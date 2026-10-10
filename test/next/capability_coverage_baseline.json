@@ -561,5 +561,2067 @@
       "effect": "write",
       "scope": "device"
     }
+  },
+  "capabilities": {
+    "credentials.status": {
+      "action": "credentials.status",
+      "effect": "read"
+    },
+    "danmaku.align": {
+      "action": "danmaku.align",
+      "effect": "write"
+    },
+    "danmaku.align_apply": {
+      "action": "danmaku.align_apply",
+      "effect": "write"
+    },
+    "danmaku.align_keep": {
+      "action": "danmaku.align_keep",
+      "effect": "write"
+    },
+    "danmaku.attach": {
+      "action": "danmaku.attach",
+      "effect": "write"
+    },
+    "danmaku.cache_delete": {
+      "action": "danmaku.cache_delete",
+      "effect": "destructive"
+    },
+    "danmaku.detach": {
+      "action": "danmaku.detach",
+      "effect": "write"
+    },
+    "danmaku.episodes": {
+      "action": "danmaku.episodes",
+      "effect": "read"
+    },
+    "danmaku.export": {
+      "action": "danmaku.export",
+      "effect": "write"
+    },
+    "danmaku.fetch": {
+      "action": "danmaku.fetch",
+      "effect": "write"
+    },
+    "danmaku.offset": {
+      "action": "danmaku.offset",
+      "effect": "write"
+    },
+    "danmaku.resolve": {
+      "action": "danmaku.resolve",
+      "effect": "read"
+    },
+    "danmaku.search": {
+      "action": "danmaku.search",
+      "effect": "read"
+    },
+    "danmaku.set_dedup": {
+      "action": "danmaku.set_dedup",
+      "effect": "write"
+    },
+    "danmaku.set_enabled": {
+      "action": "danmaku.set_enabled",
+      "effect": "write"
+    },
+    "danmaku.sources": {
+      "action": "danmaku.sources",
+      "effect": "read"
+    },
+    "danmaku.tracks": {
+      "action": "danmaku.tracks",
+      "effect": "read"
+    },
+    "download.add": {
+      "action": "download.add",
+      "effect": "write"
+    },
+    "download.delete": {
+      "action": "download.delete",
+      "effect": "destructive"
+    },
+    "download.pause": {
+      "action": "download.set_paused",
+      "effect": "write"
+    },
+    "download.remove": {
+      "action": "download.remove",
+      "effect": "write"
+    },
+    "download.resume": {
+      "action": "download.set_paused",
+      "effect": "write"
+    },
+    "history.continue_watching": {
+      "action": "history.continue_watching",
+      "effect": "read"
+    },
+    "media.identification.add_evidence": {
+      "action": "media.identification.add_evidence",
+      "effect": "write"
+    },
+    "media.identification.apply_release": {
+      "action": "media.identification.apply_release",
+      "effect": "write"
+    },
+    "media.identification.defer": {
+      "action": "media.identification.defer",
+      "effect": "write"
+    },
+    "media.identification.get": {
+      "action": "media.identification.get",
+      "effect": "read"
+    },
+    "media.identification.reconsider": {
+      "action": "media.identification.reconsider",
+      "effect": "write"
+    },
+    "media.identification.skip": {
+      "action": "media.identification.skip",
+      "effect": "write"
+    },
+    "media.identification.start": {
+      "action": "media.identification.start",
+      "effect": "write"
+    },
+    "media.identity.bind": {
+      "action": "media.identity.bind",
+      "effect": "write"
+    },
+    "media.identity.get": {
+      "action": "media.identity.get",
+      "effect": "read"
+    },
+    "media.identity.unbind": {
+      "action": "media.identity.unbind",
+      "effect": "write"
+    },
+    "media.library.import_history": {
+      "action": "media.library.import_history",
+      "effect": "write"
+    },
+    "media.library.scan": {
+      "action": "media.library.scan",
+      "effect": "write"
+    },
+    "media.library.search": {
+      "action": "media.library.search",
+      "effect": "read"
+    },
+    "media.library.series": {
+      "action": "media.library.series",
+      "effect": "read"
+    },
+    "media.library.work": {
+      "action": "media.library.work",
+      "effect": "read"
+    },
+    "media.library.works": {
+      "action": "media.library.works",
+      "effect": "read"
+    },
+    "media.metadata.get": {
+      "action": "media.metadata.get",
+      "effect": "read"
+    },
+    "media.metadata.override": {
+      "action": "media.metadata.override",
+      "effect": "write"
+    },
+    "media.metadata.refresh": {
+      "action": "media.metadata.refresh",
+      "effect": "write"
+    },
+    "media.metadata.search": {
+      "action": "media.metadata.search",
+      "effect": "read"
+    },
+    "playback.open": {
+      "action": "playback.open",
+      "effect": "write"
+    },
+    "playback.seek": {
+      "action": "playback.seek",
+      "effect": "write"
+    },
+    "playback.set_paused": {
+      "action": "playback.set_paused",
+      "effect": "write"
+    },
+    "playback.state": {
+      "action": "playback.state",
+      "effect": "read"
+    },
+    "playback.switch_episode": {
+      "action": "playback.switch_episode",
+      "effect": "write"
+    },
+    "settings.describe": {
+      "action": "settings.describe",
+      "effect": "read"
+    },
+    "settings.get": {
+      "action": "settings.get",
+      "effect": "read"
+    },
+    "settings.history": {
+      "action": "settings.history",
+      "effect": "read"
+    },
+    "settings.reset": {
+      "action": "settings.reset",
+      "effect": "write"
+    },
+    "settings.set": {
+      "action": "settings.set",
+      "effect": "write"
+    },
+    "task.cancel": {
+      "action": "task.cancel",
+      "effect": "write"
+    },
+    "task.get": {
+      "action": "task.get",
+      "effect": "read"
+    },
+    "task.list": {
+      "action": "task.list",
+      "effect": "read"
+    },
+    "task.wait": {
+      "action": "task.wait",
+      "effect": "read"
+    },
+    "ui.navigate": {
+      "action": "ui.navigate",
+      "effect": "write"
+    },
+    "download.set_paused": {
+      "action": "download.set_paused",
+      "effect": "write"
+    }
+  },
+  "compatibility": {
+    "credentials.status": {
+      "action": "credentials.status"
+    },
+    "danmaku.align": {
+      "action": "danmaku.align"
+    },
+    "danmaku.align_apply": {
+      "action": "danmaku.align_apply"
+    },
+    "danmaku.align_keep": {
+      "action": "danmaku.align_keep"
+    },
+    "danmaku.attach": {
+      "action": "danmaku.attach"
+    },
+    "danmaku.cache_delete": {
+      "action": "danmaku.cache_delete"
+    },
+    "danmaku.detach": {
+      "action": "danmaku.detach"
+    },
+    "danmaku.episodes": {
+      "action": "danmaku.episodes"
+    },
+    "danmaku.export": {
+      "action": "danmaku.export"
+    },
+    "danmaku.fetch": {
+      "action": "danmaku.fetch"
+    },
+    "danmaku.offset": {
+      "action": "danmaku.offset"
+    },
+    "danmaku.resolve": {
+      "action": "danmaku.resolve"
+    },
+    "danmaku.search": {
+      "action": "danmaku.search"
+    },
+    "danmaku.set_dedup": {
+      "action": "danmaku.set_dedup"
+    },
+    "danmaku.set_enabled": {
+      "action": "danmaku.set_enabled"
+    },
+    "danmaku.sources": {
+      "action": "danmaku.sources"
+    },
+    "danmaku.tracks": {
+      "action": "danmaku.tracks"
+    },
+    "download.add": {
+      "action": "download.add"
+    },
+    "download.delete": {
+      "action": "download.delete"
+    },
+    "download.pause": {
+      "action": "download.set_paused",
+      "inputDefaults": {
+        "paused": true
+      }
+    },
+    "download.remove": {
+      "action": "download.remove"
+    },
+    "download.resume": {
+      "action": "download.set_paused",
+      "inputDefaults": {
+        "paused": false
+      }
+    },
+    "history.continue_watching": {
+      "action": "history.continue_watching"
+    },
+    "media.identification.add_evidence": {
+      "action": "media.identification.add_evidence"
+    },
+    "media.identification.apply_release": {
+      "action": "media.identification.apply_release"
+    },
+    "media.identification.defer": {
+      "action": "media.identification.defer"
+    },
+    "media.identification.get": {
+      "action": "media.identification.get"
+    },
+    "media.identification.reconsider": {
+      "action": "media.identification.reconsider"
+    },
+    "media.identification.skip": {
+      "action": "media.identification.skip"
+    },
+    "media.identification.start": {
+      "action": "media.identification.start"
+    },
+    "media.identity.bind": {
+      "action": "media.identity.bind"
+    },
+    "media.identity.get": {
+      "action": "media.identity.get"
+    },
+    "media.identity.unbind": {
+      "action": "media.identity.unbind"
+    },
+    "media.library.import_history": {
+      "action": "media.library.import_history"
+    },
+    "media.library.scan": {
+      "action": "media.library.scan"
+    },
+    "media.library.search": {
+      "action": "media.library.search"
+    },
+    "media.library.series": {
+      "action": "media.library.series"
+    },
+    "media.library.work": {
+      "action": "media.library.work"
+    },
+    "media.library.works": {
+      "action": "media.library.works"
+    },
+    "media.metadata.get": {
+      "action": "media.metadata.get"
+    },
+    "media.metadata.override": {
+      "action": "media.metadata.override"
+    },
+    "media.metadata.refresh": {
+      "action": "media.metadata.refresh"
+    },
+    "media.metadata.search": {
+      "action": "media.metadata.search"
+    },
+    "playback.open": {
+      "action": "playback.open"
+    },
+    "playback.seek": {
+      "action": "playback.seek"
+    },
+    "playback.set_paused": {
+      "action": "playback.set_paused"
+    },
+    "playback.state": {
+      "action": "playback.state"
+    },
+    "playback.switch_episode": {
+      "action": "playback.switch_episode"
+    },
+    "settings.describe": {
+      "action": "settings.describe"
+    },
+    "settings.get": {
+      "action": "settings.get"
+    },
+    "settings.history": {
+      "action": "settings.history"
+    },
+    "settings.reset": {
+      "action": "settings.reset"
+    },
+    "settings.set": {
+      "action": "settings.set"
+    },
+    "task.cancel": {
+      "action": "task.cancel"
+    },
+    "task.get": {
+      "action": "task.get"
+    },
+    "task.list": {
+      "action": "task.list"
+    },
+    "task.wait": {
+      "action": "task.wait"
+    },
+    "ui.navigate": {
+      "action": "ui.navigate"
+    }
+  },
+  "primaryActions": {
+    "credentials.status": {
+      "effect": "read"
+    },
+    "danmaku.align": {
+      "effect": "write"
+    },
+    "danmaku.align_apply": {
+      "effect": "write"
+    },
+    "danmaku.align_keep": {
+      "effect": "write"
+    },
+    "danmaku.attach": {
+      "effect": "write"
+    },
+    "danmaku.cache_delete": {
+      "effect": "destructive"
+    },
+    "danmaku.detach": {
+      "effect": "write"
+    },
+    "danmaku.episodes": {
+      "effect": "read"
+    },
+    "danmaku.export": {
+      "effect": "write"
+    },
+    "danmaku.fetch": {
+      "effect": "write"
+    },
+    "danmaku.offset": {
+      "effect": "write"
+    },
+    "danmaku.resolve": {
+      "effect": "read"
+    },
+    "danmaku.search": {
+      "effect": "read"
+    },
+    "danmaku.set_dedup": {
+      "effect": "write"
+    },
+    "danmaku.set_enabled": {
+      "effect": "write"
+    },
+    "danmaku.sources": {
+      "effect": "read"
+    },
+    "danmaku.tracks": {
+      "effect": "read"
+    },
+    "download.add": {
+      "effect": "write",
+      "input": {
+        "type": "object",
+        "properties": {
+          "source": {
+            "type": "string",
+            "minLength": 1
+          },
+          "sources": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          "backend": {
+            "type": "object",
+            "properties": {
+              "kind": {
+                "type": "string",
+                "minLength": 1
+              },
+              "id": {
+                "type": "string",
+                "minLength": 1
+              }
+            },
+            "required": [
+              "kind"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "additionalProperties": false,
+        "oneOf": [
+          {
+            "required": [
+              "source"
+            ]
+          },
+          {
+            "required": [
+              "sources"
+            ]
+          }
+        ]
+      },
+      "outputContract": "download.add"
+    },
+    "download.delete": {
+      "effect": "destructive",
+      "input": {
+        "type": "object",
+        "properties": {
+          "jobId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "jobIds": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            }
+          }
+        },
+        "additionalProperties": false,
+        "oneOf": [
+          {
+            "required": [
+              "jobId"
+            ]
+          },
+          {
+            "required": [
+              "jobIds"
+            ]
+          }
+        ]
+      },
+      "outputContract": "download.add"
+    },
+    "download.remove": {
+      "effect": "write",
+      "input": {
+        "type": "object",
+        "properties": {
+          "jobId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "jobIds": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            }
+          }
+        },
+        "additionalProperties": false,
+        "oneOf": [
+          {
+            "required": [
+              "jobId"
+            ]
+          },
+          {
+            "required": [
+              "jobIds"
+            ]
+          }
+        ]
+      },
+      "outputContract": "download.add"
+    },
+    "download.set_paused": {
+      "effect": "write",
+      "input": {
+        "type": "object",
+        "properties": {
+          "jobId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "jobIds": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          "paused": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "paused"
+        ],
+        "additionalProperties": false,
+        "oneOf": [
+          {
+            "required": [
+              "jobId"
+            ]
+          },
+          {
+            "required": [
+              "jobIds"
+            ]
+          }
+        ]
+      },
+      "outputContract": "download.add"
+    },
+    "history.continue_watching": {
+      "effect": "read"
+    },
+    "media.identification.add_evidence": {
+      "effect": "write"
+    },
+    "media.identification.apply_release": {
+      "effect": "write"
+    },
+    "media.identification.defer": {
+      "effect": "write"
+    },
+    "media.identification.get": {
+      "effect": "read"
+    },
+    "media.identification.reconsider": {
+      "effect": "write"
+    },
+    "media.identification.skip": {
+      "effect": "write"
+    },
+    "media.identification.start": {
+      "effect": "write"
+    },
+    "media.identity.bind": {
+      "effect": "write"
+    },
+    "media.identity.get": {
+      "effect": "read"
+    },
+    "media.identity.unbind": {
+      "effect": "write"
+    },
+    "media.library.import_history": {
+      "effect": "write"
+    },
+    "media.library.scan": {
+      "effect": "write"
+    },
+    "media.library.search": {
+      "effect": "read"
+    },
+    "media.library.series": {
+      "effect": "read"
+    },
+    "media.library.work": {
+      "effect": "read"
+    },
+    "media.library.works": {
+      "effect": "read"
+    },
+    "media.metadata.get": {
+      "effect": "read"
+    },
+    "media.metadata.override": {
+      "effect": "write"
+    },
+    "media.metadata.refresh": {
+      "effect": "write"
+    },
+    "media.metadata.search": {
+      "effect": "read"
+    },
+    "playback.open": {
+      "effect": "write"
+    },
+    "playback.seek": {
+      "effect": "write"
+    },
+    "playback.set_paused": {
+      "effect": "write"
+    },
+    "playback.state": {
+      "effect": "read"
+    },
+    "playback.switch_episode": {
+      "effect": "write"
+    },
+    "settings.describe": {
+      "effect": "read",
+      "input": {
+        "type": "object",
+        "properties": {
+          "domain": {
+            "type": "string"
+          },
+          "keyword": {
+            "type": "string"
+          },
+          "keys": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          "offset": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "limit": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 1000
+          },
+          "fields": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "key",
+                "title",
+                "description",
+                "type",
+                "enum",
+                "minimum",
+                "maximum",
+                "minLength",
+                "pattern",
+                "items",
+                "properties",
+                "required",
+                "additionalProperties",
+                "oneOf",
+                "default",
+                "scope",
+                "apply",
+                "effect",
+                "step",
+                "storage",
+                "value",
+                "revision",
+                "provenance"
+              ]
+            }
+          }
+        },
+        "additionalProperties": false
+      },
+      "outputContract": "settings.describe"
+    },
+    "settings.get": {
+      "effect": "read",
+      "input": {
+        "type": "object",
+        "properties": {
+          "key": {
+            "type": "string"
+          },
+          "keys": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            }
+          }
+        },
+        "additionalProperties": false,
+        "oneOf": [
+          {
+            "required": [
+              "key"
+            ]
+          },
+          {
+            "required": [
+              "keys"
+            ]
+          }
+        ]
+      },
+      "outputContract": "settings.get"
+    },
+    "settings.history": {
+      "effect": "read",
+      "input": {
+        "type": "object",
+        "properties": {
+          "key": {
+            "type": "string"
+          },
+          "keys": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          "from": {
+            "type": "string",
+            "description": "Inclusive ISO-8601 timestamp with timezone."
+          },
+          "to": {
+            "type": "string",
+            "description": "Inclusive ISO-8601 timestamp with timezone."
+          },
+          "offset": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "limit": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 1000
+          },
+          "fields": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "key",
+                "previousValue",
+                "value",
+                "changedAt",
+                "changedBy",
+                "origin",
+                "reason",
+                "invocationId",
+                "revision"
+              ]
+            }
+          }
+        },
+        "additionalProperties": false
+      },
+      "outputContract": "settings.history"
+    },
+    "settings.reset": {
+      "effect": "write",
+      "input": {
+        "type": "object",
+        "properties": {
+          "key": {
+            "type": "string",
+            "minLength": 1
+          },
+          "reason": {
+            "type": "string"
+          },
+          "expectedRevision": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "changes": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "key": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "reason": {
+                  "type": "string"
+                },
+                "expectedRevision": {
+                  "type": "integer",
+                  "minimum": 0
+                }
+              },
+              "required": [
+                "key"
+              ],
+              "additionalProperties": false
+            }
+          }
+        },
+        "additionalProperties": false,
+        "oneOf": [
+          {
+            "required": [
+              "key"
+            ]
+          },
+          {
+            "required": [
+              "changes"
+            ]
+          }
+        ]
+      },
+      "outputContract": "settings.get"
+    },
+    "settings.set": {
+      "effect": "write",
+      "input": {
+        "type": "object",
+        "properties": {
+          "key": {
+            "type": "string",
+            "minLength": 1
+          },
+          "reason": {
+            "type": "string"
+          },
+          "expectedRevision": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "changes": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "key": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "reason": {
+                  "type": "string"
+                },
+                "expectedRevision": {
+                  "type": "integer",
+                  "minimum": 0
+                }
+              },
+              "required": [
+                "key",
+                "value"
+              ],
+              "additionalProperties": true
+            }
+          }
+        },
+        "additionalProperties": true,
+        "oneOf": [
+          {
+            "required": [
+              "key",
+              "value"
+            ]
+          },
+          {
+            "required": [
+              "changes"
+            ]
+          }
+        ]
+      },
+      "outputContract": "settings.get"
+    },
+    "task.cancel": {
+      "effect": "write",
+      "input": {
+        "type": "object",
+        "properties": {
+          "jobId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "jobIds": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            }
+          }
+        },
+        "additionalProperties": false,
+        "oneOf": [
+          {
+            "required": [
+              "jobId"
+            ]
+          },
+          {
+            "required": [
+              "jobIds"
+            ]
+          }
+        ]
+      },
+      "outputContract": "task.cancel"
+    },
+    "task.get": {
+      "effect": "read"
+    },
+    "task.list": {
+      "effect": "read"
+    },
+    "task.wait": {
+      "effect": "read"
+    },
+    "ui.navigate": {
+      "effect": "write"
+    }
+  },
+  "outputContracts": {
+    "download.add": {
+      "type": "object",
+      "properties": {
+        "job": {
+          "type": "object",
+          "properties": {
+            "jobId": {
+              "type": "string"
+            },
+            "type": {
+              "type": "string"
+            },
+            "title": {
+              "type": "string"
+            },
+            "state": {
+              "type": "string",
+              "enum": [
+                "queued",
+                "running",
+                "paused",
+                "needs_decision",
+                "waiting_retry",
+                "interrupted",
+                "cancelling",
+                "succeeded",
+                "failed",
+                "cancelled"
+              ]
+            },
+            "phase": {
+              "type": "string"
+            },
+            "progress": {
+              "type": "object",
+              "properties": {
+                "completed": {
+                  "type": "number",
+                  "minimum": 0
+                },
+                "total": {
+                  "type": "number",
+                  "minimum": 0
+                },
+                "unit": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "completed",
+                "unit"
+              ],
+              "additionalProperties": false
+            },
+            "createdAt": {
+              "type": "string"
+            },
+            "updatedAt": {
+              "type": "string"
+            },
+            "ownerDeviceId": {
+              "type": "string"
+            },
+            "revision": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "error": {
+              "type": "object",
+              "properties": {
+                "code": {
+                  "type": "string"
+                },
+                "message": {
+                  "type": "string"
+                },
+                "retryable": {
+                  "type": "boolean"
+                }
+              },
+              "required": [
+                "code",
+                "message",
+                "retryable"
+              ],
+              "additionalProperties": false
+            },
+            "decision": {
+              "type": "object",
+              "properties": {
+                "prompt": {
+                  "type": "string"
+                },
+                "options": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "label": {
+                        "type": "string"
+                      },
+                      "detail": {
+                        "type": "string"
+                      },
+                      "call": {
+                        "type": "object",
+                        "properties": {
+                          "action": {
+                            "type": "string"
+                          },
+                          "input": {
+                            "type": "object"
+                          }
+                        },
+                        "required": [
+                          "action",
+                          "input"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "required": [
+                      "label",
+                      "call"
+                    ],
+                    "additionalProperties": false
+                  }
+                }
+              },
+              "required": [
+                "prompt",
+                "options"
+              ],
+              "additionalProperties": false
+            },
+            "receipt": {
+              "type": "object",
+              "properties": {
+                "verification": {
+                  "type": "string",
+                  "enum": [
+                    "verified",
+                    "acknowledged",
+                    "unverified"
+                  ]
+                },
+                "details": {
+                  "type": "object"
+                },
+                "cancellation": {
+                  "type": "object",
+                  "properties": {
+                    "requestedAt": {
+                      "type": "string"
+                    },
+                    "phase": {
+                      "type": "string"
+                    },
+                    "sideEffectCommitted": {
+                      "type": "boolean"
+                    },
+                    "afterCommit": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "requestedAt",
+                    "phase",
+                    "sideEffectCommitted",
+                    "afterCommit"
+                  ],
+                  "additionalProperties": false
+                }
+              },
+              "required": [
+                "verification",
+                "details"
+              ],
+              "additionalProperties": false
+            },
+            "backend": {
+              "type": "object",
+              "properties": {
+                "kind": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "id": {
+                  "type": "string",
+                  "minLength": 1
+                }
+              },
+              "required": [
+                "kind"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "required": [
+            "jobId",
+            "type",
+            "title",
+            "state",
+            "phase",
+            "progress",
+            "createdAt",
+            "updatedAt",
+            "ownerDeviceId",
+            "revision",
+            "backend"
+          ],
+          "additionalProperties": true
+        },
+        "results": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "index": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "source": {
+                "type": "string",
+                "minLength": 1
+              },
+              "jobId": {
+                "type": "string",
+                "minLength": 1
+              },
+              "status": {
+                "type": "string",
+                "enum": [
+                  "completed",
+                  "failed"
+                ]
+              },
+              "job": {
+                "type": "object",
+                "properties": {
+                  "jobId": {
+                    "type": "string"
+                  },
+                  "type": {
+                    "type": "string"
+                  },
+                  "title": {
+                    "type": "string"
+                  },
+                  "state": {
+                    "type": "string",
+                    "enum": [
+                      "queued",
+                      "running",
+                      "paused",
+                      "needs_decision",
+                      "waiting_retry",
+                      "interrupted",
+                      "cancelling",
+                      "succeeded",
+                      "failed",
+                      "cancelled"
+                    ]
+                  },
+                  "phase": {
+                    "type": "string"
+                  },
+                  "progress": {
+                    "type": "object",
+                    "properties": {
+                      "completed": {
+                        "type": "number",
+                        "minimum": 0
+                      },
+                      "total": {
+                        "type": "number",
+                        "minimum": 0
+                      },
+                      "unit": {
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "completed",
+                      "unit"
+                    ],
+                    "additionalProperties": false
+                  },
+                  "createdAt": {
+                    "type": "string"
+                  },
+                  "updatedAt": {
+                    "type": "string"
+                  },
+                  "ownerDeviceId": {
+                    "type": "string"
+                  },
+                  "revision": {
+                    "type": "integer",
+                    "minimum": 0
+                  },
+                  "error": {
+                    "type": "object",
+                    "properties": {
+                      "code": {
+                        "type": "string"
+                      },
+                      "message": {
+                        "type": "string"
+                      },
+                      "retryable": {
+                        "type": "boolean"
+                      }
+                    },
+                    "required": [
+                      "code",
+                      "message",
+                      "retryable"
+                    ],
+                    "additionalProperties": false
+                  },
+                  "decision": {
+                    "type": "object",
+                    "properties": {
+                      "prompt": {
+                        "type": "string"
+                      },
+                      "options": {
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "properties": {
+                            "label": {
+                              "type": "string"
+                            },
+                            "detail": {
+                              "type": "string"
+                            },
+                            "call": {
+                              "type": "object",
+                              "properties": {
+                                "action": {
+                                  "type": "string"
+                                },
+                                "input": {
+                                  "type": "object"
+                                }
+                              },
+                              "required": [
+                                "action",
+                                "input"
+                              ],
+                              "additionalProperties": false
+                            }
+                          },
+                          "required": [
+                            "label",
+                            "call"
+                          ],
+                          "additionalProperties": false
+                        }
+                      }
+                    },
+                    "required": [
+                      "prompt",
+                      "options"
+                    ],
+                    "additionalProperties": false
+                  },
+                  "receipt": {
+                    "type": "object",
+                    "properties": {
+                      "verification": {
+                        "type": "string",
+                        "enum": [
+                          "verified",
+                          "acknowledged",
+                          "unverified"
+                        ]
+                      },
+                      "details": {
+                        "type": "object"
+                      },
+                      "cancellation": {
+                        "type": "object",
+                        "properties": {
+                          "requestedAt": {
+                            "type": "string"
+                          },
+                          "phase": {
+                            "type": "string"
+                          },
+                          "sideEffectCommitted": {
+                            "type": "boolean"
+                          },
+                          "afterCommit": {
+                            "type": "boolean"
+                          }
+                        },
+                        "required": [
+                          "requestedAt",
+                          "phase",
+                          "sideEffectCommitted",
+                          "afterCommit"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "required": [
+                      "verification",
+                      "details"
+                    ],
+                    "additionalProperties": false
+                  },
+                  "backend": {
+                    "type": "object",
+                    "properties": {
+                      "kind": {
+                        "type": "string",
+                        "minLength": 1
+                      },
+                      "id": {
+                        "type": "string",
+                        "minLength": 1
+                      }
+                    },
+                    "required": [
+                      "kind"
+                    ],
+                    "additionalProperties": false
+                  }
+                },
+                "required": [
+                  "jobId",
+                  "type",
+                  "title",
+                  "state",
+                  "phase",
+                  "progress",
+                  "createdAt",
+                  "updatedAt",
+                  "ownerDeviceId",
+                  "revision",
+                  "backend"
+                ],
+                "additionalProperties": true
+              },
+              "error": {
+                "type": "object",
+                "properties": {},
+                "additionalProperties": true
+              }
+            },
+            "required": [
+              "index",
+              "status"
+            ],
+            "additionalProperties": false,
+            "oneOf": [
+              {
+                "required": [
+                  "job"
+                ]
+              },
+              {
+                "required": [
+                  "error"
+                ]
+              }
+            ]
+          }
+        }
+      },
+      "additionalProperties": false,
+      "oneOf": [
+        {
+          "required": [
+            "job"
+          ]
+        },
+        {
+          "required": [
+            "results"
+          ]
+        }
+      ]
+    },
+    "settings.describe": {
+      "type": "object",
+      "properties": {
+        "settings": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {},
+            "additionalProperties": true
+          }
+        },
+        "nextOffset": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0
+        }
+      },
+      "required": [
+        "settings",
+        "nextOffset"
+      ],
+      "additionalProperties": false
+    },
+    "settings.get": {
+      "type": "object",
+      "properties": {
+        "key": {
+          "type": "string"
+        },
+        "revision": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "scope": {
+          "type": "string",
+          "enum": [
+            "user",
+            "device"
+          ]
+        },
+        "apply": {
+          "type": "string",
+          "enum": [
+            "immediate",
+            "reload_player",
+            "reload_server",
+            "restart_app"
+          ]
+        },
+        "provenance": {
+          "type": [
+            "object",
+            "null"
+          ],
+          "properties": {},
+          "additionalProperties": true
+        },
+        "results": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {},
+            "additionalProperties": true
+          }
+        }
+      },
+      "additionalProperties": true,
+      "oneOf": [
+        {
+          "required": [
+            "key",
+            "value",
+            "revision",
+            "scope",
+            "apply",
+            "provenance"
+          ]
+        },
+        {
+          "required": [
+            "results"
+          ]
+        }
+      ]
+    },
+    "settings.history": {
+      "type": "object",
+      "properties": {
+        "changes": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {},
+            "additionalProperties": true
+          }
+        },
+        "nextOffset": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0
+        }
+      },
+      "required": [
+        "changes",
+        "nextOffset"
+      ],
+      "additionalProperties": false
+    },
+    "task.cancel": {
+      "type": "object",
+      "properties": {
+        "job": {
+          "type": "object",
+          "properties": {
+            "jobId": {
+              "type": "string"
+            },
+            "type": {
+              "type": "string"
+            },
+            "title": {
+              "type": "string"
+            },
+            "state": {
+              "type": "string",
+              "enum": [
+                "queued",
+                "running",
+                "paused",
+                "needs_decision",
+                "waiting_retry",
+                "interrupted",
+                "cancelling",
+                "succeeded",
+                "failed",
+                "cancelled"
+              ]
+            },
+            "phase": {
+              "type": "string"
+            },
+            "progress": {
+              "type": "object",
+              "properties": {
+                "completed": {
+                  "type": "number",
+                  "minimum": 0
+                },
+                "total": {
+                  "type": "number",
+                  "minimum": 0
+                },
+                "unit": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "completed",
+                "unit"
+              ],
+              "additionalProperties": false
+            },
+            "createdAt": {
+              "type": "string"
+            },
+            "updatedAt": {
+              "type": "string"
+            },
+            "ownerDeviceId": {
+              "type": "string"
+            },
+            "revision": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "error": {
+              "type": "object",
+              "properties": {
+                "code": {
+                  "type": "string"
+                },
+                "message": {
+                  "type": "string"
+                },
+                "retryable": {
+                  "type": "boolean"
+                }
+              },
+              "required": [
+                "code",
+                "message",
+                "retryable"
+              ],
+              "additionalProperties": false
+            },
+            "decision": {
+              "type": "object",
+              "properties": {
+                "prompt": {
+                  "type": "string"
+                },
+                "options": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "label": {
+                        "type": "string"
+                      },
+                      "detail": {
+                        "type": "string"
+                      },
+                      "call": {
+                        "type": "object",
+                        "properties": {
+                          "action": {
+                            "type": "string"
+                          },
+                          "input": {
+                            "type": "object"
+                          }
+                        },
+                        "required": [
+                          "action",
+                          "input"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "required": [
+                      "label",
+                      "call"
+                    ],
+                    "additionalProperties": false
+                  }
+                }
+              },
+              "required": [
+                "prompt",
+                "options"
+              ],
+              "additionalProperties": false
+            },
+            "receipt": {
+              "type": "object",
+              "properties": {
+                "verification": {
+                  "type": "string",
+                  "enum": [
+                    "verified",
+                    "acknowledged",
+                    "unverified"
+                  ]
+                },
+                "details": {
+                  "type": "object"
+                },
+                "cancellation": {
+                  "type": "object",
+                  "properties": {
+                    "requestedAt": {
+                      "type": "string"
+                    },
+                    "phase": {
+                      "type": "string"
+                    },
+                    "sideEffectCommitted": {
+                      "type": "boolean"
+                    },
+                    "afterCommit": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "requestedAt",
+                    "phase",
+                    "sideEffectCommitted",
+                    "afterCommit"
+                  ],
+                  "additionalProperties": false
+                }
+              },
+              "required": [
+                "verification",
+                "details"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "required": [
+            "jobId",
+            "type",
+            "title",
+            "state",
+            "phase",
+            "progress",
+            "createdAt",
+            "updatedAt",
+            "ownerDeviceId",
+            "revision"
+          ],
+          "additionalProperties": true
+        },
+        "results": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "index": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "jobId": {
+                "type": "string"
+              },
+              "status": {
+                "type": "string",
+                "enum": [
+                  "completed",
+                  "failed"
+                ]
+              },
+              "job": {
+                "type": "object",
+                "properties": {
+                  "jobId": {
+                    "type": "string"
+                  },
+                  "type": {
+                    "type": "string"
+                  },
+                  "title": {
+                    "type": "string"
+                  },
+                  "state": {
+                    "type": "string",
+                    "enum": [
+                      "queued",
+                      "running",
+                      "paused",
+                      "needs_decision",
+                      "waiting_retry",
+                      "interrupted",
+                      "cancelling",
+                      "succeeded",
+                      "failed",
+                      "cancelled"
+                    ]
+                  },
+                  "phase": {
+                    "type": "string"
+                  },
+                  "progress": {
+                    "type": "object",
+                    "properties": {
+                      "completed": {
+                        "type": "number",
+                        "minimum": 0
+                      },
+                      "total": {
+                        "type": "number",
+                        "minimum": 0
+                      },
+                      "unit": {
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "completed",
+                      "unit"
+                    ],
+                    "additionalProperties": false
+                  },
+                  "createdAt": {
+                    "type": "string"
+                  },
+                  "updatedAt": {
+                    "type": "string"
+                  },
+                  "ownerDeviceId": {
+                    "type": "string"
+                  },
+                  "revision": {
+                    "type": "integer",
+                    "minimum": 0
+                  },
+                  "error": {
+                    "type": "object",
+                    "properties": {
+                      "code": {
+                        "type": "string"
+                      },
+                      "message": {
+                        "type": "string"
+                      },
+                      "retryable": {
+                        "type": "boolean"
+                      }
+                    },
+                    "required": [
+                      "code",
+                      "message",
+                      "retryable"
+                    ],
+                    "additionalProperties": false
+                  },
+                  "decision": {
+                    "type": "object",
+                    "properties": {
+                      "prompt": {
+                        "type": "string"
+                      },
+                      "options": {
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "properties": {
+                            "label": {
+                              "type": "string"
+                            },
+                            "detail": {
+                              "type": "string"
+                            },
+                            "call": {
+                              "type": "object",
+                              "properties": {
+                                "action": {
+                                  "type": "string"
+                                },
+                                "input": {
+                                  "type": "object"
+                                }
+                              },
+                              "required": [
+                                "action",
+                                "input"
+                              ],
+                              "additionalProperties": false
+                            }
+                          },
+                          "required": [
+                            "label",
+                            "call"
+                          ],
+                          "additionalProperties": false
+                        }
+                      }
+                    },
+                    "required": [
+                      "prompt",
+                      "options"
+                    ],
+                    "additionalProperties": false
+                  },
+                  "receipt": {
+                    "type": "object",
+                    "properties": {
+                      "verification": {
+                        "type": "string",
+                        "enum": [
+                          "verified",
+                          "acknowledged",
+                          "unverified"
+                        ]
+                      },
+                      "details": {
+                        "type": "object"
+                      },
+                      "cancellation": {
+                        "type": "object",
+                        "properties": {
+                          "requestedAt": {
+                            "type": "string"
+                          },
+                          "phase": {
+                            "type": "string"
+                          },
+                          "sideEffectCommitted": {
+                            "type": "boolean"
+                          },
+                          "afterCommit": {
+                            "type": "boolean"
+                          }
+                        },
+                        "required": [
+                          "requestedAt",
+                          "phase",
+                          "sideEffectCommitted",
+                          "afterCommit"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "required": [
+                      "verification",
+                      "details"
+                    ],
+                    "additionalProperties": false
+                  }
+                },
+                "required": [
+                  "jobId",
+                  "type",
+                  "title",
+                  "state",
+                  "phase",
+                  "progress",
+                  "createdAt",
+                  "updatedAt",
+                  "ownerDeviceId",
+                  "revision"
+                ],
+                "additionalProperties": true
+              },
+              "error": {
+                "type": "object",
+                "properties": {},
+                "additionalProperties": true
+              }
+            },
+            "required": [
+              "index",
+              "jobId",
+              "status"
+            ],
+            "additionalProperties": false,
+            "oneOf": [
+              {
+                "required": [
+                  "job"
+                ]
+              },
+              {
+                "required": [
+                  "error"
+                ]
+              }
+            ]
+          }
+        }
+      },
+      "additionalProperties": false,
+      "oneOf": [
+        {
+          "required": [
+            "job"
+          ]
+        },
+        {
+          "required": [
+            "results"
+          ]
+        }
+      ]
+    }
   }
 }

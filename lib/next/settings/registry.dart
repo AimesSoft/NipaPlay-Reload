@@ -139,17 +139,31 @@ final class SettingsRegistry {
     };
   }
 
-  Future<List<JsonMap>> describe({String? domain, String? keyword}) async {
+  Future<List<JsonMap>> describe(
+      {String? domain,
+      String? keyword,
+      List<String>? keys,
+      int offset = 0,
+      int? limit}) async {
     final query = keyword?.toLowerCase();
-    return [
-      for (final entry in entries)
-        if (entry.visible() &&
+    if (keys != null) {
+      for (final key in keys) {
+        _entry(key);
+      }
+    }
+    final matched = entries
+        .where((entry) =>
+            entry.visible() &&
+            (keys == null || keys.contains(entry.key)) &&
             (domain == null || entry.domain == domain) &&
             (query == null ||
                 '${entry.key} ${entry.title} ${entry.description}'
                     .toLowerCase()
                     .contains(query)))
-          {...entry.describe(), ...await get(entry.key)},
+        .skip(offset);
+    return [
+      for (final entry in limit == null ? matched : matched.take(limit))
+        {...entry.describe(), ...await get(entry.key)},
     ];
   }
 
@@ -239,16 +253,44 @@ final class SettingsRegistry {
     });
   }
 
-  Future<List<JsonMap>> history({String? key, int limit = 50}) async {
+  Future<List<JsonMap>> history(
+      {String? key,
+      List<String>? keys,
+      DateTime? from,
+      DateTime? to,
+      int offset = 0,
+      int limit = 50}) async {
     if (key != null) _entry(key);
+    if (keys != null) {
+      for (final key in keys) {
+        _entry(key);
+      }
+    }
     if (limit < 1 || limit > 1000) {
       throw const Failure(FailureCode.invalidInput, 'Limit must be 1–1000.');
     }
+    final visibleKeys = entries
+        .where((entry) =>
+            entry.visible() &&
+            (key == null || key == entry.key) &&
+            (keys == null || keys.contains(entry.key)))
+        .map((entry) => entry.key)
+        .toList();
+    if (visibleKeys.isEmpty) return [];
     final rows = await database.query('settings_changes',
-        where: key == null ? null : 'key = ?',
-        whereArgs: key == null ? null : [key],
+        where: [
+          'key IN (${List.filled(visibleKeys.length, '?').join(',')})',
+          if (from != null) 'changed_at >= ?',
+          if (to != null) 'changed_at <= ?',
+        ].join(' AND '),
+        whereArgs: [
+          ...visibleKeys,
+          if (from != null) from.toUtc().toIso8601String(),
+          if (to != null) to.toUtc().toIso8601String()
+        ],
         orderBy: 'sequence DESC',
-        limit: limit);
+        limit: limit,
+        offset: offset);
     return [
       for (final row in rows)
         if (_entries[row['key']]?.visible() ?? false) _decodeRow(row),

@@ -229,6 +229,44 @@ void main() {
         contains('without a persisted disposition'));
   });
 
+  test('batch cancellation accepts each request and preserves single-job calls',
+      () async {
+    final api = Harness([TaskCapability(engine)]);
+    final first = await engine.submit(type: 'test', title: 'First');
+    final second = await engine.submit(type: 'test', title: 'Second');
+    final outcome = await api.invokeJson(
+        'task.cancel',
+        {
+          'jobIds': [first.jobId, 'missing', second.jobId, first.jobId],
+        },
+        Invocation(origin: 'mcp')) as Completed;
+    final result = outcome.value.toJson();
+    expect(api.lookup('task.cancel')!.spec.output.validate(result), isEmpty);
+    final rows = (result['results'] as List).cast<Map>();
+    expect(rows.map((row) => row['status']),
+        ['completed', 'failed', 'completed', 'completed']);
+    expect((rows[1]['error'] as Map)['code'], 'not_found');
+    expect((rows.first['job'] as Map)['state'], 'cancelled');
+    expect(
+        (rows.first['job'] as Map)['receipt'],
+        containsPair(
+            'details', containsPair('reason', 'cancelled_before_start')));
+    expect((rows.last['job'] as Map)['revision'],
+        (rows.first['job'] as Map)['revision']);
+    final legacy = await api.invokeJson(
+            'task.cancel', {'jobId': second.jobId}, Invocation(origin: 'gui'))
+        as Completed;
+    expect(legacy.value.toJson()['job'], rows[2]['job']);
+    final ambiguous = await api.invokeJson(
+        'task.cancel',
+        {
+          'jobId': first.jobId,
+          'jobIds': [second.jobId],
+        },
+        Invocation(origin: 'mcp')) as Failed;
+    expect(ambiguous.failure.code, FailureCode.invalidInput);
+  });
+
   test('task actions expose matching contracts, filters and input failures',
       () async {
     final harness = Harness([TaskCapability(engine)]);
