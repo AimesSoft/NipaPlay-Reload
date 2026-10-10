@@ -5,6 +5,8 @@ import 'package:crypto/crypto.dart';
 import 'package:nipa_harness/nipa_harness.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:uuid/uuid.dart';
+import 'package:nipaplay/app/unified_media_library_sections.dart';
+import 'package:nipaplay/models/watch_history_model.dart';
 
 import 'metadata_provider.dart';
 
@@ -116,7 +118,7 @@ final class IdentityStore {
                 'headMd5'
               ].any((key) => (attrs['probe'] as JsonMap)[key] != probe[key])) {
                 final dandanplay = await tx.rawQuery(
-                    'SELECT o.external_id,o.scope FROM media_bindings b JOIN media_external_objects o ON o.id=b.object_id WHERE b.entity_id = ? AND b.status = ? AND o.provider = ?',
+                    'SELECT o.external_id,o.scope FROM media_bindings b JOIN media_external_objects o ON o.id=b.object_id WHERE b.entity_id = ? AND b.status = ? AND o.provider = ? AND b.source!=\'classic_match\'',
                     [fileId, 'accepted', 'dandanplay']);
                 final bindingRevision = (attrs['bindingRevision'] as int) + 1;
                 await tx.update(
@@ -131,12 +133,15 @@ final class IdentityStore {
                     },
                     where: 'id = ?',
                     whereArgs: [fileId]);
-                await tx.delete('media_file_episodes',
-                    where: 'file_id = ?', whereArgs: [fileId]);
                 await tx.update('media_bindings', {'status': 'revoked'},
-                    where: 'entity_id = ? AND status = ?',
+                    where:
+                        'entity_id = ? AND status = ? AND source!=\'classic_match\'',
                     whereArgs: [fileId, 'accepted']);
-                if (dandanplay.length == 1) {
+                await _pruneFileLinks(tx, fileId);
+                final classic = await tx.query('media_bindings',
+                    where: 'entity_id=? AND source=? AND status=?',
+                    whereArgs: [fileId, 'classic_match', 'accepted']);
+                if (dandanplay.length == 1 && classic.isEmpty) {
                   await tx.insert('media_projection_outbox', {
                     'id':
                         stableMediaId('projection', [fileId, bindingRevision]),
@@ -193,45 +198,229 @@ final class IdentityStore {
   Future<List<JsonMap>> locations(String fileId) => database
       .query('media_locations', where: 'file_id = ?', whereArgs: [fileId]);
 
-  /// Historical IDs stay as evidence; neither confirmation nor a binding actor is inferred.
-  Future<int> importLegacy(List<JsonMap> history) async {
+  /// Only visible Classic matches become identities; retained IDs remain evidence.
+  Future<int> importLegacy(List<JsonMap> history,
+      {bool reconcileMissing = true}) async {
     for (final row in history) {
-      final locator = row['filePath'] as String;
-      final existing = await database.query('media_locations',
-          where: 'owner_device_id = ? AND locator = ?',
-          whereArgs: [ownerDeviceId, locator]);
-      final source = locator.startsWith('smb://')
-          ? 'smb'
-          : locator.startsWith('webdav://')
-              ? 'webdav'
-              : locator.contains('://')
-                  ? 'remote'
-                  : 'local';
-      final fileId = existing.isEmpty
-          ? await registerFile(locator, {'legacy': true}, source: source)
-          : existing.single['file_id'] as String;
-      final location = (await locations(fileId))
-          .firstWhere((item) => item['locator'] == locator);
-      // Progress is intentionally absent from the side index.
-      final evidence = {
-        'animeId': row['animeId'],
-        'episodeId': row['episodeId'],
-        'animeName': row['animeName'],
-        'episodeTitle': row['episodeTitle'],
-        'videoHash': row['videoHash'],
-        'provenance': 'legacy_unknown'
-      };
-      final fingerprint = stableMediaId('legacy', evidence);
-      await database.insert(
-          'media_legacy_history',
-          {
-            'location_id': location['id'],
-            'fingerprint': fingerprint,
-            'payload': jsonEncode(evidence)
-          },
-          conflictAlgorithm: ConflictAlgorithm.replace);
+      await _filesChanged((added) => database.transaction((tx) async {
+            final locator = row['filePath'] as String;
+            final fileId = await _ensureFile(tx, locator, added);
+            final location = (await tx.query('media_locations',
+                    where: 'file_id=? AND locator=?',
+                    whereArgs: [fileId, locator]))
+                .single;
+            final evidence = <String, Object?>{
+              'animeId': row['animeId'],
+              'episodeId': row['episodeId'],
+              'animeName': row['animeName'],
+              'episodeTitle': row['episodeTitle'],
+              'videoHash': row['videoHash'],
+              'provenance': 'legacy_unknown'
+            };
+            final fingerprint = stableMediaId('legacy', evidence);
+            final previous = await tx.rawQuery(
+                'SELECT o.* FROM media_classic_current c JOIN media_classic_observations o ON o.id=c.observation_id WHERE c.location_id=?',
+                [location['id']]);
+            if (previous.isNotEmpty &&
+                previous.single['fingerprint'] == fingerprint) {
+              return;
+            }
+            if (previous.isNotEmpty && previous.single['binding_id'] != null) {
+              await tx.update('media_bindings', {'status': 'revoked'},
+                  where: 'id=?', whereArgs: [previous.single['binding_id']]);
+            }
+            final observationId = newMediaId('classic-observation');
+            final at = DateTime.now().toUtc();
+            String? bindingId;
+            final animeId = row['animeId'] as int?,
+                episodeId = row['episodeId'] as int?;
+            final item = WatchHistoryItem.fromJson(row);
+            final eligible = UnifiedMediaLibrarySource.values
+                .any((source) => mediaLibraryItemMatchesSource(item, source));
+            final matched = eligible &&
+                animeId != null &&
+                animeId > 0 &&
+                episodeId != null &&
+                episodeId > 0 &&
+                (row['animeName'] as String).isNotEmpty &&
+                row['episodeTitle'] != null;
+            if (matched) {
+              final work = MetadataRecord(
+                  ref: ExternalRef('dandanplay', 'anime', '$animeId'),
+                  title: row['animeName'] as String,
+                  kind: 'anime',
+                  language: 'und',
+                  order: 'provider',
+                  fetchedAt: at);
+              final episode = MetadataRecord(
+                  ref: ExternalRef('dandanplay', 'episode', '$episodeId',
+                      scope: 'anime/$animeId'),
+                  title: row['episodeTitle'] as String,
+                  kind: 'episode',
+                  language: 'und',
+                  order: 'provider',
+                  fetchedAt: at);
+              final workId = await _classicLocal(tx, 'work', work, null);
+              final releaseId =
+                  await _classicLocal(tx, 'release', work, workId);
+              final episodeLocalId =
+                  await _classicLocal(tx, 'episode', episode, releaseId);
+              for (final pair in [
+                (workId, work),
+                (releaseId, work),
+                (episodeLocalId, episode)
+              ]) {
+                final objectId = await _object(tx, pair.$2.ref);
+                final existing = await tx.query('media_bindings',
+                    where: 'entity_id=? AND object_id=? AND status=?',
+                    whereArgs: [pair.$1, objectId, 'accepted']);
+                if (existing.isEmpty) {
+                  await _classicBinding(
+                      tx, pair.$1, pair.$2, observationId, at);
+                }
+              }
+              for (final record in [work, episode]) {
+                await tx.insert('media_snapshots', {
+                  'id': stableMediaId(
+                      'classic-snapshot', [observationId, record.ref.toJson()]),
+                  'object_id': await _object(tx, record.ref),
+                  'language': record.language,
+                  'fetched_at': at.toIso8601String(),
+                  'fields': jsonEncode(
+                      {...record.toJson(), 'source': 'classic_match'})
+                });
+              }
+              // A readback of our durable projection is a delivery fact, not a new Classic decision.
+              final projections = await tx.query('media_projection_outbox',
+                  where: 'file_id=? AND state IN (?,?)',
+                  whereArgs: [fileId, 'pending', 'delivered'],
+                  orderBy: 'binding_revision DESC',
+                  limit: 1);
+              final projected = projections.isEmpty
+                  ? <String, Object?>{}
+                  : decodeMediaJson(projections.single['payload']);
+              final echo = projected['animeId'] == animeId &&
+                  projected['episodeId'] == episodeId;
+              if (!echo) {
+                bindingId = await _classicBinding(
+                    tx, fileId, episode, observationId, at);
+                await tx.insert(
+                    'media_file_episodes',
+                    {
+                      'file_id': fileId,
+                      'episode_id': episodeLocalId,
+                      'relation': 'exact',
+                      'ordinal': 0,
+                    },
+                    conflictAlgorithm: ConflictAlgorithm.ignore);
+              }
+              evidence['provenance'] =
+                  echo ? 'next_projection_readback' : 'classic_match';
+            }
+            final oldLegacy = await tx.query('media_legacy_history',
+                where: 'location_id=?', whereArgs: [location['id']]);
+            await tx.insert('media_classic_observations', {
+              'id': observationId,
+              'location_id': location['id'],
+              'fingerprint': fingerprint,
+              'payload': jsonEncode({
+                ...evidence,
+                if (previous.isEmpty && oldLegacy.isNotEmpty)
+                  'priorLegacyEvidence':
+                      decodeMediaJson(oldLegacy.single['payload'])
+              }),
+              'binding_id': bindingId,
+              'observed_at': at.toIso8601String(),
+            });
+            await tx.insert(
+                'media_classic_current',
+                {
+                  'location_id': location['id'],
+                  'observation_id': observationId
+                },
+                conflictAlgorithm: ConflictAlgorithm.replace);
+            // Preserve the released legacy evidence verbatim; new observations carry subsequent changes.
+            await tx.insert(
+                'media_legacy_history',
+                {
+                  'location_id': location['id'],
+                  'fingerprint': fingerprint,
+                  'payload':
+                      jsonEncode({...evidence, 'provenance': 'legacy_unknown'})
+                },
+                conflictAlgorithm: ConflictAlgorithm.ignore);
+            await _pruneFileLinks(tx, fileId);
+          }));
+    }
+    if (reconcileMissing) {
+      final locators = history.map((row) => row['filePath']).toSet();
+      final current = await database.rawQuery(
+          'SELECT l.locator FROM media_classic_current c JOIN media_locations l ON l.id=c.location_id WHERE l.owner_device_id=?',
+          [ownerDeviceId]);
+      final removed =
+          current.where((row) => !locators.contains(row['locator'])).toList();
+      if (removed.isNotEmpty) {
+        await importLegacy([
+          for (final row in removed)
+            {'filePath': row['locator'], 'animeName': '', 'episodeTitle': null}
+        ], reconcileMissing: false);
+      }
     }
     return history.length;
+  }
+
+  Future<String> _classicLocal(DatabaseExecutor tx, String kind,
+      MetadataRecord record, String? parent) async {
+    final owners = await tx.rawQuery(
+        'SELECT DISTINCT e.id FROM media_entities e JOIN media_bindings b ON b.entity_id=e.id WHERE e.kind=? AND b.object_id=? AND b.status=?',
+        [kind, stableMediaId('object', record.ref.toJson()), 'accepted']);
+    if (owners.length > 1) {
+      throw Failure(FailureCode.conflict,
+          'Classic external object has multiple local $kind owners: ${owners.map((row) => row['id']).join(', ')}. No owner was selected.');
+    }
+    if (owners.isNotEmpty) return owners.first['id'] as String;
+    return _materialize(tx, kind, record, parent);
+  }
+
+  Future<String> _classicBinding(DatabaseExecutor tx, String entityId,
+      MetadataRecord record, String observationId, DateTime at) async {
+    final objectId = await _object(tx, record.ref);
+    final id = stableMediaId('classic-binding', [observationId, entityId]);
+    await tx.insert('media_bindings', {
+      'id': id,
+      'entity_id': entityId,
+      'object_id': objectId,
+      'relation': record.kind == 'episode' ? 'exact' : 'contains',
+      'scope': jsonEncode({
+        'order': 'provider',
+        'season': null,
+        'cour': null,
+        'numbers': <String>[],
+        'startMs': null,
+        'endMs': null
+      }),
+      'status': 'accepted',
+      'source': 'classic_match',
+      'revision': 0,
+      'created_at': at.toIso8601String(),
+    });
+    await tx.insert('media_evidence', {
+      'id': newMediaId('evidence'),
+      'binding_id': id,
+      'source': 'classic_match',
+      'payload': jsonEncode(
+          {'observationId': observationId, 'event': 'classic_match'}),
+      'created_at': at.toIso8601String()
+    });
+    return id;
+  }
+
+  Future<void> _pruneFileLinks(DatabaseExecutor tx, String fileId) async {
+    await tx.rawDelete(
+        'DELETE FROM media_file_episodes WHERE file_id=? AND NOT EXISTS ('
+        'SELECT 1 FROM media_bindings f JOIN media_bindings e ON e.object_id=f.object_id '
+        'WHERE f.entity_id=? AND f.status=\'accepted\' AND e.entity_id=media_file_episodes.episode_id AND e.status=\'accepted\')',
+        [fileId, fileId]);
   }
 
   Future<String> _object(DatabaseExecutor tx, ExternalRef ref) async {
@@ -289,8 +478,8 @@ final class IdentityStore {
       int revision) async {
     final objectId = await _object(tx, record.ref);
     final accepted = await tx.query('media_bindings',
-        where: 'entity_id = ? AND object_id = ? AND status = ?',
-        whereArgs: [entityId, objectId, 'accepted']);
+        where: 'entity_id = ? AND object_id = ? AND status = ? AND source != ?',
+        whereArgs: [entityId, objectId, 'accepted', 'classic_match']);
     if (accepted.isNotEmpty) {
       final binding = accepted.single;
       if (binding['relation'] != relation ||
@@ -339,11 +528,14 @@ final class IdentityStore {
   Future<String> saveSnapshot(MetadataRecord record) => database.transaction(
       (tx) async => _snapshot(tx, await _object(tx, record.ref), record));
 
-  Future<List<JsonMap>> pendingProjections({String? fileId}) =>
-      database.query('media_projection_outbox',
-          where: fileId == null ? 'state = ?' : 'state = ? AND file_id = ?',
-          whereArgs: ['pending', if (fileId != null) fileId],
-          orderBy: 'binding_revision');
+  Future<List<JsonMap>> pendingProjections({String? fileId}) => database.query(
+      'media_projection_outbox',
+      where: fileId == null ? 'state = ?' : 'state IN (?,?) AND file_id = ?',
+      whereArgs: [
+        'pending',
+        if (fileId != null) ...['conflict', fileId]
+      ],
+      orderBy: 'binding_revision');
   Future<void> finishProjection(String id, String state) =>
       database.update('media_projection_outbox', {'state': state},
           where: 'id = ?', whereArgs: [id]);
@@ -368,9 +560,85 @@ final class IdentityStore {
     };
   }
 
+  Future<List<JsonMap>> classicObservations(String fileId,
+      {bool currentOnly = false}) async {
+    final rows = await database.rawQuery(
+        'SELECT o.*,c.observation_id FROM media_classic_observations o '
+        'JOIN media_locations l ON l.id=o.location_id LEFT JOIN media_classic_current c ON c.location_id=l.id '
+        'WHERE l.file_id=? ${currentOnly ? 'AND o.id=c.observation_id' : ''} ORDER BY o.observed_at,o.id',
+        [fileId]);
+    return [
+      for (final row in rows)
+        {
+          'observationId': row['id'],
+          'locationId': row['location_id'],
+          'current': row['id'] == row['observation_id'],
+          'observedAt': row['observed_at'],
+          'bindingId': row['binding_id'],
+          ...decodeMediaJson(row['payload'])
+        }
+    ];
+  }
+
+  Future<List<JsonMap>> identityConflicts(String id) async {
+    final conflicts = <JsonMap>[];
+    final classic = await classicObservations(id, currentOnly: true);
+    final bindings = await database.rawQuery(
+        'SELECT b.id,b.source,o.external_id,o.scope,o.provider FROM media_bindings b '
+        'JOIN media_external_objects o ON o.id=b.object_id WHERE b.entity_id=? AND b.status=? AND b.source!=?',
+        [id, 'accepted', 'classic_match']);
+    for (final observation
+        in classic.where((o) => o['provenance'] == 'classic_match')) {
+      for (final binding in bindings) {
+        bool same;
+        if (binding['provider'] == 'dandanplay') {
+          same = binding['external_id'] == '${observation['episodeId']}' &&
+              binding['scope'] == 'anime/${observation['animeId']}';
+        } else {
+          final shared = await database.rawQuery(
+              'SELECT 1 FROM media_bindings a JOIN media_bindings b ON b.entity_id=a.entity_id '
+              'JOIN media_external_objects o ON o.id=b.object_id JOIN media_entities e ON e.id=a.entity_id '
+              'WHERE a.object_id=(SELECT object_id FROM media_bindings WHERE id=?) AND b.status=? AND a.status=? '
+              'AND e.kind=? AND o.provider=? AND o.external_id=? AND o.scope=?',
+              [
+                binding['id'],
+                'accepted',
+                'accepted',
+                'episode',
+                'dandanplay',
+                '${observation['episodeId']}',
+                'anime/${observation['animeId']}'
+              ]);
+          same = shared.isNotEmpty;
+        }
+        if (!same) {
+          conflicts.add({
+            'type': 'different_episode',
+            'classicObservationId': observation['observationId'],
+            'bindingId': binding['id'],
+            'source': binding['source'],
+            'provider': binding['provider'],
+            'externalId': binding['external_id'],
+            'classicAnimeId': observation['animeId'],
+            'classicEpisodeId': observation['episodeId']
+          });
+        }
+      }
+    }
+    for (final projection in await database.query('media_projection_outbox',
+        where: 'file_id=? AND state=?', whereArgs: [id, 'conflict'])) {
+      conflicts.add({
+        'type': 'classic_projection',
+        'projectionId': projection['id'],
+        'payload': decodeMediaJson(projection['payload'])
+      });
+    }
+    return conflicts;
+  }
+
   Future<JsonMap> mergedMetadata(String entityId) async {
     final rows = await database.rawQuery(
-        'SELECT s.*,o.provider FROM media_snapshots s JOIN media_external_objects o ON o.id=s.object_id JOIN media_bindings b ON b.object_id=o.id WHERE b.entity_id = ? AND b.status = ? ORDER BY s.fetched_at DESC, s.id',
+        'SELECT s.*,o.provider FROM media_snapshots s JOIN media_external_objects o ON o.id=s.object_id JOIN media_bindings b ON b.object_id=o.id WHERE b.entity_id = ? AND b.status = ? ORDER BY CASE WHEN json_extract(s.fields,\'\$.source\')=\'classic_match\' THEN 1 ELSE 0 END, s.fetched_at DESC, s.id',
         [entityId, 'accepted']);
     final fields = <String, Object?>{}, provenance = <String, Object?>{};
     for (final row in rows) {
@@ -388,6 +656,7 @@ final class IdentityStore {
           fields[field] = values[field];
           provenance[field] = {
             'provider': row['provider'],
+            'source': values['source'] ?? 'provider_snapshot',
             'language': row['language'],
             'fetchedAt': row['fetched_at']
           };
@@ -568,7 +837,7 @@ final class IdentityStore {
     }
     final rows = await tx.rawQuery(
         'SELECT o.* FROM media_bindings b JOIN media_external_objects o ON o.id=b.object_id '
-        'WHERE b.entity_id=? AND b.status=? AND o.provider=?',
+        'WHERE b.entity_id=? AND b.status=? AND o.provider=? AND b.source!=\'classic_match\'',
         [id, 'accepted', records.first.ref.provider]);
     final expected = {
       for (final r in records) stableMediaId('object', r.ref.toJson())
@@ -703,9 +972,25 @@ final class IdentityStore {
                       where: 'file_id=?',
                       whereArgs: [fileId],
                       orderBy: 'ordinal');
-                  if (links.isNotEmpty &&
-                      stableMediaId('links',
-                              links.map((row) => row['episode_id']).toList()) !=
+                  final explicitLinks = <JsonMap>[];
+                  for (final link in links) {
+                    final bindings = await tx.rawQuery(
+                        'SELECT 1 FROM media_bindings f JOIN media_bindings e ON e.object_id=f.object_id WHERE f.entity_id=? AND f.status=? AND f.source!=? AND e.entity_id=? AND e.status=?',
+                        [
+                          fileId,
+                          'accepted',
+                          'classic_match',
+                          link['episode_id'],
+                          'accepted'
+                        ]);
+                    if (bindings.isNotEmpty) explicitLinks.add(link);
+                  }
+                  if (explicitLinks.isNotEmpty &&
+                      stableMediaId(
+                              'links',
+                              explicitLinks
+                                  .map((row) => row['episode_id'])
+                                  .toList()) !=
                           stableMediaId('links', episodeIds)) {
                     throw const Failure(FailureCode.conflict,
                         'File is already linked to different local episodes; unbind it explicitly.');
@@ -728,7 +1013,7 @@ final class IdentityStore {
                       'start_ms': entry['startMs'],
                       'end_ms': entry['endMs']
                     };
-                    final same = links
+                    final same = explicitLinks
                         .where((row) => row['episode_id'] == episodeIds[i]);
                     if (same.isNotEmpty &&
                         (same.single['relation'] != relation ||
@@ -813,7 +1098,7 @@ final class IdentityStore {
             final entityRow = await entity(id, db: tx);
             final bindings = await tx.rawQuery(
                 'SELECT b.*,o.provider,o.external_id,o.scope AS object_scope FROM media_bindings b '
-                'JOIN media_external_objects o ON o.id=b.object_id WHERE b.entity_id=? AND b.status=?',
+                'JOIN media_external_objects o ON o.id=b.object_id WHERE b.entity_id=? AND b.status=? AND b.source!=\'classic_match\'',
                 [id, 'accepted']);
             final requested = (entry['bindingIds'] as List?)?.cast<String>();
             if (requested != null &&
@@ -895,7 +1180,7 @@ final class IdentityStore {
       {List<JsonMap> removed = const []}) async {
     final current = await tx.rawQuery(
         'SELECT b.relation,o.external_id,o.scope AS object_scope,o.id FROM media_bindings b '
-        'JOIN media_external_objects o ON o.id=b.object_id WHERE b.entity_id=? AND b.status=? AND o.provider=?',
+        'JOIN media_external_objects o ON o.id=b.object_id WHERE b.entity_id=? AND b.status=? AND o.provider=? AND b.source!=\'classic_match\'',
         [fileId, 'accepted', 'dandanplay']);
     JsonMap? payload;
     if (current.length == 1 && current.single['relation'] == 'exact') {
@@ -929,6 +1214,24 @@ final class IdentityStore {
         'episodeTitle': await title(row['id'] as String)
       };
     } else if (removed.length == 1 && removed.single['relation'] == 'exact') {
+      final classic = await tx.query('media_bindings',
+          where: 'entity_id=? AND source=? AND status=?',
+          whereArgs: [fileId, 'classic_match', 'accepted']);
+      if (classic.isNotEmpty) return;
+      final delivered = await tx.query('media_projection_outbox',
+          where: 'file_id=? AND state=?',
+          whereArgs: [fileId, 'delivered'],
+          orderBy: 'binding_revision DESC',
+          limit: 1);
+      if (delivered.isEmpty) return;
+      final last = decodeMediaJson(delivered.single['payload']);
+      if (last['episodeId'] !=
+              int.parse(removed.single['external_id'] as String) ||
+          last['animeId'] !=
+              int.parse(
+                  (removed.single['object_scope'] as String).split('/').last)) {
+        return;
+      }
       payload = {
         'clear': true,
         'expectedAnimeId': int.parse(

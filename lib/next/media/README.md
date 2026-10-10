@@ -16,13 +16,13 @@ Action id 是 Harness 名称；MCP 名称把点替换为下划线。输入输出
 | `media.metadata.search_batch` | read | 批量搜索 TMDB、Bangumi、弹弹play等已注册来源。 |
 | `media.metadata.get_batch` | read | 批量查询作品、季或集的详情，同一调用中的相同引用只请求一次。 |
 | `media.identity.bind_batch` | write | 原子保存显式指定的文件、集、季、作品绑定及理由、证据。 |
-| `media.identity.unbind_batch` | write | 原子撤销多个实体的全部或指定绑定，保留来源审计。 |
+| `media.identity.unbind_batch` | write | 原子撤销多个实体的全部或指定显式绑定，保留来源审计；Classic 来源事实跟随 Classic 的匹配操作。 |
 | `media.metadata.search` | read | 保留单次来源搜索。 |
 | `media.metadata.get` | read | 保留单个外部对象详情查询。 |
-| `media.identity.get` | read | 读取身份、位置、来源审计和合成元数据，沿用按需 File/FileLocation 基础设施登记。 |
-| `media.library.works` | read | 读取 Next 作品及季、集、文件结构，支持非弹弹play身份。 |
+| `media.identity.get` | read | 读取身份、位置、来源审计、合成元数据，以及 Classic 历次观察和当前冲突。 |
+| `media.library.works` | read | 读取共享作品及季、集、文件结构，包含 Classic 弹弹play匹配，支持非弹弹play身份。 |
 | `media.library.work` | read | 读取一部 Next 作品的结构与元数据。 |
-| `media.library.import_history` | write | 将 Classic 历史导入旁路索引，不推断绑定者或确认身份。 |
+| `media.library.import_history` | write | 重入同步 Classic 文件与有效匹配，保留来源事实与冲突，不推断绑定者。 |
 | `media.library.scan` | write | 提交枚举、探测、哈希和文件索引任务，不请求元数据来源。 |
 | `media.metadata.override` | write | GUI 与 Agent 均可编辑；宿主记录 actor/origin。mode=persistent 刷新保留，correction 被新快照替代，clear 清除编辑。省略 mode 保持持久覆盖兼容语义。 |
 | `media.metadata.refresh` | write | 沿用元数据快照刷新任务，不改变身份。 |
@@ -67,6 +67,18 @@ FileEpisode 的关系/时间段由宿主校验。违反不变量返回稳定 Fai
 outbox 只有回读确认后才完成。投影失败返回对应条目错误，并明确身份已经提交、
 投影仍待完成；重试和启动恢复都使用同一持久 outbox。
 
+Classic 有效匹配按现有媒体库来源筛选函数进入同一实体、绑定及 FileEpisode 表，
+`source=classic_match`、`boundBy=null`。清除后保留的 ID 和远端服务自己的身份仍为历史证据。
+启动、Classic 历史通知和显式身份写入都会同步；匹配变化保存追加观察，
+撤销旧的 Classic 文件绑定而不改动 Agent/user 绑定。按弹弹play外部对象复用既有实体，
+不按标题或文件名合并。不同来源指向不同集时均保留关联，`identity.get.conflicts` 可见。
+跨来源的同一集可由 Agent 明确提供 `localEpisodeIds` 表达。
+
+Classic 已有不同匹配时，outbox 标为 `conflict`，显式绑定仍已提交，Classic 保持原值。
+再次调用原 requestId 可重试该文件的投递；启动只恢复 `pending`，不自动处理 `conflict`。
+Classic 已有相同 ID 时仅确认，不重写其标题；无匹配时仅填写匹配列，保留历史其他列。
+解除显式绑定不清除独立 Classic 匹配；投递回读不会再制造一个独立 Classic 匹配。
+
 ## 存储与升级
 
 数据库仍由 NextCore 提供唯一连接；MediaRuntime 仅提供 Capability 和基础设施执行器。
@@ -80,6 +92,12 @@ legacy history、Classic projection outbox 均保留，不重算身份或修改 
 旧非终态 media.identify / media.apply_release 任务标记为明确失败并追加任务事件，
 历史终态任务保持不变；升级不会恢复旧判断流程。
 补充时长等 probe 信息不改变文件内容修订，也不撤销原绑定。
+
+v8 只追加 `media_classic_observations` 和 `media_classic_current`，原表和数据不变。
+首次同步保留原 `media_legacy_history`，每个文件的观察、身份和当前指针同事务提交；
+中断后启动从 Classic 重读，已提交的相同指纹不重复写入。进度不参与指纹。
+Classic 标题快照带来源及未知语言 `und`，不会覆盖来源服务快照或持久用户编辑；
+所有原始标题仍可从观察读取。Classic 删除文件时撤销其来源关联，保留历次观察与结构实体。
 
 ## 验证边界
 

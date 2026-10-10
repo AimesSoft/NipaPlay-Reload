@@ -44,7 +44,9 @@ class ServiceProvider {
             await SettingsStorage.loadBool(SettingsKeys.downloaderEnabled,
                 defaultValue: true),
         loadImportedKeys: native.loadAutoScannedCompletedTaskKeys,
-        classic: WatchHistoryMetadataPort(changed: watchHistoryProvider.refresh),
+        classic: WatchHistoryMetadataPort(
+            changed: watchHistoryProvider.refresh,
+            historyChanges: watchHistoryProvider),
         authorizedRoots: () => scanService.scannedFolders,
       );
     }

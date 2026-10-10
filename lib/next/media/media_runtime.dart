@@ -1,4 +1,6 @@
 import 'dart:io';
+import 'dart:async';
+import 'package:flutter/foundation.dart';
 
 import 'package:http/http.dart' as http;
 import 'package:nipa_harness/nipa_harness.dart';
@@ -24,6 +26,24 @@ final class MediaRuntime {
   final List<JobExecutor> executors;
   final MediaCapability capability;
   final List<http.Client> _clients;
+  Listenable? _historyChanges;
+  Timer? _historyTimer;
+
+  void _classicChanged() {
+    _historyTimer?.cancel();
+    _historyTimer = Timer(const Duration(milliseconds: 250), () {
+      unawaited(service
+          .syncClassicHistory()
+          .catchError((Object error, StackTrace stack) {
+        FlutterError.reportError(FlutterErrorDetails(
+            exception: error,
+            stack: stack,
+            library: 'Next media library',
+            context: ErrorDescription('synchronizing Classic matches')));
+        return 0;
+      }));
+    });
+  }
 
   static Future<MediaRuntime> create(
       Directory root, Database db, String deviceId,
@@ -63,17 +83,31 @@ final class MediaRuntime {
         authorizedRoots: authorizedRoots,
         providers: providers,
         durationProbe: durationProbe);
-    await service.mutate(() async {
-      await store.importLegacy(await classic.history());
-    });
-    return MediaRuntime._(service, clients);
+    final runtime = MediaRuntime._(service, clients);
+    if (classic is WatchHistoryMetadataPort) {
+      runtime._historyChanges = classic.historyChanges;
+      runtime._historyChanges?.addListener(runtime._classicChanged);
+    }
+    await service.syncClassicHistory();
+    return runtime;
   }
 
   void attach(TaskEngine engine) => service.engine = engine;
 
   Future<void> start() => service.recoverProjections();
 
+  void _stopObservingClassic() {
+    _historyTimer?.cancel();
+    _historyChanges?.removeListener(_classicChanged);
+  }
+
+  Future<void> quiesce() async {
+    _stopObservingClassic();
+    await service.mutate(() async {});
+  }
+
   void close() {
+    _stopObservingClassic();
     for (final client in _clients) {
       client.close();
     }

@@ -30,8 +30,8 @@ void main() {
     await db.insert('watch_history', {
       'file_path': path,
       'media_key': 'fixture-media-key',
-      'anime_name': 'Legacy',
-      'episode_title': 'Legacy episode',
+      'anime_name': '',
+      'episode_title': null,
       'anime_id': 1,
       'episode_id': 2,
       'watch_progress': 0.4,
@@ -63,8 +63,7 @@ void main() {
         DateTime.utc(2026, 10, 10));
     expect(projected['thumbnail_path'], '/fixture/thumbnail.jpg');
     await port.apply(path, {...fields, 'animeName': 'Refined name'});
-    expect(
-        (await db.query('watch_history')).single['anime_name'], 'Refined name');
+    expect((await db.query('watch_history')).single['anime_name'], 'Animation');
     await port.apply(path,
         {'clear': true, 'expectedAnimeId': 7001, 'expectedEpisodeId': 7101});
     expect(await port.verify(path, {'clear': true}), isTrue);

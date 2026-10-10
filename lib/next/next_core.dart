@@ -162,6 +162,7 @@ final class NextCore {
     await downloads.stop();
     await danmaku.stopRestoring();
     final jobs = await engine.list(type: 'download');
+    await media.quiesce();
     await engine.close();
     await downloads.quiesce(jobs);
     downloads.dispose();

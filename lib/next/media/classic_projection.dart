@@ -1,4 +1,5 @@
 import 'package:nipa_harness/nipa_harness.dart';
+import 'package:flutter/foundation.dart';
 import 'package:nipaplay/models/watch_history_database.dart';
 import 'package:nipaplay/services/anime_deletion_tombstones.dart';
 
@@ -11,14 +12,32 @@ abstract interface class ClassicMetadataPort {
 }
 
 final class WatchHistoryMetadataPort implements ClassicMetadataPort {
-  const WatchHistoryMetadataPort({required this.changed});
+  const WatchHistoryMetadataPort({required this.changed, this.historyChanges});
   final Future<void> Function() changed;
+  final Listenable? historyChanges;
   @override
   Future<List<JsonMap>> history() async {
     final history = WatchHistoryDatabase.instance;
     await history.migrateFromJson();
+    final db = await history.database;
+    // Read failure must not be mistaken for an empty library.
     return [
-      for (final item in await history.getAllWatchHistory()) item.toJson()
+      for (final row in await db.query('watch_history'))
+        {
+          'filePath': row['file_path'],
+          'animeId': row['anime_id'],
+          'episodeId': row['episode_id'],
+          'animeName': row['anime_name'],
+          'episodeTitle': row['episode_title'],
+          'videoHash': null,
+          'watchProgress': row['watch_progress'],
+          'lastPosition': row['last_position'],
+          'duration': row['duration'],
+          'lastWatchTime': row['last_watch_time'],
+          'thumbnailPath': row['thumbnail_path'],
+          'isFromScan': row['is_from_scan'] == 1,
+          'mediaKey': row['media_key'],
+        }
     ];
   }
 
@@ -48,21 +67,36 @@ final class WatchHistoryMetadataPort implements ClassicMetadataPort {
         'anime_name': fields['animeName'],
         'episode_title': fields['episodeTitle']
       };
-      final changed = await db.update('watch_history', matching,
-          where: 'file_path = ?', whereArgs: [locator]);
-      if (changed == 0) {
-        await history.mergeEpisodeMatchBatch([
-          EpisodeMatchRestoreItem(
-              filePath: locator,
-              animeId: fields['animeId'] as int,
-              episodeId: fields['episodeId'] as int,
-              animeName: fields['animeName'] as String,
-              episodeTitle: fields['episodeTitle'] as String)
-        ]);
-        await db.update('watch_history', matching,
-            where: 'file_path = ? AND anime_id = ? AND episode_id = ?',
-            whereArgs: [locator, fields['animeId'], fields['episodeId']]);
-      }
+      await db.transaction((tx) async {
+        final rows = await tx
+            .query('watch_history', where: 'file_path=?', whereArgs: [locator]);
+        if (rows.isNotEmpty) {
+          final current = rows.single;
+          if (current['anime_name'] != '' &&
+              current['episode_title'] != null &&
+              current['anime_id'] != null &&
+              current['episode_id'] != null) {
+            if (current['anime_id'] != fields['animeId'] ||
+                current['episode_id'] != fields['episodeId']) {
+              throw const Failure(FailureCode.conflict,
+                  'Classic has a different match; both source facts are retained.');
+            }
+            return;
+          }
+          await tx.update('watch_history', matching,
+              where: 'file_path=?', whereArgs: [locator]);
+        } else {
+          await tx.insert('watch_history', {
+            ...matching,
+            'file_path': locator,
+            'watch_progress': 0.0,
+            'last_position': 0,
+            'duration': 0,
+            'last_watch_time': DateTime.now().toUtc().toIso8601String(),
+            'is_from_scan': 1
+          });
+        }
+      });
     }
     await changed();
   }
@@ -78,8 +112,8 @@ final class WatchHistoryMetadataPort implements ClassicMetadataPort {
     return current != null &&
         current.animeId == fields['animeId'] &&
         current.episodeId == fields['episodeId'] &&
-        current.animeName == fields['animeName'] &&
-        current.episodeTitle == fields['episodeTitle'];
+        current.animeName.isNotEmpty &&
+        current.episodeTitle != null;
   }
 }
 
@@ -88,6 +122,7 @@ final class ClassicProjection {
   final IdentityStore store;
   final ClassicMetadataPort port;
   Future<void> drain({String? fileId}) async {
+    await store.importLegacy(await port.history());
     for (final row in await store.pendingProjections(fileId: fileId)) {
       final file = await store.entity(row['file_id'] as String);
       if (file['revision'] != row['file_revision'] ||
@@ -97,14 +132,42 @@ final class ClassicProjection {
         continue;
       }
       final fields = decodeMediaJson(row['payload']);
-      for (final location in await store.locations(row['file_id'] as String)) {
-        await port.apply(location['locator'] as String, fields);
-        if (!await port.verify(location['locator'] as String, fields)) {
-          throw const Failure(FailureCode.unavailable,
-              'Classic metadata projection failed readback.');
+      try {
+        for (final location in (await store.locations(row['file_id'] as String))
+            .where((location) =>
+                location['owner_device_id'] == store.ownerDeviceId)) {
+          final observations = await store
+              .classicObservations(row['file_id'] as String, currentOnly: true);
+          final atLocation =
+              observations.where((o) => o['locationId'] == location['id']);
+          final current =
+              atLocation.isEmpty ? <String, Object?>{} : atLocation.single;
+          if (current['animeName'] != null &&
+              current['animeName'] != '' &&
+              current['episodeTitle'] != null &&
+              current['animeId'] != null &&
+              current['episodeId'] != null &&
+              (current['animeId'] !=
+                      (fields['animeId'] ?? fields['expectedAnimeId']) ||
+                  current['episodeId'] !=
+                      (fields['episodeId'] ?? fields['expectedEpisodeId']))) {
+            throw const Failure(FailureCode.conflict,
+                'Classic has a different match; inspect media.identity.get conflicts.');
+          }
+          await port.apply(location['locator'] as String, fields);
+          if (!await port.verify(location['locator'] as String, fields)) {
+            throw const Failure(FailureCode.unavailable,
+                'Classic metadata projection failed readback.');
+          }
         }
+        await store.finishProjection(row['id'] as String, 'delivered');
+      } on Failure catch (error) {
+        if (error.code == FailureCode.conflict) {
+          await store.finishProjection(row['id'] as String, 'conflict');
+        }
+        rethrow;
       }
-      await store.finishProjection(row['id'] as String, 'delivered');
     }
+    await store.importLegacy(await port.history());
   }
 }
