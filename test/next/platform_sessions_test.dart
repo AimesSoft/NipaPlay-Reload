@@ -394,9 +394,7 @@ void main() {
         vault.data.values.single, contains('synthetic-renewed_4102444800000'));
   });
 
-  test(
-      'Youku auth expiry is truthful, bounded and directs user to NipaPlay login',
-      () async {
+  test('Youku auth expiry reports the platform and session state', () async {
     await signIn('youku');
     var calls = 0;
     final bridge = VaultYoukuSessionBridge(sessions, MockClient((_) async {
@@ -411,10 +409,10 @@ void main() {
     expect(calls, 1);
     expect(sessions.status('youku')['status'], 'expiredOrRejected');
     expect(
-        const SourceFailure(SourceStatus.authenticationRequired,
-                diagnostics: platformLoginHint)
+        SourceFailure(SourceStatus.authenticationRequired,
+                diagnostics: sessions.status('youku')['loginHint'] as String)
             .message,
-        contains('平台登录'));
+        contains('youku 需要登录态；当前状态：expiredOrRejected'));
   });
 
   test('Youku rejects redirects, malformed replies and oversized responses',
@@ -531,7 +529,7 @@ void main() {
     expect(sessions.status('bilibili')['status'], 'expiredOrRejected');
   });
 
-  test('anonymous Bilibili login-only endpoint gives a NipaPlay login hint',
+  test('anonymous Bilibili login-only endpoint reports the session state',
       () async {
     final host = HttpDanmakuHost(
         publicClient: MockClient((_) async => _jsonResponse({'code': -101})),
@@ -543,7 +541,8 @@ void main() {
         throwsA(isA<SourceFailure>()
             .having(
                 (e) => e.status, 'status', SourceStatus.authenticationRequired)
-            .having((e) => e.message, 'login hint', contains('平台登录'))));
+            .having((e) => e.message, 'login hint',
+                contains('bilibili 需要登录态；当前状态：loggedOut'))));
     final scoped = ScopedDanmakuHost(
         host,
         const DanmakuDescriptor(

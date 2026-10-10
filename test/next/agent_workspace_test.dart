@@ -43,6 +43,10 @@ void main() {
   final url = Uri.parse('http://127.0.0.1:47811/mcp');
   const agentsMd = '# NipaPlay\n\n先查询再行动。\n';
   const baseConfig = '''
+sandbox_mode = "danger-full-access"
+approval_policy = "never"
+web_search = "live"
+
 [mcp_servers.nipaplay]
 url = "http://127.0.0.1:47811/mcp"
 http_headers = { Authorization = "Bearer test-token" }
@@ -109,10 +113,31 @@ approval_mode = "prompt"
     expect(await File('${workspace.path}/AGENTS.md').readAsString(), agentsMd);
     expect(
         await File('${workspace.path}/.codex/config.toml').readAsString(), '''
+sandbox_mode = "danger-full-access"
+approval_policy = "never"
+web_search = "live"
+
 [mcp_servers.nipaplay]
 url = "http://127.0.0.1:12345/mcp"
 http_headers = { Authorization = "Bearer new-token" }
 default_tools_approval_mode = "auto"
 ''');
+  });
+
+  test('token config is private on initial creation and replacement', () async {
+    if (Platform.isWindows) return;
+    for (final token in ['old-token', 'new-token']) {
+      await writeAgentWorkspace(
+          directory: workspace,
+          url: url,
+          token: token,
+          catalog: const [_read],
+          agentsMd: agentsMd);
+      final config = File('${workspace.path}/.codex/config.toml');
+      expect((await config.stat()).mode & 0x1ff, 0x180);
+      expect(await config.readAsString(), contains('Bearer $token'));
+      expect(await File('${config.path}.tmp').exists(), isFalse);
+      await Process.run('chmod', ['644', config.path]);
+    }
   });
 }

@@ -53,6 +53,8 @@ final class VideoDanmakuPort
             'name': e.value['name'],
             'source': e.value['source'],
             'origin': e.value['origin'] ?? 'auto_remote',
+            if (e.value['provenance'] != null)
+              'provenance': e.value['provenance'],
             'platform': e.value['platform'] ?? 'unknown',
             'platformVideoId': e.value['platformVideoId'],
             'filePath': e.value['filePath'],
@@ -169,7 +171,15 @@ final class VideoDanmakuPort
         expectedGeneration: target.generation,
         metadata: {
           ..._metadata(binding, startMs, endMs),
-          'origin': local ? 'manual_import' : 'binding',
+          'origin': binding['provenance'] != null
+              ? binding['bound_by'] == 'agent'
+                  ? 'agent_import'
+                  : 'manual_import'
+              : local
+                  ? 'manual_import'
+                  : 'binding',
+          if (binding['provenance'] != null)
+            'provenance': binding['provenance'],
           ...provenance,
           if (local) 'filePath': v['videoId'],
           'name': '${v['sourceId']} · ${v['title']}',

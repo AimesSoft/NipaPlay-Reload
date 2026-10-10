@@ -14,8 +14,118 @@ final class DanmakuStore {
         ...b,
         'video': decodeMediaJson(b['video']),
         'evidence': decodeMediaJson(b['evidence']),
-        'alignment': decodeMediaJson(b['alignment'])
+        'alignment': decodeMediaJson(b['alignment']),
+        'provenance':
+            b['provenance'] == null ? null : decodeMediaJson(b['provenance'])
       };
+
+  Future<JsonMap> importEntries(
+          String entityId,
+          DanmakuVideo video,
+          List<DanmakuEntry> entries,
+          String filePath,
+          String? note,
+          Invocation invocation) =>
+      db.transaction((tx) async {
+        final entity = await identities.entity(entityId, db: tx);
+        if (!['file', 'episode'].contains(entity['kind'])) {
+          throw const Failure(
+              FailureCode.invalidInput, 'Danmaku binds to a file or episode.');
+        }
+        final previous = await tx.query('danmaku_bindings',
+            where: 'entity_id = ? AND entity_revision = ? AND status = ? '
+                "AND json_extract(video, '\$.sourceId') = ? "
+                "AND json_extract(video, '\$.videoId') = ?",
+            whereArgs: [
+              entityId,
+              entity['revision'],
+              'accepted',
+              video.sourceId,
+              video.videoId
+            ],
+            orderBy: 'created_at,id');
+        final b = previous.isEmpty ? null : previous.first;
+        final id = b?['id'] as String? ?? newMediaId('danmaku');
+        final revision = b == null ? 0 : (b['revision'] as int) + 1;
+        final storedVideo = b == null
+            ? video
+            : DanmakuVideo.fromJson(decodeMediaJson(b['video']));
+        final ref = ExternalRef(
+            storedVideo.sourceId, storedVideo.objectType, storedVideo.videoId);
+        final objectId = stableMediaId('object', ref.toJson());
+        await tx.insert(
+            'media_external_objects',
+            {
+              'id': objectId,
+              'provider': ref.provider,
+              'object_type': ref.objectType,
+              'external_id': ref.externalId,
+              'scope': ref.scope
+            },
+            conflictAlgorithm: ConflictAlgorithm.ignore);
+        final timestamp = now;
+        final provenance = {
+          'platform': video.sourceId,
+          'platformVideoId': video.videoId,
+          'actor': invocation.origin == 'gui' ? 'user' : 'agent',
+          'origin': invocation.origin,
+          'importedAt': timestamp,
+          'filePath': filePath,
+          'note': note,
+        };
+        final key = newMediaId('danmaku-import');
+        await tx.insert('danmaku_cache_chunks', {
+          'cache_key': key,
+          'chunk_index': 0,
+          'start_ms': 0,
+          'end_ms': entries.fold<int>(
+              0, (end, e) => e.sourceTimeMs >= end ? e.sourceTimeMs + 1 : end),
+          'payload': jsonEncode([for (final e in entries) e.toJson()]),
+          'coverage': 'importedPool',
+          'fetched_at': timestamp,
+        });
+        final values = {
+          'entity_id': entityId,
+          'entity_revision': entity['revision'],
+          'object_id': objectId,
+          'video': jsonEncode(storedVideo.toJson()),
+          'status': 'accepted',
+          'evidence':
+              jsonEncode({'reason': note ?? 'Imported danmaku', 'url': null}),
+          'bound_by': provenance['actor'],
+          'invocation_id': invocation.id,
+          'revision': revision,
+          'cache_key': key,
+          'cache_revision': (b?['cache_revision'] as int? ?? 0) + 1,
+          'cache_job_id': null,
+          'provenance': jsonEncode(provenance),
+        };
+        if (b == null) {
+          await tx.insert('danmaku_bindings', {
+            ...values,
+            'id': id,
+            'enabled': 1,
+            'deduplicate': 1,
+            'offset_ms': 0,
+            'alignment': jsonEncode({'method': 'identity', 'confirmed': false}),
+            'created_at': timestamp,
+          });
+        } else {
+          await tx.update('danmaku_bindings', values,
+              where: 'id = ?', whereArgs: [id]);
+        }
+        for (final duplicate in previous.skip(1)) {
+          final rev = (duplicate['revision'] as int) + 1;
+          await tx.update(
+              'danmaku_bindings', {'status': 'revoked', 'revision': rev},
+              where: 'id = ?', whereArgs: [duplicate['id']]);
+          await _event(tx, duplicate['id'] as String, rev, invocation.id,
+              {'operation': 'replaced', 'replacementId': id, ...provenance});
+        }
+        await _event(tx, id, revision, invocation.id,
+            {'operation': 'import', ...provenance});
+        return binding(id, tx: tx);
+      });
   Future<JsonMap> binding(String id,
       {DatabaseExecutor? tx, bool active = true}) async {
     final rows = await (tx ?? db)
@@ -143,14 +253,21 @@ final class DanmakuStore {
         });
         return binding(id, tx: tx, active: values['status'] != 'revoked');
       });
-  Future<void> assignCache(String id, String key, String jobId) =>
+  Future<void> assignCache(String id, String key, String jobId,
+          {int? expectedCacheRevision}) =>
       db.transaction((tx) async {
         final b = await binding(id, tx: tx);
+        if (expectedCacheRevision != null &&
+            b['cache_revision'] != expectedCacheRevision) {
+          throw const Failure(FailureCode.conflict,
+              'Danmaku pool was replaced during acquisition.');
+        }
         if (b['cache_job_id'] == jobId && b['cache_key'] == key) return;
         await tx.update(
             'danmaku_bindings',
             {
               'cache_key': key,
+              'provenance': null,
               'cache_revision': (b['cache_revision'] as int) + 1,
               'cache_job_id': jobId
             },
@@ -249,9 +366,6 @@ final class DanmakuStore {
                       ])
                     : null;
         if (identity == null || seen.add(identity)) {
-          if (entries.length >= 100000) {
-            throw const SourceFailure(SourceStatus.schemaChanged);
-          }
           entries.add(e);
         }
       }

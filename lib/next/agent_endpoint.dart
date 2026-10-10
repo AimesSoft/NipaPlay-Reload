@@ -62,16 +62,13 @@ final class AgentEndpoint {
     await migrateCredentialFiles(_root, _credentials);
     const ref = CredentialRef('agent', 'token');
     final file = File('${_root.path}/endpoint.json');
-    final existing = await file.exists()
-        ? (jsonDecode(await file.readAsString()) as Map)['token'] : null;
-    var token = existing is String ? existing : await _credentials.vault.read(ref);
-    if (token == null) {
-      final random = Random.secure();
-      token = base64Url.encode(List.generate(32, (_) => random.nextInt(256)))
-          .replaceAll('=', '');
-      await _credentials.verifiedWrite(ref, token);
-      await file.writeAsString(jsonEncode({'token': ref.placeholder}), flush: true);
-    }
+    final random = Random.secure();
+    final token = base64Url
+        .encode(List.generate(32, (_) => random.nextInt(256)))
+        .replaceAll('=', '');
+    await _credentials.verifiedWrite(ref, token);
+    await file.writeAsString(jsonEncode({'token': ref.placeholder}),
+        flush: true);
 
     final endpoint = McpEndpoint(
       _harness,
@@ -98,13 +95,18 @@ final class AgentEndpoint {
     _server = server;
     final url = Uri.parse('http://127.0.0.1:${server.port}/mcp');
     final workspace = Directory('${_root.path}/workspace');
-    await writeAgentWorkspace(
-      directory: workspace,
-      url: url,
-      token: token,
-      catalog: _harness.catalog,
-      agentsMd: _agentsMd,
-    );
+    try {
+      await writeAgentWorkspace(
+        directory: workspace,
+        url: url,
+        token: token,
+        catalog: _harness.catalog,
+        agentsMd: _agentsMd,
+      );
+    } catch (_) {
+      await stop();
+      rethrow;
+    }
     final running = AgentEndpointRunning(url: url, workspace: workspace);
     _running = running;
     return running;

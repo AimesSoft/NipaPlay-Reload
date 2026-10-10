@@ -6,6 +6,7 @@ import 'source.dart';
 import 'store.dart';
 import 'export.dart';
 import 'alignment.dart';
+import 'import.dart';
 
 final class DanmakuPlaybackTarget {
   const DanmakuPlaybackTarget(this.path, this.generation,
@@ -133,10 +134,8 @@ final class DanmakuService {
     final end = endMs ?? video.durationMs;
     src.planFetch(video, startMs, end);
     if (src.describe.access == 'requiredSession' && access == null) {
-      throw const Failure(
-          FailureCode.unavailable,
-          'authenticationRequired: 在 NipaPlay「设置 → 实验室 → 平台登录」中登录（仅 macOS），'
-          '或由 ui.open_platform_login 打开；用 sessions.status 返回的 accessRef 作为 credentialRef。');
+      throw Failure(FailureCode.unavailable,
+          'authenticationRequired: ${platformSessionLoginHint(video.sourceId, state: host.sessionAvailable(video.sourceId) ? 'sessionPresent; credentialRef missing' : 'unavailable')}');
     }
     final key = stableMediaId('danmaku-fetch', [
       requestId,
@@ -222,10 +221,8 @@ final class DanmakuService {
     source(video.sourceId).planFetch(video, 0, video.durationMs);
     if (source(video.sourceId).describe.access == 'requiredSession' &&
         access == null) {
-      throw const Failure(
-          FailureCode.unavailable,
-          'authenticationRequired: 在 NipaPlay「设置 → 实验室 → 平台登录」中登录（仅 macOS），'
-          '或由 ui.open_platform_login 打开；用 sessions.status 返回的 accessRef 作为 credentialRef。');
+      throw Failure(FailureCode.unavailable,
+          'authenticationRequired: ${platformSessionLoginHint(video.sourceId, state: host.sessionAvailable(video.sourceId) ? 'sessionPresent; credentialRef missing' : 'unavailable')}');
     }
     final id = await store.attach(entityId, video, reason, url, invocation);
     final job = await fetch(video,
@@ -238,6 +235,34 @@ final class DanmakuService {
                 ? player.target!.durationMs
                 : null);
     return {'bindingId': id, 'jobId': job.jobId};
+  }
+
+  Future<JsonMap> importFile(JsonMap input, Invocation invocation) async {
+    final platform = input['platform'] as String;
+    final videoId = input['platformVideoId'] as String;
+    final path = input['filePath'] as String;
+    final entries = await readImportedDanmaku(path, platform, videoId);
+    final entityId = await resolveEntity(input);
+    final binding = await store.importEntries(
+        entityId,
+        DanmakuVideo(
+            sourceId: platform,
+            videoId: videoId,
+            title: videoId,
+            durationMs: 0),
+        entries,
+        path,
+        input['note'] as String?,
+        invocation);
+    final id = binding['id'] as String;
+    await refreshCurrent(replaceBindingId: id);
+    return {
+      'bindingId': id,
+      'revision': binding['revision'],
+      'count': entries.length,
+      'loaded': player.loaded(id) != null,
+      'provenance': binding['provenance'],
+    };
   }
 
   Future<Job> align(
@@ -403,7 +428,20 @@ final class DanmakuService {
   }
 
   /// Rebuild from committed cache, never start network work on a player callback.
+  Future<void> _refreshes = Future.value();
   Future<void> refreshCurrent({String? replaceBindingId}) async {
+    final previous = _refreshes;
+    final done = Completer<void>();
+    _refreshes = done.future;
+    await previous;
+    try {
+      await _refreshCurrent(replaceBindingId: replaceBindingId);
+    } finally {
+      done.complete();
+    }
+  }
+
+  Future<void> _refreshCurrent({String? replaceBindingId}) async {
     final target = player.target;
     if (target == null) return;
     await store.identities.ensureFile(target.path);
@@ -462,7 +500,15 @@ final class DanmakuService {
                 : 3;
     ordered.sort((a, b) {
       final order = priority(a).compareTo(priority(b));
-      return order == 0 ? positions[a]!.compareTo(positions[b]!) : order;
+      if (order != 0) return order;
+      final importedA = (mounts[a]!.binding['provenance']
+          as JsonMap?)?['importedAt'] as String?;
+      final importedB = (mounts[b]!.binding['provenance']
+          as JsonMap?)?['importedAt'] as String?;
+      final importedOrder = (importedB ?? '').compareTo(importedA ?? '');
+      return importedOrder == 0
+          ? positions[a]!.compareTo(positions[b]!)
+          : importedOrder;
     });
     final seenVideos = <String>{};
     for (final id in ordered) {
@@ -538,9 +584,13 @@ final class DanmakuService {
           {...track, 'entityId': track['entityId'] ?? entityId, 'loaded': true},
       for (final b in rows)
         {
-          'origin': (b['video'] as JsonMap)['sourceId'] == 'local'
-              ? 'manual_import'
-              : 'binding',
+          'origin': b['provenance'] != null
+              ? b['bound_by'] == 'agent'
+                  ? 'agent_import'
+                  : 'manual_import'
+              : (b['video'] as JsonMap)['sourceId'] == 'local'
+                  ? 'manual_import'
+                  : 'binding',
           'source': (b['video'] as JsonMap)['sourceId'],
           if ((b['video'] as JsonMap)['sourceId'] == 'local')
             'filePath': (b['video'] as JsonMap)['videoId'],
@@ -558,6 +608,7 @@ final class DanmakuService {
           'alignment': b['alignment'],
           'evidence': b['evidence'],
           'boundBy': b['bound_by'],
+          if (b['provenance'] != null) 'provenance': b['provenance'],
           'cacheKey': b['cache_key'],
           'loaded': player.loaded(b['id'] as String) != null,
           'coverage': b['cache_key'] == null
@@ -581,7 +632,14 @@ final class DanmakuService {
       final ids = bindingIds[key] ??= {};
       if (track['bindingId'] case final String id) ids.add(id);
       final previous = groups[key];
-      if (previous == null || priority(track) < priority(previous)) {
+      final importedAt =
+          (track['provenance'] as JsonMap?)?['importedAt'] as String? ?? '';
+      final previousImport =
+          (previous?['provenance'] as JsonMap?)?['importedAt'] as String? ?? '';
+      if (previous == null ||
+          priority(track) < priority(previous) ||
+          priority(track) == priority(previous) &&
+              importedAt.compareTo(previousImport) > 0) {
         groups[key] = track;
       }
     }

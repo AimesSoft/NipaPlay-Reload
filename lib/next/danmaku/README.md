@@ -33,10 +33,37 @@
 完成登录，宿主在保险库中按平台保存会话。`sessions.status` 返回的 `accessRef`
 可作为现有弹幕 Action 的 `credentialRef`。优酷 MTOP 签名与请求都在宿主中完成，
 正常的 token 握手最多更新并重试一次；不读取浏览器 cookie 数据库或个人配置。
-未登录或被平台拒绝时返回 authenticationRequired，并指明 NipaPlay 登录入口。
+未登录或被平台拒绝时返回 authenticationRequired，只陈述平台和当前会话状态。
 弹弹play 沿用已有宿主账号/应用签名边界；B 站匿名公开接口继续可用，登录后宿主
 向固定 B 站 profile 自动附加会话，也接受准确的宿主引用；不请求历史弹幕。
 平台登录的状态、存储与注销契约见 [平台会话](../sessions/README.md)。
+
+## Agent 交入弹幕
+
+`danmaku.import` 是写能力，接收 Agent 从任意途径取得的本地文件，不要求注册来源、
+宿主登录会话或媒体目录授权。输入 `filePath`、`platform`、`platformVideoId`；目标
+使用 `entityId`（File/Episode）、`path` 或当前播放文件（默认），可附 `note`。
+文件以 UTF-8 编码，支持 B 站标准 `<i><d p="...">...</d></i>` XML，以及规范化
+JSON 数组或 `{ "comments": [...] }`。JSON 条目示例：
+
+```json
+{"sourceTimeMs":1250,"text":"一条弹幕","mode":1,"colorRgb":16777215,"platformId":"9007199254740993"}
+```
+
+`sourceTimeMs` 是非负整数毫秒，`mode` 是正整数，`colorRgb` 是 24 位 RGB；
+可选 `platformId`、`sourceEntryId`、`originSource`、`sender`、`sentAt` 为字符串，
+`fontSize` 为正整数。平台和视频身份使用调用参数，actor/origin/UTC 时间由宿主
+记录在 `provenance`，每次交入追加审计事件。输入文件只读取，内容保存进宿主缓存，
+后续播放恢复不依赖原文件仍存在。空数组或 `<i/>` 表示明确交入空弹幕池。
+
+解析和验证在独立 isolate 完成，再用一个数据库事务提交缓存、绑定和来源。相同
+平台/视频再次交入即替换，保留启用、偏移和折叠设置；解析或提交失败保留旧轨道。
+交入前已启动的抓取任务不能覆盖后来交入的弹幕池。File/Episode 同视频轨道在
+播放时合并为一个，重新恢复时优先使用最新交入结果。返回 `bindingId`、`revision`、
+`count`、`loaded`、`provenance`；`loaded=false` 表示已保存但目标当前未挂载。
+播放中的目标立即挂载；`danmaku.tracks`、`state.query` 的 `danmaku.bindings` 和
+`danmaku.tracks` 视图可查询来源。调用参数不承载整集数据，也不沿用在线来源的
+响应大小和条目数量上限。数据库 v7 在绑定上追加 `provenance` 字段。
 
 宿主使用固定 URI 模板，拒绝跨域重定向及额外业务参数，逐来源串行限流；HTTP
 响应最大 8 MiB，每次计划最多 120 段、两小时、100000 条。超时只取消本次 HTTP，

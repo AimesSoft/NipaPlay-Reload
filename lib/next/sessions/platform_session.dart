@@ -9,7 +9,8 @@ import 'package:nipaplay/security/credential_vault.dart';
 import 'package:nipaplay/security/secret_redactor.dart';
 import '../danmaku/source.dart' show platformSessionLoginHint;
 
-const platformLoginHint = platformSessionLoginHint;
+String platformLoginHint(String platform, {String state = 'unavailable'}) =>
+    platformSessionLoginHint(platform, state: state);
 const sessionPlatforms = ['youku', 'bilibili'];
 const _sessionCookieNames = {
   'youku': {'P_sck', 'P_ck', 'yktk', '_m_h5_tk', '_m_h5_tk_enc', 'cna'},
@@ -179,9 +180,9 @@ final class PlatformSessions extends ChangeNotifier {
       } on Failure catch (failure) {
         _errors[platform] = failure.message;
       } on FormatException {
-        _errors[platform] = '已保存的平台会话格式无效，请注销后重新登录。';
+        _errors[platform] = '$platform 已保存的登录态格式无效。';
       } on TypeError {
-        _errors[platform] = '已保存的平台会话格式无效，请注销后重新登录。';
+        _errors[platform] = '$platform 已保存的登录态格式无效。';
       }
     }
   }
@@ -234,22 +235,23 @@ final class PlatformSessions extends ChangeNotifier {
   JsonMap status(String platform) {
     _platform(platform);
     final present = _cookies.containsKey(platform);
+    final state = !login.supported
+        ? 'unsupported'
+        : _errors.containsKey(platform)
+            ? 'unavailable'
+            : available(platform)
+                ? 'sessionPresent'
+                : present
+                    ? 'expiredOrRejected'
+                    : 'loggedOut';
     return {
       'platform': platform,
       'supported': login.supported,
-      'status': !login.supported
-          ? 'unsupported'
-          : _errors.containsKey(platform)
-              ? 'unavailable'
-              : available(platform)
-                  ? 'sessionPresent'
-                  : present
-                      ? 'expiredOrRejected'
-                      : 'loggedOut',
+      'status': state,
       'sessionAvailable': available(platform),
       'credentialRef': reference(platform).toJson(),
       'accessRef': available(platform) ? accessReference(platform) : null,
-      'loginHint': login.supported ? platformLoginHint : '平台登录仅支持 macOS。',
+      'loginHint': platformLoginHint(platform, state: state),
       'verification': 'localCookiesOnly',
       'notice': _errors[platform],
     };
@@ -278,8 +280,8 @@ final class PlatformSessions extends ChangeNotifier {
         }
         final accepted = _validated(platform, cookies);
         if (!_hasLogin(platform, accepted)) {
-          throw const Failure(
-              FailureCode.unavailable, '尚未取得平台登录态，请在窗口中完成登录再保存。');
+          throw Failure(FailureCode.unavailable,
+              'authenticationRequired: ${platformLoginHint(platform, state: 'loginNotCaptured')}');
         }
         await _save(platform, accepted, generation);
         _errors.remove(platform);
@@ -356,8 +358,8 @@ final class PlatformSessions extends ChangeNotifier {
           FailureCode.invalidInput, '会话引用与来源 v1 / 请求 profile 不匹配。');
     }
     if (!available(platform)) {
-      throw const Failure(FailureCode.unavailable,
-          'authenticationRequired: $platformLoginHint');
+      throw Failure(FailureCode.unavailable,
+          'authenticationRequired: ${status(platform)['loginHint']}');
     }
   }
 
@@ -388,8 +390,8 @@ final class PlatformSessions extends ChangeNotifier {
           String platform, String generation, List<SessionCookie> cookies) =>
       _serialize(() async {
         if (_generation[platform] != generation || !available(platform)) {
-          throw const Failure(FailureCode.unavailable,
-              'authenticationRequired: $platformLoginHint');
+          throw Failure(FailureCode.unavailable,
+              'authenticationRequired: ${status(platform)['loginHint']}');
         }
         final merged = [..._cookies[platform]!];
         for (final cookie in _validated(platform, cookies)) {

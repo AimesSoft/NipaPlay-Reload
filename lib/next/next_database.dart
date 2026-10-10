@@ -16,7 +16,8 @@ const _migrations = [
   migrateDanmaku,
   migrateSettings,
   migrateMediaPrimitives,
-  migrateMetadataEdits
+  migrateMetadataEdits,
+  migrateDanmakuImports
 ];
 
 Future<void> _migrate(Database db, int oldVersion, int newVersion) async {

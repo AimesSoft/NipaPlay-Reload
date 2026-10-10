@@ -8,6 +8,7 @@ import 'package:nipaplay/next/tasks/job_migration.dart';
 import 'package:nipaplay/next/settings/migration.dart';
 import 'package:nipaplay/next/media/primitives_migration.dart';
 import 'package:nipaplay/next/media/identity_store.dart';
+import 'package:nipaplay/next/media/metadata_edit_migration.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
 void main() {
@@ -65,9 +66,10 @@ void main() {
         migrateMediaIdentity,
         migrateDanmaku,
         migrateSettings,
-        migrateMediaPrimitives
+        migrateMediaPrimitives,
+        migrateMetadataEdits
       ];
-      if (oldVersion > 0 && oldVersion < 6) {
+      if (oldVersion > 0) {
         final old =
             await databaseFactoryFfi.openDatabase('${root.path}/next.db',
                 options: OpenDatabaseOptions(
@@ -81,12 +83,8 @@ void main() {
         await old.close();
       }
       var db = await openNextDatabase(root, factory: databaseFactoryFfi);
-      if (oldVersion == 6) {
-        await db.close();
-        db = await openNextDatabase(root, factory: databaseFactoryFfi);
-      }
       addTearDown(() => db.close());
-      expect(await db.getVersion(), 6);
+      expect(await db.getVersion(), 7);
       for (final table in [
         'jobs',
         'media_entities',

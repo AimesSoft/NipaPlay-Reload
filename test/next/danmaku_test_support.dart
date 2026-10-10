@@ -140,7 +140,7 @@ final class FixtureDanmakuHost implements DanmakuHost {
   }
 }
 
-final class MemoryDanmakuPlayer
+class MemoryDanmakuPlayer
     implements DanmakuPlayerPort, DanmakuTrackRegistry, DanmakuTrackUpdater {
   final List<JsonMap> classicTracks = [];
   final Map<String, JsonMap> classicCache = {};

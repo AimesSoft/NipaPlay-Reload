@@ -47,6 +47,23 @@ const _bindingInput = ObjectSchema(
 const _evidence = ObjectSchema(
     {'reason': _text, 'url': StringSchema(nullable: true)},
     required: ['reason', 'url']);
+const importProvenanceSchema = ObjectSchema({
+  'platform': _text,
+  'platformVideoId': _text,
+  'actor': _text,
+  'origin': _text,
+  'importedAt': _text,
+  'filePath': _text,
+  'note': StringSchema(nullable: true),
+}, required: [
+  'platform',
+  'platformVideoId',
+  'actor',
+  'origin',
+  'importedAt',
+  'filePath',
+  'note'
+]);
 const _coverage = ObjectSchema({
   'chunk_index': IntegerSchema(),
   'start_ms': IntegerSchema(),
@@ -63,6 +80,7 @@ const _coverage = ObjectSchema({
 const _track = ObjectSchema({
   'trackId': StringSchema(),
   'origin': StringSchema(),
+  'provenance': importProvenanceSchema,
   'platform': StringSchema(),
   'platformVideoId': StringSchema(nullable: true),
   'filePath': StringSchema(nullable: true),
@@ -192,6 +210,42 @@ ActionSpec _spec(String id, Effect effect, ObjectSchema input,
         input: input,
         output: output);
 final _specs = [
+  _spec(
+      'danmaku.import',
+      Effect.write,
+      const ObjectSchema({
+        'filePath': _text,
+        'platform': _text,
+        'platformVideoId': _text,
+        'entityId': _text,
+        'path': _text,
+        'current': BooleanSchema(),
+        'note': StringSchema(),
+      }, required: [
+        'filePath',
+        'platform',
+        'platformVideoId'
+      ]),
+      const ObjectSchema({
+        'bindingId': _text,
+        'revision': IntegerSchema(),
+        'count': IntegerSchema(),
+        'loaded': BooleanSchema(),
+        'provenance': importProvenanceSchema,
+      }, required: [
+        'bindingId',
+        'revision',
+        'count',
+        'loaded',
+        'provenance'
+      ]),
+      'Import acquired danmaku from a local UTF-8 Bilibili-standard XML file or JSON array (also {comments:[...]}). '
+          'JSON entries require sourceTimeMs (nonnegative integer milliseconds), text, mode (positive integer), colorRgb (0..16777215); '
+      'optional platformId, sourceEntryId, originSource, sender, sentAt (strings), fontSize (positive integer). '
+          'No registered source or session is required. Supply platform/platformVideoId; host records actor, origin and timestamp. '
+          'Target entityId (file or episode), path, or current playback (default). '
+          'Reimport replaces the same platform/video pool atomically, preserving track settings; malformed files leave the old track unchanged. '
+          'Mounted immediately when the target is playing. File data stays in host storage; do not send large comment arrays through tool arguments.'),
   _spec(
       'danmaku.sources',
       Effect.read,
@@ -463,6 +517,8 @@ final class _Action extends Action<_Data, _Data> {
         : DanmakuAccess(j['credentialRef'] as String);
     try {
       switch (spec.id) {
+        case 'danmaku.import':
+          return result(await service.importFile(j, invocation));
         case 'danmaku.sources':
           return result({
             'sources': [

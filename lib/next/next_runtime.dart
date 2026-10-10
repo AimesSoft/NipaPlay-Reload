@@ -122,17 +122,18 @@ final class NextRuntime extends ChangeNotifier {
     );
     if (_disposed) return;
     _labs.addListener(_queueEndpointUpdate);
-    await _updateEndpoint();
+    await _updateEndpoint(_labs.enableAgentEndpoint);
   }
 
   void _queueEndpointUpdate() {
-    _operations = _operations.then((_) => _updateEndpoint());
+    final enabled = _labs.enableAgentEndpoint;
+    _operations = _operations.then((_) => _updateEndpoint(enabled));
   }
 
-  Future<void> _updateEndpoint() async {
+  Future<void> _updateEndpoint(bool enabled) async {
     if (_disposed) return;
     final AgentEndpointStatus status;
-    if (_labs.enableAgentEndpoint) {
+    if (enabled) {
       status = await _endpoint.start();
     } else {
       await _endpoint.stop();

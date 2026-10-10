@@ -31,7 +31,7 @@ NextCore 通过现有 CredentialVault 使用 `next.platform-session/<platform>.v
 平台值：youku、bilibili。状态：loggedOut、sessionPresent、expiredOrRejected、
 unavailable、unsupported。sessionPresent 仅表示本地登录 cookie 存在且未过期，
 verification=localCookiesOnly；不代表已在线验证、会员权限或播放权限。
-平台拒绝认证时停止使用该会话，并指向同一登录入口。其他操作系统如实返回
+平台拒绝认证时停止使用该会话；登录提示只陈述平台和当前会话状态。其他操作系统如实返回
 unsupported / unavailable；PlatformLoginPort 保留后续平台实现的入口。
 
 来源只有 ScopedDanmakuHost 和 DanmakuAccess。宿主校验来源 ID、v1 版本、固定

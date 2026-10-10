@@ -84,12 +84,15 @@ void main() {
     addTearDown(() => client.close(force: true));
   });
 
-  test('creates a 32-byte vault token, reference file, and workspace', () async {
+  test('creates a 32-byte vault token, reference file, and workspace',
+      () async {
     final running = await endpoint.start() as AgentEndpointRunning;
     final file = File('${root.path}/endpoint.json');
     final contents = jsonDecode(await file.readAsString()) as JsonMap;
-    final token = (await credentials.vault.read(const CredentialRef('agent', 'token')))!;
-    expect(contents['token'], const CredentialRef('agent', 'token').placeholder);
+    final token =
+        (await credentials.vault.read(const CredentialRef('agent', 'token')))!;
+    expect(
+        contents['token'], const CredentialRef('agent', 'token').placeholder);
     expect(await file.readAsString(), isNot(contains(token)));
     expect(contents.keys, ['token']);
     expect(token, matches(RegExp(r'^[A-Za-z0-9_-]{43}$')));
@@ -105,6 +108,10 @@ void main() {
         await File('${running.workspace.path}/.codex/config.toml')
             .readAsString(),
         '''
+sandbox_mode = "danger-full-access"
+approval_policy = "never"
+web_search = "live"
+
 [mcp_servers.nipaplay]
 url = "${running.url}"
 http_headers = { Authorization = "Bearer $token" }
@@ -114,7 +121,8 @@ default_tools_approval_mode = "auto"
 
   test('authenticates initialize and invokes the fake capability', () async {
     final running = await endpoint.start() as AgentEndpointRunning;
-    final token = (await credentials.vault.read(const CredentialRef('agent', 'token')))!;
+    final token =
+        (await credentials.vault.read(const CredentialRef('agent', 'token')))!;
     final initialized = await _rpc(client, running.url, token, 'initialize',
         params: {'protocolVersion': '2025-11-25'});
     expect(initialized['protocolVersion'], '2025-11-25');
@@ -150,13 +158,25 @@ default_tools_approval_mode = "auto"
     addTearDown(() => rebound.close(force: true));
   });
 
-  test('reuses the token after stop and across endpoint instances', () async {
+  test('each enable rotates the token and rewrites the workspace', () async {
+    const ref = CredentialRef('agent', 'token');
+    final first = await endpoint.start() as AgentEndpointRunning;
+    final original = (await credentials.vault.read(ref))!;
     await endpoint.start();
-    final file = File('${root.path}/endpoint.json');
-    final original = await file.readAsString();
+    expect(await credentials.vault.read(ref), original);
+    final config = File('${first.workspace.path}/.codex/config.toml');
+    await config.writeAsString('obsolete workspace');
     await endpoint.stop();
-    await endpoint.start();
-    expect(await file.readAsString(), original);
+    final second = await endpoint.start() as AgentEndpointRunning;
+    final rotated = (await credentials.vault.read(ref))!;
+    expect(rotated, isNot(original));
+    expect(await config.readAsString(), contains('Bearer $rotated'));
+    final denied = await client.postUrl(second.url);
+    denied.headers.set(HttpHeaders.authorizationHeader, 'Bearer $original');
+    final response = await denied.close();
+    expect(response.statusCode, HttpStatus.unauthorized);
+    await response.drain<void>();
+    expect(await _rpc(client, second.url, rotated, 'ping'), isEmpty);
     await endpoint.stop();
 
     final restarted = AgentEndpoint(
@@ -169,8 +189,10 @@ default_tools_approval_mode = "auto"
     );
     addTearDown(restarted.stop);
     final running = await restarted.start() as AgentEndpointRunning;
-    expect(await file.readAsString(), original);
-    final token = (await credentials.vault.read(const CredentialRef('agent', 'token')))!;
+    final token =
+        (await credentials.vault.read(const CredentialRef('agent', 'token')))!;
+    expect(token, isNot(rotated));
+    expect(await config.readAsString(), contains('Bearer $token'));
     expect(await _rpc(client, running.url, token, 'ping'), isEmpty);
   });
 
@@ -196,9 +218,11 @@ default_tools_approval_mode = "auto"
     expect(running.url.port, port);
   });
 
-  test('propagates token JSON errors', () async {
+  test('replaces obsolete endpoint metadata when enabling', () async {
     await root.create(recursive: true);
     await File('${root.path}/endpoint.json').writeAsString('{');
-    await expectLater(endpoint.start(), throwsFormatException);
+    await endpoint.start();
+    expect(jsonDecode(await File('${root.path}/endpoint.json').readAsString()),
+        {'token': const CredentialRef('agent', 'token').placeholder});
   });
 }

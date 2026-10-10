@@ -4,6 +4,7 @@ import 'package:nipa_harness/nipa_harness.dart';
 import 'package:path/path.dart' as p;
 
 import '../danmaku/service.dart';
+import '../danmaku/capability.dart' show importProvenanceSchema;
 import '../capabilities/media_models.dart';
 import '../media/identity_store.dart';
 import '../media/media_service.dart';
@@ -589,13 +590,16 @@ List<StateView> publicStateViews(
           'cacheRevision': _revision,
           'loaded': _bool('Currently mounted in the local player.'),
           'boundBy': _text('Host-recorded actor.'),
+          'provenance': importProvenanceSchema,
           'createdAt': _time
         }),
-        'SELECT id AS bindingId,entity_id AS entityId,entity_revision AS entityRevision,revision,status,video,enabled,deduplicate,offset_ms AS offsetMs,cache_key AS cacheKey,cache_revision AS cacheRevision,bound_by AS boundBy,created_at AS createdAt FROM danmaku_bindings ORDER BY id',
+        'SELECT id AS bindingId,entity_id AS entityId,entity_revision AS entityRevision,revision,status,video,enabled,deduplicate,offset_ms AS offsetMs,cache_key AS cacheKey,cache_revision AS cacheRevision,bound_by AS boundBy,created_at AS createdAt,provenance FROM danmaku_bindings ORDER BY id',
         transform: (row) async {
       final video = decodeMediaJson(row['video']);
       return {
         ...row,
+        if (row['provenance'] != null)
+          'provenance': decodeMediaJson(row['provenance']),
         'sourceId': video['sourceId'],
         'videoId': video['videoId'],
         'objectType': video['objectType'],
@@ -631,6 +635,7 @@ List<StateView> publicStateViews(
           'name': _text('Track display name.'),
           'source': _text('Source namespace.'),
           'origin': _text('Track origin.'),
+          'provenance': importProvenanceSchema,
           'platform': _text('Original platform.'),
           'platformVideoId': _text('Original platform video ID.'),
           'revision': _revision,

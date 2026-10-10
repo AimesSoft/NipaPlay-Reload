@@ -59,6 +59,9 @@ final class HttpDanmakuHost implements DanmakuHost {
   final Map<String, DateTime> _next = {};
   String? _wbiKey;
   DateTime? _wbiUntil;
+  String _loginHint(String platform) =>
+      sessions?.status(platform)['loginHint'] as String? ??
+      platformLoginHint(platform);
   @override
   bool sessionAvailable(String sourceId) =>
       sourceId == 'youku' && (youkuSession?.available ?? false) ||
@@ -68,8 +71,8 @@ final class HttpDanmakuHost implements DanmakuHost {
       DanmakuAccess? access, DanmakuCancellation cancel) async {
     if (profile.startsWith('bilibili.') && access != null) {
       if (sessions == null) {
-        throw const SourceFailure(SourceStatus.authenticationRequired,
-            diagnostics: platformLoginHint);
+        throw SourceFailure(SourceStatus.authenticationRequired,
+            diagnostics: _loginHint('bilibili'));
       }
       sessions!.authorize('bilibili', profile, access.credentialRef);
     }
@@ -144,7 +147,7 @@ final class HttpDanmakuHost implements DanmakuHost {
         retryAt: retryAt,
         diagnostics:
             '${httpDiagnostics(target, statusCode: statusCode, contentType: contentType)}'
-            '${status == SourceStatus.authenticationRequired && source == 'bilibili' ? '; $platformLoginHint' : ''}');
+            '${status == SourceStatus.authenticationRequired ? '; ${_loginHint(source)}' : ''}');
     try {
       cancel.check();
       final wait = (_next[source] ?? DateTime.now()).difference(DateTime.now());
@@ -167,8 +170,8 @@ final class HttpDanmakuHost implements DanmakuHost {
         if (access == null ||
             youkuSession == null ||
             !youkuSession!.available) {
-          throw const SourceFailure(SourceStatus.authenticationRequired,
-              diagnostics: platformLoginHint);
+          throw SourceFailure(SourceStatus.authenticationRequired,
+              diagnostics: _loginHint('youku'));
         }
         final bytes = await youkuSession!.minute(
             parameters['videoId'] as String,
@@ -203,8 +206,8 @@ final class HttpDanmakuHost implements DanmakuHost {
         request.headers['Referer'] = 'https://www.bilibili.com/';
         if (access != null || (sessions?.available('bilibili') ?? false)) {
           if (sessions == null) {
-            throw const SourceFailure(SourceStatus.authenticationRequired,
-                diagnostics: platformLoginHint);
+            throw SourceFailure(SourceStatus.authenticationRequired,
+                diagnostics: _loginHint('bilibili'));
           }
           sessions!.authorize('bilibili', profile, access?.credentialRef);
           request.headers['Cookie'] = sessions!.cookieHeader('bilibili', uri);
@@ -264,8 +267,8 @@ final class HttpDanmakuHost implements DanmakuHost {
         if (source == 'bilibili' && request.headers.containsKey('Cookie')) {
           if (sessions!.generation('bilibili') != sessionGeneration ||
               !sessions!.available('bilibili')) {
-            throw const SourceFailure(SourceStatus.authenticationRequired,
-                diagnostics: platformLoginHint);
+            throw SourceFailure(SourceStatus.authenticationRequired,
+                diagnostics: _loginHint('bilibili'));
           }
           final cookies = responseCookies(response.headers['set-cookie'], uri,
               now: sessions!.now());
@@ -280,8 +283,8 @@ final class HttpDanmakuHost implements DanmakuHost {
               if (request.headers.containsKey('Cookie')) {
                 sessions!.rejected('bilibili', generation: sessionGeneration);
               }
-              throw const SourceFailure(SourceStatus.authenticationRequired,
-                  diagnostics: platformLoginHint);
+              throw SourceFailure(SourceStatus.authenticationRequired,
+                  diagnostics: _loginHint('bilibili'));
             }
             return utf8.encode(jsonEncode(safeSessionResponse(root)));
           } on FormatException {

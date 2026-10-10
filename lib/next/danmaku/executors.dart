@@ -123,7 +123,9 @@ final class _Fetch implements JobExecutor {
       if (await control.stop(details())) return;
       await c.running(phase: 'fetch');
       final bindingId = c.job.input['bindingId'] as String?;
-      if (bindingId != null) await service.store.binding(bindingId);
+      final cacheRevision = bindingId == null
+          ? null
+          : (await service.store.binding(bindingId))['cache_revision'] as int;
       var acquiredCount = 0;
       for (final chunk in plan) {
         if (await control.stop(details())) return;
@@ -195,7 +197,8 @@ final class _Fetch implements JobExecutor {
       var loaded = false;
       if (bindingId != null) {
         if (await control.stop(details())) return;
-        await service.store.assignCache(bindingId, cacheKey, c.job.jobId);
+        await service.store.assignCache(bindingId, cacheKey, c.job.jobId,
+            expectedCacheRevision: cacheRevision);
         await c.markSideEffectCommitted();
         await service.refreshCurrent(
             replaceBindingId:

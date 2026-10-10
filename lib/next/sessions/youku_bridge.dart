@@ -104,8 +104,8 @@ final class VaultYoukuSessionBridge implements YoukuSessionBridge {
         final bytes = await (() async {
           if (response.statusCode == 401) {
             sessions.rejected('youku', generation: generation);
-            throw const SourceFailure(SourceStatus.authenticationRequired,
-                diagnostics: platformLoginHint);
+            throw SourceFailure(SourceStatus.authenticationRequired,
+                diagnostics: sessions.status('youku')['loginHint'] as String);
           }
           if (response.statusCode == 403 ||
               response.isRedirect ||
@@ -137,8 +137,8 @@ final class VaultYoukuSessionBridge implements YoukuSessionBridge {
         });
         cancel.check();
         if (sessions.generation('youku') != generation || !available) {
-          throw const SourceFailure(SourceStatus.authenticationRequired,
-              diagnostics: platformLoginHint);
+          throw SourceFailure(SourceStatus.authenticationRequired,
+              diagnostics: sessions.status('youku')['loginHint'] as String);
         }
         final root = jsonDecode(utf8.decode(bytes)) as Map;
         final ret = (root['ret'] as List).cast<String>();
@@ -187,8 +187,8 @@ final class VaultYoukuSessionBridge implements YoukuSessionBridge {
         if (tokenFailure ||
             ret.any((r) => r.contains('SESSION') || r.contains('LOGIN'))) {
           sessions.rejected('youku', generation: generation);
-          throw const SourceFailure(SourceStatus.authenticationRequired,
-              diagnostics: platformLoginHint);
+          throw SourceFailure(SourceStatus.authenticationRequired,
+              diagnostics: sessions.status('youku')['loginHint'] as String);
         }
         if (ret.any((r) => r.contains('LIMIT'))) {
           throw const SourceFailure(SourceStatus.rateLimited);
@@ -209,8 +209,8 @@ final class VaultYoukuSessionBridge implements YoukuSessionBridge {
         cancellation.cancel();
       }
     }
-    throw const SourceFailure(SourceStatus.authenticationRequired,
-        diagnostics: platformLoginHint);
+    throw SourceFailure(SourceStatus.authenticationRequired,
+        diagnostics: sessions.status('youku')['loginHint'] as String);
   }
 }
 

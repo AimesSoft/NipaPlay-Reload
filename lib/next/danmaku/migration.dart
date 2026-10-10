@@ -6,6 +6,9 @@ Future<void> migrateDanmaku(DatabaseExecutor db) async {
   }
 }
 
+Future<void> migrateDanmakuImports(DatabaseExecutor db) =>
+    db.execute('ALTER TABLE danmaku_bindings ADD COLUMN provenance TEXT');
+
 const _tables = [
   '''CREATE TABLE danmaku_bindings (
     id TEXT PRIMARY KEY, entity_id TEXT NOT NULL REFERENCES media_entities(id),
