@@ -249,9 +249,11 @@ final class Invocation {
   final String origin;  // 'gui' | 'mcp' | ...
 }
 
+/// 只为已注册 action 的调用产生；未知 action id 不产生记录。
 final class InvocationRecord implements JsonEncodable {
-  // invocationId, actionId, origin, effect, input(JsonMap), status(envelope status),
-  // failureCode?, startedAt(UTC ISO-8601), elapsedMs
+  // invocationId, actionId, origin, effect, input(Object?：调用方给出的原始 JSON 输入；
+  // 类型化调用时为 input.toJson()), status(envelope status), failureCode?,
+  // startedAt(UTC ISO-8601), elapsedMs
 }
 
 abstract interface class InvocationObserver {

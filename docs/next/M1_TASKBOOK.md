@@ -89,12 +89,13 @@
 - `invokeJson` 的 `input` 为 `null` 时按 `{}` 处理。
 - 非 Map 输入 → `Failed(invalidInput)`，violations 指向根。
 - `Invocation.id` 未提供时，生成形如 `inv-<microsecondsSinceEpoch>-<进程内递增序号>` 的 id。
-- 每次调用（包括失败）恰好通知每个观察者一次。
+- 每次对**已注册 action** 的调用（包括输入校验失败与执行失败）恰好通知每个观察者一次；未知 action id 直接返回 `Failed(notFound)`，不通知观察者。
 - 观察者自身抛出的异常不影响调用结果：这是 Harness 异常边界的一部分，用 `Zone`/`try` 隔离后丢弃。
 
 **InvocationRecord**
 
 - `toJson` 字段为：`invocationId`、`actionId`、`origin`、`effect`（`read`/`write`/`destructive`）、`input`、`status`、`failureCode`（仅失败时）、`startedAt`、`elapsedMs`。
+- `input` 类型为 `Object?`：`invokeJson` 记录收到的原始 JSON 输入（包括非 Map 的非法输入）；类型化 `invoke` 记录 `input.toJson()`。
 
 **JsonlJournal**
 
@@ -324,6 +325,15 @@ flutter test test/next
 ### 目标
 
 Labs 开关打开后，NipaPlay 在 `127.0.0.1:47811` 提供 MCP 端点，并生成 Codex 工作区；关闭后端点停止。
+
+### 拆分
+
+T3 分两段执行，按指派的那一段做，另一段的文件一律不碰：
+
+- **T3a**：只做 `agent_endpoint.dart`、`agent_workspace.dart` 及其两个测试。只依赖 `nipa_harness`，测试用自建的假 Capability 构造 Harness，不依赖 T2。
+  - 验收：`flutter analyze lib/next/agent_endpoint.dart lib/next/agent_workspace.dart test/next/agent_endpoint_test.dart test/next/agent_workspace_test.dart`，以及 `flutter test test/next/agent_endpoint_test.dart test/next/agent_workspace_test.dart`。
+- **T3b**：做 `next_runtime.dart`、settings key、Labs provider、Labs 页面、`main.dart`。此时 T2 与 T3a 已合入。
+  - 验收：下文「验收命令」全部通过。
 
 ### 允许创建 / 修改的文件
 
