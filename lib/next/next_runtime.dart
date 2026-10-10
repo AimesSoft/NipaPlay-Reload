@@ -22,6 +22,9 @@ import 'capabilities/library_capability.dart';
 import 'capabilities/navigation_capability.dart';
 import 'capabilities/playback_capability.dart';
 import 'capabilities/video_player_state_port.dart';
+import 'media/media_capability.dart';
+import 'media/media_executors.dart';
+import 'media/media_runtime.dart';
 import 'tasks/device_identity.dart';
 import 'tasks/sqlite_job_store.dart';
 
@@ -63,6 +66,7 @@ final class NextRuntime extends ChangeNotifier {
   late final Harness _harness;
   late final AgentEndpoint _endpoint;
   late final TaskEngine _taskEngine;
+  late final MediaRuntime _media;
   late Future<void> _operations;
   AgentEndpointStatus _endpointStatus = const AgentEndpointStopped();
   bool _disposed = false;
@@ -77,12 +81,22 @@ final class NextRuntime extends ChangeNotifier {
     final root = Directory('${storage.path}/next');
     final deviceId = await loadDeviceIdentity(root);
     final jobs = await SqliteJobStore.open(root);
-    _taskEngine = TaskEngine(store: jobs, ownerDeviceId: deviceId);
+    _media = await MediaRuntime.create(root, jobs.database, deviceId);
+    _taskEngine = TaskEngine(
+        store: jobs,
+        ownerDeviceId: deviceId,
+        executors: mediaExecutors(_media.service));
+    _media.service.engine = _taskEngine;
     await _taskEngine.start();
+    await _media.service.recoverProjections();
     final agentsMd = await rootBundle.loadString('assets/next/AGENTS.md');
     final packageInfo = await PackageInfo.fromPlatform();
     _harness = Harness(
-      [...capabilities, TaskCapability(_taskEngine)],
+      [
+        ...capabilities,
+        TaskCapability(_taskEngine),
+        MediaCapability(_media.service)
+      ],
       observers: [JsonlJournal(File('${root.path}/journal.jsonl'))],
     );
     _endpoint = AgentEndpoint(
@@ -121,6 +135,7 @@ final class NextRuntime extends ChangeNotifier {
     _operations = _operations.then((_) async {
       await _endpoint.stop();
       await _taskEngine.close();
+      _media.close();
     });
     super.dispose();
   }

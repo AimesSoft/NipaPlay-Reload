@@ -1,0 +1,8 @@
+{
+  "/3/search/tv": {"page":1,"results":[{"id":9001,"name":"长安十二时辰","original_name":"长安十二时辰","overview":"长安城的一天。","poster_path":"/changan.jpg","first_air_date":"2019-06-27"}],"total_pages":1,"total_results":1},
+  "/3/tv/9001": {"id":9001,"name":"长安十二时辰","original_name":"长安十二时辰","overview":"长安城的一天。","poster_path":"/changan.jpg","first_air_date":"2019-06-27","seasons":[{"id":9101,"name":"第 1 季","season_number":1,"episode_count":2,"poster_path":"/changan.jpg","air_date":"2019-06-27"}]},
+  "/3/tv/9001/season/1": {"id":9101,"name":"第 1 季","season_number":1,"overview":"第一季","poster_path":"/changan.jpg","air_date":"2019-06-27","episodes":[{"id":9201,"name":"第一集","season_number":1,"episode_number":1,"air_date":"2019-06-27","overview":"第一集简介"},{"id":9202,"name":"第二集","season_number":1,"episode_number":2,"air_date":"2019-06-27","overview":"第二集简介"}]},
+  "/3/tv/9001/season/1/episode/1": {"id":9201,"name":"第一集","season_number":1,"episode_number":1,"air_date":"2019-06-27","overview":"第一集简介"},
+  "/3/search/movie": {"page":1,"results":[{"id":9301,"title":"数字 86","original_title":"86","overview":"电影样本","release_date":"2021-01-01","poster_path":"/movie.jpg"}],"total_results":1,"total_pages":1},
+  "/3/movie/9301": {"id":9301,"title":"数字 86","original_title":"86","overview":"电影样本","release_date":"2021-01-01","poster_path":"/movie.jpg"}
+}
