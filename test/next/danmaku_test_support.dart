@@ -141,7 +141,7 @@ final class FixtureDanmakuHost implements DanmakuHost {
 }
 
 final class MemoryDanmakuPlayer
-    implements DanmakuPlayerPort, DanmakuTrackRegistry {
+    implements DanmakuPlayerPort, DanmakuTrackRegistry, DanmakuTrackUpdater {
   final List<JsonMap> classicTracks = [];
   final Map<String, JsonMap> classicCache = {};
   int reuseCount = 0;
@@ -158,6 +158,23 @@ final class MemoryDanmakuPlayer
   @override
   List<JsonMap> get registry => classicTracks;
   @override
+  bool updateTrack(
+      DanmakuPlaybackTarget expected, String id, JsonMap properties) {
+    if (target?.path != expected.path ||
+        target?.generation != expected.generation) {
+      return false;
+    }
+    final track = classicTracks.where((t) => t['trackId'] == id).firstOrNull;
+    if (track == null || track['bindingId'] != null) return false;
+    track.addAll({
+      ...properties,
+      if (properties.containsKey('displayFold'))
+        'deduplicate': properties['displayFold']
+    });
+    return true;
+  }
+
+  @override
   bool reuse(DanmakuPlaybackTarget expected, JsonMap binding) {
     if (target?.path != expected.path ||
         target?.generation != expected.generation) {
@@ -172,6 +189,12 @@ final class MemoryDanmakuPlayer
     if (track == null) return false;
     reuseCount++;
     track['bindingId'] = binding['id'];
+    track.addAll({
+      'revision': binding['revision'],
+      'enabled': binding['enabled'] == 1,
+      'offsetMs': binding['offset_ms'],
+      'deduplicate': binding['deduplicate'] == 1
+    });
     tracks[binding['id'] as String] = {
       'revision': binding['revision'],
       'cacheRevision': binding['cache_revision'],
@@ -207,6 +230,7 @@ final class MemoryDanmakuPlayer
       'startMs': startMs,
       'endMs': endMs,
       'enabled': binding['enabled'] == 1,
+      'deduplicate': binding['deduplicate'] == 1,
       'offsetMs': binding['offset_ms']
     };
     data[id] = entries;
@@ -274,6 +298,87 @@ final class DanmakuFixture {
     expect(harness.lookup(id)!.spec.output.validate(result), isEmpty,
         reason: id);
     return result;
+  }
+
+  Future<JsonMap> legacyAlignment(JsonMap input,
+      {JobState state = JobState.needsDecision,
+      String? choice,
+      String candidateState = 'proposed'}) async {
+    final id = input['bindingId'] as String;
+    final binding = await service.store.binding(id);
+    final anchors = input['anchors'] as List;
+    final offsets = [
+      for (final a in anchors)
+        ((a as Map)['sourceTimeMs'] as int) - (a['mediaTimeMs'] as int)
+    ]..sort();
+    final offset = offsets.isEmpty ? null : offsets[offsets.length ~/ 2];
+    final jobId =
+        stableMediaId('danmaku-align', [input['requestId'], id, anchors]);
+    final proposal = {
+      'method': 'manualAnchors',
+      'offsetMs': offset,
+      'anchors': anchors,
+      'maxResidualMs': offset == null
+          ? null
+          : offsets
+              .map((n) => (n - offset).abs())
+              .reduce((a, b) => a > b ? a : b),
+      'confidence': 'insufficientEvidence',
+      'confirmed': false,
+      'applicableRange': 'requested media version',
+      'autoApply': false
+    };
+    final date = DateTime.now().toUtc();
+    final job = Job(
+        jobId: jobId,
+        type: 'danmaku.align',
+        title: 'Persisted legacy alignment',
+        state: state,
+        phase: 'estimate',
+        progress: JobProgress(completed: 0, unit: 'anchors'),
+        createdAt: date,
+        updatedAt: date,
+        ownerDeviceId: 'fixture-device',
+        revision: 0,
+        sideEffectCommitted: true,
+        checkpoint: {
+          if (choice != null) ...{
+            'choice': choice,
+            'invocationId': 'legacy-invocation',
+            'boundBy': 'agent'
+          }
+        },
+        input: {...input, 'bindingRevision': binding['revision']},
+        decision: state == JobState.needsDecision
+            ? Decision(prompt: 'Persisted legacy choice', options: [
+                if (offset != null)
+                  DecisionOption(
+                      label: 'Apply',
+                      call: ActionCall('danmaku.align_apply',
+                          {'jobId': jobId, 'revision': 0})),
+                DecisionOption(
+                    label: 'Keep',
+                    call: ActionCall(
+                        'danmaku.align_keep', {'jobId': jobId, 'revision': 0}))
+              ])
+            : null);
+    await jobs.commit(
+        job,
+        JobEvent(
+            jobId: jobId,
+            revision: 0,
+            kind: 'needs_decision',
+            at: date,
+            snapshot: job.toJson()),
+        expectedRevision: null);
+    await jobs.database.insert('danmaku_alignment_candidates', {
+      'job_id': jobId,
+      'binding_id': id,
+      'binding_revision': binding['revision'],
+      'payload': jsonEncode(proposal),
+      'state': candidateState
+    });
+    return {'jobId': jobId};
   }
 
   Future<Job> wait(String id, JobState state) async {

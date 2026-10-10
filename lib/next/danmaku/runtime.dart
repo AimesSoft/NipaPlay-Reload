@@ -18,12 +18,17 @@ import 'store.dart';
 import 'local_source.dart';
 
 /// Forwards track operations to the host player once the widget tree created it.
-final class _HostPlayerPort implements DanmakuPlayerPort, DanmakuTrackRegistry {
+final class _HostPlayerPort
+    implements DanmakuPlayerPort, DanmakuTrackRegistry, DanmakuTrackUpdater {
   VideoDanmakuPort? _delegate;
   void attach(VideoDanmakuPort delegate) => _delegate = delegate;
   void detach() => _delegate = null;
   @override
   List<JsonMap> get registry => _delegate?.registry ?? const [];
+  @override
+  bool updateTrack(
+          DanmakuPlaybackTarget target, String trackId, JsonMap properties) =>
+      _delegate?.updateTrack(target, trackId, properties) ?? false;
   @override
   bool reuse(DanmakuPlaybackTarget target, JsonMap binding) =>
       _delegate?.reuse(target, binding) ?? false;

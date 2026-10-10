@@ -8,7 +8,7 @@ import 'source.dart';
 import 'service.dart';
 
 final class VideoDanmakuPort
-    implements DanmakuPlayerPort, DanmakuTrackRegistry {
+    implements DanmakuPlayerPort, DanmakuTrackRegistry, DanmakuTrackUpdater {
   const VideoDanmakuPort(this.player, {this.requestChange});
   final VideoPlayerState player;
   final Future<void> Function(
@@ -19,6 +19,32 @@ final class VideoDanmakuPort
           .map((e) => e.key)
           .firstOrNull ??
       'next:$id';
+  @override
+  bool updateTrack(
+      DanmakuPlaybackTarget expected, String id, JsonMap properties) {
+    if (target?.path != expected.path ||
+        target?.generation != expected.generation) {
+      return false;
+    }
+    final track = player.danmakuTracks[id];
+    if (track == null || track['bindingId'] != null) return false;
+    if (id == 'timeline' && properties.containsKey('offsetMs')) {
+      throw const Failure(FailureCode.invalidInput,
+          'The live timeline track does not support a fixed offset.');
+    }
+    if (properties.containsKey('displayFold')) {
+      track['deduplicate'] = properties['displayFold'];
+    }
+    if (properties.containsKey('offsetMs')) {
+      player.setDanmakuTrackOffset(id, (properties['offsetMs'] as int) / 1000);
+    }
+    player.toggleDanmakuTrack(
+        id,
+        properties['enabled'] as bool? ??
+            player.danmakuTrackEnabled[id] == true);
+    return true;
+  }
+
   @override
   List<JsonMap> get registry => [
         for (final e in player.danmakuTracks.entries)

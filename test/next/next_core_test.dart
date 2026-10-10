@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:convert';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:nipa_harness/nipa_harness.dart';
@@ -171,13 +172,53 @@ void main() {
         '合成证据',
         null,
         Invocation(origin: 'mcp'));
-    final job = await core.danmaku.service.align(
-        bindingId,
-        [
+    final date = DateTime.now().toUtc();
+    final job = Job(
+        jobId: 'core-danmaku-align',
+        type: 'danmaku.align',
+        title: 'Persisted legacy alignment',
+        state: JobState.needsDecision,
+        phase: 'estimate',
+        progress: JobProgress(completed: 0, unit: 'anchors'),
+        createdAt: date,
+        updatedAt: date,
+        ownerDeviceId: core.deviceId,
+        revision: 0,
+        sideEffectCommitted: true,
+        input: {'bindingId': bindingId, 'bindingRevision': 0},
+        decision: const Decision(prompt: 'Persisted choice', options: [
+          DecisionOption(
+              label: 'Apply',
+              call: ActionCall('danmaku.align_apply',
+                  {'jobId': 'core-danmaku-align', 'revision': 0}))
+        ]));
+    await core.engine.store.commit(
+        job,
+        JobEvent(
+            jobId: job.jobId,
+            revision: 0,
+            kind: 'needs_decision',
+            at: date,
+            snapshot: job.toJson()),
+        expectedRevision: null);
+    await core.danmaku.service.store.db.insert('danmaku_alignment_candidates', {
+      'job_id': job.jobId,
+      'binding_id': bindingId,
+      'binding_revision': 0,
+      'state': 'proposed',
+      'payload': jsonEncode({
+        'method': 'manualAnchors',
+        'offsetMs': 500,
+        'anchors': [
           {'sourceTimeMs': 1000, 'mediaTimeMs': 500, 'evidence': '合成锚点'}
         ],
-        'core-danmaku-align');
-    await waitForJob(core.engine, job.jobId, JobState.needsDecision);
+        'maxResidualMs': 0,
+        'confidence': 'insufficientEvidence',
+        'confirmed': false,
+        'applicableRange': 'requested media version',
+        'autoApply': false
+      })
+    });
     expect(core.danmaku.service.player.target, isNull);
     await core.close();
     core = createCore();

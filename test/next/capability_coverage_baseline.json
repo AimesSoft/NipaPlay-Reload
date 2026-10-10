@@ -59,6 +59,25 @@
     "task.wait": "read",
     "ui.navigate": "write"
   },
+  "primaryActions": {
+    "danmaku.analyze_alignment": "read",
+    "danmaku.update": "write"
+  },
+  "compatibility": {
+    "danmaku.set_enabled": {"targets": ["danmaku.update"], "mode": "alias", "capability": "set enabled absolutely with binding revision"},
+    "danmaku.set_dedup": {"targets": ["danmaku.update"], "mode": "alias", "capability": "set displayFold while preserving raw caches"},
+    "danmaku.offset": {"targets": ["danmaku.update"], "mode": "alias", "capability": "set any supported absolute offset in milliseconds"},
+    "danmaku.align": {"targets": ["danmaku.analyze_alignment"], "mode": "legacyRecovery", "capability": "estimate fixed offset, residuals and evidence"},
+    "danmaku.align_apply": {"targets": ["danmaku.update"], "mode": "legacyRecovery", "capability": "apply explicit offset with binding revision"},
+    "danmaku.align_keep": {"targets": ["danmaku.analyze_alignment"], "mode": "legacyRecovery", "capability": "inspect alignment without changing the binding"}
+  },
+  "behaviorScenarios": {
+    "danmaku.analyze_alignment": ["alignment analysis is read-only and one update accepts a different estimate", "empty inconsistent and even anchor sets expose evidence limits"],
+    "danmaku.update": ["batch changes are atomic per binding and retain ordered failures", "unbound current tracks support enabled offset and display folding", "bound track updates use binding revision and survive restart"],
+    "danmaku.align": ["legacy queued alignment completes analysis without producing a Decision", "legacy proposed checkpoint recovers to analysis without changing binding"],
+    "danmaku.align_apply": ["alignment candidates wait for an exact explicit choice and recover across restart", "stale alignment cannot overwrite a manual offset made during its decision"],
+    "danmaku.align_keep": ["empty legacy alignment evidence can keep the existing mapping"]
+  },
   "settings": {
     "player.pauseOnBackground": {
       "effect": "write",
