@@ -67,21 +67,70 @@ void main() {
       await File('${Directory.systemTemp.path}/nipa-capability-coverage.json')
           .writeAsString('${const JsonEncoder.withIndent('  ').convert({
             'actions': actions,
-            'settings': settings
+            'settings': settings,
+            'contracts': {
+              for (final spec in api.catalog)
+                spec.id: {
+                  'effect': spec.effect.name,
+                  'input': spec.input.toJsonSchema(),
+                  'output': spec.output.toJsonSchema(),
+                },
+            },
           })}\n');
     }
     final baseline = jsonDecode(await baselineFile.readAsString()) as Map;
     final expectedActions = baseline['actions'] as Map;
     final expectedSettings = baseline['settings'] as Map;
+    final capabilities = baseline['capabilities'] as Map;
+    final primary = baseline['primaryActions'] as Map;
+    final compatibility = baseline['compatibility'] as Map;
+    // Released rows remain the floor; merging tools must retain their abilities.
     for (final entry in expectedActions.entries) {
-      expect(actions[entry.key], entry.value,
-          reason: 'Missing or changed Action: ${entry.key}');
+      expect(capabilities, contains(entry.key));
+      expect(compatibility, contains(entry.key));
+      final mapping = compatibility[entry.key] as Map;
+      final capability = capabilities[entry.key] as Map;
+      expect(capability['action'], mapping['action']);
+      expect(capability['effect'], entry.value);
+      expect(primary, contains(mapping['action']));
+      expect(actions[mapping['action']], entry.value,
+          reason: 'Missing ability: ${entry.key} → ${mapping['action']}');
+    }
+    for (final entry in capabilities.entries) {
+      final capability = entry.value as Map;
+      expect(primary, contains(capability['action']));
+      expect(actions[capability['action']], capability['effect'],
+          reason: 'Missing capability: ${entry.key}');
+    }
+    for (final verb in ['pause', 'resume']) {
+      final mapping = compatibility['download.$verb'] as Map;
+      expect(mapping['action'], 'download.set_paused');
+      expect(mapping['inputDefaults'], {'paused': verb == 'pause'});
+      expect(
+          api.lookup(mapping['action'] as String)!.spec.input.validate({
+            'jobId': 'coverage-target',
+            ...Map<String, Object?>.from(mapping['inputDefaults'] as Map),
+          }),
+          isEmpty);
+      expect(actions['download.$verb'], 'write');
+    }
+    for (final entry in primary.entries) {
+      final contract = entry.value as Map;
+      final spec = api.lookup(entry.key as String)!.spec;
+      expect(spec.effect.name, contract['effect'], reason: entry.key as String);
+      if (contract.containsKey('input')) {
+        expect(spec.input.toJsonSchema(), contract['input'],
+            reason: '${entry.key} input contract');
+        expect(spec.output.toJsonSchema(),
+            (baseline['outputContracts'] as Map)[contract['outputContract']],
+            reason: '${entry.key} output contract');
+      }
     }
     for (final entry in expectedSettings.entries) {
       expect(settings[entry.key], entry.value,
           reason: 'Missing or changed setting: ${entry.key}');
     }
     debugPrint(
-        'Capability coverage: ${actions.length} actions, ${settings.length} settings.');
+        'Capability coverage: ${capabilities.length} abilities, ${primary.length} primary actions, ${compatibility.length} compatibility mappings; ${actions.length} callable actions, ${settings.length} settings.');
   });
 }

@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
@@ -101,8 +102,8 @@ void main() {
     expect(done.error, isNull);
   });
 
-  void connect() {
-    final backends = DownloadBackends([backend]);
+  void connect({List<DownloadBackend> additional = const []}) {
+    final backends = DownloadBackends([backend, ...additional]);
     executor = DownloadExecutor(
         backends: backends,
         library: library,
@@ -121,6 +122,7 @@ void main() {
       TaskCapability(engine),
       DownloadCapability(
           downloads: downloads,
+          deleteAudit: JsonlJournal(File('${root.path}/download-audit.jsonl')),
           sources: DownloadSources(Directory('${root.path}/metadata')))
     ]);
   }
@@ -164,6 +166,140 @@ void main() {
       await executor.quiesce(job.jobId);
     }
     await root.delete(recursive: true);
+  });
+
+  Future<JsonMap> call(String action, JsonMap input) async {
+    final outcome = await harness.invokeJson(
+        action, input, Invocation(origin: 'mcp', id: 'batch-test'));
+    expect(outcome, isA<Completed>(), reason: '${outcome.toEnvelope()}');
+    final result = (outcome as Completed).value.toJson();
+    expect(harness.lookup(action)!.spec.output.validate(result), isEmpty);
+    return result;
+  }
+
+  Future<(FakeDownloadBackend, Job, Job)> twoDownloads() async {
+    await engine.close();
+    final otherRoot = await Directory('${root.path}/second').create();
+    final other = FakeDownloadBackend(otherRoot,
+        reference: const DownloadBackendRef(kind: 'fixture', id: 'second'));
+    connect(additional: [other]);
+    await engine.start();
+    final first = await downloads.add(testRequest);
+    final second = await downloads.add(testRequest, backend: other.reference);
+    await phase(first.jobId, 'downloading');
+    await phase(second.jobId, 'downloading');
+    return (other, first, second);
+  }
+
+  test(
+      'batch add accepts distinct sources, keeps failures local and preserves old source calls',
+      () async {
+    await engine.close();
+    connect();
+    final secondSource = 'magnet:?xt=urn:btih:${'1' * 40}';
+    final results = (await call('download.add', {
+      'sources': [testRequest.source, 'magnet:?xt=urn:btih:bad', secondSource],
+    }))['results'] as List;
+    expect(results.map((row) => (row as Map)['status']),
+        ['completed', 'failed', 'completed']);
+    final first = (results.first as Map)['job'] as Map;
+    final second = (results.last as Map)['job'] as Map;
+    expect(first['jobId'], isNot(second['jobId']));
+    expect(first['state'], 'queued');
+    expect(((results[1] as Map)['error'] as Map)['code'], 'invalid_input');
+    final legacy = await call('download.add', {'source': testRequest.source});
+    expect((legacy['job'] as Map)['jobId'], first['jobId']);
+    expect(await engine.list(), hasLength(2));
+  });
+
+  test(
+      'one call pauses and resumes multiple downloads, aliases and batch remove keep files',
+      () async {
+    final (other, first, second) = await twoDownloads();
+    final ids = [first.jobId, 'missing', second.jobId];
+    final paused = (await call('download.set_paused', {
+      'jobIds': ids,
+      'paused': true,
+    }))['results'] as List;
+    expect(paused.map((row) => (row as Map)['status']),
+        ['completed', 'failed', 'completed']);
+    expect(backend.paused, isTrue);
+    expect(other.paused, isTrue);
+    expect((paused.first as Map)['job'], containsPair('state', 'paused'));
+    final resumed = (await call('download.set_paused', {
+      'jobIds': ids,
+      'paused': false,
+    }))['results'] as List;
+    expect(resumed.map((row) => (row as Map)['status']),
+        ['completed', 'failed', 'completed']);
+    expect(backend.paused, isFalse);
+    expect(other.paused, isFalse);
+    await phase(first.jobId, 'downloading');
+    await phase(second.jobId, 'downloading');
+    expect((await call('download.pause', {'jobId': first.jobId}))['job'],
+        containsPair('state', 'paused'));
+    await call('download.resume', {'jobId': first.jobId});
+    expect(backend.paused, isFalse);
+    await phase(first.jobId, 'downloading');
+    await File(backend.video.location.path).writeAsString('part');
+    await File(other.video.location.path).writeAsString('part');
+    final removed =
+        (await call('download.remove', {'jobIds': ids}))['results'] as List;
+    expect(removed.map((row) => (row as Map)['status']),
+        ['completed', 'failed', 'completed']);
+    expect(backend.removals, 1);
+    expect(other.removals, 1);
+    expect(await File(backend.video.location.path).exists(), isTrue);
+    expect(await File(other.video.location.path).exists(), isTrue);
+  });
+
+  test(
+      'batch delete checks every item, continues after boundary failures and audits each attempt',
+      () async {
+    final (other, first, second) = await twoDownloads();
+    final outsideRoot =
+        await Directory.systemTemp.createTemp('batch-delete-outside-');
+    addTearDown(() => outsideRoot.delete(recursive: true));
+    final outside =
+        await File('${outsideRoot.path}/keep.mkv').writeAsString('keep');
+    backend.overrideFiles = [
+      DownloadFile(
+        location: DownloadLocation(path: outside.path, isLocal: true),
+        expectedSize: 4,
+        isVideo: true,
+      )
+    ];
+    await File(other.video.location.path).writeAsString('part');
+    final deleted = (await call('download.delete', {
+      'jobIds': [first.jobId, 'missing', second.jobId],
+    }))['results'] as List;
+    expect(deleted.map((row) => (row as Map)['status']),
+        ['failed', 'failed', 'completed']);
+    expect(((deleted.first as Map)['error'] as Map)['code'], 'invalid_input');
+    expect(backend.deletions, 0);
+    expect(other.deletions, 1);
+    expect(await outside.exists(), isTrue);
+    expect(await File(other.video.location.path).exists(), isFalse);
+    final auditFile = File('${root.path}/download-audit.jsonl');
+    final audit = (await auditFile.readAsLines())
+        .map((line) => jsonDecode(line) as Map)
+        .toList();
+    expect(audit, hasLength(3));
+    expect(audit.map((row) => row['invocationId']),
+        ['batch-test/0', 'batch-test/1', 'batch-test/2']);
+    expect(
+        audit.map((row) => row['status']), ['failed', 'failed', 'completed']);
+    expect(audit.map((row) => row['effect']).toSet(), {'destructive'});
+    expect(audit.map((row) => row['origin']).toSet(), {'mcp'});
+    expect(audit.map((row) => (row['input'] as Map)['jobId']),
+        [first.jobId, 'missing', second.jobId]);
+    backend.overrideFiles = null;
+    await File(backend.video.location.path).writeAsString('part');
+    await call('download.delete', {'jobId': first.jobId});
+    expect(backend.deletions, 1);
+    expect(await auditFile.readAsLines(), hasLength(4));
+    expect(harness.lookup('download.delete')!.spec.effect, Effect.destructive);
+    expect(harness.lookup('download.remove')!.spec.effect, Effect.write);
   });
 
   test(

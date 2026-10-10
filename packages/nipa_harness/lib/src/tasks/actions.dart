@@ -45,8 +45,8 @@ final class _TaskAction extends Action<_TaskInput, _TaskOutput> {
               'wait for the next meaningful change. Pass the last snapshot revision to avoid missing changes '
               'between calls. Returns the current job; use repeated bounded waits for long tasks.',
           _ =>
-            'Request cancellation and return the accepted snapshot. cancelling is not '
-                'confirmation of stopping. Committed effects are still verified and recorded in receipt.',
+            'Request cancellation for jobId or jobIds and return accepted snapshots with individual batch failures. cancelling is not '
+                'confirmation of stopping. Committed effects are still verified and recorded in receipt. Does not remove downloads or delete files.',
         },
         effect: operation == 'cancel' ? Effect.write : Effect.read,
         input: operation == 'list'
@@ -57,18 +57,54 @@ final class _TaskAction extends Action<_TaskInput, _TaskOutput> {
               })
             : ObjectSchema({
                 'jobId': const StringSchema(minLength: 1),
+                if (operation == 'cancel')
+                  'jobIds': const ArraySchema(StringSchema(minLength: 1)),
                 if (operation == 'wait') ...{
                   'afterRevision': const IntegerSchema(minimum: 0),
                   'timeoutMs': const IntegerSchema(minimum: 0, maximum: 60000),
                   'includeProgress': const BooleanSchema(),
                 },
-              }, required: const [
-                'jobId'
-              ]),
+              },
+                required: [
+                    if (operation != 'cancel') 'jobId'
+                  ],
+                oneOfRequired: operation == 'cancel'
+                    ? const [
+                        ['jobId'],
+                        ['jobIds']
+                      ]
+                    : const []),
         output: operation == 'list'
             ? ObjectSchema({'jobs': ArraySchema(jobSnapshotSchema)},
                 required: const ['jobs'])
-            : ObjectSchema({'job': jobSnapshotSchema}, required: const ['job']),
+            : ObjectSchema({
+                'job': jobSnapshotSchema,
+                if (operation == 'cancel')
+                  'results': ArraySchema(ObjectSchema({
+                    'index': const IntegerSchema(minimum: 0),
+                    'jobId': const StringSchema(),
+                    'status':
+                        const StringSchema(values: ['completed', 'failed']),
+                    'job': jobSnapshotSchema,
+                    'error': const ObjectSchema({}, additionalProperties: true),
+                  }, required: const [
+                    'index',
+                    'jobId',
+                    'status'
+                  ], oneOfRequired: const [
+                    ['job'],
+                    ['error']
+                  ])),
+              },
+                required: [
+                    if (operation != 'cancel') 'job'
+                  ],
+                oneOfRequired: operation == 'cancel'
+                    ? const [
+                        ['job'],
+                        ['results']
+                      ]
+                    : const []),
       );
 
   @override
@@ -88,6 +124,32 @@ final class _TaskAction extends Action<_TaskInput, _TaskOutput> {
       return Completed(_TaskOutput({
         'jobs': [for (final job in jobs) job.toJson()]
       }));
+    }
+    if (operation == 'cancel' && json.containsKey('jobIds')) {
+      final ids = (json['jobIds'] as List).cast<String>();
+      final results = <JsonMap>[];
+      for (var i = 0; i < ids.length; i++) {
+        final identity = {'index': i, 'jobId': ids[i]};
+        try {
+          results.add({
+            ...identity,
+            'status': 'completed',
+            'job': (await engine.cancel(ids[i])).toJson()
+          });
+        } on Failure catch (failure) {
+          results.add(
+              {...identity, 'status': 'failed', 'error': failure.toJson()});
+        } catch (error) {
+          results.add({
+            ...identity,
+            'status': 'failed',
+            'error':
+                Failure(FailureCode.internal, 'Cancellation failed: $error')
+                    .toJson()
+          });
+        }
+      }
+      return Completed(_TaskOutput({'results': results}));
     }
     final id = json['jobId'] as String;
     final job = switch (operation) {

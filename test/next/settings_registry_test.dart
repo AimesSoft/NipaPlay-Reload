@@ -141,6 +141,153 @@ void main() {
     return value;
   }
 
+  test(
+      'one call edits multiple Classic settings with independent revisions and failures',
+      () async {
+    final output = await call('settings.set', {
+      'changes': [
+        {
+          'key': 'danmaku.opacity',
+          'value': 0.5,
+          'expectedRevision': 0,
+          'reason': 'less noise'
+        },
+        {'key': 'subtitle.opacity', 'value': 0.4, 'expectedRevision': 0},
+        {'key': 'danmaku.opacity', 'value': 9},
+        {'key': 'danmaku.opacity', 'value': 0.8, 'expectedRevision': 0},
+        {'key': 'agent.token', 'value': 'forbidden'},
+        {'key': 'subtitle.opacity', 'value': 0.6, 'expectedRevision': 1},
+      ]
+    });
+    final results = (output['results'] as List).cast<Map>();
+    expect(results.map((row) => row['status']),
+        ['completed', 'completed', 'failed', 'failed', 'failed', 'completed']);
+    expect(results.map((row) => row['index']), [0, 1, 2, 3, 4, 5]);
+    expect(results.first['revision'], 1);
+    expect(results.last['revision'], 2);
+    expect(results.first['apply'], 'immediate');
+    expect((results[2]['error'] as Map)['code'], 'invalid_input');
+    expect(((results[2]['error'] as Map)['violations'] as List).first,
+        containsPair('path', '/changes/2/value'));
+    expect((results[3]['error'] as Map)['code'], 'conflict');
+    expect((results[4]['error'] as Map)['code'], 'not_found');
+    expect(video.danmakuOpacity, 0.5);
+    expect((await registry.get('subtitle.opacity'))['value'], 0.6);
+    final history = await registry.history();
+    expect(history, hasLength(3));
+    expect(history.map((row) => row['changedBy']).toSet(), {'agent'});
+    expect(history.map((row) => row['invocationId']).toSet(), hasLength(1));
+    expect(history.last['reason'], 'less noise');
+
+    final reset = (await call('settings.reset', {
+      'changes': [
+        {'key': 'danmaku.opacity', 'expectedRevision': 1, 'reason': 'default'},
+        {'key': 'subtitle.opacity', 'expectedRevision': 1},
+        {'key': 'subtitle.opacity', 'expectedRevision': 2},
+      ]
+    }))['results'] as List;
+    expect(reset.map((row) => (row as Map)['status']),
+        ['completed', 'failed', 'completed']);
+    expect((reset.first as Map)['revision'], 2);
+    expect((reset.last as Map)['revision'], 3);
+    final values = (await call('settings.get', {
+      'keys': ['subtitle.opacity', 'agent.token', 'danmaku.opacity']
+    }))['results'] as List;
+    expect((values.first as Map)['revision'], 3);
+    expect((values[1] as Map)['status'], 'failed');
+    expect(
+        (values.last as Map)['value'],
+        registry.entries
+            .firstWhere((entry) => entry.key == 'danmaku.opacity')
+            .defaultValue);
+  });
+
+  test(
+      'describe projects and pages contracts, history filters keys and inclusive time',
+      () async {
+    final keys = ['danmaku.opacity', 'subtitle.opacity'];
+    final first = await call('settings.describe', {
+      'keys': keys,
+      'fields': ['key', 'type', 'revision', 'apply'],
+      'limit': 1
+    });
+    expect(first['nextOffset'], 1);
+    final second = await call('settings.describe', {
+      'keys': keys,
+      'fields': ['key', 'type', 'revision', 'apply'],
+      'limit': 1,
+      'offset': first['nextOffset'],
+    });
+    expect(second['nextOffset'], isNull);
+    final descriptions = [
+      ...(first['settings'] as List).cast<Map>(),
+      ...(second['settings'] as List).cast<Map>(),
+    ];
+    expect(descriptions.map((row) => row['key']).toSet(), keys.toSet());
+    expect(
+        descriptions.every((row) => row.keys
+            .toSet()
+            .difference({'key', 'type', 'revision', 'apply'}).isEmpty),
+        isTrue);
+    expect(descriptions.map((row) => row['type']).toSet(), {'number'});
+    await call('settings.set', {
+      'changes': [
+        {'key': keys[0], 'value': 0.5},
+        {'key': keys[1], 'value': 0.6},
+        {'key': keys[0], 'value': 0.7},
+      ]
+    });
+    await db.update(
+        'settings_changes', {'changed_at': '2026-10-11T01:00:00.000Z'},
+        where: 'key = ? AND revision = ?', whereArgs: [keys[0], 1]);
+    await db.update(
+        'settings_changes', {'changed_at': '2026-10-11T02:00:00.000Z'},
+        where: 'key = ?', whereArgs: [keys[1]]);
+    await db.update(
+        'settings_changes', {'changed_at': '2026-10-11T03:00:00.000Z'},
+        where: 'key = ? AND revision = ?', whereArgs: [keys[0], 2]);
+    final filter = <String, Object?>{
+      'keys': keys,
+      'from': '2026-10-11T02:00:00Z',
+      'to': '2026-10-11T03:00:00Z',
+      'fields': ['key', 'revision'],
+      'limit': 1,
+    };
+    final historyFirst = await call('settings.history', filter);
+    expect(historyFirst['changes'], [
+      {'key': keys[0], 'revision': 2}
+    ]);
+    expect(historyFirst['nextOffset'], 1);
+    final historyLast =
+        await call('settings.history', {...filter, 'offset': 1});
+    expect(historyLast['changes'], [
+      {'key': keys[1], 'revision': 1}
+    ]);
+    expect(historyLast['nextOffset'], isNull);
+    expect(
+        (await call('settings.history', {
+          ...filter,
+          'keys': [keys[0]]
+        }))['nextOffset'],
+        isNull);
+    for (final input in [
+      {'from': 'bad'},
+      {'from': '2026-10-11T01:00:00'},
+      {'from': '2026-10-12T00:00:00Z', 'to': '2026-10-11T00:00:00Z'},
+      {
+        'fields': ['secret']
+      },
+      {'key': keys[0], 'keys': keys},
+    ]) {
+      final outcome = await api.invokeJson(
+          'settings.history', input, harness.Invocation(origin: 'mcp'));
+      expect((outcome as harness.Failed).failure.code,
+          harness.FailureCode.invalidInput);
+    }
+    expect((await call('settings.history', {'limit': 1000}))['changes'],
+        hasLength(3));
+  });
+
   test('Classic AI secrets use the vault while public settings retain history',
       () async {
     const secret = 'settings-vault-offline-test-key';

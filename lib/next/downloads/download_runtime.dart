@@ -59,6 +59,7 @@ final class DownloadRuntime extends ChangeNotifier {
         library: _library);
     capability = DownloadCapability(
         downloads: downloads,
+        deleteAudit: JsonlJournal(File('${root.path}/download-audit.jsonl')),
         sources: DownloadSources(Directory('${root.path}/torrent_sources')));
   }
 
