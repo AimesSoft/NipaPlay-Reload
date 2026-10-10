@@ -36,6 +36,15 @@ download-harness 是一个 Codex 在其中工作的仓库：对话就是操作�
 
 现有的能力层（`packages/nipa_harness`、`lib/next`）原样保留，作为 harness 背后的接口。
 
+## 界面：同一个身体的两张脸
+
+Next 以后会有一套专门呈现 Agent 成果的界面，放在后面做。在那之前，Classic 的界面就是这个身体唯一的脸。harness 操作的是身体本身，与用户此刻看的是哪套界面无关：
+
+- **两边共用的东西**（弹幕轨道、设置、下载、观看历史），Agent 改了，Classic 立刻能看到。
+- **Classic 有对应概念的**（例如文件与弹弹play 剧集的匹配），Agent 的结果写进 Classic，Classic 照常使用。
+- **Classic 没有对应概念的**（例如 TMDB 身份、豆瓣元数据），先保存在身体的事实里，由 Next 的界面呈现。
+- **不用 harness 的用户**，Classic 照常工作。
+
 ## 每个人的 harness
 
 开启 Next 时，NipaPlay 为用户创建一个 harness 仓库（默认 `~/nipaplay-harness`），之后不再改动它：
