@@ -41,6 +41,10 @@ dependencies:
   shelf_static: ^1.1.2
   shelf_router: ^1.1.4
   shelf_cors_headers: ^0.1.5
+
+  # NipaPlay Next capability kernel (pure Dart, no Flutter).
+  nipa_harness:
+    path: packages/nipa_harness
   
   # The following adds the Cupertino Icons font to your application.
   # Use with the CupertinoIcons class for iOS style icons.
@@ -232,6 +236,7 @@ flutter:
   generate: true
   assets:
     - pubspec.lock
+    - assets/next/AGENTS.md
     - packages/adaptive_platform_ui/pubspec.yaml
     - packages/danmaku_canvas/pubspec.yaml
     - packages/nipaplay_smb2/pubspec.yaml
