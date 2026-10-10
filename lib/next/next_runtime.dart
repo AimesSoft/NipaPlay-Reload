@@ -12,6 +12,8 @@ import 'package:nipaplay/services/episode_file_selection_service.dart';
 import 'package:nipaplay/services/playback_service.dart';
 import 'package:nipaplay/utils/tab_change_notifier.dart';
 import 'package:nipaplay/utils/video_player_state.dart';
+import 'package:nipaplay/utils/globals.dart' as globals;
+import 'package:nipaplay/player_abstraction/player_factory.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:provider/provider.dart';
 
@@ -21,6 +23,7 @@ import 'capabilities/library_capability.dart';
 import 'capabilities/navigation_capability.dart';
 import 'capabilities/playback_capability.dart';
 import 'capabilities/video_player_state_port.dart';
+import 'settings/application_settings.dart';
 
 final class NextRuntime extends ChangeNotifier {
   NextRuntime._(this._labs, this._player, List<Capability> capabilities) {
@@ -29,6 +32,11 @@ final class NextRuntime extends ChangeNotifier {
 
   factory NextRuntime.fromContext(BuildContext context) {
     final labs = context.read<LabsSettingsProvider>();
+    ApplicationSettings.erikaVisible = () =>
+        PlayerFactory.isErikaKernelSupported &&
+        (globals.isTelevision ||
+            PlayerFactory.isHarmonyOS ||
+            labs.enableErikaPlayerKernel);
     final settings = context.read<SettingsProvider>();
     final player = context.read<VideoPlayerState>();
     final navigation = context.read<TabChangeNotifier>();

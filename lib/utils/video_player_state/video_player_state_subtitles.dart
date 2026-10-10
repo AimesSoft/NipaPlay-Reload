@@ -298,7 +298,7 @@ extension VideoPlayerStateSubtitles on VideoPlayerState {
     if (_blockTopDanmaku != block) {
       _blockTopDanmaku = block;
       final prefs = await SharedPreferences.getInstance();
-      await prefs.setBool(SettingsKeys.blockTopDanmaku, block);
+      await SettingsAccess.persist(SettingsKeys.blockTopDanmaku, () => prefs.setBool(SettingsKeys.blockTopDanmaku, block));
       _updateMergedDanmakuList();
     }
   }
@@ -315,7 +315,7 @@ extension VideoPlayerStateSubtitles on VideoPlayerState {
     if (_blockBottomDanmaku != block) {
       _blockBottomDanmaku = block;
       final prefs = await SharedPreferences.getInstance();
-      await prefs.setBool(SettingsKeys.blockBottomDanmaku, block);
+      await SettingsAccess.persist(SettingsKeys.blockBottomDanmaku, () => prefs.setBool(SettingsKeys.blockBottomDanmaku, block));
       _updateMergedDanmakuList();
     }
   }
@@ -332,7 +332,7 @@ extension VideoPlayerStateSubtitles on VideoPlayerState {
     if (_blockScrollDanmaku != block) {
       _blockScrollDanmaku = block;
       final prefs = await SharedPreferences.getInstance();
-      await prefs.setBool(SettingsKeys.blockScrollDanmaku, block);
+      await SettingsAccess.persist(SettingsKeys.blockScrollDanmaku, () => prefs.setBool(SettingsKeys.blockScrollDanmaku, block));
       _updateMergedDanmakuList();
     }
   }
@@ -379,7 +379,7 @@ extension VideoPlayerStateSubtitles on VideoPlayerState {
     _spoilerPreventionEnabled = enabled;
 
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setBool(SettingsKeys.spoilerPreventionEnabled, enabled);
+    await SettingsAccess.persist(SettingsKeys.spoilerPreventionEnabled, () => prefs.setBool(SettingsKeys.spoilerPreventionEnabled, enabled));
 
     _isSpoilerDanmakuAnalyzing = false;
     _spoilerDanmakuAnalysisHash = null;
@@ -447,7 +447,7 @@ extension VideoPlayerStateSubtitles on VideoPlayerState {
         prefs.getBool(SettingsKeys.spoilerAiDebugPrintResponse) ?? false;
     if (_spoilerPreventionEnabled && !spoilerAiConfigReady) {
       _spoilerPreventionEnabled = false;
-      await prefs.setBool(SettingsKeys.spoilerPreventionEnabled, false);
+      await SettingsAccess.persist(SettingsKeys.spoilerPreventionEnabled, () => prefs.setBool(SettingsKeys.spoilerPreventionEnabled, false), migration: true);
     }
     _notifyListeners();
   }
@@ -474,17 +474,17 @@ extension VideoPlayerStateSubtitles on VideoPlayerState {
 
     if (apiFormat != null && _spoilerAiApiFormat != apiFormat) {
       _spoilerAiApiFormat = apiFormat;
-      await prefs.setString(
+      await SettingsAccess.persist(SettingsKeys.spoilerAiApiFormat, () => prefs.setString(
         SettingsKeys.spoilerAiApiFormat,
         _spoilerAiApiFormatToPrefs(apiFormat),
-      );
+      ));
       changed = true;
       shouldRestartAnalysis = true;
     }
 
     if (apiUrl != null && _spoilerAiApiUrl != apiUrl) {
       _spoilerAiApiUrl = apiUrl;
-      await prefs.setString(SettingsKeys.spoilerAiApiUrl, apiUrl);
+      await SettingsAccess.persist(SettingsKeys.spoilerAiApiUrl, () => prefs.setString(SettingsKeys.spoilerAiApiUrl, apiUrl));
       changed = true;
       shouldRestartAnalysis = true;
     }
@@ -498,7 +498,7 @@ extension VideoPlayerStateSubtitles on VideoPlayerState {
 
     if (model != null && _spoilerAiModel != model) {
       _spoilerAiModel = model;
-      await prefs.setString(SettingsKeys.spoilerAiModel, model);
+      await SettingsAccess.persist(SettingsKeys.spoilerAiModel, () => prefs.setString(SettingsKeys.spoilerAiModel, model));
       changed = true;
       shouldRestartAnalysis = true;
     }
@@ -507,7 +507,7 @@ extension VideoPlayerStateSubtitles on VideoPlayerState {
       final resolved = temperature.clamp(0.0, 2.0).toDouble();
       if ((_spoilerAiTemperature - resolved).abs() > 0.0001) {
         _spoilerAiTemperature = resolved;
-        await prefs.setDouble(SettingsKeys.spoilerAiTemperature, resolved);
+        await SettingsAccess.persist(SettingsKeys.spoilerAiTemperature, () => prefs.setDouble(SettingsKeys.spoilerAiTemperature, resolved));
         changed = true;
         shouldRestartAnalysis = true;
       }
@@ -516,7 +516,7 @@ extension VideoPlayerStateSubtitles on VideoPlayerState {
     if (debugPrintResponse != null &&
         _spoilerAiDebugPrintResponse != debugPrintResponse) {
       _spoilerAiDebugPrintResponse = debugPrintResponse;
-      await prefs.setBool(SettingsKeys.spoilerAiDebugPrintResponse, debugPrintResponse);
+      await SettingsAccess.persist(SettingsKeys.spoilerAiDebugPrintResponse, () => prefs.setBool(SettingsKeys.spoilerAiDebugPrintResponse, debugPrintResponse));
       changed = true;
     }
 
@@ -564,6 +564,12 @@ extension VideoPlayerStateSubtitles on VideoPlayerState {
   }
 
   // 添加弹幕屏蔽词
+  Future<void> setDanmakuBlockWords(List<String> words) async {
+    _danmakuBlockWords = words.where((word) => word.isNotEmpty).toSet().toList();
+    await _saveDanmakuBlockWords();
+    _updateMergedDanmakuList();
+  }
+
   Future<void> addDanmakuBlockWord(String word) async {
     if (word.isNotEmpty && !_danmakuBlockWords.contains(word)) {
       _danmakuBlockWords.add(word);
@@ -585,7 +591,7 @@ extension VideoPlayerStateSubtitles on VideoPlayerState {
   Future<void> _saveDanmakuBlockWords() async {
     final prefs = await SharedPreferences.getInstance();
     final blockWordsJson = json.encode(_danmakuBlockWords);
-    await prefs.setString(SettingsKeys.danmakuBlockWords, blockWordsJson);
+    await SettingsAccess.persist(SettingsKeys.danmakuBlockWords, () => prefs.setString(SettingsKeys.danmakuBlockWords, blockWordsJson));
   }
 
   // 检查是否是正则表达式规则格式: 规则名称/表达式/

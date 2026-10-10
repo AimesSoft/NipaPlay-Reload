@@ -1,3 +1,4 @@
+import 'package:nipaplay/next/settings/registry.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'dart:async';
@@ -30,6 +31,7 @@ enum DanmakuRenderEngine {
 
 /// 负责读写弹幕渲染引擎设置的工厂类
 class DanmakuKernelFactory {
+  static DanmakuRenderEngine get defaultEngine => _defaultEngine;
   // Default to DFM+ where it is supported; fall back to NipaPlay Next on Web.
   static DanmakuRenderEngine _cachedEngine = _defaultEngine;
   static bool _initialized = false;
@@ -61,10 +63,10 @@ class DanmakuKernelFactory {
 
     try {
       final prefs = await SharedPreferences.getInstance();
-      await prefs.setBool(
+      await SettingsAccess.persist(SettingsKeys.danmakuEnableNextPlusPlusEngine, () => prefs.setBool(
         SettingsKeys.danmakuEnableNextPlusPlusEngine,
         enabled,
-      );
+      ));
     } catch (e) {
       // ignore
     }
@@ -163,7 +165,7 @@ class DanmakuKernelFactory {
     if (_selectedPluginRendererId == selectionId) return;
     _selectedPluginRendererId = selectionId;
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(SettingsKeys.danmakuPluginRenderer, selectionId);
+    await SettingsAccess.persist(SettingsKeys.danmakuPluginRenderer, () => prefs.setString(SettingsKeys.danmakuPluginRenderer, selectionId));
     _rendererChangeController.add(null);
   }
 
@@ -172,15 +174,15 @@ class DanmakuKernelFactory {
     try {
       final sanitizedEngine = _sanitizeEngine(engine);
       final prefs = await SharedPreferences.getInstance();
-      await prefs.setInt(
+      await SettingsAccess.persist(SettingsKeys.danmakuRenderEngine, () => prefs.setInt(
         SettingsKeys.danmakuRenderEngine,
         sanitizedEngine.index,
-      );
+      ));
       final oldEngine = _cachedEngine;
       final hadPluginRenderer = _selectedPluginRendererId != null;
       _cachedEngine = sanitizedEngine;
       _selectedPluginRendererId = null;
-      await prefs.remove(SettingsKeys.danmakuPluginRenderer);
+      await SettingsAccess.persist(SettingsKeys.danmakuPluginRenderer, () => prefs.remove(SettingsKeys.danmakuPluginRenderer));
 
       if (oldEngine != sanitizedEngine || hadPluginRenderer) {
         _kernelChangeController.add(sanitizedEngine);

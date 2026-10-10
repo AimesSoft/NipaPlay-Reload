@@ -1,0 +1,566 @@
+{
+  "actions": {
+    "danmaku.align": "write",
+    "danmaku.align_apply": "write",
+    "danmaku.align_keep": "write",
+    "danmaku.attach": "write",
+    "danmaku.cache_delete": "destructive",
+    "danmaku.detach": "write",
+    "danmaku.episodes": "read",
+    "danmaku.export": "write",
+    "danmaku.fetch": "write",
+    "danmaku.offset": "write",
+    "danmaku.resolve": "read",
+    "danmaku.search": "read",
+    "danmaku.set_dedup": "write",
+    "danmaku.set_enabled": "write",
+    "danmaku.sources": "read",
+    "danmaku.tracks": "read",
+    "download.add": "write",
+    "download.delete": "destructive",
+    "download.pause": "write",
+    "download.remove": "write",
+    "download.resume": "write",
+    "history.continue_watching": "read",
+    "media.identification.add_evidence": "write",
+    "media.identification.defer": "write",
+    "media.identification.get": "read",
+    "media.identification.reconsider": "write",
+    "media.identification.skip": "write",
+    "media.identification.start": "write",
+    "media.identity.bind": "write",
+    "media.identity.get": "read",
+    "media.identity.unbind": "write",
+    "media.library.import_history": "write",
+    "media.library.scan": "write",
+    "media.library.search": "read",
+    "media.library.series": "read",
+    "media.library.work": "read",
+    "media.library.works": "read",
+    "media.metadata.get": "read",
+    "media.metadata.override": "write",
+    "media.metadata.refresh": "write",
+    "media.metadata.search": "read",
+    "playback.open": "write",
+    "playback.seek": "write",
+    "playback.set_paused": "write",
+    "playback.state": "read",
+    "playback.switch_episode": "write",
+    "settings.describe": "read",
+    "settings.get": "read",
+    "settings.history": "read",
+    "settings.reset": "write",
+    "settings.set": "write",
+    "task.cancel": "write",
+    "task.get": "read",
+    "task.list": "read",
+    "task.wait": "read",
+    "ui.navigate": "write"
+  },
+  "settings": {
+    "player.pauseOnBackground": {
+      "effect": "write",
+      "scope": "user"
+    },
+    "player.desktopHoverSettingsMenuEnabled": {
+      "effect": "write",
+      "scope": "user"
+    },
+    "player.instantHidePlayerUiEnabled": {
+      "effect": "write",
+      "scope": "user"
+    },
+    "player.showMenuQuickControls": {
+      "effect": "write",
+      "scope": "user"
+    },
+    "player.topSendDanmakuButtonVisible": {
+      "effect": "write",
+      "scope": "user"
+    },
+    "player.topSkipButtonVisible": {
+      "effect": "write",
+      "scope": "user"
+    },
+    "player.topResizeButtonVisible": {
+      "effect": "write",
+      "scope": "user"
+    },
+    "player.topFrameStepButtonsVisible": {
+      "effect": "write",
+      "scope": "user"
+    },
+    "player.chapterMarkersEnabled": {
+      "effect": "write",
+      "scope": "user"
+    },
+    "player.minimalProgressBarEnabled": {
+      "effect": "write",
+      "scope": "user"
+    },
+    "player.useHardwareDecoder": {
+      "effect": "write",
+      "scope": "device"
+    },
+    "player.introSkipEnabled": {
+      "effect": "write",
+      "scope": "user"
+    },
+    "player.timelinePreviewEnabled": {
+      "effect": "write",
+      "scope": "user"
+    },
+    "player.autoFullscreenEnabled": {
+      "effect": "write",
+      "scope": "user"
+    },
+    "player.doubleResolutionPlaybackEnabled": {
+      "effect": "write",
+      "scope": "device"
+    },
+    "player.screenshotIncludeDanmaku": {
+      "effect": "write",
+      "scope": "user"
+    },
+    "player.screenshotIncludeSubtitles": {
+      "effect": "write",
+      "scope": "user"
+    },
+    "player.screenshotCropLetterbox": {
+      "effect": "write",
+      "scope": "user"
+    },
+    "playback.rate": {
+      "effect": "write",
+      "scope": "user"
+    },
+    "seek.stepSeconds": {
+      "effect": "write",
+      "scope": "user"
+    },
+    "seek.speedBoostRate": {
+      "effect": "write",
+      "scope": "user"
+    },
+    "seek.skipSeconds": {
+      "effect": "write",
+      "scope": "user"
+    },
+    "player.autoNextCountdownSeconds": {
+      "effect": "write",
+      "scope": "user"
+    },
+    "player.precacheBufferSizeMb": {
+      "effect": "write",
+      "scope": "device"
+    },
+    "player.precacheBufferDurationSeconds": {
+      "effect": "write",
+      "scope": "device"
+    },
+    "player.volumeBoost": {
+      "effect": "write",
+      "scope": "user"
+    },
+    "player.minimalProgressBarColor": {
+      "effect": "write",
+      "scope": "user"
+    },
+    "player.playbackEndAction": {
+      "effect": "write",
+      "scope": "user"
+    },
+    "player.anime4kProfile": {
+      "effect": "write",
+      "scope": "device"
+    },
+    "player.crtProfile": {
+      "effect": "write",
+      "scope": "device"
+    },
+    "player.erikaUpscalerMode": {
+      "effect": "write",
+      "scope": "device"
+    },
+    "player.hwdecMode": {
+      "effect": "write",
+      "scope": "device"
+    },
+    "player.videoAspectMode": {
+      "effect": "write",
+      "scope": "user"
+    },
+    "player.screenshotSaveTarget": {
+      "effect": "write",
+      "scope": "user"
+    },
+    "player.screenshotQuality": {
+      "effect": "write",
+      "scope": "user"
+    },
+    "player.screenshotFormat": {
+      "effect": "write",
+      "scope": "user"
+    },
+    "player.softDecodePixelFormat": {
+      "effect": "write",
+      "scope": "device"
+    },
+    "player.fastPlaybackStartup": {
+      "effect": "write",
+      "scope": "user"
+    },
+    "player.externalEnabled": {
+      "effect": "write",
+      "scope": "user"
+    },
+    "player.externalDanmakuOverlay": {
+      "effect": "write",
+      "scope": "user"
+    },
+    "player.externalAutoSwitchToDanmakuConsole": {
+      "effect": "write",
+      "scope": "user"
+    },
+    "player.externalShrinkWindow": {
+      "effect": "write",
+      "scope": "user"
+    },
+    "player.externalConsoleWindowMode": {
+      "effect": "write",
+      "scope": "user"
+    },
+    "danmaku.convertToSimplified": {
+      "effect": "write",
+      "scope": "user"
+    },
+    "danmaku.autoMatchFirstSearchResultOnHashFail": {
+      "effect": "write",
+      "scope": "user"
+    },
+    "danmaku.skipMatching": {
+      "effect": "write",
+      "scope": "user"
+    },
+    "player.externalPath": {
+      "effect": "write",
+      "scope": "device"
+    },
+    "player.externalType": {
+      "effect": "write",
+      "scope": "user"
+    },
+    "danmaku.autoLoadStrategy": {
+      "effect": "write",
+      "scope": "user"
+    },
+    "danmaku.supersample": {
+      "effect": "write",
+      "scope": "user"
+    },
+    "player.kernel": {
+      "effect": "write",
+      "scope": "device"
+    },
+    "player.macosNativeVideoEnabled": {
+      "effect": "write",
+      "scope": "device"
+    },
+    "player.androidAudioOutput": {
+      "effect": "write",
+      "scope": "device"
+    },
+    "player.erikaAndroidOutputMode": {
+      "effect": "write",
+      "scope": "device"
+    },
+    "player.customUserAgent": {
+      "effect": "write",
+      "scope": "user"
+    },
+    "danmaku.visible": {
+      "effect": "write",
+      "scope": "user"
+    },
+    "danmaku.showDensityChart": {
+      "effect": "write",
+      "scope": "user"
+    },
+    "danmaku.randomColor": {
+      "effect": "write",
+      "scope": "user"
+    },
+    "danmaku.stacking": {
+      "effect": "write",
+      "scope": "user"
+    },
+    "danmaku.merge": {
+      "effect": "write",
+      "scope": "user"
+    },
+    "danmaku.blockTop": {
+      "effect": "write",
+      "scope": "user"
+    },
+    "danmaku.blockBottom": {
+      "effect": "write",
+      "scope": "user"
+    },
+    "danmaku.blockScroll": {
+      "effect": "write",
+      "scope": "user"
+    },
+    "danmaku.timelineEnabled": {
+      "effect": "write",
+      "scope": "user"
+    },
+    "danmaku.rememberOffset": {
+      "effect": "write",
+      "scope": "user"
+    },
+    "danmaku.spoilerPreventionEnabled": {
+      "effect": "write",
+      "scope": "user"
+    },
+    "danmaku.spoilerAiDebugPrintResponse": {
+      "effect": "write",
+      "scope": "user"
+    },
+    "danmaku.opacity": {
+      "effect": "write",
+      "scope": "user"
+    },
+    "danmaku.fontSize": {
+      "effect": "write",
+      "scope": "user"
+    },
+    "danmaku.speedMultiplier": {
+      "effect": "write",
+      "scope": "user"
+    },
+    "danmaku.displayArea": {
+      "effect": "write",
+      "scope": "user"
+    },
+    "danmaku.trackGap": {
+      "effect": "write",
+      "scope": "user"
+    },
+    "danmaku.outlineWidth": {
+      "effect": "write",
+      "scope": "user"
+    },
+    "danmaku.spoilerAiTemperature": {
+      "effect": "write",
+      "scope": "user"
+    },
+    "danmaku.outlineStyle": {
+      "effect": "write",
+      "scope": "user"
+    },
+    "danmaku.shadowStyle": {
+      "effect": "write",
+      "scope": "user"
+    },
+    "danmaku.fontFamily": {
+      "effect": "write",
+      "scope": "user"
+    },
+    "danmaku.fontFilePath": {
+      "effect": "write",
+      "scope": "user"
+    },
+    "danmaku.blockWords": {
+      "effect": "write",
+      "scope": "user"
+    },
+    "danmaku.manualOffset": {
+      "effect": "write",
+      "scope": "user"
+    },
+    "danmaku.renderEngine": {
+      "effect": "write",
+      "scope": "device"
+    },
+    "danmaku.nextPlusPlusEnabled": {
+      "effect": "write",
+      "scope": "user"
+    },
+    "danmaku.pluginRenderer": {
+      "effect": "write",
+      "scope": "user"
+    },
+    "danmaku.spoilerAiApiUrl": {
+      "effect": "write",
+      "scope": "user"
+    },
+    "danmaku.spoilerAiModel": {
+      "effect": "write",
+      "scope": "user"
+    },
+    "danmaku.spoilerAiApiFormat": {
+      "effect": "write",
+      "scope": "user"
+    },
+    "subtitle.scale": {
+      "effect": "write",
+      "scope": "user"
+    },
+    "subtitle.srtScale": {
+      "effect": "write",
+      "scope": "user"
+    },
+    "subtitle.delaySeconds": {
+      "effect": "write",
+      "scope": "user"
+    },
+    "subtitle.srtDelaySeconds": {
+      "effect": "write",
+      "scope": "user"
+    },
+    "subtitle.position": {
+      "effect": "write",
+      "scope": "user"
+    },
+    "subtitle.marginX": {
+      "effect": "write",
+      "scope": "user"
+    },
+    "subtitle.marginY": {
+      "effect": "write",
+      "scope": "user"
+    },
+    "subtitle.opacity": {
+      "effect": "write",
+      "scope": "user"
+    },
+    "subtitle.borderSize": {
+      "effect": "write",
+      "scope": "user"
+    },
+    "subtitle.shadowOffset": {
+      "effect": "write",
+      "scope": "user"
+    },
+    "subtitle.alignX": {
+      "effect": "write",
+      "scope": "user"
+    },
+    "subtitle.alignY": {
+      "effect": "write",
+      "scope": "user"
+    },
+    "subtitle.overrideMode": {
+      "effect": "write",
+      "scope": "user"
+    },
+    "subtitle.bold": {
+      "effect": "write",
+      "scope": "user"
+    },
+    "subtitle.italic": {
+      "effect": "write",
+      "scope": "user"
+    },
+    "subtitle.color": {
+      "effect": "write",
+      "scope": "user"
+    },
+    "subtitle.borderColor": {
+      "effect": "write",
+      "scope": "user"
+    },
+    "subtitle.shadowColor": {
+      "effect": "write",
+      "scope": "user"
+    },
+    "subtitle.externalColor": {
+      "effect": "write",
+      "scope": "user"
+    },
+    "subtitle.fontName": {
+      "effect": "write",
+      "scope": "user"
+    },
+    "subtitle.externalFontName": {
+      "effect": "write",
+      "scope": "user"
+    },
+    "subtitle.fontDir": {
+      "effect": "write",
+      "scope": "user"
+    },
+    "danmaku.titan.opacity": {
+      "effect": "write",
+      "scope": "user"
+    },
+    "danmaku.titan.fontSize": {
+      "effect": "write",
+      "scope": "user"
+    },
+    "danmaku.titan.bold": {
+      "effect": "write",
+      "scope": "user"
+    },
+    "danmaku.titan.fontBorder": {
+      "effect": "write",
+      "scope": "user"
+    },
+    "danmaku.titan.fontFamily": {
+      "effect": "write",
+      "scope": "user"
+    },
+    "danmaku.titan.speedPlus": {
+      "effect": "write",
+      "scope": "user"
+    },
+    "danmaku.titan.density": {
+      "effect": "write",
+      "scope": "user"
+    },
+    "danmaku.titan.duration": {
+      "effect": "write",
+      "scope": "user"
+    },
+    "danmaku.titan.limit": {
+      "effect": "write",
+      "scope": "user"
+    },
+    "danmaku.titan.trackGap": {
+      "effect": "write",
+      "scope": "user"
+    },
+    "danmaku.titan.preventShade": {
+      "effect": "write",
+      "scope": "user"
+    },
+    "danmaku.titan.offsetTop": {
+      "effect": "write",
+      "scope": "user"
+    },
+    "danmaku.titan.offsetBottom": {
+      "effect": "write",
+      "scope": "user"
+    },
+    "danmaku.titan.maxLength": {
+      "effect": "write",
+      "scope": "user"
+    },
+    "danmaku.titan.isRecyclingDom": {
+      "effect": "write",
+      "scope": "user"
+    },
+    "danmaku.titan.isRecyclingModel": {
+      "effect": "write",
+      "scope": "user"
+    },
+    "danmaku.titan.forbidShrinkState": {
+      "effect": "write",
+      "scope": "user"
+    },
+    "player.screenshotDirectory": {
+      "effect": "write",
+      "scope": "device"
+    }
+  }
+}

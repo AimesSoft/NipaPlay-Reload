@@ -64,7 +64,7 @@ void main() {
     expect(
         (await upgraded.get(job.jobId))!.toStorageJson(), job.toStorageJson());
     expect(await upgraded.events(job.jobId), hasLength(1));
-    expect(await upgraded.database.getVersion(), 3);
+    expect(await upgraded.database.getVersion(), 4);
     expect(await upgraded.database.query('media_entities'), isEmpty);
     await upgraded.close();
     await root.delete(recursive: true);

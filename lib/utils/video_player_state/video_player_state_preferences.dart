@@ -81,7 +81,7 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
       return;
     }
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(_playbackEndActionKey, action.prefsValue);
+    await SettingsAccess.persist(_playbackEndActionKey, () => prefs.setString(_playbackEndActionKey, action.prefsValue));
     _playbackEndAction = action;
     AutoNextEpisodeService.instance.updateAutoPlayEnabled(
       action == PlaybackEndAction.autoNext,
@@ -121,7 +121,7 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
       return;
     }
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setInt(_autoNextCountdownSecondsKey, resolved);
+    await SettingsAccess.persist(_autoNextCountdownSecondsKey, () => prefs.setInt(_autoNextCountdownSecondsKey, resolved));
     _autoNextCountdownSeconds = resolved;
     AutoNextEpisodeService.instance.updateCountdownDuration(resolved);
     _notifyListeners();
@@ -144,7 +144,7 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
       return;
     }
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setBool(_pauseOnBackgroundKey, enabled);
+    await SettingsAccess.persist(_pauseOnBackgroundKey, () => prefs.setBool(_pauseOnBackgroundKey, enabled));
     _pauseOnBackground = enabled;
     _notifyListeners();
   }
@@ -166,7 +166,7 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
       return;
     }
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setBool(_desktopHoverSettingsMenuEnabledKey, enabled);
+    await SettingsAccess.persist(_desktopHoverSettingsMenuEnabledKey, () => prefs.setBool(_desktopHoverSettingsMenuEnabledKey, enabled));
     _desktopHoverSettingsMenuEnabled = enabled;
     if (!enabled) {
       setShowRightMenu(false);
@@ -190,7 +190,7 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
       return;
     }
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setBool(_instantHidePlayerUiEnabledKey, enabled);
+    await SettingsAccess.persist(_instantHidePlayerUiEnabledKey, () => prefs.setBool(_instantHidePlayerUiEnabledKey, enabled));
     _instantHidePlayerUiEnabled = enabled;
     _notifyListeners();
   }
@@ -229,7 +229,7 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
   Future<void> setShowPlayerMenuQuickControls(bool visible) async {
     if (_showPlayerMenuQuickControls == visible) return;
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setBool(SettingsKeys.showPlayerMenuQuickControls, visible);
+    await SettingsAccess.persist(SettingsKeys.showPlayerMenuQuickControls, () => prefs.setBool(SettingsKeys.showPlayerMenuQuickControls, visible));
     _showPlayerMenuQuickControls = visible;
     _notifyListeners();
   }
@@ -276,7 +276,7 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
       return;
     }
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setBool(key, newValue);
+    await SettingsAccess.persist(key, () => prefs.setBool(key, newValue));
     apply();
     _notifyListeners();
   }
@@ -299,7 +299,7 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
       return;
     }
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setBool(_chapterMarkersEnabledKey, enabled);
+    await SettingsAccess.persist(_chapterMarkersEnabledKey, () => prefs.setBool(_chapterMarkersEnabledKey, enabled));
     _chapterMarkersEnabled = enabled;
     _notifyListeners();
   }
@@ -308,7 +308,7 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
   Future<void> setMinimalProgressBarEnabled(bool enabled) async {
     _minimalProgressBarEnabled = enabled;
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setBool(_minimalProgressBarEnabledKey, enabled);
+    await SettingsAccess.persist(_minimalProgressBarEnabledKey, () => prefs.setBool(_minimalProgressBarEnabledKey, enabled));
     _notifyListeners();
   }
 
@@ -316,7 +316,7 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
   Future<void> setMinimalProgressBarColor(int color) async {
     _minimalProgressBarColor = color;
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setInt(_minimalProgressBarColorKey, color);
+    await SettingsAccess.persist(_minimalProgressBarColorKey, () => prefs.setInt(_minimalProgressBarColorKey, color));
     _notifyListeners();
   }
 
@@ -324,7 +324,7 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
   Future<void> setShowDanmakuDensityChart(bool show) async {
     _showDanmakuDensityChart = show;
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setBool(SettingsKeys.showDanmakuDensityChart, show);
+    await SettingsAccess.persist(SettingsKeys.showDanmakuDensityChart, () => prefs.setBool(SettingsKeys.showDanmakuDensityChart, show));
     _notifyListeners();
   }
 
@@ -344,7 +344,7 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
     _syncErikaDanmakuOpacity();
     _notifyListeners();
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setDouble(SettingsKeys.danmakuOpacity, opacity);
+    await SettingsAccess.persist(SettingsKeys.danmakuOpacity, () => prefs.setDouble(SettingsKeys.danmakuOpacity, opacity));
   }
 
   // 获取映射后的弹幕不透明度
@@ -375,7 +375,7 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
     }
     // 即使内存值相同也保存显式选择，避免启动默认值掩盖旧存档。
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setBool(SettingsKeys.danmakuVisible, visible);
+    await SettingsAccess.persist(SettingsKeys.danmakuVisible, () => prefs.setBool(SettingsKeys.danmakuVisible, visible));
   }
 
   void toggleDanmakuVisible() {
@@ -394,7 +394,7 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
     if (_mergeDanmaku != merge) {
       _mergeDanmaku = merge;
       final prefs = await SharedPreferences.getInstance();
-      await prefs.setBool(SettingsKeys.mergeDanmaku, merge);
+      await SettingsAccess.persist(SettingsKeys.mergeDanmaku, () => prefs.setBool(SettingsKeys.mergeDanmaku, merge));
       _syncErikaDanmakuConfig();
       _notifyListeners();
     }
@@ -446,7 +446,7 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
     if (_danmakuStacking != stacking) {
       _danmakuStacking = stacking;
       final prefs = await SharedPreferences.getInstance();
-      await prefs.setBool(SettingsKeys.danmakuStacking, stacking);
+      await SettingsAccess.persist(SettingsKeys.danmakuStacking, () => prefs.setBool(SettingsKeys.danmakuStacking, stacking));
       _syncErikaDanmakuConfig();
       _notifyListeners();
     }
@@ -459,7 +459,7 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
     }
     _danmakuRandomColorEnabled = enabled;
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setBool(SettingsKeys.danmakuRandomColorEnabled, enabled);
+    await SettingsAccess.persist(SettingsKeys.danmakuRandomColorEnabled, () => prefs.setBool(SettingsKeys.danmakuRandomColorEnabled, enabled));
     _updateMergedDanmakuList();
   }
 
@@ -489,7 +489,7 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
       _useHardwareDecoder = enabled;
       PlayerFactory.setUseHardwareDecoder(enabled);
       final prefs = await SharedPreferences.getInstance();
-      await prefs.setBool(_useHardwareDecoderKey, enabled);
+      await SettingsAccess.persist(_useHardwareDecoderKey, () => prefs.setBool(_useHardwareDecoderKey, enabled));
       await applyHardwareDecoderPreference();
       _notifyListeners();
     }
@@ -614,7 +614,7 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
     }
     _precacheBufferDurationSeconds = resolved;
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setInt(_precacheBufferDurationSecondsKey, resolved);
+    await SettingsAccess.persist(_precacheBufferDurationSecondsKey, () => prefs.setInt(_precacheBufferDurationSecondsKey, resolved));
     await applyPrecacheBufferSettings();
     _notifyListeners();
   }
@@ -640,7 +640,7 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
     _playbackRate = resolved;
     if (_isSpeedBoostActive) _normalPlaybackRate = resolved;
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setDouble(_playbackRateKey, resolved);
+    await SettingsAccess.persist(_playbackRateKey, () => prefs.setDouble(_playbackRateKey, resolved));
 
     // 立即应用新的播放速度
     if (hasVideo && !_isSpeedBoostActive) {
@@ -654,7 +654,7 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
   Future<void> setSpeedBoostRate(double rate) async {
     _speedBoostRate = rate;
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setDouble(_speedBoostRateKey, rate);
+    await SettingsAccess.persist(_speedBoostRateKey, () => prefs.setDouble(_speedBoostRateKey, rate));
     _notifyListeners();
   }
 
@@ -754,8 +754,8 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
         '[VideoPlayerState] 读取$_seekStepSecondsKey失败，已重置为默认值: $e',
       );
       try {
-        await prefs.remove(_seekStepSecondsKey);
-        await prefs.setDouble(_seekStepSecondsKey, _seekStepSeconds);
+        await SettingsAccess.persist(_seekStepSecondsKey, () => prefs.remove(_seekStepSecondsKey), migration: true);
+        await SettingsAccess.persist(_seekStepSecondsKey, () => prefs.setDouble(_seekStepSecondsKey, _seekStepSeconds), migration: true);
       } catch (persistError) {
         debugPrint(
           '[VideoPlayerState] 重置$_seekStepSecondsKey失败: $persistError',
@@ -769,7 +769,7 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
   Future<void> setSeekStepSeconds(double seconds) async {
     _seekStepSeconds = clampSeekStepToCurrentVideoDuration(seconds);
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setDouble(_seekStepSecondsKey, _seekStepSeconds);
+    await SettingsAccess.persist(_seekStepSecondsKey, () => prefs.setDouble(_seekStepSecondsKey, _seekStepSeconds));
     _notifyListeners();
   }
 
@@ -784,7 +784,7 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
   Future<void> setSkipSeconds(int seconds) async {
     _skipSeconds = seconds;
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setInt(_skipSecondsKey, seconds);
+    await SettingsAccess.persist(_skipSecondsKey, () => prefs.setInt(_skipSecondsKey, seconds));
     _notifyListeners();
   }
 
@@ -848,10 +848,10 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
     bool value, {
     required String settingName,
   }) async {
-    bool ok = await prefs.setBool(key, value);
+    bool ok = await SettingsAccess.persist(key, () => prefs.setBool(key, value));
     if (ok) return;
-    await prefs.remove(key);
-    ok = await prefs.setBool(key, value);
+    await SettingsAccess.persist(key, () => prefs.remove(key));
+    ok = await SettingsAccess.persist(key, () => prefs.setBool(key, value));
     if (!ok) {
       debugPrint('[VideoPlayerState] 保存$settingName失败: key=$key, value=$value');
     }
@@ -863,10 +863,10 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
     int value, {
     required String settingName,
   }) async {
-    bool ok = await prefs.setInt(key, value);
+    bool ok = await SettingsAccess.persist(key, () => prefs.setInt(key, value));
     if (ok) return;
-    await prefs.remove(key);
-    ok = await prefs.setInt(key, value);
+    await SettingsAccess.persist(key, () => prefs.remove(key));
+    ok = await SettingsAccess.persist(key, () => prefs.setInt(key, value));
     if (!ok) {
       debugPrint('[VideoPlayerState] 保存$settingName失败: key=$key, value=$value');
     }
@@ -1475,6 +1475,14 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
     _scheduleTitanDanmakuSettingsPersistence();
   }
 
+  Future<void> commitTitanDanmakuSettings(TitanDanmakuSettings settings) async {
+    _titanDanmakuSettings = settings;
+    _titanDanmakuSettingsPersistenceTimer?.cancel();
+    _titanDanmakuSettingsPersistenceTimer = null;
+    await _saveTitanDanmakuSettingsPreference(settings);
+    _notifyListeners();
+  }
+
   // 设置弹幕字体大小
   Future<void> setDanmakuFontSize(
     double fontSize, {
@@ -1482,11 +1490,14 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
   }) async {
     if (_danmakuFontSize != fontSize) {
       _danmakuFontSize = fontSize;
-      _scheduleDanmakuFontSizePersistence(immediate: commit);
+      if (!commit) _scheduleDanmakuFontSizePersistence();
       _syncErikaDanmakuFontSize();
       _notifyListeners();
-    } else if (commit) {
-      _scheduleDanmakuFontSizePersistence(immediate: true);
+    }
+    if (commit) {
+      _danmakuFontSizePersistenceTimer?.cancel();
+      _danmakuFontSizePersistenceTimer = null;
+      await _saveDanmakuFontSizePreference(fontSize);
     }
   }
 
@@ -1653,19 +1664,19 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
     _next2DanmakuOutlineWidth = loadedNext2OutlineWidth;
 
     if (loadedFontFilePath != effectiveFontPath) {
-      await prefs.setString(
-          SettingsKeys.danmakuFontFilePath, effectiveFontPath);
+      await SettingsAccess.persist(SettingsKeys.danmakuFontFilePath, () => prefs.setString(
+          SettingsKeys.danmakuFontFilePath, effectiveFontPath), migration: true);
     }
     if ((prefs.getString(SettingsKeys.danmakuFontFamily) ?? '').trim() !=
         loadedFontFamily) {
-      await prefs.setString(SettingsKeys.danmakuFontFamily, loadedFontFamily);
+      await SettingsAccess.persist(SettingsKeys.danmakuFontFamily, () => prefs.setString(SettingsKeys.danmakuFontFamily, loadedFontFamily), migration: true);
     }
     if ((prefs.getDouble(SettingsKeys.next2DanmakuOutlineWidth) ?? -1.0) !=
         loadedNext2OutlineWidth) {
-      await prefs.setDouble(
+      await SettingsAccess.persist(SettingsKeys.next2DanmakuOutlineWidth, () => prefs.setDouble(
         SettingsKeys.next2DanmakuOutlineWidth,
         loadedNext2OutlineWidth,
-      );
+      ), migration: true);
     }
     if (migrateTvOSErikaOutlineDefault) {
       await prefs.setBool(
@@ -1687,8 +1698,8 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
     _danmakuFontFilePath = '';
     _danmakuFontFamily = normalized;
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(SettingsKeys.danmakuFontFilePath, '');
-    await prefs.setString(SettingsKeys.danmakuFontFamily, normalized);
+    await SettingsAccess.persist(SettingsKeys.danmakuFontFilePath, () => prefs.setString(SettingsKeys.danmakuFontFilePath, ''));
+    await SettingsAccess.persist(SettingsKeys.danmakuFontFamily, () => prefs.setString(SettingsKeys.danmakuFontFamily, normalized));
     _syncErikaDanmakuConfig();
     _notifyListeners();
   }
@@ -1713,8 +1724,8 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
     _danmakuFontFilePath = persistedPath;
     _danmakuFontFamily = runtimeFamily;
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(SettingsKeys.danmakuFontFilePath, persistedPath);
-    await prefs.setString(SettingsKeys.danmakuFontFamily, runtimeFamily);
+    await SettingsAccess.persist(SettingsKeys.danmakuFontFilePath, () => prefs.setString(SettingsKeys.danmakuFontFilePath, persistedPath));
+    await SettingsAccess.persist(SettingsKeys.danmakuFontFamily, () => prefs.setString(SettingsKeys.danmakuFontFamily, runtimeFamily));
     _syncErikaDanmakuConfig();
     _notifyListeners();
     return true;
@@ -1727,8 +1738,8 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
     _danmakuFontFilePath = '';
     _danmakuFontFamily = '';
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(SettingsKeys.danmakuFontFilePath, '');
-    await prefs.setString(SettingsKeys.danmakuFontFamily, '');
+    await SettingsAccess.persist(SettingsKeys.danmakuFontFilePath, () => prefs.setString(SettingsKeys.danmakuFontFilePath, ''));
+    await SettingsAccess.persist(SettingsKeys.danmakuFontFamily, () => prefs.setString(SettingsKeys.danmakuFontFamily, ''));
     _syncErikaDanmakuConfig();
     _notifyListeners();
   }
@@ -1746,11 +1757,11 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
     _danmakuOutlineStyle = style;
     _next2DanmakuOutlineWidth = sanitizedWidth;
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setInt(SettingsKeys.danmakuOutlineStyle, style.index);
-    await prefs.setDouble(
+    await SettingsAccess.persist(SettingsKeys.danmakuOutlineStyle, () => prefs.setInt(SettingsKeys.danmakuOutlineStyle, style.index));
+    await SettingsAccess.persist(SettingsKeys.next2DanmakuOutlineWidth, () => prefs.setDouble(
       SettingsKeys.next2DanmakuOutlineWidth,
       sanitizedWidth,
-    );
+    ));
     _syncErikaDanmakuConfig();
     _notifyListeners();
   }
@@ -1786,7 +1797,7 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
     }
     _danmakuShadowStyle = style;
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setInt(SettingsKeys.danmakuShadowStyle, style.index);
+    await SettingsAccess.persist(SettingsKeys.danmakuShadowStyle, () => prefs.setInt(SettingsKeys.danmakuShadowStyle, style.index));
     _syncErikaDanmakuConfig();
     _notifyListeners();
   }
@@ -1966,7 +1977,7 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
     }
     _subtitleScale = resolved;
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setDouble(_subtitleScaleKey, resolved);
+    await SettingsAccess.persist(_subtitleScaleKey, () => prefs.setDouble(_subtitleScaleKey, resolved));
     await applySubtitleStylePreference();
     _notifyListeners();
   }
@@ -1977,7 +1988,7 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
       if ((_srtSubtitleScale - resolved).abs() < 0.0001) return;
       _srtSubtitleScale = resolved;
       final prefs = await SharedPreferences.getInstance();
-      await prefs.setDouble(_srtSubtitleScaleKey, resolved);
+      await SettingsAccess.persist(_srtSubtitleScaleKey, () => prefs.setDouble(_srtSubtitleScaleKey, resolved));
       _notifyListeners();
     }
 
@@ -1987,7 +1998,7 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
     if (_srtSubtitleDelaySeconds == clamped) return;
     _srtSubtitleDelaySeconds = clamped;
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setDouble(_srtSubtitleDelayKey, clamped);
+    await SettingsAccess.persist(_srtSubtitleDelayKey, () => prefs.setDouble(_srtSubtitleDelayKey, clamped));
     _notifyListeners();
   }
 
@@ -1997,7 +2008,7 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
     }
     _subtitleDelaySeconds = seconds;
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setDouble(_subtitleDelayKey, seconds);
+    await SettingsAccess.persist(_subtitleDelayKey, () => prefs.setDouble(_subtitleDelayKey, seconds));
     await applySubtitleStylePreference();
     _notifyListeners();
   }
@@ -2030,7 +2041,7 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
       _subtitlePosition = resolved;
       debugPrint('[SubtitlePos] 设置 sub-pos=$resolved kernel=${player.getPlayerKernelName()}');
       final prefs = await SharedPreferences.getInstance();
-      await prefs.setDouble(_subtitlePositionKey, resolved);
+      await SettingsAccess.persist(_subtitlePositionKey, () => prefs.setDouble(_subtitlePositionKey, resolved));
     // 滑块只管内嵌轨（含 libmpv 内核轨 sub-pos）；外挂叠层字幕块由
     // 长按拖动逐条定位，滑块不再同步覆盖各 path 的位置。
     _subtitleManager.globalPositionSeed = resolved;
@@ -2047,7 +2058,7 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
     if (_subtitleAlignX == align) return;
     _subtitleAlignX = align;
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setInt(_subtitleAlignXKey, align.index);
+    await SettingsAccess.persist(_subtitleAlignXKey, () => prefs.setInt(_subtitleAlignXKey, align.index));
     await applySubtitleStylePreference();
     _refreshSubtitleLayout();
     _notifyListeners();
@@ -2057,7 +2068,7 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
     if (_subtitleAlignY == align) return;
     _subtitleAlignY = align;
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setInt(_subtitleAlignYKey, align.index);
+    await SettingsAccess.persist(_subtitleAlignYKey, () => prefs.setInt(_subtitleAlignYKey, align.index));
     await applySubtitleStylePreference();
     _refreshSubtitleLayout();
     _notifyListeners();
@@ -2067,7 +2078,7 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
     if ((_subtitleMarginX - value).abs() < 0.0001) return;
     _subtitleMarginX = value;
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setDouble(_subtitleMarginXKey, value);
+    await SettingsAccess.persist(_subtitleMarginXKey, () => prefs.setDouble(_subtitleMarginXKey, value));
     _subtitleManager.globalMarginSeed = value;
     // 水平边距滑块同样只管内嵌轨，不覆盖外挂叠层块的独立摆位。
     // 叠层字幕位置在 Flutter UI 层，不碰内核 sub-margin/sub-pos（MediaKit 限制0~300且报错）
@@ -2083,7 +2094,7 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
     if ((_subtitleMarginY - value).abs() < 0.0001) return;
     _subtitleMarginY = value;
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setDouble(_subtitleMarginYKey, value);
+    await SettingsAccess.persist(_subtitleMarginYKey, () => prefs.setDouble(_subtitleMarginYKey, value));
     // 叠层字幕位置在 Flutter UI 层，不碰内核 sub-margin/sub-pos（MediaKit 限制0~300且报错）
     if (!shouldRenderCurrentExternalSubtitleInApp()) {
     await applySubtitleStylePreference();
@@ -2098,7 +2109,7 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
     if ((_subtitleOpacity - resolved).abs() < 0.0001) return;
     _subtitleOpacity = resolved;
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setDouble(_subtitleOpacityKey, resolved);
+    await SettingsAccess.persist(_subtitleOpacityKey, () => prefs.setDouble(_subtitleOpacityKey, resolved));
     await applySubtitleStylePreference();
     _notifyListeners();
   }
@@ -2108,7 +2119,7 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
     if ((_subtitleBorderSize - resolved).abs() < 0.0001) return;
     _subtitleBorderSize = resolved;
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setDouble(_subtitleBorderSizeKey, resolved);
+    await SettingsAccess.persist(_subtitleBorderSizeKey, () => prefs.setDouble(_subtitleBorderSizeKey, resolved));
     await applySubtitleStylePreference();
     _notifyListeners();
   }
@@ -2118,7 +2129,7 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
     if ((_subtitleShadowOffset - resolved).abs() < 0.0001) return;
     _subtitleShadowOffset = resolved;
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setDouble(_subtitleShadowOffsetKey, resolved);
+    await SettingsAccess.persist(_subtitleShadowOffsetKey, () => prefs.setDouble(_subtitleShadowOffsetKey, resolved));
     await applySubtitleStylePreference();
     _notifyListeners();
   }
@@ -2127,7 +2138,7 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
     if (_subtitleBold == value) return;
     _subtitleBold = value;
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setBool(_subtitleBoldKey, value);
+    await SettingsAccess.persist(_subtitleBoldKey, () => prefs.setBool(_subtitleBoldKey, value));
     await applySubtitleStylePreference();
     _notifyListeners();
   }
@@ -2136,7 +2147,7 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
     if (_subtitleItalic == value) return;
     _subtitleItalic = value;
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setBool(_subtitleItalicKey, value);
+    await SettingsAccess.persist(_subtitleItalicKey, () => prefs.setBool(_subtitleItalicKey, value));
     await applySubtitleStylePreference();
     _notifyListeners();
   }
@@ -2148,7 +2159,7 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
     if (_externalSubtitleColorValue == color.value) return;
     _externalSubtitleColorValue = color.value;
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setInt(_externalSubtitleColorKey, color.value);
+    await SettingsAccess.persist(_externalSubtitleColorKey, () => prefs.setInt(_externalSubtitleColorKey, color.value));
     _notifyListeners();
   }
 
@@ -2160,7 +2171,7 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
     if (_externalSubtitleFontName == normalized) return;
     _externalSubtitleFontName = normalized;
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(_externalSubtitleFontNameKey, normalized);
+    await SettingsAccess.persist(_externalSubtitleFontNameKey, () => prefs.setString(_externalSubtitleFontNameKey, normalized));
     await ensureSelectedSubtitleFontsRegistered();
     _notifyListeners();
   }
@@ -2169,7 +2180,7 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
     if (_subtitleColorValue == color.value) return;
     _subtitleColorValue = color.value;
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setInt(_subtitleColorKey, color.value);
+    await SettingsAccess.persist(_subtitleColorKey, () => prefs.setInt(_subtitleColorKey, color.value));
     await applySubtitleStylePreference();
     _notifyListeners();
   }
@@ -2178,7 +2189,7 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
     if (_subtitleBorderColorValue == color.value) return;
     _subtitleBorderColorValue = color.value;
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setInt(_subtitleBorderColorKey, color.value);
+    await SettingsAccess.persist(_subtitleBorderColorKey, () => prefs.setInt(_subtitleBorderColorKey, color.value));
     await applySubtitleStylePreference();
     _notifyListeners();
   }
@@ -2187,7 +2198,7 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
     if (_subtitleShadowColorValue == color.value) return;
     _subtitleShadowColorValue = color.value;
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setInt(_subtitleShadowColorKey, color.value);
+    await SettingsAccess.persist(_subtitleShadowColorKey, () => prefs.setInt(_subtitleShadowColorKey, color.value));
     await applySubtitleStylePreference();
     _notifyListeners();
   }
@@ -2197,7 +2208,7 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
     if (_subtitleFontName == trimmed) return;
     _subtitleFontName = trimmed;
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(_subtitleFontNameKey, trimmed);
+    await SettingsAccess.persist(_subtitleFontNameKey, () => prefs.setString(_subtitleFontNameKey, trimmed));
     // 多选字体在叠层渲染前必须已注册进引擎，否则 fontFamily 静默回退。
     unawaited(ensureSelectedSubtitleFontsRegistered());
     await applySubtitleStylePreference();
@@ -2208,7 +2219,7 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
     if (_subtitleFontDir == dir) return;
     _subtitleFontDir = dir;
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(_subtitleFontDirKey, dir);
+    await SettingsAccess.persist(_subtitleFontDirKey, () => prefs.setString(_subtitleFontDirKey, dir));
     await applySubtitleStylePreference();
     _notifyListeners();
   }
@@ -2250,9 +2261,9 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
       _subtitleFontName = '';
       _externalSubtitleFontName = '';
       final prefs = await SharedPreferences.getInstance();
-      await prefs.setString(_subtitleFontDirKey, '');
-      await prefs.setString(_subtitleFontNameKey, '');
-      await prefs.setString(_externalSubtitleFontNameKey, '');
+      await SettingsAccess.persist(_subtitleFontDirKey, () => prefs.setString(_subtitleFontDirKey, ''));
+      await SettingsAccess.persist(_subtitleFontNameKey, () => prefs.setString(_subtitleFontNameKey, ''));
+      await SettingsAccess.persist(_externalSubtitleFontNameKey, () => prefs.setString(_externalSubtitleFontNameKey, ''));
       await applySubtitleStylePreference();
       _notifyListeners();
     } catch (e) {
@@ -2374,9 +2385,9 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
         _subtitleFontName = p.basenameWithoutExtension(destPath);
       }
       final prefs = await SharedPreferences.getInstance();
-      await prefs.setString(_subtitleFontDirKey, _subtitleFontDir);
+      await SettingsAccess.persist(_subtitleFontDirKey, () => prefs.setString(_subtitleFontDirKey, _subtitleFontDir));
       if (applyName) {
-        await prefs.setString(_subtitleFontNameKey, _subtitleFontName);
+        await SettingsAccess.persist(_subtitleFontNameKey, () => prefs.setString(_subtitleFontNameKey, _subtitleFontName));
       }
       await applySubtitleStylePreference();
       _notifyListeners();
@@ -2426,7 +2437,7 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
 
       _subtitleFontDir = fontsDir.path;
       final prefs = await SharedPreferences.getInstance();
-      await prefs.setString(_subtitleFontDirKey, _subtitleFontDir);
+      await SettingsAccess.persist(_subtitleFontDirKey, () => prefs.setString(_subtitleFontDirKey, _subtitleFontDir));
       await applySubtitleStylePreference();
       _notifyListeners();
       debugPrint(
@@ -2442,7 +2453,7 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
     if (_subtitleOverrideMode == mode) return;
     _subtitleOverrideMode = mode;
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setInt(_subtitleOverrideModeKey, mode.index);
+    await SettingsAccess.persist(_subtitleOverrideModeKey, () => prefs.setInt(_subtitleOverrideModeKey, mode.index));
     await applySubtitleStylePreference();
     _notifyListeners();
   }
@@ -2469,24 +2480,24 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
     _subtitleFontDir = '';
     _subtitleOverrideMode = VideoPlayerState.defaultSubtitleOverrideMode;
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setDouble(_subtitleScaleKey, _subtitleScale);
-    await prefs.setDouble(_subtitleDelayKey, _subtitleDelaySeconds);
-    await prefs.setDouble(_subtitlePositionKey, _subtitlePosition);
-    await prefs.setInt(_subtitleAlignXKey, _subtitleAlignX.index);
-    await prefs.setInt(_subtitleAlignYKey, _subtitleAlignY.index);
-    await prefs.setDouble(_subtitleMarginXKey, _subtitleMarginX);
-    await prefs.setDouble(_subtitleMarginYKey, _subtitleMarginY);
-    await prefs.setDouble(_subtitleOpacityKey, _subtitleOpacity);
-    await prefs.setDouble(_subtitleBorderSizeKey, _subtitleBorderSize);
-    await prefs.setDouble(_subtitleShadowOffsetKey, _subtitleShadowOffset);
-    await prefs.setBool(_subtitleBoldKey, _subtitleBold);
-    await prefs.setBool(_subtitleItalicKey, _subtitleItalic);
-    await prefs.setInt(_subtitleColorKey, _subtitleColorValue);
-    await prefs.setInt(_subtitleBorderColorKey, _subtitleBorderColorValue);
-    await prefs.setInt(_subtitleShadowColorKey, _subtitleShadowColorValue);
-    await prefs.setString(_subtitleFontNameKey, _subtitleFontName);
-    await prefs.setString(_subtitleFontDirKey, _subtitleFontDir);
-    await prefs.setInt(_subtitleOverrideModeKey, _subtitleOverrideMode.index);
+    await SettingsAccess.persist(_subtitleScaleKey, () => prefs.setDouble(_subtitleScaleKey, _subtitleScale));
+    await SettingsAccess.persist(_subtitleDelayKey, () => prefs.setDouble(_subtitleDelayKey, _subtitleDelaySeconds));
+    await SettingsAccess.persist(_subtitlePositionKey, () => prefs.setDouble(_subtitlePositionKey, _subtitlePosition));
+    await SettingsAccess.persist(_subtitleAlignXKey, () => prefs.setInt(_subtitleAlignXKey, _subtitleAlignX.index));
+    await SettingsAccess.persist(_subtitleAlignYKey, () => prefs.setInt(_subtitleAlignYKey, _subtitleAlignY.index));
+    await SettingsAccess.persist(_subtitleMarginXKey, () => prefs.setDouble(_subtitleMarginXKey, _subtitleMarginX));
+    await SettingsAccess.persist(_subtitleMarginYKey, () => prefs.setDouble(_subtitleMarginYKey, _subtitleMarginY));
+    await SettingsAccess.persist(_subtitleOpacityKey, () => prefs.setDouble(_subtitleOpacityKey, _subtitleOpacity));
+    await SettingsAccess.persist(_subtitleBorderSizeKey, () => prefs.setDouble(_subtitleBorderSizeKey, _subtitleBorderSize));
+    await SettingsAccess.persist(_subtitleShadowOffsetKey, () => prefs.setDouble(_subtitleShadowOffsetKey, _subtitleShadowOffset));
+    await SettingsAccess.persist(_subtitleBoldKey, () => prefs.setBool(_subtitleBoldKey, _subtitleBold));
+    await SettingsAccess.persist(_subtitleItalicKey, () => prefs.setBool(_subtitleItalicKey, _subtitleItalic));
+    await SettingsAccess.persist(_subtitleColorKey, () => prefs.setInt(_subtitleColorKey, _subtitleColorValue));
+    await SettingsAccess.persist(_subtitleBorderColorKey, () => prefs.setInt(_subtitleBorderColorKey, _subtitleBorderColorValue));
+    await SettingsAccess.persist(_subtitleShadowColorKey, () => prefs.setInt(_subtitleShadowColorKey, _subtitleShadowColorValue));
+    await SettingsAccess.persist(_subtitleFontNameKey, () => prefs.setString(_subtitleFontNameKey, _subtitleFontName));
+    await SettingsAccess.persist(_subtitleFontDirKey, () => prefs.setString(_subtitleFontDirKey, _subtitleFontDir));
+    await SettingsAccess.persist(_subtitleOverrideModeKey, () => prefs.setInt(_subtitleOverrideModeKey, _subtitleOverrideMode.index));
     await applySubtitleStylePreference();
     _notifyListeners();
   }
@@ -2720,7 +2731,7 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
     if (_danmakuDisplayArea != area) {
       _danmakuDisplayArea = area;
       final prefs = await SharedPreferences.getInstance();
-      await prefs.setDouble(SettingsKeys.danmakuDisplayArea, area);
+      await SettingsAccess.persist(SettingsKeys.danmakuDisplayArea, () => prefs.setDouble(SettingsKeys.danmakuDisplayArea, area));
       _syncErikaDanmakuConfig();
       _notifyListeners();
     }
@@ -2759,7 +2770,7 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
       return;
     }
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setBool(SettingsKeys.rememberDanmakuOffset, remember);
+    await SettingsAccess.persist(SettingsKeys.rememberDanmakuOffset, () => prefs.setBool(SettingsKeys.rememberDanmakuOffset, remember));
     _rememberDanmakuOffset = remember;
     _notifyListeners();
   }
@@ -2771,7 +2782,7 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
     }
     _danmakuSpeedMultiplier = normalized;
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setDouble(SettingsKeys.danmakuSpeedMultiplier, normalized);
+    await SettingsAccess.persist(SettingsKeys.danmakuSpeedMultiplier, () => prefs.setDouble(SettingsKeys.danmakuSpeedMultiplier, normalized));
     _syncErikaDanmakuConfig();
     _notifyListeners();
   }
@@ -2790,7 +2801,7 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
     }
     _danmakuDfmPlusTrackGap = normalized;
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setDouble(SettingsKeys.danmakuDfmPlusTrackGap, normalized);
+    await SettingsAccess.persist(SettingsKeys.danmakuDfmPlusTrackGap, () => prefs.setDouble(SettingsKeys.danmakuDfmPlusTrackGap, normalized));
     _syncErikaDanmakuConfig();
     _notifyListeners();
   }
@@ -2875,7 +2886,7 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
     _screenshotSaveTarget = target;
     try {
       final prefs = await SharedPreferences.getInstance();
-      await prefs.setInt(_screenshotSaveTargetKey, target.prefsValue);
+      await SettingsAccess.persist(_screenshotSaveTargetKey, () => prefs.setInt(_screenshotSaveTargetKey, target.prefsValue));
     } catch (e) {
       debugPrint('保存截图默认保存位置失败: $e');
     }
@@ -2885,7 +2896,7 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
   Future<void> setScreenshotFormat(ScreenshotFormat format) async {
     if (_screenshotFormat == format) return;
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(_screenshotFormatKey, format.name);
+    await SettingsAccess.persist(_screenshotFormatKey, () => prefs.setString(_screenshotFormatKey, format.name));
     _screenshotFormat = format;
     _notifyListeners();
   }
@@ -2894,7 +2905,7 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
     if (_screenshotQuality == quality) return;
     _screenshotQuality = quality;
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setInt(_screenshotQualityKey, quality.prefsValue);
+    await SettingsAccess.persist(_screenshotQualityKey, () => prefs.setInt(_screenshotQualityKey, quality.prefsValue));
     logPlayerEvent(
       'Player',
       '截图质量已设置为 ${quality.label}（JPEG ${quality.jpegQuality}）',
@@ -2909,11 +2920,11 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
     if (_hwdecMode == mode) return;
     _hwdecMode = mode;
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(_hwdecModeKey, mode.name);
-    await applyHardwareDecoderPreference();
+    await SettingsAccess.persist(_hwdecModeKey, () => prefs.setString(_hwdecModeKey, mode.name));
+    if (!SettingsAccess.deferReload) await applyHardwareDecoderPreference();
     // 硬解模式切换后自动重载当前视频使其生效（保留播放位置，保持暂停）
     final path = currentVideoPath;
-    if (path != null && path.isNotEmpty && hasVideo) {
+    if (!SettingsAccess.deferReload && path != null && path.isNotEmpty && hasVideo) {
       final posMs = _position.inMilliseconds;
       final history = WatchHistoryItem(
         filePath: path,
@@ -2945,7 +2956,7 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
     if (_screenshotCaptureIncludesDanmaku == value) return;
     _screenshotCaptureIncludesDanmaku = value;
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setBool(_screenshotIncludeDanmakuKey, value);
+    await SettingsAccess.persist(_screenshotIncludeDanmakuKey, () => prefs.setBool(_screenshotIncludeDanmakuKey, value));
     _notifyListeners();
   }
 
@@ -2953,7 +2964,7 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
     if (_screenshotCropLetterbox == value) return;
     _screenshotCropLetterbox = value;
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setBool(_screenshotCropLetterboxKey, value);
+    await SettingsAccess.persist(_screenshotCropLetterboxKey, () => prefs.setBool(_screenshotCropLetterboxKey, value));
     _notifyListeners();
   }
 
@@ -2961,7 +2972,7 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
     if (_videoAspectMode == mode) return;
     _videoAspectMode = mode;
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(_videoAspectModeKey, mode.name);
+    await SettingsAccess.persist(_videoAspectModeKey, () => prefs.setString(_videoAspectModeKey, mode.name));
     _notifyListeners();
   }
 
@@ -2973,11 +2984,11 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
       if (_softDecodePixelFormat == normalized) return;
       _softDecodePixelFormat = normalized;
       final prefs = await SharedPreferences.getInstance();
-      await prefs.setString(_softDecodePixelFormatKey, normalized);
-      await applyHardwareDecoderPreference();
+      await SettingsAccess.persist(_softDecodePixelFormatKey, () => prefs.setString(_softDecodePixelFormatKey, normalized));
+      if (!SettingsAccess.deferReload) await applyHardwareDecoderPreference();
       // 颜色格式切换后自动重载当前视频使其生效（保留播放位置，保持暂停）
       final path = currentVideoPath;
-      if (path != null && path.isNotEmpty && hasVideo) {
+      if (!SettingsAccess.deferReload && path != null && path.isNotEmpty && hasVideo) {
         final posMs = _position.inMilliseconds;
         final history = WatchHistoryItem(
           filePath: path,
@@ -3009,7 +3020,7 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
     if (_screenshotCaptureIncludesSubtitles == value) return;
     _screenshotCaptureIncludesSubtitles = value;
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setBool(_screenshotIncludeSubtitlesKey, value);
+    await SettingsAccess.persist(_screenshotIncludeSubtitlesKey, () => prefs.setBool(_screenshotIncludeSubtitlesKey, value));
     _notifyListeners();
   }
 
@@ -3072,7 +3083,7 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
     final prefs = await SharedPreferences.getInstance();
 
     if (trimmed == null || trimmed.isEmpty) {
-      await prefs.remove(_screenshotSaveDirectoryKey);
+      await SettingsAccess.persist(_screenshotSaveDirectoryKey, () => prefs.remove(_screenshotSaveDirectoryKey));
       final defaultDir = await _getDefaultScreenshotSaveDirectory();
       _screenshotSaveDirectory = defaultDir.path;
       _notifyListeners();
@@ -3097,7 +3108,7 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
       debugPrint('创建截图目录失败: $e');
     }
 
-    await prefs.setString(_screenshotSaveDirectoryKey, resolvedPath);
+    await SettingsAccess.persist(_screenshotSaveDirectoryKey, () => prefs.setString(_screenshotSaveDirectoryKey, resolvedPath));
     _screenshotSaveDirectory = resolvedPath;
     _notifyListeners();
   }

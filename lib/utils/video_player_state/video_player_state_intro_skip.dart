@@ -230,7 +230,7 @@ extension VideoPlayerStateSkipSegments on VideoPlayerState {
     _notifyListeners();
     try {
       final prefs = await SharedPreferences.getInstance();
-      await prefs.setBool(_introSkipEnabledKey, enabled);
+      await SettingsAccess.persist(_introSkipEnabledKey, () => prefs.setBool(_introSkipEnabledKey, enabled));
     } catch (e) {
       debugPrint('[跳过片头] 开关持久化失败: $e');
     }

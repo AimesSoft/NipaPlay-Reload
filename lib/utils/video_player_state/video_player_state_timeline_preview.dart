@@ -34,7 +34,7 @@ extension VideoPlayerStateTimelinePreview on VideoPlayerState {
     if (_timelinePreviewEnabled == enabled) return;
     try {
       final prefs = await SharedPreferences.getInstance();
-      await prefs.setBool(_timelinePreviewEnabledKey, enabled);
+      await SettingsAccess.persist(_timelinePreviewEnabledKey, () => prefs.setBool(_timelinePreviewEnabledKey, enabled));
     } catch (e) {
       debugPrint('保存时间轴缩略图开关失败: $e');
     }
