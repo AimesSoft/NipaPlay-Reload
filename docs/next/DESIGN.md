@@ -409,7 +409,11 @@ download-harness 中写死的部分，在 NipaPlay Next 中都是可替换的能
    - **Agent 刮削**：扫描与识别成为任务。高置信度由确定性程序绑定；有歧义的文件生成持久化 Decision，由 Agent（可联网查证）或用户判断。元数据多来源共存（弹弹play、Bangumi、TMDB……），一个文件或剧集挂多个外部 ID；弹弹play 的 episodeId 仍是弹幕匹配的根基。调研见 `research/METADATA_IDENTIFICATION.md`。
    - **多平台弹幕聚合**：每个平台是一个 `DanmakuSource`，契约从第一天起按插件接口设计；多个来源合并进播放器现有的多轨弹幕。弹幕源是第 5 步“可演化能力”的第一类。研究阶段只用公开接口与用户自己的登录态，不绕过会员、DRM 或付费墙。调研见 `research/DANMAKU_AGGREGATION.md`。
 2. **GUI 迁移**：Classic 页面逐步改为调用 Harness。`Invocation` 增加 `interactive`，GUI 调用时由宿主把 `NeedsDecision` 渲染为对话框。
-3. **Next Shell**：内嵌 Codex App Server；`ui.present` 组件目录；`ui.layout.patch` 首页布局。
+3. **Next Shell**：内嵌 Codex App Server；`ui.present` 组件目录；`ui.layout.patch` 首页布局。依据 `research/CODEX_APP_SERVER.md` 的实测结论，做出以下决定：
+   - App Server 以 stdio 子进程运行，固定运行时版本；使用 NipaPlay 自己的独立 `CODEX_HOME`，与用户安装的 Codex 隔离；共享对话以后作为显式选项再考虑。
+   - 领域 Action 继续走 M1 的 MCP 端点，在 `thread/start.config` 中注入，不依赖项目信任、不写用户配置；`ui.present`、`ui.layout.patch` 走 dynamicTools（实验 API），其 Effect 由宿主依据 ActionSpec 判定。
+   - 原生按钮直接执行宿主保存的 `ActionCall`，不经过模型；Task Engine 只在需要判断时通过 `turn/start` 唤醒 Agent。
+   - **前置条件：凭据保险库。** Codex 的 `read-only` 沙箱不阻止读取工作区以外的文件（实测）。在 Next Shell 之前，NipaPlay 的令牌与密码必须从 SharedPreferences 迁入系统钥匙串，Agent 只拿到凭据引用。
 4. **Preference Memory**：带来源与理由的结构化偏好。
 5. **Capability Registry**：Agent 生成的能力经“校验 → 审批 → 注册 → 回滚”纳入 Harness。
 6. **Mesh**：Harness 通过新的 transport 跨设备调用；`playback.handoff`。
