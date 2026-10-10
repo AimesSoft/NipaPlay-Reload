@@ -23,6 +23,7 @@ import 'settings/registry.dart';
 import 'settings/capability.dart';
 import 'mesh/runtime.dart';
 import 'mesh/capability.dart';
+import 'mesh/debug_claim_names.dart';
 
 /// Application-owned task and capability composition, independent of Labs.
 final class NextCore {
@@ -68,6 +69,7 @@ final class NextCore {
       Iterable<String> Function() authorizedRoots,
       Iterable<MetadataProvider>? mediaProviders,
       Future<int?> Function(String) mediaDurationProbe) async {
+    await debugDandanplayClaimNames(credentialVault);
     root = suppliedRoot ??
         Directory(
             '${(await StorageService.getAppStorageDirectory()).path}/next');

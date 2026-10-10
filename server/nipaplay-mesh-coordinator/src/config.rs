@@ -1,6 +1,6 @@
 use std::{net::SocketAddr, path::PathBuf};
 
-use nipaplay_auth::{env_bool, env_number, env_value, load_app_secret, UpstreamConfig};
+use nipaplay_auth::{env_bool, env_number, env_value};
 
 /// Minimum heartbeat interval the coordinator will advertise, per the Mesh
 /// taskbook (heartbeats no more often than every 15 minutes, with jitter).
@@ -25,7 +25,8 @@ pub struct Config {
     pub devices_per_hour: u32,
     pub ip_requests_per_minute: u32,
     pub trust_proxy_headers: bool,
-    pub upstream: UpstreamConfig,
+    pub gateway_base: String,
+    pub gateway_user_agent: String,
     pub account_claim_pointer: String,
 }
 
@@ -37,13 +38,6 @@ impl Config {
         let database_path = PathBuf::from(env_value("MESH_DATABASE_PATH", "nipaplay-mesh.db"));
         let ca_cert_file = required_path("MESH_CA_CERT_FILE")?;
         let ca_key_file = required_path("MESH_CA_KEY_FILE")?;
-
-        let upstream_base = env_value("DANDANPLAY_UPSTREAM_BASE", "https://api.dandanplay.net")
-            .trim_end_matches('/')
-            .to_owned();
-        let app_id = env_value("DANDANPLAY_APP_ID", "nipaplayv1");
-        let user_agent = env_value("DANDANPLAY_USER_AGENT", "NipaPlay-Mesh/1.0");
-        let app_secret = load_app_secret(&user_agent).await?;
 
         let heartbeat_interval_seconds = env_number(
             "MESH_HEARTBEAT_INTERVAL_SECONDS",
@@ -73,12 +67,11 @@ impl Config {
             devices_per_hour: env_number("MESH_DEVICES_PER_HOUR", 120),
             ip_requests_per_minute: env_number("MESH_IP_REQUESTS_PER_MINUTE", 300),
             trust_proxy_headers: env_bool("MESH_TRUST_PROXY_HEADERS", true),
-            upstream: UpstreamConfig {
-                base_url: upstream_base,
-                app_id,
-                app_secret,
-                user_agent,
-            },
+            gateway_base: env_value(
+                "DANDANPLAY_GATEWAY_BASE",
+                "https://nipaplay.aimes-soft.com/dandanplay",
+            ),
+            gateway_user_agent: env_value("DANDANPLAY_USER_AGENT", "NipaPlay-Mesh/1.0"),
         })
     }
 }

@@ -103,7 +103,9 @@ impl TokenValidationCache {
 /// Exposes read-only token validation and identity from the accepted JWT.
 #[derive(Clone)]
 pub struct DandanplayUpstream {
-    config: Arc<UpstreamConfig>,
+    base_url: String,
+    user_agent: String,
+    signing: Option<Arc<UpstreamConfig>>,
     client: reqwest::Client,
     cache: TokenValidationCache,
 }
@@ -138,19 +140,54 @@ impl std::error::Error for AccountLookupError {}
 
 impl DandanplayUpstream {
     pub fn new(config: UpstreamConfig) -> Result<Self, String> {
-        let client = reqwest::Client::builder()
+        Ok(Self::with_client(config, Self::http_client()?))
+    }
+
+    /// Delegates application signing to the NipaPlay gateway, retaining its path prefix.
+    pub fn via_gateway(base_url: String, user_agent: String) -> Result<Self, String> {
+        Self::via_gateway_with_client(base_url, user_agent, Self::http_client()?)
+    }
+
+    pub fn via_gateway_with_client(
+        base_url: String,
+        user_agent: String,
+        client: reqwest::Client,
+    ) -> Result<Self, String> {
+        let url = reqwest::Url::parse(&base_url)
+            .map_err(|_| "invalid DANDANPLAY_GATEWAY_BASE".to_owned())?;
+        if !matches!(url.scheme(), "http" | "https")
+            || url.host_str().is_none()
+            || !url.username().is_empty()
+            || url.password().is_some()
+            || url.query().is_some()
+            || url.fragment().is_some()
+        {
+            return Err("invalid DANDANPLAY_GATEWAY_BASE".to_owned());
+        }
+        Ok(Self {
+            base_url: url.as_str().trim_end_matches('/').to_owned(),
+            user_agent,
+            signing: None,
+            client,
+            cache: TokenValidationCache::new(),
+        })
+    }
+
+    fn http_client() -> Result<reqwest::Client, String> {
+        reqwest::Client::builder()
             .connect_timeout(Duration::from_secs(5))
             .timeout(Duration::from_secs(25))
             .redirect(Policy::none())
             .build()
-            .map_err(|error| format!("failed to build upstream client: {error}"))?;
-        Ok(Self::with_client(config, client))
+            .map_err(|error| format!("failed to build upstream client: {error}"))
     }
 
     /// Uses the caller's HTTP policy and connection pool with the shared auth logic.
     pub fn with_client(config: UpstreamConfig, client: reqwest::Client) -> Self {
         Self {
-            config: Arc::new(config),
+            base_url: config.base_url.clone(),
+            user_agent: config.user_agent.clone(),
+            signing: Some(Arc::new(config)),
             client,
             cache: TokenValidationCache::new(),
         }
@@ -166,21 +203,26 @@ impl DandanplayUpstream {
         path: &str,
         token: &str,
     ) -> reqwest::RequestBuilder {
+        let request = self
+            .client
+            .request(method, format!("{}{path}", self.base_url))
+            .header(reqwest::header::ACCEPT, "application/json")
+            .header(reqwest::header::USER_AGENT, &self.user_agent)
+            .header(reqwest::header::AUTHORIZATION, format!("Bearer {token}"));
+        let Some(config) = &self.signing else {
+            return request;
+        };
         let timestamp = unix_timestamp();
         let signature = app_signature(
-            &self.config.app_id,
+            &config.app_id,
             timestamp,
             path.split('?')
                 .next()
                 .expect("a path has a first component"),
-            &self.config.app_secret,
+            &config.app_secret,
         );
-        self.client
-            .request(method, format!("{}{path}", self.config.base_url))
-            .header(reqwest::header::ACCEPT, "application/json")
-            .header(reqwest::header::USER_AGENT, &self.config.user_agent)
-            .header(reqwest::header::AUTHORIZATION, format!("Bearer {token}"))
-            .header("x-appid", &self.config.app_id)
+        request
+            .header("x-appid", &config.app_id)
             .header("x-timestamp", timestamp.to_string())
             .header("x-signature", signature)
     }
@@ -313,6 +355,47 @@ fn jwt_payload(token: &str) -> Result<Value, AccountLookupError> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn gateway_requests_preserve_prefix_and_delegate_signing() {
+        for (base, path) in [
+            ("http://127.0.0.1:18081", "/api/v2/playhistory"),
+            (
+                "https://nipaplay.example/dandanplay/",
+                "/dandanplay/api/v2/playhistory",
+            ),
+        ] {
+            let upstream =
+                DandanplayUpstream::via_gateway(base.into(), "test-agent".into()).unwrap();
+            let request = upstream
+                .signed_get("/api/v2/playhistory?pageSize=1", "synthetic-token")
+                .build()
+                .unwrap();
+            assert_eq!(request.url().path(), path);
+            assert_eq!(request.url().query(), Some("pageSize=1"));
+            assert_eq!(request.headers()["authorization"], "Bearer synthetic-token");
+            assert_eq!(request.headers()["user-agent"], "test-agent");
+            for header in ["x-appid", "x-timestamp", "x-signature"] {
+                assert!(!request.headers().contains_key(header));
+            }
+        }
+    }
+
+    #[test]
+    fn gateway_configuration_rejects_non_http_urls_and_embedded_credentials() {
+        for base in [
+            "invalid",
+            "file:///tmp/gateway",
+            "https://user:synthetic-secret@example.com",
+            "https://example.com?token=synthetic-secret",
+            "https://example.com#fragment",
+        ] {
+            let error = DandanplayUpstream::via_gateway(base.into(), "test-agent".into())
+                .err()
+                .unwrap();
+            assert_eq!(error, "invalid DANDANPLAY_GATEWAY_BASE");
+        }
+    }
 
     #[test]
     fn signs_the_path_without_query_and_preserves_validation_request() {

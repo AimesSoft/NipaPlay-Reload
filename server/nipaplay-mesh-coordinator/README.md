@@ -20,7 +20,7 @@ cargo run --manifest-path server/nipaplay-mesh-coordinator/Cargo.toml -- \
 MESH_CA_CERT_FILE=/tmp/mesh/ca.crt.pem \
 MESH_CA_KEY_FILE=/tmp/mesh/ca.key.pem \
 MESH_DATABASE_PATH=/tmp/mesh/mesh.db \
-DANDANPLAY_APP_SECRET=... \
+DANDANPLAY_GATEWAY_BASE=http://127.0.0.1:18081 \
 cargo run --manifest-path server/nipaplay-mesh-coordinator/Cargo.toml
 ```
 
@@ -46,10 +46,14 @@ cargo run --manifest-path server/nipaplay-mesh-coordinator/Cargo.toml
 | `MESH_DEVICES_PER_HOUR` | `120` | 每账号每小时设备/吊销请求次数 |
 | `MESH_IP_REQUESTS_PER_MINUTE` | `300` | 每 IP 每分钟请求上限，包括匿名、无效输入和公开接口 |
 | `MESH_TRUST_PROXY_HEADERS` | `true` | 仅当 socket 对端为回环代理时信任 `X-Real-IP` / `X-Forwarded-For` |
-| `DANDANPLAY_UPSTREAM_BASE` | `https://api.dandanplay.net` | 上游 API |
-| `DANDANPLAY_APP_ID` | `nipaplayv1` | 应用 ID |
+| `DANDANPLAY_GATEWAY_BASE` | `https://nipaplay.aimes-soft.com/dandanplay` | NipaPlay 网关；同机生产部署可用 `http://127.0.0.1:18081`。保留配置中的路径前缀 |
+| `DANDANPLAY_USER_AGENT` | `NipaPlay-Mesh/1.0` | 网关请求的 User-Agent |
 | `MESH_ACCOUNT_CLAIM_POINTER` | `/userId` | 已验证 JWT 中稳定用户标识的 JSON Pointer；默认声明名尚待真实令牌验收确认 |
-| `DANDANPLAY_APP_SECRET` / `DANDANPLAY_APP_SECRET_URLS` | 见网关 | 应用密钥，复用网关的加载逻辑 |
+
+协调服务只支持经网关验证，不持有 AppSecret，也不加载旧密钥端点。
+旧配置中的 `DANDANPLAY_UPSTREAM_BASE`、`DANDANPLAY_APP_ID`、`DANDANPLAY_APP_SECRET`
+和 `DANDANPLAY_APP_SECRET_URLS` 不再用于协调服务，应从其部署环境移除。
+AppSecret 与上游签名仍由网关负责，网关部署与行为保持原样。
 
 ## 认证
 
@@ -59,13 +63,19 @@ cargo run --manifest-path server/nipaplay-mesh-coordinator/Cargo.toml
 Authorization: Bearer <弹弹play token>
 ```
 
-服务先用只读的 `/api/v2/playhistory` 验证令牌（有效缓存 10 分钟，无效 30 秒），
-上游接受后才解析该 JWT 的 payload，按 `MESH_ACCOUNT_CLAIM_POINTER` 提取稳定用户标识。
+服务携带用户的 Bearer 令牌请求网关的只读 `/api/v2/playhistory`
+（有效缓存 10 分钟，无效 30 秒），不发送应用签名头。
+例如 base 为 `https://nipaplay.aimes-soft.com/dandanplay` 时，请求路径为
+`/dandanplay/api/v2/playhistory`；同机网关根地址则为 `/api/v2/playhistory`。
+网关完成签名与上游通信，接受后协调服务才解析该 JWT 的 payload，
+按 `MESH_ACCOUNT_CLAIM_POINTER` 提取稳定用户标识。
 接受正整数或 1–128 字节的字母、数字、`-._` 标识字符串；不使用用户名。
 协调服务不会调用上游 renew。令牌无效返回 `401`；上游不可达返回 `503`；
 JWT 无法解析、声明缺失或类型不符返回 `422 invalid_identity`。客户端自报账号字段被忽略。
 
-正式端到端验收先确认真实 JWT 的声明名。启动配置相同，运行
+正式端到端验收先通过 App 宿主的 Debug 诊断确认声明名与类型，步骤见
+[`lib/next/mesh/README.md`](../../lib/next/mesh/README.md#主控本机端到端验收)。
+如需协调服务侧只读验证诊断，启动配置相同，运行
 `nipaplay-mesh-coordinator --inspect-account-claim-names`，从 stdin 提供令牌。
 它先请求只读验证接口，再输出声明名的 JSON Pointer 数组，绝不输出声明值或令牌。
 不要把令牌放进命令行、仓库或 shell 历史；从私有宿主流程或关闭回显的终端输入。
@@ -304,7 +314,7 @@ rmdir "$mesh_ca_stage"
 sudo install -o root -g root -m 644 server/nipaplay-mesh-coordinator/deploy/nipaplay-mesh-coordinator.service /etc/systemd/system/
 sudo install -o root -g nipaplay-mesh -m 640 server/nipaplay-mesh-coordinator/deploy/nipaplay-mesh-coordinator.env.example \
   /etc/nipaplay-mesh-coordinator.env
-# 编辑 /etc/nipaplay-mesh-coordinator.env 填入密钥
+# 编辑 /etc/nipaplay-mesh-coordinator.env 配置网关地址和稳定用户声明 Pointer
 sudo systemctl daemon-reload && sudo systemctl enable --now nipaplay-mesh-coordinator
 ```
 
@@ -321,8 +331,8 @@ curl -s http://127.0.0.1:18082/mesh/v1/server-info
 cargo test --manifest-path server/nipaplay-mesh-coordinator/Cargo.toml
 ```
 
-测试使用模拟上游，不访问线上服务，夹具中不含任何真实令牌。
-覆盖签名与证书字段、上游身份类型、跨账号拒绝、吊销后重新注册、并发写入与吊销、SQL
+测试使用模拟网关，不访问线上服务，夹具中不含任何真实令牌。
+覆盖网关路径前缀、Bearer 传递与无应用签名头、证书字段、上游身份类型、跨账号拒绝、吊销后重新注册、并发写入与吊销、SQL
 参数化和事务回滚、上游调用次数、输入大小/格式与错误脱敏。手工导出测试被默认忽略，
 证书结构与验签由正常运行的自动化测试覆盖。
 

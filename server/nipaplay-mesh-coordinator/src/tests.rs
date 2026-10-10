@@ -18,7 +18,7 @@ use axum::{
     routing::get,
     Json, Router,
 };
-use nipaplay_auth::{DandanplayUpstream, RateLimiter, UpstreamConfig};
+use nipaplay_auth::{DandanplayUpstream, RateLimiter};
 use serde_json::{json, Value};
 
 use crate::{account::AccountResolver, api, cert, config::Config, store::Store};
@@ -35,7 +35,7 @@ struct Harness {
     store: Store,
     validation_calls: Arc<AtomicUsize>,
     lookup_calls: Arc<AtomicUsize>,
-    upstream_config: UpstreamConfig,
+    gateway_base: String,
     tasks: Vec<tokio::task::JoinHandle<()>>,
 }
 
@@ -99,19 +99,12 @@ fn account_for(headers: &HeaderMap) -> Option<i64> {
 
 /// Mock play-history endpoint used for read-only token validation.
 async fn mock_playhistory(headers: HeaderMap) -> Response {
+    for name in ["x-appid", "x-timestamp", "x-signature"] {
+        assert!(!headers.contains_key(name));
+    }
     if nipaplay_auth::bearer_token(&headers) == Some("synthetic-upstream-accepted-opaque") {
         return Json(json!({"success":true})).into_response();
     }
-    let timestamp: i64 = headers["x-timestamp"].to_str().unwrap().parse().unwrap();
-    assert_eq!(
-        headers["x-signature"],
-        nipaplay_auth::app_signature(
-            "nipaplayv1",
-            timestamp,
-            "/api/v2/playhistory",
-            "test-app-secret"
-        )
-    );
     if let Some(encoded) = nipaplay_auth::bearer_token(&headers) {
         use base64::Engine as _;
         if let Some(part) = encoded.split('.').nth(1) {
@@ -171,13 +164,13 @@ async fn start_harness_with_methods(
 
     let upstream_router = Router::new()
         .route(
-            "/api/v2/playhistory",
+            "/dandanplay/api/v2/playhistory",
             get(move |headers: HeaderMap| {
                 validation_count.fetch_add(1, Ordering::SeqCst);
                 mock_playhistory(headers)
             }),
         )
-        .route("/api/v2/login/renew", renewal);
+        .route("/dandanplay/api/v2/login/renew", renewal);
     let upstream_listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
     let upstream_addr = upstream_listener.local_addr().unwrap();
     let upstream_task = tokio::spawn(async move {
@@ -209,12 +202,8 @@ async fn start_harness_with_methods(
         devices_per_hour: 120,
         ip_requests_per_minute: 300,
         trust_proxy_headers: true,
-        upstream: UpstreamConfig {
-            base_url: format!("http://{upstream_addr}"),
-            app_id: "nipaplayv1".to_owned(),
-            app_secret: "test-app-secret".to_owned(),
-            user_agent: "NipaPlay-Mesh-Test/1.0".to_owned(),
-        },
+        gateway_base: format!("http://{upstream_addr}/dandanplay/"),
+        gateway_user_agent: "NipaPlay-Mesh-Test/1.0".to_owned(),
     };
     configure(&mut config);
 
@@ -222,16 +211,18 @@ async fn start_harness_with_methods(
     let ca = Arc::new(
         cert::CertificateAuthority::load(&config.ca_cert_file, &config.ca_key_file).unwrap(),
     );
-    let upstream = DandanplayUpstream::with_client(
-        config.upstream.clone(),
+    let upstream = DandanplayUpstream::via_gateway_with_client(
+        config.gateway_base.clone(),
+        config.gateway_user_agent.clone(),
         reqwest::Client::builder()
             .no_proxy()
             .redirect(reqwest::redirect::Policy::none())
             .build()
             .unwrap(),
-    );
+    )
+    .unwrap();
     let claim_pointer = config.account_claim_pointer.clone();
-    let upstream_config = config.upstream.clone();
+    let gateway_base = config.gateway_base.clone();
     let state = api::AppState {
         config: Arc::new(config),
         store: store.clone(),
@@ -263,7 +254,7 @@ async fn start_harness_with_methods(
         store,
         validation_calls,
         lookup_calls,
-        upstream_config,
+        gateway_base,
         tasks: vec![upstream_task, server_task],
     }
 }
@@ -1263,10 +1254,12 @@ async fn jwt_claim_pointer_is_configurable_and_diagnostics_return_only_names_aft
             .status(),
         StatusCode::OK
     );
-    let client = DandanplayUpstream::with_client(
-        harness.upstream_config.clone(),
+    let client = DandanplayUpstream::via_gateway_with_client(
+        harness.gateway_base.clone(),
+        "NipaPlay-Mesh-Test/1.0".to_owned(),
         reqwest::Client::builder().no_proxy().build().unwrap(),
-    );
+    )
+    .unwrap();
     let names = client
         .account_claim_names(&test_token(VALID_TOKEN))
         .await

@@ -37,7 +37,8 @@ mesh.invoke 拒绝 destructive，mesh.invoke_destructive 只接受 destructive�
 
 ## 控制面与发现
 
-只读上游验证后解析配置的 JWT 声明；客户端不自报 accountId，协调服务不调用上游 renew。
+协调服务通过 NipaPlay 网关的只读 playhistory 验证后解析配置的 JWT 声明；
+客户端不自报 accountId，协调服务不持有 AppSecret，也不调用上游 renew。
 注册和设备证书续期都签名时间戳、nonce、操作及请求字段，具体数组见协调服务 README。
 启动重新同步设备快照；心跳每 900 秒或服务端更长间隔加 0–10% 抖动。
 每次心跳上报网卡/手填地址并同步吊销计数和设备列表；更新允许集合立即终止已吊销会话，
@@ -85,7 +86,8 @@ Release 忽略该变量，仅使用 meshProductionIssuerPem 内置常量；目�
 ~~~
 
 此测试构建 Rust 库和协调服务，调用协调服务 --generate-dev-ca，在同一进程启动两个节点，
-并连接真实协调服务进程与本机模拟上游。没有真实令牌或线上请求。
+并连接真实协调服务进程与本机模拟网关。协调服务启动环境不继承宿主环境、无需 AppSecret；
+模拟网关检查 `/dandanplay` 前缀与无应用签名头。没有真实令牌或线上请求。
 
 macOS Debug 构建完成后，可用同一测试验证实际包内 Rust framework：
 
@@ -96,8 +98,9 @@ NIPAPLAY_MESH_TEST_LIBRARY="$PWD/build/macos/Build/Products/Debug/NipaPlay.app/C
 
 测试夹具显式加载包内 FlutterMacOS framework，补齐 flutter_tester 缺少的应用框架路径。
 
-以下真实账号验收由主控执行；复用其私有环境中的 DANDANPLAY_APP_SECRET。
-实现与自动测试没有执行这一过程。
+以下真实账号验收由主控执行。协调服务指向已有网关，网关自行持有 AppSecret；
+协调服务环境移除旧 `DANDANPLAY_APP_SECRET` / `DANDANPLAY_APP_SECRET_URLS`、
+`DANDANPLAY_UPSTREAM_BASE` / `DANDANPLAY_APP_ID` 配置。实现与自动测试没有执行这一过程。
 
 ~~~sh
 mkdir -p /tmp/nipaplay-mesh-e2e
@@ -107,14 +110,31 @@ export MESH_CA_CERT_FILE=/tmp/nipaplay-mesh-e2e/ca.pem
 export MESH_CA_KEY_FILE=/tmp/nipaplay-mesh-e2e/ca.key
 export MESH_DATABASE_PATH=/tmp/nipaplay-mesh-e2e/mesh.db
 export MESH_LISTEN_ADDR=127.0.0.1:18082
-export DANDANPLAY_UPSTREAM_BASE=https://api.dandanplay.net
+export DANDANPLAY_GATEWAY_BASE=https://nipaplay.aimes-soft.com/dandanplay
+# 若主控本机已有运行的网关，可改用 http://127.0.0.1:18081
 ~~~
 
-先确认声明名：运行 cargo run --manifest-path server/nipaplay-mesh-coordinator/Cargo.toml
--- --inspect-account-claim-names，从关闭回显的 stdin 输入真实令牌；
-命令只输出声明名。依据主控确认的稳定用户 ID 配置 MESH_ACCOUNT_CLAIM_POINTER
-（如 /userId；默认值尚未用真实令牌确认）。
-若不存在稳定 ID，停止并交主控裁定。随后启动：
+先确认声明名：以终端直接启动 Debug App，并开启宿主诊断：
+
+~~~sh
+mesh_app="$PWD/build/macos/Build/Products/Debug/NipaPlay.app"
+NIPAPLAY_DEBUG_DANDANPLAY_CLAIM_NAMES=1 "$mesh_app/Contents/MacOS/NipaPlay"
+~~~
+
+宿主启动时直接从保险库读取 `preferences/dandanplay_token`，本地解析 JWT payload，
+stdout 只输出 `[DandanplayClaimNames]` 加声明 JSON Pointer 与 JSON 类型，绝不输出值、
+令牌或解码后的 payload。没有令牌时 stderr 提示 `token_not_found`；先通过 GUI 登录，
+再退出并带同一个开关重启。格式错误与保险库失败只给固定错误代码。
+该诊断不验证令牌有效性、不判断字段是否稳定，不执行网络请求；
+Release/Profile 忽略开关，不读取保险库，不注册 Harness Action，不进入 Agent 或 journal。
+
+例如输出包含 `{"pointer":"/userId","type":"number"}`，且主控确认它是稳定用户 ID，
+则设置 `export MESH_ACCOUNT_CLAIM_POINTER=/userId`；嵌套声明 `/identity/uid` 可直接设置
+为 `export MESH_ACCOUNT_CLAIM_POINTER=/identity/uid`。Pointer 中名称的 `~` 与 `/` 分别
+转义为 `~0` 与 `~1`，直接复制诊断的 pointer 即可。协调服务接受正整数或 1–128 字节的
+字母、数字、`-._` 标识字符串；字段名称和类型只能帮助找候选，不能证明其稳定性。
+默认 `/userId` 尚未用真实令牌确认。若不存在稳定 ID，停止并交主控裁定。
+配置确认后启动（每次修改声明 Pointer 都重启协调服务）：
 
 ~~~sh
 cargo run --manifest-path server/nipaplay-mesh-coordinator/Cargo.toml

@@ -64,12 +64,15 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
 
     let config = Arc::new(Config::from_env().await.map_err(std::io::Error::other)?);
+    let upstream = DandanplayUpstream::via_gateway(
+        config.gateway_base.clone(),
+        config.gateway_user_agent.clone(),
+    )
+    .map_err(std::io::Error::other)?;
     if cli.inspect_account_claim_names {
         use std::io::Read;
         let mut token = String::new();
         std::io::stdin().take(4097).read_to_string(&mut token)?;
-        let upstream =
-            DandanplayUpstream::new(config.upstream.clone()).map_err(std::io::Error::other)?;
         let names = upstream
             .account_claim_names(token.trim())
             .await
@@ -82,8 +85,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         CertificateAuthority::load(&config.ca_cert_file, &config.ca_key_file)
             .map_err(std::io::Error::other)?,
     );
-    let upstream =
-        DandanplayUpstream::new(config.upstream.clone()).map_err(std::io::Error::other)?;
     let state = AppState {
         config: Arc::clone(&config),
         store: store.clone(),

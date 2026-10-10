@@ -114,10 +114,13 @@ final class _Rig {
   Future<void> start() async {
     upstream = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
     upstream.listen((request) async {
-      if (request.uri.path == '/api/v2/login/renew') {
+      if (request.uri.path == '/dandanplay/api/v2/login/renew') {
         renewCalls++;
       }
-      final accepted = request.uri.path == '/api/v2/playhistory' &&
+      for (final name in ['x-appid', 'x-timestamp', 'x-signature']) {
+        expect(request.headers.value(name), isNull);
+      }
+      final accepted = request.uri.path == '/dandanplay/api/v2/playhistory' &&
           [
             _jwt(424242),
             _jwt(515151)
@@ -134,13 +137,14 @@ final class _Rig {
     coordinator = await Process.start(
         'server/nipaplay-mesh-coordinator/target/debug/nipaplay-mesh-coordinator',
         [],
+        includeParentEnvironment: false,
         environment: {
           'MESH_LISTEN_ADDR': '127.0.0.1:$port',
           'MESH_DATABASE_PATH': '${directory.path}/coordinator.db',
           'MESH_CA_CERT_FILE': '${caDirectory.path}/ca.pem',
           'MESH_CA_KEY_FILE': '${caDirectory.path}/ca.key',
-          'DANDANPLAY_UPSTREAM_BASE': 'http://127.0.0.1:${upstream.port}',
-          'DANDANPLAY_APP_SECRET': 'test-app-secret',
+          'DANDANPLAY_GATEWAY_BASE':
+              'http://127.0.0.1:${upstream.port}/dandanplay/',
           'MESH_ACCOUNT_CLAIM_POINTER': '/userId',
           'NO_PROXY': '127.0.0.1,localhost,::1',
           'HTTP_PROXY': '',
