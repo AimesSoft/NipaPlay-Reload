@@ -1,0 +1,5 @@
+{
+  "/api/v2/search/anime":{"success":true,"animes":[{"animeId":7001,"animeTitle":"动画样本"}]},
+  "/api/v2/bangumi/7001":{"success":true,"bangumi":{"animeId":7001,"animeTitle":"动画样本","summary":"动画简介","imageUrl":"https://example.invalid/anime.jpg","episodes":[{"episodeId":7101,"episodeTitle":"第一话","episodeNumber":"1"},{"episodeId":7102,"episodeTitle":"第二话","episodeNumber":"2"}]}},
+  "/api/v2/match":{"success":true,"isMatched":true,"matches":[{"animeId":7001,"animeTitle":"动画样本","episodeId":7101,"episodeTitle":"第一话","episodeNumber":"1"}]}
+}

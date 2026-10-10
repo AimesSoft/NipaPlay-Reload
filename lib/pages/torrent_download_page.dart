@@ -53,7 +53,7 @@ class TorrentDownloadPage extends StatefulWidget {
 class _TorrentDownloadPageState extends State<TorrentDownloadPage>
     with PageActivityMixin {
   final TorrentDownloadService _service = TorrentDownloadService.instance;
-  final _downloads = ServiceProvider.downloads;
+  final _downloads = ServiceProvider.nextCore.downloads;
   final TextEditingController _searchController = TextEditingController();
   Timer? _refreshTimer;
   late final TorrentTaskController _taskController;

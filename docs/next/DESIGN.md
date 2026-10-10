@@ -77,7 +77,8 @@ packages/nipa_harness/          纯 Dart，禁止依赖 Flutter 与 NipaPlay
 lib/next/                       NipaPlay 侧
   capabilities/                 领域 Capability：包装现有 service / provider / VideoPlayerState
   agent_endpoint.dart           MCP 端点生命周期、令牌、工作区生成
-  next_runtime.dart             组合根：用真实依赖构建 Harness，跟随 Labs 开关启停端点
+  next_core.dart                应用组合点：数据库、设备身份、唯一 TaskEngine 与领域能力
+  next_runtime.dart             用 Core 能力构建 Harness，跟随 Labs 开关启停端点
 ```
 
 - `nipa_harness` 是独立 package，由编译器保证内核不依赖 Flutter，将来的 headless Core、Mesh 节点可以直接复用。

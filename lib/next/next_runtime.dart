@@ -10,7 +10,6 @@ import 'package:nipaplay/providers/settings_provider.dart';
 import 'package:nipaplay/services/bangumi_service.dart';
 import 'package:nipaplay/services/episode_file_selection_service.dart';
 import 'package:nipaplay/services/playback_service.dart';
-import 'package:nipaplay/utils/storage_service.dart';
 import 'package:nipaplay/utils/tab_change_notifier.dart';
 import 'package:nipaplay/utils/video_player_state.dart';
 import 'package:package_info_plus/package_info_plus.dart';
@@ -70,16 +69,15 @@ final class NextRuntime extends ChangeNotifier {
   AgentEndpointStatus get endpointStatus => _endpointStatus;
 
   Future<void> _initialize(List<Capability> capabilities) async {
-    final downloads = ServiceProvider.downloads;
-    await downloads.ready;
-    _taskEngine = downloads.engine;
+    final core = ServiceProvider.nextCore;
+    await core.ready;
+    _taskEngine = core.engine;
     await _labs.ready;
-    final storage = await StorageService.getAppStorageDirectory();
-    final root = Directory('${storage.path}/next');
+    final root = core.root;
     final agentsMd = await rootBundle.loadString('assets/next/AGENTS.md');
     final packageInfo = await PackageInfo.fromPlatform();
     _harness = Harness(
-      [...capabilities, TaskCapability(_taskEngine), downloads.capability],
+      [...capabilities, ...core.capabilities],
       observers: [JsonlJournal(File('${root.path}/journal.jsonl'))],
     );
     _endpoint = AgentEndpoint(

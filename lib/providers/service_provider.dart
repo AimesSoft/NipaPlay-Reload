@@ -1,5 +1,12 @@
 import 'package:flutter/foundation.dart';
-import 'package:nipaplay/next/downloads/download_runtime.dart';
+import 'package:nipaplay/constants/settings_keys.dart';
+import 'package:nipaplay/next/downloads/builtin_download_backend.dart';
+import 'package:nipaplay/next/downloads/download_library.dart';
+import 'package:nipaplay/next/media/classic_projection.dart';
+import 'package:nipaplay/next/next_core.dart';
+import 'package:nipaplay/services/torrent_download_service.dart';
+import 'package:nipaplay/utils/globals.dart' as globals;
+import 'package:nipaplay/utils/settings_storage.dart';
 import 'package:nipaplay/services/server_history_sync_service.dart';
 import 'package:nipaplay/services/web_server_service.dart';
 import 'package:nipaplay/services/scan_service.dart';
@@ -21,14 +28,30 @@ class ServiceProvider {
   static final WatchHistoryProvider watchHistoryProvider =
       WatchHistoryProvider();
   static final ScanService scanService = ScanService();
-  static final DownloadRuntime downloads = DownloadRuntime();
+  static NextCore? _nextCore;
+  static NextCore get nextCore => _nextCore!;
   static final ServerHistorySyncService serverHistorySyncService =
       ServerHistorySyncService.instance;
 
   static Future<void> initialize({bool deferBackground = false}) async {
+    if (!kIsWeb) {
+      final native = TorrentDownloadService.instance;
+      _nextCore ??= NextCore(
+        downloadBackend: BuiltinDownloadBackend(native),
+        downloadLibrary: AppDownloadLibrary(native),
+        isDownloaderEnabled: () async =>
+            globals.isDownloaderSupportedPlatform &&
+            await SettingsStorage.loadBool(SettingsKeys.downloaderEnabled,
+                defaultValue: true),
+        loadImportedKeys: native.loadAutoScannedCompletedTaskKeys,
+        classic: WatchHistoryMetadataPort(changed: watchHistoryProvider.refresh),
+        authorizedRoots: () => scanService.scannedFolders,
+      );
+    }
     // 可以在这里添加服务的初始化逻辑
     // 并行初始化网络媒体库服务，不等待连接验证完成
     await Future.wait([
+      if (!kIsWeb) nextCore.ready,
       jellyfinProvider.initialize(),
       embyProvider.initialize(),
       dandanplayRemoteProvider.initialize(),
@@ -44,7 +67,6 @@ class ServiceProvider {
 
   static Future<void> _initializeBackground() async {
     await watchHistoryProvider.loadHistory();
-    if (!kIsWeb) await downloads.ready;
 
     // 初始化服务器观看历史同步（当前仅支持 Jellyfin 下行同步）
     serverHistorySyncService.initialize(

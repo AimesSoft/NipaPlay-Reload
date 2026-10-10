@@ -4,39 +4,17 @@ import 'dart:io';
 import 'package:nipa_harness/nipa_harness.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
+import '../next_database.dart';
+
 final class SqliteJobStore implements JobStore {
-  SqliteJobStore._(this._database);
+  SqliteJobStore.fromDatabase(this._database);
   final Database _database;
+  Database get database => _database;
 
   static Future<SqliteJobStore> open(Directory root,
-      {DatabaseFactory? factory}) async {
-    await root.create(recursive: true);
-    if (factory == null) {
-      if (Platform.isWindows || Platform.isLinux || Platform.isMacOS) {
-        sqfliteFfiInit();
-        factory = databaseFactoryFfi;
-      } else {
-        factory = databaseFactory;
-      }
-    }
-    final database = await factory.openDatabase('${root.path}/next.db',
-        options: OpenDatabaseOptions(
-          version: 1,
-          onConfigure: (db) => db.execute('PRAGMA foreign_keys = ON'),
-          onCreate: (db, version) async {
-            await db.execute('CREATE TABLE jobs ('
-                'job_id TEXT PRIMARY KEY, type TEXT NOT NULL, state TEXT NOT NULL, '
-                'revision INTEGER NOT NULL, created_at TEXT NOT NULL, snapshot TEXT NOT NULL)');
-            await db
-                .execute('CREATE INDEX jobs_state_type ON jobs(state, type)');
-            await db.execute('CREATE TABLE job_events ('
-                'job_id TEXT NOT NULL REFERENCES jobs(job_id), revision INTEGER NOT NULL, '
-                'kind TEXT NOT NULL, at TEXT NOT NULL, snapshot TEXT NOT NULL, '
-                'PRIMARY KEY(job_id, revision))');
-          },
-        ));
-    return SqliteJobStore._(database);
-  }
+          {DatabaseFactory? factory}) async =>
+      SqliteJobStore.fromDatabase(
+          await openNextDatabase(root, factory: factory));
 
   @override
   Future<Job?> get(String jobId) async {
