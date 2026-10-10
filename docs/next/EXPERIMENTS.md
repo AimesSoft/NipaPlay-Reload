@@ -25,3 +25,23 @@
 - Classic 首页正常：媒体库里的《炒翻天》、自定义背景、继续播放、弹弹play 排行榜都在。
 - 开启着 Next 的情况下启动，`~/nipaplay-harness` 被创建并初始提交，凭据在 `~/.config/nipaplay/endpoint.json`（0600），`./nipa status` 返回实时状态。
 - 历史回执里的路径仍指向容器（迁移不改写绝对路径，容器保留，文件仍可访问）。`./nipa status` 输出很长，留给 Agent 自己发现。
+
+## 2026-10-11 · 实验 1：第一次见面
+
+假设：只靠种子 harness（AGENTS.md + `nipa`），Agent 能在第一次对话中摸清用户的环境，写进 AGENTS.md 并提交。
+
+做了什么：DeepSeek V4.1 flash，`codex exec` 在 `~/nipaplay-harness` 中运行，只用 harness 自己的 `.codex/config.toml`（完全权限）。用户消息：“你好！我刚开启了 NipaPlay Next，先熟悉一下我的环境吧。”
+
+观察到：
+- 照 AGENTS.md 先 `./nipa status`、`./nipa list`，然后探索 NipaPlay 状态和文件系统，共 81 条命令。写下的环境基本准确：`/Volumes/Media` 是工位机的 SMB 共享（3.6 TB、约 170 个视频，动画、日剧、国产剧、电影混装）、本机下载、已装软件（qBittorrent、mpv、ffmpeg、yt-dlp、Clash Verge、Tailscale 等）、播放与弹幕偏好。提交为一条 commit，没有写入秘密。
+- 发现了真实问题：内置 B 站弹幕获取 5 次全部 `schemaChanged`；媒体库分成两层且不一致（Classic 9 部 / 53 集，Next 作品层 2 部）；367 条文件位置中 284 条未识别。
+- 最后列出要用户确认的问题（在哪看、下载来源、是否补识别），合理：exec 模式下无法来回对话。
+- 授权边界：只 `ls` 了 Chrome Cookie 库是否存在，没有读取内容。读了旧工作区残留的 `.codex/config.toml`（含一个早已轮换失效的令牌）。
+
+摩擦（身体的问题，归我们改）：
+1. **输出过大**：`./nipa list` 362 KB，`./nipa status` 107 KB。整次会话 790 万输入 token（绝大部分命中缓存）。Agent 用 Python 过滤绕过，但没有改进 `nipa`。
+2. **`state.query` 翻页不可靠**：`state_read_failed` 5 次、`query_concurrency_limit` 2 次、超时 5 次，Agent 只好写带重试的分页脚本。这是 v1 预设的并发与耗时护栏在真实使用中成了阻碍。
+3. **两层媒体库**：`media.library.search`（Classic）与 `library.works`（Next）内容不同，Agent 必须自己弄懂两套视图。
+4. **辅助脚本写在 `/tmp`**：分页与统计脚本都没有留在 harness 里，下次会话要重写。
+
+因此改了：清走旧工作区、旧 `endpoint.json` 和 Mesh 测试数据（移入备份）；1、2、4 与种子更新通道交给 X4，3 交给 X5。
