@@ -14,6 +14,7 @@ sealed class Schema {
       BooleanSchema() => 'boolean',
       ArraySchema() => 'array',
       ObjectSchema() => 'object',
+      _TaskJsonSchema() => 'object',
     };
     return {
       'type': nullable ? [type, 'null'] : type,
@@ -32,6 +33,7 @@ sealed class Schema {
             if (maximum != null) 'maximum': maximum,
           },
         BooleanSchema() => <String, Object?>{},
+        _TaskJsonSchema() => <String, Object?>{},
         ArraySchema(:final items) => {'items': items.toJsonSchema()},
         ObjectSchema(
           :final properties,
@@ -60,6 +62,10 @@ sealed class Schema {
     if (value == null && nullable) return [];
     final violations = <SchemaViolation>[];
     switch (this) {
+      case _TaskJsonSchema():
+        if (value is! JsonMap) {
+          return [SchemaViolation(path, 'Expected an object.')];
+        }
       case StringSchema(:final values, :final minLength):
         if (value is! String) {
           return [SchemaViolation(path, 'Expected a string.')];

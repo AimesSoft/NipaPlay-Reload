@@ -22,6 +22,8 @@ import 'capabilities/library_capability.dart';
 import 'capabilities/navigation_capability.dart';
 import 'capabilities/playback_capability.dart';
 import 'capabilities/video_player_state_port.dart';
+import 'tasks/device_identity.dart';
+import 'tasks/sqlite_job_store.dart';
 
 final class NextRuntime extends ChangeNotifier {
   NextRuntime._(this._labs, List<Capability> capabilities) {
@@ -60,21 +62,27 @@ final class NextRuntime extends ChangeNotifier {
   final LabsSettingsProvider _labs;
   late final Harness _harness;
   late final AgentEndpoint _endpoint;
+  late final TaskEngine _taskEngine;
   late Future<void> _operations;
   AgentEndpointStatus _endpointStatus = const AgentEndpointStopped();
   bool _disposed = false;
 
   Harness get harness => _harness;
+  TaskEngine get taskEngine => _taskEngine;
   AgentEndpointStatus get endpointStatus => _endpointStatus;
 
   Future<void> _initialize(List<Capability> capabilities) async {
     await _labs.ready;
     final storage = await StorageService.getAppStorageDirectory();
     final root = Directory('${storage.path}/next');
+    final deviceId = await loadDeviceIdentity(root);
+    final jobs = await SqliteJobStore.open(root);
+    _taskEngine = TaskEngine(store: jobs, ownerDeviceId: deviceId);
+    await _taskEngine.start();
     final agentsMd = await rootBundle.loadString('assets/next/AGENTS.md');
     final packageInfo = await PackageInfo.fromPlatform();
     _harness = Harness(
-      capabilities,
+      [...capabilities, TaskCapability(_taskEngine)],
       observers: [JsonlJournal(File('${root.path}/journal.jsonl'))],
     );
     _endpoint = AgentEndpoint(
@@ -110,7 +118,10 @@ final class NextRuntime extends ChangeNotifier {
   void dispose() {
     _disposed = true;
     _labs.removeListener(_queueEndpointUpdate);
-    _operations = _operations.then((_) => _endpoint.stop());
+    _operations = _operations.then((_) async {
+      await _endpoint.stop();
+      await _taskEngine.close();
+    });
     super.dispose();
   }
 }

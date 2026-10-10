@@ -98,9 +98,15 @@ class LabsSettingsContent extends StatelessWidget {
                     'Expose a local MCP endpoint to control NipaPlay through conversation in Codex.',
                   );
                   if (labsSettings.enableAgentEndpoint) {
+                    final trustHint = _text(
+                      context,
+                      '在 Codex 中添加此文件夹为项目并选择信任',
+                      '在 Codex 中新增此資料夾為專案並選擇信任',
+                      'Add this folder as a project in Codex and choose to trust it.',
+                    );
                     final statusText = switch (status) {
                       AgentEndpointRunning(:final url, :final workspace) =>
-                        '$url\n${workspace.path}',
+                        '$url\n${workspace.path}\n$trustHint',
                       AgentEndpointFailed(:final message) => message,
                       AgentEndpointStopped() => _text(
                           context,
