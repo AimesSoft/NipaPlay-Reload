@@ -62,7 +62,7 @@ void main() {
     expect(
         (await upgraded.get(job.jobId))!.toStorageJson(), job.toStorageJson());
     expect(await upgraded.events(job.jobId), hasLength(1));
-    expect(await upgraded.database.getVersion(), 5);
+    expect(await upgraded.database.getVersion(), 6);
     expect(await upgraded.database.query('media_entities'), isEmpty);
     await upgraded.close();
     await root.delete(recursive: true);
@@ -402,17 +402,21 @@ void main() {
     expect(f.classic.rows[locator]!['animeName'], '');
   });
 
-  test('metadata refresh preserves bindings and GUI field overrides', () async {
+  test(
+      'metadata refresh preserves bindings and host-attributed persistent edits',
+      () async {
     final id = await f.file('override.mkv');
     await f.call('media.identity.bind_batch', {
       'requestId': 'override-bind',
       'entries': [tmdbBinding(id)]
     });
-    final agent = await f.harness.invokeJson(
-        'media.metadata.override',
-        {'entityId': id, 'field': 'title', 'value': 'User title'},
-        Invocation(origin: 'mcp')) as Failed;
-    expect(agent.failure.code, FailureCode.unavailable);
+    final agent = await f.call('media.metadata.override',
+        {'entityId': id, 'field': 'title', 'value': 'Agent title'});
+    final agentTitle = (((agent['identity'] as Map)['metadata'] as List)
+        .singleWhere((field) => (field as Map)['field'] == 'title')) as Map;
+    expect(agentTitle['actor'], 'agent');
+    expect(agentTitle['origin'], 'mcp');
+    expect(agentTitle['mode'], 'persistent');
     await f.call('media.metadata.override',
         {'entityId': id, 'field': 'title', 'value': 'User title'},
         origin: 'gui');
@@ -424,6 +428,52 @@ void main() {
     expect(await f.jobs.database.query('media_bindings'), before);
     expect(((await f.identities.mergedMetadata(id))['fields'] as Map)['title'],
         'User title');
+  });
+
+  test(
+      'corrections expire on newer snapshots and clear removes persistent edits',
+      () async {
+    final id = await f.file('correction.mkv');
+    await f.call('media.identity.bind_batch', {
+      'requestId': 'correct-bind',
+      'entries': [tmdbBinding(id)]
+    });
+    await f.call('media.metadata.override', {
+      'entityId': id,
+      'field': 'title',
+      'value': 'Correction',
+      'mode': 'correction'
+    });
+    expect(((await f.identities.mergedMetadata(id))['fields'] as Map)['title'],
+        'Correction');
+    await f.jobs.database.update('media_snapshots', {
+      'fetched_at': DateTime.now()
+          .toUtc()
+          .add(const Duration(seconds: 1))
+          .toIso8601String()
+    });
+    expect(((await f.identities.mergedMetadata(id))['fields'] as Map)['title'],
+        isNot('Correction'));
+    await f.call('media.metadata.override', {
+      'entityId': id,
+      'field': 'title',
+      'value': 'Pinned',
+      'mode': 'persistent'
+    });
+    expect(((await f.identities.mergedMetadata(id))['fields'] as Map)['title'],
+        'Pinned');
+    await f.call('media.metadata.override',
+        {'entityId': id, 'field': 'title', 'value': null, 'mode': 'clear'});
+    expect(((await f.identities.mergedMetadata(id))['fields'] as Map)['title'],
+        isNot('Pinned'));
+    expect(
+        (await f.jobs.database.query('media_metadata_edits'))
+            .map((row) => row['mode']),
+        ['correction', 'persistent', 'clear']);
+    expect(
+        (await f.jobs.database.query('media_metadata_edits'))
+            .every((row) => row['actor'] == 'agent' && row['origin'] == 'mcp'),
+        isTrue);
   });
 
   test('read primitives never create bindings snapshots or jobs', () async {

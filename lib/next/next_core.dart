@@ -24,6 +24,8 @@ import 'settings/capability.dart';
 import 'mesh/runtime.dart';
 import 'mesh/capability.dart';
 import 'mesh/debug_claim_names.dart';
+import 'state/query.dart';
+import 'state/views.dart';
 
 /// Application-owned task and capability composition, independent of Labs.
 final class NextCore {
@@ -61,6 +63,8 @@ final class NextCore {
   late final SettingsRegistry settings;
   late final MeshRuntime mesh;
   late final List<Capability> capabilities;
+  final StateSources stateSources = StateSources();
+  late final StateCapability state;
 
   Future<void> _initialize(
       Directory? suppliedRoot,
@@ -103,6 +107,12 @@ final class NextCore {
     downloads.attach(engine, root);
     media.attach(engine);
     danmaku.attach(engine);
+    state = StateCapability(publicStateViews(
+        media: media.service,
+        settings: settings,
+        danmaku: danmaku.service,
+        mesh: mesh,
+        sources: stateSources));
     capabilities = List.unmodifiable([
       CredentialCapability(credentials),
       TaskCapability(engine),
@@ -111,6 +121,7 @@ final class NextCore {
       danmaku.capability,
       SettingsCapability(settings),
       MeshCapability(mesh),
+      state,
     ]);
     await engine.start();
     await downloads.start();

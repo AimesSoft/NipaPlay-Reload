@@ -128,17 +128,16 @@ void main() {
       }
     }
     final scenarios = baseline['behaviorScenarios'] as Map;
-    final danmakuTests = Directory('test/next')
+    final behaviorTests = Directory('test/next')
         .listSync()
         .whereType<File>()
-        .where(
-            (f) => f.path.contains('danmaku_') && f.path.endsWith('_test.dart'))
+        .where((f) => f.path.endsWith('_test.dart'))
         .map((f) => f.readAsStringSync())
         .join('\n');
     for (final entry in scenarios.entries) {
       expect(actions.containsKey(entry.key), isTrue);
       for (final scenario in entry.value as List) {
-        expect(danmakuTests, contains(scenario as String),
+        expect(behaviorTests, contains(scenario as String),
             reason: 'Missing behavior scenario: $scenario');
       }
     }
@@ -155,6 +154,16 @@ void main() {
       }
       if (mapping['mode'] == 'legacyRecovery') {
         expect(scenarios[entry.key], isNotEmpty);
+      }
+      if (mapping['action'] == 'state.query') {
+        expect(actions[entry.key], 'read',
+            reason: 'Legacy getter remains callable: ${entry.key}');
+        expect(core.state.views,
+            contains((mapping['inputDefaults'] as Map)['view']));
+        expect(
+            api.lookup('state.query')!.spec.input.validate(
+                Map<String, Object?>.from(mapping['inputDefaults'] as Map)),
+            isEmpty);
       }
     }
     for (final entry in expectedSettings.entries) {

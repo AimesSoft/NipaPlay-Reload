@@ -19,21 +19,19 @@ UI 不是另一套业务实现，而是 Harness 的一个调用者，同时也�
 | `Effect` | `read` / `write` / `destructive`。描述副作用等级，决定 MCP `readOnlyHint` / `destructiveHint` 与 Agent 审批策略。 |
 | `Schema` | 极小的 JSON Schema 子集，既能输出 JSON Schema，又能校验 JSON 值。 |
 | `Outcome<O>` | `Completed(value)` / `NeedsDecision(decision)` / `Failed(failure)`。 |
-| `Decision` | Action 无法替用户做主时返回的结构化提问。每个选项都携带一个**可直接执行的** `ActionCall`。 |
+| `Decision` | 歧义目标的结构化数据；可包含直接执行的 `ActionCall`，也可作为 GUI 按钮。它不规定 Agent 的调用流程。 |
 | `Failure` | 稳定错误码 + 人类可读说明。Action 内部直接 `throw Failure(...)`。 |
 | `Capability` | 一组共享依赖的 Action（例如播放能力持有播放器端口并提供 `playback.*`）。 |
 | `Harness` | 内核：注册 Capability、校验输入、执行 Action、把异常归一为 `Outcome`、通知观察者（日志）。 |
 | `Invocation` | 一次调用的上下文：`id`（关联 ID）与 `origin`（`gui` / `mcp` / 将来的 `mesh:<device>`）。 |
 | Transport | Harness 的外部接口。M1 只有 MCP（Streamable HTTP，仅回环地址）。将来的 Mesh、Web 都是新的 transport，不改 Action。 |
 
-### 2.1 为什么 `NeedsDecision` 是核心
+### 2.1 `NeedsDecision` 的数据与展示语义
 
-这是 Classic 与 Next 能共存、意图能端到端执行的关键：
-
-- 现在的代码在“需要用户选择”时直接弹对话框（选文件、确认匹配……），Agent 无法参与。
-- 在 Harness 里，Action 不弹框，而是返回 `NeedsDecision`。每个选项就是下一次调用（`ActionCall`）。
-- Agent 若已能从用户意图决定（例如“播最新那个版本”），直接执行对应选项；否则把选项交给用户。
-- 将来的 `ui.present` 可以把选项渲染成按钮，点击直接执行 `ActionCall`，**不需要再触发一次模型推理**。
+依据 §2.3 与架构复审定稿，`NeedsDecision` 表达歧义数据，不是判断流程协议。
+Action 不弹对话框；候选可以附带 `ActionCall` 作为可执行表示，Agent 自由组合能力。
+GUI 可把选项渲染为按钮，点击执行宿主保存的 `ActionCall`，无需模型推理。
+存量任务保留兼容恢复；新原语不得通过固定 Decision 节点规定 Agent 何时介入。
 
 ### 2.2 Effect 与授权
 
@@ -56,7 +54,7 @@ UI 不是另一套业务实现，而是 Harness 的一个调用者，同时也�
 - **护栏，而不是轨道**：Effect、凭据保险库、数据不变量、权限边界是护栏，防止 Agent 出错或越权；代码不得规定 Agent 只能走哪条路径。
 - **每个领域都有一个“有护栏的通用出口”**，参照 download-harness 的 `api get/post`：
   - 只读查询：面向有文档说明的状态（媒体库、历史、任务、绑定），排除秘密，限制资源；
-  - 通用写操作：默认只预览，确认后才执行，权限与 Effect 照常生效。
+  - 通用写操作：架构复审定稿后暂不提供；现有原语与 `settings.*` 覆盖写操作。未来若引入，宿主按真实 Effect 分级与授权。
   - 目的是：不必预先为每种情况造专用工具，Agent 遇到没有想到的需求时也不会被卡住。
 - **参照物是 download-harness**：先有 Agent，代码只为它铺工具和护栏；缺能力时，Agent 自己写工具。
 
@@ -423,18 +421,18 @@ download-harness 中写死的部分，在 NipaPlay Next 中都是可替换的能
 | 传输（`sync.transfer` 任务） | 把完成的文件从后端搬到存储节点：SFTP 续传（harness worker 的做法）、NipaPlay 节点间的 HTTP Range、SMB 等，同样是可替换的能力 |
 | 节点服务 | 存储节点、播放节点、转码节点（例如工位机为电视转码），由设备能力决定角色 |
 
-每个任务都记录它的后端与执行设备（`ownerDeviceId`）。由谁执行先按规则决定，规则无法决定时交给 Agent 判断。
+每个任务都记录它的后端与执行设备（`ownerDeviceId`）。目标设备由调用数据明确指定，宿主检查设备权限与任务不变量。
 
 ## 9. 演进路线（M1 之后）
 
-1. **Task Engine**：下载 / 扫描 / 同步成为持久任务，带回执与事件；只在需要判断时唤醒 Agent。M2 先做任务内核与应用内 BT 下载，Classic 下载页一同受益（`M2_TASKBOOK.md`）。
-   - **Agent 刮削**：扫描与识别成为任务。高置信度由确定性程序绑定；有歧义的文件生成持久化 Decision，由 Agent（可联网查证）或用户判断。元数据多来源共存（弹弹play、Bangumi、TMDB，必要时加入豆瓣等中文剧集来源），一个文件、剧集、作品可以挂多个外部 ID。**弹弹play 只是来源之一**：电视剧、电影、综艺常常没有弹弹play 条目，因此作品身份与媒体库不得依赖弹弹play 的 `animeId`（现有媒体库条件会把这类文件排除在外，M1 的 `media.library.*` 也继承了这一限制，需要一并解除）。调研见 `research/METADATA_IDENTIFICATION.md`。
+1. **Task Engine**：下载 / 扫描 / 同步成为持久任务，带回执与事件；引擎负责执行、恢复与通知，不规定 Agent 的判断时机。M2 的任务内核与应用内 BT 下载也服务 Classic 下载页（`M2_TASKBOOK.md`）。
+   - **Agent 刮削**：提供目录列表、批量哈希匹配、元数据查询、批量绑定和编辑原语；候选是数据，绑定目标由调用者明确指定，宿主检查一致性与来源。元数据多来源共存（弹弹play、Bangumi、TMDB 等），一个文件、剧集、作品可以挂多个外部 ID。作品身份与 Next 媒体库不依赖弹弹play 的 `animeId`；M1 的 Classic getter 保留旧 ID 语义作为兼容入口。调研见 `research/METADATA_IDENTIFICATION.md`。
    - **多平台弹幕聚合**：每个平台是一个 `DanmakuSource`，契约从第一天起按插件接口设计；多个来源合并进播放器现有的多轨弹幕。媒体可以直接绑定优酷、B 站、爱奇艺、腾讯、芒果等平台的视频 ID，从平台直接获取弹幕，不经过弹弹play；弹弹play（含其 related 聚合）是其中一条轨道，并保留各条目的原始来源以便去重。弹幕源是第 5 步“可演化能力”的第一类。研究阶段只用公开接口与用户自己的登录态，不绕过会员、DRM 或付费墙。调研见 `research/DANMAKU_AGGREGATION.md`。
 2. **GUI 迁移**：Classic 页面逐步改为调用 Harness。`Invocation` 增加 `interactive`，GUI 调用时由宿主把 `NeedsDecision` 渲染为对话框。
 3. **Next Shell**：内嵌 Codex App Server；`ui.present` 组件目录；`ui.layout.patch` 首页布局。依据 `research/CODEX_APP_SERVER.md` 的实测结论，做出以下决定：
    - App Server 以 stdio 子进程运行，固定运行时版本；使用 NipaPlay 自己的独立 `CODEX_HOME`，与用户安装的 Codex 隔离；共享对话以后作为显式选项再考虑。
    - 领域 Action 继续走 M1 的 MCP 端点，在 `thread/start.config` 中注入，不依赖项目信任、不写用户配置；`ui.present`、`ui.layout.patch` 走 dynamicTools（实验 API），其 Effect 由宿主依据 ActionSpec 判定。
-   - 原生按钮直接执行宿主保存的 `ActionCall`，不经过模型；Task Engine 只在需要判断时通过 `turn/start` 唤醒 Agent。
+   - 原生按钮直接执行宿主保存的 `ActionCall`，不经过模型；任务事件可作为 Agent 观察与唤醒的数据，领域代码不预设判断节点。
    - **前置条件：凭据保险库。** Codex 的 `read-only` 沙箱不阻止读取工作区以外的文件（实测）。在 Next Shell 之前，NipaPlay 的令牌与密码必须从 SharedPreferences 迁入系统钥匙串，Agent 只拿到凭据引用。
 4. **Preference Memory**：带来源与理由的结构化偏好。
 5. **Capability Registry**：Agent 生成的能力经“校验 → 审批 → 注册 → 回滚”纳入 Harness。

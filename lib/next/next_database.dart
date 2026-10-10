@@ -5,6 +5,7 @@ import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'danmaku/migration.dart';
 import 'media/media_migration.dart';
 import 'media/primitives_migration.dart';
+import 'media/metadata_edit_migration.dart';
 import 'tasks/job_migration.dart';
 import 'settings/migration.dart';
 
@@ -14,7 +15,8 @@ const _migrations = [
   migrateMediaIdentity,
   migrateDanmaku,
   migrateSettings,
-  migrateMediaPrimitives
+  migrateMediaPrimitives,
+  migrateMetadataEdits
 ];
 
 Future<void> _migrate(Database db, int oldVersion, int newVersion) async {

@@ -5,6 +5,89 @@ import 'package:nipaplay/models/watch_history_model.dart';
 import 'package:path/path.dart' as p;
 
 import 'media_models.dart';
+import '../state/query.dart';
+
+List<StateView> classicLibraryStateViews({
+  required Iterable<WatchHistoryItem> Function() history,
+  required BangumiAnime? Function(int animeId) seriesDetail,
+}) =>
+    [
+      StateView(
+          name: 'library.classic_series',
+          description:
+              'Classic identified series, using Dandanplay anime IDs. Same recorded-library scope as media.library.search; latest watch time first.',
+          fields: classicSeriesStateSchema,
+          relations: {
+            'episodes': const StateRelation(
+                'library.classic_episodes', 'animeId', 'animeId')
+          },
+          read: (offset, limit) async {
+            final groups = _libraryGroups(history());
+            final summaries = [
+              for (final files in groups.values)
+                _summary(files, seriesDetail(files.first.animeId!))
+            ]..sort((a, b) => b.lastWatchedAt.compareTo(a.lastWatchedAt));
+            return [
+              for (final row in summaries.skip(offset).take(limit))
+                {
+                  ...row.toJson(),
+                  'searchText': [
+                    row.title,
+                    row.originalTitle ?? '',
+                    for (final item in groups[row.animeId]!) item.animeName
+                  ].join('\n')
+                }
+            ];
+          }),
+      StateView(
+          name: 'library.classic_episodes',
+          description:
+              'Classic recorded episodes and files, including unidentified episodes. Dandanplay IDs retain their Classic meaning; progress comes from current history memory.',
+          fields: ObjectSchema({
+            'animeId':
+                const IntegerSchema(description: 'Dandanplay series ID.'),
+            ...episodeEntrySchema.properties
+          }),
+          read: (offset, limit) async {
+            final rows = <JsonMap>[];
+            for (final group in _libraryGroups(history()).entries) {
+              final episodes = <Object, List<WatchHistoryItem>>{};
+              for (final item in group.value) {
+                episodes
+                    .putIfAbsent(item.episodeId ?? item, () => [])
+                    .add(item);
+              }
+              for (final files in episodes.values) {
+                final row = {
+                  'animeId': group.key,
+                  ..._episodeEntry(files).toJson()
+                };
+                if (files.first.episodeTitle == null ||
+                    files.first.episodeTitle!.isEmpty) {
+                  final location = Uri.parse(files.first.filePath);
+                  row['title'] = p.basename(location.hasScheme
+                      ? location.path
+                      : files.first.filePath);
+                }
+                rows.add(row);
+              }
+            }
+            rows.sort((a, b) {
+              final series =
+                  (a['animeId'] as int).compareTo(b['animeId'] as int);
+              if (series != 0) return series;
+              final aId = a['episodeId'] as int?, bId = b['episodeId'] as int?;
+              return aId == null
+                  ? bId == null
+                      ? (a['title'] as String).compareTo(b['title'] as String)
+                      : 1
+                  : bId == null
+                      ? -1
+                      : aId.compareTo(bId);
+            });
+            return rows.skip(offset).take(limit).toList();
+          }),
+    ];
 
 final class LibraryCapability implements Capability {
   LibraryCapability({

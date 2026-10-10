@@ -298,6 +298,15 @@ void main() {
     final remote =
         devices.singleWhere((d) => d['deviceId'] == b.identity!.deviceId);
     expect(remote['online'], true);
+    final cached = a.cachedDevices
+        .singleWhere((device) => device['deviceId'] == b.identity!.deviceId);
+    expect(cached['name'], remote['device_name']);
+    expect(cached['platform'], remote['platform']);
+    expect(cached['online'], true);
+    expect(
+        DateTime.parse(cached['lastSeenAt'] as String).millisecondsSinceEpoch,
+        (remote['last_seen_at'] as int) * 1000);
+    expect(cached.keys, isNot(contains('device_public_key')));
     expect((remote['actions'] as List).map((a) => (a as JsonMap)['id']),
         isNot(contains('credentials.hidden')));
     final echo = (remote['actions'] as List)

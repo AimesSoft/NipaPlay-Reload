@@ -24,7 +24,7 @@ Action id 是 Harness 名称；MCP 名称把点替换为下划线。输入输出
 | `media.library.work` | read | 读取一部 Next 作品的结构与元数据。 |
 | `media.library.import_history` | write | 将 Classic 历史导入旁路索引，不推断绑定者或确认身份。 |
 | `media.library.scan` | write | 提交枚举、探测、哈希和文件索引任务，不请求元数据来源。 |
-| `media.metadata.override` | write | 沿用 GUI 用户字段覆盖，刷新保留覆盖值。 |
+| `media.metadata.override` | write | GUI 与 Agent 均可编辑；宿主记录 actor/origin。mode=persistent 刷新保留，correction 被新快照替代，clear 清除编辑。省略 mode 保持持久覆盖兼容语义。 |
 | `media.metadata.refresh` | write | 沿用元数据快照刷新任务，不改变身份。 |
 
 目录列表、批量哈希和元数据查询不写数据库，不创建绑定、缓存或任务。

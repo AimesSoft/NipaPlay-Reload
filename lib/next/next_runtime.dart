@@ -82,6 +82,19 @@ final class NextRuntime extends ChangeNotifier {
   Future<void> _initialize(List<Capability> capabilities) async {
     final core = ServiceProvider.nextCore;
     await core.ready;
+    core.stateSources.history = () => [
+          for (final item in ServiceProvider.watchHistoryProvider.history)
+            item.toJson()
+        ];
+    core.stateSources.continueWatching = () => [
+          for (final item
+              in ServiceProvider.watchHistoryProvider.continueWatchingItems)
+            item.toJson()
+        ];
+    core.stateSources.classicLibrary = classicLibraryStateViews(
+      history: () => ServiceProvider.watchHistoryProvider.history,
+      seriesDetail: BangumiService.instance.getAnimeDetailsFromMemory,
+    );
     _taskEngine = core.engine;
     await _labs.ready;
     final root = core.root;

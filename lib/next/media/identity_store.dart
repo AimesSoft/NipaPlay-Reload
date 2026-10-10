@@ -371,27 +371,48 @@ final class IdentityStore {
     }
     for (final row in await database.query('media_overrides',
         where: 'entity_id = ?', whereArgs: [entityId])) {
+      if (row['mode'] == 'correction' &&
+          rows.any((snapshot) =>
+              (snapshot['fetched_at'] as String)
+                  .compareTo(row['changed_at'] as String) >
+              0)) {
+        continue;
+      }
       fields[row['field'] as String] = jsonDecode(row['value'] as String);
       provenance[row['field'] as String] = {
-        'provider': 'user',
-        'invocationId': row['invocation_id']
+        'provider': row['actor'],
+        'invocationId': row['invocation_id'],
+        'origin': row['origin'],
+        'mode': row['mode']
       };
     }
     return {'fields': fields, 'provenance': provenance};
   }
 
   Future<void> overrideField(
-      String id, String field, Object? value, Invocation invocation) async {
+      String id, String field, Object? value, Invocation invocation,
+      {String mode = 'persistent'}) async {
     await entity(id);
-    await database.insert(
-        'media_overrides',
-        {
-          'entity_id': id,
-          'field': field,
-          'value': jsonEncode(value),
-          'invocation_id': invocation.id
-        },
-        conflictAlgorithm: ConflictAlgorithm.replace);
+    final edit = {
+      'entity_id': id,
+      'field': field,
+      'value': jsonEncode(value),
+      'mode': mode,
+      'actor': invocation.origin == 'gui' ? 'user' : 'agent',
+      'origin': invocation.origin,
+      'invocation_id': invocation.id,
+      'changed_at': _now
+    };
+    await database.transaction((tx) async {
+      await tx.insert('media_metadata_edits', edit);
+      if (mode == 'clear') {
+        await tx.delete('media_overrides',
+            where: 'entity_id=? AND field=?', whereArgs: [id, field]);
+      } else {
+        await tx.insert('media_overrides', edit,
+            conflictAlgorithm: ConflictAlgorithm.replace);
+      }
+    });
   }
 
   Future<List<JsonMap>> library({String? query}) async {

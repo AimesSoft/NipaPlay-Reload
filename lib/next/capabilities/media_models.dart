@@ -22,13 +22,19 @@ import 'package:nipaplay/models/bangumi_model.dart';
 }
 
 const seriesSummarySchema = ObjectSchema({
-  'animeId': IntegerSchema(),
-  'title': StringSchema(),
-  'originalTitle': StringSchema(nullable: true),
-  'imageUrl': StringSchema(nullable: true),
-  'episodeCount': IntegerSchema(),
-  'fileCount': IntegerSchema(),
-  'lastWatchedAt': StringSchema(),
+  'animeId': IntegerSchema(description: 'Dandanplay anime ID.'),
+  'title': StringSchema(description: 'Resolved series display title.'),
+  'originalTitle': StringSchema(
+      nullable: true, description: 'Original-language series title, if known.'),
+  'imageUrl':
+      StringSchema(nullable: true, description: 'Recorded series image URL.'),
+  'episodeCount': IntegerSchema(
+      description:
+          'Number of recorded library episodes, including unidentified files.'),
+  'fileCount':
+      IntegerSchema(description: 'Number of recorded files in this series.'),
+  'lastWatchedAt':
+      StringSchema(description: 'Latest UTC ISO-8601 watch timestamp.'),
 }, required: [
   'animeId',
   'title',
@@ -38,6 +44,13 @@ const seriesSummarySchema = ObjectSchema({
   'fileCount',
   'lastWatchedAt',
 ]);
+
+final classicSeriesStateSchema = ObjectSchema({
+  ...seriesSummarySchema.properties,
+  'searchText': const StringSchema(
+      description:
+          'Concatenated resolved titles and recorded names for case-insensitive substring search.'),
+});
 
 final class SeriesSummary implements JsonEncodable {
   const SeriesSummary({
@@ -71,12 +84,18 @@ final class SeriesSummary implements JsonEncodable {
 }
 
 const episodeFileSchema = ObjectSchema({
-  'path': StringSchema(),
-  'source': StringSchema(values: ['local', 'webdav', 'smb']),
-  'progress': NumberSchema(minimum: 0, maximum: 1),
-  'positionMs': IntegerSchema(),
-  'durationMs': IntegerSchema(),
-  'lastWatchedAt': StringSchema(),
+  'path': StringSchema(description: 'Recorded media location.'),
+  'source': StringSchema(
+      values: ['local', 'webdav', 'smb'],
+      description: 'Classic library location source.'),
+  'progress': NumberSchema(
+      minimum: 0, maximum: 1, description: 'Watched fraction from 0 to 1.'),
+  'positionMs':
+      IntegerSchema(description: 'Saved playback position in milliseconds.'),
+  'durationMs': IntegerSchema(
+      description: 'Recorded duration in milliseconds; zero means unknown.'),
+  'lastWatchedAt':
+      StringSchema(description: 'UTC ISO-8601 last watch timestamp.'),
 }, required: [
   'path',
   'source',
@@ -115,9 +134,13 @@ final class EpisodeFile implements JsonEncodable {
 }
 
 const episodeEntrySchema = ObjectSchema({
-  'episodeId': IntegerSchema(nullable: true),
-  'title': StringSchema(),
-  'files': ArraySchema(episodeFileSchema),
+  'episodeId': IntegerSchema(
+      nullable: true,
+      description: 'Dandanplay episode ID; null for unidentified episodes.'),
+  'title':
+      StringSchema(description: 'Recorded episode title or file basename.'),
+  'files': ArraySchema(episodeFileSchema,
+      description: 'Recorded files for this episode, latest watch time first.'),
 }, required: [
   'episodeId',
   'title',
@@ -327,7 +350,7 @@ final class LibrarySearchOutput implements JsonEncodable {
 
 const librarySeriesInputSchema = ObjectSchema({
   'animeId': IntegerSchema(
-    description: 'Series ID returned by media_library_search.',
+    description: 'Dandanplay anime ID identifying a recorded series.',
   ),
 }, required: [
   'animeId'
@@ -400,14 +423,16 @@ final class ContinueWatchingOutput implements JsonEncodable {
 const playbackOpenInputSchema = ObjectSchema({
   'path': StringSchema(
     minLength: 1,
-    description: 'Exact file path returned by media_library_series, '
-        'history_continue_watching or a decision option. Plays that file.',
+    description: 'Exact recorded media location to play. Mutually exclusive '
+        'with animeId and episodeId.',
   ),
   'animeId': IntegerSchema(
-    description: 'Series ID; use together with episodeId instead of path.',
+    description:
+        'Dandanplay anime ID. Required together with episodeId; mutually exclusive with path.',
   ),
   'episodeId': IntegerSchema(
-    description: 'Episode ID from media_library_series; use with animeId.',
+    description:
+        'Dandanplay episode ID. Required together with animeId; mutually exclusive with path.',
   ),
   'startPositionMs': IntegerSchema(
     minimum: 0,

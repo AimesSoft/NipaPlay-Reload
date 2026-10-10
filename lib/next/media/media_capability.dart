@@ -69,7 +69,18 @@ const _fieldSchema = ObjectSchema({
   'provider': StringSchema(),
   'language': StringSchema(nullable: true),
   'fetchedAt': StringSchema(nullable: true),
-  'invocationId': StringSchema(nullable: true)
+  'invocationId': StringSchema(nullable: true),
+  'actor': StringSchema(
+      nullable: true,
+      description:
+          'Host-recorded metadata editor: user or agent; null for source snapshots.'),
+  'origin': StringSchema(
+      nullable: true,
+      description: 'Invocation origin of an edit; null for source snapshots.'),
+  'mode': StringSchema(
+      nullable: true,
+      description:
+          'persistent or correction for edits; null for source snapshots.')
 }, required: [
   'field',
   'value',
@@ -508,13 +519,20 @@ final _specs = [
       ])),
   _spec(
       'media.metadata.override',
-      'Override one metadata field as the user. Requires a GUI invocation; Agent calls cannot claim a user override. Refresh preserves this value.',
+      'Edit one metadata field. The host records actor, origin and invocationId. Persistent overrides survive source refresh; corrections expire on newer source snapshots; clear removes the edit. Missing entities return not_found.',
       Effect.write,
       const ObjectSchema({
         'entityId': _text,
         'field': StringSchema(
             values: ['title', 'originalTitle', 'overview', 'imageUrl']),
-        'value': StringSchema(nullable: true)
+        'value': StringSchema(
+            nullable: true,
+            description:
+                'Replacement text; null is an explicit empty value. Ignored for clear.'),
+        'mode': StringSchema(
+            values: ['persistent', 'correction', 'clear'],
+            description:
+                'Edit lifetime. Defaults to persistent for compatibility. clear removes the stored edit.')
       }, required: [
         'entityId',
         'field',
@@ -523,7 +541,7 @@ final _specs = [
       const ObjectSchema({'identity': _entitySchema}, required: ['identity'])),
   _spec(
       'media.metadata.refresh',
-      'Schedule a metadata snapshot refresh for an accepted external object. Identity and user overrides remain unchanged. requestId deduplicates acceptance.',
+      'Schedule a metadata snapshot refresh for an accepted external object. Identity and persistent overrides remain unchanged; newer snapshots supersede corrections. requestId deduplicates acceptance.',
       Effect.write,
       const ObjectSchema(
           {'ref': _refSchema, 'language': _text, 'requestId': _text},
@@ -672,12 +690,9 @@ final class _MediaAction extends Action<_JsonValue, _JsonValue> {
         }
         result = {'results': results};
       case 'media.metadata.override':
-        if (invocation.origin != 'gui') {
-          throw const Failure(FailureCode.unavailable,
-              'Only the host GUI can write user metadata overrides.');
-        }
         await store.overrideField(json['entityId'] as String,
-            json['field'] as String, json['value'], invocation);
+            json['field'] as String, json['value'], invocation,
+            mode: json['mode'] as String? ?? 'persistent');
         result = {
           'identity': await _identity(store, json['entityId'] as String)
         };
@@ -718,7 +733,12 @@ List<JsonMap> _fields(JsonMap metadata) {
         'provider': (provenance[field] as Map)['provider'],
         'language': (provenance[field] as Map)['language'],
         'fetchedAt': (provenance[field] as Map)['fetchedAt'],
-        'invocationId': (provenance[field] as Map)['invocationId']
+        'invocationId': (provenance[field] as Map)['invocationId'],
+        'actor': (provenance[field] as Map)['origin'] == null
+            ? null
+            : (provenance[field] as Map)['provider'],
+        'origin': (provenance[field] as Map)['origin'],
+        'mode': (provenance[field] as Map)['mode']
       }
   ];
 }

@@ -38,12 +38,12 @@ final class _TaskAction extends Action<_TaskInput, _TaskOutput> {
             'List persisted task snapshots, optionally filtering by state or type.',
           'get' =>
             'Read the complete task snapshot. succeeded means verification finished; '
-                'use receipt for verified results. needs_decision contains executable option calls.',
+                'receipt contains verified results. needs_decision contains optional executable option calls.',
           'wait' => 'Wait for a terminal state, a state/phase/decision change after afterRevision, or timeout. '
               'Progress alone does not wake the wait unless includeProgress is true. '
               'timeoutMs defaults to 60000 and is bounded to 0–60000. Without afterRevision, '
-              'wait for the next meaningful change. Pass the last snapshot revision to avoid missing changes '
-              'between calls. Returns the current job; use repeated bounded waits for long tasks.',
+              'wait for the next meaningful change. afterRevision is the observed snapshot revision; '
+              'a newer meaningful revision returns immediately. Returns the current job. Timeout does not cancel execution.',
           _ =>
             'Request cancellation for jobId or jobIds and return accepted snapshots with individual batch failures. cancelling is not '
                 'confirmation of stopping. Committed effects are still verified and recorded in receipt. Does not remove downloads or delete files.',

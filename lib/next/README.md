@@ -7,6 +7,8 @@ Classic 下载页使用 `core.downloads`，`NextRuntime` 把
 `core.capabilities` 注册到 Harness。Labs 只启停 Agent 端点，销毁
 `NextRuntime` 也不关闭 Core。应用宿主结束 Core 生命周期时调用 `core.close()`。
 
+只读公开状态通过 `state.describe` / `state.query` 提供，契约与边界见 [state/README.md](state/README.md)。旧 getter 保留兼容 ID 和行为，覆盖率基线同时维护能力、主要契约与兼容映射。
+
 启动顺序：读取设备身份 → 打开并迁移 `next.db` → 创建领域运行时（媒体先导入
 旧历史）→ 收集全部执行器创建 TaskEngine → 向各领域注入同一引擎并收集
 Capability → `engine.start()` 恢复持久任务 → 启动下载会话观察与页面外自动入库

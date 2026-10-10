@@ -54,7 +54,10 @@
     "task.get": "read",
     "task.list": "read",
     "task.wait": "read",
-    "ui.navigate": "write"
+    "ui.navigate": "write",
+    "state.describe": "read",
+    "state.query": "read",
+    "mesh.devices": "read"
   },
   "primaryActions": {
     "credentials.status": {
@@ -1140,13 +1143,7 @@
       "outputContract": "danmaku.update"
     },
     "mesh.devices": {
-      "effect": "read",
-      "input": {
-        "type": "object",
-        "properties": {},
-        "additionalProperties": false
-      },
-      "outputContract": "mesh.devices"
+      "effect": "read"
     },
     "mesh.invoke": {
       "effect": "write",
@@ -1203,6 +1200,95 @@
         "additionalProperties": false
       },
       "outputContract": "mesh.invoke_destructive"
+    },
+    "state.describe": {
+      "effect": "read",
+      "input": {
+        "type": "object",
+        "properties": {
+          "view": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      },
+      "outputContract": "state.describe.v1"
+    },
+    "state.query": {
+      "effect": "read",
+      "input": {
+        "type": "object",
+        "properties": {
+          "view": {
+            "type": "string",
+            "description": "Registered public view name.",
+            "minLength": 1
+          },
+          "filter": {
+            "type": "object",
+            "description": "Field to operator/value objects. All predicates are combined with AND. Only registered scalar fields are filterable.",
+            "properties": {},
+            "additionalProperties": true
+          },
+          "select": {
+            "type": "array",
+            "description": "Top-level field projection. Omitted means all public fields.",
+            "items": {
+              "type": "string"
+            }
+          },
+          "orderBy": {
+            "type": "array",
+            "description": "Scalar sort keys; default is source order. Equal keys retain source order.",
+            "items": {
+              "type": "object",
+              "properties": {
+                "field": {
+                  "type": "string"
+                },
+                "direction": {
+                  "type": "string",
+                  "enum": [
+                    "asc",
+                    "desc"
+                  ]
+                }
+              },
+              "required": [
+                "field"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "include": {
+            "type": "object",
+            "description": "Declared relation names mapped to query options (filter, select, orderBy, limit, include). Maximum two relation levels.",
+            "properties": {},
+            "additionalProperties": true
+          },
+          "limit": {
+            "type": "integer",
+            "description": "Root page size. Defaults to 50. At most 200 rows including relations.",
+            "minimum": 1,
+            "maximum": 200
+          },
+          "cursor": {
+            "type": "string",
+            "description": "Opaque continuation for the same query over live data; it is not a transaction snapshot."
+          },
+          "timeoutMs": {
+            "type": "integer",
+            "description": "Execution budget in milliseconds, default 1000.",
+            "minimum": 1,
+            "maximum": 1000
+          }
+        },
+        "required": [
+          "view"
+        ],
+        "additionalProperties": false
+      },
+      "outputContract": "state.query.v1"
     }
   },
   "compatibility": {
@@ -1285,7 +1371,20 @@
       "action": "danmaku.sources"
     },
     "danmaku.tracks": {
-      "action": "danmaku.tracks"
+      "action": "state.query",
+      "mode": "alias",
+      "targets": [
+        "state.query"
+      ],
+      "capability": "danmaku.tracks",
+      "inputDefaults": {
+        "view": "danmaku.bindings"
+      },
+      "inputMap": {
+        "entityId": "filter.entityId.eq"
+      },
+      "legacyContract": "ID, input, output and existing effects remain callable; query uses normalized public projections and explicit pagination.",
+      "notes": "Persistent bindings and live tracks are separate views. Unbound Classic/local tracks remain available in the danmaku.tracks view and the callable legacy alias."
     },
     "download.add": {
       "action": "download.add"
@@ -1309,10 +1408,41 @@
       }
     },
     "history.continue_watching": {
-      "action": "history.continue_watching"
+      "action": "state.query",
+      "mode": "alias",
+      "targets": [
+        "state.query"
+      ],
+      "capability": "history.continue_watching",
+      "inputDefaults": {
+        "view": "history.continue_watching",
+        "limit": 20
+      },
+      "inputMap": {
+        "limit": "limit"
+      },
+      "legacyContract": "ID, input, output and existing effects remain callable; query uses normalized public projections and explicit pagination.",
+      "notes": "Legacy alias retains display-title enrichment; public history uses recorded titles. ID namespaces and millisecond progress are preserved."
     },
     "media.identity.get": {
-      "action": "media.identity.get"
+      "action": "state.query",
+      "mode": "alias",
+      "targets": [
+        "state.query"
+      ],
+      "capability": "media.identity.get",
+      "inputDefaults": {
+        "view": "media.entities",
+        "include": {
+          "bindings": {},
+          "locations": {}
+        }
+      },
+      "inputMap": {
+        "entityId": "filter.id.eq"
+      },
+      "legacyContract": "ID, input, output and existing effects remain callable; query uses normalized public projections and explicit pagination.",
+      "notes": "Only recorded entities are queried. Legacy path/current resolution and location registration remain on the callable alias; raw evidence is not public state."
     },
     "media.library.import_history": {
       "action": "media.library.import_history"
@@ -1321,16 +1451,97 @@
       "action": "media.library.scan"
     },
     "media.library.search": {
-      "action": "media.library.search"
+      "action": "state.query",
+      "mode": "alias",
+      "targets": [
+        "state.query"
+      ],
+      "capability": "media.library.search",
+      "inputDefaults": {
+        "view": "library.classic_series"
+      },
+      "inputMap": {
+        "query": "filter.searchText.contains",
+        "limit": "limit"
+      },
+      "legacyContract": "ID, input, output and existing effects remain callable; query uses normalized public projections and explicit pagination.",
+      "notes": "The legacy alias preserves its original envelope and ordering."
     },
     "media.library.series": {
-      "action": "media.library.series"
+      "action": "state.query",
+      "mode": "alias",
+      "targets": [
+        "state.query"
+      ],
+      "capability": "media.library.series",
+      "inputDefaults": {
+        "view": "library.classic_series",
+        "include": {
+          "episodes": {
+            "limit": 200
+          }
+        }
+      },
+      "inputMap": {
+        "animeId": "filter.animeId.eq"
+      },
+      "legacyContract": "ID, input, output and existing effects remain callable; query uses normalized public projections and explicit pagination.",
+      "notes": "The legacy alias preserves its original envelope and ordering."
     },
     "media.library.work": {
-      "action": "media.library.work"
+      "action": "state.query",
+      "mode": "alias",
+      "targets": [
+        "state.query"
+      ],
+      "capability": "media.library.work",
+      "inputDefaults": {
+        "view": "library.works",
+        "include": {
+          "seasons": {},
+          "episodes": {
+            "limit": 200,
+            "include": {
+              "files": {
+                "limit": 200
+              }
+            }
+          }
+        }
+      },
+      "inputMap": {
+        "workId": "filter.id.eq"
+      },
+      "legacyContract": "ID, input, output and existing effects remain callable; query uses normalized public projections and explicit pagination.",
+      "notes": "The legacy alias preserves its original envelope and ordering."
     },
     "media.library.works": {
-      "action": "media.library.works"
+      "action": "state.query",
+      "mode": "alias",
+      "targets": [
+        "state.query"
+      ],
+      "capability": "media.library.works",
+      "inputDefaults": {
+        "view": "library.works",
+        "include": {
+          "seasons": {},
+          "episodes": {
+            "limit": 200,
+            "include": {
+              "files": {
+                "limit": 200
+              }
+            }
+          }
+        }
+      },
+      "inputMap": {
+        "query": "filter.title.contains",
+        "limit": "limit"
+      },
+      "legacyContract": "ID, input, output and existing effects remain callable; query uses normalized public projections and explicit pagination.",
+      "notes": "Legacy title/original-title matching remains supported by the alias. Query projects and paginates the declared work graph."
     },
     "media.metadata.get": {
       "action": "media.metadata.get"
@@ -1366,7 +1577,24 @@
       "action": "settings.get"
     },
     "settings.history": {
-      "action": "settings.history"
+      "action": "state.query",
+      "mode": "alias",
+      "targets": [
+        "state.query"
+      ],
+      "capability": "settings.history",
+      "inputDefaults": {
+        "view": "settings.changes"
+      },
+      "inputMap": {
+        "key": "filter.key.eq",
+        "keys": "filter.key.in",
+        "from": "filter.changedAt.gte",
+        "to": "filter.changedAt.lte",
+        "limit": "limit"
+      },
+      "legacyContract": "ID, input, output and existing effects remain callable; query uses normalized public projections and explicit pagination.",
+      "notes": "Values are schema projections encoded as valueJson/previousValueJson; legacy offset, fields and native value shapes remain supported by the alias."
     },
     "settings.reset": {
       "action": "settings.reset"
@@ -1378,10 +1606,37 @@
       "action": "task.cancel"
     },
     "task.get": {
-      "action": "task.get"
+      "action": "state.query",
+      "mode": "alias",
+      "targets": [
+        "state.query"
+      ],
+      "capability": "task.get",
+      "inputDefaults": {
+        "view": "tasks"
+      },
+      "inputMap": {
+        "jobId": "filter.jobId.eq"
+      },
+      "legacyContract": "ID, input, output and existing effects remain callable; query uses normalized public projections and explicit pagination.",
+      "notes": "The legacy alias preserves its original envelope and ordering."
     },
     "task.list": {
-      "action": "task.list"
+      "action": "state.query",
+      "mode": "alias",
+      "targets": [
+        "state.query"
+      ],
+      "capability": "task.list",
+      "inputDefaults": {
+        "view": "tasks"
+      },
+      "inputMap": {
+        "state": "filter.state.eq",
+        "type": "filter.type.eq"
+      },
+      "legacyContract": "ID, input, output and existing effects remain callable; query uses normalized public projections and explicit pagination.",
+      "notes": "The legacy alias preserves its original envelope and ordering."
     },
     "task.wait": {
       "action": "task.wait"
@@ -1417,13 +1672,28 @@
       "action": "download.set_paused"
     },
     "mesh.devices": {
-      "action": "mesh.devices"
+      "action": "state.query",
+      "mode": "alias",
+      "targets": [
+        "state.query"
+      ],
+      "capability": "mesh.devices",
+      "inputDefaults": {
+        "view": "mesh.devices"
+      },
+      "legacyContract": "Legacy getter retains coordinator refresh and authenticated catalogs; state.query reads cached public device observations without network requests."
     },
     "mesh.invoke": {
       "action": "mesh.invoke"
     },
     "mesh.invoke_destructive": {
       "action": "mesh.invoke_destructive"
+    },
+    "state.describe": {
+      "action": "state.describe"
+    },
+    "state.query": {
+      "action": "state.query"
     }
   },
   "behaviorScenarios": {
@@ -1446,6 +1716,16 @@
     ],
     "danmaku.align_keep": [
       "empty legacy alignment evidence can keep the existing mapping"
+    ],
+    "state.describe": [
+      "all registered views exclude secret fields and authenticated URL components without writes"
+    ],
+    "state.query": [
+      "one state.query returns all episodes files bindings and viewing progress",
+      "all registered views exclude secret fields and authenticated URL components without writes",
+      "filters projection stable sorting and query-bound pagination",
+      "scan budget continuation reaches rows beyond the first 5000",
+      "Classic query projections preserve existing getter identities and progress"
     ]
   },
   "settings": {
@@ -2024,7 +2304,7 @@
       "effect": "read"
     },
     "danmaku.tracks": {
-      "action": "danmaku.tracks",
+      "action": "state.query",
       "effect": "read"
     },
     "download.add": {
@@ -2048,11 +2328,11 @@
       "effect": "write"
     },
     "history.continue_watching": {
-      "action": "history.continue_watching",
+      "action": "state.query",
       "effect": "read"
     },
     "media.identity.get": {
-      "action": "media.identity.get",
+      "action": "state.query",
       "effect": "read"
     },
     "media.library.import_history": {
@@ -2064,19 +2344,19 @@
       "effect": "write"
     },
     "media.library.search": {
-      "action": "media.library.search",
+      "action": "state.query",
       "effect": "read"
     },
     "media.library.series": {
-      "action": "media.library.series",
+      "action": "state.query",
       "effect": "read"
     },
     "media.library.work": {
-      "action": "media.library.work",
+      "action": "state.query",
       "effect": "read"
     },
     "media.library.works": {
-      "action": "media.library.works",
+      "action": "state.query",
       "effect": "read"
     },
     "media.metadata.get": {
@@ -2124,7 +2404,7 @@
       "effect": "read"
     },
     "settings.history": {
-      "action": "settings.history",
+      "action": "state.query",
       "effect": "read"
     },
     "settings.reset": {
@@ -2140,11 +2420,11 @@
       "effect": "write"
     },
     "task.get": {
-      "action": "task.get",
+      "action": "state.query",
       "effect": "read"
     },
     "task.list": {
-      "action": "task.list",
+      "action": "state.query",
       "effect": "read"
     },
     "task.wait": {
@@ -2192,7 +2472,7 @@
       "effect": "write"
     },
     "mesh.devices": {
-      "action": "mesh.devices",
+      "action": "state.query",
       "effect": "read"
     },
     "mesh.invoke": {
@@ -2202,6 +2482,14 @@
     "mesh.invoke_destructive": {
       "action": "mesh.invoke_destructive",
       "effect": "destructive"
+    },
+    "state.describe": {
+      "action": "state.describe",
+      "effect": "read"
+    },
+    "state.query": {
+      "action": "state.query",
+      "effect": "read"
     }
   },
   "outputContracts": {
@@ -4514,6 +4802,80 @@
       "type": "object",
       "properties": {},
       "additionalProperties": true
+    },
+    "state.describe.v1": {
+      "type": "object",
+      "properties": {},
+      "additionalProperties": true
+    },
+    "state.query.v1": {
+      "type": "object",
+      "properties": {
+        "schemaVersion": {
+          "type": "integer",
+          "description": "Public query envelope version; currently 1."
+        },
+        "snapshotId": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "Null: observations do not form a global transaction snapshot."
+        },
+        "observedAt": {
+          "type": "string",
+          "description": "UTC ISO-8601 response observation time."
+        },
+        "consistency": {
+          "type": "string",
+          "description": "Consistency and live pagination scope."
+        },
+        "sources": {
+          "type": "object",
+          "description": "View name to UTC ISO-8601 read time; cached data can be older.",
+          "properties": {},
+          "additionalProperties": true
+        },
+        "rows": {
+          "type": "array",
+          "description": "Public projections described by each registered view. Relations contain rows, truncated and nextQuery.",
+          "items": {
+            "type": "object",
+            "properties": {},
+            "additionalProperties": true
+          }
+        },
+        "nextCursor": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "Continuation for the same live query; null when no root continuation is known."
+        },
+        "truncated": {
+          "type": "boolean",
+          "description": "True when pagination or a resource limit omitted data."
+        },
+        "warnings": {
+          "type": "array",
+          "description": "Resource limits: time_limit, scan_limit, row_limit, byte_limit, field_limit, relation_limit, sort_within_scan_window.",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "required": [
+        "schemaVersion",
+        "snapshotId",
+        "observedAt",
+        "consistency",
+        "sources",
+        "rows",
+        "nextCursor",
+        "truncated",
+        "warnings"
+      ],
+      "additionalProperties": false
     }
   }
 }

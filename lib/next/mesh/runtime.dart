@@ -47,6 +47,7 @@ final class MeshRuntime {
   List<JsonMap> _devices = [], _manual = [];
   final _catalogs = <String, List<JsonMap>>{};
   final _routes = <String, JsonMap>{};
+  final _reachability = <String, bool>{};
   final _seen = <String, int>{};
   Future<void> _replayWrites = Future.value();
   bool _replayLoaded = false;
@@ -56,6 +57,24 @@ final class MeshRuntime {
   DateTime _nextJoinAttempt = DateTime.fromMillisecondsSinceEpoch(0);
   int get port => _discovery?.port ?? 0;
   String? get accountId => _account;
+  List<JsonMap> get cachedDevices => [
+        for (final device in _devices)
+          {
+            'deviceId': device['device_id'],
+            'name': device['device_name'],
+            'platform': device['platform'],
+            'revoked': device['revoked'],
+            'online': device['revoked'] == true
+                ? false
+                : _reachability[device['device_id']],
+            'lastSeenAt': device['last_seen_at'] == null
+                ? null
+                : DateTime.fromMillisecondsSinceEpoch(
+                        (device['last_seen_at'] as int) * 1000,
+                        isUtc: true)
+                    .toIso8601String(),
+          }
+      ];
   List<String> get _active => [
         for (final device in _devices)
           if (device['revoked'] == false) device['device_id'] as String,
@@ -353,6 +372,7 @@ final class MeshRuntime {
   Future<JsonMap> _describe(JsonMap device) async {
     final id = device['device_id'] as String;
     if (device['revoked'] == true) {
+      _reachability[id] = false;
       return {
         ...device,
         'deviceId': id,
@@ -362,8 +382,10 @@ final class MeshRuntime {
     }
     try {
       final tools = await _catalog(id);
+      _reachability[id] = true;
       return {...device, 'deviceId': id, 'online': true, 'actions': tools};
     } on Failure {
+      _reachability[id] = false;
       return {
         ...device,
         'deviceId': id,

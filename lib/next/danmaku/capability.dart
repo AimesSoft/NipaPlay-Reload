@@ -206,7 +206,7 @@ final _specs = [
           required: ['sourceId', 'query']),
       const ObjectSchema({'results': ArraySchema(_video)},
           required: ['results']),
-      'Bounded transient title search. Bilibili returns bvid candidates: resolve the BV ID to an exact cid before attaching. Unsupported sources report unavailable; no binding or task is created.'),
+      'Bounded transient title search. Bilibili bvid candidates identify multipart containers; cid identifies an exact playable part. Unsupported sources report unavailable; no binding or task is created.'),
   _spec(
       'danmaku.episodes',
       Effect.read,
@@ -227,7 +227,7 @@ final _specs = [
         'page',
         'mayHaveMore'
       ]),
-      'Read a finite catalogue page. A zero duration requires an explicit known media duration before fetching.'),
+      'Read a finite catalogue page. Zero duration means unknown duration. Acquisition requires a finite range within a known media duration.'),
   _spec(
       'danmaku.resolve',
       Effect.read,
@@ -269,7 +269,7 @@ final _specs = [
         'bindingId',
         'jobId'
       ]),
-      'Bind a platform video to entityId, path or the current file (default). Reuse an existing platform/video track; Classic dandanplay reuse records a binding, with jobId=null. Local pools prevent online acquisition. refresh=true explicitly fetches and replaces. Required local range must validate before mounting; outside-range errors are reported separately. Credentials are opaque host references.'),
+      'Bind a platform video to entityId, path or the current file (default). Existing platform/video tracks are reused; Classic dandanplay reuse records a binding, with jobId=null. Local pools prevent online acquisition. refresh=true fetches and replaces. Invalid required local ranges fail without mounting; outside-range errors are reported separately. Credentials are opaque host references.'),
   _spec(
       'danmaku.tracks',
       Effect.read,

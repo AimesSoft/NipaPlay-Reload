@@ -1,6 +1,7 @@
 # M2 任务书：Task Engine 与应用内下载
 
 > 工作方式见 `docs/next/TEAM.md`。设计背景见 `docs/next/DESIGN.md`，调研输入见 `docs/next/research/LONG_RUNNING_OPERATIONS.md`（R2）。
+> 2026-10-11：固定判断流程由 DESIGN §2.3 与架构复审定稿替代。存量 Decision 任务与选项保留兼容恢复；新原语不通过固定判断节点编排 Agent。
 
 ## 目标
 
@@ -39,7 +40,7 @@
 | `progress` | `{completed, total?, unit}`。总量未知时省略 `total`；不同阶段的单位不混算 |
 | `createdAt` / `updatedAt` | UTC ISO-8601 |
 | `error` | 失败时为 `{code, message, retryable}` |
-| `decision` | `state = needs_decision` 时提供，形状与 Harness 的 `Decision` 相同；执行任一选项的 `call` 即可让任务继续 |
+| `decision` | `state = needs_decision` 时提供，形状与 Harness 的 `Decision` 相同；存量选项携带兼容恢复调用，新原语以数据表达歧义 |
 | `receipt` | 终态时提供，见下文 |
 | `ownerDeviceId` | 执行设备。Mesh 之前恒为本机安装 ID |
 

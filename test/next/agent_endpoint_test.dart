@@ -63,7 +63,7 @@ void main() {
   late Harness harness;
   late CredentialStore credentials;
   late HttpClient client;
-  const agentsMd = '# NipaPlay\nQuery before acting.\n';
+  const agentsMd = '# NipaPlay\n媒体能力由 Harness 提供。\n';
 
   setUp(() async {
     temporary = await Directory.systemTemp.createTemp('agent-endpoint-');
@@ -124,11 +124,13 @@ default_tools_approval_mode = "auto"
       'version': '1.2.3',
     });
     final instructions = initialized['instructions'] as String;
-    expect(instructions, contains('Query before acting'));
+    expect(instructions, contains('NipaPlay exposes'));
     expect(instructions, contains('needs_decision'));
     expect(instructions, contains('call'));
-    expect(instructions, contains('ask the user'));
-    expect(instructions, contains('AGENTS.md'));
+    expect(instructions, contains('accepted work'));
+    expect(instructions, contains('Credentials remain in the host'));
+    expect(instructions, isNot(contains('before acting')));
+    expect(instructions, isNot(contains('ask the user')));
     final called = await _rpc(client, running.url, token, 'tools/call',
         params: {'name': 'test_query', 'arguments': {}});
     expect(called['structuredContent'], {'status': 'completed', 'result': {}});

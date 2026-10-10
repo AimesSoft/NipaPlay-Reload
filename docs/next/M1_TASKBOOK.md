@@ -387,7 +387,7 @@ final class AgentEndpoint {
    - 写入该文件；非 Windows 平台用 `chmod 600` 设置权限。
 2. 构造 `McpEndpoint`：
    - `serverInfo`：name `nipaplay`、title `NipaPlay`、version `appVersion`；
-   - `instructions`：一段英文，说明“先查询再行动；`needs_decision` 时，若用户意图已能确定选项就执行该选项的 `call`，否则询问用户；遵循工作区 `AGENTS.md`”。
+   - `instructions`：依据 DESIGN §2.3 与架构复审定稿，只陈述能力、Outcome、任务与回执语义、秘密边界及数据性质，不规定调用顺序。
 3. `serve(port: port)`。端口被占用等 `SocketException` → 返回 `AgentEndpointFailed`，消息包含端口号。这是 `start()` 唯一允许处理的异常。
 4. 调用 `writeAgentWorkspace(...)`，然后返回 `AgentEndpointRunning`。
 
@@ -491,7 +491,7 @@ flutter test test/next
 |---|---|---|
 | 我最近在看什么？ | `history_continue_watching` | 按时间列出 5 部作品的进度；从发布文件名中识别出未匹配条目的作品名 |
 | 继续看穹庐下的魔女 | `history_continue_watching` → `playback_open {path}` | NipaPlay 从 11:39 续播第 11 话；`playback.open` 耗时 2.8 s，并写入操作日志 |
-| 先暂停一下，我待会再看 | `playback_state` → `playback_set_paused` → `playback_state` | 已暂停在 12:06；遵循“先查状态、行动、验证” |
+| 先暂停一下，我待会再看 | `playback_set_paused`（可自由组合状态查询） | 已暂停在 12:06；结果与真实播放状态一致 |
 
 协议层冒烟测试：版本协商、9 个工具列出、无令牌返回 401、令牌文件权限 0600、端点只监听 127.0.0.1。Labs 开关关闭时不启动任何服务。
 
