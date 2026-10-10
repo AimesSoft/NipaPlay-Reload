@@ -432,6 +432,7 @@ download-harness 中写死的部分，在 NipaPlay Next 中都是可替换的能
    - **前置条件：凭据保险库。** Codex 的 `read-only` 沙箱不阻止读取工作区以外的文件（实测）。在 Next Shell 之前，NipaPlay 的令牌与密码必须从 SharedPreferences 迁入系统钥匙串，Agent 只拿到凭据引用。
 4. **Preference Memory**：带来源与理由的结构化偏好。
 5. **Capability Registry**：Agent 生成的能力经“校验 → 审批 → 注册 → 回滚”纳入 Harness。
+   - **来源契约只约束数据，不约束流程**（2026-10-11 复审）：宿主要消费的数据格式（标准弹幕条目、元数据快照、发布候选）是契约；一个来源本身就是一组 Agent 可直接调用的 Action，如何搜索、定位由它自己决定。新来源（包括 Agent 生成的）不必实现预设的“搜索 → 定位 → 获取”接口。
    - **发现来源（`ReleaseSource`）** 是与 `MetadataProvider`、`DanmakuSource` 并列的第三类来源能力：搜索、RSS、详情，输出发布候选（标题、磁链或种子、大小、做种数、推断属性、来源）。
      - 沿用 download-harness 的语义：“找一下”只推荐，“你来选并下载”才授权执行；站点文本是数据；选定后交给 `download.add`。
      - 需要登录的站点，其会话与弹幕源走同一条通道：内置 WebView 登录，会话存入凭据保险库。

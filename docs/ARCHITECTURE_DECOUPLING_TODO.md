@@ -1,3 +1,5 @@
+> **已废止（2026-10-11）**：本路线图被 NipaPlay Next 的“Agent 编排 UI + 共用 Harness”架构取代，不再执行。见 `docs/next/DESIGN.md` 与 `docs/next/ARCHITECTURE_REVIEW.md`。其中的安全审计（D-24 等）已并入 `docs/next/research/LAN_SECURITY.md`。
+
 # NipaPlay 后端驱动 UI、前后端解耦与可替换运行时迁移路线图
 
 > 状态：目标已确认 / 待执行
