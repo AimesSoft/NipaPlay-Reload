@@ -11,6 +11,8 @@ import 'package:nipaplay/next/danmaku/local_source.dart';
 import 'package:nipaplay/next/danmaku/service.dart';
 import 'package:nipaplay/next/danmaku/source.dart';
 import 'package:nipaplay/next/danmaku/sources.dart';
+import 'package:nipaplay/next/network/dandanplay_gateway.dart';
+import 'package:nipaplay/services/dandanplay_http_client.dart';
 import 'package:nipaplay/utils/dandanplay_comments.dart';
 import 'package:nipaplay/utils/danmaku_parser.dart';
 import 'package:nipaplay/utils/local_danmaku_file.dart';
@@ -383,9 +385,8 @@ void main() {
     addTearDown(client.close);
     final host = HttpDanmakuHost(
         publicClient: client,
-        dandanplayClient: client,
-        dandanplayBase: () async => Uri.https('api.dandanplay.net'),
-        dandanplayHeaders: (_) async => {},
+        dandanplay:
+            DandanplayGateway(client: DandanplayHttpClient(inner: client)),
         interval: Duration.zero);
     final source = BilibiliDanmakuSource(
         ScopedDanmakuHost(host, BilibiliDanmakuSource(host).describe));

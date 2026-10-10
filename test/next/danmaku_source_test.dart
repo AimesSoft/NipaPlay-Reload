@@ -5,6 +5,8 @@ import 'package:http/testing.dart';
 import 'package:nipaplay/next/danmaku/host.dart';
 import 'package:nipaplay/next/danmaku/source.dart';
 import 'package:nipaplay/next/danmaku/sources.dart';
+import 'package:nipaplay/next/network/dandanplay_gateway.dart';
+import 'package:nipaplay/services/dandanplay_http_client.dart';
 import 'danmaku_test_support.dart';
 
 final class _AbortClient extends http.BaseClient {
@@ -193,9 +195,8 @@ void main() {
     });
     final transport = HttpDanmakuHost(
         publicClient: client,
-        dandanplayClient: client,
-        dandanplayBase: () async => Uri.https('example.invalid'),
-        dandanplayHeaders: (_) async => {},
+        dandanplay:
+            DandanplayGateway(client: DandanplayHttpClient(inner: client)),
         interval: Duration.zero);
     await expectLater(
         transport.request('bilibili.segment',
@@ -219,9 +220,8 @@ void main() {
         headers: {'retry-after': '5'}));
     final transport = HttpDanmakuHost(
         publicClient: client,
-        dandanplayClient: client,
-        dandanplayBase: () async => Uri.https('example.invalid'),
-        dandanplayHeaders: (_) async => {},
+        dandanplay:
+            DandanplayGateway(client: DandanplayHttpClient(inner: client)),
         interval: Duration.zero);
     await expectLater(
         transport.request('bilibili.segment',
@@ -246,9 +246,8 @@ void main() {
     final client = _AbortClient();
     final transport = HttpDanmakuHost(
         publicClient: client,
-        dandanplayClient: client,
-        dandanplayBase: () async => Uri.https('example.invalid'),
-        dandanplayHeaders: (_) async => {},
+        dandanplay:
+            DandanplayGateway(client: DandanplayHttpClient(inner: client)),
         interval: Duration.zero,
         timeout: const Duration(milliseconds: 1));
     final cancellation = DanmakuCancellation();

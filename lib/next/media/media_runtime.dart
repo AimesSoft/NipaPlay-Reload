@@ -3,7 +3,6 @@ import 'dart:io';
 import 'package:http/http.dart' as http;
 import 'package:nipa_harness/nipa_harness.dart';
 import 'package:nipaplay/services/dandanplay_http_client.dart';
-import 'package:nipaplay/services/dandanplay_service.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
 import 'classic_projection.dart';
@@ -15,6 +14,7 @@ import 'media_probe.dart';
 import 'metadata_provider.dart';
 import 'provider_transport.dart';
 import 'providers.dart';
+import '../network/dandanplay_gateway.dart';
 
 final class MediaRuntime {
   MediaRuntime._(this.service, this._clients)
@@ -52,25 +52,8 @@ final class MediaRuntime {
             provider: 'bangumi',
             baseUri: Uri.parse('https://api.bgm.tv'),
             client: bangumi)),
-        DandanplayMetadataProvider(HttpMetadataTransport(
-            provider: 'dandanplay',
-            baseUri: Uri.parse(await DandanplayService.getApiBaseUrl()),
-            client: dandanplay,
-            headers: (path) async {
-              if (!await DandanplayService.canAccessCurrentServer()) {
-                throw const Failure(
-                    FailureCode.unavailable, 'Dandanplay login is required.');
-              }
-              final secret = await DandanplayService.getAppSecret();
-              final timestamp =
-                  DateTime.now().toUtc().millisecondsSinceEpoch ~/ 1000;
-              return {
-                'X-AppId': DandanplayService.appId,
-                'X-Timestamp': '$timestamp',
-                'X-Signature': DandanplayService.generateSignature(
-                    DandanplayService.appId, timestamp, path, secret)
-              };
-            })),
+        DandanplayMetadataProvider(HttpMetadataTransport.dandanplay(
+            DandanplayGateway(client: dandanplay))),
       ];
     }
     final store = IdentityStore(db, deviceId);

@@ -14,9 +14,12 @@ enum SourceStatus {
 }
 
 final class SourceFailure implements Exception {
-  const SourceFailure(this.status, {this.retryAt});
+  const SourceFailure(this.status, {this.retryAt, this.diagnostics});
   final SourceStatus status;
   final DateTime? retryAt;
+  final String? diagnostics;
+  String get message =>
+      '${status.name}${diagnostics == null ? "" : "; $diagnostics"}';
 }
 
 final class DanmakuCancellation {

@@ -3,10 +3,10 @@ import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'package:nipa_harness/nipa_harness.dart';
 import 'package:nipaplay/services/dandanplay_http_client.dart';
-import 'package:nipaplay/services/dandanplay_service.dart';
 import 'package:nipaplay/utils/network_settings.dart';
 import 'package:nipaplay/utils/video_player_state.dart';
 import '../media/identity_store.dart';
+import '../network/dandanplay_gateway.dart';
 import 'capability.dart';
 import 'executors.dart';
 import 'host.dart';
@@ -70,29 +70,10 @@ final class DanmakuRuntime {
       {YoukuSessionBridge? youkuSession,
       Future<String> Function(String path)? authorizeLocalFile}) async {
     final public = http.Client(), ddp = DandanplayHttpClient();
-    Future<Uri> base() async =>
-        Uri.parse(await DandanplayService.getApiBaseUrl());
     final host = HttpDanmakuHost(
         publicClient: public,
-        dandanplayClient: ddp,
-        dandanplayBase: base,
-        youkuSession: youkuSession,
-        dandanplayHeaders: (path) async {
-          if (!await DandanplayService.canAccessCurrentServer()) {
-            throw const SourceFailure(SourceStatus.authenticationRequired);
-          }
-          final timestamp =
-              DateTime.now().toUtc().millisecondsSinceEpoch ~/ 1000;
-          return {
-            'X-AppId': DandanplayService.appId,
-            'X-Timestamp': '$timestamp',
-            'X-Signature': DandanplayService.generateSignature(
-                DandanplayService.appId,
-                timestamp,
-                path,
-                await DandanplayService.getAppSecret())
-          };
-        });
+        dandanplay: DandanplayGateway(client: ddp),
+        youkuSession: youkuSession);
     final port = _HostPlayerPort();
     DanmakuSource scoped(DanmakuSource Function(DanmakuHost) build) =>
         build(ScopedDanmakuHost(host, build(host).describe));

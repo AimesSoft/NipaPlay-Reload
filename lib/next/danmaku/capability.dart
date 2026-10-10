@@ -519,8 +519,7 @@ final class _Action extends Action<_Data, _Data> {
           return result({'bindingId': id, 'revision': updated['revision']});
       }
     } on SourceFailure catch (e) {
-      throw Failure(
-          FailureCode.unavailable, '${j['sourceId']}: ${e.status.name}',
+      throw Failure(FailureCode.unavailable, '${j['sourceId']}: ${e.message}',
           retryable: e.status == SourceStatus.rateLimited ||
               e.status == SourceStatus.transportFailed);
     }

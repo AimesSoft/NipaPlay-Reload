@@ -143,6 +143,7 @@ final class _Fetch implements JobExecutor {
             missing.add({
               ...chunk.toJson(),
               'status': error.status.name,
+              if (error.diagnostics != null) 'diagnostics': error.diagnostics,
               'outsideLocalRange': true
             });
             continue;
@@ -222,7 +223,10 @@ final class _Fetch implements JobExecutor {
           completed.add(chunk.index);
         }
       }
-      missing.add({'status': error.status.name});
+      missing.add({
+        'status': error.status.name,
+        if (error.diagnostics != null) 'diagnostics': error.diagnostics
+      });
       final retries = c.job.checkpoint['retries'] as int? ?? 0;
       if ((error.status == SourceStatus.rateLimited ||
               error.status == SourceStatus.transportFailed) &&
@@ -230,8 +234,8 @@ final class _Fetch implements JobExecutor {
         await c.retryAt(
             error.retryAt ??
                 DateTime.now().toUtc().add(Duration(seconds: 2 << retries)),
-            Failure(FailureCode.unavailable,
-                '${video.sourceId}: ${error.status.name}',
+            Failure(
+                FailureCode.unavailable, '${video.sourceId}: ${error.message}',
                 retryable: true),
             checkpoint: {
               'retries': retries + 1,
@@ -240,8 +244,8 @@ final class _Fetch implements JobExecutor {
             });
       } else {
         await c.fail(
-            Failure(FailureCode.unavailable,
-                '${video.sourceId}: ${error.status.name}'),
+            Failure(
+                FailureCode.unavailable, '${video.sourceId}: ${error.message}'),
             JobReceipt(
                 verification: VerificationLevel.acknowledged,
                 details: details(status: error.status.name)));

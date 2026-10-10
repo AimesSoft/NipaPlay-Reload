@@ -4,6 +4,9 @@ import 'dart:convert';
 import 'package:crypto/crypto.dart';
 import 'package:http/http.dart' as http;
 import 'package:nipa_harness/nipa_harness.dart';
+import 'package:nipaplay/services/dandanplay_http_client.dart';
+import '../network/dandanplay_gateway.dart';
+import '../network/http_diagnostics.dart';
 import 'source.dart';
 
 /// A session bridge must validate the reference against the current source
@@ -37,17 +40,12 @@ final class ScopedDanmakuHost implements DanmakuHost {
 final class HttpDanmakuHost implements DanmakuHost {
   HttpDanmakuHost(
       {required this.publicClient,
-      required this.dandanplayClient,
-      required this.dandanplayBase,
-      required this.dandanplayHeaders,
+      required this.dandanplay,
       this.youkuSession,
       this.interval = const Duration(milliseconds: 300),
       this.timeout = const Duration(seconds: 20)});
-  final http.Client publicClient, dandanplayClient;
-
-  /// Resolved on first dandanplay request so composition needs no app settings.
-  final Future<Uri> Function() dandanplayBase;
-  final Future<Map<String, String>> Function(String path) dandanplayHeaders;
+  final http.Client publicClient;
+  final DandanplayGateway dandanplay;
   final YoukuSessionBridge? youkuSession;
   final Duration interval;
   final Duration timeout;
@@ -124,6 +122,14 @@ final class HttpDanmakuHost implements DanmakuHost {
     final done = Completer<void>();
     _tails[source] = previous.then((_) => done.future);
     await Future.any([previous, cancel.stopped]);
+    Uri? target;
+    int? statusCode;
+    String? contentType;
+    SourceFailure failure(SourceStatus status, {DateTime? retryAt}) =>
+        SourceFailure(status,
+            retryAt: retryAt,
+            diagnostics: httpDiagnostics(target,
+                statusCode: statusCode, contentType: contentType));
     try {
       cancel.check();
       final wait = (_next[source] ?? DateTime.now()).difference(DateTime.now());
@@ -163,9 +169,12 @@ final class HttpDanmakuHost implements DanmakuHost {
         throw const Failure(FailureCode.invalidInput,
             'Anonymous profiles do not accept session references.');
       }
-      final uri = _uri(profile, parameters,
-          source == 'dandanplay' ? await dandanplayBase() : null);
-      final client = source == 'dandanplay' ? dandanplayClient : publicClient;
+      final endpoint = _uri(profile, parameters);
+      final uri = source == 'dandanplay'
+          ? await dandanplay.resolve(endpoint)
+          : endpoint;
+      target = uri;
+      final client = source == 'dandanplay' ? dandanplay.client : publicClient;
       cancel.stopped.then((_) => requestCancellation.cancel());
       final request = http.AbortableRequest('GET', uri,
           abortTrigger: requestCancellation.stopped)
@@ -173,9 +182,6 @@ final class HttpDanmakuHost implements DanmakuHost {
         ..headers['Accept'] = profile == 'bilibili.segment'
             ? 'application/octet-stream'
             : 'application/json';
-      if (source == 'dandanplay') {
-        request.headers.addAll(await dandanplayHeaders(uri.path));
-      }
       if (source == 'bilibili') {
         request.headers['User-Agent'] = 'Mozilla/5.0 NipaPlay';
         request.headers['Referer'] = 'https://www.bilibili.com/';
@@ -183,12 +189,14 @@ final class HttpDanmakuHost implements DanmakuHost {
       cancel.check();
       final bytes = await (() async {
         final response = await client.send(request);
+        statusCode = response.statusCode;
+        contentType = response.headers['content-type'];
         if (response.statusCode == 401) {
-          throw const SourceFailure(SourceStatus.authenticationRequired);
+          throw failure(SourceStatus.authenticationRequired);
         }
         if (response.statusCode == 403 ||
             response.statusCode >= 300 && response.statusCode < 400) {
-          throw const SourceFailure(SourceStatus.accessDenied);
+          throw failure(SourceStatus.accessDenied);
         }
         if (response.statusCode == 429) {
           final retry = response.headers['retry-after'];
@@ -203,25 +211,25 @@ final class HttpDanmakuHost implements DanmakuHost {
                   .difference(DateTime.now().toUtc())
                   .inSeconds;
             } on FormatException {
-              throw const SourceFailure(SourceStatus.schemaChanged);
+              throw failure(SourceStatus.schemaChanged);
             }
           }
-          throw SourceFailure(SourceStatus.rateLimited,
+          throw failure(SourceStatus.rateLimited,
               retryAt: DateTime.now()
                   .toUtc()
                   .add(Duration(seconds: seconds.clamp(1, 3600))));
         }
         if (response.statusCode != 200) {
-          throw const SourceFailure(SourceStatus.transportFailed);
+          throw failure(SourceStatus.transportFailed);
         }
         if ((response.contentLength ?? 0) > 8388608) {
-          throw const SourceFailure(SourceStatus.schemaChanged);
+          throw failure(SourceStatus.schemaChanged);
         }
         final bytes = <int>[];
         await for (final part in response.stream) {
           cancel.check();
           if (bytes.length + part.length > 8388608) {
-            throw const SourceFailure(SourceStatus.schemaChanged);
+            throw failure(SourceStatus.schemaChanged);
           }
           bytes.addAll(part);
         }
@@ -229,17 +237,19 @@ final class HttpDanmakuHost implements DanmakuHost {
       })()
           .timeout(timeout, onTimeout: () {
         requestCancellation.cancel();
-        throw const SourceFailure(SourceStatus.transportFailed);
+        throw failure(SourceStatus.transportFailed);
       });
       cancel.check();
       return bytes;
+    } on DandanplayLoginRequired {
+      throw failure(SourceStatus.authenticationRequired);
     } on http.RequestAbortedException {
       cancel.check();
-      throw const SourceFailure(SourceStatus.transportFailed);
+      throw failure(SourceStatus.transportFailed);
     } on http.ClientException {
-      throw const SourceFailure(SourceStatus.transportFailed);
+      throw failure(SourceStatus.transportFailed);
     } on SocketException {
-      throw const SourceFailure(SourceStatus.transportFailed);
+      throw failure(SourceStatus.transportFailed);
     } finally {
       requestCancellation.cancel();
       _next[source] = DateTime.now().add(interval);
@@ -247,7 +257,7 @@ final class HttpDanmakuHost implements DanmakuHost {
     }
   }
 
-  Uri _uri(String profile, JsonMap p, Uri? dandanplayBase) {
+  Uri _uri(String profile, JsonMap p) {
     final fields = switch (profile) {
       'dandanplay.search' => {'query'},
       'dandanplay.episodes' => {'workId'},
@@ -315,17 +325,16 @@ final class HttpDanmakuHost implements DanmakuHost {
           throw const Failure(
               FailureCode.invalidInput, 'Invalid search query.');
         }
-        return dandanplayBase!
-            .resolve('/api/v2/search/episodes')
-            .replace(queryParameters: {'anime': p['query'] as String});
+        return Uri(
+            path: '/api/v2/search/episodes',
+            queryParameters: {'anime': p['query'] as String});
       case 'dandanplay.episodes':
-        return dandanplayBase!
-            .resolve('/api/v2/bangumi/${value('workId', pattern: r'^\d+$')}');
+        return Uri(
+            path: '/api/v2/bangumi/${value('workId', pattern: r'^\d+$')}');
       case 'dandanplay.comments':
-        return dandanplayBase!
-            .resolve('/api/v2/comment/${value('videoId', pattern: r'^\d+$')}')
-            .replace(
-                queryParameters: {'withRelated': 'true', 'chConvert': '0'});
+        return Uri(
+            path: '/api/v2/comment/${value('videoId', pattern: r'^\d+$')}',
+            queryParameters: {'withRelated': 'true', 'chConvert': '0'});
       case 'bilibili.view':
         return uri(
             'api.bilibili.com',
