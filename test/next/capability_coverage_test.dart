@@ -63,9 +63,11 @@ void main() {
       expect(entry.writer, isNotEmpty);
     }
     final baselineFile = File('test/next/capability_coverage_baseline.json');
+    final baseline = jsonDecode(await baselineFile.readAsString()) as Map;
     if (Platform.environment['NIPA_EXPORT_COVERAGE'] == '1') {
       await File('${Directory.systemTemp.path}/nipa-capability-coverage.json')
           .writeAsString('${const JsonEncoder.withIndent('  ').convert({
+            ...Map<String, Object?>.from(baseline),
             'actions': actions,
             'settings': settings,
             'contracts': {
@@ -78,7 +80,6 @@ void main() {
             },
           })}\n');
     }
-    final baseline = jsonDecode(await baselineFile.readAsString()) as Map;
     final expectedActions = baseline['actions'] as Map;
     final expectedSettings = baseline['settings'] as Map;
     final capabilities = baseline['capabilities'] as Map;
@@ -124,6 +125,36 @@ void main() {
         expect(spec.output.toJsonSchema(),
             (baseline['outputContracts'] as Map)[contract['outputContract']],
             reason: '${entry.key} output contract');
+      }
+    }
+    final scenarios = baseline['behaviorScenarios'] as Map;
+    final danmakuTests = Directory('test/next')
+        .listSync()
+        .whereType<File>()
+        .where(
+            (f) => f.path.contains('danmaku_') && f.path.endsWith('_test.dart'))
+        .map((f) => f.readAsStringSync())
+        .join('\n');
+    for (final entry in scenarios.entries) {
+      expect(actions.containsKey(entry.key), isTrue);
+      for (final scenario in entry.value as List) {
+        expect(danmakuTests, contains(scenario as String),
+            reason: 'Missing behavior scenario: $scenario');
+      }
+    }
+    for (final entry in compatibility.entries) {
+      final mapping = entry.value as Map;
+      if (!mapping.containsKey('mode')) continue;
+      expect(expectedActions.containsKey(entry.key), isTrue);
+      expect(mapping['mode'], isIn(['alias', 'legacyRecovery']));
+      expect(mapping['capability'], isNotEmpty);
+      for (final target in mapping['targets'] as List) {
+        expect(primary.containsKey(target), isTrue);
+        expect(actions[target], (primary[target] as Map)['effect']);
+        expect(scenarios[target], isNotEmpty);
+      }
+      if (mapping['mode'] == 'legacyRecovery') {
+        expect(scenarios[entry.key], isNotEmpty);
       }
     }
     for (final entry in expectedSettings.entries) {

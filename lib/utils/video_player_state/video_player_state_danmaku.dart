@@ -706,6 +706,8 @@ extension VideoPlayerStateDanmaku on VideoPlayerState {
   }) {
     List<Map<String, dynamic>> mergedList = [];
     final hasManagedTracks = _danmakuTracks.values.any((t) => t['usesMediaTimeline'] == true);
+    final hasFoldTracks = hasManagedTracks ||
+        _danmakuTracks.values.any((t) => t['deduplicate'] == true);
 
     // 合并所有启用的轨道
     for (final trackId in _danmakuTracks.keys) {
@@ -723,7 +725,12 @@ extension VideoPlayerStateDanmaku on VideoPlayerState {
                   'nextTrackId': trackId,
                   'foldEnabled': trackData['deduplicate'] == true,
                   'aggregation': trackData['aggregation'] == true}
-              : hasManagedTracks && trackId == 'dandanplay'
+              : trackData.containsKey('deduplicate')
+                  ? {...DanmakuTrackTiming.shift(comment, offset),
+                      'nextTrackId': trackId,
+                      'foldEnabled': trackData['deduplicate'] == true,
+                      'aggregation': trackData['aggregation'] == true}
+                  : hasFoldTracks && trackId == 'dandanplay'
                   ? {...DanmakuTrackTiming.shift(comment, offset),
                       'source': comment['source'] ?? 'unknown', 'nextTrackId': trackId,
                       'foldEnabled': true, 'aggregation': true}
@@ -739,7 +746,7 @@ extension VideoPlayerStateDanmaku on VideoPlayerState {
       return timeA.compareTo(timeB);
     });
 
-    if (hasManagedTracks) {
+    if (hasFoldTracks) {
       mergedList = foldDanmakuSources(mergedList);
     }
 

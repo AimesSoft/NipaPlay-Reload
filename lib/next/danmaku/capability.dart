@@ -78,6 +78,7 @@ const _track = ObjectSchema({
   'video': _video,
   'enabled': BooleanSchema(),
   'deduplicate': BooleanSchema(),
+  'displayFold': BooleanSchema(),
   'offsetMs': IntegerSchema(),
   'alignment': _alignment,
   'evidence': _evidence,
@@ -152,6 +153,35 @@ const _fetchFields = {
   'localDurationMs': IntegerSchema(minimum: 1, maximum: 7200000),
   'refresh': BooleanSchema()
 };
+const _change = ObjectSchema({
+  'bindingId': _text,
+  'trackId': _text,
+  'expectedRevision': IntegerSchema(minimum: 0),
+  'enabled': BooleanSchema(),
+  'offsetMs': IntegerSchema(minimum: -7200000, maximum: 7200000),
+  'displayFold': BooleanSchema(),
+  'reason': _text
+}, oneOfRequired: [
+  ['bindingId'],
+  ['trackId']
+]);
+const _updateValue = ObjectSchema({
+  'bindingId': _text,
+  'trackId': _text,
+  'revision': IntegerSchema(),
+  'enabled': BooleanSchema(),
+  'offsetMs': IntegerSchema(),
+  'displayFold': BooleanSchema(),
+  'persistence': StringSchema(values: ['binding', 'playback'])
+}, required: [
+  'enabled',
+  'offsetMs',
+  'displayFold',
+  'persistence'
+]);
+const _failure = ObjectSchema(
+    {'code': _text, 'message': StringSchema(), 'retryable': BooleanSchema()},
+    required: ['code', 'message', 'retryable']);
 ActionSpec _spec(String id, Effect effect, ObjectSchema input,
         ObjectSchema output, String description) =>
     ActionSpec(
@@ -256,7 +286,7 @@ final _specs = [
             required: ['bindingId', 'revision', field]),
         const ObjectSchema({'bindingId': _text, 'revision': IntegerSchema()},
             required: ['bindingId', 'revision']),
-        'Set absolute $field with a binding revision check. Original source cache is preserved.'),
+        'Compatibility alias for danmaku.update: set absolute $field with a binding revision check. deduplicate controls displayFold only; original source cache is preserved.'),
   _spec(
       'danmaku.offset',
       Effect.write,
@@ -271,7 +301,7 @@ final _specs = [
       ]),
       const ObjectSchema({'bindingId': _text, 'revision': IntegerSchema()},
           required: ['bindingId', 'revision']),
-      'Set an absolute fixed offset in integer milliseconds: positive advances, zero resets. Does not refetch or accumulate offsets.'),
+      'Compatibility alias for danmaku.update: set an absolute fixed offset in integer milliseconds, positive advances, zero resets. Does not refetch or accumulate offsets.'),
   _spec(
       'danmaku.detach',
       Effect.write,
@@ -279,6 +309,64 @@ final _specs = [
       const ObjectSchema({'bindingId': _text, 'revision': IntegerSchema()},
           required: ['bindingId', 'revision']),
       'Revoke this managed binding and remove its player track; source cache and provenance remain available.'),
+  _spec(
+      'danmaku.analyze_alignment',
+      Effect.read,
+      const ObjectSchema({'bindingId': _text, 'anchors': ArraySchema(_anchor)},
+          required: ['bindingId', 'anchors']),
+      const ObjectSchema({
+        'bindingId': _text,
+        'observedRevision': IntegerSchema(),
+        'currentOffsetMs': IntegerSchema(),
+        'estimateOffsetMs': IntegerSchema(nullable: true),
+        'anchorOffsetsMs': ArraySchema(IntegerSchema()),
+        'residualsMs': ArraySchema(IntegerSchema()),
+        'maxResidualMs': IntegerSchema(nullable: true),
+        'anchorSpanMs': IntegerSchema(),
+        'method': StringSchema(values: ['median']),
+        'anchors': ArraySchema(_anchor),
+        'evidence': ArraySchema(StringSchema()),
+        'confidence':
+            StringSchema(values: ['consistentAnchors', 'insufficientEvidence']),
+        'limitations': ArraySchema(StringSchema())
+      }, required: [
+        'bindingId',
+        'observedRevision',
+        'currentOffsetMs',
+        'estimateOffsetMs',
+        'anchorOffsetsMs',
+        'residualsMs',
+        'maxResidualMs',
+        'anchorSpanMs',
+        'method',
+        'anchors',
+        'evidence',
+        'confidence',
+        'limitations'
+      ]),
+      'Estimate a fixed offset from up to 100 supplied source/media time anchors. Returns the upper median, absolute residuals in input order, span, evidence and confidence limits. Reads the binding revision; no task, Decision or persistence. Positive integer milliseconds advance danmaku (display time = source time - offsetMs).'),
+  _spec(
+      'danmaku.update',
+      Effect.write,
+      const ObjectSchema({'changes': ArraySchema(_change)},
+          required: ['changes']),
+      const ObjectSchema({
+        'results': ArraySchema(ObjectSchema({
+          'index': IntegerSchema(),
+          'status': StringSchema(values: ['completed', 'failed']),
+          'result': _updateValue,
+          'error': _failure
+        }, required: [
+          'index',
+          'status'
+        ], oneOfRequired: [
+          ['result'],
+          ['error']
+        ]))
+      }, required: [
+        'results'
+      ]),
+      'Update 1 to 100 bindings or current player tracks in input order. Each item sets enabled, offsetMs and/or displayFold absolutely; positive integer milliseconds advance, negative delay, zero resets. Any explicit offset in the supported range is accepted independently of analysis estimates. Persistent bindings (including bound trackId targets) require expectedRevision; each item is atomic and returns its own result or failure, without rolling back earlier items. Unbound tracks last for the current playback and have no binding revision. displayFold affects display grouping only; original caches remain unchanged.'),
   _spec(
       'danmaku.align',
       Effect.write,
@@ -300,7 +388,7 @@ final _specs = [
         'requestId'
       ]),
       _job,
-      'Create an anchor-based alignment task. It stores a fixed-offset estimate and requests an explicit choice; it never applies guesses automatically.'),
+      'Retired compatibility lookup for existing alignment requestId tasks. New requests return unavailable with migration to danmaku.analyze_alignment and danmaku.update.'),
   for (final operation in ['apply', 'keep'])
     _spec(
         'danmaku.align_$operation',
@@ -309,7 +397,7 @@ final _specs = [
             {'jobId': _text, 'revision': IntegerSchema(minimum: 0)},
             required: ['jobId', 'revision']),
         _job,
-        'Execute the exact current alignment decision option with a task revision check.'),
+        'Legacy recovery only: execute an existing persisted alignment decision option with a task revision check. New analysis returns data and offsets are set through danmaku.update.'),
   _spec(
       'danmaku.cache_delete',
       Effect.destructive,
@@ -457,6 +545,17 @@ final class _Action extends Action<_Data, _Data> {
               refresh: j['refresh'] == true));
         case 'danmaku.tracks':
           return result(await service.tracks(await service.resolveEntity(j)));
+        case 'danmaku.analyze_alignment':
+          return result(await service.analyzeAlignment(
+              j['bindingId'] as String, [
+            for (final a in j['anchors'] as List)
+              Map<String, Object?>.from(a as Map)
+          ]));
+        case 'danmaku.update':
+          return result(await service.update([
+            for (final change in j['changes'] as List)
+              Map<String, Object?>.from(change as Map)
+          ], invocation));
         case 'danmaku.align':
           final anchors = [
             for (final a in j['anchors'] as List)
@@ -494,27 +593,20 @@ final class _Action extends Action<_Data, _Data> {
               j['path'] as String, j['view'] as String));
         default:
           final id = j['bindingId'] as String, revision = j['revision'] as int;
-          final values = switch (spec.id) {
-            'danmaku.set_enabled' => {'enabled': j['enabled'] == true ? 1 : 0},
-            'danmaku.set_dedup' => {
-                'deduplicate': j['deduplicate'] == true ? 1 : 0
-              },
-            'danmaku.offset' => {'offset_ms': j['offsetMs']},
-            'danmaku.detach' => {'status': 'revoked'},
-            _ => throw StateError('Unregistered danmaku action')
-          };
-          final updated =
-              await service.store.change(id, revision, values, invocation,
-                  alignment: spec.id == 'danmaku.offset'
-                      ? {
-                          'method': 'manualOffset',
-                          'confirmed': true,
-                          'offsetMs': j['offsetMs'],
-                          'confirmedBy':
-                              invocation.origin == 'gui' ? 'user' : 'agent'
-                        }
-                      : null);
-          if (spec.id == 'danmaku.detach') service.player.remove(id);
+          if (spec.id != 'danmaku.detach') {
+            final updated = await service.updateProperties({
+              'bindingId': id,
+              'expectedRevision': revision,
+              if (spec.id == 'danmaku.set_enabled') 'enabled': j['enabled'],
+              if (spec.id == 'danmaku.set_dedup')
+                'displayFold': j['deduplicate'],
+              if (spec.id == 'danmaku.offset') 'offsetMs': j['offsetMs']
+            }, invocation);
+            return result({'bindingId': id, 'revision': updated['revision']});
+          }
+          final updated = await service.store
+              .change(id, revision, {'status': 'revoked'}, invocation);
+          service.player.remove(id);
           await service.refreshCurrent();
           return result({'bindingId': id, 'revision': updated['revision']});
       }

@@ -5,6 +5,7 @@ import '../media/identity_store.dart';
 import 'source.dart';
 import 'store.dart';
 import 'export.dart';
+import 'alignment.dart';
 
 final class DanmakuPlaybackTarget {
   const DanmakuPlaybackTarget(this.path, this.generation,
@@ -28,6 +29,11 @@ abstract interface class DanmakuPlayerPort {
       DanmakuPlaybackTarget target, JsonMap binding, List<DanmakuEntry> entries,
       {int startMs = 0, int? endMs});
   void remove(String bindingId);
+}
+
+abstract interface class DanmakuTrackUpdater {
+  bool updateTrack(
+      DanmakuPlaybackTarget target, String trackId, JsonMap properties);
 }
 
 final class DanmakuService {
@@ -232,29 +238,126 @@ final class DanmakuService {
 
   Future<Job> align(
       String bindingId, List<JsonMap> anchors, String requestId) async {
-    final previous = _submissions;
-    final done = Completer<void>();
-    _submissions = done.future;
-    await previous;
-    try {
-      final key =
-          stableMediaId('danmaku-align', [requestId, bindingId, anchors]);
-      final existing = await engine.store.get(key);
-      if (existing != null) return existing;
-      final b = await store.binding(bindingId);
-      return await engine.submit(
-          type: 'danmaku.align',
-          jobId: key,
-          title: 'Propose danmaku alignment',
-          input: {
-            'bindingId': bindingId,
-            'bindingRevision': b['revision'],
-            'anchors': anchors,
-            'requestId': requestId
-          });
-    } finally {
-      done.complete();
+    final key = stableMediaId('danmaku-align', [requestId, bindingId, anchors]);
+    final existing = await engine.store.get(key);
+    if (existing != null) return existing;
+    throw const Failure(FailureCode.unavailable,
+        'danmaku.align is retired. Use danmaku.analyze_alignment for data and danmaku.update to set offsetMs. Existing requestId tasks remain readable.');
+  }
+
+  Future<JsonMap> analyzeAlignment(
+      String bindingId, List<JsonMap> anchors) async {
+    final analysis = analyzeDanmakuAnchors(anchors);
+    final binding = await store.binding(bindingId);
+    return {
+      'bindingId': bindingId,
+      'observedRevision': binding['revision'],
+      'currentOffsetMs': binding['offset_ms'],
+      ...analysis
+    };
+  }
+
+  Future<JsonMap> update(List<JsonMap> changes, Invocation invocation) async {
+    if (changes.isEmpty || changes.length > 100) {
+      throw const Failure(FailureCode.invalidInput, 'Supply 1 to 100 changes.');
     }
+    final results = <JsonMap>[];
+    for (var index = 0; index < changes.length; index++) {
+      final change = changes[index];
+      try {
+        results.add({
+          'index': index,
+          'status': 'completed',
+          'result': await updateProperties(change, invocation)
+        });
+      } on Failure catch (failure) {
+        results.add(
+            {'index': index, 'status': 'failed', 'error': failure.toJson()});
+      }
+    }
+    return {'results': results};
+  }
+
+  Future<JsonMap> updateProperties(
+      JsonMap change, Invocation invocation) async {
+    final properties = {
+      for (final key in ['enabled', 'offsetMs', 'displayFold'])
+        if (change.containsKey(key)) key: change[key]
+    };
+    if (properties.isEmpty) {
+      throw const Failure(
+          FailureCode.invalidInput, 'Supply an update property.');
+    }
+    String? bindingId = change['bindingId'] as String?;
+    final trackId = change['trackId'] as String?;
+    final target = player.target;
+    if (trackId != null) {
+      final track = registry.where((t) => t['trackId'] == trackId).firstOrNull;
+      if (track == null || target == null) {
+        throw const Failure(
+            FailureCode.notFound, 'Current player track not found.');
+      }
+      bindingId = track['bindingId'] as String?;
+      if (bindingId == null) {
+        if (change.containsKey('expectedRevision')) {
+          throw const Failure(FailureCode.invalidInput,
+              'Unbound player tracks have no persistent binding revision.');
+        }
+        if (player is! DanmakuTrackUpdater) {
+          throw const Failure(FailureCode.unavailable,
+              'Host does not support updating unbound player tracks.');
+        }
+        if (!(player as DanmakuTrackUpdater)
+            .updateTrack(target, trackId, properties)) {
+          throw const Failure(
+              FailureCode.conflict, 'Player target or track changed.');
+        }
+        final updated = registry.singleWhere((t) => t['trackId'] == trackId);
+        return {
+          'trackId': trackId,
+          'enabled': updated['enabled'],
+          'offsetMs': updated['offsetMs'],
+          'displayFold': updated['deduplicate'],
+          'persistence': 'playback'
+        };
+      }
+    }
+    final revision = change['expectedRevision'] as int?;
+    if (revision == null) {
+      throw const Failure(FailureCode.invalidInput,
+          'expectedRevision is required for a persistent binding.');
+    }
+    final updated = await store.change(
+        bindingId!,
+        revision,
+        {
+          if (properties.containsKey('enabled'))
+            'enabled': properties['enabled'] == true ? 1 : 0,
+          if (properties.containsKey('displayFold'))
+            'deduplicate': properties['displayFold'] == true ? 1 : 0,
+          if (properties.containsKey('offsetMs'))
+            'offset_ms': properties['offsetMs']
+        },
+        invocation,
+        reason: change['reason'] as String?,
+        alignment: properties.containsKey('offsetMs')
+            ? {
+                'method': 'manualOffset',
+                'confirmed': true,
+                'offsetMs': properties['offsetMs'],
+                'confirmedBy': invocation.origin == 'gui' ? 'user' : 'agent'
+              }
+            : null);
+    await refreshCurrent();
+    return {
+      'bindingId': bindingId,
+      if (trackId != null) 'trackId': trackId,
+      'revision': updated['revision'],
+      'enabled': updated['enabled'] == 1,
+      'offsetMs': updated['offset_ms'],
+      'displayFold': updated['deduplicate'] == 1,
+      'persistence': 'binding'
+    };
   }
 
   Future<Job> chooseAlignment(
@@ -428,7 +531,7 @@ final class DanmakuService {
     final candidates = <JsonMap>[
       for (final track in currentTracks)
         if (!rows.any((b) => b['id'] == track['bindingId']))
-            {...track, 'entityId': track['entityId'] ?? entityId, 'loaded': true},
+          {...track, 'entityId': track['entityId'] ?? entityId, 'loaded': true},
       for (final b in rows)
         {
           'origin': (b['video'] as JsonMap)['sourceId'] == 'local'
@@ -481,7 +584,11 @@ final class DanmakuService {
     return {
       'tracks': [
         for (final group in groups.entries)
-          {...group.value, 'bindingIds': bindingIds[group.key]!.toList()}
+          {
+            ...group.value,
+            'displayFold': group.value['deduplicate'] != false,
+            'bindingIds': bindingIds[group.key]!.toList()
+          }
       ]
     };
   }

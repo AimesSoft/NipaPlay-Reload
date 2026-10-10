@@ -117,7 +117,7 @@ final class DanmakuStore {
 
   Future<JsonMap> change(
           String id, int revision, JsonMap values, Invocation invocation,
-          {JsonMap? alignment}) =>
+          {JsonMap? alignment, String? reason}) =>
       db.transaction((tx) async {
         final b = await binding(id, tx: tx);
         if (b['revision'] != revision) {
@@ -134,8 +134,13 @@ final class DanmakuStore {
             },
             where: 'id = ?',
             whereArgs: [id]);
-        await _event(tx, id, revision + 1, invocation.id,
-            {...values, if (alignment != null) 'alignment': alignment});
+        await _event(tx, id, revision + 1, invocation.id, {
+          ...values,
+          if (alignment != null) 'alignment': alignment,
+          if (reason != null) 'reason': reason,
+          'origin': invocation.origin,
+          'actor': invocation.origin == 'gui' ? 'user' : 'agent'
+        });
         return binding(id, tx: tx, active: values['status'] != 'revoked');
       });
   Future<void> assignCache(String id, String key, String jobId) =>

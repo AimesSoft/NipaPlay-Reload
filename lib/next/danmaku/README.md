@@ -53,7 +53,7 @@ MA 的 v2 身份迁移保持原样，MB 在 `next_database.dart` 的迁移序列
 |---|---|
 | danmaku_bindings | 引用 MA File/Episode 与 media_external_objects；记录实体修订、启用、去重、绝对偏移、对齐、证据、宿主绑定者、绑定修订和已提交缓存 |
 | danmaku_cache_chunks | 来源/视频/版本/宿主域名/访问引用摘要/内容选项组成 cache key；保存各段原始时间条目、覆盖及抓取时间；TTL 两小时 |
-| danmaku_alignment_candidates | 任务的锚点、固定偏移候选、残差、置信说明和显式选择；关联绑定修订 |
+| danmaku_alignment_candidates | 存量对齐任务的锚点、固定偏移候选、残差、置信说明和显式选择；关联绑定修订 |
 | danmaku_binding_events | 追加的 attach、控制、解绑与对齐选择审计记录；不抹去旧证据 |
 
 MB 绑定不写入 MA 的元数据 bindings，也不投影 Classic 匹配字段，避免元数据解绑
@@ -75,11 +75,37 @@ Task Engine 禁止提交副作用后进入 cancelled。MB 在取消前尚无提�
 
 ## 对齐、显示与 GUI
 
-原始 sourceTimeMs 永不累积改写。正 offsetMs 提前，负数延后；GUI 秒数在宿主
-换成整数毫秒。对齐任务取手动锚点偏移的中位数，保存最大残差和时间跨度；即使
-锚点一致也不自动应用，持久 Decision 提供 apply/keep。应用检查原绑定修订并
-原子保存选择、映射和审计事件。首期只实现固定平移，不宣称自动音画/字幕对齐或
-分段/比例映射已完成。
+原始 sourceTimeMs 永不累积改写。正 offsetMs 提前，负数延后；显示时间减去
+offsetMs，GUI 秒数在宿主换成整数毫秒。`analyze_alignment` 只读当前绑定修订，
+从最多 100 个手工锚点计算偏移的中位数（偶数个取上中位数），返回输入顺序的
+偏移、绝对残差、最大残差、源时间跨度、证据、置信标签及限制。空锚点返回空数组和
+null 估计；不修改绑定、不写候选、不创建任务或 Decision。至少三个锚点、源时间跨度
+至少 60000 ms 且最大残差不超过 250 ms 时标记 consistentAnchors，否则为
+insufficientEvidence。标签只表示锚点一致性，不证明集身份或语义对齐；首期只实现固定平移。
+
+`update` 接受 1–100 个 changes，按输入顺序批量设置 enabled、offsetMs、displayFold。
+每项指定 bindingId 或当前播放器 trackId，至少设置一个属性。绑定及有绑定的轨道
+必须携带 expectedRevision；同一项的多属性和审计原子保存，修订只增加一次。
+可采用估计，也可设置任何已有范围内的明确整数毫秒值（±7200000），无须 apply/keep。
+返回每项 index、status 与 result/error；一个业务失败不回滚之前成功的项，后续项继续。
+整个请求先做 schema 校验；结构/类型不合法时不执行任何项。reason 可选，记录到绑定
+审计中；actor/origin 来自宿主 Invocation。未绑定轨道只修改当前播放状态，无持久绑定
+revision；live timeline 不支持固定偏移。displayFold 只控制显示折叠，原始缓存不变。
+
+旧 `set_enabled`、`set_dedup`、`offset` 保留原输入输出，分别转到同一属性更新实现。
+`tracks` 同时提供 displayFold 与兼容字段 deduplicate。
+
+### 旧对齐任务的恢复
+
+- `align` 停止创建任务；已有 requestId/绑定/锚点组合仍返回原 jobId，新请求返回
+  unavailable 并指明 `analyze_alignment` 与 `update` 的迁移入口。
+- 已保存的 needs_decision 快照、选项和候选继续可读；`align_apply/align_keep` 只恢复
+  这些存量选项，保持任务 revision、精确 ActionCall 和应用时的绑定 revision 检查。
+  应用与审计仍原子写入，重启后已提交的 apply/keep 不会重复提交。
+- 未选择的 queued/interrupted/恢复任务直接完成为分析回执，包含原 proposal、analysis、
+  observedRevision 与 migration，不再产生 Decision，不改变偏移；已保存候选保留。
+  暂停、取消及有 choice checkpoint 的任务继续按原引擎恢复与提交验证处理。
+- 不迁移内核 JobState/Decision API，也不删除历史任务、候选和回执。
 
 只使用播放器现有多轨注册表：Classic 与 Next 共用唯一的 `dandanplay` 轨道，
 其余在线轨道使用 `next:<bindingId>`。每条来源轨道记录 origin、platform、
@@ -108,7 +134,8 @@ Classic 与 Next 的弹弹play 原始响应共用 `dandanplay_comments.dart` 解
 
 输入/输出 schema 的唯一事实来源是 `capability.dart`。视频引用包括 sourceId、
 videoId、objectType、title、durationMs；durationMs=0 可以出现在定位结果中，
-获取前必须由调用者补充有依据的时长。fetch 与 align 的 requestId 用于幂等重试。
+获取前必须由调用者补充有依据的时长。fetch 的 requestId 用于幂等重试；align 的
+requestId 只用于存量任务查找。
 
 | Action | Effect | 结果 |
 |---|---|---|
@@ -116,7 +143,9 @@ videoId、objectType、title、durationMs；durationMs=0 可以出现在定位�
 | fetch | write | 立即返回 jobId；只获取缓存，不改播放轨道 |
 | attach | write | 明确绑定及获取任务，或复用已有轨道；复用/已存在时 jobId=null，回执带 status/trackId |
 | set_enabled / set_dedup / offset / detach | write | 绑定修订 CAS；绝对设置；解绑保留缓存 |
-| align / align_apply / align_keep | write | 持久对齐任务和可直接执行的选择 |
+| analyze_alignment | read | 估计、逐锚点偏移/残差、证据、置信与限制；无持久化或任务 |
+| update | write | 批量绝对属性修改，逐项结果；绑定 CAS、轨道播放状态、显示折叠 |
+| align / align_apply / align_keep | write | 仅存量任务查找/恢复；新任务迁移到只读分析加属性更新 |
 | export | write | 授权媒体目录中的新 JSON 文件；raw 或 mapped，按 bytes/SHA-256 回读；不覆盖现有文件 |
 | cache_delete | destructive | 删除明确 cacheKey；活动获取任务引用该缓存时返回 conflict，先停止任务 |
 
@@ -128,6 +157,10 @@ videoId、objectType、title、durationMs；durationMs=0 可以出现在定位�
 `test/next/danmaku_*_test.dart` 使用测试源码构造的 JSON/protobuf、MockClient、
 临时 SQLite 与内存播放器端口；没有真实平台录制、账号内容或线上请求。
 播放器原生内核、真实登录态以及三项真机场景留给主控端到端验收。
+`danmaku_ergonomics_test.dart` 验证分析无写入、估计后一次 update 设置不同值、批量
+失败、轨道/绑定属性、空与矛盾证据、旧任务重启恢复和退役错误。覆盖率基线保留旧
+actions，另增 primaryActions、compatibility（alias/legacyRecovery）和 behaviorScenarios；
+验收同时检查旧入口 Effect、新入口 Effect 和能力映射。
 
 ```sh
 ~/development/flutter-3.44.6/bin/flutter analyze --no-pub lib/next lib/utils/danmaku_source_merge.dart test/next

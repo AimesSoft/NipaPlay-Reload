@@ -104,7 +104,8 @@ void main() {
         'danmaku.search',
         'danmaku.episodes',
         'danmaku.resolve',
-        'danmaku.tracks'
+        'danmaku.tracks',
+        'danmaku.analyze_alignment'
       ].contains(spec.id);
       expect(
           spec.effect,
@@ -408,7 +409,7 @@ void main() {
     final result = await attach(entity, biliVideo);
     await f.wait(result['jobId'] as String, JobState.succeeded);
     final id = result['bindingId'] as String;
-    final alignment = await f.call('danmaku.align', {
+    final alignment = await f.legacyAlignment({
       'bindingId': id,
       'requestId': 'anchors',
       'anchors': [
@@ -457,7 +458,7 @@ void main() {
     final result = await attach(entity, biliVideo);
     await f.wait(result['jobId'] as String, JobState.succeeded);
     final id = result['bindingId'] as String;
-    final submitted = await f.call('danmaku.align', {
+    final submitted = await f.legacyAlignment({
       'bindingId': id,
       'requestId': 'stale',
       'anchors': [
@@ -478,12 +479,12 @@ void main() {
     expect(failed.error!.code, FailureCode.conflict);
     expect((await f.service.store.binding(id))['offset_ms'], -100);
   });
-  test('empty alignment evidence only offers keeping the existing mapping',
+  test('empty legacy alignment evidence can keep the existing mapping',
       () async {
     final entity = await f.file();
     final result = await attach(entity, biliVideo);
     await f.wait(result['jobId'] as String, JobState.succeeded);
-    final submitted = await f.call('danmaku.align', {
+    final submitted = await f.legacyAlignment({
       'bindingId': result['bindingId'],
       'requestId': 'empty',
       'anchors': []
@@ -594,7 +595,7 @@ void main() {
       'requestId': 'idempotent-align',
       'anchors': <Object?>[]
     };
-    final first = await f.call('danmaku.align', input);
+    final first = await f.legacyAlignment(input);
     final same = await f.call('danmaku.align', input);
     expect(same['jobId'], first['jobId']);
     final job = await f.wait(first['jobId'] as String, JobState.needsDecision);

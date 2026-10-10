@@ -4,6 +4,7 @@ import 'package:nipa_harness/nipa_harness.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'source.dart';
 import 'service.dart';
+import 'alignment.dart';
 import '../media/identity_store.dart';
 
 List<JobExecutor> danmakuExecutors(DanmakuService service) =>
@@ -357,24 +358,13 @@ final class _Align implements JobExecutor {
         for (final a in c.job.input['anchors'] as List)
           Map<String, Object?>.from(a as Map)
       ];
-      final offsets = [
-        for (final a in anchors)
-          (a['sourceTimeMs'] as int) - (a['mediaTimeMs'] as int)
-      ]..sort();
-      final offset = offsets.isEmpty ? null : offsets[offsets.length ~/ 2];
-      final residuals = [for (final n in offsets) (n - offset!).abs()];
-      final maximum =
-          residuals.isEmpty ? null : residuals.reduce((a, b) => a > b ? a : b);
-      final times = [for (final a in anchors) a['sourceTimeMs'] as int]..sort();
-      final broad = times.length >= 2 && times.last - times.first >= 60000;
+      final analysis = analyzeDanmakuAnchors(anchors);
       final proposal = {
         'method': 'manualAnchors',
-        'offsetMs': offset,
+        'offsetMs': analysis['estimateOffsetMs'],
         'anchors': anchors,
-        'maxResidualMs': maximum,
-        'confidence': offsets.length >= 3 && broad && maximum! <= 250
-            ? 'consistentAnchors'
-            : 'insufficientEvidence',
+        'maxResidualMs': analysis['maxResidualMs'],
+        'confidence': analysis['confidence'],
         'confirmed': false,
         'applicableRange': 'requested media version',
         'autoApply': false
@@ -397,23 +387,20 @@ final class _Align implements JobExecutor {
             where: 'job_id = ?',
             whereArgs: [c.job.jobId]))
         .single['payload']);
-    final revision = c.job.revision + 1;
     if (await control.stop({'bindingId': id, 'applied': false})) return;
-    await c.needsDecision(Decision(
-        prompt:
-            'Review the fixed offset estimated from supplied anchors. Positive values advance this track; the estimate needs explicit confirmation.',
-        options: [
-          if (proposal['offsetMs'] != null)
-            DecisionOption(
-                label:
-                    'Apply ${proposal['offsetMs']} ms (${proposal['confidence']})',
-                detail: jsonEncode(proposal),
-                call: ActionCall('danmaku.align_apply',
-                    {'jobId': c.job.jobId, 'revision': revision})),
-          DecisionOption(
-              label: 'Keep current mapping',
-              call: ActionCall('danmaku.align_keep',
-                  {'jobId': c.job.jobId, 'revision': revision}))
-        ]));
+    await c
+        .succeed(JobReceipt(verification: VerificationLevel.verified, details: {
+      'bindingId': id,
+      'observedRevision': b['revision'],
+      'applied': false,
+      'proposal': proposal,
+      'analysis': analyzeDanmakuAnchors([
+        for (final a in proposal['anchors'] as List)
+          Map<String, Object?>.from(a as Map)
+      ]),
+      'migration': 'danmaku.analyze_alignment + danmaku.update',
+      'verificationMeaning':
+          'Stored anchor estimate read back; binding unchanged. Set any explicit offsetMs with danmaku.update and expectedRevision.'
+    }));
   }
 }
