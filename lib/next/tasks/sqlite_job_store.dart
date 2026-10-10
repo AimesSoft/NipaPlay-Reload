@@ -5,6 +5,7 @@ import 'package:nipa_harness/nipa_harness.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
 import '../media/media_migration.dart';
+import '../danmaku/migration.dart';
 
 final class SqliteJobStore implements JobStore {
   SqliteJobStore._(this._database);
@@ -24,7 +25,7 @@ final class SqliteJobStore implements JobStore {
     }
     final database = await factory.openDatabase('${root.path}/next.db',
         options: OpenDatabaseOptions(
-          version: 2,
+          version: 3,
           onConfigure: (db) => db.execute('PRAGMA foreign_keys = ON'),
           onCreate: (db, version) async {
             await db.execute('CREATE TABLE jobs ('
@@ -37,9 +38,11 @@ final class SqliteJobStore implements JobStore {
                 'kind TEXT NOT NULL, at TEXT NOT NULL, snapshot TEXT NOT NULL, '
                 'PRIMARY KEY(job_id, revision))');
             await migrateMediaIdentity(db);
+            await migrateDanmaku(db);
           },
           onUpgrade: (db, oldVersion, newVersion) async {
             if (oldVersion < 2) await migrateMediaIdentity(db);
+            if (oldVersion < 3) await migrateDanmaku(db);
           },
         ));
     return SqliteJobStore._(database);

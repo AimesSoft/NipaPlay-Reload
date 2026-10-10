@@ -25,11 +25,15 @@ import 'capabilities/video_player_state_port.dart';
 import 'media/media_capability.dart';
 import 'media/media_executors.dart';
 import 'media/media_runtime.dart';
+import 'danmaku/capability.dart';
+import 'danmaku/executors.dart';
+import 'danmaku/runtime.dart';
+import 'danmaku/export.dart';
 import 'tasks/device_identity.dart';
 import 'tasks/sqlite_job_store.dart';
 
 final class NextRuntime extends ChangeNotifier {
-  NextRuntime._(this._labs, List<Capability> capabilities) {
+  NextRuntime._(this._labs, this._player, List<Capability> capabilities) {
     _operations = _initialize(capabilities);
   }
 
@@ -40,7 +44,7 @@ final class NextRuntime extends ChangeNotifier {
     final navigation = context.read<TabChangeNotifier>();
     final history = ServiceProvider.watchHistoryProvider;
     final seriesDetail = BangumiService.instance.getAnimeDetailsFromMemory;
-    return NextRuntime._(labs, [
+    return NextRuntime._(labs, player, [
       LibraryCapability(
         history: () => history.history,
         seriesDetail: seriesDetail,
@@ -63,10 +67,12 @@ final class NextRuntime extends ChangeNotifier {
   }
 
   final LabsSettingsProvider _labs;
+  final VideoPlayerState _player;
   late final Harness _harness;
   late final AgentEndpoint _endpoint;
   late final TaskEngine _taskEngine;
   late final MediaRuntime _media;
+  late final DanmakuRuntime _danmaku;
   late Future<void> _operations;
   AgentEndpointStatus _endpointStatus = const AgentEndpointStopped();
   bool _disposed = false;
@@ -82,23 +88,29 @@ final class NextRuntime extends ChangeNotifier {
     final deviceId = await loadDeviceIdentity(root);
     final jobs = await SqliteJobStore.open(root);
     _media = await MediaRuntime.create(root, jobs.database, deviceId);
-    _taskEngine = TaskEngine(
-        store: jobs,
-        ownerDeviceId: deviceId,
-        executors: mediaExecutors(_media.service));
+    _danmaku = await DanmakuRuntime.create(_media.service.store, _player);
+    _danmaku.service.exporter = DanmakuExporter(_danmaku.service.store,
+        (path) => _media.service.authorizedPath(path, directory: true));
+    _taskEngine = TaskEngine(store: jobs, ownerDeviceId: deviceId, executors: [
+      ...mediaExecutors(_media.service),
+      ...danmakuExecutors(_danmaku.service),
+    ]);
     _media.service.engine = _taskEngine;
-    await _taskEngine.start();
-    await _media.service.recoverProjections();
-    final agentsMd = await rootBundle.loadString('assets/next/AGENTS.md');
-    final packageInfo = await PackageInfo.fromPlatform();
+    _danmaku.service.engine = _taskEngine;
     _harness = Harness(
       [
         ...capabilities,
         TaskCapability(_taskEngine),
-        MediaCapability(_media.service)
+        MediaCapability(_media.service),
+        DanmakuCapability(_danmaku.service),
       ],
       observers: [JsonlJournal(File('${root.path}/journal.jsonl'))],
     );
+    _danmaku.startRestoring(_harness);
+    await _taskEngine.start();
+    await _media.service.recoverProjections();
+    final agentsMd = await rootBundle.loadString('assets/next/AGENTS.md');
+    final packageInfo = await PackageInfo.fromPlatform();
     _endpoint = AgentEndpoint(
       harness: _harness,
       root: root,
@@ -134,7 +146,9 @@ final class NextRuntime extends ChangeNotifier {
     _labs.removeListener(_queueEndpointUpdate);
     _operations = _operations.then((_) async {
       await _endpoint.stop();
+      await _danmaku.stopRestoring();
       await _taskEngine.close();
+      _danmaku.close();
       _media.close();
     });
     super.dispose();

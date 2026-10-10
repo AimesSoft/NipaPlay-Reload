@@ -12,6 +12,7 @@ import 'screenshot_encoding.dart';
 
 import 'package:nipaplay/utils/local_danmaku_file.dart';
 import 'package:nipaplay/utils/danmaku_track_timing.dart';
+import 'package:nipaplay/utils/danmaku_source_merge.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -1839,6 +1840,9 @@ int _exactEndStreak = 0;
       return;
     }
     _autoDanmakuOffset = offset;
+    if (_danmakuTracks.values.any((t) => t['usesMediaTimeline'] == true)) {
+      _updateMergedDanmakuList();
+    }
     _syncNativeDanmakuGlobalOffset();
     notifyListeners();
   }

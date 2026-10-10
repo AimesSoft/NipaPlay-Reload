@@ -629,13 +629,38 @@ extension VideoPlayerStateDanmaku on VideoPlayerState {
     }
   }
 
+  /// Installs host-validated platform data, including legitimate empty pools.
+  /// A playback generation prevents an old acquisition from loading into a new video.
+  bool installSourceDanmakuTrack({required String trackId,
+    required String expectedPath, required int expectedGeneration,
+    required Map<String,dynamic> metadata,
+    required List<Map<String,dynamic>> entries, required bool enabled,
+    required double offsetSeconds,
+    Future<void> Function(String operation, Object? value)? requestChange}) {
+    if (_isDisposed || _currentVideoPath != expectedPath ||
+      _playbackGeneration != expectedGeneration) {
+      return false;
+    }
+    _danmakuTracks[trackId] = {...metadata, 'name': metadata['name'],
+      'danmakuList': entries, 'count': entries.length, 'loadTime': DateTime.now(),
+      'timeOffset': offsetSeconds, 'usesMediaTimeline': true};
+    if (requestChange != null) {
+      _danmakuTracks[trackId]!['requestChange'] = requestChange;
+    }
+    _danmakuTrackEnabled[trackId] = enabled;
+    _updateMergedDanmakuList();
+    _notifyListeners();
+    return true;
+  }
+
   // 更新合并后的弹幕列表
   void _updateMergedDanmakuList({
     bool preserveOverlay = false,
     Map<String, dynamic>? locallySentDanmaku,
     bool locallySentTrackEnabled = true,
   }) {
-    final List<Map<String, dynamic>> mergedList = [];
+    List<Map<String, dynamic>> mergedList = [];
+    final hasManagedTracks = _danmakuTracks.values.any((t) => t['usesMediaTimeline'] == true);
 
     // 合并所有启用的轨道
     for (final trackId in _danmakuTracks.keys) {
@@ -643,9 +668,21 @@ extension VideoPlayerStateDanmaku on VideoPlayerState {
         final trackData = _danmakuTracks[trackId]!;
         final trackDanmaku =
             trackData['danmakuList'] as List<Map<String, dynamic>>;
-        final offset = DanmakuTrackTiming.offsetOf(trackData);
+        // Managed tracks use the local media timeline. Compensate the legacy
+        // automatic offset, which is still added globally by all renderers.
+        final offset = DanmakuTrackTiming.offsetOf(trackData) -
+            (trackData['usesMediaTimeline'] == true ? _autoDanmakuOffset : 0);
         mergedList.addAll(trackDanmaku.map(
-          (comment) => DanmakuTrackTiming.shift(comment, offset),
+          (comment) => trackData['usesMediaTimeline'] == true
+              ? {...DanmakuTrackTiming.shift(comment, offset),
+                  'nextTrackId': trackId,
+                  'foldEnabled': trackData['deduplicate'] == true,
+                  'aggregation': trackData['aggregation'] == true}
+              : hasManagedTracks && trackId == 'dandanplay'
+                  ? {...DanmakuTrackTiming.shift(comment, offset),
+                      'source': 'unknown', 'nextTrackId': trackId,
+                      'foldEnabled': true, 'aggregation': true}
+                  : DanmakuTrackTiming.shift(comment, offset),
         ));
       }
     }
@@ -656,6 +693,10 @@ extension VideoPlayerStateDanmaku on VideoPlayerState {
       final timeB = (b['time'] as num?)?.toDouble() ?? 0.0;
       return timeA.compareTo(timeB);
     });
+
+    if (hasManagedTracks) {
+      mergedList = foldDanmakuSources(mergedList);
+    }
 
     debugPrint("[updateMerged] 合并后的总弹幕: ${mergedList.length}");
     int mergedTopCount = 0, mergedBottomCount = 0, mergedScrollCount = 0;
@@ -1333,11 +1374,13 @@ extension VideoPlayerStateDanmaku on VideoPlayerState {
     if (_isDisposed || !offset.isFinite || trackId == 'timeline') return;
     final track = _danmakuTracks[trackId];
     if (track == null || danmakuTrackOffset(trackId) == offset) return;
+    if (_requestSourceTrackChange(trackId, 'offset', offset)) return;
     track['timeOffset'] = offset;
     _updateMergedDanmakuList();
   }
 
   void toggleDanmakuTrack(String trackId, bool enabled) {
+    if (_requestSourceTrackChange(trackId, 'enabled', enabled)) return;
     if (_danmakuTracks.containsKey(trackId)) {
       _danmakuTrackEnabled[trackId] = enabled;
       _updateMergedDanmakuList();
@@ -1348,6 +1391,7 @@ extension VideoPlayerStateDanmaku on VideoPlayerState {
 
   // 删除弹幕轨道
   void removeDanmakuTrack(String trackId) {
+    if (_requestSourceTrackChange(trackId, 'detach', null)) return;
     if (trackId == 'dandanplay') {
       debugPrint('不能删除弹弹play轨道');
       return;
@@ -1360,6 +1404,24 @@ extension VideoPlayerStateDanmaku on VideoPlayerState {
       _notifyListeners();
       debugPrint('删除弹幕轨道: $trackId');
     }
+  }
+
+  bool _requestSourceTrackChange(String trackId, String operation, Object? value) {
+    final callback = _danmakuTracks[trackId]?['requestChange'] as Future<void> Function(String, Object?)?;
+    if (callback == null) return false;
+    unawaited(callback(operation,value).catchError((Object error,StackTrace stack) {
+      FlutterError.reportError(FlutterErrorDetails(exception:error,stack:stack,library:'Source danmaku track control'));
+    }));
+    return true;
+  }
+
+  void removeSourceDanmakuTrack(String trackId) {
+    final track = _danmakuTracks[trackId];
+    if (track == null || track['usesMediaTimeline'] != true) return;
+    _danmakuTracks.remove(trackId);
+    _danmakuTrackEnabled.remove(trackId);
+    _updateMergedDanmakuList();
+    _notifyListeners();
   }
 
   // 在设置视频时长时更新状态
