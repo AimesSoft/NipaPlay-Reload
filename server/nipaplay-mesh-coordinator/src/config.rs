@@ -51,16 +51,17 @@ impl Config {
         .max(MIN_HEARTBEAT_INTERVAL_SECONDS);
         let address_max_ttl_seconds =
             env_number("MESH_ADDRESS_MAX_TTL_SECONDS", MAX_ADDRESS_TTL_SECONDS)
-                .min(MAX_ADDRESS_TTL_SECONDS);
-        let address_default_ttl_seconds =
-            env_number("MESH_ADDRESS_DEFAULT_TTL_SECONDS", 3_600).min(address_max_ttl_seconds);
+                .clamp(60, MAX_ADDRESS_TTL_SECONDS);
+        let address_default_ttl_seconds = env_number("MESH_ADDRESS_DEFAULT_TTL_SECONDS", 3_600)
+            .clamp(60, address_max_ttl_seconds);
 
         Ok(Self {
             listen,
             database_path,
             ca_cert_file,
             ca_key_file,
-            cert_validity_seconds: env_number("MESH_CERT_VALIDITY_SECONDS", 7 * 86_400),
+            cert_validity_seconds: env_number("MESH_CERT_VALIDITY_SECONDS", 7 * 86_400)
+                .clamp(900, 7 * 86_400),
             heartbeat_interval_seconds,
             address_default_ttl_seconds,
             address_max_ttl_seconds,

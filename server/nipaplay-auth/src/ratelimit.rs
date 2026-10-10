@@ -44,7 +44,7 @@ impl RateLimiter {
 
         if buckets.len() > 50_000 {
             buckets.retain(|_, bucket| {
-                now.duration_since(bucket.last_seen) < Duration::from_secs(600)
+                now.duration_since(bucket.last_seen) < bucket.window.max(Duration::from_secs(600))
             });
         }
 
@@ -114,5 +114,59 @@ mod tests {
         let limiter = RateLimiter::new();
         assert!(limiter.check(&[("global", 10), ("ip:1", 1)]));
         assert!(!limiter.check(&[("global", 10), ("ip:1", 1)]));
+        assert_eq!(limiter.buckets.lock().unwrap()["global"].count, 1);
+    }
+
+    #[test]
+    fn hourly_buckets_survive_cleanup_after_ten_minutes() {
+        let limiter = RateLimiter::new();
+        assert!(limiter.check_window(Duration::from_secs(3600), &[("account", 1)]));
+        {
+            let mut buckets = limiter.buckets.lock().unwrap();
+            let account = buckets.get_mut("account").unwrap();
+            account.last_seen = Instant::now() - Duration::from_secs(601);
+            account.started_at = account.last_seen;
+            for i in 0..50_001 {
+                buckets.insert(
+                    format!("stale:{i}"),
+                    WindowBucket {
+                        started_at: Instant::now() - Duration::from_secs(700),
+                        last_seen: Instant::now() - Duration::from_secs(700),
+                        window: Duration::from_secs(60),
+                        count: 1,
+                    },
+                );
+            }
+        }
+        assert!(!limiter.check_window(Duration::from_secs(3600), &[("account", 1)]));
+        assert_eq!(limiter.buckets.lock().unwrap().len(), 1);
+    }
+
+    #[test]
+    fn window_boundary_resets_and_concurrent_requests_obey_one_limit() {
+        let limiter = RateLimiter::new();
+        assert!(limiter.check(&[("account", 1)]));
+        limiter
+            .buckets
+            .lock()
+            .unwrap()
+            .get_mut("account")
+            .unwrap()
+            .started_at = Instant::now() - Duration::from_secs(60);
+        assert!(limiter.check(&[("account", 1)]));
+        assert!(!limiter.check(&[("account", 1)]));
+        let threads: Vec<_> = (0..32)
+            .map(|_| {
+                let limiter = limiter.clone();
+                std::thread::spawn(move || limiter.check(&[("concurrent", 7)]))
+            })
+            .collect();
+        assert_eq!(
+            threads
+                .into_iter()
+                .filter_map(|thread| thread.join().unwrap().then_some(()))
+                .count(),
+            7
+        );
     }
 }

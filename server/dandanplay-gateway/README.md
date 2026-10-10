@@ -37,6 +37,17 @@ the shared `nipaplay-auth` crate (`server/nipaplay-auth`), which the Mesh
 coordinator reuses. Run the crate's tests with
 `cargo test --manifest-path server/nipaplay-auth/Cargo.toml`.
 
+Authentication signs only the path, preserving the pre-refactor signature,
+validation query, cache TTLs, limits and response behavior. The gateway reuses
+the same HTTP client for validation and proxying. Debug request spans omit query
+strings and transport error logs omit URLs so browser `webToken` values are not
+recorded. Method, path, status, timing and hashed identities remain available.
+
+Run `python3 server/dandanplay-gateway/tests/compare_main.py` from the repository
+to build main and the working gateway and compare them against a loopback mock.
+It checks HTTP responses, upstream requests, signatures, account hashes, caches,
+limits, and the webToken log leak using synthetic credentials only.
+
 Production templates are in `deploy/`. After key rotation, set the new key as
 `DANDANPLAY_APP_SECRET` in `/etc/nipaplay-dandanplay-gateway.env` and remove the
 legacy secret URL setting.

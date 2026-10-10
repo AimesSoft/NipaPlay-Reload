@@ -10,10 +10,18 @@ NipaPlay 服务端二进制共享的认证与上游辅助逻辑。抽出来是�
 - `app_signature`：上游请求签名；
 - `RateLimiter`：固定窗口限流（`check` 为每分钟，`check_window` 可指定窗口）；
 - `DandanplayUpstream`：`validate_token`（只读 playhistory 校验，带缓存）与
-  `resolve_account`（取稳定数字 `userId`）；
+  `resolve_account`（从续期响应取稳定正整数 `userId`，POST，405 + Allow: GET 时改用 GET）；
 - `load_app_secret` / `decode_legacy_secret`：应用密钥加载与旧接口解密；
 - `env_value` / `env_bool` / `env_number` / `unix_timestamp`。
 
 ```bash
 cargo test --manifest-path server/nipaplay-auth/Cargo.toml
 ```
+
+签名只包含 URI 路径，不包含查询串。有效验证缓存 600 秒，无效缓存 30 秒；网络、HTTP 5xx
+和 JSON 解析失败不缓存为无效令牌。`with_client` 允许网关复用原连接池及 HTTP 策略，
+测试可注入禁用代理的回环客户端。`token_identity` 保留网关原有的 16 位十六进制摘要；
+协调服务使用完整 SHA-256 作为内部认证和限流键。
+
+`client_ip` 本身不验证代理是否可信，调用者必须确定信任边界。网关保留原有代理规则；
+协调服务仅对回环代理启用转发头。自定义限流窗口的桶清理不会提前丢弃仍有效的小时窗口。

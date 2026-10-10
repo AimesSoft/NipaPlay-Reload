@@ -82,13 +82,15 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .timeout(Duration::from_secs(25))
         .redirect(Policy::none())
         .build()?;
-    let upstream = DandanplayUpstream::new(UpstreamConfig {
-        base_url: config.upstream_base.clone(),
-        app_id: config.app_id.clone(),
-        app_secret: config.app_secret.clone(),
-        user_agent: config.user_agent.clone(),
-    })
-    .map_err(std::io::Error::other)?;
+    let upstream = DandanplayUpstream::with_client(
+        UpstreamConfig {
+            base_url: config.upstream_base.clone(),
+            app_id: config.app_id.clone(),
+            app_secret: config.app_secret.clone(),
+            user_agent: config.user_agent.clone(),
+        },
+        client.clone(),
+    );
     let state = AppState {
         config: Arc::clone(&config),
         client,
@@ -115,7 +117,10 @@ fn app_router(state: AppState) -> Router {
         .route("/api/v2/{*path}", any(proxy))
         .fallback(not_found)
         .layer(CorsLayer::permissive())
-        .layer(TraceLayer::new_for_http())
+        .layer(TraceLayer::new_for_http().make_span_with(|request: &Request| {
+                tracing::debug_span!(target: "tower_http::trace::make_span", "request",
+                    method = %request.method(), uri = %request.uri().path(), version = ?request.version())
+        }))
         .with_state(state)
 }
 
@@ -249,6 +254,7 @@ async fn proxy(
     let upstream_response = match upstream.send().await {
         Ok(response) => response,
         Err(error) => {
+            let error = error.without_url();
             error!(method = %method, path, client_ip = %client_ip, %error, "upstream request failed");
             let status = if error.is_timeout() {
                 StatusCode::GATEWAY_TIMEOUT
@@ -264,6 +270,7 @@ async fn proxy(
     let response_body = match upstream_response.bytes().await {
         Ok(bytes) => bytes,
         Err(error) => {
+            let error = error.without_url();
             error!(method = %method, path, %error, "failed to read upstream response");
             return json_error(StatusCode::BAD_GATEWAY, "读取弹弹play响应失败");
         }
@@ -534,6 +541,11 @@ mod tests {
     #[tokio::test]
     async fn all_apis_require_a_valid_account_token() {
         async fn validation(headers: HeaderMap) -> Json<Value> {
+            let timestamp = headers["x-timestamp"].to_str().unwrap().parse().unwrap();
+            assert_eq!(
+                headers["x-signature"],
+                app_signature("nipaplayv1", timestamp, "/api/v2/playhistory", "secret")
+            );
             if headers.get(header::AUTHORIZATION)
                 == Some(&HeaderValue::from_static("Bearer valid-token"))
             {
@@ -560,16 +572,18 @@ mod tests {
 
         let mut config = config("secret");
         config.upstream_base = format!("http://{upstream_addr}");
-        let upstream = DandanplayUpstream::new(UpstreamConfig {
-            base_url: config.upstream_base.clone(),
-            app_id: config.app_id.clone(),
-            app_secret: config.app_secret.clone(),
-            user_agent: config.user_agent.clone(),
-        })
-        .unwrap();
+        let upstream = DandanplayUpstream::with_client(
+            UpstreamConfig {
+                base_url: config.upstream_base.clone(),
+                app_id: config.app_id.clone(),
+                app_secret: config.app_secret.clone(),
+                user_agent: config.user_agent.clone(),
+            },
+            reqwest::Client::builder().no_proxy().build().unwrap(),
+        );
         let state = AppState {
             config: Arc::new(config),
-            client: reqwest::Client::new(),
+            client: reqwest::Client::builder().no_proxy().build().unwrap(),
             limiter: RateLimiter::new(),
             upstream,
         };
@@ -584,7 +598,7 @@ mod tests {
             .unwrap();
         });
 
-        let client = reqwest::Client::new();
+        let client = reqwest::Client::builder().no_proxy().build().unwrap();
         let url = format!("http://{gateway_addr}/api/v2/match");
         let anonymous = client.post(&url).json(&json!({})).send().await.unwrap();
         assert_eq!(anonymous.status(), StatusCode::UNAUTHORIZED);
@@ -697,5 +711,377 @@ mod tests {
 
         gateway_task.abort();
         upstream_task.abort();
+    }
+
+    type CapturedRequest = (String, HeaderMap, Vec<u8>);
+
+    struct Harness {
+        url: String,
+        client: reqwest::Client,
+        calls: Arc<std::sync::Mutex<Vec<CapturedRequest>>>,
+        tasks: Vec<tokio::task::JoinHandle<()>>,
+    }
+
+    impl Drop for Harness {
+        fn drop(&mut self) {
+            for task in &self.tasks {
+                task.abort();
+            }
+        }
+    }
+
+    async fn harness(configure: impl FnOnce(&mut Config)) -> Harness {
+        let calls = Arc::new(std::sync::Mutex::new(Vec::new()));
+        let captured = calls.clone();
+        let upstream = Router::new().fallback(any(move |request: Request| {
+            let captured = captured.clone();
+            async move {
+                let (parts, body) = request.into_parts();
+                let body = to_bytes(body, 4096).await.unwrap().to_vec();
+                let token = bearer_token(&parts.headers).unwrap_or("").to_owned();
+                let validation = parts.uri.path() == "/api/v2/playhistory";
+                captured
+                    .lock()
+                    .unwrap()
+                    .push((parts.uri.to_string(), parts.headers, body));
+                if validation {
+                    return match token.as_str() {
+                        "test-401" => StatusCode::UNAUTHORIZED.into_response(),
+                        "test-403" => StatusCode::FORBIDDEN.into_response(),
+                        "test-500" => StatusCode::INTERNAL_SERVER_ERROR.into_response(),
+                        "test-json-error" => "not-json".into_response(),
+                        "test-false" => Json(json!({"success":false})).into_response(),
+                        _ => Json(json!({"success":true})).into_response(),
+                    };
+                }
+                if token == "test-slow" {
+                    tokio::time::sleep(Duration::from_millis(250)).await;
+                }
+                Response::builder()
+                    .status(StatusCode::CREATED)
+                    .header("content-type", "application/json")
+                    .header("etag", "test-etag")
+                    .header("last-modified", "Wed, 01 Jan 2025 00:00:00 GMT")
+                    .header("location", "/next")
+                    .header("allow", "GET, POST")
+                    .header("www-authenticate", "Bearer")
+                    .header("x-error-message", "test-error")
+                    .header("set-cookie", "test-cookie=should-not-pass")
+                    .header("x-upstream-private", "should-not-pass")
+                    .body(Body::from("{\"success\":true}"))
+                    .unwrap()
+            }
+        }));
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let address = listener.local_addr().unwrap();
+        let upstream_task = tokio::spawn(async move {
+            axum::serve(listener, upstream).await.unwrap();
+        });
+        let mut config = config("secret");
+        config.upstream_base = format!("http://{address}");
+        configure(&mut config);
+        let upstream = DandanplayUpstream::with_client(
+            UpstreamConfig {
+                base_url: config.upstream_base.clone(),
+                app_id: config.app_id.clone(),
+                app_secret: config.app_secret.clone(),
+                user_agent: config.user_agent.clone(),
+            },
+            reqwest::Client::builder()
+                .no_proxy()
+                .redirect(Policy::none())
+                .build()
+                .unwrap(),
+        );
+        let state = AppState {
+            config: Arc::new(config),
+            client: reqwest::Client::builder()
+                .no_proxy()
+                .redirect(Policy::none())
+                .timeout(Duration::from_millis(100))
+                .build()
+                .unwrap(),
+            limiter: RateLimiter::new(),
+            upstream,
+        };
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let address = listener.local_addr().unwrap();
+        let gateway_task = tokio::spawn(async move {
+            axum::serve(
+                listener,
+                app_router(state).into_make_service_with_connect_info::<SocketAddr>(),
+            )
+            .await
+            .unwrap();
+        });
+        Harness {
+            url: format!("http://{address}"),
+            calls,
+            client: reqwest::Client::builder()
+                .no_proxy()
+                .redirect(Policy::none())
+                .build()
+                .unwrap(),
+            tasks: vec![upstream_task, gateway_task],
+        }
+    }
+
+    #[tokio::test]
+    async fn validation_statuses_and_cache_match_the_original_gateway() {
+        let harness = harness(|_| {}).await;
+        for (token, expected, expected_calls) in [
+            ("test-valid", StatusCode::CREATED, 3),
+            ("test-401", StatusCode::UNAUTHORIZED, 1),
+            ("test-403", StatusCode::UNAUTHORIZED, 1),
+            ("test-false", StatusCode::UNAUTHORIZED, 1),
+            ("test-500", StatusCode::SERVICE_UNAVAILABLE, 2),
+            ("test-json-error", StatusCode::SERVICE_UNAVAILABLE, 2),
+        ] {
+            let before = harness.calls.lock().unwrap().len();
+            for _ in 0..2 {
+                let response = harness
+                    .client
+                    .get(format!("{}/api/v2/bangumi/42", harness.url))
+                    .bearer_auth(token)
+                    .send()
+                    .await
+                    .unwrap();
+                assert_eq!(response.status(), expected, "{token}");
+                assert_eq!(response.headers()["x-nipaplay-gateway"], "rust");
+                if expected != StatusCode::CREATED {
+                    let body: Value = response.json().await.unwrap();
+                    assert_eq!(body["errorCode"], expected.as_u16());
+                    assert_eq!(body["success"], false);
+                }
+            }
+            assert_eq!(
+                harness.calls.lock().unwrap().len() - before,
+                expected_calls,
+                "{token}"
+            );
+        }
+    }
+
+    #[tokio::test]
+    async fn request_signature_headers_query_body_and_response_headers_are_preserved() {
+        let harness = harness(|_| {}).await;
+        let body = b"{\"fileName\":\"test.mkv\"}";
+        let response = harness
+            .client
+            .post(format!("{}/api/v2/match?extra=one", harness.url))
+            .bearer_auth("test-valid")
+            .header("accept", "application/test")
+            .header("content-type", "application/json")
+            .header("x-signature", "client-forged")
+            .header("x-appid", "client-forged")
+            .header("x-private", "must-not-pass")
+            .body(body.to_vec())
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::CREATED);
+        for (header, expected) in [
+            ("content-type", "application/json"),
+            ("etag", "test-etag"),
+            ("last-modified", "Wed, 01 Jan 2025 00:00:00 GMT"),
+            ("location", "/next"),
+            ("allow", "GET, POST"),
+            ("www-authenticate", "Bearer"),
+            ("x-error-message", "test-error"),
+            ("cache-control", "private, no-store"),
+            ("x-nipaplay-gateway", "rust"),
+        ] {
+            assert_eq!(response.headers()[header], expected);
+        }
+        assert!(!response.headers().contains_key("set-cookie"));
+        assert!(!response.headers().contains_key("x-upstream-private"));
+        assert_eq!(response.text().await.unwrap(), "{\"success\":true}");
+        let calls = harness.calls.lock().unwrap();
+        assert_eq!(
+            calls[0].0,
+            "/api/v2/playhistory?withRelatedBangumi=false&pageIndex=0&pageSize=1"
+        );
+        assert_eq!(calls[1].0, "/api/v2/match?extra=one");
+        assert_eq!(calls[1].2, body);
+        for (path, headers, _) in calls.iter() {
+            let timestamp = headers["x-timestamp"].to_str().unwrap().parse().unwrap();
+            assert_eq!(
+                headers["x-signature"],
+                app_signature(
+                    "nipaplayv1",
+                    timestamp,
+                    path.split('?').next().unwrap(),
+                    "secret"
+                )
+            );
+            assert_eq!(headers["x-appid"], "nipaplayv1");
+            assert_eq!(headers["user-agent"], "NipaPlay/1.0");
+            assert_eq!(headers["authorization"], "Bearer test-valid");
+            assert!(!headers.contains_key("x-private"));
+        }
+    }
+
+    #[tokio::test]
+    async fn web_tokens_and_renewal_bypass_only_the_original_validation_rules() {
+        let harness = harness(|_| {}).await;
+        for path in [
+            "/api/v2/oauth/deleteAccount",
+            "/api/v2/oauthprovider/bangumi/manage",
+        ] {
+            let response = harness
+                .client
+                .get(format!("{}{path}?webToken=test-web-token", harness.url))
+                .send()
+                .await
+                .unwrap();
+            assert_eq!(response.status(), StatusCode::CREATED);
+            assert_eq!(
+                harness
+                    .client
+                    .get(format!("{}{path}", harness.url))
+                    .send()
+                    .await
+                    .unwrap()
+                    .status(),
+                StatusCode::UNAUTHORIZED
+            );
+        }
+        for method in [Method::GET, Method::POST] {
+            let response = harness
+                .client
+                .request(method, format!("{}/api/v2/login/renew", harness.url))
+                .bearer_auth("test-false")
+                .send()
+                .await
+                .unwrap();
+            assert_eq!(response.status(), StatusCode::CREATED);
+        }
+        assert!(harness
+            .calls
+            .lock()
+            .unwrap()
+            .iter()
+            .all(|(path, _, _)| !path.starts_with("/api/v2/playhistory")));
+    }
+
+    #[tokio::test]
+    async fn rate_limits_apply_atomically_before_validation_and_use_original_keys() {
+        for kind in ["account", "ip", "global"] {
+            let harness = harness(|config| match kind {
+                "account" => config.account_requests_per_minute = 1,
+                "ip" => config.ip_requests_per_minute = 1,
+                _ => config.global_requests_per_minute = 1,
+            })
+            .await;
+            let first = harness
+                .client
+                .get(format!("{}/api/v2/bangumi/42", harness.url))
+                .bearer_auth("test-a")
+                .header("x-real-ip", "203.0.113.1")
+                .send()
+                .await
+                .unwrap();
+            assert_eq!(first.status(), StatusCode::CREATED);
+            let second = harness
+                .client
+                .get(format!("{}/api/v2/bangumi/43", harness.url))
+                .bearer_auth(if kind == "account" {
+                    "test-a"
+                } else {
+                    "test-b"
+                })
+                .header(
+                    "x-real-ip",
+                    if kind == "global" {
+                        "203.0.113.2"
+                    } else {
+                        "203.0.113.1"
+                    },
+                )
+                .send()
+                .await
+                .unwrap();
+            assert_eq!(second.status(), StatusCode::TOO_MANY_REQUESTS, "{kind}");
+            assert_eq!(harness.calls.lock().unwrap().len(), 2);
+        }
+    }
+
+    #[tokio::test]
+    async fn unknown_routes_body_errors_and_timeout_keep_original_statuses() {
+        let harness = harness(|config| config.allow_unknown_api_v2 = false).await;
+        assert_eq!(
+            harness
+                .client
+                .get(format!("{}/api/v2/future", harness.url))
+                .bearer_auth("test-valid")
+                .send()
+                .await
+                .unwrap()
+                .status(),
+            StatusCode::NOT_FOUND
+        );
+        assert_eq!(
+            harness
+                .client
+                .get(format!("{}/outside", harness.url))
+                .send()
+                .await
+                .unwrap()
+                .status(),
+            StatusCode::NOT_FOUND
+        );
+        assert!(harness.calls.lock().unwrap().is_empty());
+        for (body, status) in [
+            ("invalid".to_owned(), StatusCode::BAD_REQUEST),
+            ("x".repeat(1025), StatusCode::PAYLOAD_TOO_LARGE),
+        ] {
+            let response = harness
+                .client
+                .post(format!("{}/api/v2/login", harness.url))
+                .header("content-type", "application/json")
+                .body(body)
+                .send()
+                .await
+                .unwrap();
+            assert_eq!(response.status(), status);
+        }
+        let response = harness
+            .client
+            .get(format!("{}/api/v2/login/renew", harness.url))
+            .bearer_auth("test-slow")
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::GATEWAY_TIMEOUT);
+    }
+
+    #[test]
+    fn registration_hash_and_web_token_decoding_match_original_rules() {
+        let config = config("secret");
+        let body = br#"{"userName":"alice","password":"pw","email":"a@example.test","screenName":"Alice","appId":"forged","hash":"forged"}"#;
+        let value: Value = serde_json::from_slice(
+            &rewrite_account_body("/api/v2/register", body, &config, 123).unwrap(),
+        )
+        .unwrap();
+        assert_eq!(
+            value["hash"],
+            format!(
+                "{:x}",
+                md5::compute(b"nipaplayv1a@example.testpwAlice123alicesecret")
+            )
+        );
+        assert_eq!(value["appId"], "nipaplayv1");
+        assert_eq!(
+            account_page_web_token("/api/v2/oauth/deleteAccount", Some("webToken=test%2Btoken")),
+            Some("test+token".to_owned())
+        );
+        assert_eq!(
+            account_page_web_token("/api/v2/oauth/deleteAccount", Some("webToken=")),
+            None
+        );
+        assert_eq!(
+            account_page_web_token("/api/v2/match", Some("webToken=test-token")),
+            None
+        );
     }
 }

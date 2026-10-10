@@ -39,6 +39,17 @@ impl AccountResolver {
         }
     }
 
+    pub fn known_account(&self, identity: &str) -> Option<String> {
+        let cache = self
+            .cache
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        match cache.get(identity) {
+            Some(CachedAccount::Valid { account_id, .. }) => Some(account_id.clone()),
+            _ => None,
+        }
+    }
+
     /// Verifies a bearer token and returns the upstream account id.
     ///
     /// A token must both pass the read-only validation endpoint and yield a
@@ -68,19 +79,21 @@ impl AccountResolver {
             ));
         }
 
-        let account = self
-            .upstream
-            .resolve_account(token)
-            .await
-            .map_err(|error| match error {
-                AccountLookupError::InvalidToken => {
-                    ApiError::new(ErrorCode::InvalidToken, "弹弹play 登录已失效，请重新登录")
-                }
-                AccountLookupError::Transport(message) => ApiError::new(
-                    ErrorCode::UpstreamUnavailable,
-                    format!("无法获取账号身份：{message}"),
-                ),
-            })?;
+        let account = match self.upstream.resolve_account(token).await {
+            Ok(account) => account,
+            Err(error) => {
+                return Err(match error {
+                    AccountLookupError::InvalidToken => {
+                        self.store_invalid(identity);
+                        ApiError::new(ErrorCode::InvalidToken, "弹弹play 登录已失效，请重新登录")
+                    }
+                    AccountLookupError::Transport(message) => ApiError::new(
+                        ErrorCode::UpstreamUnavailable,
+                        format!("无法获取账号身份：{message}"),
+                    ),
+                })
+            }
+        };
 
         self.store_valid(identity, account.account_id.clone());
         Ok(account.account_id)
@@ -113,6 +126,10 @@ impl AccountResolver {
             .cache
             .lock()
             .unwrap_or_else(|poisoned| poisoned.into_inner());
+        prune(&mut cache);
+        if cache.len() >= 50_000 {
+            return;
+        }
         cache.insert(
             identity.to_owned(),
             CachedAccount::Valid {
@@ -127,11 +144,26 @@ impl AccountResolver {
             .cache
             .lock()
             .unwrap_or_else(|poisoned| poisoned.into_inner());
+        prune(&mut cache);
+        if cache.len() >= 50_000 {
+            return;
+        }
         cache.insert(
             identity.to_owned(),
             CachedAccount::Invalid {
                 expires_at: Instant::now() + INVALID_TTL,
             },
         );
+    }
+}
+
+fn prune(cache: &mut HashMap<String, CachedAccount>) {
+    if cache.len() >= 50_000 {
+        let now = Instant::now();
+        cache.retain(|_, entry| match entry {
+            CachedAccount::Valid { expires_at, .. } | CachedAccount::Invalid { expires_at } => {
+                *expires_at > now
+            }
+        });
     }
 }

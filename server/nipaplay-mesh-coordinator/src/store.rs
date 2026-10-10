@@ -9,7 +9,30 @@ use std::{
     sync::{Arc, Mutex},
 };
 
-use rusqlite::{params, Connection, OptionalExtension};
+use rusqlite::{params, Connection, OptionalExtension, TransactionBehavior};
+
+use crate::error::{ApiError, ErrorCode};
+
+impl From<rusqlite::Error> for ApiError {
+    fn from(_: rusqlite::Error) -> Self {
+        ApiError::internal("数据库操作失败")
+    }
+}
+
+fn require_active(conn: &Connection, account_id: &str, device_id: &str) -> Result<(), ApiError> {
+    let revoked: Option<Option<i64>> = conn
+        .query_row(
+            "SELECT revoked_at FROM devices WHERE account_id = ?1 AND device_id = ?2",
+            params![account_id, device_id],
+            |row| row.get(0),
+        )
+        .optional()?;
+    match revoked {
+        Some(None) => Ok(()),
+        Some(Some(_)) => Err(ApiError::new(ErrorCode::DeviceRevoked, "设备已被吊销")),
+        None => Err(ApiError::new(ErrorCode::DeviceNotFound, "设备未注册")),
+    }
+}
 
 #[derive(Clone)]
 pub struct Store {
@@ -134,9 +157,24 @@ impl Store {
     }
 
     /// Records a device and its freshly issued certificate in one transaction.
-    pub fn upsert_device(&self, device: DeviceUpsert<'_>) -> Result<(), String> {
+    pub fn upsert_device(&self, device: DeviceUpsert<'_>) -> Result<(), ApiError> {
         let mut conn = self.lock();
-        let tx = conn.transaction().map_err(|error| error.to_string())?;
+        let tx = conn.transaction_with_behavior(TransactionBehavior::Immediate)?;
+        let existing: Option<(String, Vec<u8>, Option<i64>)> = tx
+            .query_row(
+                "SELECT account_id, public_key, revoked_at FROM devices WHERE device_id = ?1",
+                params![device.device_id],
+                |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+            )
+            .optional()?;
+        if let Some((account, key, revoked)) = existing {
+            if account != device.account_id || key != device.public_key {
+                return Err(ApiError::new(ErrorCode::DeviceConflict, "设备身份冲突"));
+            }
+            if revoked.is_some() {
+                return Err(ApiError::new(ErrorCode::DeviceRevoked, "设备已被吊销"));
+            }
+        }
         tx.execute(
             r#"
             INSERT INTO devices
@@ -159,36 +197,36 @@ impl Store {
                 device.app_version,
                 device.now
             ],
-        )
-        .map_err(|error| error.to_string())?;
+        )?;
         tx.execute(
             "INSERT INTO certificates (device_id, issued_at, expires_at) VALUES (?1, ?2, ?3)",
             params![device.device_id, device.now, device.cert_expires_at],
-        )
-        .map_err(|error| error.to_string())?;
-        tx.commit().map_err(|error| error.to_string())
+        )?;
+        tx.commit()?;
+        Ok(())
     }
 
     /// Records a renewed certificate without touching device metadata.
     pub fn record_renewal(
         &self,
+        account_id: &str,
         device_id: &str,
         now: i64,
         cert_expires_at: i64,
-    ) -> Result<(), String> {
+    ) -> Result<(), ApiError> {
         let mut conn = self.lock();
-        let tx = conn.transaction().map_err(|error| error.to_string())?;
+        let tx = conn.transaction_with_behavior(TransactionBehavior::Immediate)?;
+        require_active(&tx, account_id, device_id)?;
         tx.execute(
             "UPDATE devices SET last_seen_at = ?2 WHERE device_id = ?1",
             params![device_id, now],
-        )
-        .map_err(|error| error.to_string())?;
+        )?;
         tx.execute(
             "INSERT INTO certificates (device_id, issued_at, expires_at) VALUES (?1, ?2, ?3)",
             params![device_id, now, cert_expires_at],
-        )
-        .map_err(|error| error.to_string())?;
-        tx.commit().map_err(|error| error.to_string())
+        )?;
+        tx.commit()?;
+        Ok(())
     }
 
     pub fn device(&self, device_id: &str) -> Result<Option<DeviceRecord>, String> {
@@ -204,76 +242,94 @@ impl Store {
             .map_err(|error| error.to_string())
     }
 
+    #[cfg(test)]
     pub fn list_devices(&self, account_id: &str) -> Result<Vec<DeviceRecord>, String> {
         let conn = self.lock();
-        let mut statement = conn
-            .prepare(
-                r#"SELECT account_id, device_id, public_key, name, platform,
-                          created_at, last_seen_at, revoked_at
-                   FROM devices WHERE account_id = ?1 ORDER BY created_at"#,
-            )
-            .map_err(|error| error.to_string())?;
-        let rows = statement
-            .query_map(params![account_id], row_to_device)
-            .map_err(|error| error.to_string())?;
-        rows.collect::<Result<Vec<_>, _>>()
-            .map_err(|error| error.to_string())
+        list_devices_at(&conn, account_id).map_err(|error| error.to_string())
+    }
+
+    pub fn device_snapshot(&self, account_id: &str) -> Result<(Vec<DeviceRecord>, i64), ApiError> {
+        let mut conn = self.lock();
+        let tx = conn.transaction()?;
+        let devices = list_devices_at(&tx, account_id)?;
+        let epoch = tx.query_row(
+            "SELECT COALESCE((SELECT revocation_epoch FROM accounts WHERE account_id = ?1), 0)",
+            params![account_id],
+            |row| row.get(0),
+        )?;
+        tx.commit()?;
+        Ok((devices, epoch))
     }
 
     /// Marks a device revoked, bumps its account's revocation epoch, and drops
     /// the device's address candidates, all in one transaction.
-    pub fn revoke_device(&self, device_id: &str, now: i64) -> Result<i64, String> {
+    pub fn revoke_device(
+        &self,
+        account_id: &str,
+        device_id: &str,
+        now: i64,
+    ) -> Result<i64, ApiError> {
         let mut conn = self.lock();
-        let tx = conn.transaction().map_err(|error| error.to_string())?;
-        let account_id: String = tx
-            .query_row(
-                "SELECT account_id FROM devices WHERE device_id = ?1",
-                params![device_id],
-                |row| row.get(0),
-            )
-            .map_err(|error| error.to_string())?;
+        let tx = conn.transaction_with_behavior(TransactionBehavior::Immediate)?;
+        let belongs: bool = tx.query_row(
+            "SELECT EXISTS(SELECT 1 FROM devices WHERE account_id = ?1 AND device_id = ?2)",
+            params![account_id, device_id],
+            |row| row.get(0),
+        )?;
+        if !belongs {
+            return Err(ApiError::new(ErrorCode::DeviceNotFound, "设备未注册"));
+        }
         tx.execute(
             "UPDATE devices SET revoked_at = ?2 WHERE device_id = ?1 AND revoked_at IS NULL",
             params![device_id, now],
-        )
-        .map_err(|error| error.to_string())?;
+        )?;
         tx.execute(
             "DELETE FROM addresses WHERE device_id = ?1",
             params![device_id],
-        )
-        .map_err(|error| error.to_string())?;
+        )?;
         tx.execute(
             r#"INSERT INTO accounts (account_id, revocation_epoch) VALUES (?1, 1)
-               ON CONFLICT(account_id) DO UPDATE
-                   SET revocation_epoch = revocation_epoch + 1"#,
+               ON CONFLICT(account_id) DO UPDATE SET revocation_epoch = revocation_epoch + 1"#,
             params![account_id],
-        )
-        .map_err(|error| error.to_string())?;
-        let epoch: i64 = tx
-            .query_row(
-                "SELECT revocation_epoch FROM accounts WHERE account_id = ?1",
-                params![account_id],
-                |row| row.get(0),
-            )
-            .map_err(|error| error.to_string())?;
-        tx.commit().map_err(|error| error.to_string())?;
+        )?;
+        let epoch = tx.query_row(
+            "SELECT revocation_epoch FROM accounts WHERE account_id = ?1",
+            params![account_id],
+            |row| row.get(0),
+        )?;
+        tx.commit()?;
         Ok(epoch)
+    }
+
+    pub fn address_snapshot(
+        &self,
+        account_id: &str,
+        device_id: &str,
+        now: i64,
+    ) -> Result<Vec<AddressRecord>, ApiError> {
+        let mut conn = self.lock();
+        let tx = conn.transaction()?;
+        require_active(&tx, account_id, device_id)?;
+        let records = addresses_at(&tx, device_id, now)?;
+        tx.commit()?;
+        Ok(records)
     }
 
     /// Replaces the stored address candidates for a device.
     pub fn replace_addresses(
         &self,
+        account_id: &str,
         device_id: &str,
         addresses: &[AddressRecord],
         now: i64,
-    ) -> Result<(), String> {
+    ) -> Result<(), ApiError> {
         let mut conn = self.lock();
-        let tx = conn.transaction().map_err(|error| error.to_string())?;
+        let tx = conn.transaction_with_behavior(TransactionBehavior::Immediate)?;
+        require_active(&tx, account_id, device_id)?;
         tx.execute(
             "DELETE FROM addresses WHERE device_id = ?1",
             params![device_id],
-        )
-        .map_err(|error| error.to_string())?;
+        )?;
         for address in addresses {
             tx.execute(
                 r#"INSERT INTO addresses
@@ -288,41 +344,19 @@ impl Store {
                     address.expires_at,
                     now
                 ],
-            )
-            .map_err(|error| error.to_string())?;
+            )?;
         }
         tx.execute(
             "UPDATE devices SET last_seen_at = ?2 WHERE device_id = ?1",
             params![device_id, now],
-        )
-        .map_err(|error| error.to_string())?;
-        tx.commit().map_err(|error| error.to_string())
+        )?;
+        tx.commit()?;
+        Ok(())
     }
 
+    #[cfg(test)]
     pub fn addresses(&self, device_id: &str, now: i64) -> Result<Vec<AddressRecord>, String> {
-        let conn = self.lock();
-        let mut statement = conn
-            .prepare(
-                r#"SELECT kind, host, port, priority, expires_at, updated_at
-                   FROM addresses
-                   WHERE device_id = ?1 AND expires_at > ?2
-                   ORDER BY priority DESC, updated_at DESC"#,
-            )
-            .map_err(|error| error.to_string())?;
-        let rows = statement
-            .query_map(params![device_id, now], |row| {
-                Ok(AddressRecord {
-                    kind: row.get(0)?,
-                    host: row.get(1)?,
-                    port: row.get(2)?,
-                    priority: row.get(3)?,
-                    expires_at: row.get(4)?,
-                    updated_at: row.get(5)?,
-                })
-            })
-            .map_err(|error| error.to_string())?;
-        rows.collect::<Result<Vec<_>, _>>()
-            .map_err(|error| error.to_string())
+        addresses_at(&self.lock(), device_id, now).map_err(|error| error.to_string())
     }
 
     /// Deletes address rows that have expired.
@@ -331,6 +365,40 @@ impl Store {
             .execute("DELETE FROM addresses WHERE expires_at <= ?1", params![now])
             .map_err(|error| error.to_string())
     }
+}
+
+fn list_devices_at(conn: &Connection, account_id: &str) -> rusqlite::Result<Vec<DeviceRecord>> {
+    let mut statement = conn.prepare(
+        r#"SELECT account_id, device_id, public_key, name, platform,
+                          created_at, last_seen_at, revoked_at
+                   FROM devices WHERE account_id = ?1 ORDER BY created_at"#,
+    )?;
+    let rows = statement.query_map(params![account_id], row_to_device)?;
+    rows.collect()
+}
+
+fn addresses_at(
+    conn: &Connection,
+    device_id: &str,
+    now: i64,
+) -> rusqlite::Result<Vec<AddressRecord>> {
+    let mut statement = conn.prepare(
+        r#"SELECT kind, host, port, priority, expires_at, updated_at
+                   FROM addresses
+                   WHERE device_id = ?1 AND expires_at > ?2
+                   ORDER BY priority DESC, updated_at DESC"#,
+    )?;
+    let rows = statement.query_map(params![device_id, now], |row| {
+        Ok(AddressRecord {
+            kind: row.get(0)?,
+            host: row.get(1)?,
+            port: row.get(2)?,
+            priority: row.get(3)?,
+            expires_at: row.get(4)?,
+            updated_at: row.get(5)?,
+        })
+    })?;
+    rows.collect()
 }
 
 fn row_to_device(row: &rusqlite::Row<'_>) -> rusqlite::Result<DeviceRecord> {
@@ -429,12 +497,12 @@ mod tests {
         }
         assert_eq!(store.revocation_epoch("acct-1").unwrap(), 0);
         assert_eq!(store.revocation_epoch("acct-2").unwrap(), 0);
-        assert_eq!(store.revoke_device("dev-1", 10).unwrap(), 1);
+        assert_eq!(store.revoke_device("acct-1", "dev-1", 10).unwrap(), 1);
         assert_eq!(store.revocation_epoch("acct-1").unwrap(), 1);
         assert_eq!(store.revocation_epoch("acct-2").unwrap(), 0);
         assert!(store.device("dev-1").unwrap().unwrap().revoked_at.is_some());
         // Re-revoking is a no-op for state but still advances the epoch.
-        assert_eq!(store.revoke_device("dev-1", 11).unwrap(), 2);
+        assert_eq!(store.revoke_device("acct-1", "dev-1", 11).unwrap(), 2);
     }
 
     #[test]
@@ -454,6 +522,7 @@ mod tests {
             .unwrap();
         store
             .replace_addresses(
+                "acct-1",
                 "dev-1",
                 &[AddressRecord {
                     kind: "lan".to_owned(),
@@ -468,7 +537,7 @@ mod tests {
             .unwrap();
         assert_eq!(store.addresses("dev-1", 50).unwrap().len(), 1);
 
-        store.revoke_device("dev-1", 20).unwrap();
+        store.revoke_device("acct-1", "dev-1", 20).unwrap();
         assert!(store.addresses("dev-1", 50).unwrap().is_empty());
     }
 
@@ -489,6 +558,7 @@ mod tests {
             .unwrap();
         store
             .replace_addresses(
+                "acct-1",
                 "dev-1",
                 &[AddressRecord {
                     kind: "lan".to_owned(),
@@ -504,7 +574,173 @@ mod tests {
         assert_eq!(store.addresses("dev-1", 50).unwrap().len(), 1);
         assert!(store.addresses("dev-1", 200).unwrap().is_empty());
 
-        store.replace_addresses("dev-1", &[], 5).unwrap();
+        store.replace_addresses("acct-1", "dev-1", &[], 5).unwrap();
         assert!(store.addresses("dev-1", 50).unwrap().is_empty());
+    }
+
+    fn fixture_device<'a>(account: &'a str) -> DeviceUpsert<'a> {
+        DeviceUpsert {
+            account_id: account,
+            device_id: "dev-shared",
+            public_key: &[9; 32],
+            name: "Mac",
+            platform: "macos",
+            app_version: "1",
+            now: 100,
+            cert_expires_at: 200,
+        }
+    }
+
+    fn fixture_address(host: &str) -> AddressRecord {
+        AddressRecord {
+            kind: "lan".to_owned(),
+            host: host.to_owned(),
+            port: 1180,
+            priority: 1,
+            expires_at: 300,
+            updated_at: 100,
+        }
+    }
+
+    #[test]
+    fn simultaneous_registration_cannot_issue_for_two_accounts() {
+        let store = store();
+        let barrier = Arc::new(std::sync::Barrier::new(2));
+        let threads: Vec<_> = ["account-a", "account-b"]
+            .into_iter()
+            .map(|account| {
+                let store = store.clone();
+                let barrier = barrier.clone();
+                std::thread::spawn(move || {
+                    assert!(store.device("dev-shared").unwrap().is_none());
+                    barrier.wait();
+                    store.upsert_device(fixture_device(account))
+                })
+            })
+            .collect();
+        let results: Vec<_> = threads
+            .into_iter()
+            .map(|thread| thread.join().unwrap())
+            .collect();
+        assert_eq!(results.iter().filter(|result| result.is_ok()).count(), 1);
+        assert_eq!(
+            results
+                .iter()
+                .find_map(|result| result.as_ref().err())
+                .unwrap()
+                .code,
+            ErrorCode::DeviceConflict
+        );
+        let count: i64 = store
+            .lock()
+            .query_row("SELECT COUNT(*) FROM certificates", [], |row| row.get(0))
+            .unwrap();
+        assert_eq!(count, 1);
+    }
+
+    #[test]
+    fn a_stale_precheck_cannot_write_after_revocation() {
+        let store = store();
+        store.upsert_device(fixture_device("account-a")).unwrap();
+        let stale = store.device("dev-shared").unwrap().unwrap();
+        assert!(stale.revoked_at.is_none());
+        store.revoke_device("account-a", "dev-shared", 110).unwrap();
+        assert_eq!(
+            store
+                .record_renewal(&stale.account_id, &stale.device_id, 120, 220)
+                .unwrap_err()
+                .code,
+            ErrorCode::DeviceRevoked
+        );
+        assert_eq!(
+            store
+                .replace_addresses(
+                    &stale.account_id,
+                    &stale.device_id,
+                    &[fixture_address("192.168.1.1")],
+                    120
+                )
+                .unwrap_err()
+                .code,
+            ErrorCode::DeviceRevoked
+        );
+        assert_eq!(
+            store
+                .upsert_device(fixture_device("account-a"))
+                .unwrap_err()
+                .code,
+            ErrorCode::DeviceRevoked
+        );
+        assert_eq!(
+            store
+                .address_snapshot("account-a", "dev-shared", 120)
+                .unwrap_err()
+                .code,
+            ErrorCode::DeviceRevoked
+        );
+        assert!(store.addresses("dev-shared", 120).unwrap().is_empty());
+        let count: i64 = store
+            .lock()
+            .query_row("SELECT COUNT(*) FROM certificates", [], |row| row.get(0))
+            .unwrap();
+        assert_eq!(count, 1);
+    }
+
+    #[test]
+    fn concurrent_report_and_revoke_leave_no_addresses_and_consistent_snapshot() {
+        let store = store();
+        store.upsert_device(fixture_device("account-a")).unwrap();
+        let barrier = Arc::new(std::sync::Barrier::new(2));
+        let report = {
+            let store = store.clone();
+            let barrier = barrier.clone();
+            std::thread::spawn(move || {
+                barrier.wait();
+                store.replace_addresses(
+                    "account-a",
+                    "dev-shared",
+                    &[fixture_address("192.168.1.1")],
+                    110,
+                )
+            })
+        };
+        barrier.wait();
+        store.revoke_device("account-a", "dev-shared", 110).unwrap();
+        if let Err(error) = report.join().unwrap() {
+            assert_eq!(error.code, ErrorCode::DeviceRevoked);
+        }
+        assert!(store.addresses("dev-shared", 120).unwrap().is_empty());
+        let (devices, epoch) = store.device_snapshot("account-a").unwrap();
+        assert_eq!(epoch, 1);
+        assert!(devices[0].revoked_at.is_some());
+    }
+
+    #[test]
+    fn failed_replacement_rolls_back_and_sql_metacharacters_remain_data() {
+        let store = store();
+        let account = "'; DROP TABLE devices; --";
+        store.upsert_device(fixture_device(account)).unwrap();
+        let address = fixture_address("192.168.1.1");
+        store
+            .replace_addresses(account, "dev-shared", std::slice::from_ref(&address), 110)
+            .unwrap();
+        assert!(store
+            .replace_addresses(account, "dev-shared", &[address.clone(), address], 120)
+            .is_err());
+        let records = store.addresses("dev-shared", 120).unwrap();
+        assert_eq!(records.len(), 1);
+        assert_eq!(records[0].updated_at, 110);
+        assert_eq!(store.list_devices(account).unwrap().len(), 1);
+        assert_eq!(
+            store.device("dev-shared").unwrap().unwrap().last_seen_at,
+            110
+        );
+        assert_eq!(
+            store
+                .revoke_device("other-account", "dev-shared", 130)
+                .unwrap_err()
+                .code,
+            ErrorCode::DeviceNotFound
+        );
     }
 }
