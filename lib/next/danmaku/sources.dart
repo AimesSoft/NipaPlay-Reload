@@ -229,7 +229,8 @@ final class BilibiliDanmakuSource extends _Source {
   JsonMap data(JsonMap root) {
     final code = integer(root['code']);
     if (code == -101) {
-      throw const SourceFailure(SourceStatus.authenticationRequired);
+      throw const SourceFailure(SourceStatus.authenticationRequired,
+          diagnostics: platformSessionLoginHint);
     }
     if (code == -403) throw const SourceFailure(SourceStatus.accessDenied);
     if (code == -412) throw const SourceFailure(SourceStatus.rateLimited);
@@ -537,14 +538,16 @@ final class YoukuDanmakuSource extends _Source {
   Future<DanmakuChunkResult> fetchChunk(DanmakuVideo video, DanmakuChunk chunk,
       DanmakuAccess? access, DanmakuCancellation cancel) async {
     if (access == null) {
-      throw const SourceFailure(SourceStatus.authenticationRequired);
+      throw const SourceFailure(SourceStatus.authenticationRequired,
+          diagnostics: platformSessionLoginHint);
     }
     final root = await requestJson('youku.minute',
         {'videoId': video.videoId, 'minute': chunk.index}, cancel, access);
     final ret = array(root['ret']).map(string).toList();
     if (!ret.any((s) => s.startsWith('SUCCESS::'))) {
       if (ret.any((s) => s.contains('TOKEN') || s.contains('SESSION'))) {
-        throw const SourceFailure(SourceStatus.authenticationRequired);
+        throw const SourceFailure(SourceStatus.authenticationRequired,
+            diagnostics: platformSessionLoginHint);
       }
       if (ret.any((s) => s.contains('LIMIT'))) {
         throw const SourceFailure(SourceStatus.rateLimited);

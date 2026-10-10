@@ -16,6 +16,8 @@ import 'source.dart';
 import 'sources.dart';
 import 'store.dart';
 import 'local_source.dart';
+import '../sessions/platform_session.dart';
+import '../sessions/youku_bridge.dart';
 
 /// Forwards track operations to the host player once the widget tree created it.
 final class _HostPlayerPort
@@ -73,12 +75,17 @@ final class DanmakuRuntime {
   Future<void> _controls = Future.value();
   static Future<DanmakuRuntime> create(IdentityStore identities,
       {YoukuSessionBridge? youkuSession,
+      PlatformSessions? sessions,
       Future<String> Function(String path)? authorizeLocalFile}) async {
     final public = http.Client(), ddp = DandanplayHttpClient();
     final host = HttpDanmakuHost(
         publicClient: public,
         dandanplay: DandanplayGateway(client: ddp),
-        youkuSession: youkuSession);
+        youkuSession: youkuSession ??
+            (sessions == null
+                ? null
+                : VaultYoukuSessionBridge(sessions, public)),
+        sessions: sessions);
     final port = _HostPlayerPort();
     DanmakuSource scoped(DanmakuSource Function(DanmakuHost) build) =>
         build(ScopedDanmakuHost(host, build(host).describe));

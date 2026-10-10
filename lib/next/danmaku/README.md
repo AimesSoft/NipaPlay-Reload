@@ -28,10 +28,15 @@
 
 优酷参考仅采用分钟计划、嵌套结果结构和属性/时间映射机制。签名应在宿主
 `YoukuSessionBridge.minute` 内完成，桥接必须校验凭据引用对应的会话、来源版本和
-获准 profile，过滤响应中的会话材料，并支持取消/限额。当前应用没有现成的优酷
-会话签名通道，默认不注入该 bridge；`sources` 如实返回 sessionAvailable=false，
-获取任务返回 authenticationRequired。没有读取浏览器、添加登录流程或读取凭据文件。
-弹弹play 沿用已有宿主账号/应用签名边界；B 站使用匿名公开接口，不请求历史弹幕。
+获准 profile，过滤响应中的会话材料，并支持取消/限额。macOS 由 NextCore 注入
+`VaultYoukuSessionBridge`：用户在「设置 → 实验室 → 平台登录」的内置 WebView
+完成登录，宿主在保险库中按平台保存会话。`sessions.status` 返回的 `accessRef`
+可作为现有弹幕 Action 的 `credentialRef`。优酷 MTOP 签名与请求都在宿主中完成，
+正常的 token 握手最多更新并重试一次；不读取浏览器 cookie 数据库或个人配置。
+未登录或被平台拒绝时返回 authenticationRequired，并指明 NipaPlay 登录入口。
+弹弹play 沿用已有宿主账号/应用签名边界；B 站匿名公开接口继续可用，登录后宿主
+向固定 B 站 profile 自动附加会话，也接受准确的宿主引用；不请求历史弹幕。
+平台登录的状态、存储与注销契约见 [平台会话](../sessions/README.md)。
 
 宿主使用固定 URI 模板，拒绝跨域重定向及额外业务参数，逐来源串行限流；HTTP
 响应最大 8 MiB，每次计划最多 120 段、两小时、100000 条。超时只取消本次 HTTP，

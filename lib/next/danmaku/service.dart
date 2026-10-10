@@ -133,8 +133,10 @@ final class DanmakuService {
     final end = endMs ?? video.durationMs;
     src.planFetch(video, startMs, end);
     if (src.describe.access == 'requiredSession' && access == null) {
-      throw const Failure(FailureCode.unavailable,
-          'authenticationRequired: this source needs a host session reference.');
+      throw const Failure(
+          FailureCode.unavailable,
+          'authenticationRequired: 在 NipaPlay「设置 → 实验室 → 平台登录」中登录（仅 macOS），'
+          '或由 ui.open_platform_login 打开；用 sessions.status 返回的 accessRef 作为 credentialRef。');
     }
     final key = stableMediaId('danmaku-fetch', [
       requestId,
@@ -220,8 +222,10 @@ final class DanmakuService {
     source(video.sourceId).planFetch(video, 0, video.durationMs);
     if (source(video.sourceId).describe.access == 'requiredSession' &&
         access == null) {
-      throw const Failure(FailureCode.unavailable,
-          'authenticationRequired: this source needs a host session reference.');
+      throw const Failure(
+          FailureCode.unavailable,
+          'authenticationRequired: 在 NipaPlay「设置 → 实验室 → 平台登录」中登录（仅 macOS），'
+          '或由 ui.open_platform_login 打开；用 sessions.status 返回的 accessRef 作为 credentialRef。');
     }
     final id = await store.attach(entityId, video, reason, url, invocation);
     final job = await fetch(video,
