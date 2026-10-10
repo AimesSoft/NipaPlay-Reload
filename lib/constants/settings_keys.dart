@@ -64,6 +64,8 @@ class SettingsKeys {
   static const String labsEnableImmersiveAnimeDetail =
       'labs_enable_immersive_anime_detail';
 
+  static const String labsEnableAgentEndpoint = 'labs_enable_agent_endpoint';
+
   static const String danmakuEnableNextPlusPlusEngine =
       'labs_enable_next_plus_plus_engine';
 

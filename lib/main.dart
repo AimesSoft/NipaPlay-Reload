@@ -58,6 +58,7 @@ import 'package:nipaplay/providers/remote_access_settings_provider.dart';
 import 'package:nipaplay/providers/jellyfin_transcode_provider.dart';
 import 'package:nipaplay/providers/emby_transcode_provider.dart';
 import 'package:nipaplay/providers/labs_settings_provider.dart';
+import 'package:nipaplay/next/next_runtime.dart';
 import 'package:nipaplay/plugins/plugin_service.dart';
 import 'package:nipaplay/src/rust/api/startup_commands.dart'
     as startup_commands;
@@ -665,6 +666,11 @@ void main(List<String> args) async {
             ChangeNotifierProvider(
               create: (_) => LargeScreenUiSfxService(),
             ),
+            if (!kIsWeb)
+              ChangeNotifierProvider(
+                lazy: false,
+                create: NextRuntime.fromContext,
+              ),
           ],
           child: DesktopMultiWindowHost(
             child: NipaPlayApp(

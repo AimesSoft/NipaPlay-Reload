@@ -16,10 +16,12 @@ class LabsSettingsProvider extends ChangeNotifier {
 
   bool _enableErikaPlayerKernel = false;
   bool _enableImmersiveAnimeDetail = false;
+  bool _enableAgentEndpoint = false;
   bool _isLoaded = false;
 
   bool get enableErikaPlayerKernel => _enableErikaPlayerKernel;
   bool get enableImmersiveAnimeDetail => _enableImmersiveAnimeDetail;
+  bool get enableAgentEndpoint => _enableAgentEndpoint;
   bool get isLoaded => _isLoaded;
 
   Future<void> _loadSettings() async {
@@ -29,6 +31,10 @@ class LabsSettingsProvider extends ChangeNotifier {
     );
     _enableImmersiveAnimeDetail = await SettingsStorage.loadBool(
       SettingsKeys.labsEnableImmersiveAnimeDetail,
+      defaultValue: false,
+    );
+    _enableAgentEndpoint = await SettingsStorage.loadBool(
+      SettingsKeys.labsEnableAgentEndpoint,
       defaultValue: false,
     );
     _isLoaded = true;
@@ -53,6 +59,17 @@ class LabsSettingsProvider extends ChangeNotifier {
     notifyListeners();
     await SettingsStorage.saveBool(
       SettingsKeys.labsEnableImmersiveAnimeDetail,
+      enabled,
+    );
+  }
+
+  Future<void> setEnableAgentEndpoint(bool enabled) async {
+    await ready;
+    if (_enableAgentEndpoint == enabled) return;
+    _enableAgentEndpoint = enabled;
+    notifyListeners();
+    await SettingsStorage.saveBool(
+      SettingsKeys.labsEnableAgentEndpoint,
       enabled,
     );
   }

@@ -2,8 +2,11 @@ import 'package:flutter/cupertino.dart' as cupertino;
 import 'package:flutter/material.dart';
 import 'package:kmbal_ionicons/kmbal_ionicons.dart';
 import 'package:nipaplay/l10n/l10n.dart';
+import 'package:nipaplay/next/agent_endpoint.dart';
+import 'package:nipaplay/next/next_runtime.dart';
 import 'package:nipaplay/player_abstraction/player_factory.dart';
 import 'package:nipaplay/providers/labs_settings_provider.dart';
+import 'package:nipaplay/services/folder_opener.dart';
 import 'package:nipaplay/settings/adaptive_settings_widgets.dart';
 import 'package:nipaplay/utils/globals.dart' as globals;
 import 'package:provider/provider.dart';
@@ -84,6 +87,62 @@ class LabsSettingsContent extends StatelessWidget {
                 ),
               ],
             ),
+            if (globals.isDesktop)
+              Consumer<NextRuntime>(
+                builder: (context, runtime, child) {
+                  final status = runtime.endpointStatus;
+                  var subtitle = _text(
+                    context,
+                    '在本机开放 MCP 接口，可在 Codex 中用对话操作 NipaPlay',
+                    '在本機開放 MCP 介面，可在 Codex 中用對話操作 NipaPlay',
+                    'Expose a local MCP endpoint to control NipaPlay through conversation in Codex.',
+                  );
+                  if (labsSettings.enableAgentEndpoint) {
+                    final statusText = switch (status) {
+                      AgentEndpointRunning(:final url, :final workspace) =>
+                        '$url\n${workspace.path}',
+                      AgentEndpointFailed(:final message) => message,
+                      AgentEndpointStopped() => _text(
+                          context,
+                          '正在启动…',
+                          '正在啟動…',
+                          'Starting…',
+                        ),
+                    };
+                    subtitle = '$subtitle\n$statusText';
+                  }
+                  return AdaptiveSettingsSection(
+                    children: [
+                      AdaptiveSettingsTile.toggle(
+                        title: _text(
+                          context,
+                          'Agent 接口（NipaPlay Next）',
+                          'Agent 介面（NipaPlay Next）',
+                          'Agent Endpoint (NipaPlay Next)',
+                        ),
+                        subtitle: subtitle,
+                        icon: Ionicons.flask_outline,
+                        phoneIcon: cupertino.CupertinoIcons.lab_flask,
+                        value: labsSettings.enableAgentEndpoint,
+                        onChanged: labsSettings.setEnableAgentEndpoint,
+                      ),
+                      if (labsSettings.enableAgentEndpoint)
+                        if (status case AgentEndpointRunning(:final workspace))
+                          AdaptiveSettingsTile.button(
+                            title: _text(
+                              context,
+                              '打开工作区文件夹',
+                              '開啟工作區資料夾',
+                              'Open Workspace Folder',
+                            ),
+                            icon: Ionicons.folder_outline,
+                            phoneIcon: cupertino.CupertinoIcons.folder,
+                            onTap: () => FolderOpener.open(workspace.path),
+                          ),
+                    ],
+                  );
+                },
+              ),
           ],
         );
       },
