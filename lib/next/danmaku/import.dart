@@ -1,9 +1,10 @@
-import 'dart:convert';
 import 'dart:io';
 import 'dart:isolate';
 
 import 'package:nipa_harness/nipa_harness.dart';
-import 'package:xml/xml.dart';
+import 'package:nipaplay/utils/danmaku_parser.dart';
+import 'package:nipaplay/utils/danmaku_xml_utils.dart';
+import 'package:nipaplay/utils/local_danmaku_file.dart';
 
 import 'source.dart';
 
@@ -11,55 +12,35 @@ Future<List<DanmakuEntry>> readImportedDanmaku(
         String path, String platform, String videoId) =>
     Isolate.run(() async {
       try {
-        final content = (await File(path).readAsString())
-            .replaceFirst(RegExp(r'^\uFEFF'), '')
-            .trimLeft();
-        final rows = <JsonMap>[];
-        if (content.startsWith('<')) {
-          final document = XmlDocument.parse(content);
-          if (document.rootElement.name.local != 'i') {
-            throw const FormatException(
-                'Expected a Bilibili-standard XML pool with an i root.');
-          }
-          for (final element in document.findAllElements('d')) {
-            final p = (element.getAttribute('p') ?? '').split(',');
-            if (p.length < 4) {
-              throw const FormatException(
-                  'XML comment requires time, mode, font size and color.');
-            }
-            final seconds = double.parse(p[0]);
-            if (!seconds.isFinite || seconds < 0) {
-              throw const FormatException(
-                  'Comment time must be finite and nonnegative.');
-            }
-            rows.add({
-              'sourceTimeMs': (seconds * 1000).round(),
-              'text': element.innerText,
-              'mode': int.parse(p[1]),
-              'fontSize': int.parse(p[2]),
-              'colorRgb': int.parse(p[3]),
-              if (p.length > 4) 'sentAt': p[4],
-              if (p.length > 6 && p[6] != '0') 'sender': p[6],
-              if (p.length > 7 && p[7] != '0') 'platformId': p[7],
-            });
-          }
-        } else {
-          final decoded = jsonDecode(content);
-          final comments = decoded is Map ? decoded['comments'] : decoded;
-          if (comments is! List) {
-            throw const FormatException(
-                'JSON requires an array or a comments array.');
-          }
-          for (final comment in comments) {
-            if (comment is! Map<String, dynamic>) {
-              throw const FormatException('Each comment must be an object.');
-            }
-            rows.add(comment);
-          }
+        final data = parseLocalDanmakuBytes(await File(path).readAsBytes(),
+            allowEmpty: true);
+        final comments = data['comments'] as List;
+        if (comments.isEmpty) return <DanmakuEntry>[];
+        final rows = parseDanmakuListInBackground(comments);
+        if (rows.isNotEmpty) {
+          return [
+            for (var index = 0; index < rows.length; index++)
+              _classicEntry(rows[index], index, platform, videoId)
+          ];
+        }
+        // Keep the acquisition JSON contract alongside Classic's local formats.
+        final normalized = comments.any((row) =>
+            row is Map &&
+            !row.containsKey('content') &&
+            !row.containsKey('c') &&
+            (row.containsKey('text') ||
+                row.containsKey('mode') ||
+                row.containsKey('sourceTimeMs') ||
+                row.containsKey('colorRgb')));
+        if (!normalized) {
+          throw const FormatException('弹幕文件中没有可解析的弹幕数据');
         }
         final entries = <DanmakuEntry>[];
-        for (var index = 0; index < rows.length; index++) {
-          final row = rows[index];
+        for (var index = 0; index < comments.length; index++) {
+          final row = comments[index];
+          if (row is! Map<String, dynamic>) {
+            throw FormatException('Comment at index $index must be an object.');
+          }
           if (row['sourceTimeMs'] is! int ||
               (row['sourceTimeMs'] as int) < 0 ||
               row['text'] is! String ||
@@ -67,7 +48,6 @@ Future<List<DanmakuEntry>> readImportedDanmaku(
               (row['mode'] as int) < 1 ||
               row['colorRgb'] is! int ||
               (row['colorRgb'] as int) < 0 ||
-              (row['colorRgb'] as int) > 0xffffff ||
               row['fontSize'] != null &&
                   (row['fontSize'] is! int || (row['fontSize'] as int) <= 0) ||
               [
@@ -81,6 +61,7 @@ Future<List<DanmakuEntry>> readImportedDanmaku(
           }
           entries.add(DanmakuEntry.fromJson({
             ...row,
+            'colorRgb': parseDanmakuColorToInt(row['colorRgb']),
             'sourceId': platform,
             'videoId': videoId,
             'platform': platform,
@@ -93,5 +74,39 @@ Future<List<DanmakuEntry>> readImportedDanmaku(
             FailureCode.notFound, 'Cannot read the danmaku file.');
       } on FormatException catch (error) {
         throw Failure(FailureCode.invalidInput, error.message.toString());
+      } on TypeError catch (error) {
+        throw Failure(FailureCode.invalidInput, error.toString());
       }
     });
+
+DanmakuEntry _classicEntry(
+    Map<String, dynamic> row, int index, String platform, String videoId) {
+  final seconds = row['time'] as num;
+  if (!seconds.isFinite) {
+    throw FormatException('Comment time at index $index must be finite.');
+  }
+  final type = row['type'];
+  final mode = row['originalType'] ?? row['originalMode'] ?? type;
+  return DanmakuEntry(
+    sourceId: platform,
+    videoId: videoId,
+    platform: platform,
+    originVideoId: videoId,
+    sourceTimeMs: (seconds * 1000).round(),
+    text: row['content'] as String,
+    mode: mode is int
+        ? mode
+        : type == 'top'
+            ? 5
+            : type == 'bottom'
+                ? 4
+                : 1,
+    colorRgb: parseDanmakuColorToInt(row['color']),
+    platformId: row['platformDanmakuId']?.toString(),
+    sourceEntryId: row['sourceEntryId']?.toString(),
+    originSource: row['originSource']?.toString(),
+    sender: row['senderId'] as String?,
+    fontSize: int.tryParse(row['fontSize']?.toString() ?? ''),
+    sentAt: (row['sentAt'] ?? row['timestamp'])?.toString(),
+  );
+}

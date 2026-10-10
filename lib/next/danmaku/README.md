@@ -40,20 +40,28 @@ Next 注册的内置来源只有弹弹play与 local。优酷、B 站在线来源
 `danmaku.import` 是写能力，接收 Agent 从任意途径取得的本地文件，不要求注册来源、
 媒体目录授权。输入 `filePath`、`platform`、`platformVideoId`；目标
 使用 `entityId`（File/Episode）、`path` 或当前播放文件（默认），可附 `note`。
-文件以 UTF-8 编码，支持 B 站标准 `<i><d p="...">...</d></i>` XML，以及规范化
-JSON 数组或 `{ "comments": [...] }`。JSON 条目示例：
+文件复用 Classic 的本地弹幕解析与编码处理：XML、JSON 数组、`comments`/`data`
+包装、弹弹play `p`/`m` 格式，以及 UTF-8/BOM、UTF-16 和原有旧编码。
+XML 的 32 位 ARGB 和其他 Classic 支持的颜色使用相同颜色转换，存为 24 位 RGB。
+同时保留规范化 JSON 数组或 `{ "comments": [...] }`。规范化条目示例：
 
 ```json
 {"sourceTimeMs":1250,"text":"一条弹幕","mode":1,"colorRgb":16777215,"platformId":"9007199254740993"}
 ```
 
-`sourceTimeMs` 是非负整数毫秒，`mode` 是正整数，`colorRgb` 是 24 位 RGB；
+`sourceTimeMs` 是非负整数毫秒，`mode` 是正整数，`colorRgb` 是非负整数，
+通过 Classic 颜色转换存为 24 位 RGB；
 可选 `platformId`、`sourceEntryId`、`originSource`、`sender`、`sentAt` 为字符串，
 `fontSize` 为正整数。平台和视频身份使用调用参数，actor/origin/UTC 时间由宿主
 记录在 `provenance`，每次交入追加审计事件。输入文件只读取，内容保存进宿主缓存，
 后续播放恢复不依赖原文件仍存在。空数组或 `<i/>` 表示明确交入空弹幕池。
 
-解析和验证在独立 isolate 完成，再用一个数据库事务提交缓存、绑定和来源。相同
+Classic 格式的条目采用现有解析器的默认值和筛选语义，不再单独检查 XML 根名、
+字段数或 24 位颜色上限。无法解析的文件返回 `invalid_input` 与实际解析错误；
+非空输入无法产生可解析弹幕时也报告失败。Classic 本地加载仍拒绝空池；只有
+交入入口显式允许空 JSON 数组和不含 `<d>` 的 `<i/>`，不把损坏的 XML 当空刷新。
+
+解析和转换在独立 isolate 完成，再用一个数据库事务提交缓存、绑定和来源。相同
 平台/视频再次交入即替换，保留启用、偏移和折叠设置；解析或提交失败保留旧轨道。
 交入前已启动的抓取任务不能覆盖后来交入的弹幕池。File/Episode 同视频轨道在
 播放时合并为一个，重新恢复时优先使用最新交入结果。返回 `bindingId`、`revision`、

@@ -11,6 +11,9 @@ import 'package:nipaplay/next/danmaku/source.dart';
 import 'package:nipaplay/next/state/query.dart';
 import 'package:nipaplay/next/state/views.dart';
 import 'package:nipaplay/utils/danmaku_track_registry.dart';
+import 'package:nipaplay/utils/danmaku_parser.dart';
+import 'package:nipaplay/utils/danmaku_xml_utils.dart';
+import 'package:nipaplay/utils/local_danmaku_file.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
@@ -224,6 +227,112 @@ void main() {
     expect((restored['danmakuList'] as List).single['content'], '新弹幕');
   });
 
+  test('Classic ARGB rows retain all entries and metadata after restoration',
+      () async {
+    final content =
+        '<pool><chatserver>youku</chatserver><chatid>Xsynthetic</chatid>'
+        '${List.generate(140, (i) => '<d p="${i / 10},${[
+              1,
+              4,
+              5,
+              6,
+              7
+            ][i % 5]},25,'
+            '${i < 135 ? 0xff02cc92 : 0x02cc92},1700000000,0,synthetic-$i,'
+            '${9007199254740993 + i}">合成弹幕 $i &amp; 内容</d>').join()}'
+        '</pool>';
+    await pool.writeAsString(content);
+    final classicData = parseLocalDanmakuBytes(await pool.readAsBytes());
+    final classic =
+        parseDanmakuListInBackground(classicData['comments'] as List);
+    final result = await call('danmaku.import', input());
+    expect(result['count'], classic.length);
+    expect(result['count'], 140);
+    final binding = await service.store.binding(result['bindingId'] as String);
+    final saved = await service.store.entries(binding['cache_key'] as String);
+    for (var i = 0; i < saved.length; i++) {
+      expect(saved[i].text, classic[i]['content']);
+      expect(saved[i].sourceTimeMs, i * 100);
+      expect(saved[i].colorRgb, parseDanmakuColorToInt(classic[i]['color']));
+      expect(saved[i].platformId, '${9007199254740993 + i}');
+      expect(saved[i].sender, 'synthetic-$i');
+      expect(saved[i].fontSize, 25);
+      expect(saved[i].sentAt, '1700000000');
+      expect(saved[i].mode, [1, 4, 5, 6, 7][i % 5]);
+      expect(saved[i].toPlayer()['type'], classic[i]['type']);
+    }
+    await pool.delete();
+    video.danmakuTracks.clear();
+    video.danmakuTrackEnabled.clear();
+    await service.refreshCurrent();
+    expect(video.danmakuTracks.values.single['count'], 140);
+    expect(video.danmakuTracks.values.single['danmakuList'],
+        saved.map((e) => e.toPlayer()).toList());
+  });
+
+  test('Classic JSON and byte encodings retain the same playable data',
+      () async {
+    const xmlText = '<i><d p="1.25,5,25,4278373522,1700000000,0,sender,42">'
+        '合成弹幕 &amp; 内容</d></i>';
+    final utf16 = [
+      for (final littleEndian in [true, false])
+        <int>[
+          ...littleEndian ? [0xff, 0xfe] : [0xfe, 0xff],
+          for (final unit in xmlText.codeUnits)
+            ...littleEndian ? [unit & 255, unit >> 8] : [unit >> 8, unit & 255],
+        ]
+    ];
+    final fixtures = [
+      utf8.encode('\uFEFF$xmlText'),
+      ...utf16,
+      utf8.encode(jsonEncode([
+        {'t': '1.25', 'c': '合成弹幕', 'y': 'top', 'r': '#ff02cc92'}
+      ])),
+      utf8.encode(jsonEncode([
+        {'time': 1.25, 'content': '合成弹幕', 'color': 255},
+        {'text': 'Classic 不作为弹幕加载的合成元数据', 'mode': 'metadata'},
+      ])),
+      utf8.encode(jsonEncode({
+        'data': jsonEncode([
+          {'time': 1.25, 'content': '合成弹幕', 'type': 5, 'color': 0xff02cc92}
+        ])
+      })),
+      utf8.encode(jsonEncode({
+        'comments': [
+          {'p': '1.25,5,16711680,synthetic', 'm': '合成弹幕', 'cid': 42}
+        ]
+      })),
+      // GBK bytes for a synthetic Chinese text node.
+      [
+        ...ascii.encode('<?xml version="1.0" encoding="GBK"?>'
+            '<i><d p="1.25,5,25,255">'),
+        0xba,
+        0xcf,
+        0xb3,
+        0xc9,
+        ...ascii.encode('</d></i>'),
+      ],
+    ];
+    for (final bytes in fixtures) {
+      await pool.writeAsBytes(bytes);
+      final classicData = parseLocalDanmakuBytes(await pool.readAsBytes());
+      final classic =
+          parseDanmakuListInBackground(classicData['comments'] as List);
+      final result = await call('danmaku.import', input());
+      expect(result['count'], classic.length);
+      final row = classic.single;
+      final loaded = (video.danmakuTracks.values.single['danmakuList'] as List)
+          .single as Map;
+      expect(loaded['time'], row['time']);
+      expect(loaded['content'], row['content']);
+      expect(
+          loaded['color'],
+          'rgb(${(parseDanmakuColorToInt(row['color']) >> 16) & 255},'
+          '${(parseDanmakuColorToInt(row['color']) >> 8) & 255},'
+          '${parseDanmakuColorToInt(row['color']) & 255})');
+    }
+  });
+
   test(
       'a malformed file or transaction failure leaves the previous pool unchanged',
       () async {
@@ -235,7 +344,12 @@ void main() {
     for (final content in [
       '{',
       '<html/>',
+      '<i><d',
+      '<i><d p="1,1">缺少必要字段</d></i>',
       '<i><d p="NaN,1,25,255">坏数据</d></i>',
+      '{"data":"{}"}',
+      '[{"time":"Infinity","content":"不可存储的时间"}]',
+      '{"platform":42,"comments":[{"time":1,"content":"合成弹幕"}]}',
       jsonEncode([
         {'sourceTimeMs': 1000, 'text': 'valid', 'mode': 1, 'colorRgb': 255},
         {'sourceTimeMs': -1, 'text': 'invalid', 'mode': 1, 'colorRgb': 255}
@@ -287,12 +401,17 @@ void main() {
         (video.danmakuTracks.values.single['danmakuList'] as List)
             .last['content'],
         '合成弹幕 49999');
-    await pool.writeAsString('[]');
-    final empty =
-        await call('danmaku.import', input(platform: 'custom-platform'));
-    expect(empty['bindingId'], result['bindingId']);
-    expect(empty['count'], 0);
-    expect(video.danmakuTracks.values.single['count'], 0);
+    for (final content in ['[]', '<i/>', '{"data":[]}']) {
+      await pool.writeAsString(content);
+      expect(() => parseLocalDanmakuBytes(utf8.encode(content)),
+          throwsFormatException,
+          reason: 'Classic still rejects empty local pools');
+      final empty =
+          await call('danmaku.import', input(platform: 'custom-platform'));
+      expect(empty['bindingId'], result['bindingId']);
+      expect(empty['count'], 0);
+      expect(video.danmakuTracks.values.single['count'], 0);
+    }
   });
 
   test(

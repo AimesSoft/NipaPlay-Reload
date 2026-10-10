@@ -34,7 +34,9 @@ Future<Map<String, dynamic>> readLocalDanmakuFile(XFile file) async {
 }
 
 /// 手动导入与同名自动加载共用的解析入口，不依赖文件扩展名或本地路径。
-Map<String, dynamic> parseLocalDanmakuBytes(Uint8List bytes) {
+/// [allowEmpty] 允许显式空数组或不含 d 元素的 i 根节点作为空池。
+Map<String, dynamic> parseLocalDanmakuBytes(Uint8List bytes,
+    {bool allowEmpty = false}) {
   String content;
   if (bytes.length >= 2 &&
       ((bytes[0] == 0xff && bytes[1] == 0xfe) ||
@@ -62,10 +64,13 @@ Map<String, dynamic> parseLocalDanmakuBytes(Uint8List bytes) {
   }
   content = content.replaceFirst(RegExp(r'^\uFEFF'), '').trimLeft();
   dynamic comments;
+  var explicitEmptyPool = false;
   String platform = 'unknown';
   String? platformVideoId;
   if (content.startsWith('<')) {
     final document = XmlDocument.parse(content);
+    explicitEmptyPool = document.rootElement.name.local == 'i' &&
+        document.findAllElements('d').isEmpty;
     final server = document
         .findAllElements('chatserver')
         .firstOrNull
@@ -101,11 +106,14 @@ Map<String, dynamic> parseLocalDanmakuBytes(Uint8List bytes) {
       comments = decoded['comments'] ?? decoded['data'];
       if (comments is String) comments = jsonDecode(comments);
     }
+    explicitEmptyPool = comments is List && comments.isEmpty;
   }
   if (comments is! List) {
     throw const FormatException('弹幕文件必须包含 comments/data 数组或 XML 弹幕');
   }
-  if (comments.isEmpty) throw const FormatException('弹幕文件中没有弹幕数据');
+  if (comments.isEmpty && !(allowEmpty && explicitEmptyPool)) {
+    throw const FormatException('弹幕文件中没有弹幕数据');
+  }
   comments = [
     for (final row in comments)
       if (row is Map && row.containsKey('p') && row.containsKey('m'))

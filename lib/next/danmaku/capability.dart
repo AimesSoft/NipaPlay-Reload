@@ -236,8 +236,8 @@ final _specs = [
         'loaded',
         'provenance'
       ]),
-      'Import acquired danmaku from a local UTF-8 Bilibili-standard XML file or JSON array (also {comments:[...]}). '
-          'JSON entries require sourceTimeMs (nonnegative integer milliseconds), text, mode (positive integer), colorRgb (0..16777215); '
+      'Import acquired danmaku using Classic local XML/JSON parsing and encoding support, including ARGB colors. '
+          'Also accepts normalized JSON arrays (or {comments:[...]}): sourceTimeMs (nonnegative integer milliseconds), text, mode (positive integer), colorRgb (nonnegative integer, converted to RGB); '
           'optional platformId, sourceEntryId, originSource, sender, sentAt (strings), fontSize (positive integer). '
           'No registered source is required. Supply platform/platformVideoId; host records actor, origin and timestamp. '
           'Target entityId (file or episode), path, or current playback (default). '
