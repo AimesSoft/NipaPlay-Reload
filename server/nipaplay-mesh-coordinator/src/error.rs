@@ -14,6 +14,7 @@ pub enum ErrorCode {
     InvalidToken,
     UpstreamUnavailable,
     InvalidInput,
+    InputTooLarge,
     DeviceNotFound,
     DeviceRevoked,
     DeviceConflict,
@@ -28,6 +29,7 @@ impl ErrorCode {
             ErrorCode::InvalidToken => "invalid_token",
             ErrorCode::UpstreamUnavailable => "upstream_unavailable",
             ErrorCode::InvalidInput => "invalid_input",
+            ErrorCode::InputTooLarge => "invalid_input",
             ErrorCode::DeviceNotFound => "device_not_found",
             ErrorCode::DeviceRevoked => "device_revoked",
             ErrorCode::DeviceConflict => "device_conflict",
@@ -41,6 +43,7 @@ impl ErrorCode {
             ErrorCode::MissingToken | ErrorCode::InvalidToken => StatusCode::UNAUTHORIZED,
             ErrorCode::UpstreamUnavailable => StatusCode::SERVICE_UNAVAILABLE,
             ErrorCode::InvalidInput => StatusCode::BAD_REQUEST,
+            ErrorCode::InputTooLarge => StatusCode::PAYLOAD_TOO_LARGE,
             ErrorCode::DeviceNotFound => StatusCode::NOT_FOUND,
             ErrorCode::DeviceRevoked | ErrorCode::DeviceConflict => StatusCode::FORBIDDEN,
             ErrorCode::RateLimited => StatusCode::TOO_MANY_REQUESTS,
@@ -71,13 +74,18 @@ impl ApiError {
 impl IntoResponse for ApiError {
     fn into_response(self) -> Response {
         let status = self.code.status();
+        let message = match self.code {
+            ErrorCode::Internal => "服务内部错误，请稍后再试".to_owned(),
+            ErrorCode::UpstreamUnavailable => "暂时无法核实账号，请稍后再试".to_owned(),
+            _ => self.message,
+        };
         (
             status,
             Json(json!({
                 "success": false,
                 "error": self.code.as_str(),
                 "errorCode": status.as_u16(),
-                "errorMessage": self.message,
+                "errorMessage": message,
             })),
         )
             .into_response()

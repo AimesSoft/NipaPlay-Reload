@@ -48,8 +48,12 @@ pub async fn load_app_secret(user_agent: &str) -> Result<String, String> {
 
         match result {
             Ok(secret) if !secret.is_empty() => return Ok(secret),
-            Ok(_) => warn!(url, "legacy AppSecret endpoint returned an empty secret"),
-            Err(error) => warn!(url, %error, "failed to load AppSecret from legacy endpoint"),
+            Ok(_) => {
+                warn!(target: "nipaplay_dandanplay_gateway", url, "legacy AppSecret endpoint returned an empty secret")
+            }
+            Err(error) => {
+                warn!(target: "nipaplay_dandanplay_gateway", url, %error, "failed to load AppSecret from legacy endpoint")
+            }
         }
     }
 

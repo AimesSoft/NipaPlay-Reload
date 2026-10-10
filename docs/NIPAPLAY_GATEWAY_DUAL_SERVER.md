@@ -31,7 +31,7 @@ RTT 高且丢包严重，表现为弹幕/番剧信息加载慢、随机推荐超
 | `nipaplay-next` | `127.0.0.1:3010` | 官方站点、随机推荐、日志分享等 Next.js 接口 |
 | `nipaplay-region` | `127.0.0.1:18100` | 归属地判定（内置中国 IP 段库） |
 | `nipaplay-relay` | `0.0.0.0:18080` | 远程访问中继 |
-| `nipaplay-mesh-coordinator` | `127.0.0.1:18082` | Mesh 控制面（设备注册与证书签发、地址候选、吊销） |
+| `nipaplay-mesh-coordinator`（待部署） | `127.0.0.1:18082` | Mesh 控制面（设备注册与证书签发、地址候选、吊销） |
 | `nginx` | `0.0.0.0:80` | 唯一入口，按路径反代到上面各服务 |
 
 nginx 路由：
@@ -40,6 +40,12 @@ nginx 路由：
 - `/dandanplay/*` → `nipaplay-dandanplay-gateway`
 - `/mesh/*` → `nipaplay-mesh-coordinator`
 - `/*` → `nipaplay-next`
+
+Mesh 行和 `/mesh/*` 路由是待部署配置，不表示服务已经上线。模板见
+`server/nipaplay-mesh-coordinator/deploy/`；`proxy_pass` 必须保留 `/mesh/` 前缀。
+Mesh 协调服务及上述 relay 都不承担 Mesh 的媒体或任务流量转发，设备间的数据面由设备
+直连或用户自有节点完成。协调服务应先选定一个部署端和内置 CA；双服务器网关切换
+不等于协调服务可切换，不能用两个独立 SQLite/CA 实例提供同一 Mesh。
 
 关键文件：
 

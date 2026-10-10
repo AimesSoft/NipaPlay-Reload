@@ -3,10 +3,18 @@
 //! Every test uses a mock upstream; no request leaves the machine and no real
 //! token appears in this file.
 
-use std::{net::SocketAddr, path::PathBuf, sync::Arc};
+use std::{
+    net::SocketAddr,
+    path::PathBuf,
+    sync::{
+        atomic::{AtomicUsize, Ordering},
+        Arc,
+    },
+};
 
 use axum::{
     http::{header, HeaderMap, StatusCode},
+    response::{IntoResponse, Response},
     routing::get,
     Json, Router,
 };
@@ -25,6 +33,18 @@ struct Harness {
     base_url: String,
     client: reqwest::Client,
     _dir: TempDir,
+    store: Store,
+    validation_calls: Arc<AtomicUsize>,
+    lookup_calls: Arc<AtomicUsize>,
+    tasks: Vec<tokio::task::JoinHandle<()>>,
+}
+
+impl Drop for Harness {
+    fn drop(&mut self) {
+        for task in &self.tasks {
+            task.abort();
+        }
+    }
 }
 
 struct TempDir(PathBuf);
@@ -56,13 +76,31 @@ fn account_for(headers: &HeaderMap) -> Option<i64> {
         .and_then(|value| value.strip_prefix("Bearer "))?;
     match token {
         VALID_TOKEN => Some(ACCOUNT_ID),
+        "test-same-account-token" => Some(ACCOUNT_ID),
         SECOND_TOKEN => Some(SECOND_ACCOUNT_ID),
+        "test-zero-id"
+        | "test-negative-id"
+        | "test-string-id"
+        | "test-missing-id"
+        | "test-upstream-error"
+        | "test-malformed-upstream"
+        | "test-renew-rejected" => Some(ACCOUNT_ID),
         _ => None,
     }
 }
 
 /// Mock play-history endpoint used for read-only token validation.
 async fn mock_playhistory(headers: HeaderMap) -> (StatusCode, Json<Value>) {
+    let timestamp: i64 = headers["x-timestamp"].to_str().unwrap().parse().unwrap();
+    assert_eq!(
+        headers["x-signature"],
+        nipaplay_auth::app_signature(
+            "nipaplayv1",
+            timestamp,
+            "/api/v2/playhistory",
+            "test-app-secret"
+        )
+    );
     match account_for(&headers) {
         Some(_) => (StatusCode::OK, Json(json!({"success": true}))),
         None => (StatusCode::UNAUTHORIZED, Json(json!({"success": false}))),
@@ -70,7 +108,31 @@ async fn mock_playhistory(headers: HeaderMap) -> (StatusCode, Json<Value>) {
 }
 
 /// Mock renewal endpoint that also reports the stable numeric account id.
-async fn mock_renew(headers: HeaderMap) -> (StatusCode, Json<Value>) {
+async fn mock_renew(headers: HeaderMap) -> Response {
+    match nipaplay_auth::bearer_token(&headers) {
+        Some("test-zero-id") => return Json(json!({"success": true, "userId": 0})).into_response(),
+        Some("test-negative-id") => {
+            return Json(json!({"success": true, "userId": -1})).into_response()
+        }
+        Some("test-string-id") => {
+            return Json(json!({"success": true, "userId": "424242"})).into_response()
+        }
+        Some("test-missing-id") => return Json(json!({"success": true})).into_response(),
+        Some("test-upstream-error") => {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "test-secret-in-upstream-error",
+            )
+                .into_response()
+        }
+        Some("test-malformed-upstream") => {
+            return "test-secret-in-malformed-upstream".into_response()
+        }
+        Some("test-renew-rejected") => {
+            return (StatusCode::FORBIDDEN, Json(json!({"success": false}))).into_response()
+        }
+        _ => {}
+    }
     match account_for(&headers) {
         Some(account_id) => (
             StatusCode::OK,
@@ -83,17 +145,49 @@ async fn mock_renew(headers: HeaderMap) -> (StatusCode, Json<Value>) {
         ),
         None => (StatusCode::UNAUTHORIZED, Json(json!({"success": false}))),
     }
+    .into_response()
 }
 
 async fn start_harness(label: &str, configure: impl FnOnce(&mut Config)) -> Harness {
+    start_harness_with_methods(label, configure, true).await
+}
+
+async fn start_harness_with_methods(
+    label: &str,
+    configure: impl FnOnce(&mut Config),
+    allow_post: bool,
+) -> Harness {
     let dir = TempDir::new(label);
 
+    let validation_calls = Arc::new(AtomicUsize::new(0));
+    let lookup_calls = Arc::new(AtomicUsize::new(0));
+    let validation_count = validation_calls.clone();
+    let lookup_count = lookup_calls.clone();
+    let post_count = lookup_calls.clone();
+    let mut renewal = get(move |headers: HeaderMap| {
+        lookup_count.fetch_add(1, Ordering::SeqCst);
+        mock_renew(headers)
+    });
+    if allow_post {
+        renewal = renewal.post(move |headers: HeaderMap| {
+            assert_eq!(headers["content-type"], "application/json");
+            post_count.fetch_add(1, Ordering::SeqCst);
+            mock_renew(headers)
+        });
+    }
+
     let upstream_router = Router::new()
-        .route("/api/v2/playhistory", get(mock_playhistory))
-        .route("/api/v2/login/renew", get(mock_renew));
+        .route(
+            "/api/v2/playhistory",
+            get(move |headers: HeaderMap| {
+                validation_count.fetch_add(1, Ordering::SeqCst);
+                mock_playhistory(headers)
+            }),
+        )
+        .route("/api/v2/login/renew", renewal);
     let upstream_listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
     let upstream_addr = upstream_listener.local_addr().unwrap();
-    tokio::spawn(async move {
+    let upstream_task = tokio::spawn(async move {
         axum::serve(upstream_listener, upstream_router)
             .await
             .unwrap();
@@ -134,17 +228,24 @@ async fn start_harness(label: &str, configure: impl FnOnce(&mut Config)) -> Harn
     let ca = Arc::new(
         cert::CertificateAuthority::load(&config.ca_cert_file, &config.ca_key_file).unwrap(),
     );
-    let upstream = DandanplayUpstream::new(config.upstream.clone()).unwrap();
+    let upstream = DandanplayUpstream::with_client(
+        config.upstream.clone(),
+        reqwest::Client::builder()
+            .no_proxy()
+            .redirect(reqwest::redirect::Policy::none())
+            .build()
+            .unwrap(),
+    );
     let state = api::AppState {
         config: Arc::new(config),
-        store,
+        store: store.clone(),
         ca,
         accounts: AccountResolver::new(upstream),
         limiter: RateLimiter::new(),
     };
 
     let app = api::router(state);
-    tokio::spawn(async move {
+    let server_task = tokio::spawn(async move {
         axum::serve(
             listener,
             app.into_make_service_with_connect_info::<SocketAddr>(),
@@ -163,6 +264,10 @@ async fn start_harness(label: &str, configure: impl FnOnce(&mut Config)) -> Harn
         base_url: format!("http://{listen_addr}"),
         client,
         _dir: dir,
+        store,
+        validation_calls,
+        lookup_calls,
+        tasks: vec![upstream_task, server_task],
     }
 }
 
@@ -657,6 +762,373 @@ async fn health_reports_the_service_name() {
         .unwrap();
     assert_eq!(body["service"], "nipaplay-mesh-coordinator");
     assert_eq!(body["ok"], true);
+}
+
+#[tokio::test]
+async fn revoked_devices_cannot_register_again_or_restore_addresses() {
+    let harness = start_harness("reregister-revoked", |_| {}).await;
+    let key = new_device_key();
+    let id = cert::device_id_from_public_key(&key);
+    assert_eq!(
+        harness.register(VALID_TOKEN, &key, "Mac").await.status(),
+        StatusCode::OK
+    );
+    harness
+        .client
+        .post(harness.url(&format!("/mesh/v1/devices/{id}/revoke")))
+        .bearer_auth(VALID_TOKEN)
+        .json(&json!({"device_id": id}))
+        .send()
+        .await
+        .unwrap();
+    let response = harness.register(VALID_TOKEN, &key, "Mac").await;
+    assert_eq!(response.status(), StatusCode::FORBIDDEN);
+    let body: Value = response.json().await.unwrap();
+    assert_eq!(body["error"], "device_revoked");
+    assert!(body.get("certificate").is_none());
+    let report = harness
+        .client
+        .post(harness.url("/mesh/v1/addresses"))
+        .bearer_auth(VALID_TOKEN)
+        .json(&json!({"device_id": id,
+            "candidates": [{"kind":"lan", "host":"192.168.1.1", "port":1180}]}))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(report.status(), StatusCode::FORBIDDEN);
+    assert!(harness
+        .store
+        .addresses(&id, nipaplay_auth::unix_timestamp())
+        .unwrap()
+        .is_empty());
+}
+
+#[tokio::test]
+async fn account_is_verified_and_cross_account_operations_are_rejected() {
+    let harness = start_harness("cross-account", |_| {}).await;
+    let key = new_device_key();
+    let id = cert::device_id_from_public_key(&key);
+    let response = harness.client.post(harness.url("/mesh/v1/devices/register"))
+        .bearer_auth(VALID_TOKEN).json(&json!({"device_public_key":base64url(&key),
+            "device_name":"Mac", "platform":"macos", "app_version":"1", "account_id":SECOND_ACCOUNT_ID.to_string()}))
+        .send().await.unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    assert_eq!(
+        response.json::<Value>().await.unwrap()["account_id"],
+        ACCOUNT_ID.to_string()
+    );
+    assert_eq!(
+        harness.register(SECOND_TOKEN, &key, "Other").await.status(),
+        StatusCode::FORBIDDEN
+    );
+    for (path, body) in [
+        (
+            "/mesh/v1/devices/renew".to_owned(),
+            json!({"device_id":id,"device_public_key":base64url(&key)}),
+        ),
+        (
+            format!("/mesh/v1/devices/{id}/revoke"),
+            json!({"device_id":id}),
+        ),
+        (
+            "/mesh/v1/addresses".to_owned(),
+            json!({"device_id":id,"candidates":[]}),
+        ),
+    ] {
+        let response = harness
+            .client
+            .post(harness.url(&path))
+            .bearer_auth(SECOND_TOKEN)
+            .json(&body)
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::NOT_FOUND, "{path}");
+    }
+    let response = harness
+        .client
+        .get(harness.url(&format!("/mesh/v1/addresses?device_id={id}")))
+        .bearer_auth(SECOND_TOKEN)
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::NOT_FOUND);
+    assert!(harness
+        .store
+        .device(&id)
+        .unwrap()
+        .unwrap()
+        .revoked_at
+        .is_none());
+}
+
+#[tokio::test]
+async fn revoke_requires_matching_path_and_body() {
+    let harness = start_harness("revoke-path", |_| {}).await;
+    let key = new_device_key();
+    let id = cert::device_id_from_public_key(&key);
+    harness.register(VALID_TOKEN, &key, "Mac").await;
+    let response = harness
+        .client
+        .post(harness.url("/mesh/v1/devices/wrong-device/revoke"))
+        .bearer_auth(VALID_TOKEN)
+        .json(&json!({"device_id":id}))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+    assert!(harness
+        .store
+        .device(&id)
+        .unwrap()
+        .unwrap()
+        .revoked_at
+        .is_none());
+}
+
+#[tokio::test]
+async fn ip_and_token_limits_prevent_upstream_calls_including_rejected_renewals() {
+    let harness = start_harness("upstream-ip-limit", |config| {
+        config.ip_requests_per_minute = 1
+    })
+    .await;
+    let first = harness
+        .client
+        .get(harness.url("/mesh/v1/devices"))
+        .bearer_auth("test-invalid-a")
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(first.status(), StatusCode::UNAUTHORIZED);
+    let second = harness
+        .client
+        .get(harness.url("/mesh/v1/devices"))
+        .bearer_auth("test-invalid-b")
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(second.status(), StatusCode::TOO_MANY_REQUESTS);
+    assert_eq!(harness.validation_calls.load(Ordering::SeqCst), 1);
+    assert_eq!(harness.lookup_calls.load(Ordering::SeqCst), 0);
+    let harness = start_harness("upstream-token-limit", |config| config.devices_per_hour = 1).await;
+    for expected in [StatusCode::UNAUTHORIZED, StatusCode::TOO_MANY_REQUESTS] {
+        let response = harness
+            .client
+            .get(harness.url("/mesh/v1/devices"))
+            .bearer_auth("test-renew-rejected")
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(response.status(), expected);
+    }
+    assert_eq!(harness.validation_calls.load(Ordering::SeqCst), 1);
+    assert_eq!(harness.lookup_calls.load(Ordering::SeqCst), 1);
+}
+
+#[tokio::test]
+async fn malformed_identity_and_upstream_failures_never_issue_certificates_or_leak_details() {
+    let harness = start_harness("bad-upstream", |_| {}).await;
+    for token in [
+        "test-zero-id",
+        "test-negative-id",
+        "test-string-id",
+        "test-missing-id",
+        "test-upstream-error",
+        "test-malformed-upstream",
+    ] {
+        let response = harness.register(token, &new_device_key(), "Mac").await;
+        assert_eq!(
+            response.status(),
+            StatusCode::SERVICE_UNAVAILABLE,
+            "{token}"
+        );
+        let body: Value = response.json().await.unwrap();
+        assert_eq!(body["error"], "upstream_unavailable");
+        let text = body.to_string();
+        assert!(!text.contains("test-secret"));
+        assert!(!text.contains("127.0.0.1"));
+        assert!(!text.contains("userId"));
+        assert!(body.get("certificate").is_none());
+    }
+    assert!(harness
+        .store
+        .list_devices(&ACCOUNT_ID.to_string())
+        .unwrap()
+        .is_empty());
+}
+
+#[tokio::test]
+async fn invalid_json_and_oversized_inputs_are_rejected_before_upstream_access() {
+    let harness = start_harness("input-body", |_| {}).await;
+    for (body, expected) in [
+        ("{invalid".to_owned(), StatusCode::BAD_REQUEST),
+        ("x".repeat(32 * 1024 + 1), StatusCode::PAYLOAD_TOO_LARGE),
+    ] {
+        let response = harness
+            .client
+            .post(harness.url("/mesh/v1/devices/register"))
+            .bearer_auth(VALID_TOKEN)
+            .header("content-type", "application/json")
+            .body(body)
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(response.status(), expected);
+        let body: Value = response.json().await.unwrap();
+        assert_eq!(body["error"], "invalid_input");
+        assert_eq!(body["errorCode"], expected.as_u16());
+    }
+    assert_eq!(harness.validation_calls.load(Ordering::SeqCst), 0);
+    let response = harness
+        .client
+        .get(harness.url("/mesh/v1/devices"))
+        .bearer_auth("x".repeat(4097))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+    assert_eq!(harness.validation_calls.load(Ordering::SeqCst), 0);
+}
+
+#[tokio::test]
+async fn invalid_hosts_duplicates_and_sql_text_are_rejected_without_mutation() {
+    let harness = start_harness("host-validation", |_| {}).await;
+    let key = new_device_key();
+    let id = cert::device_id_from_public_key(&key);
+    harness.register(VALID_TOKEN, &key, "Mac").await;
+    for host in [
+        "https://example.com/path",
+        "host:1180",
+        "a b",
+        "'; DROP TABLE devices;--",
+        "-invalid.local",
+        "a..b",
+    ] {
+        let response = harness
+            .client
+            .post(harness.url("/mesh/v1/addresses"))
+            .bearer_auth(VALID_TOKEN)
+            .json(&json!({"device_id":id,
+                "candidates":[{"kind":"lan","host":host,"port":1180}]}))
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::BAD_REQUEST, "{host}");
+    }
+    let candidate = json!({"kind":"lan","host":"192.168.1.20","port":1180});
+    let response = harness
+        .client
+        .post(harness.url("/mesh/v1/addresses"))
+        .bearer_auth(VALID_TOKEN)
+        .json(&json!({"device_id":id, "candidates":[candidate,candidate]}))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+    assert!(harness
+        .store
+        .addresses(&id, nipaplay_auth::unix_timestamp())
+        .unwrap()
+        .is_empty());
+    assert!(harness.store.device(&id).unwrap().is_some());
+}
+
+#[tokio::test]
+async fn ttl_and_certificate_configuration_extremes_cannot_panic_or_issue_long_lived_certs() {
+    for (label, ttl) in [("zero-ttl", 0), ("overflow-ttl", u64::MAX)] {
+        let harness = start_harness(label, |config| {
+            config.address_max_ttl_seconds = ttl;
+            config.address_default_ttl_seconds = u64::MAX;
+            config.cert_validity_seconds = u64::MAX;
+        })
+        .await;
+        let key = new_device_key();
+        let id = cert::device_id_from_public_key(&key);
+        let response = harness.register(VALID_TOKEN, &key, "Mac").await;
+        assert_eq!(response.status(), StatusCode::OK);
+        let body: Value = response.json().await.unwrap();
+        assert!(
+            body["certificate"]["not_after"].as_i64().unwrap()
+                <= nipaplay_auth::unix_timestamp() + 7 * 86_400
+        );
+        let response = harness
+            .client
+            .post(harness.url("/mesh/v1/addresses"))
+            .bearer_auth(VALID_TOKEN)
+            .json(&json!({"device_id":id,
+                "candidates":[{"kind":"lan","host":"::1","port":1180,"expires_in":i64::MAX}]}))
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+        let records = harness
+            .store
+            .addresses(&id, nipaplay_auth::unix_timestamp())
+            .unwrap();
+        assert_eq!(records.len(), 1);
+        assert!(records[0].expires_at - records[0].updated_at <= 7200);
+    }
+}
+
+#[tokio::test]
+async fn database_failure_returns_generic_error_instead_of_a_false_zero_epoch() {
+    let harness = start_harness("db-failure", |_| {}).await;
+    let connection = rusqlite::Connection::open(harness._dir.0.join("mesh.db")).unwrap();
+    connection.execute_batch("DROP TABLE accounts").unwrap();
+    let response = harness
+        .client
+        .get(harness.url("/mesh/v1/devices"))
+        .bearer_auth(VALID_TOKEN)
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::INTERNAL_SERVER_ERROR);
+    let body: Value = response.json().await.unwrap();
+    assert_eq!(body["error"], "internal_error");
+    assert!(!body.to_string().contains("accounts"));
+    assert!(body.get("revocation_epoch").is_none());
+}
+
+#[tokio::test]
+async fn account_lookup_supports_post_and_documented_get_only_upstreams() {
+    for (label, post) in [("renew-post", true), ("renew-get", false)] {
+        let harness = start_harness_with_methods(label, |_| {}, post).await;
+        let response = harness
+            .register(VALID_TOKEN, &new_device_key(), "Mac")
+            .await;
+        assert_eq!(response.status(), StatusCode::OK);
+        assert_eq!(
+            response.json::<Value>().await.unwrap()["account_id"],
+            ACCOUNT_ID.to_string()
+        );
+        assert_eq!(harness.lookup_calls.load(Ordering::SeqCst), 1);
+    }
+}
+
+#[tokio::test]
+async fn different_tokens_share_the_verified_account_limit() {
+    let harness = start_harness("same-account-limit", |config| config.register_per_hour = 1).await;
+    assert_eq!(
+        harness
+            .register(VALID_TOKEN, &new_device_key(), "First")
+            .await
+            .status(),
+        StatusCode::OK
+    );
+    let response = harness
+        .register("test-same-account-token", &new_device_key(), "Second")
+        .await;
+    assert_eq!(response.status(), StatusCode::TOO_MANY_REQUESTS);
+    assert_eq!(
+        harness
+            .store
+            .list_devices(&ACCOUNT_ID.to_string())
+            .unwrap()
+            .len(),
+        1
+    );
+    assert_eq!(harness.validation_calls.load(Ordering::SeqCst), 2);
+    assert_eq!(harness.lookup_calls.load(Ordering::SeqCst), 2);
 }
 
 /// Writes the CA and a leaf certificate from the same run to disk so their

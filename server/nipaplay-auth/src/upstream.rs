@@ -99,8 +99,8 @@ impl TokenValidationCache {
 
 /// Client for the Dandanplay upstream API.
 ///
-/// Only the read-only endpoints needed for token validation and stable account
-/// identification are exposed. The coordinator never proxies user traffic.
+/// Exposes play-history validation and renewal-based account identification.
+/// The coordinator never proxies user traffic; renewal may rotate a token.
 #[derive(Clone)]
 pub struct DandanplayUpstream {
     config: Arc<UpstreamConfig>,
@@ -141,23 +141,39 @@ impl DandanplayUpstream {
             .redirect(Policy::none())
             .build()
             .map_err(|error| format!("failed to build upstream client: {error}"))?;
-        Ok(Self {
+        Ok(Self::with_client(config, client))
+    }
+
+    /// Uses the caller's HTTP policy and connection pool with the shared auth logic.
+    pub fn with_client(config: UpstreamConfig, client: reqwest::Client) -> Self {
+        Self {
             config: Arc::new(config),
             client,
             cache: TokenValidationCache::new(),
-        })
+        }
     }
 
     fn signed_get(&self, path: &str, token: &str) -> reqwest::RequestBuilder {
+        self.signed_request(reqwest::Method::GET, path, token)
+    }
+
+    fn signed_request(
+        &self,
+        method: reqwest::Method,
+        path: &str,
+        token: &str,
+    ) -> reqwest::RequestBuilder {
         let timestamp = unix_timestamp();
         let signature = app_signature(
             &self.config.app_id,
             timestamp,
-            path,
+            path.split('?')
+                .next()
+                .expect("a path has a first component"),
             &self.config.app_secret,
         );
         self.client
-            .get(format!("{}{path}", self.config.base_url))
+            .request(method, format!("{}{path}", self.config.base_url))
             .header(reqwest::header::ACCEPT, "application/json")
             .header(reqwest::header::USER_AGENT, &self.config.user_agent)
             .header(reqwest::header::AUTHORIZATION, format!("Bearer {token}"))
@@ -199,7 +215,8 @@ impl DandanplayUpstream {
 
     /// Resolves the stable upstream account identity for a token.
     ///
-    /// Uses `GET /api/v2/login/renew`, which returns the same `LoginResponse`
+    /// Uses `POST /api/v2/login/renew`, with GET fallback on 405 + Allow: GET,
+    /// matching the application client's renewal policy. It returns `LoginResponse`
     /// shape as a fresh login (including the numeric `userId`). The upstream
     /// derives the identity from the token itself, so the coordinator never
     /// trusts a client-supplied account id.
@@ -207,11 +224,29 @@ impl DandanplayUpstream {
         &self,
         token: &str,
     ) -> Result<AccountIdentity, AccountLookupError> {
-        let response = self
-            .signed_get("/api/v2/login/renew", token)
+        let mut response = self
+            .signed_request(reqwest::Method::POST, "/api/v2/login/renew", token)
+            .header(reqwest::header::CONTENT_TYPE, "application/json")
             .send()
             .await
             .map_err(|error| AccountLookupError::Transport(error.to_string()))?;
+        if response.status() == reqwest::StatusCode::METHOD_NOT_ALLOWED
+            && response
+                .headers()
+                .get(reqwest::header::ALLOW)
+                .and_then(|value| value.to_str().ok())
+                .is_some_and(|allow| {
+                    allow
+                        .split(',')
+                        .any(|method| method.trim().eq_ignore_ascii_case("GET"))
+                })
+        {
+            response = self
+                .signed_get("/api/v2/login/renew", token)
+                .send()
+                .await
+                .map_err(|error| AccountLookupError::Transport(error.to_string()))?;
+        }
 
         let status = response.status();
         if status == reqwest::StatusCode::UNAUTHORIZED || status == reqwest::StatusCode::FORBIDDEN {
@@ -232,6 +267,7 @@ impl DandanplayUpstream {
         let account_id = payload
             .get("userId")
             .and_then(Value::as_i64)
+            .filter(|id| *id > 0)
             .map(|id| id.to_string())
             .ok_or_else(|| {
                 AccountLookupError::Transport("upstream response is missing userId".to_owned())
@@ -252,11 +288,60 @@ mod tests {
     use super::*;
 
     #[test]
-    fn account_identity_uses_numeric_user_id() {
-        let identity = AccountIdentity {
-            account_id: "123456".to_owned(),
-            user_name: Some("tester".to_owned()),
-        };
-        assert_eq!(identity.account_id, "123456");
+    fn signs_the_path_without_query_and_preserves_validation_request() {
+        let mut config = UpstreamConfig::new("http://127.0.0.1:1", "test-app", "test-secret");
+        config.user_agent = "test-agent".to_owned();
+        let upstream = DandanplayUpstream::new(config).unwrap();
+        let request = upstream
+            .signed_get(
+                "/api/v2/playhistory?withRelatedBangumi=false&pageIndex=0&pageSize=1",
+                "test-token",
+            )
+            .build()
+            .unwrap();
+        let headers = request.headers();
+        let timestamp = headers["x-timestamp"].to_str().unwrap().parse().unwrap();
+        assert_eq!(
+            headers["x-signature"],
+            app_signature("test-app", timestamp, "/api/v2/playhistory", "test-secret")
+        );
+        assert_eq!(
+            request.url().query(),
+            Some("withRelatedBangumi=false&pageIndex=0&pageSize=1")
+        );
+        assert_eq!(headers["authorization"], "Bearer test-token");
+        assert_eq!(headers["accept"], "application/json");
+        assert_eq!(headers["user-agent"], "test-agent");
+        assert_eq!(headers["x-appid"], "test-app");
+    }
+
+    #[test]
+    fn caches_valid_and_invalid_results_with_distinct_ttls_and_expires_them() {
+        let cache = TokenValidationCache::new();
+        let before = Instant::now();
+        cache.put("valid".to_owned(), true);
+        cache.put("invalid".to_owned(), false);
+        let after = Instant::now();
+        assert_eq!(cache.get("valid"), Some(true));
+        assert_eq!(cache.get("invalid"), Some(false));
+        {
+            let mut entries = cache.entries.lock().unwrap();
+            for (key, ttl) in [("valid", 600), ("invalid", 30)] {
+                let entry = entries.get_mut(key).unwrap();
+                assert!(entry.expires_at >= before + Duration::from_secs(ttl));
+                assert!(entry.expires_at <= after + Duration::from_secs(ttl));
+                entry.expires_at = before - Duration::from_secs(1);
+            }
+        }
+        assert_eq!(cache.get("valid"), None);
+        assert_eq!(cache.get("invalid"), None);
+    }
+
+    #[test]
+    fn signature_matches_a_fixed_independent_vector() {
+        assert_eq!(
+            app_signature("test-app", 123, "/api/v2/playhistory", "test-secret"),
+            "JcZCk+i2x9jLi+FPpJrwTkPpIV4KKC1Ti5Uanco0E6U="
+        );
     }
 }

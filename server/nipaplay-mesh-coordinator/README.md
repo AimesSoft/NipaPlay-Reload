@@ -12,6 +12,7 @@ Mesh 的控制面服务：验证弹弹play 账号、登记设备公钥、签发�
 
 ```bash
 # 1) 生成开发用 CA（生产请用同一命令生成后妥善保管私钥）
+mkdir -p /tmp/mesh
 cargo run --manifest-path server/nipaplay-mesh-coordinator/Cargo.toml -- \
   --generate-dev-ca /tmp/mesh/ca.crt.pem /tmp/mesh/ca.key.pem
 
@@ -23,8 +24,9 @@ DANDANPLAY_APP_SECRET=... \
 cargo run --manifest-path server/nipaplay-mesh-coordinator/Cargo.toml
 ```
 
-`--generate-dev-ca` 只在文件不存在时写入，私钥以 `0600` 落盘。签发者密钥必须与证书匹配，
-否则服务在启动时报错退出。生产部署模板见 `deploy/`。
+`--generate-dev-ca` 以排他创建写入新文件，私钥从创建时即为 `0600`。Unix 上加载私钥时拒绝
+组或其他用户可访问的文件；仅接受普通文件。签发者必须是当前有效、具有 `keyCertSign`
+的自签名 Ed25519 CA，密钥必须与证书匹配，否则启动失败。生产部署模板见 `deploy/`。
 
 ## 配置
 
@@ -34,16 +36,16 @@ cargo run --manifest-path server/nipaplay-mesh-coordinator/Cargo.toml
 | `MESH_DATABASE_PATH` | `nipaplay-mesh.db` | SQLite 文件路径 |
 | `MESH_CA_CERT_FILE` | 必填 | 签发者证书（PEM） |
 | `MESH_CA_KEY_FILE` | 必填 | 签发者私钥（PEM，Ed25519 PKCS#8） |
-| `MESH_CERT_VALIDITY_SECONDS` | `604800` | 设备证书有效期 |
+| `MESH_CERT_VALIDITY_SECONDS` | `604800` | 夹到 900–604800 秒，叶子证书到期不晚于 CA |
 | `MESH_HEARTBEAT_INTERVAL_SECONDS` | `900` | 下发给客户端的心跳间隔，最小 900 秒 |
 | `MESH_ADDRESS_DEFAULT_TTL_SECONDS` | `3600` | 地址候选未指定有效期时的默认值 |
-| `MESH_ADDRESS_MAX_TTL_SECONDS` | `7200` | 地址候选有效期上限，服务端强制不超过 2 小时 |
+| `MESH_ADDRESS_MAX_TTL_SECONDS` | `7200` | 夹到 60–7200 秒；默认 TTL 同样夹到范围内 |
 | `MESH_REGISTER_PER_HOUR` | `10` | 每账号每小时注册次数 |
 | `MESH_RENEW_PER_HOUR` | `24` | 每账号每小时续期次数 |
 | `MESH_ADDRESSES_PER_HOUR` | `60` | 每账号每小时地址请求次数 |
 | `MESH_DEVICES_PER_HOUR` | `120` | 每账号每小时设备/吊销请求次数 |
-| `MESH_IP_REQUESTS_PER_MINUTE` | `300` | 每 IP 每分钟请求上限（所有接口共用） |
-| `MESH_TRUST_PROXY_HEADERS` | `true` | 是否信任 `X-Real-IP` / `X-Forwarded-For` |
+| `MESH_IP_REQUESTS_PER_MINUTE` | `300` | 每 IP 每分钟请求上限，包括匿名、无效输入和公开接口 |
+| `MESH_TRUST_PROXY_HEADERS` | `true` | 仅当 socket 对端为回环代理时信任 `X-Real-IP` / `X-Forwarded-For` |
 | `DANDANPLAY_UPSTREAM_BASE` | `https://api.dandanplay.net` | 上游 API |
 | `DANDANPLAY_APP_ID` | `nipaplayv1` | 应用 ID |
 | `DANDANPLAY_APP_SECRET` / `DANDANPLAY_APP_SECRET_URLS` | 见网关 | 应用密钥，复用网关的加载逻辑 |
@@ -57,8 +59,15 @@ Authorization: Bearer <弹弹play token>
 ```
 
 服务先用只读的 `/api/v2/playhistory` 验证令牌（有效缓存 10 分钟，无效 30 秒），再调用
-`/api/v2/login/renew` 取稳定的数字 `userId` 作为 `accountId`。令牌无效返回 `401`；
+`POST /api/v2/login/renew` 取稳定的正整数 `userId` 作为 `accountId`（仅在 `405` 且
+`Allow` 包含 `GET` 时改用 GET，与现有 App 相同）。令牌无效返回 `401`；
 上游不可达返回 `503`。请求体中的任何账号字段都被忽略。
+
+IP 限流在解析请求体前执行；令牌限流在上游验证前执行。已解析过的账号也在再次验证前
+检查账号额度；新令牌必须先核实身份才能归入账号桶，同账号的不同令牌共用账号额度。
+身份缓存有效 10 分钟、拒绝结果 30 秒。令牌最长 4096 字节，不接受空白或控制字符。
+HTTP JSON 请求体最多 32 KiB；畸形 JSON 返回 `400 invalid_input`，超限返回 `413 invalid_input`。
+所有内部或上游失败仅返回固定错误信息，不返回路径、SQL 或上游响应正文。
 
 ## 接口契约
 
@@ -88,7 +97,8 @@ Authorization: Bearer <弹弹play token>
 
 ### `GET /mesh/v1/server-info`
 
-无需认证，用于客户端内置或首次拉取签发者公钥。
+无需认证，用于读取服务参数和核对签发者。App 必须预置签发者证书；开发构建可以显式
+配置开发 CA。该响应不能用作首次连接时自动建立信任的依据。
 
 ```json
 {
@@ -115,8 +125,10 @@ Authorization: Bearer <弹弹play token>
 }
 ```
 
-`device_name` 1–128 字符，`platform` ≤ 32，`app_version` ≤ 32。
+字段先去掉首尾空白，再检查：`device_name` 1–128 字符，`platform`、`app_version` 均为
+1–32 字节，不接受控制字符。
 `deviceId` 由服务从公钥派生：`base64url(SHA-256(公钥))`。
+已吊销公钥不能再次注册；要重新加入需生成新的设备密钥。同一公钥不能转移到其他账号。
 
 响应：
 
@@ -161,7 +173,10 @@ Authorization: Bearer <弹弹play token>
 { "device_id": "<device_id>" }
 ```
 
-响应 `{ "success": true, "revocation_epoch": <n> }`。`revocation_epoch` **按账号独立计数**，只在成功吊销后递增（重复吊销同一设备也会 +1）。吊销会在同一事务里删除该设备的全部地址候选。
+路径和 JSON 中的 `device_id` 必须相同。响应 `{ "success": true, "revocation_epoch": <n> }`。
+`revocation_epoch` **按账号独立计数**，只在成功吊销后递增（重复吊销同一设备也会 +1）。
+吊销会在同一事务里删除该设备的全部地址候选；注册、续期和地址写入在事务内再次检查
+归属与吊销状态。设备列表与吊销计数从同一个数据库快照返回。
 
 ### `POST /mesh/v1/addresses`
 
@@ -175,6 +190,8 @@ Authorization: Bearer <弹弹play token>
 ```
 
 - `kind` ∈ `lan` / `public` / `overlay` / `relay` / `manual`；每设备最多 32 条；
+- `host` 只接受 IPv4、IPv6 或 ASCII DNS 主机名（≤255 字节），不接受 URL、端口或路径；
+- `port` 为 1–65535；重复的 `(kind, host, port)` 返回 `400`，保留已有候选；
 - 每次上报**替换**该设备全部候选；`expires_in` 会被夹到 `[60, 2 小时]`（服务端硬上限，配置再大也不超过）；
 - 响应 `{ "success": true, "accepted": <n> }`。
 
@@ -208,12 +225,18 @@ Authorization: Bearer <弹弹play token>
 | `extendedKeyUsage` | `clientAuth`、`serverAuth` |
 | `subjectAltName` | `URI:nipaplay-mesh://device?account=<accountId>&device=<deviceId>` |
 | `authorityKeyIdentifier` | 由 CA 公钥派生 |
-| 私有扩展 `1.3.6.1.4.1.61086.1.1` | DER `UTF8String`，内容为 `{"v":1,"accountId":...,"deviceId":...,"publicKey":...}`。**该 OID 为未注册私有弧，正式发布前替换为已注册的 PEN；客户端只依赖文档字段，不硬编码该 OID。** |
-| 有效期 | `not_before = 签发时刻 - 5 分钟`，`not_after = 签发时刻 + MESH_CERT_VALIDITY_SECONDS` |
+| 私有扩展 `1.3.6.1.4.1.61086.1.1` | DER `UTF8String`，内容为 `{"v":1,"accountId":...,"deviceId":...,"publicKey":...}`。**该 OID 使用的 PEN 归属尚未核实，正式发布前由主控确定合法的 OID；客户端解析器需与最终 OID 同步。** |
+| 有效期 | `not_before = 签发时刻 - 5 分钟`，`not_after = 签发时刻 + MESH_CERT_VALIDITY_SECONDS`，两端均限制在 CA 有效期内 |
 
-客户端应把内置或首次拉取的签发者公钥（`serverPublicKey`）作为信任根，校验链、`accountId`
-与自身一致、设备未吊销且证书在有效期内。吊销以**本账号的** `revocation_epoch` 为准，客户端
-本地持久化并在会话建立时比较；不同账号的计数互不影响，也不会泄露平台整体的吊销次数。
+客户端以 **App 内置的签发者证书**为信任根，校验链、`accountId` 与自身一致、公钥与
+`deviceId` 匹配、设备未吊销且证书在有效期内。`revocation_epoch` 是本账号吊销列表的
+版本号，不是某张证书的吊销证明；版本变化后须重新获取列表并更新本地拒绝集合，终止
+对应设备的既有会话。仅比较数字不能实现吊销检查。
+
+服务器立即阻止被吊销设备注册、续期和上报，并删除地址。已有直连会话何时停止取决于
+客户端获知吊销的机制；本服务没有推送通道。心跳至少间隔 15 分钟，客户端必须加入随机
+抖动。离线使用与“所有对端立即获知吊销”的取舍由主控确定，不能声称本服务单独实现
+了全网即时吊销。
 
 ## 存储
 
@@ -233,7 +256,7 @@ SQLite（WAL）单文件，四张表：
 
 - 有效期短：服务端硬上限 **2 小时**，过期即从查询结果消失，并由后台每小时清理；
 - 设备吊销时**立即删除**它的全部地址候选；
-- 只有同一账号的已认证设备能读取（接口按账号校验）。
+- 持有同一账号有效令牌的调用者能读取（接口按账号校验；HTTP API 未要求设备私钥证明）。
 
 **后续计划**：地址候选改为按**接收设备的公钥做端到端加密**，协调服务只存不透明密文，
 既看不到内容也无需理解其结构。最小版先按明文实现。
@@ -244,17 +267,23 @@ SQLite（WAL）单文件，四张表：
 sudo useradd --system --home /var/lib/nipaplay-mesh-coordinator nipaplay-mesh
 sudo install -d -o nipaplay-mesh -g nipaplay-mesh /var/lib/nipaplay-mesh-coordinator
 sudo install -d -o root -g nipaplay-mesh -m 750 /etc/nipaplay-mesh-coordinator
+sudo install -d -o root -g root -m 755 /opt/nipaplay-mesh-coordinator
 
 cargo build --release --manifest-path server/nipaplay-mesh-coordinator/Cargo.toml
 sudo install -m 755 server/nipaplay-mesh-coordinator/target/release/nipaplay-mesh-coordinator \
   /opt/nipaplay-mesh-coordinator/
 
-# 生成并安装 CA（只生成一次；私钥 0600，仅 nipaplay-mesh 可读）
-sudo -u nipaplay-mesh /opt/nipaplay-mesh-coordinator/nipaplay-mesh-coordinator \
-  --generate-dev-ca /opt/nipaplay-mesh-coordinator/ca.crt.pem /etc/nipaplay-mesh-coordinator/ca.key.pem
+# 生成到当前用户可写的暂存目录，然后安装到服务目录（只生成一次）
+mesh_ca_stage=$(mktemp -d)
+server/nipaplay-mesh-coordinator/target/release/nipaplay-mesh-coordinator \
+  --generate-dev-ca "$mesh_ca_stage/ca.crt.pem" "$mesh_ca_stage/ca.key.pem"
+sudo install -o root -g root -m 644 "$mesh_ca_stage/ca.crt.pem" /opt/nipaplay-mesh-coordinator/ca.crt.pem
+sudo install -o nipaplay-mesh -g nipaplay-mesh -m 600 "$mesh_ca_stage/ca.key.pem" /etc/nipaplay-mesh-coordinator/ca.key.pem
+rm "$mesh_ca_stage/ca.crt.pem" "$mesh_ca_stage/ca.key.pem"
+rmdir "$mesh_ca_stage"
 
-sudo install -o root -g root -m 644 deploy/nipaplay-mesh-coordinator.service /etc/systemd/system/
-sudo install -o root -g nipaplay-mesh -m 640 deploy/nipaplay-mesh-coordinator.env.example \
+sudo install -o root -g root -m 644 server/nipaplay-mesh-coordinator/deploy/nipaplay-mesh-coordinator.service /etc/systemd/system/
+sudo install -o root -g nipaplay-mesh -m 640 server/nipaplay-mesh-coordinator/deploy/nipaplay-mesh-coordinator.env.example \
   /etc/nipaplay-mesh-coordinator.env
 # 编辑 /etc/nipaplay-mesh-coordinator.env 填入密钥
 sudo systemctl daemon-reload && sudo systemctl enable --now nipaplay-mesh-coordinator
@@ -274,6 +303,9 @@ cargo test --manifest-path server/nipaplay-mesh-coordinator/Cargo.toml
 ```
 
 测试使用模拟上游，不访问线上服务，夹具中不含任何真实令牌。
+覆盖签名与证书字段、上游身份类型、跨账号拒绝、吊销后重新注册、并发写入与吊销、SQL
+参数化和事务回滚、上游调用次数、输入大小/格式与错误脱敏。手工导出测试被默认忽略，
+证书结构与验签由正常运行的自动化测试覆盖。
 
 需要人工检查证书结构时，可运行被忽略的导出测试（写入同一轮的 CA 与叶子证书）：
 

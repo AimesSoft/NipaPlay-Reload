@@ -4,7 +4,12 @@
 //! deployment configuration and signs short-lived device certificates that bind
 //! `(account_id, device_id, device_public_key, validity)`.
 
-use std::{fs, path::Path, sync::Arc};
+use std::{
+    fs,
+    io::{Read, Write},
+    path::Path,
+    sync::Arc,
+};
 
 use base64::{engine::general_purpose::URL_SAFE_NO_PAD as B64URL, Engine as _};
 use rcgen::{
@@ -59,6 +64,8 @@ pub struct CertificateAuthority {
     issuer: Issuer<'static, SharedSigningKey>,
     ca_pem: String,
     public_key_raw: Vec<u8>,
+    not_before: i64,
+    not_after: i64,
 }
 
 impl CertificateAuthority {
@@ -66,8 +73,25 @@ impl CertificateAuthority {
     pub fn load(cert_file: &Path, key_file: &Path) -> Result<Self, String> {
         let ca_pem = fs::read_to_string(cert_file)
             .map_err(|error| format!("failed to read {}: {error}", cert_file.display()))?;
-        let key_pem = fs::read_to_string(key_file)
-            .map_err(|error| format!("failed to read {}: {error}", key_file.display()))?;
+        let mut key_handle =
+            fs::File::open(key_file).map_err(|_| "failed to open CA key".to_owned())?;
+        let metadata = key_handle
+            .metadata()
+            .map_err(|_| "failed to inspect CA key".to_owned())?;
+        if !metadata.is_file() || metadata.len() > 16 * 1024 {
+            return Err("CA key must be a regular PEM file of at most 16 KiB".to_owned());
+        }
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            if metadata.permissions().mode() & 0o077 != 0 {
+                return Err("CA key permissions must be owner-only (0600 or 0400)".to_owned());
+            }
+        }
+        let mut key_pem = String::new();
+        key_handle
+            .read_to_string(&mut key_pem)
+            .map_err(|_| "failed to read CA key".to_owned())?;
         let key = KeyPair::from_pem(&key_pem)
             .map_err(|error| format!("failed to parse {}: {error}", key_file.display()))?;
         if key.algorithm() != &rcgen::PKCS_ED25519 {
@@ -90,9 +114,23 @@ impl CertificateAuthority {
         parsed
             .verify_signature(None)
             .map_err(|error| format!("{} is not self-signed: {error}", cert_file.display()))?;
+        if parsed.subject() != parsed.issuer()
+            || !parsed.is_ca()
+            || !parsed.validity().is_valid()
+            || !parsed
+                .key_usage()
+                .map_err(|_| "invalid CA keyUsage".to_owned())?
+                .is_some_and(|usage| usage.value.key_cert_sign())
+        {
+            return Err(
+                "issuer must be a currently valid self-signed CA with keyCertSign".to_owned(),
+            );
+        }
         let spki = parsed.public_key();
         let raw = spki.subject_public_key.data.as_ref();
-        if raw.len() != ED25519_PUBLIC_KEY_LEN {
+        if spki.algorithm.algorithm.to_id_string() != "1.3.101.112"
+            || raw.len() != ED25519_PUBLIC_KEY_LEN
+        {
             return Err(format!(
                 "{} does not hold a raw Ed25519 public key",
                 cert_file.display()
@@ -103,6 +141,8 @@ impl CertificateAuthority {
             issuer,
             ca_pem,
             public_key_raw: raw.to_vec(),
+            not_before: parsed.validity().not_before.timestamp(),
+            not_after: parsed.validity().not_after.timestamp(),
         };
         authority.verify_signing_key()?;
         Ok(authority)
@@ -155,6 +195,14 @@ impl CertificateAuthority {
         let device_spki = ed25519_spki(device_public_key)?;
 
         let now = OffsetDateTime::now_utc();
+        if validity < Duration::minutes(1) || validity > Duration::days(7) {
+            return Err(
+                "device certificate validity must be between 1 minute and 7 days".to_owned(),
+            );
+        }
+        if now.unix_timestamp() < self.not_before || now.unix_timestamp() >= self.not_after {
+            return Err("issuer is outside its validity period".to_owned());
+        }
         let mut params =
             CertificateParams::new(Vec::<String>::new()).map_err(|error| error.to_string())?;
         params.distinguished_name = DistinguishedName::new();
@@ -165,8 +213,14 @@ impl CertificateAuthority {
             .distinguished_name
             .push(DnType::OrganizationName, "NipaPlay Mesh");
         params.is_ca = IsCa::ExplicitNoCa;
-        params.not_before = now - Duration::minutes(5);
-        params.not_after = now + validity;
+        params.not_before = (now - Duration::minutes(5)).max(
+            OffsetDateTime::from_unix_timestamp(self.not_before)
+                .map_err(|_| "invalid issuer validity".to_owned())?,
+        );
+        params.not_after = (now + validity).min(
+            OffsetDateTime::from_unix_timestamp(self.not_after)
+                .map_err(|_| "invalid issuer expiry".to_owned())?,
+        );
         params.serial_number = Some(random_serial()?);
         params.use_authority_key_identifier_extension = true;
         params.key_usages.push(KeyUsagePurpose::DigitalSignature);
@@ -219,6 +273,9 @@ pub fn device_id_from_public_key(public_key: &[u8]) -> String {
 
 /// Decodes a base64url (unpadded) raw Ed25519 public key.
 pub fn decode_device_public_key(encoded: &str) -> Result<Vec<u8>, String> {
+    if encoded.trim().len() != 43 {
+        return Err("device_public_key must encode 32 raw bytes".to_owned());
+    }
     let bytes = B64URL
         .decode(encoded.trim())
         .map_err(|_| "device_public_key is not valid base64url".to_owned())?;
@@ -333,19 +390,21 @@ pub fn generate_ca(cert_file: &Path, key_file: &Path) -> Result<(), String> {
 }
 
 fn write_file(path: &Path, contents: &[u8], private: bool) -> Result<(), String> {
-    if path.exists() {
-        return Err(format!("{} already exists", path.display()));
-    }
-    fs::write(path, contents)
-        .map_err(|error| format!("failed to write {}: {error}", path.display()))?;
+    let mut options = fs::OpenOptions::new();
+    options.write(true).create_new(true);
     #[cfg(unix)]
     if private {
-        use std::os::unix::fs::PermissionsExt;
-        fs::set_permissions(path, fs::Permissions::from_mode(0o600))
-            .map_err(|error| format!("failed to chmod {}: {error}", path.display()))?;
+        use std::os::unix::fs::OpenOptionsExt;
+        options.mode(0o600);
     }
     #[cfg(not(unix))]
     let _ = private;
+    let mut file = options
+        .open(path)
+        .map_err(|error| format!("failed to create {}: {error}", path.display()))?;
+    file.write_all(contents)
+        .and_then(|_| file.sync_all())
+        .map_err(|error| format!("failed to write {}: {error}", path.display()))?;
     Ok(())
 }
 
@@ -364,7 +423,9 @@ mod tests {
         let _ = fs::remove_dir_all(&dir);
         fs::create_dir_all(&dir).unwrap();
         generate_ca(&cert, &key).unwrap();
-        CertificateAuthority::load(&cert, &key).unwrap()
+        let authority = CertificateAuthority::load(&cert, &key).unwrap();
+        fs::remove_dir_all(dir).unwrap();
+        authority
     }
 
     #[test]
@@ -416,6 +477,12 @@ mod tests {
         assert_eq!(payload["publicKey"], B64URL.encode(&raw));
 
         assert!(!cert.is_ca());
+        assert_eq!(cert.public_key().subject_public_key.data.as_ref(), raw);
+        assert!(cert.key_usage().unwrap().unwrap().value.digital_signature());
+        let eku = cert.extended_key_usage().unwrap().unwrap();
+        assert!(eku.value.client_auth && eku.value.server_auth);
+        assert_eq!(cert.validity().not_before.timestamp(), issued.not_before);
+        assert_eq!(cert.validity().not_after.timestamp(), issued.not_after);
         assert_eq!(
             issued.not_after - issued.not_before,
             Duration::days(7).whole_seconds() + 300
@@ -432,7 +499,7 @@ mod tests {
             .issue_device_certificate("acct-7", &device_id, &raw, Duration::days(7))
             .unwrap();
 
-        // The client only has the base64url issuer key from `server-info`.
+        // Simulate the issuer public key embedded in the application build.
         let pinned = ca.public_key_base64url();
         let pinned_raw = B64URL.decode(pinned).unwrap();
         assert_eq!(pinned_raw.len(), ED25519_PUBLIC_KEY_LEN);
@@ -471,5 +538,107 @@ mod tests {
         let id = device_id_from_public_key(&raw);
         assert_eq!(id.len(), 43); // 32-byte digest in base64url without padding
         assert_eq!(id, device_id_from_public_key(&raw));
+    }
+
+    fn load_test_params(
+        params: CertificateParams,
+        mismatch: bool,
+    ) -> Result<CertificateAuthority, String> {
+        use std::sync::atomic::{AtomicU64, Ordering};
+        static COUNTER: AtomicU64 = AtomicU64::new(0);
+        let dir = std::env::temp_dir().join(format!(
+            "mesh-ca-invalid-{}-{}",
+            std::process::id(),
+            COUNTER.fetch_add(1, Ordering::Relaxed)
+        ));
+        fs::create_dir_all(&dir).unwrap();
+        let key = KeyPair::generate_for(&rcgen::PKCS_ED25519).unwrap();
+        let certificate = params.self_signed(&key).unwrap();
+        let actual_key = if mismatch {
+            KeyPair::generate_for(&rcgen::PKCS_ED25519).unwrap()
+        } else {
+            key
+        };
+        write_file(&dir.join("cert.pem"), certificate.pem().as_bytes(), false).unwrap();
+        write_file(
+            &dir.join("key.pem"),
+            actual_key.serialize_pem().as_bytes(),
+            true,
+        )
+        .unwrap();
+        let result = CertificateAuthority::load(&dir.join("cert.pem"), &dir.join("key.pem"));
+        fs::remove_dir_all(dir).unwrap();
+        result
+    }
+
+    fn ca_params() -> CertificateParams {
+        let mut params = CertificateParams::new(Vec::<String>::new()).unwrap();
+        params.is_ca = IsCa::Ca(BasicConstraints::Constrained(0));
+        params.key_usages.push(KeyUsagePurpose::KeyCertSign);
+        params.not_before = OffsetDateTime::now_utc() - Duration::minutes(1);
+        params.not_after = OffsetDateTime::now_utc() + Duration::hours(1);
+        params
+    }
+
+    #[test]
+    fn rejects_expired_non_ca_wrong_usage_and_mismatched_issuers() {
+        let mut expired = ca_params();
+        expired.not_after = OffsetDateTime::now_utc() - Duration::seconds(1);
+        assert!(load_test_params(expired, false).is_err());
+        let mut leaf = ca_params();
+        leaf.is_ca = IsCa::ExplicitNoCa;
+        assert!(load_test_params(leaf, false).is_err());
+        let mut wrong_usage = ca_params();
+        wrong_usage.key_usages = vec![KeyUsagePurpose::DigitalSignature];
+        assert!(load_test_params(wrong_usage, false).is_err());
+        assert!(load_test_params(ca_params(), true).is_err());
+    }
+
+    #[test]
+    fn certificate_expiry_never_exceeds_issuer_and_validity_is_bounded() {
+        let ca = load_test_params(ca_params(), false).unwrap();
+        let key = KeyPair::generate_for(&rcgen::PKCS_ED25519).unwrap();
+        let raw = key.der_bytes();
+        let id = device_id_from_public_key(raw);
+        let issued = ca
+            .issue_device_certificate("424242", &id, raw, Duration::days(7))
+            .unwrap();
+        assert_eq!(issued.not_after, ca.not_after);
+        assert!(issued.not_before >= ca.not_before);
+        assert!(ca
+            .issue_device_certificate("424242", &id, raw, Duration::days(8))
+            .is_err());
+        assert!(ca
+            .issue_device_certificate("424242", &id, raw, Duration::seconds(-1))
+            .is_err());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn private_key_files_are_private_at_creation_and_existing_paths_cannot_be_overwritten() {
+        use std::os::unix::fs::{symlink, PermissionsExt};
+        let dir = std::env::temp_dir().join(format!("mesh-key-permissions-{}", std::process::id()));
+        fs::create_dir_all(&dir).unwrap();
+        let cert = dir.join("cert.pem");
+        let key = dir.join("key.pem");
+        generate_ca(&cert, &key).unwrap();
+        assert_eq!(
+            fs::metadata(&key).unwrap().permissions().mode() & 0o777,
+            0o600
+        );
+        fs::set_permissions(&key, fs::Permissions::from_mode(0o644)).unwrap();
+        assert!(CertificateAuthority::load(&cert, &key).is_err());
+        assert!(write_file(&key, b"replace", true).is_err());
+        let link = dir.join("symlink.pem");
+        symlink(&key, &link).unwrap();
+        assert!(write_file(&link, b"replace", true).is_err());
+        let dangling = dir.join("dangling.pem");
+        symlink(dir.join("missing.pem"), &dangling).unwrap();
+        assert!(write_file(&dangling, b"private-material", true).is_err());
+        assert!(!dir.join("missing.pem").exists());
+        assert!(fs::read_to_string(&key)
+            .unwrap()
+            .starts_with("-----BEGIN PRIVATE KEY-----"));
+        fs::remove_dir_all(dir).unwrap();
     }
 }
