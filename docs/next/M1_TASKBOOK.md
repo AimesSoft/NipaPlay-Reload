@@ -480,3 +480,24 @@ if (!kIsWeb)
 flutter analyze lib/next lib/settings/pages/labs_settings_content.dart lib/providers/labs_settings_provider.dart lib/main.dart test/next
 flutter test test/next
 ```
+
+---
+
+## M1 验收记录（2026-10-10）
+
+环境：macOS 调试版（Flutter 3.44.6）、codex-cli 0.144.1、模型 gpt-6.1-sol。在 Labs 打开 Agent 接口后，于生成的工作区中执行 `codex exec`，只给自然语言指令：
+
+| 用户说 | Agent 调用的工具 | 结果 |
+|---|---|---|
+| 我最近在看什么？ | `history_continue_watching` | 按时间列出 5 部作品的进度；从发布文件名中识别出未匹配条目的作品名 |
+| 继续看穹庐下的魔女 | `history_continue_watching` → `playback_open {path}` | NipaPlay 从 11:39 续播第 11 话；`playback.open` 耗时 2.8 s，并写入操作日志 |
+| 先暂停一下，我待会再看 | `playback_state` → `playback_set_paused` → `playback_state` | 已暂停在 12:06；遵循“先查状态、行动、验证” |
+
+协议层冒烟测试：版本协商、9 个工具列出、无令牌返回 401、令牌文件权限 0600、端点只监听 127.0.0.1。Labs 开关关闭时不启动任何服务。
+
+### 验收中的发现
+
+- **Codex 只为受信任项目加载项目级 `.codex/config.toml`**，且信任必须持久化在用户配置中（`-c` 覆盖无效）；不需要 `.git`。
+  - Codex App 添加项目时会询问是否信任，因此产品流程成立。
+  - Labs 页面应提示用户“在 Codex 中添加并信任该文件夹”。
+- 本机设置了 `HTTP_PROXY`，命令行验收时用 `NO_PROXY=127.0.0.1,localhost` 访问回环端点。Codex App 是否会把回环请求送进系统代理，需要在 App 中实测。
