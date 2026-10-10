@@ -393,7 +393,9 @@ NipaPlay 在应用支持目录下生成一个 Codex 项目目录（download-harn
 
 ## 8. 演进路线（M1 之后）
 
-1. **Task Engine**：下载 / 扫描 / 同步成为持久任务，带回执与事件；只在需要判断时唤醒 Agent。
+1. **Task Engine**：下载 / 扫描 / 同步成为持久任务，带回执与事件；只在需要判断时唤醒 Agent。M2 先做任务内核与应用内 BT 下载，Classic 下载页一同受益（`M2_TASKBOOK.md`）。
+   - **Agent 刮削**：扫描与识别成为任务。高置信度由确定性程序绑定；有歧义的文件生成持久化 Decision，由 Agent（可联网查证）或用户判断。元数据多来源共存（弹弹play、Bangumi、TMDB……），一个文件或剧集挂多个外部 ID；弹弹play 的 episodeId 仍是弹幕匹配的根基。调研见 `research/METADATA_IDENTIFICATION.md`。
+   - **多平台弹幕聚合**：每个平台是一个 `DanmakuSource`，契约从第一天起按插件接口设计；多个来源合并进播放器现有的多轨弹幕。弹幕源是第 5 步“可演化能力”的第一类。研究阶段只用公开接口与用户自己的登录态，不绕过会员、DRM 或付费墙。调研见 `research/DANMAKU_AGGREGATION.md`。
 2. **GUI 迁移**：Classic 页面逐步改为调用 Harness。`Invocation` 增加 `interactive`，GUI 调用时由宿主把 `NeedsDecision` 渲染为对话框。
 3. **Next Shell**：内嵌 Codex App Server；`ui.present` 组件目录；`ui.layout.patch` 首页布局。
 4. **Preference Memory**：带来源与理由的结构化偏好。
