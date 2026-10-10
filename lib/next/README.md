@@ -11,9 +11,9 @@
 Capability → `engine.start()` 恢复持久任务 → 启动下载会话观察与页面外自动入库
 → 恢复媒体投影 outbox。领域不得创建引擎或打开数据库。
 
-新增领域（如 MB 弹幕）沿用 `MediaRuntime`：接收 Core 的数据库与设备身份，
-提供执行器及 Capability，在 `NextCore` 中参与组合，并在 `engine.start()`
-前完成引擎注入。后续恢复工作放在引擎启动之后。
+新增领域（如 MB 弹幕）沿用同一模式：接收 Core 的数据库与设备身份（弹幕还接收
+MA 的身份存储），提供执行器及 Capability，在 `NextCore` 中参与组合，并在
+`engine.start()` 前完成引擎注入。后续恢复工作放在引擎启动之后。
 迁移实现保留在各领域目录，按发布顺序追加到 `next_database.dart` 的
 `_migrations`，不改已发布位置：v1 任务表，v2 媒体身份表，MB 从 v3 追加。
 新库和旧库共用这一迁移序列。`SqliteJobStore.open` 仅供独立存储测试使用；

@@ -4,6 +4,8 @@ import 'package:nipa_harness/nipa_harness.dart';
 import 'package:nipaplay/utils/storage_service.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
+import 'danmaku/export.dart';
+import 'danmaku/runtime.dart';
 import 'downloads/download_backend.dart';
 import 'downloads/download_runtime.dart';
 import 'media/classic_projection.dart';
@@ -42,6 +44,7 @@ final class NextCore {
   late final TaskEngine engine;
   final DownloadRuntime downloads;
   late final MediaRuntime media;
+  late final DanmakuRuntime danmaku;
   late final List<Capability> capabilities;
 
   Future<void> _initialize(
@@ -60,14 +63,26 @@ final class NextCore {
         classic: classic,
         authorizedRoots: authorizedRoots,
         providers: mediaProviders);
+    danmaku = await DanmakuRuntime.create(media.service.store);
+    danmaku.service.exporter = DanmakuExporter(danmaku.service.store,
+        (path) => media.service.authorizedPath(path, directory: true));
     engine = TaskEngine(
         store: jobs,
         ownerDeviceId: deviceId,
-        executors: [downloads.executor, ...media.executors]);
+        executors: [
+          downloads.executor,
+          ...media.executors,
+          ...danmaku.executors
+        ]);
     downloads.attach(engine, root);
     media.attach(engine);
-    capabilities = List.unmodifiable(
-        [TaskCapability(engine), downloads.capability, media.capability]);
+    danmaku.attach(engine);
+    capabilities = List.unmodifiable([
+      TaskCapability(engine),
+      downloads.capability,
+      media.capability,
+      danmaku.capability
+    ]);
     await engine.start();
     await downloads.start();
     await media.start();
@@ -76,10 +91,12 @@ final class NextCore {
   Future<void> close() async {
     await ready;
     await downloads.stop();
+    await danmaku.stopRestoring();
     final jobs = await engine.list(type: 'download');
     await engine.close();
     await downloads.quiesce(jobs);
     downloads.dispose();
+    danmaku.close();
     media.close();
   }
 }

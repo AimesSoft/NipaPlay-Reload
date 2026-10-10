@@ -23,7 +23,7 @@ import 'capabilities/playback_capability.dart';
 import 'capabilities/video_player_state_port.dart';
 
 final class NextRuntime extends ChangeNotifier {
-  NextRuntime._(this._labs, List<Capability> capabilities) {
+  NextRuntime._(this._labs, this._player, List<Capability> capabilities) {
     _operations = _initialize(capabilities);
   }
 
@@ -34,7 +34,7 @@ final class NextRuntime extends ChangeNotifier {
     final navigation = context.read<TabChangeNotifier>();
     final history = ServiceProvider.watchHistoryProvider;
     final seriesDetail = BangumiService.instance.getAnimeDetailsFromMemory;
-    return NextRuntime._(labs, [
+    return NextRuntime._(labs, player, [
       LibraryCapability(
         history: () => history.history,
         seriesDetail: seriesDetail,
@@ -57,6 +57,7 @@ final class NextRuntime extends ChangeNotifier {
   }
 
   final LabsSettingsProvider _labs;
+  final VideoPlayerState _player;
   late final Harness _harness;
   late final AgentEndpoint _endpoint;
   late final TaskEngine _taskEngine;
@@ -80,6 +81,7 @@ final class NextRuntime extends ChangeNotifier {
       [...capabilities, ...core.capabilities],
       observers: [JsonlJournal(File('${root.path}/journal.jsonl'))],
     );
+    core.danmaku.startRestoring(_harness, _player);
     _endpoint = AgentEndpoint(
       harness: _harness,
       root: root,
@@ -115,6 +117,7 @@ final class NextRuntime extends ChangeNotifier {
     _labs.removeListener(_queueEndpointUpdate);
     _operations = _operations.then((_) async {
       await _endpoint.stop();
+      await ServiceProvider.nextCore.danmaku.stopRestoring();
     });
     super.dispose();
   }
