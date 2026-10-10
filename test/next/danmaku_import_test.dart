@@ -113,10 +113,7 @@ void main() {
     entityId = await core.media.service.index(media.path);
     video = _Video(await media.resolveSymbolicLinks());
     service = DanmakuService(
-        store: core.danmaku.service.store,
-        sources: [],
-        host: FixtureDanmakuHost(),
-        player: video)
+        store: core.danmaku.service.store, sources: [], player: video)
       ..engine = core.engine;
     api = Harness([
       DanmakuCapability(service),
@@ -347,19 +344,19 @@ void main() {
     await f.open();
     addTearDown(f.close);
     final file = await f.file();
-    f.host.blockedKey = 'bilibili.segment:1';
+    f.host.blockedKey = 'segmented.chunk:0';
     f.host.entered = Completer<void>();
     f.host.release = Completer<void>();
     final pending = await f.call('danmaku.attach', {
       'entityId': file,
-      'video': biliVideo.toJson(),
+      'video': segmentedVideo.toJson(),
       'reason': 'synthetic',
       'requestId': 'before-import'
     });
     await f.host.entered!.future;
     await xml('交入结果');
     final imported = await f.call('danmaku.import',
-        {...input(platform: 'bilibili', id: '101'), 'entityId': file});
+        {...input(platform: 'segmented', id: '101'), 'entityId': file});
     f.host.release!.complete();
     await f.wait(pending['jobId'] as String, JobState.failed);
     final binding =
@@ -372,7 +369,7 @@ void main() {
     expect(f.player.data[imported['bindingId']]!.single.text, '交入结果');
     final refresh = await f.call('danmaku.attach', {
       'entityId': file,
-      'video': biliVideo.toJson(),
+      'video': segmentedVideo.toJson(),
       'reason': 'fresh host acquisition',
       'requestId': 'after-import',
       'refresh': true,

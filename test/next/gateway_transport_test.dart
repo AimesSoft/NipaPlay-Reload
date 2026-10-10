@@ -27,7 +27,6 @@ void main() {
   const backup = NetworkSettings.chinaServer;
   late List<http.Request> requests;
   late DandanplayGateway gateway;
-  late http.Client publicClient;
   late HttpDanmakuHost host;
   late HttpMetadataTransport metadata;
   late Map<String, String> account;
@@ -63,23 +62,18 @@ void main() {
           });
         }));
     gateway = DandanplayGateway(client: client);
-    publicClient = MockClient((_) async => fail('Wrong provider client'));
-    host = HttpDanmakuHost(
-        publicClient: publicClient,
-        dandanplay: gateway,
-        interval: Duration.zero);
+    host = HttpDanmakuHost(dandanplay: gateway, interval: Duration.zero);
     metadata =
         HttpMetadataTransport.dandanplay(gateway, interval: Duration.zero);
   });
   tearDown(() {
     gateway.client.close();
-    publicClient.close();
     router.reportSuccess(Uri.parse(primary));
     router.reportSuccess(Uri.parse(backup));
   });
 
   Future<List<int>> searchDanmaku([String query = '动画']) => host.request(
-      'dandanplay.search', {'query': query}, null, DanmakuCancellation());
+      'dandanplay.search', {'query': query}, DanmakuCancellation());
 
   test(
       'all Dandanplay profiles and metadata operations use Classic gateway '
@@ -87,9 +81,9 @@ void main() {
     expect(await DandanplayService.getApiBaseUrl(), primary);
     await searchDanmaku();
     await host.request(
-        'dandanplay.episodes', {'workId': '7001'}, null, DanmakuCancellation());
-    await host.request('dandanplay.comments', {'videoId': '7101'}, null,
-        DanmakuCancellation());
+        'dandanplay.episodes', {'workId': '7001'}, DanmakuCancellation());
+    await host.request(
+        'dandanplay.comments', {'videoId': '7101'}, DanmakuCancellation());
     account = {'Authorization': 'Bearer updated-fixture-token'};
     final provider = DandanplayMetadataProvider(metadata);
     final anime = (await provider.search('动画')).single;

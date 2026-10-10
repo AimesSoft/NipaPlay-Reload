@@ -113,7 +113,7 @@ void main() {
     final fileId = await media.identities.ensureFile(video.path);
     final danmaku = DanmakuStore(media.identities);
     final binding = await danmaku.attach(
-        fileId, biliVideo, '合成证据', null, Invocation(origin: 'mcp'));
+        fileId, segmentedVideo, '合成证据', null, Invocation(origin: 'mcp'));
     await media.call('media.identity.bind_batch', {
       'requestId': 'on-demand',
       'entries': [tmdbBinding(fileId)]

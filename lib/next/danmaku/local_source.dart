@@ -62,11 +62,7 @@ final class LocalDanmakuSource implements DanmakuSource {
       plan.every((c) => completed.contains(c.index));
   @override
   Future<DanmakuChunkResult> fetchChunk(DanmakuVideo video, DanmakuChunk chunk,
-      DanmakuAccess? access, DanmakuCancellation cancel) async {
-    if (access != null) {
-      throw const Failure(
-          FailureCode.invalidInput, 'Local files do not take credentials.');
-    }
+      DanmakuCancellation cancel) async {
     final path = await authorize(video.videoId);
     final file = File(path);
     if (await file.length() > 8388608) {

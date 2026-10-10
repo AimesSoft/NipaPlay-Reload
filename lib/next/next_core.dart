@@ -24,8 +24,6 @@ import 'settings/capability.dart';
 import 'mesh/runtime.dart';
 import 'mesh/capability.dart';
 import 'mesh/debug_claim_names.dart';
-import 'sessions/capability.dart';
-import 'sessions/platform_session.dart';
 import 'state/query.dart';
 import 'state/views.dart';
 import 'harness_hooks.dart';
@@ -68,7 +66,6 @@ final class NextCore {
   late final DanmakuRuntime danmaku;
   late final SettingsRegistry settings;
   late final MeshRuntime mesh;
-  late final PlatformSessions sessions;
   late final List<Capability> capabilities;
   final StateSources stateSources = StateSources();
   late final StateCapability state;
@@ -105,12 +102,8 @@ final class NextCore {
     SettingsAccess.registry = settings;
     ApplicationSettings.authorizePath = (path, {directory = false}) =>
         media.service.authorizedPath(path, directory: directory);
-    final login = MacOSPlatformLogin();
-    sessions = PlatformSessions(credentialVault, login);
-    login.bind(sessions);
-    await sessions.restore();
     danmaku = await DanmakuRuntime.create(media.service.store,
-        sessions: sessions, authorizeLocalFile: media.service.authorizedPath);
+        authorizeLocalFile: media.service.authorizedPath);
     danmaku.service.exporter = DanmakuExporter(danmaku.service.store,
         (path) => media.service.authorizedPath(path, directory: true));
     engine = TaskEngine(store: jobs, ownerDeviceId: deviceId, executors: [
@@ -131,7 +124,6 @@ final class NextCore {
         sources: stateSources));
     capabilities = List.unmodifiable([
       CredentialCapability(credentials),
-      PlatformSessionCapability(sessions),
       TaskCapability(engine),
       downloads.capability,
       media.capability,
@@ -166,8 +158,6 @@ final class NextCore {
     await downloads.quiesce(jobs);
     downloads.dispose();
     danmaku.close();
-    await sessions.close();
-    sessions.dispose();
     media.close();
   }
 }

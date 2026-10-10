@@ -274,14 +274,14 @@ final class DanmakuStore {
             where: 'id = ?',
             whereArgs: [id]);
       });
-  String cacheKey(DanmakuVideo v, DanmakuSource source, DanmakuAccess? access,
+  String cacheKey(DanmakuVideo v, DanmakuSource source,
           {String? refreshJobId}) =>
       stableMediaId('danmaku-cache', [
         v.sourceId,
         v.videoId,
         source.describe.version,
         source.describe.hosts,
-        access?.credentialRef ?? 'public',
+        'public',
         'related=true',
         if (refreshJobId != null) {'refreshJobId': refreshJobId}
       ]);

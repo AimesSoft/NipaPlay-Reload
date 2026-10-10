@@ -134,8 +134,7 @@ const _descriptor = ObjectSchema({
   'requestBudget': IntegerSchema(),
   'responseBytes': IntegerSchema(),
   'itemCount': IntegerSchema(),
-  'historyFetch': BooleanSchema(),
-  'sessionAvailable': BooleanSchema()
+  'historyFetch': BooleanSchema()
 }, required: [
   'sourceId',
   'contractVersion',
@@ -159,12 +158,10 @@ const _descriptor = ObjectSchema({
   'requestBudget',
   'responseBytes',
   'itemCount',
-  'historyFetch',
-  'sessionAvailable'
+  'historyFetch'
 ]);
 const _fetchFields = {
   'video': _video,
-  'credentialRef': _text,
   'requestId': _text,
   'startMs': IntegerSchema(minimum: 0),
   'endMs': IntegerSchema(minimum: 1),
@@ -241,8 +238,8 @@ final _specs = [
       ]),
       'Import acquired danmaku from a local UTF-8 Bilibili-standard XML file or JSON array (also {comments:[...]}). '
           'JSON entries require sourceTimeMs (nonnegative integer milliseconds), text, mode (positive integer), colorRgb (0..16777215); '
-      'optional platformId, sourceEntryId, originSource, sender, sentAt (strings), fontSize (positive integer). '
-          'No registered source or session is required. Supply platform/platformVideoId; host records actor, origin and timestamp. '
+          'optional platformId, sourceEntryId, originSource, sender, sentAt (strings), fontSize (positive integer). '
+          'No registered source is required. Supply platform/platformVideoId; host records actor, origin and timestamp. '
           'Target entityId (file or episode), path, or current playback (default). '
           'Reimport replaces the same platform/video pool atomically, preserving track settings; malformed files leave the old track unchanged. '
           'Mounted immediately when the target is playing. File data stays in host storage; do not send large comment arrays through tool arguments.'),
@@ -252,7 +249,7 @@ final _specs = [
       const ObjectSchema({}),
       const ObjectSchema({'sources': ArraySchema(_descriptor)},
           required: ['sources']),
-      'List registered plugin-ready sources, capabilities and host session availability. No network or persistence.'),
+      'List registered sources and capabilities. No network or persistence.'),
   _spec(
       'danmaku.search',
       Effect.read,
@@ -260,7 +257,7 @@ final _specs = [
           required: ['sourceId', 'query']),
       const ObjectSchema({'results': ArraySchema(_video)},
           required: ['results']),
-      'Bounded transient title search. Bilibili bvid candidates identify multipart containers; cid identifies an exact playable part. Unsupported sources report unavailable; no binding or task is created.'),
+      'Bounded transient title search. Unsupported sources report unavailable; no binding or task is created.'),
   _spec(
       'danmaku.episodes',
       Effect.read,
@@ -272,15 +269,9 @@ final _specs = [
         'sourceId',
         'workId'
       ]),
-      const ObjectSchema({
-        'results': ArraySchema(_video),
-        'page': IntegerSchema(),
-        'mayHaveMore': BooleanSchema()
-      }, required: [
-        'results',
-        'page',
-        'mayHaveMore'
-      ]),
+      const ObjectSchema(
+          {'results': ArraySchema(_video), 'page': IntegerSchema()},
+          required: ['results', 'page']),
       'Read a finite catalogue page. Zero duration means unknown duration. Acquisition requires a finite range within a known media duration.'),
   _spec(
       'danmaku.resolve',
@@ -301,7 +292,6 @@ final _specs = [
       Effect.write,
       const ObjectSchema({
         'video': _video,
-        'credentialRef': _text,
         'requestId': _text,
         'entityId': _text,
         'path': _text,
@@ -512,9 +502,6 @@ final class _Action extends Action<_Data, _Data> {
     final j = input.value;
     final cancel = DanmakuCancellation();
     Completed<_Data> result(JsonMap value) => Completed(_Data(value));
-    DanmakuAccess? access() => j['credentialRef'] == null
-        ? null
-        : DanmakuAccess(j['credentialRef'] as String);
     try {
       switch (spec.id) {
         case 'danmaku.import':
@@ -522,12 +509,7 @@ final class _Action extends Action<_Data, _Data> {
         case 'danmaku.sources':
           return result({
             'sources': [
-              for (final s in service.sources.values)
-                {
-                  ...s.describe.toJson(),
-                  'sessionAvailable':
-                      service.host.sessionAvailable(s.describe.id)
-                }
+              for (final s in service.sources.values) s.describe.toJson()
             ]
           });
         case 'danmaku.search':
@@ -546,8 +528,7 @@ final class _Action extends Action<_Data, _Data> {
               .listEpisodes(j['workId'] as String, page, cancel);
           return result({
             'results': [for (final v in videos) v.toJson()],
-            'page': page,
-            'mayHaveMore': j['sourceId'] == 'youku' && videos.length == 100
+            'page': page
           });
         case 'danmaku.resolve':
           final videos = await service
@@ -581,7 +562,6 @@ final class _Action extends Action<_Data, _Data> {
           final job = await service.fetch(
               DanmakuVideo.fromJson(
                   Map<String, Object?>.from(j['video'] as Map)),
-              access: access(),
               startMs: j['startMs'] as int? ?? 0,
               endMs: j['endMs'] as int?,
               localDurationMs: j['localDurationMs'] as int?,
@@ -595,7 +575,6 @@ final class _Action extends Action<_Data, _Data> {
                   Map<String, Object?>.from(j['video'] as Map)),
               j['reason'] as String,
               j['url'] as String?,
-              access(),
               j['requestId'] as String,
               invocation,
               refresh: j['refresh'] == true));

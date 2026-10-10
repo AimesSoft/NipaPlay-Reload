@@ -41,12 +41,10 @@ final class DanmakuService {
   DanmakuService(
       {required this.store,
       required Iterable<DanmakuSource> sources,
-      required this.host,
       required this.player})
       : sources = {for (final source in sources) source.describe.id: source};
   final DanmakuStore store;
   final Map<String, DanmakuSource> sources;
-  final DanmakuHost host;
   final DanmakuPlayerPort player;
   final Map<String, JsonMap> _localCacheProvenance = {};
   Future<JsonMap> _provenance(JsonMap binding) async {
@@ -124,7 +122,6 @@ final class DanmakuService {
 
   Future<Job> fetch(DanmakuVideo video,
       {String? bindingId,
-      DanmakuAccess? access,
       int startMs = 0,
       int? endMs,
       int? localDurationMs,
@@ -133,15 +130,11 @@ final class DanmakuService {
     final src = source(video.sourceId);
     final end = endMs ?? video.durationMs;
     src.planFetch(video, startMs, end);
-    if (src.describe.access == 'requiredSession' && access == null) {
-      throw Failure(FailureCode.unavailable,
-          'authenticationRequired: ${platformSessionLoginHint(video.sourceId, state: host.sessionAvailable(video.sourceId) ? 'sessionPresent; credentialRef missing' : 'unavailable')}');
-    }
     final key = stableMediaId('danmaku-fetch', [
       requestId,
       video.toJson(),
       bindingId,
-      access?.credentialRef,
+      null,
       startMs,
       end,
       if (localDurationMs != null || refresh)
@@ -168,7 +161,6 @@ final class DanmakuService {
           input: {
             'video': video.toJson(),
             'bindingId': bindingId,
-            'credentialRef': access?.credentialRef,
             'startMs': startMs,
             'endMs': end,
             'localDurationMs': localDurationMs,
@@ -179,14 +171,8 @@ final class DanmakuService {
     }
   }
 
-  Future<JsonMap> attach(
-      String entityId,
-      DanmakuVideo video,
-      String reason,
-      String? url,
-      DanmakuAccess? access,
-      String requestId,
-      Invocation invocation,
+  Future<JsonMap> attach(String entityId, DanmakuVideo video, String reason,
+      String? url, String requestId, Invocation invocation,
       {bool refresh = false}) async {
     source(video.sourceId);
     final target = player.target;
@@ -219,15 +205,9 @@ final class DanmakuService {
       }
     }
     source(video.sourceId).planFetch(video, 0, video.durationMs);
-    if (source(video.sourceId).describe.access == 'requiredSession' &&
-        access == null) {
-      throw Failure(FailureCode.unavailable,
-          'authenticationRequired: ${platformSessionLoginHint(video.sourceId, state: host.sessionAvailable(video.sourceId) ? 'sessionPresent; credentialRef missing' : 'unavailable')}');
-    }
     final id = await store.attach(entityId, video, reason, url, invocation);
     final job = await fetch(video,
         bindingId: id,
-        access: access,
         requestId: requestId,
         refresh: refresh,
         localDurationMs:
@@ -411,10 +391,10 @@ final class DanmakuService {
         if (job.state.isTerminal) continue;
         final video = DanmakuVideo.fromJson(
             Map<String, Object?>.from(job.input['video'] as Map));
-        final ref = job.input['credentialRef'] as String?;
-        final jobKey = store.cacheKey(video, source(video.sourceId),
-            ref == null ? null : DanmakuAccess(ref),
-            refreshJobId: job.input['refresh'] == true ? job.jobId : null);
+        if (!sources.containsKey(video.sourceId)) continue;
+        final jobKey = job.checkpoint['cacheKey'] ??
+            store.cacheKey(video, source(video.sourceId),
+                refreshJobId: job.input['refresh'] == true ? job.jobId : null);
         if (jobKey == key) {
           throw const Failure(FailureCode.conflict,
               'Stop active fetch tasks before deleting their cache.');

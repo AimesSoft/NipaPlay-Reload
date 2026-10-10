@@ -1,10 +1,6 @@
 import 'dart:async';
 import 'package:nipa_harness/nipa_harness.dart';
 
-String platformSessionLoginHint(String platform,
-        {String state = 'unavailable'}) =>
-    '$platform 需要登录态；当前状态：$state。';
-
 enum SourceStatus {
   validEmpty,
   complete,
@@ -38,13 +34,6 @@ final class DanmakuCancellation {
   void check() {
     if (cancelled) throw const SourceFailure(SourceStatus.cancelled);
   }
-}
-
-/// The host binds this opaque reference to an account, source version and profile.
-/// No secret or signed request is returned to a source.
-final class DanmakuAccess {
-  const DanmakuAccess(this.credentialRef);
-  final String credentialRef;
 }
 
 final class DanmakuVideo implements JsonEncodable {
@@ -224,7 +213,7 @@ final class DanmakuDescriptor implements JsonEncodable {
       };
 }
 
-/// Pure Dart plugin boundary. Requests, sessions, budgets and cache belong to host.
+/// Pure Dart plugin boundary. Requests, budgets and cache belong to host.
 abstract interface class DanmakuSource {
   DanmakuDescriptor get describe;
   Future<List<DanmakuVideo>> search(String query, DanmakuCancellation cancel);
@@ -233,16 +222,13 @@ abstract interface class DanmakuSource {
   Future<List<DanmakuVideo>> resolve(
       String locator, DanmakuCancellation cancel);
   List<DanmakuChunk> planFetch(DanmakuVideo video, int startMs, int endMs);
-  Future<DanmakuChunkResult> fetchChunk(DanmakuVideo video, DanmakuChunk chunk,
-      DanmakuAccess? access, DanmakuCancellation cancel);
+  Future<DanmakuChunkResult> fetchChunk(
+      DanmakuVideo video, DanmakuChunk chunk, DanmakuCancellation cancel);
   bool validate(List<DanmakuChunk> plan, Set<int> completed);
 }
 
 /// Implementations accept only named profiles and typed business parameters.
-/// In particular youku.minute must sign and send inside the host, never expose
-/// token material to a plugin, and reject unbound sessions or redirects.
 abstract interface class DanmakuHost {
-  Future<List<int>> request(String profile, JsonMap parameters,
-      DanmakuAccess? access, DanmakuCancellation cancel);
-  bool sessionAvailable(String sourceId);
+  Future<List<int>> request(
+      String profile, JsonMap parameters, DanmakuCancellation cancel);
 }

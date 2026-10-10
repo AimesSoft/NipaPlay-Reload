@@ -13,52 +13,79 @@ import 'package:nipaplay/next/media/identity_store.dart';
 import 'package:nipaplay/next/tasks/sqlite_job_store.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
-/// Synthetic protocol responses, not recordings of platform content or accounts.
 List<int> jsonBytes(Object value) => utf8.encode(jsonEncode(value));
-List<int> varint(BigInt value) {
-  final bytes = <int>[];
-  do {
-    var b = (value & BigInt.from(127)).toInt();
-    value >>= 7;
-    if (value != BigInt.zero) b |= 128;
-    bytes.add(b);
-  } while (value != BigInt.zero);
-  return bytes;
+
+/// Segmented synthetic source for storage/task tests; no platform protocol.
+final class FixtureDanmakuSource implements DanmakuSource {
+  const FixtureDanmakuSource(this.host, this.id, this.segmentMs);
+  final DanmakuHost host;
+  final String id;
+  final int segmentMs;
+  @override
+  DanmakuDescriptor get describe => DanmakuDescriptor(
+      id: id,
+      platform: id,
+      hosts: const ['fixture.invalid'],
+      profiles: ['$id.chunk'],
+      access: 'anonymous',
+      segmentMs: segmentMs);
+  DanmakuVideo video(String videoId) => DanmakuVideo(
+      sourceId: id,
+      videoId: videoId,
+      title: videoId,
+      durationMs: segmentMs * 2);
+  @override
+  Future<List<DanmakuVideo>> resolve(
+          String locator, DanmakuCancellation cancel) async =>
+      locator == 'ambiguous' ? [video('101'), video('102')] : [video(locator)];
+  @override
+  Future<List<DanmakuVideo>> listEpisodes(
+          String workId, int page, DanmakuCancellation cancel) async =>
+      [video('Xfixture')];
+  @override
+  Future<List<DanmakuVideo>> search(
+          String query, DanmakuCancellation cancel) async =>
+      [video('101')];
+  @override
+  List<DanmakuChunk> planFetch(DanmakuVideo video, int startMs, int endMs) => [
+        for (var i = startMs ~/ segmentMs; i <= (endMs - 1) ~/ segmentMs; i++)
+          DanmakuChunk(i, i * segmentMs, (i + 1) * segmentMs)
+      ];
+  @override
+  bool validate(List<DanmakuChunk> plan, Set<int> completed) =>
+      completed.length == plan.length &&
+      plan.every((chunk) => completed.contains(chunk.index));
+  @override
+  Future<DanmakuChunkResult> fetchChunk(DanmakuVideo video, DanmakuChunk chunk,
+      DanmakuCancellation cancel) async {
+    final rows = jsonDecode(utf8.decode(
+        await host.request('$id.chunk', {'index': chunk.index}, cancel)));
+    if (rows is! List) throw const SourceFailure(SourceStatus.schemaChanged);
+    return DanmakuChunkResult([
+      for (final row in rows)
+        DanmakuEntry.fromJson(Map<String, Object?>.from(row as Map))
+    ]);
+  }
 }
 
-List<int> numberField(int field, int value) =>
-    [field << 3, ...varint(BigInt.from(value))];
-List<int> bytesField(int field, List<int> value) =>
-    [(field << 3) | 2, ...varint(BigInt.from(value.length)), ...value];
-List<int> biliSegment(
-        {String id = '9007199254740993',
+List<int> fixtureChunk(
+        {String source = 'segmented',
+        String id = '9007199254740993',
         int timeMs = 1000,
-        String text = '合成弹幕样本内容',
-        String sender = 'sender-hash-fixture',
-        int mode = 1}) =>
-    bytesField(1, [
-      ...numberField(2, timeMs),
-      ...numberField(3, mode),
-      ...numberField(4, 25),
-      ...numberField(5, 16777215),
-      ...bytesField(6, utf8.encode(sender)),
-      ...bytesField(7, utf8.encode(text)),
-      ...bytesField(12, utf8.encode(id))
+        String text = '合成弹幕样本内容'}) =>
+    jsonBytes([
+      DanmakuEntry(
+              sourceId: source,
+              videoId: source == 'minutes' ? 'Xfixture' : '101',
+              platform: source,
+              originVideoId: source == 'minutes' ? 'Xfixture' : '101',
+              platformId: id,
+              sourceTimeMs: timeMs,
+              text: text,
+              mode: 1,
+              colorRgb: 16777215)
+          .toJson()
     ]);
-JsonMap youkuPayload(List<JsonMap> rows) => {
-      'ret': ['SUCCESS::调用成功'],
-      'data': {
-        'result': jsonEncode({
-          'data': {'result': rows}
-        })
-      }
-    };
-JsonMap youkuEntry({String id = 'entry-fixture', int time = 1000}) => {
-      'id': id,
-      'playat': time,
-      'content': '优酷合成弹幕内容',
-      'propertis': jsonEncode({'pos': 4, 'color': 16777215, 'size': 25})
-    };
 
 final class FixtureDanmakuHost implements DanmakuHost {
   final List<JsonMap> requests = [];
@@ -77,51 +104,24 @@ final class FixtureDanmakuHost implements DanmakuHost {
         {'cid': 3, 'p': '3,4,255,0', 'm': '没有来源证据'}
       ]
     }),
-    'bilibili.view': jsonBytes({
-      'code': 0,
-      'data': {
-        'title': '分 P 样本',
-        'pages': [
-          {'cid': 101, 'part': '第一段', 'duration': 360, 'page': 1},
-          {'cid': 102, 'part': '第二段', 'duration': 420, 'page': 2}
-        ]
-      }
-    }),
-    'bilibili.segment:1': biliSegment(),
-    'bilibili.segment:2': biliSegment(id: 'second-id', timeMs: 361000),
-    'youku.video':
-        jsonBytes({'id': 'Xfixture', 'title': '优酷样本', 'duration': 120}),
-    'youku.episodes': jsonBytes({
-      'total': 1,
-      'videos': [
-        {'id': 'Xfixture', 'title': '优酷样本', 'duration': 120}
-      ]
-    }),
-    'youku.minute:0': jsonBytes(youkuPayload([youkuEntry()])),
-    'youku.minute:1':
-        jsonBytes(youkuPayload([youkuEntry(id: 'entry-two', time: 61000)])),
+    'segmented.chunk:0': fixtureChunk(),
+    'segmented.chunk:1': fixtureChunk(id: 'second-id', timeMs: 361000),
+    'minutes.chunk:0': fixtureChunk(source: 'minutes'),
+    'minutes.chunk:1':
+        fixtureChunk(source: 'minutes', id: 'entry-two', timeMs: 61000),
   };
   Completer<void>? entered, release;
   String? blockedKey;
   SourceFailure? failure;
   final Map<String, SourceFailure> failures = {};
-  bool session = true;
   @override
-  bool sessionAvailable(String sourceId) => sourceId == 'youku' && session;
-  @override
-  Future<List<int>> request(String profile, JsonMap parameters,
-      DanmakuAccess? access, DanmakuCancellation cancel) async {
+  Future<List<int>> request(
+      String profile, JsonMap parameters, DanmakuCancellation cancel) async {
     cancel.check();
-    final key = profile == 'youku.minute'
-        ? '$profile:${parameters['minute']}'
-        : profile == 'bilibili.segment'
-            ? '$profile:${parameters['segmentIndex']}'
-            : profile;
-    requests.add({
-      'profile': profile,
-      'parameters': parameters,
-      'accessRef': access?.credentialRef
-    });
+    final key = parameters.containsKey('index')
+        ? '$profile:${parameters['index']}'
+        : profile;
+    requests.add({'profile': profile, 'parameters': parameters});
     if (blockedKey == key) {
       if (entered != null && !entered!.isCompleted) entered!.complete();
       await Future.any([release!.future, cancel.stopped]);
@@ -264,12 +264,12 @@ final class DanmakuFixture {
     identities = IdentityStore(jobs.database, 'fixture-device');
     service = DanmakuService(
         store: DanmakuStore(identities),
-        host: host,
         player: player,
         sources: [
-          DandanplayDanmakuSource(host),
-          BilibiliDanmakuSource(host),
-          YoukuDanmakuSource(host)
+          DandanplayDanmakuSource(host,
+              allowedHosts: const ['fixture.invalid']),
+          FixtureDanmakuSource(host, 'segmented', 360000),
+          FixtureDanmakuSource(host, 'minutes', 60000)
         ]);
     engine = TaskEngine(
         store: jobs,
@@ -408,14 +408,13 @@ final class DanmakuFixture {
   }
 }
 
-const biliVideo = DanmakuVideo(
-    sourceId: 'bilibili',
-    videoId: '101',
-    title: '测试分 P',
-    durationMs: 720000,
-    objectType: 'cid');
-const youkuVideo = DanmakuVideo(
-    sourceId: 'youku', videoId: 'Xfixture', title: '测试剧集', durationMs: 120000);
+const segmentedVideo = DanmakuVideo(
+    sourceId: 'segmented', videoId: '101', title: '分段测试', durationMs: 720000);
+const minuteVideo = DanmakuVideo(
+    sourceId: 'minutes',
+    videoId: 'Xfixture',
+    title: '测试剧集',
+    durationMs: 120000);
 const ddpVideo = DanmakuVideo(
     sourceId: 'dandanplay',
     videoId: '7101',
