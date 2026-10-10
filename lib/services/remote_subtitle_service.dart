@@ -178,6 +178,9 @@ class RemoteSubtitleService {
     if (_parseSharedRemoteStreamUrl(videoPath) != null) return true;
     final resolvedPath = _resolveManagedStreamPath(videoPath);
     if (resolvedPath.isEmpty) return false;
+    if (DandanplayRemoteService.instance.isDandanplayStreamUrl(resolvedPath)) {
+      return true;
+    }
     if (MediaSourceUtils.isSmbPath(resolvedPath)) return true;
     final uri = Uri.tryParse(resolvedPath);
     if (uri == null) return false;
