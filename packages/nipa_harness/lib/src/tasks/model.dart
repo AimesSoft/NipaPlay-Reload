@@ -36,7 +36,7 @@ enum JobState {
         needsDecision =>
           {queued, interrupted, cancelling, failed}.contains(next),
         waitingRetry =>
-          {queued, interrupted, cancelling, failed}.contains(next),
+          {queued, paused, interrupted, cancelling, failed}.contains(next),
         interrupted => {
             running,
             paused,
@@ -110,6 +110,7 @@ final class Job implements JsonEncodable {
     required this.revision,
     JsonMap input = const {},
     JsonMap checkpoint = const {},
+    JsonMap details = const {},
     this.error,
     Decision? decision,
     this.receipt,
@@ -120,6 +121,7 @@ final class Job implements JsonEncodable {
     this.sideEffectCommitted = false,
   })  : input = _freezeJson(input),
         checkpoint = _freezeJson(checkpoint),
+        details = _freezeJson(details),
         decision = decision == null
             ? null
             : _decodeDecision(_freezeJson(decision.toJson())) {
@@ -133,6 +135,32 @@ final class Job implements JsonEncodable {
         (retryAt != null && !retryAt!.isUtc) ||
         (cancelRequestedAt != null && !cancelRequestedAt!.isUtc)) {
       throw ArgumentError('Invalid job identity, revision or timestamps.');
+    }
+    const reserved = {
+      'jobId',
+      'type',
+      'title',
+      'state',
+      'phase',
+      'progress',
+      'createdAt',
+      'updatedAt',
+      'ownerDeviceId',
+      'revision',
+      'error',
+      'decision',
+      'receipt',
+      'input',
+      'checkpoint',
+      'details',
+      'retryAt',
+      'cancelRequestedAt',
+      'cancelRequestedPhase',
+      'cancelAfterCommit',
+      'sideEffectCommitted',
+    };
+    if (details.keys.any(reserved.contains)) {
+      throw ArgumentError('Public details cannot shadow kernel fields.');
     }
     if ((state == JobState.needsDecision) != (this.decision != null) ||
         (state == JobState.waitingRetry) != (retryAt != null) ||
@@ -152,7 +180,7 @@ final class Job implements JsonEncodable {
   final JobProgress progress;
   final DateTime createdAt, updatedAt;
   final int revision;
-  final JsonMap input, checkpoint;
+  final JsonMap input, checkpoint, details;
   final Failure? error;
   final Decision? decision;
   final JobReceipt? receipt;
@@ -174,6 +202,7 @@ final class Job implements JsonEncodable {
         revision: json['revision'] as int,
         input: json['input'] as JsonMap,
         checkpoint: json['checkpoint'] as JsonMap,
+        details: (json['details'] as JsonMap?) ?? const {},
         error: json['error'] == null
             ? null
             : _decodeFailure(json['error'] as JsonMap),
@@ -192,6 +221,7 @@ final class Job implements JsonEncodable {
 
   @override
   JsonMap toJson() => {
+        ...details,
         'jobId': jobId,
         'type': type,
         'title': title,
@@ -222,6 +252,7 @@ final class Job implements JsonEncodable {
         ...toJson(),
         'input': input,
         'checkpoint': checkpoint,
+        'details': details,
         'sideEffectCommitted': sideEffectCommitted,
         'cancelAfterCommit': cancelAfterCommit,
         if (retryAt != null) 'retryAt': retryAt!.toIso8601String(),

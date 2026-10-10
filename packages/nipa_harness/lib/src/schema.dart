@@ -38,6 +38,7 @@ sealed class Schema {
         ObjectSchema(
           :final properties,
           :final required,
+          :final additionalProperties,
           :final oneOfRequired
         ) =>
           {
@@ -46,7 +47,7 @@ sealed class Schema {
                 entry.key: entry.value.toJsonSchema(),
             },
             if (required.isNotEmpty) 'required': required,
-            'additionalProperties': false,
+            'additionalProperties': additionalProperties,
             if (oneOfRequired.isNotEmpty)
               'oneOf': [
                 for (final group in oneOfRequired) {'required': group},
@@ -105,6 +106,7 @@ sealed class Schema {
       case ObjectSchema(
           :final properties,
           :final required,
+          :final additionalProperties,
           :final oneOfRequired
         ):
         if (value is! Map) {
@@ -114,7 +116,7 @@ sealed class Schema {
           if (key is! String) {
             violations
                 .add(SchemaViolation(path, 'Object keys must be strings.'));
-          } else if (!properties.containsKey(key)) {
+          } else if (!additionalProperties && !properties.containsKey(key)) {
             violations
                 .add(SchemaViolation(_pointer(path, key), 'Unknown field.'));
           }
@@ -226,6 +228,7 @@ final class ObjectSchema extends Schema {
     this.properties, {
     this.required = const [],
     this.oneOfRequired = const [],
+    this.additionalProperties = false,
     super.description,
     super.nullable,
   });
@@ -233,6 +236,7 @@ final class ObjectSchema extends Schema {
   final Map<String, Schema> properties;
   final List<String> required;
   final List<List<String>> oneOfRequired;
+  final bool additionalProperties;
 }
 
 final class SchemaViolation implements JsonEncodable {

@@ -211,14 +211,26 @@ void main() {
     executor = FakeExecutor(onRecover: (context) async {
       expect(context.job.state, JobState.interrupted);
       expect(context.job.cancelRequestedAt, isNotNull);
-      await context.succeed(verified());
+      await context
+          .cancelled(verified(details: {'retainedEffect': 'effect-1'}));
     });
     engine = TaskEngine(
         store: store, ownerDeviceId: 'device-test', executors: [executor]);
     await engine.start();
-    final completed = await untilState(engine, job.jobId, JobState.succeeded);
-    expect((completed.toJson()['receipt'] as JsonMap)['cancellation'],
-        containsPair('phase', 'publishing'));
+    final completed = await untilState(engine, job.jobId, JobState.cancelled);
+    expect(
+        (completed.toJson()['receipt'] as JsonMap)['cancellation'],
+        allOf(containsPair('phase', 'publishing'),
+            containsPair('sideEffectCommitted', true)));
+    expect(completed.receipt!.details, {'retainedEffect': 'effect-1'});
+    expect(completed.error, isNull);
+    expect((await store.events(job.jobId)).last.snapshot, completed.toJson());
+    await engine.close();
+    store = await SqliteJobStore.open(root, factory: databaseFactoryFfi);
+    engine = TaskEngine(
+        store: store, ownerDeviceId: 'device-test', executors: [executor]);
+    await engine.start();
+    expect((await engine.get(job.jobId)).toJson(), completed.toJson());
   });
 
   test('worker start persistence failure produces an honest failed receipt',

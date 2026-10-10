@@ -25,6 +25,15 @@ across phases. After an external effect commits, persist its stable handle
 using `markSideEffectCommitted`. Recovery must still check the actual effect:
 a process can stop between external commit and local checkpoint persistence.
 
+`submit(details: ...)` and `context.report(details: ...)` maintain immutable,
+durable public domain fields. These fields appear at the top level of every
+job snapshot, including task actions and events. They cannot shadow kernel or
+storage fields. The job schema allows domain extensions; each domain owns its
+field contracts. `details` replaces the entire public map when provided.
+In contrast, `input` and `checkpoint` are private storage data, never projected
+into task results. Keep recovery handles and credential references there;
+never put credentials or private connection configuration in public details.
+
 Finish with `succeed` and a `verified` receipt after readback, or `fail` with
 an error and an honest receipt. `acknowledged` and `unverified` receipts can
 describe failed or cancelled work; they cannot certify success. Returning a
@@ -35,13 +44,19 @@ the retry enters recovery before further work.
 
 `stopRequested` signals cancellation, pause or shutdown; inspect the job
 snapshot to distinguish them. `task.cancel` acknowledges a request, while
-`context.cancelled` acknowledges an actual stop before effects commit.
-Committed effects must still be verified. Terminal receipts record the
+`context.cancelled` acknowledges an actual stop, whether or not effects have
+committed. Executors read back committed effects and report them with an honest
+verification level; cancellation does not undo those effects. All three receipt
+levels can describe cancellation, while only `verified` can certify success.
+Use `failed` for actual errors, never merely because cancellation followed a
+commit. Terminal receipts record the
 cancellation time, phase, whether an effect had committed when cancellation
 arrived, and whether an effect ultimately committed. On pause and shutdown,
 old contexts lose write access. Resume waits for the old worker to return,
 then reconciles. Executors must cooperate with controls and stop their domain
 operation; fencing database writes cannot stop external operations by itself.
+`waiting_retry` can also be paused: its retry timer is removed, and an explicit
+resume reconciles immediately rather than waiting for the old retry deadline.
 
 The engine invokes workers through a private Harness Action so Harness
 remains the catch-all exception boundary. Worker errors become failed jobs

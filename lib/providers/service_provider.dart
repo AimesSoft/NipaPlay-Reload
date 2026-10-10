@@ -1,4 +1,5 @@
 import 'package:flutter/foundation.dart';
+import 'package:nipaplay/next/downloads/download_runtime.dart';
 import 'package:nipaplay/services/server_history_sync_service.dart';
 import 'package:nipaplay/services/web_server_service.dart';
 import 'package:nipaplay/services/scan_service.dart';
@@ -20,6 +21,7 @@ class ServiceProvider {
   static final WatchHistoryProvider watchHistoryProvider =
       WatchHistoryProvider();
   static final ScanService scanService = ScanService();
+  static final DownloadRuntime downloads = DownloadRuntime();
   static final ServerHistorySyncService serverHistorySyncService =
       ServerHistorySyncService.instance;
 
@@ -42,6 +44,7 @@ class ServiceProvider {
 
   static Future<void> _initializeBackground() async {
     await watchHistoryProvider.loadHistory();
+    if (!kIsWeb) await downloads.ready;
 
     // 初始化服务器观看历史同步（当前仅支持 Jellyfin 下行同步）
     serverHistorySyncService.initialize(

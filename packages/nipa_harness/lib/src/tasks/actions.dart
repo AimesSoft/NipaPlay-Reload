@@ -65,9 +65,9 @@ final class _TaskAction extends Action<_TaskInput, _TaskOutput> {
                 'jobId'
               ]),
         output: operation == 'list'
-            ? ObjectSchema({'jobs': ArraySchema(_jobSchema)},
+            ? ObjectSchema({'jobs': ArraySchema(jobSnapshotSchema)},
                 required: const ['jobs'])
-            : ObjectSchema({'job': _jobSchema}, required: const ['job']),
+            : ObjectSchema({'job': jobSnapshotSchema}, required: const ['job']),
       );
 
   @override
@@ -101,7 +101,7 @@ final class _TaskAction extends Action<_TaskInput, _TaskOutput> {
   }
 }
 
-final _jobSchema = ObjectSchema({
+final jobSnapshotSchema = ObjectSchema({
   'jobId': const StringSchema(),
   'type': const StringSchema(),
   'title': const StringSchema(),
@@ -174,7 +174,7 @@ final _jobSchema = ObjectSchema({
   'updatedAt',
   'ownerDeviceId',
   'revision'
-]);
+], additionalProperties: true);
 
 /// Domain receipts and option inputs have type-specific JSON contracts.
 final class _TaskJsonSchema extends Schema {

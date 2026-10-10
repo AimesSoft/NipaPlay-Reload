@@ -1,0 +1,134 @@
+import 'package:nipa_harness/nipa_harness.dart';
+
+/// Public identity only. Connection settings and credential references belong
+/// to the backend adapter, never to task snapshots.
+final class DownloadBackendRef implements JsonEncodable {
+  const DownloadBackendRef({required this.kind, this.id});
+  const DownloadBackendRef.builtin()
+      : kind = 'builtin',
+        id = null;
+  final String kind;
+  final String? id;
+  factory DownloadBackendRef.fromJson(JsonMap json) => DownloadBackendRef(
+      kind: json['kind'] as String, id: json['id'] as String?);
+  String get key => '$kind:${id ?? ''}';
+  @override
+  JsonMap toJson() => {'kind': kind, if (id != null) 'id': id};
+}
+
+final class DownloadLocation {
+  const DownloadLocation({required this.path, required this.isLocal});
+  final String path;
+  final bool isLocal;
+}
+
+final class DownloadFile {
+  const DownloadFile(
+      {required this.location,
+      required this.expectedSize,
+      required this.isVideo,
+      this.included = true});
+  final DownloadLocation location;
+  final int expectedSize;
+  final bool isVideo, included;
+}
+
+final class DownloadSnapshot {
+  const DownloadSnapshot(
+      {required this.handle,
+      required this.infoHash,
+      required this.title,
+      required this.output,
+      required this.completed,
+      required this.total,
+      required this.finished,
+      required this.paused,
+      this.libraryKey,
+      this.error,
+      this.files = const []});
+  final String handle, infoHash, title;
+  final DownloadLocation output;
+  final int completed, total;
+  final bool finished, paused;
+  final String? error;
+  final String? libraryKey;
+  String get importKey => libraryKey ?? '$infoHash|${output.path}';
+  final List<DownloadFile> files;
+}
+
+final class DownloadRequest implements JsonEncodable {
+  const DownloadRequest(
+      {required this.source,
+      required this.infoHash,
+      required this.title,
+      this.downloadDirectory,
+      this.createFolderForTask});
+  final String source, infoHash, title;
+  final String? downloadDirectory;
+  final bool? createFolderForTask;
+  factory DownloadRequest.fromJson(JsonMap json) => DownloadRequest(
+      source: json['source'] as String,
+      infoHash: json['infoHash'] as String,
+      title: json['title'] as String,
+      downloadDirectory: json['downloadDirectory'] as String?,
+      createFolderForTask: json['createFolderForTask'] as bool?);
+  @override
+  JsonMap toJson() => {
+        'source': source,
+        'infoHash': infoHash,
+        'title': title,
+        if (downloadDirectory != null) 'downloadDirectory': downloadDirectory,
+        if (createFolderForTask != null)
+          'createFolderForTask': createFolderForTask,
+      };
+}
+
+/// Offline adapters throw Failure(unavailable, retryable: true). Credentials
+/// are resolved by adapters using a private reference. Remote paths remain
+/// remote until a separate transfer task publishes them locally.
+abstract interface class DownloadBackend {
+  DownloadBackendRef get reference;
+  String? get credentialRef;
+  Future<void> initialize();
+  Future<List<DownloadSnapshot>> list();
+  Future<DownloadSnapshot> read(String handle);
+  Future<DownloadSnapshot> add(DownloadRequest request,
+      {Future<void>? stopRequested});
+  Future<void> pause(String handle);
+  Future<void> resume(String handle);
+  Future<void> remove(String handle);
+
+  /// Adapters must validate their own deletion boundary before removing data.
+  Future<void> delete(String handle);
+
+  /// Returns null for a missing file; remote adapters perform remote readback.
+  Future<int?> readSize(DownloadFile file);
+}
+
+final class DownloadBackends {
+  DownloadBackends(Iterable<DownloadBackend> backends)
+      : _backends = {
+          for (final backend in backends) backend.reference.key: backend
+        };
+  final Map<String, DownloadBackend> _backends;
+  Iterable<DownloadBackend> get values => _backends.values;
+  DownloadBackend resolve(DownloadBackendRef ref) =>
+      _backends[ref.key] ??
+      (throw Failure(FailureCode.unavailable,
+          'Download backend is not configured: ${ref.key}',
+          retryable: true));
+}
+
+/// Metadata preparation stopped before committing a backend session entry.
+final class DownloadAddStopped implements Exception {
+  const DownloadAddStopped();
+}
+
+abstract interface class DownloadLibrary {
+  Future<bool> get enabled;
+  bool get isBusy;
+  Future<bool> wasImported(String key);
+  Future<JsonMap?> lookup(String path);
+  Future<bool> importFiles(List<String> paths, String outputDirectory);
+  Future<void> markImported(String key);
+}

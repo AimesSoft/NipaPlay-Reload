@@ -201,6 +201,9 @@ class TorrentDownloadService {
     await _initSession(await getDownloadDirectory());
   }
 
+  Future<String> resolveTaskOutputDirectory(TorrentTask task) =>
+      _resolveDownloadDirectoryAccess(task.outputFolder);
+
   Future<List<TorrentTask>> listTasks() async {
     final downloadDir = await getDownloadDirectory();
     await _initSession(downloadDir);
@@ -296,6 +299,7 @@ class TorrentDownloadService {
       request.throwIfCancelled();
       return TorrentMagnetPreview.fromJson(jsonText, requestId: id);
     } catch (_) {
+      request.throwIfCancelled();
       request.cancel();
       rethrow;
     }
@@ -328,6 +332,24 @@ class TorrentDownloadService {
       _log('addMagnet failed: $error');
       _log('addMagnet stackTrace: $stackTrace');
       rethrow;
+    }
+  }
+
+  Future<TorrentAddResult> addMagnetWithPreview(
+    String magnetUri, {String? downloadDirectory, bool? createFolderForTask, Future<void>? stopRequested}
+  ) async {
+    final request = TorrentPreviewRequest();
+    var finished = false;
+    stopRequested?.then((_) { if (!finished) request.cancel(); });
+    try {
+      final preview = await previewMagnet(magnetUri,
+          downloadDirectory: downloadDirectory, request: request);
+      return await addMagnet(magnetUri, previewId: preview.requestId,
+          downloadDirectory: downloadDirectory,
+          createFolderForTask: createFolderForTask);
+    } finally {
+      finished = true;
+      request.cancel();
     }
   }
 

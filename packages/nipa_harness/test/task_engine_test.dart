@@ -54,10 +54,14 @@ void main() {
     final job = await engine.submit(type: 'test', title: 'Invalid');
     final context = await executor.entered.future;
     await expectLater(context.cancelled(verified()), throwsA(isA<Failure>()));
-    await expectLater(
-        context.succeed(JobReceipt(
-            verification: VerificationLevel.acknowledged, details: {})),
-        throwsArgumentError);
+    for (final level in [
+      VerificationLevel.acknowledged,
+      VerificationLevel.unverified
+    ]) {
+      await expectLater(
+          context.succeed(JobReceipt(verification: level, details: {})),
+          throwsArgumentError);
+    }
     expect((await engine.get(job.jobId)).state, JobState.running);
     await context.succeed(verified());
     await expectLater(engine.pause(job.jobId), throwsA(isA<Failure>()));
@@ -141,20 +145,30 @@ void main() {
         containsPair('phase', 'queued'));
   });
 
-  test('cancel after commit still verifies and records cancellation timing',
-      () async {
-    await engine.start();
-    final job = await engine.submit(type: 'test', title: 'Committed');
-    final context = await executor.entered.future;
-    await context.report(phase: 'publishing');
-    await context.markSideEffectCommitted();
-    await engine.cancel(job.jobId);
-    await expectLater(context.cancelled(verified()), throwsA(isA<Failure>()));
-    final completed = await context.succeed(verified());
-    expect(completed.state, JobState.succeeded);
-    expect((completed.toJson()['receipt'] as JsonMap)['cancellation'],
-        containsPair('sideEffectCommitted', true));
-  });
+  for (final level in VerificationLevel.values) {
+    test('cancel after commit preserves a ${level.name} receipt', () async {
+      await engine.start();
+      final job = await engine.submit(type: 'test', title: 'Committed');
+      final context = await executor.entered.future;
+      await context.report(phase: 'publishing');
+      await context.markSideEffectCommitted(checkpoint: {'handle': 'effect-1'});
+      await engine.cancel(job.jobId);
+      final details = {'effect': 'effect-1', 'retained': true};
+      final completed = await context
+          .cancelled(JobReceipt(verification: level, details: details));
+      expect(completed.state, JobState.cancelled);
+      expect(completed.error, isNull);
+      expect(completed.receipt!.verification, level);
+      expect(completed.receipt!.details, details);
+      expect(
+          (completed.toJson()['receipt'] as JsonMap)['cancellation'],
+          allOf(
+              containsPair('sideEffectCommitted', true),
+              containsPair('afterCommit', true),
+              containsPair('phase', 'publishing')));
+      expect((await store.events(job.jobId)).last.snapshot, completed.toJson());
+    });
+  }
 
   test('retry deadline survives restart and resumes through recovery',
       () async {

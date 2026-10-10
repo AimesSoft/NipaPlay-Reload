@@ -22,9 +22,15 @@ final class JobContext {
   Future<Job> snapshot() => _engine.get(job.jobId);
 
   Future<Job> report(
-          {String? phase, JobProgress? progress, JsonMap? checkpoint}) =>
+          {String? phase,
+          JobProgress? progress,
+          JsonMap? checkpoint,
+          JsonMap? details}) =>
       _update('progress',
-          phase: phase, progress: progress, checkpoint: checkpoint);
+          phase: phase,
+          progress: progress,
+          checkpoint: checkpoint,
+          details: details);
 
   Future<Job> markSideEffectCommitted({JsonMap? checkpoint}) =>
       _update('effect_committed', checkpoint: checkpoint, committed: true);
@@ -64,6 +70,7 @@ final class JobContext {
     String? phase,
     JobProgress? progress,
     JsonMap? checkpoint,
+    JsonMap? details,
     bool? committed,
     Decision? decision,
     DateTime? retryAt,
@@ -80,6 +87,7 @@ final class JobContext {
           phase: phase,
           progress: progress,
           checkpoint: checkpoint,
+          details: details,
           committed: committed,
           decision: decision,
           retryAt: retryAt,
@@ -155,6 +163,7 @@ final class TaskEngine {
       {required String type,
       required String title,
       JsonMap input = const {},
+      JsonMap details = const {},
       String phase = 'queued',
       String? jobId}) async {
     if (!_executors.containsKey(type)) {
@@ -174,7 +183,8 @@ final class TaskEngine {
           updatedAt: now,
           ownerDeviceId: ownerDeviceId,
           revision: 0,
-          input: input);
+          input: input,
+          details: details);
       await _commit(job, null, 'submitted');
       return job;
     });
@@ -438,6 +448,7 @@ Job _change(Job job,
     String? phase,
     JobProgress? progress,
     JsonMap? checkpoint,
+    JsonMap? details,
     bool? committed,
     Decision? decision,
     DateTime? retryAt,
@@ -454,10 +465,6 @@ Job _change(Job job,
     throw const Failure(
         FailureCode.conflict, 'Cancellation must be requested first.');
   }
-  if (next == JobState.cancelled && job.sideEffectCommitted) {
-    throw const Failure(FailureCode.conflict,
-        'Committed effects must be verified before finishing cancellation.');
-  }
   final json = job.toStorageJson();
   if (next != JobState.needsDecision) json.remove('decision');
   if (next != JobState.waitingRetry) json.remove('retryAt');
@@ -472,6 +479,7 @@ Job _change(Job job,
     if (phase != null) 'phase': phase,
     if (progress != null) 'progress': progress.toJson(),
     if (checkpoint != null) 'checkpoint': checkpoint,
+    if (details != null) 'details': details,
     if (committed != null) 'sideEffectCommitted': committed,
     if (decision != null) 'decision': decision.toJson(),
     if (retryAt != null) 'retryAt': retryAt.toIso8601String(),

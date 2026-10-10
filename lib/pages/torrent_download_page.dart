@@ -6,6 +6,7 @@ import 'dart:async';
 import 'package:file_selector/file_selector.dart';
 import 'package:flutter/cupertino.dart' as cupertino;
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart' show setEquals;
 import 'package:kmbal_ionicons/kmbal_ionicons.dart';
 import 'package:nipaplay/models/torrent_magnet_preview.dart';
 import 'package:nipaplay/models/torrent_task.dart';
@@ -52,16 +53,14 @@ class TorrentDownloadPage extends StatefulWidget {
 class _TorrentDownloadPageState extends State<TorrentDownloadPage>
     with PageActivityMixin {
   final TorrentDownloadService _service = TorrentDownloadService.instance;
+  final _downloads = ServiceProvider.downloads;
   final TextEditingController _searchController = TextEditingController();
   Timer? _refreshTimer;
   late final TorrentTaskController _taskController;
   List<TorrentTask> get _tasks => _taskController.tasks;
   List<TorrentTask>? _lastScannedSnapshot;
   bool _isPlaying = false;
-  final Map<String, DateTime> _autoScanRetryAfter = {};
-  final Set<String> _autoScannedCompletedTaskKeys = <String>{};
-  final Set<String> _autoScanningTaskKeys = <String>{};
-  Future<void> _autoScanChain = Future<void>.value();
+  Set<String> _displayedImportedKeys = const {};
   final Map<String, TorrentTaskScanSummary> _scanSummaries =
       <String, TorrentTaskScanSummary>{};
   final Set<String> _scanSummaryCheckedKeys = <String>{};
@@ -71,7 +70,6 @@ class _TorrentDownloadPageState extends State<TorrentDownloadPage>
   String _downloadDirectory = '';
   bool _isLoading = true;
   bool _isBusy = false;
-  bool _autoScanRegistryLoaded = false;
   UnifiedTorrentTaskViewMode _viewMode = UnifiedTorrentTaskViewMode.cards;
   UnifiedTorrentTaskSort _sort = UnifiedTorrentTaskSort.latest;
   String _searchQuery = '';
@@ -97,6 +95,7 @@ class _TorrentDownloadPageState extends State<TorrentDownloadPage>
     super.initState();
     _taskController = TorrentTaskController(loadTasks: _service.listTasks);
     _taskController.addListener(_onTasksChanged);
+    _downloads.addListener(_onDownloadStatusChanged);
     _initialize();
   }
 
@@ -105,6 +104,7 @@ class _TorrentDownloadPageState extends State<TorrentDownloadPage>
     _refreshTimer?.cancel();
     _taskController.removeListener(_onTasksChanged);
     _taskController.dispose();
+    _downloads.removeListener(_onDownloadStatusChanged);
     _searchController.dispose();
     super.dispose();
   }
@@ -131,6 +131,7 @@ class _TorrentDownloadPageState extends State<TorrentDownloadPage>
   Future<void> _initialize() async {
     try {
       final directory = await _service.getDownloadDirectory();
+      await _downloads.ready;
       await _service.initialize();
       await _taskController.refresh();
       if (!mounted) return;
@@ -158,10 +159,17 @@ class _TorrentDownloadPageState extends State<TorrentDownloadPage>
     unawaited(_loadScanSummariesForTasks(_tasks).catchError((Object error) {
       debugPrint('读取下载任务入库结果失败: $error');
     }));
-    unawaited(_handleAutoScanCompletedTasks(_tasks, silent: true)
-        .catchError((Object error) {
-      debugPrint('检查下载任务自动入库失败: $error');
-    }));
+  }
+
+  void _onDownloadStatusChanged() {
+    if (!mounted) return;
+    final changed = !setEquals(_displayedImportedKeys, _downloads.autoScannedKeys);
+    setState(() => _displayedImportedKeys = Set.of(_downloads.autoScannedKeys));
+    if (changed) {
+      unawaited(_loadScanSummariesForTasks(_tasks, force: true).catchError((Object error) {
+        debugPrint('读取下载任务入库结果失败: $error');
+      }));
+    }
   }
 
   Future<void> _refreshTasks({bool silent = false}) async {
@@ -207,7 +215,7 @@ class _TorrentDownloadPageState extends State<TorrentDownloadPage>
           );
         }
         try {
-          addResult = await _service.addMagnet(
+          addResult = await _downloads.addMagnet(
             result.magnetUri,
             previewId: result.preview.requestId,
             downloadDirectory: result.downloadDirectory,
@@ -277,7 +285,7 @@ class _TorrentDownloadPageState extends State<TorrentDownloadPage>
     await _runBusyAction(
       action: () async {
         await _service.setDownloadDirectory(downloadDirectory);
-        addResult = await _service.addTorrentFile(
+        addResult = await _downloads.addTorrentFile(
           file.path,
           downloadDirectory: downloadDirectory,
           createFolderForTask: downloaderSettings.createFolderForTask,
@@ -325,7 +333,7 @@ class _TorrentDownloadPageState extends State<TorrentDownloadPage>
   Future<void> _toggleTask(TorrentTask task) async {
     await _runBusyAction(
       action: () =>
-          task.canResume ? _service.resume(task.id) : _service.pause(task.id),
+          task.canResume ? _downloads.resume(task.id) : _downloads.pause(task.id),
       taskId: task.id,
       successMessage: () => task.canResume ? '已恢复任务' : '已暂停任务',
     );
@@ -333,7 +341,7 @@ class _TorrentDownloadPageState extends State<TorrentDownloadPage>
 
   Future<void> _forgetTask(TorrentTask task) async {
     await _runBusyAction(
-      action: () => _service.forget(task.id),
+      action: () => _downloads.forget(task.id),
       taskId: task.id,
       successMessage: () => '已移除下载任务',
     );
@@ -346,7 +354,7 @@ class _TorrentDownloadPageState extends State<TorrentDownloadPage>
     );
     if (!confirm) return;
     await _runBusyAction(
-      action: () => _service.delete(task.id),
+      action: () => _downloads.delete(task.id),
       taskId: task.id,
       successMessage: () => '已删除任务和文件',
     );
@@ -370,18 +378,6 @@ class _TorrentDownloadPageState extends State<TorrentDownloadPage>
           ? UnifiedTorrentTaskViewMode.list
           : UnifiedTorrentTaskViewMode.cards;
     });
-  }
-
-  Future<void> _loadAutoScanRegistry() async {
-    if (_autoScanRegistryLoaded) return;
-    final keys = await _service.loadAutoScannedCompletedTaskKeys();
-    _autoScannedCompletedTaskKeys
-      ..clear()
-      ..addAll(keys);
-    for (final key in keys) {
-      _scanSummaryCheckedKeys.remove(key);
-    }
-    _autoScanRegistryLoaded = true;
   }
 
   Future<void> _loadScanSummariesForTasks(
@@ -451,87 +447,10 @@ class _TorrentDownloadPageState extends State<TorrentDownloadPage>
     final items = await _service.listCompletedFileScanHistoryItems(task);
     final summary = TorrentTaskScanSummary.fromHistoryItems(items);
     if (summary.hasItems ||
-        _autoScannedCompletedTaskKeys.contains(task.autoScanKey)) {
+        _downloads.autoScannedKeys.contains(task.autoScanKey)) {
       return summary;
     }
     return null;
-  }
-
-  Future<void> _handleAutoScanCompletedTasks(
-    List<TorrentTask> tasks, {
-    required bool silent,
-  }) async {
-    if (!mounted) return;
-    final settings =
-        Provider.of<DownloaderSettingsProvider>(context, listen: false);
-    if (!settings.isLoaded || !settings.autoScanCompletedTasks) return;
-
-    await _loadAutoScanRegistry();
-    if (!mounted) return;
-    unawaited(_loadScanSummariesForTasks(tasks));
-
-    for (final task in tasks) {
-      if (!task.finished || task.outputFolder.trim().isEmpty) continue;
-      final key = task.autoScanKey;
-      final retryAfter = _autoScanRetryAfter[key];
-      if (retryAfter != null && DateTime.now().isBefore(retryAfter)) continue;
-      if (_autoScannedCompletedTaskKeys.contains(key) ||
-          _autoScanningTaskKeys.contains(key)) {
-        continue;
-      }
-
-      _autoScanningTaskKeys.add(key);
-      _autoScanChain = _autoScanChain.then(
-        (_) => _autoScanCompletedTask(task, key, silent: silent),
-      );
-      unawaited(_autoScanChain);
-    }
-  }
-
-  Future<void> _autoScanCompletedTask(
-    TorrentTask task,
-    String key, {
-    required bool silent,
-  }) async {
-    try {
-      if (!mounted ||
-          !_tasks.any(
-              (current) => current.autoScanKey == key && current.finished)) {
-        return;
-      }
-      final scanService = ServiceProvider.scanService;
-      if (scanService.isScanning) return;
-      final paths = await _service.listCompletedVideoPaths(task);
-      if (!mounted) return;
-      final succeeded = await scanService.scanCompletedFiles(paths,
-          folderPath: task.outputFolder);
-      if (!succeeded) {
-        _autoScanRetryAfter[key] =
-            DateTime.now().add(const Duration(minutes: 1));
-        return;
-      }
-      _autoScanRetryAfter.remove(key);
-      await ServiceProvider.watchHistoryProvider.refresh();
-      await _service.markAutoScannedCompletedTask(key);
-      _autoScannedCompletedTaskKeys.add(key);
-      final summary = await _loadScanSummary(task);
-      if (mounted && summary != null) {
-        setState(() {
-          _scanSummaries[key] = summary;
-          _scanSummaryCheckedKeys.add(key);
-        });
-      }
-
-      if (!mounted || silent) return;
-      _showTorrentMessage('已自动扫描并加入媒体库: ${task.name}');
-    } catch (e) {
-      _autoScanRetryAfter[key] = DateTime.now().add(const Duration(minutes: 1));
-      debugPrint('自动扫描下载任务失败: $e');
-      if (!mounted || silent) return;
-      _showTorrentMessage('自动扫描下载任务失败: $e');
-    } finally {
-      _autoScanningTaskKeys.remove(key);
-    }
   }
 
   Future<void> _playTask(TorrentTask task) async {
@@ -552,7 +471,7 @@ class _TorrentDownloadPageState extends State<TorrentDownloadPage>
       if (selected == null || !mounted) return;
       if (!task.finished && task.isPaused) {
         if (!await _taskController.run(
-            task.id, () => _service.resume(task.id))) {
+            task.id, () => _downloads.resume(task.id))) {
           return;
         }
         if (!mounted) return;
@@ -628,8 +547,8 @@ class _TorrentDownloadPageState extends State<TorrentDownloadPage>
     return UnifiedTorrentTaskItemViewModel(
       task: task,
       scanSummary: _scanSummaries[task.autoScanKey],
-      isAutoScanning: _autoScanningTaskKeys.contains(task.autoScanKey),
-      isAutoScanned: _autoScannedCompletedTaskKeys.contains(task.autoScanKey),
+      isAutoScanning: _downloads.isImporting(task),
+      isAutoScanned: _downloads.autoScannedKeys.contains(task.autoScanKey),
       actions: [
         if (task.canPlay)
           action(
