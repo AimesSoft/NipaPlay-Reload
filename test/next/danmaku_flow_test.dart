@@ -27,8 +27,6 @@ void main() {
             'video': video.toJson(),
             'reason': 'Synthetic same episode evidence',
             'requestId': 'attach-${video.sourceId}',
-            if (video.sourceId == 'youku')
-              'credentialRef': 'session-ref-fixture'
           },
           origin: origin);
 
@@ -91,9 +89,9 @@ void main() {
     await f.call('danmaku.sources', {});
     await f.call('danmaku.tracks', {'entityId': id});
     await f.call(
-        'danmaku.episodes', {'sourceId': 'youku', 'workId': 'show-fixture'});
-    await f
-        .call('danmaku.resolve', {'sourceId': 'youku', 'locator': 'Xfixture'});
+        'danmaku.episodes', {'sourceId': 'minutes', 'workId': 'show-fixture'});
+    await f.call(
+        'danmaku.resolve', {'sourceId': 'minutes', 'locator': 'Xfixture'});
     expect(await f.jobs.list(), isEmpty);
     expect(await f.jobs.database.query('danmaku_bindings'), isEmpty);
     expect(await f.jobs.database.query('danmaku_cache_chunks'), isEmpty);
@@ -120,7 +118,7 @@ void main() {
       () async {
     final outcome = await f.harness.invokeJson(
         'danmaku.resolve',
-        {'sourceId': 'bilibili', 'locator': 'BVfixture'},
+        {'sourceId': 'segmented', 'locator': 'ambiguous'},
         Invocation(origin: 'mcp'));
     final decision = (outcome as NeedsDecision).decision;
     expect(decision.options, hasLength(2));
@@ -144,8 +142,8 @@ void main() {
     final entity = await f.file();
     final results = [
       await attach(entity, ddpVideo, origin: 'gui'),
-      await attach(entity, biliVideo),
-      await attach(entity, youkuVideo)
+      await attach(entity, segmentedVideo),
+      await attach(entity, minuteVideo)
     ];
     for (final result in results) {
       final job = await f.wait(result['jobId'] as String, JobState.succeeded);
@@ -167,7 +165,7 @@ void main() {
         'danmaku.attach',
         {
           'entityId': entity,
-          'video': biliVideo.toJson(),
+          'video': segmentedVideo.toJson(),
           'reason': 'fixture',
           'requestId': 'bad',
           'boundBy': 'user'
@@ -180,48 +178,34 @@ void main() {
       () async {
     await f.file();
     final submitted = await f.call('danmaku.fetch',
-        {'video': biliVideo.toJson(), 'requestId': 'standalone'});
+        {'video': segmentedVideo.toJson(), 'requestId': 'standalone'});
     final job = await f.wait(submitted['jobId'] as String, JobState.succeeded);
     expect(job.receipt!.details['loaded'], isFalse);
     expect(job.receipt!.details['rawCount'], 2);
     expect(f.player.managedTracks, isEmpty);
     expect(await f.jobs.database.query('danmaku_bindings'), isEmpty);
     final repeated = await f.call('danmaku.fetch',
-        {'video': biliVideo.toJson(), 'requestId': 'standalone'});
+        {'video': segmentedVideo.toJson(), 'requestId': 'standalone'});
     expect(repeated['jobId'], submitted['jobId']);
     expect(await f.jobs.list(), hasLength(1));
   });
-  test(
-      'duplicate acquisitions share committed chunks and cache keys distinguish session references',
-      () async {
+  test('duplicate acquisitions share committed chunks', () async {
     final jobs = await Future.wait([
-      f.service.fetch(youkuVideo,
-          access: const DanmakuAccess('session-ref-fixture'),
-          requestId: 'first'),
-      f.service.fetch(youkuVideo,
-          access: const DanmakuAccess('session-ref-fixture'),
-          requestId: 'second')
+      f.service.fetch(minuteVideo, requestId: 'first'),
+      f.service.fetch(minuteVideo, requestId: 'second')
     ]);
     for (final job in jobs) {
       await f.wait(job.jobId, JobState.succeeded);
     }
-    expect(f.host.requests.where((r) => r['profile'] == 'youku.minute'),
+    expect(f.host.requests.where((r) => r['profile'] == 'minutes.chunk'),
         hasLength(2));
-    expect(
-        f.service.store.cacheKey(youkuVideo, f.service.source('youku'),
-            const DanmakuAccess('session-ref-fixture')),
-        isNot(f.service.store.cacheKey(youkuVideo, f.service.source('youku'),
-            const DanmakuAccess('different-ref'))));
   });
   test(
       'one malformed minute fails with persisted partial coverage and does not mount an incomplete track',
       () async {
     final entity = await f.file();
-    f.host.responses['youku.minute:1'] = jsonBytes({
-      'ret': ['SUCCESS::ok'],
-      'data': {}
-    });
-    final result = await attach(entity, youkuVideo);
+    f.host.responses['minutes.chunk:1'] = jsonBytes({'entries': 'malformed'});
+    final result = await attach(entity, minuteVideo);
     final job = await f.wait(result['jobId'] as String, JobState.failed);
     expect(job.receipt!.details['status'], 'schemaChanged');
     expect(job.receipt!.details['complete'], isFalse);
@@ -247,12 +231,10 @@ void main() {
   test('cancellation aborts a pending chunk and stops subsequent requests',
       () async {
     await f.file();
-    f.host.blockedKey = 'youku.minute:1';
+    f.host.blockedKey = 'minutes.chunk:1';
     f.host.entered = Completer();
     f.host.release = Completer();
-    final job = await f.service.fetch(youkuVideo,
-        access: const DanmakuAccess('session-ref-fixture'),
-        requestId: 'cancel');
+    final job = await f.service.fetch(minuteVideo, requestId: 'cancel');
     await f.host.entered!.future;
     await f.engine.cancel(job.jobId);
     final cancelled = await f.wait(job.jobId, JobState.failed);
@@ -263,15 +245,12 @@ void main() {
     expect(await f.jobs.database.query('danmaku_cache_chunks'), hasLength(1));
   });
   test('cancelling a queued source job makes no request', () async {
-    f.host.blockedKey = 'youku.minute:0';
+    f.host.blockedKey = 'minutes.chunk:0';
     f.host.entered = Completer();
     f.host.release = Completer();
-    final first = await f.service.fetch(youkuVideo,
-        access: const DanmakuAccess('session-ref-fixture'), requestId: 'held');
+    final first = await f.service.fetch(minuteVideo, requestId: 'held');
     await f.host.entered!.future;
-    final second = await f.service.fetch(youkuVideo,
-        access: const DanmakuAccess('session-ref-fixture'),
-        requestId: 'queued');
+    final second = await f.service.fetch(minuteVideo, requestId: 'queued');
     await f.engine.cancel(second.jobId);
     await f.wait(second.jobId, JobState.cancelled);
     expect(f.host.requests, hasLength(1));
@@ -281,20 +260,17 @@ void main() {
   test(
       'engine shutdown and restart recover completed chunks without refetching them',
       () async {
-    f.host.blockedKey = 'youku.minute:1';
+    f.host.blockedKey = 'minutes.chunk:1';
     f.host.entered = Completer();
     f.host.release = Completer();
-    final job = await f.service.fetch(youkuVideo,
-        access: const DanmakuAccess('session-ref-fixture'),
-        requestId: 'restart');
+    final job = await f.service.fetch(minuteVideo, requestId: 'restart');
     await f.host.entered!.future;
     await f.reopen();
     f.host.blockedKey = null;
     f.host.release!.complete();
     final recovered = await f.wait(job.jobId, JobState.succeeded);
     expect(recovered.receipt!.details['complete'], isTrue);
-    expect(
-        f.host.requests.where((r) => (r['parameters'] as Map)['minute'] == 0),
+    expect(f.host.requests.where((r) => (r['parameters'] as Map)['index'] == 0),
         hasLength(1));
   });
   test(
@@ -302,7 +278,7 @@ void main() {
       () async {
     f.host.failure = SourceFailure(SourceStatus.rateLimited,
         retryAt: DateTime.now().toUtc().add(const Duration(minutes: 1)));
-    final job = await f.service.fetch(biliVideo, requestId: 'rate-limit');
+    final job = await f.service.fetch(segmentedVideo, requestId: 'rate-limit');
     final waiting = await f.wait(job.jobId, JobState.waitingRetry);
     expect(waiting.checkpoint['retries'], 1);
     expect(waiting.retryAt, isNotNull);
@@ -313,10 +289,10 @@ void main() {
       'media content revision changing mid-fetch prevents obsolete binding from mounting',
       () async {
     final entity = await f.file();
-    f.host.blockedKey = 'bilibili.segment:2';
+    f.host.blockedKey = 'segmented.chunk:1';
     f.host.entered = Completer();
     f.host.release = Completer();
-    final result = await attach(entity, biliVideo);
+    final result = await attach(entity, segmentedVideo);
     await f.host.entered!.future;
     await f.identities.registerFile('/fixture/video.mkv',
         {'size': 2, 'modifiedAt': 'changed', 'headMd5': 'changed'});
@@ -331,10 +307,10 @@ void main() {
       'changing video during fetch caches data but never loads into the other file',
       () async {
     final entity = await f.file();
-    f.host.blockedKey = 'bilibili.segment:2';
+    f.host.blockedKey = 'segmented.chunk:1';
     f.host.entered = Completer();
     f.host.release = Completer();
-    final result = await attach(entity, biliVideo);
+    final result = await attach(entity, segmentedVideo);
     await f.host.entered!.future;
     f.player.target = const DanmakuPlaybackTarget('/fixture/other.mkv', 2);
     f.host.release!.complete();
@@ -349,7 +325,7 @@ void main() {
       'offsets and enable state persist independently and absolute offsets do not accumulate',
       () async {
     final entity = await f.file();
-    final result = await attach(entity, biliVideo);
+    final result = await attach(entity, segmentedVideo);
     await f.wait(result['jobId'] as String, JobState.succeeded);
     final id = result['bindingId'] as String;
     await f.call(
@@ -391,7 +367,7 @@ void main() {
       'cache deletion removes its loaded track while preserving the accepted binding',
       () async {
     final entity = await f.file();
-    final result = await attach(entity, biliVideo);
+    final result = await attach(entity, segmentedVideo);
     await f.wait(result['jobId'] as String, JobState.succeeded);
     final b = await f.service.store.binding(result['bindingId'] as String);
     await f.call('danmaku.cache_delete', {'cacheKey': b['cache_key']});
@@ -406,7 +382,7 @@ void main() {
       'alignment candidates wait for an exact explicit choice and recover across restart',
       () async {
     final entity = await f.file();
-    final result = await attach(entity, biliVideo);
+    final result = await attach(entity, segmentedVideo);
     await f.wait(result['jobId'] as String, JobState.succeeded);
     final id = result['bindingId'] as String;
     final alignment = await f.legacyAlignment({
@@ -455,7 +431,7 @@ void main() {
       'stale alignment cannot overwrite a manual offset made during its decision',
       () async {
     final entity = await f.file();
-    final result = await attach(entity, biliVideo);
+    final result = await attach(entity, segmentedVideo);
     await f.wait(result['jobId'] as String, JobState.succeeded);
     final id = result['bindingId'] as String;
     final submitted = await f.legacyAlignment({
@@ -482,7 +458,7 @@ void main() {
   test('empty legacy alignment evidence can keep the existing mapping',
       () async {
     final entity = await f.file();
-    final result = await attach(entity, biliVideo);
+    final result = await attach(entity, segmentedVideo);
     await f.wait(result['jobId'] as String, JobState.succeeded);
     final submitted = await f.legacyAlignment({
       'bindingId': result['bindingId'],
@@ -518,7 +494,7 @@ void main() {
       'start_ms': 10000,
       'end_ms': 900000
     });
-    final result = await attach('episode-fixture', biliVideo);
+    final result = await attach('episode-fixture', segmentedVideo);
     await f.wait(result['jobId'] as String, JobState.succeeded);
     expect(f.player.tracks[result['bindingId']]!['startMs'], 10000);
     expect(await f.jobs.database.query('media_bindings'), isEmpty);
@@ -527,15 +503,13 @@ void main() {
   test(
       'cache deletion rejects an active fetch rather than allowing silent repopulation',
       () async {
-    f.host.blockedKey = 'youku.minute:1';
+    f.host.blockedKey = 'minutes.chunk:1';
     f.host.entered = Completer();
     f.host.release = Completer();
-    final job = await f.service.fetch(youkuVideo,
-        access: const DanmakuAccess('session-ref-fixture'),
-        requestId: 'delete-active');
+    final job = await f.service.fetch(minuteVideo, requestId: 'delete-active');
     await f.host.entered!.future;
-    final key = f.service.store.cacheKey(youkuVideo, f.service.source('youku'),
-        const DanmakuAccess('session-ref-fixture'));
+    final key =
+        f.service.store.cacheKey(minuteVideo, f.service.source('minutes'));
     final outcome = await f.harness.invokeJson(
         'danmaku.cache_delete', {'cacheKey': key}, Invocation(origin: 'gui'));
     expect((outcome as Failed).failure.code, FailureCode.conflict);
@@ -548,18 +522,18 @@ void main() {
       'expired chunks are refetched and refresh a mounted track even with unchanged identity and offset',
       () async {
     final entity = await f.file();
-    final result = await attach(entity, biliVideo);
+    final result = await attach(entity, segmentedVideo);
     await f.wait(result['jobId'] as String, JobState.succeeded);
     final id = result['bindingId'] as String;
     await f.jobs.database.update('danmaku_cache_chunks',
         {'fetched_at': DateTime.utc(2000).toIso8601String()});
-    f.host.responses['bilibili.segment:1'] = biliSegment(text: '更新后的合成弹幕');
+    f.host.responses['segmented.chunk:0'] = fixtureChunk(text: '更新后的合成弹幕');
     final second = await f.service
-        .fetch(biliVideo, bindingId: id, requestId: 'refresh-cache');
+        .fetch(segmentedVideo, bindingId: id, requestId: 'refresh-cache');
     await f.wait(second.jobId, JobState.succeeded);
     expect(f.player.data[id]!.first.text, '更新后的合成弹幕');
     expect((await f.service.store.binding(id))['cache_revision'], 2);
-    expect(f.host.requests.where((r) => r['profile'] == 'bilibili.segment'),
+    expect(f.host.requests.where((r) => r['profile'] == 'segmented.chunk'),
         hasLength(4));
   });
   test(
@@ -588,7 +562,7 @@ void main() {
   test('alignment requestId is idempotent before and after an explicit choice',
       () async {
     final entity = await f.file();
-    final result = await attach(entity, biliVideo);
+    final result = await attach(entity, segmentedVideo);
     await f.wait(result['jobId'] as String, JobState.succeeded);
     final input = {
       'bindingId': result['bindingId'],
@@ -608,7 +582,7 @@ void main() {
       'export verifies original and mapped data in an authorized folder and rejects overwrite or escape',
       () async {
     final entity = await f.file();
-    final result = await attach(entity, biliVideo);
+    final result = await attach(entity, segmentedVideo);
     await f.wait(result['jobId'] as String, JobState.succeeded);
     final id = result['bindingId'] as String;
     f.service.exporter = DanmakuExporter(f.service.store, (path) async {

@@ -34,7 +34,7 @@ download-harness 是一个 Codex 在其中工作的仓库：对话就是操作�
 - **Mesh**：同一账号的设备自动互信，替代 SSH 密钥与手动登记设备。服务器只做控制面。
 - **知情同意、钥匙串、脱敏**：在「设置 → 实验室」开启 Next 时，用红字说明真实风险；用户确认之后，Agent 可以像用户本人一样使用这台电脑。
 
-现有的能力层（`packages/nipa_harness`、`lib/next`）原样保留，作为 harness 背后的接口。
+现有的能力层（`packages/nipa_harness`、`lib/next`）作为 harness 背后的接口，按实验观察演进。
 
 ## 界面：同一个身体的两张脸
 

@@ -1,4 +1,4 @@
-# MB 多平台弹幕
+# MB 弹幕来源与轨道
 
 `DanmakuRuntime.create` 接收 NextCore 提供的 MA 身份存储，提供 `executors` 与
 `capability`。NextCore 在 `engine.start()` 前调用 `attach` 注入唯一引擎，启动后由
@@ -17,8 +17,6 @@
 | 来源 | 定位与目录 | 获取与身份 |
 |---|---|---|
 | 弹弹play | episode ID、标题搜索、作品目录；未知时长由调用者依据本地媒体补齐 | 原始 comment JSON，withRelated=true；保留条目级 source、sourceVideoId、originalId，cid 单独记为 sourceEntryId |
-| B 站 | 匿名 WBI 标题搜索返回 BV 候选；BV/av 的分 P、ep、ss、cid；URL 尾斜杠、`p` 和 `ep_id` 选集；歧义返回可执行 Decision | 360 秒 protobuf 段；专用有界 wire 解码，不新增库；ID 字符串化 |
-| 优酷 | vid/公开视频 URL、show 的正片分页目录 | 60 秒段；宿主会话 profile 返回响应，严格检查 ret、data.result 和内层 data.result |
 | local | 授权媒体目录中的明确 XML/JSON 路径；同名/相似名自动发现仍沿用 Classic | 共用 Classic 文件解析入口；从 chatserver/chatid 读取平台与视频身份；未知平台保持 unknown |
 
 弹弹play 未提供条目级来源时保存 `platform=unknown`，不根据格式、cid 或用户 ID
@@ -26,22 +24,21 @@
 不建立跨源身份等价。测试里的扩展字段是合成输入，不表示已验证真实服务器会返回
 这些字段；真实 related 响应的来源字段仍需主控回放验收。
 
-优酷参考仅采用分钟计划、嵌套结果结构和属性/时间映射机制。签名应在宿主
-`YoukuSessionBridge.minute` 内完成，桥接必须校验凭据引用对应的会话、来源版本和
-获准 profile，过滤响应中的会话材料，并支持取消/限额。macOS 由 NextCore 注入
-`VaultYoukuSessionBridge`：用户在「设置 → 实验室 → 平台登录」的内置 WebView
-完成登录，宿主在保险库中按平台保存会话。`sessions.status` 返回的 `accessRef`
-可作为现有弹幕 Action 的 `credentialRef`。优酷 MTOP 签名与请求都在宿主中完成，
-正常的 token 握手最多更新并重试一次；不读取浏览器 cookie 数据库或个人配置。
-未登录或被平台拒绝时返回 authenticationRequired，只陈述平台和当前会话状态。
-弹弹play 沿用已有宿主账号/应用签名边界；B 站匿名公开接口继续可用，登录后宿主
-向固定 B 站 profile 自动附加会话，也接受准确的宿主引用；不请求历史弹幕。
-平台登录的状态、存储与注销契约见 [平台会话](../sessions/README.md)。
+弹弹play 使用 Classic 的 `DandanplayHttpClient` 与
+`NipaplayServerRouter`，所有请求经过 NipaPlay 网关的 `/dandanplay` 前缀，
+账号认证与主备切换沿用宿主规则。
+
+Next 注册的内置来源只有弹弹play与 local。优酷、B 站在线来源及应用内平台登录
+已删除，Action 不再接受平台会话引用，也不返回平台会话状态。钥匙串里已有的
+`next.platform-session/<platform>.v1` 条目保持原样；Next 不再读取、更新或删除它们。
+既有绑定、外部视频身份、缓存、对齐、事件与任务记录不迁移、不清理；轨道查询、
+播放恢复、属性修改和导出直接使用保存的事实，不依赖来源仍被注册。
+旧来源不能再在线刷新，尚未结束的旧获取任务恢复时因来源未注册失败，已提交数据保留。
 
 ## Agent 交入弹幕
 
 `danmaku.import` 是写能力，接收 Agent 从任意途径取得的本地文件，不要求注册来源、
-宿主登录会话或媒体目录授权。输入 `filePath`、`platform`、`platformVideoId`；目标
+媒体目录授权。输入 `filePath`、`platform`、`platformVideoId`；目标
 使用 `entityId`（File/Episode）、`path` 或当前播放文件（默认），可附 `note`。
 文件以 UTF-8 编码，支持 B 站标准 `<i><d p="...">...</d></i>` XML，以及规范化
 JSON 数组或 `{ "comments": [...] }`。JSON 条目示例：
@@ -68,13 +65,8 @@ JSON 数组或 `{ "comments": [...] }`。JSON 条目示例：
 宿主使用固定 URI 模板，拒绝跨域重定向及额外业务参数，逐来源串行限流；HTTP
 响应最大 8 MiB，每次计划最多 120 段、两小时、100000 条。超时只取消本次 HTTP，
 不会冒充任务取消。429 尊重有界 Retry-After；任务只对限流/传输失败重试三次。
-正片范围内的结构变化、登录失效和访问拒绝立即停止。优酷不声明标题搜索，调用者用明确
-URL/ID 或目录定位。B 站使用 `/x/web-interface/nav` 返回的公开 WBI 图像键签名
-`/x/web-interface/wbi/search/type`；键缓存一小时，查询限第一页、20 个 BV 候选，
-候选必须 resolve 到 cid 后获取。2026-10-11 的两次无 Cookie/Authorization 请求探测中，
-nav 返回 `code=-101,isLogin=false` 且包含 WBI 键，搜索返回 `code=0`、空结果；这证明
-匿名接口可用，不证明特定标题能搜到或所有网络均不触发限流。未实现验证码、会员/地区
-限制绕过、全站抓取或历史查询。测试只使用合成响应，不重复线上探测。
+正片范围内的结构变化、宿主账号认证失败和访问拒绝立即停止。
+不请求平台历史弹幕。
 
 ## 追加存储
 
@@ -84,7 +76,7 @@ MA 的 v2 身份迁移保持原样，MB 在 `next_database.dart` 的迁移序列
 | 表 | 语义 |
 |---|---|
 | danmaku_bindings | 引用 MA File/Episode 与 media_external_objects；记录实体修订、启用、去重、绝对偏移、对齐、证据、宿主绑定者、绑定修订和已提交缓存 |
-| danmaku_cache_chunks | 来源/视频/版本/宿主域名/访问引用摘要/内容选项组成 cache key；保存各段原始时间条目、覆盖及抓取时间；TTL 两小时 |
+| danmaku_cache_chunks | 来源/视频/版本/网关域名/public/内容选项组成新获取的 cache key；旧 key 按原值读取；保存各段原始时间条目、覆盖及抓取时间；TTL 两小时 |
 | danmaku_alignment_candidates | 存量对齐任务的锚点、固定偏移候选、残差、置信说明和显式选择；关联绑定修订 |
 | danmaku_binding_events | 追加的 attach、控制、解绑与对齐选择审计记录；不抹去旧证据 |
 
@@ -186,9 +178,9 @@ requestId 只用于存量任务查找。
 
 ## 离线验收
 
-`test/next/danmaku_*_test.dart` 使用测试源码构造的 JSON/protobuf、MockClient、
+`test/next/danmaku_*_test.dart` 使用测试源码构造的 JSON、MockClient 和回环 HTTP 网关、
 临时 SQLite 与内存播放器端口；没有真实平台录制、账号内容或线上请求。
-播放器原生内核、真实登录态以及三项真机场景留给主控端到端验收。
+播放器原生内核与真实浏览器取弹幕场景留给主控端到端验收。
 `danmaku_ergonomics_test.dart` 验证分析无写入、估计后一次 update 设置不同值、批量
 失败、轨道/绑定属性、空与矛盾证据、旧任务重启恢复和退役错误。覆盖率基线保留旧
 actions，另增 primaryActions、compatibility（alias/legacyRecovery）和 behaviorScenarios；

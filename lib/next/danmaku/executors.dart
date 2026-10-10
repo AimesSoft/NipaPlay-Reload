@@ -56,9 +56,7 @@ final class _Fetch implements JobExecutor {
     final source = service.source(video.sourceId);
     final plan = source.planFetch(
         video, c.job.input['startMs'] as int, c.job.input['endMs'] as int);
-    final credential = c.job.input['credentialRef'] as String?;
-    final access = credential == null ? null : DanmakuAccess(credential);
-    final cacheKey = service.store.cacheKey(video, source, access,
+    final cacheKey = service.store.cacheKey(video, source,
         refreshJobId: c.job.input['refresh'] == true ? c.job.jobId : null);
     final completed = <int>{};
     final localDuration = c.job.input['localDurationMs'] as int?;
@@ -135,8 +133,8 @@ final class _Fetch implements JobExecutor {
                 : await service.store.chunk(cacheKey, chunk);
         if (result == null) {
           try {
-            result = await source.fetchChunk(
-                video, chunk, access, control.cancellation);
+            result =
+                await source.fetchChunk(video, chunk, control.cancellation);
           } on SourceFailure catch (error) {
             if (localDuration == null ||
                 chunk.startMs < localDuration ||

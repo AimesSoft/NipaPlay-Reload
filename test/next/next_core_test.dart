@@ -64,6 +64,18 @@ void main() {
     core = createCore();
     await core.ready;
     final harness = Harness(core.capabilities);
+    expect(core.danmaku.service.sources.keys, ['dandanplay', 'local']);
+    for (final action in [
+      'sessions.status',
+      'sessions.logout',
+      'ui.open_platform_login'
+    ]) {
+      expect(harness.lookup(action), isNull);
+    }
+    for (final action in ['danmaku.fetch', 'danmaku.attach']) {
+      expect(harness.lookup(action)!.spec.input.properties,
+          isNot(contains('credentialRef')));
+    }
     expect(core.downloads.engine, same(core.engine));
     expect(core.media.service.engine, same(core.engine));
     expect(core.danmaku.service.engine, same(core.engine));

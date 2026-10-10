@@ -19,7 +19,7 @@
 
 通过原生 `sandbox_check(getpid(), nil, 0)` 查询实际进程状态，并经已有 `security_bookmark` channel 交给 Dart。`LabsSettingsProvider.nextAvailable` 控制 Next 的可用性；保存为开启的旧偏好在沙箱进程中也呈现关闭，拒绝重新开启，原偏好仍保留。NextRuntime 原有启动判断读取这个受限 getter，因此不会启动 Agent endpoint。Classic 下载使用的共享 NextCore 基础设施继续保留。
 
-实验室页面仅增加 8 行：禁用开关、展示中／繁／英文原因及 GitHub 完整版提示，并禁用依赖 Next 的平台登录入口，便于与另一位组员的知情同意改动合并。没有新增构建变体，没有改动 Windows/Linux/iOS/Android 的平台逻辑。
+实验室页面仅增加 8 行：禁用开关、展示中／繁／英文原因及 GitHub 完整版提示，并禁用当时依赖 Next 的平台登录入口（该入口现已在 X6 删除），便于与另一位组员的知情同意改动合并。没有新增构建变体，没有改动 Windows/Linux/iOS/Android 的平台逻辑。
 
 书签原生层按实际沙箱状态选择 security-scoped 或普通 bookmark。非沙箱解析不再把 `startAccessingSecurityScopedResource() == false` 当作失败。Dart 层也接受正常解析出的非 scoped 路径，只记录真正启动过的 security scope，支持过期书签刷新。原有书签字节随偏好保留。
 

@@ -17,7 +17,7 @@ void main() {
   });
   tearDown(() => f.close());
   Future<String> binding() async => f.service.store.attach(await f.file(),
-      biliVideo, 'synthetic evidence', null, Invocation(origin: 'mcp'));
+      segmentedVideo, 'synthetic evidence', null, Invocation(origin: 'mcp'));
   Future<JsonMap> snapshot() async => {
         for (final table in [
           'danmaku_bindings',
