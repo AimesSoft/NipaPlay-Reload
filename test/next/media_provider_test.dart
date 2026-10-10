@@ -1,3 +1,5 @@
+import '../security/memory_vault.dart';
+import 'package:nipaplay/security/credential_store.dart';
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
@@ -131,19 +133,11 @@ void main() {
       () async {
     final root = await Directory.systemTemp.createTemp('next-credentials-');
     try {
-      final resolver = FileCredentialResolver(root);
+      final resolver = VaultCredentialResolver(root, store: CredentialStore(MemoryVault(), desktop: true));
       await resolver.initialize();
-      expect(await File('${root.path}/credentials.json').readAsString(), '{}');
-      if (!Platform.isWindows) {
-        final result = await Process.run(
-            'stat',
-            Platform.isMacOS
-                ? ['-f', '%Lp', '${root.path}/credentials.json']
-                : ['-c', '%a', '${root.path}/credentials.json']);
-        expect(result.stdout.toString().trim(), '600');
-      }
+      expect(await File('${root.path}/credentials.json').exists(), false);
       await expectLater(
-          resolver.resolve(const CredentialRef('tmdb')),
+          resolver.resolve(const CredentialRef('metadata', 'tmdb')),
           throwsA(isA<Failure>()
               .having((error) => error.message, 'message', contains('tmdb'))));
     } finally {

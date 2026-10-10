@@ -1,3 +1,6 @@
+import '../security/memory_vault.dart';
+import 'package:nipaplay/security/credential_store.dart';
+import 'package:nipaplay/security/credential_vault.dart';
 import 'dart:convert';
 import 'dart:io';
 
@@ -277,7 +280,9 @@ void main() {
       () async {
     final harness = Harness([TaskCapability(engine)]);
     final job = await engine.submit(type: 'test', title: 'MCP');
+    final credentials = CredentialStore(MemoryVault(), desktop: true);
     final endpoint = AgentEndpoint(
+        credentials: credentials,
         harness: harness,
         root: root,
         appVersion: 'test',
@@ -285,9 +290,7 @@ void main() {
         port: 0);
     addTearDown(endpoint.stop);
     final running = await endpoint.start() as AgentEndpointRunning;
-    final token =
-        (jsonDecode(await File('${root.path}/endpoint.json').readAsString())
-            as JsonMap)['token'] as String;
+    final token = (await credentials.vault.read(const CredentialRef('agent', 'token')))!;
     final client = HttpClient()..findProxy = (_) => 'DIRECT';
     addTearDown(() => client.close(force: true));
     Future<JsonMap> rpc(String method, JsonMap params) async {

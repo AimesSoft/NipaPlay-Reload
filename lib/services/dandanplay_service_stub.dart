@@ -1,3 +1,4 @@
+import 'package:nipaplay/security/credential_store.dart';
 import 'dart:async';
 import 'dart:convert';
 import 'package:crypto/crypto.dart';
@@ -175,7 +176,7 @@ class DandanplayService {
   static Future<void> initialize({bool renewToken = true}) async {
     // 从localStorage加载登录状态
     final prefs = await SharedPreferences.getInstance();
-    await prefs.remove('dandanplay_app_secret');
+    if (!CredentialStore.instance.desktop) await prefs.remove('dandanplay_app_secret');
     _isLoggedIn = prefs.getBool('dandanplay_logged_in') ?? false;
     _userName = prefs.getString('dandanplay_username');
     _screenName = prefs.getString('dandanplay_screenname');
@@ -273,7 +274,7 @@ class DandanplayService {
 
   static Future<void> loadToken() async {
     final prefs = await SharedPreferences.getInstance();
-    _token = prefs.getString('dandanplay_token');
+    _token = (await CredentialStore.instance.read(prefs, 'dandanplay_token'));
     if (_token != null && _token!.isNotEmpty) {
       _isLoggedIn = true;
     }
@@ -317,14 +318,14 @@ class DandanplayService {
       _clearBangumiDetailsCache();
     }
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setString('dandanplay_token', token);
+    await CredentialStore.instance.write(prefs, 'dandanplay_token', token);
   }
 
   static Future<void> clearToken() async {
     _clearBangumiDetailsCache();
     _token = null;
     final prefs = await SharedPreferences.getInstance();
-    await prefs.remove('dandanplay_token');
+    await CredentialStore.instance.delete(prefs, 'dandanplay_token');
   }
 
   static Future<Map<String, dynamic>?> getCachedVideoInfo(

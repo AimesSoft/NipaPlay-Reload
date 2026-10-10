@@ -1,3 +1,4 @@
+import 'package:nipaplay/security/credential_store.dart';
 import 'dart:async';
 import 'dart:convert';
 
@@ -168,7 +169,7 @@ class TrendingBangumiService {
         (DateTime.now().toUtc().millisecondsSinceEpoch / 1000).round();
     final appSecret = await DandanplayService.getAppSecret();
     final prefs = await SharedPreferences.getInstance();
-    final token = prefs.getString('dandanplay_token');
+    final token = (await CredentialStore.instance.read(prefs, 'dandanplay_token'));
     final response = await _client.get(
       WebRemoteAccessService.proxyUri(uri),
       headers: {

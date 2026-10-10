@@ -1,3 +1,11 @@
+import 'package:nipaplay/security/secret_redactor.dart';
+import 'dart:convert';
+import 'package:nipaplay/security/credential_diagnostics_migration.dart';
+import 'package:path_provider/path_provider.dart';
+import 'package:nipaplay/security/credential_store.dart';
+import 'package:nipaplay/security/credential_file_migration.dart';
+import 'package:nipaplay/security/credential_notice.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:nipaplay/utils/performance_trace.dart';
 import 'package:nipaplay/services/remote_control_access_guard_service.dart';
 import 'package:nipaplay/services/password_input_mode_service.dart';
@@ -166,7 +174,12 @@ Alignment _resolveStartupWindowAlignment(
   }
 }
 
-void main(List<String> args) async {
+Future<void> main(List<String> args) => runZoned(() => _main(args),
+    zoneSpecification: ZoneSpecification(print: (self, parent, zone, line) {
+      parent.print(zone, SecretRedactor.text(line));
+    }));
+
+Future<void> _main(List<String> args) async {
   WidgetsFlutterBinding.ensureInitialized();
   // Restore directory grants before storage, history, scanning or playback.
   if (globals.isHarmonyOS) {
@@ -259,6 +272,20 @@ void main(List<String> args) async {
   // 初始化hotkey_manager
   if (globals.isDesktop) {
     await hotKeyManager.unregisterAll();
+  }
+
+  if (!kIsWeb) {
+    final credentials = CredentialStore.instance;
+    await credentials.checkAvailability();
+    await credentials.migrate(await SharedPreferences.getInstance());
+    await migrateCredentialFiles(
+        Directory('${(await StorageService.getAppStorageDirectory()).path}/next'), credentials);
+    await migrateCredentialDiagnostics(await StorageService.getAppStorageDirectory(),
+        await getApplicationSupportDirectory(), credentials);
+    await (await SharedPreferences.getInstance()).setString('vault_migration_failures_v1', jsonEncode([
+      for (final entry in credentials.failures.entries)
+        {'reference': entry.key.toJson(), 'reason': entry.value},
+    ]));
   }
 
   // 初始化调试日志服务（在最前面初始化，这样可以收集启动过程的日志）
@@ -2066,7 +2093,7 @@ Widget _buildGlobalAppOverlay(
   required bool isDragging,
 }) {
   final appChild =
-      globals.isTelevision ? TvOSRemoteTextInputScope(child: child) : child;
+      CredentialNotice(child: globals.isTelevision ? TvOSRemoteTextInputScope(child: child) : child);
   return Stack(
     children: [
       if (globals.isAndroidTv)

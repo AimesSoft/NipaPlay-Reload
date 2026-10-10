@@ -1,3 +1,4 @@
+import 'package:nipaplay/security/credential_store.dart';
 import 'dart:convert';
 import 'dart:async';
 import 'dart:io' if (dart.library.io) 'dart:io';
@@ -175,7 +176,7 @@ class DandanplayService {
   static Future<void> initialize({bool renewToken = true}) async {
     final prefs = await SharedPreferences.getInstance();
     // 新版由服务端保管 AppSecret，清理旧版本曾缓存到本地的副本。
-    await prefs.remove('dandanplay_app_secret');
+    if (!CredentialStore.instance.desktop) await prefs.remove('dandanplay_app_secret');
     _isLoggedIn = prefs.getBool('dandanplay_logged_in') ?? false;
     _userName = prefs.getString('dandanplay_username');
     _screenName = prefs.getString('dandanplay_screenname');
@@ -183,7 +184,7 @@ class DandanplayService {
     // loadToken 内部在距上次续期超过 21 天时会发起一次网络续期请求。
     // 加超时护栏：超时就沿用本地已缓存的 token 继续启动，
     // 续期交由后续请求自然重试，不阻塞首帧。
-    _token = prefs.getString('dandanplay_token');
+    _token = (await CredentialStore.instance.read(prefs, 'dandanplay_token'));
     if (!renewToken) return;
     await loadToken().timeout(
       _tokenLoadTimeout,
@@ -252,7 +253,7 @@ class DandanplayService {
 
   static Future<void> loadToken() async {
     final prefs = await SharedPreferences.getInstance();
-    _token = prefs.getString('dandanplay_token');
+    _token = (await CredentialStore.instance.read(prefs, 'dandanplay_token'));
 
     // 检查是否需要刷新Token
     await _checkAndRenewToken();
@@ -270,7 +271,7 @@ class DandanplayService {
     _isLoggedIn = true;
 
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setString('dandanplay_token', token);
+    await CredentialStore.instance.write(prefs, 'dandanplay_token', token);
     await prefs.setString('dandanplay_username', username);
     await prefs.setString('dandanplay_screenname', screenName);
     await prefs.setBool('dandanplay_logged_in', true);
@@ -290,7 +291,7 @@ class DandanplayService {
     _loginTimestamp = null;
 
     final prefs = await SharedPreferences.getInstance();
-    await prefs.remove('dandanplay_token');
+    await CredentialStore.instance.delete(prefs, 'dandanplay_token');
     await prefs.remove('dandanplay_username');
     await prefs.remove('dandanplay_screenname');
     await prefs.remove('dandanplay_logged_in');
@@ -382,7 +383,7 @@ class DandanplayService {
     }
     _token = token;
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setString('dandanplay_token', token);
+    await CredentialStore.instance.write(prefs, 'dandanplay_token', token);
     // 保存Token刷新时间
     await prefs.setInt(
       _lastTokenRenewKey,
@@ -394,7 +395,7 @@ class DandanplayService {
     _clearBangumiDetailsCache();
     _token = null;
     final prefs = await SharedPreferences.getInstance();
-    await prefs.remove('dandanplay_token');
+    await CredentialStore.instance.delete(prefs, 'dandanplay_token');
     await prefs.remove(_lastTokenRenewKey);
   }
 

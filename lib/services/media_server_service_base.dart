@@ -1,3 +1,4 @@
+import 'package:nipaplay/security/credential_store.dart';
 import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
@@ -238,7 +239,7 @@ abstract class MediaServerServiceBase {
     if (currentProfile == null) {
       serverUrl = prefs.getString('${prefsKeyPrefix}_server_url');
       username = prefs.getString('${prefsKeyPrefix}_username');
-      accessToken = prefs.getString('${prefsKeyPrefix}_access_token');
+      accessToken = (await CredentialStore.instance.read(prefs, '${prefsKeyPrefix}_access_token'));
       userId = prefs.getString('${prefsKeyPrefix}_user_id');
     }
 
@@ -441,7 +442,7 @@ abstract class MediaServerServiceBase {
 
     await prefs.setString('${prefsKeyPrefix}_server_url', serverUrl!);
     await prefs.setString('${prefsKeyPrefix}_username', username!);
-    await prefs.setString('${prefsKeyPrefix}_access_token', accessToken!);
+    await CredentialStore.instance.write(prefs, '${prefsKeyPrefix}_access_token', accessToken!);
     await prefs.setString('${prefsKeyPrefix}_user_id', userId!);
   }
 
@@ -465,7 +466,7 @@ abstract class MediaServerServiceBase {
     await prefs.remove('${prefsKeyPrefix}_current_profile_id');
     await prefs.remove('${prefsKeyPrefix}_server_url');
     await prefs.remove('${prefsKeyPrefix}_username');
-    await prefs.remove('${prefsKeyPrefix}_access_token');
+    await CredentialStore.instance.delete(prefs, '${prefsKeyPrefix}_access_token');
     await prefs.remove('${prefsKeyPrefix}_user_id');
     await prefs.remove('${prefsKeyPrefix}_selected_libraries');
 

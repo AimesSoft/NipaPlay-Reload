@@ -1,3 +1,4 @@
+import 'package:nipaplay/security/credential_store.dart';
 import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
@@ -203,7 +204,7 @@ class SMBService {
   Future<void> _loadConnections() async {
     try {
       final prefs = await SharedPreferences.getInstance();
-      final savedJson = prefs.getString(_connectionsKey);
+      final savedJson = (await CredentialStore.instance.read(prefs, _connectionsKey));
       if (savedJson == null) return;
       final List<dynamic> decoded = json.decode(savedJson);
       final needsIdMigration = decoded.whereType<Map>().any(
@@ -223,8 +224,7 @@ class SMBService {
   Future<void> _saveConnections() async {
     try {
       final prefs = await SharedPreferences.getInstance();
-      await prefs.setString(
-        _connectionsKey,
+      await CredentialStore.instance.write(prefs, _connectionsKey,
         json.encode(_connections.map((e) => e.toJson()).toList()),
       );
     } catch (e) {

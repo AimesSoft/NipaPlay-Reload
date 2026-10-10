@@ -1,3 +1,5 @@
+import 'package:nipaplay/security/portable_credentials.dart';
+import 'package:nipaplay/security/credential_store.dart';
 import 'dart:io';
 import 'dart:convert';
 export 'package:nipaplay/services/backup_category.dart';
@@ -142,7 +144,7 @@ class FullBackupService {
       backupData['accounts'] = await _collectAccounts();
     }
 
-    return _sanitizeForJson(backupData) as Map<String, dynamic>;
+    return sealPortableCredentials(_sanitizeForJson(backupData) as Map<String, dynamic>, CredentialStore.instance);
   }
 
   // ---------- 偏好设置收集 ----------
@@ -188,7 +190,7 @@ class FullBackupService {
     for (final key in settingsKeys) {
       final value = prefs.get(key);
       if (value != null) {
-        settingsMap[key] = value;
+        settingsMap[key] = CredentialStore.instance.exportPreference(key, value);
       }
     }
     result['settings'] = settingsMap;
@@ -249,7 +251,7 @@ class FullBackupService {
       await webdavService.initialize();
       final webdavConnections = webdavService.connections;
       result['webdavConnections'] =
-          webdavConnections.map((c) => c.toJson()).toList();
+          CredentialStore.instance.exportItems('webdav_connections', webdavConnections.map((c) => c.toJson()).toList());
     } catch (e) {
       debugPrint('收集WebDAV连接配置失败: $e');
     }
@@ -259,7 +261,7 @@ class FullBackupService {
       final smbService = SMBService.instance;
       await smbService.initialize();
       final smbConnections = smbService.connections;
-      result['smbConnections'] = smbConnections.map((c) => c.toJson()).toList();
+      result['smbConnections'] = CredentialStore.instance.exportItems('smb_connections', smbConnections.map((c) => c.toJson()).toList());
     } catch (e) {
       debugPrint('收集SMB连接配置失败: $e');
     }
@@ -272,7 +274,7 @@ class FullBackupService {
           remoteService.serverUrl!.isNotEmpty) {
         result['dandanplayRemote'] = {
           'baseUrl': prefs.getString('dandanplay_remote_base_url'),
-          'apiToken': prefs.getString('dandanplay_remote_api_token'),
+          'apiToken': CredentialStore.preferenceRef('dandanplay_remote_api_token').placeholder,
           'tokenRequired':
               prefs.getBool('dandanplay_remote_token_required') ?? false,
         };
@@ -308,7 +310,7 @@ class FullBackupService {
     try {
       await MultiAddressServerService.instance.loadProfiles();
       final profiles = MultiAddressServerService.instance.profiles;
-      return profiles.map((p) => p.toJson()).toList();
+      return CredentialStore.instance.exportItems('server_profiles', profiles.map((p) => p.toJson()).toList()).cast<Map<String, dynamic>>();
     } catch (e) {
       debugPrint('收集服务器配置失败: $e');
       return [];
@@ -428,7 +430,7 @@ class FullBackupService {
     final dandanplayLoggedIn = prefs.getBool('dandanplay_logged_in') ?? false;
     dandanplayAccount['isLoggedIn'] = dandanplayLoggedIn;
     if (dandanplayLoggedIn) {
-      dandanplayAccount['token'] = prefs.getString('dandanplay_token');
+      dandanplayAccount['token'] = CredentialStore.preferenceRef('dandanplay_token').placeholder;
       dandanplayAccount['username'] = prefs.getString('dandanplay_username');
       dandanplayAccount['screenName'] =
           prefs.getString('dandanplay_screenname');
@@ -454,7 +456,7 @@ class FullBackupService {
     final bangumiLoggedIn = prefs.getBool('bangumi_logged_in') ?? false;
     bangumiAccount['isLoggedIn'] = bangumiLoggedIn;
     if (bangumiLoggedIn) {
-      bangumiAccount['accessToken'] = prefs.getString('bangumi_access_token');
+      bangumiAccount['accessToken'] = CredentialStore.preferenceRef('bangumi_access_token').placeholder;
       final bangumiUserInfoRaw = prefs.getString('bangumi_user_info');
       if (bangumiUserInfoRaw != null) {
         try {
@@ -474,7 +476,7 @@ class FullBackupService {
                 'serverName': p.serverName,
                 'serverType': p.serverType,
                 'username': p.username,
-                'accessToken': p.accessToken,
+                'accessToken': p.accessToken == null ? null : CredentialStore.itemRef('server_profiles', {'id': p.id}).placeholder,
                 'userId': p.userId,
                 'serverId': p.serverId,
                 'addresses': p.addresses.map((a) => a.toJson()).toList(),
@@ -663,6 +665,7 @@ class FullBackupService {
     final result = CategoryRestoreResult();
 
     try {
+      preferencesData = await hydratePortableCredentials(preferencesData, CredentialStore.instance);
       final prefs = await SharedPreferences.getInstance();
 
       // 恢复软件设置
@@ -680,7 +683,7 @@ class FullBackupService {
             } else if (value is double) {
               await prefs.setDouble(key, value);
             } else if (value is String) {
-              await prefs.setString(key, value);
+              await CredentialStore.instance.write(prefs, key, value);
             } else if (value is List) {
               await prefs.setStringList(
                   key, value.map((e) => e.toString()).toList());
@@ -711,6 +714,7 @@ class FullBackupService {
     final result = CategoryRestoreResult();
 
     try {
+      mediaLibrariesData = await hydratePortableCredentials(mediaLibrariesData, CredentialStore.instance);
       final prefs = await SharedPreferences.getInstance();
 
       // 1. 恢复本地媒体库路径
@@ -751,7 +755,7 @@ class FullBackupService {
         final prefsInstance = await SharedPreferences.getInstance();
         final profilesJson =
             json.encode(mergedProfiles.map((p) => p.toJson()).toList());
-        await prefsInstance.setString('server_profiles', profilesJson);
+        await CredentialStore.instance.write(prefsInstance, 'server_profiles', profilesJson);
 
         result.serverProfileCount = profiles.length;
         debugPrint('恢复了 ${profiles.length} 个服务器配置');
@@ -862,7 +866,7 @@ class FullBackupService {
             }
             final apiToken = dandanplayRemoteData['apiToken'] as String?;
             if (apiToken != null) {
-              await prefs.setString('dandanplay_remote_api_token', apiToken);
+              await CredentialStore.instance.write(prefs, 'dandanplay_remote_api_token', apiToken);
             }
             final tokenRequired =
                 dandanplayRemoteData['tokenRequired'] as bool? ?? false;
@@ -926,6 +930,7 @@ class FullBackupService {
     final result = CategoryRestoreResult();
 
     try {
+      watchHistoryData = (await hydratePortableCredentials({'items': watchHistoryData}, CredentialStore.instance))['items'] as List;
       final database = WatchHistoryDatabase.instance;
       final items = <WatchHistoryItem>[];
 
@@ -988,6 +993,7 @@ class FullBackupService {
     final result = CategoryRestoreResult();
 
     try {
+      episodeMatchesData = (await hydratePortableCredentials({'items': episodeMatchesData}, CredentialStore.instance))['items'] as List;
       final database = WatchHistoryDatabase.instance;
       final matches = <EpisodeMatchRestoreItem>[];
 
@@ -1040,6 +1046,7 @@ class FullBackupService {
     final result = CategoryRestoreResult();
 
     try {
+      accountsData = await hydratePortableCredentials(accountsData, CredentialStore.instance);
       final prefs = await SharedPreferences.getInstance();
 
       // 1. 恢复弹弹play 账户
@@ -1050,7 +1057,7 @@ class FullBackupService {
         if (isLoggedIn) {
           final token = dandanplayData['token'] as String?;
           if (token != null) {
-            await prefs.setString('dandanplay_token', token);
+            await CredentialStore.instance.write(prefs, 'dandanplay_token', token);
           }
           final username = dandanplayData['username'] as String?;
           if (username != null) {
@@ -1094,7 +1101,7 @@ class FullBackupService {
         if (bangumiLoggedIn) {
           final accessToken = bangumiData['accessToken'] as String?;
           if (accessToken != null) {
-            await prefs.setString('bangumi_access_token', accessToken);
+            await CredentialStore.instance.write(prefs, 'bangumi_access_token', accessToken);
           }
           final userInfo = bangumiData['userInfo'] as Map<String, dynamic>?;
           if (userInfo != null) {
@@ -1141,7 +1148,7 @@ class FullBackupService {
         final prefsInstance = await SharedPreferences.getInstance();
         final profilesJson =
             json.encode(mergedProfiles.map((p) => p.toJson()).toList());
-        await prefsInstance.setString('server_profiles', profilesJson);
+        await CredentialStore.instance.write(prefsInstance, 'server_profiles', profilesJson);
 
         result.serverAccountCount = serverAccountsData.length;
         debugPrint('恢复了 ${serverAccountsData.length} 个服务器账户');

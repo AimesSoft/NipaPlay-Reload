@@ -44,7 +44,11 @@ url = "2.5.8"
 wgpu-hal = { version = "27.0.4", features = ["metal"] }
 metal = "0.32.0"
 
+[target.'cfg(target_os = "macos")'.dependencies]
+keyring = { version = "3.6.3", features = ["apple-native"] }
+
 [target.'cfg(target_os = "windows")'.dependencies]
+keyring = { version = "3.6.3", features = ["windows-native"] }
 librqbit = { version = "9.0.1", default-features = false, features = ["default-tls"] }
 wgpu-hal = { version = "27.0.4", features = ["dx12"] }
 windows = { version = "0.58", features = [
@@ -62,6 +66,7 @@ windows = { version = "0.58", features = [
 librqbit = { version = "9.0.1", default-features = false, features = ["rust-tls"] }
 
 [target.'cfg(target_os = "linux")'.dependencies]
+keyring = { version = "3.6.3", features = ["sync-secret-service", "crypto-rust", "vendored"] }
 wgpu-hal = { version = "27.0.4", features = ["gles"] }
 
 [target.'cfg(target_os = "android")'.dependencies]

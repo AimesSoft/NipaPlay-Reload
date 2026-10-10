@@ -1,4 +1,6 @@
 import 'package:nipa_harness/nipa_harness.dart';
+import 'package:nipaplay/security/credential_vault.dart';
+export 'package:nipaplay/security/credential_vault.dart';
 
 final class ExternalRef implements JsonEncodable {
   const ExternalRef(this.provider, this.objectType, this.externalId,
@@ -88,12 +90,6 @@ abstract interface class MetadataProvider {
 abstract interface class HashMetadataProvider implements MetadataProvider {
   Future<List<MetadataRecord>> matchHash(
       String filename, String hash, int size);
-}
-
-/// A reference never contains the secret and is safe to include in configuration.
-final class CredentialRef {
-  const CredentialRef(this.id);
-  final String id;
 }
 
 abstract interface class CredentialResolver {

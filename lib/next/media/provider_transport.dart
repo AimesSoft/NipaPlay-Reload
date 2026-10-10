@@ -6,78 +6,35 @@ import 'package:http/http.dart' as http;
 import 'package:nipa_harness/nipa_harness.dart';
 
 import 'metadata_provider.dart';
+import 'package:nipaplay/security/credential_store.dart';
+import 'package:nipaplay/security/credential_file_migration.dart';
+import 'package:nipaplay/security/secret_redactor.dart';
 
 abstract interface class MetadataTransport {
   Future<JsonMap> request(String path,
       {Map<String, String> query = const {}, JsonMap? body});
 }
 
-final class FileCredentialResolver implements CredentialResolver {
-  FileCredentialResolver(Directory nextRoot)
-      : _file = File('${nextRoot.path}/credentials.json');
-  final File _file;
-
-  Future<void> initialize() async {
-    await _file.parent.create(recursive: true);
-    if (!await _file.exists()) {
-      final temporary = File('${_file.path}.tmp');
-      await temporary.writeAsString('');
-      await _restrict(temporary);
-      await temporary.writeAsString('{}', flush: true);
-      await temporary.rename(_file.path);
-    }
-    await _restrict(_file);
-  }
-
-  Future<void> _restrict(File file) async {
-    if (Platform.isWindows) {
-      final result = await Process.run('powershell.exe', [
-        '-NoProfile',
-        '-NonInteractive',
-        '-Command',
-        r'''$ErrorActionPreference = 'Stop';
-$sid = [System.Security.Principal.WindowsIdentity]::GetCurrent().User;
-$acl = [System.Security.AccessControl.FileSecurity]::new();
-$acl.SetOwner($sid);
-$acl.SetAccessRuleProtection($true, $false);
-$rule = [System.Security.AccessControl.FileSystemAccessRule]::new($sid, 'FullControl', 'Allow');
-$acl.SetAccessRule($rule);
-Set-Acl -LiteralPath $env:NIPAPLAY_CREDENTIAL_PATH -AclObject $acl;'''
-      ], environment: {
-        'NIPAPLAY_CREDENTIAL_PATH': file.path
-      });
-      if (result.exitCode != 0) {
-        throw const Failure(FailureCode.unavailable,
-            'Cannot restrict credential file permissions.');
-      }
-      return;
-    }
-    final result = await Process.run('chmod', ['600', file.path]);
-    if (result.exitCode != 0) {
-      throw const Failure(FailureCode.unavailable,
-          'Cannot restrict credential file permissions.');
-    }
-  }
-
+final class VaultCredentialResolver implements CredentialResolver {
+  VaultCredentialResolver(this.root, {CredentialStore? store})
+      : store = store ?? CredentialStore.instance;
+  final Directory root;
+  final CredentialStore store;
+  Future<void> initialize() => migrateCredentialFiles(root, store);
   @override
   Future<String> resolve(CredentialRef ref) async {
-    final Object? decoded;
-    try {
-      decoded = jsonDecode(await _file.readAsString());
-    } on FormatException {
-      throw const Failure(
-          FailureCode.unavailable, 'Credential file contains invalid JSON.');
+    String? secret;
+    final file = File('${root.path}/credentials.json');
+    if (await file.exists()) {
+      final values = jsonDecode(await file.readAsString()) as Map;
+      // Keep using the old value if migration failed, including non-desktop.
+      if (values[ref.key] is String) secret = values[ref.key] as String;
     }
-    if (decoded is! Map) {
-      throw const Failure(
-          FailureCode.unavailable, 'Credential file must contain an object.');
+    secret ??= await store.vault.read(ref);
+    if (secret == null || secret.isEmpty) {
+      throw Failure(FailureCode.unavailable, '$ref is not configured.');
     }
-    final values = decoded;
-    final secret = values[ref.id];
-    if (secret is! String || secret.isEmpty) {
-      throw Failure(FailureCode.unavailable,
-          'Credential reference ${ref.id} is not configured.');
-    }
+    SecretRedactor.remember(ref, secret);
     return secret;
   }
 }

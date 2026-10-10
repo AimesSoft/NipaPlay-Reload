@@ -16,6 +16,7 @@ import 'api/performance.dart';
 import 'api/remote_directory.dart';
 import 'api/startup_commands.dart';
 import 'api/torrent.dart';
+import 'api/vault.dart';
 import 'api/webdav_multistatus.dart';
 import 'dart:async';
 import 'dart:convert';
@@ -83,7 +84,7 @@ class RustLib extends BaseEntrypoint<RustLibApi, RustLibApiImpl, RustLibWire> {
   String get codegenVersion => '2.12.0';
 
   @override
-  int get rustContentHash => -281536625;
+  int get rustContentHash => 1224259226;
 
   static const kDefaultExternalLibraryLoaderConfig =
       ExternalLibraryLoaderConfig(
@@ -320,6 +321,15 @@ abstract class RustLibApi extends BaseApi {
 
   Future<String> crateApiTorrentTorrentStreamUrl(
       {required int id, required int fileId, required String filename});
+
+  Future<void> crateApiVaultVaultDelete(
+      {required String namespace, required String key});
+
+  Future<String?> crateApiVaultVaultRead(
+      {required String namespace, required String key});
+
+  Future<void> crateApiVaultVaultWrite(
+      {required String namespace, required String key, required String secret});
 }
 
 class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
@@ -2097,6 +2107,87 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       const TaskConstMeta(
         debugName: "torrent_stream_url",
         argNames: ["id", "fileId", "filename"],
+      );
+
+  @override
+  Future<void> crateApiVaultVaultDelete(
+      {required String namespace, required String key}) {
+    return handler.executeNormal(NormalTask(
+      callFfi: (port_) {
+        final serializer = SseSerializer(generalizedFrbRustBinding);
+        sse_encode_String(namespace, serializer);
+        sse_encode_String(key, serializer);
+        pdeCallFfi(generalizedFrbRustBinding, serializer,
+            funcId: 62, port: port_);
+      },
+      codec: SseCodec(
+        decodeSuccessData: sse_decode_unit,
+        decodeErrorData: sse_decode_String,
+      ),
+      constMeta: kCrateApiVaultVaultDeleteConstMeta,
+      argValues: [namespace, key],
+      apiImpl: this,
+    ));
+  }
+
+  TaskConstMeta get kCrateApiVaultVaultDeleteConstMeta => const TaskConstMeta(
+        debugName: "vault_delete",
+        argNames: ["namespace", "key"],
+      );
+
+  @override
+  Future<String?> crateApiVaultVaultRead(
+      {required String namespace, required String key}) {
+    return handler.executeNormal(NormalTask(
+      callFfi: (port_) {
+        final serializer = SseSerializer(generalizedFrbRustBinding);
+        sse_encode_String(namespace, serializer);
+        sse_encode_String(key, serializer);
+        pdeCallFfi(generalizedFrbRustBinding, serializer,
+            funcId: 63, port: port_);
+      },
+      codec: SseCodec(
+        decodeSuccessData: sse_decode_opt_String,
+        decodeErrorData: sse_decode_String,
+      ),
+      constMeta: kCrateApiVaultVaultReadConstMeta,
+      argValues: [namespace, key],
+      apiImpl: this,
+    ));
+  }
+
+  TaskConstMeta get kCrateApiVaultVaultReadConstMeta => const TaskConstMeta(
+        debugName: "vault_read",
+        argNames: ["namespace", "key"],
+      );
+
+  @override
+  Future<void> crateApiVaultVaultWrite(
+      {required String namespace,
+      required String key,
+      required String secret}) {
+    return handler.executeNormal(NormalTask(
+      callFfi: (port_) {
+        final serializer = SseSerializer(generalizedFrbRustBinding);
+        sse_encode_String(namespace, serializer);
+        sse_encode_String(key, serializer);
+        sse_encode_String(secret, serializer);
+        pdeCallFfi(generalizedFrbRustBinding, serializer,
+            funcId: 64, port: port_);
+      },
+      codec: SseCodec(
+        decodeSuccessData: sse_decode_unit,
+        decodeErrorData: sse_decode_String,
+      ),
+      constMeta: kCrateApiVaultVaultWriteConstMeta,
+      argValues: [namespace, key, secret],
+      apiImpl: this,
+    ));
+  }
+
+  TaskConstMeta get kCrateApiVaultVaultWriteConstMeta => const TaskConstMeta(
+        debugName: "vault_write",
+        argNames: ["namespace", "key", "secret"],
       );
 
   @protected

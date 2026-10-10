@@ -3,6 +3,8 @@ import 'dart:io';
 import 'package:nipa_harness/nipa_harness.dart';
 import 'package:nipaplay/utils/storage_service.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
+import 'package:nipaplay/security/credential_store.dart';
+import 'package:nipaplay/security/credential_capability.dart';
 
 import 'danmaku/export.dart';
 import 'danmaku/runtime.dart';
@@ -43,6 +45,8 @@ final class NextCore {
   late final String deviceId;
   late final TaskEngine engine;
   final DownloadRuntime downloads;
+  CredentialStore get credentials => CredentialStore.instance;
+  CredentialVault get credentialVault => credentials.vault;
   late final MediaRuntime media;
   late final DanmakuRuntime danmaku;
   late final List<Capability> capabilities;
@@ -78,6 +82,7 @@ final class NextCore {
     media.attach(engine);
     danmaku.attach(engine);
     capabilities = List.unmodifiable([
+      CredentialCapability(credentials),
       TaskCapability(engine),
       downloads.capability,
       media.capability,

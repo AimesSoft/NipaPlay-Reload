@@ -1,3 +1,4 @@
+import 'package:nipaplay/security/credential_store.dart';
 import 'package:nipaplay/utils/performance_trace.dart';
 import 'dart:async';
 import 'dart:convert';
@@ -177,7 +178,7 @@ class PluginService extends ChangeNotifier {
     final key = '$pluginId::$entryId';
     _textSettingValues[key] = value;
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setString('$_textSettingPrefix$key', value);
+    await CredentialStore.instance.write(prefs, '$_textSettingPrefix$key', value);
     notifyListeners();
     _emitSettingsChanged(pluginId, entryId, 'text', value);
   }
@@ -213,7 +214,7 @@ class PluginService extends ChangeNotifier {
       for (final entry in plugin.uiEntries) {
         if (!entry.isTextInput) continue;
         final key = '${plugin.manifest.id}::${entry.id}';
-        final saved = prefs.getString('$_textSettingPrefix$key');
+        final saved = (await CredentialStore.instance.read(prefs, '$_textSettingPrefix$key'));
         if (saved != null) {
           _textSettingValues[key] = saved;
         } else {
@@ -248,7 +249,7 @@ class PluginService extends ChangeNotifier {
       final prefix = 'plugin_${plugin.manifest.id}_';
       for (final key in prefs.getKeys()) {
         if (!key.startsWith(prefix)) continue;
-        final value = prefs.getString(key);
+        final value = (await CredentialStore.instance.read(prefs, key));
         if (value != null) {
           _pluginStorageValues[key] = value;
         }
@@ -605,7 +606,7 @@ class PluginService extends ChangeNotifier {
           final value = callArgs[1]?.toString() ?? '';
           _pluginStorageValues[key] = value;
           unawaited(SharedPreferences.getInstance().then(
-            (prefs) => prefs.setString(key, value),
+            (prefs) => CredentialStore.instance.write(prefs, key, value),
           ));
           return true;
         }
@@ -621,7 +622,7 @@ class PluginService extends ChangeNotifier {
           final key = 'plugin_${pluginId}_${callArgs[0]}';
           _pluginStorageValues.remove(key);
           unawaited(SharedPreferences.getInstance().then(
-            (prefs) => prefs.remove(key),
+            (prefs) => CredentialStore.instance.delete(prefs, key),
           ));
           return true;
         }
@@ -633,7 +634,7 @@ class PluginService extends ChangeNotifier {
           final keys =
               prefs.getKeys().where((k) => k.startsWith(prefix)).toList();
           for (final k in keys) {
-            await prefs.remove(k);
+            await CredentialStore.instance.delete(prefs, k);
           }
         }));
         return true;

@@ -6,6 +6,9 @@ import 'package:nipa_harness/mcp.dart';
 import 'package:nipa_harness/nipa_harness.dart';
 
 import 'agent_workspace.dart';
+import 'package:nipaplay/security/credential_store.dart';
+import 'package:nipaplay/security/credential_file_migration.dart';
+import 'package:nipaplay/security/credential_vault.dart';
 
 sealed class AgentEndpointStatus {
   const AgentEndpointStatus();
@@ -35,17 +38,20 @@ final class AgentEndpoint {
     required String appVersion,
     required String agentsMd,
     int port = 47811,
+    CredentialStore? credentials,
   })  : _harness = harness,
         _root = root,
         _appVersion = appVersion,
         _agentsMd = agentsMd,
-        _port = port;
+        _port = port,
+        _credentials = credentials ?? CredentialStore.instance;
 
   final Harness _harness;
   final Directory _root;
   final String _appVersion;
   final String _agentsMd;
   final int _port;
+  final CredentialStore _credentials;
   HttpServer? _server;
   AgentEndpointRunning? _running;
 
@@ -53,34 +59,18 @@ final class AgentEndpoint {
     if (_running case final running?) return running;
 
     await _root.create(recursive: true);
+    await migrateCredentialFiles(_root, _credentials);
+    const ref = CredentialRef('agent', 'token');
     final file = File('${_root.path}/endpoint.json');
-    final String token;
-    if (await file.exists()) {
-      token =
-          (jsonDecode(await file.readAsString()) as JsonMap)['token'] as String;
-    } else {
+    final existing = await file.exists()
+        ? (jsonDecode(await file.readAsString()) as Map)['token'] : null;
+    var token = existing is String ? existing : await _credentials.vault.read(ref);
+    if (token == null) {
       final random = Random.secure();
-      token = base64Url
-          .encode(List.generate(32, (_) => random.nextInt(256)))
+      token = base64Url.encode(List.generate(32, (_) => random.nextInt(256)))
           .replaceAll('=', '');
-      // Restrict a temporary file before the token is written, then rename it
-      // into place so a crash never leaves a readable or empty token file.
-      final pending = File('${file.path}.tmp');
-      await pending.writeAsString('');
-      if (!Platform.isWindows) {
-        final arguments = ['600', pending.path];
-        final result = await Process.run('chmod', arguments);
-        if (result.exitCode != 0) {
-          throw ProcessException(
-            'chmod',
-            arguments,
-            result.stderr.toString(),
-            result.exitCode,
-          );
-        }
-      }
-      await pending.writeAsString(jsonEncode({'token': token}), flush: true);
-      await pending.rename(file.path);
+      await _credentials.verifiedWrite(ref, token);
+      await file.writeAsString(jsonEncode({'token': ref.placeholder}), flush: true);
     }
 
     final endpoint = McpEndpoint(

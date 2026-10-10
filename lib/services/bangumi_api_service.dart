@@ -1,3 +1,4 @@
+import 'package:nipaplay/security/credential_store.dart';
 import 'dart:convert';
 import 'dart:async';
 import 'package:flutter/foundation.dart';
@@ -57,7 +58,7 @@ class BangumiApiService {
         return;
       }
       final prefs = await SharedPreferences.getInstance();
-      _accessToken = prefs.getString(_tokenKey);
+      _accessToken = (await CredentialStore.instance.read(prefs, _tokenKey));
       _isLoggedIn = prefs.getBool(_isLoggedInKey) ?? false;
       loginStatusNotifier.value = _isLoggedIn;
 
@@ -249,7 +250,7 @@ class BangumiApiService {
 
         // 保存到SharedPreferences
         final prefs = await SharedPreferences.getInstance();
-        await prefs.setString(_tokenKey, token);
+        await CredentialStore.instance.write(prefs, _tokenKey, token);
         await prefs.setString(_userInfoKey, json.encode(userData));
         await prefs.setBool(_isLoggedInKey, true);
 
@@ -287,7 +288,7 @@ class BangumiApiService {
       loginStatusNotifier.value = false;
 
       final prefs = await SharedPreferences.getInstance();
-      await prefs.remove(_tokenKey);
+      await CredentialStore.instance.delete(prefs, _tokenKey);
       await prefs.remove(_userInfoKey);
       await prefs.remove(_isLoggedInKey);
 
