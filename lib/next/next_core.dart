@@ -28,6 +28,8 @@ import 'sessions/capability.dart';
 import 'sessions/platform_session.dart';
 import 'state/query.dart';
 import 'state/views.dart';
+import 'harness_hooks.dart';
+import 'harness_location.dart';
 
 /// Application-owned task and capability composition, independent of Labs.
 final class NextCore {
@@ -57,6 +59,8 @@ final class NextCore {
   late final Directory root;
   late final String deviceId;
   late final TaskEngine engine;
+  final hooks = HarnessHooks();
+  final harnessLocation = HarnessLocation();
   final DownloadRuntime downloads;
   CredentialStore get credentials => CredentialStore.instance;
   CredentialVault get credentialVault => credentials.vault;
@@ -93,8 +97,11 @@ final class NextCore {
         vault: credentialVault,
         token: () async => credentials.read(
             await SharedPreferences.getInstance(), 'dandanplay_token'));
-    settings = SettingsRegistry(
-        database, [...ApplicationSettings.entries(), meshAddressSetting(mesh)]);
+    settings = SettingsRegistry(database, [
+      ...ApplicationSettings.entries(),
+      meshAddressSetting(mesh),
+      harnessLocation.setting
+    ]);
     SettingsAccess.registry = settings;
     ApplicationSettings.authorizePath = (path, {directory = false}) =>
         media.service.authorizedPath(path, directory: directory);
@@ -109,8 +116,10 @@ final class NextCore {
     engine = TaskEngine(store: jobs, ownerDeviceId: deviceId, executors: [
       downloads.executor,
       ...media.executors,
-      ...danmaku.executors
+      ...danmaku.executors,
+      hooks,
     ]);
+    hooks.engine = engine;
     downloads.attach(engine, root);
     media.attach(engine);
     danmaku.attach(engine);
@@ -147,6 +156,8 @@ final class NextCore {
       ApplicationSettings.authorizePath = null;
     }
     await settings.drain();
+    await hooks.disable();
+    harnessLocation.dispose();
     await mesh.close();
     await downloads.stop();
     await danmaku.stopRestoring();

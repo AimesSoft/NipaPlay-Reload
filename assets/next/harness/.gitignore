@@ -1,0 +1,18 @@
+# Local observations and generated output
+records/
+logs/
+*.log
+*.jsonl
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.env
+.env.*
+secrets/
+credentials/
+endpoint.json
+*.pem
+*.key
+.DS_Store
+Thumbs.db

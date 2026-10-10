@@ -1,4 +1,4 @@
-"""Offline probe of the generated workspace with the installed Codex CLI."""
+"""Offline probe of the harness seed with the installed Codex CLI."""
 
 import http.server
 import json
@@ -18,22 +18,23 @@ def main():
         workspace = root / "workspace"
         generator = root / "generate.dart"
         generator.write_text("""import 'dart:io';
-import 'package:nipa_harness/nipa_harness.dart';
 import 'WORKSPACE_SOURCE';
-Future<void> main(List<String> args) => writeAgentWorkspace(
-  directory: Directory(args.single), url: Uri.parse('http://127.0.0.1:9/mcp'),
-  token: 'synthetic-probe-token', agentsMd: '# Offline configuration probe\\n',
-  catalog: [for (final id in ['download.delete', 'danmaku.cache_delete', 'mesh.invoke_destructive'])
-    ActionSpec(id: id, title: id, description: id, effect: Effect.destructive,
-      input: const ObjectSchema({}), output: const ObjectSchema({}))]);
-""".replace("WORKSPACE_SOURCE", (repo / "lib/next/agent_workspace.dart").as_uri()))
+Future<void> main(List<String> args) async {
+  final seed = <String, List<int>>{};
+  final source = Directory(args[1]);
+  await for (final entry in source.list(recursive: true)) {
+    if (entry is File) seed[entry.path.substring(source.path.length + 1)] = await entry.readAsBytes();
+  }
+  await createHarnessRepository(Directory(args[0]), seed);
+}
+""".replace("WORKSPACE_SOURCE", (repo / "lib/next/harness_repository.dart").as_uri()))
         subprocess.run([
             str(Path("~/development/flutter-3.44.6/bin/dart").expanduser()),
             "--packages=" + str(repo / ".dart_tool/package_config.json"),
-            str(generator), str(workspace),
+            str(generator), str(workspace), str(repo / "assets/next/harness"),
         ], cwd=repo, check=True)
-        assert (workspace / ".codex/config.toml").stat().st_mode & 0o777 == 0o600
-        print("config file mode: 600")
+        assert "token" not in (workspace / ".codex/config.toml").read_text()
+        print("seed config: no token or MCP connection")
         home = root / "codex-home"
         home.mkdir()
         requests = []
@@ -132,10 +133,6 @@ requires_openai_auth = false
                     assert config["config"][key] == expected
                     assert config["origins"][key]["name"]["type"] == "project"
                     print(key + ": " + json.dumps(expected) + " (origin: project)")
-                tools = config["config"]["mcp_servers"]["nipaplay"]["tools"]
-                assert tools == {name: {"approval_mode": "prompt"} for name in [
-                    "download_delete", "danmaku_cache_delete", "mesh_invoke_destructive"]}
-                print("destructive tools: " + json.dumps(tools, sort_keys=True))
                 thread = rpc("thread/start", {"cwd": str(workspace), "ephemeral": True})
                 assert thread["approvalPolicy"] == "never"
                 assert thread["sandbox"] == {"type": "dangerFullAccess"}

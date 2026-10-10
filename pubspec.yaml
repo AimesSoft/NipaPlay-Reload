@@ -236,7 +236,11 @@ flutter:
   generate: true
   assets:
     - pubspec.lock
-    - assets/next/AGENTS.md
+    - assets/next/harness/AGENTS.md
+    - assets/next/harness/nipa
+    - assets/next/harness/.gitignore
+    - assets/next/harness/.codex/config.toml
+    - assets/next/harness/hooks/README.md
     - packages/adaptive_platform_ui/pubspec.yaml
     - packages/danmaku_canvas/pubspec.yaml
     - packages/nipaplay_smb2/pubspec.yaml

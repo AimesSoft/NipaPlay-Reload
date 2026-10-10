@@ -126,8 +126,8 @@ class LabsSettingsContent extends StatelessWidget {
                       'Add this folder as a project in Codex and choose to trust it.',
                     );
                     final statusText = switch (status) {
-                      AgentEndpointRunning(:final url, :final workspace) =>
-                        '$url\n${workspace.path}\n$trustHint',
+                      AgentEndpointRunning(:final url, :final repository) =>
+                        '$url\n${repository.path}\n$trustHint',
                       AgentEndpointFailed(:final message) => message,
                       AgentEndpointStopped() => _text(
                           context,
@@ -154,19 +154,27 @@ class LabsSettingsContent extends StatelessWidget {
                           await labsSettings.setEnableAgentEndpoint(enabled);
                         },
                       ),
-                      if (labsSettings.enableAgentEndpoint)
-                        if (status case AgentEndpointRunning(:final workspace))
-                          AdaptiveSettingsTile.button(
-                            title: _text(
-                              context,
-                              '打开工作区文件夹',
-                              '開啟工作區資料夾',
-                              'Open Workspace Folder',
-                            ),
-                            icon: Ionicons.folder_outline,
-                            phoneIcon: cupertino.CupertinoIcons.folder,
-                            onTap: () => FolderOpener.open(workspace.path),
+                      AdaptiveSettingsTile.button(
+                        title: _text(context, 'Harness 仓库路径', 'Harness 倉庫路徑',
+                            'Harness Repository Path'),
+                        subtitle: runtime.repositoryPath,
+                        icon: Ionicons.code_outline,
+                        phoneIcon: cupertino
+                            .CupertinoIcons.chevron_left_slash_chevron_right,
+                        onTap: () => _editHarnessPath(context, runtime),
+                      ),
+                      if (status case AgentEndpointRunning(:final repository))
+                        AdaptiveSettingsTile.button(
+                          title: _text(
+                            context,
+                            '打开 Harness 仓库',
+                            '開啟 Harness 倉庫',
+                            'Open Harness Repository',
                           ),
+                          icon: Ionicons.folder_outline,
+                          phoneIcon: cupertino.CupertinoIcons.folder,
+                          onTap: () => FolderOpener.open(repository.path),
+                        ),
                     ],
                   );
                 },
@@ -175,6 +183,40 @@ class LabsSettingsContent extends StatelessWidget {
         );
       },
     );
+  }
+
+  Future<void> _editHarnessPath(
+      BuildContext context, NextRuntime runtime) async {
+    final controller = TextEditingController(text: runtime.repositoryPath);
+    String? error;
+    await showDialog<void>(
+        context: context,
+        builder: (context) => StatefulBuilder(
+              builder: (context, setState) => AlertDialog(
+                title: Text(_text(context, 'Harness 仓库路径', 'Harness 倉庫路徑',
+                    'Harness Repository Path')),
+                content: TextField(
+                    controller: controller,
+                    autofocus: true,
+                    decoration: InputDecoration(errorText: error)),
+                actions: [
+                  TextButton(
+                      onPressed: () => Navigator.pop(context),
+                      child: Text(_text(context, '取消', '取消', 'Cancel'))),
+                  TextButton(
+                      onPressed: () async {
+                        try {
+                          await runtime.setHarnessPath(controller.text.trim());
+                          if (context.mounted) Navigator.pop(context);
+                        } catch (failure) {
+                          setState(() => error = failure.toString());
+                        }
+                      },
+                      child: Text(_text(context, '保存', '儲存', 'Save'))),
+                ],
+              ),
+            ));
+    controller.dispose();
   }
 
   Future<bool> _confirmNext(BuildContext context) async =>

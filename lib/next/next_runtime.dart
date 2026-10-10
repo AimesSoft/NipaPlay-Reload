@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
@@ -26,6 +27,9 @@ import 'capabilities/playback_capability.dart';
 import 'capabilities/video_player_state_port.dart';
 import 'media/file_indexing.dart';
 import 'settings/application_settings.dart';
+import 'harness_location.dart';
+import 'harness_hooks.dart';
+import 'harness_repository.dart';
 
 final class NextRuntime extends ChangeNotifier {
   NextRuntime._(this._labs, this._player, List<Capability> capabilities) {
@@ -71,6 +75,13 @@ final class NextRuntime extends ChangeNotifier {
   late final Harness _harness;
   late final AgentEndpoint _endpoint;
   late final TaskEngine _taskEngine;
+  HarnessLocation? _location;
+  late final HarnessHooks _hooks;
+  StreamSubscription<Job>? _jobEvents;
+  StreamSubscription<JsonMap>? _fileEvents;
+  Future<void> _hookEvents = Future.value();
+  Set<String> _libraryPaths = {};
+  String? _startedPath;
   late Future<void> _operations;
   AgentEndpointStatus _endpointStatus = const AgentEndpointStopped();
   bool _disposed = false;
@@ -78,6 +89,12 @@ final class NextRuntime extends ChangeNotifier {
   Harness get harness => _harness;
   TaskEngine get taskEngine => _taskEngine;
   AgentEndpointStatus get endpointStatus => _endpointStatus;
+  String get repositoryPath => _location?.path ?? defaultHarnessPath;
+  Future<void> setHarnessPath(String path) async {
+    await ServiceProvider.nextCore.settings.set(
+        'next.harnessPath', path, Invocation(origin: 'gui'),
+        reason: 'Changed harness repository in Labs.');
+  }
 
   Future<void> _initialize(List<Capability> capabilities) async {
     final core = ServiceProvider.nextCore;
@@ -96,9 +113,20 @@ final class NextRuntime extends ChangeNotifier {
       seriesDetail: BangumiService.instance.getAnimeDetailsFromMemory,
     );
     _taskEngine = core.engine;
+    _hooks = core.hooks;
+    _location = core.harnessLocation;
+    await _location!.ready;
     await _labs.ready;
     final root = core.root;
-    final agentsMd = await rootBundle.loadString('assets/next/AGENTS.md');
+    final manifest = await AssetManifest.loadFromAssetBundle(rootBundle);
+    const prefix = 'assets/next/harness/';
+    final seed = <String, List<int>>{};
+    for (final asset
+        in manifest.listAssets().where((path) => path.startsWith(prefix))) {
+      final data = await rootBundle.load(asset);
+      seed[asset.substring(prefix.length)] =
+          data.buffer.asUint8List(data.offsetInBytes, data.lengthInBytes);
+    }
     final packageInfo = await PackageInfo.fromPlatform();
     _harness = Harness(
       [
@@ -113,28 +141,37 @@ final class NextRuntime extends ChangeNotifier {
     core.media.service.currentPath = () => _player.currentVideoPath;
     _endpoint = AgentEndpoint(
       harness: _harness,
-      root: root,
       appVersion: packageInfo.version,
-      agentsMd: agentsMd,
+      seed: seed,
       port: kDebugMode && Platform.environment['NIPAPLAY_AGENT_PORT'] != null
           ? int.parse(Platform.environment['NIPAPLAY_AGENT_PORT']!)
           : 47811,
     );
     if (_disposed) return;
     _labs.addListener(_queueEndpointUpdate);
+    _location!.addListener(_queueEndpointUpdate);
+    notifyListeners();
     await _updateEndpoint(_labs.enableAgentEndpoint);
   }
 
   void _queueEndpointUpdate() {
+    notifyListeners();
     final enabled = _labs.enableAgentEndpoint;
     _operations = _operations.then((_) => _updateEndpoint(enabled));
   }
 
   Future<void> _updateEndpoint(bool enabled) async {
     if (_disposed) return;
+    if (_endpointStatus case AgentEndpointRunning(:final repository)) {
+      if (enabled && repository.path == repositoryPath) return;
+    }
+    await _detachHooks();
     final AgentEndpointStatus status;
     if (enabled) {
-      status = await _endpoint.start();
+      status = await _endpoint.start(Directory(repositoryPath));
+      if (status case AgentEndpointRunning(:final repository)) {
+        await _attachHooks(repository);
+      }
     } else {
       await _endpoint.stop();
       status = const AgentEndpointStopped();
@@ -144,11 +181,85 @@ final class NextRuntime extends ChangeNotifier {
     notifyListeners();
   }
 
+  void _queueHook(Future<void> Function() event) {
+    _hookEvents = _hookEvents.then((_) => event());
+  }
+
+  Future<void> _attachHooks(Directory repository) async {
+    final store = ServiceProvider.nextCore.media.service.store;
+    _libraryPaths = {
+      for (final row in await store.database.query('media_locations'))
+        row['locator'] as String,
+      for (final item in ServiceProvider.watchHistoryProvider.history)
+        item.filePath,
+    };
+    _startedPath =
+        {PlayerStatus.playing, PlayerStatus.paused}.contains(_player.status)
+            ? _player.currentVideoPath
+            : null;
+    _hooks.enable(repository, _endpoint.credentialFile);
+    _jobEvents = _taskEngine.changes.listen((job) {
+      _queueHook(() => _hooks.taskChanged(job));
+    });
+    _fileEvents = store.fileChanges.listen((file) => _queueHook(() async {
+          final path = file['path'] as String;
+          if (_libraryPaths.add(path)) {
+            await _hooks.emit('library.file_added', path, file);
+          }
+        }));
+    ServiceProvider.watchHistoryProvider.addListener(_libraryChanged);
+    _player.addListener(_playbackChanged);
+  }
+
+  void _libraryChanged() => _queueHook(_observeLibrary);
+  Future<void> _observeLibrary() async {
+    final files = {
+      for (final item in ServiceProvider.watchHistoryProvider.history)
+        if (!_libraryPaths.contains(item.filePath))
+          item.filePath: {'path': item.filePath},
+    };
+    for (final entry in files.entries) {
+      if (_libraryPaths.add(entry.key)) {
+        await _hooks.emit('library.file_added', entry.key, entry.value);
+      }
+    }
+  }
+
+  void _playbackChanged() {
+    final path = _player.currentVideoPath;
+    if (!_player.hasVideo) {
+      _startedPath = null;
+      return;
+    }
+    if (_player.status != PlayerStatus.playing ||
+        path == null ||
+        path == _startedPath) {
+      return;
+    }
+    _startedPath = path;
+    _queueHook(() async {
+      await _hooks.emit('playback.started', path, {'path': path});
+    });
+  }
+
+  Future<void> _detachHooks() async {
+    _player.removeListener(_playbackChanged);
+    ServiceProvider.watchHistoryProvider.removeListener(_libraryChanged);
+    await _jobEvents?.cancel();
+    await _fileEvents?.cancel();
+    _jobEvents = null;
+    _fileEvents = null;
+    await _hookEvents;
+    await _hooks.disable();
+  }
+
   @override
   void dispose() {
     _disposed = true;
     _labs.removeListener(_queueEndpointUpdate);
+    _location?.removeListener(_queueEndpointUpdate);
     _operations = _operations.then((_) async {
+      await _detachHooks();
       await _endpoint.stop();
     });
     super.dispose();

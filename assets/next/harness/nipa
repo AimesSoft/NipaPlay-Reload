@@ -1,0 +1,186 @@
+#!/usr/bin/env python3
+"""NipaPlay's live Action client. Python 3.9+, standard library only.
+
+On Windows use: python nipa ...
+Connection data belongs outside this repository; NIPAPLAY_ENDPOINT_FILE can
+select another credential file. No persistent client session or background work.
+"""
+import argparse
+import json
+import os
+from pathlib import Path
+import re
+import sys
+import time
+import urllib.error
+import urllib.parse
+import urllib.request
+
+
+def endpoint_file():
+    override = os.environ.get("NIPAPLAY_ENDPOINT_FILE")
+    if override:
+        return Path(override).expanduser()
+    if os.name == "nt":
+        return Path(os.environ["APPDATA"]) / "NipaPlay" / "endpoint.json"
+    return Path.home() / ".config" / "nipaplay" / "endpoint.json"
+
+
+def redact(value, secrets=()):
+    """Remove named secrets, known connection values and authenticated URLs."""
+    if isinstance(value, dict):
+        return {redact(str(k), secrets): v if k in {"inputSchema", "outputSchema"} else "[redacted]" if re.search(
+            r"password|secret|token|cookie|authorization|api[_-]?key|passkey", str(k), re.I)
+                else redact(v, secrets) for k, v in value.items()}
+    if isinstance(value, list):
+        return [redact(v, secrets) for v in value]
+    if not isinstance(value, str):
+        return value
+    for secret in sorted((s for s in secrets if s), key=len, reverse=True):
+        for form in {secret, urllib.parse.quote(secret, safe=""),
+                     urllib.parse.quote_plus(secret)}:
+            value = value.replace(form, "[redacted]")
+    value = re.sub(r"\b(Bearer|Basic)\s+[^\s\"',}]+", r"\1 [redacted]", value, flags=re.I)
+    value = re.sub(r"\b(?:https?|magnet)://[^\s\"<>]+", "[redacted URL]", value)
+    value = re.sub(r"(?i)((?:password|secret|token|cookie|authorization|api[_-]?key|passkey)[\"']?\s*[=:]\s*)[^\s,}]+",
+                   r"\1[redacted]", value)
+    return value
+
+
+def json_input(text):
+    if text.startswith("@"):
+        text = Path(text[1:]).expanduser().read_text(encoding="utf-8")
+    value = json.loads(text)
+    if not isinstance(value, dict):
+        raise ValueError("Action input must be a JSON object")
+    return value
+
+
+class Client:
+    def __init__(self):
+        connection = json.loads(endpoint_file().read_text(encoding="utf-8"))
+        self.url = connection["url"]
+        self.token = connection["token"]
+        address = urllib.parse.urlsplit(self.url)
+        if (address.scheme != "http" or address.hostname != "127.0.0.1"
+                or address.username or address.password or address.path != "/harness"):
+            raise ValueError("Expected a local NipaPlay /harness endpoint")
+        # The local endpoint must never be sent through HTTP_PROXY.
+        self.opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
+        self.device = None
+
+    def request(self, operation, **fields):
+        body = json.dumps(dict(operation=operation, **fields)).encode("utf-8")
+        request = urllib.request.Request(self.url, data=body, headers={
+            "Authorization": "Bearer " + self.token, "Content-Type": "application/json"})
+        try:
+            with self.opener.open(request, timeout=65) as response:
+                return json.load(response)
+        except urllib.error.HTTPError as error:
+            raise RuntimeError("NipaPlay returned HTTP " + str(error.code)) from None
+        except (urllib.error.URLError, TimeoutError):
+            raise RuntimeError("Cannot connect; run NipaPlay and enable Next in Labs") from None
+
+    def result(self, value):
+        if value.get("status") != "completed":
+            raise ValueError(json.dumps(value, ensure_ascii=False))
+        return value["result"]
+
+    def select_device(self, name):
+        devices = self.result(self.call("mesh.devices", {}))["devices"]
+        matches = [d for d in devices if name in (d["deviceId"], d.get("device_name"))]
+        if len(matches) != 1:
+            raise ValueError("Device name/ID must match exactly one Mesh device")
+        self.device = matches[0]
+        if not self.device["online"]:
+            raise ValueError("Mesh device is offline; its cached catalog is not live")
+
+    def catalog(self):
+        if self.device:
+            return {"actions": self.device["actions"]}
+        return self.request("list")
+
+    def describe(self, action):
+        matches = [a for a in self.catalog()["actions"] if a["id"] == action]
+        if not matches:
+            raise ValueError("Unknown Action: " + action)
+        return matches[0]
+
+    def call(self, action, inputs, execute=False):
+        if not self.device:
+            return self.request("call", action=action, input=inputs, execute=execute)
+        spec = self.describe(action)
+        if spec["effect"] == "destructive" and not execute:
+            return {"status": "preview", "action": action, "input": inputs,
+                    "deviceId": self.device["deviceId"], "effect": "destructive",
+                    "description": spec["description"], "executed": False}
+        gateway = "mesh.invoke_destructive" if spec["effect"] == "destructive" else "mesh.invoke"
+        return self.request("call", action=gateway, input={
+            "deviceId": self.device["deviceId"], "action": action, "input": inputs}, execute=execute)
+
+    def watch(self, task, seconds):
+        end = time.monotonic() + seconds
+        snapshot = self.call("task.get", {"jobId": task})
+        while snapshot.get("status") == "completed":
+            job = snapshot["result"]["job"]
+            remaining = end - time.monotonic()
+            if job["state"] in {"succeeded", "failed", "cancelled", "needs_decision", "paused"} or remaining <= 0:
+                return snapshot
+            snapshot = self.call("task.wait", {"jobId": task, "afterRevision": job["revision"],
+                                                "timeoutMs": max(0, int(remaining * 1000))})
+        return snapshot
+
+
+class JsonArgumentParser(argparse.ArgumentParser):
+    def error(self, message):
+        print(json.dumps({"error": "Invalid command arguments; use --help"}))
+        raise SystemExit(2)
+
+
+def main():
+    parser = JsonArgumentParser(description=__doc__)
+    parser.add_argument("--device", help="Exact Mesh device name or ID")
+    commands = parser.add_subparsers(dest="command", required=True)
+    commands.add_parser("status")
+    commands.add_parser("list")
+    commands.add_parser("describe").add_argument("action")
+    call = commands.add_parser("call")
+    call.add_argument("action")
+    call.add_argument("input", nargs="?", default="{}", help="JSON object or @file")
+    call.add_argument("--execute", action="store_true")
+    query = commands.add_parser("query")
+    query.add_argument("view")
+    query.add_argument("input", nargs="?", default="{}")
+    watch = commands.add_parser("watch")
+    watch.add_argument("task")
+    watch.add_argument("--seconds", type=int, default=40, choices=range(0, 61), metavar="0..60")
+    args = parser.parse_args()
+    client = None
+    try:
+        client = Client()
+        if args.device:
+            client.select_device(args.device)
+        if args.command == "status":
+            data = ({"device": client.device, "tasks": client.call("task.list", {})}
+                    if client.device else client.request("status"))
+        elif args.command == "list":
+            data = client.catalog()
+        elif args.command == "describe":
+            data = client.describe(args.action)
+        elif args.command == "call":
+            data = client.call(args.action, json_input(args.input), args.execute)
+        elif args.command == "query":
+            data = client.call("state.query", dict(json_input(args.input), view=args.view))
+        else:
+            data = client.watch(args.task, args.seconds)
+        print(json.dumps(redact(data, [client.token]), ensure_ascii=False, indent=2))
+        return 1 if data.get("status") == "failed" else 0
+    except (OSError, ValueError, KeyError, RuntimeError) as error:
+        print(json.dumps({"error": redact(str(error), [client.token] if client else [])},
+                         ensure_ascii=False))
+        return 1
+
+
+if __name__ == "__main__":
+    sys.stdout.reconfigure(encoding="utf-8")
+    sys.exit(main())

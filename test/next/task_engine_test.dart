@@ -1,6 +1,3 @@
-import '../security/memory_vault.dart';
-import 'package:nipaplay/security/credential_store.dart';
-import 'package:nipaplay/security/credential_vault.dart';
 import 'dart:convert';
 import 'dart:io';
 
@@ -280,17 +277,18 @@ void main() {
       () async {
     final harness = Harness([TaskCapability(engine)]);
     final job = await engine.submit(type: 'test', title: 'MCP');
-    final credentials = CredentialStore(MemoryVault(), desktop: true);
+    final credentials = File('${root.path}/private/endpoint.json');
     final endpoint = AgentEndpoint(
-        credentials: credentials,
+        credentialFile: credentials,
         harness: harness,
-        root: root,
         appVersion: 'test',
-        agentsMd: '# Test',
+        seed: {},
         port: 0);
     addTearDown(endpoint.stop);
-    final running = await endpoint.start() as AgentEndpointRunning;
-    final token = (await credentials.vault.read(const CredentialRef('agent', 'token')))!;
+    final repository = await Directory('${root.path}/harness').create();
+    final running = await endpoint.start(repository) as AgentEndpointRunning;
+    final token = (jsonDecode(await credentials.readAsString()) as Map)['token']
+        as String;
     final client = HttpClient()..findProxy = (_) => 'DIRECT';
     addTearDown(() => client.close(force: true));
     Future<JsonMap> rpc(String method, JsonMap params) async {
@@ -317,8 +315,6 @@ void main() {
       'status': 'completed',
       'result': {'job': job.toJson()}
     });
-    expect(await File('${running.workspace.path}/.codex/config.toml').exists(),
-        isTrue);
   });
 
   test('installation identity is stable and rejects corrupt persisted data',

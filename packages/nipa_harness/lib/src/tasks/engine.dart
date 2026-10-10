@@ -123,6 +123,9 @@ final class TaskEngine {
   final Map<String, JobContext> _active = {};
   final Map<String, Timer> _retries = {};
   final _changes = StreamController<Job>.broadcast(sync: true);
+
+  /// Persisted changes, emitted only after snapshot and event commit.
+  Stream<Job> get changes => _changes.stream;
   Future<void> _tail = Future.value();
   bool _started = false, _closed = false;
 

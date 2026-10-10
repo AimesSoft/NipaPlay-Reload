@@ -7,7 +7,7 @@ Classic 下载页使用 `core.downloads`，`NextRuntime` 把
 `core.capabilities` 注册到 Harness。Labs 只启停 Agent 端点，销毁
 `NextRuntime` 也不关闭 Core。应用宿主结束 Core 生命周期时调用 `core.close()`。
 
-只读公开状态通过 `state.describe` / `state.query` 提供，契约与边界见 [state/README.md](state/README.md)。旧 getter 保留兼容 ID 和行为，覆盖率基线同时维护能力、主要契约与兼容映射。
+只读公开状态通过 `state.describe` / `state.query` 提供，契约与边界见 [state/README.md](state/README.md)。Agent 用 `nipa list` 读取当前全部能力。
 
 启动顺序：读取设备身份 → 打开并迁移 `next.db` → 创建领域运行时（媒体先导入
 旧历史）→ 收集全部执行器创建 TaskEngine → 向各领域注入同一引擎并收集
@@ -39,10 +39,14 @@ Core 同时创建 `mesh`、注册三个 `mesh.*` Action 与 `mesh.addressCandida
 Mesh 与回环 MCP 共用分派器；Mesh 生命周期由 Core 管理，不依赖 Labs 开关。
 Mesh 的身份、证书和去重文件独立持久化，不新增 `next.db` 迁移。
 
-`test/next/capability_coverage_baseline.json` 保存 Action id/effect 与设置
-key/effect/scope，并同时维护 `capabilities`、`primaryActions` 契约、
-`compatibility` 映射与 `behaviorScenarios`。覆盖率测试从真实 Core 和运行时能力
-生成目录，断言包含基线；旧任务恢复与新只读分析分别保留真实 Effect。
-新增能力时运行 `NIPA_EXPORT_COVERAGE=1 ~/development/flutter-3.44.6/bin/flutter
-test --no-pub test/next/capability_coverage_test.dart`，快照导出到系统临时目录的
-`nipa-capability-coverage.json`；核对后合入新增能力、契约与映射，已有项不得删除或降权。
+开启 Next 时，`AgentEndpoint` 从 `assets/next/harness/` 创建用户仓库，默认
+`~/nipaplay-harness`；`next.harnessPath` 设置和实验室共用 `HarnessLocation`。
+已有路径不写入任何文件。初次种子包含无令牌的 Codex 配置、`nipa`、hooks 说明。
+令牌每次开启轮换，写到仓库外的用户私有 `endpoint.json`；MCP `/mcp` 与 CLI
+`/harness` 共用认证和 Harness，CLI 调用来源为 `harness_cli`。
+
+Core 注册 `harness.hook` 执行器；NextRuntime 仅在 Next 开启时订阅下载任务的
+成功变更、提交后的新增文件和播放器的首次 playing 状态。事件交给用户仓库的
+同名可执行程序，标准输入为 JSON，输出脱敏后写入同一任务系统的回执。
+中断 hooks 不重跑。复现实验见 `scripts/next/x3_experiment.dart`；测试守住凭据
+隔离、仓库不改写、去重与失败回执等数据约束。

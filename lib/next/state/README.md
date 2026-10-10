@@ -50,7 +50,6 @@ relation_limit、row_limit、byte_limit 和 field_limit。根 cursor 固定查�
 返回 unavailable；文件行的 historyStatus 区分 unavailable/no_history/recorded。
 Mesh 读取缓存，不重新验证可达性；online=null 表示没有缓存的可达性观察。
 
-旧 getter 的 ID、输入、输出与副作用行为保留。主要只读入口与兼容查询映射维护
-在 `test/next/capability_coverage_baseline.json`；映射描述公开投影的查询方式，
-不把旧 getter 的隐式写入带入 state.query。来源元数据联网查询、文件系统枚举、
-任务等待和秘密状态不属于此状态查询的兼容映射。
+`state.describe` 给出当前可查询视图及字段，`state.query` 读取其公开投影，
+不带入 getter 的隐式写入。来源元数据联网查询、文件系统枚举、任务等待和秘密
+状态使用各自的 Action；全部能力以 `nipa list` 为准。

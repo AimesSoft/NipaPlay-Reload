@@ -30,12 +30,14 @@ final class McpEndpoint {
     required this.serverInfo,
     required this.token,
     this.instructions,
+    this.jsonHandler,
   }) : _rpc =
             McpRpc(harness, serverInfo: serverInfo, instructions: instructions);
   final Harness harness;
   final McpServerInfo serverInfo;
   final String token;
   final String? instructions;
+  final Handler? jsonHandler;
   final McpRpc _rpc;
   int? _port;
 
@@ -49,7 +51,10 @@ final class McpEndpoint {
   }
 
   Future<Response> _handle(Request request) async {
-    if (request.requestedUri.path != '/mcp') return Response.notFound('');
+    final path = request.requestedUri.path;
+    if (path != '/mcp' && !(path == '/harness' && jsonHandler != null)) {
+      return Response.notFound('');
+    }
     if (request.method != 'POST') {
       return Response(405, headers: {'allow': 'POST'});
     }
@@ -69,6 +74,7 @@ final class McpEndpoint {
       }
     }
 
+    if (path == '/harness') return jsonHandler!(request);
     Object? message;
     try {
       message = jsonDecode(await request.readAsString());

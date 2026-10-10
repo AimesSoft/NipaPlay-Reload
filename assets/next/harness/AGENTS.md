@@ -35,6 +35,8 @@
 ./nipa --device NAME call ...                 # 同一账号下 Mesh 中的其他设备
 ```
 
+Windows 上把 `./nipa` 换成 `python nipa`。连接凭据默认在 macOS/Linux 的 `~/.config/nipaplay/endpoint.json`、Windows 的 `%APPDATA%\NipaPlay\endpoint.json`；`NIPAPLAY_ENDPOINT_FILE` 可指定其他位置。
+
 - 能力随 NipaPlay 的版本变化，以 `./nipa list` 为准。
 - 返回任务只代表已受理。只有状态为 `succeeded`、并且回执经过验证，才算完成。`watch` 是有界的等待，不是后台守护。
 - 关闭对话不会中断 NipaPlay 里的任务。但对话结束后，不要承诺你会在后台继续监视。

@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:crypto/crypto.dart';
@@ -26,17 +27,32 @@ bool isLocationOnlyMediaProbe(JsonMap probe) =>
     probe.keys.every((key) => key == 'legacy');
 
 final class IdentityStore {
-  const IdentityStore(this.database, this.ownerDeviceId);
+  IdentityStore(this.database, this.ownerDeviceId);
   final Database database;
   final String ownerDeviceId;
+  final _fileChanges = StreamController<JsonMap>.broadcast();
+  Stream<JsonMap> get fileChanges => _fileChanges.stream;
+  Future<T> _filesChanged<T>(
+      Future<T> Function(List<JsonMap>) operation) async {
+    final added = <JsonMap>[];
+    final result = await operation(added);
+    for (final file in added) {
+      _fileChanges.add(file);
+    }
+    return result;
+  }
+
+  Future<void> closeEvents() => _fileChanges.close();
 
   /// Location-only registration never changes content revisions or infers identity.
   Future<String> ensureFile(String locator, {DatabaseExecutor? db}) =>
       db == null
-          ? database.transaction((tx) => _ensureFile(tx, locator))
+          ? _filesChanged((added) =>
+              database.transaction((tx) => _ensureFile(tx, locator, added)))
           : _ensureFile(db, locator);
 
-  Future<String> _ensureFile(DatabaseExecutor tx, String locator) async {
+  Future<String> _ensureFile(DatabaseExecutor tx, String locator,
+      [List<JsonMap>? added]) async {
     if (locator.trim().isEmpty) {
       throw const Failure(FailureCode.invalidInput, 'File path is empty.');
     }
@@ -60,6 +76,7 @@ final class IdentityStore {
       'locator': locator,
       'available': 1
     });
+    added?.add({'fileId': id, 'path': locator});
     return id;
   }
 
@@ -77,93 +94,101 @@ final class IdentityStore {
 
   Future<String> registerFile(String locator, JsonMap probe,
           {String source = 'local'}) =>
-      database.transaction((tx) async {
-        final locations = await tx.query('media_locations',
-            where: 'source = ? AND owner_device_id = ? AND locator = ?',
-            whereArgs: [source, ownerDeviceId, locator]);
-        if (locations.isNotEmpty) {
-          final fileId = locations.single['file_id'] as String;
-          final file = await entity(fileId, db: tx);
-          final attrs = file['attributes'] as JsonMap;
-          if (isLocationOnlyMediaProbe(attrs['probe'] as JsonMap)) {
-            await tx.update(
-                'media_entities',
-                {
-                  'attributes': jsonEncode({...attrs, 'probe': probe})
-                },
-                where: 'id = ?',
-                whereArgs: [fileId]);
-          } else if (['size', 'modifiedAt', 'headMd5']
-              .any((key) => (attrs['probe'] as JsonMap)[key] != probe[key])) {
-            final dandanplay = await tx.rawQuery(
-                'SELECT o.external_id,o.scope FROM media_bindings b JOIN media_external_objects o ON o.id=b.object_id WHERE b.entity_id = ? AND b.status = ? AND o.provider = ?',
-                [fileId, 'accepted', 'dandanplay']);
-            final bindingRevision = (attrs['bindingRevision'] as int) + 1;
-            await tx.update(
-                'media_entities',
-                {
-                  'revision': (file['revision'] as int) + 1,
-                  'attributes': jsonEncode({
-                    ...attrs,
-                    'probe': probe,
-                    'bindingRevision': bindingRevision
-                  })
-                },
-                where: 'id = ?',
-                whereArgs: [fileId]);
-            await tx.delete('media_file_episodes',
-                where: 'file_id = ?', whereArgs: [fileId]);
-            await tx.update('media_bindings', {'status': 'revoked'},
-                where: 'entity_id = ? AND status = ?',
-                whereArgs: [fileId, 'accepted']);
-            if (dandanplay.length == 1) {
-              await tx.insert('media_projection_outbox', {
-                'id': stableMediaId('projection', [fileId, bindingRevision]),
-                'file_id': fileId,
-                'file_revision': (file['revision'] as int) + 1,
-                'binding_revision': bindingRevision,
-                'payload': jsonEncode({
-                  'clear': true,
-                  'expectedAnimeId': int.parse(
-                      (dandanplay.single['scope'] as String).split('/').last),
-                  'expectedEpisodeId':
-                      int.parse(dandanplay.single['external_id'] as String)
-                }),
-                'state': 'pending'
-              });
+      _filesChanged((added) => database.transaction((tx) async {
+            final locations = await tx.query('media_locations',
+                where: 'source = ? AND owner_device_id = ? AND locator = ?',
+                whereArgs: [source, ownerDeviceId, locator]);
+            if (locations.isNotEmpty) {
+              final fileId = locations.single['file_id'] as String;
+              final file = await entity(fileId, db: tx);
+              final attrs = file['attributes'] as JsonMap;
+              if (isLocationOnlyMediaProbe(attrs['probe'] as JsonMap)) {
+                await tx.update(
+                    'media_entities',
+                    {
+                      'attributes': jsonEncode({...attrs, 'probe': probe})
+                    },
+                    where: 'id = ?',
+                    whereArgs: [fileId]);
+              } else if ([
+                'size',
+                'modifiedAt',
+                'headMd5'
+              ].any((key) => (attrs['probe'] as JsonMap)[key] != probe[key])) {
+                final dandanplay = await tx.rawQuery(
+                    'SELECT o.external_id,o.scope FROM media_bindings b JOIN media_external_objects o ON o.id=b.object_id WHERE b.entity_id = ? AND b.status = ? AND o.provider = ?',
+                    [fileId, 'accepted', 'dandanplay']);
+                final bindingRevision = (attrs['bindingRevision'] as int) + 1;
+                await tx.update(
+                    'media_entities',
+                    {
+                      'revision': (file['revision'] as int) + 1,
+                      'attributes': jsonEncode({
+                        ...attrs,
+                        'probe': probe,
+                        'bindingRevision': bindingRevision
+                      })
+                    },
+                    where: 'id = ?',
+                    whereArgs: [fileId]);
+                await tx.delete('media_file_episodes',
+                    where: 'file_id = ?', whereArgs: [fileId]);
+                await tx.update('media_bindings', {'status': 'revoked'},
+                    where: 'entity_id = ? AND status = ?',
+                    whereArgs: [fileId, 'accepted']);
+                if (dandanplay.length == 1) {
+                  await tx.insert('media_projection_outbox', {
+                    'id':
+                        stableMediaId('projection', [fileId, bindingRevision]),
+                    'file_id': fileId,
+                    'file_revision': (file['revision'] as int) + 1,
+                    'binding_revision': bindingRevision,
+                    'payload': jsonEncode({
+                      'clear': true,
+                      'expectedAnimeId': int.parse(
+                          (dandanplay.single['scope'] as String)
+                              .split('/')
+                              .last),
+                      'expectedEpisodeId':
+                          int.parse(dandanplay.single['external_id'] as String)
+                    }),
+                    'state': 'pending'
+                  });
+                }
+              }
+              await tx.update(
+                  'media_entities',
+                  {
+                    'attributes': jsonEncode({
+                      ...(await entity(fileId, db: tx))['attributes']
+                          as JsonMap,
+                      'probe': probe
+                    })
+                  },
+                  where: 'id=?',
+                  whereArgs: [fileId]);
+              await tx.update('media_locations', {'available': 1},
+                  where: 'id = ?', whereArgs: [locations.single['id']]);
+              return fileId;
             }
-          }
-          await tx.update(
-              'media_entities',
-              {
-                'attributes': jsonEncode({
-                  ...(await entity(fileId, db: tx))['attributes'] as JsonMap,
-                  'probe': probe
-                })
-              },
-              where: 'id=?',
-              whereArgs: [fileId]);
-          await tx.update('media_locations', {'available': 1},
-              where: 'id = ?', whereArgs: [locations.single['id']]);
-          return fileId;
-        }
-        final id = newMediaId('file');
-        await tx.insert('media_entities', {
-          'id': id,
-          'kind': 'file',
-          'revision': 0,
-          'attributes': jsonEncode({'probe': probe, 'bindingRevision': 0})
-        });
-        await tx.insert('media_locations', {
-          'id': newMediaId('location'),
-          'file_id': id,
-          'source': source,
-          'owner_device_id': ownerDeviceId,
-          'locator': locator,
-          'available': 1
-        });
-        return id;
-      });
+            final id = newMediaId('file');
+            await tx.insert('media_entities', {
+              'id': id,
+              'kind': 'file',
+              'revision': 0,
+              'attributes': jsonEncode({'probe': probe, 'bindingRevision': 0})
+            });
+            await tx.insert('media_locations', {
+              'id': newMediaId('location'),
+              'file_id': id,
+              'source': source,
+              'owner_device_id': ownerDeviceId,
+              'locator': locator,
+              'available': 1
+            });
+            added.add({'fileId': id, 'path': locator});
+            return id;
+          }));
 
   Future<List<JsonMap>> locations(String fileId) => database
       .query('media_locations', where: 'file_id = ?', whereArgs: [fileId]);
@@ -567,204 +592,213 @@ final class IdentityStore {
 
   Future<JsonMap> bindBatch(List<JsonMap> entries, String key,
           String fingerprint, Invocation invocation) =>
-      database.transaction((tx) async {
-        final saved = await operation(key, fingerprint, db: tx);
-        if (saved != null) return saved;
-        final results = <JsonMap>[];
-        for (var index = 0; index < entries.length; index++) {
-          final entry = entries[index];
-          try {
-            final kind = entry['kind'] as String;
-            final work = MetadataRecord.fromJson(entry['work'] as JsonMap);
-            final release =
-                MetadataRecord.fromJson(entry['release'] as JsonMap);
-            final selected = (entry['episodes'] as List)
-                .cast<JsonMap>()
-                .map(MetadataRecord.fromJson)
-                .toList();
-            final workId = await _local(
-                tx,
-                kind == 'work'
-                    ? entry['entityId'] as String?
-                    : entry['workId'] as String?,
-                'work',
-                work,
-                null);
-            final scope = <String, Object?>{
-              'order': release.order,
-              'season': release.season,
-              'cour': null,
-              'numbers': [for (final ep in selected) ep.number],
-              'startMs': entry['startMs'],
-              'endMs': entry['endMs']
-            };
-            final bindings = <String>[];
-            final actor = invocation.origin == 'gui' ? 'user' : 'agent';
-            Future<void> bind(String id, MetadataRecord record, String relation,
-                JsonMap bindingScope,
-                {JsonMap? file}) async {
-              final binding = await _bindRecord(
-                  tx,
-                  id,
-                  record,
-                  relation,
-                  bindingScope,
-                  actor,
-                  'explicit_binding',
-                  invocation,
-                  key,
-                  ((await entity(id, db: tx))['attributes']
-                          as JsonMap)['bindingRevision'] as int? ??
-                      0);
-              if (!bindings.contains(binding)) {
-                bindings.add(binding);
-                await _audit(tx, binding, entry, invocation, file: file);
-              }
-            }
-
-            final parentScope = {
-              ...scope,
-              'numbers': <String>[],
-              'startMs': null,
-              'endMs': null
-            };
-            await _checkObjects(tx, workId, [work]);
-            await bind(workId, work, 'contains',
-                {...parentScope, 'season': work.season, 'order': work.order});
-            String? releaseId;
-            final episodeIds = <String>[];
-            if (kind != 'work') {
-              releaseId = await _local(
-                  tx,
-                  kind == 'release'
-                      ? entry['entityId'] as String?
-                      : entry['releaseId'] as String?,
-                  'release',
-                  release,
-                  workId);
-              await _checkObjects(tx, releaseId, [release]);
-              await bind(releaseId, release, 'contains', parentScope);
-              for (var i = 0; i < selected.length; i++) {
-                final ep = selected[i];
-                final localIds =
-                    (entry['localEpisodeIds'] as List?)?.cast<String>();
-                final id = await _local(
+      _filesChanged((newFiles) => database.transaction((tx) async {
+            final saved = await operation(key, fingerprint, db: tx);
+            if (saved != null) return saved;
+            final results = <JsonMap>[];
+            for (var index = 0; index < entries.length; index++) {
+              final entry = entries[index];
+              try {
+                final kind = entry['kind'] as String;
+                final work = MetadataRecord.fromJson(entry['work'] as JsonMap);
+                final release =
+                    MetadataRecord.fromJson(entry['release'] as JsonMap);
+                final selected = (entry['episodes'] as List)
+                    .cast<JsonMap>()
+                    .map(MetadataRecord.fromJson)
+                    .toList();
+                final workId = await _local(
                     tx,
-                    kind == 'episode'
+                    kind == 'work'
                         ? entry['entityId'] as String?
-                        : localIds?[i],
-                    'episode',
-                    ep,
-                    releaseId);
-                await _checkObjects(tx, id, [ep]);
-                await bind(id, ep, 'exact', {
-                  ...parentScope,
-                  'numbers': [ep.number]
-                });
-                episodeIds.add(id);
-              }
-            }
-            String? fileId;
-            if (kind == 'file') {
-              fileId = entry['entityId'] as String? ??
-                  await ensureFile(entry['verifiedPath'] as String, db: tx);
-              final file = await entity(fileId, db: tx);
-              final attrs = file['attributes'] as JsonMap;
-              final links = await tx.query('media_file_episodes',
-                  where: 'file_id=?', whereArgs: [fileId], orderBy: 'ordinal');
-              if (links.isNotEmpty &&
-                  stableMediaId('links',
-                          links.map((row) => row['episode_id']).toList()) !=
-                      stableMediaId('links', episodeIds)) {
-                throw const Failure(FailureCode.conflict,
-                    'File is already linked to different local episodes; unbind it explicitly.');
-              }
-              final previousBindings = await tx.query('media_bindings',
-                  where: 'entity_id=? AND status=?',
-                  whereArgs: [fileId, 'accepted']);
-              await _checkObjects(tx, fileId, selected);
-              final relation = selected.length == 1 ? 'exact' : 'combined';
-              for (var i = 0; i < selected.length; i++) {
-                await bind(fileId, selected[i], relation, scope, file: {
-                  ...file,
-                  'attributes': {...attrs, 'probe': entry['probe']}
-                });
-                final link = {
-                  'file_id': fileId,
-                  'episode_id': episodeIds[i],
-                  'relation': relation,
-                  'ordinal': i,
-                  'start_ms': entry['startMs'],
-                  'end_ms': entry['endMs']
+                        : entry['workId'] as String?,
+                    'work',
+                    work,
+                    null);
+                final scope = <String, Object?>{
+                  'order': release.order,
+                  'season': release.season,
+                  'cour': null,
+                  'numbers': [for (final ep in selected) ep.number],
+                  'startMs': entry['startMs'],
+                  'endMs': entry['endMs']
                 };
-                final same =
-                    links.where((row) => row['episode_id'] == episodeIds[i]);
-                if (same.isNotEmpty &&
-                    (same.single['relation'] != relation ||
-                        same.single['start_ms'] != entry['startMs'] ||
-                        same.single['end_ms'] != entry['endMs'])) {
-                  throw const Failure(FailureCode.conflict,
-                      'Existing file episode relation or interval differs.');
+                final bindings = <String>[];
+                final actor = invocation.origin == 'gui' ? 'user' : 'agent';
+                Future<void> bind(String id, MetadataRecord record,
+                    String relation, JsonMap bindingScope,
+                    {JsonMap? file}) async {
+                  final binding = await _bindRecord(
+                      tx,
+                      id,
+                      record,
+                      relation,
+                      bindingScope,
+                      actor,
+                      'explicit_binding',
+                      invocation,
+                      key,
+                      ((await entity(id, db: tx))['attributes']
+                              as JsonMap)['bindingRevision'] as int? ??
+                          0);
+                  if (!bindings.contains(binding)) {
+                    bindings.add(binding);
+                    await _audit(tx, binding, entry, invocation, file: file);
+                  }
                 }
-                await tx.insert('media_file_episodes', link,
-                    conflictAlgorithm: ConflictAlgorithm.ignore);
-              }
-              final probe = entry['probe'] as JsonMap;
-              final oldProbe = attrs['probe'] as JsonMap;
-              if (!isLocationOnlyMediaProbe(oldProbe) &&
-                  ['size', 'modifiedAt', 'headMd5']
-                      .any((key) => probe[key] != oldProbe[key])) {
-                throw const Failure(FailureCode.conflict,
-                    'File changed since indexing; scan again.');
-              }
-              final fileBindings = await tx.query('media_bindings',
-                  where: 'entity_id=? AND status=?',
-                  whereArgs: [fileId, 'accepted']);
-              final added = fileBindings.any(
-                  (b) => !previousBindings.any((old) => old['id'] == b['id']));
-              final revision =
-                  (attrs['bindingRevision'] as int) + (added ? 1 : 0);
-              for (final binding in fileBindings.where((b) =>
-                  !previousBindings.any((old) => old['id'] == b['id']))) {
-                await tx.update('media_bindings', {'revision': revision},
-                    where: 'id=?', whereArgs: [binding['id']]);
-              }
-              await tx.update(
-                  'media_entities',
-                  {
-                    'attributes': jsonEncode(
-                        {...attrs, 'probe': probe, 'bindingRevision': revision})
-                  },
-                  where: 'id=?',
-                  whereArgs: [fileId]);
-              if (added) {
-                await _queueFileProjection(
-                    tx, fileId, file['revision'] as int, revision);
+
+                final parentScope = {
+                  ...scope,
+                  'numbers': <String>[],
+                  'startMs': null,
+                  'endMs': null
+                };
+                await _checkObjects(tx, workId, [work]);
+                await bind(workId, work, 'contains', {
+                  ...parentScope,
+                  'season': work.season,
+                  'order': work.order
+                });
+                String? releaseId;
+                final episodeIds = <String>[];
+                if (kind != 'work') {
+                  releaseId = await _local(
+                      tx,
+                      kind == 'release'
+                          ? entry['entityId'] as String?
+                          : entry['releaseId'] as String?,
+                      'release',
+                      release,
+                      workId);
+                  await _checkObjects(tx, releaseId, [release]);
+                  await bind(releaseId, release, 'contains', parentScope);
+                  for (var i = 0; i < selected.length; i++) {
+                    final ep = selected[i];
+                    final localIds =
+                        (entry['localEpisodeIds'] as List?)?.cast<String>();
+                    final id = await _local(
+                        tx,
+                        kind == 'episode'
+                            ? entry['entityId'] as String?
+                            : localIds?[i],
+                        'episode',
+                        ep,
+                        releaseId);
+                    await _checkObjects(tx, id, [ep]);
+                    await bind(id, ep, 'exact', {
+                      ...parentScope,
+                      'numbers': [ep.number]
+                    });
+                    episodeIds.add(id);
+                  }
+                }
+                String? fileId;
+                if (kind == 'file') {
+                  fileId = entry['entityId'] as String? ??
+                      await _ensureFile(
+                          tx, entry['verifiedPath'] as String, newFiles);
+                  final file = await entity(fileId, db: tx);
+                  final attrs = file['attributes'] as JsonMap;
+                  final links = await tx.query('media_file_episodes',
+                      where: 'file_id=?',
+                      whereArgs: [fileId],
+                      orderBy: 'ordinal');
+                  if (links.isNotEmpty &&
+                      stableMediaId('links',
+                              links.map((row) => row['episode_id']).toList()) !=
+                          stableMediaId('links', episodeIds)) {
+                    throw const Failure(FailureCode.conflict,
+                        'File is already linked to different local episodes; unbind it explicitly.');
+                  }
+                  final previousBindings = await tx.query('media_bindings',
+                      where: 'entity_id=? AND status=?',
+                      whereArgs: [fileId, 'accepted']);
+                  await _checkObjects(tx, fileId, selected);
+                  final relation = selected.length == 1 ? 'exact' : 'combined';
+                  for (var i = 0; i < selected.length; i++) {
+                    await bind(fileId, selected[i], relation, scope, file: {
+                      ...file,
+                      'attributes': {...attrs, 'probe': entry['probe']}
+                    });
+                    final link = {
+                      'file_id': fileId,
+                      'episode_id': episodeIds[i],
+                      'relation': relation,
+                      'ordinal': i,
+                      'start_ms': entry['startMs'],
+                      'end_ms': entry['endMs']
+                    };
+                    final same = links
+                        .where((row) => row['episode_id'] == episodeIds[i]);
+                    if (same.isNotEmpty &&
+                        (same.single['relation'] != relation ||
+                            same.single['start_ms'] != entry['startMs'] ||
+                            same.single['end_ms'] != entry['endMs'])) {
+                      throw const Failure(FailureCode.conflict,
+                          'Existing file episode relation or interval differs.');
+                    }
+                    await tx.insert('media_file_episodes', link,
+                        conflictAlgorithm: ConflictAlgorithm.ignore);
+                  }
+                  final probe = entry['probe'] as JsonMap;
+                  final oldProbe = attrs['probe'] as JsonMap;
+                  if (!isLocationOnlyMediaProbe(oldProbe) &&
+                      ['size', 'modifiedAt', 'headMd5']
+                          .any((key) => probe[key] != oldProbe[key])) {
+                    throw const Failure(FailureCode.conflict,
+                        'File changed since indexing; scan again.');
+                  }
+                  final fileBindings = await tx.query('media_bindings',
+                      where: 'entity_id=? AND status=?',
+                      whereArgs: [fileId, 'accepted']);
+                  final added = fileBindings.any((b) =>
+                      !previousBindings.any((old) => old['id'] == b['id']));
+                  final revision =
+                      (attrs['bindingRevision'] as int) + (added ? 1 : 0);
+                  for (final binding in fileBindings.where((b) =>
+                      !previousBindings.any((old) => old['id'] == b['id']))) {
+                    await tx.update('media_bindings', {'revision': revision},
+                        where: 'id=?', whereArgs: [binding['id']]);
+                  }
+                  await tx.update(
+                      'media_entities',
+                      {
+                        'attributes': jsonEncode({
+                          ...attrs,
+                          'probe': probe,
+                          'bindingRevision': revision
+                        })
+                      },
+                      where: 'id=?',
+                      whereArgs: [fileId]);
+                  if (added) {
+                    await _queueFileProjection(
+                        tx, fileId, file['revision'] as int, revision);
+                  }
+                }
+                results.add({
+                  'index': index,
+                  'workId': workId,
+                  'releaseId': releaseId,
+                  'episodeIds': episodeIds,
+                  'fileId': fileId,
+                  'bindingIds': bindings
+                });
+              } on Failure catch (error) {
+                throw Failure(error.code, 'Entry $index: ${error.message}',
+                    violations: [
+                      SchemaViolation('/entries/$index', error.message)
+                    ]);
               }
             }
-            results.add({
-              'index': index,
-              'workId': workId,
-              'releaseId': releaseId,
-              'episodeIds': episodeIds,
-              'fileId': fileId,
-              'bindingIds': bindings
+            final result = <String, Object?>{'entries': results};
+            await tx.insert('media_binding_operations', {
+              'id': key,
+              'fingerprint': fingerprint,
+              'result': jsonEncode(result)
             });
-          } on Failure catch (error) {
-            throw Failure(error.code, 'Entry $index: ${error.message}',
-                violations: [
-                  SchemaViolation('/entries/$index', error.message)
-                ]);
-          }
-        }
-        final result = <String, Object?>{'entries': results};
-        await tx.insert('media_binding_operations', {
-          'id': key,
-          'fingerprint': fingerprint,
-          'result': jsonEncode(result)
-        });
-        return result;
-      });
+            return result;
+          }));
 
   Future<JsonMap> unbindBatch(List<JsonMap> entries, String key,
           String fingerprint, Invocation invocation) =>
