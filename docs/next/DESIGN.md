@@ -406,8 +406,8 @@ download-harness 中写死的部分，在 NipaPlay Next 中都是可替换的能
 ## 9. 演进路线（M1 之后）
 
 1. **Task Engine**：下载 / 扫描 / 同步成为持久任务，带回执与事件；只在需要判断时唤醒 Agent。M2 先做任务内核与应用内 BT 下载，Classic 下载页一同受益（`M2_TASKBOOK.md`）。
-   - **Agent 刮削**：扫描与识别成为任务。高置信度由确定性程序绑定；有歧义的文件生成持久化 Decision，由 Agent（可联网查证）或用户判断。元数据多来源共存（弹弹play、Bangumi、TMDB……），一个文件或剧集挂多个外部 ID；弹弹play 的 episodeId 仍是弹幕匹配的根基。调研见 `research/METADATA_IDENTIFICATION.md`。
-   - **多平台弹幕聚合**：每个平台是一个 `DanmakuSource`，契约从第一天起按插件接口设计；多个来源合并进播放器现有的多轨弹幕。弹幕源是第 5 步“可演化能力”的第一类。研究阶段只用公开接口与用户自己的登录态，不绕过会员、DRM 或付费墙。调研见 `research/DANMAKU_AGGREGATION.md`。
+   - **Agent 刮削**：扫描与识别成为任务。高置信度由确定性程序绑定；有歧义的文件生成持久化 Decision，由 Agent（可联网查证）或用户判断。元数据多来源共存（弹弹play、Bangumi、TMDB，必要时加入豆瓣等中文剧集来源），一个文件、剧集、作品可以挂多个外部 ID。**弹弹play 只是来源之一**：电视剧、电影、综艺常常没有弹弹play 条目，因此作品身份与媒体库不得依赖弹弹play 的 `animeId`（现有媒体库条件会把这类文件排除在外，M1 的 `media.library.*` 也继承了这一限制，需要一并解除）。调研见 `research/METADATA_IDENTIFICATION.md`。
+   - **多平台弹幕聚合**：每个平台是一个 `DanmakuSource`，契约从第一天起按插件接口设计；多个来源合并进播放器现有的多轨弹幕。媒体可以直接绑定优酷、B 站、爱奇艺、腾讯、芒果等平台的视频 ID，从平台直接获取弹幕，不经过弹弹play；弹弹play（含其 related 聚合）是其中一条轨道，并保留各条目的原始来源以便去重。弹幕源是第 5 步“可演化能力”的第一类。研究阶段只用公开接口与用户自己的登录态，不绕过会员、DRM 或付费墙。调研见 `research/DANMAKU_AGGREGATION.md`。
 2. **GUI 迁移**：Classic 页面逐步改为调用 Harness。`Invocation` 增加 `interactive`，GUI 调用时由宿主把 `NeedsDecision` 渲染为对话框。
 3. **Next Shell**：内嵌 Codex App Server；`ui.present` 组件目录；`ui.layout.patch` 首页布局。依据 `research/CODEX_APP_SERVER.md` 的实测结论，做出以下决定：
    - App Server 以 stdio 子进程运行，固定运行时版本；使用 NipaPlay 自己的独立 `CODEX_HOME`，与用户安装的 Codex 隔离；共享对话以后作为显式选项再考虑。
