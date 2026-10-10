@@ -399,3 +399,5 @@ NipaPlay 在应用支持目录下生成一个 Codex 项目目录（download-harn
 4. **Preference Memory**：带来源与理由的结构化偏好。
 5. **Capability Registry**：Agent 生成的能力经“校验 → 审批 → 注册 → 回滚”纳入 Harness。
 6. **Mesh**：设备身份、配对后，Harness 通过新的 transport 跨设备调用；`playback.handoff`。
+   - 现有局域网 API（`0.0.0.0:1180`，遥控接收端默认开启时就会启动）没有统一鉴权，存在凭据泄露、SSRF、任意文件读取等问题，详见 `research/LAN_SECURITY.md`。
+   - 2026-10-10 决定：这些问题不单独热修，随设备身份与配对（该报告的 B 档）一起解决，作为 Mesh 的第一步。
