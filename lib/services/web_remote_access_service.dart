@@ -158,12 +158,31 @@ class WebRemoteAccessService {
     if (!kIsWeb) return target;
     final base = _cachedBaseUrl;
     if (base == null || base.isEmpty) return target;
+    return proxyUriForBase(target, Uri.parse(base));
+  }
+
+  static bool isWithinBase(Uri target, Uri base) {
+    if (target.scheme != base.scheme ||
+        target.host.toLowerCase() != base.host.toLowerCase() ||
+        target.port != base.port) {
+      return false;
+    }
+    final basePath = base.path.endsWith('/')
+        ? base.path.substring(0, base.path.length - 1)
+        : base.path;
+    return basePath.isEmpty ||
+        target.path == basePath ||
+        target.path.startsWith('$basePath/');
+  }
+
+  @visibleForTesting
+  static Uri proxyUriForBase(Uri target, Uri base) {
     if (!target.isAbsolute) return target;
     if (target.scheme != 'http' && target.scheme != 'https') {
       return target;
     }
     final targetString = target.toString();
-    if (targetString.toLowerCase().startsWith(base.toLowerCase())) {
+    if (isWithinBase(target, base)) {
       return target;
     }
     final encoded = Uri.encodeComponent(targetString);
@@ -180,7 +199,7 @@ class WebRemoteAccessService {
     if (!kIsWeb) return imageUrl;
     final base = _cachedBaseUrl;
     if (base == null || base.isEmpty) {
-      debugPrint('[WebRemote] imageProxyUrl: Base URL is empty, returning original: $imageUrl');
+      debugPrint('[WebRemote] imageProxyUrl: Base URL is empty');
       return imageUrl;
     }
     

@@ -54,6 +54,7 @@ class WebUiProxyApi {
 
     final responseHeaders = Map<String, String>.from(upstream.headers);
     _stripHopByHop(responseHeaders);
+    if (request.method != 'HEAD') responseHeaders.remove('content-length');
 
     return Response(
       upstream.statusCode,
@@ -91,8 +92,8 @@ class WebUiProxyApi {
   void _stripHopByHop(Map<String, String> headers) {
     removeHeadersWhere(
       headers,
-      (key, _) => _hopByHopHeaders.contains(key.toLowerCase()),
+      (key, _) => _hopByHopHeaders.contains(key.toLowerCase()) ||
+          key.toLowerCase().startsWith('access-control-'),
     );
-    headers.remove('content-length');
   }
 }

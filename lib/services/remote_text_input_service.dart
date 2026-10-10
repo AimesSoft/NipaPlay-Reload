@@ -593,6 +593,7 @@ class RemoteTextInputApiService {
         'Content-Type': 'text/html; charset=utf-8',
         'Cache-Control': 'no-store',
         'X-Content-Type-Options': 'nosniff',
+        'Referrer-Policy': 'no-referrer',
         'Content-Security-Policy':
             "default-src 'none'; style-src 'unsafe-inline'; form-action 'self'; base-uri 'none'; frame-ancestors 'none'",
       },

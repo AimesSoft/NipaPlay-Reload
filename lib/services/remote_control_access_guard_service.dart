@@ -54,7 +54,16 @@ class RemoteControlClientIdentity {
 }
 
 class RemoteControlAccessGuardService {
-  RemoteControlAccessGuardService._();
+  RemoteControlAccessGuardService._() : _approvalPrompt = null;
+
+  @visibleForTesting
+  RemoteControlAccessGuardService.forTesting({
+    required Future<Map<String, dynamic>> Function(RemoteControlClientIdentity)
+        approvalPrompt,
+  }) : _approvalPrompt = approvalPrompt;
+
+  final Future<Map<String, dynamic>> Function(RemoteControlClientIdentity)?
+      _approvalPrompt;
 
   static final RemoteControlAccessGuardService instance =
       RemoteControlAccessGuardService._();
@@ -69,6 +78,8 @@ class RemoteControlAccessGuardService {
   final Map<String, DateTime> _deniedClients = {};
   final Map<String, Future<bool>> _pendingPrompts = {};
   final Map<String, Map<String, dynamic>> _trustedDevices = {};
+  final Map<String, int> _approvalGenerations = {};
+  Future<void> _trustPersistence = Future<void>.value();
 
   Future<RemoteControlAccessResult> evaluate(
     Request request, {
@@ -134,7 +145,12 @@ class RemoteControlAccessGuardService {
       '[RemoteControlAuth] 请求授权: ${identity.displayName}, '
       'id=${identity.clientId ?? '-'}, platform=${identity.platform ?? '-'}',
     );
-    final promptFuture = _showApprovalDialog(identity).then((result) async {
+    final generation = _approvalGenerations[identity.clientKey] ?? 0;
+    final promptFuture =
+        (_approvalPrompt ?? _showApprovalDialog)(identity).then((result) async {
+      if ((_approvalGenerations[identity.clientKey] ?? 0) != generation) {
+        return false;
+      }
       final approved = result['approved'] == true;
       final trusted = result['trusted'] == true;
 
@@ -162,7 +178,9 @@ class RemoteControlAccessGuardService {
     _pendingPrompts[identity.clientKey] = promptFuture;
     unawaited(
       promptFuture.whenComplete(() {
-        _pendingPrompts.remove(identity.clientKey);
+        if (identical(_pendingPrompts[identity.clientKey], promptFuture)) {
+          _pendingPrompts.remove(identity.clientKey);
+        }
       }),
     );
   }
@@ -178,14 +196,21 @@ class RemoteControlAccessGuardService {
     };
 
     _trustedDevices[identity.clientKey] = device;
-    await RemoteControlSettings.addTrustedDevice(device);
+    await (_trustPersistence = _trustPersistence.then(
+      (_) => RemoteControlSettings.addTrustedDevice(device),
+    ));
   }
 
   Future<void> loadTrustedDevices() async {
+    final generations = Map<String, int>.from(_approvalGenerations);
+    await _trustPersistence;
     final devices = await RemoteControlSettings.getTrustedDevices();
     _trustedDevices.clear();
     for (final device in devices) {
-      _trustedDevices[device['clientKey'] as String] = device;
+      final key = device['clientKey'] as String;
+      if ((generations[key] ?? 0) == (_approvalGenerations[key] ?? 0)) {
+        _trustedDevices[key] = device;
+      }
     }
   }
 
@@ -194,8 +219,15 @@ class RemoteControlAccessGuardService {
   }
 
   Future<void> removeTrustedDevice(String clientKey) async {
+    _approvalGenerations[clientKey] =
+        (_approvalGenerations[clientKey] ?? 0) + 1;
+    _approvedClients.remove(clientKey);
+    _deniedClients.remove(clientKey);
+    _pendingPrompts.remove(clientKey);
     _trustedDevices.remove(clientKey);
-    await RemoteControlSettings.removeTrustedDevice(clientKey);
+    await (_trustPersistence = _trustPersistence.then(
+      (_) => RemoteControlSettings.removeTrustedDevice(clientKey),
+    ));
   }
 
   Future<Map<String, dynamic>> _showApprovalDialog(
