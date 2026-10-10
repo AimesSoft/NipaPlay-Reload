@@ -586,15 +586,26 @@ dependencies = [
 ]
 
 [[package]]
+name = "nipaplay-auth"
+version = "0.1.0"
+dependencies = [
+ "base64",
+ "http",
+ "reqwest",
+ "serde_json",
+ "sha2",
+ "tracing",
+]
+
+[[package]]
 name = "nipaplay-dandanplay-gateway"
 version = "0.1.0"
 dependencies = [
  "axum",
- "base64",
  "md5",
+ "nipaplay-auth",
  "reqwest",
  "serde_json",
- "sha2",
  "tokio",
  "tower-http",
  "tracing",

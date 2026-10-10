@@ -32,6 +32,11 @@ Health check:
 curl http://127.0.0.1:18081/healthz
 ```
 
+Token extraction, upstream signature, rate limiting and token validation live in
+the shared `nipaplay-auth` crate (`server/nipaplay-auth`), which the Mesh
+coordinator reuses. Run the crate's tests with
+`cargo test --manifest-path server/nipaplay-auth/Cargo.toml`.
+
 Production templates are in `deploy/`. After key rotation, set the new key as
 `DANDANPLAY_APP_SECRET` in `/etc/nipaplay-dandanplay-gateway.env` and remove the
 legacy secret URL setting.

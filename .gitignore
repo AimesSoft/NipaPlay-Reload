@@ -53,6 +53,8 @@ docs/error.txt
 /packages/nipaplay_smb2/android/.cxx/Debug/6r64695b
 /rust/target
 /server/dandanplay-gateway/target/
+/server/nipaplay-auth/target/
+/server/nipaplay-mesh-coordinator/target/
 /node_modules/
 **/oh_modules/
 # HarmonyOS signing materials are developer- and device-specific.
