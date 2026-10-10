@@ -24,6 +24,78 @@ String expandHarnessPath(String value) {
   return p.normalize(expanded);
 }
 
+/// Reads the live seed and fetched remote tip without fetching or changing refs.
+Future<Map<String, Object?>> harnessSeedStatus(
+    Directory repository, Directory seed) async {
+  Future<String?> read(Directory dir, List<String> args) async {
+    final result = await Process.run('git', args, workingDirectory: dir.path);
+    if (result.exitCode != 0) return null;
+    return (result.stdout as String).trim();
+  }
+
+  try {
+    final head = await read(seed, ['rev-parse', '--verify', 'refs/heads/main']);
+    final remote = await read(repository, ['remote', 'get-url', 'nipaplay']);
+    final tracking = await read(
+        repository, ['rev-parse', '--verify', 'refs/remotes/nipaplay/main']);
+    bool? remoteMatchesSeed;
+    if (remote != null) {
+      final uri = Uri.tryParse(remote);
+      final remotePath = p.isAbsolute(remote)
+          ? remote
+          : uri?.scheme == 'file'
+              ? uri!.toFilePath()
+              : uri?.hasScheme == false
+                  ? p.join(repository.path, remote)
+                  : null;
+      remoteMatchesSeed = remotePath != null &&
+          await Directory(remotePath).exists() &&
+          p.equals(await Directory(remotePath).resolveSymbolicLinks(),
+              await seed.resolveSymbolicLinks());
+    }
+    String state;
+    bool? behind;
+    if (head == null) {
+      state = 'seed_unversioned';
+    } else if (remote == null) {
+      state = 'missing_remote';
+    } else if (remoteMatchesSeed != true) {
+      state = 'different_remote';
+    } else if (tracking == null) {
+      state = 'not_fetched';
+    } else if (head == tracking) {
+      state = 'current';
+      behind = false;
+    } else {
+      final ancestry = await Process.run(
+          'git', ['merge-base', '--is-ancestor', tracking, head],
+          workingDirectory: seed.path);
+      if (ancestry.exitCode == 0) {
+        state = 'behind';
+        behind = true;
+      } else {
+        state = ancestry.exitCode == 1 ? 'diverged' : 'unrelated_or_unknown';
+      }
+    }
+    return {
+      'path': seed.absolute.path,
+      'head': head,
+      'remote': remote,
+      'remoteMatchesSeed': remoteMatchesSeed,
+      'trackingHead': tracking,
+      'trackingBehindSeed': behind,
+      'state': state
+    };
+  } on ProcessException catch (error) {
+    if (error.errorCode != 2) rethrow;
+    return {
+      'path': seed.absolute.path,
+      'state': 'git_unavailable',
+      'trackingBehindSeed': null
+    };
+  }
+}
+
 Future<ProcessResult> _git(Directory directory, List<String> args,
     {Set<int> accepted = const {0}}) async {
   final result =

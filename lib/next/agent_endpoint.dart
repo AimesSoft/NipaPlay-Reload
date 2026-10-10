@@ -174,6 +174,8 @@ final class AgentEndpoint {
         'status': 'running',
         'version': _appVersion,
         'repository': _running?.repository.path,
+        'harnessSeed':
+            await harnessSeedStatus(_running!.repository, seedRepository),
         'actions': _harness.catalog.length,
         'tasks': full ? tasks : _taskSummary(tasks)
       });

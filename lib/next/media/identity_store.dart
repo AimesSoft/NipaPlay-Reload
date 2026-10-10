@@ -118,7 +118,7 @@ final class IdentityStore {
                 'headMd5'
               ].any((key) => (attrs['probe'] as JsonMap)[key] != probe[key])) {
                 final dandanplay = await tx.rawQuery(
-                    'SELECT o.external_id,o.scope FROM media_bindings b JOIN media_external_objects o ON o.id=b.object_id WHERE b.entity_id = ? AND b.status = ? AND o.provider = ? AND b.source!=\'classic_match\'',
+                    'SELECT b.relation,o.external_id,o.scope AS object_scope FROM media_bindings b JOIN media_external_objects o ON o.id=b.object_id WHERE b.entity_id = ? AND b.status = ? AND o.provider = ? AND b.source!=\'classic_match\'',
                     [fileId, 'accepted', 'dandanplay']);
                 final bindingRevision = (attrs['bindingRevision'] as int) + 1;
                 await tx.update(
@@ -138,28 +138,9 @@ final class IdentityStore {
                         'entity_id = ? AND status = ? AND source!=\'classic_match\'',
                     whereArgs: [fileId, 'accepted']);
                 await _pruneFileLinks(tx, fileId);
-                final classic = await tx.query('media_bindings',
-                    where: 'entity_id=? AND source=? AND status=?',
-                    whereArgs: [fileId, 'classic_match', 'accepted']);
-                if (dandanplay.length == 1 && classic.isEmpty) {
-                  await tx.insert('media_projection_outbox', {
-                    'id':
-                        stableMediaId('projection', [fileId, bindingRevision]),
-                    'file_id': fileId,
-                    'file_revision': (file['revision'] as int) + 1,
-                    'binding_revision': bindingRevision,
-                    'payload': jsonEncode({
-                      'clear': true,
-                      'expectedAnimeId': int.parse(
-                          (dandanplay.single['scope'] as String)
-                              .split('/')
-                              .last),
-                      'expectedEpisodeId':
-                          int.parse(dandanplay.single['external_id'] as String)
-                    }),
-                    'state': 'pending'
-                  });
-                }
+                await _queueFileProjection(
+                    tx, fileId, (file['revision'] as int) + 1, bindingRevision,
+                    removed: dandanplay);
               }
               await tx.update(
                   'media_entities',
@@ -1067,6 +1048,17 @@ final class IdentityStore {
                   'releaseId': releaseId,
                   'episodeIds': episodeIds,
                   'fileId': fileId,
+                  if (fileId != null)
+                    'classicProjectionId': (await tx.query(
+                            'media_projection_outbox',
+                            where: 'file_id=? AND binding_revision=?',
+                            whereArgs: [
+                          fileId,
+                          ((await entity(fileId, db: tx))['attributes']
+                              as JsonMap)['bindingRevision']
+                        ]))
+                        .map((p) => p['id'])
+                        .firstOrNull,
                   'bindingIds': bindings
                 });
               } on Failure catch (error) {
@@ -1157,6 +1149,17 @@ final class IdentityStore {
             results.add({
               'index': index,
               'entityId': id,
+              if (entityRow['kind'] == 'file')
+                'classicProjectionId': (await tx.query(
+                        'media_projection_outbox',
+                        where: 'file_id=? AND binding_revision=?',
+                        whereArgs: [
+                      id,
+                      ((await entity(id, db: tx))['attributes']
+                          as JsonMap)['bindingRevision']
+                    ]))
+                    .map((p) => p['id'])
+                    .firstOrNull,
               'bindingIds': [for (final b in selected) b['id']]
             });
           } on Failure catch (error) {
@@ -1194,49 +1197,65 @@ final class IdentityStore {
         throw const Failure(FailureCode.conflict,
             'Dandanplay work metadata is missing for projection.');
       }
-      Future<String> title(String objectId) async {
+      Future<String?> title(String objectId) async {
         final snapshots = await tx.query('media_snapshots',
             where: 'object_id=?',
             whereArgs: [objectId],
-            orderBy: 'fetched_at DESC',
-            limit: 1);
+            orderBy: 'fetched_at DESC');
         if (snapshots.isEmpty) {
           throw const Failure(FailureCode.conflict,
               'Dandanplay metadata snapshot is missing for projection.');
         }
-        return decodeMediaJson(snapshots.single['fields'])['title'] as String;
+        for (final snapshot in snapshots) {
+          final fields = decodeMediaJson(snapshot['fields']);
+          final value = fields['title'] as String;
+          if (fields['source'] != 'classic_match' && value.trim().isNotEmpty) {
+            return value;
+          }
+        }
+        return null;
       }
 
       payload = {
+        'journalVersion': 1,
         'animeId': animeId,
         'episodeId': int.parse(row['external_id'] as String),
         'animeName': await title(animeObjects.single['id'] as String),
         'episodeTitle': await title(row['id'] as String)
       };
-    } else if (removed.length == 1 && removed.single['relation'] == 'exact') {
-      final classic = await tx.query('media_bindings',
-          where: 'entity_id=? AND source=? AND status=?',
-          whereArgs: [fileId, 'classic_match', 'accepted']);
-      if (classic.isNotEmpty) return;
+      final previous = await tx.query('media_projection_outbox',
+          where: "file_id=? AND json_extract(payload,'\$.animeId') IS NOT NULL",
+          whereArgs: [fileId],
+          orderBy: 'binding_revision DESC',
+          limit: 1);
+      if (previous.isNotEmpty) {
+        final prior = decodeMediaJson(previous.single['payload']);
+        if (prior['animeId'] == payload['animeId'] &&
+            prior['episodeId'] == payload['episodeId']) {
+          payload['previousProjectionId'] = previous.single['id'];
+        }
+      }
+    } else if (removed.isNotEmpty) {
       final delivered = await tx.query('media_projection_outbox',
-          where: 'file_id=? AND state=?',
-          whereArgs: [fileId, 'delivered'],
+          where: "file_id=? AND json_extract(payload,'\$.animeId') IS NOT NULL",
+          whereArgs: [fileId],
           orderBy: 'binding_revision DESC',
           limit: 1);
       if (delivered.isEmpty) return;
       final last = decodeMediaJson(delivered.single['payload']);
-      if (last['episodeId'] !=
-              int.parse(removed.single['external_id'] as String) ||
-          last['animeId'] !=
-              int.parse(
-                  (removed.single['object_scope'] as String).split('/').last)) {
+      if (!removed.any((b) =>
+          b['relation'] == 'exact' &&
+          last['episodeId'] == int.parse(b['external_id'] as String) &&
+          last['animeId'] ==
+              int.parse((b['object_scope'] as String).split('/').last))) {
         return;
       }
       payload = {
         'clear': true,
-        'expectedAnimeId': int.parse(
-            (removed.single['object_scope'] as String).split('/').last),
-        'expectedEpisodeId': int.parse(removed.single['external_id'] as String)
+        'restoreProjectionId': delivered.single['id'],
+        'journalVersion': last['journalVersion'],
+        'expectedAnimeId': last['animeId'],
+        'expectedEpisodeId': last['episodeId']
       };
     }
     if (payload == null) return;

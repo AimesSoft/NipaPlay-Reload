@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 import 'dart:math' as math;
 
@@ -356,6 +357,7 @@ final class MediaService {
         final existing = await store.operation(key, fingerprint);
         if (existing != null) {
           await _deliverBindings(existing);
+          await _saveProjectionReceipt(key, existing);
           return existing;
         }
         final records = <String, Future<MetadataRecord>>{};
@@ -499,6 +501,7 @@ final class MediaService {
         final result =
             await store.bindBatch(prepared, key, fingerprint, invocation);
         await _deliverBindings(result);
+        await _saveProjectionReceipt(key, result);
         return result;
       });
 
@@ -515,19 +518,44 @@ final class MediaService {
         }
         final result =
             await store.unbindBatch(entries, key, fingerprint, invocation);
-        await _deliverBindings(result);
+        await _deliverBindings(result, revoked: true);
+        await _saveProjectionReceipt(key, result);
         return result;
       });
 
-  Future<void> _deliverBindings(JsonMap result) async {
+  Future<void> _saveProjectionReceipt(String key, JsonMap result) async {
+    await store.database.update(
+        'media_binding_operations', {'result': jsonEncode(result)},
+        where: 'id=?', whereArgs: [key]);
+  }
+
+  Future<void> _deliverBindings(JsonMap result, {bool revoked = false}) async {
     for (final row in (result['entries'] as List).cast<JsonMap>()) {
+      if (row.containsKey('classicProjection')) continue;
       final id = (row['fileId'] ?? row['entityId']) as String?;
       if (id == null || (await store.entity(id))['kind'] != 'file') continue;
       try {
         await projection.drain(fileId: id);
+        if (classic case final ReversibleClassicMetadataPort reversible) {
+          final projections = row['classicProjectionId'] == null
+              ? <JsonMap>[]
+              : await store.database.query('media_projection_outbox',
+                  where: 'id=? AND state=?',
+                  whereArgs: [row['classicProjectionId'], 'delivered']);
+          row['classicProjection'] = [
+            for (final queued in projections)
+              for (final location in await store.locations(id))
+                if (location['owner_device_id'] == store.ownerDeviceId)
+                  await reversible.projectionOutcome(
+                      location['locator'] as String, {
+                    ...decodeMediaJson(queued['payload']),
+                    'projectionId': queued['id']
+                  })
+          ];
+        }
       } on Failure catch (error) {
         throw Failure(error.code,
-            'Entry ${row['index']}: Identity committed; Classic projection is ${error.code == FailureCode.conflict ? 'in conflict' : 'pending'}: ${error.message}',
+            'Entry ${row['index']}: ${revoked ? 'Next bindings revoked' : 'Identity committed'}; Classic projection is ${error.code == FailureCode.conflict ? 'in conflict' : 'pending'}: ${error.message}',
             retryable: true,
             violations: [
               SchemaViolation('/entries/${row['index']}', error.message)

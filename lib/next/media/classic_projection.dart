@@ -1,5 +1,8 @@
+import 'dart:convert';
+
 import 'package:nipa_harness/nipa_harness.dart';
 import 'package:flutter/foundation.dart';
+import 'package:path/path.dart' as p;
 import 'package:nipaplay/models/watch_history_database.dart';
 import 'package:nipaplay/services/anime_deletion_tombstones.dart';
 
@@ -11,7 +14,23 @@ abstract interface class ClassicMetadataPort {
   Future<bool> verify(String locator, JsonMap fields);
 }
 
-final class WatchHistoryMetadataPort implements ClassicMetadataPort {
+abstract interface class ReversibleClassicMetadataPort
+    implements ClassicMetadataPort {
+  Future<JsonMap> projectionOutcome(String locator, JsonMap fields);
+}
+
+const _matchingColumns = [
+  'anime_id',
+  'episode_id',
+  'anime_name',
+  'episode_title'
+];
+JsonMap _matching(JsonMap row) =>
+    {for (final key in _matchingColumns) key: row[key]};
+bool _sameMatching(JsonMap a, JsonMap b) =>
+    _matchingColumns.every((key) => a[key] == b[key]);
+
+final class WatchHistoryMetadataPort implements ReversibleClassicMetadataPort {
   const WatchHistoryMetadataPort({required this.changed, this.historyChanges});
   final Future<void> Function() changed;
   final Listenable? historyChanges;
@@ -43,50 +62,154 @@ final class WatchHistoryMetadataPort implements ClassicMetadataPort {
 
   @override
   Future<void> apply(String locator, JsonMap fields) async {
+    if (fields['clear'] != true && fields['projectionId'] is! String) {
+      throw const Failure(FailureCode.invalidInput,
+          'Classic projection requires a durable projectionId.');
+    }
     final history = WatchHistoryDatabase.instance;
-    if (fields['clear'] == true) {
-      final current = await history.getHistoryByFilePath(locator);
-      if (current != null &&
-          fields['expectedAnimeId'] != null &&
-          (current.animeId != fields['expectedAnimeId'] ||
-              current.episodeId != fields['expectedEpisodeId'])) {
-        throw const Failure(FailureCode.conflict,
-            'Classic was rematched since this projection was queued.');
+    if (fields['clear'] != true &&
+        (await AnimeDeletionTombstones.deletedAnimeIds())
+            .contains(fields['animeId'])) {
+      throw const Failure(FailureCode.conflict,
+          'Classic anime was deleted; restore it before projecting matching fields.');
+    }
+    final db = await history.database;
+    var earlierProjectionChanged = false;
+    await db.transaction((tx) async {
+      // The undo evidence commits atomically with the Classic write.
+      await tx.execute(
+          '''CREATE TABLE IF NOT EXISTS next_classic_projection_journal (
+          projection_id TEXT NOT NULL, file_path TEXT NOT NULL,
+          before_fields TEXT NOT NULL, after_fields TEXT NOT NULL,
+          row_existed INTEGER NOT NULL, row_id INTEGER NOT NULL, state TEXT NOT NULL,
+          PRIMARY KEY (projection_id, file_path))''');
+      final rows = await tx
+          .query('watch_history', where: 'file_path=?', whereArgs: [locator]);
+      final current = rows.isEmpty ? <String, Object?>{} : rows.single;
+      final projectionId = fields['clear'] == true
+          ? fields['restoreProjectionId']
+          : fields['projectionId'];
+      final journal = projectionId == null
+          ? <JsonMap>[]
+          : await tx.query('next_classic_projection_journal',
+              where: 'projection_id=? AND file_path=?',
+              whereArgs: [projectionId, locator]);
+      if (fields['clear'] == true) {
+        if (journal.isEmpty) {
+          if (fields['journalVersion'] == 1) return;
+          throw const Failure(FailureCode.conflict,
+              'Classic not restored: this older projection has no atomic undo evidence.');
+        }
+        final entry = journal.single;
+        if (entry['state'] == 'unchanged') return;
+        final before = decodeMediaJson(entry['before_fields']);
+        final expected = decodeMediaJson(entry[
+            entry['state'] == 'restored' ? 'before_fields' : 'after_fields']);
+        if (rows.isEmpty ||
+            current['id'] != entry['row_id'] ||
+            !_sameMatching(current, expected)) {
+          throw const Failure(FailureCode.conflict,
+              'Classic not restored: matching fields changed or the row was deleted after projection; Classic was left untouched.');
+        }
+        if (entry['state'] != 'restored') {
+          await tx.update('watch_history', before,
+              where: 'file_path=?', whereArgs: [locator]);
+          await tx.update(
+              'next_classic_projection_journal', {'state': 'restored'},
+              where: 'projection_id=? AND file_path=?',
+              whereArgs: [projectionId, locator]);
+        }
+        return;
       }
-      if (current != null) await history.clearMatchInfoForFile(current);
-    } else {
-      if ((await AnimeDeletionTombstones.deletedAnimeIds())
-          .contains(fields['animeId'])) {
+      if (journal.isNotEmpty) {
+        if (journal.single['state'] == 'written' &&
+            current['id'] == journal.single['row_id'] &&
+            _sameMatching(
+                current, decodeMediaJson(journal.single['after_fields']))) {
+          return;
+        }
+        if (journal.single['state'] == 'unchanged' &&
+            current['id'] == journal.single['row_id'] &&
+            current['anime_id'] == fields['animeId'] &&
+            current['episode_id'] == fields['episodeId']) {
+          return;
+        }
         throw const Failure(FailureCode.conflict,
-            'Classic anime was deleted; restore it before projecting matching fields.');
+            'Classic changed after this projection; Classic was left untouched.');
       }
-      final db = await history.database;
-      final matching = {
-        'anime_id': fields['animeId'],
-        'episode_id': fields['episodeId'],
-        'anime_name': fields['animeName'],
-        'episode_title': fields['episodeTitle']
-      };
-      await db.transaction((tx) async {
-        final rows = await tx
-            .query('watch_history', where: 'file_path=?', whereArgs: [locator]);
-        if (rows.isNotEmpty) {
-          final current = rows.single;
-          if (current['anime_name'] != '' &&
-              current['episode_title'] != null &&
-              current['anime_id'] != null &&
-              current['episode_id'] != null) {
-            if (current['anime_id'] != fields['animeId'] ||
-                current['episode_id'] != fields['episodeId']) {
-              throw const Failure(FailureCode.conflict,
-                  'Classic has a different match; both source facts are retained.');
+      var before = rows.isEmpty
+          ? <String, Object?>{
+              'anime_id': null,
+              'episode_id': null,
+              'anime_name': p.basename(locator),
+              'episode_title': null
             }
-            return;
+          : _matching(current);
+      var matching = <String, Object?>{};
+      var state = 'written';
+      var rowId = current['id'] as int?;
+      var rowExisted = rows.isNotEmpty;
+      var needsWrite = true;
+      final previous = fields['previousProjectionId'] == null
+          ? <JsonMap>[]
+          : await tx.query('next_classic_projection_journal',
+              where: 'projection_id=? AND file_path=?',
+              whereArgs: [fields['previousProjectionId'], locator]);
+      if (previous.isNotEmpty &&
+          previous.single['state'] == 'written' &&
+          (previous.single['row_id'] != rowId ||
+              !_sameMatching(
+                  current, decodeMediaJson(previous.single['after_fields'])))) {
+        await tx.insert('next_classic_projection_journal',
+            {...previous.single, 'projection_id': projectionId});
+        earlierProjectionChanged = true;
+        return;
+      }
+      if (rows.isNotEmpty) {
+        if (current['anime_name'] != '' &&
+            current['episode_title'] != null &&
+            current['anime_id'] != null &&
+            current['episode_id'] != null) {
+          if (current['anime_id'] != fields['animeId'] ||
+              current['episode_id'] != fields['episodeId']) {
+            throw const Failure(FailureCode.conflict,
+                'Classic has a different match; both source facts are retained.');
           }
+          matching = _matching(current);
+          state = 'unchanged';
+          needsWrite = false;
+          if (previous.isNotEmpty && previous.single['state'] == 'written') {
+            before = decodeMediaJson(previous.single['before_fields']);
+            rowExisted = previous.single['row_existed'] == 1;
+            state = 'written';
+          }
+        }
+      }
+      if (needsWrite) {
+        String title(String field, String column) {
+          final provided = fields[field] as String?;
+          final original = current[column] as String?;
+          final value = provided != null && provided.trim().isNotEmpty
+              ? provided
+              : original;
+          if (value == null || value.trim().isEmpty) {
+            throw Failure(FailureCode.conflict,
+                'Classic projection needs a nonempty evidenced $field; Classic was left untouched.');
+          }
+          return value;
+        }
+
+        matching = {
+          'anime_id': fields['animeId'],
+          'episode_id': fields['episodeId'],
+          'anime_name': title('animeName', 'anime_name'),
+          'episode_title': title('episodeTitle', 'episode_title')
+        };
+        if (rows.isNotEmpty) {
           await tx.update('watch_history', matching,
               where: 'file_path=?', whereArgs: [locator]);
         } else {
-          await tx.insert('watch_history', {
+          rowId = await tx.insert('watch_history', {
             ...matching,
             'file_path': locator,
             'watch_progress': 0.0,
@@ -96,9 +219,47 @@ final class WatchHistoryMetadataPort implements ClassicMetadataPort {
             'is_from_scan': 1
           });
         }
-      });
+      }
+      if (projectionId != null) {
+        await tx.insert('next_classic_projection_journal', {
+          'projection_id': projectionId,
+          'file_path': locator,
+          'before_fields': jsonEncode(before),
+          'after_fields': jsonEncode(matching),
+          'row_existed': rowExisted ? 1 : 0,
+          'row_id': rowId!,
+          'state': state
+        });
+      }
+    });
+    if (earlierProjectionChanged) {
+      throw const Failure(FailureCode.conflict,
+          'Classic changed after the earlier projection; Classic was left untouched and its undo remains in conflict.');
     }
     await changed();
+  }
+
+  @override
+  Future<JsonMap> projectionOutcome(String locator, JsonMap fields) async {
+    final db = await WatchHistoryDatabase.instance.database;
+    final id = fields['clear'] == true
+        ? fields['restoreProjectionId']
+        : fields['projectionId'];
+    final table = await db.rawQuery(
+        "SELECT name FROM sqlite_master WHERE name='next_classic_projection_journal'");
+    final rows = table.isEmpty || id == null
+        ? <JsonMap>[]
+        : await db.query('next_classic_projection_journal',
+            where: 'projection_id=? AND file_path=?', whereArgs: [id, locator]);
+    return {
+      'locator': locator,
+      'status': rows.isEmpty
+          ? (fields['clear'] == true && fields['journalVersion'] == 1
+              ? 'not_written'
+              : 'no_undo_evidence')
+          : rows.single['state'],
+      'restored': rows.isNotEmpty && rows.single['state'] == 'restored'
+    };
   }
 
   @override
@@ -106,10 +267,35 @@ final class WatchHistoryMetadataPort implements ClassicMetadataPort {
     final current =
         await WatchHistoryDatabase.instance.getHistoryByFilePath(locator);
     if (fields['clear'] == true) {
-      return current == null ||
-          (current.animeName.isEmpty && current.episodeTitle == null);
+      final outcome = await projectionOutcome(locator, fields);
+      if (outcome['status'] == 'unchanged' ||
+          outcome['status'] == 'not_written') {
+        return true;
+      }
+      if (outcome['status'] != 'restored') return false;
+      final db = await WatchHistoryDatabase.instance.database;
+      final journal = (await db.query('next_classic_projection_journal',
+              where: 'projection_id=? AND file_path=?',
+              whereArgs: [fields['restoreProjectionId'], locator]))
+          .single;
+      final rows = await db
+          .query('watch_history', where: 'file_path=?', whereArgs: [locator]);
+      return rows.isNotEmpty &&
+          rows.single['id'] == journal['row_id'] &&
+          _sameMatching(rows.single, decodeMediaJson(journal['before_fields']));
     }
-    return current != null &&
+    final db = await WatchHistoryDatabase.instance.database;
+    final journal = await db.query('next_classic_projection_journal',
+        where: 'projection_id=? AND file_path=?',
+        whereArgs: [fields['projectionId'], locator]);
+    final rows = await db
+        .query('watch_history', where: 'file_path=?', whereArgs: [locator]);
+    return journal.isNotEmpty &&
+        rows.isNotEmpty &&
+        rows.single['id'] == journal.single['row_id'] &&
+        _sameMatching(
+            rows.single, decodeMediaJson(journal.single['after_fields'])) &&
+        current != null &&
         current.animeId == fields['animeId'] &&
         current.episodeId == fields['episodeId'] &&
         current.animeName.isNotEmpty &&
@@ -142,7 +328,9 @@ final class ClassicProjection {
               observations.where((o) => o['locationId'] == location['id']);
           final current =
               atLocation.isEmpty ? <String, Object?>{} : atLocation.single;
-          if (current['animeName'] != null &&
+          if (port is! ReversibleClassicMetadataPort &&
+              fields['clear'] != true &&
+              current['animeName'] != null &&
               current['animeName'] != '' &&
               current['episodeTitle'] != null &&
               current['animeId'] != null &&
@@ -154,8 +342,9 @@ final class ClassicProjection {
             throw const Failure(FailureCode.conflict,
                 'Classic has a different match; inspect media.identity.get conflicts.');
           }
-          await port.apply(location['locator'] as String, fields);
-          if (!await port.verify(location['locator'] as String, fields)) {
+          final delivery = {...fields, 'projectionId': row['id']};
+          await port.apply(location['locator'] as String, delivery);
+          if (!await port.verify(location['locator'] as String, delivery)) {
             throw const Failure(FailureCode.unavailable,
                 'Classic metadata projection failed readback.');
           }

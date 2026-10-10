@@ -47,6 +47,7 @@ void main() {
           where: 'file_path = ?', whereArgs: [path]);
     });
     final fields = {
+      'projectionId': 'fixture-projection',
       'animeId': 7001,
       'episodeId': 7101,
       'animeName': 'Animation',
@@ -62,13 +63,22 @@ void main() {
     expect(DateTime.parse(projected['last_watch_time'] as String),
         DateTime.utc(2026, 10, 10));
     expect(projected['thumbnail_path'], '/fixture/thumbnail.jpg');
-    await port.apply(path, {...fields, 'animeName': 'Refined name'});
+    await port.apply(path, {
+      ...fields,
+      'projectionId': 'independent-confirmation',
+      'animeName': 'Refined name'
+    });
     expect((await db.query('watch_history')).single['anime_name'], 'Animation');
-    await port.apply(path,
-        {'clear': true, 'expectedAnimeId': 7001, 'expectedEpisodeId': 7101});
-    expect(await port.verify(path, {'clear': true}), isTrue);
+    await port.apply(
+        path, {'clear': true, 'restoreProjectionId': 'fixture-projection'});
+    expect(
+        await port.verify(
+            path, {'clear': true, 'restoreProjectionId': 'fixture-projection'}),
+        isTrue);
     final cleared = (await db.query('watch_history')).single;
     expect(cleared['anime_name'], '');
+    expect(cleared['anime_id'], 1);
+    expect(cleared['episode_id'], 2);
     expect(cleared['last_position'], 23456);
     expect(cleared['duration'], 99999);
     expect((await port.history()).single['lastPosition'], 23456);

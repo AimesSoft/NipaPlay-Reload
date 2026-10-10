@@ -77,7 +77,21 @@ Classic 有效匹配按现有媒体库来源筛选函数进入同一实体、绑
 Classic 已有不同匹配时，outbox 标为 `conflict`，显式绑定仍已提交，Classic 保持原值。
 再次调用原 requestId 可重试该文件的投递；启动只恢复 `pending`，不自动处理 `conflict`。
 Classic 已有相同 ID 时仅确认，不重写其标题；无匹配时仅填写匹配列，保留历史其他列。
+标题取同一外部对象的非空 provider 快照；缺少时保留 Classic 对应非空原值，仍缺少则报告冲突，不写空标题。
 解除显式绑定不清除独立 Classic 匹配；投递回读不会再制造一个独立 Classic 匹配。
+
+Classic 写事务同时向 `next_classic_projection_journal` 追加该 projectionId / 路径的
+匹配字段前像、后像、行 ID 和行存在标记。撤销仅在原行 ID 及四个匹配字段逐值仍与后像一致时恢复前像；
+用户改标题、重匹配或删除行都会保留 Classic 并返回 conflict，Next 撤销仍已提交，
+`identity.get.conflicts` 可见。进度、时间等字段不参与比较，也不被恢复覆盖。
+同一匹配因另一来源绑定而再次投影时，通过 `previousProjectionId` 继承仍有效的
+原始撤销前像；已有 Classic 编辑则保留撤销冲突，不把再次确认当成独立 Classic 匹配。
+原先不存在的行撤销后保留历史行和后续播放数据，匹配 ID 恢复 null，标题为原路径文件名。
+已有独立匹配只记录 unchanged，不撤销它；未投递的新版投影记录 not_written。
+旧投影缺少原子撤销证据时保留 Classic 并报告 conflict，不从旧观察猜测前像。
+`bind_batch` / `unbind_batch` 文件条目含可空 `classicProjectionId`，生产 Classic 端口返回
+`classicProjection` 的逐路径 status / restored；成功回执持久保存，旧 requestId 重试返回
+该操作的原确认结果，不会撤销后续绑定。投影日志保留供恢复和审计，不清理原 outbox。
 
 ## 存储与升级
 
@@ -94,6 +108,8 @@ legacy history、Classic projection outbox 均保留，不重算身份或修改 
 补充时长等 probe 信息不改变文件内容修订，也不撤销原绑定。
 
 v8 只追加 `media_classic_observations` 和 `media_classic_current`，原表和数据不变。
+Next schema 仍为 v8；Classic 的投影日志在首次投递的事务内可重入创建，
+Classic `user_version` 和 `watch_history` schema 不变，启动同步不写 Classic。
 首次同步保留原 `media_legacy_history`，每个文件的观察、身份和当前指针同事务提交；
 中断后启动从 Classic 重读，已提交的相同指纹不重复写入。进度不参与指纹。
 Classic 标题快照带来源及未知语言 `und`，不会覆盖来源服务快照或持久用户编辑；

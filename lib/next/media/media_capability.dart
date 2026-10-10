@@ -430,7 +430,17 @@ final _specs = [
           'releaseId': StringSchema(nullable: true),
           'episodeIds': ArraySchema(StringSchema()),
           'fileId': StringSchema(nullable: true),
-          'bindingIds': ArraySchema(StringSchema())
+          'classicProjectionId': StringSchema(nullable: true),
+          'bindingIds': ArraySchema(StringSchema()),
+          'classicProjection': ArraySchema(ObjectSchema({
+            'locator': StringSchema(),
+            'status': StringSchema(),
+            'restored': BooleanSchema()
+          }, required: [
+            'locator',
+            'status',
+            'restored'
+          ]))
         }, required: [
           'index',
           'workId',
@@ -444,7 +454,7 @@ final _specs = [
       ])),
   _spec(
       'media.identity.unbind_batch',
-      'Atomically revoke Agent/user bindings on files, episodes, releases or works and retain provenance. Optional bindingIds selects accepted bindings on that entity; omitted revokes all explicit bindings. Classic source facts are changed through Classic matching operations. Clears file episode links when no accepted file identity remains and uses the durable Classic outbox. reason is audited; requestId makes retries idempotent.',
+      'Atomically revoke Agent/user bindings and retain provenance. Optional bindingIds selects accepted bindings; omitted revokes all explicit bindings. Restore a projected Classic match only when its matching fields still equal the atomic projection journal; changed Classic fields remain untouched and return conflict after Next revocation. classicProjection reports restoration or unchanged independent Classic matches. reason is audited; requestId makes retries idempotent.',
       Effect.write,
       const ObjectSchema({
         'requestId': _text,
@@ -467,7 +477,17 @@ final _specs = [
         'entries': ArraySchema(ObjectSchema({
           'index': IntegerSchema(),
           'entityId': StringSchema(),
-          'bindingIds': ArraySchema(StringSchema())
+          'bindingIds': ArraySchema(StringSchema()),
+          'classicProjectionId': StringSchema(nullable: true),
+          'classicProjection': ArraySchema(ObjectSchema({
+            'locator': StringSchema(),
+            'status': StringSchema(),
+            'restored': BooleanSchema()
+          }, required: [
+            'locator',
+            'status',
+            'restored'
+          ]))
         }, required: [
           'index',
           'entityId',

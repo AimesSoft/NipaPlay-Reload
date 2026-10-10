@@ -389,13 +389,19 @@ void main() {
     final bound = await identity(path);
     expect(bound['conflicts'], isEmpty);
     expect(await classicDb.query('watch_history', orderBy: 'id'), before);
-    await call('media.identity.unbind_batch', {
+    final receipt = await call('media.identity.unbind_batch', {
       'requestId': 'same-episode-unbind',
       'entries': [
         {'entityId': bound['id'], 'reason': 'Withdraw only Agent decision'}
       ]
     });
     final unbound = await identity(path);
+    final classicResult =
+        (receipt['entries'] as List).single['classicProjection'][0];
+    expect(classicResult['status'], 'unchanged');
+    expect(classicResult['restored'], false);
+    print(
+        'X8 independent Classic match: undo.status=unchanged; restored=false; original row and Classic binding retained=true');
     expect(
         (unbound['bindings'] as List)
             .where((b) => b['status'] == 'accepted')

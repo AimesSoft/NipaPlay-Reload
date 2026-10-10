@@ -64,6 +64,49 @@ void main() {
   });
 
   test(
+      'status endpoint and seed CLI expose seed location and fresh lag without fetching',
+      () async {
+    final cli = await File('assets/next/harness/nipa').readAsBytes();
+    endpoint = AgentEndpoint(
+        harness: Harness([]),
+        seed: {'nipa': cli},
+        appVersion: 'x8-fixture',
+        credentialFile: credentials,
+        port: 0);
+    await endpoint.start(repository);
+    final seedFile = File('${endpoint.seedRepository.path}/nipa');
+    await seedFile
+        .writeAsString('${await seedFile.readAsString()}\n# fixture upgrade\n');
+    final commit = await Process.run(
+        'git',
+        [
+          '-c',
+          'user.name=Fixture',
+          '-c',
+          'user.email=fixture@localhost',
+          '-c',
+          'commit.gpgSign=false',
+          '-c',
+          'core.hooksPath=${endpoint.seedRepository.path}/.git/no-hooks',
+          'commit',
+          '-am',
+          'Fixture upgrade'
+        ],
+        workingDirectory: endpoint.seedRepository.path);
+    expect(commit.exitCode, 0, reason: commit.stderr.toString());
+    final result = await Process.run(
+        'python3', ['${repository.path}/nipa', 'status'],
+        workingDirectory: repository.path,
+        environment: {'NIPAPLAY_ENDPOINT_FILE': credentials.path});
+    expect(result.exitCode, 0, reason: result.stderr.toString());
+    final value = jsonDecode(result.stdout as String) as Map;
+    expect(value['harnessSeed']['path'], endpoint.seedRepository.absolute.path);
+    expect(value['harnessSeed']['trackingBehindSeed'], true);
+    // ignore: avoid_print
+    print('X8 nipa status: ${jsonEncode(value)}');
+  });
+
+  test(
       'credentials cannot be placed inside the repository including via symlink',
       () async {
     await repository.create();
