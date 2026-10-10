@@ -83,6 +83,12 @@ lib/next/                       NipaPlay 侧
 - `nipa_harness` 是独立 package，由编译器保证内核不依赖 Flutter，将来的 headless Core、Mesh 节点可以直接复用。
 - `lib/next/capabilities` 只依赖 `nipa_harness` 与现有服务；不依赖任何主题或页面 Widget。
 - 现有代码不依赖 `lib/next`，唯一例外是组合根 `main.dart` 中的一个 Provider 与 Labs 设置项。
+- **应用层唯一组合点 `NextCore`**（2026-10-10 决定）：
+  - 由 `ServiceProvider` 在应用启动时创建（Web 除外）；
+  - 统一负责打开 `next.db`、读取设备身份，并创建每个应用实例**唯一的** `TaskEngine`；
+  - 各领域（下载、媒体、弹幕……）只提供自己的执行器与 Capability，注册到 `NextCore`，不得自行创建引擎或另开数据库连接；
+  - Classic（如下载页）与 Next（`NextRuntime` / Harness）都从 `NextCore` 取用引擎与能力；
+  - 是否开启 Labs 只影响 Agent 端点，不影响任务引擎。
 
 ## 4. 内核 API（`package:nipa_harness/nipa_harness.dart`）
 
