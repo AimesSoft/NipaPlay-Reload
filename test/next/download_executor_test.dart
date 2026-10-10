@@ -24,15 +24,23 @@ void main() {
   late DownloadService downloads;
   late Harness harness;
 
-  test('scanner acknowledgement cannot replace media readback', () async {
+  test(
+      'scanner acknowledgement does not fabricate media or block download success',
+      () async {
     backend.present = true;
     await backend.finish();
     library.acknowledgeOnly = true;
     final job = await downloads.add(testRequest);
-    final retry = await untilState(engine, job.jobId, JobState.waitingRetry);
-    expect(retry.phase, 'importing');
-    expect(retry.receipt, isNull);
-    expect(library.importedKeys, isEmpty);
+    final done = await untilState(engine, job.jobId, JobState.succeeded);
+    expect(done.receipt!.verification, VerificationLevel.verified);
+    expect(
+        (done.receipt!.details['files'] as List).single,
+        allOf(
+            containsPair('imported', false),
+            containsPair('reason', 'not_identified'),
+            containsPair('identificationPending', true),
+            isNot(contains('media'))));
+    expect(library.importedKeys, contains(backend.snapshot.importKey));
   });
 
   test(
@@ -69,6 +77,28 @@ void main() {
     expect(files.last, containsPair('reason', 'not_selected'));
     expect(files.last['actualSize'], isNull);
     expect(files.take(2).every((row) => row['imported'] == true), isTrue);
+  });
+
+  test(
+      'registered unidentified entries succeed and await separate identification',
+      () async {
+    backend.present = true;
+    await backend.finish();
+    library.media[backend.video.location.path] = {
+      'path': backend.video.location.path,
+      'identificationPending': true
+    };
+    final job = await downloads.add(testRequest);
+    final done = await untilState(engine, job.jobId, JobState.succeeded);
+    expect(
+        (done.receipt!.details['files'] as List).single,
+        allOf(
+            containsPair('imported', true),
+            containsPair('identificationPending', true),
+            containsPair('reason', 'not_identified'),
+            contains('media')));
+    expect(library.scans, isEmpty);
+    expect(done.error, isNull);
   });
 
   void connect() {
@@ -231,7 +261,91 @@ void main() {
   });
 
   test(
-      'busy and unidentified imports retry durably; recovery only scans unmapped files',
+      'download controls are idempotent through Actions for running and terminal jobs',
+      () async {
+    Future<Job> control(String action, String id) async {
+      final outcome = await harness.invokeJson(
+          'download.$action', {'jobId': id}, Invocation(origin: 'test'));
+      expect(outcome, isA<Completed<JsonEncodable>>());
+      return engine.get(id);
+    }
+
+    final job = await add();
+    await phase(job.jobId, 'downloading');
+    await control('resume', job.jobId);
+    await control('resume', job.jobId);
+    expect(backend.resumes, 0);
+    await control('pause', job.jobId);
+    final paused = await control('pause', job.jobId);
+    expect(paused.state, JobState.paused);
+    expect(backend.pauses, 1);
+    await control('resume', job.jobId);
+    await control('resume', job.jobId);
+    expect(backend.resumes, 1);
+    await backend.finish();
+    final done = await untilState(engine, job.jobId, JobState.succeeded);
+    await control('resume', job.jobId);
+    expect(backend.resumes, 1);
+    await control('pause', job.jobId);
+    await control('pause', job.jobId);
+    expect(backend.pauses, 2);
+    await control('resume', job.jobId);
+    await control('resume', job.jobId);
+    expect(backend.resumes, 2);
+    expect((await engine.get(job.jobId)).toJson(), done.toJson());
+    await control('remove', job.jobId);
+    await control('remove', job.jobId);
+    await control('delete', job.jobId);
+    expect(backend.removals, 1);
+    expect(backend.deletions, 0);
+    final missing = await harness.invokeJson(
+            'download.resume', {'jobId': job.jobId}, Invocation(origin: 'test'))
+        as Failed;
+    expect(missing.failure.code, FailureCode.notFound);
+    for (final action in ['pause', 'resume', 'remove', 'delete']) {
+      final outcome = await harness.invokeJson('download.$action',
+          {'jobId': 'unknown'}, Invocation(origin: 'test')) as Failed;
+      expect(outcome.failure.code, FailureCode.notFound);
+    }
+  });
+
+  test(
+      'resume retries a backend error instead of treating it as already running',
+      () async {
+    final job = await add();
+    await phase(job.jobId, 'downloading');
+    backend.error = 'peer connection failed';
+    final outcome = await harness.invokeJson(
+        'download.resume', {'jobId': job.jobId}, Invocation(origin: 'test'));
+    expect(outcome, isA<Completed<JsonEncodable>>());
+    expect(backend.resumes, 1);
+    expect(backend.error, isNull);
+  });
+
+  test(
+      'resume cannot restart a torrent while cancellation is still stopping it',
+      () async {
+    backend.present = true;
+    await backend.finish();
+    final entered = Completer<void>(), release = Completer<void>();
+    library.onImport = (_) async {
+      entered.complete();
+      await release.future;
+    };
+    final job = await add();
+    await entered.future;
+    await engine.cancel(job.jobId);
+    final outcome = await harness.invokeJson(
+            'download.resume', {'jobId': job.jobId}, Invocation(origin: 'test'))
+        as Failed;
+    expect(outcome.failure.code, FailureCode.conflict);
+    expect(backend.resumes, 0);
+    release.complete();
+    await untilState(engine, job.jobId, JobState.cancelled);
+  });
+
+  test(
+      'busy scanner retries, but unidentified files finish without recognition retries',
       () async {
     backend.present = true;
     await backend.finish();
@@ -244,20 +358,20 @@ void main() {
     final retry = await untilState(engine, job.jobId, JobState.waitingRetry);
     await downloads.pause(retry.jobId);
     await downloads.resume(retry.jobId);
-    final unidentified =
-        await untilState(engine, job.jobId, JobState.waitingRetry);
-    expect((unidentified.checkpoint['files'] as List).single,
-        containsPair('reason', 'not_identified'));
-    library.media[backend.video.location.path] = {
-      'path': backend.video.location.path,
-      'animeId': 1,
-      'episodeId': 2
-    };
-    final scans = library.scans.length;
-    await downloads.pause(job.jobId);
-    await downloads.resume(job.jobId);
-    await untilState(engine, job.jobId, JobState.succeeded);
-    expect(library.scans.length, scans);
+    final done = await untilState(engine, job.jobId, JobState.succeeded);
+    expect(
+        (done.receipt!.details['files'] as List).single,
+        allOf(
+            containsPair('reason', 'not_identified'),
+            containsPair('identificationPending', true),
+            containsPair('actualSize', 4)));
+    expect(done.error, isNull);
+    expect(library.scans, hasLength(1));
+    for (var observation = 0; observation < 3; observation++) {
+      expect(
+          (await downloads.adopt(backend, backend.snapshot)).jobId, job.jobId);
+    }
+    expect(library.scans, hasLength(1));
   });
 
   test(

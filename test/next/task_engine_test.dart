@@ -262,11 +262,13 @@ void main() {
     await context.report(phase: 'verifying');
     final changed = await waiting;
     expect(changed.phase, 'verifying');
+    await context.report(progress: JobProgress(completed: 1, unit: 'files'));
     final timedOut = await engine.wait(job.jobId,
         afterRevision: changed.revision,
         timeout: const Duration(milliseconds: 10));
-    expect(timedOut.revision, changed.revision);
-    final terminal = engine.wait(job.jobId, afterRevision: changed.revision);
+    expect(timedOut.progress.completed, 1);
+    expect(timedOut.revision, changed.revision + 1);
+    final terminal = engine.wait(job.jobId, afterRevision: timedOut.revision);
     await context.succeed(verified());
     expect((await terminal).receipt!.verification, VerificationLevel.verified);
   });

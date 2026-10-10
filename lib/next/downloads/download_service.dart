@@ -141,7 +141,14 @@ final class DownloadService {
           throw const Failure(
               FailureCode.notFound, 'Download is absent from its backend.');
         }
-        await backend.resume(task.handle);
+        if (job.state == JobState.cancelling ||
+            job.cancelRequestedAt != null && !job.state.isTerminal) {
+          throw const Failure(FailureCode.conflict,
+              'Download cancellation is still in progress.');
+        }
+        if (task.paused || (task.error?.isNotEmpty ?? false)) {
+          await backend.resume(task.handle);
+        }
         if (job.state == JobState.paused) return engine.resume(jobId);
         return engine.get(jobId);
       });

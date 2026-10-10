@@ -9,6 +9,47 @@ import '../../packages/nipa_harness/test/task_support.dart';
 import 'download_test_support.dart';
 
 void main() {
+  test('unidentified downloads stay complete across observation and restart',
+      () async {
+    final root =
+        await Directory.systemTemp.createTemp('download-unidentified-');
+    final backend = FakeDownloadBackend(root)..present = true;
+    await backend.finish();
+    final library = FakeDownloadLibrary()..identify = false;
+    final store = MemoryJobStore();
+    DownloadRuntime createRuntime() => DownloadRuntime.forTesting(
+        root: root,
+        store: store,
+        backend: backend,
+        library: library,
+        isEnabled: () async => true,
+        loadImportedKeys: () async => library.importedKeys);
+    var runtime = createRuntime();
+    addTearDown(() async {
+      await runtime.close();
+      runtime.dispose();
+      await root.delete(recursive: true);
+    });
+    await runtime.ready;
+    final job = (await runtime.engine.list()).single;
+    final done =
+        await untilState(runtime.engine, job.jobId, JobState.succeeded);
+    expect(
+        (done.receipt!.details['files'] as List).single,
+        allOf(containsPair('imported', false),
+            containsPair('identificationPending', true)));
+    await runtime.refresh();
+    await runtime.refresh();
+    expect(library.scans, hasLength(1));
+    await runtime.close();
+    runtime.dispose();
+    runtime = createRuntime();
+    await runtime.ready;
+    expect(await runtime.engine.list(), hasLength(1));
+    expect((await runtime.engine.get(job.jobId)).toJson(), done.toJson());
+    expect(library.scans, hasLength(1));
+  });
+
   test('observation keeps cancelled data paused until an explicit resume',
       () async {
     final root = await Directory.systemTemp.createTemp('download-cancelled-');

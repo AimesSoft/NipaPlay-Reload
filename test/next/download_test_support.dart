@@ -104,6 +104,7 @@ final class FakeDownloadBackend implements DownloadBackend {
   @override
   Future<void> pause(String handle) async {
     _online();
+    if (paused) throw 'already paused';
     pauses++;
     paused = true;
   }
@@ -111,6 +112,7 @@ final class FakeDownloadBackend implements DownloadBackend {
   @override
   Future<void> resume(String handle) async {
     _online();
+    if (!paused && error == null) throw 'already running';
     resumes++;
     paused = false;
     error = null;
@@ -119,6 +121,7 @@ final class FakeDownloadBackend implements DownloadBackend {
   @override
   Future<void> remove(String handle) async {
     _online();
+    if (!present) throw 'missing session';
     removals++;
     present = false;
   }
@@ -126,6 +129,7 @@ final class FakeDownloadBackend implements DownloadBackend {
   @override
   Future<void> delete(String handle) async {
     _online();
+    if (!present) throw 'missing session';
     deletions++;
     present = false;
     for (final file in snapshot.files) {

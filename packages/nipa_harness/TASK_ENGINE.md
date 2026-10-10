@@ -75,10 +75,14 @@ with `conflict`; no extra generic `task.resolve` Action is introduced.
 
 `task.list` accepts optional `state` and `type` filters and returns `jobs`.
 `task.get`, `task.cancel` and `task.wait` accept `jobId` and return `job`.
-`task.wait` additionally accepts `afterRevision` and `timeoutMs` (0–60000,
-default 60000). Pass the last observed revision to catch changes between
-requests; omit it to wait for the next change. Terminal states return
-immediately. Change and timeout both return the current snapshot. The
+`task.wait` additionally accepts `afterRevision`, `timeoutMs` (0–60000,
+default 60000), and `includeProgress` (default false). By default only changes
+to `state`, `phase`, or `decision` wake a wait. Set `includeProgress: true` to
+also wake on progress changes. Other revision updates do not wake a wait.
+Pass the last observed revision to catch meaningful changes between requests;
+the engine checks persisted events, including transitions away and back to the
+same value. Omit it to wait for the next meaningful change. Terminal states
+return immediately. Change and timeout both return the latest snapshot. The
 returned revision identifies a persisted event; raw input and checkpoints
 stay in storage rather than appearing in task Action results.
 

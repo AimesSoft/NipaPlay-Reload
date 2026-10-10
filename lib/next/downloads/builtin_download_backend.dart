@@ -117,6 +117,8 @@ final class BuiltinDownloadBackend implements DownloadBackend {
       return await operation();
     } on AnyhowException catch (error) {
       throw Failure(FailureCode.unavailable, error.toString(), retryable: true);
+    } on String catch (error) {
+      throw Failure(FailureCode.unavailable, error, retryable: true);
     }
   }
 }

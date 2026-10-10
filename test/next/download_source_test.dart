@@ -23,6 +23,20 @@ void main() {
         sources.prepare('magnet:?xt=urn:btih:bad'), throwsA(isA<Failure>()));
     await expectLater(sources.prepare('ftp://example.com/file.torrent'),
         throwsA(isA<Failure>()));
+    await expectLater(
+        sources.prepare('magnet:?xt=urn:btih:${'0' * 40}&dn='),
+        throwsA(isA<Failure>()
+            .having((f) => f.code, 'code', FailureCode.invalidInput)));
+    for (final source in [
+      'http:///file.torrent',
+      'file://remote/file.torrent',
+      'file:///tmp/file.torrent?query=1'
+    ]) {
+      await expectLater(
+          sources.prepare(source),
+          throwsA(isA<Failure>()
+              .having((f) => f.code, 'code', FailureCode.invalidInput)));
+    }
   });
   test('local metadata is hashed verbatim and cached for recovery', () async {
     final root = await Directory.systemTemp.createTemp('torrent-source-');
@@ -76,5 +90,18 @@ void main() {
           throwsA(isA<Failure>()),
           reason: value);
     }
+  });
+
+  test('unreachable torrent URL reports unavailable rather than internal',
+      () async {
+    final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+    final port = server.port;
+    await server.close(force: true);
+    final sources = DownloadSources(Directory('/unused'),
+        clientFactory: () => HttpClient()..findProxy = (_) => 'DIRECT');
+    await expectLater(
+        sources.prepare('http://127.0.0.1:$port/file.torrent'),
+        throwsA(isA<Failure>()
+            .having((f) => f.code, 'code', FailureCode.unavailable)));
   });
 }

@@ -302,6 +302,7 @@ final class TaskEngine {
   /// between obtaining the snapshot and installing the waiter.
   Future<Job> wait(String jobId,
       {int? afterRevision,
+      bool includeProgress = false,
       Duration timeout = const Duration(seconds: 60)}) async {
     if (timeout < Duration.zero ||
         timeout > const Duration(seconds: 60) ||
@@ -310,15 +311,31 @@ final class TaskEngine {
           'Wait is bounded to 0–60 seconds and a nonnegative revision.');
     }
     final changed = Completer<void>();
-    int? baseline = afterRevision;
-    Job? latest;
+    final pending = <Job>[];
+    JsonMap? previous;
+    var cursor = -1;
+    void observe(JsonMap snapshot) {
+      final revision = snapshot['revision'] as int;
+      if (revision <= cursor) return;
+      final meaningful = snapshot['state'] != previous!['state'] ||
+          snapshot['phase'] != previous!['phase'] ||
+          !_sameJson(snapshot['decision'], previous!['decision']) ||
+          (includeProgress &&
+              !_sameJson(snapshot['progress'], previous!['progress']));
+      previous = snapshot;
+      cursor = revision;
+      final terminal = JobState.values
+          .singleWhere((state) => state.wireName == snapshot['state'])
+          .isTerminal;
+      if ((terminal || meaningful) && !changed.isCompleted) changed.complete();
+    }
+
     final subscription = _changes.stream.listen((job) {
       if (job.jobId != jobId) return;
-      latest = job;
-      if (baseline != null &&
-          (job.state.isTerminal || job.revision > baseline) &&
-          !changed.isCompleted) {
-        changed.complete();
+      if (previous == null) {
+        pending.add(job);
+      } else {
+        observe(job.toJson());
       }
     }, onDone: () {
       if (!changed.isCompleted) changed.complete();
@@ -326,15 +343,27 @@ final class TaskEngine {
     Timer? timer;
     try {
       final current = await get(jobId);
-      baseline ??= current.revision;
+      final baseline = afterRevision ?? current.revision;
       if (afterRevision != null && afterRevision > current.revision) {
         throw const Failure(
             FailureCode.invalidInput, 'Revision is ahead of the job.');
       }
-      if (current.state.isTerminal || current.revision > baseline) {
-        return current;
+      if (current.state.isTerminal) return current;
+      if (baseline < current.revision) {
+        final events = await store.events(jobId, afterRevision: baseline - 1);
+        previous = events.firstWhere((e) => e.revision == baseline).snapshot;
+        cursor = baseline;
+        for (final event in events) {
+          observe(event.snapshot);
+        }
+      } else {
+        previous = current.toJson();
+        cursor = baseline;
       }
-      if (latest != null && latest!.revision > baseline) return latest!;
+      for (final job in pending) {
+        observe(job.toJson());
+      }
+      if (changed.isCompleted) return await get(jobId);
       timer = Timer(timeout, () {
         if (!changed.isCompleted) changed.complete();
       });

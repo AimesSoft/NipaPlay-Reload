@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
@@ -16,6 +17,22 @@ final class DownloadSources {
   static const maxTorrentBytes = 16 * 1024 * 1024;
 
   Future<DownloadRequest> prepare(String source) async {
+    try {
+      return await _prepare(source);
+    } on SocketException catch (error) {
+      throw Failure(FailureCode.unavailable, error.toString(), retryable: true);
+    } on HttpException catch (error) {
+      throw Failure(FailureCode.unavailable, error.toString(), retryable: true);
+    } on TimeoutException catch (error) {
+      throw Failure(FailureCode.unavailable, error.toString(), retryable: true);
+    } on FileSystemException catch (error) {
+      throw Failure(FailureCode.unavailable, error.toString(), retryable: true);
+    } on FormatException catch (error) {
+      throw Failure(FailureCode.invalidInput, error.toString());
+    }
+  }
+
+  Future<DownloadRequest> _prepare(String source) async {
     final uri = Uri.tryParse(source);
     if (uri == null || source.trim().isEmpty) {
       throw const Failure(FailureCode.invalidInput, 'Invalid download source.');
@@ -29,6 +46,10 @@ final class DownloadSources {
         throw const Failure(FailureCode.invalidInput,
             'Magnet must contain one BT v1 infoHash.');
       }
+      if (uri.queryParameters['dn'] == '') {
+        throw const Failure(
+            FailureCode.invalidInput, 'Magnet display name must not be empty.');
+      }
       return DownloadRequest(
           source: source,
           infoHash: hashes.single,
@@ -37,6 +58,10 @@ final class DownloadSources {
     Uint8List bytes;
     String localPath;
     if (uri.scheme == 'http' || uri.scheme == 'https') {
+      if (uri.host.isEmpty) {
+        throw const Failure(
+            FailureCode.invalidInput, 'Torrent URL must contain a host.');
+      }
       final client = _clientFactory();
       try {
         final response = await (await client.getUrl(uri))
@@ -70,6 +95,13 @@ final class DownloadSources {
         throw const Failure(FailureCode.invalidInput,
             'Expected magnet, HTTP torrent URL, or local torrent path.');
       }
+      if (uri.scheme == 'file' &&
+          (uri.hasQuery ||
+              uri.hasFragment ||
+              uri.host.isNotEmpty && uri.host != 'localhost')) {
+        throw const Failure(FailureCode.invalidInput,
+            'Expected a local file URI without query or fragment.');
+      }
       localPath = uri.scheme == 'file' ? uri.toFilePath() : source;
       final file = File(localPath);
       if (!await file.exists() || await file.length() > maxTorrentBytes) {
@@ -83,10 +115,10 @@ final class DownloadSources {
       await File(cached).writeAsBytes(bytes, flush: true);
       localPath = cached;
     }
+    final hash = torrentInfoHash(bytes);
+    final name = p.basename(uri.path);
     return DownloadRequest(
-        source: localPath,
-        infoHash: torrentInfoHash(bytes),
-        title: p.basename(uri.path));
+        source: localPath, infoHash: hash, title: name.isEmpty ? hash : name);
   }
 }
 

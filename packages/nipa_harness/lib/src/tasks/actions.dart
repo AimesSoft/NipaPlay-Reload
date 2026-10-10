@@ -39,11 +39,11 @@ final class _TaskAction extends Action<_TaskInput, _TaskOutput> {
           'get' =>
             'Read the complete task snapshot. succeeded means verification finished; '
                 'use receipt for verified results. needs_decision contains executable option calls.',
-          'wait' =>
-            'Wait for a terminal state, a revision newer than afterRevision, or timeout. '
-                'timeoutMs defaults to 60000 and is bounded to 0–60000. Without afterRevision, '
-                'wait for the next change. Pass the last snapshot revision to avoid missing changes '
-                'between calls. Returns the current job; use repeated bounded waits for long tasks.',
+          'wait' => 'Wait for a terminal state, a state/phase/decision change after afterRevision, or timeout. '
+              'Progress alone does not wake the wait unless includeProgress is true. '
+              'timeoutMs defaults to 60000 and is bounded to 0–60000. Without afterRevision, '
+              'wait for the next meaningful change. Pass the last snapshot revision to avoid missing changes '
+              'between calls. Returns the current job; use repeated bounded waits for long tasks.',
           _ =>
             'Request cancellation and return the accepted snapshot. cancelling is not '
                 'confirmation of stopping. Committed effects are still verified and recorded in receipt.',
@@ -60,6 +60,7 @@ final class _TaskAction extends Action<_TaskInput, _TaskOutput> {
                 if (operation == 'wait') ...{
                   'afterRevision': const IntegerSchema(minimum: 0),
                   'timeoutMs': const IntegerSchema(minimum: 0, maximum: 60000),
+                  'includeProgress': const BooleanSchema(),
                 },
               }, required: const [
                 'jobId'
@@ -92,6 +93,7 @@ final class _TaskAction extends Action<_TaskInput, _TaskOutput> {
     final job = switch (operation) {
       'wait' => await engine.wait(id,
           afterRevision: (json['afterRevision'] as num?)?.toInt(),
+          includeProgress: json['includeProgress'] as bool? ?? false,
           timeout: Duration(
               milliseconds: (json['timeoutMs'] as num?)?.toInt() ?? 60000)),
       'cancel' => await engine.cancel(id),

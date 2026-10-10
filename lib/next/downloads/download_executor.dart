@@ -189,6 +189,15 @@ final class DownloadExecutor implements JobExecutor {
                               ? 'auto_import_disabled'
                               : 'not_identified';
         }
+        if (media == null &&
+            match.included &&
+            match.isVideo &&
+            match.location.isLocal) {
+          file['identificationPending'] = true;
+        } else if (media?['identificationPending'] == true) {
+          file['identificationPending'] = true;
+          file['reason'] = 'not_identified';
+        }
       }
       if (stopped && context.job.cancelRequestedAt == null) return;
       if (autoImport && localVideos.isNotEmpty && !alreadyImported) {
@@ -229,7 +238,13 @@ final class DownloadExecutor implements JobExecutor {
               file['imported'] = media != null;
               if (media != null) {
                 file['media'] = media;
-                file.remove('reason');
+                if (media['identificationPending'] == true) {
+                  file['identificationPending'] = true;
+                  file['reason'] = 'not_identified';
+                } else {
+                  file.remove('reason');
+                  file.remove('identificationPending');
+                }
               }
             }
           }
@@ -239,23 +254,6 @@ final class DownloadExecutor implements JobExecutor {
         await context.report(
             progress: JobProgress(
                 completed: imported, total: localVideos.length, unit: 'files'));
-        if (localVideos.any((video) =>
-            files.singleWhere(
-                (row) => row['path'] == video.location.path)['imported'] !=
-            true)) {
-          if (context.job.cancelRequestedAt != null) {
-            await _finishCancelled(context, backend, task, files,
-                reason: 'not_identified');
-          } else {
-            await context.retryAt(
-                DateTime.now().toUtc().add(importRetryDelay),
-                const Failure(FailureCode.unavailable,
-                    'Some videos could not be identified; import will retry.',
-                    retryable: true),
-                checkpoint: {...context.job.checkpoint, 'files': files});
-          }
-          return;
-        }
         if (context.job.cancelRequestedAt == null) {
           await library.markImported(key);
         }
@@ -332,6 +330,10 @@ final class DownloadExecutor implements JobExecutor {
       row['imported'] = media != null;
       if (media != null) {
         row['media'] = media;
+        if (media['identificationPending'] == true) {
+          row['identificationPending'] = true;
+          row['reason'] = 'not_identified';
+        }
       } else if (!row.containsKey('reason')) {
         row['reason'] = !file.included
             ? 'not_selected'
@@ -339,7 +341,16 @@ final class DownloadExecutor implements JobExecutor {
                 ? 'not_video'
                 : !file.location.isLocal
                     ? 'requires_transfer'
-                    : reason ?? 'cancelled_before_import';
+                    : task.finished && reason == null
+                        ? 'not_identified'
+                        : reason ?? 'cancelled_before_import';
+      }
+      if (media == null &&
+          file.included &&
+          file.isVideo &&
+          file.location.isLocal &&
+          task.finished) {
+        row['identificationPending'] = true;
       }
     }
     await context.cancelled(_receipt(task, files, reason: reason));
