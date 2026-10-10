@@ -44,12 +44,12 @@ class WebApiService {
     _router.post('/danmaku/match', handleDanmakuMatchRequest);
     _router.get('/danmaku/load', handleDanmakuLoadRequest);
     _router.get('/image_proxy', handleImageProxyRequest);
+    _router.add('HEAD', '/web_proxy', _webUiProxyApi.handle);
     _router.add('GET', '/web_proxy', _webUiProxyApi.handle);
     _router.add('POST', '/web_proxy', _webUiProxyApi.handle);
     _router.add('PUT', '/web_proxy', _webUiProxyApi.handle);
     _router.add('PATCH', '/web_proxy', _webUiProxyApi.handle);
     _router.add('DELETE', '/web_proxy', _webUiProxyApi.handle);
-    _router.add('HEAD', '/web_proxy', _webUiProxyApi.handle);
     _router.add('OPTIONS', '/web_proxy', _webUiProxyApi.handleOptions);
 
     // 新增搜索相关的API路由
@@ -80,14 +80,14 @@ class WebApiService {
         '/media/local/item/<animeId>', handleGetLocalMediaItemDetailRequest);
     _router.get('/history', handleGetHistoryRequest);
     _router.post('/history/progress', handleUpdateHistoryProgressRequest);
-    _router.mount('/media/local/share/', _localMediaShareApi.router);
-    _router.mount('/media/local/manage/', _localMediaManagementApi.router);
-    _router.mount('/settings/network/', _networkMediaSettingsApi.router);
-    _router.mount('/remote/control/', _remoteControlApi.router);
-    _router.mount('/remote/input/', _remoteTextInputApi.router);
+    _router.mount('/media/local/share/', _localMediaShareApi.router.call);
+    _router.mount('/media/local/manage/', _localMediaManagementApi.router.call);
+    _router.mount('/settings/network/', _networkMediaSettingsApi.router.call);
+    _router.mount('/remote/control/', _remoteControlApi.router.call);
+    _router.mount('/remote/input/', _remoteTextInputApi.router.call);
   }
 
-  Handler get handler => _router;
+  Handler get handler => _router.call;
 
   Future<Response> handleInfoRequest(Request request) async {
     try {
@@ -191,7 +191,6 @@ class WebApiService {
             response.bodyBytes,
             headers: {
               'Content-Type': response.headers['content-type'] ?? 'image/jpeg',
-              'Access-Control-Allow-Origin': '*',
             },
           );
         } else {
@@ -231,7 +230,6 @@ class WebApiService {
           bytes,
           headers: {
             'Content-Type': contentType,
-            'Access-Control-Allow-Origin': '*',
             'Cache-Control': 'public, max-age=3600',
           },
         );
@@ -412,14 +410,12 @@ class WebApiService {
     try {
       debugPrint(
         '[WebApi][dandanplay/refresh_login] 入站请求: method=${request.method} '
-        'path=/${request.url.path} query=${request.url.query}',
+        '/api/dandanplay/refresh_login',
       );
       final result = await DandanplayService.refreshLinkedBangumiStatus();
       debugPrint(
         '[WebApi][dandanplay/refresh_login] 刷新结果: success=${result['success']} '
-        'statusCode=${result['statusCode'] ?? '-'} '
-        'requestMethod=${result['requestMethod'] ?? '-'} allow=${result['allow'] ?? '-'} '
-        'requestUri=${result['requestUri'] ?? '-'} message=${result['message'] ?? '-'}',
+        'statusCode=${result['statusCode'] ?? '-'}',
       );
       final payload = <String, dynamic>{
         ...result,
@@ -436,7 +432,7 @@ class WebApiService {
         headers: {'Content-Type': 'application/json; charset=utf-8'},
       );
     } catch (e) {
-      debugPrint('[WebApi][dandanplay/refresh_login] 异常: $e');
+      debugPrint('[WebApi][dandanplay/refresh_login] 异常: ${e.runtimeType}');
       return Response.internalServerError(
         body: 'Error refreshing login status: $e',
       );
@@ -1153,10 +1149,12 @@ class WebApiService {
   String? _getSourceFromFilePath(String filePath) {
     if (filePath.startsWith('jellyfin://')) return 'Jellyfin';
     if (filePath.startsWith('emby://')) return 'Emby';
-    if (filePath.contains('SMB://') || filePath.contains('smb://'))
+    if (filePath.contains('SMB://') || filePath.contains('smb://')) {
       return 'SMB';
-    if (filePath.startsWith('http://') || filePath.startsWith('https://'))
+    }
+    if (filePath.startsWith('http://') || filePath.startsWith('https://')) {
       return 'Network';
+    }
     return 'Local';
   }
 }

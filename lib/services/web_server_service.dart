@@ -1,10 +1,11 @@
 import 'dart:io';
+import 'package:flutter/foundation.dart';
 import 'package:path/path.dart' as path;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:shelf/shelf.dart';
 import 'package:shelf/shelf_io.dart' as shelf_io;
 import 'package:shelf_router/shelf_router.dart';
-import 'package:shelf_cors_headers/shelf_cors_headers.dart';
+import 'lan_http_policy.dart';
 import 'package:shelf_static/shelf_static.dart';
 import 'web_api_service.dart';
 import 'package:nipaplay/services/nipaplay_lan_discovery.dart';
@@ -287,15 +288,7 @@ class WebServerService {
 
   void _logStaticRouting(Request request, File indexFile,
       {required String prefix}) {
-    final pathValue = request.url.path;
-    final accept = request.headers[HttpHeaders.acceptHeader] ?? '';
-    final rootDir = indexFile.parent;
-    final normalizedPath =
-        path.normalize(pathValue.isEmpty ? 'index.html' : pathValue);
-    final resolvedPath = path.join(rootDir.path, normalizedPath);
-    final exists = File(resolvedPath).existsSync();
-    print('[WebServer] $prefix: ${request.requestedUri} '
-        'accept="$accept" resolved="$resolvedPath" exists=$exists');
+    debugPrint('[WebServer] $prefix: ${lanRouteTemplate(request)}');
   }
 
   Future<void> loadSettings() async {
@@ -350,7 +343,7 @@ class WebServerService {
   Future<bool> startServer({int? port}) async {
     if (_isRunning) {
       _lastStartErrorMessage = null;
-      print('Remote access server is already running.');
+      debugPrint('Remote access server is already running.');
       return true;
     }
 
@@ -372,7 +365,7 @@ class WebServerService {
       // 挂载在 '/api'，剥离前缀后保留子路径的前导斜杠 (e.g. /api/info -> /info)
       final apiRouter = Router()..mount('/api', _webApiService.handler);
 
-      final Handler rootHandler = (Request request) async {
+      Future<Response> rootHandler(Request request) async {
         final path = request.url.path;
         //print('[WebServer] 收到请求: "$path", handlerPath: "${request.handlerPath}"');
 
@@ -394,11 +387,11 @@ class WebServerService {
           return _redirectWithApiParam(request);
         }
         return _handleWebUiRequest(request);
-      };
+      }
 
       final handler = const Pipeline()
-          .addMiddleware(corsHeaders())
-          .addMiddleware(logRequests())
+          .addMiddleware(lanRequestLog(write: debugPrint))
+          .addMiddleware(lanResponsePolicy())
           .addHandler(rootHandler);
 
       _isIpv6Listening = false;
@@ -425,7 +418,7 @@ class WebServerService {
       }
       _isRunning = true;
       _lastStartErrorMessage = null;
-      print('Remote access server started on port ${_server!.port}');
+      debugPrint('Remote access server started on port ${_server!.port}');
       await _lanDiscoveryResponder.start(webPort: _server!.port);
       await saveSettings();
       return true;
@@ -446,7 +439,7 @@ class WebServerService {
       _isRunning = false;
       _isIpv6Listening = false;
       await _lanDiscoveryResponder.stop();
-      print('Remote access server stopped.');
+      debugPrint('Remote access server stopped.');
       await saveSettings();
     }
   }
@@ -541,7 +534,7 @@ class WebServerService {
         }
       }
     } catch (e) {
-      print('Error getting network interfaces: $e');
+      debugPrint('Error getting network interfaces: ${e.runtimeType}');
     }
     addUrl('localhost');
     addUrl('127.0.0.1');

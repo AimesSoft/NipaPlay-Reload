@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as transport;
 import 'package:nipaplay/services/dandanplay_service.dart';
 import 'package:nipaplay/services/nipaplay_server_router.dart';
+import 'package:nipaplay/services/web_remote_access_service.dart';
 import 'package:nipaplay/utils/http_header_utils.dart';
 import 'package:nipaplay/utils/network_settings.dart';
 
@@ -28,11 +29,12 @@ class DandanplayHttpClient extends transport.BaseClient {
   final Map<String, String> Function() _authorization;
 
   static Uri targetUri(Uri uri) {
-    for (var depth = 0; depth < 4; depth++) {
-      if (!uri.path.endsWith('/api/web_proxy') &&
-          !uri.path.endsWith('/api/image_proxy')) {
-        break;
-      }
+    final baseUrl = WebRemoteAccessService.cachedBaseUrl;
+    if (!kIsWeb || baseUrl == null) return uri;
+    final base = Uri.parse(baseUrl);
+    if (WebRemoteAccessService.isWithinBase(uri, base) &&
+        (uri.path == '${base.path}/api/web_proxy' ||
+            uri.path == '${base.path}/api/image_proxy')) {
       var targetUrl = uri.queryParameters['url'] ?? '';
       if (uri.path.endsWith('/api/image_proxy')) {
         try {
@@ -42,8 +44,9 @@ class DandanplayHttpClient extends transport.BaseClient {
         }
       }
       final target = Uri.tryParse(targetUrl);
-      if (target == null || !target.hasScheme) break;
-      uri = target;
+      if (target != null && (target.scheme == 'http' || target.scheme == 'https')) {
+        return target;
+      }
     }
     return uri;
   }
@@ -56,16 +59,20 @@ class DandanplayHttpClient extends transport.BaseClient {
 
   @override
   Future<transport.StreamedResponse> send(transport.BaseRequest request) async {
-    final target = targetUri(request.url);
+    final target = request.url;
     final authorization = _authorization();
+    // Relay recognition only controls the browser login gate. Credentials are
+    // always scoped to the actual outbound URL below.
+    final relayTarget = targetUri(target);
+    if (relayTarget != target &&
+        NetworkSettings.isDandanplayServiceUri(relayTarget) &&
+        !isAccountEntry(request.method, relayTarget) &&
+        !DandanplayService.isLoggedIn) {
+      throw DandanplayLoginRequired();
+    }
     final isGatewayTarget = NetworkSettings.isDandanplayServiceUri(target);
     if (isGatewayTarget) {
       if (!isAccountEntry(request.method, target)) {
-        // The desktop relay injects its token. The browser only knows the
-        // synchronized login state, and must never receive the desktop token.
-        if (kIsWeb && target != request.url && DandanplayService.isLoggedIn) {
-          return _inner.send(request);
-        }
         if (authorization.isEmpty) throw DandanplayLoginRequired();
         // 这里不能用 removeWhere/addAll 改写：http 的 headers 是自定义
         // equals 的 LinkedHashMap，会踩到 dart-lang/sdk#64217。

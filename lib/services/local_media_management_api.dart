@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'package:flutter/foundation.dart';
 
 import 'package:path/path.dart' as p;
 import 'package:shelf/shelf.dart';
@@ -62,11 +63,11 @@ class LocalMediaManagementApi {
     router.post('/smb/scan', _handleScanSMB);
 
     router.get('/browse', _handleBrowse);
-    router.get('/stream', _handleStream);
     router.add('HEAD', '/stream', _handleStreamHead);
+    router.get('/stream', _handleStream);
     router.get('/subtitles', _handleSubtitles);
-    router.get('/subtitle', _handleSubtitleStream);
     router.add('HEAD', '/subtitle', _handleSubtitleStreamHead);
+    router.get('/subtitle', _handleSubtitleStream);
 
     router.get('/scan/status', _handleScanStatus);
     router.post('/scan/rescan', _handleRescanAll);
@@ -490,7 +491,7 @@ class LocalMediaManagementApi {
         }
       }
     } catch (e) {
-      print('获取WebDAV视频文件失败: $e');
+      debugPrint('获取WebDAV视频文件失败: ${e.runtimeType}');
     }
     return videoFiles;
   }
@@ -511,7 +512,7 @@ class LocalMediaManagementApi {
         }
       }
     } catch (e) {
-      print('获取SMB视频文件失败: $e');
+      debugPrint('获取SMB视频文件失败: ${e.runtimeType}');
     }
     return videoFiles;
   }
@@ -574,10 +575,10 @@ class LocalMediaManagementApi {
           episodeId: episodeId,
           animeId: animeId,
           watchProgress: preserveProgress
-              ? existingHistory!.watchProgress
+              ? existingHistory.watchProgress
               : (existingHistory?.watchProgress ?? 0.0),
           lastPosition: preserveProgress
-              ? existingHistory!.lastPosition
+              ? existingHistory.lastPosition
               : (existingHistory?.lastPosition ?? 0),
           duration: durationFromMatch,
           lastWatchTime: DateTime.now(),
@@ -591,7 +592,7 @@ class LocalMediaManagementApi {
         matched++;
       } catch (e) {
         failed++;
-        print('$sourceLabel 刮削失败: ${candidate.fileName} -> $e');
+        debugPrint('$sourceLabel 刮削失败: ${e.runtimeType}');
       }
     }
 

@@ -95,18 +95,6 @@ class DandanplayService {
     return {'Authorization': 'Bearer $_token'};
   }
 
-  static String _maskToken(String? token) {
-    if (token == null || token.isEmpty) return '(empty)';
-    if (token.length <= 8) return '***';
-    return '${token.substring(0, 4)}...${token.substring(token.length - 4)}';
-  }
-
-  static String _previewBody(String body, {int maxLength = 280}) {
-    final normalized = body.replaceAll(RegExp(r'\s+'), ' ').trim();
-    if (normalized.length <= maxLength) return normalized;
-    return '${normalized.substring(0, maxLength)}...(truncated)';
-  }
-
   static bool _allowContainsMethod(String? allowHeader, String method) {
     if (allowHeader == null || allowHeader.trim().isEmpty) return false;
     final target = method.toUpperCase();
@@ -139,29 +127,23 @@ class DandanplayService {
   }) async {
     var methodUsed = 'POST';
     debugPrint(
-      '[弹弹play服务][$logTag] 发起请求: method=$methodUsed uri=$requestUri token=${_maskToken(_token)}',
+      '[弹弹play服务][$logTag] 发起请求: method=$methodUsed /api/v2/login/renew',
     );
     var response = await http.post(requestUri, headers: headers);
     debugPrint(
-      '[弹弹play服务][$logTag] 响应: status=${response.statusCode} '
-      'allow=${response.headers['allow'] ?? '-'} '
-      'x-error-message=${response.headers['x-error-message'] ?? '-'} '
-      'body=${_previewBody(response.body)}',
+      '[弹弹play服务][$logTag] 响应: status=${response.statusCode}',
     );
 
     final allowHeader = response.headers['allow'];
     if (response.statusCode == 405 &&
         _allowContainsMethod(allowHeader, 'GET')) {
-      debugPrint('[弹弹play服务][$logTag] 发现405且Allow=$allowHeader，改用GET重试');
+      debugPrint('[弹弹play服务][$logTag] 发现405，改用GET重试');
       methodUsed = 'GET';
       final getHeaders = Map<String, String>.from(headers)
         ..remove('Content-Type');
       response = await http.get(requestUri, headers: getHeaders);
       debugPrint(
-        '[弹弹play服务][$logTag] GET重试响应: status=${response.statusCode} '
-        'allow=${response.headers['allow'] ?? '-'} '
-        'x-error-message=${response.headers['x-error-message'] ?? '-'} '
-        'body=${_previewBody(response.body)}',
+        '[弹弹play服务][$logTag] GET重试响应: status=${response.statusCode}',
       );
     }
 
@@ -368,11 +350,11 @@ class DandanplayService {
         } else {
           debugPrint(
             '[弹弹play服务][Token续期] 请求失败: method=$requestMethod '
-            'status=${response.statusCode} allow=${response.headers['allow'] ?? '-'}',
+            'status=${response.statusCode}',
           );
         }
       } catch (e) {
-        debugPrint('[弹弹play服务][Token续期] 请求异常: $e');
+        debugPrint('[弹弹play服务][Token续期] 请求异常: ${e.runtimeType}');
       }
     }
   }
@@ -906,7 +888,7 @@ class DandanplayService {
         'requestMethod': requestMethod,
       };
     } catch (e) {
-      debugPrint('[弹弹play服务][Bangumi绑定刷新] 请求异常: $e');
+      debugPrint('[弹弹play服务][Bangumi绑定刷新] 请求异常: ${e.runtimeType}');
       return {'success': false, 'message': '刷新绑定状态失败: $e'};
     }
   }
@@ -2642,7 +2624,7 @@ class DandanplayService {
     }
 
     try {
-      debugPrint('[弹弹play服务] 获取WebToken: business=$business');
+      debugPrint('[弹弹play服务] 获取WebToken /api/v2/oauth/webToken');
 
       final appSecret = await getAppSecret();
       final timestamp =
@@ -2667,11 +2649,9 @@ class DandanplayService {
       );
 
       debugPrint('[弹弹play服务] 获取WebToken响应: ${response.statusCode}');
-      debugPrint('[弹弹play服务] 获取WebToken响应内容: ${response.body}');
 
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
-        debugPrint('[弹弹play服务] WebToken解析后数据: $data');
         debugPrint('[弹弹play服务] WebToken获取成功');
         return data;
       } else {
@@ -2680,7 +2660,7 @@ class DandanplayService {
         throw Exception('获取WebToken失败: $errorMessage');
       }
     } catch (e) {
-      debugPrint('[弹弹play服务] 获取WebToken时出错: $e');
+      debugPrint('[弹弹play服务] 获取WebToken时出错: ${e.runtimeType}');
       rethrow;
     }
   }
@@ -2757,14 +2737,12 @@ class DandanplayService {
 
       // 1. 获取用于账号注销的WebToken
       final webTokenData = await getWebToken(business: 'deleteAccount');
-      debugPrint('[弹弹play服务] 获取到的WebToken数据: $webTokenData');
 
       // 检查数据结构和webToken字段
       final webToken = webTokenData['webToken'];
-      debugPrint('[弹弹play服务] 提取的webToken: $webToken');
 
       if (webToken == null || webToken.toString().isEmpty) {
-        debugPrint('[弹弹play服务] WebToken为空或null，完整响应数据: $webTokenData');
+        debugPrint('[弹弹play服务] WebToken为空');
         throw Exception('获取账号注销WebToken失败：响应中没有webToken字段');
       }
 
@@ -2772,11 +2750,10 @@ class DandanplayService {
       final deleteAccountUrl =
           '${await getAccountApiBaseUrl()}/api/v2/oauth/deleteAccount?webToken=$webToken';
 
-      debugPrint('[弹弹play服务] 账号注销URL: $deleteAccountUrl');
 
       return deleteAccountUrl;
     } catch (e) {
-      debugPrint('[弹弹play服务] 启动账号注销流程时出错: $e');
+      debugPrint('[弹弹play服务] 启动账号注销流程时出错: ${e.runtimeType}');
       rethrow;
     }
   }
@@ -2793,10 +2770,9 @@ class DandanplayService {
       // Bangumi管理页要求使用 oauth_bangumi 业务标识获取WebToken
       final webTokenData = await getWebToken(business: 'oauth_bangumi');
       final webToken = webTokenData['webToken']?.toString();
-      debugPrint('[弹弹play服务] Bangumi管理页WebToken: $webToken');
 
       if (webToken == null || webToken.isEmpty) {
-        debugPrint('[弹弹play服务] Bangumi管理页WebToken为空，完整响应: $webTokenData');
+        debugPrint('[弹弹play服务] Bangumi管理页WebToken为空');
         throw Exception('获取Bangumi管理页WebToken失败：响应中没有webToken字段');
       }
 
@@ -2804,10 +2780,9 @@ class DandanplayService {
         '${await getAccountApiBaseUrl()}/api/v2/oauthprovider/bangumi/manage',
       ).replace(queryParameters: {'webToken': webToken});
       final manageUrl = manageUri.toString();
-      debugPrint('[弹弹play服务] Bangumi管理页URL: $manageUrl');
       return manageUrl;
     } catch (e) {
-      debugPrint('[弹弹play服务] 打开Bangumi管理页流程出错: $e');
+      debugPrint('[弹弹play服务] 打开Bangumi管理页流程出错: ${e.runtimeType}');
       rethrow;
     }
   }

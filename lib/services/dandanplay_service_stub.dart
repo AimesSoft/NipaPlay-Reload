@@ -86,18 +86,6 @@ class DandanplayService {
     return {'Authorization': 'Bearer $_token'};
   }
 
-  static String _maskToken(String? token) {
-    if (token == null || token.isEmpty) return '(empty)';
-    if (token.length <= 8) return '***';
-    return '${token.substring(0, 4)}...${token.substring(token.length - 4)}';
-  }
-
-  static String _previewBody(String body, {int maxLength = 280}) {
-    final normalized = body.replaceAll(RegExp(r'\s+'), ' ').trim();
-    if (normalized.length <= maxLength) return normalized;
-    return '${normalized.substring(0, maxLength)}...(truncated)';
-  }
-
   static bool _allowContainsMethod(String? allowHeader, String method) {
     if (allowHeader == null || allowHeader.trim().isEmpty) return false;
     final target = method.toUpperCase();
@@ -839,29 +827,23 @@ class DandanplayService {
         );
         var requestMethod = 'POST';
         debugPrint(
-          '[弹弹play服务-Web][Bangumi绑定刷新] 发起请求: method=$requestMethod uri=$requestUri',
+          '[弹弹play服务-Web][Bangumi绑定刷新] 发起请求: method=$requestMethod /api/dandanplay/refresh_login',
         );
         var response = await http.post(requestUri);
         debugPrint(
-          '[弹弹play服务-Web][Bangumi绑定刷新] 响应: status=${response.statusCode} '
-          'allow=${response.headers['allow'] ?? '-'} '
-          'x-error-message=${response.headers['x-error-message'] ?? '-'} '
-          'body=${_previewBody(response.body)}',
+          '[弹弹play服务-Web][Bangumi绑定刷新] 响应: status=${response.statusCode}',
         );
 
         final allowHeader = response.headers['allow'];
         if (response.statusCode == 405 &&
             _allowContainsMethod(allowHeader, 'GET')) {
           debugPrint(
-            '[弹弹play服务-Web][Bangumi绑定刷新] 发现405且Allow=$allowHeader，改用GET重试',
+            '[弹弹play服务-Web][Bangumi绑定刷新] 发现405，改用GET重试',
           );
           requestMethod = 'GET';
           response = await http.get(requestUri);
           debugPrint(
-            '[弹弹play服务-Web][Bangumi绑定刷新] GET重试响应: status=${response.statusCode} '
-            'allow=${response.headers['allow'] ?? '-'} '
-            'x-error-message=${response.headers['x-error-message'] ?? '-'} '
-            'body=${_previewBody(response.body)}',
+            '[弹弹play服务-Web][Bangumi绑定刷新] GET重试响应: status=${response.statusCode}',
           );
         }
 
@@ -899,7 +881,7 @@ class DandanplayService {
         data['requestUri'] ??= requestUri.toString();
         return data;
       } catch (e) {
-        debugPrint('[弹弹play服务-Web][Bangumi绑定刷新] 请求异常: $e');
+        debugPrint('[弹弹play服务-Web][Bangumi绑定刷新] 请求异常: ${e.runtimeType}');
         return {'success': false, 'message': '刷新绑定状态失败: $e'};
       }
     }
@@ -917,8 +899,7 @@ class DandanplayService {
       final requestUri = Uri.parse('$apiBaseUrl$apiPath');
       var requestMethod = 'POST';
       debugPrint(
-        '[弹弹play服务-Web][Bangumi绑定刷新] 发起请求: method=$requestMethod uri=$requestUri '
-        'token=${_maskToken(_token)}',
+        '[弹弹play服务-Web][Bangumi绑定刷新] 发起请求: method=$requestMethod /api/dandanplay/refresh_login',
       );
       var response = await http.post(
         requestUri,
@@ -938,17 +919,14 @@ class DandanplayService {
         },
       );
       debugPrint(
-        '[弹弹play服务-Web][Bangumi绑定刷新] 响应: status=${response.statusCode} '
-        'allow=${response.headers['allow'] ?? '-'} '
-        'x-error-message=${response.headers['x-error-message'] ?? '-'} '
-        'body=${_previewBody(response.body)}',
+        '[弹弹play服务-Web][Bangumi绑定刷新] 响应: status=${response.statusCode}',
       );
 
       final allowHeader = response.headers['allow'];
       if (response.statusCode == 405 &&
           _allowContainsMethod(allowHeader, 'GET')) {
         debugPrint(
-          '[弹弹play服务-Web][Bangumi绑定刷新] 发现405且Allow=$allowHeader，改用GET重试',
+          '[弹弹play服务-Web][Bangumi绑定刷新] 发现405，改用GET重试',
         );
         requestMethod = 'GET';
         response = await http.get(
@@ -968,10 +946,7 @@ class DandanplayService {
           },
         );
         debugPrint(
-          '[弹弹play服务-Web][Bangumi绑定刷新] GET重试响应: status=${response.statusCode} '
-          'allow=${response.headers['allow'] ?? '-'} '
-          'x-error-message=${response.headers['x-error-message'] ?? '-'} '
-          'body=${_previewBody(response.body)}',
+          '[弹弹play服务-Web][Bangumi绑定刷新] GET重试响应: status=${response.statusCode}',
         );
       }
 
@@ -1023,7 +998,7 @@ class DandanplayService {
         'requestMethod': requestMethod,
       };
     } catch (e) {
-      debugPrint('[弹弹play服务-Web][Bangumi绑定刷新] 请求异常: $e');
+      debugPrint('[弹弹play服务-Web][Bangumi绑定刷新] 请求异常: ${e.runtimeType}');
       return {'success': false, 'message': '刷新绑定状态失败: $e'};
     }
   }
@@ -2624,7 +2599,7 @@ class DandanplayService {
       }
 
       try {
-        debugPrint('[弹弹play服务-Web] 获取WebToken: business=$business');
+        debugPrint('[弹弹play服务-Web] 获取WebToken /api/dandanplay/webtoken');
 
         final response = await http.get(
           Uri.parse(
@@ -2642,7 +2617,7 @@ class DandanplayService {
           throw Exception('获取WebToken失败: HTTP ${response.statusCode}');
         }
       } catch (e) {
-        debugPrint('[弹弹play服务-Web] 获取WebToken时出错: $e');
+        debugPrint('[弹弹play服务-Web] 获取WebToken时出错: ${e.runtimeType}');
         rethrow;
       }
     }
@@ -2683,7 +2658,7 @@ class DandanplayService {
         throw Exception('获取WebToken失败: $errorMessage');
       }
     } catch (e) {
-      debugPrint('[弹弹play服务] 获取WebToken时出错: $e');
+      debugPrint('[弹弹play服务] 获取WebToken时出错: ${e.runtimeType}');
       rethrow;
     }
   }
@@ -2704,7 +2679,7 @@ class DandanplayService {
           '${await getApiBaseUrl()}/api/v2/oauth/deleteAccount?webToken=$webToken';
       return deleteAccountUrl;
     } catch (e) {
-      debugPrint('[弹弹play服务] 启动账号注销流程时出错: $e');
+      debugPrint('[弹弹play服务] 启动账号注销流程时出错: ${e.runtimeType}');
       rethrow;
     }
   }
@@ -2727,7 +2702,7 @@ class DandanplayService {
       ).replace(queryParameters: {'webToken': webToken});
       return manageUri.toString();
     } catch (e) {
-      debugPrint('[弹弹play服务] 打开Bangumi管理页流程出错: $e');
+      debugPrint('[弹弹play服务] 打开Bangumi管理页流程出错: ${e.runtimeType}');
       rethrow;
     }
   }

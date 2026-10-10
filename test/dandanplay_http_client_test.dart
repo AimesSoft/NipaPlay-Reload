@@ -168,7 +168,7 @@ void main() {
     client.close();
   });
 
-  test('Web/image relay URLs cannot bypass the provider gate', () async {
+  test('native relay requests authorize only their actual destination', () async {
     var requests = 0;
     final client = DandanplayHttpClient(
       authorization: () => {},
@@ -181,24 +181,39 @@ void main() {
       final uri = Uri.parse('http://localhost:8080/api/$relay').replace(
         queryParameters: {'url': '$gateway/api/v2/comment/123'},
       );
-      await expectLater(
-          client.get(uri), throwsA(isA<DandanplayLoginRequired>()));
+      await client.get(uri);
     }
-    expect(requests, 0);
+    expect(requests, 2);
     client.close();
   });
 
-  test('base64 image relay URLs cannot bypass the provider gate', () async {
+  test('nested and base64 image relays never receive account credentials', () async {
+    final seen = <http.Request>[];
     final client = DandanplayHttpClient(
-      authorization: () => {},
-      inner: MockClient((_) async => fail('Must not reach the network')),
+      authorization: () => {'Authorization': 'Bearer account-token'},
+      inner: MockClient((request) async {
+        seen.add(request);
+        return http.Response('{}', 200);
+      }),
     );
     final uri = Uri.parse('http://localhost:8080/api/image_proxy').replace(
       queryParameters: {
         'url': base64Url.encode(utf8.encode('$gateway/api/v2/comment/123')),
       },
     );
-    await expectLater(client.get(uri), throwsA(isA<DandanplayLoginRequired>()));
+    for (final target in [
+      uri,
+      Uri.parse('https://attacker.example/api/web_proxy').replace(
+        queryParameters: {'url': uri.toString()},
+      ),
+      Uri.parse('https://attacker.example/api/web_proxy').replace(
+        queryParameters: {'url': '$gateway/api/v2/favorite'},
+      ),
+    ]) {
+      await client.get(target, headers: {'Authorization': 'Bearer account-token'});
+    }
+    expect(seen, hasLength(3));
+    expect(seen.every((request) => !request.headers.containsKey('authorization')), isTrue);
     client.close();
   });
 
