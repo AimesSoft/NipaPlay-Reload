@@ -444,6 +444,7 @@ final class NextRuntime extends ChangeNotifier {
   - `Harness` 的 observers 为 `[JsonlJournal(File('<root>/journal.jsonl'))]`。
 - `root` = `StorageService.getAppStorageDirectory()` 下的 `next` 子目录；`agentsMd` 用 `rootBundle.loadString('assets/next/AGENTS.md')`；`appVersion` 用 `PackageInfo.fromPlatform()`。这些异步准备在 runtime 内部完成，完成前端点状态为 `AgentEndpointStopped`。
 - 监听 `LabsSettingsProvider`：先 `await labs.ready`，此后 `enableAgentEndpoint` 为真则 `start()`，为假则 `stop()`。状态变化时 `notifyListeners()`。
+- 启停必须串行：用一条 `Future` 链依次执行，开关快速切换时不得并发调用 `start()`。每一步执行时都以当时的开关值为准。
 - `dispose` 时停止端点并移除监听。
 
 **`main.dart`**：在 providers 列表末尾追加：
