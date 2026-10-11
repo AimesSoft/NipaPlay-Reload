@@ -8,6 +8,7 @@ import '../../ui_data/ui_data.dart';
 import '../conversation/chat_port.dart';
 import '../dev/dev_services.dart';
 import 'core_connect.dart';
+import 'discover.dart';
 import 'login_requests.dart';
 import 'ui_actions.dart';
 
@@ -17,6 +18,7 @@ final class NextUiServices {
     required this.data,
     required this.actions,
     required this.chat,
+    required this.discover,
     LoginRequests? logins,
     this.onDispose,
   }) : logins = logins ?? LoginRequests();
@@ -24,6 +26,9 @@ final class NextUiServices {
   final NextUiData data;
   final NextUiActions actions;
   final ChatPort chat;
+
+  /// The 发现 page's calendar and rankings.
+  final NextDiscoverData discover;
 
   /// Logins the agent asked for, waiting for the user's window.
   final LoginRequests logins;
@@ -50,6 +55,7 @@ final class NextUiServices {
       data: coreUiData(core),
       actions: coreUiActions(core, runtime),
       chat: ChatHostPort(runtime),
+      discover: CoreDiscover(runtime),
       logins: logins,
       onDispose: attachCoreLogins(core, logins),
     );

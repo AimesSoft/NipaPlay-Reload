@@ -23,6 +23,7 @@ class NextTopBar extends StatelessWidget {
 
   static const _sections = [
     (NextSection.home, '首页'),
+    (NextSection.discover, '发现'),
     (NextSection.library, '片库'),
     (NextSection.activity, '动态'),
   ];

@@ -6,9 +6,11 @@ import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 
 import '../../ui_data/ui_data.dart';
+import '../data/discover.dart';
 import '../shell/shell_controller.dart';
 import '../theme/tokens.dart';
 import '../widgets/art_origin.dart';
+import '../widgets/artwork.dart';
 import '../widgets/buttons.dart';
 import '../widgets/icons.dart';
 import '../widgets/menu.dart';
@@ -23,6 +25,8 @@ import 'episodes.dart';
 /// the left (original title, logo or Songti title, one meta line, two lines
 /// of overview, continue / ask Nipa / ⋯), a season's episodes below.
 /// Scrolling moves the backdrop at 0.3× and docks the title in the top bar.
+/// A work found on 发现 and not in the library has no episodes yet: its
+/// page offers “让 Nipa 准备” instead of playing.
 class WorkDetailPage extends StatefulWidget {
   const WorkDetailPage({super.key, required this.work, this.origin});
   final UiWork work;
@@ -53,6 +57,12 @@ class _WorkDetailPageState extends State<WorkDetailPage>
   bool _overviewOpen = false;
   bool _menuOpen = false;
   bool _seasonsOpen = false;
+
+  /// A short word after the ⋯ menu did something, gone after a moment.
+  String? _said;
+  Timer? _saidTimer;
+
+  late final bool _found = Found.isFound(widget.work);
 
   final _scroll = ScrollController();
   late final AnimationController _dock = AnimationController(
@@ -107,6 +117,7 @@ class _WorkDetailPageState extends State<WorkDetailPage>
   void dispose() {
     _route?.removeStatusListener(_routeStatus);
     _changes?.cancel();
+    _saidTimer?.cancel();
     _scroll.dispose();
     _dock.dispose();
     final origin = _origin;
@@ -122,6 +133,7 @@ class _WorkDetailPageState extends State<WorkDetailPage>
   }
 
   Future<void> _load() async {
+    if (_found) return _loadFound();
     final data = _shell!.services.data;
     final id = widget.work.workId;
     final work = await data.work(id);
@@ -139,6 +151,19 @@ class _WorkDetailPageState extends State<WorkDetailPage>
       _work = work;
       _episodes = episodes;
     });
+  }
+
+  /// A found work: what its page needs, read once (the library's changes
+  /// do not touch it).
+  Future<void> _loadFound() async {
+    if (_episodes != null) return;
+    _episodes = const [];
+    try {
+      final work = await _shell!.services.discover.details(widget.work);
+      if (mounted) setState(() => _work = work);
+    } catch (error) {
+      debugPrint('[NextUi] found work details failed: $error');
+    }
   }
 
   /// The picture flown from, this frame. Coming back after its page was
@@ -221,6 +246,53 @@ class _WorkDetailPageState extends State<WorkDetailPage>
     shell.sayAbout(_work, '把《${_work.title}》剩下的集都下载下来');
   }
 
+  /// A work not in the library: Nipa is asked, in your words, to get it.
+  void _prepare() => _shell!.sayAbout(_work, '帮我准备《${_work.title}》');
+
+  /// The season's episodes on disk, for “都看过了” / “标成没看过”.
+  List<UiEpisode> get _seasonOnDisk => [
+        for (final e in _episodes ?? const <UiEpisode>[])
+          if (e.season == _currentSeason && e.playable) e
+      ];
+
+  /// The ⋯ menu: download the rest, mark the current episode or the season
+  /// watched (or the season not watched, once it all is).
+  List<(String, VoidCallback)> get _menuItems {
+    if (_found) return const [];
+    final next = _work.next;
+    final season = _seasonOnDisk;
+    final seasonName =
+        _seasons.length > 1 ? Words.season(_currentSeason) : '这一季';
+    final allWatched =
+        season.isNotEmpty && season.every((e) => (e.progress ?? 0) >= 1);
+    final unwatched = [
+      for (final e in season)
+        if ((e.progress ?? 0) < 1) e
+    ];
+    return [
+      if (_missing) ('下载全部', _downloadAll),
+      if (next != null && next.playable && (next.progress ?? 0) < 1)
+        ('${Words.episode(next.number)}看过了', () => _mark([next], true)),
+      if (unwatched.length > 1)
+        ('$seasonName都看过了', () => _mark(unwatched, true)),
+      if (allWatched) ('$seasonName标成没看过', () => _mark(season, false)),
+    ];
+  }
+
+  /// Through `history.mark_watched_batch`, like the agent. The page follows
+  /// the library's change; a refusal (no watch record yet) is said briefly.
+  Future<void> _mark(List<UiEpisode> episodes, bool watched) async {
+    setState(() => _menuOpen = false);
+    final done =
+        await _shell!.services.actions.markWatched(episodes, watched: watched);
+    if (!mounted || done) return;
+    _saidTimer?.cancel();
+    setState(() => _said = '这几集还没法标记。');
+    _saidTimer = Timer(const Duration(seconds: 3), () {
+      if (mounted) setState(() => _said = null);
+    });
+  }
+
   // —— Debug ——
 
   @override
@@ -250,6 +322,9 @@ class _WorkDetailPageState extends State<WorkDetailPage>
         'docked': _dock.value,
         'flies': _flies,
         'menu': _menuOpen,
+        'menuItems': [for (final (label, _) in _menuItems) label],
+        'found': _found,
+        'note': _said,
       };
 
   // —— Building ——
@@ -271,7 +346,8 @@ class _WorkDetailPageState extends State<WorkDetailPage>
         return Stack(fit: StackFit.expand, children: [
           RepaintBoundary(
             child: DetailBackdrop(
-              image: _work.artwork.backdrop,
+              image: _work.artwork.backdrop ?? _work.artwork.poster,
+              soft: _work.artwork.backdrop == null,
               tint: _work.artwork.tint,
               size: size,
               scroll: _scroll,
@@ -310,6 +386,7 @@ class _WorkDetailPageState extends State<WorkDetailPage>
               ),
             ),
           ),
+          if (_standingPoster(size) case final poster?) poster,
           FadeTransition(
             opacity: content,
             child: IgnorePointer(child: _bar(size, titleTop, reduced)),
@@ -332,6 +409,54 @@ class _WorkDetailPageState extends State<WorkDetailPage>
             ..._popover(_seasonLink, _seasonMenu(), () => _seasonsOpen = false),
         ]);
       }),
+    );
+  }
+
+  /// A work with only a poster (most works found on 发现): the poster
+  /// stands on the right, sharp over its own blur, when there is room.
+  Widget? _standingPoster(Size size) {
+    final poster = _work.artwork.poster;
+    if (_work.artwork.backdrop != null || poster == null) return null;
+    final height = math.min(size.height * 0.56, 480.0);
+    final width = height * 2 / 3;
+    final room = size.width - NextMetrics.gutter - 600 - 64;
+    if (room < width + 56) return null;
+    final content = _flies ? _content : kAlwaysCompleteAnimation;
+    return Positioned(
+      right: math.max(72.0, (room - width) / 2),
+      top: (size.height / 6).clamp(120.0, 160.0) - 8,
+      child: AnimatedBuilder(
+        animation: _scroll,
+        builder: (context, child) => Transform.translate(
+          offset: Offset(0, _scroll.hasClients ? -_scroll.offset : 0),
+          child: child,
+        ),
+        child: FadeTransition(
+          opacity: content,
+          child: Container(
+            width: width,
+            height: height,
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(16),
+              boxShadow: const [
+                BoxShadow(
+                    color: Color(0x99000000),
+                    blurRadius: 60,
+                    offset: Offset(0, 24)),
+              ],
+            ),
+            foregroundDecoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(color: const Color(0x1AFFFFFF)),
+            ),
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(16),
+              child: NextImage(poster,
+                  shape: ArtShape.poster, tint: _work.artwork.tint),
+            ),
+          ),
+        ),
+      ),
     );
   }
 
@@ -449,8 +574,12 @@ class _WorkDetailPageState extends State<WorkDetailPage>
     final started = episodes != null
         ? episodes.any((e) => (e.progress ?? 0) > 0)
         : (next?.progress ?? 0) > 0;
-    return Row(children: [
-      if (next != null && next.playable) ...[
+    final menu = _menuItems;
+    final row = Row(children: [
+      if (_found) ...[
+        NextButton(label: '让 Nipa 准备', onTap: _prepare),
+        const SizedBox(width: 12),
+      ] else if (next != null && next.playable) ...[
         PlayButton(
           label: started ? '继续 ${Words.episode(next.number)}' : '播放',
           onTap: () => shell.play(work, episode: next),
@@ -462,7 +591,7 @@ class _WorkDetailPageState extends State<WorkDetailPage>
         leading: const NipaAvatar(size: 20),
         onTap: () => shell.openPanel(about: work),
       ),
-      if (_missing) ...[
+      if (menu.isNotEmpty) ...[
         const SizedBox(width: 12),
         CompositedTransformTarget(
           link: _menuLink,
@@ -476,10 +605,29 @@ class _WorkDetailPageState extends State<WorkDetailPage>
         ),
       ],
     ]);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        row,
+        AnimatedSize(
+          duration: const Duration(milliseconds: 200),
+          alignment: Alignment.topLeft,
+          child: _said == null
+              ? const SizedBox(height: 0)
+              : Padding(
+                  padding: const EdgeInsets.only(top: 12, left: 4),
+                  child: Text(_said!,
+                      style: NextText.sans(13, color: NextColors.p2)),
+                ),
+        ),
+      ],
+    );
   }
 
-  Widget _menu() => MenuPanel(width: 168, children: [
-        MenuItem(label: '下载全部', onTap: _downloadAll),
+  Widget _menu() => MenuPanel(width: 188, children: [
+        for (final (label, onTap) in _menuItems)
+          MenuItem(label: label, onTap: onTap),
       ]);
 
   Widget _seasonMenu() {

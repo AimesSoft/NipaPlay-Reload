@@ -12,7 +12,12 @@ enum NextGlyph {
   chevronRight,
   chevronLeft,
   check,
-  plus
+  plus,
+
+  /// A file, a video, a torrent: what was dropped into the conversation.
+  file,
+  video,
+  torrent
 }
 
 class NextIcon extends StatelessWidget {
@@ -102,6 +107,47 @@ class _GlyphPainter extends CustomPainter {
       case NextGlyph.plus:
         canvas.drawLine(const Offset(12, 5), const Offset(12, 19), line);
         canvas.drawLine(const Offset(5, 12), const Offset(19, 12), line);
+      case NextGlyph.file:
+        canvas.drawPath(
+            Path()
+              ..moveTo(14, 3)
+              ..lineTo(7, 3)
+              ..quadraticBezierTo(5, 3, 5, 5)
+              ..lineTo(5, 19)
+              ..quadraticBezierTo(5, 21, 7, 21)
+              ..lineTo(17, 21)
+              ..quadraticBezierTo(19, 21, 19, 19)
+              ..lineTo(19, 8)
+              ..close()
+              ..moveTo(14, 3)
+              ..lineTo(14, 8)
+              ..lineTo(19, 8),
+            line);
+      case NextGlyph.video:
+        canvas.drawRRect(
+            RRect.fromRectAndRadius(
+                const Rect.fromLTWH(3, 5, 18, 14), const Radius.circular(3)),
+            line);
+        canvas.drawPath(
+            Path()
+              ..moveTo(10, 9)
+              ..lineTo(15, 12)
+              ..lineTo(10, 15)
+              ..close(),
+            fill);
+      case NextGlyph.torrent:
+        canvas.drawPath(
+            Path()
+              ..moveTo(12, 4)
+              ..lineTo(12, 14)
+              ..moveTo(8, 10)
+              ..lineTo(12, 14)
+              ..lineTo(16, 10)
+              ..moveTo(5, 15)
+              ..lineTo(5, 19)
+              ..lineTo(19, 19)
+              ..lineTo(19, 15),
+            line);
     }
   }
 

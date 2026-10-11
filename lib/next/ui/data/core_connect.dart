@@ -103,6 +103,34 @@ final class CoreUiActions implements NextUiActions {
   @override
   Future<void> cancelTask(String taskId) => core.engine.cancel(taskId);
 
+  @override
+  Future<bool> markWatched(List<UiEpisode> episodes,
+      {required bool watched}) async {
+    final outcome = await runtime.harness.invokeJson(
+        'history.mark_watched_batch',
+        {
+          'entries': [
+            for (final e in episodes)
+              {'episodeId': e.episodeId, 'watched': watched}
+          ]
+        },
+        Invocation(origin: 'gui'));
+    if (outcome case Failed(:final failure)) {
+      debugPrint('[NextUi] mark watched failed: ${failure.message}');
+      return false;
+    }
+    return true;
+  }
+
+  @override
+  Future<void> login(String provider) async {
+    final outcome = await runtime.harness.invokeJson(
+        'accounts.login', {'provider': provider}, Invocation(origin: 'gui'));
+    if (outcome case Failed(:final failure)) {
+      debugPrint('[NextUi] login failed: ${failure.message}');
+    }
+  }
+
   /// Plays in Classic's player, which the shell reveals while a video is
   /// open. Several recorded locations: the first one.
   @override

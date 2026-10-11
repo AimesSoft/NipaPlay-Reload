@@ -1,6 +1,5 @@
-import 'dart:io';
 import 'dart:math' as math;
-import 'dart:ui' show lerpDouble;
+import 'dart:ui' show ImageFilter, lerpDouble;
 
 import 'package:flutter/widgets.dart';
 
@@ -29,9 +28,14 @@ class DetailBackdrop extends StatelessWidget {
     required this.flies,
     required this.source,
     required this.parallax,
+    this.soft = false,
   });
 
   final String? image;
+
+  /// [image] is only a poster (a work without a backdrop): it is spread
+  /// out of focus behind the page.
+  final bool soft;
   final int? tint;
   final Size size;
   final ScrollController scroll;
@@ -109,10 +113,11 @@ class DetailBackdrop extends StatelessWidget {
                         child: image == null
                             ? NoArtGlow(tint: tint)
                             : _Art(image,
-                                decodeWidth: decode,
+                                decodeWidth: soft ? 256 : decode,
                                 tint: tint,
                                 alignment: align,
-                                placeholder: from == null),
+                                placeholder: from == null,
+                                soft: soft),
                       ),
                     ]),
                   ),
@@ -144,11 +149,15 @@ class _Art extends StatelessWidget {
       {required this.decodeWidth,
       required this.tint,
       required this.alignment,
-      this.placeholder = false});
+      this.placeholder = false,
+      this.soft = false});
   final String? path;
   final int decodeWidth;
   final int? tint;
   final Alignment alignment;
+
+  /// Out of focus and dimmed (a poster standing in for a backdrop).
+  final bool soft;
 
   /// Show the tint while loading (no other picture is under it).
   final bool placeholder;
@@ -157,9 +166,25 @@ class _Art extends StatelessWidget {
   Widget build(BuildContext context) {
     final file = path;
     if (file == null) return NextImage(null, tint: tint);
+    if (soft) {
+      return ClipRect(
+        child: Stack(fit: StackFit.expand, children: [
+          ImageFiltered(
+            imageFilter: ImageFilter.blur(sigmaX: 30, sigmaY: 30),
+            child: Transform.scale(
+                scale: 1.15,
+                child: _Art(file,
+                    decodeWidth: decodeWidth,
+                    tint: tint,
+                    alignment: alignment,
+                    placeholder: placeholder)),
+          ),
+          const ColoredBox(color: Color(0x1F000000)),
+        ]),
+      );
+    }
     return Image(
-      image:
-          ResizeImage.resizeIfNeeded(decodeWidth, null, FileImage(File(file))),
+      image: ResizeImage.resizeIfNeeded(decodeWidth, null, artProvider(file)),
       fit: BoxFit.cover,
       alignment: alignment,
       filterQuality: FilterQuality.medium,

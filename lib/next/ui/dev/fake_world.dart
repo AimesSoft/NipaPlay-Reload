@@ -7,14 +7,16 @@ import 'package:flutter/foundation.dart';
 
 import '../../ui_data/ui_data.dart';
 import '../conversation/chat_port.dart';
-import '../conversation/panel_chat.dart' show ChatContext;
+import '../conversation/chat_context.dart';
+import '../data/discover.dart';
 import '../data/ui_actions.dart';
 
 /// Development-only data for screenshots and experiments, built from the
 /// concept's TMDB sample set. Never used by production code paths (see
 /// `NextUiDev`).
-final class FakeWorld implements NextUiData, NextUiActions {
-  FakeWorld._(this.dir, this._meta, {required bool tasks, int? followupAfter}) {
+final class FakeWorld implements NextUiData, NextUiActions, NextDiscoverData {
+  FakeWorld._(this.dir, this._meta, this._found,
+      {required bool tasks, int? followupAfter}) {
     if (tasks) {
       _tasks['fake-task-frieren'] = _FakeTask(
           'fake-task-frieren', '葬送的芙莉莲', sample('frieren').artwork, 0.47);
@@ -27,11 +29,21 @@ final class FakeWorld implements NextUiData, NextUiActions {
     final file = File('$dir/meta.json');
     if (!file.existsSync()) return null;
     final meta = jsonDecode(file.readAsStringSync()) as Map<String, dynamic>;
-    return FakeWorld._(dir, meta, tasks: tasks, followupAfter: followupAfter);
+    // Works the library does not have, for the 发现 page (posters only).
+    final found = File('$dir/discover/meta.json');
+    return FakeWorld._(
+        dir,
+        meta,
+        found.existsSync()
+            ? jsonDecode(found.readAsStringSync()) as Map<String, dynamic>
+            : const {},
+        tasks: tasks,
+        followupAfter: followupAfter);
   }
 
   final String dir;
   final Map<String, dynamic> _meta;
+  final Map<String, dynamic> _found;
   final _changes = StreamController<void>.broadcast();
   final _taskStream = StreamController<List<UiTask>>.broadcast();
   final _tasks = <String, _FakeTask>{};
@@ -52,9 +64,9 @@ final class FakeWorld implements NextUiData, NextUiActions {
     for (final e in aliases.entries) {
       if (text.contains(e.key)) return e.value;
     }
-    for (final key in _meta.keys) {
-      final title = (_meta[key] as Map)['title'] as String;
-      if (text.contains(title)) return key;
+    for (final entry in [..._meta.entries, ..._found.entries]) {
+      final title = (entry.value as Map)['title'] as String;
+      if (text.contains(title)) return entry.key;
     }
     return null;
   }
@@ -92,6 +104,14 @@ final class FakeWorld implements NextUiData, NextUiActions {
     'dungeon': {for (var n = 1; n <= 13; n++) n: 1.0},
   };
 
+  /// Short reactions viewers left, drifting over the hero. Most works have
+  /// none, so the sky stays empty for them.
+  static const _danmaku = {
+    'frieren': ['画面好美', '音乐好好听', '一起看', '好治愈', '这段好温柔', '名场面'],
+    'bocchi': ['好燃', '笑死', '一起看'],
+    'violet': ['好哭', '画面好美'],
+  };
+
   static const _tints = {
     'frieren': 0xFF3C5A6E,
     'bocchi': 0xFF6E3C55,
@@ -107,6 +127,8 @@ final class FakeWorld implements NextUiData, NextUiActions {
   };
 
   UiWork sample(String key, {UiEpisode? next}) {
+    // A work only found on 发现: what discovery knows of it.
+    if (!_meta.containsKey(key)) return _discovered(key)!.work;
     final m = _meta[key] as Map<String, dynamic>;
     final o = _overrides[key] ?? const {};
     String? file(String field) => m[field] == null ? null : '$dir/${m[field]}';
@@ -136,6 +158,7 @@ final class FakeWorld implements NextUiData, NextUiActions {
         tint: _tints[key],
       ),
       next: next ?? _episode(key, 1),
+      danmaku: _danmaku[key] ?? const [],
     );
   }
 
@@ -224,6 +247,21 @@ final class FakeWorld implements NextUiData, NextUiActions {
         episode: episode, caption: caption, badge: badge);
   }
 
+  /// An episode out today, not on disk yet.
+  UiShelfItem _airing(String key, int ep, String caption) {
+    final e = _episode(key, ep);
+    final episode = UiEpisode(
+        episodeId: e.episodeId,
+        workId: e.workId,
+        number: e.number,
+        season: e.season,
+        title: e.title,
+        runtime: e.runtime,
+        heat: e.heat);
+    return UiShelfItem(sample(key, next: episode),
+        episode: episode, caption: caption);
+  }
+
   @override
   Future<UiHome> home() async {
     await Future<void>.delayed(const Duration(milliseconds: 120));
@@ -240,6 +278,16 @@ final class FakeWorld implements NextUiData, NextUiActions {
             _continue('dungeon', 13, null, '第 13 集', badge: '新'),
             _continue('bocchi', 9, 0.8, '第 9 集 · 剩 4 分钟'),
             _continue('edgerunners', 6, 0.45, '第 6 集'),
+          ],
+        ),
+        UiShelf(
+          id: 'airing',
+          title: '今天更新',
+          kind: UiShelfKind.airing,
+          items: [
+            _airing('kusuriya', 32, '第 32 集 · 今天 23:00'),
+            _airing('oshinoko', 15, '第 15 集 · 今天 23:30'),
+            _airing('dungeon', 14, '第 14 集 · 今天'),
           ],
         ),
         UiShelf(
@@ -409,6 +457,108 @@ final class FakeWorld implements NextUiData, NextUiActions {
   Future<void> play(UiWork work, {UiEpisode? episode}) async {
     debugPrint(
         '[NextUi dev] play ${work.title} ${episode?.number ?? work.next?.number}');
+  }
+
+  @override
+  Future<bool> markWatched(List<UiEpisode> episodes,
+      {required bool watched}) async {
+    for (final e in episodes) {
+      final key = e.workId.substring(5);
+      final n = int.parse(e.episodeId.split(':').last);
+      final marks = _watched[key] ??= {..._continued(key)};
+      if (watched) {
+        marks[n] = 1;
+      } else {
+        marks.remove(n);
+      }
+    }
+    _changes.add(null);
+    return true;
+  }
+
+  @override
+  Future<void> login(String provider) async =>
+      debugPrint('[NextUi dev] login $provider');
+
+  // —— 发现 ——
+
+  /// Each weekday's new series, library works among them.
+  static const _calendar = <int, List<String>>{
+    1: ['kusuriya', 'ranma', 'kaiju8', 'dungeon', 'shoshimin', 'yurucamp'],
+    2: ['makeine', 'bokuyaba', 'violet', 'kamuy'],
+    3: ['girlsband', 'mushoku', 'lycoris'],
+    4: ['dandadan', 'spyfamily', 'bluelock', 'jujutsu'],
+    5: ['frieren', 'kimetsu', 'chainsaw'],
+    6: ['oshinoko', 'bocchi', 'edgerunners'],
+    0: ['changan', 'yurucamp', 'kamuy'],
+  };
+
+  static const _rankings = [
+    ('弹弹play', '本周热播', ['dandadan', 'frieren', 'kusuriya', 'kaiju8',
+      'makeine', 'dungeon', 'oshinoko', 'ranma', 'girlsband', 'chainsaw']),
+    ('弹弹play', '本周飙升', ['shoshimin', 'ranma', 'bokuyaba', 'makeine',
+      'girlsband', 'kamuy', 'yurucamp', 'dandadan']),
+    ('弹弹play', '本季新番', ['dandadan', 'ranma', 'kaiju8', 'makeine',
+      'shoshimin', 'dungeon', 'kusuriya', 'girlsband']),
+    ('Bangumi', '高分', ['frieren', 'bocchi', 'violet', 'kimetsu', 'mushoku',
+      'jujutsu', 'bokuyaba', 'kamuy', 'chainsaw', 'changan']),
+  ];
+
+  static const _followed = {'kusuriya', 'oshinoko', 'dungeon', 'bocchi',
+    'edgerunners', 'frieren'};
+
+  UiFound? _discovered(String key) {
+    if (_meta.containsKey(key)) {
+      return UiFound(sample(key), followed: _followed.contains(key));
+    }
+    final m = _found[key] as Map<String, dynamic>?;
+    if (m == null) return null;
+    return UiFound(UiWork(
+      workId: Found.id('fake', key),
+      title: m['title'] as String,
+      originalTitle: m['original'] as String?,
+      year: int.tryParse('${m['year'] ?? ''}'),
+      ratings: [
+        if (m['rating'] case final num r) UiRating('弹弹play', r.toDouble())
+      ],
+      artwork: UiArtwork(poster: '$dir/${m['poster']}'),
+    ));
+  }
+
+  @override
+  Future<UiDiscover> discover() async {
+    await Future<void>.delayed(const Duration(milliseconds: 160));
+    List<UiFound> list(List<String> keys) =>
+        [
+          for (final k in keys)
+            if (_discovered(k) case final found?) found
+        ];
+    return UiDiscover(
+      today: DateTime.now().weekday % 7,
+      days: {for (final e in _calendar.entries) e.key: list(e.value)},
+      rankings: [
+        for (final (source, title, keys) in _rankings)
+          UiRanking(source: source, title: title, items: list(keys)),
+      ],
+    );
+  }
+
+  @override
+  Future<UiWork> details(UiWork work) async {
+    await Future<void>.delayed(const Duration(milliseconds: 240));
+    final key = work.workId.split(':').last;
+    final m = _found[key] as Map<String, dynamic>? ?? const {};
+    return UiWork(
+      workId: work.workId,
+      title: work.title,
+      originalTitle: work.originalTitle,
+      year: work.year,
+      genres: const ['动画'],
+      episodeCount: 12,
+      overview: m['overview'] as String?,
+      ratings: work.ratings,
+      artwork: work.artwork,
+    );
   }
 
   @override
@@ -873,8 +1023,10 @@ final class FakeChatPort implements ChatPort {
 
   _Script _scriptFor(String text) {
     final said = ChatContext.strip(text);
+    final files = ChatContext.files(text);
+    if (files.isNotEmpty) return _dropped(files);
     // From a work's page the work is named in the context, not in your words.
-    final fromPage = said != text.trim();
+    final fromPage = ChatContext.aboutTitle(text) != null;
     final key = world._named(fromPage ? text : said);
     if (fromPage && key != null) return _about(key, said);
     if (_any(said, ['版本', '选个'])) return _pickVersion(key ?? 'frieren');
@@ -920,6 +1072,42 @@ final class FakeChatPort implements ChatPort {
       '这句话不太像要看什么，先看看 NipaPlay 现在的情况，再问清楚',
       const _Run('./nipa status', '{"ok":true,"library":48,"tasks":1}', ms: 700),
     ], replies[_fallbacks++ % replies.length]);
+  }
+
+  /// Files dropped into the conversation: a torrent is looked into, a
+  /// picture recognised, a video matched.
+  _Script _dropped(List<String> files) {
+    final torrent =
+        files.where((f) => DroppedFile.kindOf(f) == '种子').firstOrNull;
+    if (torrent != null) {
+      return _Script([
+        '拖进来一个种子，先看看里面是什么',
+        _Run(_call('download.preview', {'torrent': torrent}),
+            _ok({'files': 1, 'name': '迷宫饭 第14集 1080p 简中', 'size': '612 MB'})),
+        '是《迷宫饭》第 14 集，正好是今天更新的那一集',
+      ], '种子里是《迷宫饭》第 14 集，1080p 简中内嵌。要我加进下载吗？');
+    }
+    final image = files.where(DroppedFile.isImage).firstOrNull;
+    if (image != null) {
+      return _Script([
+        '一张截图，看看画面是哪部作品的哪一集',
+        _Run('python3 -c "from PIL import Image; print(Image.open(\'$image\').size)"',
+            '(1920, 1080)', ms: 500),
+        _Run(_call('media.library.search', {'query': '芙莉莲'}),
+            _ok({'total': 1, 'first': '葬送的芙莉莲'})),
+        '是芙莉莲第 3 集的画面，你那集看到一半',
+        _present(['episode']),
+      ], '这是《葬送的芙莉莲》第 3 集里的一幕。你那集看到一半，要接着看吗？',
+          cards: () => [
+                UiEpisodeCard(world.sample('frieren'),
+                    world._episode('frieren', 3, progress: 0.49))
+              ]);
+    }
+    return _Script([
+      '一个视频文件，对一下它是哪部的哪一集',
+      _Run(_call('media.hash.match', {'path': files.first}),
+          _ok({'matched': true, 'title': '孤独摇滚！', 'episode': 9})),
+    ], '这是《孤独摇滚！》第 9 集，片库里已经有了，你看到还剩 4 分钟。');
   }
 
   /// Latest episode of the works that have one, and when it came.

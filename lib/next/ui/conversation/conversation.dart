@@ -5,14 +5,15 @@ import 'package:flutter/foundation.dart';
 import '../../ui_data/ui_data.dart';
 import '../widgets/nipa_avatar.dart';
 import '../widgets/words.dart';
+import 'chat_context.dart';
 import 'chat_port.dart';
 import 'session_choice.dart';
 import 'turn_activity.dart';
 
 /// The home's conversation: the latest round on the stage (state B) and
 /// whatever Nipa does on its own afterwards (state C). What you say here
-/// goes into the current session ([SessionChoice], the main one unless you
-/// picked another); the stage shows only its latest round.
+/// always goes into the main session ([SessionChoice]), whatever the side
+/// panel shows; the stage shows only its latest round.
 ///
 /// Events come from [ChatPort.display]. Cards come from
 /// [NextUiData.cards]; the agent presents them, NipaPlay resolves them.
@@ -41,6 +42,9 @@ class Conversation extends ChangeNotifier {
   /// The stage is showing.
   bool staged = false;
   String? said;
+
+  /// Files that went with [said].
+  List<String> saidFiles = const [];
   String reply = '';
 
   /// Our turn is running, or waiting for the host to be free.
@@ -127,19 +131,25 @@ class Conversation extends ChangeNotifier {
 
   // —— Saying something ——
 
-  /// Says [text] on the home, in the current session: a new round on the
-  /// stage, or more for the round still running.
-  Future<void> say(String text) async {
+  /// Says [text] (with the [files] dropped on the input bar) on the home, in
+  /// the main session: a new round on the stage, or more for the round
+  /// still running.
+  Future<void> say(String text, {List<String> files = const []}) async {
     text = text.trim();
-    if (text.isEmpty) return;
+    if (text.isEmpty && files.isEmpty) return;
     _touch();
-    if (question != null) return answerText(text);
-    final sameRound = staged && _thread != null && _thread == choice.current;
+    if (question != null) {
+      if (text.isNotEmpty) await answerText(text);
+      return;
+    }
+    final input = ChatContext.withFiles(text, files);
+    final sameRound = staged && _thread != null && _thread == choice.main;
     if (sameRound && inProgress && port.busy && _turn != null) {
       said = text;
+      saidFiles = files;
       _notify();
       try {
-        await port.steer(text);
+        await port.steer(input);
       } catch (error) {
         debugPrint('[NextUi] steer failed: $error');
       }
@@ -147,6 +157,8 @@ class Conversation extends ChangeNotifier {
     }
     staged = true;
     said = text;
+    saidFiles = files;
+    _input = input;
     reply = '';
     cards = const [];
     trouble = null;
@@ -160,8 +172,11 @@ class Conversation extends ChangeNotifier {
     _latestMessage = null;
     _thread = null;
     _notify();
-    await _start(text);
+    await _start(input);
   }
+
+  /// What went to Nipa for [said], files included, for “重新发”.
+  String? _input;
 
   Future<void> _start(String text) async {
     if (!port.available) {
@@ -172,7 +187,7 @@ class Conversation extends ChangeNotifier {
     }
     try {
       while (!_disposed) {
-        _thread ??= await choice.target();
+        _thread ??= await choice.mainTarget();
         if (_thread == null) {
           await _waitUntilFree();
           continue;
@@ -206,7 +221,7 @@ class Conversation extends ChangeNotifier {
 
   /// “重新发”: stop the silent turn and say the same thing again.
   Future<void> resend() async {
-    final text = said;
+    final text = _input ?? said;
     if (text == null) return;
     try {
       if (port.busy) await port.interrupt();
@@ -243,6 +258,7 @@ class Conversation extends ChangeNotifier {
     if (request == null) return;
     final items = questionItems;
     question = null;
+    round?.endWait();
     _notify();
     try {
       await port.answer(request['id'] as Object, {
@@ -258,6 +274,7 @@ class Conversation extends ChangeNotifier {
   void dropQuestion(Object requestId) {
     if (question?['id'] != requestId) return;
     question = null;
+    round?.endWait();
     _notify();
   }
 
@@ -272,6 +289,8 @@ class Conversation extends ChangeNotifier {
     }
     _touch();
     said = text;
+    saidFiles = const [];
+    _input = null;
     if (!steer) {
       round = TurnActivity();
       reply = '';
@@ -298,6 +317,7 @@ class Conversation extends ChangeNotifier {
       return;
     }
     question = event;
+    if (thread == _thread) round?.beginWait();
     if (!staged) unseen = true;
     _notify();
   }

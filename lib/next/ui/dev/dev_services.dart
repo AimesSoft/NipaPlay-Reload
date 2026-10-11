@@ -44,6 +44,7 @@ abstract final class NextUiDev {
       data: world,
       actions: world,
       chat: chat,
+      discover: world,
       onDispose: world.dispose,
     );
   }
