@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:nipa_harness/nipa_harness.dart';
 import 'package:nipaplay/utils/globals.dart' as globals;
 import 'package:window_manager/window_manager.dart';
+import 'package:nipaplay/utils/lab_profile.dart';
 
 Future<T?> showNextLogin<T>(Widget Function(BuildContext) builder) async {
   final navigator = globals.navigatorKey.currentState;
@@ -13,8 +14,8 @@ Future<T?> showNextLogin<T>(Widget Function(BuildContext) builder) async {
   }
   if (globals.isDesktop) {
     if (await windowManager.isMinimized()) await windowManager.restore();
-    await windowManager.show();
-    await windowManager.focus();
+    await windowManager.show(inactive: LabProfile.quiet);
+    if (!LabProfile.quiet) await windowManager.focus();
   }
   if (!context.mounted) {
     throw const Failure(

@@ -18,6 +18,11 @@ abstract final class LabProfile {
       kIsWeb || !kDebugMode ? null : Platform.environment['NIPAPLAY_PROFILE']);
   static String? _root;
   static bool get active => name != null;
+
+  /// Lab instances run beside the user's work: they start behind other
+  /// windows and never take focus, unless NIPAPLAY_LAB_QUIET=0 (a demo).
+  static bool get quiet =>
+      active && Platform.environment['NIPAPLAY_LAB_QUIET'] != '0';
   static String get root => _root!;
   static String location(String child) => p.join(root, child);
   static String title(String title) => active ? '$title · LAB [$name]' : title;

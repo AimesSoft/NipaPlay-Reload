@@ -640,8 +640,14 @@ Future<void> _main(List<String> args) async {
             devicePixelRatio: windowManager.getDevicePixelRatio(),
           ));
         }
-        await windowManager.show();
-        await windowManager.focus();
+        if (LabProfile.quiet) {
+          // Experiments run beside the user: never take focus or the front.
+          await windowManager.show(inactive: true);
+          await windowManager.blur();
+        } else {
+          await windowManager.show();
+          await windowManager.focus();
+        }
       });
     }
 
@@ -1016,7 +1022,7 @@ class _NipaPlayAppState extends State<NipaPlayApp> with WidgetsBindingObserver {
   }
 
   Future<void> _focusMainWindow() async {
-    if (!globals.isDesktop) {
+    if (!globals.isDesktop || LabProfile.quiet) {
       return;
     }
     try {
