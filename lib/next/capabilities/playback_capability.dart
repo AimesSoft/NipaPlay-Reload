@@ -1,3 +1,5 @@
+import 'dart:async';
+import 'dart:io';
 import 'package:nipa_harness/nipa_harness.dart';
 import 'package:nipaplay/models/episode_file_candidate.dart';
 import 'package:nipaplay/models/playable_item.dart';
@@ -11,8 +13,8 @@ enum EpisodeDirection { next, previous }
 
 abstract interface class PlayerPort {
   PlaybackSnapshot snapshot();
-  void setPaused(bool paused);
-  void seekTo(Duration position);
+  FutureOr<void> setPaused(bool paused);
+  FutureOr<void> seekTo(Duration position);
   Future<void> switchEpisode(EpisodeDirection direction);
 }
 
@@ -60,9 +62,10 @@ final class PlaybackOpenAction
   static const _spec = ActionSpec(
     id: 'playback.open',
     title: 'Open a video',
-    description: 'Play a recorded file by path or a series episode by IDs. '
+    description: 'Play a local file, URL, jellyfin://itemId or emby://itemId, '
+        'including files with no watch history, or a recorded episode by IDs. '
         'Multiple episode files return a decision with executable path calls. '
-        'An optional start position is supported only by the internal player. '
+        'An optional start position is supported by controllable players. '
         'On success, returns the selected path, player type and current state.',
     effect: Effect.write,
     input: playbackOpenInputSchema,
@@ -85,27 +88,42 @@ final class PlaybackOpenAction
     PlaybackOpenInput input,
     Invocation invocation,
   ) async {
-    final external = _usesExternalPlayer();
-    if (input.startPositionMs != null && external) {
-      throw const Failure(FailureCode.unavailable,
-          'The external player does not support a specified start position.');
+    var path = input.path;
+    if (path != null && Uri.tryParse(path)?.scheme == 'file') {
+      try {
+        path = Uri.parse(path).toFilePath(windows: Platform.isWindows);
+      } on UnsupportedError {
+        throw const Failure(FailureCode.invalidInput, 'Invalid local file URL.');
+      }
     }
-    final path = input.path;
     final history = path != null
         ? await _historyItem(path)
         : await _episodeItem(input.animeId!, input.episodeId!);
-    if (history == null) {
+    if (history == null && path == null) {
       throw const Failure(FailureCode.notFound,
           'The requested file or episode was not found in watch history.');
     }
+    if (history == null && path != null) {
+      final uri = Uri.tryParse(path);
+      if (p.isAbsolute(path) || uri == null || uri.scheme.isEmpty) {
+        if (!p.isAbsolute(path)) {
+          throw const Failure(FailureCode.invalidInput, 'Use an absolute file path.');
+        }
+        if (!await File(path).exists()) {
+          throw const Failure(FailureCode.notFound, 'The local file does not exist or is inaccessible.');
+        }
+      } else if (uri.host.isEmpty) {
+        throw const Failure(FailureCode.invalidInput, 'A media URL must include a host or item ID.');
+      }
+    }
     final requested = PlayableItem(
-      videoPath: history.filePath,
-      title: history.animeName,
-      subtitle: history.episodeTitle,
-      animeId: history.animeId,
-      episodeId: history.episodeId,
+      videoPath: history?.filePath ?? path!,
+      title: history?.animeName,
+      subtitle: history?.episodeTitle,
+      animeId: history?.animeId,
+      episodeId: history?.episodeId,
       historyItem: history,
-      mediaKey: history.mediaKey,
+      mediaKey: history?.mediaKey,
     );
     PlayableItem item = requested;
     if (path == null) {
@@ -147,13 +165,14 @@ final class PlaybackOpenAction
           'NipaPlay cannot start playback right now; the window may not be ready.',
           retryable: true);
     }
-    if (input.startPositionMs case final position? when !external) {
-      _player.seekTo(Duration(milliseconds: position));
+    if (input.startPositionMs case final position?) {
+      await _player.seekTo(Duration(milliseconds: position));
     }
+    final state = _player.snapshot();
     return Completed(PlaybackOpenOutput(
       path: item.videoPath,
-      player: external ? 'external' : 'internal',
-      state: _player.snapshot(),
+      player: state.player ?? (_usesExternalPlayer() ? 'external' : 'internal'),
+      state: state,
     ));
   }
 }
@@ -219,7 +238,7 @@ final class PlaybackSetPausedAction
     if (!_player.snapshot().hasVideo) {
       throw const Failure(FailureCode.unavailable, 'No video is loaded.');
     }
-    _player.setPaused(input.paused);
+    await _player.setPaused(input.paused);
     return Completed(PlaybackStateOutput(state: _player.snapshot()));
   }
 }
@@ -260,7 +279,11 @@ final class PlaybackSeekAction
       throw const Failure(FailureCode.unavailable, 'No video is loaded.');
     }
     final target = input.positionMs ?? state.positionMs + input.offsetMs!;
-    _player.seekTo(Duration(milliseconds: target.clamp(0, state.durationMs)));
+    if (input.offsetMs != null && state.external?['positionMs'] == null && state.external != null) {
+      throw const Failure(FailureCode.unavailable, 'The external player cannot report position for a relative seek.');
+    }
+    await _player.seekTo(Duration(milliseconds: target.clamp(0,
+      state.external != null && state.durationMs == 0 ? target.abs() : state.durationMs)));
     return Completed(PlaybackStateOutput(state: _player.snapshot()));
   }
 }

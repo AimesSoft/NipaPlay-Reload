@@ -362,7 +362,7 @@ class AudioTracksMenu extends StatelessWidget {
                               MediaServerMenuSurface.nipaplayAudio,
                               isEmby,
                               () async {
-                                videoState.player.activeAudioTracks = [index];
+                                videoState.selectEmbeddedAudioTrack(index);
                               },
                               () async {
                                 if (source == null || preference == null) {

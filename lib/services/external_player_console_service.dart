@@ -113,6 +113,28 @@ class ExternalPlayerConsoleService extends ChangeNotifier {
   static Duration? get position => _session?.position;
   static double? get fraction => _session?.fraction;
   static bool? get isPaused => _session?.isPaused;
+  static ExternalPlayerType? get playerType => _session?.type;
+  static bool get supportsPlaybackTelemetry => hasActiveSession &&
+      playerType != ExternalPlayerType.generic && playerType != ExternalPlayerType.unset;
+
+  static bool setPaused(bool paused) {
+    final current = _session;
+    if (!supportsPlaybackTelemetry || current == null || current.isPaused == null) return false;
+    if (current.isPaused != paused) current.togglePause();
+    return true;
+  }
+
+  static bool seekToPosition(Duration position) =>
+      _session?.seekToPosition(position) ?? false;
+
+  static Future<bool> refreshPlaybackState() async {
+    if (!supportsPlaybackTelemetry) return false;
+    final current = _session;
+    if (current is ExternalPlayerTelemetrySession) {
+      return (current as ExternalPlayerTelemetrySession).refreshPlaybackState();
+    }
+    return current?.position != null;
+  }
 
   // 番剧信息相关
   // ------------------------------------------------------------------------ //

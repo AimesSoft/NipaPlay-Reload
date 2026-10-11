@@ -6,6 +6,10 @@ import 'package:nipaplay/models/danmaku/style.dart';
 import 'package:nipaplay/constants/media_extensions.dart';
 import 'package:flutter/foundation.dart';
 
+abstract interface class ExternalPlayerTelemetrySession {
+  Future<bool> refreshPlaybackState();
+}
+
 
 /// 外部播放器启动后返回给调用方的公共会话接口
 abstract interface class ExternalPlayerLaunchSession extends ChangeNotifier {

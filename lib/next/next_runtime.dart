@@ -24,6 +24,8 @@ import 'capabilities/history_capability.dart';
 import 'capabilities/library_capability.dart';
 import 'capabilities/navigation_capability.dart';
 import 'capabilities/playback_capability.dart';
+import 'capabilities/playback_controls_capability.dart';
+import 'capabilities/classic_playback_controls.dart';
 import 'capabilities/video_player_state_port.dart';
 import 'media/file_indexing.dart';
 import 'settings/application_settings.dart';
@@ -132,6 +134,7 @@ final class NextRuntime extends ChangeNotifier {
       [
         for (final capability in capabilities)
           FileIndexingCapability(capability, core.media.service.store),
+        PlaybackControlsCapability(ClassicPlaybackControls(_player)),
         ...core.capabilities
       ],
       observers: [JsonlJournal(File('${root.path}/journal.jsonl'))],

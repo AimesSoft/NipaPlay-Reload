@@ -556,7 +556,7 @@ class _SubtitleTracksMenuState extends State<SubtitleTracksMenu> {
             // 核心：告诉播放器切换到指定的内嵌字幕轨道索引
             // Note: `activeSubtitleTracks` in `MediaKitPlayerAdapter` expects an index
             // that corresponds to its `_mediaInfo.subtitle` list.
-            videoState.player.activeSubtitleTracks = [trackIndex];
+            videoState.selectEmbeddedSubtitleTrack(trackIndex);
             debugPrint(
                 '_SubtitleTracksMenu: Switched to embedded subtitle, player instructed with mediaInfo index: $trackIndex');
 
@@ -566,8 +566,7 @@ class _SubtitleTracksMenuState extends State<SubtitleTracksMenu> {
             // UI应该响应SubtitleManager通过ChangeNotifier发出的更新。
           } else {
             // 关闭字幕 (trackIndex is -1 or invalid)
-            videoState.player.activeSubtitleTracks =
-                []; // Tell player to use "no" subtitle
+            videoState.selectEmbeddedSubtitleTrack(-1);
             debugPrint(
                 '_SubtitleTracksMenu: Turned off subtitles, player instructed.');
 
