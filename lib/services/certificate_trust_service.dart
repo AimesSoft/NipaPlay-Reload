@@ -5,6 +5,7 @@ import 'dart:typed_data';
 import 'package:crypto/crypto.dart';
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:nipaplay/next/settings/registry.dart';
 
 class TrustedCertRule {
   final String host; // 不含协议与端口，例如: example.com 或 10.0.0.2
@@ -63,7 +64,8 @@ class CertificateTrustService {
   Future<void> setGlobalAllow(bool allow) async {
     _globalAllow = allow;
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setBool(_prefsGlobalAllowKey, allow);
+    await SettingsAccess.persist(
+        _prefsGlobalAllowKey, () => prefs.setBool(_prefsGlobalAllowKey, allow));
   }
 
   Future<void> upsertRule(TrustedCertRule rule) async {

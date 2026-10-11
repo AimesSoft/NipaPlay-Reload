@@ -56,8 +56,9 @@ class DeveloperOptionsProvider extends ChangeNotifier {
 
   // 构造函数
   DeveloperOptionsProvider() {
-    _loadSettings();
+    ready = _loadSettings();
   }
+  late final Future<void> ready;
   
   // 加载设置
   Future<void> _loadSettings() async {

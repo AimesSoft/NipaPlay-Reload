@@ -1,3 +1,4 @@
+import 'package:nipaplay/next/settings/registry.dart';
 import 'package:nipaplay/security/credential_store.dart';
 import 'package:nipaplay/utils/performance_trace.dart';
 import 'dart:async';
@@ -82,7 +83,7 @@ class PluginService extends ChangeNotifier {
 
   static Future<void> _saveDownloaderOverride(bool value) async {
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setBool(_downloaderOverrideKey, value);
+    await SettingsAccess.persist(_downloaderOverrideKey, () => prefs.setBool(_downloaderOverrideKey, value));
   }
 
   final List<PluginDescriptor> _plugins = <PluginDescriptor>[];
@@ -99,6 +100,7 @@ class PluginService extends ChangeNotifier {
   final Map<String, Process> _managedProcesses = {};
 
   late final Future<void> _ready;
+  Future<void> get ready => _ready;
   bool _isLoaded = false;
   Map<String, PluginIndexEntry> _pluginIndex = {};
   Map<String, RemotePluginInfo> _remotePlugins = {};
@@ -175,10 +177,16 @@ class PluginService extends ChangeNotifier {
 
   Future<void> setTextSettingValue(
       String pluginId, String entryId, String value) async {
+    final previous = getTextSettingValue(pluginId, entryId);
     final key = '$pluginId::$entryId';
     _textSettingValues[key] = value;
     final prefs = await SharedPreferences.getInstance();
     await CredentialStore.instance.write(prefs, '$_textSettingPrefix$key', value);
+    if (previous != value) {
+      await SettingsAccess.recordRegisteredRuntime(
+          'plugins.settings.${Uri.encodeComponent(pluginId)}.${Uri.encodeComponent(entryId)}',
+          previous, value);
+    }
     notifyListeners();
     _emitSettingsChanged(pluginId, entryId, 'text', value);
   }
@@ -192,7 +200,7 @@ class PluginService extends ChangeNotifier {
     final key = '$pluginId::$entryId';
     _switchSettingValues[key] = value;
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setBool('$_switchSettingPrefix$key', value);
+    await SettingsAccess.persist('$_switchSettingPrefix$key', () => prefs.setBool('$_switchSettingPrefix$key', value));
     notifyListeners();
     _emitSettingsChanged(pluginId, entryId, 'switch', value);
   }
@@ -417,6 +425,23 @@ class PluginService extends ChangeNotifier {
 
   Map<String, RemotePluginInfo> get remotePlugins =>
       Map.unmodifiable(_remotePlugins);
+
+  Future<String?> installRemotePlugin(String id, {
+    String? proxyUrl,
+    String? updateForId,
+  }) async {
+    await _ready;
+    final remote = getRemotePluginInfo(id);
+    if (remote == null) throw StateError('插件不在当前市场索引中: $id');
+    final rawUrl = remote.resolvedDownloadUrl;
+    if (rawUrl.isEmpty) throw StateError('插件没有下载地址: $id');
+    final url = proxyUrl == null || proxyUrl.trim().isEmpty
+        ? await GithubAccelResolver.resolveFirstReachable(rawUrl) ?? rawUrl
+        : _applyProxyIfNeeded(remote.proxyDownloadUrl, proxyUrl);
+    final response = await http.get(Uri.parse(url));
+    if (response.statusCode != 200) throw StateError('下载插件失败: ${response.statusCode}');
+    return importPluginFromContent(response.body, updateForId: updateForId);
+  }
 
   void _setupEventListeners() {
     _eventBus.on(PluginEventType.videoLoaded, _handleEvent);
@@ -1783,7 +1808,7 @@ class PluginService extends ChangeNotifier {
 
   Future<void> _saveEnabledIds(List<String> ids) async {
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setStringList(_enabledPluginsKey, ids);
+    await SettingsAccess.persist(_enabledPluginsKey, () => prefs.setStringList(_enabledPluginsKey, ids));
   }
 
   @override

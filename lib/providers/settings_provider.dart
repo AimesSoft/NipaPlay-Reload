@@ -230,14 +230,14 @@ class SettingsProvider with ChangeNotifier {
   /// If `enable` is false, blurPower is set to 0.
   Future<void> setBlurEnabled(bool enable) async {
     _blurPower = enable ? 10.0 : 0.0; // 开启时使用中等模糊强度
-    await _prefs.setDouble(_blurPowerKey, _blurPower);
+    await SettingsAccess.persist(_blurPowerKey, () => _prefs.setDouble(_blurPowerKey, _blurPower));
     notifyListeners();
   }
 
   /// Sets a specific blur power value.
   Future<void> setBlurPower(double value) async {
     _blurPower = _clampBlurPower(value);
-    await _prefs.setDouble(_blurPowerKey, _blurPower);
+    await SettingsAccess.persist(_blurPowerKey, () => _prefs.setDouble(_blurPowerKey, _blurPower));
     notifyListeners();
   }
 
@@ -357,10 +357,10 @@ class SettingsProvider with ChangeNotifier {
 
   Future<void> setGithubProxyUrl(String url) async {
     _githubProxyUrl = url.trim();
-    await _prefs.setString(
+    await SettingsAccess.persist(SettingsKeys.githubProxyUrl, () => _prefs.setString(
       SettingsKeys.githubProxyUrl,
       _githubProxyUrl,
-    );
+    ));
     notifyListeners();
   }
 
@@ -373,7 +373,7 @@ class SettingsProvider with ChangeNotifier {
       SettingsKeys.danmakuSupersampleV2,
       value.toStringAsFixed(1),
     ));
-    await _prefs.setDouble(SettingsKeys.danmakuSupersample, value);
+    await SettingsAccess.persist(SettingsKeys.danmakuSupersample, () => _prefs.setDouble(SettingsKeys.danmakuSupersample, value));
     notifyListeners();
   }
 }

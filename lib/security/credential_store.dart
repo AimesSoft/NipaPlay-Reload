@@ -1,3 +1,4 @@
+import 'package:nipaplay/next/settings/registry.dart';
 import 'dart:convert';
 import 'package:crypto/crypto.dart';
 import 'package:flutter/foundation.dart';
@@ -192,7 +193,7 @@ final class CredentialStore {
   Future<bool> write(SharedPreferences prefs, String key, String value) async {
     if (!desktop) {
       if (isSecretKey(key)) SecretRedactor.remember(preferenceRef(key), value);
-      return prefs.setString(key, value);
+      return SettingsAccess.persist(key, () => prefs.setString(key, value));
     }
     try {
       final retired = <CredentialRef>{};
@@ -224,7 +225,7 @@ final class CredentialStore {
         await verifiedWrite(ref, value);
         value = jsonEncode(ref.placeholder);
       }
-      if (!await prefs.setString(key, value)) {
+      if (!await SettingsAccess.persist(key, () => prefs.setString(key, value))) {
         throw StateError('preferences_write_failed');
       }
       for (final ref in retired) {
@@ -240,7 +241,7 @@ final class CredentialStore {
   Future<bool> delete(SharedPreferences prefs, String key) async {
     try {
       if (desktop && isSecretKey(key)) await vault.delete(preferenceRef(key));
-      return await prefs.remove(key);
+      return await SettingsAccess.persist(key, () => prefs.remove(key));
     } catch (error) {
       report(preferenceRef(key), error);
       rethrow;

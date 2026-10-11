@@ -25,6 +25,8 @@ import 'tasks/sqlite_job_store.dart';
 import 'settings/application_settings.dart';
 import 'settings/registry.dart';
 import 'settings/capability.dart';
+import 'settings/classic_settings.dart';
+import 'settings/operations.dart';
 import 'mesh/runtime.dart';
 import 'mesh/capability.dart';
 import 'mesh/debug_claim_names.dart';
@@ -103,6 +105,7 @@ final class NextCore {
             await SharedPreferences.getInstance(), 'dandanplay_token'));
     settings = SettingsRegistry(database, [
       ...ApplicationSettings.entries(),
+      ...ClassicSettings.entries(),
       meshAddressSetting(mesh),
       harnessLocation.setting
     ]);
@@ -142,6 +145,7 @@ final class NextCore {
       AccountsCapability(accounts),
       danmaku.capability,
       SettingsCapability(settings),
+      ClassicOperations(settings),
       MeshCapability(mesh),
       state,
     ]);

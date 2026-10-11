@@ -1,3 +1,4 @@
+import 'package:nipaplay/next/settings/registry.dart';
 import 'package:nipaplay/security/portable_credentials.dart';
 import 'package:nipaplay/security/credential_store.dart';
 import 'dart:io';
@@ -678,16 +679,16 @@ class FullBackupService {
             final key = entry.key;
             final value = entry.value;
             if (value is bool) {
-              await prefs.setBool(key, value);
+              await SettingsAccess.persist(key, () => prefs.setBool(key, value));
             } else if (value is int) {
-              await prefs.setInt(key, value);
+              await SettingsAccess.persist(key, () => prefs.setInt(key, value));
             } else if (value is double) {
-              await prefs.setDouble(key, value);
+              await SettingsAccess.persist(key, () => prefs.setDouble(key, value));
             } else if (value is String) {
               await CredentialStore.instance.write(prefs, key, value);
             } else if (value is List) {
-              await prefs.setStringList(
-                  key, value.map((e) => e.toString()).toList());
+              await SettingsAccess.persist(key, () => prefs.setStringList(
+                  key, value.map((e) => e.toString()).toList()));
             }
             restoredCount++;
           } catch (e) {

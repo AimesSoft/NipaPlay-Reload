@@ -22,6 +22,8 @@ final class SettingEntry {
     required this.read,
     required this.write,
     required this.decodeStorage,
+    this.additionalStorageKeys = const [],
+    this.storageKind,
     this.scope = 'user',
     this.apply = 'immediate',
     bool Function()? visible,
@@ -48,6 +50,8 @@ final class SettingEntry {
   Object? get defaultValue => dynamicDefaultValue?.call() ?? _defaultValue;
   final Future<Object?> Function() read;
   final Future<void> Function(Object?) write;
+  final List<String> additionalStorageKeys;
+  final String? storageKind;
   final Object? Function(Object?) decodeStorage;
   final bool Function() visible;
   final JsonMap? remote;
@@ -70,10 +74,11 @@ final class SettingEntry {
         if (key.startsWith('subtitle.') && key.toLowerCase().endsWith('color'))
           'pattern': r'^#[0-9A-Fa-f]{8}$',
         'storage': {
-          'kind': storageKey.startsWith('@runtime:')
+          'kind': storageKind ?? (storageKey.startsWith('@runtime:')
               ? 'runtime'
-              : 'shared_preferences',
+              : 'shared_preferences'),
           'key': storageKey,
+          if (additionalStorageKeys.isNotEmpty) 'additionalKeys': additionalStorageKeys,
           if (key == 'danmaku.supersample')
             'legacyKeys': ['danmaku_supersample'],
           'reader': reader,
@@ -84,6 +89,10 @@ final class SettingEntry {
 
 final class SettingsRegistry {
   SettingsRegistry(this.database, Iterable<SettingEntry> entries) {
+    register(entries);
+  }
+
+  void register(Iterable<SettingEntry> entries) {
     for (final entry in entries) {
       if (isSettingDenied(entry.key) || isSettingDenied(entry.storageKey)) {
         throw ArgumentError('Forbidden setting: ${entry.key}');
@@ -92,7 +101,10 @@ final class SettingsRegistry {
         throw ArgumentError('Duplicate setting: ${entry.key}');
       }
       _entries[entry.key] = entry;
-      _storage.putIfAbsent(entry.storageKey, () => []).add(entry);
+      for (final key in [entry.storageKey, ...entry.additionalStorageKeys]) {
+        if (isSettingDenied(key)) throw ArgumentError('Forbidden storage key: $key');
+        _storage.putIfAbsent(key, () => []).add(entry);
+      }
     }
   }
 
@@ -103,6 +115,19 @@ final class SettingsRegistry {
   static final _operation = Object();
 
   Iterable<SettingEntry> get entries => _entries.values;
+  bool contains(String key) => _entries[key]?.visible() ?? false;
+
+  void replaceGroup(String prefix, Iterable<SettingEntry> entries) {
+    final removed = _entries.values.where((e) => e.key.startsWith(prefix)).toList();
+    for (final entry in removed) {
+      _entries.remove(entry.key);
+      for (final key in [entry.storageKey, ...entry.additionalStorageKeys]) {
+        _storage[key]!.remove(entry);
+        if (_storage[key]!.isEmpty) _storage.remove(key);
+      }
+    }
+    register(entries);
+  }
 
   SettingEntry _entry(String key) {
     final entry = _entries[key];
@@ -151,7 +176,7 @@ final class SettingsRegistry {
         _entry(key);
       }
     }
-    final matched = entries
+    final matched = entries.toList()
         .where((entry) =>
             entry.visible() &&
             (keys == null || keys.contains(entry.key)) &&
@@ -211,7 +236,7 @@ final class SettingsRegistry {
 
   Future<bool> persist(String storageKey, Future<bool> Function() perform,
       Invocation invocation, String? reason) async {
-    final affected = _storage[storageKey];
+    final affected = _storage[storageKey]?.toList();
     if (affected == null) return perform();
     Future<bool> run() async {
       final before = [for (final entry in affected) await entry.read()];
@@ -331,6 +356,11 @@ abstract final class SettingsAccess {
   static Future<void> recordRuntime(
           String key, Object? previous, Object? value) =>
       registry?.recordRuntime(key, previous, value) ?? Future.value();
+
+  static Future<void> recordRegisteredRuntime(String key, Object? previous, Object? value) =>
+      registry?.contains(key) == true
+          ? registry!.recordRuntime(key, previous, value)
+          : Future.value();
 
   static Future<bool> persist(
       String storageKey, Future<bool> Function() perform,

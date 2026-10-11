@@ -9,6 +9,7 @@ class RemotePluginInfo {
     required this.downloadUrl,
     this.tags = const [],
     this.github,
+    this.file,
   });
 
   final String id;
@@ -20,6 +21,15 @@ class RemotePluginInfo {
   final String downloadUrl;
   final List<String> tags;
   final String? github;
+  final String? file;
+  String get resolvedDownloadUrl => downloadUrl.isNotEmpty
+      ? downloadUrl
+      : file == null || file!.isEmpty
+          ? ''
+          : 'https://raw.githubusercontent.com/AimesSoft/Nipaplay-plugins/refs/heads/main/$file';
+  String get proxyDownloadUrl => file == null || file!.isEmpty
+      ? resolvedDownloadUrl
+      : 'https://github.com/AimesSoft/Nipaplay-plugins/blob/main/$file';
 
   Map<String, dynamic> toJson() {
     return {
@@ -49,6 +59,7 @@ class RemotePluginInfo {
               .toList() ??
           [],
       github: json['github']?.toString().trim(),
+      file: json['file']?.toString().trim(),
     );
   }
 

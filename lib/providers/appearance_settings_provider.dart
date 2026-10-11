@@ -1,3 +1,4 @@
+import 'package:nipaplay/next/settings/registry.dart';
 import 'package:flutter/painting.dart' show TextOverflow;
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -85,6 +86,7 @@ class AppearanceSettingsProvider extends ChangeNotifier {
   RecentWatchingStyle get recentWatchingStyle => _recentWatchingStyle;
   double get uiScale => _uiScale;
   bool get supportsAutomaticUiScale => _automaticUiScale != null;
+  double? get automaticUiScaleValue => _automaticUiScale;
   bool get useAutomaticUiScale => _useAutomaticUiScale;
   bool get showAnimeCardSummary => _showAnimeCardSummary;
   bool get showQuarterlyAnimeReview => _showQuarterlyAnimeReview;
@@ -128,7 +130,7 @@ class AppearanceSettingsProvider extends ChangeNotifier {
     _showHomeHeroSideCardTop = true;
     _showHomeHeroSideCardBottom = true;
     AppAccentColors.setCurrent(_accentColorPreset);
-    _loadSettings();
+    ready = _loadSettings();
   }
 
   double _resolveDefaultUiScale() {
@@ -159,10 +161,12 @@ class AppearanceSettingsProvider extends ChangeNotifier {
   }
 
   // 从SharedPreferences加载设置
+  late final Future<void> ready;
+
   Future<void> _loadSettings() async {
     try {
       final prefs = await SharedPreferences.getInstance();
-      await prefs.setBool(_widgetBlurEffectKey, false);
+      await SettingsAccess.persist(_widgetBlurEffectKey, () => prefs.setBool(_widgetBlurEffectKey, false));
       _showDanmakuDensityChart =
           prefs.getBool(SettingsKeys.showDanmakuDensityChart) ?? true;
       _showAnimeCardSummary = prefs.getBool(_showAnimeCardSummaryKey) ?? true;
@@ -239,7 +243,7 @@ class AppearanceSettingsProvider extends ChangeNotifier {
   Future<void> setEnableWidgetBlurEffect(bool value) async {
     try {
       final prefs = await SharedPreferences.getInstance();
-      await prefs.setBool(_widgetBlurEffectKey, false);
+      await SettingsAccess.persist(_widgetBlurEffectKey, () => prefs.setBool(_widgetBlurEffectKey, false));
     } catch (e) {
       debugPrint('保存控件模糊效果关闭状态时出错: $e');
     }
@@ -254,7 +258,7 @@ class AppearanceSettingsProvider extends ChangeNotifier {
 
     try {
       final prefs = await SharedPreferences.getInstance();
-      await prefs.setInt(_animeCardActionKey, value.index);
+      await SettingsAccess.persist(_animeCardActionKey, () => prefs.setInt(_animeCardActionKey, value.index));
     } catch (e) {
       debugPrint('保存番剧卡片点击行为设置时出错: $e');
     }
@@ -269,7 +273,7 @@ class AppearanceSettingsProvider extends ChangeNotifier {
 
     try {
       final prefs = await SharedPreferences.getInstance();
-      await prefs.setBool(SettingsKeys.showDanmakuDensityChart, value);
+      await SettingsAccess.persist(SettingsKeys.showDanmakuDensityChart, () => prefs.setBool(SettingsKeys.showDanmakuDensityChart, value));
     } catch (e) {
       debugPrint('保存弹幕密度图设置时出错: $e');
     }
@@ -284,7 +288,7 @@ class AppearanceSettingsProvider extends ChangeNotifier {
 
     try {
       final prefs = await SharedPreferences.getInstance();
-      await prefs.setInt(_recentWatchingStyleKey, value.index);
+      await SettingsAccess.persist(_recentWatchingStyleKey, () => prefs.setInt(_recentWatchingStyleKey, value.index));
     } catch (e) {
       debugPrint('保存最近观看样式设置时出错: $e');
     }
@@ -300,8 +304,8 @@ class AppearanceSettingsProvider extends ChangeNotifier {
 
     try {
       final prefs = await SharedPreferences.getInstance();
-      await prefs.setDouble(_uiScaleKey, clampedValue);
-      await prefs.setBool(_automaticUiScaleKey, false);
+      await SettingsAccess.persist(_uiScaleKey, () => prefs.setDouble(_uiScaleKey, clampedValue));
+      await SettingsAccess.persist(_automaticUiScaleKey, () => prefs.setBool(_automaticUiScaleKey, false));
     } catch (e) {
       debugPrint('保存界面缩放设置时出错: $e');
     }
@@ -319,7 +323,7 @@ class AppearanceSettingsProvider extends ChangeNotifier {
     try {
       final prefs = await SharedPreferences.getInstance();
       // Store the mode, not the computed scale: recalculate at the next launch.
-      await prefs.setBool(_automaticUiScaleKey, true);
+      await SettingsAccess.persist(_automaticUiScaleKey, () => prefs.setBool(_automaticUiScaleKey, true));
     } catch (e) {
       debugPrint('保存自动界面缩放设置时出错: $e');
     }
@@ -333,7 +337,7 @@ class AppearanceSettingsProvider extends ChangeNotifier {
 
     try {
       final prefs = await SharedPreferences.getInstance();
-      await prefs.setBool(_showAnimeCardSummaryKey, value);
+      await SettingsAccess.persist(_showAnimeCardSummaryKey, () => prefs.setBool(_showAnimeCardSummaryKey, value));
     } catch (e) {
       debugPrint('保存番剧卡片简介显示设置时出错: $e');
     }
@@ -347,7 +351,7 @@ class AppearanceSettingsProvider extends ChangeNotifier {
 
     try {
       final prefs = await SharedPreferences.getInstance();
-      await prefs.setBool(_showQuarterlyAnimeReviewKey, value);
+      await SettingsAccess.persist(_showQuarterlyAnimeReviewKey, () => prefs.setBool(_showQuarterlyAnimeReviewKey, value));
     } catch (e) {
       debugPrint('保存首页新番回顾显示设置时出错: $e');
     }
@@ -361,7 +365,7 @@ class AppearanceSettingsProvider extends ChangeNotifier {
 
     try {
       final prefs = await SharedPreferences.getInstance();
-      await prefs.setBool(SettingsKeys.showMediaLibraryNewBadge, value);
+      await SettingsAccess.persist(SettingsKeys.showMediaLibraryNewBadge, () => prefs.setBool(SettingsKeys.showMediaLibraryNewBadge, value));
     } catch (e) {
       debugPrint('保存媒体库 NEW 标识显示设置时出错: $e');
     }
@@ -375,7 +379,7 @@ class AppearanceSettingsProvider extends ChangeNotifier {
 
     try {
       final prefs = await SharedPreferences.getInstance();
-      await prefs.setInt(_windowDisplayModeKey, value.index);
+      await SettingsAccess.persist(_windowDisplayModeKey, () => prefs.setInt(_windowDisplayModeKey, value.index));
     } catch (e) {
       debugPrint('保存窗口显示区域设置时出错: $e');
     }
@@ -390,7 +394,7 @@ class AppearanceSettingsProvider extends ChangeNotifier {
 
     try {
       final prefs = await SharedPreferences.getInstance();
-      await prefs.setString(_accentColorPresetKey, value.storageKey);
+      await SettingsAccess.persist(_accentColorPresetKey, () => prefs.setString(_accentColorPresetKey, value.storageKey));
     } catch (e) {
       debugPrint('保存主题色设置时出错: $e');
     }
@@ -405,7 +409,7 @@ class AppearanceSettingsProvider extends ChangeNotifier {
 
     try {
       final prefs = await SharedPreferences.getInstance();
-      await prefs.setInt(_folderNameDisplayModeKey, value.index);
+      await SettingsAccess.persist(_folderNameDisplayModeKey, () => prefs.setInt(_folderNameDisplayModeKey, value.index));
     } catch (e) {
       debugPrint('保存目录名称显示模式设置时出错: $e');
     }
@@ -419,7 +423,7 @@ class AppearanceSettingsProvider extends ChangeNotifier {
 
     try {
       final prefs = await SharedPreferences.getInstance();
-      await prefs.setBool(_diffuseLowResolutionPostersKey, value);
+      await SettingsAccess.persist(_diffuseLowResolutionPostersKey, () => prefs.setBool(_diffuseLowResolutionPostersKey, value));
     } catch (e) {
       debugPrint('保存低清推荐海报晕染设置时出错: $e');
     }
@@ -434,7 +438,7 @@ class AppearanceSettingsProvider extends ChangeNotifier {
 
     try {
       final prefs = await SharedPreferences.getInstance();
-      await prefs.setBool(_showHomeHeroBannerKey, value);
+      await SettingsAccess.persist(_showHomeHeroBannerKey, () => prefs.setBool(_showHomeHeroBannerKey, value));
     } catch (e) {
       debugPrint('保存主页推荐轮播大图显示设置时出错: $e');
     }
@@ -449,7 +453,7 @@ class AppearanceSettingsProvider extends ChangeNotifier {
 
     try {
       final prefs = await SharedPreferences.getInstance();
-      await prefs.setBool(_showHomeHeroSideCardTopKey, value);
+      await SettingsAccess.persist(_showHomeHeroSideCardTopKey, () => prefs.setBool(_showHomeHeroSideCardTopKey, value));
     } catch (e) {
       debugPrint('保存主页上方推荐小卡片显示设置时出错: $e');
     }
@@ -464,7 +468,7 @@ class AppearanceSettingsProvider extends ChangeNotifier {
 
     try {
       final prefs = await SharedPreferences.getInstance();
-      await prefs.setBool(_showHomeHeroSideCardBottomKey, value);
+      await SettingsAccess.persist(_showHomeHeroSideCardBottomKey, () => prefs.setBool(_showHomeHeroSideCardBottomKey, value));
     } catch (e) {
       debugPrint('保存主页下方推荐小卡片显示设置时出错: $e');
     }

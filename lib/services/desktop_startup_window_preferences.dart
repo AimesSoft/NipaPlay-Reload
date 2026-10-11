@@ -1,3 +1,4 @@
+import 'package:nipaplay/next/settings/registry.dart';
 import 'dart:ui';
 
 import 'package:shared_preferences/shared_preferences.dart';
@@ -97,7 +98,7 @@ class DesktopStartupWindowPreferences {
 
   static Future<void> saveState(DesktopStartupWindowState state) async {
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(_stateKey, serializeState(state));
+    await SettingsAccess.persist(_stateKey, () => prefs.setString(_stateKey, serializeState(state)));
   }
 
   static Future<DesktopStartupWindowPosition> loadPosition() async {
@@ -107,7 +108,7 @@ class DesktopStartupWindowPreferences {
 
   static Future<void> savePosition(DesktopStartupWindowPosition position) async {
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(_positionKey, serializePosition(position));
+    await SettingsAccess.persist(_positionKey, () => prefs.setString(_positionKey, serializePosition(position)));
   }
 
   static Future<Size> loadSize() async {
@@ -122,13 +123,13 @@ class DesktopStartupWindowPreferences {
   static Future<void> saveSize(Size size) async {
     final prefs = await SharedPreferences.getInstance();
     final resolved = sanitizeSize(size);
-    await prefs.setDouble(_widthKey, resolved.width);
-    await prefs.setDouble(_heightKey, resolved.height);
+    await SettingsAccess.persist(_widthKey, () => prefs.setDouble(_widthKey, resolved.width));
+    await SettingsAccess.persist(_heightKey, () => prefs.setDouble(_heightKey, resolved.height));
   }
 
   static Future<void> resetSize() async {
     final prefs = await SharedPreferences.getInstance();
-    await prefs.remove(_widthKey);
-    await prefs.remove(_heightKey);
+    await SettingsAccess.persist(_widthKey, () => prefs.remove(_widthKey));
+    await SettingsAccess.persist(_heightKey, () => prefs.remove(_heightKey));
   }
 }

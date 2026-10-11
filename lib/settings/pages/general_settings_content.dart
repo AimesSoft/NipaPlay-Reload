@@ -19,6 +19,7 @@ import 'package:nipaplay/themes/nipaplay/widgets/tvos_remote_text_input_scope.da
 import 'package:nipaplay/utils/app_accent_color.dart';
 import 'package:nipaplay/utils/globals.dart' as globals;
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:nipaplay/next/settings/registry.dart';
 
 const String defaultPageIndexKey = 'default_page_index';
 
@@ -501,8 +502,10 @@ class _GeneralSettingsContentState extends State<GeneralSettingsContent> {
   Future<void> _saveDefaultPagePreference(int index) async {
     if (!globals.isDownloaderSupportedPlatform && index == 3) return;
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setInt(defaultPageIndexKey, index);
-    await prefs.setString(_defaultHomeTabKey, _defaultHomeTabName(index));
+    await SettingsAccess.persist(defaultPageIndexKey,
+        () => prefs.setInt(defaultPageIndexKey, index));
+    await SettingsAccess.persist(_defaultHomeTabKey,
+        () => prefs.setString(_defaultHomeTabKey, _defaultHomeTabName(index)));
   }
 
   String _defaultHomeTabName(int index) {

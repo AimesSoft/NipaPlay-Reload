@@ -419,7 +419,7 @@ class PlayerFactory {
     final resolved = AppHttpProxy.validate(proxy)?.toString() ?? '';
     final changed = resolved != _cachedHttpProxy;
     final preferences = await SharedPreferences.getInstance();
-    await preferences.setString(SettingsKeys.playerHttpProxy, resolved);
+    await SettingsAccess.persist(SettingsKeys.playerHttpProxy, () => preferences.setString(SettingsKeys.playerHttpProxy, resolved));
     _cachedHttpProxy = resolved;
     AppHttpProxy.set(resolved);
     final kernelType = _cachedKernelType ?? PlayerKernelType.mdk;

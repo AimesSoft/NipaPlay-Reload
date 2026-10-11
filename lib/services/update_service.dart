@@ -1,3 +1,4 @@
+import 'package:nipaplay/next/settings/registry.dart';
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'package:package_info_plus/package_info_plus.dart';
@@ -19,7 +20,7 @@ class UpdateService {
     final legacy =
         prefs.getBool(SettingsKeys.legacyAutoCheckUpdatesOnAboutPage);
     if (legacy != null) {
-      await prefs.setBool(SettingsKeys.autoCheckUpdatesInBackground, legacy);
+      await SettingsAccess.persist(SettingsKeys.autoCheckUpdatesInBackground, () => prefs.setBool(SettingsKeys.autoCheckUpdatesInBackground, legacy));
       return legacy;
     }
 
@@ -28,8 +29,8 @@ class UpdateService {
 
   static Future<void> setAutoCheckEnabled(bool enabled) async {
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setBool(SettingsKeys.autoCheckUpdatesInBackground, enabled);
-    await prefs.remove(SettingsKeys.legacyAutoCheckUpdatesOnAboutPage);
+    await SettingsAccess.persist(SettingsKeys.autoCheckUpdatesInBackground, () => prefs.setBool(SettingsKeys.autoCheckUpdatesInBackground, enabled));
+    await SettingsAccess.persist(SettingsKeys.legacyAutoCheckUpdatesOnAboutPage, () => prefs.remove(SettingsKeys.legacyAutoCheckUpdatesOnAboutPage));
     debugPrint('自动检测更新已${enabled ? "开启" : "关闭"}');
   }
 

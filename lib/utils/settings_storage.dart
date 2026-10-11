@@ -1,10 +1,11 @@
+import 'package:nipaplay/next/settings/registry.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:nipaplay/security/credential_store.dart';
 
 class SettingsStorage {
   static Future<void> saveBool(String key, bool value) async {
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setBool(key, value);
+    await SettingsAccess.persist(key, () => prefs.setBool(key, value));
   }
 
   static Future<bool> loadBool(String key, {bool defaultValue = false}) async {
@@ -25,7 +26,7 @@ class SettingsStorage {
 
   static Future<void> saveStringList(String key, List<String> value) async {
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setStringList(key, value);
+    await SettingsAccess.persist(key, () => prefs.setStringList(key, value));
   }
 
   static Future<List<String>> loadStringList(String key,
@@ -36,7 +37,7 @@ class SettingsStorage {
 
   static Future<void> saveInt(String key, int value) async {
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setInt(key, value);
+    await SettingsAccess.persist(key, () => prefs.setInt(key, value));
   }
 
   static Future<int> loadInt(String key, {int defaultValue = 0}) async {
@@ -46,7 +47,7 @@ class SettingsStorage {
 
   static Future<void> saveDouble(String key, double value) async {
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setDouble(key, value);
+    await SettingsAccess.persist(key, () => prefs.setDouble(key, value));
   }
 
   static Future<double> loadDouble(String key,

@@ -1,3 +1,4 @@
+import 'package:nipaplay/next/settings/registry.dart';
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -76,7 +77,7 @@ class HomeSectionsSettingsProvider extends ChangeNotifier {
     _enabled = {
       for (final type in defaultOrder) type: true,
     };
-    _loadSettings();
+    ready = _loadSettings();
   }
 
   List<HomeSectionType> get orderedSections => List.unmodifiable(_order);
@@ -115,12 +116,14 @@ class HomeSectionsSettingsProvider extends ChangeNotifier {
     };
     notifyListeners();
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setStringList(
+    await SettingsAccess.persist(_orderKey, () => prefs.setStringList(
       _orderKey,
       _order.map((type) => type.storageKey).toList(),
-    );
-    await prefs.setStringList(_disabledKey, const []);
+    ));
+    await SettingsAccess.persist(_disabledKey, () => prefs.setStringList(_disabledKey, const []));
   }
+
+  late final Future<void> ready;
 
   Future<void> _loadSettings() async {
     try {
@@ -156,10 +159,10 @@ class HomeSectionsSettingsProvider extends ChangeNotifier {
   Future<void> _saveOrder() async {
     try {
       final prefs = await SharedPreferences.getInstance();
-      await prefs.setStringList(
+      await SettingsAccess.persist(_orderKey, () => prefs.setStringList(
         _orderKey,
         _order.map((type) => type.storageKey).toList(),
-      );
+      ));
     } catch (_) {
     }
   }
@@ -171,7 +174,7 @@ class HomeSectionsSettingsProvider extends ChangeNotifier {
           .where((entry) => entry.value == false)
           .map((entry) => entry.key.storageKey)
           .toList();
-      await prefs.setStringList(_disabledKey, disabled);
+      await SettingsAccess.persist(_disabledKey, () => prefs.setStringList(_disabledKey, disabled));
     } catch (_) {
     }
   }
