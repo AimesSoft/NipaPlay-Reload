@@ -57,7 +57,9 @@
 
 - Flutter 一律使用 CI 版本 3.44.6：`~/development/flutter-3.44.6/bin/flutter`、`.../bin/dart`。PATH 中默认的 3.47.2 编译不了本项目。
 - analyze / test 一律加 `--no-pub`。
-- 报告前跑完整的 `flutter test --no-pub test/next`（另加改动涉及的 Classic 测试），不只跑自己新增的；数据库版本升级会让旧的迁移断言失败。
+- 迭代时只跑受影响的测试文件；完整的 `flutter test --no-pub test/next`（另加改动涉及的 Classic 测试）只在报告前跑一次。数据库版本升级会让旧的迁移断言失败，所以最后那一次不能省。
+- 多个同伴会同时工作，Flutter 测试一律排队、去掉代理再跑：`lockf -k /tmp/nipa-next/flutter-test.lock env -u HTTP_PROXY -u HTTPS_PROXY -u ALL_PROXY -u http_proxy -u https_proxy -u all_proxy NO_PROXY=127.0.0.1,localhost ~/development/flutter-3.44.6/bin/flutter test --no-pub <文件>`。测试宿主连不上导致的“加载失败”是环境问题，不是测试失败，不要因此重跑全量。
+- 实验脚本写好后，改动只影响其中一部分时，只重跑那一部分。
 - 本机设置了 `HTTP_PROXY`：测试里访问回环地址的 `HttpClient` 要设置 `findProxy = (_) => 'DIRECT'`。
 
 ## 报告格式
