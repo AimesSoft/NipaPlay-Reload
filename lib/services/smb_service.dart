@@ -17,12 +17,19 @@ class SMBConnection {
   final String host;
   final int port;
   final String username;
+  final String? credentialOrigin;
+  String get credentialAuthority => 'smb://${host.toLowerCase()}:$port';
   final StoredCredential _password;
   String get password => _password.value ?? '';
   bool get passwordIsResolved => _password.ref == null || _password.value != null;
   StoredCredential? retainPassword(String edited, {required String original}) =>
       edited == original ? _password : null;
-  Future<void> resolvePassword() async { await _password.resolve(); }
+  Future<void> resolvePassword() async {
+    if (credentialOrigin != null && credentialOrigin != credentialAuthority) {
+      throw StateError('credential_origin_changed');
+    }
+    await _password.resolve();
+  }
   final String domain;
   final bool isConnected;
 
@@ -34,6 +41,7 @@ class SMBConnection {
     required this.username,
     required String password,
     StoredCredential? storedPassword,
+    this.credentialOrigin,
     this.domain = '',
     this.isConnected = false,
   }) : _password = storedPassword ?? StoredCredential(password),
@@ -48,6 +56,7 @@ class SMBConnection {
     String? password,
     String? domain,
     bool? isConnected,
+    String? credentialOrigin,
   }) {
     return SMBConnection(
       id: id ?? this.id,
@@ -59,6 +68,7 @@ class SMBConnection {
       storedPassword: password == null ? _password : null,
       domain: domain ?? this.domain,
       isConnected: isConnected ?? this.isConnected,
+      credentialOrigin: credentialOrigin ?? this.credentialOrigin,
     );
   }
 
@@ -72,6 +82,7 @@ class SMBConnection {
       'password': _password.toJson(),
       'domain': domain,
       'isConnected': isConnected,
+      if (credentialOrigin != null) 'credentialOrigin': credentialOrigin,
     };
   }
 
@@ -97,6 +108,7 @@ class SMBConnection {
           CredentialStore.itemRef('smb_connections', json)),
       domain: json['domain'] ?? '',
       isConnected: json['isConnected'] ?? false,
+      credentialOrigin: json['credentialOrigin'] as String?,
     );
   }
 }
@@ -250,6 +262,33 @@ class SMBService {
       await _saveConnections();
     }
     return success;
+  }
+
+  /// Save configuration before the user supplies a login secret.
+  Future<void> configureConnection(SMBConnection connection) async {
+    final normalized = _normalizeConnection(connection);
+    final index = _connections.indexWhere((item) => item.id == normalized.id);
+    final replacement = [..._connections];
+    if (index < 0) {
+      replacement.add(normalized);
+    } else {
+      replacement[index] = normalized;
+    }
+    await CredentialStore.instance.write(
+        await SharedPreferences.getInstance(),
+        _connectionsKey,
+        jsonEncode(replacement.map((e) => e.toJson()).toList()));
+    _connections
+      ..clear()
+      ..addAll(replacement);
+    clearDirectoryCache();
+  }
+
+  Future<void> persistConnections() async {
+    await CredentialStore.instance.write(
+        await SharedPreferences.getInstance(),
+        _connectionsKey,
+        jsonEncode(_connections.map((c) => c.toJson()).toList()));
   }
 
   Future<bool> updateConnection(

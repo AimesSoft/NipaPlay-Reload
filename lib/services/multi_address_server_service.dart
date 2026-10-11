@@ -60,7 +60,12 @@ class MultiAddressServerService {
       DebugLogService().addLog('MultiAddressServer: 保存配置失败: $e');
     }
   }
-  
+
+  Future<void> persistProfiles() async {
+    await CredentialStore.instance.write(await SharedPreferences.getInstance(),
+        _profilesKey, json.encode(_profiles.map((p) => p.toJson()).toList()));
+  }
+
   /// 添加新的服务器配置
   Future<ServerProfile?> addProfile({
     required String serverName,

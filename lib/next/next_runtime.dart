@@ -10,6 +10,9 @@ import 'package:nipaplay/models/watch_history_model.dart';
 import 'package:nipaplay/providers/labs_settings_provider.dart';
 import 'package:nipaplay/providers/service_provider.dart';
 import 'package:nipaplay/providers/settings_provider.dart';
+import 'package:nipaplay/providers/shared_remote_library_provider.dart';
+import 'package:nipaplay/providers/jellyfin_provider.dart';
+import 'package:nipaplay/providers/emby_provider.dart';
 import 'package:nipaplay/services/bangumi_service.dart';
 import 'package:nipaplay/services/episode_file_selection_service.dart';
 import 'package:nipaplay/services/playback_service.dart';
@@ -27,6 +30,7 @@ import 'capabilities/navigation_capability.dart';
 import 'capabilities/playback_capability.dart';
 import 'capabilities/video_player_state_port.dart';
 import 'media/file_indexing.dart';
+import 'media_sources/login_dialog.dart';
 import 'settings/application_settings.dart';
 import 'harness_location.dart';
 import 'harness_hooks.dart';
@@ -39,6 +43,20 @@ final class NextRuntime extends ChangeNotifier {
 
   factory NextRuntime.fromContext(BuildContext context) {
     final labs = context.read<LabsSettingsProvider>();
+    final core = ServiceProvider.nextCore;
+    core.ready.then((_) {
+      if (!context.mounted) return;
+      core.mediaSources.shared = context.read<SharedRemoteLibraryProvider>();
+      core.mediaSources.updateGuiSelection = (type, ids) => type == 'jellyfin'
+          ? context.read<JellyfinProvider>().updateSelectedLibraries(ids)
+          : context.read<EmbyProvider>().updateSelectedLibraries(ids);
+      core.mediaSources.requestPassword = (source, stopped) {
+        if (!context.mounted)
+          throw const Failure(
+              FailureCode.unavailable, 'The NipaPlay login window has closed.');
+        return showMediaSourceLogin(source, stopped);
+      };
+    });
     ApplicationSettings.erikaVisible = () =>
         PlayerFactory.isErikaKernelSupported &&
         (globals.isTelevision ||
