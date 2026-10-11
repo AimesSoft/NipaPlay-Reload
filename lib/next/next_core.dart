@@ -37,6 +37,8 @@ import 'state/change_history.dart';
 import 'state/activity.dart';
 import 'harness_hooks.dart';
 import 'harness_location.dart';
+import 'followups/service.dart';
+import 'followups/capability.dart';
 
 /// Application-owned task and capability composition, independent of Labs.
 final class NextCore {
@@ -81,6 +83,7 @@ final class NextCore {
   final StateSources stateSources = StateSources();
   late final StateCapability state;
   late final ChangeHistory changeHistory;
+  late final Followups followups;
 
   Future<void> _initialize(
       Directory? suppliedRoot,
@@ -140,6 +143,8 @@ final class NextCore {
       for (final executor in executors) OriginExecutor(executor, database)
     ]);
     hooks.engine = engine;
+    followups = Followups(database, engine, harnessLocation);
+    hooks.observeEvent = followups.hookEvent;
     downloads.attach(engine, root);
     media.attach(engine);
     mediaSources.engine = engine;
@@ -152,10 +157,11 @@ final class NextCore {
         mesh: mesh,
         sources: stateSources), ActivityView(media.service, settings,
             File('${root.path}/journal.jsonl'), harnessLocation,
-            changeHistory).view]);
+            changeHistory).view, followups.view]);
     capabilities = List.unmodifiable([
       CredentialCapability(credentials),
       TaskCapability(engine),
+      FollowupCapability(followups),
       downloads.capability,
       downloads.metadataCapability,
       media.capability,
@@ -168,6 +174,7 @@ final class NextCore {
       state,
     ].map(InvocationScopeCapability.new));
     await engine.start();
+    followups.start();
     await downloads.start();
     await media.start();
     mesh.attach(Harness(capabilities));
@@ -185,6 +192,8 @@ final class NextCore {
     await settings.drain();
     if (identical(BodyChanges.attached, changeHistory)) BodyChanges.attached = null;
     await changeHistory.drain();
+    await followups.close();
+    hooks.observeEvent = null;
     await hooks.disable();
     harnessLocation.dispose();
     await mesh.close();

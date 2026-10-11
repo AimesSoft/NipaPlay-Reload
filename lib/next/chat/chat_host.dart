@@ -41,15 +41,27 @@ final class ChatHost {
   final _inputRequests = <Object, ChatMessage>{};
   final _reasoning = <String, StringBuffer>{};
   final _deltaTails = <String, ChatMessage>{};
+  final _freshThreads = <String, ChatMessage>{};
   Process? _process;
   Timer? _flush, _clock;
   Future<void>? _reader, _stderr;
   bool _closing = false;
+  bool _transportClosed = false;
+  Future<void> _controls = Future.value();
   Future<void>? _closeFuture;
   int _nextId = 0;
   String? threadId, model, provider;
   ChatMessage? thread;
   Map<String, String> launchEnvironment = {};
+
+  bool get available => _process != null && !_closing && !_transportClosed;
+  bool get busy => liveness.status == 'inProgress' || liveness.status == 'starting';
+
+  Future<T> _control<T>(Future<T> Function() operation) {
+    final result = _controls.then((_) => operation());
+    _controls = result.then<void>((_) {}, onError: (Object error, StackTrace stack) {});
+    return result;
+  }
 
   Future<void> start() async {
     if (_process != null) throw StateError('Chat server already started.');
@@ -321,11 +333,13 @@ final class ChatHost {
   }
 
   void _transportError(String text) {
+    _transportClosed = true;
     liveness.latestError = text;
     _display.add({
       'method': 'host/error',
       'params': {'message': text}
     });
+    _events.add({'method': 'host/error', 'params': {'message': text}});
   }
 
   void _flushReasoning() {
@@ -344,7 +358,7 @@ final class ChatHost {
       _process!.stdin.writeln(jsonEncode(message));
   Future<ChatMessage> _request(String method, ChatMessage params) async {
     await endpoint.inspectChatText(jsonEncode(params));
-    if (_closing || _process == null) {
+    if (!available) {
       throw StateError('Chat server is not running');
     }
     final id = ++_nextId;
@@ -359,9 +373,9 @@ final class ChatHost {
         'sandbox': 'danger-full-access',
         'approvalPolicy': 'never'
       };
-  Future<ChatMessage> startThread() => _select('thread/start', _common);
+  Future<ChatMessage> startThread() => _control(() => _select('thread/start', _common));
   Future<ChatMessage> resumeThread(String id) =>
-      _select('thread/resume', {..._common, 'threadId': id});
+      _control(() => _select('thread/resume', {..._common, 'threadId': id}));
   Future<ChatMessage> _select(String method, ChatMessage params) async {
     if (liveness.status == 'inProgress' || liveness.status == 'starting') {
       throw StateError('Interrupt the current turn before switching threads');
@@ -369,6 +383,7 @@ final class ChatHost {
     final response = await _request(method, params);
     thread = _public(Map<String, dynamic>.from(response['thread'] as Map));
     threadId = thread!['id'] as String;
+    if (method == 'thread/start') _freshThreads[threadId!] = thread!;
     model = response['model'] as String;
     provider = response['modelProvider'] as String;
     return Map<String, dynamic>.from(redactHarnessJson(response) as Map);
@@ -386,12 +401,14 @@ final class ChatHost {
   List<ChatMessage> _input(String text) => [
         {'type': 'text', 'text': text}
       ];
-  Future<ChatMessage> startTurn(String text) async {
+  Future<ChatMessage> startTurn(String text) => _control(() => _startTurn(text));
+  Future<ChatMessage> _startTurn(String text) async {
     if (threadId == null) throw StateError('Select a thread first');
     if (liveness.status == 'inProgress' || liveness.status == 'starting') {
       throw StateError('Use steer for an active turn');
     }
     liveness.starting(DateTime.now());
+    _freshThreads.remove(threadId);
     try {
       return _public(await _request(
           'turn/start', {'threadId': threadId, 'input': _input(text)}));
@@ -408,6 +425,33 @@ final class ChatHost {
         'expectedTurnId': liveness.turnId,
         'input': _input(text)
       }));
+
+  Future<ChatMessage> readThread(String id) async {
+    // Codex cannot includeTurns until a newly started thread has its first input.
+    if (_freshThreads[id] case final fresh?) return fresh;
+    final result = await _request('thread/read', {'threadId': id, 'includeTurns': true});
+    return Map<String, dynamic>.from(result['thread'] as Map);
+  }
+
+  /// Serialize with UI selection/start. Wait while the host has an active turn.
+  Future<String?> prepareFollowup(String? id) => _control(() async {
+    if (busy) return null;
+    if (id == null) {
+      await _select('thread/start', _common);
+      return threadId;
+    }
+    final history = await readThread(id);
+    if ((history['turns'] as List).cast<Map>().any((turn) => turn['status'] == 'inProgress')) return null;
+    return id;
+  });
+
+  Future<ChatMessage?> startFollowup(String id, String text) => _control(() async {
+    if (busy) return null;
+    final history = await readThread(id);
+    if ((history['turns'] as List).cast<Map>().any((turn) => turn['status'] == 'inProgress')) return null;
+    if (threadId != id) await _select('thread/resume', {..._common, 'threadId': id});
+    return _startTurn(text);
+  });
   Future<ChatMessage> interrupt() async => _public(await _request(
       'turn/interrupt', {'threadId': threadId, 'turnId': liveness.turnId}));
   Future<void> answerUserInput(
