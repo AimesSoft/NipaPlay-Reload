@@ -51,6 +51,7 @@ final class UiWork {
     this.ratings = const [],
     this.artwork = const UiArtwork(),
     this.next,
+    this.danmaku = const [],
   });
   final String workId;
   final String title;
@@ -65,6 +66,10 @@ final class UiWork {
 
   /// The episode a play button should start: next unwatched or in progress.
   final UiEpisode? next;
+
+  /// A few short comments viewers left on this work, for drifting over the
+  /// hero. Empty when there are none.
+  final List<String> danmaku;
 }
 
 final class UiEpisode {
@@ -113,7 +118,14 @@ final class UiHero {
   final String? note;
 }
 
-enum UiShelfKind { continueWatching, agent, recent }
+enum UiShelfKind {
+  continueWatching,
+
+  /// Works the user follows that have a new episode out today.
+  airing,
+  agent,
+  recent,
+}
 
 final class UiShelf {
   const UiShelf({
