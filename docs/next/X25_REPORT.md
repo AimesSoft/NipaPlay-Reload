@@ -55,8 +55,8 @@ b670602fa00934ca27c4351bb0efe7ea7a07fae57284e44226025eeed7c51254
 
 | 实验 | 对话及命令输出 | 状态采样 | 完整 activity 原始输出 |
 |---|---|---|---|
-| 在线 | [transcript](evidence/x25/online-transcript.json)、[协议流](evidence/x25/online-chat.jsonl)、[操作](evidence/x25/online-operations.json) | [samples](evidence/x25/online-samples.json) | [75 行完整 JSON](evidence/x25/online-activity.json)、[完整贴出版本](evidence/x25/online-ACTIVITY.md) |
-| 停机完成后重启 | [transcript](evidence/x25/restart-transcript.json)、[协议流](evidence/x25/restart-chat.jsonl)、[操作](evidence/x25/restart-operations.json) | [samples](evidence/x25/restart-samples.json) | [44 行完整 JSON](evidence/x25/restart-activity.json)、[完整贴出版本](evidence/x25/restart-ACTIVITY.md) |
+| 在线 | [transcript](evidence/x25/online-transcript.json)、[协议流](evidence/x25/online-chat.jsonl.gz)、[操作](evidence/x25/online-operations.json) | [samples](evidence/x25/online-samples.json.gz) | [75 行完整 JSON](evidence/x25/online-activity.json)、[完整贴出版本](evidence/x25/online-ACTIVITY.md) |
+| 停机完成后重启 | [transcript](evidence/x25/restart-transcript.json.gz)、[协议流](evidence/x25/restart-chat.jsonl.gz)、[操作](evidence/x25/restart-operations.json) | [samples](evidence/x25/restart-samples.json.gz) | [44 行完整 JSON](evidence/x25/restart-activity.json)、[完整贴出版本](evidence/x25/restart-ACTIVITY.md) |
 | 边界补充 | [操作](evidence/x25/controls.json)、[协议流](evidence/x25/controls-chat.jsonl) | 操作中含各次实际状态 | [34 行完整 JSON](evidence/x25/controls-activity.json)、[完整贴出版本](evidence/x25/controls-ACTIVITY.md) |
 
 三份 activity 的 nextCursor 都是 null，warnings 都是 []，没有省略后续记录或领域记录。以下时间均为 UTC。
