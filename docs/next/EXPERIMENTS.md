@@ -151,7 +151,7 @@
 - Agent 写了 `hooks/download.completed` 和 `tools/dandanplay_autolink.py`、`tools/dandanplay_retry_unlinked.py`：先看已有身份绑定，再看 Classic 观察，最后退回哈希匹配；识别不了的追加到 `records/unlinked_downloads.jsonl`（已忽略、去重）。用法写进 AGENTS.md 与 `hooks/README.md`，两次提交。
 - 下载了 Big Buck Bunny（WebTorrent 官方开放授权种子，276 MB）。**下载完成后 hook 自动触发**（任务 exit 0），弹弹play 未收录，如实记入清单。
 - 307 条命令，6100 万输入 token（绝大部分缓存），大量时间花在排查网络上。
-- **网络**：直连弹弹play 网关被校园网拦截：直连拿到 `pan-fw-trust`（Palo Alto 防火墙）签发的证书，备用 IP 被 302 到 `campus.example` 登录页。经 Clash 访问网关正常（200，证书有效）。NipaPlay 没有设置自己的 HTTP 代理，所以直连。Agent 判断为“网络问题，不是代码问题”，正确。
+- **网络**：直连弹弹play 网关被校园网拦截：直连拿到 `pan-fw-trust`（Palo Alto 防火墙）签发的证书，备用 IP 被 302 到 `campus.example` 登录页。经 Clash 访问网关正常（200，证书有效）。（更正：NipaPlay 自己的代理设置为空时会使用 macOS 系统代理，即 Clash，并非直连；此处的 302 后来在 X14 中查明是弹弹play 评论接口跳转 CDN、客户端未跟随。）
 - **身体的缺陷（用户数据受影响，已恢复）**：为测试“能识别时”的链路，Agent 把《穹庐下的魔女》第 1 集（Classic 中原本未匹配）临时绑定到弹弹play，随后撤销，并报告“临时绑定已撤销”。实际上绑定经 X5 的投影写进了 Classic，撤销只撤了 Next 一侧；投影还把这一行的 `anime_name` 写成了空字符串。逐行对比迁移前备份后，主控退出应用，把这一行恢复原值；Classic 库现与备份完全一致。
 
 判读：hook 机制成立。投影是单向的：写入 Classic 的匹配不会随撤销收回，Agent 也看不见这一点，于是报告与事实不符。交给 X8：撤销时收回自己的投影（Classic 之后没被改过时），投影不清空字段；同时让 `nipa status` 报告种子状态（实验 4）。
