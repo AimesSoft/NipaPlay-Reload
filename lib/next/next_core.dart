@@ -14,6 +14,8 @@ import 'downloads/download_runtime.dart';
 import 'media/classic_projection.dart';
 import 'media/media_runtime.dart';
 import 'media/media_probe.dart';
+import 'media_sources/service.dart';
+import 'media_sources/capability.dart';
 import 'media/metadata_provider.dart';
 import 'next_database.dart';
 import 'tasks/device_identity.dart';
@@ -63,6 +65,7 @@ final class NextCore {
   CredentialStore get credentials => CredentialStore.instance;
   CredentialVault get credentialVault => credentials.vault;
   late final MediaRuntime media;
+  late final MediaSourcesService mediaSources;
   late final DanmakuRuntime danmaku;
   late final SettingsRegistry settings;
   late final MeshRuntime mesh;
@@ -89,6 +92,7 @@ final class NextCore {
         authorizedRoots: authorizedRoots,
         providers: mediaProviders,
         durationProbe: mediaDurationProbe);
+    mediaSources = MediaSourcesService(media.service.store);
     mesh = MeshRuntime(
         root: root,
         vault: credentialVault,
@@ -109,12 +113,14 @@ final class NextCore {
     engine = TaskEngine(store: jobs, ownerDeviceId: deviceId, executors: [
       downloads.executor,
       ...media.executors,
+      ...mediaSourcesExecutors(mediaSources),
       ...danmaku.executors,
       hooks,
     ]);
     hooks.engine = engine;
     downloads.attach(engine, root);
     media.attach(engine);
+    mediaSources.engine = engine;
     danmaku.attach(engine);
     state = StateCapability(publicStateViews(
         media: media.service,
@@ -127,6 +133,7 @@ final class NextCore {
       TaskCapability(engine),
       downloads.capability,
       media.capability,
+      MediaSourcesCapability(mediaSources),
       danmaku.capability,
       SettingsCapability(settings),
       MeshCapability(mesh),
@@ -156,6 +163,7 @@ final class NextCore {
     final jobs = await engine.list(type: 'download');
     await media.quiesce();
     await engine.close();
+    await mediaSources.close();
     await downloads.quiesce(jobs);
     downloads.dispose();
     danmaku.close();

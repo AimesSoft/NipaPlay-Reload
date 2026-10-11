@@ -23,12 +23,19 @@ class WebDAVConnection {
   final String name;
   final String url;
   final String username;
+  final String? credentialOrigin;
+  String get credentialAuthority => Uri.parse(url).origin;
   final StoredCredential _password;
   String get password => _password.value ?? '';
   bool get passwordIsResolved => _password.ref == null || _password.value != null;
   StoredCredential? retainPassword(String edited, {required String original}) =>
       edited == original ? _password : null;
-  Future<void> resolvePassword() async { await _password.resolve(); }
+  Future<void> resolvePassword() async {
+    if (credentialOrigin != null && credentialOrigin != credentialAuthority) {
+      throw StateError('credential_origin_changed');
+    }
+    await _password.resolve();
+  }
   final bool isConnected;
 
   WebDAVConnection({
@@ -38,6 +45,7 @@ class WebDAVConnection {
     required this.username,
     required String password,
     StoredCredential? storedPassword,
+    this.credentialOrigin,
     this.isConnected = false,
   }) : _password = storedPassword ?? StoredCredential(password),
        id = id?.trim().isNotEmpty == true ? id!.trim() : const Uuid().v4();
@@ -50,6 +58,7 @@ class WebDAVConnection {
       'username': username,
       'password': _password.toJson(),
       'isConnected': isConnected,
+      if (credentialOrigin != null) 'credentialOrigin': credentialOrigin,
     };
   }
 
@@ -70,6 +79,7 @@ class WebDAVConnection {
       storedPassword: StoredCredential.fromJson(json['password'],
           CredentialStore.itemRef('webdav_connections', json)),
       isConnected: json['isConnected'] ?? false,
+      credentialOrigin: json['credentialOrigin'] as String?,
     );
   }
 
@@ -80,6 +90,7 @@ class WebDAVConnection {
     String? username,
     String? password,
     bool? isConnected,
+    String? credentialOrigin,
   }) {
     return WebDAVConnection(
       id: id ?? this.id,
@@ -89,6 +100,7 @@ class WebDAVConnection {
       password: password ?? this.password,
       storedPassword: password == null ? _password : null,
       isConnected: isConnected ?? this.isConnected,
+      credentialOrigin: credentialOrigin ?? this.credentialOrigin,
     );
   }
 }
@@ -274,6 +286,36 @@ class WebDAVService {
 
   Future<bool> addConnection(WebDAVConnection connection) async {
     return upsertConnection(connection);
+  }
+
+  /// Save configuration before the user supplies a login secret.
+  Future<void> configureConnection(WebDAVConnection connection) async {
+    final normalized = _normalizeConnection(connection);
+    final index = _connections.indexWhere((item) => item.id == normalized.id);
+    final replacement = [..._connections];
+    if (index < 0) {
+      replacement.add(normalized);
+    } else {
+      replacement[index] = normalized;
+    }
+    await CredentialStore.instance.write(
+        await SharedPreferences.getInstance(),
+        _connectionsKey,
+        jsonEncode(replacement.map((e) => e.toJson()).toList()));
+    _connections
+      ..clear()
+      ..addAll(replacement);
+    _connectionTombstones.remove(normalized.id);
+    await _saveConnectionTombstones();
+    clearDirectoryCache();
+  }
+
+  Future<void> persistConnections() async {
+    await CredentialStore.instance.write(
+        await SharedPreferences.getInstance(),
+        _connectionsKey,
+        jsonEncode(_connections.map((c) => c.toJson()).toList()));
+    await _saveConnectionTombstones();
   }
 
   /// Validates the replacement before mutating the currently saved connection.

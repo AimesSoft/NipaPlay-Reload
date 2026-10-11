@@ -17,6 +17,8 @@ import 'package:nipaplay/utils/media_source_utils.dart';
 import 'package:nipaplay/models/playable_item.dart';
 import 'package:nipaplay/models/shared_remote_library.dart';
 import 'package:nipaplay/models/watch_history_model.dart';
+import 'package:nipaplay/security/credential_store.dart';
+import 'package:nipaplay/security/credential_vault.dart';
 
 typedef _RemoteDirectoryCacheKey = ({
   String hostId,
@@ -82,6 +84,49 @@ class SharedRemoteLibraryProvider extends ChangeNotifier {
   String? _managementErrorMessage;
 
   List<SharedRemoteHost> get hosts => List.unmodifiable(_hosts);
+
+  Future<String> hostUsername(String hostId) async =>
+      (await SharedPreferences.getInstance())
+          .getString('shared_remote_username.$hostId') ??
+      '';
+
+  Future<void> configureHostCredentials(String hostId, String username,
+      {String? password}) async {
+    if (!_hosts.any((host) => host.id == hostId)) {
+      throw StateError('Unknown shared host');
+    }
+    if (password != null) {
+      await CredentialStore.instance.verifiedWrite(
+          CredentialRef('shared_remote_hosts', 'basic:$hostId'), password);
+      final host = _hosts.firstWhere((host) => host.id == hostId);
+      await (await SharedPreferences.getInstance()).setString(
+          'shared_remote_credential_origin.$hostId',
+          Uri.parse(host.baseUrl).origin);
+    }
+    await (await SharedPreferences.getInstance())
+        .setString('shared_remote_username.$hostId', username);
+    final index = _hosts.indexWhere((host) => host.id == hostId);
+    final uri = Uri.parse(_hosts[index].baseUrl);
+    if (password != null && uri.userInfo.isNotEmpty) {
+      _hosts[index] = _hosts[index]
+          .copyWith(baseUrl: uri.replace(userInfo: '').toString());
+      await _persistHosts();
+      if (_activeHostId == hostId) {
+        await _syncHostToRemoteControl(_hosts[index]);
+      }
+      notifyListeners();
+    }
+  }
+
+  Future<void> removeHostCredentials(String hostId) async {
+    await CredentialStore.instance.vault
+        .delete(CredentialRef('shared_remote_hosts', 'basic:$hostId'));
+    await (await SharedPreferences.getInstance())
+        .remove('shared_remote_username.$hostId');
+    await (await SharedPreferences.getInstance())
+        .remove('shared_remote_credential_origin.$hostId');
+  }
+
   String? get activeHostId => _activeHostId;
   SharedRemoteHost? get activeHost {
     if (_activeHostId == null) return null;
@@ -568,7 +613,7 @@ class SharedRemoteLibraryProvider extends ChangeNotifier {
       if (!kIsWeb) 'User-Agent': 'NipaPlay/1.0',
     };
 
-    final authHeader = _buildBasicAuthHeader(uri);
+    final authHeader = await _buildBasicAuthHeader(uri);
     if (authHeader != null) {
       headers['Authorization'] = authHeader;
     }
@@ -596,7 +641,7 @@ class SharedRemoteLibraryProvider extends ChangeNotifier {
       'Content-Type': 'application/json; charset=utf-8',
     };
 
-    final authHeader = _buildBasicAuthHeader(uri);
+    final authHeader = await _buildBasicAuthHeader(uri);
     if (authHeader != null) {
       headers['Authorization'] = authHeader;
     }
@@ -627,7 +672,7 @@ class SharedRemoteLibraryProvider extends ChangeNotifier {
       if (!kIsWeb) 'User-Agent': 'NipaPlay/1.0',
     };
 
-    final authHeader = _buildBasicAuthHeader(uri);
+    final authHeader = await _buildBasicAuthHeader(uri);
     if (authHeader != null) {
       headers['Authorization'] = authHeader;
     }
@@ -655,8 +700,28 @@ class SharedRemoteLibraryProvider extends ChangeNotifier {
     );
   }
 
-  String? _buildBasicAuthHeader(Uri uri) {
+  Future<String?> _buildBasicAuthHeader(Uri uri) async {
     if (uri.userInfo.isEmpty) {
+      for (final host in _hosts) {
+        final base = Uri.parse(host.baseUrl);
+        if (base.scheme != uri.scheme ||
+            base.host != uri.host ||
+            base.port != uri.port ||
+            !(uri.path == base.path || uri.path.startsWith('${base.path}/'))) {
+          continue;
+        }
+        final username = await hostUsername(host.id);
+        if (username.isEmpty) return null;
+        final origin = (await SharedPreferences.getInstance())
+            .getString('shared_remote_credential_origin.${host.id}');
+        if (origin != null && origin != uri.origin) {
+          throw StateError('credential_origin_changed');
+        }
+        final password = await CredentialStore.instance.vault
+            .read(CredentialRef('shared_remote_hosts', 'basic:${host.id}'));
+        if (password == null) throw StateError('credential_missing');
+        return 'Basic ${base64Encode(utf8.encode('$username:$password'))}';
+      }
       return null;
     }
 

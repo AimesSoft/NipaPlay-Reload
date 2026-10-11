@@ -12,6 +12,7 @@ import 'package:nipaplay/utils/url_name_generator.dart';
 import 'debug_log_service.dart';
 import 'media_server_device_id_service.dart';
 import 'media_server_transport.dart';
+import 'media_server_pagination.dart';
 import 'dart:io' if (dart.library.io) 'dart:io';
 
 abstract class MediaServerServiceBase {
@@ -491,6 +492,91 @@ abstract class MediaServerServiceBase {
         DebugLogService().addLog('$serviceNameService: 删除服务器配置文件失败: $e');
       }
     }
+  }
+
+  /// Select a saved profile without deleting the previous profile or its token.
+  Future<void> activateProfile(ServerProfile profile) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString('${prefsKeyPrefix}_current_profile_id', profile.id);
+    isConnected = false;
+    isReady = false;
+    accessToken = null;
+    clearServiceData();
+    await loadSavedSettings();
+  }
+
+  /// Commit an authenticated session obtained by an interactive login method.
+  Future<void> acceptSession(ServerProfile profile,
+      {required String token,
+      required String authenticatedUserId,
+      required String authenticatedUsername,
+      List<String>? libraryIds}) async {
+    currentProfile = profile.copyWith(
+        accessToken: token,
+        userId: authenticatedUserId,
+        username: authenticatedUsername);
+    currentAddressId = profile.currentAddress!.id;
+    serverUrl = profile.currentAddress!.normalizedUrl;
+    username = authenticatedUsername;
+    userId = authenticatedUserId;
+    accessToken = token;
+    password = null;
+    await _multiAddressService.updateProfile(currentProfile!);
+    await _multiAddressService.persistProfiles();
+    await _saveConnectionInfo();
+    if (libraryIds != null) await updateSelectedLibraries(libraryIds);
+    isConnected = true;
+    await loadAvailableLibraries();
+    isReady = true;
+    _notifyConnectionStateChanged();
+    _notifyReady();
+  }
+
+  Future<String> identifySource(String url) => getServerId(url);
+
+  Future<void> authenticateProfile(ServerProfile profile, String secret,
+      {List<String>? libraryIds}) async {
+    await performAuthentication(
+        profile.currentAddress!.normalizedUrl, profile.username, secret);
+    await acceptSession(profile,
+        token: accessToken!,
+        authenticatedUserId: userId!,
+        authenticatedUsername: profile.username,
+        libraryIds: libraryIds);
+  }
+
+  Future<List<Map<String, dynamic>>> catalogLibraries() async {
+    if (!isConnected) throw StateError(notConnectedMessage);
+    final response = await makeAuthenticatedRequest(serviceType == 'jellyfin'
+        ? '/UserViews?userId=$userId'
+        : '/Users/$userId/Views');
+    final data = jsonDecode(response.body) as Map<String, dynamic>;
+    return (data['Items'] as List).cast<Map<String, dynamic>>();
+  }
+
+  /// Full catalog discovery, including items with no playback history.
+  Future<List<Map<String, dynamic>>> browseCatalog(
+      {String? parentId, bool recursive = false}) async {
+    if (!isConnected) throw StateError(notConnectedMessage);
+    final session = (serverUrl, userId, accessToken);
+    final endpoint = Uri(path: '/Items', queryParameters: {
+      'userId': userId!,
+      if (parentId != null) 'ParentId': parentId,
+      'Recursive': '$recursive',
+      'IncludeItemTypes': recursive
+          ? 'Episode,Movie,Video'
+          : 'CollectionFolder,Folder,Series,Season,Episode,Movie,Video',
+      'Fields': 'ParentId,SeriesName,SeriesId,SeasonId,Path,MediaSources',
+      'SortBy': 'SortName',
+      'SortOrder': 'Ascending',
+      'Limit': '2147483647',
+    }).toString();
+    return loadMediaServerItems<Map<String, dynamic>>(
+      endpoint: endpoint,
+      request: (path) => makeAuthenticatedRequest(path),
+      decode: (body) async => decodeMediaServerPage(body, (item) => item),
+      isCurrent: () => session == (serverUrl, userId, accessToken),
+    );
   }
 
   @protected

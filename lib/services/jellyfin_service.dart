@@ -25,6 +25,28 @@ MediaServerPage<JellyfinMovieInfo> _decodeJellyfinMoviePage(String body) =>
 
 class JellyfinService extends MediaServerServiceBase
     implements MediaServerPlaybackClient {
+  Future<Map<String, dynamic>> quickConnectRequest(String url, String path,
+      {String method = 'GET', Map<String, dynamic>? body}) async {
+    final response = await sendRequestFollowingRedirects(
+      Uri.parse('${normalizeUrl(url)}$path'),
+      method: method,
+      headers: {
+        'Content-Type': 'application/json',
+        ...await buildAuthorizationHeaders(includeToken: false)
+      },
+      body: body == null ? null : jsonEncode(body),
+      timeout: const Duration(seconds: 30),
+      redirectLogLabel: 'JellyfinService',
+    );
+    if (response.statusCode != 200) {
+      throw StateError('Quick Connect HTTP ${response.statusCode}');
+    }
+    final value = jsonDecode(response.body);
+    return value is bool
+        ? {'enabled': value}
+        : Map<String, dynamic>.from(value as Map);
+  }
+
   Future<List<T>> _loadItemPages<T>(
       String endpoint, MediaServerPage<T> Function(String) decoder,
       {bool Function()? isCurrent}) {
