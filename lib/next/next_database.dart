@@ -11,6 +11,7 @@ import 'tasks/job_migration.dart';
 import 'settings/migration.dart';
 import 'state/change_history.dart';
 import 'followups/migration.dart';
+import 'ui_data/migration.dart';
 
 // Each position is a released database version. Append new domain migrations.
 const _migrations = [
@@ -24,6 +25,7 @@ const _migrations = [
   migrateClassicMatches,
   migrateChangeHistory,
   migrateFollowups,
+  migrateUiData,
 ];
 
 Future<void> _migrate(Database db, int oldVersion, int newVersion) async {

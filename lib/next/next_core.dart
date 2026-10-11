@@ -39,6 +39,8 @@ import 'harness_hooks.dart';
 import 'harness_location.dart';
 import 'followups/service.dart';
 import 'followups/capability.dart';
+import 'ui_data/service.dart';
+import 'ui_data/capability.dart';
 
 /// Application-owned task and capability composition, independent of Labs.
 final class NextCore {
@@ -84,6 +86,7 @@ final class NextCore {
   late final StateCapability state;
   late final ChangeHistory changeHistory;
   late final Followups followups;
+  late final UiDataService uiData;
 
   Future<void> _initialize(
       Directory? suppliedRoot,
@@ -158,10 +161,12 @@ final class NextCore {
         sources: stateSources), ActivityView(media.service, settings,
             File('${root.path}/journal.jsonl'), harnessLocation,
             changeHistory).view, followups.view]);
+    uiData = UiDataService(media.service, engine, state, stateSources, root, credentialVault);
     capabilities = List.unmodifiable([
       CredentialCapability(credentials),
       TaskCapability(engine),
       FollowupCapability(followups),
+      UiDataCapability(uiData),
       downloads.capability,
       downloads.metadataCapability,
       media.capability,
@@ -174,6 +179,7 @@ final class NextCore {
       state,
     ].map(InvocationScopeCapability.new));
     await engine.start();
+    await uiData.start();
     followups.start();
     await downloads.start();
     await media.start();
@@ -193,6 +199,7 @@ final class NextCore {
     if (identical(BodyChanges.attached, changeHistory)) BodyChanges.attached = null;
     await changeHistory.drain();
     await followups.close();
+    await uiData.close();
     hooks.observeEvent = null;
     await hooks.disable();
     harnessLocation.dispose();

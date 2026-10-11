@@ -4,6 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:nipaplay/next/danmaku/migration.dart';
 import 'package:nipaplay/next/media/media_migration.dart';
 import 'package:nipaplay/next/next_database.dart';
+import 'package:nipaplay/next/followups/migration.dart';
 import 'package:nipaplay/next/tasks/job_migration.dart';
 import 'package:nipaplay/next/settings/migration.dart';
 import 'package:nipaplay/next/media/primitives_migration.dart';
@@ -58,7 +59,7 @@ void main() {
     expect(((metadata['provenance'] as Map)['title'] as Map)['invocationId'],
         'legacy-invocation');
   });
-  for (final oldVersion in [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]) {
+  for (final oldVersion in [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10]) {
     test('database v$oldVersion upgrades to the complete shared schema',
         () async {
       final root = await Directory.systemTemp.createTemp('next-migration-');
@@ -73,6 +74,7 @@ void main() {
         migrateDanmakuImports,
         migrateClassicMatches,
         migrateChangeHistory,
+        migrateFollowups,
       ];
       if (oldVersion > 0) {
         final old =
@@ -89,8 +91,11 @@ void main() {
       }
       var db = await openNextDatabase(root, factory: databaseFactoryFfi);
       addTearDown(() => db.close());
-      expect(await db.getVersion(), 10);
+      expect(await db.getVersion(), 11);
       for (final table in [
+        'ui_presentations',
+        'ui_shelves',
+        'ui_cache',
         'body_changes',
         'followups',
         'followup_events',
