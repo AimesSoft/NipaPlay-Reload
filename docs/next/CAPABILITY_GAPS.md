@@ -30,5 +30,6 @@
 | X14 | 缺口 6 的账号业务与 Bangumi 同步；实验 7 的快速连接、登录窗口与弹幕回执 | 已实现，真实实验及限制见 X14_REPORT.md |
 | 之后 | 缺口 7、8、Classic 多端同步与其他设置 | 待排 |
 
-已知限制：同类媒体服务器有多台时，Emby 条目编号可能碰撞（沿用 Classic 的定位格式）；出现真实情况时再处理。
-- 远程媒体（Jellyfin / Emby 等）的文件不能绑定身份：`media.identity.bind_batch` 只接受本机位置（实验 9 第一轮发现）。
+X17：远程媒体已可通过 `media.identity.bind_batch` 绑定；Next 文件位置和新增 Classic 映射按服务器来源隔离，同名 item ID 不混淆。按 path 有歧义时使用来源浏览返回的 fileId。实验及边界见 `X17_REPORT.md`。
+
+Classic 旧的无服务器归属映射、观看历史及播放 path 仍沿用原格式，不自动迁移或猜测归属；遇到旧映射阻塞投影时明确返回 conflict。原 Classic 多台 Emby 服务器历史路径碰撞不在 X17 中迁移。

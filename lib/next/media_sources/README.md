@@ -16,4 +16,6 @@ SMB/WebDAV parentId 为来源内目录路径。共享来源省略 parentId 列�
 `sync` 递归发现所选库，登记统一文件索引，保留缺失文件和所有绑定。
 
 文件定位与 Classic 一致；发现不创建观看历史或推断作品身份。
+Next 索引按 `sourceId` 隔离远程位置，Jellyfin/Emby 另包括实际 serverId；同类两台服务器即使返回相同 item ID，也得到不同
+`fileId`。绑定时使用此 fileId，播放时继续使用原 path。无来源归属的旧记录保留为独立证据。
 完整 schema 以实时 Harness 列表为准。实现及实验见 docs/next/X12_REPORT.md。

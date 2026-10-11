@@ -5,8 +5,11 @@ import 'package:flutter/foundation.dart';
 import 'package:path/path.dart' as p;
 import 'package:nipaplay/models/watch_history_database.dart';
 import 'package:nipaplay/services/anime_deletion_tombstones.dart';
+import 'package:nipaplay/services/jellyfin_episode_mapping_service.dart';
+import 'package:nipaplay/services/emby_episode_mapping_service.dart';
 
 import 'identity_store.dart';
+import 'remote_classic_projection.dart';
 
 abstract interface class ClassicMetadataPort {
   Future<List<JsonMap>> history();
@@ -74,6 +77,17 @@ final class WatchHistoryMetadataPort implements ReversibleClassicMetadataPort {
           'Classic anime was deleted; restore it before projecting matching fields.');
     }
     final db = await history.database;
+    if (fields['remoteTarget'] != null) {
+      await RemoteClassicProjection(db).apply(locator, fields);
+      JellyfinEpisodeMappingService.instance.invalidateCache();
+      EmbyEpisodeMappingService.instance.invalidateCache();
+      await changed();
+      return;
+    }
+    if (locator.startsWith('jellyfin://') || locator.startsWith('emby://')) {
+      throw const Failure(FailureCode.conflict,
+          'Remote server ownership is unknown; browse its source and bind that fileId.');
+    }
     var earlierProjectionChanged = false;
     await db.transaction((tx) async {
       // The undo evidence commits atomically with the Classic write.
@@ -242,6 +256,9 @@ final class WatchHistoryMetadataPort implements ReversibleClassicMetadataPort {
   @override
   Future<JsonMap> projectionOutcome(String locator, JsonMap fields) async {
     final db = await WatchHistoryDatabase.instance.database;
+    if (fields['remoteTarget'] != null) {
+      return RemoteClassicProjection(db).outcome(locator, fields);
+    }
     final id = fields['clear'] == true
         ? fields['restoreProjectionId']
         : fields['projectionId'];
@@ -264,6 +281,11 @@ final class WatchHistoryMetadataPort implements ReversibleClassicMetadataPort {
 
   @override
   Future<bool> verify(String locator, JsonMap fields) async {
+    if (fields['remoteTarget'] != null) {
+      return RemoteClassicProjection(
+              await WatchHistoryDatabase.instance.database)
+          .verify(locator, fields);
+    }
     final current =
         await WatchHistoryDatabase.instance.getHistoryByFilePath(locator);
     if (fields['clear'] == true) {

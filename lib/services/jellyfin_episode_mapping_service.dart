@@ -1,4 +1,6 @@
 import 'dart:async';
+import 'jellyfin_service.dart';
+import 'scoped_media_server_mapping.dart';
 import 'package:flutter/foundation.dart';
 import 'package:sqflite/sqflite.dart';
 import 'package:nipaplay/models/jellyfin_model.dart';
@@ -22,6 +24,11 @@ class JellyfinEpisodeMappingService {
   final Map<String, int?> _episodePredictionCache = {};
   DateTime? _lastCacheClean;
 
+  void invalidateCache() {
+    _animeMappingCache.clear();
+    _episodePredictionCache.clear();
+  }
+
   /// 初始化数据库
   Future<void> initialize() async {
     if (_database != null) return;
@@ -33,33 +40,7 @@ class JellyfinEpisodeMappingService {
     final mainDb = await WatchHistoryDatabase.instance.database;
     _database = mainDb;
 
-    // 创建映射表（简化版本，移除复杂的偏移量字段）
-    await _database!.execute('''
-      CREATE TABLE IF NOT EXISTS jellyfin_dandanplay_mapping (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        jellyfin_series_id TEXT NOT NULL,
-        jellyfin_series_name TEXT,
-        jellyfin_season_id TEXT,
-        dandanplay_anime_id INTEGER NOT NULL,
-        dandanplay_anime_title TEXT,
-        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-        UNIQUE(jellyfin_series_id, jellyfin_season_id, dandanplay_anime_id)
-      )
-    ''');
-
-    await _database!.execute('''
-      CREATE TABLE IF NOT EXISTS jellyfin_episode_mapping (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        jellyfin_episode_id TEXT NOT NULL UNIQUE,
-        jellyfin_index_number INTEGER,
-        dandanplay_episode_id INTEGER NOT NULL,
-        mapping_id INTEGER NOT NULL,
-        confirmed BOOLEAN DEFAULT FALSE,
-        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-        FOREIGN KEY (mapping_id) REFERENCES jellyfin_dandanplay_mapping (id)
-      )
-    ''');
+    await ensureMediaServerMappingTables(_database!, 'jellyfin');
 
     debugPrint('[映射服务] 数据库初始化完成');
     
@@ -91,13 +72,16 @@ class JellyfinEpisodeMappingService {
     if (kIsWeb) return 0;
     await initialize();
 
+    jellyfinSeriesId = await writableSeriesId(_database!, 'jellyfin',
+        mediaServerProfileScope(JellyfinService.instance.currentProfile), jellyfinSeriesId);
+
     debugPrint('[映射服务] 创建动画映射: $jellyfinSeriesName -> $dandanplayAnimeTitle');
 
     // 检查是否已存在映射
     final existing = await _database!.query(
       'jellyfin_dandanplay_mapping',
-      where: 'jellyfin_series_id = ? AND jellyfin_season_id = ? AND dandanplay_anime_id = ?',
-      whereArgs: [jellyfinSeriesId, jellyfinSeasonId, dandanplayAnimeId],
+      where: 'jellyfin_series_id = ? AND jellyfin_season_id ${jellyfinSeasonId == null ? 'IS NULL' : '= ?'} AND dandanplay_anime_id = ?',
+      whereArgs: [jellyfinSeriesId, if (jellyfinSeasonId != null) jellyfinSeasonId, dandanplayAnimeId],
     );
 
     if (existing.isNotEmpty) {
@@ -114,6 +98,7 @@ class JellyfinEpisodeMappingService {
         whereArgs: [mappingId],
       );
       debugPrint('[映射服务] 更新现有动画映射: ID=$mappingId');
+      invalidateCache();
       return mappingId;
     } else {
       // 创建新映射
@@ -128,6 +113,7 @@ class JellyfinEpisodeMappingService {
         },
       );
       debugPrint('[映射服务] 创建新动画映射: ID=$mappingId');
+      invalidateCache();
       return mappingId;
     }
   }
@@ -142,6 +128,10 @@ class JellyfinEpisodeMappingService {
   }) async {
     if (kIsWeb) return;
     await initialize();
+
+    jellyfinEpisodeId = await writableEpisodeId(
+        _database!, 'jellyfin', jellyfinEpisodeId, mappingId,
+        profileScope: mediaServerProfileScope(JellyfinService.instance.currentProfile));
 
     debugPrint('[映射服务] 记录剧集映射: Jellyfin集$jellyfinIndexNumber -> DandanPlay集$dandanplayEpisodeId');
 
@@ -158,13 +148,7 @@ class JellyfinEpisodeMappingService {
       conflictAlgorithm: ConflictAlgorithm.replace,
     );
 
-    // 清理相关缓存
-    final cacheKeyToRemove = _episodePredictionCache.keys
-        .where((key) => key.startsWith(jellyfinEpisodeId))
-        .toList();
-    for (final key in cacheKeyToRemove) {
-      _episodePredictionCache.remove(key);
-    }
+    invalidateCache();
 
     // 如果是确认的映射，更新相关统计信息
     if (confirmed) {
@@ -180,8 +164,12 @@ class JellyfinEpisodeMappingService {
     if (kIsWeb) return null;
     await initialize();
 
+    final scoped = await scopedAnimeMapping(_database!, 'jellyfin',
+        mediaServerProfileScope(JellyfinService.instance.currentProfile), jellyfinSeriesId, jellyfinSeasonId);
+    if (scoped != null) return scoped;
+
     // 生成缓存键
-    final cacheKey = '${jellyfinSeriesId}_${jellyfinSeasonId ?? 'null'}';
+    final cacheKey = '${mediaServerProfileScope(JellyfinService.instance.currentProfile)}|${jellyfinSeriesId}_${jellyfinSeasonId ?? 'null'}';
     
     // 检查缓存
     if (_animeMappingCache.containsKey(cacheKey)) {
@@ -191,8 +179,8 @@ class JellyfinEpisodeMappingService {
 
     final results = await _database!.query(
       'jellyfin_dandanplay_mapping',
-      where: 'jellyfin_series_id = ? AND (jellyfin_season_id = ? OR jellyfin_season_id IS NULL)',
-      whereArgs: [jellyfinSeriesId, jellyfinSeasonId],
+      where: 'jellyfin_series_id = ? AND (jellyfin_season_id IS NULL${jellyfinSeasonId == null ? '' : ' OR jellyfin_season_id = ?'})',
+      whereArgs: [jellyfinSeriesId, if (jellyfinSeasonId != null) jellyfinSeasonId],
       orderBy: 'jellyfin_season_id IS NULL, updated_at DESC', // 优先匹配指定季节
     );
 
@@ -212,6 +200,10 @@ class JellyfinEpisodeMappingService {
     if (kIsWeb) return null;
     await initialize();
 
+    final scoped = await scopedEpisodeMapping(_database!, 'jellyfin',
+        mediaServerProfileScope(JellyfinService.instance.currentProfile), jellyfinEpisode.id);
+    if (scoped != null) return scoped['dandanplay_episode_id'] as int;
+
     // 如果没有集号信息，无法预测
     if (jellyfinEpisode.indexNumber == null) {
       debugPrint('[映射服务] Jellyfin剧集缺少集号信息，无法预测映射');
@@ -219,7 +211,7 @@ class JellyfinEpisodeMappingService {
     }
 
     // 生成缓存键
-    final cacheKey = '${jellyfinEpisode.id}_${jellyfinEpisode.indexNumber}';
+    final cacheKey = '${mediaServerProfileScope(JellyfinService.instance.currentProfile)}|${jellyfinEpisode.id}_${jellyfinEpisode.indexNumber}';
     
     // 检查缓存
     if (_episodePredictionCache.containsKey(cacheKey)) {
@@ -333,7 +325,7 @@ class JellyfinEpisodeMappingService {
     if (episodeMappings.isNotEmpty) {
       final nextMapping = episodeMappings.first;
       debugPrint('[映射服务] 找到下一集映射: 第${nextMapping['jellyfin_index_number']}集');
-      return Map<String, dynamic>.from(nextMapping);
+      return mediaServerMappingForDisplay('jellyfin', nextMapping);
     }
 
     debugPrint('[映射服务] 未找到下一集的现有映射');
@@ -371,7 +363,7 @@ class JellyfinEpisodeMappingService {
     if (episodeMappings.isNotEmpty) {
       final prevMapping = episodeMappings.first;
       debugPrint('[映射服务] 找到上一集映射: 第${prevMapping['jellyfin_index_number']}集');
-      return Map<String, dynamic>.from(prevMapping);
+      return mediaServerMappingForDisplay('jellyfin', prevMapping);
     }
 
     debugPrint('[映射服务] 未找到上一集的现有映射');
@@ -397,7 +389,12 @@ class JellyfinEpisodeMappingService {
         FROM jellyfin_episode_mapping jem
         INNER JOIN jellyfin_dandanplay_mapping jdm ON jem.mapping_id = jdm.id
         WHERE jem.dandanplay_episode_id = ? AND jdm.dandanplay_anime_id = ?
-      ''', [currentEpisodeId, currentAnimeId]);
+          AND (jem.jellyfin_episode_id NOT LIKE 'next:%'
+            OR substr(jem.jellyfin_episode_id,1,length(?))=?)
+        ORDER BY jem.jellyfin_episode_id LIKE 'next:%' DESC
+      ''', [currentEpisodeId, currentAnimeId,
+        scopedMediaServerId(mediaServerProfileScope(JellyfinService.instance.currentProfile) ?? '', ''),
+        scopedMediaServerId(mediaServerProfileScope(JellyfinService.instance.currentProfile) ?? '', '')]);
 
       debugPrint('[映射服务] 查询结果数量: ${currentMappingResults.length}');
       if (currentMappingResults.isNotEmpty) {
@@ -446,7 +443,7 @@ class JellyfinEpisodeMappingService {
         debugPrint('[映射服务] ✅ 找到下一集的现有映射: $nextMapping');
         debugPrint('[映射服务] - 下一集集号: ${nextMapping['jellyfin_index_number']}');
         debugPrint('[映射服务] - 下一集弹幕ID: ${nextMapping['dandanplay_episode_id']}');
-        return Map<String, dynamic>.from(nextMapping);
+        return mediaServerMappingForDisplay('jellyfin', nextMapping);
       }
 
       // 4. 如果没有现有映射，尝试基于已有映射推算下一集
@@ -489,7 +486,7 @@ class JellyfinEpisodeMappingService {
           'confirmed': 0, // 标记为预测映射
         };
         debugPrint('[映射服务] ✅ 返回推算的映射: $predictedMapping');
-        return predictedMapping;
+        return mediaServerMappingForDisplay('jellyfin', predictedMapping);
       } else {
         debugPrint('[映射服务] ❌ 没有已有映射记录，无法推算');
       }
@@ -520,7 +517,12 @@ class JellyfinEpisodeMappingService {
         FROM jellyfin_episode_mapping jem
         INNER JOIN jellyfin_dandanplay_mapping jdm ON jem.mapping_id = jdm.id
         WHERE jem.dandanplay_episode_id = ? AND jdm.dandanplay_anime_id = ?
-      ''', [currentEpisodeId, currentAnimeId]);
+          AND (jem.jellyfin_episode_id NOT LIKE 'next:%'
+            OR substr(jem.jellyfin_episode_id,1,length(?))=?)
+        ORDER BY jem.jellyfin_episode_id LIKE 'next:%' DESC
+      ''', [currentEpisodeId, currentAnimeId,
+        scopedMediaServerId(mediaServerProfileScope(JellyfinService.instance.currentProfile) ?? '', ''),
+        scopedMediaServerId(mediaServerProfileScope(JellyfinService.instance.currentProfile) ?? '', '')]);
 
       if (currentMappingResults.isEmpty) {
         debugPrint('[映射服务] 未找到当前剧集的映射记录');
@@ -552,7 +554,7 @@ class JellyfinEpisodeMappingService {
       if (previousMappingResults.isNotEmpty) {
         final previousMapping = previousMappingResults.first;
         debugPrint('[映射服务] 找到上一集的现有映射: 第${previousMapping['jellyfin_index_number']}集');
-        return Map<String, dynamic>.from(previousMapping);
+        return mediaServerMappingForDisplay('jellyfin', previousMapping);
       }
 
       // 4. 如果没有现有映射，尝试基于已有映射推算上一集
@@ -579,7 +581,7 @@ class JellyfinEpisodeMappingService {
         debugPrint('[映射服务] 基于已有映射推算上一集: 参考第$referenceJellyfinIndex集(ID=$referenceDandanplayEpisodeId) -> 预测第$previousJellyfinIndexNumber集(ID=$predictedEpisodeId)');
         
         // 返回预测的映射信息
-        return {
+        return mediaServerMappingForDisplay('jellyfin', {
           'jellyfin_index_number': previousJellyfinIndexNumber,
           'dandanplay_episode_id': predictedEpisodeId,
           'dandanplay_anime_id': currentAnimeId,
@@ -587,7 +589,7 @@ class JellyfinEpisodeMappingService {
           'jellyfin_season_id': seasonId,
           'mapping_id': mappingId,
           'confirmed': 0, // 标记为预测映射
-        };
+        });
       }
 
       debugPrint('[映射服务] 未找到上一集的有效映射');
@@ -654,25 +656,13 @@ class JellyfinEpisodeMappingService {
     debugPrint('[映射服务] 批量记录完成');
   }
 
-  /// 清理指定系列的缓存
-  void _clearSeriesCache(String jellyfinSeriesId, String? seasonId) {
-    final cacheKey = '${jellyfinSeriesId}_${seasonId ?? 'null'}';
-    _animeMappingCache.remove(cacheKey);
-    
-    // 清理相关的剧集预测缓存
-    final keysToRemove = _episodePredictionCache.keys
-        .where((key) => key.startsWith(jellyfinSeriesId))
-        .toList();
-    
-    for (final key in keysToRemove) {
-      _episodePredictionCache.remove(key);
-    }
-  }
-
   /// 清除指定系列的映射（用于重新配置）
   Future<void> clearSeriesMapping(String jellyfinSeriesId, {String? seasonId}) async {
     if (kIsWeb) return;
     await initialize();
+
+    jellyfinSeriesId = await writableSeriesId(_database!, 'jellyfin',
+        mediaServerProfileScope(JellyfinService.instance.currentProfile), jellyfinSeriesId);
 
     debugPrint('[映射服务] 清除系列映射: $jellyfinSeriesId');
 
@@ -693,7 +683,7 @@ class JellyfinEpisodeMappingService {
     );
 
     // 清理相关缓存
-    _clearSeriesCache(jellyfinSeriesId, seasonId);
+    invalidateCache();
 
     debugPrint('[映射服务] 映射清除完成');
   }
@@ -752,6 +742,10 @@ class JellyfinEpisodeMappingService {
   Future<Map<String, dynamic>?> getEpisodeMapping(String jellyfinEpisodeId) async {
     if (kIsWeb) return null;
     await initialize();
+
+    final scoped = await scopedEpisodeMapping(_database!, 'jellyfin',
+        mediaServerProfileScope(JellyfinService.instance.currentProfile), jellyfinEpisodeId);
+    if (scoped != null) return scoped;
 
     final results = await _database!.query(
       'jellyfin_episode_mapping',
