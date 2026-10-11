@@ -84,7 +84,9 @@ class Client:
     def request(self, operation, **fields):
         body = json.dumps(dict(operation=operation, **fields)).encode("utf-8")
         request = urllib.request.Request(self.url, data=body, headers={
-            "Authorization": "Bearer " + self.token, "Content-Type": "application/json"})
+            "Authorization": "Bearer " + self.token, "Content-Type": "application/json",
+            **({"X-NipaPlay-Chat": os.environ["NIPAPLAY_CHAT"]}
+               if os.environ.get("NIPAPLAY_CHAT") else {})})
         try:
             with self.opener.open(request, timeout=65) as response:
                 return json.load(response)

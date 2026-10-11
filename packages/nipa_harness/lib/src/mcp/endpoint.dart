@@ -35,7 +35,7 @@ final class McpEndpoint {
             McpRpc(harness, serverInfo: serverInfo, instructions: instructions);
   final Harness harness;
   final McpServerInfo serverInfo;
-  final String token;
+  String token;
   final String? instructions;
   final Handler? jsonHandler;
   final McpRpc _rpc;

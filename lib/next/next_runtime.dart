@@ -49,6 +49,9 @@ import 'package:nipaplay/utils/theme_notifier.dart';
 import 'harness_location.dart';
 import 'harness_hooks.dart';
 import 'harness_repository.dart';
+import 'chat/chat_host.dart';
+import 'chat/debug_chat.dart';
+import 'harness_redaction.dart';
 
 final class NextRuntime extends ChangeNotifier {
   NextRuntime._(this._labs, this._player, List<Capability> capabilities) {
@@ -131,6 +134,13 @@ final class NextRuntime extends ChangeNotifier {
   AgentEndpointStatus _endpointStatus = const AgentEndpointStopped();
   bool _disposed = false;
   ClassicSettings? _classicSettings;
+  ChatHost? chat;
+  String? chatError;
+  Future<void> closeChat() async {
+    await _operations;
+    await chat?.close();
+    chat = null;
+  }
 
   void _syncPluginSettings() {
     final classic = _classicSettings!;
@@ -196,7 +206,8 @@ final class NextRuntime extends ChangeNotifier {
             core.media.service.store),
         ...core.capabilities
       ],
-      observers: [JsonlJournal(File('${root.path}/journal.jsonl'))],
+      observers: [JsonlJournal(File('${root.path}/journal.jsonl'),
+        effects: Effect.values.toSet())],
     );
     core.attachHarness(_harness);
     core.danmaku.startRestoring(_harness, _player);
@@ -211,6 +222,7 @@ final class NextRuntime extends ChangeNotifier {
           : 47811,
     );
     if (_disposed) return;
+    if (kDebugMode && LabProfile.active) installDebugChat(() => chat);
     _labs.addListener(_queueEndpointUpdate);
     _location!.addListener(_queueEndpointUpdate);
     notifyListeners();
@@ -229,11 +241,24 @@ final class NextRuntime extends ChangeNotifier {
       if (enabled && repository.path == repositoryPath) return;
     }
     await _detachHooks();
+    await chat?.close();
+    chat = null;
+    chatError = null;
     final AgentEndpointStatus status;
     if (enabled) {
       status = await _endpoint.start(Directory(repositoryPath));
       if (status case AgentEndpointRunning(:final repository)) {
         await _attachHooks(repository);
+        final host = chat = ChatHost(endpoint: _endpoint, repository: repository,
+          labRoot: LabProfile.active ? Directory(LabProfile.root) : null);
+        if (kDebugMode && LabProfile.active) recordDebugChat(host);
+        try {
+          await host.start();
+        } catch (error) {
+          chatError = redactHarnessText(error.toString());
+          await host.close();
+          chat = null;
+        }
       }
     } else {
       await _endpoint.stop();
@@ -325,6 +350,7 @@ final class NextRuntime extends ChangeNotifier {
     _location?.removeListener(_queueEndpointUpdate);
     _operations = _operations.then((_) async {
       await _detachHooks();
+      await chat?.close();
       await _endpoint.stop();
     });
     super.dispose();
