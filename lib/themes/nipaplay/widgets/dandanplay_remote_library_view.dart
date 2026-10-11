@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'package:nipaplay/widgets/page_activity_mixin.dart';
 import 'package:flutter/cupertino.dart' as cupertino;
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
@@ -40,7 +41,8 @@ class DandanplayRemoteLibraryView extends StatefulWidget {
 }
 
 class _DandanplayRemoteLibraryViewState
-    extends State<DandanplayRemoteLibraryView> {
+    extends State<DandanplayRemoteLibraryView>
+    with PageActivityMixin<DandanplayRemoteLibraryView> {
   final TextEditingController _searchController = TextEditingController();
   final FocusNode _searchFocusNode = FocusNode();
   String _searchQuery = '';
@@ -48,6 +50,19 @@ class _DandanplayRemoteLibraryViewState
   Timer? _searchDebounce;
   final Map<int, String?> _coverCache = {}; // 复用本地缓存的番剧封面
   final Map<int, Future<String?>> _coverLoadingTasks = {};
+
+  @override
+  void onPageActivityChanged(bool active) {
+    if (active) unawaited(_activateConnection());
+  }
+
+  Future<void> _activateConnection() async {
+    try {
+      await context.read<DandanplayRemoteProvider>().activateSavedConnection();
+    } catch (error) {
+      if (mounted) BlurSnackBar.show(context, '读取远程凭据失败：$error');
+    }
+  }
 
   @override
   void initState() {

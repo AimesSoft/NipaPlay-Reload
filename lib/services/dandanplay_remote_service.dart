@@ -54,10 +54,10 @@ class DandanplayRemoteService {
     return uri.path.contains('/api/v1/stream/');
   }
 
-  Future<void> loadSavedSettings({bool backgroundRefresh = false}) async {
+  Future<void> loadSavedSettings(
+      {bool backgroundRefresh = false, bool loadCredentials = true}) async {
     final prefs = await SharedPreferences.getInstance();
     final savedBase = prefs.getString(_baseUrlKey);
-    final savedToken = (await CredentialStore.instance.read(prefs, _tokenKey));
     final savedTokenRequired = prefs.getBool(_tokenRequiredKey) ?? false;
 
     if (savedBase == null || savedBase.isEmpty) {
@@ -69,8 +69,9 @@ class DandanplayRemoteService {
     }
 
     _baseUrl = savedBase;
-    _apiToken = savedToken;
     _tokenRequired = savedTokenRequired;
+    if (!loadCredentials) return;
+    _apiToken = await CredentialStore.instance.read(prefs, _tokenKey);
 
     Future<void> refreshTask() async {
       try {

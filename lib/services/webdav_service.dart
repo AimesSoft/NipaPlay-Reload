@@ -1,4 +1,6 @@
 import 'package:nipaplay/security/credential_store.dart';
+import 'package:nipaplay/security/stored_credential.dart';
+import 'package:nipaplay/security/credential_vault.dart';
 import 'dart:convert';
 import 'dart:io';
 
@@ -21,7 +23,12 @@ class WebDAVConnection {
   final String name;
   final String url;
   final String username;
-  final String password;
+  final StoredCredential _password;
+  String get password => _password.value ?? '';
+  bool get passwordIsResolved => _password.ref == null || _password.value != null;
+  StoredCredential? retainPassword(String edited, {required String original}) =>
+      edited == original ? _password : null;
+  Future<void> resolvePassword() async { await _password.resolve(); }
   final bool isConnected;
 
   WebDAVConnection({
@@ -29,9 +36,11 @@ class WebDAVConnection {
     required this.name,
     required this.url,
     required this.username,
-    required this.password,
+    required String password,
+    StoredCredential? storedPassword,
     this.isConnected = false,
-  }) : id = id?.trim().isNotEmpty == true ? id!.trim() : const Uuid().v4();
+  }) : _password = storedPassword ?? StoredCredential(password),
+       id = id?.trim().isNotEmpty == true ? id!.trim() : const Uuid().v4();
 
   Map<String, dynamic> toJson() {
     return {
@@ -39,7 +48,7 @@ class WebDAVConnection {
       'name': name,
       'url': url,
       'username': username,
-      'password': password,
+      'password': _password.toJson(),
       'isConnected': isConnected,
     };
   }
@@ -49,14 +58,17 @@ class WebDAVConnection {
     return WebDAVConnection(
       id: savedId?.isNotEmpty == true
           ? savedId
-          : const Uuid().v5(
+          : credentialReference(json['password'])?.key ??
+          const Uuid().v5(
               '6ba7b811-9dad-11d1-80b4-00c04fd430c8',
               'nipaplay:webdav:${json['url'] ?? ''}|${json['username'] ?? ''}',
             ),
       name: json['name'] ?? '',
       url: json['url'] ?? '',
       username: json['username'] ?? '',
-      password: json['password'] ?? '',
+      password: '',
+      storedPassword: StoredCredential.fromJson(json['password'],
+          CredentialStore.itemRef('webdav_connections', json)),
       isConnected: json['isConnected'] ?? false,
     );
   }
@@ -75,6 +87,7 @@ class WebDAVConnection {
       url: url ?? this.url,
       username: username ?? this.username,
       password: password ?? this.password,
+      storedPassword: password == null ? _password : null,
       isConnected: isConnected ?? this.isConnected,
     );
   }
@@ -212,16 +225,12 @@ class WebDAVService {
   Future<void> _loadConnections() async {
     final prefs = await SharedPreferences.getInstance();
     try {
-      final connectionsJson = (await CredentialStore.instance.read(prefs, _connectionsKey));
+      final connectionsJson = prefs.getString(_connectionsKey);
       if (connectionsJson != null) {
         final List<dynamic> decoded = json.decode(connectionsJson);
-        final needsIdMigration = decoded.whereType<Map>().any(
-              (entry) => entry['id']?.toString().trim().isNotEmpty != true,
-            );
         _connections = decoded
             .map((e) => _normalizeConnection(WebDAVConnection.fromJson(e)))
             .toList();
-        if (needsIdMigration) await _saveConnections();
       }
     } catch (e) {
       print('加载WebDAV连接失败: $e');
@@ -338,6 +347,7 @@ class WebDAVService {
   Future<WebDAVConnection?> _validateConnection(
     WebDAVConnection connection,
   ) async {
+    await connection.resolvePassword();
     final override = _connectionValidator;
     if (override != null) return override(connection);
     final triedUrls = <String>{};
@@ -359,7 +369,7 @@ class WebDAVService {
       }
 
       try {
-        final client = _createClient(current);
+        final client = await _createClient(current);
         await _pingClient(client);
         await client.readDir('/');
         return current;
@@ -450,7 +460,8 @@ class WebDAVService {
     WebDAVConnection connection,
     String path, {
     bool forceRefresh = false,
-  }) {
+  }) async {
+    await connection.resolvePassword();
     final normalizedConnection = _normalizeConnection(connection);
     final normalizedPath = _normalizeDirectoryPath(path);
     final key = (
@@ -471,7 +482,7 @@ class WebDAVService {
     WebDAVConnection normalizedConnection,
     String normalizedPath,
   ) async {
-    final client = _createClient(normalizedConnection);
+    final client = await _createClient(normalizedConnection);
 
     try {
       final remoteFiles = await client.readDir(normalizedPath);
@@ -583,6 +594,7 @@ class WebDAVService {
     if (_isFullyQualifiedUrl(filePath)) {
       return filePath;
     }
+    if (!connection.passwordIsResolved) throw StateError('credential_not_loaded');
 
     final baseUri = Uri.parse(normalizedConnection.url);
     final combinedPath = _buildServerRelativePath(baseUri.path, filePath);
@@ -753,7 +765,8 @@ class WebDAVService {
     return _buildServerRelativePath(baseUri.path, relativePath);
   }
 
-  webdav.Client _createClient(WebDAVConnection connection) {
+  Future<webdav.Client> _createClient(WebDAVConnection connection) async {
+    await connection.resolvePassword();
     final client = webdav.newClient(
       connection.url,
       user: connection.username,

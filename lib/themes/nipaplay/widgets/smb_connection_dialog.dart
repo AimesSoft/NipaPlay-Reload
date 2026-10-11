@@ -49,6 +49,7 @@ class _SMBConnectionFormState extends State<_SMBConnectionForm> {
   final _domainController = TextEditingController();
   final _usernameController = TextEditingController();
   final _passwordController = TextEditingController();
+  late final String _originalPassword;
 
   bool _isSubmitting = false;
   bool _passwordVisible = false;
@@ -90,6 +91,7 @@ class _SMBConnectionFormState extends State<_SMBConnectionForm> {
   @override
   void initState() {
     super.initState();
+    _originalPassword = widget.editConnection?.password ?? '';
     final connection = widget.editConnection;
     if (connection != null) {
       _nameController.text = connection.name;
@@ -189,7 +191,9 @@ class _SMBConnectionFormState extends State<_SMBConnectionForm> {
                 controller: _usernameController,
                 fieldId: 'username',
                 label: '用户名（可选）',
-                hint: '留空将使用匿名访问',
+                hint: widget.editConnection?.passwordIsResolved == false
+                    ? '已保存密码；留空保留，输入新密码可替换'
+                    : '留空将使用匿名访问',
               ),
               SizedBox(height: 14),
               _buildTextField(
@@ -324,6 +328,8 @@ class _SMBConnectionFormState extends State<_SMBConnectionForm> {
       port: port,
       username: _usernameController.text.trim(),
       password: _passwordController.text,
+      storedPassword: widget.editConnection?.retainPassword(
+          _passwordController.text, original: _originalPassword),
       domain: _domainController.text.trim(),
     );
 

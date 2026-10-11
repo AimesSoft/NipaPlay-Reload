@@ -106,7 +106,7 @@ void main() {
     expect(await store.read(prefs, 'dandanplay_token'), 'restore-sentinel');
     final backup =
         await service.collectBackupData(categories: {BackupCategory.accounts});
-    (store.vault as MemoryVault).values.clear();
+    (store.vault.backend as MemoryVault).values.clear();
     await prefs.remove('dandanplay_token');
     await prefs.remove('dandanplay_logged_in');
     final restored = await service.restoreFromData(
@@ -123,7 +123,7 @@ void main() {
     expect(jsonEncode(backup), isNot(contains('uri-sentinel')));
     expect(backup['filePath'], isA<String>());
     expect((await hydratePortableCredentials(backup, store))['filePath'], url);
-    (store.vault as MemoryVault).values.clear();
+    (store.vault.backend as MemoryVault).values.clear();
     expect(
         (await hydratePortableCredentials(backup, store))['filePath'], isNull);
     expect(store.notices.value.join(), contains('重新登录'));

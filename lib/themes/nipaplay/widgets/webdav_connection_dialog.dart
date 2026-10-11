@@ -49,6 +49,7 @@ class _WebDAVFormState extends State<_WebDAVForm> {
   final _urlController = TextEditingController();
   final _usernameController = TextEditingController();
   final _passwordController = TextEditingController();
+  late final String _originalPassword;
 
   bool _isLoading = false;
   bool _passwordVisible = false;
@@ -56,6 +57,7 @@ class _WebDAVFormState extends State<_WebDAVForm> {
   @override
   void initState() {
     super.initState();
+    _originalPassword = (widget.editConnection?.password ?? '').trim();
     if (widget.editConnection != null) {
       _nameController.text = widget.editConnection!.name;
       _urlController.text = widget.editConnection!.url;
@@ -239,7 +241,7 @@ class _WebDAVFormState extends State<_WebDAVForm> {
                 fieldId: 'password',
                 obscureText: true,
                 child: TextFormField(
-                  controller: _passwordController,
+                    controller: _passwordController,
                   obscureText: !_passwordVisible,
                   keyboardType: TextInputType.visiblePassword,
                   autocorrect: false,
@@ -250,7 +252,9 @@ class _WebDAVFormState extends State<_WebDAVForm> {
                   style: TextStyle(color: textColor),
                   decoration: buildDecoration(
                     label: '密码',
-                    hint: '可选，如果服务器需要认证',
+                    hint: widget.editConnection?.passwordIsResolved == false
+                        ? '已保存密码；留空保留，输入新密码可替换'
+                        : '可选，如果服务器需要认证',
                     suffixIcon: IconButton(
                       icon: Icon(
                         _passwordVisible
@@ -349,6 +353,8 @@ class _WebDAVFormState extends State<_WebDAVForm> {
         url: _urlController.text.trim(),
         username: _usernameController.text.trim(),
         password: _passwordController.text.trim(),
+        storedPassword: widget.editConnection?.retainPassword(
+            _passwordController.text.trim(), original: _originalPassword),
       );
 
       print('📋 连接信息:');
@@ -411,6 +417,8 @@ class _WebDAVFormState extends State<_WebDAVForm> {
         url: _urlController.text.trim(),
         username: _usernameController.text.trim(),
         password: _passwordController.text.trim(),
+        storedPassword: widget.editConnection?.retainPassword(
+            _passwordController.text.trim(), original: _originalPassword),
       );
 
       bool success;

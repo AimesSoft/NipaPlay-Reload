@@ -900,6 +900,7 @@ class _PlaylistMenuState extends State<PlaylistMenu> {
                 pathSegments.isNotEmpty ? pathSegments.last : filePath;
             final fallbackTitle = _remoteDisplayNameCache[filePath] ??
                 p.basenameWithoutExtension(_safeDecode(lastSegment));
+            await MediaSourceUtils.prepareRemotePath(filePath);
             final actualPlayUrl =
                 MediaSourceUtils.resolveRemotePathToUrl(filePath);
             if (actualPlayUrl == null || actualPlayUrl.isEmpty) {

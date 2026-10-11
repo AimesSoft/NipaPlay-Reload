@@ -50,6 +50,7 @@ class _CupertinoWebDAVConnectionSheetState
   final TextEditingController _urlController = TextEditingController();
   final TextEditingController _usernameController = TextEditingController();
   final TextEditingController _passwordController = TextEditingController();
+  late final String _originalPassword;
 
   bool _isSaving = false;
   bool _isTesting = false;
@@ -58,6 +59,7 @@ class _CupertinoWebDAVConnectionSheetState
   @override
   void initState() {
     super.initState();
+    _originalPassword = (widget.editConnection?.password ?? '').trim();
     final edit = widget.editConnection;
     if (edit != null) {
       _nameController.text = edit.name;
@@ -109,6 +111,8 @@ class _CupertinoWebDAVConnectionSheetState
       url: _urlController.text.trim(),
       username: _usernameController.text.trim(),
       password: _passwordController.text.trim(),
+      storedPassword: widget.editConnection?.retainPassword(
+          _passwordController.text.trim(), original: _originalPassword),
     );
   }
 
@@ -319,7 +323,9 @@ class _CupertinoWebDAVConnectionSheetState
                     context,
                     label: context.l10n.passwordOptional,
                     controller: _passwordController,
-                    placeholder: context.l10n.canBeEmpty,
+                    placeholder: widget.editConnection?.passwordIsResolved == false
+                        ? '已保存密码；留空保留，输入新密码可替换'
+                        : context.l10n.canBeEmpty,
                     obscureText: true,
                   ),
                 ],

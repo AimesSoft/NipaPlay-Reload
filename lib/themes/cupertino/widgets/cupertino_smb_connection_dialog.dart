@@ -47,6 +47,7 @@ class _CupertinoSmbConnectionSheetState
   final TextEditingController _domainController = TextEditingController();
   final TextEditingController _usernameController = TextEditingController();
   final TextEditingController _passwordController = TextEditingController();
+  late final String _originalPassword;
 
   bool _isSaving = false;
   String? _errorMessage;
@@ -54,6 +55,7 @@ class _CupertinoSmbConnectionSheetState
   @override
   void initState() {
     super.initState();
+    _originalPassword = (widget.editConnection?.password ?? '').trim();
     final edit = widget.editConnection;
     if (edit != null) {
       _hostController.text = edit.host;
@@ -107,6 +109,8 @@ class _CupertinoSmbConnectionSheetState
       port: port,
       username: username,
       password: password,
+      storedPassword: widget.editConnection?.retainPassword(
+          password, original: _originalPassword),
       domain: domain,
     );
   }
@@ -276,7 +280,9 @@ class _CupertinoSmbConnectionSheetState
                     context,
                     label: context.l10n.passwordOptional,
                     controller: _passwordController,
-                    placeholder: context.l10n.canBeEmpty,
+                    placeholder: widget.editConnection?.passwordIsResolved == false
+                        ? '已保存密码；留空保留，输入新密码可替换'
+                        : context.l10n.canBeEmpty,
                     obscureText: true,
                   ),
                 ],

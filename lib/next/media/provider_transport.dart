@@ -25,9 +25,12 @@ final class VaultCredentialResolver implements CredentialResolver {
       : store = store ?? CredentialStore.instance;
   final Directory root;
   final CredentialStore store;
-  Future<void> initialize() => migrateCredentialFiles(root, store);
   @override
   Future<String> resolve(CredentialRef ref) async {
+    await migrateCredentialFiles(root, store, only: ref);
+    if (store.vault.blocked.containsKey(ref)) {
+      throw StateError(store.vault.blocked[ref]!);
+    }
     String? secret;
     final file = File('${root.path}/credentials.json');
     if (await file.exists()) {

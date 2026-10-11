@@ -166,7 +166,15 @@ class DandanplayService {
     // loadToken 内部在距上次续期超过 21 天时会发起一次网络续期请求。
     // 加超时护栏：超时就沿用本地已缓存的 token 继续启动，
     // 续期交由后续请求自然重试，不阻塞首帧。
-    _token = (await CredentialStore.instance.read(prefs, 'dandanplay_token'));
+    try {
+      _token = await CredentialStore.instance.read(prefs, 'dandanplay_token');
+    } on StateError catch (error) {
+      if (!const {'storage_access_denied', 'storage_authorization_cancelled', 'storage_interaction_required'}
+          .contains(error.message)) rethrow;
+      _token = null;
+      _isLoggedIn = false;
+      return;
+    }
     if (!renewToken) return;
     await loadToken().timeout(
       _tokenLoadTimeout,

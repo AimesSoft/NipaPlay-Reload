@@ -120,8 +120,11 @@ class EmbyProvider extends ChangeNotifier {
   }
 
   // 初始化Emby Provider
-  Future<void> initialize() async {
-    if (_isInitialized) return;
+  Future<void> initialize({bool loadCredentials = true}) async {
+    if (_isInitialized) {
+      if (loadCredentials) await activateSavedConnection();
+      return;
+    }
 
     _isLoading = true;
     _hasError = false;
@@ -132,7 +135,7 @@ class EmbyProvider extends ChangeNotifier {
       if (kIsWeb) {
         await _syncFromRemote();
       } else {
-        await _embyService.loadSavedSettings();
+        await _embyService.loadSavedSettings(loadCredentials: loadCredentials);
       }
       await _loadSortSettings(); // 加载排序设置
       _isInitialized = true;
@@ -150,6 +153,14 @@ class EmbyProvider extends ChangeNotifier {
       _isLoading = false;
       _notifyCoalesced();
     }
+  }
+
+  Future<void>? _savedConnection;
+  Future<void> activateSavedConnection() {
+    if (isConnected) return Future.value();
+    return _savedConnection ??= (kIsWeb
+        ? _syncFromRemote() : _embyService.ensureSavedConnection())
+        .whenComplete(() => _savedConnection = null);
   }
 
   Future<void> _syncFromRemote() async {

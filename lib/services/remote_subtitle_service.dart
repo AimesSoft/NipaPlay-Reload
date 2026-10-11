@@ -1795,6 +1795,7 @@ class RemoteSubtitleService {
 
   Future<void> _downloadWebDavSubtitle(
       WebDavRemoteSubtitleCandidate candidate, File destination) async {
+    await candidate.connection.resolvePassword();
     final rawUrl = WebDAVService.instance
         .getFileUrl(candidate.connection, candidate.remotePath);
     final rawUri = Uri.parse(rawUrl);
@@ -1859,6 +1860,7 @@ class RemoteSubtitleService {
 
     SmbConnect? client;
     try {
+      await candidate.connection.resolvePassword();
       client = await SmbConnect.connectAuth(
         host: candidate.connection.host,
         username: candidate.connection.username,

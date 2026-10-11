@@ -353,6 +353,7 @@ extension VideoPlayerStatePlayerSetup on VideoPlayerState {
         (resolvedActualPlayUrl == null || resolvedActualPlayUrl.isEmpty)) {
       try {
         if (MediaSourceUtils.isNewWebDavPath(videoPath)) {
+          await MediaSourceUtils.prepareRemotePath(videoPath);
           resolvedActualPlayUrl =
               MediaSourceUtils.resolveWebDavPathToUrl(videoPath);
         } else if (MediaSourceUtils.isNewSmbPath(videoPath)) {

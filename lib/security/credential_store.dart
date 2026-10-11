@@ -5,14 +5,20 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'credential_vault.dart';
 import 'secret_redactor.dart';
 import 'vault_backend.dart';
+import 'session_credential_vault.dart';
 
 /// Adapts verified legacy storage keys without exposing secrets to serializers.
 final class CredentialStore {
-  CredentialStore(this.vault, {required this.desktop});
+  CredentialStore(CredentialVault backend,
+      {required this.desktop, TargetPlatform? platform})
+      : platform = platform ?? defaultTargetPlatform {
+    vault = SessionCredentialVault(backend, report, _recovered);
+  }
   static var instance =
       CredentialStore(createCredentialVault(), desktop: usesSystemVault);
-  final CredentialVault vault;
+  late final SessionCredentialVault vault;
   final bool desktop;
+  final TargetPlatform platform;
   final ValueNotifier<List<String>> notices = ValueNotifier(const []);
   final Map<CredentialRef, String> failures = {};
   static const scalarKeys = {
@@ -58,6 +64,9 @@ final class CredentialStore {
     const codes = {
       'invalid_reference',
       'storage_access_denied',
+      'storage_authorization_cancelled',
+      'storage_interaction_required',
+      'credential_missing',
       'system_vault_unavailable',
       'ambiguous_reference',
       'vault_operation_failed',
@@ -71,10 +80,37 @@ final class CredentialStore {
     failures[ref] =
         codes.contains(reason) ? reason : error.runtimeType.toString();
     debugPrint('[CredentialVault] $ref: ${failures[ref]}');
+    _refreshNotices();
+  }
+
+  void _recovered(CredentialRef ref) {
+    if (failures.remove(ref) != null) _refreshNotices();
+  }
+
+  void _refreshNotices() {
+    final guidance = switch (platform) {
+      TargetPlatform.macOS => '请在 macOS 钥匙串访问中检查此条目的访问权限。',
+      TargetPlatform.linux => '请启动并解锁 Secret Service（GNOME Keyring/KWallet）。',
+      TargetPlatform.windows => '请检查 Windows 凭据管理器的访问权限。',
+      _ => '请检查系统凭据存储的访问权限。',
+    };
     notices.value = [
-      '凭据保险库不可用或迁移失败。Linux 请启动并解锁 Secret Service（GNOME Keyring/KWallet）。旧凭据已保留；未回落到明文存储。',
-      for (final entry in failures.entries) '${entry.key}: ${entry.value}',
+      if (failures.isNotEmpty) '凭据访问或迁移失败。$guidance 现有凭据已保留；未回落到明文存储。',
+      for (final entry in failures.entries)
+        vault.blocked.containsKey(entry.key)
+            ? '${entry.key}: ${switch (entry.value) {
+                'storage_authorization_cancelled' => '授权已取消',
+                'storage_interaction_required' => '系统禁止授权交互',
+                _ => '访问被拒绝',
+              }}；本次运行已停止自动重试，可主动重试。'
+            : '${entry.key}: ${entry.value}',
     ];
+  }
+
+  /// Explicit UI/Agent operation; it never exports the resolved secret.
+  Future<bool> retry(CredentialRef ref) async {
+    vault.allowRetry(ref);
+    return await _readRef(ref) != null;
   }
 
   Future<void> verifiedWrite(CredentialRef ref, String secret) async {
@@ -83,7 +119,7 @@ final class CredentialStore {
     if (await vault.read(ref) != secret) {
       throw StateError('vault_readback_mismatch');
     }
-    failures.remove(ref);
+    _recovered(ref);
   }
 
   Future<void> checkAvailability() async {
@@ -117,6 +153,14 @@ final class CredentialStore {
     if (!isSecretKey(key)) return raw;
     final ref = _decodeRef(raw);
     if (ref == preferenceRef(key)) return _readRef(ref!);
+    if (desktop) {
+      try {
+        await write(prefs, key, raw);
+      } catch (error) {
+        if (vault.blocked.containsKey(preferenceRef(key))) rethrow;
+        // Keep the existing legacy value until a verified migration succeeds.
+      }
+    }
     SecretRedactor.remember(preferenceRef(key), raw);
     return raw; // A failed migration retains the working legacy value.
   }
@@ -199,9 +243,10 @@ final class CredentialStore {
     }
   }
 
-  Future<void> migrate(SharedPreferences prefs) async {
+  Future<void> migrate(SharedPreferences prefs, {Set<String>? keys}) async {
     if (!desktop) return;
     for (final key in prefs.getKeys().toList()) {
+      if (keys != null && !keys.contains(key)) continue;
       if (compositeKeys.containsKey(key)) {
         await _migrateItems(prefs, key);
       } else if (isSecretKey(key)) {

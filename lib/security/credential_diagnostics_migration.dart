@@ -8,7 +8,8 @@ import 'portable_credentials.dart';
 /// Scrub host-owned diagnostics and cached sync state after legacy secrets have
 /// been registered by migration. User-created backup archives stay untouched.
 Future<void> migrateCredentialDiagnostics(
-    Directory appRoot, Directory syncSupportRoot, CredentialStore store) async {
+    Directory appRoot, Directory syncSupportRoot, CredentialStore store,
+    {bool migrateCaches = true}) async {
   if (!store.desktop) return;
   final journal = File('${appRoot.path}/next/journal.jsonl');
   if (await journal.exists()) {
@@ -37,6 +38,7 @@ Future<void> migrateCredentialDiagnostics(
       }
     }
   }
+  if (!migrateCaches) return;
   final caches = Directory('${syncSupportRoot.path}/incremental_sync');
   if (await caches.exists()) {
     await for (final entity in caches.list(followLinks: false)) {

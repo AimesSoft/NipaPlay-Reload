@@ -41,14 +41,18 @@ class DandanplayRemoteProvider extends ChangeNotifier {
     return _service.buildImageUrl(hash);
   }
 
-  Future<void> initialize() async {
-    if (_isInitialized) return;
+  Future<void> initialize({bool loadCredentials = true}) async {
+    if (_isInitialized) {
+      if (loadCredentials) await activateSavedConnection();
+      return;
+    }
     _setLoading(true);
     try {
       if (kIsWeb) {
         await _syncFromRemote();
       } else {
-        await _service.loadSavedSettings(backgroundRefresh: true);
+        await _service.loadSavedSettings(
+            backgroundRefresh: true, loadCredentials: loadCredentials);
       }
       _episodes = _service.cachedEpisodes;
       _rebuildGroups();
@@ -154,7 +158,31 @@ class DandanplayRemoteProvider extends ChangeNotifier {
     }
   }
 
+  Future<void>? _savedConnection;
+  Future<void> activateSavedConnection() {
+    if (isConnected) return Future.value();
+    return _savedConnection ??= _activateSavedConnection()
+        .whenComplete(() => _savedConnection = null);
+  }
+
+  Future<void> _activateSavedConnection() async {
+    _setLoading(true);
+    try {
+      if (kIsWeb) {
+        await _syncFromRemote();
+      } else {
+        await _service.loadSavedSettings();
+      }
+      _episodes = _service.cachedEpisodes;
+      _rebuildGroups();
+      _errorMessage = _service.lastError;
+    } finally {
+      _setLoading(false);
+    }
+  }
+
   Future<void> refresh() async {
+    await activateSavedConnection();
     if (!_service.isConnected) {
       throw Exception('尚未连接到弹弹play远程服务');
     }

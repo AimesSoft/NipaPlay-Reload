@@ -782,6 +782,7 @@ class JellyfinService extends MediaServerServiceBase
   }
 
   Future<JellyfinMediaItemDetail> getMediaItemDetails(String itemId) async {
+    await ensureSavedConnection();
     if (!_isConnected) {
       throw Exception('未连接到Jellyfin服务器');
     }
@@ -856,6 +857,7 @@ class JellyfinService extends MediaServerServiceBase
 
   // 获取单个剧集的详细信息
   Future<JellyfinEpisodeInfo?> getEpisodeDetails(String episodeId) async {
+    await ensureSavedConnection();
     if (!_isConnected) {
       throw Exception('未连接到Jellyfin服务器');
     }
@@ -1091,6 +1093,7 @@ class JellyfinService extends MediaServerServiceBase
     String? playSessionId,
     String? mediaSourceId,
   }) async {
+    await ensureSavedConnection();
     if (!_isConnected || _accessToken == null || _userId == null) {
       throw Exception('未连接到Jellyfin服务器');
     }

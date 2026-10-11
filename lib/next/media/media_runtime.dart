@@ -54,7 +54,6 @@ final class MediaRuntime {
     final clients = <http.Client>[];
     if (providers == null) {
       final credentials = VaultCredentialResolver(root);
-      await credentials.initialize();
       final tmdb = http.Client(),
           bangumi = http.Client(),
           dandanplay = DandanplayHttpClient();

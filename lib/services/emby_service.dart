@@ -932,6 +932,7 @@ class EmbyService extends MediaServerServiceBase
   }
 
   Future<EmbyMediaItemDetail> getMediaItemDetails(String itemId) async {
+    await ensureSavedConnection();
     if (!_isConnected || _userId == null) {
       throw Exception('未连接到Emby服务器');
     }
@@ -1038,6 +1039,7 @@ class EmbyService extends MediaServerServiceBase
   }
 
   Future<EmbyEpisodeInfo?> getEpisodeDetails(String episodeId) async {
+    await ensureSavedConnection();
     try {
       debugPrint('[EmbyService] 开始获取剧集详情: episodeId=$episodeId');
       debugPrint('[EmbyService] 服务器URL: $_serverUrl');
@@ -1210,6 +1212,7 @@ class EmbyService extends MediaServerServiceBase
     String? playSessionId,
     String? mediaSourceId,
   }) async {
+    await ensureSavedConnection();
     if (!_isConnected || _accessToken == null || _userId == null) {
       throw Exception('未连接到Emby服务器');
     }

@@ -4,7 +4,7 @@ import 'credential_store.dart';
 import 'credential_vault.dart';
 
 Future<void> migrateCredentialFiles(
-    Directory root, CredentialStore store) async {
+    Directory root, CredentialStore store, {CredentialRef? only}) async {
   if (!store.desktop) return;
   for (final name in ['credentials.json', 'endpoint.json']) {
     final file = File('${root.path}/$name');
@@ -17,6 +17,7 @@ Future<void> migrateCredentialFiles(
         if (secret is! String) continue;
         final ref =
             CredentialRef(name == 'endpoint.json' ? 'agent' : 'metadata', key);
+        if (only != null && ref != only) continue;
         try {
           await store.verifiedWrite(ref, secret);
           values[key] = ref.placeholder;

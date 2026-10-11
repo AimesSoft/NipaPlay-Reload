@@ -1,4 +1,6 @@
 import 'package:nipaplay/security/credential_store.dart';
+import 'package:nipaplay/security/stored_credential.dart';
+import 'package:nipaplay/security/credential_vault.dart';
 import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
@@ -15,7 +17,12 @@ class SMBConnection {
   final String host;
   final int port;
   final String username;
-  final String password;
+  final StoredCredential _password;
+  String get password => _password.value ?? '';
+  bool get passwordIsResolved => _password.ref == null || _password.value != null;
+  StoredCredential? retainPassword(String edited, {required String original}) =>
+      edited == original ? _password : null;
+  Future<void> resolvePassword() async { await _password.resolve(); }
   final String domain;
   final bool isConnected;
 
@@ -25,10 +32,12 @@ class SMBConnection {
     required this.host,
     this.port = 445,
     required this.username,
-    required this.password,
+    required String password,
+    StoredCredential? storedPassword,
     this.domain = '',
     this.isConnected = false,
-  }) : id = id?.trim().isNotEmpty == true ? id!.trim() : const Uuid().v4();
+  }) : _password = storedPassword ?? StoredCredential(password),
+       id = id?.trim().isNotEmpty == true ? id!.trim() : const Uuid().v4();
 
   SMBConnection copyWith({
     String? id,
@@ -47,6 +56,7 @@ class SMBConnection {
       port: port ?? this.port,
       username: username ?? this.username,
       password: password ?? this.password,
+      storedPassword: password == null ? _password : null,
       domain: domain ?? this.domain,
       isConnected: isConnected ?? this.isConnected,
     );
@@ -59,7 +69,7 @@ class SMBConnection {
       'host': host,
       'port': port,
       'username': username,
-      'password': password,
+      'password': _password.toJson(),
       'domain': domain,
       'isConnected': isConnected,
     };
@@ -70,7 +80,8 @@ class SMBConnection {
     return SMBConnection(
       id: savedId?.isNotEmpty == true
           ? savedId
-          : const Uuid().v5(
+          : credentialReference(json['password'])?.key ??
+          const Uuid().v5(
               '6ba7b811-9dad-11d1-80b4-00c04fd430c8',
               'nipaplay:smb:${json['host'] ?? ''}|${json['port'] ?? 445}|'
                   '${json['domain'] ?? ''}|${json['username'] ?? ''}',
@@ -81,7 +92,9 @@ class SMBConnection {
           ? json['port'] as int
           : int.tryParse(json['port']?.toString() ?? '') ?? 445,
       username: json['username'] ?? '',
-      password: json['password'] ?? '',
+      password: '',
+      storedPassword: StoredCredential.fromJson(json['password'],
+          CredentialStore.itemRef('smb_connections', json)),
       domain: json['domain'] ?? '',
       isConnected: json['isConnected'] ?? false,
     );
@@ -204,18 +217,14 @@ class SMBService {
   Future<void> _loadConnections() async {
     try {
       final prefs = await SharedPreferences.getInstance();
-      final savedJson = (await CredentialStore.instance.read(prefs, _connectionsKey));
+      final savedJson = prefs.getString(_connectionsKey);
       if (savedJson == null) return;
       final List<dynamic> decoded = json.decode(savedJson);
-      final needsIdMigration = decoded.whereType<Map>().any(
-            (entry) => entry['id']?.toString().trim().isNotEmpty != true,
-          );
       _connections
         ..clear()
         ..addAll(decoded
             .whereType<Map<String, dynamic>>()
             .map((e) => _normalizeConnection(SMBConnection.fromJson(e))));
-      if (needsIdMigration) await _saveConnections();
     } catch (e) {
       print('加载SMB连接失败: $e');
     }
@@ -333,7 +342,8 @@ class SMBService {
     SMBConnection connection,
     String path, {
     bool forceRefresh = false,
-  }) {
+  }) async {
+    await connection.resolvePassword();
     final normalizedConnection = _normalizeConnection(connection);
     final normalizedPath = _normalizePath(path);
     final key = (
@@ -413,6 +423,7 @@ class SMBService {
   }
 
   Future<bool> _testConnection(SMBConnection connection) async {
+    await connection.resolvePassword();
     if (Smb2NativeService.instance.isSupported) {
       try {
         await Smb2NativeService.instance.listDirectory(connection, '/');
@@ -436,7 +447,8 @@ class SMBService {
     }
   }
 
-  Future<SmbConnect> _createClient(SMBConnection connection) {
+  Future<SmbConnect> _createClient(SMBConnection connection) async {
+    await connection.resolvePassword();
     return SmbConnect.connectAuth(
       host: connection.host,
       username: connection.username,
@@ -464,7 +476,6 @@ class SMBService {
       host: trimmedHost,
       port: port,
       username: connection.username.trim(),
-      password: connection.password,
       domain: connection.domain.trim(),
     );
   }
@@ -501,6 +512,7 @@ class SMBService {
   }
 
   String buildFileUrl(SMBConnection connection, String smbPath) {
+    if (!connection.passwordIsResolved) throw StateError('credential_not_loaded');
     final normalized = _normalizeConnection(connection);
     final normalizedPath = _normalizePath(smbPath);
     final encodedSegments = normalizedPath

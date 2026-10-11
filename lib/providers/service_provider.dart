@@ -57,9 +57,9 @@ class ServiceProvider {
     // 并行初始化网络媒体库服务，不等待连接验证完成
     await Future.wait([
       if (!kIsWeb) nextCore.ready,
-      jellyfinProvider.initialize(),
-      embyProvider.initialize(),
-      dandanplayRemoteProvider.initialize(),
+      jellyfinProvider.initialize(loadCredentials: false),
+      embyProvider.initialize(loadCredentials: false),
+      dandanplayRemoteProvider.initialize(loadCredentials: false),
     ]);
 
     if (!kIsWeb) {

@@ -31,6 +31,7 @@ class Smb2NativeService {
     SMBConnection connection,
     String path,
   ) async {
+    await connection.resolvePassword();
     final jsonString = await _worker.requestList(
       host: connection.host,
       port: connection.port,
@@ -65,6 +66,7 @@ class Smb2NativeService {
     SMBConnection connection,
     String path,
   ) async {
+    await connection.resolvePassword();
     final result = await _worker.requestStat(
       host: connection.host,
       port: connection.port,
@@ -85,8 +87,9 @@ class Smb2NativeService {
     required int start,
     required int endExclusive,
     int chunkSize = 256 * 1024,
-  }) {
-    return _Smb2StreamReader.stream(
+  }) async* {
+    await connection.resolvePassword();
+    yield* _Smb2StreamReader.stream(
       host: connection.host,
       port: connection.port,
       username: connection.username,

@@ -1,4 +1,5 @@
-
+import 'package:nipaplay/security/credential_store.dart';
+import 'package:nipaplay/security/stored_credential.dart';
 
 /// 服务器配置文件模型，支持多地址管理
 class ServerProfile {
@@ -8,7 +9,10 @@ class ServerProfile {
   final List<ServerAddress> addresses; // 多个地址列表
   final String username; // 用户名
   final String? serverId; // 远程服务器ID（Emby/Jellyfin服务器的唯一标识）
-  String? accessToken; // 访问令牌
+  StoredCredential _accessToken;
+  String? get accessToken => _accessToken.value;
+  set accessToken(String? value) => _accessToken = StoredCredential(value);
+  Future<String?> resolveAccessToken() => _accessToken.resolve();
   String? userId; // 用户ID
   String? lastSuccessfulAddressId; // 最近成功连接的地址ID
   DateTime? lastConnectionTime; // 最后连接时间
@@ -20,11 +24,12 @@ class ServerProfile {
     required this.addresses,
     required this.username,
     this.serverId,
-    this.accessToken,
+    String? accessToken,
+    StoredCredential? storedAccessToken,
     this.userId,
     this.lastSuccessfulAddressId,
     this.lastConnectionTime,
-  });
+  }) : _accessToken = storedAccessToken ?? StoredCredential(accessToken);
 
   /// 获取当前应该使用的地址（优先使用最近成功的地址）
   ServerAddress? get currentAddress {
@@ -127,6 +132,7 @@ class ServerProfile {
       username: username ?? this.username,
       serverId: serverId ?? this.serverId,
       accessToken: accessToken ?? this.accessToken,
+      storedAccessToken: accessToken == null ? _accessToken : null,
       userId: userId ?? this.userId,
       lastSuccessfulAddressId: lastSuccessfulAddressId ?? this.lastSuccessfulAddressId,
       lastConnectionTime: lastConnectionTime ?? this.lastConnectionTime,
@@ -141,7 +147,7 @@ class ServerProfile {
       'addresses': addresses.map((addr) => addr.toJson()).toList(),
       'username': username,
       'serverId': serverId,
-      'accessToken': accessToken,
+      'accessToken': _accessToken.toJson(),
       'userId': userId,
       'lastSuccessfulAddressId': lastSuccessfulAddressId,
       'lastConnectionTime': lastConnectionTime?.toIso8601String(),
@@ -158,7 +164,8 @@ class ServerProfile {
           .toList(),
       username: json['username'],
       serverId: json['serverId'],
-      accessToken: json['accessToken'],
+      storedAccessToken: StoredCredential.fromJson(json['accessToken'],
+          CredentialStore.itemRef('server_profiles', json)),
       userId: json['userId'],
       lastSuccessfulAddressId: json['lastSuccessfulAddressId'],
       lastConnectionTime: json['lastConnectionTime'] != null

@@ -134,12 +134,11 @@ void main() {
     try {
       final resolver = VaultCredentialResolver(root,
           store: CredentialStore(MemoryVault(), desktop: true));
-      await resolver.initialize();
-      expect(await File('${root.path}/credentials.json').exists(), false);
       await expectLater(
           resolver.resolve(const CredentialRef('metadata', 'tmdb')),
           throwsA(isA<Failure>()
               .having((error) => error.message, 'message', contains('tmdb'))));
+      expect(await File('${root.path}/credentials.json').exists(), false);
     } finally {
       await root.delete(recursive: true);
     }

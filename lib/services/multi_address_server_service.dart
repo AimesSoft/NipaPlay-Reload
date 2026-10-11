@@ -32,7 +32,7 @@ class MultiAddressServerService {
   Future<void> loadProfiles() async {
     try {
       final prefs = await SharedPreferences.getInstance();
-      final profilesJson = (await CredentialStore.instance.read(prefs, _profilesKey));
+      final profilesJson = prefs.getString(_profilesKey);
       
       if (profilesJson != null) {
         final List<dynamic> profilesList = json.decode(profilesJson);

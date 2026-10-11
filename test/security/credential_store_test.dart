@@ -9,6 +9,7 @@ import 'package:nipaplay/security/credential_diagnostics_migration.dart';
 import 'package:nipaplay/security/portable_credentials.dart';
 import 'package:nipaplay/security/secret_redactor.dart';
 import 'package:nipaplay/security/credential_notice.dart';
+import 'package:nipaplay/services/dandanplay_service.dart';
 import 'package:flutter/material.dart';
 import 'memory_vault.dart';
 
@@ -94,6 +95,64 @@ void main() {
       await store.migrate(prefs);
       expect(prefs.getString(entry.key), isNot(contains('secret-')));
     }
+  });
+  test('readback refusal retains legacy data and blocks automatic rewrites', () async {
+    final ref = CredentialStore.preferenceRef('dandanplay_token');
+    await prefs.setString('dandanplay_token', 'existing-secret');
+    vault.denied = ref;
+    await store.migrate(prefs);
+    expect(prefs.getString('dandanplay_token'), 'existing-secret');
+    expect(vault.values[ref], 'existing-secret');
+    await store.migrate(prefs);
+    await expectLater(store.read(prefs, 'dandanplay_token'), throwsStateError);
+    expect(vault.reads[ref], 1);
+    expect(vault.writes[ref], 1);
+    vault.denied = null;
+    await store.retry(ref);
+    await store.migrate(prefs);
+    expect(credentialReference(jsonDecode(prefs.getString('dandanplay_token')!)), ref);
+    expect(await store.read(prefs, 'dandanplay_token'), 'existing-secret');
+  });
+  test('concurrent cancelled reads share one attempt and a new run can read', () async {
+    const ref = CredentialRef('smb_connections', 'fixture');
+    vault.denied = ref;
+    vault.refusal = 'storage_authorization_cancelled';
+    await Future.wait([
+      for (var i = 0; i < 4; i++)
+        expectLater(store.vault.read(ref), throwsStateError),
+    ]);
+    expect(vault.reads[ref], 1);
+    vault.denied = null;
+    vault.values[ref] = 'fixture-secret';
+    await expectLater(store.vault.read(ref), throwsStateError);
+    final nextRun = CredentialStore(vault, desktop: true);
+    expect(await nextRun.vault.read(ref), 'fixture-secret');
+    expect(vault.reads[ref], 2);
+  });
+  test('essential login refusal allows startup without clearing persisted login', () async {
+    final previousStore = CredentialStore.instance;
+    CredentialStore.instance = store;
+    addTearDown(() => CredentialStore.instance = previousStore);
+    final ref = CredentialStore.preferenceRef('dandanplay_token');
+    await prefs.setString('dandanplay_token', jsonEncode(ref.placeholder));
+    await prefs.setBool('dandanplay_logged_in', true);
+    vault.values[ref] = 'fixture-login';
+    vault.denied = ref;
+    await DandanplayService.initialize(renewToken: false);
+    await DandanplayService.initialize(renewToken: false);
+    expect(vault.reads[ref], 1);
+    expect(DandanplayService.isLoggedIn, false);
+    expect(prefs.getBool('dandanplay_logged_in'), true);
+    expect(prefs.getString('dandanplay_token'), jsonEncode(ref.placeholder));
+    expect(vault.values[ref], 'fixture-login');
+    expect(store.failures[ref], 'storage_access_denied');
+  });
+  test('failed new writes never create a plaintext preference', () async {
+    vault.unavailable = true;
+    await expectLater(store.write(prefs, 'plugin_fixture_token', 'fixture-secret'),
+        throwsStateError);
+    expect(prefs.getString('plugin_fixture_token'), isNull);
+    expect(vault.values, isEmpty);
   });
   test(
       'legacy files migrate per entry, preserving failed values and endpoint token',
@@ -228,6 +287,7 @@ void main() {
   });
   testWidgets('unavailable Linux vault gives a persistent user-visible notice',
       (tester) async {
+    store = CredentialStore(vault, desktop: true, platform: TargetPlatform.linux);
     final previous = CredentialStore.instance;
     CredentialStore.instance = store;
     addTearDown(() => CredentialStore.instance = previous);

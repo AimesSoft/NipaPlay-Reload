@@ -211,7 +211,14 @@ abstract class MediaServerServiceBase {
     return normalized;
   }
 
-  Future<void> loadSavedSettings() async {
+  Future<void>? _restoringConnection;
+  Future<void> ensureSavedConnection() {
+    if (isConnected) return Future.value();
+    return _restoringConnection ??= loadSavedSettings()
+        .whenComplete(() => _restoringConnection = null);
+  }
+
+  Future<void> loadSavedSettings({bool loadCredentials = true}) async {
     await _multiAddressService.initialize();
 
     final prefs = await SharedPreferences.getInstance();
@@ -222,7 +229,6 @@ abstract class MediaServerServiceBase {
         currentProfile = _multiAddressService.getProfileById(profileId);
         if (currentProfile != null) {
           username = currentProfile!.username;
-          accessToken = currentProfile!.accessToken;
           userId = currentProfile!.userId;
 
           final currentAddress = currentProfile!.currentAddress;
@@ -236,10 +242,16 @@ abstract class MediaServerServiceBase {
       }
     }
 
-    if (currentProfile == null) {
+    if (currentProfile != null) {
+      accessToken = loadCredentials
+          ? await currentProfile!.resolveAccessToken()
+          : null;
+    } else {
       serverUrl = prefs.getString('${prefsKeyPrefix}_server_url');
       username = prefs.getString('${prefsKeyPrefix}_username');
-      accessToken = (await CredentialStore.instance.read(prefs, '${prefsKeyPrefix}_access_token'));
+      accessToken = loadCredentials
+          ? await CredentialStore.instance.read(prefs, '${prefsKeyPrefix}_access_token')
+          : null;
       userId = prefs.getString('${prefsKeyPrefix}_user_id');
     }
 
@@ -247,7 +259,7 @@ abstract class MediaServerServiceBase {
         prefs.getStringList('${prefsKeyPrefix}_selected_libraries') ?? [];
 
     if (serverUrl != null && accessToken != null && userId != null) {
-      _validateConnectionAsync();
+      await _validateConnectionAsync();
     } else {
       isConnected = false;
       isReady = false;
@@ -486,6 +498,12 @@ abstract class MediaServerServiceBase {
       {String method = 'GET',
       Map<String, dynamic>? body,
       Duration? timeout}) async {
+    if (accessToken == null) {
+      accessToken = currentProfile != null
+          ? await currentProfile!.resolveAccessToken()
+          : await CredentialStore.instance.read(
+              await SharedPreferences.getInstance(), '${prefsKeyPrefix}_access_token');
+    }
     if (accessToken == null) {
       throw Exception(notConnectedMessage);
     }

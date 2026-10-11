@@ -9,15 +9,20 @@ import 'package:nipaplay/services/jellyfin_service.dart';
 import 'package:nipaplay/services/media_server_service_base.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:nipaplay/security/credential_store.dart';
+import 'security/memory_vault.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
   final previousOverrides = HttpOverrides.current;
   // Exercise real HTTP against loopback fixtures, without Flutter's HTTP mock.
-  HttpOverrides.global = null;
+  HttpOverrides.global = _DirectHttp();
   tearDownAll(() => HttpOverrides.global = previousOverrides);
 
   setUp(() {
+    final previousStore = CredentialStore.instance;
+    CredentialStore.instance = CredentialStore(MemoryVault(), desktop: true);
+    addTearDown(() => CredentialStore.instance = previousStore);
     SharedPreferences.setMockInitialValues({'server_profiles': '[]'});
     PackageInfo.setMockInitialValues(
       appName: 'NipaPlay',
@@ -124,6 +129,12 @@ void main() {
     expect(fixture.requests.single.headers, isNot(contains('authorization')));
     expect(fixture.rejectedRequests, isEmpty);
   });
+}
+
+class _DirectHttp extends HttpOverrides {
+  @override
+  HttpClient createHttpClient(SecurityContext? context) =>
+      super.createHttpClient(context)..findProxy = (_) => 'DIRECT';
 }
 
 const _token = 'fixture-token';

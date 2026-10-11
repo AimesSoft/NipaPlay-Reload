@@ -235,6 +235,7 @@ class SMBProxyService {
 
     SmbConnect? client;
     try {
+      await connection.resolvePassword();
       client = await SmbConnect.connectAuth(
         host: connection.host,
         username: connection.username,

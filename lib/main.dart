@@ -3,7 +3,6 @@ import 'dart:convert';
 import 'package:nipaplay/security/credential_diagnostics_migration.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:nipaplay/security/credential_store.dart';
-import 'package:nipaplay/security/credential_file_migration.dart';
 import 'package:nipaplay/security/credential_notice.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:nipaplay/utils/performance_trace.dart';
@@ -276,12 +275,10 @@ Future<void> _main(List<String> args) async {
 
   if (!kIsWeb) {
     final credentials = CredentialStore.instance;
-    await credentials.checkAvailability();
-    await credentials.migrate(await SharedPreferences.getInstance());
-    await migrateCredentialFiles(
-        Directory('${(await StorageService.getAppStorageDirectory()).path}/next'), credentials);
+    await credentials.migrate(await SharedPreferences.getInstance(),
+        keys: const {'dandanplay_token'});
     await migrateCredentialDiagnostics(await StorageService.getAppStorageDirectory(),
-        await getApplicationSupportDirectory(), credentials);
+        await getApplicationSupportDirectory(), credentials, migrateCaches: false);
     await (await SharedPreferences.getInstance()).setString('vault_migration_failures_v1', jsonEncode([
       for (final entry in credentials.failures.entries)
         {'reference': entry.key.toJson(), 'reason': entry.value},

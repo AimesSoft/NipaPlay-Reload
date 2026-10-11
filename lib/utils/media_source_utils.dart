@@ -424,6 +424,14 @@ class MediaSourceUtils {
   }
 
   /// Resolve stable remote-library paths while leaving regular URLs alone.
+  static Future<void> prepareRemotePath(String filePath) async {
+    if (isNewWebDavPath(filePath)) {
+      await WebDAVService.instance.initialize();
+      final resolved = WebDAVService.instance.resolveMediaPath(filePath);
+      if (resolved != null) await resolved.connection.resolvePassword();
+    }
+  }
+
   static String? resolveRemotePathToUrl(String filePath) {
     if (isNewWebDavPath(filePath)) {
       return resolveWebDavPathToUrl(filePath);

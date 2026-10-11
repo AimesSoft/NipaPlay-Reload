@@ -269,7 +269,8 @@ class FullBackupService {
     // 8. 收集弹弹play远程服务配置
     try {
       final remoteService = DandanplayRemoteService.instance;
-      await remoteService.loadSavedSettings(backgroundRefresh: true);
+      await remoteService.loadSavedSettings(
+          backgroundRefresh: true, loadCredentials: false);
       if (remoteService.serverUrl != null &&
           remoteService.serverUrl!.isNotEmpty) {
         result['dandanplayRemote'] = {
@@ -476,7 +477,7 @@ class FullBackupService {
                 'serverName': p.serverName,
                 'serverType': p.serverType,
                 'username': p.username,
-                'accessToken': p.accessToken == null ? null : CredentialStore.itemRef('server_profiles', {'id': p.id}).placeholder,
+                'accessToken': p.toJson()['accessToken'] == null ? null : CredentialStore.itemRef('server_profiles', {'id': p.id}).placeholder,
                 'userId': p.userId,
                 'serverId': p.serverId,
                 'addresses': p.addresses.map((a) => a.toJson()).toList(),

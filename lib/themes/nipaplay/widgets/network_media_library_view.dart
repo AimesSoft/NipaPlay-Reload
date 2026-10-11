@@ -1579,6 +1579,14 @@ class _NetworkMediaLibraryViewState extends State<NetworkMediaLibraryView>
 
     final provider = _provider;
 
+    if (!provider.isConnected && isPageActive) {
+      try {
+        await provider.activateSavedConnection();
+      } catch (error) {
+        if (mounted) setState(() => _error = error.toString());
+        return;
+      }
+    }
     if (!provider.isConnected || provider.selectedLibraryIds.isEmpty) {
       if (mounted) {
         setState(() {
@@ -2140,6 +2148,7 @@ class _NetworkMediaLibraryViewState extends State<NetworkMediaLibraryView>
   void onPageActivityChanged(bool active) {
     if (active) {
       _setupRefreshTimer();
+      if (!_hasBeenActive) unawaited(_loadData());
       if (_hasBeenActive && !_isLoadingLibraryContent) {
         unawaited(_manualRefresh());
       }

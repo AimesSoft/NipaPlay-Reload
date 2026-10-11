@@ -430,6 +430,7 @@ extension VideoPlayerStateNavigation on VideoPlayerState {
       );
     }
 
+    await MediaSourceUtils.prepareRemotePath(episode.videoPath);
     final actualPlayUrl = episode.actualPlayUrl ??
         (MediaSourceUtils.isNewWebDavPath(episode.videoPath) ||
                 MediaSourceUtils.isNewSmbPath(episode.videoPath)
@@ -712,6 +713,7 @@ extension VideoPlayerStateNavigation on VideoPlayerState {
     // "路径不可用"（非本地文件也非 HTTP URL）而跳过，导致续播无弹幕。
     if (MediaSourceUtils.isNewWebDavPath(filePath)) {
       try {
+        await MediaSourceUtils.prepareRemotePath(filePath);
         final url = MediaSourceUtils.resolveWebDavPathToUrl(filePath);
         if (url != null && url.isNotEmpty) return url;
       } catch (_) {}

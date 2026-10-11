@@ -15,9 +15,22 @@ final class CredentialNotice extends StatelessWidget {
                   bottom: false,
                   child: Padding(
                     padding: const EdgeInsets.all(8),
-                    child: Text(notices.join('\n'),
-                        style:
-                            const TextStyle(color: Colors.black, fontSize: 13)),
+                    child: Column(mainAxisSize: MainAxisSize.min, children: [
+                      Text(notices.join('\n'),
+                          style: const TextStyle(
+                              color: Colors.black, fontSize: 13)),
+                      for (final ref
+                          in CredentialStore.instance.vault.blocked.keys)
+                        TextButton(
+                            onPressed: () async {
+                              try {
+                                await CredentialStore.instance.retry(ref);
+                              } catch (_) {
+                                // The store publishes the new authorization outcome.
+                              }
+                            },
+                            child: Text('重试 $ref')),
+                    ]),
                   )),
             ),
           Expanded(child: child),
