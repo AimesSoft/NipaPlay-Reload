@@ -3,6 +3,15 @@ import 'dart:io';
 import 'package:nipa_harness/nipa_harness.dart';
 import 'package:path/path.dart' as p;
 
+void validateDownloadDirectory(String directory) {
+  if (directory.trim().isEmpty ||
+      !p.isAbsolute(directory) ||
+      directory != directory.trim()) {
+    throw const Failure(FailureCode.invalidInput,
+        'Use an absolute download directory without surrounding whitespace.');
+  }
+}
+
 /// Check both lexical containment and existing symlink ancestors. Missing
 /// descendants are allowed so partially downloaded torrents can be deleted.
 Future<String> checkedDownloadPath(String output, String path) async {

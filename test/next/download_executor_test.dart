@@ -25,6 +25,40 @@ void main() {
   late DownloadService downloads;
   late Harness harness;
 
+  void connect({List<DownloadBackend> additional = const []}) {
+    final backends = DownloadBackends([backend, ...additional]);
+    executor = DownloadExecutor(
+        backends: backends,
+        library: library,
+        isEnabled: () async => true,
+        pollInterval: const Duration(milliseconds: 10),
+        importRetryDelay: const Duration(minutes: 1));
+    engine = TaskEngine(
+        store: store, ownerDeviceId: 'device-test', executors: [executor]);
+    executor.engine = engine;
+    downloads = DownloadService(
+        engine: engine,
+        executor: executor,
+        backends: backends,
+        library: library);
+    harness = Harness([
+      TaskCapability(engine),
+      DownloadCapability(
+          downloads: downloads,
+          deleteAudit: JsonlJournal(File('${root.path}/download-audit.jsonl')),
+          sources: DownloadSources(Directory('${root.path}/metadata')))
+    ]);
+  }
+
+  Future<JsonMap> call(String action, JsonMap input) async {
+    final outcome = await harness.invokeJson(
+        action, input, Invocation(origin: 'mcp', id: 'batch-test'));
+    expect(outcome, isA<Completed>(), reason: '${outcome.toEnvelope()}');
+    final result = (outcome as Completed).value.toJson();
+    expect(harness.lookup(action)!.spec.output.validate(result), isEmpty);
+    return result;
+  }
+
   test(
       'scanner acknowledgement does not fabricate media or block download success',
       () async {
@@ -42,6 +76,64 @@ void main() {
             containsPair('identificationPending', true),
             isNot(contains('media'))));
     expect(library.importedKeys, contains(backend.snapshot.importKey));
+  });
+
+  test(
+      'directory overrides survive persistence and duplicate adds do not move data',
+      () async {
+    await engine.close();
+    connect();
+    final result = await call('download.add', {
+      'source': testRequest.source,
+      'downloadDirectory': '${root.path}/chosen',
+      'createFolderForTask': false,
+    });
+    final first = await engine.get((result['job'] as Map)['jobId'] as String);
+    expect(first.input['downloadDirectory'], '${root.path}/chosen');
+    expect(first.input['createFolderForTask'], false);
+    final duplicate = await call('download.add', {
+      'source': testRequest.source,
+      'downloadDirectory': '${root.path}/other',
+    });
+    expect((duplicate['job'] as Map)['jobId'], first.jobId);
+    expect((await engine.get(first.jobId)).input, first.input);
+    final invalid = await harness.invokeJson(
+        'download.add',
+        {
+          'source': 'magnet:?xt=urn:btih:${'1' * 40}',
+          'downloadDirectory': 'relative',
+        },
+        Invocation(origin: 'test'));
+    expect(invalid, isA<Failed>());
+    expect(await engine.list(), hasLength(1));
+  });
+
+  test(
+      'explicit completed scan preserves receipts and does not invent imported identity',
+      () async {
+    backend.present = true;
+    await backend.finish();
+    library.autoImport = false;
+    library.acknowledgeOnly = true;
+    final job = await downloads.add(testRequest);
+    final done = await untilState(engine, job.jobId, JobState.succeeded);
+    final receipt = jsonEncode(done.receipt!.toJson());
+    final result = await call('download.import', {'jobId': job.jobId});
+    final file = ((result['task'] as Map)['files'] as List).single as Map;
+    expect(file['imported'], false);
+    expect(file['identificationPending'], true);
+    expect(file.containsKey('media'), false);
+    expect(
+        jsonEncode((await engine.get(job.jobId)).receipt!.toJson()), receipt);
+    expect(library.importedKeys, contains(backend.snapshot.importKey));
+    await File(backend.video.location.path).writeAsString('short');
+    final scans = library.scans.length;
+    final corrupt = await harness.invokeJson(
+        'download.import', {'jobId': job.jobId}, Invocation(origin: 'test'));
+    expect(corrupt, isA<Failed>());
+    expect(library.scans.length, scans);
+    expect(
+        jsonEncode((await engine.get(job.jobId)).receipt!.toJson()), receipt);
   });
 
   test(
@@ -102,31 +194,6 @@ void main() {
     expect(done.error, isNull);
   });
 
-  void connect({List<DownloadBackend> additional = const []}) {
-    final backends = DownloadBackends([backend, ...additional]);
-    executor = DownloadExecutor(
-        backends: backends,
-        library: library,
-        isEnabled: () async => true,
-        pollInterval: const Duration(milliseconds: 10),
-        importRetryDelay: const Duration(minutes: 1));
-    engine = TaskEngine(
-        store: store, ownerDeviceId: 'device-test', executors: [executor]);
-    executor.engine = engine;
-    downloads = DownloadService(
-        engine: engine,
-        executor: executor,
-        backends: backends,
-        library: library);
-    harness = Harness([
-      TaskCapability(engine),
-      DownloadCapability(
-          downloads: downloads,
-          deleteAudit: JsonlJournal(File('${root.path}/download-audit.jsonl')),
-          sources: DownloadSources(Directory('${root.path}/metadata')))
-    ]);
-  }
-
   Future<Job> add() async {
     final outcome = await harness.invokeJson('download.add',
         {'source': testRequest.source}, Invocation(origin: 'test'));
@@ -167,15 +234,6 @@ void main() {
     }
     await root.delete(recursive: true);
   });
-
-  Future<JsonMap> call(String action, JsonMap input) async {
-    final outcome = await harness.invokeJson(
-        action, input, Invocation(origin: 'mcp', id: 'batch-test'));
-    expect(outcome, isA<Completed>(), reason: '${outcome.toEnvelope()}');
-    final result = (outcome as Completed).value.toJson();
-    expect(harness.lookup(action)!.spec.output.validate(result), isEmpty);
-    return result;
-  }
 
   Future<(FakeDownloadBackend, Job, Job)> twoDownloads() async {
     await engine.close();

@@ -10,6 +10,7 @@ import 'package:nipaplay/models/watch_history_model.dart';
 import 'package:nipaplay/providers/labs_settings_provider.dart';
 import 'package:nipaplay/providers/service_provider.dart';
 import 'package:nipaplay/providers/settings_provider.dart';
+import 'package:nipaplay/providers/downloader_settings_provider.dart';
 import 'package:nipaplay/providers/shared_remote_library_provider.dart';
 import 'package:nipaplay/providers/jellyfin_provider.dart';
 import 'package:nipaplay/providers/emby_provider.dart';
@@ -28,6 +29,8 @@ import 'capabilities/history_capability.dart';
 import 'capabilities/library_capability.dart';
 import 'capabilities/navigation_capability.dart';
 import 'capabilities/playback_capability.dart';
+import 'capabilities/download_playback_capability.dart';
+import 'settings/download_settings.dart';
 import 'capabilities/playback_controls_capability.dart';
 import 'capabilities/classic_playback_controls.dart';
 import 'capabilities/video_player_state_port.dart';
@@ -65,6 +68,7 @@ final class NextRuntime extends ChangeNotifier {
       plugins: context.read<PluginService>(),
     );
     final core = ServiceProvider.nextCore;
+    DownloadSettings.provider = context.read<DownloaderSettingsProvider>();
     core.ready.then((_) {
       if (!context.mounted) return;
       core.mediaSources.shared = context.read<SharedRemoteLibraryProvider>();
@@ -186,6 +190,10 @@ final class NextRuntime extends ChangeNotifier {
         for (final capability in capabilities)
           FileIndexingCapability(capability, core.media.service.store),
         PlaybackControlsCapability(ClassicPlaybackControls(_player)),
+        FileIndexingCapability(
+            DownloadPlaybackCapability(
+                core.downloads, (item) => PlaybackService().play(item)),
+            core.media.service.store),
         ...core.capabilities
       ],
       observers: [JsonlJournal(File('${root.path}/journal.jsonl'))],

@@ -1,5 +1,39 @@
 # Download completion and identification
 
+Agent controls use the same Classic torrent session and preferences. Discover
+jobs with `task.list` (`type: download`); `download.read` accepts `jobId` or
+`jobIds` and returns live backend state, rates, output paths and indexed files.
+The job receipt remains a historical completion observation; live seeding pause
+state comes from `task.paused` in this read result.
+
+The `download` settings domain exposes `enabled`, `directory`,
+`createFolderForTask` and `autoScanCompletedTasks`. Disabling preserves Classic
+semantics: it hides the downloader tab and prevents Agent adds, without pausing
+existing native tasks. `download.add.downloadDirectory` and
+`createFolderForTask` override defaults only for new tasks. Hash deduplication
+returns the original job without moving its data. Directory permission requests
+reuse `playback.authorize_directory`.
+
+`download.preview` reuses Classic magnet metadata resolution and releases its
+temporary handle without adding a task. `download.directories` returns the
+default and recent choices; `download.forget_directories` removes recent choices
+without changing the default or touching downloaded data.
+
+`download.play` takes `jobId` and `fileIndex` from `download.read.files` and uses
+Classic's selected-video playback source. Completed files play from disk even
+without a recognized library entry; unfinished paused files resume and stream.
+`playback.open` also accepts a completed local path after the session is removed.
+File selection here means selecting a video to play. Classic currently has no
+download inclusion editor, priority control or rate-limit setter.
+
+`download.import` scans completed local videos, including when automatic scan is
+off. It checks containment and actual sizes, reuses the Classic scanner and
+completed-scan marker, and returns actual recognized entries. An attempted scan
+does not imply `imported: true`; unmatched or unauthenticated scans remain
+`identificationPending`. The action never rewrites the original receipt. For
+unidentified files, existing `media.library.scan` can register native files under
+a configured media root without inventing work or episode identity.
+
 A download succeeds when its selected files have been read back and checked
 against the backend manifest. Identification does not certify or block download
 success. Each receipt file contains `path`, `expectedSize`, `actualSize`, and

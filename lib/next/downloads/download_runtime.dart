@@ -8,6 +8,7 @@ import 'package:nipaplay/models/torrent_task.dart';
 import 'package:nipaplay/services/torrent_download_service.dart';
 
 import '../capabilities/download_capability.dart';
+import '../capabilities/download_metadata_capability.dart';
 import 'download_backend.dart';
 import 'download_executor.dart';
 import 'download_service.dart';
@@ -35,6 +36,7 @@ final class DownloadRuntime extends ChangeNotifier {
   late final DownloadExecutor executor;
   late final DownloadService downloads;
   late final DownloadCapability capability;
+  late final DownloadMetadataCapability metadataCapability;
   final DownloadBackend _backend;
   final DownloadLibrary _library;
   late final DownloadBackends _backends;
@@ -61,6 +63,8 @@ final class DownloadRuntime extends ChangeNotifier {
         downloads: downloads,
         deleteAudit: JsonlJournal(File('${root.path}/download-audit.jsonl')),
         sources: DownloadSources(Directory('${root.path}/torrent_sources')));
+    metadataCapability = DownloadMetadataCapability(
+        DownloadSources(Directory('${root.path}/torrent_sources')), _enabled);
   }
 
   Future<void> start() {

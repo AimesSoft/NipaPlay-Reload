@@ -44,6 +44,9 @@ final class DownloadSnapshot {
       required this.finished,
       required this.paused,
       this.libraryKey,
+      this.state,
+      this.downloadSpeedBytesPerSecond,
+      this.uploadSpeedBytesPerSecond,
       this.error,
       this.files = const []});
   final String handle, infoHash, title;
@@ -52,8 +55,39 @@ final class DownloadSnapshot {
   final bool finished, paused;
   final String? error;
   final String? libraryKey;
+  final String? state;
+  final int? downloadSpeedBytesPerSecond, uploadSpeedBytesPerSecond;
   String get importKey => libraryKey ?? '$infoHash|${output.path}';
   final List<DownloadFile> files;
+
+  JsonMap toJson() => {
+        'handle': handle,
+        'infoHash': infoHash,
+        'title': title,
+        'outputDirectory': output.path,
+        'local': output.isLocal,
+        'completedBytes': completed,
+        'totalBytes': total,
+        'finished': finished,
+        'paused': paused,
+        'error': error,
+        if (state != null) 'state': state,
+        if (downloadSpeedBytesPerSecond != null)
+          'downloadSpeedBytesPerSecond': downloadSpeedBytesPerSecond,
+        if (uploadSpeedBytesPerSecond != null)
+          'uploadSpeedBytesPerSecond': uploadSpeedBytesPerSecond,
+        'files': [
+          for (var i = 0; i < files.length; i++)
+            {
+              'index': i,
+              'path': files[i].location.path,
+              'local': files[i].location.isLocal,
+              'expectedSize': files[i].expectedSize,
+              'included': files[i].included,
+              'isVideo': files[i].isVideo,
+            }
+        ],
+      };
 }
 
 final class DownloadRequest implements JsonEncodable {
