@@ -642,8 +642,7 @@ Future<void> _main(List<String> args) async {
         }
         if (LabProfile.quiet) {
           // Experiments run beside the user: never take focus or the front.
-          await windowManager.show(inactive: true);
-          await windowManager.blur();
+          await LabProfile.showBehind();
         } else {
           await windowManager.show();
           await windowManager.focus();

@@ -14,8 +14,12 @@ Future<T?> showNextLogin<T>(Widget Function(BuildContext) builder) async {
   }
   if (globals.isDesktop) {
     if (await windowManager.isMinimized()) await windowManager.restore();
-    await windowManager.show(inactive: LabProfile.quiet);
-    if (!LabProfile.quiet) await windowManager.focus();
+    if (LabProfile.quiet) {
+      await LabProfile.showBehind();
+    } else {
+      await windowManager.show();
+      await windowManager.focus();
+    }
   }
   if (!context.mounted) {
     throw const Failure(

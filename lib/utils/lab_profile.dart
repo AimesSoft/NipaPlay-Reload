@@ -23,6 +23,11 @@ abstract final class LabProfile {
   /// windows and never take focus, unless NIPAPLAY_LAB_QUIET=0 (a demo).
   static bool get quiet =>
       active && Platform.environment['NIPAPLAY_LAB_QUIET'] != '0';
+
+  /// window_manager's macOS show() always activates the app, so a quiet
+  /// instance shows its window natively, behind everything.
+  static Future<void> showBehind() =>
+      const MethodChannel('nipaplay/instance').invokeMethod('showBehind');
   static String get root => _root!;
   static String location(String child) => p.join(root, child);
   static String title(String title) => active ? '$title · LAB [$name]' : title;

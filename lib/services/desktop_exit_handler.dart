@@ -523,8 +523,12 @@ class DesktopExitHandler
 
   Future<void> _showMainWindow() async {
     await windowManager.setSkipTaskbar(false);
-    await windowManager.show(inactive: LabProfile.quiet);
-    if (!LabProfile.quiet) await windowManager.focus();
+    if (LabProfile.quiet) {
+      await LabProfile.showBehind();
+    } else {
+      await windowManager.show();
+      await windowManager.focus();
+    }
   }
 
   @override

@@ -1642,12 +1642,20 @@ class MainFlutterWindow: NSWindow {
     let instanceChannel = FlutterMethodChannel(
       name: "nipaplay/instance", binaryMessenger: flutterEngine.binaryMessenger)
     instanceChannel.setMethodCallHandler { [weak self] call, result in
-      guard call.method == "facts" else {
-        result(FlutterMethodNotImplemented)
-        return
-      }
       guard let window = self else {
         result(FlutterError(code: "window_closed", message: "The main window has closed", details: nil))
+        return
+      }
+      if call.method == "showBehind" {
+        // Lab instances run beside the user: visible, behind everything,
+        // never key and never activating the app.
+        window.setIsVisible(true)
+        window.orderBack(nil)
+        result(true)
+        return
+      }
+      guard call.method == "facts" else {
+        result(FlutterMethodNotImplemented)
         return
       }
       result([
