@@ -303,7 +303,8 @@ final class AgentEndpoint {
       });
     }
     return _response((await _harness.invokeJson(
-            action.spec.id, input, Invocation(origin: origin)))
+            action.spec.id, input, Invocation(origin: request.headers['x-nipa-hook'] == null
+                ? origin : 'hook:${request.headers['x-nipa-hook']}')))
         .toEnvelope());
   }
 

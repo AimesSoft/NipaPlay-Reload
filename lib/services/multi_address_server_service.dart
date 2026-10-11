@@ -5,6 +5,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:flutter/foundation.dart';
 import '../models/server_profile_model.dart';
 import 'debug_log_service.dart';
+import '../next/state/change_history.dart';
 
 /// 多地址服务器管理服务
 class MultiAddressServerService {
@@ -26,6 +27,18 @@ class MultiAddressServerService {
   /// 初始化服务，加载保存的配置
   Future<void> initialize() async {
     await loadProfiles();
+    observeChanges(initializing: true);
+  }
+
+  void observeChanges({bool initializing = false}) {
+    final record = initializing ? BodyChanges.seed : BodyChanges.observe;
+    record('source:server', [
+      for (final profile in _profiles) {
+        'id': '${profile.serverType}:${profile.id}', 'type': profile.serverType,
+        'name': profile.serverName, 'url': profile.currentAddress?.normalizedUrl,
+        'username': profile.username,
+      }
+    ]);
   }
   
   /// 从存储加载服务器配置
@@ -54,6 +67,7 @@ class MultiAddressServerService {
       final prefs = await SharedPreferences.getInstance();
       final profilesJson = json.encode(_profiles.map((p) => p.toJson()).toList());
       await CredentialStore.instance.write(prefs, _profilesKey, profilesJson);
+      observeChanges();
       
       DebugLogService().addLog('MultiAddressServer: 保存了 ${_profiles.length} 个服务器配置');
     } catch (e) {
@@ -64,6 +78,7 @@ class MultiAddressServerService {
   Future<void> persistProfiles() async {
     await CredentialStore.instance.write(await SharedPreferences.getInstance(),
         _profilesKey, json.encode(_profiles.map((p) => p.toJson()).toList()));
+    observeChanges();
   }
 
   /// 添加新的服务器配置

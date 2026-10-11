@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import '../next/state/change_history.dart';
 import 'dart:io';
 
 import 'package:flutter/foundation.dart';
@@ -223,7 +224,17 @@ class SharedRemoteLibraryProvider extends ChangeNotifier {
     } else {
       await prefs.remove(_activeHostIdKey);
     }
+    observeChanges();
   }
+
+  void observeChanges() => BodyChanges.observe('source:shared', [
+    for (final host in _hosts) {
+      'id': 'nipaplay:${host.id}', 'type': 'nipaplay',
+      'name': host.displayName,
+      'url': Uri.parse(host.baseUrl).replace(userInfo: '').toString(),
+      'connected': host.isOnline,
+    }
+  ]);
 
   Future<SharedRemoteHost> addHost({
     required String displayName,

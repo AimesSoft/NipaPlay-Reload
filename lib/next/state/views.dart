@@ -86,6 +86,15 @@ final _historyFields = ObjectSchema({
   ..._progressFields.properties,
 });
 final _receiptDetails = ObjectSchema({
+  'sourceId': _text('Media source ID.'),
+  'provider': _text('Account provider.'),
+  'connected': _bool('Verified connection result.'),
+  'loggedIn': _bool('Account login result.'),
+  'method': _text('Authentication method, never credentials.'),
+  'event': _text('Hook trigger event.'),
+  'objectId': _text('Hook trigger subject.'),
+  'exitCode': _int('Hook process exit code.'),
+  'elapsedMs': _int('Hook execution duration.'),
   'reason': _text('Domain completion or cancellation reason.'),
   'fileId': _id,
   'fileIds': ArraySchema(_id,
@@ -159,6 +168,10 @@ final _taskFields = ObjectSchema({
   'errorCode': _text('Stable failure code; raw error messages are excluded.'),
   'receipt': _receipt,
 });
+
+JsonMap publicTaskFacts(JsonMap snapshot) => publicValue({
+  ...snapshot, 'errorCode': (snapshot['error'] as Map?)?['code'],
+}, _taskFields) as JsonMap;
 
 /// Runtime suppliers expose existing in-memory Classic state, never migration
 /// or refresh entry points. Core remains usable before a GUI is attached.

@@ -28,6 +28,7 @@ import 'agent_endpoint.dart';
 import 'capabilities/history_capability.dart';
 import 'capabilities/library_capability.dart';
 import 'capabilities/navigation_capability.dart';
+import 'capabilities/classic_ui_open.dart';
 import 'capabilities/playback_capability.dart';
 import 'capabilities/download_playback_capability.dart';
 import 'settings/download_settings.dart';
@@ -52,6 +53,7 @@ import 'harness_repository.dart';
 import 'chat/chat_host.dart';
 import 'chat/debug_chat.dart';
 import 'harness_redaction.dart';
+import 'state/change_history.dart';
 
 final class NextRuntime extends ChangeNotifier {
   NextRuntime._(this._labs, this._player, List<Capability> capabilities) {
@@ -75,13 +77,15 @@ final class NextRuntime extends ChangeNotifier {
     core.ready.then((_) {
       if (!context.mounted) return;
       core.mediaSources.shared = context.read<SharedRemoteLibraryProvider>();
+      core.mediaSources.shared!.observeChanges();
       core.mediaSources.updateGuiSelection = (type, ids) => type == 'jellyfin'
           ? context.read<JellyfinProvider>().updateSelectedLibraries(ids)
           : context.read<EmbyProvider>().updateSelectedLibraries(ids);
       core.mediaSources.requestPassword = (source, stopped) {
-        if (!context.mounted)
+        if (!context.mounted) {
           throw const Failure(
               FailureCode.unavailable, 'The NipaPlay login window has closed.');
+        }
         return showMediaSourceLogin(source, stopped);
       };
       core.accounts.requestLogin = showAccountLogin;
@@ -96,6 +100,15 @@ final class NextRuntime extends ChangeNotifier {
     final navigation = context.read<TabChangeNotifier>();
     final history = ServiceProvider.watchHistoryProvider;
     final seriesDetail = BangumiService.instance.getAnimeDetailsFromMemory;
+    final playback = PlaybackCapability(
+      player: VideoPlayerStatePort(player),
+      start: (item) => PlaybackService().play(item, episodeFileSelectionHandled: true),
+      usesExternalPlayer: () => settings.useExternalPlayer,
+      historyItem: WatchHistoryManager.getHistoryItem,
+      episodeItem: WatchHistoryManager.getHistoryItemByEpisode,
+      fileSelection: EpisodeFileSelectionService(),
+    );
+    final playbackApi = Harness([playback]);
     return NextRuntime._(labs, player, [
       LibraryCapability(
         history: () => history.history,
@@ -105,16 +118,12 @@ final class NextRuntime extends ChangeNotifier {
         continueWatching: () => history.continueWatchingItems,
         seriesDetail: seriesDetail,
       ),
-      PlaybackCapability(
-        player: VideoPlayerStatePort(player),
-        start: (item) =>
-            PlaybackService().play(item, episodeFileSelectionHandled: true),
-        usesExternalPlayer: () => settings.useExternalPlayer,
-        historyItem: WatchHistoryManager.getHistoryItem,
-        episodeItem: WatchHistoryManager.getHistoryItemByEpisode,
-        fileSelection: EpisodeFileSelectionService(),
-      ),
-      NavigationCapability(changePage: navigation.changePage),
+      playback,
+      NavigationCapability(changePage: navigation.changePage,
+        media: () => core.media.service,
+        openPage: ClassicUiOpen().page,
+        openDetail: ClassicUiOpen().detail,
+        play: (input, invocation) => playbackApi.invokeJson('playback.open', input, invocation)),
     ]);
   }
 
@@ -198,7 +207,7 @@ final class NextRuntime extends ChangeNotifier {
     _harness = Harness(
       [
         for (final capability in capabilities)
-          FileIndexingCapability(capability, core.media.service.store),
+          InvocationScopeCapability(FileIndexingCapability(capability, core.media.service.store)),
         PlaybackControlsCapability(ClassicPlaybackControls(_player)),
         FileIndexingCapability(
             DownloadPlaybackCapability(

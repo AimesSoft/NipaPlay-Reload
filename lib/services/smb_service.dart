@@ -2,6 +2,7 @@ import 'package:nipaplay/security/credential_store.dart';
 import 'package:nipaplay/security/stored_credential.dart';
 import 'package:nipaplay/security/credential_vault.dart';
 import 'dart:convert';
+import '../next/state/change_history.dart';
 
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -226,6 +227,18 @@ class SMBService {
 
   Future<void> initialize() async {
     await _loadConnections();
+    observeChanges(initializing: true);
+  }
+
+  void observeChanges({bool initializing = false}) {
+    final record = initializing ? BodyChanges.seed : BodyChanges.observe;
+    record('source:smb', [
+      for (final c in _connections) {
+        'id': 'smb:${c.id}', 'type': 'smb', 'name': c.name,
+        'url': 'smb://${c.host}:${c.port}', 'username': c.username,
+        'connected': c.isConnected,
+      }
+    ]);
   }
 
   Future<void> _loadConnections() async {
@@ -250,6 +263,7 @@ class SMBService {
       await CredentialStore.instance.write(prefs, _connectionsKey,
         json.encode(_connections.map((e) => e.toJson()).toList()),
       );
+      observeChanges();
     } catch (e) {
       print('保存SMB连接失败: $e');
     }
@@ -283,6 +297,7 @@ class SMBService {
     _connections
       ..clear()
       ..addAll(replacement);
+    observeChanges();
     clearDirectoryCache();
   }
 
@@ -291,6 +306,7 @@ class SMBService {
         await SharedPreferences.getInstance(),
         _connectionsKey,
         jsonEncode(_connections.map((c) => c.toJson()).toList()));
+    observeChanges();
   }
 
   Future<bool> updateConnection(

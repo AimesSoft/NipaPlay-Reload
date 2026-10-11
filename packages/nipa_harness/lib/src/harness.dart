@@ -21,6 +21,7 @@ final class InvocationRecord implements JsonEncodable {
     required this.failureCode,
     required this.startedAt,
     required this.elapsedMs,
+    required this.result,
   });
 
   final String invocationId;
@@ -32,6 +33,7 @@ final class InvocationRecord implements JsonEncodable {
   final FailureCode? failureCode;
   final String startedAt;
   final int elapsedMs;
+  final Object? result;
 
   @override
   JsonMap toJson() => {
@@ -44,6 +46,7 @@ final class InvocationRecord implements JsonEncodable {
         if (failureCode != null) 'failureCode': failureCode!.wireName,
         'startedAt': startedAt,
         'elapsedMs': elapsedMs,
+        if (result != null) 'result': result,
       };
 }
 
@@ -156,6 +159,9 @@ final class Harness {
       },
       startedAt: startedAt,
       elapsedMs: stopwatch.elapsedMilliseconds,
+      result: outcome is Completed<O>
+          ? _journalInput(spec.output, outcome.value.toJson(), invocation.id, '/result')
+          : null,
     );
     for (final observer in _observers) {
       try {

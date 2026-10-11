@@ -345,6 +345,7 @@ void main() {
         'status': 'completed',
         'startedAt': record.startedAt,
         'elapsedMs': record.elapsedMs,
+        'result': {'value': 'done'},
       });
       await harness.invokeJson(
           action.spec.id, false, Invocation(origin: 'mcp'));

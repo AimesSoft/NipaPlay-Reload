@@ -5,6 +5,7 @@ import 'package:nipa_harness/nipa_harness.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
 import '../next_database.dart';
+import '../state/change_history.dart';
 
 final class SqliteJobStore implements JobStore {
   SqliteJobStore.fromDatabase(this._database);
@@ -68,6 +69,13 @@ final class SqliteJobStore implements JobStore {
           throw const Failure(FailureCode.conflict, 'Job already exists.');
         }
         await transaction.insert('jobs', values);
+        final invocation = BodyChanges.invocation;
+        await transaction.insert('task_origins', {
+          'job_id': job.jobId,
+          'origin': job.type == 'harness.hook'
+              ? 'hook:${job.details['event']}' : invocation?.origin ?? 'application',
+          'invocation_id': invocation?.id,
+        });
       } else {
         final count = await transaction.update('jobs', values,
             where: 'job_id = ? AND revision = ?',
@@ -81,7 +89,9 @@ final class SqliteJobStore implements JobStore {
         'revision': event.revision,
         'kind': event.kind,
         'at': event.at.toIso8601String(),
-        'snapshot': jsonEncode(event.snapshot)
+        'snapshot': jsonEncode(event.snapshot),
+        'origin': job.type == 'harness.hook' ? 'hook:${job.details['event']}' : BodyChanges.invocation?.origin,
+        'invocation_id': BodyChanges.invocation?.id,
       });
     });
   }

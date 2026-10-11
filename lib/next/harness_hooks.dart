@@ -147,6 +147,7 @@ final class HarnessHooks implements JobExecutor {
       try {
         final Process process;
         final environment = {
+          'NIPAPLAY_HOOK': context.job.jobId,
           'NIPAPLAY_ENDPOINT_FILE': input['credentialFile'] as String
         };
         if (Platform.isWindows && p.extension(program) == '.py') {
