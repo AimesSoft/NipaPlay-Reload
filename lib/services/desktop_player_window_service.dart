@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'package:nipaplay/utils/lab_profile.dart';
 
 import 'package:desktop_multi_window/desktop_multi_window.dart';
 import 'package:flutter/foundation.dart';
@@ -381,7 +382,7 @@ class DesktopPlayerWindowService extends ChangeNotifier {
       if (animeTitle.isNotEmpty) animeTitle,
       if (episodeTitle.isNotEmpty && episodeTitle != animeTitle) episodeTitle,
     ].join(' · ');
-    return mediaTitle.isEmpty ? _windowTitle : '$mediaTitle — NipaPlay';
+    return LabProfile.title(mediaTitle.isEmpty ? _windowTitle : '$mediaTitle — NipaPlay');
   }
 
   static double normalizeAspectRatio(double value) {

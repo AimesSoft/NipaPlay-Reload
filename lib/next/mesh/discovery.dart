@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'package:nipaplay/utils/lab_profile.dart';
 import 'dart:convert';
 import 'dart:io';
 import 'package:nipa_harness/nipa_harness.dart';
@@ -32,6 +33,7 @@ final class MeshDiscovery {
   }
 
   Future<void> start() async {
+    if (LabProfile.active) return;
     final socket = await RawDatagramSocket.bind(
         InternetAddress.anyIPv4, discoveryPort,
         reuseAddress: true);

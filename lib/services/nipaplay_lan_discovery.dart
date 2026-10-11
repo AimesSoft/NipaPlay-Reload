@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'package:nipaplay/utils/lab_profile.dart';
 import 'dart:io';
 
 import 'package:flutter/foundation.dart';
@@ -83,6 +84,7 @@ class NipaPlayLanDiscoveryResponder {
   bool get isRunning => _socket != null;
 
   Future<void> start({required int webPort}) async {
+    if (LabProfile.active) return;
     _webPort = webPort;
     if (_socket != null) {
       return;

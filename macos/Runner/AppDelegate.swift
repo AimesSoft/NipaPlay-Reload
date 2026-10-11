@@ -50,7 +50,7 @@ class AppDelegate: FlutterAppDelegate {
     }
 
     do {
-      let baseURL = fileManager.urls(for: .cachesDirectory, in: .userDomainMask).first
+      let baseURL = LabProfile.root?.appendingPathComponent("cache") ?? fileManager.urls(for: .cachesDirectory, in: .userDomainMask).first
         ?? fileManager.temporaryDirectory
       let icdDirectoryURL = baseURL
         .appendingPathComponent("vulkan", isDirectory: true)
@@ -67,7 +67,11 @@ class AppDelegate: FlutterAppDelegate {
         ],
       ]
       let data = try JSONSerialization.data(withJSONObject: icd, options: [.prettyPrinted, .sortedKeys])
-      try data.write(to: icdURL, options: [.atomic])
+      if LabProfile.active {
+        try writeLabData(data, to: icdURL)
+      } else {
+        try data.write(to: icdURL, options: [.atomic])
+      }
 
       setenv("VK_ICD_FILENAMES", icdURL.path, 0)
       setenv("VK_DRIVER_FILES", icdURL.path, 0)

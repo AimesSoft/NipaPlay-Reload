@@ -4,6 +4,18 @@
 
 ---
 
+## 2026-10-11 · X11：实验配置隔离
+
+假设：一个 Debug profile 开关足以把研究实例的偏好、数据、保险库身份、harness 与端点隔离，并与真实实例并行。
+
+做了什么：审计 StorageService、SharedPreferences、path_provider、原生缓存、Rust torrent/DHT、钥匙串、Agent、Mesh、Web 和单实例入口；实现 `NIPAPLAY_PROFILE`，在 macOS 引擎启动前安装文件写入限制和 profile 后端。真实 HOME 下启动 x11test/x11peer，与无 profile 的真实 PID 25337 同时存在；经实验 CLI 写设置，跨 profile 令牌返回 401，同名 profile 重复启动正常退出。
+
+观察到：指定真实偏好域的 427 个键、真实数据目录、原有 10 个钥匙串账号名、endpoint 和用户 harness，在最终独立基线的启动前/运行时/清理后完全相同；实验新增的两个钥匙串条目和两个 profile 目录已清理，真实 PID 保持运行。profile 外普通写入、符号链接写入和直接子进程 touch 均被拒绝，真实媒体目录可读。
+
+意外：Foundation 原子写入会用外部临时目录，改为同目录替换；legacy Keychain API 在写入限制下失败，改用只接受该 profile namespace 的管道 broker。中途重建签名触发实验条目授权等待，清理合成条目后用同一最终构建复验。整个长会话另有真实启动/用户 harness 变化，不能报告全会话零变化；最终受控区间的指定状态不变。真实实例自己的全局 DHT 缓存仍周期更新，两个实验 DHT 分别位于自己的会话目录。
+
+因此改了：删除旧 DATA_DIR 机制，统一所有应用存储入口、账号命名空间和动态端口；不参与真实 LAN 广播，窗口/CLI 明示 profile。27 项约束/回归测试、analyze、macOS Debug 构建通过。范围与真实输出见 [X11_REPORT.md](X11_REPORT.md)。
+
 ## 2026-10-11 · X3：用户拥有的 harness
 
 假设：普通用户仓库、外置连接凭据和一个标准库 CLI，足以让 Agent 操作现有 Harness；事件程序可以复用同一任务与回执系统。

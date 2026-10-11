@@ -131,17 +131,28 @@ pub fn torrent_init_session(
         }
     }
 
+    let lab_session = cfg!(target_os = "macos")
+        && std::env::var("NIPAPLAY_LAB_ROOT").is_ok_and(|root| {
+            session_dir.as_ref().is_some_and(|dir| Path::new(dir).starts_with(root))
+        });
     let session_dir = session_dir
         .map(PathBuf::from)
         .unwrap_or_else(|| default_session_dir(&normalized_dir));
     torrent_log(format_args!(
         "init_session create session: download_dir={normalized_dir:?}, session_dir={session_dir:?}"
     ));
+    let mut dht = DhtSessionConfig::default();
+    if lab_session {
+        if let Some(persistence) = dht.persistence.as_mut() {
+            persistence.config_filename = Some(session_dir.join("dht.json"));
+        }
+    }
     let session = state.runtime.block_on(async {
         Session::new_with_opts(
             PathBuf::from(&normalized_dir),
             SessionOptions {
                 fastresume: true,
+                disable_local_service_discovery: lab_session,
                 persistence: Some(SessionPersistenceConfig::Json {
                     folder: Some(session_dir),
                 }),
@@ -149,10 +160,11 @@ pub fn torrent_init_session(
                 // whose HOME points outside the application sandbox. Keep
                 // rqbit from writing its global DHT cache there.
                 dht: Some(DhtSessionConfig {
+                    port: if lab_session { Some(0) } else { None },
                     persistence: if cfg!(any(target_os = "android", feature = "ohos")) {
                         None
                     } else {
-                        DhtSessionConfig::default().persistence
+                        dht.persistence
                     },
                     ..Default::default()
                 }),

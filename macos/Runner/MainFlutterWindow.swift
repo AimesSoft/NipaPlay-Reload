@@ -66,6 +66,18 @@ class SecurityBookmarkPlugin: NSObject, FlutterPlugin {
     
     func handle(_ call: FlutterMethodCall, result: @escaping FlutterResult) {
         switch call.method {
+        case "labProfileInfo":
+            result(["name": LabProfile.name as Any, "root": LabProfile.root?.path as Any,
+                    "writeSandbox": LabProfile.writeSandbox])
+        case "labVault":
+            guard LabProfile.active, let arguments = call.arguments as? [String: Any] else {
+                result(FlutterError(code: "invalid_reference", message: "Lab profile required", details: nil))
+                return
+            }
+            LabVaultBroker.call(arguments) { value, error in
+                if let error { result(FlutterError(code: error, message: error, details: nil)) }
+                else { result(value) }
+            }
         case "isSandboxed":
             result(MacOSProcessEnvironment.isSandboxed)
         case "createBookmark":
@@ -1513,6 +1525,8 @@ class MainFlutterWindow: NSWindow {
 
   override func awakeFromNib() {
     do {
+      try LabProfile.install()
+      if let profile = LabProfile.name { title = "NipaPlay · LAB [\(profile)]" }
       try SandboxMigration.runBeforeEngine()
     } catch {
       let alert = NSAlert()

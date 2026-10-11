@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:io';
 import 'dart:math';
+import 'package:nipaplay/utils/lab_profile.dart';
 
 import 'package:nipa_harness/mcp.dart';
 import 'package:nipa_harness/nipa_harness.dart';
@@ -39,10 +40,10 @@ final class AgentEndpoint {
       required String appVersion,
       File? credentialFile,
       Directory? seedRepository,
-      int port = 47811})
+      int? port})
       : _harness = harness,
         _appVersion = appVersion,
-        _port = port,
+        _port = LabProfile.active ? 0 : port ?? 47811,
         credentialFile = credentialFile ?? defaultEndpointFile,
         seedRepository = seedRepository ??
             Directory(p.join(
@@ -172,6 +173,10 @@ final class AgentEndpoint {
           .toEnvelope();
       return _response({
         'status': 'running',
+        if (LabProfile.active) 'profile': {
+          'name': LabProfile.name, 'root': LabProfile.root,
+          'externalFiles': 'readOnly',
+        },
         'version': _appVersion,
         'repository': _running?.repository.path,
         'harnessSeed':

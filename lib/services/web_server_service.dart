@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'package:nipaplay/utils/lab_profile.dart';
 import 'package:flutter/foundation.dart';
 import 'package:path/path.dart' as path;
 import 'package:shared_preferences/shared_preferences.dart';
@@ -347,7 +348,7 @@ class WebServerService {
       return true;
     }
 
-    _port = port ?? _port;
+    _port = LabProfile.active ? 0 : port ?? _port;
 
     try {
       final webRoot = _resolveWebUiRoot();

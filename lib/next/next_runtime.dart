@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:io';
+import 'package:nipaplay/utils/lab_profile.dart';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart' show kDebugMode;
@@ -144,7 +145,7 @@ final class NextRuntime extends ChangeNotifier {
       appVersion: packageInfo.version,
       seed: seed,
       seedRepository: Directory('${root.path}/harness-seed'),
-      port: kDebugMode && Platform.environment['NIPAPLAY_AGENT_PORT'] != null
+      port: LabProfile.active ? 0 : kDebugMode && Platform.environment['NIPAPLAY_AGENT_PORT'] != null
           ? int.parse(Platform.environment['NIPAPLAY_AGENT_PORT']!)
           : 47811,
     );

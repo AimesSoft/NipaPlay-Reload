@@ -21,6 +21,18 @@ def endpoint_file():
     override = os.environ.get("NIPAPLAY_ENDPOINT_FILE")
     if override:
         return Path(override).expanduser()
+    # A lab harness remains connected to its own instance in a fresh shell.
+    for parent in Path(__file__).resolve().parents:
+        marker = parent / "lab-profile.json"
+        if marker.is_file():
+            return Path(json.loads(marker.read_text())["endpointFile"])
+    profile = os.environ.get("NIPAPLAY_PROFILE")
+    if profile is not None:
+        if not re.fullmatch(r"[a-z0-9][a-z0-9_-]{0,63}", profile):
+            raise ValueError("Invalid NIPAPLAY_PROFILE")
+        if sys.platform != "darwin":
+            raise ValueError("Lab profiles require macOS")
+        return Path.home() / "Library" / "Application Support" / "NipaPlay" / "LabProfiles" / profile / "endpoint.json"
     if os.name == "nt":
         return Path(os.environ["APPDATA"]) / "NipaPlay" / "endpoint.json"
     return Path.home() / ".config" / "nipaplay" / "endpoint.json"

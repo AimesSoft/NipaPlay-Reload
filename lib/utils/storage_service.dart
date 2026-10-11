@@ -6,6 +6,7 @@ import 'android_storage_helper.dart'; // 导入Android存储帮助类
 import 'linux_storage_migration.dart'; // 导入Linux存储迁移
 import 'macos_storage_migration.dart'; // 导入macOS存储迁移
 import 'package:nipaplay/services/macos_process_environment.dart';
+import 'lab_profile.dart';
 
 class StorageService {
   @visibleForTesting
@@ -142,9 +143,8 @@ class StorageService {
 
   // 主应用存储目录
   static Future<Directory> getAppStorageDirectory() async {
-    final isolated = kDebugMode ? Platform.environment['NIPAPLAY_DATA_DIR'] : null;
-    if (isolated != null) {
-      final directory = Directory(isolated);
+    if (LabProfile.active) {
+      final directory = Directory(LabProfile.location('data'));
       await directory.create(recursive: true);
       return directory;
     }

@@ -140,37 +140,37 @@ Release/Profile 忽略开关，不读取保险库，不注册 Harness Action，�
 cargo run --manifest-path server/nipaplay-mesh-coordinator/Cargo.toml
 ~~~
 
-macOS 沙盒下使用本 App 容器中的两个数据目录。另一个终端准备：
+macOS 非 App Sandbox 的 Debug 版使用两个 lab profile。它们独立保存偏好、钥匙串账号、数据与连接文件；真实媒体目录只读。另一个终端准备：
 
 ~~~sh
 mesh_app="$PWD/build/macos/Build/Products/Debug/NipaPlay.app"
-mesh_bundle_id=$(/usr/libexec/PlistBuddy -c 'Print CFBundleIdentifier' "$mesh_app/Contents/Info.plist")
-mesh_data="$HOME/Library/Containers/$mesh_bundle_id/Data/Documents/mesh-e2e"
-mkdir -p "$mesh_data/node-a/next" "$mesh_data/node-b/next"
+mesh_data="$HOME/Library/Application Support/NipaPlay/LabProfiles"
+mkdir -p "$mesh_data/mesh-a/data/next" "$mesh_data/mesh-b/data/next"
 cp /tmp/nipaplay-mesh-e2e/ca.pem "$mesh_data/ca.pem"
-cat > "$mesh_data/node-a/next/mesh.json" <<'JSON'
-{"coordinator":"http://127.0.0.1:18082","name":"node-a","port":47812,"addresses":[{"kind":"manual","host":"127.0.0.1","port":47812}]}
+cat > "$mesh_data/mesh-a/data/next/mesh.json" <<'JSON'
+{"coordinator":"http://127.0.0.1:18082","name":"node-a"}
 JSON
-cat > "$mesh_data/node-b/next/mesh.json" <<'JSON'
-{"coordinator":"http://127.0.0.1:18082","name":"node-b","port":47813,"addresses":[{"kind":"manual","host":"127.0.0.1","port":47813}]}
+cat > "$mesh_data/mesh-b/data/next/mesh.json" <<'JSON'
+{"coordinator":"http://127.0.0.1:18082","name":"node-b"}
 JSON
-NIPAPLAY_DATA_DIR="$mesh_data/node-a" NIPAPLAY_MESH_DEV_CA="$mesh_data/ca.pem" \
-  NIPAPLAY_AGENT_PORT=47811 "$mesh_app/Contents/MacOS/NipaPlay"
+NIPAPLAY_PROFILE=mesh-a NIPAPLAY_MESH_DEV_CA="$mesh_data/ca.pem" \
+  "$mesh_app/Contents/MacOS/NipaPlay"
 ~~~
 
-登录弹弹play并开启 Labs Agent 端点；另开终端，以相同 mesh_app/mesh_data 路径启动第二节点：
+在实验窗口登录弹弹play并开启 Labs Agent 端点；另开终端，以相同 mesh_app/mesh_data 路径启动第二节点：
 
 ~~~sh
-NIPAPLAY_DATA_DIR="$mesh_data/node-b" NIPAPLAY_MESH_DEV_CA="$mesh_data/ca.pem" \
-  NIPAPLAY_AGENT_PORT=47821 "$mesh_app/Contents/MacOS/NipaPlay"
+NIPAPLAY_PROFILE=mesh-b NIPAPLAY_MESH_DEV_CA="$mesh_data/ca.pem" \
+  "$mesh_app/Contents/MacOS/NipaPlay"
 ~~~
 
-两个目录分别保存设备身份、Next 数据库、任务、journal、workspace 和单实例锁。
-现有账号钥匙串和系统 SharedPreferences 属于同一个 App，不复制秘密进隔离目录；
-两个实例使用同一账号。数据目录和 Agent 端口环境覆盖只在 Debug 生效。
+两个 profile 分别保存设备身份、Next 数据库、任务、journal、harness、偏好和单实例锁。
+需要同一账号时在两个实验窗口分别登录；不会读取真实实例的登录态。
+Agent 与 Mesh 端口由系统分配，连接地址从各自 endpoint.json / Mesh 控制面取得。
+实验实例不参与真实实例的 UDP LAN 发现广播。开关只在 Debug 生效。
 不要复制 mesh-identity.json 创建第二安装。开发 CA 私钥留在协调服务目录，App 只读公开证书。
 
-在 node-a 的 next/workspace 连接 Agent，先调用 mesh.devices，确认两台设备具有不同的
+在 mesh-a 的 harness 连接 Agent，先调用 mesh.devices，确认两台设备具有不同的
 公钥派生 ID 且 node-b online；调用 mesh.invoke 指向 node-b 的 download.add，
 再用 task.get/task.wait 确认任务在 node-b 执行。
 对删除使用 mesh.invoke_destructive，确认普通 mesh.invoke 被拒绝。

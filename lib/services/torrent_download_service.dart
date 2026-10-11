@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'package:nipaplay/utils/lab_profile.dart';
 import 'dart:io' as io;
 
 import 'package:flutter/foundation.dart';
@@ -421,7 +422,7 @@ class TorrentDownloadService {
     }
     await ensureRustInitialized();
     String? sessionDir;
-    if (io.Platform.isAndroid || io.Platform.operatingSystem == 'ohos') {
+    if (LabProfile.active || io.Platform.isAndroid || io.Platform.operatingSystem == 'ohos') {
       final support = await getApplicationSupportDirectory();
       sessionDir = await TorrentSessionStorage.prepare(
         io.Directory(p.join(support.path, 'torrent_session')),

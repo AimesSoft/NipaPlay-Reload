@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'package:nipaplay/utils/lab_profile.dart';
 
 import 'package:path/path.dart' as p;
 
@@ -6,8 +7,10 @@ import 'package:path/path.dart' as p;
 String get harnessHome => Platform.isWindows
     ? Platform.environment['USERPROFILE']!
     : Platform.environment['HOME']!;
-String get defaultHarnessPath => p.join(harnessHome, 'nipaplay-harness');
-File get defaultEndpointFile => Platform.isWindows
+String get defaultHarnessPath => LabProfile.active
+    ? LabProfile.location('harness') : p.join(harnessHome, 'nipaplay-harness');
+File get defaultEndpointFile => LabProfile.active
+    ? File(LabProfile.location('endpoint.json')) : Platform.isWindows
     ? File(
         p.join(Platform.environment['APPDATA']!, 'NipaPlay', 'endpoint.json'))
     : File(p.join(harnessHome, '.config', 'nipaplay', 'endpoint.json'));

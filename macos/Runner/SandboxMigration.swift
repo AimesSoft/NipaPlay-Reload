@@ -1,13 +1,264 @@
 import Foundation
 import CryptoKit
 import Darwin
+import ObjectiveC.runtime
+import Security
+
+@_silgen_name("sandbox_init")
+private func installWriteSandbox(_ profile: UnsafePointer<CChar>, _ flags: UInt64,
+                                 _ error: UnsafeMutablePointer<UnsafeMutablePointer<CChar>?>) -> Int32
+@_silgen_name("sandbox_free_error")
+private func freeSandboxError(_ error: UnsafeMutablePointer<CChar>)
+
+/// Installed before migration, plugins and the Flutter engine, inherited by children.
+enum LabProfile {
+    static private(set) var name: String?
+    static private(set) var root: URL?
+    static private(set) var writeSandbox = false
+    static var active: Bool { name != nil }
+    static func install() throws {
+        unsetenv("NIPAPLAY_LAB_ROOT")
+        #if DEBUG
+        guard let value = ProcessInfo.processInfo.environment["NIPAPLAY_PROFILE"] else { return }
+        guard value.range(of: "^[a-z0-9][a-z0-9_-]{0,63}$", options: .regularExpression) != nil else {
+            throw NSError(domain: "LabProfile", code: 1,
+                          userInfo: [NSLocalizedDescriptionKey: "Invalid NIPAPLAY_PROFILE"])
+        }
+        if CommandLine.arguments.contains("--nipaplay-lab-vault-broker") {
+            LabVaultBroker.serve(profile: value)
+            exit(EXIT_SUCCESS)
+        }
+        let directory = FileManager.default.homeDirectoryForCurrentUser
+            .appendingPathComponent("Library/Application Support/NipaPlay/LabProfiles/\(value)")
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        let canonical = directory.resolvingSymlinksInPath()
+        guard canonical == directory.standardizedFileURL else {
+            throw NSError(domain: "LabProfile", code: 3,
+                          userInfo: [NSLocalizedDescriptionKey: "Lab profile root must not be a symlink"])
+        }
+        try FileManager.default.setAttributes([.posixPermissions: 0o700], ofItemAtPath: canonical.path)
+        for child in ["temp", "cache", "support", "data"] {
+            try FileManager.default.createDirectory(at: canonical.appendingPathComponent(child), withIntermediateDirectories: true)
+        }
+        let defaults = try LabUserDefaults(file: canonical.appendingPathComponent("native-preferences.plist"))
+        LabUserDefaults.profileDefaults = defaults
+        let original = class_getClassMethod(UserDefaults.self, #selector(getter: UserDefaults.standard))!
+        let replacement = class_getClassMethod(LabUserDefaults.self, #selector(LabUserDefaults.labStandard))!
+        method_exchangeImplementations(original, replacement)
+        setenv("TMPDIR", canonical.appendingPathComponent("temp").path + "/", 1)
+        // Legacy Keychain writes happen in the caller. Keep that API in a narrow
+        // broker rather than granting the media process access to login.keychain.
+        try LabVaultBroker.start()
+        let quoted = canonical.path.replacingOccurrences(of: "\\", with: "\\\\").replacingOccurrences(of: "\"", with: "\\\"")
+        let policy = """
+        (version 1)
+        (allow default)
+        (deny file-write*)
+        (allow file-write* (subpath "\(quoted)"))
+        (allow file-write-data (literal "/dev/null") (literal "/dev/tty"))
+        """
+        var error: UnsafeMutablePointer<CChar>?
+        let status = policy.withCString { installWriteSandbox($0, 0, &error) }
+        if status != 0 {
+            let message = error.map { String(cString: $0) } ?? "sandbox_init failed"
+            if let error { freeSandboxError(error) }
+            throw NSError(domain: "LabProfile", code: 2, userInfo: [NSLocalizedDescriptionKey: message])
+        }
+        name = value
+        root = canonical
+        writeSandbox = true
+        setenv("NIPAPLAY_LAB_ROOT", canonical.path, 1)
+        URLCache.shared = URLCache(memoryCapacity: 4 * 1024 * 1024, diskCapacity: 0, diskPath: nil)
+        print("[LabProfile] name=\(value) root=\(canonical.path) writeSandbox=true")
+        #endif
+    }
+}
+
+enum LabVaultBroker {
+    private static var process: Process?
+    private static var input: FileHandle!
+    private static var output: FileHandle!
+    private static let queue = DispatchQueue(label: "nipaplay.lab-vault")
+
+    static func start() throws {
+        let child = Process()
+        let request = Pipe(), response = Pipe()
+        child.executableURL = Bundle.main.executableURL!
+        child.arguments = ["--nipaplay-lab-vault-broker"]
+        child.standardInput = request
+        child.standardOutput = response
+        child.standardError = FileHandle.standardError
+        try child.run()
+        request.fileHandleForReading.closeFile()
+        response.fileHandleForWriting.closeFile()
+        process = child
+        input = request.fileHandleForWriting
+        output = response.fileHandleForReading
+    }
+
+    private static func line(_ handle: FileHandle) throws -> Data? {
+        var data = Data()
+        while let byte = try handle.read(upToCount: 1), !byte.isEmpty {
+            if byte[0] == 10 { return data }
+            data.append(byte)
+        }
+        return nil
+    }
+
+    static func call(_ arguments: [String: Any], completion: @escaping (Any?, String?) -> Void) {
+        queue.async {
+            do {
+                guard process?.isRunning == true else { throw failure("system_vault_unavailable") }
+                var data = try JSONSerialization.data(withJSONObject: arguments)
+                data.append(10)
+                try input.write(contentsOf: data)
+                guard let reply = try line(output) else { throw failure("system_vault_unavailable") }
+                let value = try JSONSerialization.jsonObject(with: reply) as! [String: Any]
+                DispatchQueue.main.async { completion(value["value"], value["error"] as? String) }
+            } catch {
+                DispatchQueue.main.async { completion(nil, "system_vault_unavailable") }
+            }
+        }
+    }
+
+    private static func failure(_ code: String) -> NSError { NSError(domain: code, code: 1) }
+    private static func errorCode(_ status: OSStatus) -> String {
+        switch status {
+        case -128: return "storage_authorization_cancelled"
+        case -25293: return "storage_access_denied"
+        case -25308: return "storage_interaction_required"
+        case -25291, -25292, -25294, -25295: return "system_vault_unavailable"
+        default: return "vault_operation_failed"
+        }
+    }
+
+    private static func operate(_ request: [String: Any], profile: String) -> [String: Any] {
+        guard let operation = request["operation"] as? String,
+              let namespace = request["namespace"] as? String, !namespace.isEmpty,
+              let key = request["key"] as? String, !key.isEmpty,
+              !namespace.contains("\0"), !key.contains("\0") else { return ["error": "invalid_reference"] }
+        let scoped = "lab:\(profile):\(namespace)"
+        let account = "\(scoped.utf8.count):\(scoped)\(key)"
+        let service = "com.nipaplay.credential-vault.v1"
+        var keychain: SecKeychain?
+        var status = SecKeychainCopyDomainDefault(.user, &keychain)
+        if status != 0 { return ["error": errorCode(status)] }
+        var item: SecKeychainItem?
+        var length: UInt32 = 0
+        var secret: UnsafeMutableRawPointer?
+        if operation == "read" {
+            status = SecKeychainFindGenericPassword(keychain, UInt32(service.utf8.count), service,
+                UInt32(account.utf8.count), account, &length, &secret, nil)
+            if status == errSecItemNotFound { return [:] }
+            if status != 0 { return ["error": errorCode(status)] }
+            defer { SecKeychainItemFreeContent(nil, secret) }
+            if length == 0 { return ["value": ""] }
+            guard let secret, let value = String(data: Data(bytes: secret, count: Int(length)), encoding: .utf8) else {
+                return ["error": "vault_operation_failed"]
+            }
+            return ["value": value]
+        }
+        status = SecKeychainFindGenericPassword(keychain, UInt32(service.utf8.count), service,
+            UInt32(account.utf8.count), account, nil, nil, &item)
+        if operation == "delete" {
+            if status == errSecItemNotFound { return [:] }
+            if status == 0 { status = SecKeychainItemDelete(item!) }
+        } else if operation == "write", let value = request["secret"] as? String {
+            let bytes = value.utf8CString
+            status = bytes.withUnsafeBytes { buffer in
+                if status == errSecItemNotFound {
+                    return SecKeychainAddGenericPassword(keychain, UInt32(service.utf8.count), service,
+                        UInt32(account.utf8.count), account, UInt32(bytes.count - 1), buffer.baseAddress!, nil)
+                }
+                if status == 0 { return SecKeychainItemModifyAttributesAndData(item!, nil, UInt32(bytes.count - 1), buffer.baseAddress) }
+                return status
+            }
+        } else { return ["error": "invalid_reference"] }
+        return status == 0 ? [:] : ["error": errorCode(status)]
+    }
+
+    static func serve(profile: String) {
+        let parent = getppid()
+        let lifecycle = DispatchSource.makeTimerSource(queue: DispatchQueue.global())
+        lifecycle.schedule(deadline: .now() + 1, repeating: 1)
+        lifecycle.setEventHandler { if getppid() != parent { _exit(EXIT_SUCCESS) } }
+        lifecycle.resume()
+        defer { lifecycle.cancel() }
+        do {
+            while let data = try line(FileHandle.standardInput) {
+                let request = try JSONSerialization.jsonObject(with: data) as! [String: Any]
+                var reply = try JSONSerialization.data(withJSONObject: operate(request, profile: profile))
+                reply.append(10)
+                try FileHandle.standardOutput.write(contentsOf: reply)
+            }
+        } catch { exit(EXIT_FAILURE) }
+    }
+}
+
+func writeLabData(_ data: Data, to destination: URL) throws {
+    let pending = destination.deletingLastPathComponent().appendingPathComponent(".lab-\(UUID().uuidString)")
+    try data.write(to: pending)
+    if rename(pending.path, destination.path) != 0 {
+        let error = errno
+        try FileManager.default.removeItem(at: pending)
+        throw NSError(domain: NSPOSIXErrorDomain, code: Int(error))
+    }
+}
+
+/// Native window/plugin preferences also stay inside the profile, without cfprefsd.
+private class LabUserDefaults: UserDefaults {
+    static var profileDefaults: LabUserDefaults!
+    @objc class func labStandard() -> UserDefaults { profileDefaults }
+    private let file: URL
+    private var values: [String: Any]
+    private let lock = NSRecursiveLock()
+    init(file: URL) throws {
+        self.file = file
+        values = FileManager.default.fileExists(atPath: file.path)
+            ? try PropertyListSerialization.propertyList(from: Data(contentsOf: file), format: nil) as! [String: Any] : [:]
+        super.init(suiteName: "NipaPlay-Lab-InMemory")!
+    }
+    required init?(coder: NSCoder) { fatalError("Not supported") }
+    override func object(forKey key: String) -> Any? {
+        lock.lock(); defer { lock.unlock() }
+        return values[key]
+    }
+    override func set(_ value: Any?, forKey key: String) {
+        lock.lock(); defer { lock.unlock() }
+        values[key] = value
+        precondition(synchronize(), "Cannot save native lab preferences")
+    }
+    override func removeObject(forKey key: String) { set(nil, forKey: key) }
+    override func dictionaryRepresentation() -> [String: Any] {
+        lock.lock(); defer { lock.unlock() }
+        return values
+    }
+    override func persistentDomain(forName name: String) -> [String: Any]? { dictionaryRepresentation() }
+    override func setPersistentDomain(_ domain: [String: Any], forName name: String) {
+        lock.lock(); defer { lock.unlock() }
+        values = domain
+        precondition(synchronize(), "Cannot save native lab preferences")
+    }
+    override func removePersistentDomain(forName name: String) { setPersistentDomain([:], forName: name) }
+    override func synchronize() -> Bool {
+        lock.lock(); defer { lock.unlock() }
+        do {
+            let data = try PropertyListSerialization.data(fromPropertyList: values, format: .binary, options: 0)
+            try writeLabData(data, to: file)
+            return true
+        } catch {
+            NSLog("[LabProfile] Native preferences write failed: %@", error.localizedDescription)
+            return false
+        }
+    }
+}
 
 @_silgen_name("sandbox_check")
 private func processSandboxCheck(_ pid: pid_t, _ operation: UnsafePointer<CChar>?, _ filter: Int32) -> Int32
 
 enum MacOSProcessEnvironment {
     // A nil operation queries whether this process is sandboxed, independent of build mode.
-    static var isSandboxed: Bool { processSandboxCheck(getpid(), nil, 0) != 0 }
+    static var isSandboxed: Bool { !LabProfile.active && processSandboxCheck(getpid(), nil, 0) != 0 }
 }
 
 private final class MigrationCopyDelegate: NSObject, FileManagerDelegate {
@@ -71,10 +322,7 @@ final class SandboxMigration {
 
     static func runBeforeEngine() throws {
         guard !MacOSProcessEnvironment.isSandboxed else { return }
-        #if DEBUG
-        // Match Dart's existing isolated debug startup; it must not migrate the user's production data.
-        if ProcessInfo.processInfo.environment["NIPAPLAY_DATA_DIR"] != nil { return }
-        #endif
+        if LabProfile.active { return }
         let home = FileManager.default.homeDirectoryForCurrentUser
         let bundleID = Bundle.main.bundleIdentifier!
         let migration = SandboxMigration(

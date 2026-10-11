@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'package:nipaplay/utils/lab_profile.dart';
 
 import 'package:flutter/foundation.dart';
 import 'package:path/path.dart' as path;
@@ -282,9 +283,8 @@ class SingleInstanceService {
   }
 
   static Future<Directory> _instanceDirectory() async {
-    final isolated = kDebugMode ? Platform.environment['NIPAPLAY_DATA_DIR'] : null;
-    if (isolated != null) {
-      return Directory(path.join(isolated, 'single_instance'))
+    if (LabProfile.active) {
+      return Directory(LabProfile.location('single_instance'))
           .create(recursive: true);
     }
     if (!Platform.isMacOS) {

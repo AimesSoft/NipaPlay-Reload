@@ -92,6 +92,7 @@ import 'package:nipaplay/services/file_log_service.dart';
 import 'package:nipaplay/services/file_association_service.dart';
 import 'package:nipaplay/services/external_player_console_service.dart';
 import 'package:nipaplay/services/single_instance_service.dart';
+import 'package:nipaplay/utils/lab_profile.dart';
 import 'package:nipaplay/services/desktop_startup_window_preferences.dart';
 import 'package:nipaplay/danmaku_abstraction/danmaku_kernel_factory.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/splash_screen.dart';
@@ -180,6 +181,7 @@ Future<void> main(List<String> args) => runZoned(() => _main(args),
 
 Future<void> _main(List<String> args) async {
   WidgetsFlutterBinding.ensureInitialized();
+  await LabProfile.initialize();
   // Restore directory grants before storage, history, scanning or playback.
   if (globals.isHarmonyOS) {
     try {
@@ -618,7 +620,7 @@ Future<void> _main(List<String> args) async {
         titleBarStyle: TitleBarStyle.hidden,
         backgroundColor:
             transparentWindowBackground ? Colors.transparent : null,
-        title: "NipaPlay",
+        title: LabProfile.title('NipaPlay'),
       );
       windowManager.waitUntilReadyToShow(windowOptions, () async {
         if (transparentWindowBackground) {
@@ -2101,6 +2103,19 @@ Widget _buildGlobalAppOverlay(
       else
         appChild,
       const _SystemResourceOverlay(),
+      if (LabProfile.active)
+        Positioned(
+          top: 8, right: 12,
+          child: IgnorePointer(child: Material(
+            color: const Color(0xff9c2f00),
+            borderRadius: BorderRadius.circular(6),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+              child: Text('LAB [${LabProfile.name}] · 外部文件只读',
+                style: const TextStyle(color: Colors.white, fontSize: 12)),
+            ),
+          )),
+        ),
       if (isDragging) const DragDropOverlay(),
     ],
   );

@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'package:nipaplay/utils/lab_profile.dart';
 import 'dart:convert';
 import 'dart:io';
 import 'dart:math';
@@ -119,7 +120,7 @@ final class MeshRuntime {
           ca: ca,
           coordinator: _coordinator!,
           name: json['name'] as String? ?? Platform.localHostname,
-          listenPort: json['port'] as int? ?? 47812);
+          listenPort: LabProfile.active ? 0 : json['port'] as int? ?? 47812);
     }
 
     await _queue(checkLogin);
@@ -221,7 +222,7 @@ final class MeshRuntime {
         key: await own.privateKey(),
         account: _account!,
         allowed: _active,
-        bind: '0.0.0.0:$listenPort');
+        bind: '0.0.0.0:${LabProfile.active ? 0 : listenPort}');
     final node = _node!;
     final generation = ++_generation;
     _receiver = _receive(node, generation);
