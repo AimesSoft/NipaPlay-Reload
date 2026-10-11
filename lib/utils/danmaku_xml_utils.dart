@@ -1,7 +1,7 @@
 import 'dart:convert';
 import 'package:xml/xml.dart';
 import 'package:flutter/foundation.dart';
-import 'package:nipaplay/constants/danmaku/mode.dart';
+import 'package:nipaplay_core/constants/danmaku/mode.dart';
 import 'package:nipaplay/cpp_native/bindings/danmaku_parser.dart';
 
 String encodeDanmakuXmlText(String input) {

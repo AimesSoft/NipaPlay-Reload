@@ -4,7 +4,7 @@ import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
-import 'package:nipaplay/models/trending_bangumi.dart';
+import 'package:nipaplay_core/models/trending_bangumi.dart';
 import 'package:nipaplay/providers/home_sections_settings_provider.dart';
 import 'package:nipaplay/services/trending_bangumi_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';

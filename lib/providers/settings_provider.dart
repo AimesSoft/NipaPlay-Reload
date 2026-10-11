@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:nipaplay/constants/settings_keys.dart';
-import 'package:nipaplay/constants/media_extensions.dart';
+import 'package:nipaplay_core/constants/settings_keys.dart';
+import 'package:nipaplay_core/constants/media_extensions.dart';
 import 'package:nipaplay/l10n/app_locale_utils.dart';
-import 'package:nipaplay/models/danmaku_auto_load_strategy.dart';
+import 'package:nipaplay_core/models/danmaku_auto_load_strategy.dart';
 import 'package:nipaplay/utils/external_player_utils.dart';
 import 'package:nipaplay/utils/globals.dart' as globals;
 

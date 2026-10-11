@@ -3,7 +3,7 @@ import 'dart:io';
 import 'dart:isolate';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:nipaplay/services/app_http_proxy.dart';
+import 'package:nipaplay_core/services/app_http_proxy.dart';
 import 'package:nipaplay/services/plugin_media_proxy.dart';
 
 void main() {

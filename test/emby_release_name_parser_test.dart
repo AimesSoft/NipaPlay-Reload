@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:nipaplay/services/emby_release_name_parser.dart';
+import 'package:nipaplay_core/services/emby_release_name_parser.dart';
 
 void main() {
   group('parseEmbyReleaseIdentity', () {

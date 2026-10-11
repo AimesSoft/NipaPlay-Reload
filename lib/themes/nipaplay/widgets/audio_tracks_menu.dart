@@ -4,7 +4,7 @@ import 'package:provider/provider.dart';
 import 'package:nipaplay/providers/jellyfin_transcode_provider.dart';
 import 'package:nipaplay/providers/emby_transcode_provider.dart';
 import 'package:nipaplay/services/jellyfin_service.dart';
-import 'package:nipaplay/models/emby_media_selection.dart';
+import 'package:nipaplay_core/models/emby_media_selection.dart';
 import 'package:nipaplay/services/emby_player_menu_selection.dart';
 import 'base_settings_menu.dart';
 import 'player_menu_theme.dart';

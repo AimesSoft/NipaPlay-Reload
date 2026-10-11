@@ -3,7 +3,7 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-import 'package:nipaplay/services/backup_category.dart';
+import 'package:nipaplay_core/services/backup_category.dart';
 
 /// Persisted configuration for the incremental multi-device sync repository.
 ///

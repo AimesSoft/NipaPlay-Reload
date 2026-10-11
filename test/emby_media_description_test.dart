@@ -1,6 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:nipaplay/models/emby_media_selection.dart';
-import 'package:nipaplay/models/media_server_playback.dart';
+import 'package:nipaplay_core/models/emby_media_selection.dart';
+import 'package:nipaplay_core/models/media_server_playback.dart';
 
 void main() {
   group('describeEmbyMediaSource', () {

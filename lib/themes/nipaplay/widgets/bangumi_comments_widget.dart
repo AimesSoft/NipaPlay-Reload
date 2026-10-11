@@ -1,7 +1,7 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:kmbal_ionicons/kmbal_ionicons.dart';
-import 'package:nipaplay/models/bangumi_comment_model.dart';
+import 'package:nipaplay_core/models/bangumi_comment_model.dart';
 import 'package:nipaplay/services/bangumi_api_service.dart';
 import 'package:nipaplay/services/server_connectivity_service.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/hover_scale_text_button.dart';

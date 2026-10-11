@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:nipaplay/app/app_display_surface.dart';
 import 'package:nipaplay/app/app_display_surface_scope.dart';
-import 'package:nipaplay/constants/settings_keys.dart';
+import 'package:nipaplay_core/constants/settings_keys.dart';
 import 'package:nipaplay/l10n/app_localizations.dart';
 import 'package:nipaplay/player_abstraction/player_factory.dart';
 import 'package:nipaplay/providers/appearance_settings_provider.dart';

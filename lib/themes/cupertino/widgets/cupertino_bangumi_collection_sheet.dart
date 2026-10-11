@@ -1,6 +1,6 @@
 import 'package:nipaplay/themes/cupertino/cupertino_imports.dart';
 import 'package:flutter/services.dart';
-import 'package:nipaplay/models/bangumi_collection_submit_result.dart';
+import 'package:nipaplay_core/models/bangumi_collection_submit_result.dart';
 
 class CupertinoBangumiCollectionSheet extends StatefulWidget {
   const CupertinoBangumiCollectionSheet({

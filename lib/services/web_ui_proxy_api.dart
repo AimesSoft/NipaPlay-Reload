@@ -1,5 +1,5 @@
 import 'package:nipaplay/services/dandanplay_http_client.dart' as http;
-import 'package:nipaplay/utils/http_header_utils.dart';
+import 'package:nipaplay_core/utils/http_header_utils.dart';
 import 'package:shelf/shelf.dart';
 
 class WebUiProxyApi {

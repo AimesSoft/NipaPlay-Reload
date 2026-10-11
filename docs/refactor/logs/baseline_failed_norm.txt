@@ -1,0 +1,8 @@
++140 ~6 -3: danmaku_matching_access_test.dart: danmaku matching access all app matching callers use the shared matching facade [E]
++3 -1: android_tv_platform_policy_test.dart: Android TV keeps Android player and danmaku kernel choices [E]
++455 ~24 -4: mainline_flutter_compatibility_test.dart: Linux mode retains every shared dependency override [E]
++51 ~6 -2: bangumi_external_auth_launch_test.dart: Bangumi auth launches directly and only reports real success [E]
++687 ~25 -5: subtitle_manager_regression_test.dart: retains stacked subtitles when the primary subtitle reloads [E]
++701 ~25 -6: television_media_library_test.dart: media collection restores each source sort after switching sections [E]
++729 ~25 -7: tvos_erika_kernel_policy_test.dart: tvOS release uses shared hosted Erika and reports Erika [E]
++729 ~25 -8: tvos_erika_kernel_policy_test.dart: tvOS hides unsupported desktop settings entries [E]

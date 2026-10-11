@@ -1,9 +1,9 @@
 import 'dart:io' as io;
 
 import 'package:flutter/foundation.dart';
-import 'package:nipaplay/constants/settings_keys.dart';
-import 'package:nipaplay/models/torrent_magnet_preview.dart';
-import 'package:nipaplay/models/torrent_task.dart';
+import 'package:nipaplay_core/constants/settings_keys.dart';
+import 'package:nipaplay_core/models/torrent_magnet_preview.dart';
+import 'package:nipaplay_core/models/torrent_task.dart';
 import 'package:nipaplay/models/watch_history_model.dart';
 import 'package:nipaplay/services/security_bookmark_service.dart';
 import 'package:nipaplay/src/rust/api/torrent.dart' as rust_torrent;

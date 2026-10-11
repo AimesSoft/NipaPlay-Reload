@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:nipaplay/models/server_profile_model.dart';
+import 'package:nipaplay_core/models/server_profile_model.dart';
 import 'package:nipaplay/services/media_server_service_base.dart';
 
 class _TestMediaServerService extends MediaServerServiceBase {

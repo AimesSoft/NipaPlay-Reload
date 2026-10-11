@@ -2,7 +2,7 @@
 // lib/models/danmaku/danmaku_item.dart
 // 弹幕模型
 
-import 'package:nipaplay/constants/danmaku/mode.dart';
+import 'package:nipaplay_core/constants/danmaku/mode.dart';
 
 
 /// 应用层中的一条弹幕.

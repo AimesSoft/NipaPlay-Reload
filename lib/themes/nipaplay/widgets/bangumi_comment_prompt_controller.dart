@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:nipaplay/models/bangumi_collection_submit_result.dart';
+import 'package:nipaplay_core/models/bangumi_collection_submit_result.dart';
 import 'package:nipaplay/services/bangumi_api_service.dart';
 import 'package:nipaplay/services/bangumi_service.dart';
 import 'package:nipaplay/services/server_connectivity_service.dart';

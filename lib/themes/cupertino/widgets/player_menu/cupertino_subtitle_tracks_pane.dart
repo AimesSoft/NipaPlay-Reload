@@ -1,5 +1,5 @@
 import 'package:nipaplay/themes/cupertino/cupertino_imports.dart';
-import 'package:nipaplay/models/emby_media_selection.dart';
+import 'package:nipaplay_core/models/emby_media_selection.dart';
 import 'package:nipaplay/services/emby_player_menu_selection.dart';
 import 'package:nipaplay/themes/cupertino/cupertino_adaptive_platform_ui.dart'
     show AdaptiveButton, AdaptiveButtonStyle;

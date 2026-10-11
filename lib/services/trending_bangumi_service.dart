@@ -3,7 +3,7 @@ import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
 import 'package:nipaplay/services/dandanplay_http_client.dart' as http;
-import 'package:nipaplay/models/trending_bangumi.dart';
+import 'package:nipaplay_core/models/trending_bangumi.dart';
 import 'package:nipaplay/services/dandanplay_service.dart';
 import 'package:nipaplay/services/web_remote_access_service.dart';
 import 'package:nipaplay/utils/chinese_converter.dart';

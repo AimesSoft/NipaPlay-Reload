@@ -1,7 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/foundation.dart';
-import 'package:nipaplay/constants/settings_keys.dart';
+import 'package:nipaplay_core/constants/settings_keys.dart';
 import 'package:nipaplay/utils/settings_storage.dart';
 
 class DownloaderSettingsProvider extends ChangeNotifier {

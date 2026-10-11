@@ -1,13 +1,13 @@
 import 'dart:io';
 import 'dart:convert';
-export 'package:nipaplay/services/backup_category.dart';
+export 'package:nipaplay_core/services/backup_category.dart';
 
 import 'package:flutter/foundation.dart';
 import 'package:path/path.dart' as path;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:nipaplay/models/watch_history_model.dart';
 import 'package:nipaplay/models/watch_history_database.dart';
-import 'package:nipaplay/models/server_profile_model.dart';
+import 'package:nipaplay_core/models/server_profile_model.dart';
 import 'package:nipaplay/utils/storage_service.dart';
 import 'package:nipaplay/services/multi_address_server_service.dart';
 import 'package:nipaplay/services/webdav_service.dart';
@@ -15,7 +15,7 @@ import 'package:nipaplay/services/smb_service.dart';
 import 'package:nipaplay/services/dandanplay_remote_service.dart';
 import 'package:nipaplay/services/bangumi_service.dart';
 import 'package:nipaplay/services/incremental_sync_native_codec.dart';
-import 'package:nipaplay/services/backup_category.dart';
+import 'package:nipaplay_core/services/backup_category.dart';
 import 'package:nipaplay/utils/auto_sync_settings.dart';
 import 'package:crypto/crypto.dart';
 

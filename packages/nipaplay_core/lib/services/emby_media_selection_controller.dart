@@ -1,9 +1,9 @@
 import 'package:flutter/foundation.dart';
 
-import '../models/emby_media_selection.dart';
-import 'emby_media_preference_store.dart';
-import 'emby_media_selection_resolver.dart';
-import 'emby_media_source_catalog.dart';
+import 'package:nipaplay_core/models/emby_media_selection.dart';
+import 'package:nipaplay_core/services/emby_media_preference_store.dart';
+import 'package:nipaplay_core/services/emby_media_selection_resolver.dart';
+import 'package:nipaplay_core/services/emby_media_source_catalog.dart';
 
 enum EmbySelectionDimension { source, audio, subtitle }
 

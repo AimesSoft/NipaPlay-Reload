@@ -1,4 +1,4 @@
-import 'package:nipaplay/constants/settings_keys.dart';
+import 'package:nipaplay_core/constants/settings_keys.dart';
 import 'package:nipaplay/utils/settings_storage.dart';
 
 typedef MediaLibrarySectionOrderLoader = Future<List<String>> Function();

@@ -1,7 +1,7 @@
 import 'package:flutter/cupertino.dart' as cupertino;
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:nipaplay/constants/settings_keys.dart';
+import 'package:nipaplay_core/constants/settings_keys.dart';
 import 'package:nipaplay/l10n/app_localizations.dart';
 import 'package:nipaplay/providers/appearance_settings_provider.dart';
 import 'package:nipaplay/services/media_server_service_base.dart';

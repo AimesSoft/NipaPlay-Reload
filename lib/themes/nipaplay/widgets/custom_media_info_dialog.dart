@@ -9,7 +9,7 @@ import 'package:nipaplay/utils/media_source_utils.dart';
 import 'package:nipaplay/providers/watch_history_provider.dart';
 import 'package:nipaplay/providers/appearance_settings_provider.dart';
 import 'package:nipaplay/models/watch_history_model.dart';
-import 'package:nipaplay/models/bangumi_model.dart';
+import 'package:nipaplay_core/models/bangumi_model.dart';
 import 'package:nipaplay/services/bangumi_service.dart';
 import 'package:provider/provider.dart';
 import 'package:nipaplay/utils/globals.dart' as globals;

@@ -9,11 +9,11 @@ import 'package:path/path.dart' as p;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:shelf/shelf.dart';
 
-import 'package:nipaplay/models/bangumi_model.dart';
+import 'package:nipaplay_core/models/bangumi_model.dart';
 import 'package:nipaplay/models/watch_history_model.dart';
 import 'package:nipaplay/providers/service_provider.dart';
 import 'package:nipaplay/services/bangumi_service.dart';
-import 'package:nipaplay/constants/media_extensions.dart';
+import 'package:nipaplay_core/constants/media_extensions.dart';
 import 'package:nipaplay/utils/storage_service.dart';
 import 'package:nipaplay/utils/subtitle_file_utils.dart';
 

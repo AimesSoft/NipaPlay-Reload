@@ -1,5 +1,5 @@
-import '../models/emby_media_selection.dart';
-import 'emby_release_name_parser.dart';
+import 'package:nipaplay_core/models/emby_media_selection.dart';
+import 'package:nipaplay_core/services/emby_release_name_parser.dart';
 
 abstract interface class EmbyMediaSelectionResolver {
   EmbyResolutionPlan resolve({

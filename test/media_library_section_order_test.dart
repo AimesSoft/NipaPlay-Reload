@@ -7,7 +7,7 @@ import 'package:nipaplay/app/app_display_surface.dart';
 import 'package:nipaplay/app/app_display_surface_scope.dart';
 import 'package:nipaplay/app/app_page_ids.dart';
 import 'package:nipaplay/app/unified_media_library_sections.dart';
-import 'package:nipaplay/constants/settings_keys.dart';
+import 'package:nipaplay_core/constants/settings_keys.dart';
 import 'package:nipaplay/media_library/adaptive_media_library_controls.dart';
 import 'package:nipaplay/media_library/adaptive_media_library_page.dart';
 import 'package:nipaplay/media_library/media_library_section_order_store.dart';

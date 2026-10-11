@@ -1,7 +1,7 @@
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
-import 'package:nipaplay/models/media_server_playback.dart';
+import 'package:nipaplay_core/models/media_server_playback.dart';
 import '../models/watch_history_model.dart';
 import 'emby_service.dart';
 import 'media_server_transport.dart';

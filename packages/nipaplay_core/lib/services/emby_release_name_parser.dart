@@ -1,4 +1,4 @@
-import '../models/emby_media_selection.dart';
+import 'package:nipaplay_core/models/emby_media_selection.dart';
 
 EmbyReleaseIdentity parseEmbyReleaseIdentity(String name) {
   final tokens = _tokenize(name);

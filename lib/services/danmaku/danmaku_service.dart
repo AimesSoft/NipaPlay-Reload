@@ -2,8 +2,8 @@
 // lib/services/danmaku/danmaku_service.dart
 // 处理弹幕相关的服务, 包括弹幕的加载, 保存, 导出等功能.
 
-import 'package:nipaplay/models/danmaku/danmaku_item.dart';
-import 'package:nipaplay/models/danmaku/style.dart';
+import 'package:nipaplay_core/models/danmaku/danmaku_item.dart';
+import 'package:nipaplay_core/models/danmaku/style.dart';
 import 'package:nipaplay/services/dandanplay_service.dart';
 import 'package:nipaplay/utils/danmaku/style.dart';
 import 'package:nipaplay/utils/danmaku_ass_converter.dart';

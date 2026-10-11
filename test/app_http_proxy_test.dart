@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:nipaplay/services/app_http_proxy.dart';
+import 'package:nipaplay_core/services/app_http_proxy.dart';
 
 void main() {
   tearDown(AppHttpProxy.clear);

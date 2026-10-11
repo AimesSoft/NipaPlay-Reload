@@ -1,0 +1,161 @@
+{
+ "batch": "batch-1-models-constants-utils",
+ "moves": [
+  {
+   "from": "lib/models/anime_detail_display_mode.dart",
+   "to": "packages/nipaplay_core/lib/src/models/anime_detail_display_mode.dart"
+  },
+  {
+   "from": "lib/models/background_image_render_mode.dart",
+   "to": "packages/nipaplay_core/lib/src/models/background_image_render_mode.dart"
+  },
+  {
+   "from": "lib/models/bangumi_collection_submit_result.dart",
+   "to": "packages/nipaplay_core/lib/src/models/bangumi_collection_submit_result.dart"
+  },
+  {
+   "from": "lib/models/bangumi_comment_model.dart",
+   "to": "packages/nipaplay_core/lib/src/models/bangumi_comment_model.dart"
+  },
+  {
+   "from": "lib/models/bangumi_model.dart",
+   "to": "packages/nipaplay_core/lib/src/models/bangumi_model.dart"
+  },
+  {
+   "from": "lib/models/dandanplay_remote_model.dart",
+   "to": "packages/nipaplay_core/lib/src/models/dandanplay_remote_model.dart"
+  },
+  {
+   "from": "lib/models/danmaku/blocked_item.dart",
+   "to": "packages/nipaplay_core/lib/src/models/danmaku/blocked_item.dart"
+  },
+  {
+   "from": "lib/models/danmaku/danmaku_item.dart",
+   "to": "packages/nipaplay_core/lib/src/models/danmaku/danmaku_item.dart"
+  },
+  {
+   "from": "lib/models/danmaku/style.dart",
+   "to": "packages/nipaplay_core/lib/src/models/danmaku/style.dart"
+  },
+  {
+   "from": "lib/models/danmaku_auto_load_strategy.dart",
+   "to": "packages/nipaplay_core/lib/src/models/danmaku_auto_load_strategy.dart"
+  },
+  {
+   "from": "lib/models/database/anime_episode_relation.dart",
+   "to": "packages/nipaplay_core/lib/src/models/database/anime_episode_relation.dart"
+  },
+  {
+   "from": "lib/models/media_identity.dart",
+   "to": "packages/nipaplay_core/lib/src/models/media_identity.dart"
+  },
+  {
+   "from": "lib/models/media_server_playback.dart",
+   "to": "packages/nipaplay_core/lib/src/models/media_server_playback.dart"
+  },
+  {
+   "from": "lib/models/search_model.dart",
+   "to": "packages/nipaplay_core/lib/src/models/search_model.dart"
+  },
+  {
+   "from": "lib/models/server_profile_model.dart",
+   "to": "packages/nipaplay_core/lib/src/models/server_profile_model.dart"
+  },
+  {
+   "from": "lib/models/jellyfin_transcode_settings.dart",
+   "to": "packages/nipaplay_core/lib/src/models/jellyfin_transcode_settings.dart"
+  },
+  {
+   "from": "lib/models/torrent_magnet_preview.dart",
+   "to": "packages/nipaplay_core/lib/src/models/torrent_magnet_preview.dart"
+  },
+  {
+   "from": "lib/models/torrent_task.dart",
+   "to": "packages/nipaplay_core/lib/src/models/torrent_task.dart"
+  },
+  {
+   "from": "lib/models/trending_bangumi.dart",
+   "to": "packages/nipaplay_core/lib/src/models/trending_bangumi.dart"
+  },
+  {
+   "from": "lib/models/emby_media_selection.dart",
+   "to": "packages/nipaplay_core/lib/src/services/emby_media_selection.dart"
+  },
+  {
+   "from": "lib/services/emby_media_source_catalog.dart",
+   "to": "packages/nipaplay_core/lib/src/services/emby_media_source_catalog.dart"
+  },
+  {
+   "from": "lib/services/emby_media_selection_resolver.dart",
+   "to": "packages/nipaplay_core/lib/src/services/emby_media_selection_resolver.dart"
+  },
+  {
+   "from": "lib/services/emby_media_source_selection.dart",
+   "to": "packages/nipaplay_core/lib/src/services/emby_media_source_selection.dart"
+  },
+  {
+   "from": "lib/services/emby_media_preference_store.dart",
+   "to": "packages/nipaplay_core/lib/src/services/emby_media_preference_store.dart"
+  },
+  {
+   "from": "lib/services/emby_media_selection_controller.dart",
+   "to": "packages/nipaplay_core/lib/src/services/emby_media_selection_controller.dart"
+  },
+  {
+   "from": "lib/services/emby_release_name_parser.dart",
+   "to": "packages/nipaplay_core/lib/src/services/emby_release_name_parser.dart"
+  },
+  {
+   "from": "lib/services/media_server_playback_client.dart",
+   "to": "packages/nipaplay_core/lib/src/services/media_server_playback_client.dart"
+  },
+  {
+   "from": "lib/services/backup_category.dart",
+   "to": "packages/nipaplay_core/lib/src/services/backup_category.dart"
+  },
+  {
+   "from": "lib/services/incremental_sync_webdav_connections.dart",
+   "to": "packages/nipaplay_core/lib/src/services/incremental_sync_webdav_connections.dart"
+  },
+  {
+   "from": "lib/services/app_http_proxy.dart",
+   "to": "packages/nipaplay_core/lib/src/services/app_http_proxy.dart"
+  },
+  {
+   "from": "lib/services/process_memory_cache.dart",
+   "to": "packages/nipaplay_core/lib/src/services/process_memory_cache.dart"
+  },
+  {
+   "from": "lib/constants/acknowledgements.dart",
+   "to": "packages/nipaplay_core/lib/src/constants/acknowledgements.dart"
+  },
+  {
+   "from": "lib/constants/danmaku/ass_kind.dart",
+   "to": "packages/nipaplay_core/lib/src/constants/danmaku/ass_kind.dart"
+  },
+  {
+   "from": "lib/constants/danmaku/mode.dart",
+   "to": "packages/nipaplay_core/lib/src/constants/danmaku/mode.dart"
+  },
+  {
+   "from": "lib/constants/media_extensions.dart",
+   "to": "packages/nipaplay_core/lib/src/constants/media_extensions.dart"
+  },
+  {
+   "from": "lib/constants/settings_keys.dart",
+   "to": "packages/nipaplay_core/lib/src/constants/settings_keys.dart"
+  },
+  {
+   "from": "lib/utils/http_header_utils.dart",
+   "to": "packages/nipaplay_core/lib/src/utils/http_header_utils.dart"
+  },
+  {
+   "from": "lib/utils/http_user_agent.dart",
+   "to": "packages/nipaplay_core/lib/src/utils/http_user_agent.dart"
+  },
+  {
+   "from": "lib/utils/frame_rate_sampler.dart",
+   "to": "packages/nipaplay_core/lib/src/utils/frame_rate_sampler.dart"
+  }
+ ]
+}

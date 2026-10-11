@@ -16,7 +16,7 @@ import 'package:nipaplay/services/incremental_sync_native_codec.dart';
 import 'package:nipaplay/services/incremental_sync_data_filter.dart';
 import 'package:nipaplay/services/incremental_sync_repository.dart';
 import 'package:nipaplay/services/incremental_sync_transport.dart';
-import 'package:nipaplay/services/incremental_sync_webdav_connections.dart';
+import 'package:nipaplay_core/services/incremental_sync_webdav_connections.dart';
 import 'package:nipaplay/services/multi_address_server_service.dart';
 import 'package:nipaplay/services/smb_service.dart';
 import 'package:nipaplay/services/webdav_service.dart';

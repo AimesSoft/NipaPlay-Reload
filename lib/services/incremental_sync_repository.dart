@@ -2,8 +2,8 @@ import 'dart:convert';
 
 import 'package:crypto/crypto.dart';
 
-import 'package:nipaplay/services/backup_category.dart';
-import 'package:nipaplay/services/incremental_sync_webdav_connections.dart';
+import 'package:nipaplay_core/services/backup_category.dart';
+import 'package:nipaplay_core/services/incremental_sync_webdav_connections.dart';
 
 typedef IncrementalSyncState = Map<String, Map<String, dynamic>>;
 

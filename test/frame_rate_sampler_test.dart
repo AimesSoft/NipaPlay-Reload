@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:nipaplay/utils/frame_rate_sampler.dart';
+import 'package:nipaplay_core/utils/frame_rate_sampler.dart';
 
 void main() {
   List<int> frames(int hz, int seconds) => List.generate(

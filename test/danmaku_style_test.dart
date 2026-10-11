@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:nipaplay/models/danmaku/style.dart';
+import 'package:nipaplay_core/models/danmaku/style.dart';
 
 void main() {
   test('uses the expected default danmaku style', () {

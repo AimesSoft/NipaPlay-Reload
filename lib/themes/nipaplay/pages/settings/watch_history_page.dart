@@ -12,7 +12,7 @@ import 'package:nipaplay/services/playback_service.dart';
 import 'package:nipaplay/services/jellyfin_service.dart';
 import 'package:nipaplay/services/emby_service.dart';
 import 'package:nipaplay/models/playable_item.dart';
-import 'package:nipaplay/models/media_server_playback.dart';
+import 'package:nipaplay_core/models/media_server_playback.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_snackbar.dart';
 import 'package:kmbal_ionicons/kmbal_ionicons.dart';
 import 'package:provider/provider.dart';

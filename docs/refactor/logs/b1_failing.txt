@@ -1,0 +1,6 @@
+Failing tests:
+  F:/Hermes Agent CN Desktop Portable/data/hermes-home/NipaPlay-Reload-features/test/android_tv_platform_policy_test.dart: Android TV keeps Android player and danmaku kernel choices
+  F:/Hermes Agent CN Desktop Portable/data/hermes-home/NipaPlay-Reload-features/test/bangumi_external_auth_launch_test.dart: Bangumi auth launches directly and only reports real success
+  F:/Hermes Agent CN Desktop Portable/data/hermes-home/NipaPlay-Reload-features/test/danmaku_matching_access_test.dart: danmaku matching access all app matching callers use the shared matching facade
+  F:/Hermes Agent CN Desktop Portable/data/hermes-home/NipaPlay-Reload-features/test/mainline_flutter_compatibility_test.dart: Linux mode retains every shared dependency override
+  ... and 4 more

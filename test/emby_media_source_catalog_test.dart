@@ -3,9 +3,9 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:nipaplay/models/media_server_playback.dart';
+import 'package:nipaplay_core/models/media_server_playback.dart';
 import 'package:nipaplay/services/emby_service.dart';
-import 'package:nipaplay/services/emby_media_source_catalog.dart';
+import 'package:nipaplay_core/services/emby_media_source_catalog.dart';
 
 void main() {
   test('coalesces concurrent loads and keeps the completed result per scope',

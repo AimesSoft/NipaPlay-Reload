@@ -1,10 +1,10 @@
 import 'package:fluent_ui/fluent_ui.dart' as fluent;
 import 'package:flutter/material.dart';
-import 'package:nipaplay/constants/danmaku/mode.dart';
+import 'package:nipaplay_core/constants/danmaku/mode.dart';
 import 'package:nipaplay/l10n/l10n.dart';
-import 'package:nipaplay/models/danmaku/blocked_item.dart';
-import 'package:nipaplay/models/danmaku/danmaku_item.dart';
-import 'package:nipaplay/models/danmaku/style.dart';
+import 'package:nipaplay_core/models/danmaku/blocked_item.dart';
+import 'package:nipaplay_core/models/danmaku/danmaku_item.dart';
+import 'package:nipaplay_core/models/danmaku/style.dart';
 import 'package:nipaplay/services/danmaku/danmaku_service.dart';
 import 'package:nipaplay/services/external_player_console_service.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/large_screen_editable_slider.dart';

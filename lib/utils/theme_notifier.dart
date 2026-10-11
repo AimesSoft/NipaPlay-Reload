@@ -2,8 +2,8 @@
 import 'package:flutter/material.dart';
 import 'package:nipaplay/utils/settings_storage.dart';
 import 'package:nipaplay/utils/globals.dart' as globals;
-import 'package:nipaplay/models/anime_detail_display_mode.dart';
-import 'package:nipaplay/models/background_image_render_mode.dart';
+import 'package:nipaplay_core/models/anime_detail_display_mode.dart';
+import 'package:nipaplay_core/models/background_image_render_mode.dart';
 
 class ThemeNotifier with ChangeNotifier {
   static const String backgroundImageRenderModeKey =

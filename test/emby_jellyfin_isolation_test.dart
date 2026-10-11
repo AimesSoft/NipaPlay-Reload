@@ -1,11 +1,11 @@
 import 'dart:async';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:nipaplay/models/emby_media_selection.dart';
-import 'package:nipaplay/models/jellyfin_transcode_settings.dart';
-import 'package:nipaplay/models/media_server_playback.dart';
-import 'package:nipaplay/services/emby_media_preference_store.dart';
-import 'package:nipaplay/services/emby_media_selection_resolver.dart';
+import 'package:nipaplay_core/models/emby_media_selection.dart';
+import 'package:nipaplay_core/models/jellyfin_transcode_settings.dart';
+import 'package:nipaplay_core/models/media_server_playback.dart';
+import 'package:nipaplay_core/services/emby_media_preference_store.dart';
+import 'package:nipaplay_core/services/emby_media_selection_resolver.dart';
 import 'package:nipaplay/services/emby_player_menu_selection.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 

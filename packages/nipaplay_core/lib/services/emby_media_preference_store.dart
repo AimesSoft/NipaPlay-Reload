@@ -2,9 +2,9 @@ import 'dart:convert';
 
 import 'package:shared_preferences/shared_preferences.dart';
 
-import '../models/emby_media_selection.dart';
-import '../models/server_profile_model.dart';
-import 'emby_release_name_parser.dart';
+import 'package:nipaplay_core/models/emby_media_selection.dart';
+import 'package:nipaplay_core/models/server_profile_model.dart';
+import 'package:nipaplay_core/services/emby_release_name_parser.dart';
 
 const _preferencesKey = 'emby_media_preferences_v1';
 const _schemaVersion = 1;

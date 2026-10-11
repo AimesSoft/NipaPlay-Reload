@@ -158,6 +158,8 @@ dependencies:
   smb_connect: ^0.0.9
   danmaku_canvas:
     path: packages/danmaku_canvas
+  nipaplay_core:
+    path: packages/nipaplay_core
   nipaplay_smb2:
     path: packages/nipaplay_smb2
   battery_plus: ^7.0.0

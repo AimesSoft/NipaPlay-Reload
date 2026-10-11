@@ -1,6 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
-import 'package:nipaplay/utils/http_header_utils.dart';
+import 'package:nipaplay_core/utils/http_header_utils.dart';
 
 /// 回归背景：Dart 3.13 的 VM 里 `LinkedHashMap.removeWhere` 只标记 `_data`、
 /// 不同步 `_index`，残留索引槽中的删除哨兵会被当作 key 交给 `equals`，抛

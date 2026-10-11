@@ -1,6 +1,6 @@
 import 'package:flutter/cupertino.dart';
 import 'package:nipaplay/downloads/unified_torrent_page_model.dart';
-import 'package:nipaplay/models/torrent_task.dart';
+import 'package:nipaplay_core/models/torrent_task.dart';
 import 'package:nipaplay/themes/cupertino/cupertino_adaptive_platform_ui.dart';
 import 'package:nipaplay/themes/cupertino/widgets/cupertino_bottom_sheet.dart';
 

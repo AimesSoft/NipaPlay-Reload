@@ -1,0 +1,45 @@
+// nipaplay_core — 逻辑层公共出口。
+// 红线：本包禁止 import 任何 UI 包（material/cupertino/widgets/rendering/painting）。
+// 允许：flutter/foundation、flutter/services、dart:ui 几何值类型、非 UI 插件。
+// 每搬一批在此追加对应 export（也供 scripts/check_core_purity.sh 校验）。
+
+// ---- Batch 1: models / constants / pure utils ----
+export 'models/anime_detail_display_mode.dart';
+export 'models/background_image_render_mode.dart';
+export 'models/bangumi_collection_submit_result.dart';
+export 'models/bangumi_comment_model.dart';
+export 'models/bangumi_model.dart';
+export 'models/dandanplay_remote_model.dart';
+export 'models/danmaku/blocked_item.dart';
+export 'models/danmaku/danmaku_item.dart';
+export 'models/danmaku/style.dart';
+export 'models/danmaku_auto_load_strategy.dart';
+export 'models/database/anime_episode_relation.dart';
+export 'models/emby_media_selection.dart';
+export 'models/jellyfin_transcode_settings.dart';
+export 'models/media_identity.dart';
+export 'models/media_server_playback.dart';
+export 'models/search_model.dart';
+export 'models/server_profile_model.dart';
+export 'models/torrent_magnet_preview.dart';
+export 'models/torrent_task.dart';
+export 'models/trending_bangumi.dart';
+export 'services/app_http_proxy.dart';
+export 'services/backup_category.dart';
+export 'services/emby_media_preference_store.dart';
+export 'services/emby_media_selection_controller.dart';
+export 'services/emby_media_selection_resolver.dart';
+export 'services/emby_media_source_catalog.dart';
+export 'services/emby_media_source_selection.dart';
+export 'services/emby_release_name_parser.dart';
+export 'services/incremental_sync_webdav_connections.dart';
+export 'services/media_server_playback_client.dart';
+export 'services/process_memory_cache.dart';
+export 'constants/acknowledgements.dart';
+export 'constants/danmaku/ass_kind.dart';
+export 'constants/danmaku/mode.dart';
+export 'constants/media_extensions.dart';
+export 'constants/settings_keys.dart';
+export 'utils/frame_rate_sampler.dart';
+export 'utils/http_header_utils.dart';
+export 'utils/http_user_agent.dart';

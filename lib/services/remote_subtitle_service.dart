@@ -7,7 +7,7 @@ import 'package:flutter/foundation.dart';
 import 'package:path/path.dart' as p;
 import 'package:smb_connect/smb_connect.dart';
 
-import 'package:nipaplay/constants/media_extensions.dart';
+import 'package:nipaplay_core/constants/media_extensions.dart';
 import 'package:nipaplay/services/smb2_native_service.dart';
 import 'package:nipaplay/services/smb_service.dart';
 import 'package:nipaplay/services/webdav_service.dart';

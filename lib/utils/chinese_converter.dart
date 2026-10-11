@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:nipaplay/l10n/app_locale_utils.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:nipaplay/models/bangumi_model.dart';
+import 'package:nipaplay_core/models/bangumi_model.dart';
 import 'package:pinyin/pinyin.dart';
-import 'package:nipaplay/constants/settings_keys.dart';
+import 'package:nipaplay_core/constants/settings_keys.dart';
 
 class ChineseConverter {
   // pinyin库v3.3.0中，ChineseHelper已经内置了简繁转换功能，不需要手动加载字典

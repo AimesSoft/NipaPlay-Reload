@@ -1,9 +1,9 @@
 // lib/models/external_player_session/session.dart
 // 外部播放器启动会话的公共接口
 
-import 'package:nipaplay/models/danmaku/danmaku_item.dart';
-import 'package:nipaplay/models/danmaku/style.dart';
-import 'package:nipaplay/constants/media_extensions.dart';
+import 'package:nipaplay_core/models/danmaku/danmaku_item.dart';
+import 'package:nipaplay_core/models/danmaku/style.dart';
+import 'package:nipaplay_core/constants/media_extensions.dart';
 import 'package:flutter/foundation.dart';
 
 

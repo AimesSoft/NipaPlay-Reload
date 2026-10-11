@@ -1,4 +1,4 @@
-import 'package:nipaplay/models/bangumi_model.dart';
+import 'package:nipaplay_core/models/bangumi_model.dart';
 
 enum TrendingRankingKind {
   allHot,

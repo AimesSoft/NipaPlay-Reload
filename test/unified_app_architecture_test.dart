@@ -20,7 +20,7 @@ import 'package:nipaplay/l10n/app_localizations.dart';
 import 'package:nipaplay/models/playable_item.dart';
 import 'package:nipaplay/models/playback_detail_context.dart';
 import 'package:nipaplay/models/watch_history_model.dart';
-import 'package:nipaplay/models/torrent_task.dart';
+import 'package:nipaplay_core/models/torrent_task.dart';
 import 'package:nipaplay/media_library/adaptive_media_library_page.dart';
 import 'package:nipaplay/media_library/adaptive_library_management_overview.dart';
 import 'package:nipaplay/media_library/media_collection_empty_content.dart';
@@ -1575,7 +1575,7 @@ void main() {
     final addMediaFlow = File(
       'lib/media_library/adaptive_add_media_flow.dart',
     ).readAsStringSync();
-    final keys = File('lib/constants/settings_keys.dart').readAsStringSync();
+    final keys = File('packages/nipaplay_core/lib/constants/settings_keys.dart').readAsStringSync();
 
     expect(keys, contains('mediaLibrarySelectedSection'));
     expect(page, contains('_restoreSelectedSection'));

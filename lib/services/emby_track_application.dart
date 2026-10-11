@@ -1,4 +1,4 @@
-import '../models/emby_media_selection.dart';
+import 'package:nipaplay_core/models/emby_media_selection.dart';
 import '../player_abstraction/abstract_player.dart';
 import '../player_abstraction/player_data_models.dart';
 import '../player_abstraction/player_enums.dart';

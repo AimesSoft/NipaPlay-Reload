@@ -4,12 +4,12 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:nipaplay/constants/danmaku/mode.dart';
-import 'package:nipaplay/constants/media_extensions.dart';
+import 'package:nipaplay_core/constants/danmaku/mode.dart';
+import 'package:nipaplay_core/constants/media_extensions.dart';
 import 'package:nipaplay/l10n/app_localizations.dart';
-import 'package:nipaplay/models/danmaku/blocked_item.dart';
-import 'package:nipaplay/models/danmaku/danmaku_item.dart';
-import 'package:nipaplay/models/danmaku/style.dart';
+import 'package:nipaplay_core/models/danmaku/blocked_item.dart';
+import 'package:nipaplay_core/models/danmaku/danmaku_item.dart';
+import 'package:nipaplay_core/models/danmaku/style.dart';
 import 'package:nipaplay/models/external_player_session/session.dart';
 import 'package:nipaplay/pages/external_player_console_page.dart';
 import 'package:nipaplay/services/external_player_console_service.dart';

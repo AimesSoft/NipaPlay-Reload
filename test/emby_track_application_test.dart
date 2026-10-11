@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:nipaplay/models/emby_media_selection.dart';
+import 'package:nipaplay_core/models/emby_media_selection.dart';
 import 'package:nipaplay/player_abstraction/player_data_models.dart';
 import 'package:nipaplay/services/emby_track_application.dart';
 

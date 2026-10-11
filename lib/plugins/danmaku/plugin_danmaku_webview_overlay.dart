@@ -4,7 +4,7 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:webview_flutter/webview_flutter.dart';
 
-import 'package:nipaplay/models/danmaku/danmaku_item.dart';
+import 'package:nipaplay_core/models/danmaku/danmaku_item.dart';
 import 'package:nipaplay/plugins/danmaku/plugin_external_script_cache.dart';
 import 'package:nipaplay/plugins/models/plugin_danmaku_renderer.dart';
 import 'package:nipaplay/utils/video_player_state.dart';

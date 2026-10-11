@@ -6,7 +6,7 @@ import 'dart:typed_data';
 
 import 'package:crypto/crypto.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:nipaplay/models/database/anime_episode_relation.dart';
+import 'package:nipaplay_core/models/database/anime_episode_relation.dart';
 import 'package:nipaplay/models/database/asset_record.dart';
 import 'package:nipaplay/models/watch_history_database.dart';
 import 'package:nipaplay/services/anime_info/anime_info_service.dart';

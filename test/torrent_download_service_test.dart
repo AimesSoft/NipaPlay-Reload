@@ -1,7 +1,7 @@
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:nipaplay/constants/settings_keys.dart';
+import 'package:nipaplay_core/constants/settings_keys.dart';
 import 'package:nipaplay/services/torrent_download_service.dart';
 import 'package:nipaplay/utils/settings_storage.dart';
 import 'package:shared_preferences/shared_preferences.dart';

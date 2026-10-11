@@ -5,7 +5,7 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:nipaplay/services/dandanplay_http_client.dart' as http;
 import 'package:nipaplay/services/danmaku_matching_service.dart';
-import 'package:nipaplay/models/database/anime_episode_relation.dart';
+import 'package:nipaplay_core/models/database/anime_episode_relation.dart';
 import 'package:nipaplay/models/database/asset_record.dart';
 import 'package:nipaplay/services/bangumi_api_service.dart';
 import 'package:nipaplay/services/database/database_service.dart';

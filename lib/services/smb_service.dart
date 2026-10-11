@@ -5,7 +5,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:smb_connect/smb_connect.dart';
 import 'package:uuid/uuid.dart';
 
-import 'package:nipaplay/services/process_memory_cache.dart';
+import 'package:nipaplay_core/services/process_memory_cache.dart';
 import 'package:nipaplay/services/smb2_native_service.dart';
 
 class SMBConnection {

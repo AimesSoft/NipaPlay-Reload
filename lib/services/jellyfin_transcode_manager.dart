@@ -1,7 +1,7 @@
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import '../models/jellyfin_transcode_settings.dart';
+import 'package:nipaplay_core/models/jellyfin_transcode_settings.dart';
 
 /// Jellyfin 转码设置管理器
 /// 职责：管理转码相关的设置持久化和获取

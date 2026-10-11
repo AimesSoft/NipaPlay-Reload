@@ -1,4 +1,4 @@
-import 'media_server_playback.dart';
+import 'package:nipaplay_core/models/media_server_playback.dart';
 import 'watch_history_model.dart';
 
 enum PlaybackSourceKind {

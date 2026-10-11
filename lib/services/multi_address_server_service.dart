@@ -2,7 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:flutter/foundation.dart';
-import '../models/server_profile_model.dart';
+import 'package:nipaplay_core/models/server_profile_model.dart';
 import 'debug_log_service.dart';
 
 /// 多地址服务器管理服务

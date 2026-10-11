@@ -2,7 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:nipaplay/models/media_server_playback.dart';
+import 'package:nipaplay_core/models/media_server_playback.dart';
 import 'package:nipaplay/models/watch_history_model.dart';
 import 'package:nipaplay/services/emby_playback_sync_service.dart';
 import 'package:nipaplay/services/emby_service.dart';

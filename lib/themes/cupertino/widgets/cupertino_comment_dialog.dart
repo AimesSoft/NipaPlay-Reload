@@ -1,5 +1,5 @@
 import 'package:nipaplay/themes/cupertino/cupertino_imports.dart';
-import 'package:nipaplay/models/bangumi_collection_submit_result.dart';
+import 'package:nipaplay_core/models/bangumi_collection_submit_result.dart';
 import 'package:nipaplay/themes/cupertino/widgets/cupertino_bottom_sheet.dart';
 
 class CupertinoCommentDialog extends StatefulWidget {

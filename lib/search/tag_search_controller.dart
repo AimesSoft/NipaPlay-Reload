@@ -1,7 +1,7 @@
 import 'dart:collection';
 
 import 'package:flutter/foundation.dart';
-import 'package:nipaplay/models/search_model.dart';
+import 'package:nipaplay_core/models/search_model.dart';
 import 'package:nipaplay/services/search_service.dart';
 
 enum TagSearchMode { none, text, advanced }

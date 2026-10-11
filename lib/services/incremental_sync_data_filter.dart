@@ -1,7 +1,7 @@
 import 'package:nipaplay/services/anime_deletion_tombstones.dart';
-import 'package:nipaplay/services/backup_category.dart';
+import 'package:nipaplay_core/services/backup_category.dart';
 import 'package:nipaplay/services/incremental_sync_repository.dart';
-import 'package:nipaplay/services/incremental_sync_webdav_connections.dart';
+import 'package:nipaplay_core/services/incremental_sync_webdav_connections.dart';
 import 'package:nipaplay/services/webdav_service.dart';
 
 /// Removes device-bound local media data from the cross-device repository.

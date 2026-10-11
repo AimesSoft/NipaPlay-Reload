@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:nipaplay/models/danmaku_auto_load_strategy.dart';
+import 'package:nipaplay_core/models/danmaku_auto_load_strategy.dart';
 
 void main() {
   group('DanmakuAutoLoadStrategy', () {

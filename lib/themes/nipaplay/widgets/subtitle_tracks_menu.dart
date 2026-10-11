@@ -17,7 +17,7 @@ import 'package:nipaplay/services/remote_subtitle_service.dart';
 import 'package:nipaplay/utils/subtitle_file_utils.dart';
 import 'package:nipaplay/utils/subtitle_language_utils.dart';
 import 'package:flutter/foundation.dart';
-import 'package:nipaplay/models/emby_media_selection.dart';
+import 'package:nipaplay_core/models/emby_media_selection.dart';
 import 'package:nipaplay/services/emby_player_menu_selection.dart';
 
 class SubtitleTracksMenu extends StatefulWidget {

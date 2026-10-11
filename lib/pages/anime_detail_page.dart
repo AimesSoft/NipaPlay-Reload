@@ -3,7 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:nipaplay/services/bangumi_service.dart';
 import 'package:nipaplay/services/bangumi_api_service.dart';
-import 'package:nipaplay/models/bangumi_model.dart';
+import 'package:nipaplay_core/models/bangumi_model.dart';
 import 'package:nipaplay/models/shared_remote_library.dart';
 import 'package:nipaplay/models/watch_history_model.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/cached_network_image_widget.dart';
@@ -21,7 +21,7 @@ import 'dart:io'; // Added for File operations
 // import 'package:nipaplay/utils/tab_change_notifier.dart'; // Removed from here
 import 'package:nipaplay/themes/nipaplay/widgets/tag_search_widget.dart'; // 添加标签搜索组件
 import 'package:nipaplay/themes/nipaplay/widgets/rating_dialog.dart'; // 添加评分对话框
-import 'package:nipaplay/models/bangumi_collection_submit_result.dart';
+import 'package:nipaplay_core/models/bangumi_collection_submit_result.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/bangumi_collection_dialog.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/bangumi_comment_dialog.dart';
 import 'package:nipaplay/services/playback_service.dart';

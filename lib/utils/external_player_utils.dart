@@ -3,7 +3,7 @@
 // 外部播放器相关工具函数
 
 import 'package:flutter/widgets.dart';
-import 'package:nipaplay/constants/media_extensions.dart';
+import 'package:nipaplay_core/constants/media_extensions.dart';
 import 'package:nipaplay/models/playable_item.dart';
 import 'package:nipaplay/services/smb_proxy_service.dart';
 import 'package:nipaplay/services/webdav_service.dart';

@@ -12,7 +12,7 @@ void main() {
       'lib/providers/labs_settings_provider.dart',
     ).readAsStringSync();
     final settingsKeys = File(
-      'lib/constants/settings_keys.dart',
+      'packages/nipaplay_core/lib/constants/settings_keys.dart',
     ).readAsStringSync();
 
     expect(main, contains('shouldOfferLargeScreenModeControl('));

@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:kmbal_ionicons/kmbal_ionicons.dart';
 import 'package:nipaplay/downloads/unified_torrent_page_model.dart';
-import 'package:nipaplay/models/torrent_task.dart';
+import 'package:nipaplay_core/models/torrent_task.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_dialog.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/hover_scale_text_button.dart';
 

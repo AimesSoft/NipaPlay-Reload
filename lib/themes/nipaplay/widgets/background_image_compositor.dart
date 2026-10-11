@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:nipaplay/models/background_image_render_mode.dart';
+import 'package:nipaplay_core/models/background_image_render_mode.dart';
 
 class BackgroundImageCompositor extends StatelessWidget {
   const BackgroundImageCompositor({

@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
-import 'package:nipaplay/models/emby_media_selection.dart';
-import 'package:nipaplay/models/media_server_playback.dart';
-import 'package:nipaplay/services/emby_media_selection_controller.dart';
+import 'package:nipaplay_core/models/emby_media_selection.dart';
+import 'package:nipaplay_core/models/media_server_playback.dart';
+import 'package:nipaplay_core/services/emby_media_selection_controller.dart';
 import 'package:nipaplay/themes/cupertino/widgets/emby_media_selection_sheet.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/emby_media_selection_dialog.dart';
 import 'package:nipaplay/utils/media_path_name.dart';

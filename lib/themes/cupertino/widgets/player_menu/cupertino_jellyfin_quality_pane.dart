@@ -3,13 +3,13 @@ import 'package:nipaplay/themes/cupertino/cupertino_adaptive_platform_ui.dart'
     show AdaptiveButton, AdaptiveButtonStyle;
 import 'package:provider/provider.dart';
 
-import 'package:nipaplay/models/jellyfin_transcode_settings.dart';
-import 'package:nipaplay/models/media_server_playback.dart';
-import 'package:nipaplay/models/emby_media_selection.dart';
+import 'package:nipaplay_core/models/jellyfin_transcode_settings.dart';
+import 'package:nipaplay_core/models/media_server_playback.dart';
+import 'package:nipaplay_core/models/emby_media_selection.dart';
 import 'package:nipaplay/providers/emby_transcode_provider.dart';
 import 'package:nipaplay/providers/jellyfin_transcode_provider.dart';
 import 'package:nipaplay/services/emby_service.dart';
-import 'package:nipaplay/services/emby_media_source_selection.dart';
+import 'package:nipaplay_core/services/emby_media_source_selection.dart';
 import 'package:nipaplay/services/emby_player_menu_selection.dart';
 import 'package:nipaplay/services/jellyfin_service.dart';
 import 'package:nipaplay/themes/cupertino/widgets/cupertino_bottom_sheet.dart';

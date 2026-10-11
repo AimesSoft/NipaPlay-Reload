@@ -2,10 +2,10 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:nipaplay/models/emby_media_selection.dart';
-import 'package:nipaplay/models/media_server_playback.dart';
-import 'package:nipaplay/services/emby_media_selection_resolver.dart';
-import 'package:nipaplay/services/emby_media_source_selection.dart';
+import 'package:nipaplay_core/models/emby_media_selection.dart';
+import 'package:nipaplay_core/models/media_server_playback.dart';
+import 'package:nipaplay_core/services/emby_media_selection_resolver.dart';
+import 'package:nipaplay_core/services/emby_media_source_selection.dart';
 import 'package:nipaplay/services/emby_service.dart';
 import 'package:path_provider_platform_interface/path_provider_platform_interface.dart';
 

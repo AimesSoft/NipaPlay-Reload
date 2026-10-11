@@ -992,6 +992,13 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "1.0.0"
+  nipaplay_core:
+    dependency: "direct main"
+    description:
+      path: "packages/nipaplay_core"
+      relative: true
+    source: path
+    version: "0.1.0"
   nipaplay_smb2:
     dependency: "direct main"
     description:

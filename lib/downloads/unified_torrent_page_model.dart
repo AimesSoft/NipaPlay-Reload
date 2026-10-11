@@ -1,7 +1,7 @@
-import 'package:nipaplay/models/torrent_task.dart';
+import 'package:nipaplay_core/models/torrent_task.dart';
 import 'package:nipaplay/models/torrent_task_scan_summary.dart';
 import 'package:flutter/widgets.dart';
-import 'package:nipaplay/models/torrent_magnet_preview.dart';
+import 'package:nipaplay_core/models/torrent_magnet_preview.dart';
 
 enum UnifiedTorrentTaskViewMode { cards, list }
 

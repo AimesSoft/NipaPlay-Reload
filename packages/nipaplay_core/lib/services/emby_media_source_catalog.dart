@@ -1,5 +1,5 @@
-import '../models/emby_media_selection.dart';
-import '../models/media_server_playback.dart';
+import 'package:nipaplay_core/models/emby_media_selection.dart';
+import 'package:nipaplay_core/models/media_server_playback.dart';
 
 typedef EmbyMediaSourceLoader = Future<List<PlaybackMediaSource>> Function(
   String itemId,

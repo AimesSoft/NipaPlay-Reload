@@ -3,7 +3,7 @@ import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
-import 'package:nipaplay/models/jellyfin_transcode_settings.dart';
+import 'package:nipaplay_core/models/jellyfin_transcode_settings.dart';
 import 'package:nipaplay/services/emby_service.dart';
 import 'package:nipaplay/services/jellyfin_service.dart';
 import 'package:nipaplay/services/media_server_service_base.dart';

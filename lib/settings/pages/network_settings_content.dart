@@ -6,7 +6,7 @@ import 'package:nipaplay/app/app_display_surface.dart';
 import 'package:nipaplay/app/app_display_surface_scope.dart';
 import 'package:nipaplay/l10n/l10n.dart';
 import 'package:nipaplay/player_abstraction/player_factory.dart';
-import 'package:nipaplay/services/app_http_proxy.dart';
+import 'package:nipaplay_core/services/app_http_proxy.dart';
 import 'package:nipaplay/services/nipaplay_server_router.dart';
 import 'package:nipaplay/services/server_connectivity_service.dart';
 import 'package:nipaplay/settings/adaptive_settings_widgets.dart';

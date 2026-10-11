@@ -1,8 +1,8 @@
 import 'dart:async';
 
 import 'package:http/http.dart' as http;
-import 'package:nipaplay/constants/settings_keys.dart';
-import 'package:nipaplay/utils/http_user_agent.dart';
+import 'package:nipaplay_core/constants/settings_keys.dart';
+import 'package:nipaplay_core/utils/http_user_agent.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'media_server_transport_client_stub.dart'

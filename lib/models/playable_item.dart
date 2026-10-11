@@ -1,5 +1,5 @@
 import 'watch_history_model.dart';
-import 'media_server_playback.dart';
+import 'package:nipaplay_core/models/media_server_playback.dart';
 import 'playback_detail_context.dart';
 
 class PlayableItem {

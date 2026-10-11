@@ -8,7 +8,7 @@ import 'package:http/io_client.dart';
 import 'package:path/path.dart' as p;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:nipaplay/services/remote_control_settings.dart';
-import 'package:nipaplay/services/process_memory_cache.dart';
+import 'package:nipaplay_core/services/process_memory_cache.dart';
 import 'package:nipaplay/services/web_remote_access_service.dart';
 import 'package:nipaplay/services/webdav_service.dart';
 import 'package:nipaplay/services/smb_service.dart';

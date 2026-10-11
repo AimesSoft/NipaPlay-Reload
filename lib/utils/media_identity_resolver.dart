@@ -1,7 +1,7 @@
 import 'package:flutter/foundation.dart';
 import 'package:path/path.dart' as p;
 
-import 'package:nipaplay/models/media_identity.dart';
+import 'package:nipaplay_core/models/media_identity.dart';
 import 'package:nipaplay/services/smb_service.dart';
 import 'package:nipaplay/services/webdav_service.dart';
 import 'package:nipaplay/utils/media_source_utils.dart';

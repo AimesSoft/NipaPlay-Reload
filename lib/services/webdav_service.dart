@@ -10,8 +10,8 @@ import 'package:webdav_client/webdav_client.dart' as webdav;
 import 'package:xml/xml.dart';
 import 'package:uuid/uuid.dart';
 
-import 'package:nipaplay/models/media_identity.dart';
-import 'package:nipaplay/services/process_memory_cache.dart';
+import 'package:nipaplay_core/models/media_identity.dart';
+import 'package:nipaplay_core/services/process_memory_cache.dart';
 import 'package:nipaplay/src/rust/api/webdav_multistatus.dart' as rust_webdav;
 import 'package:nipaplay/src/rust/frb_generated.dart';
 

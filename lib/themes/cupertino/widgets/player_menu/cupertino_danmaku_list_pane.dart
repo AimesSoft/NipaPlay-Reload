@@ -1,6 +1,6 @@
 import 'dart:async';
 
-import 'package:nipaplay/constants/danmaku/mode.dart';
+import 'package:nipaplay_core/constants/danmaku/mode.dart';
 import 'package:nipaplay/themes/cupertino/cupertino_imports.dart';
 import 'package:nipaplay/themes/cupertino/widgets/cupertino_bottom_sheet.dart';
 import 'package:nipaplay/themes/cupertino/widgets/player_menu/adaptive_player_menu_primitives.dart';

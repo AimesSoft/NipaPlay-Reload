@@ -6,7 +6,7 @@ import '../player_abstraction/player_abstraction.dart';
 import '../danmaku_abstraction/danmaku_kernel_factory.dart';
 import '../danmaku_next/next2_platform_support.dart';
 import 'globals.dart' as globals;
-import 'package:nipaplay/constants/settings_keys.dart';
+import 'package:nipaplay_core/constants/settings_keys.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'video_player_state.dart';
 import '../models/watch_history_model.dart';

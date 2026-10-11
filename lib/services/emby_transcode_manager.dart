@@ -1,7 +1,7 @@
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import '../models/jellyfin_transcode_settings.dart';
+import 'package:nipaplay_core/models/jellyfin_transcode_settings.dart';
 
 /// Emby 转码设置管理器（与 Jellyfin 分离存储）
 class EmbyTranscodeManager {

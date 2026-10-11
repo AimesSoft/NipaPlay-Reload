@@ -1,0 +1,8 @@
++140 ~6 -3: F:/Hermes Agent CN Desktop Portable/data/hermes-home/NipaPlay-Reload-features/test/danmaku_matching_access_test.dart: danmaku matching access all app matching callers use the shared matching facade [E]
++3 -1: F:/Hermes Agent CN Desktop Portable/data/hermes-home/NipaPlay-Reload-features/test/android_tv_platform_policy_test.dart: Android TV keeps Android player and danmaku kernel choices [E]
++453 ~24 -4: F:/Hermes Agent CN Desktop Portable/data/hermes-home/NipaPlay-Reload-features/test/mainline_flutter_compatibility_test.dart: Linux mode retains every shared dependency override [E]
++51 ~6 -2: F:/Hermes Agent CN Desktop Portable/data/hermes-home/NipaPlay-Reload-features/test/bangumi_external_auth_launch_test.dart: Bangumi auth launches directly and only reports real success [E]
++703 ~25 -5: F:/Hermes Agent CN Desktop Portable/data/hermes-home/NipaPlay-Reload-features/test/television_media_library_test.dart: media collection restores each source sort after switching sections [E]
++731 ~25 -6: F:/Hermes Agent CN Desktop Portable/data/hermes-home/NipaPlay-Reload-features/test/tvos_erika_kernel_policy_test.dart: tvOS hides unsupported desktop settings entries [E]
++731 ~25 -7: F:/Hermes Agent CN Desktop Portable/data/hermes-home/NipaPlay-Reload-features/test/tvos_large_screen_adaptation_policy_test.dart: large screen mode is a permanent feature outside labs [E]
++798 ~25 -8: F:/Hermes Agent CN Desktop Portable/data/hermes-home/NipaPlay-Reload-features/test/unified_app_architecture_test.dart: phone media library selection is restored and follows new mounts [E]

@@ -1,6 +1,6 @@
-import 'package:nipaplay/models/emby_media_selection.dart';
-import 'package:nipaplay/models/media_server_playback.dart';
-import 'package:nipaplay/services/emby_media_selection_resolver.dart';
+import 'package:nipaplay_core/models/emby_media_selection.dart';
+import 'package:nipaplay_core/models/media_server_playback.dart';
+import 'package:nipaplay_core/services/emby_media_selection_resolver.dart';
 
 typedef EmbyPlaybackSessionCreator = Future<PlaybackSession> Function(
   EmbyPlaybackSessionRequest request,

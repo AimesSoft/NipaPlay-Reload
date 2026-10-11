@@ -2,7 +2,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import 'dart:async';
 
-import 'package:nipaplay/constants/settings_keys.dart';
+import 'package:nipaplay_core/constants/settings_keys.dart';
 import 'package:nipaplay/danmaku_next/next2_platform_support.dart';
 import 'package:nipaplay/plugins/models/plugin_danmaku_renderer.dart';
 import 'package:nipaplay/utils/linux_nvidia_gpu.dart';

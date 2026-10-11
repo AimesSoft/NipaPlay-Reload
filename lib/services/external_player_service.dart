@@ -5,8 +5,8 @@
 import 'dart:io';
 
 import 'package:flutter/widgets.dart';
-import 'package:nipaplay/constants/media_extensions.dart';
-import 'package:nipaplay/models/danmaku/danmaku_item.dart';
+import 'package:nipaplay_core/constants/media_extensions.dart';
+import 'package:nipaplay_core/models/danmaku/danmaku_item.dart';
 import 'package:nipaplay/models/external_player_session/mpv_session.dart';
 import 'package:nipaplay/models/external_player_session/other_session.dart';
 import 'package:nipaplay/models/external_player_session/potplayer_session.dart';

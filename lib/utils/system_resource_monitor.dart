@@ -1,6 +1,6 @@
 import 'dart:async';
 import 'dart:ui' show FramePhase;
-import 'frame_rate_sampler.dart';
+import 'package:nipaplay_core/utils/frame_rate_sampler.dart';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/scheduler.dart';

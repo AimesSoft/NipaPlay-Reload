@@ -1,5 +1,5 @@
-import 'package:nipaplay/models/jellyfin_transcode_settings.dart';
-import 'package:nipaplay/models/media_server_playback.dart';
+import 'package:nipaplay_core/models/jellyfin_transcode_settings.dart';
+import 'package:nipaplay_core/models/media_server_playback.dart';
 
 abstract class MediaServerPlaybackClient {
   Future<PlaybackSession> createPlaybackSession({

@@ -4,7 +4,7 @@
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:nipaplay/models/database/anime_episode_relation.dart';
+import 'package:nipaplay_core/models/database/anime_episode_relation.dart';
 import 'package:nipaplay/models/database/asset_record.dart';
 import 'package:nipaplay/services/database/database_service.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';

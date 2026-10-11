@@ -1,6 +1,6 @@
 import 'package:flutter/widgets.dart';
-import 'package:nipaplay/constants/settings_keys.dart';
-import 'package:nipaplay/models/danmaku_auto_load_strategy.dart';
+import 'package:nipaplay_core/constants/settings_keys.dart';
+import 'package:nipaplay_core/models/danmaku_auto_load_strategy.dart';
 import 'package:nipaplay/services/danmaku_matching_service.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_snackbar.dart';
 import 'package:shared_preferences/shared_preferences.dart';

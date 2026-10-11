@@ -5,7 +5,7 @@ import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart'
     show PlatformInt64Util;
 
 import 'package:nipaplay/services/incremental_sync_repository.dart';
-import 'package:nipaplay/services/backup_category.dart';
+import 'package:nipaplay_core/services/backup_category.dart';
 import 'package:nipaplay/src/rust/api/incremental_sync.dart' as rust_sync;
 import 'package:nipaplay/src/rust/rust_init.dart';
 

@@ -2,7 +2,7 @@
 // 为外部 mpv 生成弹幕 ASS
 
 import 'package:flutter/foundation.dart';
-import 'package:nipaplay/models/danmaku/danmaku_item.dart';
+import 'package:nipaplay_core/models/danmaku/danmaku_item.dart';
 import 'package:nipaplay/src/rust/api/dfm_plus.dart' as rust_dfm;
 import 'package:nipaplay/src/rust/rust_init.dart';
 import 'package:nipaplay/utils/danmaku_ass_converter.dart';

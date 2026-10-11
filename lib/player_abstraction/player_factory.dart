@@ -7,8 +7,8 @@ import 'package:media_kit/media_kit.dart'; // MediaKit.ensureInitialized（media
 import './player_data_models.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:flutter/foundation.dart'; // 用于 debugPrint
-import 'package:nipaplay/constants/settings_keys.dart';
-import 'package:nipaplay/services/app_http_proxy.dart';
+import 'package:nipaplay_core/constants/settings_keys.dart';
+import 'package:nipaplay_core/services/app_http_proxy.dart';
 import 'package:nipaplay/utils/system_resource_monitor.dart'; // 导入系统资源监控器
 import 'package:nipaplay/utils/globals.dart' as globals;
 import 'dart:async'; // 导入dart:async库

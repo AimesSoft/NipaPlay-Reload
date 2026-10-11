@@ -1,9 +1,9 @@
 // lib/constants/danmaku/ass_kind.dart
 // 实现 弹幕数据 -> ASS 字幕文本
 
-import 'package:nipaplay/constants/danmaku/ass_kind.dart';
-import 'package:nipaplay/constants/danmaku/mode.dart';
-import 'package:nipaplay/models/danmaku/danmaku_item.dart';
+import 'package:nipaplay_core/constants/danmaku/ass_kind.dart';
+import 'package:nipaplay_core/constants/danmaku/mode.dart';
+import 'package:nipaplay_core/models/danmaku/danmaku_item.dart';
 import 'package:nipaplay/src/rust/api/ass_converter.dart' as rust_ass;
 import 'package:nipaplay/src/rust/frb_generated.dart';
 import 'package:nipaplay/utils/danmaku_xml_utils.dart';

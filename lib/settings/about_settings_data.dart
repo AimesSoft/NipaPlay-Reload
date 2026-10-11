@@ -1,4 +1,4 @@
-import 'package:nipaplay/constants/acknowledgements.dart';
+import 'package:nipaplay_core/constants/acknowledgements.dart';
 
 class AboutSettingsData {
   const AboutSettingsData._();

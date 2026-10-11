@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:nipaplay/services/jellyfin_transcode_manager.dart';
-import 'package:nipaplay/models/jellyfin_transcode_settings.dart';
+import 'package:nipaplay_core/models/jellyfin_transcode_settings.dart';
 import 'package:nipaplay/services/jellyfin_service.dart';
 
 /// Jellyfin转码设置Provider

@@ -3,16 +3,16 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'package:nipaplay/models/emby_model.dart';
-import 'package:nipaplay/models/media_server_playback.dart';
-import 'package:nipaplay/models/server_profile_model.dart';
+import 'package:nipaplay_core/models/media_server_playback.dart';
+import 'package:nipaplay_core/models/server_profile_model.dart';
 import 'package:path_provider/path_provider.dart'
     if (dart.library.html) 'package:nipaplay/utils/mock_path_provider.dart';
 import 'package:nipaplay/services/web_remote_access_service.dart';
 import 'dart:io' if (dart.library.io) 'dart:io';
 import 'debug_log_service.dart';
-import 'package:nipaplay/models/jellyfin_transcode_settings.dart';
+import 'package:nipaplay_core/models/jellyfin_transcode_settings.dart';
 import 'package:nipaplay/services/emby_transcode_manager.dart';
-import 'package:nipaplay/services/media_server_playback_client.dart';
+import 'package:nipaplay_core/services/media_server_playback_client.dart';
 import 'package:nipaplay/services/media_server_image_loader.dart';
 import 'media_server_service_base.dart';
 

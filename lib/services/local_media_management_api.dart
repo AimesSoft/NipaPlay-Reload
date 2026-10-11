@@ -6,7 +6,7 @@ import 'package:path/path.dart' as p;
 import 'package:shelf/shelf.dart';
 import 'package:shelf_router/shelf_router.dart';
 
-import 'package:nipaplay/constants/media_extensions.dart';
+import 'package:nipaplay_core/constants/media_extensions.dart';
 import 'package:nipaplay/models/watch_history_model.dart';
 import 'package:nipaplay/providers/service_provider.dart';
 import 'package:nipaplay/services/danmaku_matching_service.dart';
