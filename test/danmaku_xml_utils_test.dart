@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:nipaplay/utils/danmaku_xml_utils.dart';
+import 'package:nipaplay_core/utils/danmaku_xml_utils.dart';
 
 void main() {
   group('convertBilibiliXmlDanmakuToJson', () {

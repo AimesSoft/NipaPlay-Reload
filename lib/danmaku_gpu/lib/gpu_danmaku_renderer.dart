@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
-import 'package:nipaplay/danmaku_abstraction/danmaku_content_item.dart';
-import 'package:nipaplay/danmaku_abstraction/positioned_danmaku_item.dart';
+import 'package:nipaplay_core/danmaku_abstraction/danmaku_content_item.dart';
+import 'package:nipaplay_core/danmaku_abstraction/positioned_danmaku_item.dart';
 import 'gpu_danmaku_config.dart';
 import 'gpu_top_danmaku_renderer.dart';
 import 'gpu_bottom_danmaku_renderer.dart';

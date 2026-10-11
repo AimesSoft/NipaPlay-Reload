@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:nipaplay_core/constants/danmaku/mode.dart';
-import 'package:nipaplay/danmaku_abstraction/danmaku_content_item.dart';
-import 'package:nipaplay/danmaku_abstraction/positioned_danmaku_item.dart';
+import 'package:nipaplay_core/danmaku_abstraction/danmaku_content_item.dart';
+import 'package:nipaplay_core/danmaku_abstraction/positioned_danmaku_item.dart';
 import 'package:nipaplay/src/rust/api/next2.dart' as rust_next2;
 import 'package:nipaplay/src/rust/rust_init.dart';
 

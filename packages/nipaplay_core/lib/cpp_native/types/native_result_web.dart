@@ -4,7 +4,7 @@
 /// native_result.dart) without any `dart:ffi` / `package:ffi` imports,
 /// so it compiles on Web. On Web these types are never actually used.
 
-import 'native_types_web.dart';
+import 'package:nipaplay_core/cpp_native/types/native_types_web.dart';
 
 /// Unified error handling — Result<T> pattern
 class NativeResult<T> {

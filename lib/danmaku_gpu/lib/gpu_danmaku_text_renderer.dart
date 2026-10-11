@@ -1,7 +1,7 @@
 
 import 'package:flutter/material.dart';
 import 'package:nipaplay/danmaku_abstraction/danmaku_text_renderer.dart';
-import 'package:nipaplay/danmaku_abstraction/danmaku_content_item.dart';
+import 'package:nipaplay_core/danmaku_abstraction/danmaku_content_item.dart';
 import 'package:nipaplay/utils/globals.dart' as globals;
 import 'gpu_danmaku_item.dart';
 import 'dynamic_font_atlas.dart';

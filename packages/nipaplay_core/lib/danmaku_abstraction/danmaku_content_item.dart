@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'dart:ui' show Color;
 
 enum DanmakuItemType {
   scroll,
@@ -36,7 +36,7 @@ class DanmakuContentItem {
 
   DanmakuContentItem(
     this.text, {
-    this.color = Colors.white,
+    this.color = const Color(0xFFFFFFFF),
     this.type = DanmakuItemType.scroll,
     this.timeOffset = 0,
     this.trackIndex, // 🔥 新增：轨道编号

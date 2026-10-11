@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:nipaplay/danmaku_abstraction/positioned_danmaku_item.dart';
+import 'package:nipaplay_core/danmaku_abstraction/positioned_danmaku_item.dart';
 import 'danmaku_container.dart';
 import 'package:nipaplay/danmaku_gpu/lib/gpu_danmaku_overlay.dart';
 import 'package:nipaplay/danmaku_gpu/lib/gpu_danmaku_config.dart';

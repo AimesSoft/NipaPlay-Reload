@@ -1,7 +1,7 @@
 import 'dart:ffi';
 import 'package:ffi/ffi.dart' show Utf8;
 
-import 'native_types_io.dart';
+import 'package:nipaplay_core/cpp_native/types/native_types_io.dart';
 
 /// NpSubtitleEntry — 字幕条目结构
 /// 对应 C++ 侧的 NpSubtitleEntry

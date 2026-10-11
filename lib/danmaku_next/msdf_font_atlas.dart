@@ -4,7 +4,7 @@ import 'dart:typed_data';
 import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
-import 'package:nipaplay/danmaku_next/danmaku_next_log.dart';
+import 'package:nipaplay_core/danmaku_next/danmaku_next_log.dart';
 
 class MsdfFontAtlas {
   final double fontSize;

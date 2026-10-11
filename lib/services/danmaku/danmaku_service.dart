@@ -5,7 +5,7 @@
 import 'package:nipaplay_core/models/danmaku/danmaku_item.dart';
 import 'package:nipaplay_core/models/danmaku/style.dart';
 import 'package:nipaplay/services/dandanplay_service.dart';
-import 'package:nipaplay/utils/danmaku/style.dart';
+import 'package:nipaplay_core/utils/danmaku/style.dart';
 import 'package:nipaplay/utils/danmaku_ass_converter.dart';
 import 'package:nipaplay/utils/external_player_danmaku_ass.dart';
 import 'package:nipaplay/utils/globals.dart' as globals;

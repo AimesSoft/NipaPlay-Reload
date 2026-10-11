@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import '../../danmaku_abstraction/danmaku_content_item.dart';
+import 'package:nipaplay_core/danmaku_abstraction/danmaku_content_item.dart';
 
 /// GPU弹幕项目
 /// 

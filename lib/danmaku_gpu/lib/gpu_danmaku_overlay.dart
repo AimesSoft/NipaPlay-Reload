@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
-import 'package:nipaplay/danmaku_abstraction/positioned_danmaku_item.dart';
+import 'package:nipaplay_core/danmaku_abstraction/positioned_danmaku_item.dart';
 import 'package:provider/provider.dart';
 import '../../utils/video_player_state.dart';
-import 'package:nipaplay/danmaku_abstraction/danmaku_content_item.dart';
+import 'package:nipaplay_core/danmaku_abstraction/danmaku_content_item.dart';
 import '../../providers/developer_options_provider.dart';
 import 'gpu_danmaku_renderer.dart';
 import 'gpu_danmaku_config.dart';

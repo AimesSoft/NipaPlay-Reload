@@ -3,8 +3,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart' show compute;
 import 'dart:convert';
 import 'dart:typed_data';
-import 'package:nipaplay/cpp_native/nipaplay_native.dart';
-import 'package:nipaplay/utils/legacy_charset_decoder.dart';
+import 'package:nipaplay_core/cpp_native/nipaplay_native.dart';
+import 'package:nipaplay_core/utils/legacy_charset_decoder.dart';
 
 // [FIX-SUBTITLE-ISO] 顶层函数供 compute() 在 worker isolate 执行 C++ 字幕解析，
 // 避免在主线程同步解析大字幕文件（如 412KB/2431 条目 ASS）阻塞 53ms 导致掉帧。

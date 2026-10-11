@@ -1,7 +1,7 @@
 import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
-import 'package:nipaplay/cpp_native/bindings/similarity_engine.dart';
+import 'package:nipaplay_core/cpp_native/bindings/similarity_engine.dart';
 
 /// 通过 cpp_native (nipaplay_native DLL) 同步调用 C++ 相似度引擎。
 ///

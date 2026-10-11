@@ -1,0 +1,22 @@
+{
+  "batch": "batch-4-network-settings-foundation",
+  "moves": [
+    {"from": "lib/services/certificate_trust_service.dart"},
+    {"from": "lib/services/system_proxy_service.dart"},
+    {"from": "lib/services/http_overrides_io.dart"},
+    {"from": "lib/services/http_overrides_web.dart"},
+    {"from": "lib/services/http_client_initializer.dart"},
+    {"from": "lib/services/media_server_transport.dart"},
+    {"from": "lib/services/media_server_transport_client_io.dart"},
+    {"from": "lib/services/media_server_transport_client_stub.dart"},
+    {"from": "lib/services/nipaplay_lan_discovery.dart"},
+    {"from": "lib/services/nipaplay_server_router.dart"},
+    {"from": "lib/services/web_remote_access_service.dart"},
+    {"from": "lib/services/playback_position_store.dart"},
+    {"from": "lib/services/remote_control_settings.dart"},
+    {"from": "lib/services/media_server_device_id_service.dart"},
+    {"from": "lib/utils/network_settings.dart"},
+    {"from": "lib/utils/settings_storage.dart"},
+    {"from": "lib/models/shared_remote_library.dart"}
+  ]
+}

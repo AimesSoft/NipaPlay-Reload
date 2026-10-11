@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
-import 'package:nipaplay/danmaku_abstraction/positioned_danmaku_item.dart';
+import 'package:nipaplay_core/danmaku_abstraction/positioned_danmaku_item.dart';
 import 'gpu_danmaku_item.dart';
 import 'gpu_danmaku_config.dart';
 import 'dynamic_font_atlas.dart';
 import 'gpu_danmaku_text_renderer.dart';
-import '../../danmaku_abstraction/danmaku_content_item.dart';
+import 'package:nipaplay_core/danmaku_abstraction/danmaku_content_item.dart';
 
 /// GPU弹幕基础渲染器
 ///

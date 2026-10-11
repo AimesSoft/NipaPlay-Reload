@@ -1,4 +1,4 @@
-import 'danmaku_content_item.dart';
+import 'package:nipaplay_core/danmaku_abstraction/danmaku_content_item.dart';
 
 /// Mutable layout result for a danmaku item.
 ///

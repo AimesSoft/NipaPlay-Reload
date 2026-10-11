@@ -1,12 +1,12 @@
 import 'dart:ffi';
 import 'package:ffi/ffi.dart';
 
-import '../native_arena.dart';
-import '../native_library.dart';
-import '../types/native_types_io.dart';
-import '../types/native_result_io.dart';
-import '../types/native_layout_types.dart';
-import 'native_bindings.dart';
+import 'package:nipaplay_core/cpp_native/native_arena.dart';
+import 'package:nipaplay_core/cpp_native/native_library.dart';
+import 'package:nipaplay_core/cpp_native/types/native_types_io.dart';
+import 'package:nipaplay_core/cpp_native/types/native_result_io.dart';
+import 'package:nipaplay_core/cpp_native/types/native_layout_types.dart';
+import 'package:nipaplay_core/cpp_native/bindings/native_bindings.dart';
 
 /// 布局结果（Dart 侧，由 DanmakuLayoutEngine.frame 返回）
 class DanmakuLayoutResult {

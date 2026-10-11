@@ -1,10 +1,10 @@
 import 'dart:ffi';
 import 'package:ffi/ffi.dart';
-import '../native_arena.dart';
-import '../native_library.dart';
-import '../types/native_types_io.dart';
-import '../types/native_result_io.dart';
-import 'native_bindings.dart';
+import 'package:nipaplay_core/cpp_native/native_arena.dart';
+import 'package:nipaplay_core/cpp_native/native_library.dart';
+import 'package:nipaplay_core/cpp_native/types/native_types_io.dart';
+import 'package:nipaplay_core/cpp_native/types/native_result_io.dart';
+import 'package:nipaplay_core/cpp_native/bindings/native_bindings.dart';
 
 class ExampleCalculator implements Finalizable {
   NpHandle _handle;

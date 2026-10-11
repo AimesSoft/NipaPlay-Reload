@@ -10,3 +10,7 @@ dependencies:
   flutter:
     sdk: flutter
   path: ^1.9.0
+  xml: ^6.5.0
+  charset: ^2.0.1
+  cp949_codec: ^1.0.1
+  enough_convert: ^1.6.0

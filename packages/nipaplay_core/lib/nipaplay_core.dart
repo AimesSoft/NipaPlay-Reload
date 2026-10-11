@@ -56,3 +56,13 @@ export 'player/nipa_player.dart';
 export 'player_abstraction/player_data_models.dart';
 export 'player_abstraction/player_enums.dart';
 export 'utils/video_aspect_geometry.dart';
+
+// ---- Batch 3: danmaku parsing / cpp_native FFI bindings ----
+export 'cpp_native/nipaplay_native.dart';
+export 'danmaku_abstraction/danmaku_content_item.dart';
+export 'danmaku_abstraction/positioned_danmaku_item.dart';
+export 'constants/danmaku_color_presets.dart';
+export 'utils/danmaku_parser.dart';
+export 'utils/danmaku/style.dart';
+export 'utils/danmaku_xml_utils.dart';
+export 'utils/legacy_charset_decoder.dart';

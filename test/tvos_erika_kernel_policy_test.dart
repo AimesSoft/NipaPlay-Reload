@@ -2,7 +2,7 @@ import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:nipaplay/player_abstraction/player_factory.dart';
-import 'package:nipaplay/utils/danmaku/style.dart';
+import 'package:nipaplay_core/utils/danmaku/style.dart';
 
 void main() {
   test('tvOS exposes Erika as its only player kernel', () {

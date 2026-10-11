@@ -13,13 +13,13 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:nipaplay_core/constants/danmaku/mode.dart';
-import 'package:nipaplay/utils/danmaku/style.dart';
+import 'package:nipaplay_core/utils/danmaku/style.dart';
 // import 'package:fvp/mdk.dart';  // Commented out
 import '../player_abstraction/player_abstraction.dart'; // <-- NEW IMPORT
 import 'package:nipaplay_core/player_abstraction/hwdec_type.dart';
 import '../player_abstraction/player_factory.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:nipaplay/constants/danmaku_color_presets.dart';
+import 'package:nipaplay_core/constants/danmaku_color_presets.dart';
 import 'package:nipaplay_core/constants/settings_keys.dart';
 import 'package:window_manager/window_manager.dart';
 import 'package:flutter/services.dart';
@@ -99,9 +99,9 @@ import 'package:nipaplay/services/photo_library_service.dart';
 import 'package:provider/provider.dart';
 import '../providers/watch_history_provider.dart';
 import '../providers/settings_provider.dart';
-import 'danmaku_parser.dart';
-import 'danmaku_xml_utils.dart';
-import 'package:nipaplay/cpp_native/bindings/danmaku_parser.dart';
+import 'package:nipaplay_core/utils/danmaku_parser.dart';
+import 'package:nipaplay_core/utils/danmaku_xml_utils.dart';
+import 'package:nipaplay_core/cpp_native/bindings/danmaku_parser.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
 import 'package:screen_brightness/screen_brightness.dart'; // Added screen_brightness
 import 'package:nipaplay/themes/nipaplay/widgets/brightness_indicator.dart'; // Added import for BrightnessIndicator widget

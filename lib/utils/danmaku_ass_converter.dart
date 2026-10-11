@@ -6,7 +6,7 @@ import 'package:nipaplay_core/constants/danmaku/mode.dart';
 import 'package:nipaplay_core/models/danmaku/danmaku_item.dart';
 import 'package:nipaplay/src/rust/api/ass_converter.dart' as rust_ass;
 import 'package:nipaplay/src/rust/frb_generated.dart';
-import 'package:nipaplay/utils/danmaku_xml_utils.dart';
+import 'package:nipaplay_core/utils/danmaku_xml_utils.dart';
 
 /// ASS 字幕导出用的描边样式。
 /// 与 [DanmakuOutlineStyle] 一一对应，但保持本转换器零外部依赖以便单测。

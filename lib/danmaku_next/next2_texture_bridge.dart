@@ -1,10 +1,10 @@
 import 'dart:convert';
 
 import 'package:flutter/services.dart';
-import 'package:nipaplay/danmaku_abstraction/positioned_danmaku_item.dart';
+import 'package:nipaplay_core/danmaku_abstraction/positioned_danmaku_item.dart';
 import 'package:nipaplay/danmaku_next/next2_platform_support.dart';
 import 'next2_native_vsync.dart';
-import 'package:nipaplay/utils/danmaku/style.dart';
+import 'package:nipaplay_core/utils/danmaku/style.dart';
 
 class Next2TextureInfo {
   const Next2TextureInfo({

@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'dart:ui' show Color;
 
 class DanmakuColorPresets {
   DanmakuColorPresets._();

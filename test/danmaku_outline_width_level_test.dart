@@ -1,7 +1,7 @@
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:nipaplay/utils/danmaku/style.dart';
+import 'package:nipaplay_core/utils/danmaku/style.dart';
 
 void main() {
   group('normalizeDanmakuOutlineWidthLevel', () {

@@ -1,4 +1,4 @@
-import 'native_types_io.dart';
+import 'package:nipaplay_core/cpp_native/types/native_types_io.dart';
 
 /// 统一错误处理 — Result<T> 模式
 class NativeResult<T> {

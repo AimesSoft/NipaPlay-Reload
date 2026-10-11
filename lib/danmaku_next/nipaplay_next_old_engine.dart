@@ -5,10 +5,10 @@ import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart' show debugPrint, listEquals, kIsWeb, kReleaseMode;
 import 'package:nipaplay_core/constants/danmaku/mode.dart';
-import 'package:nipaplay/danmaku_abstraction/danmaku_content_item.dart';
-import 'package:nipaplay/danmaku_abstraction/positioned_danmaku_item.dart';
-import 'package:nipaplay/danmaku_next/danmaku_next_log.dart';
-import 'package:nipaplay/cpp_native/bindings/danmaku_layout.dart';
+import 'package:nipaplay_core/danmaku_abstraction/danmaku_content_item.dart';
+import 'package:nipaplay_core/danmaku_abstraction/positioned_danmaku_item.dart';
+import 'package:nipaplay_core/danmaku_next/danmaku_next_log.dart';
+import 'package:nipaplay_core/cpp_native/bindings/danmaku_layout.dart';
 
 const String _logTag = 'NipaPlayNextOldEngine';
 

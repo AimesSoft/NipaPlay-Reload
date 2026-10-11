@@ -6,7 +6,7 @@ import 'package:nipaplay/services/dandanplay_http_client.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:nipaplay_core/constants/danmaku/mode.dart';
 import 'package:nipaplay_core/constants/settings_keys.dart';
-import 'package:nipaplay/utils/danmaku_parser.dart';
+import 'package:nipaplay_core/utils/danmaku_parser.dart';
 import 'package:nipaplay/utils/network_settings.dart';
 import 'package:nipaplay/utils/media_filename_parser.dart';
 import 'package:nipaplay/services/file_picker_service.dart';

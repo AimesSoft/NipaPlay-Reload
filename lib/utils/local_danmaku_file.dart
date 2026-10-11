@@ -2,8 +2,8 @@ import 'dart:convert';
 
 import 'package:file_selector/file_selector.dart';
 import 'package:flutter/foundation.dart';
-import 'package:nipaplay/utils/danmaku_xml_utils.dart';
-import 'package:nipaplay/utils/legacy_charset_decoder.dart';
+import 'package:nipaplay_core/utils/danmaku_xml_utils.dart';
+import 'package:nipaplay_core/utils/legacy_charset_decoder.dart';
 
 List<XTypeGroup> get localDanmakuFileTypes => [
       const XTypeGroup(

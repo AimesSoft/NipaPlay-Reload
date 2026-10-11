@@ -27,7 +27,7 @@ import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
 
-import 'danmaku_next_log.dart';
+import 'package:nipaplay_core/danmaku_next/danmaku_next_log.dart';
 
 class MsdfTextRenderer {
   static const String _shaderAsset = 'assets/shaders/danmaku/msdf_text_next.frag';
