@@ -33,6 +33,7 @@ import 'capabilities/classic_playback_controls.dart';
 import 'capabilities/video_player_state_port.dart';
 import 'media/file_indexing.dart';
 import 'media_sources/login_dialog.dart';
+import 'accounts/login_dialog.dart';
 import 'settings/application_settings.dart';
 import 'harness_location.dart';
 import 'harness_hooks.dart';
@@ -58,6 +59,7 @@ final class NextRuntime extends ChangeNotifier {
               FailureCode.unavailable, 'The NipaPlay login window has closed.');
         return showMediaSourceLogin(source, stopped);
       };
+      core.accounts.requestLogin = showAccountLogin;
     });
     ApplicationSettings.erikaVisible = () =>
         PlayerFactory.isErikaKernelSupported &&

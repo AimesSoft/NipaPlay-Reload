@@ -16,6 +16,8 @@ import 'media/media_runtime.dart';
 import 'media/media_probe.dart';
 import 'media_sources/service.dart';
 import 'media_sources/capability.dart';
+import 'accounts/service.dart';
+import 'accounts/capability.dart';
 import 'media/metadata_provider.dart';
 import 'next_database.dart';
 import 'tasks/device_identity.dart';
@@ -66,6 +68,7 @@ final class NextCore {
   CredentialVault get credentialVault => credentials.vault;
   late final MediaRuntime media;
   late final MediaSourcesService mediaSources;
+  final accounts = AccountsService();
   late final DanmakuRuntime danmaku;
   late final SettingsRegistry settings;
   late final MeshRuntime mesh;
@@ -114,6 +117,7 @@ final class NextCore {
       downloads.executor,
       ...media.executors,
       ...mediaSourcesExecutors(mediaSources),
+      ...accountExecutors(accounts),
       ...danmaku.executors,
       hooks,
     ]);
@@ -121,6 +125,7 @@ final class NextCore {
     downloads.attach(engine, root);
     media.attach(engine);
     mediaSources.engine = engine;
+    accounts.attach(engine);
     danmaku.attach(engine);
     state = StateCapability(publicStateViews(
         media: media.service,
@@ -134,6 +139,7 @@ final class NextCore {
       downloads.capability,
       media.capability,
       MediaSourcesCapability(mediaSources),
+      AccountsCapability(accounts),
       danmaku.capability,
       SettingsCapability(settings),
       MeshCapability(mesh),
@@ -164,6 +170,7 @@ final class NextCore {
     await media.quiesce();
     await engine.close();
     await mediaSources.close();
+    await accounts.close();
     await downloads.quiesce(jobs);
     downloads.dispose();
     danmaku.close();

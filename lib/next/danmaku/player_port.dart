@@ -55,8 +55,10 @@ final class VideoDanmakuPort
             'origin': e.value['origin'] ?? 'auto_remote',
             if (e.value['provenance'] != null)
               'provenance': e.value['provenance'],
-            'platform': e.value['platform'] ?? 'unknown',
-            'platformVideoId': e.value['platformVideoId'],
+            'platform': e.value['platform'] ??
+                (e.key == 'dandanplay' ? 'dandanplay' : 'unknown'),
+            'platformVideoId': e.value['platformVideoId'] ??
+                (e.key == 'dandanplay' ? player.episodeId?.toString() : null),
             'filePath': e.value['filePath'],
             'bindingId': e.value['bindingId'],
             if (e.value['bindingRevision'] != null)

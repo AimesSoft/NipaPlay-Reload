@@ -245,20 +245,33 @@ final class _Fetch implements JobExecutor {
               'completedChunks': completed.toList()
             });
       } else {
+        final available = await service.availability(
+            video, cacheKey, c.job.input['bindingId'] as String?);
         await c.fail(
             Failure(
                 FailureCode.unavailable, '${video.sourceId}: ${error.message}'),
-            JobReceipt(
-                verification: VerificationLevel.acknowledged,
-                details: details(status: error.status.name)));
+            JobReceipt(verification: VerificationLevel.acknowledged, details: {
+              ...details(
+                  status: error.status.name,
+                  loaded: (available['player'] as JsonMap)['loaded'] == true),
+              'bindingId': c.job.input['bindingId'],
+              'acquisitionSucceeded': false,
+              'available': available
+            }));
       }
     } on Failure catch (error) {
       if (await control.stop(details())) return;
+      final available = await service.availability(
+          video, cacheKey, c.job.input['bindingId'] as String?);
       await c.fail(
           error,
-          JobReceipt(
-              verification: VerificationLevel.acknowledged,
-              details: details()));
+          JobReceipt(verification: VerificationLevel.acknowledged, details: {
+            ...details(
+                loaded: (available['player'] as JsonMap)['loaded'] == true),
+            'bindingId': c.job.input['bindingId'],
+            'acquisitionSucceeded': false,
+            'available': available
+          }));
     } finally {
       done.complete();
     }
