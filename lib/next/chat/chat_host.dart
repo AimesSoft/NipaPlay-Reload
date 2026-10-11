@@ -7,6 +7,7 @@ import '../agent_endpoint.dart';
 import '../harness_redaction.dart';
 import 'liveness.dart';
 import 'session_store.dart';
+import 'turn_process_store.dart';
 
 typedef ChatMessage = Map<String, dynamic>;
 
@@ -60,6 +61,13 @@ final class ChatHost {
   String? threadId, model, provider;
   ChatMessage? thread;
   Map<String, String> launchEnvironment = {};
+  late final processes = TurnProcessStore(
+      TurnProcessStore.fileFor(endpoint.seedRepository.parent, repository.path));
+
+  ChatMessage turnProcess(String id, String turnId) => {
+        'found': processes.read(id, turnId) != null,
+        'process': processes.read(id, turnId),
+      };
 
   bool get available => _process != null && !_closing && !_transportClosed;
   bool get busy =>
@@ -178,6 +186,7 @@ final class ChatHost {
         liveness.observe(message, DateTime.now());
         final wireMethod = decoded['method'] as String? ?? '';
         final wireParams = decoded['params'] as Map?;
+        processes.observe(message, 'harness_cli:chat:$sessionId', DateTime.now());
         if (wireMethod == 'turn/started' || wireMethod == 'turn/completed') {
           File('${endpoint.seedRepository.parent.path}/journal.jsonl')
               .writeAsStringSync(
@@ -497,7 +506,11 @@ final class ChatHost {
     if (_freshThreads[id] case final fresh?) return fresh;
     final result =
         await _request('thread/read', {'threadId': id, 'includeTurns': true});
-    return Map<String, dynamic>.from(result['thread'] as Map);
+    final history = Map<String, dynamic>.from(result['thread'] as Map);
+    for (final turn in (history['turns'] as List).cast<Map>()) {
+      processes.restore(id, turn);
+    }
+    return history;
   }
 
   /// Serialize with UI selection/start. Wait while the host has an active turn.

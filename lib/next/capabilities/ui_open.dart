@@ -14,19 +14,21 @@ final class UiOpenValue implements JsonEncodable {
 
 final class UiOpenAction extends Action<UiOpenValue, UiOpenValue> {
   const UiOpenAction(
-      {this.media, this.openPage, this.openDetail, this.openTarget, this.play});
+      {this.media, this.openPage, this.openDetail, this.openWork, this.openTarget, this.play});
   final MediaService Function()? media;
   final Future<bool> Function(String page)? openPage;
   final Future<bool> Function(int animeId)? openDetail;
+  final Future<bool?> Function(String workId)? openWork;
   final Future<JsonMap?> Function(JsonMap target)? openTarget;
   final Future<Outcome<JsonEncodable>> Function(JsonMap, Invocation)? play;
   @override
   ActionSpec get spec => const ActionSpec(
         id: 'ui.open',
-        title: 'Open a visible Classic target',
+        title: '打开页面',
         effect: Effect.write,
         description:
-            'Supply exactly one page, dialog, animeId, serverItem, sourceItem, libraryItem, aboutLink, system, entityId or path. '
+            'Supply exactly one page, dialog, animeId, serverItem, sourceItem, libraryItem, aboutLink, system, entityId, workId or path. '
+            'entityId/workId for a work opens Next details when Next is visible, otherwise follows Classic details. '
             'page=settings accepts subpage (defaults about); page=media_library accepts subpage for library section. '
             'Settings and dialogs use existing Classic forms; user enters secrets. Dialog connection forms add a server; no credentials accepted. '
             'serverItem={provider:jellyfin|emby,itemId} uses the currently active Classic server. animeId supports direct positive or custom negative Classic IDs. '
@@ -77,6 +79,7 @@ final class UiOpenAction extends Action<UiOpenValue, UiOpenValue> {
             'animeId'
           ]),
           'entityId': StringSchema(minLength: 1),
+          'workId': StringSchema(minLength: 1),
           'path': StringSchema(minLength: 1),
         }),
         output: ObjectSchema({
@@ -111,7 +114,7 @@ final class UiOpenAction extends Action<UiOpenValue, UiOpenValue> {
   Completed<UiOpenValue> _opened(JsonMap target, JsonMap actual) =>
       Completed(UiOpenValue({
         'opened': actual['matched'] != false,
-        'interface': actual['presentation'] == 'system' ? 'system' : 'classic',
+        'interface': actual['interface'] ?? (actual['presentation'] == 'system' ? 'system' : 'classic'),
         'target': target,
         'actual': actual,
         'reason': actual['matched'] == false ? '目标界面当前不可用。' : null,
@@ -152,6 +155,7 @@ final class UiOpenAction extends Action<UiOpenValue, UiOpenValue> {
       'aboutLink',
       'system',
       'entityId',
+      'workId',
       'path'
     ];
     if (keys.where(target.containsKey).length != 1 ||
@@ -215,8 +219,18 @@ final class UiOpenAction extends Action<UiOpenValue, UiOpenValue> {
           p.isAbsolute(local) ? await service.authorizedPath(local) : path,
           invocation);
     }
-    final id = target['entityId'] as String;
+    final id = (target['entityId'] ?? target['workId']) as String;
     final entity = await service.store.entity(id);
+    if (target.containsKey('workId') && entity['kind'] != 'work') {
+      throw const Failure(FailureCode.invalidInput, '请选择一部作品。');
+    }
+    if (entity['kind'] == 'work') {
+      final opened = await openWork?.call(id);
+      if (opened != null) {
+        return opened ? _opened(target, {'kind': 'work_detail', 'workId': id, 'interface': 'next'})
+            : _unavailable(target, '作品详情还没准备好。');
+      }
+    }
     if (entity['kind'] == 'file' || entity['kind'] == 'episode') {
       final rows = await service.store.database.rawQuery(
           entity['kind'] == 'file'
@@ -253,7 +267,7 @@ final class UiOpenAction extends Action<UiOpenValue, UiOpenValue> {
         [detailEntity['id']]);
     if (bindings.length != 1) {
       return _unavailable(target,
-          '该${entity['kind']}没有唯一已接受的弹弹play作品身份，Classic 作品详情仅支持弹弹play；Next 事实页尚未实现。');
+          '还没有找到这部作品的详情。');
     }
     final animeId = int.tryParse(bindings.single['external_id'] as String);
     if (animeId == null || animeId == 0) {

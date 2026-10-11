@@ -183,6 +183,7 @@ final class NextCore {
             File('${root.path}/journal.jsonl'), harnessLocation,
             changeHistory).view, followups.view]);
     uiData = UiDataService(media.service, engine, state, stateSources, root, credentialVault);
+    settings.register([uiData.openingSetting]);
     capabilities = List.unmodifiable(diskDeletion.protect([
       CredentialCapability(credentials),
       TaskCapability(engine),

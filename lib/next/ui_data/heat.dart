@@ -97,46 +97,35 @@ final class EpisodeHeat {
     return result;
   }
 
-  Future<List<String>> comments(List<(String, int?)> episodes) async {
-    final candidates = <({String text, int bucket, int episode})>[];
-    final density = <(int, int), int>{};
-    final seenTracks = <String>{};
-    for (var index = 0; index < episodes.length; index++) {
-      final (id, duration) = episodes[index];
+  Future<List<String>> comments(List<(String, int?)> episodes,
+      {Duration openingWindow = const Duration(minutes: 3), int maxEpisodes = 3}) async {
+    final result = <String>[], seen = <String>{}, seenTracks = <String>{};
+    for (final (id, duration) in episodes.take(maxEpisodes)) {
+      final candidates = <({String text, int time})>[];
       for (final track in await _tracks(id)) {
         final start = track['start'] as int, end = track['end'] as int?;
         if (!seenTracks.add(jsonEncode([track['cache_key'], start, end, track['offset_ms']]))) continue;
         for (final entry in await store.entries(track['cache_key'] as String)) {
           final time = entry.sourceTimeMs + (track['offset_ms'] as int) - start;
-          if (time < 0 || end != null && time >= end - start || duration != null && time >= duration) continue;
-          final bucket = duration == null ? time ~/ 30000 : math.min(59, time * 60 ~/ math.max(1, duration));
-          final key = (index, bucket);
-          density[key] = (density[key] ?? 0) + 1;
-          final text = entry.text.trim();
-          // Restrict to reactions that do not describe characters or events.
+          if (time < 0 || time >= openingWindow.inMilliseconds ||
+              end != null && time >= end - start || duration != null && time >= duration) continue;
+          final text = entry.text.replaceAll(RegExp(r'\s+'), ' ').trim();
           if (text.runes.length < 2 || text.runes.length > 18 ||
-              !RegExp(r'^[\p{Script=Han}a-zA-Z\s，。！？!~～]+$', unicode: true).hasMatch(text) ||
-              RegExp(r'(.)\1{3,}').hasMatch(text) ||
-              !RegExp(r'^(好看|太好看了|真好看|画面好美|好美|太美了|这画面真美|音乐好好听|音乐真好听|好听|这首歌好听|喜欢这个画风|这个画风好棒|制作好棒|制作真好|氛围真好|氛围感好棒|好治愈|太治愈了|笑死我了|哈哈哈|来了|前排|一起看)[，。！？!~～]*$').hasMatch(text)) continue;
-          candidates.add((text: text, bucket: bucket, episode: index));
+              RegExp(r'(?:https?://|www\.|(?:[a-z0-9-]+\.)+[a-z]{2,24}\b|\b(?:\d{1,3}\.){3}\d{1,3}\b)', caseSensitive: false).hasMatch(text) ||
+              RegExp(r'(.)\1{3,}', unicode: true).hasMatch(text) ||
+              RegExp(r'[\x00-\x1f\x7f]').hasMatch(text)) continue;
+          final normalized = text.replaceAll(RegExp(r'[^\p{L}\p{N}]', unicode: true), '').toLowerCase();
+          if (normalized.runes.length < 2 || RegExp(r'^(.{1,3})\1{2,}$', unicode: true).hasMatch(normalized)) continue;
+          candidates.add((text: text, time: time));
         }
       }
-    }
-    candidates.sort((a, b) {
-      final hot = density[(b.episode, b.bucket)]!.compareTo(density[(a.episode, a.bucket)]!);
-      if (hot != 0) return hot;
-      final ep = a.episode.compareTo(b.episode);
-      return ep != 0 ? ep : a.bucket.compareTo(b.bucket);
-    });
-    final seen = <String>{}, counts = <(int, int), int>{};
-    final result = <String>[];
-    for (final c in candidates) {
-      final key = (c.episode, c.bucket);
-      final normalized = c.text.replaceAll(RegExp(r'[\s，。！？!~～]'), '').toLowerCase();
-      if ((counts[key] ?? 0) >= 2 || !seen.add(normalized)) continue;
-      counts[key] = (counts[key] ?? 0) + 1;
-      result.add(c.text);
-      if (result.length == 6) break;
+      candidates.sort((a, b) => a.time.compareTo(b.time) != 0 ? a.time.compareTo(b.time) : a.text.compareTo(b.text));
+      for (final c in candidates) {
+        final normalized = c.text.replaceAll(RegExp(r'[^\p{L}\p{N}]', unicode: true), '').toLowerCase();
+        if (!seen.add(normalized)) continue;
+        result.add(c.text);
+        if (result.length == 6) return result;
+      }
     }
     return result;
   }

@@ -11,11 +11,28 @@ final class FollowupCapability implements Capability {
           _FollowupAction(service, 'cancel'),
           _FollowupAction(service, 'wake'),
           _FollowupAction(service, 'discover'),
+          _TurnProcessAction(service),
           for (final operation in ['main', 'new', 'list', 'switch'])
             _SessionAction(service, operation),
         ];
   @override
   final List<Action> actions;
+}
+
+final class _TurnProcessAction extends Action<_Json, _Json> {
+  const _TurnProcessAction(this.service);
+  final Followups service;
+  @override
+  ActionSpec get spec => const ActionSpec(
+      id: 'chat.turn.process', title: '回看工作过程', effect: Effect.read,
+      description: 'Read redacted command execution facts and available reasoning summaries by threadId and turnId. Retained across restart for the latest 60 turns in this harness, at most 4 MiB. found=false means no retained record; this does not reconstruct older commands.',
+      input: ObjectSchema({'threadId': StringSchema(minLength: 1), 'turnId': StringSchema(minLength: 1)}, required: ['threadId', 'turnId']),
+      output: ObjectSchema({}, additionalProperties: true));
+  @override
+  _Json decodeInput(JsonMap input) => _Json(input);
+  @override
+  Future<Outcome<_Json>> run(_Json input, Invocation invocation) async =>
+      Completed(_Json(await service.turnProcess(input.value['threadId'] as String, input.value['turnId'] as String)));
 }
 
 final class _SessionAction extends Action<_Json, _Json> {
