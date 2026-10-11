@@ -57,6 +57,7 @@
 
 - Flutter 一律使用 CI 版本 3.44.6：`~/development/flutter-3.44.6/bin/flutter`、`.../bin/dart`。PATH 中默认的 3.47.2 编译不了本项目。
 - analyze / test 一律加 `--no-pub`。
+- 报告前跑完整的 `flutter test --no-pub test/next`（另加改动涉及的 Classic 测试），不只跑自己新增的；数据库版本升级会让旧的迁移断言失败。
 - 本机设置了 `HTTP_PROXY`：测试里访问回环地址的 `HttpClient` 要设置 `findProxy = (_) => 'DIRECT'`。
 
 ## 报告格式
