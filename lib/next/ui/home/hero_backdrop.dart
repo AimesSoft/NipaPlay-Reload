@@ -3,6 +3,7 @@ import 'dart:math' as math;
 import 'package:flutter/widgets.dart';
 
 import '../theme/tokens.dart';
+import '../widgets/art_origin.dart';
 import '../widgets/artwork.dart';
 
 /// The home's backdrop.
@@ -15,6 +16,7 @@ import '../widgets/artwork.dart';
 class HeroBackdrop extends StatefulWidget {
   const HeroBackdrop({
     super.key,
+    required this.workId,
     required this.image,
     required this.tint,
     required this.staged,
@@ -23,6 +25,8 @@ class HeroBackdrop extends StatefulWidget {
     this.fade = NextMotion.crossfade,
   });
 
+  /// The work shown: opening it flies this picture into its detail page.
+  final String? workId;
   final String? image;
   final int? tint;
   final bool staged;
@@ -50,6 +54,9 @@ class _HeroBackdropState extends State<HeroBackdrop>
   late final Animation<double> _stageT =
       CurvedAnimation(parent: _stage, curve: NextMotion.ease);
   bool _reduced = false;
+
+  /// The visible part of the artwork (A's hero, or the whole page in B).
+  final _visible = GlobalKey(debugLabel: 'hero.visible');
 
   void _syncMotion() {
     final reduced = NextMotion.reduced(context);
@@ -121,7 +128,7 @@ class _HeroBackdropState extends State<HeroBackdrop>
       child: Stack(clipBehavior: Clip.none, children: [
         Positioned.fromRect(
           rect: b,
-          child: AnimatedSwitcher(
+          child: _origin(AnimatedSwitcher(
             duration: widget.fade,
             switchInCurve: Curves.easeInOut,
             switchOutCurve: Curves.easeInOut,
@@ -131,7 +138,7 @@ class _HeroBackdropState extends State<HeroBackdrop>
             child: KeyedSubtree(
               key: ValueKey(widget.image),
               child: widget.image == null
-                  ? _NoArt(tint: widget.tint)
+                  ? NoArtGlow(tint: widget.tint)
                   : NextImage(
                       widget.image,
                       tint: widget.tint,
@@ -139,7 +146,7 @@ class _HeroBackdropState extends State<HeroBackdrop>
                       fade: const Duration(milliseconds: 400),
                     ),
             ),
-          ),
+          )),
         ),
       ]),
     );
@@ -150,7 +157,11 @@ class _HeroBackdropState extends State<HeroBackdrop>
         opacity: ReverseAnimation(_stageT),
         child: Stack(children: [
           Positioned(
-              left: 0, right: 0, top: 0, height: hA, child: const _ShadeA()),
+              left: 0,
+              right: 0,
+              top: 0,
+              height: hA,
+              child: ShadeLayers(heroShadeA)),
           Positioned(
               left: 0,
               right: 0,
@@ -159,7 +170,7 @@ class _HeroBackdropState extends State<HeroBackdrop>
               child: const ColoredBox(color: NextColors.ink)),
         ]),
       ),
-      FadeTransition(opacity: _stageT, child: const _ShadeB()),
+      FadeTransition(opacity: _stageT, child: ShadeLayers(heroShadeB)),
     ]);
 
     return ClipRect(
@@ -193,6 +204,13 @@ class _HeroBackdropState extends State<HeroBackdrop>
               offset: Offset(0, -scroll),
               child: shades,
             ),
+            Positioned(
+              left: 0,
+              top: -scroll,
+              width: view.width,
+              height: visibleH,
+              child: SizedBox(key: _visible),
+            ),
           ]);
         },
       ),
@@ -201,72 +219,83 @@ class _HeroBackdropState extends State<HeroBackdrop>
 }
 
 const _ink = NextColors.ink;
-Color _a(double alpha) => _ink.withValues(alpha: alpha);
 
-class _ShadeA extends StatelessWidget {
-  const _ShadeA();
-
-  @override
-  Widget build(BuildContext context) => Stack(fit: StackFit.expand, children: [
-        DecoratedBox(
-            decoration: BoxDecoration(
-                gradient: LinearGradient(
-          colors: [_a(.94), _a(.78), _a(.24), _a(0)],
-          stops: const [0, .26, .56, .72],
-        ))),
-        DecoratedBox(
-            decoration: BoxDecoration(
-                gradient: LinearGradient(
-          begin: Alignment.bottomCenter,
-          end: Alignment.topCenter,
-          colors: [_ink, _a(.6), _a(0)],
-          stops: const [0, .22, .46],
-        ))),
-        DecoratedBox(
-            decoration: BoxDecoration(
-                gradient: LinearGradient(
-          begin: Alignment.topCenter,
-          end: Alignment.bottomCenter,
-          colors: [_a(.55), _a(0)],
-          stops: const [0, .18],
-        ))),
-      ]);
+extension on _HeroBackdropState {
+  Widget _origin(Widget child) {
+    final workId = widget.workId;
+    if (workId == null) return child;
+    return ArtOrigin(
+      workId: workId,
+      image: widget.image,
+      tint: widget.tint,
+      alignment: const Alignment(0, -0.3),
+      visible: _visible,
+      shade: widget.staged ? heroShadeB : heroShadeA,
+      lifts: false,
+      child: child,
+    );
+  }
 }
 
-class _ShadeB extends StatelessWidget {
-  const _ShadeB();
+Color _a(double alpha) => _ink.withValues(alpha: alpha);
+
+/// The concept's `.hero .shade` over A's hero, then the stage's over the
+/// whole page in B: left, bottom and top gradients. Kept as data so a
+/// shared element flight can blend them into the detail page's shade.
+final heroShadeA = <Gradient>[
+  LinearGradient(
+    colors: [_a(.94), _a(.78), _a(.24), _a(0)],
+    stops: const [0, .26, .56, .72],
+  ),
+  LinearGradient(
+    begin: Alignment.bottomCenter,
+    end: Alignment.topCenter,
+    colors: [_ink, _a(.6), _a(0)],
+    stops: const [0, .22, .46],
+  ),
+  LinearGradient(
+    begin: Alignment.topCenter,
+    end: Alignment.bottomCenter,
+    colors: [_a(.55), _a(0)],
+    stops: const [0, .18],
+  ),
+];
+
+final heroShadeB = <Gradient>[
+  LinearGradient(
+    colors: [_a(.95), _a(.86), _a(.4), _a(.25)],
+    stops: const [0, .38, .7, 1],
+  ),
+  LinearGradient(
+    begin: Alignment.bottomCenter,
+    end: Alignment.topCenter,
+    colors: [_ink, _a(.7), _a(0)],
+    stops: const [0, .3, .6],
+  ),
+  LinearGradient(
+    begin: Alignment.topCenter,
+    end: Alignment.bottomCenter,
+    colors: [_a(.6), _a(0)],
+    stops: const [0, .22],
+  ),
+];
+
+/// Gradients stacked over artwork.
+class ShadeLayers extends StatelessWidget {
+  const ShadeLayers(this.gradients, {super.key});
+  final List<Gradient> gradients;
 
   @override
   Widget build(BuildContext context) => Stack(fit: StackFit.expand, children: [
-        DecoratedBox(
-            decoration: BoxDecoration(
-                gradient: LinearGradient(
-          colors: [_a(.95), _a(.86), _a(.4), _a(.25)],
-          stops: const [0, .38, .7, 1],
-        ))),
-        DecoratedBox(
-            decoration: BoxDecoration(
-                gradient: LinearGradient(
-          begin: Alignment.bottomCenter,
-          end: Alignment.topCenter,
-          colors: [_ink, _a(.7), _a(0)],
-          stops: const [0, .3, .6],
-        ))),
-        DecoratedBox(
-            decoration: BoxDecoration(
-                gradient: LinearGradient(
-          begin: Alignment.topCenter,
-          end: Alignment.bottomCenter,
-          colors: [_a(.6), _a(0)],
-          stops: const [0, .22],
-        ))),
+        for (final g in gradients)
+          DecoratedBox(decoration: BoxDecoration(gradient: g)),
       ]);
 }
 
 /// No artwork yet: a quiet glow in the work's tint (or Nipa's crimson), so
 /// the hero still has depth.
-class _NoArt extends StatelessWidget {
-  const _NoArt({this.tint});
+class NoArtGlow extends StatelessWidget {
+  const NoArtGlow({super.key, this.tint});
   final int? tint;
 
   @override

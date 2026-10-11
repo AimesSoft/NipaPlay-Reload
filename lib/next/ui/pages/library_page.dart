@@ -90,6 +90,7 @@ class _LibraryPageState extends State<LibraryPage> {
                   final work = _works[i];
                   return LayoutBuilder(
                     builder: (context, c) => PosterCard(
+                      workId: work.workId,
                       image: work.artwork.poster,
                       tint: work.artwork.tint,
                       title: work.title,

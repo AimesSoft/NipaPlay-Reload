@@ -4,14 +4,14 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 
-import '../../ui_data/ui_data.dart';
 import '../data/services.dart';
 import '../dev/debug_extension.dart';
 import '../home/home_page.dart';
+import '../detail/work_route.dart';
 import '../pages/activity_page.dart';
-import '../pages/detail_slot.dart';
 import '../pages/library_page.dart';
 import '../theme/tokens.dart';
+import '../widgets/art_origin.dart';
 import '../widgets/grain.dart';
 import 'shell_controller.dart';
 import 'top_bar.dart';
@@ -50,16 +50,13 @@ class _NextShellState extends State<NextShell> {
   }
 
   Route<void> _route(RouteSettings settings) {
-    final Widget page = switch (settings.name) {
-      '/work' => DetailSlot(work: settings.arguments as UiWork),
-      _ => const _Sections(),
-    };
+    if (settings.name == '/work') return workRoute(settings);
     return PageRouteBuilder<void>(
       settings: settings,
-      opaque: settings.name != '/',
+      opaque: false,
       transitionDuration: NextMotion.page,
       reverseTransitionDuration: const Duration(milliseconds: 220),
-      pageBuilder: (context, _, __) => page,
+      pageBuilder: (context, _, __) => const _Sections(),
       transitionsBuilder: (context, animation, _, child) =>
           nextPageTransition(context, animation, child),
     );
@@ -113,9 +110,17 @@ class _NextShellState extends State<NextShell> {
                     Positioned.fill(
                       child: NotificationListener<ScrollNotification>(
                         onNotification: _onScroll,
-                        child: Navigator(
-                          key: _shell.navigatorKey,
-                          onGenerateRoute: _route,
+                        child: ArtOriginScope(
+                          origins: _shell.origins,
+                          child: Listener(
+                            behavior: HitTestBehavior.translucent,
+                            onPointerDown: (e) =>
+                                _shell.origins.press(e.localPosition),
+                            child: Navigator(
+                              key: _shell.navigatorKey,
+                              onGenerateRoute: _route,
+                            ),
+                          ),
                         ),
                       ),
                     ),

@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'dart:math' as math;
 
 import 'package:flutter/foundation.dart';
 
@@ -75,6 +76,21 @@ final class FakeWorld implements NextUiData, NextUiActions {
     'War & Politics': '战争',
   };
 
+  /// Second ratings, as the detail page shows them side by side.
+  static const _douban = {
+    'frieren': 9.2,
+    'bocchi': 9.5,
+    'kusuriya': 8.9,
+    'dungeon': 9.0,
+    'violet': 8.7,
+  };
+
+  /// Watch progress per episode number; the first unfinished one is next.
+  final _watched = <String, Map<int, double>>{
+    'frieren': {1: 1, 2: 1, 3: 0.49},
+    'dungeon': {for (var n = 1; n <= 13; n++) n: 1.0},
+  };
+
   static const _tints = {
     'frieren': 0xFF3C5A6E,
     'bocchi': 0xFF6E3C55,
@@ -110,6 +126,7 @@ final class FakeWorld implements NextUiData, NextUiActions {
       ratings: [
         if (m['rating'] != null)
           UiRating('TMDB', (m['rating'] as num).toDouble()),
+        if (_douban[key] case final douban?) UiRating('豆瓣', douban),
       ],
       artwork: UiArtwork(
         backdrop: file('backdrop'),
@@ -121,20 +138,82 @@ final class FakeWorld implements NextUiData, NextUiActions {
     );
   }
 
-  UiEpisode _episode(String key, int n, {double? progress}) {
+  UiEpisode _episode(String key, int n,
+      {double? progress, int season = 1, int? number}) {
     final eps = (_meta[key]['eps'] as List?)?.cast<Map<String, dynamic>>();
     final e = eps?.where((e) => e['n'] == n).firstOrNull;
     return UiEpisode(
       episodeId: 'fake:$key:$n',
       workId: 'fake:$key',
-      number: n,
-      season: 1,
+      number: number ?? n,
+      season: season,
       title: e?['name'] as String?,
       runtime: Duration(minutes: (e?['runtime'] as int?) ?? 24),
       still: e?['still'] == null ? null : '$dir/${e!['still']}',
       progress: progress,
-      playable: true,
+      heat: _heat(key, n),
+      // Episodes with a still stand for the ones on disk.
+      playable: eps == null || e != null,
     );
+  }
+
+  /// A plausible danmaku density: a few peaks over a quiet floor.
+  static List<double> _heat(String key, int n) {
+    final random = math.Random(key.hashCode * 31 + n);
+    final peaks = [
+      for (var i = 0; i < 4; i++)
+        (
+          random.nextDouble() * 60,
+          3 + random.nextDouble() * 6,
+          0.4 + random.nextDouble() * 0.6
+        )
+    ];
+    final raw = [
+      for (var i = 0; i < 60; i++)
+        0.15 +
+            0.1 * random.nextDouble() +
+            peaks.fold<double>(
+                0,
+                (sum, p) =>
+                    sum +
+                    p.$3 * math.exp(-math.pow(i - p.$1, 2) / (2 * p.$2 * p.$2)))
+    ];
+    final top = raw.reduce(math.max);
+    return [for (final v in raw) v / top];
+  }
+
+  /// All episodes, seasons split evenly where the sample has several.
+  List<UiEpisode> _episodesOf(String key) {
+    final m = _meta[key] as Map<String, dynamic>;
+    final total = (_overrides[key]?['episodes'] as int?) ??
+        (m['episodes'] as int?) ??
+        (m['eps'] as List?)?.length ??
+        1;
+    final seasons = (m['seasons'] as int?) ?? 1;
+    final perSeason = (total / seasons).ceil();
+    final watched = _watched[key] ?? _continued(key);
+    return [
+      for (var n = 1; n <= total; n++)
+        _episode(key, n,
+            progress: watched[n],
+            season: (n - 1) ~/ perSeason + 1,
+            number: (n - 1) % perSeason + 1)
+    ];
+  }
+
+  /// Where “继续观看” left off: every episode before it watched.
+  static Map<int, double> _continued(String key) {
+    final at = _continueAt[key];
+    if (at == null) return const {};
+    final (n, p) = at;
+    return {for (var i = 1; i < n; i++) i: 1.0, if (p != null) n: p};
+  }
+
+  /// The detail's view of a work: where watching continues.
+  UiWork _detailed(String key) {
+    final episodes = _episodesOf(key);
+    return sample(key,
+        next: episodes.where((e) => (e.progress ?? 0) < 1).firstOrNull);
   }
 
   UiShelfItem _continue(String key, int ep, double? progress, String caption,
@@ -193,14 +272,17 @@ final class FakeWorld implements NextUiData, NextUiActions {
   @override
   Future<UiWork?> work(String workId) async {
     final key = workId.startsWith('fake:') ? workId.substring(5) : workId;
-    return _meta.containsKey(key) ? sample(key) : null;
+    return _meta.containsKey(key) ? _detailed(key) : null;
   }
 
   @override
   Future<List<UiEpisode>> episodes(String workId, {int? season}) async {
     final key = workId.startsWith('fake:') ? workId.substring(5) : workId;
-    final count = (_meta[key]?['eps'] as List?)?.length ?? 12;
-    return [for (var n = 1; n <= count; n++) _episode(key, n)];
+    if (!_meta.containsKey(key)) return const [];
+    return [
+      for (final e in _episodesOf(key))
+        if (season == null || e.season == season) e
+    ];
   }
 
   @override

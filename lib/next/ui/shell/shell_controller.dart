@@ -5,7 +5,9 @@ import 'package:flutter/widgets.dart';
 import '../../ui_data/ui_data.dart';
 import '../conversation/conversation.dart';
 import '../data/services.dart';
+import '../detail/work_route.dart';
 import '../theme/tokens.dart';
+import '../widgets/art_origin.dart';
 
 enum NextSection { home, library, activity }
 
@@ -16,6 +18,8 @@ enum NextPopover { none, tasks, nipa }
 class NextShellController extends ChangeNotifier {
   NextShellController(this.services, {required this.onLeave}) {
     conversation = Conversation(port: services.chat, data: services.data);
+    origins.reference =
+        () => navigatorKey.currentContext?.findRenderObject() as RenderBox?;
     _tasks = services.data.tasks().listen((list) {
       tasks.value = list;
       if (activeTasks.isEmpty && popover == NextPopover.tasks) closePopover();
@@ -32,6 +36,9 @@ class NextShellController extends ChangeNotifier {
   final navigatorKey = GlobalKey<NavigatorState>(debugLabel: 'next');
   final askFocus = FocusNode(debugLabel: 'next.ask');
   final askText = TextEditingController();
+
+  /// Pictures a work can open from (shared element transitions).
+  final origins = ArtOrigins();
 
   /// The conversation side panel's slot (the panel itself is next stage).
   final panelOpen = ValueNotifier<bool>(false);
@@ -82,19 +89,35 @@ class NextShellController extends ChangeNotifier {
   }
 
   /// Slot for the conversation side panel (next stage): until it exists,
-  /// asking happens in the home's input bar.
-  void openPanel() {
+  /// asking happens in the home's input bar. [about] is the work the
+  /// conversation starts from (the detail page's “问 Nipa”).
+  void openPanel({UiWork? about}) {
     panelOpen.value = true;
     ask();
   }
 
   void closePanel() => panelOpen.value = false;
 
-  /// Slot for the detail page (next stage): a placeholder route for now.
+  /// The work's detail page. The picture it was opened from (under the
+  /// pointer, or the largest one on screen) grows into the page's backdrop;
+  /// under reduced motion the page only fades in.
   void openWork(UiWork work) {
+    final nav = navigatorKey.currentState;
+    if (nav == null) return;
     popover = NextPopover.none;
     notifyListeners();
-    navigatorKey.currentState?.pushNamed('/work', arguments: work);
+    final origin =
+        NextMotion.reduced(nav.context) ? null : origins.find(work.workId);
+    if (origin != null && origin.lifts) origin.hidden = true;
+    // The page draws its own bar scrim and title; the section's comes back
+    // with it.
+    final from = section, wasScrolled = scrolled.value;
+    scrolled.value = false;
+    nav
+        .pushNamed('/work', arguments: WorkRouteArgs(work, origin: origin))
+        .then((_) {
+      if (section == from) scrolled.value = wasScrolled;
+    });
   }
 
   void play(UiWork work, {UiEpisode? episode}) {

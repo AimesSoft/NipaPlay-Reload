@@ -8,6 +8,7 @@ import '../theme/tokens.dart';
 import '../widgets/buttons.dart';
 import '../widgets/glass.dart';
 import '../widgets/icons.dart';
+import '../widgets/menu.dart';
 import '../widgets/nipa_avatar.dart';
 import '../widgets/progress.dart';
 import 'shell_controller.dart';
@@ -328,64 +329,19 @@ class _NipaMenu extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final shell = NextShellScope.of(context);
-    return Glass(
-      blur: 30,
-      color: const Color(0xC2121218),
-      borderColor: const Color(0x1AFFFFFF),
-      radius: BorderRadius.circular(16),
-      shadows: const [
-        BoxShadow(
-            color: Color(0x80000000), blurRadius: 50, offset: Offset(0, 20))
-      ],
-      padding: const EdgeInsets.all(6),
-      child: SizedBox(
-        width: 208,
-        child: Column(mainAxisSize: MainAxisSize.min, children: [
-          _MenuItem(
-            label: '问 Nipa',
-            trailing: const KeyHint('⌘ K'),
-            onTap: shell.openPanel,
-          ),
-          _MenuItem(
-            label: '回到经典界面',
-            onTap: () {
-              shell.closePopover();
-              shell.onLeave();
-            },
-          ),
-        ]),
+    return MenuPanel(children: [
+      MenuItem(
+        label: '问 Nipa',
+        trailing: const KeyHint('⌘ K'),
+        onTap: shell.openPanel,
       ),
-    );
+      MenuItem(
+        label: '回到经典界面',
+        onTap: () {
+          shell.closePopover();
+          shell.onLeave();
+        },
+      ),
+    ]);
   }
-}
-
-class _MenuItem extends StatelessWidget {
-  const _MenuItem({required this.label, required this.onTap, this.trailing});
-  final String label;
-  final VoidCallback onTap;
-  final Widget? trailing;
-
-  @override
-  Widget build(BuildContext context) => Pressable(
-        onTap: onTap,
-        semanticLabel: label,
-        pressScale: 0.99,
-        builder: (context, hovered) => AnimatedContainer(
-          duration: const Duration(milliseconds: 120),
-          height: 38,
-          padding: const EdgeInsets.symmetric(horizontal: 12),
-          decoration: BoxDecoration(
-            color: hovered ? const Color(0x14FFFFFF) : const Color(0x00FFFFFF),
-            borderRadius: BorderRadius.circular(10),
-          ),
-          child: Row(children: [
-            Expanded(
-              child: Text(label,
-                  style: NextText.sans(13.5,
-                      color: hovered ? NextColors.paper : NextColors.p2)),
-            ),
-            if (trailing != null) trailing!,
-          ]),
-        ),
-      );
 }

@@ -4,19 +4,24 @@ import 'dart:developer';
 
 import 'package:flutter/gestures.dart';
 import 'package:flutter/rendering.dart';
+import 'package:flutter/scheduler.dart';
 import 'package:flutter/widgets.dart';
 import 'package:provider/provider.dart';
 import 'package:window_manager/window_manager.dart';
 
 import '../../ui_data/ui_data.dart';
 import '../cards/card_views.dart';
+import '../detail/detail_page.dart';
+import '../detail/episodes.dart';
 import '../home/stage.dart';
 import '../shell/next_ui_preference.dart';
+import '../pages/library_page.dart';
 import '../shell/shell_controller.dart';
 import '../shell/window_chrome.dart';
 import '../theme/tokens.dart';
 import '../widgets/buttons.dart';
 import '../widgets/cards.dart';
+import '../widgets/menu.dart';
 import '../widgets/nipa_avatar.dart';
 import '../widgets/shelf.dart';
 import 'dev_services.dart';
@@ -32,14 +37,23 @@ import 'fake_world.dart';
 /// - `home` `state=A|B|C` [`text=`]: A leaves the stage; B says [text]
 ///   (default “来点轻松的”); C wakes Nipa (scripted chat only).
 /// - `fill` `text=`: put text in the input bar without sending; `send`.
-/// - `hover` `index=N` [`area=stage|shelf|avatar`]: a synthetic mouse hovers the
-///   N-th visible card (no OS pointer moves); `index=-1` leaves.
+/// - `hover` `index=N` [`area=stage|shelf|avatar|episodes|library`]: a
+///   synthetic mouse hovers the N-th visible card (no OS pointer moves);
+///   `index=-1` leaves.
+/// - `tap` `index=N` `area=…|hero|menu`: the synthetic mouse clicks it
+///   (`hero`: the hero's “详情”; `menu`: an open menu's items), e.g. to open
+///   a work from where it is shown.
 /// - `section` `name=home|library|activity`; `open` / `play` [`workId=`]
 ///   (default: the hero); `escape`.
+/// - `detail` [`scroll=px`] [`season=N`] [`menu=true|false`]
+///   [`seasons=true|false`] [`overview=true|false`]: the open detail page.
+/// - `dilate` `factor=`: slow animations down (1 is normal), to capture a
+///   transition mid-way.
 /// - `popover` `which=tasks|nipa|none`; `panel` `open=true|false`.
 /// - `reduce` `on=true|false|system`.
 /// - `interface` `next=true|false`: “使用 Next 界面” on or off.
-/// - `window` [`size=WxH`] [`maximize=true|false`] [`fullscreen=true|false`]:
+/// - `window` [`size=WxH` | `width=` `height=`] [`maximize=true|false`]
+///   [`fullscreen=true|false`]:
 ///   resize, zoom, or enter / leave full screen without activating it.
 /// - `chrome`: where the top bar's items are and where the traffic lights
 ///   end.
@@ -87,6 +101,9 @@ abstract final class NextUiDebug {
         if (p['size'] case final size?) {
           final [w, h] = size.split('x').map(double.parse).toList();
           await windowManager.setSize(Size(w, h));
+        } else if (p['width'] != null || p['height'] != null) {
+          await windowManager.setSize(Size(double.parse(p['width'] ?? '1440'),
+              double.parse(p['height'] ?? '900')));
         }
         if (p['maximize'] case final on?) {
           await (on == 'true'
@@ -142,6 +159,32 @@ abstract final class NextUiDebug {
       case 'hover':
         await _settle();
         return _hover(int.parse(p['index'] ?? '0'), p['area']);
+      case 'tap':
+        await _settle();
+        final result = _hover(int.parse(p['index'] ?? '0'), p['area']);
+        _click(result['at'] as List<int>);
+        await _settle();
+        return {...result, ..._status(shell)};
+      case 'detail':
+        final page = _detail();
+        if (page == null) throw StateError('No detail page is showing');
+        if (p['season'] case final season?) {
+          page.debugSeason(int.tryParse(season));
+        }
+        if (p['menu'] case final menu?) page.debugMenu(menu == 'true');
+        if (p['overview'] case final open?) page.debugOverview(open == 'true');
+        if (p['seasons'] case final open?) page.debugSeasons(open == 'true');
+        if (p['scroll'] case final to?) {
+          final scroll = page.debugScroll;
+          await scroll.animateTo(
+              double.parse(to).clamp(0, scroll.position.maxScrollExtent),
+              duration: const Duration(milliseconds: 400),
+              curve: NextMotion.ease);
+        }
+        await _settle();
+        return {...page.debugStatus(), ..._status(shell)};
+      case 'dilate':
+        timeDilation = double.parse(p['factor'] ?? '1');
       case 'section':
         shell.go(NextSection.values.byName(p['name'] ?? 'home'));
       case 'open':
@@ -210,26 +253,53 @@ abstract final class NextUiDebug {
     };
   }
 
-  /// Visible work cards in paint order, optionally under the stage or a
-  /// shelf only.
+  /// The detail page on top, if one is showing.
+  static WorkDetailDebug? _detail() {
+    WorkDetailDebug? found;
+    void visit(Element element) {
+      final widget = element.widget;
+      if (widget is TickerMode && !widget.enabled) return;
+      if (element is StatefulElement && element.state is WorkDetailDebug) {
+        found = element.state as WorkDetailDebug;
+      }
+      element.visitChildren(visit);
+    }
+
+    final context = _context;
+    if (context == null || !context.mounted) return null;
+    (context as Element).visitChildren(visit);
+    return found;
+  }
+
+  /// Visible work cards in paint order, optionally under the stage, a
+  /// shelf, the detail's episodes or the library only.
   static List<RenderBox> _cards(String? area) {
     final found = <RenderBox>[];
+    final scope = switch (area) {
+      'stage' => ConverseStage,
+      'shelf' => Shelf,
+      'episodes' => EpisodeRow,
+      'library' => LibraryPage,
+      _ => null,
+    };
     void visit(Element element) {
       final widget = element.widget;
       if (widget is Offstage && widget.offstage) return;
-      final wanted = area == 'avatar'
-          ? widget is NipaAvatar
-          : (widget is WideCard ||
-              widget is PosterCard ||
-              widget is WorkRowCard);
+      if (widget is TickerMode && !widget.enabled) return;
+      final wanted = switch (area) {
+        'avatar' => widget is NipaAvatar,
+        'hero' => widget is NextButton && widget.label == '详情',
+        'menu' => widget is MenuItem,
+        _ =>
+          widget is WideCard || widget is PosterCard || widget is WorkRowCard,
+      };
       if (wanted) {
         final box = element.findRenderObject();
         if (box is RenderBox && box.attached && box.hasSize) {
-          var inArea = area == null || area == 'avatar';
+          var inArea = scope == null;
           if (!inArea) {
             element.visitAncestorElements((a) {
-              if ((area == 'stage' && a.widget is ConverseStage) ||
-                  (area == 'shelf' && a.widget is Shelf)) {
+              if (a.widget.runtimeType == scope) {
                 inArea = true;
                 return false;
               }
@@ -289,6 +359,24 @@ abstract final class NextUiDebug {
 
   static Offset _center(RenderBox box) =>
       box.localToGlobal(box.size.center(Offset.zero));
+
+  /// A primary click of the synthetic mouse where it hovers.
+  static void _click(List<int> at) {
+    final binding = GestureBinding.instance;
+    final viewId = View.of(_context!).viewId;
+    final position = Offset(at[0].toDouble(), at[1].toDouble());
+    binding.handlePointerEvent(PointerDownEvent(
+        viewId: viewId,
+        device: _device,
+        kind: PointerDeviceKind.mouse,
+        buttons: kPrimaryButton,
+        position: position));
+    binding.handlePointerEvent(PointerUpEvent(
+        viewId: viewId,
+        device: _device,
+        kind: PointerDeviceKind.mouse,
+        position: position));
+  }
 
   static Map<String, Object?> _hover(int index, String? area) {
     final binding = GestureBinding.instance;
