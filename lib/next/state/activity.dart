@@ -73,7 +73,7 @@ final class ActivityView {
       for (final line in await journal.readAsLines()) {
         if (line.isEmpty) continue;
         final record = decodeMediaJson(line);
-        invocations[record['invocationId'] as String] = record;
+        if (record['invocationId'] case final String id) invocations[id] = record;
       }
     } else {
       warnings.add('activity.journal_absent');
@@ -121,6 +121,18 @@ final class ActivityView {
       for (final row in await db.query('jobs'))
         row['job_id'] as String: decodeMediaJson(row['snapshot'])
     };
+    for (final row in await db.query('followup_events', orderBy: 'sequence')) {
+      final facts = decodeMediaJson(row['facts']);
+      add('followup:${row['sequence']}', row['at'] as String,
+          row['type'] as String, '${facts['title']} · ${facts['state']}',
+          'followup_events', facts,
+          origin: row['origin'] as String,
+          actor: row['type'] == 'followup.registered' || row['type'] == 'followup.cancelled'
+              ? null : 'system',
+          invocationId: row['invocation_id'] as String?,
+          jobId: (facts['condition'] as Map)['jobId'] as String?,
+          subjectId: row['followup_id'] as String);
+    }
     final origins = {
       for (final row in await db.query('task_origins'))
         row['job_id'] as String: row

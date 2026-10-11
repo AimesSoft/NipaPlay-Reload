@@ -147,6 +147,7 @@ final class NextRuntime extends ChangeNotifier {
   String? chatError;
   Future<void> closeChat() async {
     await _operations;
+    await ServiceProvider.nextCore.followups.attach(null, reason: 'Chat host was closed.');
     await chat?.close();
     chat = null;
   }
@@ -254,6 +255,8 @@ final class NextRuntime extends ChangeNotifier {
       if (enabled && repository.path == repositoryPath) return;
     }
     await _detachHooks();
+    await ServiceProvider.nextCore.followups.attach(null,
+        reason: enabled ? 'Chat host is restarting for the active harness.' : 'Next chat host is disabled.');
     await chat?.close();
     chat = null;
     chatError = null;
@@ -267,10 +270,12 @@ final class NextRuntime extends ChangeNotifier {
         if (kDebugMode && LabProfile.active) recordDebugChat(host);
         try {
           await host.start();
+          await ServiceProvider.nextCore.followups.attach(host);
         } catch (error) {
           chatError = redactHarnessText(error.toString());
           await host.close();
           chat = null;
+          await ServiceProvider.nextCore.followups.attach(null, reason: chatError);
         }
       }
     } else {
@@ -363,6 +368,7 @@ final class NextRuntime extends ChangeNotifier {
     _location?.removeListener(_queueEndpointUpdate);
     _operations = _operations.then((_) async {
       await _detachHooks();
+      await ServiceProvider.nextCore.followups.attach(null, reason: 'NipaPlay is shutting down.');
       await chat?.close();
       await _endpoint.stop();
     });

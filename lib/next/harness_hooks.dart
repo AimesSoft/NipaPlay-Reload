@@ -12,6 +12,7 @@ final class HarnessHooks implements JobExecutor {
   HarnessHooks({this.timeout = const Duration(seconds: 60)});
   final Duration timeout;
   late TaskEngine engine;
+  Future<void> Function(String event, String objectId, JsonMap payload)? observeEvent;
   Directory? _repository;
   File? _credentialFile;
   int _generation = 0;
@@ -57,6 +58,13 @@ final class HarnessHooks implements JobExecutor {
     _submissions = done.future;
     await previous;
     try {
+      final payload = redactHarnessJson({
+        'event': event,
+        'objectId': objectId,
+        'occurredAt': DateTime.now().toUtc().toIso8601String(),
+        'data': data,
+      }) as JsonMap;
+      await observeEvent?.call(event, objectId, payload);
       final repository = _repository;
       final credentialFile = _credentialFile;
       if (repository == null || credentialFile == null) return null;
@@ -80,12 +88,6 @@ final class HarnessHooks implements JobExecutor {
           return job;
         }
       }
-      final payload = redactHarnessJson({
-        'event': event,
-        'objectId': objectId,
-        'occurredAt': DateTime.now().toUtc().toIso8601String(),
-        'data': data,
-      }) as JsonMap;
       return engine.submit(type: type, title: 'Hook $event', input: {
         ...payload,
         'eventKey': eventKey,

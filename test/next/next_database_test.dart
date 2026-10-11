@@ -10,6 +10,7 @@ import 'package:nipaplay/next/media/primitives_migration.dart';
 import 'package:nipaplay/next/media/identity_store.dart';
 import 'package:nipaplay/next/media/metadata_edit_migration.dart';
 import 'package:nipaplay/next/media/classic_match_migration.dart';
+import 'package:nipaplay/next/state/change_history.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
 void main() {
@@ -57,7 +58,7 @@ void main() {
     expect(((metadata['provenance'] as Map)['title'] as Map)['invocationId'],
         'legacy-invocation');
   });
-  for (final oldVersion in [0, 1, 2, 3, 4, 5, 6, 7, 8]) {
+  for (final oldVersion in [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]) {
     test('database v$oldVersion upgrades to the complete shared schema',
         () async {
       final root = await Directory.systemTemp.createTemp('next-migration-');
@@ -70,7 +71,8 @@ void main() {
         migrateMediaPrimitives,
         migrateMetadataEdits,
         migrateDanmakuImports,
-        migrateClassicMatches
+        migrateClassicMatches,
+        migrateChangeHistory,
       ];
       if (oldVersion > 0) {
         final old =
@@ -87,9 +89,12 @@ void main() {
       }
       var db = await openNextDatabase(root, factory: databaseFactoryFfi);
       addTearDown(() => db.close());
-      expect(await db.getVersion(), 9);
+      expect(await db.getVersion(), 10);
       for (final table in [
         'body_changes',
+        'followups',
+        'followup_events',
+        'followup_hook_events',
         'task_origins',
         'jobs',
         'media_entities',
