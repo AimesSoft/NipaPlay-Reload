@@ -31,6 +31,7 @@ class BangumiService {
   final Map<(int, bool), Future<BangumiAnime>> _detailRequests = {};
   final Map<int, DateTime> _tagRefreshAttempts = {};
   final Map<int, Object> _pendingDetailEdits = {};
+  Future<BangumiAnime> Function(BangumiAnime)? metadataView;
 
   void _rememberDetail(int id, BangumiAnime anime, DateTime time) {
     _detailsCache.remove(id);
@@ -384,7 +385,8 @@ class BangumiService {
     final pending = _detailRequests[key] ??=
         _getAnimeDetails(animeId, forceRefresh: forceRefresh);
     try {
-      return await pending;
+      final anime = await pending;
+      return metadataView == null ? anime : await metadataView!(anime);
     } finally {
       if (identical(_detailRequests[key], pending)) _detailRequests.remove(key);
     }

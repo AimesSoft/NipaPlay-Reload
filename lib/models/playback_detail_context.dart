@@ -1,5 +1,6 @@
 import 'media_server_playback.dart';
 import 'watch_history_model.dart';
+import 'bangumi_model.dart';
 
 enum PlaybackSourceKind {
   localLibrary,
@@ -152,6 +153,7 @@ class PlaybackDetailContext {
     this.summary,
     this.imageUrl,
     this.animeId,
+    this.metadataView,
   });
 
   final PlaybackSourceKind sourceKind;
@@ -164,6 +166,7 @@ class PlaybackDetailContext {
   final int? animeId;
   final bool isIdentified;
   final PlaybackDetailEpisodeLoader episodeLoader;
+  final Future<BangumiAnime> Function(BangumiAnime)? metadataView;
 
   String get displayTitle => isIdentified ? title : '未识别';
 
@@ -191,6 +194,7 @@ class PlaybackDetailContext {
       animeId: animeId,
       isIdentified: true,
       episodeLoader: episodeLoader,
+      metadataView: metadataView,
     );
   }
 }

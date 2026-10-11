@@ -8,6 +8,7 @@ import '../danmaku/capability.dart' show importProvenanceSchema;
 import '../capabilities/media_models.dart';
 import '../media/identity_store.dart';
 import '../media/media_service.dart';
+import '../media/metadata_snapshot.dart';
 import '../mesh/runtime.dart';
 import '../settings/denylist.dart';
 import '../settings/registry.dart';
@@ -276,6 +277,7 @@ List<StateView> publicStateViews(
         description: 'Merged field values and provenance.'),
     'bindings': ArraySchema(_bindingFields,
         description: 'Public identity bindings for this entity.'),
+    'metadataView': metadataViewSchema,
   });
   Future<JsonMap> entity(JsonMap row) async {
     final attrs = decodeMediaJson(row['attributes']);
@@ -287,6 +289,7 @@ List<StateView> publicStateViews(
       ...attrs,
       'title': (metadata['fields'] as Map)['title'] ?? attrs['title'],
       'bindings': await bindings(row['id'] as String),
+      'metadataView': metadata,
       'metadata': [
         for (final field in values.keys)
           {

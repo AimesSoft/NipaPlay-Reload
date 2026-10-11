@@ -3,6 +3,7 @@ import 'package:nipa_harness/nipa_harness.dart';
 import 'identity_store.dart';
 import 'media_service.dart';
 import 'metadata_provider.dart';
+import 'metadata_snapshot.dart';
 
 const _text = StringSchema(minLength: 1);
 const _refSchema = ObjectSchema({
@@ -150,6 +151,7 @@ const _entitySchema = ObjectSchema({
   'revision': IntegerSchema(),
   'bindingRevision': IntegerSchema(nullable: true),
   'metadata': ArraySchema(_fieldSchema),
+  'metadataView': metadataViewSchema,
   'bindings': ArraySchema(_bindingSchema),
   'locations': ArraySchema(_locationSchema),
   'episodes': ArraySchema(_fileEpisodeSchema),
@@ -200,10 +202,12 @@ const _libraryWorkSchema = ObjectSchema({
   'workId': StringSchema(),
   'title': StringSchema(),
   'metadata': ArraySchema(_fieldSchema),
+  'metadataView': metadataViewSchema,
   'releases': ArraySchema(ObjectSchema({
     'releaseId': StringSchema(),
     'title': StringSchema(),
     'metadata': ArraySchema(_fieldSchema),
+    'metadataView': metadataViewSchema,
     'episodes': ArraySchema(ObjectSchema({
       'episodeId': StringSchema(),
       'title': StringSchema(),
@@ -211,6 +215,7 @@ const _libraryWorkSchema = ObjectSchema({
       'order': StringSchema(),
       'type': StringSchema(),
       'metadata': ArraySchema(_fieldSchema),
+      'metadataView': metadataViewSchema,
       'files': ArraySchema(ObjectSchema({
         'fileId': StringSchema(),
         'locator': StringSchema(),
@@ -394,7 +399,7 @@ final _specs = [
       ])),
   _spec(
       'media.identity.bind_batch',
-      'Atomically accept explicit work, release, episode or file bindings. Files require entityId or path and episodeRefs; TMDB TV requires releaseRef. Validates catalogue membership and existing identity conflicts. Optional workId/releaseId/localEpisodeIds explicitly connect another source to local entities. Preserves reason/evidence; host derives boundBy. requestId is durable and cannot be reused with different input. No filename interpretation or release cascade.',
+      'Atomically accept explicit bindings. Use ref + existing entityId + kind for any external work/release/episode, with no provider fetch or cascade. New provider namespaces must be HTTPS origins; host canonicalizes case, default port and trailing slash. Or use workRef/releaseRef/episodeRefs for built-in catalogue validation and file links. Preserves reason/evidence; host derives boundBy. requestId is durable and cannot be reused with different input.',
       Effect.write,
       const ObjectSchema({
         'requestId': _text,
@@ -406,6 +411,7 @@ final _specs = [
           'releaseId': _text,
           'localEpisodeIds': ArraySchema(_text),
           'workRef': _refSchema,
+          'ref': _refSchema,
           'releaseRef': _refSchema,
           'episodeRefs': ArraySchema(_refSchema),
           'reason': _text,
@@ -416,7 +422,6 @@ final _specs = [
           'endMs': IntegerSchema(minimum: 0)
         }, required: [
           'kind',
-          'workRef',
           'reason'
         ]))
       }, required: [
@@ -542,8 +547,44 @@ final _specs = [
         'results'
       ])),
   _spec(
+      'media.metadata.import_batch',
+      'Append structured snapshots for accepted external identities, including arbitrary HTTPS origin namespaces. fields.rating has value/max/count and optional label; the host records its source from ref, receipt time, actor, origin and invocationId. Other JSON fields are retained. fetchedAt is optional source-reported acquisition time; host receipt time controls freshness. Atomic, durable requestId; no network or identity changes.',
+      Effect.write,
+      const ObjectSchema({
+        'requestId': _text,
+        'entries': ArraySchema(ObjectSchema({
+          'ref': _refSchema,
+          'language': _text,
+          'fields': metadataFieldsSchema,
+          'fetchedAt': _text,
+          'url': _text,
+        }, required: [
+          'ref',
+          'language',
+          'fields'
+        ])),
+      }, required: [
+        'requestId',
+        'entries'
+      ]),
+      const ObjectSchema({
+        'entries': ArraySchema(ObjectSchema({}, additionalProperties: true))
+      }, required: [
+        'entries'
+      ])),
+  _spec(
+      'media.metadata.snapshots',
+      'Read all retained source snapshots and host provenance for an entity. Work/release use the same work family; episode/file remain local. Returns original records, including unknown fields and historical snapshots. Does not fetch or write.',
+      Effect.read,
+      const ObjectSchema({'entityId': _text}, required: ['entityId']),
+      const ObjectSchema({
+        'snapshots': ArraySchema(ObjectSchema({}, additionalProperties: true))
+      }, required: [
+        'snapshots'
+      ])),
+  _spec(
       'media.metadata.override',
-      'Edit one metadata field. The host records actor, origin and invocationId. Persistent overrides survive source refresh; corrections expire on newer source snapshots; clear removes the edit. Missing entities return not_found.',
+      'Edit one metadata field. Work/release edits share the work view: latest active edit wins, and clear removes this field’s active edits across the work/release family while retaining the audit log. Episode/file edits remain local. The host records actor, origin and invocationId. Persistent overrides survive refresh; corrections expire on newer snapshots in the same view. Missing entities return not_found.',
       Effect.write,
       const ObjectSchema({
         'entityId': _text,
@@ -720,6 +761,13 @@ final class _MediaAction extends Action<_JsonValue, _JsonValue> {
         result = {
           'identity': await _identity(store, json['entityId'] as String)
         };
+      case 'media.metadata.import_batch':
+        result =
+            await service.mutate(() => store.importSnapshots(json, invocation));
+      case 'media.metadata.snapshots':
+        result = {
+          'snapshots': await store.metadataSnapshots(json['entityId'] as String)
+        };
       case 'media.metadata.refresh':
         final ref =
             ExternalRef.fromJson(Map<String, Object?>.from(json['ref'] as Map));
@@ -759,9 +807,10 @@ List<JsonMap> _fields(JsonMap metadata) {
         'language': (provenance[field] as Map)['language'],
         'fetchedAt': (provenance[field] as Map)['fetchedAt'],
         'invocationId': (provenance[field] as Map)['invocationId'],
-        'actor': (provenance[field] as Map)['origin'] == null
-            ? null
-            : (provenance[field] as Map)['provider'],
+        'actor': (provenance[field] as Map)['actor'] ??
+            ((provenance[field] as Map)['mode'] == null
+                ? null
+                : (provenance[field] as Map)['provider']),
         'origin': (provenance[field] as Map)['origin'],
         'mode': (provenance[field] as Map)['mode']
       }
@@ -781,6 +830,7 @@ Future<JsonMap> _identity(IdentityStore store, String id) async {
     'revision': entity['revision'],
     'bindingRevision': (entity['attributes'] as JsonMap)['bindingRevision'],
     'metadata': _fields(value['metadata'] as JsonMap),
+    'metadataView': value['metadata'],
     'bindings': [
       for (final row in value['bindings'] as List<JsonMap>)
         {
@@ -844,12 +894,14 @@ JsonMap _work(JsonMap work) => {
       'workId': work['workId'],
       'title': work['title'],
       'metadata': _fields(work['metadata'] as JsonMap),
+      'metadataView': work['metadata'],
       'releases': [
         for (final release in work['releases'] as List<JsonMap>)
           {
             'releaseId': release['id'],
             'title': _displayTitle(release),
             'metadata': _fields(release['metadata'] as JsonMap),
+            'metadataView': release['metadata'],
             'episodes': [
               for (final episode in release['episodes'] as List<JsonMap>)
                 {
@@ -859,6 +911,7 @@ JsonMap _work(JsonMap work) => {
                   'order': (episode['attributes'] as JsonMap)['order'],
                   'type': (episode['attributes'] as JsonMap)['type'],
                   'metadata': _fields(episode['metadata'] as JsonMap),
+                  'metadataView': episode['metadata'],
                   'files': [
                     for (final file in episode['files'] as List<JsonMap>)
                       {

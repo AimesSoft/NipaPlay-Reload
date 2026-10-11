@@ -379,6 +379,35 @@ final class MediaService {
           final entry = entries[index];
           try {
             final kind = entry['kind'] as String;
+            if (entry.containsKey('ref')) {
+              if (kind == 'file' ||
+                  !entry.containsKey('entityId') ||
+                  entry.keys.any((key) => const {
+                        'path',
+                        'workRef',
+                        'releaseRef',
+                        'episodeRefs',
+                        'workId',
+                        'releaseId',
+                        'localEpisodeIds',
+                        'startMs',
+                        'endMs'
+                      }.contains(key))) {
+                throw const Failure(FailureCode.invalidInput,
+                    'Direct ref bindings require an existing work/release/episode entityId, without catalogue or file fields.');
+              }
+              prepared.add({
+                ...entry,
+                'ref': canonicalExternalRef(
+                        Map<String, Object?>.from(entry['ref'] as Map))
+                    .toJson()
+              });
+              continue;
+            }
+            if (!entry.containsKey('workRef')) {
+              throw const Failure(
+                  FailureCode.invalidInput, 'Choose ref or workRef.');
+            }
             if ((kind == 'file' &&
                     (entry.containsKey('entityId') ==
                         entry.containsKey('path'))) ||

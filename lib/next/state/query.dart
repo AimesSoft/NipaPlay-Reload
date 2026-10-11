@@ -340,7 +340,7 @@ int _compare(Object? a, Object? b) => a == b
                 ? a.compareTo(b)
                 : a.toString().compareTo(b.toString());
 
-// Public objects are closed projections, including every nested object.
+// Only schemas explicitly declaring additionalProperties expose open JSON facts.
 Object? publicValue(Object? value, Schema schema) {
   if (schema.secret || value == null) return null;
   // JSON cannot represent non-finite measurements; null denotes unknown.
@@ -354,6 +354,9 @@ Object? publicValue(Object? value, Schema schema) {
   }
   if (schema is ObjectSchema && value is Map) {
     return {
+      if (schema.additionalProperties)
+        for (final key in value.keys.cast<String>())
+          if (!schema.properties.containsKey(key)) key: _publicJson(value[key]),
       for (final e in schema.properties.entries)
         if (!e.value.secret) e.key: publicValue(value[e.key], e.value)
     };
@@ -382,6 +385,18 @@ Object? publicValue(Object? value, Schema schema) {
   if (value is num || value is bool) return value;
   return null;
 }
+
+Object? _publicJson(Object? value) => switch (value) {
+      Map() => {
+          for (final entry in value.entries)
+            entry.key as String: _publicJson(entry.value)
+        },
+      List() => [for (final item in value) _publicJson(item)],
+      String() => publicValue(value, const StringSchema()),
+      num() => publicValue(value, const NumberSchema()),
+      bool() => value,
+      _ => null,
+    };
 
 JsonMap publicSchema(Schema schema) => {
       ...schema.toJsonSchema(),

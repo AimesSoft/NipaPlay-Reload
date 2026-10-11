@@ -3,6 +3,9 @@ import 'package:nipaplay/constants/settings_keys.dart';
 import 'package:nipaplay/next/downloads/builtin_download_backend.dart';
 import 'package:nipaplay/next/downloads/download_library.dart';
 import 'package:nipaplay/next/media/classic_projection.dart';
+import 'package:nipaplay/next/media/classic_metadata_view.dart';
+import 'package:nipaplay/services/bangumi_service.dart';
+import 'package:nipaplay/services/playback_source_service.dart';
 import 'package:nipaplay/next/next_core.dart';
 import 'package:nipaplay/services/torrent_download_service.dart';
 import 'package:nipaplay/utils/globals.dart' as globals;
@@ -58,6 +61,12 @@ class ServiceProvider {
       embyProvider.initialize(),
       dandanplayRemoteProvider.initialize(),
     ]);
+
+    if (!kIsWeb) {
+      final metadata = ClassicMetadataView(nextCore.media.service.store);
+      BangumiService.instance.metadataView = metadata.apply;
+      PlaybackSourceService.metadataView = metadata.applyForPath;
+    }
 
     watchHistoryProvider.setScanService(scanService);
     if (!deferBackground) await initializeAfterFirstFrame();

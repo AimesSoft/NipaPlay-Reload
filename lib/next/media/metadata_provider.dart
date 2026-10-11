@@ -2,6 +2,42 @@ import 'package:nipa_harness/nipa_harness.dart';
 import 'package:nipaplay/security/credential_vault.dart';
 export 'package:nipaplay/security/credential_vault.dart';
 
+/// Built-in names remain stable; new authorities use an origin, not a nickname.
+String canonicalMetadataNamespace(String input) {
+  final name = input.trim().toLowerCase();
+  if (const {'tmdb', 'bangumi', 'dandanplay'}.contains(name)) return name;
+  final uri = Uri.tryParse(name);
+  if (uri != null &&
+      uri.scheme == 'https' &&
+      uri.host.isNotEmpty &&
+      !uri.host.contains(RegExp(r'[\s%]')) &&
+      uri.userInfo.isEmpty &&
+      (uri.path.isEmpty || uri.path == '/') &&
+      !uri.hasQuery &&
+      !uri.hasFragment) {
+    return Uri(
+            scheme: 'https',
+            host: uri.host.endsWith('.')
+                ? uri.host.substring(0, uri.host.length - 1)
+                : uri.host,
+            port: uri.hasPort && uri.port != 443 ? uri.port : null)
+        .toString();
+  }
+  throw const Failure(FailureCode.invalidInput,
+      'New metadata namespaces must be HTTPS origins, e.g. https://movie.douban.com; reuse the returned canonical provider. Built-in names: tmdb, bangumi, dandanplay.');
+}
+
+ExternalRef canonicalExternalRef(JsonMap json) {
+  final ref = ExternalRef.fromJson(json);
+  if (ref.objectType.trim().isEmpty || ref.externalId.trim().isEmpty) {
+    throw const Failure(FailureCode.invalidInput,
+        'External object type and ID must not be blank.');
+  }
+  return ExternalRef(
+      canonicalMetadataNamespace(ref.provider), ref.objectType, ref.externalId,
+      scope: ref.scope);
+}
+
 final class ExternalRef implements JsonEncodable {
   const ExternalRef(this.provider, this.objectType, this.externalId,
       {this.scope = ''});

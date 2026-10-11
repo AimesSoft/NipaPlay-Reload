@@ -1,0 +1,19 @@
+{
+  "sourceArchive": "Experiment 6, records/metadata/changan_douban.json, read-only copy of public facts",
+  "ref": {"provider": "https://movie.douban.com", "objectType": "subject", "externalId": "26849758", "scope": ""},
+  "language": "zh-CN",
+  "fetchedAt": "2026-10-11T00:00:00Z",
+  "url": "https://movie.douban.com/subject/26849758/",
+  "fields": {
+    "title": "长安十二时辰", "year": 2019,
+    "rating": {"value": 8.1, "max": 10, "count": 520049, "label": "豆瓣"},
+    "directors": ["曹盾"],
+    "actors": ["雷佳音", "易烊千玺", "周一围", "芦芳生", "热依扎", "王鹤润", "杰曼·翰苏", "韩童生", "李媛", "余皑磊"],
+    "genres": ["剧情", "悬疑", "古装"], "countries": ["中国大陆"],
+    "pubdate": ["2019-06-27(中国大陆)"], "durations": ["45分钟"], "episodesCount": 48,
+    "aka": ["The Longest Day In Chang'an"], "languages": ["汉语普通话"],
+    "overview": "改编自马伯庸的同名小说，讲述了唐朝上元节前夕，长安城陷入危局，长安死囚张小敬临危受命，与李必携手在十二时辰内拯救长安的故事。",
+    "cardSubtitle": "2019 / 中国大陆 / 剧情 悬疑 古装 / 曹盾 / 雷佳音 易烊千玺",
+    "unfamiliar": {"nested": [1, true, null, {"key": "保留原样"}]}
+  }
+}

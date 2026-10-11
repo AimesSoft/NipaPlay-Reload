@@ -9,6 +9,7 @@ import 'package:nipaplay/app/unified_media_library_sections.dart';
 import 'package:nipaplay/models/watch_history_model.dart';
 
 import 'metadata_provider.dart';
+import 'metadata_snapshot.dart';
 
 String stableMediaId(String prefix, Object value) =>
     '$prefix-${sha256.convert(utf8.encode(jsonEncode(_canonical(value))))}';
@@ -456,7 +457,8 @@ final class IdentityStore {
       String source,
       Invocation invocation,
       String requestKey,
-      int revision) async {
+      int revision,
+      {bool saveMetadata = true}) async {
     final objectId = await _object(tx, record.ref);
     final accepted = await tx.query('media_bindings',
         where: 'entity_id = ? AND object_id = ? AND status = ? AND source != ?',
@@ -485,7 +487,7 @@ final class IdentityStore {
       'invocation_id': invocation.id,
       'created_at': _now
     });
-    await _snapshot(tx, objectId, record);
+    if (saveMetadata) await _snapshot(tx, objectId, record);
     return id;
   }
 
@@ -508,6 +510,128 @@ final class IdentityStore {
 
   Future<String> saveSnapshot(MetadataRecord record) => database.transaction(
       (tx) async => _snapshot(tx, await _object(tx, record.ref), record));
+
+  Future<JsonMap> importSnapshots(JsonMap input, Invocation invocation) =>
+      database.transaction((tx) async {
+        final key = stableMediaId(
+            'snapshot-operation', [invocation.origin, input['requestId']]);
+        final fingerprint = stableMediaId('input', input);
+        final saved = await operation(key, fingerprint, db: tx);
+        if (saved != null) return saved;
+        final entries = (input['entries'] as List).cast<JsonMap>();
+        if (entries.isEmpty) {
+          throw const Failure(
+              FailureCode.invalidInput, 'entries must not be empty.');
+        }
+        final receivedAt = _now;
+        final results = <JsonMap>[];
+        for (var index = 0; index < entries.length; index++) {
+          try {
+            final entry = entries[index];
+            final ref = canonicalExternalRef(
+                Map<String, Object?>.from(entry['ref'] as Map));
+            final objectId = stableMediaId('object', ref.toJson());
+            final bound = await tx.query('media_bindings',
+                where: 'object_id=? AND status=?',
+                whereArgs: [objectId, 'accepted'],
+                limit: 1);
+            if (bound.isEmpty) {
+              throw const Failure(FailureCode.invalidInput,
+                  'Snapshot requires an accepted external identity; bind ref first.');
+            }
+            final fields = Map<String, Object?>.from(entry['fields'] as Map);
+            validateMetadataFields(fields);
+            final fetchedAt = entry['fetchedAt'] as String?;
+            if (fetchedAt != null && DateTime.tryParse(fetchedAt) == null) {
+              throw const Failure(FailureCode.invalidInput,
+                  'fetchedAt must be an ISO-8601 timestamp.');
+            }
+            final id = stableMediaId('imported-snapshot', [key, index]);
+            final payload = <String, Object?>{
+              'ref': ref.toJson(),
+              'metadata': {
+                ...fields,
+                if (fields['rating'] case final Map rating)
+                  'rating': {...rating, 'source': ref.provider},
+              },
+              'language': entry['language'],
+              'fetchedAt': fetchedAt,
+              'receivedAt': receivedAt,
+              'source': 'submitted_snapshot',
+              'actor': invocation.origin == 'gui' ? 'user' : 'agent',
+              'origin': invocation.origin,
+              'invocationId': invocation.id,
+              'url': entry['url'],
+            };
+            await tx.insert('media_snapshots', {
+              'id': id,
+              'object_id': objectId,
+              'language': entry['language'],
+              'fetched_at': receivedAt,
+              'fields': jsonEncode(payload)
+            });
+            results.add({'index': index, 'snapshotId': id, ...payload});
+          } on Failure catch (error) {
+            throw Failure(error.code, 'Entry $index: ${error.message}',
+                violations: [
+                  SchemaViolation('/entries/$index', error.message)
+                ]);
+          }
+        }
+        final result = <String, Object?>{'entries': results};
+        await tx.insert('media_binding_operations', {
+          'id': key,
+          'fingerprint': fingerprint,
+          'result': jsonEncode(result)
+        });
+        return result;
+      });
+
+  Future<List<String>> _metadataEntities(String id) async {
+    final target = await entity(id);
+    if (target['kind'] != 'work' && target['kind'] != 'release') return [id];
+    final workId =
+        target['kind'] == 'work' ? id : target['parent_id'] as String;
+    final releases = await database.query('media_entities',
+        columns: ['id'],
+        where: 'kind=? AND parent_id=?',
+        whereArgs: ['release', workId],
+        orderBy: 'id');
+    return [workId, for (final row in releases) row['id'] as String];
+  }
+
+  Future<List<JsonMap>> _metadataSnapshots(List<String> ids,
+          {bool acceptedOnly = true}) =>
+      database.rawQuery(
+          'SELECT DISTINCT s.*,o.provider,o.object_type,o.external_id,o.scope AS object_scope,b.entity_id FROM media_snapshots s '
+          'JOIN media_external_objects o ON o.id=s.object_id JOIN media_bindings b ON b.object_id=o.id '
+          'WHERE b.entity_id IN (${List.filled(ids.length, '?').join(',')}) ${acceptedOnly ? 'AND b.status=\'accepted\'' : ''} '
+          'ORDER BY CASE WHEN json_extract(s.fields,\'\$.source\')=\'classic_match\' THEN 1 ELSE 0 END, '
+          'CASE WHEN b.entity_id=? THEN 0 ELSE 1 END,s.fetched_at DESC,s.id DESC',
+          [...ids, ids.first]);
+
+  Future<List<JsonMap>> metadataSnapshots(String id) async {
+    final rows = await _metadataSnapshots(await _metadataEntities(id),
+        acceptedOnly: false);
+    final seen = <String>{};
+    return [
+      for (final row in rows)
+        if (seen.add(row['id'] as String))
+          {
+            'snapshotId': row['id'],
+            'entityId': row['entity_id'],
+            'ref': {
+              'provider': row['provider'],
+              'objectType': row['object_type'],
+              'externalId': row['external_id'],
+              'scope': row['object_scope']
+            },
+            'language': row['language'],
+            'recordedAt': row['fetched_at'],
+            'record': decodeMediaJson(row['fields']),
+          }
+    ];
+  }
 
   Future<List<JsonMap>> pendingProjections({String? fileId}) => database.query(
       'media_projection_outbox',
@@ -618,34 +742,70 @@ final class IdentityStore {
   }
 
   Future<JsonMap> mergedMetadata(String entityId) async {
-    final rows = await database.rawQuery(
-        'SELECT s.*,o.provider FROM media_snapshots s JOIN media_external_objects o ON o.id=s.object_id JOIN media_bindings b ON b.object_id=o.id WHERE b.entity_id = ? AND b.status = ? ORDER BY CASE WHEN json_extract(s.fields,\'\$.source\')=\'classic_match\' THEN 1 ELSE 0 END, s.fetched_at DESC, s.id',
-        [entityId, 'accepted']);
+    final ids = await _metadataEntities(entityId);
+    final rows = await _metadataSnapshots(ids);
     final fields = <String, Object?>{}, provenance = <String, Object?>{};
+    final ratings = <JsonMap>[];
+    final seenRatings = <String>{}, seenSubmitted = <String>{};
     for (final row in rows) {
-      final values = decodeMediaJson(row['fields']);
-      for (final field in [
-        'title',
-        'originalTitle',
-        'overview',
-        'imageUrl',
-        'year'
-      ]) {
+      final record = decodeMediaJson(row['fields']);
+      final values = record['metadata'] == null
+          ? {
+              for (final key in [
+                'title',
+                'originalTitle',
+                'overview',
+                'imageUrl',
+                'year'
+              ])
+                key: record[key]
+            }
+          : Map<String, Object?>.from(record['metadata'] as Map);
+      final sourceKey = '${row['object_id']}/${row['language']}';
+      if (record['source'] == 'submitted_snapshot' &&
+          !seenSubmitted.add(sourceKey)) {
+        continue;
+      }
+      if (values['rating'] case final Map rating
+          when seenRatings.add(sourceKey)) {
+        ratings.add({
+          ...Map<String, Object?>.from(rating),
+          'source': row['provider'],
+          'snapshotId': row['id'],
+          'language': row['language'],
+          'ref': {
+            'provider': row['provider'],
+            'objectType': row['object_type'],
+            'externalId': row['external_id'],
+            'scope': row['object_scope']
+          },
+        });
+      }
+      for (final field in values.keys) {
         if (values[field] != null &&
             values[field] != '' &&
             !fields.containsKey(field)) {
           fields[field] = values[field];
           provenance[field] = {
             'provider': row['provider'],
-            'source': values['source'] ?? 'provider_snapshot',
+            'source': record['source'] ?? 'provider_snapshot',
             'language': row['language'],
-            'fetchedAt': row['fetched_at']
+            'fetchedAt': record['fetchedAt'] ?? row['fetched_at'],
+            'recordedAt': row['fetched_at'],
+            'snapshotId': row['id'],
+            'entityId': row['entity_id'],
+            'actor': record['actor'],
+            'origin': record['origin'],
+            'invocationId': record['invocationId'],
           };
         }
       }
     }
-    for (final row in await database.query('media_overrides',
-        where: 'entity_id = ?', whereArgs: [entityId])) {
+    final edited = <String>{};
+    for (final row in await database.rawQuery(
+        'SELECT * FROM media_overrides WHERE entity_id IN (${List.filled(ids.length, '?').join(',')}) '
+        'ORDER BY changed_at DESC, CASE WHEN entity_id=? THEN 0 ELSE 1 END, entity_id',
+        [...ids, ids.first])) {
       if (row['mode'] == 'correction' &&
           rows.any((snapshot) =>
               (snapshot['fetched_at'] as String)
@@ -653,6 +813,7 @@ final class IdentityStore {
               0)) {
         continue;
       }
+      if (!edited.add(row['field'] as String)) continue;
       fields[row['field'] as String] = jsonDecode(row['value'] as String);
       provenance[row['field'] as String] = {
         'provider': row['actor'],
@@ -661,13 +822,13 @@ final class IdentityStore {
         'mode': row['mode']
       };
     }
-    return {'fields': fields, 'provenance': provenance};
+    return {'fields': fields, 'provenance': provenance, 'ratings': ratings};
   }
 
   Future<void> overrideField(
       String id, String field, Object? value, Invocation invocation,
       {String mode = 'persistent'}) async {
-    await entity(id);
+    final ids = await _metadataEntities(id);
     final edit = {
       'entity_id': id,
       'field': field,
@@ -682,7 +843,9 @@ final class IdentityStore {
       await tx.insert('media_metadata_edits', edit);
       if (mode == 'clear') {
         await tx.delete('media_overrides',
-            where: 'entity_id=? AND field=?', whereArgs: [id, field]);
+            where:
+                'entity_id IN (${List.filled(ids.length, '?').join(',')}) AND field=?',
+            whereArgs: [...ids, field]);
       } else {
         await tx.insert('media_overrides', edit,
             conflictAlgorithm: ConflictAlgorithm.replace);
@@ -711,13 +874,13 @@ final class IdentityStore {
         'workId': id,
         'title': title,
         'metadata': metadata,
-        'releases': await _releases(id)
+        'releases': await _releases(id, metadata)
       });
     }
     return results;
   }
 
-  Future<List<JsonMap>> _releases(String workId) async {
+  Future<List<JsonMap>> _releases(String workId, JsonMap metadata) async {
     final releases = await database.query('media_entities',
         where: 'parent_id = ? AND kind = ?', whereArgs: [workId, 'release']);
     return [
@@ -725,7 +888,7 @@ final class IdentityStore {
         {
           ...release,
           'attributes': decodeMediaJson(release['attributes']),
-          'metadata': await mergedMetadata(release['id'] as String),
+          'metadata': metadata,
           'episodes': await _episodes(release['id'] as String)
         }
     ];
@@ -850,6 +1013,58 @@ final class IdentityStore {
               final entry = entries[index];
               try {
                 final kind = entry['kind'] as String;
+                if (entry.containsKey('ref')) {
+                  final id = entry['entityId'] as String;
+                  final target = await entity(id, db: tx);
+                  if (target['kind'] != kind || kind == 'file') {
+                    throw const Failure(FailureCode.invalidInput,
+                        'Direct binding kind must match the existing work/release/episode.');
+                  }
+                  final record = MetadataRecord(
+                      ref: ExternalRef.fromJson(entry['ref'] as JsonMap),
+                      title: '',
+                      kind: kind,
+                      fetchedAt: DateTime.now().toUtc());
+                  await _checkObjects(tx, id, [record]);
+                  final binding = await _bindRecord(
+                      tx,
+                      id,
+                      record,
+                      kind == 'episode' ? 'exact' : 'contains',
+                      {
+                        'order': 'unspecified',
+                        'season': null,
+                        'cour': null,
+                        'numbers': <String>[],
+                        'startMs': null,
+                        'endMs': null
+                      },
+                      invocation.origin == 'gui' ? 'user' : 'agent',
+                      'explicit_binding',
+                      invocation,
+                      key,
+                      0,
+                      saveMetadata: false);
+                  await _audit(tx, binding, entry, invocation);
+                  results.add({
+                    'index': index,
+                    'workId': kind == 'work'
+                        ? id
+                        : kind == 'release'
+                            ? target['parent_id']
+                            : (await entity(target['parent_id'] as String,
+                                db: tx))['parent_id'],
+                    'releaseId': kind == 'release'
+                        ? id
+                        : kind == 'episode'
+                            ? target['parent_id']
+                            : null,
+                    'episodeIds': kind == 'episode' ? [id] : <String>[],
+                    'fileId': null,
+                    'bindingIds': [binding],
+                  });
+                  continue;
+                }
                 final work = MetadataRecord.fromJson(entry['work'] as JsonMap);
                 final release =
                     MetadataRecord.fromJson(entry['release'] as JsonMap);

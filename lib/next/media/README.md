@@ -26,6 +26,8 @@ Action id 是 Harness 名称；MCP 名称把点替换为下划线。输入输出
 | `media.library.scan` | write | 提交枚举、探测、哈希和文件索引任务，不请求元数据来源。 |
 | `media.metadata.override` | write | GUI 与 Agent 均可编辑；宿主记录 actor/origin。mode=persistent 刷新保留，correction 被新快照替代，clear 清除编辑。省略 mode 保持持久覆盖兼容语义。 |
 | `media.metadata.refresh` | write | 沿用元数据快照刷新任务，不改变身份。 |
+| `media.metadata.import_batch` | write | 追加任意来源的结构化快照，宿主记录来源、交入时间、actor/origin/invocationId；保留其他 JSON 字段。原子且 requestId 幂等。 |
+| `media.metadata.snapshots` | read | 读取实体对应的全部来源快照、原始字段和历史，包括已撤销身份的快照。 |
 
 目录列表、批量哈希和元数据查询不写数据库，不创建绑定、缓存或任务。
 目录列表没有分页，未索引文件的 `fileId` 为 null；绑定可直接使用它的 `path`。
@@ -39,6 +41,17 @@ Action id 是 Harness 名称；MCP 名称把点替换为下划线。输入输出
 ## 绑定与不变量
 
 `bind_batch.entries` 的 `kind` 是 work/release/episode/file。
+除内置目录模式外，`kind` + 既有 `entityId` + `ref` + `reason` 可以直接绑定
+work/release/episode 的任意外部对象：不请求 provider、不建立父实体或文件关联。
+宿主仍校验实体层级、同来源身份冲突、同种本地实体的外部对象唯一归属，并记录理由与证据。
+直接绑定不能混入 `workRef` 等目录模式字段。任意来源的外部目录关系由 Agent 判断，宿主保存其证据。
+
+新来源的 `ref.provider` 使用 HTTPS origin，例如 `https://movie.douban.com`，
+禁止自由昵称；大小写、空白、默认 443 端口、末尾斜线与 hostname 末尾点统一。
+路径、查询、fragment、userinfo 不属于来源命名空间；内置 `tmdb` / `bangumi` / `dandanplay` 保持原名。
+不同 host 或非默认端口表示不同 authority，不猜测站点别名；复用身份读回的 canonical provider。
+`objectType`、`externalId` 和 `scope` 都是该 authority 内的 opaque 字符串，不改写它们。
+
 文件目标使用 `entityId` 或 `path`；其他层级可用 `entityId` 绑定既有本地实体，
 省略时按外部对象建立对应实体。每条输入明确给出 `workRef` 和理由：
 TV 的季身份使用 `releaseRef`，文件或集的身份使用 `episodeRefs`。
@@ -94,6 +107,54 @@ Classic 写事务同时向 `next_classic_projection_journal` 追加该 projectio
 该操作的原确认结果，不会撤销后续绑定。投影日志保留供恢复和审计，不清理原 outbox。
 
 ## 存储与升级
+
+### 任意来源快照与作品视图（X9）
+
+先绑定外部身份，再调用 `media.metadata.import_batch`：
+
+```json
+{
+  "requestId": "changan-douban-2026-10-11",
+  "entries": [{
+    "ref": {"provider": "https://movie.douban.com", "objectType": "subject", "externalId": "26849758", "scope": ""},
+    "language": "zh-CN",
+    "fetchedAt": "2026-10-11T00:00:00Z",
+    "url": "https://movie.douban.com/subject/26849758/",
+    "fields": {
+      "overview": "豆瓣简介",
+      "rating": {"value": 8.1, "max": 10, "count": 520049, "label": "豆瓣"},
+      "directors": ["曹盾"],
+      "actors": ["雷佳音", "易烊千玺"],
+      "otherFacts": {"preserved": true}
+    }
+  }]
+}
+```
+
+`rating` 的 value/max 为有限数值，`0 <= value <= max`、`max > 0`；count 为非负整数或 null。
+来源由宿主从 ref.provider 填入，不接受调用者替评分声明其他来源。
+title/originalTitle/overview/imageUrl/year、导演、演员、类型有字段类型；未知字段完整保存。
+宿主交入时间控制提交快照的新旧，fetchedAt 保留为来源报告的采集时间。
+重复 requestId 返回原回执；不同内容复用 requestId 返回 conflict；失败整批回滚。
+
+`media.identity.get`、`media.library.work(s)` 以及 `media.entities` / `library.works` /
+`library.seasons` / `library.episodes` 的 `metadataView` 返回真正的 JSON fields/provenance/ratings。
+旧 `metadata` 文本数组保持兼容；结构化消费者使用 `metadataView`，原始及历史信息用 snapshots 读取。
+`state.query` 显式开放的 JSON 对象保留其属性，并延续 URL 去认证信息的公共视图规则。
+
+work 与其所有 release 共用一个作品视图，episode/file 仍保留各自元数据。
+源字段优先取 work 的服务/提交快照，按时间从新到旧，缺项再从 release 补充；
+Classic 观察排在服务/提交事实之后。同一对象/语言只使用最新提交快照；所有历史仍可读取。
+ratings 独立保留各对象/语言的最新评分，不因另一来源评分而消失。
+work/release 已有编辑不迁移：读取时按 changed_at 取该字段最新有效编辑，平时不改任何旧行。
+persistent 始终保留；correction 被作品范围的新快照替代；clear 明确清除该作品范围的该字段编辑，
+原编辑日志保留。季专属标题/简介等原始事实仍在 snapshots 中，不需要再写两层 overview。
+
+Classic 完整详情按已绑定的弹弹play身份读同一作品视图；只有其他身份的本地文件，
+播放器详情通过 FileEpisode 读取同一作品视图。展示简介、标题、海报、类型、主创、评分和评价人数，
+沿用已有的评分与制作信息布局；评分投影为 Classic 的十分制，原始满分仍在身体里。
+Classic 的详情持久缓存和用户个人评分不改写；没有对应概念的字段留在事实中。
+本次没有 schema 迁移：沿用 v8 表，以追加 JSON 快照和幂等回执扩展存储，不重写旧数据。
 
 数据库仍由 NextCore 提供唯一连接；MediaRuntime 仅提供 Capability 和基础设施执行器。
 存储保持 Work → Release → Episode、File、FileLocation、FileEpisode 的身份模型，

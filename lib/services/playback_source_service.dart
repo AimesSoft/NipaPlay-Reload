@@ -6,6 +6,7 @@ import 'package:path/path.dart' as p;
 import 'package:provider/provider.dart';
 
 import 'package:nipaplay/models/playable_item.dart';
+import 'package:nipaplay/models/bangumi_model.dart';
 import 'package:nipaplay/models/playback_detail_context.dart';
 import 'package:nipaplay/models/dandanplay_remote_model.dart';
 import 'package:nipaplay/models/shared_remote_library.dart';
@@ -25,6 +26,7 @@ import 'package:nipaplay/utils/webdav_file_sorter.dart';
 
 class PlaybackSourceService {
   const PlaybackSourceService._();
+  static Future<BangumiAnime> Function(String, BangumiAnime)? metadataView;
 
   static const List<String> _videoExtensions = <String>[
     '.mp4',
@@ -182,6 +184,9 @@ class PlaybackSourceService {
       animeId: animeId,
       isIdentified: animeId != null && animeId > 0,
       episodeLoader: () => _loadLocalEpisodes(item),
+      metadataView: metadataView == null
+          ? null
+          : (anime) => metadataView!(item.videoPath, anime),
     );
   }
 

@@ -665,16 +665,22 @@ class _AnimeDetailPageState extends State<AnimeDetailPage>
     final animeId = playbackAnimeId != null && playbackAnimeId > 0
         ? playbackAnimeId
         : widget.animeId;
-    if (animeId <= 0 && _playbackDetailContext != null) {
-      setState(() {
-        _detailedAnime = _playbackFallbackAnime();
-        _isLoading = false;
-        _error = null;
-      });
-      return;
-    }
-
     try {
+      if (animeId <= 0 && _playbackDetailContext != null) {
+        final fallback = _playbackFallbackAnime();
+        final metadataView = _playbackDetailContext!.metadataView;
+        final anime = metadataView == null
+            ? fallback
+            : await metadataView(fallback);
+        if (!mounted) return;
+        setState(() {
+          _detailedAnime = anime;
+          _isLoading = false;
+          _error = null;
+        });
+        return;
+      }
+
       BangumiAnime anime;
 
       if (kIsWeb) {
