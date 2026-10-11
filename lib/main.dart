@@ -619,7 +619,9 @@ Future<void> _main(List<String> args) async {
               .environment['NIPAPLAY_DISABLE_WINDOWS_TRANSPARENT_BACKGROUND'] !=
           '1';
       WindowOptions windowOptions = WindowOptions(
-        skipTaskbar: false,
+        // window_manager maps this to the activation policy; quiet lab
+        // instances stay accessory so they are never activated.
+        skipTaskbar: LabProfile.quiet,
         titleBarStyle: TitleBarStyle.hidden,
         backgroundColor:
             transparentWindowBackground ? Colors.transparent : null,
