@@ -1,0 +1,398 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>NipaPlay Next · 视觉概念</title>
+<style>
+:root{
+  --ink:#08080b; --ink-2:#0f0f14; --ink-3:#17171e;
+  --paper:#f5f1ea; --p2:rgba(245,241,234,.72); --p3:rgba(245,241,234,.48); --p4:rgba(245,241,234,.26);
+  --line:rgba(245,241,234,.09); --line-2:rgba(245,241,234,.16);
+  --accent:#ff2e55; --accent-2:#ff6f8a; --accent-soft:rgba(255,46,85,.14);
+  --mint:#5be3b0; --amber:#ffbf5c;
+  --glass:rgba(20,20,26,.56); --glass-2:rgba(32,32,40,.62);
+  --sans:"PingFang SC","SF Pro Text",-apple-system,"Helvetica Neue",sans-serif;
+  --serif:"Songti SC","STSong","Noto Serif SC",serif;
+  --num:"SF Pro Display",-apple-system,"Helvetica Neue",sans-serif;
+  --ease:cubic-bezier(.22,1,.36,1);
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{background:#000;font-family:var(--sans);color:var(--paper);-webkit-font-smoothing:antialiased}
+.board{position:relative;width:1440px;height:900px;overflow:hidden;background:var(--ink)}
+.board+.board{margin-top:40px}
+.num{font-family:var(--num);font-variant-numeric:tabular-nums}
+
+/* 胶片颗粒：静态噪声叠在最上层，让大面积暗色不发“塑料” */
+.grain{position:absolute;inset:0;pointer-events:none;z-index:50;opacity:.07;mix-blend-mode:overlay;
+  background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='220' height='220'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='3' stitchTiles='stitch'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>")}
+
+/* —— 顶栏 —— */
+.chrome{position:absolute;top:0;left:0;right:0;height:64px;display:flex;align-items:center;padding:0 28px 0 96px;z-index:30}
+.lights{position:absolute;left:22px;top:24px;display:flex;gap:8px}
+.lights i{width:12px;height:12px;border-radius:50%;background:#ff5f57}.lights i:nth-child(2){background:#febc2e}.lights i:nth-child(3){background:#28c840}
+.nav{display:flex;gap:30px;font-size:14px;letter-spacing:.02em}
+.nav a{color:var(--p3);text-decoration:none;position:relative;font-weight:500}
+.nav a.on{color:var(--paper)}
+.nav a.on:after{content:"";position:absolute;left:50%;bottom:-9px;width:4px;height:4px;border-radius:50%;background:var(--accent);transform:translateX(-50%);box-shadow:0 0 10px var(--accent)}
+.chrome .right{margin-left:auto;display:flex;align-items:center;gap:14px}
+.ico{width:32px;height:32px;border-radius:50%;display:grid;place-items:center;color:var(--p2)}
+.task-pill{display:flex;align-items:center;gap:10px;height:32px;padding:0 14px 0 10px;border-radius:16px;background:rgba(10,10,14,.42);
+  border:1px solid var(--line-2);backdrop-filter:blur(18px) saturate(150%);font-size:12px;color:var(--p2)}
+.ring{width:16px;height:16px;border-radius:50%;background:conic-gradient(var(--accent) 0 47%,rgba(255,255,255,.14) 47% 100%);
+  -webkit-mask:radial-gradient(circle,transparent 4.5px,#000 5px);mask:radial-gradient(circle,transparent 4.5px,#000 5px)}
+.avatar{width:30px;height:30px;border-radius:50%;background:url(img/nipa-avatar.jpg) center/cover;position:relative;box-shadow:0 0 0 1.5px rgba(255,255,255,.18)}
+.avatar.live:after{content:"";position:absolute;right:-1px;bottom:-1px;width:9px;height:9px;border-radius:50%;background:var(--mint);box-shadow:0 0 0 2px var(--ink)}
+
+/* —— 主视觉 —— */
+.hero{position:absolute;inset:0 0 auto 0;height:660px;overflow:hidden}
+.hero .art{position:absolute;inset:0;background-size:cover;background-position:center 30%;transform:scale(1.02)}
+.hero .shade{position:absolute;inset:0;background:
+  linear-gradient(90deg,rgba(8,8,11,.94) 0%,rgba(8,8,11,.78) 26%,rgba(8,8,11,.24) 56%,rgba(8,8,11,0) 72%),
+  linear-gradient(0deg,var(--ink) 0%,rgba(8,8,11,.6) 22%,rgba(8,8,11,0) 46%),
+  linear-gradient(180deg,rgba(8,8,11,.55) 0%,rgba(8,8,11,0) 18%)}
+.copy{position:absolute;left:96px;bottom:338px;width:600px;z-index:5}
+.eyebrow{display:flex;align-items:center;gap:10px;font-size:12.5px;letter-spacing:.06em;color:var(--accent-2);font-weight:600}
+.eyebrow .avatar{width:20px;height:20px}
+.eyebrow .sep{width:3px;height:3px;border-radius:50%;background:var(--p4)}
+.eyebrow span.mute{color:var(--p3);font-weight:500;letter-spacing:.02em}
+.logo{display:block;height:96px;margin:20px 0 16px -6px;filter:drop-shadow(0 6px 24px rgba(0,0,0,.45))}
+.meta{display:flex;align-items:center;gap:12px;font-size:13.5px;color:var(--p2)}
+.meta .dot{width:3px;height:3px;border-radius:50%;background:var(--p4)}
+.score{display:inline-flex;align-items:baseline;gap:5px;color:var(--paper);font-weight:600}
+.score b{font-family:var(--num);font-size:15px}
+sup.fn{font-family:var(--num);font-size:9.5px;color:var(--accent-2);margin-left:2px;font-weight:600;vertical-align:baseline;position:relative;top:-.7em}
+.blurb{margin-top:14px;font-size:14.5px;line-height:1.75;color:var(--p2);max-width:520px}
+.why{margin-top:16px;display:flex;gap:10px;font-size:13px;line-height:1.6;color:var(--p2);padding-left:12px;border-left:2px solid var(--accent)}
+.why em{font-style:normal;color:var(--paper)}
+.actions{margin-top:26px;display:flex;align-items:center;gap:12px}
+.btn{height:46px;border-radius:23px;display:inline-flex;align-items:center;gap:10px;padding:0 22px;font-size:15px;font-weight:600;letter-spacing:.02em}
+.btn.play{background:var(--paper);color:#111}
+.btn.play svg{fill:#111}
+.btn.ghost{background:rgba(255,255,255,.1);border:1px solid var(--line-2);backdrop-filter:blur(16px);color:var(--paper)}
+.btn.round{width:46px;padding:0;justify-content:center}
+.live{display:flex;align-items:center;gap:12px;margin-left:8px;font-size:12.5px;color:var(--p2)}
+.live .bar{width:120px;height:3px;border-radius:2px;background:rgba(255,255,255,.14);overflow:hidden;position:relative}
+.live .bar i{position:absolute;inset:0 53% 0 0;background:linear-gradient(90deg,var(--accent),var(--accent-2));border-radius:2px}
+.live .bar i:after{content:"";position:absolute;inset:0;background:linear-gradient(90deg,transparent,rgba(255,255,255,.7),transparent);animation:sweep 1.8s linear infinite}
+@keyframes sweep{from{transform:translateX(-100%)}to{transform:translateX(100%)}}
+.pulse{width:7px;height:7px;border-radius:50%;background:var(--accent);box-shadow:0 0 0 0 rgba(255,46,85,.6);animation:pulse 1.8s infinite}
+@keyframes pulse{70%{box-shadow:0 0 0 8px rgba(255,46,85,0)}100%{box-shadow:0 0 0 0 rgba(255,46,85,0)}}
+
+/* 弹幕：NipaPlay 的身份，只在主视觉上很淡地飘过 */
+.danmaku{position:absolute;inset:78px 0 auto 60%;height:120px;z-index:3;pointer-events:none;overflow:hidden;
+  -webkit-mask:linear-gradient(90deg,transparent,#000 14%,#000 86%,transparent);mask:linear-gradient(90deg,transparent,#000 14%,#000 86%,transparent)}
+.danmaku span{position:absolute;white-space:nowrap;font-size:15px;font-weight:600;color:rgba(255,255,255,.42);text-shadow:0 1px 3px rgba(0,0,0,.6);animation:fly linear infinite}
+@keyframes fly{from{transform:translateX(600px)}to{transform:translateX(-300px)}}
+
+/* —— 书架 —— */
+.shelf{position:absolute;left:96px;right:0;z-index:6}
+.shelf h3{display:flex;align-items:baseline;gap:14px;font-size:19px;font-weight:600;letter-spacing:.02em;margin-bottom:16px}
+.shelf h3 small{font-size:12.5px;font-weight:500;color:var(--p3);letter-spacing:.02em}
+.row{display:flex;gap:16px}
+.card{width:296px;flex:none}
+.thumb{position:relative;height:150px;border-radius:12px;background-size:cover;background-position:center;overflow:hidden;box-shadow:0 10px 30px rgba(0,0,0,.35),inset 0 0 0 1px rgba(255,255,255,.06)}
+.thumb:after{content:"";position:absolute;inset:0;background:linear-gradient(0deg,rgba(0,0,0,.78),rgba(0,0,0,.2) 46%,transparent 70%)}
+.thumb .cap{position:absolute;left:14px;right:14px;bottom:20px;z-index:2}
+.thumb .cap b{display:block;font-size:14.5px;font-weight:600;text-shadow:0 1px 6px rgba(0,0,0,.5)}
+.thumb .cap span{display:block;font-size:11.5px;color:var(--p2);margin-top:3px}
+.thumb .prog{position:absolute;left:14px;right:14px;bottom:11px;height:3px;border-radius:2px;background:rgba(255,255,255,.22);z-index:2}
+.thumb .prog i{position:absolute;inset:0 auto 0 0;border-radius:2px;background:var(--paper)}
+.thumb .tag{position:absolute;left:12px;top:12px;z-index:2;font-size:11px;font-weight:600;padding:4px 8px;border-radius:6px;background:rgba(0,0,0,.5);backdrop-filter:blur(10px);color:var(--p2)}
+.card .t{margin-top:12px;font-size:14.5px;font-weight:600}
+.card .s{margin-top:4px;font-size:12.5px;color:var(--p3)}
+
+/* —— 问 Nipa 的胶囊 —— */
+.ask{position:absolute;left:50%;bottom:18px;transform:translateX(-50%);width:640px;height:58px;border-radius:29px;z-index:40;
+  display:flex;align-items:center;gap:14px;padding:0 10px 0 10px;
+  background:rgba(22,22,28,.62);border:1px solid rgba(255,255,255,.12);
+  backdrop-filter:blur(28px) saturate(170%);box-shadow:0 20px 60px rgba(0,0,0,.55),inset 0 1px 0 rgba(255,255,255,.06)}
+.ask .avatar{width:38px;height:38px}
+.ask .ph{flex:1;font-size:15px;color:var(--p3)}
+.ask .ph b{color:var(--p2);font-weight:500}
+.kbd{font-family:var(--num);font-size:11.5px;color:var(--p3);border:1px solid var(--line-2);border-radius:6px;padding:3px 7px;margin-right:6px}
+.send{width:38px;height:38px;border-radius:50%;background:var(--accent);display:grid;place-items:center;box-shadow:0 6px 20px rgba(255,46,85,.45)}
+
+/* —— 详情页 —— */
+.back{position:absolute;left:96px;top:78px;z-index:20;font-size:13.5px;color:var(--p2);display:flex;align-items:center;gap:6px}
+.title-serif{font-family:var(--serif);font-weight:900;font-size:64px;letter-spacing:.04em;line-height:1.08;margin:18px 0 10px}
+.orig{font-size:13px;letter-spacing:.2em;color:var(--p3)}
+.notes{position:absolute;left:96px;top:420px;width:560px;z-index:6;border-top:1px solid var(--line);padding-top:12px;display:grid;gap:5px}
+.notes p{font-size:11.5px;line-height:1.5;color:var(--p3);display:flex;gap:8px}
+.notes p b{font-family:var(--num);color:var(--accent-2);font-weight:600;width:10px;flex:none}
+.notes p em{font-style:normal;color:var(--p2)}
+.facts{position:absolute;right:56px;top:96px;width:372px;z-index:10;border-radius:18px;padding:20px 22px 8px;
+  background:rgba(14,14,18,.55);border:1px solid var(--line);backdrop-filter:blur(26px) saturate(150%)}
+.facts h4{font-size:12px;letter-spacing:.14em;color:var(--p3);font-weight:600;margin-bottom:6px}
+.fact{display:grid;grid-template-columns:78px 1fr;gap:12px;padding:12px 0;border-top:1px solid var(--line);font-size:13px}
+.fact:first-of-type{border-top:0}
+.fact .k{color:var(--p3);font-size:12px;padding-top:1px}
+.fact .v{color:var(--paper);line-height:1.5}
+.fact .v small{display:block;color:var(--p3);font-size:11.5px;margin-top:3px}
+.who{display:inline-flex;align-items:center;gap:5px;color:var(--p2)}
+.who i{width:14px;height:14px;border-radius:50%;background:url(img/nipa-avatar.jpg) center/cover;display:inline-block}
+.ok{color:var(--mint)}
+.eps{position:absolute;left:96px;right:0;bottom:30px;z-index:6}
+.ep{width:256px;flex:none}
+.ep .thumb{height:144px}
+.ep .n{font-family:var(--num);position:absolute;left:12px;bottom:12px;z-index:2;font-size:28px;font-weight:700;letter-spacing:-.02em;color:rgba(255,255,255,.92)}
+.ep .t{margin-top:10px;font-size:13.5px;font-weight:600;display:flex;justify-content:space-between}
+.ep .t span{font-family:var(--num);font-weight:500;color:var(--p3);font-size:12px}
+.spark{margin-top:8px;height:22px;width:100%}
+.ep .src{margin-top:4px;font-size:11.5px;color:var(--p3)}
+.ep.watched .thumb .prog i{width:100%}
+.ep.now .thumb{box-shadow:0 0 0 2px var(--paper),0 14px 40px rgba(0,0,0,.5)}
+
+/* —— 对话面板 —— */
+.dim{position:absolute;inset:0;z-index:60;background:rgba(6,6,9,.35);backdrop-filter:blur(6px) saturate(120%)}
+.sheet{position:absolute;top:12px;right:12px;bottom:12px;width:496px;z-index:70;border-radius:24px;display:flex;flex-direction:column;
+  background:rgba(18,18,24,.74);border:1px solid rgba(255,255,255,.1);backdrop-filter:blur(40px) saturate(170%);box-shadow:-30px 0 80px rgba(0,0,0,.5)}
+.sh{display:flex;align-items:center;gap:14px;padding:20px 22px 16px;border-bottom:1px solid var(--line)}
+.sh .avatar{width:42px;height:42px}
+.sh .nm{font-size:16px;font-weight:600}
+.sh .st{font-size:12px;color:var(--p3);margin-top:3px;display:flex;align-items:center;gap:8px}
+.sh .st .d{width:6px;height:6px;border-radius:50%;background:var(--p4)}
+.sh .x{margin-left:auto;color:var(--p3)}
+.sh .nm{font-size:16px;font-weight:600}
+.thread{flex:1;overflow:hidden;padding:18px 20px;display:flex;flex-direction:column;gap:14px}
+.u{align-self:flex-end;max-width:78%;font-size:14.5px;line-height:1.6;padding:11px 16px;border-radius:18px 18px 6px 18px;background:rgba(255,255,255,.09);border:1px solid var(--line)}
+.n-msg{font-size:14.5px;line-height:1.7;color:var(--paper)}
+.n-msg .by{display:flex;align-items:center;gap:8px;font-size:12px;color:var(--p3);margin-bottom:6px}
+.n-msg .by .avatar{width:18px;height:18px}
+.turn{font-size:11px;color:var(--p4);display:flex;gap:6px;align-items:center;margin-top:8px}
+.turn code{font-family:"SF Mono",ui-monospace,monospace;font-size:10.5px;color:var(--p3);background:rgba(255,255,255,.05);padding:2px 6px;border-radius:5px}
+.cardx{border-radius:16px;background:rgba(255,255,255,.045);border:1px solid var(--line);overflow:hidden}
+.work{display:flex;gap:14px;padding:12px}
+.work .pst{width:52px;height:74px;border-radius:8px;background-size:cover;background-position:center;flex:none;box-shadow:0 6px 18px rgba(0,0,0,.4)}
+.work .wt{font-size:15px;font-weight:600}
+.work .wm{font-size:12px;color:var(--p3);margin-top:5px;line-height:1.6}
+.work .open{margin-left:auto;align-self:center;font-size:12.5px;color:var(--p2)}
+.prep .head{display:flex;align-items:center;gap:10px;padding:14px 16px 10px;font-size:13px;font-weight:600}
+.prep .head .badge{margin-left:auto;display:flex;align-items:center;gap:7px;font-size:11px;font-weight:600;color:var(--accent-2)}
+.steps{padding:4px 16px 14px;position:relative}
+.step{display:grid;grid-template-columns:22px 1fr auto;gap:12px;padding:6px 0;position:relative}
+.step:before{content:"";position:absolute;left:10px;top:30px;bottom:-9px;width:1.5px;background:var(--line-2)}
+.step:last-child:before{display:none}
+.mark{width:21px;height:21px;border-radius:50%;display:grid;place-items:center;font-size:11px;position:relative;z-index:1}
+.mark.done{background:rgba(91,227,176,.14);color:var(--mint);box-shadow:inset 0 0 0 1px rgba(91,227,176,.35)}
+.mark.run{background:var(--accent-soft);box-shadow:inset 0 0 0 1px rgba(255,46,85,.5)}
+.mark.run:after{content:"";width:7px;height:7px;border-radius:50%;background:var(--accent);animation:pulse 1.8s infinite}
+.mark.wait{box-shadow:inset 0 0 0 1px var(--line-2);background:transparent}
+.step .w{font-size:13.5px;font-weight:600}
+.step .d2{font-size:12px;color:var(--p3);margin-top:3px;line-height:1.55}
+.step .tm{font-family:var(--num);font-size:11.5px;color:var(--p4);padding-top:2px}
+.step .bar2{margin-top:9px;height:4px;border-radius:2px;background:rgba(255,255,255,.1);position:relative;overflow:hidden}
+.step .bar2 i{position:absolute;inset:0 53% 0 0;background:linear-gradient(90deg,var(--accent),var(--accent-2));border-radius:2px}
+.step .bar2 i:after{content:"";position:absolute;inset:0;background:linear-gradient(90deg,transparent,rgba(255,255,255,.75),transparent);animation:sweep 1.6s linear infinite}
+.chip{display:inline-flex;align-items:center;gap:6px;font-size:11px;color:var(--p3);margin-top:6px;padding:3px 8px;border-radius:6px;background:rgba(255,255,255,.05);border:1px solid var(--line)}
+.compose{margin:0 16px 16px;height:54px;border-radius:27px;display:flex;align-items:center;gap:12px;padding:0 8px 0 18px;background:rgba(255,255,255,.06);border:1px solid var(--line-2)}
+.compose .ph{flex:1;font-size:14px;color:var(--p3)}
+.small-note{padding:0 22px 10px;font-size:11px;color:var(--p4)}
+
+/* —— 首页：Nipa 站在台前 —— */
+.say{display:flex;align-items:center;gap:12px;font-size:15.5px;color:rgba(245,241,234,.9);margin-bottom:6px}
+.say .avatar{width:28px;height:28px}
+.say b{font-weight:600;color:var(--paper)}
+.askbar{position:absolute;left:96px;top:594px;z-index:20;display:flex;align-items:center;gap:14px}
+.askbar .field{width:640px;height:56px;border-radius:28px;display:flex;align-items:center;gap:12px;padding:0 8px 0 10px;
+  background:rgba(22,22,28,.6);border:1px solid rgba(255,255,255,.14);backdrop-filter:blur(26px) saturate(170%);
+  box-shadow:0 18px 50px rgba(0,0,0,.45),inset 0 1px 0 rgba(255,255,255,.06)}
+.askbar .field .avatar{width:38px;height:38px}
+.askbar .field .ph{flex:1;font-size:15.5px;color:var(--p3)}
+.askbar .field .ph.typed{color:var(--paper)}
+.sugs{display:flex;gap:10px}
+.sug{height:36px;padding:0 15px;border-radius:18px;display:inline-flex;align-items:center;font-size:13px;color:var(--p2);
+  background:rgba(255,255,255,.07);border:1px solid var(--line-2);backdrop-filter:blur(14px);white-space:nowrap}
+.caret{display:inline-block;width:1.5px;height:18px;background:var(--accent);margin-left:2px;vertical-align:-3px;animation:blink 1s steps(1) infinite}
+@keyframes blink{50%{opacity:0}}
+/* 就地对话 */
+.stage{position:absolute;left:96px;top:118px;width:760px;z-index:10}
+.you{display:flex;align-items:center;gap:10px;font-size:14px;color:var(--p3)}
+.you span{color:var(--p2)}
+.reply{margin-top:18px;display:flex;gap:12px;font-size:19px;line-height:1.6;color:var(--paper);font-weight:500;letter-spacing:.01em}
+.reply .avatar{width:30px;height:30px;flex:none;margin-top:2px}
+.picks{margin-top:26px;display:flex;gap:18px;padding-left:42px}
+.pick{width:176px}
+.pick .pst{height:252px;border-radius:12px;background-size:cover;background-position:center;box-shadow:0 18px 40px rgba(0,0,0,.5),inset 0 0 0 1px rgba(255,255,255,.08);transition:transform .4s var(--ease)}
+.pick.on .pst{box-shadow:0 0 0 2px var(--paper),0 22px 50px rgba(0,0,0,.6);transform:translateY(-6px)}
+.pick .pt{margin-top:12px;font-size:14.5px;font-weight:600}
+.pick .pr{margin-top:4px;font-size:12.5px;color:var(--p3);line-height:1.5}
+.thinking{display:inline-flex;gap:4px;margin-left:6px;vertical-align:middle}
+.thinking i{width:5px;height:5px;border-radius:50%;background:var(--p3);animation:dots 1.2s infinite}
+.thinking i:nth-child(2){animation-delay:.15s}.thinking i:nth-child(3){animation-delay:.3s}
+@keyframes dots{0%,80%,100%{opacity:.25}40%{opacity:1}}
+</style>
+</head>
+<body>
+
+<!-- ================= 首页 ================= -->
+<section class="board" id="home">
+  <div class="hero">
+    <div class="art" style="background-image:url(tmdb/frieren-backdrop.jpg)"></div>
+    <div class="shade"></div>
+  </div>
+  <div class="danmaku">
+    <span style="top:6px;left:0;animation-duration:19s;animation-delay:-8s">一千年后的再会</span>
+    <span style="top:44px;left:0;animation-duration:23s;animation-delay:-4s;font-size:14px;color:rgba(255,255,255,.34)">这配乐每次都绷不住</span>
+    <span style="top:82px;left:0;animation-duration:17s;animation-delay:-11s;color:rgba(255,190,205,.5)">芙莉莲：嗯。</span>
+  </div>
+  <header class="chrome">
+    <div class="lights"><i></i><i></i><i></i></div>
+    <nav class="nav"><a class="on">首页</a><a>片库</a><a>动态</a></nav>
+    <div class="right">
+      <div class="task-pill"><span class="ring"></span><span class="num">47%</span></div>
+      <div class="ico"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg></div>
+      <div class="avatar"></div>
+    </div>
+  </header>
+  <div class="copy">
+    <div class="say"><span class="avatar"></span><span><b>《葬送的芙莉莲》</b>准备好了，第一集随时可以看。</span></div>
+    <img class="logo" src="tmdb/frieren-logo.png" alt="葬送的芙莉莲">
+    <div class="meta"><span class="score">★ <b>8.8</b></span><span class="dot"></span><span class="num">2023</span><span class="dot"></span><span>奇幻 · 冒险</span><span class="dot"></span><span><span class="num">28</span> 集</span></div>
+    <p class="blurb">打倒魔王之后，“那之后”的故事。活了上千年的精灵魔法使，重新走一遍和同伴们走过的路，慢慢明白人类为什么把短短十年看得那么重。</p>
+    <div class="actions">
+      <span class="btn play"><svg width="14" height="14" viewBox="0 0 24 24"><path d="M6 4l14 8-14 8z"/></svg>播放 第 1 集</span>
+      <span class="btn ghost">详情</span>
+    </div>
+  </div>
+  <div class="shelf" style="top:684px">
+    <h3>继续观看</h3>
+    <div class="row">
+      <div class="card"><div class="thumb" style="background-image:url(tmdb/kusuriya-backdrop.jpg)"><div class="cap"><b>药屋少女的呢喃</b><span>第 31 集 · 剩 9 分钟</span></div><div class="prog"><i style="width:62%"></i></div></div></div>
+      <div class="card"><div class="thumb" style="background-image:url(tmdb/oshinoko-backdrop.jpg)"><div class="cap"><b>【我推的孩子】</b><span>第 14 集 · 剩 17 分钟</span></div><div class="prog"><i style="width:28%"></i></div></div></div>
+      <div class="card"><div class="thumb" style="background-image:url(tmdb/dungeon-backdrop.jpg)"><span class="tag">新</span><div class="cap"><b>迷宫饭</b><span>第 13 集</span></div></div></div>
+      <div class="card"><div class="thumb" style="background-image:url(tmdb/bocchi-backdrop.jpg)"><div class="cap"><b>孤独摇滚！</b><span>第 9 集 · 剩 4 分钟</span></div><div class="prog"><i style="width:80%"></i></div></div></div>
+      <div class="card"><div class="thumb" style="background-image:url(tmdb/edgerunners-backdrop.jpg)"><div class="cap"><b>赛博朋克：边缘行者</b><span>第 6 集</span></div><div class="prog"><i style="width:45%"></i></div></div></div>
+    </div>
+  </div>
+  <div class="askbar">
+    <div class="field"><span class="avatar"></span><span class="ph">今天想看什么？</span><span class="kbd">⌘ K</span><span class="send"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.4" stroke-linecap="round"><path d="M12 19V5M5 12l7-7 7 7"/></svg></span></div>
+    <div class="sugs"><span class="sug">接着看《药屋少女的呢喃》</span><span class="sug">迷宫饭更新了</span><span class="sug">来点轻松的</span></div>
+  </div>
+  <div class="grain"></div>
+</section>
+
+
+<!-- ================= 首页 · 就地对话 ================= -->
+<section class="board" id="converse">
+  <div class="hero" style="height:900px">
+    <div class="art" style="background-image:url(tmdb/bocchi-backdrop.jpg);background-position:center 35%"></div>
+    <div class="shade" style="background:
+      linear-gradient(90deg,rgba(8,8,11,.95) 0%,rgba(8,8,11,.86) 38%,rgba(8,8,11,.4) 70%,rgba(8,8,11,.25) 100%),
+      linear-gradient(0deg,var(--ink) 0%,rgba(8,8,11,.7) 30%,rgba(8,8,11,0) 60%),
+      linear-gradient(180deg,rgba(8,8,11,.6) 0%,rgba(8,8,11,0) 22%)"></div>
+  </div>
+  <header class="chrome">
+    <div class="lights"><i></i><i></i><i></i></div>
+    <nav class="nav"><a class="on">首页</a><a>片库</a><a>动态</a></nav>
+    <div class="right"><div class="task-pill"><span class="ring"></span><span class="num">47%</span></div><div class="ico"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg></div><div class="avatar"></div></div>
+  </header>
+  <div class="stage">
+    <div class="you">你<span>来点轻松的，今晚就看一会儿</span></div>
+    <div class="reply"><span class="avatar"></span><span>这三部都很轻松，一集二十分钟出头。《孤独摇滚！》你还差最后四集，今晚正好看完。</span></div>
+    <div class="picks">
+      <div class="pick on"><div class="pst" style="background-image:url(tmdb/bocchi-poster.jpg)"></div><div class="pt">孤独摇滚！</div><div class="pr">接着看第 9 集</div></div>
+      <div class="pick"><div class="pst" style="background-image:url(tmdb/spyfamily-poster.jpg)"></div><div class="pt">间谍过家家</div><div class="pr">每集都能单独看</div></div>
+      <div class="pick"><div class="pst" style="background-image:url(tmdb/dungeon-poster.jpg)"></div><div class="pt">迷宫饭</div><div class="pr">刚更新了第 13 集</div></div>
+    </div>
+  </div>
+  <div class="askbar" style="top:640px">
+    <div class="field"><span class="avatar"></span><span class="ph typed">那就孤独摇滚吧<span class="caret"></span></span><span class="send"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.4" stroke-linecap="round"><path d="M12 19V5M5 12l7-7 7 7"/></svg></span></div>
+  </div>
+  <div class="shelf" style="top:736px"><h3>继续观看</h3><div class="row">
+    <div class="card"><div class="thumb" style="background-image:url(tmdb/kusuriya-backdrop.jpg)"><div class="cap"><b>药屋少女的呢喃</b><span>第 31 集 · 剩 9 分钟</span></div></div></div>
+    <div class="card"><div class="thumb" style="background-image:url(tmdb/oshinoko-backdrop.jpg)"><div class="cap"><b>【我推的孩子】</b><span>第 14 集</span></div></div></div>
+    <div class="card"><div class="thumb" style="background-image:url(tmdb/frieren-backdrop.jpg)"><div class="cap"><b>葬送的芙莉莲</b><span>第 1 集</span></div></div></div>
+    <div class="card"><div class="thumb" style="background-image:url(tmdb/edgerunners-backdrop.jpg)"><div class="cap"><b>赛博朋克：边缘行者</b><span>第 6 集</span></div></div></div>
+    <div class="card"><div class="thumb" style="background-image:url(tmdb/violet-backdrop.jpg)"></div></div>
+  </div></div>
+  <div class="grain"></div>
+</section>
+
+<!-- ================= 详情 ================= -->
+<section class="board" id="detail">
+  <div class="hero" style="height:900px">
+    <div class="art" style="background-image:url(tmdb/frieren-backdrop2.jpg);background-position:center 20%"></div>
+    <div class="shade" style="background:
+      linear-gradient(90deg,rgba(8,8,11,.95) 0%,rgba(8,8,11,.8) 30%,rgba(8,8,11,.22) 62%,rgba(8,8,11,.05) 100%),
+      linear-gradient(0deg,var(--ink) 0%,rgba(8,8,11,.85) 26%,rgba(8,8,11,0) 55%),
+      linear-gradient(180deg,rgba(8,8,11,.55) 0%,rgba(8,8,11,0) 20%)"></div>
+  </div>
+  <header class="chrome">
+    <div class="lights"><i></i><i></i><i></i></div>
+    <nav class="nav"><a>首页</a><a class="on">片库</a><a>动态</a></nav>
+    <div class="right"><div class="ico"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg></div><div class="avatar"></div></div>
+  </header>
+  <div class="copy" style="bottom:auto;top:150px">
+    <div class="orig">葬送のフリーレン</div>
+    <h1 class="title-serif">葬送的芙莉莲</h1>
+    <div class="meta"><span class="score">★ <b>8.8</b></span><span class="dot"></span><span>豆瓣 <span class="num">9.2</span></span><span class="dot"></span><span class="num">2023</span><span class="dot"></span><span><span class="num">28</span> 集</span><span class="dot"></span><span>Madhouse</span></div>
+    <p class="blurb">打倒了魔王的勇者一行人的后日谈。身为精灵魔法使的芙莉莲，比人类长寿太多；在同伴逝去之后，她踏上新的旅途，去理解那十年对人类意味着什么。</p>
+    <div class="actions">
+      <span class="btn play"><svg width="14" height="14" viewBox="0 0 24 24"><path d="M6 4l14 8-14 8z"/></svg>继续 第 3 集</span>
+      <span class="btn ghost"><span class="avatar" style="width:20px;height:20px"></span>问 Nipa</span>
+      <span class="btn ghost round">⋯</span>
+    </div>
+  </div>
+  <div class="eps">
+    <div class="shelf" style="position:static"><h3 style="margin-bottom:14px">第一季</h3></div>
+    <div class="row">
+      <div class="ep watched"><div class="thumb" style="background-image:url(tmdb/frieren-ep1.jpg)"><span class="n">01</span><div class="prog"><i></i></div></div><div class="t">冒险的结束<span>26 分</span></div>
+        <svg class="spark" viewBox="0 0 256 22" preserveAspectRatio="none"><path d="M0 20 C20 18 30 9 46 12 S80 19 96 14 130 3 150 8 190 17 210 10 240 4 256 12 L256 22 L0 22Z" fill="rgba(255,46,85,.16)"/><path d="M0 20 C20 18 30 9 46 12 S80 19 96 14 130 3 150 8 190 17 210 10 240 4 256 12" fill="none" stroke="var(--accent)" stroke-width="1.4" stroke-opacity=".85"/></svg></div>
+      <div class="ep watched"><div class="thumb" style="background-image:url(tmdb/frieren-ep2.jpg)"><span class="n">02</span><div class="prog"><i></i></div></div><div class="t">也不一定要是魔法…<span>26 分</span></div>
+        <svg class="spark" viewBox="0 0 256 22" preserveAspectRatio="none"><path d="M0 18 C30 16 40 14 60 16 S100 8 120 12 150 18 170 15 200 6 220 9 245 15 256 14 L256 22 L0 22Z" fill="rgba(255,46,85,.16)"/><path d="M0 18 C30 16 40 14 60 16 S100 8 120 12 150 18 170 15 200 6 220 9 245 15 256 14" fill="none" stroke="var(--accent)" stroke-width="1.4" stroke-opacity=".85"/></svg></div>
+      <div class="ep now"><div class="thumb" style="background-image:url(tmdb/frieren-ep3.jpg)"><span class="n">03</span><div class="prog"><i style="width:49%"></i></div></div><div class="t">杀人魔法<span>25 分</span></div>
+        <svg class="spark" viewBox="0 0 256 22" preserveAspectRatio="none"><path d="M0 19 C20 17 40 15 60 12 S90 4 110 6 140 16 160 14 190 3 210 2 240 10 256 13 L256 22 L0 22Z" fill="rgba(255,46,85,.16)"/><path d="M0 19 C20 17 40 15 60 12 S90 4 110 6 140 16 160 14 190 3 210 2 240 10 256 13" fill="none" stroke="var(--accent)" stroke-width="1.4" stroke-opacity=".85"/></svg></div>
+      <div class="ep "><div class="thumb" style="background-image:url(tmdb/frieren-ep4.jpg)"><span class="n">04</span></div><div class="t">灵魂安眠之地<span>26 分</span></div>
+        <svg class="spark" viewBox="0 0 256 22" preserveAspectRatio="none"><path d="M0 20 C40 19 60 13 80 15 S120 18 140 12 170 7 200 11 230 16 256 15 L256 22 L0 22Z" fill="rgba(255,46,85,.16)"/><path d="M0 20 C40 19 60 13 80 15 S120 18 140 12 170 7 200 11 230 16 256 15" fill="none" stroke="var(--accent)" stroke-width="1.4" stroke-opacity=".85"/></svg></div>
+      <div class="ep "><div class="thumb" style="background-image:url(tmdb/frieren-ep5.jpg)"><span class="n">05</span></div><div class="t">死者的幻影<span>25 分</span></div>
+        <svg class="spark" viewBox="0 0 256 22" preserveAspectRatio="none"><path d="M0 19 C30 18 50 10 70 13 S110 17 130 9 160 5 190 12 220 17 256 11 L256 22 L0 22Z" fill="rgba(255,46,85,.16)"/><path d="M0 19 C30 18 50 10 70 13 S110 17 130 9 160 5 190 12 220 17 256 11" fill="none" stroke="var(--accent)" stroke-width="1.4" stroke-opacity=".85"/></svg></div>
+    </div>
+  </div>
+  <div class="grain"></div>
+</section>
+
+<!-- ================= 对话 ================= -->
+<section class="board" id="chat">
+  <div class="hero"><div class="art" style="background-image:url(tmdb/frieren-backdrop.jpg)"></div><div class="shade"></div></div>
+  <header class="chrome"><div class="lights"><i></i><i></i><i></i></div><nav class="nav"><a class="on">首页</a><a>片库</a><a>动态</a></nav></header>
+  <div class="copy"><img class="logo" src="tmdb/frieren-logo.png" alt=""><p class="blurb">打倒魔王之后，“那之后”的故事。</p></div>
+  <div class="shelf" style="top:630px"><h3>继续观看</h3><div class="row">
+    <div class="card"><div class="thumb" style="background-image:url(tmdb/kusuriya-backdrop.jpg)"></div></div>
+    <div class="card"><div class="thumb" style="background-image:url(tmdb/oshinoko-backdrop.jpg)"></div></div>
+    <div class="card"><div class="thumb" style="background-image:url(tmdb/dungeon-backdrop.jpg)"></div></div></div></div>
+  <div class="dim"></div>
+  <div class="sheet">
+    <div class="sh">
+      <span class="avatar"></span>
+      <div class="nm">Nipa</div>
+      <span class="x"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6 6 18"/></svg></span>
+    </div>
+    <div class="thread">
+      <div class="u">帮我准备一下《葬送的芙莉莲》，按平时的喜好来</div>
+      <div class="n-msg">好，选了简中内嵌的 1080p，已经在下了。下好以后我再看看弹幕够不够，你先忙。</div>
+      <div class="cardx work">
+        <div class="pst" style="background-image:url(tmdb/frieren-poster.jpg)"></div>
+        <div><div class="wt">葬送的芙莉莲</div><div class="wm">★ <span class="num">8.8</span> · <span class="num">2023</span> · <span class="num">28</span> 集</div></div>
+        <span class="open">›</span>
+      </div>
+      <div class="cardx prep">
+        <div class="head">正在准备</div>
+        <div class="steps">
+          <div class="step"><span class="mark done">✓</span><div><div class="w">找到作品</div></div><span class="tm"></span></div>
+          <div class="step"><span class="mark done">✓</span><div><div class="w">选好版本</div><div class="d2">简中内嵌 · 1080p</div></div><span class="tm"></span></div>
+          <div class="step"><span class="mark run"></span><div><div class="w">下载</div><div class="d2"><span class="num">47%</span> · 还要 3 分钟</div><div class="bar2"><i></i></div></div><span class="tm"></span></div>
+          <div class="step"><span class="mark wait"></span><div><div class="w" style="color:var(--p2)">补上弹幕</div></div><span class="tm"></span></div>
+        </div>
+      </div>
+    </div>
+    <div class="compose"><span class="ph">继续说…</span><span class="send"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.4" stroke-linecap="round"><path d="M12 19V5M5 12l7-7 7 7"/></svg></span></div>
+  </div>
+  <div class="grain"></div>
+</section>
+
+<script>
+  const v = new URLSearchParams(location.search).get('v');
+  if (v) document.querySelectorAll('.board').forEach(b => { if (b.id !== v) b.remove(); });
+</script>
+</body>
+</html>
