@@ -55,6 +55,15 @@ abstract final class Words {
     return '$n';
   }
 
+  /// How long something took: “32 秒”, “2 分 5 秒”, “1 小时 3 分”.
+  static String duration(Duration d) {
+    final s = (d.inMilliseconds / 1000).round().clamp(1, 1 << 31);
+    if (s < 60) return '$s 秒';
+    if (s < 3600) return s % 60 == 0 ? '${s ~/ 60} 分钟' : '${s ~/ 60} 分 ${s % 60} 秒';
+    final m = (s % 3600) ~/ 60;
+    return m == 0 ? '${s ~/ 3600} 小时' : '${s ~/ 3600} 小时 $m 分';
+  }
+
   /// The first sentence, for Nipa's one line after a conversation.
   static String firstSentence(String text) {
     final trimmed = text.trim();

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart' show InputDecoration, TextField;
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 
+import '../shell/shell_controller.dart';
 import '../theme/tokens.dart';
 import '../widgets/buttons.dart';
 import '../widgets/glass.dart';
@@ -93,7 +94,10 @@ class _AskBarState extends State<AskBar> {
           padding: const EdgeInsets.only(left: 9, right: 8),
           child: Row(children: [
             NipaAvatar(
-                size: 38, mood: widget.mood, sentence: widget.moodSentence),
+                size: 38,
+                mood: widget.mood,
+                sentence: widget.moodSentence,
+                onTap: NextShellScope.of(context).openPanel),
             const SizedBox(width: 12),
             Expanded(
               child: TextField(

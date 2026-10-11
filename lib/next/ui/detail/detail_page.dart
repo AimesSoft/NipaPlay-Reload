@@ -218,8 +218,7 @@ class _WorkDetailPageState extends State<WorkDetailPage>
   void _downloadAll() {
     final shell = _shell!;
     setState(() => _menuOpen = false);
-    shell.openPanel(about: _work);
-    unawaited(shell.conversation.say('把《${_work.title}》剩下的集都下载下来'));
+    shell.sayAbout(_work, '把《${_work.title}》剩下的集都下载下来');
   }
 
   // —— Debug ——

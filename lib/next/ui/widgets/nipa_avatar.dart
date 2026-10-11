@@ -75,6 +75,8 @@ class NipaAvatar extends StatelessWidget {
     this.mood = NipaMood.idle,
     this.hasNews = false,
     this.sentence,
+    this.onTap,
+    this.onMenu,
   });
 
   final double size;
@@ -83,6 +85,12 @@ class NipaAvatar extends StatelessWidget {
 
   /// Shown on hover, e.g. “在想”, “在补弹幕”.
   final String? sentence;
+
+  /// Click (anywhere it appears, this opens the conversation panel).
+  final VoidCallback? onTap;
+
+  /// Right click or long press.
+  final VoidCallback? onMenu;
 
   @override
   Widget build(BuildContext context) {
@@ -138,6 +146,17 @@ class NipaAvatar extends StatelessWidget {
         ],
       ),
     );
+    if (onTap != null || onMenu != null) {
+      avatar = MouseRegion(
+        cursor: SystemMouseCursors.click,
+        child: GestureDetector(
+          onTap: onTap,
+          onSecondaryTap: onMenu,
+          onLongPress: onMenu,
+          child: avatar,
+        ),
+      );
+    }
     if (sentence case final text? when text.isNotEmpty) {
       avatar = Tooltip(
         message: text,

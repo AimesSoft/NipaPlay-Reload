@@ -309,6 +309,9 @@ class _NextHomePageState extends State<NextHomePage> {
               conversation: c,
               callbacks: _stageCallbacks,
               focusedWorkId: _stageWork()?.workId,
+              onViewAll: c.threadId == null
+                  ? null
+                  : () => shell.openPanelOn(c.threadId!),
             ),
           ),
         ),

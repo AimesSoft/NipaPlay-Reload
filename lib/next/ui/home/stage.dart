@@ -4,6 +4,7 @@ import 'package:flutter/widgets.dart';
 import '../cards/card_views.dart';
 import '../conversation/conversation.dart';
 import '../theme/tokens.dart';
+import '../widgets/activity_line.dart';
 import '../widgets/buttons.dart';
 import '../widgets/nipa_avatar.dart';
 import '../widgets/progress.dart';
@@ -16,11 +17,15 @@ class ConverseStage extends StatelessWidget {
     required this.conversation,
     required this.callbacks,
     this.focusedWorkId,
+    this.onViewAll,
   });
 
   final Conversation conversation;
   final CardCallbacks callbacks;
   final String? focusedWorkId;
+
+  /// “展开”: the whole conversation in the side panel, at its latest.
+  final VoidCallback? onViewAll;
 
   @override
   Widget build(BuildContext context) {
@@ -42,28 +47,48 @@ class ConverseStage extends StatelessWidget {
                     overflow: TextOverflow.ellipsis,
                     style: NextText.sans(14, color: NextColors.p2)),
               ),
+              if (onViewAll != null) ...[
+                const SizedBox(width: 18),
+                _ViewAll(onTap: onViewAll!),
+              ],
             ]),
-          const SizedBox(height: 18),
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Padding(
-                padding: const EdgeInsets.only(top: 2),
-                child: NipaAvatar(
-                    size: 30, mood: c.mood, sentence: c.moodSentence),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Padding(
-                  padding: const EdgeInsets.only(top: 1),
-                  child: StreamingReply(
-                    text: c.reply,
-                    thinking: c.thinking || (c.working && c.question == null),
+          if (c.round case final round?) ...[
+            const SizedBox(height: 14),
+            ActivityLine(
+                key: ObjectKey(round),
+                activity: round,
+                expandable: false,
+                asking: c.question != null),
+          ],
+          // Until Nipa says something, the line above is the whole answer.
+          if (c.reply.isNotEmpty || c.round == null) ...[
+            const SizedBox(height: 18),
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Padding(
+                  padding: const EdgeInsets.only(top: 2),
+                  child: NipaAvatar(
+                      size: 30,
+                      mood: c.mood,
+                      sentence: c.moodSentence,
+                      onTap: onViewAll),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Padding(
+                    padding: const EdgeInsets.only(top: 1),
+                    // The line above shows the waiting; no dots here.
+                    child: StreamingReply(
+                      text: c.reply,
+                      thinking: c.round == null &&
+                          (c.thinking || (c.working && c.question == null)),
+                    ),
                   ),
                 ),
-              ),
-            ],
-          ),
+              ],
+            ),
+          ],
           if (questions.isNotEmpty)
             Padding(
               padding: const EdgeInsets.only(left: 42, top: 18),
@@ -100,9 +125,13 @@ class ConverseStage extends StatelessWidget {
 /// Nipa's reply, revealed character by character as it streams, with the
 /// three dots while it is still thinking.
 class StreamingReply extends StatefulWidget {
-  const StreamingReply({super.key, required this.text, required this.thinking});
+  const StreamingReply(
+      {super.key, required this.text, required this.thinking, this.style});
   final String text;
   final bool thinking;
+
+  /// The stage's large white type unless given.
+  final TextStyle? style;
 
   @override
   State<StreamingReply> createState() => _StreamingReplyState();
@@ -157,8 +186,9 @@ class _StreamingReplyState extends State<StreamingReply>
   Widget build(BuildContext context) {
     final visible =
         widget.text.substring(0, _shown.floor().clamp(0, widget.text.length));
-    final style = NextText.sans(19,
-        weight: FontWeight.w500, height: 1.6, letterSpacing: 0.19);
+    final style = widget.style ??
+        NextText.sans(19,
+            weight: FontWeight.w500, height: 1.6, letterSpacing: 0.19);
     return Text.rich(
       TextSpan(style: style, children: [
         TextSpan(text: visible),
@@ -225,5 +255,19 @@ class _Quiet extends StatelessWidget {
                 label: '重新发', height: 36, onTap: conversation.resend),
           ]),
         ],
+      );
+}
+
+class _ViewAll extends StatelessWidget {
+  const _ViewAll({required this.onTap});
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) => Pressable(
+        onTap: onTap,
+        semanticLabel: '展开',
+        builder: (context, hovered) => Text('展开',
+            style: NextText.sans(13,
+                color: hovered ? NextColors.paper : NextColors.p3)),
       );
 }

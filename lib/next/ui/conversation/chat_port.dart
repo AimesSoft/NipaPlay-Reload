@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import '../../chat/chat_host.dart';
+import '../../harness_redaction.dart';
 import '../../next_runtime.dart';
 
 typedef ChatEvent = Map<String, dynamic>;
@@ -25,7 +26,13 @@ abstract interface class ChatPort {
 
   /// Explicitly opens a fresh conversation. Null while another turn is running.
   Future<String?> newThread();
+
+  /// Codex's threads for this harness, most recent first, the main one
+  /// marked: `{data: [{id, preview, updatedAt, isMain, isCurrent, …}],
+  /// mainThreadId, currentThreadId, nextCursor}`.
   Future<ChatEvent> listThreads({String? cursor});
+
+  /// Makes [threadId] the host's current session. Null while a turn runs.
   Future<String?> switchThread(String threadId);
 
   /// Starts a turn on [threadId]. Returns the server's response, or null
@@ -34,6 +41,9 @@ abstract interface class ChatPort {
 
   /// Adds input to the running turn.
   Future<void> steer(String text);
+
+  /// A thread with its turns and their items (Codex's own history).
+  Future<ChatEvent> readThread(String threadId);
   Future<void> interrupt();
   Future<void> answer(Object requestId, Map<String, List<String>> answers);
   void dispose();
@@ -124,6 +134,16 @@ final class ChatHostPort implements ChatPort {
 
   @override
   Future<void> steer(String text) async => _current?.steer(text);
+
+  /// Redacted like the live display stream, so history shows what the
+  /// live view showed.
+  @override
+  Future<ChatEvent> readThread(String threadId) async {
+    final host = _current;
+    if (host == null) throw StateError('chat host unavailable');
+    return Map<String, dynamic>.from(
+        redactHarnessJson(await host.readThread(threadId)) as Map);
+  }
 
   @override
   Future<void> interrupt() async => _current?.interrupt();

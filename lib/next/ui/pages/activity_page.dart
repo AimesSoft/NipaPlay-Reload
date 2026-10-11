@@ -29,7 +29,11 @@ class ActivityPage extends StatelessWidget {
             const SizedBox(height: 28),
             if (line != null) ...[
               Row(children: [
-                NipaAvatar(size: 28, mood: c.mood, sentence: c.moodSentence),
+                NipaAvatar(
+                    size: 28,
+                    mood: c.mood,
+                    sentence: c.moodSentence,
+                    onTap: shell.openPanel),
                 const SizedBox(width: 12),
                 Expanded(child: NipaSentence(line)),
               ]),

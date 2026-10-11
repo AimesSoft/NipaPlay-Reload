@@ -4,6 +4,7 @@ import 'package:nipa_harness/nipa_harness.dart';
 import '../../next_core.dart';
 import '../../next_runtime.dart';
 import '../../ui_data/ui_data.dart';
+import 'login_requests.dart';
 import 'ui_actions.dart';
 
 /// The one place the shell takes its real data from: `NextCore.uiData`,
@@ -14,6 +15,44 @@ NextUiData coreUiData(NextCore core) => _WhenReady(core);
 /// same `ui.open` Action the agent uses.
 NextUiActions coreUiActions(NextCore core, NextRuntime runtime) =>
     CoreUiActions(core, runtime);
+
+/// Routes the core's login windows (accounts and media sources started by
+/// the agent without a secret) through [requests] while the shell lives.
+/// Returns the detach, which puts the original windows back.
+VoidCallback attachCoreLogins(NextCore core, LoginRequests requests) {
+  var attached = true;
+  Future<JsonMap?> Function(JsonMap, Future<void>)? account;
+  Future<String?> Function(JsonMap, Future<void>)? source;
+  Future<JsonMap?> accountCard(JsonMap input, Future<void> stopped) =>
+      requests.request<JsonMap>(
+          switch (input['provider']) {
+            'dandanplay' => '弹弹play',
+            'bangumi' => 'Bangumi',
+            final other => '$other',
+          },
+          () => account!(input, stopped),
+          stopped);
+  Future<String?> sourceCard(JsonMap row, Future<void> stopped) =>
+      requests.request<String>('${row['name'] ?? row['type']}',
+          () => source!(row, stopped), stopped);
+  // NextRuntime attaches the windows when the core is ready; wrap after it.
+  core.ready.then((_) => Future<void>.delayed(Duration.zero)).then((_) {
+    if (!attached) return;
+    account = core.accounts.requestLogin;
+    source = core.mediaSources.requestPassword;
+    if (account != null) core.accounts.requestLogin = accountCard;
+    if (source != null) core.mediaSources.requestPassword = sourceCard;
+  });
+  return () {
+    attached = false;
+    if (identical(core.accounts.requestLogin, accountCard)) {
+      core.accounts.requestLogin = account;
+    }
+    if (identical(core.mediaSources.requestPassword, sourceCard)) {
+      core.mediaSources.requestPassword = source;
+    }
+  };
+}
 
 final class _WhenReady implements NextUiData {
   _WhenReady(this.core);

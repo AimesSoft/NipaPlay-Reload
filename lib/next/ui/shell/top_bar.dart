@@ -117,15 +117,22 @@ class NextTopBar extends StatelessWidget {
                   listenable: shell.conversation,
                   builder: (context, _) {
                     final c = shell.conversation;
-                    return Pressable(
-                      onTap: () => shell.togglePopover(NextPopover.nipa),
-                      semanticLabel: 'Nipa',
-                      pressScale: 0.94,
-                      builder: (context, hovered) => NipaAvatar(
-                        size: _avatar,
-                        mood: c.mood,
-                        hasNews: c.unseen,
-                        sentence: c.moodSentence,
+                    // Click: the conversation; right click or long press:
+                    // the menu (back to Classic).
+                    return GestureDetector(
+                      onSecondaryTap: () =>
+                          shell.togglePopover(NextPopover.nipa),
+                      onLongPress: () => shell.togglePopover(NextPopover.nipa),
+                      child: Pressable(
+                        onTap: shell.openPanel,
+                        semanticLabel: 'Nipa',
+                        pressScale: 0.94,
+                        builder: (context, hovered) => NipaAvatar(
+                          size: _avatar,
+                          mood: c.mood,
+                          hasNews: c.unseen,
+                          sentence: c.moodSentence,
+                        ),
                       ),
                     );
                   },

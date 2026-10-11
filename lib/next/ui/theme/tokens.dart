@@ -74,6 +74,18 @@ abstract final class NextText {
         leadingDistribution: TextLeadingDistribution.even,
       );
 
+  /// Commands and their output.
+  static TextStyle mono(double size,
+          {Color color = NextColors.p2, double height = 1.5}) =>
+      TextStyle(
+        fontFamily: 'Menlo',
+        fontFamilyFallback: const ['Monaco', 'Courier'],
+        fontSize: size,
+        color: color,
+        height: height,
+        decoration: TextDecoration.none,
+      );
+
   static TextStyle num(double size,
           {FontWeight weight = FontWeight.w500,
           Color color = NextColors.paper,

@@ -2,6 +2,7 @@ import 'package:flutter/widgets.dart';
 
 import '../../ui_data/ui_data.dart';
 import '../cards/card_views.dart';
+import '../shell/shell_controller.dart';
 import '../theme/tokens.dart';
 import '../widgets/artwork.dart';
 import '../widgets/buttons.dart';
@@ -66,7 +67,10 @@ class HeroCopy extends StatelessWidget {
                       padding: const EdgeInsets.only(bottom: 6),
                       child: Row(children: [
                         NipaAvatar(
-                            size: 28, mood: mood, sentence: moodSentence),
+                            size: 28,
+                            mood: mood,
+                            sentence: moodSentence,
+                            onTap: NextShellScope.of(context).openPanel),
                         const SizedBox(width: 12),
                         Expanded(
                           child: NipaSentence(line!,

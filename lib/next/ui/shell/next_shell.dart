@@ -10,6 +10,7 @@ import '../home/home_page.dart';
 import '../detail/work_route.dart';
 import '../pages/activity_page.dart';
 import '../pages/library_page.dart';
+import '../panel/chat_panel.dart';
 import '../theme/tokens.dart';
 import '../widgets/art_origin.dart';
 import '../widgets/grain.dart';
@@ -71,6 +72,9 @@ class _NextShellState extends State<NextShell> {
 
   @override
   Widget build(BuildContext context) {
+    // Hidden while Classic's player shows a video: logins open at once then.
+    final showing = TickerMode.valuesOf(context).enabled;
+    _services.logins.showing = () => showing && mounted;
     final base = Theme.of(context);
     return Theme(
       data: ThemeData(
@@ -156,6 +160,7 @@ class _NextShellState extends State<NextShell> {
                         left: 0, right: 0, top: 0, child: NextTopBar()),
                     const Positioned.fill(child: Grain()),
                     const Positioned.fill(child: NextPopovers()),
+                    const Positioned.fill(child: ChatPanelLayer()),
                   ]),
                 ),
               ),
