@@ -1,0 +1,44 @@
+=== flutter test 2026-10-12T00:50:24+08:00 ===
+07:07 +829 ~25 -7: F:/Hermes Agent CN Desktop Portable/data/hermes-home/NipaPlay-Reload-features/test/watch_history_clear_by_source_test.dart: removeHistoriesWhere 删除匹配记录并同步内存列表
+跳过无效文件: /local/4.mp4
+07:07 +830 ~25 -7: F:/Hermes Agent CN Desktop Portable/data/hermes-home/NipaPlay-Reload-features/test/watch_history_database_migration_test.dart: (setUpAll)
+07:08 +830 ~25 -7: F:/Hermes Agent CN Desktop Portable/data/hermes-home/NipaPlay-Reload-features/test/watch_history_database_migration_test.dart: v1 库已含 media_key 时升级到 v2 不再抛 duplicate column
+07:09 +831 ~25 -7: F:/Hermes Agent CN Desktop Portable/data/hermes-home/NipaPlay-Reload-features/test/watch_history_database_migration_test.dart: 标准 v1 库升级到 v2 会补上 media_key 列并保留数据
+07:09 +832 ~25 -7: F:/Hermes Agent CN Desktop Portable/data/hermes-home/NipaPlay-Reload-features/test/watch_history_database_migration_test.dart: (tearDownAll)
+07:10 +832 ~25 -7: F:/Hermes Agent CN Desktop Portable/data/hermes-home/NipaPlay-Reload-features/test/watch_history_model_test.dart: accepts integer-backed numeric values from persisted history
+07:11 +833 ~25 -7: F:/Hermes Agent CN Desktop Portable/data/hermes-home/NipaPlay-Reload-features/test/webdav_connection_rebind_test.dart: 加载无 id 的旧连接时按 url|username 派生稳定 id 并可直接解析
+07:11 +834 ~25 -7: F:/Hermes Agent CN Desktop Portable/data/hermes-home/NipaPlay-Reload-features/test/webdav_connection_rebind_test.dart: 连接删除重建后，旧条目引用的派生 id 重绑到新连接
+07:11 +835 ~25 -7: F:/Hermes Agent CN Desktop Portable/data/hermes-home/NipaPlay-Reload-features/test/webdav_connection_rebind_test.dart: URL 与用户名都对不上的旧 id 不做重绑
+07:13 +836 ~25 -7: F:/Hermes Agent CN Desktop Portable/data/hermes-home/NipaPlay-Reload-features/test/webdav_file_sorter_test.dart: WebDAVFileSorter keeps folders first and sorts names naturally by default
+07:13 +837 ~25 -7: F:/Hermes Agent CN Desktop Portable/data/hermes-home/NipaPlay-Reload-features/test/webdav_file_sorter_test.dart: WebDAVFileSorter sorts by modified time with stable name fallback
+07:15 +838 ~25 -7: F:/Hermes Agent CN Desktop Portable/data/hermes-home/NipaPlay-Reload-features/test/webdav_quick_access_provider_test.dart: WebDAVQuickAccessProvider loads WebDAV as effective default tab when enabled
+07:15 +839 ~25 -7: F:/Hermes Agent CN Desktop Portable/data/hermes-home/NipaPlay-Reload-features/test/webdav_quick_access_provider_test.dart: WebDAVQuickAccessProvider falls back to home when WebDAV default tab is disabled
+07:17 +840 ~25 -7: F:/Hermes Agent CN Desktop Portable/data/hermes-home/NipaPlay-Reload-features/test/web_ui_proxy_api_test.dart: 转发带 Accept-Encoding 的请求不会抛错，且改写为 identity
+07:19 +841 ~25 -7: F:/Hermes Agent CN Desktop Portable/data/hermes-home/NipaPlay-Reload-features/test/widgets/nipaplay_window_test.dart: embedded window provides a Material ancestor
+07:20 +842 ~25 -7: F:/Hermes Agent CN Desktop Portable/data/hermes-home/NipaPlay-Reload-features/test/widgets/nipaplay_window_test.dart: filled-screen window can respect supplied maximum size
+07:20 +843 ~25 -7: Some tests failed.
+
+Failing tests:
+  F:/Hermes Agent CN Desktop Portable/data/hermes-home/NipaPlay-Reload-features/test/android_tv_platform_policy_test.dart: Android TV keeps Android player and danmaku kernel choices
+  F:/Hermes Agent CN Desktop Portable/data/hermes-home/NipaPlay-Reload-features/test/bangumi_external_auth_launch_test.dart: Bangumi auth launches directly and only reports real success
+  F:/Hermes Agent CN Desktop Portable/data/hermes-home/NipaPlay-Reload-features/test/danmaku_matching_access_test.dart: danmaku matching access all app matching callers use the shared matching facade
+  F:/Hermes Agent CN Desktop Portable/data/hermes-home/NipaPlay-Reload-features/test/mainline_flutter_compatibility_test.dart: Linux mode retains every shared dependency override
+  ... and 3 more
+=== test exit: 0 ===
+=== flutter build windows --debug 2026-10-12T00:58:12+08:00 ===
+F:\Hermes Agent CN Desktop Portable\data\hermes-home\NipaPlay-Reload-features\windows\flutter\ephemeral\.plugin_symlinks\nipaplay_smb2\third_party\libsmb2\lib\socket.c(559,57): warning C4267: “=”: 从“size_t”转换到“int”，可能丢失数据 [F:\Hermes Agent CN Desktop Portable\data\hermes-home\NipaPlay-Reload-features\build\windows\x64\plugins\nipaplay_smb2\shared\libsmb2\lib\smb2.vcxproj]
+F:\Hermes Agent CN Desktop Portable\data\hermes-home\NipaPlay-Reload-features\windows\flutter\ephemeral\.plugin_symlinks\nipaplay_smb2\third_party\libsmb2\lib\socket.c(650,40): warning C4267: “-=”: 从“size_t”转换到“int”，可能丢失数据 [F:\Hermes Agent CN Desktop Portable\data\hermes-home\NipaPlay-Reload-features\build\windows\x64\plugins\nipaplay_smb2\shared\libsmb2\lib\smb2.vcxproj]
+F:\Hermes Agent CN Desktop Portable\data\hermes-home\NipaPlay-Reload-features\windows\flutter\ephemeral\.plugin_symlinks\nipaplay_smb2\third_party\libsmb2\lib\socket.c(677,54): warning C4267: “=”: 从“size_t”转换到“int”，可能丢失数据 [F:\Hermes Agent CN Desktop Portable\data\hermes-home\NipaPlay-Reload-features\build\windows\x64\plugins\nipaplay_smb2\shared\libsmb2\lib\smb2.vcxproj]
+F:\Hermes Agent CN Desktop Portable\data\hermes-home\NipaPlay-Reload-features\windows\flutter\ephemeral\.plugin_symlinks\nipaplay_smb2\third_party\libsmb2\lib\socket.c(680,57): warning C4267: “=”: 从“size_t”转换到“int”，可能丢失数据 [F:\Hermes Agent CN Desktop Portable\data\hermes-home\NipaPlay-Reload-features\build\windows\x64\plugins\nipaplay_smb2\shared\libsmb2\lib\smb2.vcxproj]
+F:\Hermes Agent CN Desktop Portable\data\hermes-home\NipaPlay-Reload-features\windows\flutter\ephemeral\.plugin_symlinks\nipaplay_smb2\third_party\libsmb2\lib\socket.c(726,54): warning C4267: “=”: 从“size_t”转换到“int”，可能丢失数据 [F:\Hermes Agent CN Desktop Portable\data\hermes-home\NipaPlay-Reload-features\build\windows\x64\plugins\nipaplay_smb2\shared\libsmb2\lib\smb2.vcxproj]
+F:\Hermes Agent CN Desktop Portable\data\hermes-home\NipaPlay-Reload-features\windows\flutter\ephemeral\.plugin_symlinks\nipaplay_smb2\third_party\libsmb2\lib\socket.c(729,57): warning C4267: “=”: 从“size_t”转换到“int”，可能丢失数据 [F:\Hermes Agent CN Desktop Portable\data\hermes-home\NipaPlay-Reload-features\build\windows\x64\plugins\nipaplay_smb2\shared\libsmb2\lib\smb2.vcxproj]
+F:\Hermes Agent CN Desktop Portable\data\hermes-home\NipaPlay-Reload-features\windows\flutter\ephemeral\.plugin_symlinks\nipaplay_smb2\third_party\libsmb2\lib\socket.c(1482,34): warning C4244: “函数”: 从“t_socket”转换到“const int”，可能丢失数据 [F:\Hermes Agent CN Desktop Portable\data\hermes-home\NipaPlay-Reload-features\build\windows\x64\plugins\nipaplay_smb2\shared\libsmb2\lib\smb2.vcxproj]
+C:\Program Files (x86)\Windows Kits\10\Include\10.0.26100.0\um\winsock2.h(17,9): warning C4005: “_WINSOCKAPI_”: 宏重定义 [F:\Hermes Agent CN Desktop Portable\data\hermes-home\NipaPlay-Reload-features\build\windows\x64\plugins\nipaplay_smb2\shared\libsmb2\lib\smb2.vcxproj]
+C:\Program Files (x86)\Windows Kits\10\Include\10.0.26100.0\um\winsock2.h(17,9): warning C4005: “_WINSOCKAPI_”: 宏重定义 [F:\Hermes Agent CN Desktop Portable\data\hermes-home\NipaPlay-Reload-features\build\windows\x64\plugins\nipaplay_smb2\shared\libsmb2\lib\smb2.vcxproj]
+C:\Program Files (x86)\Windows Kits\10\Include\10.0.26100.0\um\winsock2.h(17,9): warning C4005: “_WINSOCKAPI_”: 宏重定义 [F:\Hermes Agent CN Desktop Portable\data\hermes-home\NipaPlay-Reload-features\build\windows\x64\plugins\nipaplay_smb2\shared\libsmb2\lib\smb2.vcxproj]
+C:\Program Files (x86)\Windows Kits\10\Include\10.0.26100.0\um\winsock2.h(17,9): warning C4005: “_WINSOCKAPI_”: 宏重定义 [F:\Hermes Agent CN Desktop Portable\data\hermes-home\NipaPlay-Reload-features\build\windows\x64\plugins\nipaplay_smb2\shared\libsmb2\lib\smb2.vcxproj]
+C:\Program Files (x86)\Windows Kits\10\Include\10.0.26100.0\um\winsock2.h(17,9): warning C4005: “_WINSOCKAPI_”: 宏重定义 [F:\Hermes Agent CN Desktop Portable\data\hermes-home\NipaPlay-Reload-features\build\windows\x64\plugins\nipaplay_smb2\shared\libsmb2\lib\smb2.vcxproj]
+C:\Program Files (x86)\Windows Kits\10\Include\10.0.26100.0\um\winsock2.h(17,9): warning C4005: “_WINSOCKAPI_”: 宏重定义 [F:\Hermes Agent CN Desktop Portable\data\hermes-home\NipaPlay-Reload-features\build\windows\x64\plugins\nipaplay_smb2\shared\nipaplay_smb2.vcxproj]
+Building Windows application...                                  2817.5s
+Build process failed.
+=== build exit: 0 ===

@@ -65,9 +65,9 @@
 ### 2.3 flutter build windows --debug
 | 指标 | 基线 | 重构后 |
 |---|---|---|
-| 结果 | **失败**（nipaplay_smb2 插件原生 C 编译，libsmb2/socket.c；与 Dart 无关的本机预存问题） | 后台对照中，预期复现同一原生失败点（日志 `post_refactor_build.log`） |
+| 结果 | **失败**：nipaplay_smb2 插件原生 C 编译（libsmb2/socket.c，MSVC 警告即错误） | **失败**：universal_gamepad 插件原生 C++ 编译（sdl_manager.h，C2220 警告即错误） |
 
-结论口径：构建行为与基线一致即视为"构建能力未回归"；Windows 端原生构建问题需单独修复（不在本阶段范围）。Dart 侧编译完整性由 analyze 0 error + 全量测试覆盖。
+两次失败均为 **vendored 插件的原生 C/C++ 编译问题**（本机 MSVC/SDK 组合下"警告视为错误"），与 Dart 重构无关——重构未触碰任何 vendored 插件，失败点不同属原生并行编译的非确定性。Dart 侧编译完整性由 analyze 0 error + 全量测试覆盖（构建日志：`docs/refactor/logs/baseline_test_build.log`、`post_refactor_build.log`）。Windows 端原生构建修复不在本阶段范围（用户发版走 CI，仓库带 release workflow）。
 
 ### 2.4 core 纯净度（scripts/check_core_purity.sh）
 每批执行，最终状态：**通过**——core 无 material/cupertino/widgets/rendering/painting import、无 UI 第三方包、无 Widget/BuildContext/StatefulWidget 符号、dart:ui 仅几何值类型。

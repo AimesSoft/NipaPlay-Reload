@@ -1,0 +1,5 @@
+=== flutter build windows --debug (post-refactor) 2026-10-12T02:54:52+08:00 ===
+F:\Hermes Agent CN Desktop Portable\data\hermes-home\NipaPlay-Reload-features\windows\flutter\ephemeral\.plugin_symlinks\universal_gamepad\windows\sdl_manager.h(1,1): error C2220: 以下警告被视为错误 [F:\Hermes Agent CN Desktop Portable\data\hermes-home\NipaPlay-Reload-features\build\windows\x64\plugins\universal_gamepad\universal_gamepad_plugin.vcxproj]
+F:\Hermes Agent CN Desktop Portable\data\hermes-home\NipaPlay-Reload-features\windows\flutter\ephemeral\.plugin_symlinks\universal_gamepad\windows\sdl_manager.h(1,1): error C2220: 以下警告被视为错误 [F:\Hermes Agent CN Desktop Portable\data\hermes-home\NipaPlay-Reload-features\build\windows\x64\plugins\universal_gamepad\universal_gamepad_plugin.vcxproj]
+Build process failed.
+=== done 2026-10-12T02:57:04+08:00 ===
