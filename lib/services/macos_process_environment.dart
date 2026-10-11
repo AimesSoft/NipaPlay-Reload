@@ -14,7 +14,13 @@ abstract final class MacOSProcessEnvironment {
   }
 
   static Future<bool> _query() async {
-    final value = await _channel.invokeMethod<bool>('isSandboxed');
+    final bool? value;
+    try {
+      value = await _channel.invokeMethod<bool>('isSandboxed');
+    } on MissingPluginException {
+      // No native host (flutter test), so not the sandboxed app container.
+      return false;
+    }
     if (value == null) throw StateError('macOS sandbox status is unavailable');
     return value;
   }
