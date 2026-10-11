@@ -15,6 +15,9 @@ enum LabProfile {
     static private(set) var root: URL?
     static private(set) var writeSandbox = false
     static var active: Bool { name != nil }
+    static var quiet: Bool {
+        active && ProcessInfo.processInfo.environment["NIPAPLAY_LAB_QUIET"] != "0"
+    }
     static func install() throws {
         unsetenv("NIPAPLAY_LAB_ROOT")
         #if DEBUG

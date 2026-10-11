@@ -18,6 +18,10 @@ class AppDelegate: FlutterAppDelegate {
   
   @objc override func applicationDidFinishLaunching(_ notification: Notification) {
     configureBundledMoltenVKIfAvailable()
+    if LabProfile.quiet {
+      // The nib window is visible at launch; keep a lab instance behind.
+      NSApp.windows.forEach { $0.orderBack(nil) }
+    }
     print("[AppDelegate] 应用启动")
   }
 

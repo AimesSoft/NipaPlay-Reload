@@ -1567,6 +1567,11 @@ class MainFlutterWindow: NSWindow {
     do {
       try LabProfile.install()
       if let profile = LabProfile.name { title = "NipaPlay · LAB [\(profile)]" }
+      if LabProfile.quiet {
+        // Experiments run beside the user: an accessory app is never
+        // activated at launch and takes neither the Dock nor the menu bar.
+        NSApp.setActivationPolicy(.accessory)
+      }
       try SandboxMigration.runBeforeEngine()
     } catch {
       let alert = NSAlert()
