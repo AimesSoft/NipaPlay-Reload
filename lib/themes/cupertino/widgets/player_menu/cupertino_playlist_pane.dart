@@ -18,7 +18,7 @@ import 'package:nipaplay/providers/settings_provider.dart';
 import 'package:nipaplay/services/playback_service.dart';
 import 'package:nipaplay/services/smb_proxy_service.dart';
 import 'package:nipaplay/services/smb_service.dart';
-import 'package:nipaplay/services/webdav_service.dart';
+import 'package:nipaplay_core/services/webdav_service.dart';
 import 'package:nipaplay/providers/shared_remote_library_provider.dart';
 import 'package:nipaplay/utils/media_source_utils.dart';
 import 'package:nipaplay/utils/media_identity_resolver.dart';

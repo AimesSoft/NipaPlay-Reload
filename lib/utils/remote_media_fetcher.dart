@@ -10,8 +10,8 @@ import 'package:http/http.dart' as http;
 import 'package:http/io_client.dart';
 import 'package:nipaplay/player_abstraction/player_factory.dart';
 import 'package:xml/xml.dart';
-import 'package:nipaplay/src/rust/api/media_probe.dart' as rust_media;
-import 'package:nipaplay/src/rust/rust_init.dart';
+import 'package:nipaplay_core/rust/api/media_probe.dart' as rust_media;
+import 'package:nipaplay_core/rust/rust_init.dart';
 import 'package:nipaplay_core/utils/http_user_agent.dart';
 
 /// 获取远程媒体文件的基础信息，并计算前16MB内容的 MD5。

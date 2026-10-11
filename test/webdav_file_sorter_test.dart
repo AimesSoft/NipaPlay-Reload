@@ -1,6 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:nipaplay/providers/webdav_quick_access_provider.dart';
-import 'package:nipaplay/services/webdav_service.dart';
+import 'package:nipaplay_core/services/webdav_service.dart';
 import 'package:nipaplay/utils/webdav_file_sorter.dart';
 
 void main() {

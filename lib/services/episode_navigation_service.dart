@@ -13,7 +13,7 @@ import 'package:nipaplay/services/jellyfin_episode_mapping_service.dart';
 import 'package:nipaplay/services/emby_episode_mapping_service.dart';
 import 'package:nipaplay/services/dandanplay_service.dart';
 import 'package:nipaplay/services/smb_service.dart';
-import 'package:nipaplay/services/webdav_service.dart';
+import 'package:nipaplay_core/services/webdav_service.dart';
 import 'package:nipaplay/utils/webdav_file_sorter.dart';
 import 'package:nipaplay/utils/media_source_utils.dart';
 /// 剧集导航结果

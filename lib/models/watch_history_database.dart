@@ -11,8 +11,8 @@ import 'package:nipaplay/utils/storage_service.dart';
 import 'package:nipaplay/utils/media_source_utils.dart';
 import 'package:nipaplay/utils/media_identity_resolver.dart';
 import 'package:nipaplay/services/smb_service.dart';
-import 'package:nipaplay/services/webdav_service.dart';
-import 'package:nipaplay/services/anime_deletion_tombstones.dart';
+import 'package:nipaplay_core/services/webdav_service.dart';
+import 'package:nipaplay_core/services/anime_deletion_tombstones.dart';
 import 'dart:io' as io;
 
 class WatchHistoryBulkMergeResult {

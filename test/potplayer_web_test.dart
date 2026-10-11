@@ -2,8 +2,8 @@
 library;
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:nipaplay/models/external_player_session/potplayer_session.dart';
-import 'package:nipaplay/models/external_player_session/potplayer_window_api.dart';
+import 'package:nipaplay_core/models/external_player_session/potplayer_session.dart';
+import 'package:nipaplay_core/models/external_player_session/potplayer_window_api.dart';
 
 void main() {
   test('PotPlayer session can be compiled into the embedded Web UI', () {

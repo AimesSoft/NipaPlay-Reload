@@ -8,7 +8,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:nipaplay/models/database/asset_record.dart';
 import 'package:nipaplay/services/database/database_service.dart';
 import 'package:nipaplay/utils/color.dart';
-import 'package:nipaplay/utils/file_hash.dart';
+import 'package:nipaplay_core/utils/file_hash.dart';
 
 import '../environment_variables.dart';
 import '../test_util/io.dart';

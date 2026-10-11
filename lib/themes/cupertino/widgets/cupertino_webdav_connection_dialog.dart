@@ -3,7 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:nipaplay/themes/cupertino/cupertino_imports.dart';
 import 'package:nipaplay/l10n/l10n.dart';
 import 'package:nipaplay/themes/cupertino/widgets/cupertino_bottom_sheet.dart';
-import 'package:nipaplay/services/webdav_service.dart';
+import 'package:nipaplay_core/services/webdav_service.dart';
 
 class CupertinoWebDAVConnectionDialog {
   static Future<bool?> show(

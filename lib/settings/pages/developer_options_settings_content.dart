@@ -23,7 +23,7 @@ import 'package:nipaplay/themes/nipaplay/widgets/nipaplay_window.dart';
 import 'package:nipaplay/utils/build_info.dart';
 import 'package:nipaplay/utils/globals.dart' as globals;
 import 'package:nipaplay/utils/linux_storage_migration.dart';
-import 'package:nipaplay/utils/platform_utils.dart' as platform;
+import 'package:nipaplay_core/utils/platform_utils.dart' as platform;
 import 'package:nipaplay/utils/video_player_state.dart';
 import 'package:provider/provider.dart';
 

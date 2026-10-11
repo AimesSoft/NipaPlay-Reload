@@ -1,6 +1,7 @@
 import 'package:path/path.dart' as p;
-import 'package:nipaplay/src/rust/api/media_metadata.dart' as rust_metadata;
-import 'package:nipaplay/src/rust/frb_generated.dart';
+import 'package:nipaplay_core/rust/api/media_metadata.dart' as rust_metadata;
+import 'package:nipaplay_core/rust/frb_generated.dart';
+// ignore_for_file: invalid_use_of_internal_member // nipaplay_core: RustLib.instance 是 frb 生成 API
 
 /// 从常见番组发布文件名中提取更适合搜索的关键词。
 ///

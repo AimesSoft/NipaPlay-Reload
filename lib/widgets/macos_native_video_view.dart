@@ -5,7 +5,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'package:nipaplay/player_abstraction/player_abstraction.dart';
-import 'package:nipaplay/utils/platform_utils.dart';
+import 'package:nipaplay_core/utils/platform_utils.dart';
 
 const int _windowHostedPlatformSurfaceId = -1;
 const MethodChannel _macOSNativeVideoChannel =

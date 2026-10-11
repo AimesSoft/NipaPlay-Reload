@@ -16,8 +16,8 @@ import 'package:nipaplay/utils/remote_media_fetcher.dart';
 import 'package:nipaplay/utils/media_filename_parser.dart';
 import 'package:nipaplay_core/services/web_remote_access_service.dart';
 import 'package:nipaplay_core/services/nipaplay_server_router.dart';
-import 'package:nipaplay/src/rust/api/media_probe.dart' as rust_media;
-import 'package:nipaplay/src/rust/rust_init.dart';
+import 'package:nipaplay_core/rust/api/media_probe.dart' as rust_media;
+import 'package:nipaplay_core/rust/rust_init.dart';
 
 class DandanplayService {
   static const String appId = "nipaplayv1";

@@ -1,10 +1,11 @@
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart'
     show Int64List, Uint32List;
 import 'package:nipaplay/providers/webdav_quick_access_provider.dart';
-import 'package:nipaplay/services/webdav_service.dart';
-import 'package:nipaplay/src/rust/api/remote_directory.dart'
+import 'package:nipaplay_core/services/webdav_service.dart';
+import 'package:nipaplay_core/rust/api/remote_directory.dart'
     as rust_remote_directory;
-import 'package:nipaplay/src/rust/frb_generated.dart';
+import 'package:nipaplay_core/rust/frb_generated.dart';
+// ignore_for_file: invalid_use_of_internal_member // nipaplay_core: RustLib.instance 是 frb 生成 API
 
 class WebDAVFileSorter {
   const WebDAVFileSorter._();

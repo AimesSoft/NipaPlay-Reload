@@ -1,6 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:nipaplay_core/models/danmaku/danmaku_item.dart';
-import 'package:nipaplay/utils/danmaku_ass_converter.dart';
+import 'package:nipaplay_core/utils/danmaku_ass_converter.dart';
 
 void main() {
   group('ASS conversion', () {

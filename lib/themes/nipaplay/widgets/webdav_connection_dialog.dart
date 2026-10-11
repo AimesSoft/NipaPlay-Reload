@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_dialog.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_snackbar.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/tvos_remote_text_input_scope.dart';
-import 'package:nipaplay/services/webdav_service.dart';
+import 'package:nipaplay_core/services/webdav_service.dart';
 import 'package:nipaplay/utils/app_accent_color.dart';
 
 class WebDAVConnectionDialog {

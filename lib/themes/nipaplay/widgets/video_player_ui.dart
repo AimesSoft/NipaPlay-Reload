@@ -9,7 +9,7 @@ import 'package:nipaplay/danmaku_abstraction/danmaku_kernel_factory.dart';
 import 'package:nipaplay/services/system_share_service.dart';
 import 'package:nipaplay/services/photo_library_service.dart';
 import 'package:nipaplay/utils/globals.dart' as globals;
-import 'package:nipaplay/utils/platform_utils.dart';
+import 'package:nipaplay_core/utils/platform_utils.dart';
 import 'package:nipaplay/utils/video_player_state.dart';
 import 'package:nipaplay_core/utils/video_aspect_geometry.dart';
 import 'package:nipaplay/widgets/context_menu/context_menu.dart';

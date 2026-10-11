@@ -12,7 +12,7 @@ import 'package:nipaplay/providers/service_provider.dart';
 import 'package:nipaplay/services/danmaku_matching_service.dart';
 import 'package:nipaplay/services/scan_service.dart';
 import 'package:nipaplay/services/smb_proxy_service.dart';
-import 'package:nipaplay/services/webdav_service.dart';
+import 'package:nipaplay_core/services/webdav_service.dart';
 import 'package:nipaplay/services/smb_service.dart';
 import 'package:nipaplay/utils/subtitle_file_utils.dart';
 

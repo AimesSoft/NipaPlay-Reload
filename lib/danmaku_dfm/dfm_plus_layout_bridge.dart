@@ -6,8 +6,8 @@ import 'package:nipaplay_core/constants/danmaku/mode.dart';
 import 'package:nipaplay_core/danmaku_abstraction/danmaku_content_item.dart';
 import 'package:nipaplay_core/danmaku_abstraction/positioned_danmaku_item.dart';
 import 'package:nipaplay/danmaku_next/next2_emoji_pipeline.dart';
-import 'package:nipaplay/src/rust/api/dfm_plus.dart' as rust_dfm;
-import 'package:nipaplay/src/rust/rust_init.dart';
+import 'package:nipaplay_core/rust/api/dfm_plus.dart' as rust_dfm;
+import 'package:nipaplay_core/rust/rust_init.dart';
 
 class DfmPlusLayoutBridge {
   rust_dfm.DfmPlusPreparedLayout? _prepared;

@@ -9,8 +9,8 @@ import 'package:nipaplay_core/utils/mock_mdk.dart'
     if (dart.library.io) 'package:fvp/mdk.dart';
 import 'package:nipaplay/danmaku_abstraction/danmaku_kernel_factory.dart';
 import 'package:nipaplay/player_abstraction/player_factory.dart';
-import 'package:nipaplay/src/rust/api/performance.dart' as rust_perf;
-import 'package:nipaplay/src/rust/rust_init.dart';
+import 'package:nipaplay_core/rust/api/performance.dart' as rust_perf;
+import 'package:nipaplay_core/rust/rust_init.dart';
 import 'package:nipaplay/utils/globals.dart' as globals;
 
 /// 系统资源监控类

@@ -23,7 +23,7 @@ import 'package:nipaplay/providers/appearance_settings_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart'; // Import SharedPreferences
 import 'package:nipaplay/services/manual_danmaku_matcher.dart'; // 导入手动弹幕匹配器
 import 'package:nipaplay/services/danmaku_matching_service.dart';
-import 'package:nipaplay/services/webdav_service.dart'; // 导入WebDAV服务
+import 'package:nipaplay_core/services/webdav_service.dart'; // 导入WebDAV服务
 import 'package:nipaplay/services/smb_service.dart';
 import 'package:nipaplay/services/smb_proxy_service.dart';
 import 'package:nipaplay/utils/media_source_utils.dart';

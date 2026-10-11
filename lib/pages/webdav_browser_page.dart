@@ -3,7 +3,7 @@ library webdav_browser_page;
 import 'package:flutter/cupertino.dart' as cupertino;
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'package:nipaplay/services/webdav_service.dart';
+import 'package:nipaplay_core/services/webdav_service.dart';
 import 'package:nipaplay/utils/media_source_utils.dart';
 import 'package:nipaplay/utils/media_identity_resolver.dart';
 import 'package:nipaplay/providers/webdav_quick_access_provider.dart';

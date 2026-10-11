@@ -8,7 +8,7 @@ import 'package:nipaplay/themes/nipaplay/widgets/large_screen_home_page.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/nipaplay_main_tab_bar.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/switchable_view.dart';
 import 'package:nipaplay/utils/globals.dart' as globals;
-import 'package:nipaplay/utils/platform_utils.dart';
+import 'package:nipaplay_core/utils/platform_utils.dart';
 import 'package:nipaplay/utils/video_player_state.dart';
 import 'package:provider/provider.dart';
 

@@ -10,7 +10,7 @@ import 'package:nipaplay_core/models/bangumi_model.dart';
 import 'package:nipaplay/providers/labs_settings_provider.dart';
 import 'package:nipaplay/services/bangumi_service.dart';
 import 'package:nipaplay/services/full_backup_service.dart';
-import 'package:nipaplay/services/incremental_sync_repository.dart';
+import 'package:nipaplay_core/services/incremental_sync_repository.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/adaptive_media_detail_action.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/cached_network_image_widget.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/immersive_anime_detail_scaffold.dart';

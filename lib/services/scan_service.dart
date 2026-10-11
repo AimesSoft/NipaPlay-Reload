@@ -5,7 +5,7 @@ import 'dart:io' if (dart.library.io) 'dart:io';
 import 'package:path/path.dart' as p;
 import 'package:nipaplay/models/watch_history_model.dart';
 import 'package:nipaplay/services/concurrent_video_processor.dart';
-import 'package:nipaplay/services/rust_file_scan_service.dart';
+import 'package:nipaplay_core/services/rust_file_scan_service.dart';
 import 'package:nipaplay/services/android_saf_service.dart';
 import 'package:nipaplay/utils/ios_container_path_fixer.dart';
 import 'dart:convert';

@@ -10,11 +10,11 @@ import 'package:nipaplay/l10n/app_localizations.dart';
 import 'package:nipaplay_core/models/danmaku/blocked_item.dart';
 import 'package:nipaplay_core/models/danmaku/danmaku_item.dart';
 import 'package:nipaplay_core/models/danmaku/style.dart';
-import 'package:nipaplay/models/external_player_session/session.dart';
+import 'package:nipaplay_core/models/external_player_session/session.dart';
 import 'package:nipaplay/pages/external_player_console_page.dart';
 import 'package:nipaplay/services/external_player_console_service.dart';
-import 'package:nipaplay/utils/danmaku_ass_converter.dart';
-import 'package:nipaplay/utils/external_player_danmaku_ass.dart';
+import 'package:nipaplay_core/utils/danmaku_ass_converter.dart';
+import 'package:nipaplay_core/utils/external_player_danmaku_ass.dart';
 import 'package:nipaplay_core/utils/mpv_utils.dart';
 
 _TestSession _session(

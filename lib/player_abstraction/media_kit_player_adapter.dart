@@ -7,7 +7,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter/scheduler.dart'; // 导入TickerProvider
 import 'package:nipaplay/utils/subtitle_font_loader.dart';
 import 'package:nipaplay/utils/subtitle_file_utils.dart';
-import 'package:nipaplay/utils/platform_utils.dart';
+import 'package:nipaplay_core/utils/platform_utils.dart';
 import 'package:media_kit/media_kit.dart';
 import 'package:media_kit_video/media_kit_video.dart';
 

@@ -1,9 +1,10 @@
 import 'dart:io';
 
 import 'package:flutter/foundation.dart';
-import 'package:nipaplay/src/rust/api/media_metadata.dart' as rust_metadata;
-import 'package:nipaplay/src/rust/frb_generated.dart';
+import 'package:nipaplay_core/rust/api/media_metadata.dart' as rust_metadata;
+import 'package:nipaplay_core/rust/frb_generated.dart';
 import 'package:path/path.dart' as p;
+// ignore_for_file: invalid_use_of_internal_member // nipaplay_core: RustLib.instance 是 frb 生成 API
 
 const Map<String, int> subtitleExtensionMatchScore = <String, int>{
   '.ass': 70,

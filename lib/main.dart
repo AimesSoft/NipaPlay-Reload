@@ -57,9 +57,9 @@ import 'package:nipaplay/providers/jellyfin_transcode_provider.dart';
 import 'package:nipaplay/providers/emby_transcode_provider.dart';
 import 'package:nipaplay/providers/labs_settings_provider.dart';
 import 'package:nipaplay/plugins/plugin_service.dart';
-import 'package:nipaplay/src/rust/api/startup_commands.dart'
+import 'package:nipaplay_core/rust/api/startup_commands.dart'
     as startup_commands;
-import 'package:nipaplay/src/rust/api/client_notifications.dart'
+import 'package:nipaplay_core/rust/api/client_notifications.dart'
     as client_notifications;
 import 'package:nipaplay/themes/nipaplay/widgets/blur_dialog.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/hover_scale_text_button.dart';
@@ -91,7 +91,7 @@ import 'package:nipaplay/models/playable_item.dart';
 import 'package:desktop_drop/desktop_drop.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/drag_drop_overlay.dart';
 import 'providers/service_provider.dart';
-import 'utils/platform_utils.dart';
+import 'package:nipaplay_core/utils/platform_utils.dart';
 import 'package:hotkey_manager/hotkey_manager.dart';
 import 'services/hotkey_service_initializer.dart';
 import 'utils/shortcut_tooltip_manager.dart';
@@ -115,7 +115,7 @@ import 'utils/fluent_icon_font_loader.dart';
 import 'utils/app_theme.dart';
 import 'package:nipaplay/services/desktop_exit_handler_stub.dart'
     if (dart.library.io) 'package:nipaplay/services/desktop_exit_handler.dart';
-import 'package:nipaplay/src/rust/rust_init.dart';
+import 'package:nipaplay_core/rust/rust_init.dart';
 
 final GlobalKey<NavigatorState> navigatorKey = globals.navigatorKey;
 

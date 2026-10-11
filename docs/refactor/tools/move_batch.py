@@ -187,7 +187,9 @@ def main():
     # uri -> 新 package uri 的映射 (按 lib 内旧路径)
     rewrite_map = {}
     for lr, (_src, _dst) in moving.items():
-        rewrite_map[lr] = CORE_PKG + lr
+        import posixpath as _pp
+        new_rel = _pp.relpath(_dst, CORE_LIB)
+        rewrite_map[lr] = CORE_PKG + new_rel
     # 已搬文件的映射也要保留 (改写本批文件内部对老批次的 package:nipaplay 引用)
     for old in already:
         pass  # 老批次文件已被改写过, 无需再映射

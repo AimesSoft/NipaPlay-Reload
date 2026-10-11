@@ -2,7 +2,7 @@ import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:nipaplay_core/constants/media_extensions.dart';
-import 'package:nipaplay/models/external_player_session/vlc_session.dart';
+import 'package:nipaplay_core/models/external_player_session/vlc_session.dart';
 
 void main() {
   test('launches and terminates a Linux VLC session process', () async {

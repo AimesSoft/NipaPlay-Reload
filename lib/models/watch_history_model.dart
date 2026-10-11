@@ -5,7 +5,7 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'watch_history_database.dart'; // 添加引入数据库类
 import 'package:nipaplay/utils/storage_service.dart';
-import 'package:nipaplay/services/anime_deletion_tombstones.dart';
+import 'package:nipaplay_core/services/anime_deletion_tombstones.dart';
 import 'package:nipaplay/services/auto_sync_service.dart';
 import 'package:nipaplay/utils/globals.dart' as globals;
 import 'package:nipaplay/utils/media_identity_resolver.dart';

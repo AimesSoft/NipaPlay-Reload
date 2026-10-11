@@ -81,3 +81,17 @@ export 'services/system_proxy_service.dart';
 export 'services/web_remote_access_service.dart';
 export 'utils/network_settings.dart';
 export 'utils/settings_storage.dart';
+
+// ---- Batch 5: rust FFI bindings + WebDAV client ----
+export 'models/external_player_session/session.dart';
+export 'rust/lib.dart';
+export 'rust/rust_init.dart';
+export 'rust/api/webdav_multistatus.dart';
+export 'services/anime_deletion_tombstones.dart';
+export 'services/incremental_sync_repository.dart';
+export 'services/rust_file_scan_service.dart';
+export 'services/webdav_service.dart';
+export 'utils/app_platform.dart';
+export 'utils/danmaku_ass_converter.dart';
+export 'utils/external_player_danmaku_ass.dart';
+export 'utils/file_hash.dart';

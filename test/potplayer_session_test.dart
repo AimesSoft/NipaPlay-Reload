@@ -1,6 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:nipaplay_core/constants/media_extensions.dart';
-import 'package:nipaplay/models/external_player_session/potplayer_session.dart';
+import 'package:nipaplay_core/models/external_player_session/potplayer_session.dart';
 import 'package:nipaplay/utils/external_player_utils.dart';
 
 void main() {

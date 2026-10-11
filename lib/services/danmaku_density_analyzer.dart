@@ -1,7 +1,8 @@
 import 'dart:math' as math;
-import 'package:nipaplay/src/rust/api/danmaku_analytics.dart' as rust_density;
-import 'package:nipaplay/src/rust/frb_generated.dart';
+import 'package:nipaplay_core/rust/api/danmaku_analytics.dart' as rust_density;
+import 'package:nipaplay_core/rust/frb_generated.dart';
 import '../widgets/danmaku_density_chart.dart';
+// ignore_for_file: invalid_use_of_internal_member // nipaplay_core: RustLib.instance 是 frb 生成 API
 
 /// 弹幕密度统计服务
 /// 负责分析弹幕数据并生成密度图表数据
