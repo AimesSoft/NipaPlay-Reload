@@ -1,7 +1,7 @@
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:nipaplay/player_abstraction/abstract_player.dart';
+import 'package:nipaplay_core/player_abstraction/abstract_player.dart';
 import 'package:nipaplay/player_abstraction/mdk_player_adapter_io.dart';
 import 'package:nipaplay/player_abstraction/media_kit_player_adapter.dart';
 import 'package:nipaplay/player_abstraction/player_factory.dart';

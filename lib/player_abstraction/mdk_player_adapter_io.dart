@@ -1,9 +1,9 @@
 import 'package:fvp/mdk.dart' as mdk;
 import 'package:flutter/foundation.dart';
 // Required for Uint8List
-import './abstract_player.dart';
-import './player_enums.dart';
-import './player_data_models.dart';
+import 'package:nipaplay_core/player_abstraction/abstract_player.dart';
+import 'package:nipaplay_core/player_abstraction/player_enums.dart';
+import 'package:nipaplay_core/player_abstraction/player_data_models.dart';
 import 'dart:async';
 import 'package:nipaplay/utils/subtitle_font_loader.dart';
 

@@ -9,9 +9,9 @@ import 'dart:convert';
 import 'package:image/image.dart' as img;
 import 'package:shared_preferences/shared_preferences.dart';
 
-import './abstract_player.dart';
-import './player_enums.dart';
-import './player_data_models.dart';
+import 'package:nipaplay_core/player_abstraction/abstract_player.dart';
+import 'package:nipaplay_core/player_abstraction/player_enums.dart';
+import 'package:nipaplay_core/player_abstraction/player_data_models.dart';
 import 'package:nipaplay/models/watch_history_model.dart';
 import 'package:nipaplay/models/watch_history_database.dart';
 import 'package:nipaplay/utils/storage_service.dart';

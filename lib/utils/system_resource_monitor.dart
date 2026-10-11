@@ -5,7 +5,7 @@ import 'package:nipaplay_core/utils/frame_rate_sampler.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:flutter/services.dart';
-import 'package:nipaplay/utils/mock_mdk.dart'
+import 'package:nipaplay_core/utils/mock_mdk.dart'
     if (dart.library.io) 'package:fvp/mdk.dart';
 import 'package:nipaplay/danmaku_abstraction/danmaku_kernel_factory.dart';
 import 'package:nipaplay/player_abstraction/player_factory.dart';

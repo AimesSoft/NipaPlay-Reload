@@ -8,7 +8,7 @@ import 'package:flutter/services.dart';
 import 'package:universal_html/html.dart' as web_html;
 import 'android_saf_service.dart';
 import 'security_bookmark_service.dart';
-import 'package:nipaplay/utils/mpv_utils.dart';
+import 'package:nipaplay_core/utils/mpv_utils.dart';
 import 'package:nipaplay/utils/storage_service.dart';
 import 'dart:io' as io;
 

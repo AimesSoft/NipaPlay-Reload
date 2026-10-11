@@ -1,8 +1,8 @@
 import 'package:flutter/foundation.dart';
 
-import 'abstract_player.dart' as core;
-import 'player_data_models.dart';
-import 'player_enums.dart';
+import 'package:nipaplay_core/player_abstraction/abstract_player.dart' as core;
+import 'package:nipaplay_core/player_abstraction/player_data_models.dart';
+import 'package:nipaplay_core/player_abstraction/player_enums.dart';
 import 'player_factory.dart';
 
 /// A [core.AbstractPlayer] that defers creating the real kernel-backed player

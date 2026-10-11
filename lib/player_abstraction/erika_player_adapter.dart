@@ -8,10 +8,10 @@ import 'package:erika_flutter/erika_flutter.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart';
 
-import './abstract_player.dart';
-import './erika_gif_export.dart';
-import './player_data_models.dart';
-import './player_enums.dart';
+import 'package:nipaplay_core/player_abstraction/abstract_player.dart';
+import 'package:nipaplay_core/player_abstraction/erika_gif_export.dart';
+import 'package:nipaplay_core/player_abstraction/player_data_models.dart';
+import 'package:nipaplay_core/player_abstraction/player_enums.dart';
 
 class _ErikaDanmakuConfigPatch {
   _ErikaDanmakuConfigPatch({

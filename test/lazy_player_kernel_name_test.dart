@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:nipaplay/player_abstraction/abstract_player.dart' as core;
+import 'package:nipaplay_core/player_abstraction/abstract_player.dart' as core;
 import 'package:nipaplay/player_abstraction/lazy_player_delegate.dart';
 import 'package:nipaplay/player_abstraction/media_kit_player_adapter.dart';
 import 'package:nipaplay/player_abstraction/player_abstraction.dart';

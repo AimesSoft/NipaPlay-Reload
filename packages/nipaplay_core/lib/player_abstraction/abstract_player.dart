@@ -1,7 +1,7 @@
 import 'dart:async';
 import 'package:flutter/foundation.dart'; // For ValueListenable
-import './player_enums.dart';
-import './player_data_models.dart';
+import 'package:nipaplay_core/player_abstraction/player_enums.dart';
+import 'package:nipaplay_core/player_abstraction/player_data_models.dart';
 
 /// Maximum number of open attempts for a remote media source, including the
 /// initial open. Slow or sleeping remote disks therefore get four transparent

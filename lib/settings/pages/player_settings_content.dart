@@ -12,10 +12,10 @@ import 'package:nipaplay/themes/nipaplay/widgets/blur_snackbar.dart';
 import 'package:nipaplay/player_abstraction/player_factory.dart';
 import 'package:flutter/foundation.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_dropdown.dart';
-import 'package:nipaplay/player_abstraction/player_data_models.dart';
+import 'package:nipaplay_core/player_abstraction/player_data_models.dart';
 import 'package:nipaplay/providers/labs_settings_provider.dart';
-import 'package:nipaplay/utils/anime4k_shader_manager.dart';
-import 'package:nipaplay/utils/crt_shader_manager.dart';
+import 'package:nipaplay_core/utils/anime4k_shader_manager.dart';
+import 'package:nipaplay_core/utils/crt_shader_manager.dart';
 import 'package:nipaplay/utils/globals.dart' as globals;
 import 'package:nipaplay/services/auto_next_episode_service.dart';
 

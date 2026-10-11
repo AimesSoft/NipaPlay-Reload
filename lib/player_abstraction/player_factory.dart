@@ -1,10 +1,10 @@
-import './abstract_player.dart';
+import 'package:nipaplay_core/player_abstraction/abstract_player.dart';
 import './mdk_player_adapter.dart';
 import './video_player_adapter.dart'; // 导入新的适配器
 import './media_kit_player_adapter.dart'; // 导入新的MediaKit适配器
 import './erika_player_adapter.dart';
 import 'package:media_kit/media_kit.dart'; // MediaKit.ensureInitialized（mediaKit 分支构造前必须就绪）
-import './player_data_models.dart';
+import 'package:nipaplay_core/player_abstraction/player_data_models.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:flutter/foundation.dart'; // 用于 debugPrint
 import 'package:nipaplay_core/constants/settings_keys.dart';

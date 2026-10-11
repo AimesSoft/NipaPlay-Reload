@@ -11,9 +11,9 @@ import 'package:nipaplay/utils/platform_utils.dart';
 import 'package:media_kit/media_kit.dart';
 import 'package:media_kit_video/media_kit_video.dart';
 
-import './abstract_player.dart';
-import './player_enums.dart';
-import './player_data_models.dart';
+import 'package:nipaplay_core/player_abstraction/abstract_player.dart';
+import 'package:nipaplay_core/player_abstraction/player_enums.dart';
+import 'package:nipaplay_core/player_abstraction/player_data_models.dart';
 
 @visibleForTesting
 void applyMediaKitUserAgentProperty(

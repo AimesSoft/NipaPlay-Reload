@@ -1,0 +1,17 @@
+{
+  "batch": "batch-2-player-abstraction",
+  "moves": [
+    {"from": "lib/player_abstraction/player_enums.dart"},
+    {"from": "lib/player_abstraction/player_data_models.dart"},
+    {"from": "lib/player_abstraction/hwdec_type.dart"},
+    {"from": "lib/player_abstraction/abstract_player.dart"},
+    {"from": "lib/player_abstraction/erika_gif_export.dart"},
+    {"from": "lib/player_abstraction/erika_gif_export_io.dart"},
+    {"from": "lib/player_abstraction/erika_gif_export_stub.dart"},
+    {"from": "lib/utils/mock_mdk.dart"},
+    {"from": "lib/utils/mpv_utils.dart"},
+    {"from": "lib/utils/video_aspect_geometry.dart"},
+    {"from": "lib/utils/anime4k_shader_manager.dart"},
+    {"from": "lib/utils/crt_shader_manager.dart"}
+  ]
+}

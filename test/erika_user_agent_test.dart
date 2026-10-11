@@ -3,7 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:nipaplay/player_abstraction/erika_player_adapter.dart';
-import 'package:nipaplay/player_abstraction/player_enums.dart';
+import 'package:nipaplay_core/player_abstraction/player_enums.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();

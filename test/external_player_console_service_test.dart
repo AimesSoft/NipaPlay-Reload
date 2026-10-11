@@ -15,7 +15,7 @@ import 'package:nipaplay/pages/external_player_console_page.dart';
 import 'package:nipaplay/services/external_player_console_service.dart';
 import 'package:nipaplay/utils/danmaku_ass_converter.dart';
 import 'package:nipaplay/utils/external_player_danmaku_ass.dart';
-import 'package:nipaplay/utils/mpv_utils.dart';
+import 'package:nipaplay_core/utils/mpv_utils.dart';
 
 _TestSession _session(
   Process process, {

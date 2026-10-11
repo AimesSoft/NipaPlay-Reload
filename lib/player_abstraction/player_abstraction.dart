@@ -1,7 +1,7 @@
 // Export all necessary enums, data models, and the abstract interface
-export './player_enums.dart' show PlayerPlaybackState, PlayerMediaType;
-export './player_data_models.dart';
-export './abstract_player.dart'
+export 'package:nipaplay_core/player_abstraction/player_enums.dart' show PlayerPlaybackState, PlayerMediaType;
+export 'package:nipaplay_core/player_abstraction/player_data_models.dart';
+export 'package:nipaplay_core/player_abstraction/abstract_player.dart'
     show
         AbstractPlayer,
         AsyncDisposablePlayer,
@@ -22,10 +22,10 @@ import 'dart:ui' show Rect;
 import 'package:flutter/foundation.dart'; // For ValueListenable, used in AbstractPlayer
 import 'package:flutter/widgets.dart' show Widget;
 import 'package:video_player/video_player.dart';
-import './abstract_player.dart'
+import 'package:nipaplay_core/player_abstraction/abstract_player.dart'
     as core_player; // Alias for the true AbstractPlayer
-import './player_enums.dart' as core_enums; // Alias for our pure enums
-import './player_data_models.dart';
+import 'package:nipaplay_core/player_abstraction/player_enums.dart' as core_enums; // Alias for our pure enums
+import 'package:nipaplay_core/player_abstraction/player_data_models.dart';
 import './player_factory.dart'; // Import PlayerFactory directly
 import './lazy_player_delegate.dart';
 import './mdk_player_adapter.dart'; // 导入具体适配器类

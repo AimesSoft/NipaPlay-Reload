@@ -1,9 +1,9 @@
 import 'package:nipaplay_core/models/emby_media_selection.dart';
-import '../player_abstraction/abstract_player.dart';
-import '../player_abstraction/player_data_models.dart';
-import '../player_abstraction/player_enums.dart';
+import 'package:nipaplay_core/player_abstraction/abstract_player.dart';
+import 'package:nipaplay_core/player_abstraction/player_data_models.dart';
+import 'package:nipaplay_core/player_abstraction/player_enums.dart';
 
-export '../player_abstraction/abstract_player.dart'
+export 'package:nipaplay_core/player_abstraction/abstract_player.dart'
     show AsyncExternalSubtitlePlayer;
 
 enum EmbyExternalSubtitleActionKind { followDefault, disabled, select }

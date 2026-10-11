@@ -1,7 +1,7 @@
 import 'dart:ui';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:nipaplay/utils/video_aspect_geometry.dart';
+import 'package:nipaplay_core/utils/video_aspect_geometry.dart';
 
 void main() {
   const viewport = Size(1600, 900);

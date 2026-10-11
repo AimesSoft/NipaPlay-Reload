@@ -25,6 +25,13 @@
   "models/torrent_magnet_preview.dart",
   "models/torrent_task.dart",
   "models/trending_bangumi.dart",
+  "player_abstraction/abstract_player.dart",
+  "player_abstraction/erika_gif_export.dart",
+  "player_abstraction/erika_gif_export_io.dart",
+  "player_abstraction/erika_gif_export_stub.dart",
+  "player_abstraction/hwdec_type.dart",
+  "player_abstraction/player_data_models.dart",
+  "player_abstraction/player_enums.dart",
   "services/app_http_proxy.dart",
   "services/backup_category.dart",
   "services/emby_media_preference_store.dart",
@@ -36,9 +43,14 @@
   "services/incremental_sync_webdav_connections.dart",
   "services/media_server_playback_client.dart",
   "services/process_memory_cache.dart",
+  "utils/anime4k_shader_manager.dart",
+  "utils/crt_shader_manager.dart",
   "utils/frame_rate_sampler.dart",
   "utils/http_header_utils.dart",
-  "utils/http_user_agent.dart"
+  "utils/http_user_agent.dart",
+  "utils/mock_mdk.dart",
+  "utils/mpv_utils.dart",
+  "utils/video_aspect_geometry.dart"
  ],
  "batches": [
   {
@@ -84,6 +96,24 @@
     "utils/frame_rate_sampler.dart",
     "utils/http_header_utils.dart",
     "utils/http_user_agent.dart"
+   ]
+  },
+  {
+   "batch": "batch-2-player-abstraction",
+   "count": 12,
+   "files": [
+    "player_abstraction/abstract_player.dart",
+    "player_abstraction/erika_gif_export.dart",
+    "player_abstraction/erika_gif_export_io.dart",
+    "player_abstraction/erika_gif_export_stub.dart",
+    "player_abstraction/hwdec_type.dart",
+    "player_abstraction/player_data_models.dart",
+    "player_abstraction/player_enums.dart",
+    "utils/anime4k_shader_manager.dart",
+    "utils/crt_shader_manager.dart",
+    "utils/mock_mdk.dart",
+    "utils/mpv_utils.dart",
+    "utils/video_aspect_geometry.dart"
    ]
   }
  ]

@@ -8,7 +8,7 @@ void main() {
       'lib/player_abstraction/erika_player_adapter.dart',
     ).readAsStringSync();
     final nativeBridge = File(
-      'lib/player_abstraction/erika_gif_export_io.dart',
+      'packages/nipaplay_core/lib/player_abstraction/erika_gif_export_io.dart',
     ).readAsStringSync();
 
     expect(adapter, contains('supportsHeadlessGifExport => _isSupported'));

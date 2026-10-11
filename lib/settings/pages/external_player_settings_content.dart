@@ -12,7 +12,7 @@ import 'package:nipaplay/themes/cupertino/cupertino_adaptive_platform_ui.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_dropdown.dart';
 import 'package:nipaplay/utils/globals.dart' as globals;
 import 'package:nipaplay/utils/external_player_utils.dart';
-import 'package:nipaplay/utils/mpv_utils.dart';
+import 'package:nipaplay_core/utils/mpv_utils.dart';
 import 'package:provider/provider.dart';
 
 class ExternalPlayerSettingsContent extends StatelessWidget {

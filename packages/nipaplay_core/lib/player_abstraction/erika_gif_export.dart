@@ -1,4 +1,4 @@
-import 'erika_gif_export_stub.dart'
+import 'package:nipaplay_core/player_abstraction/erika_gif_export_stub.dart'
     if (dart.library.io) 'erika_gif_export_io.dart' as implementation;
 
 Future<Map<String, Object?>> exportGifWithErika(

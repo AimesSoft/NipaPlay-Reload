@@ -11,7 +11,7 @@ import 'package:nipaplay/services/photo_library_service.dart';
 import 'package:nipaplay/utils/globals.dart' as globals;
 import 'package:nipaplay/utils/platform_utils.dart';
 import 'package:nipaplay/utils/video_player_state.dart';
-import 'package:nipaplay/utils/video_aspect_geometry.dart';
+import 'package:nipaplay_core/utils/video_aspect_geometry.dart';
 import 'package:nipaplay/widgets/context_menu/context_menu.dart';
 import 'package:nipaplay/widgets/danmaku_overlay.dart';
 import 'package:nipaplay/widgets/external_subtitle_overlay.dart';

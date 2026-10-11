@@ -1,7 +1,7 @@
 import 'package:nipaplay/themes/cupertino/cupertino_imports.dart';
 import 'package:provider/provider.dart';
 
-import 'package:nipaplay/player_abstraction/player_data_models.dart';
+import 'package:nipaplay_core/player_abstraction/player_data_models.dart';
 import 'package:nipaplay_core/models/emby_media_selection.dart';
 import 'package:nipaplay/providers/jellyfin_transcode_provider.dart';
 import 'package:nipaplay/providers/emby_transcode_provider.dart';

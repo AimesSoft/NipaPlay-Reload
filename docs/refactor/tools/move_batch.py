@@ -97,7 +97,7 @@ def main():
         sys.exit(2)
     dry = '--dry-run' in sys.argv
     manifest = json.load(open(sys.argv[1], encoding='utf-8'))
-    moves = [(to_posix(m['from']), to_posix(m['to'])) for m in manifest['moves']]
+    moves = [(to_posix(m['from']), to_posix(m.get('to') or ('packages/nipaplay_core/lib/' + to_posix(m['from'])[4:]))) for m in manifest['moves']]
     batch = manifest.get('batch', 'unnamed')
 
     state = {'moved': []}

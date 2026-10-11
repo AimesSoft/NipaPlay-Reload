@@ -1,11 +1,11 @@
 library video_player_state;
 
-export 'video_aspect_geometry.dart' show VideoAspectMode;
+export 'package:nipaplay_core/utils/video_aspect_geometry.dart' show VideoAspectMode;
 
 import 'package:nipaplay/services/playback_position_store.dart';
 import 'package:nipaplay/services/plugin_playback_service.dart';
 import 'package:nipaplay/plugins/url_resolver.dart';
-import 'video_aspect_geometry.dart';
+import 'package:nipaplay_core/utils/video_aspect_geometry.dart';
 
 import 'package:nipaplay/utils/local_danmaku_file.dart';
 import 'package:flutter/cupertino.dart';
@@ -16,7 +16,7 @@ import 'package:nipaplay_core/constants/danmaku/mode.dart';
 import 'package:nipaplay/utils/danmaku/style.dart';
 // import 'package:fvp/mdk.dart';  // Commented out
 import '../player_abstraction/player_abstraction.dart'; // <-- NEW IMPORT
-import '../player_abstraction/hwdec_type.dart';
+import 'package:nipaplay_core/player_abstraction/hwdec_type.dart';
 import '../player_abstraction/player_factory.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:nipaplay/constants/danmaku_color_presets.dart';
@@ -120,8 +120,8 @@ import 'package:nipaplay/services/episode_navigation_service.dart'; // 导入剧
 import 'package:nipaplay/services/playback_source_service.dart';
 import 'package:nipaplay/services/auto_next_episode_service.dart';
 import 'screen_orientation_manager.dart';
-import 'anime4k_shader_manager.dart';
-import 'crt_shader_manager.dart';
+import 'package:nipaplay_core/utils/anime4k_shader_manager.dart';
+import 'package:nipaplay_core/utils/crt_shader_manager.dart';
 // 导入MediaKitPlayerAdapter
 import '../danmaku_abstraction/danmaku_kernel_factory.dart'; // 弹幕内核工厂
 import 'package:nipaplay/danmaku_gpu/lib/gpu_danmaku_overlay.dart'; // 导入GPU弹幕覆盖层

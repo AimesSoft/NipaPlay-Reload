@@ -43,3 +43,16 @@ export 'constants/settings_keys.dart';
 export 'utils/frame_rate_sampler.dart';
 export 'utils/http_header_utils.dart';
 export 'utils/http_user_agent.dart';
+
+// ---- Batch 2: player abstraction base + unified interface ----
+export 'player_abstraction/abstract_player.dart';
+export 'utils/anime4k_shader_manager.dart';
+export 'utils/crt_shader_manager.dart';
+export 'player_abstraction/erika_gif_export.dart';
+export 'player_abstraction/hwdec_type.dart';
+export 'utils/mock_mdk.dart';
+export 'utils/mpv_utils.dart';
+export 'player/nipa_player.dart';
+export 'player_abstraction/player_data_models.dart';
+export 'player_abstraction/player_enums.dart';
+export 'utils/video_aspect_geometry.dart';

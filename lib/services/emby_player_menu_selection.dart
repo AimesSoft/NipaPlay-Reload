@@ -1,5 +1,5 @@
 import 'package:nipaplay_core/models/emby_media_selection.dart';
-import '../player_abstraction/player_data_models.dart';
+import 'package:nipaplay_core/player_abstraction/player_data_models.dart';
 import 'package:nipaplay_core/services/emby_media_preference_store.dart';
 import 'package:nipaplay_core/services/emby_media_selection_resolver.dart';
 
