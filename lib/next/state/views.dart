@@ -178,6 +178,7 @@ JsonMap publicTaskFacts(JsonMap snapshot) => publicValue({
 final class StateSources {
   List<JsonMap> Function()? history;
   List<JsonMap> Function()? continueWatching;
+  Future<List<JsonMap>> Function()? calendar;
   List<StateView>? classicLibrary;
 }
 

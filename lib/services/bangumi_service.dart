@@ -106,6 +106,26 @@ class BangumiService {
     return null;
   }
 
+  /// Read the calendar and its episode dates already fetched by discovery.
+  Future<List<BangumiAnime>> cachedCalendarDetails() async {
+    final prefs = await SharedPreferences.getInstance();
+    final raw = prefs.getString(_cacheKey);
+    if (raw == null) return [];
+    final cache = jsonDecode(raw) as Map;
+    final result = <BangumiAnime>[];
+    for (final row in (cache['animes'] as List).cast<Map>()) {
+      final intro = BangumiAnime.fromJson(Map<String, dynamic>.from(row));
+      final saved = prefs.getString('$_detailsCacheKeyPrefix${intro.id}');
+      final memory = getAnimeDetailsFromMemory(intro.id);
+      final detail = memory ?? (saved == null ? null :
+          BangumiAnime.fromDandanplayDetail(Map<String, dynamic>.from(
+              (jsonDecode(saved) as Map)['animeDetail'] as Map)));
+      result.add(intro.copyWith(episodeList: detail?.episodeList,
+          isFavorited: detail?.isFavorited ?? intro.isFavorited));
+    }
+    return result;
+  }
+
   String _customBackgroundKey(int animeId) =>
       '$_customBackgroundKeyPrefix$animeId';
 

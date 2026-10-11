@@ -12,6 +12,7 @@ import '../media/metadata_provider.dart';
 import '../state/query.dart';
 import '../state/views.dart';
 import 'artwork.dart';
+import 'airing.dart';
 import 'heat.dart';
 import 'ui_data.dart';
 
@@ -72,7 +73,9 @@ final class UiDataService implements NextUiData {
         await db.rawQuery('SELECT total_changes() AS total'),
         await db.rawQuery('PRAGMA data_version'),
         sources.history?.call(),
-        sources.continueWatching?.call()
+        sources.continueWatching?.call(),
+        DateTime.now().toIso8601String().substring(0, 10),
+        await sources.calendar?.call()
       ]);
   void _changed() {
     if (!_closed) _changes.add(null);
@@ -134,7 +137,8 @@ final class UiDataService implements NextUiData {
                 (r['value'] as num).toDouble())
         ],
         artwork: uiArtwork(art),
-        next: next);
+        next: next,
+        danmaku: await heat.comments([for (final e in episodes) (e.episodeId, e.runtime?.inMilliseconds)]));
   }
 
   @override
@@ -193,7 +197,9 @@ final class UiDataService implements NextUiData {
       result.add(UiEpisode(
           episodeId: id,
           workId: workId,
-          number: (num.tryParse(attrs['number'] as String? ?? '') ?? 0).toInt(),
+          number: (num.tryParse(attrs['number'] as String? ?? '') ??
+              int.tryParse(RegExp(r'第\s*(\d+)\s*[集话話]').firstMatch(
+                  (fields['title'] ?? attrs['title']) as String? ?? '')?.group(1) ?? '') ?? 0).toInt(),
           season: s,
           title: _display(fields['title'] ?? attrs['title']),
           runtime: duration == null ? null : Duration(milliseconds: duration),
@@ -296,6 +302,25 @@ final class UiDataService implements NextUiData {
           kind: UiShelfKind.continueWatching,
           items: continuing));
     }
+    final following = Set<String>.of(seen);
+    for (final row in sources.history?.call() ?? <JsonMap>[]) {
+      final progress = (row['watchProgress'] as num?)?.toDouble() ?? 0;
+      if (progress <= 0 || progress >= .95) continue;
+      final fileId = await media.store.ensureFile(row['filePath'] as String);
+      final id = await _parentWork(fileId);
+      if (id != null) following.add(id);
+    }
+    final airing = <UiShelfItem>[];
+    for (final update in sources.calendar == null ? <JsonMap>[] :
+        await todayUpdates(media.store, following, await sources.calendar!())) {
+      final work = (await this.work(update['workId'] as String))!;
+      final matches = await db.rawQuery(
+        "SELECT b.entity_id FROM media_bindings b JOIN media_external_objects o ON o.id=b.object_id WHERE b.status='accepted' AND o.provider='dandanplay' AND o.object_type='episode' AND o.external_id=?",
+        [update['externalEpisodeId']]);
+      final ep = (await episodes(work.workId)).where((e) => matches.any((m) => m['entity_id']==e.episodeId)).firstOrNull;
+      airing.add(UiShelfItem(work, episode: ep, caption: update['caption'] as String));
+    }
+    if (airing.isNotEmpty) shelves.add(UiShelf(id: 'airing', title: '今天更新', kind: UiShelfKind.airing, items: airing));
     UiHero? hero;
     for (final row in await db.query('ui_shelves', orderBy: 'rowid')) {
       final shelf = decodeMediaJson(row['payload']);
@@ -380,7 +405,7 @@ final class UiDataService implements NextUiData {
     if (id == null ||
         id.trim().isEmpty ||
         placement == 'shelf' &&
-            const {'hero', 'continue', 'recent'}.contains(id)) {
+            const {'hero', 'continue', 'airing', 'recent'}.contains(id)) {
       throw const Failure(FailureCode.invalidInput,
           'For a shelf supply a stable id other than hero, continue or recent, and a short title.');
     }

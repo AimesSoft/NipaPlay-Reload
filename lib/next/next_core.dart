@@ -43,6 +43,7 @@ import 'harness_location.dart';
 import 'followups/service.dart';
 import 'followups/capability.dart';
 import 'ui_data/service.dart';
+import 'ui/shell/next_ui_preference.dart';
 import 'ui_data/capability.dart';
 
 /// Application-owned task and capability composition, independent of Labs.
@@ -127,6 +128,7 @@ final class NextCore {
         token: () async => credentials.read(
             await SharedPreferences.getInstance(), 'dandanplay_token'));
     settings = SettingsRegistry(database, [
+      NextUiPreference.setting(),
       ...ApplicationSettings.entries(),
       ...ClassicSettings.entries(),
       ...DownloadSettings.entries(),

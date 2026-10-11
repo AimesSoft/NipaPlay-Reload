@@ -11,7 +11,7 @@ final class EpisodeHeat {
   const EpisodeHeat(this.store);
   final DanmakuStore store;
 
-  Future<List<double>?> load(String id, int? runtimeMs) async {
+  Future<List<JsonMap>> _tracks(String id) async {
     final links = await store.db.rawQuery(
         'SELECT fe.*,(SELECT COUNT(*) FROM media_file_episodes x WHERE x.file_id=fe.file_id) AS episode_count '
         'FROM media_file_episodes fe WHERE fe.episode_id=? ORDER BY fe.file_id',
@@ -39,6 +39,11 @@ final class EpisodeHeat {
         });
       }
     }
+    return tracks;
+  }
+
+  Future<List<double>?> load(String id, int? runtimeMs) async {
+    final tracks = await _tracks(id);
     final chunks = <JsonMap>[];
     for (final key in tracks.map((b) => b['cache_key']).toSet()) {
       chunks.addAll(await store.db.query('danmaku_cache_chunks',
@@ -89,6 +94,50 @@ final class EpisodeHeat {
           'payload': jsonEncode(result)
         },
         conflictAlgorithm: ConflictAlgorithm.replace);
+    return result;
+  }
+
+  Future<List<String>> comments(List<(String, int?)> episodes) async {
+    final candidates = <({String text, int bucket, int episode})>[];
+    final density = <(int, int), int>{};
+    final seenTracks = <String>{};
+    for (var index = 0; index < episodes.length; index++) {
+      final (id, duration) = episodes[index];
+      for (final track in await _tracks(id)) {
+        final start = track['start'] as int, end = track['end'] as int?;
+        if (!seenTracks.add(jsonEncode([track['cache_key'], start, end, track['offset_ms']]))) continue;
+        for (final entry in await store.entries(track['cache_key'] as String)) {
+          final time = entry.sourceTimeMs + (track['offset_ms'] as int) - start;
+          if (time < 0 || end != null && time >= end - start || duration != null && time >= duration) continue;
+          final bucket = duration == null ? time ~/ 30000 : math.min(59, time * 60 ~/ math.max(1, duration));
+          final key = (index, bucket);
+          density[key] = (density[key] ?? 0) + 1;
+          final text = entry.text.trim();
+          // Restrict to reactions that do not describe characters or events.
+          if (text.runes.length < 2 || text.runes.length > 18 ||
+              !RegExp(r'^[\p{Script=Han}a-zA-Z\s，。！？!~～]+$', unicode: true).hasMatch(text) ||
+              RegExp(r'(.)\1{3,}').hasMatch(text) ||
+              !RegExp(r'^(好看|太好看了|真好看|画面好美|好美|太美了|这画面真美|音乐好好听|音乐真好听|好听|这首歌好听|喜欢这个画风|这个画风好棒|制作好棒|制作真好|氛围真好|氛围感好棒|好治愈|太治愈了|笑死我了|哈哈哈|来了|前排|一起看)[，。！？!~～]*$').hasMatch(text)) continue;
+          candidates.add((text: text, bucket: bucket, episode: index));
+        }
+      }
+    }
+    candidates.sort((a, b) {
+      final hot = density[(b.episode, b.bucket)]!.compareTo(density[(a.episode, a.bucket)]!);
+      if (hot != 0) return hot;
+      final ep = a.episode.compareTo(b.episode);
+      return ep != 0 ? ep : a.bucket.compareTo(b.bucket);
+    });
+    final seen = <String>{}, counts = <(int, int), int>{};
+    final result = <String>[];
+    for (final c in candidates) {
+      final key = (c.episode, c.bucket);
+      final normalized = c.text.replaceAll(RegExp(r'[\s，。！？!~～]'), '').toLowerCase();
+      if ((counts[key] ?? 0) >= 2 || !seen.add(normalized)) continue;
+      counts[key] = (counts[key] ?? 0) + 1;
+      result.add(c.text);
+      if (result.length == 6) break;
+    }
     return result;
   }
 }

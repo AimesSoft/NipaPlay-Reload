@@ -12,6 +12,7 @@ import 'settings/migration.dart';
 import 'state/change_history.dart';
 import 'followups/migration.dart';
 import 'ui_data/migration.dart';
+import 'media/file_identity_merge.dart';
 
 // Each position is a released database version. Append new domain migrations.
 const _migrations = [
@@ -26,6 +27,7 @@ const _migrations = [
   migrateChangeHistory,
   migrateFollowups,
   migrateUiData,
+  migrateFileAliases,
 ];
 
 Future<void> _migrate(Database db, int oldVersion, int newVersion) async {

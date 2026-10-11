@@ -28,6 +28,7 @@ final class DanmakuStore {
           Invocation invocation) =>
       db.transaction((tx) async {
         final entity = await identities.entity(entityId, db: tx);
+        entityId = entity['id'] as String;
         if (!['file', 'episode'].contains(entity['kind'])) {
           throw const Failure(
               FailureCode.invalidInput, 'Danmaku binds to a file or episode.');
@@ -149,6 +150,7 @@ final class DanmakuStore {
           String? url, Invocation invocation) =>
       db.transaction((tx) async {
         final entity = await identities.entity(entityId, db: tx);
+        entityId = entity['id'] as String;
         if (!['file', 'episode'].contains(entity['kind'])) {
           throw const Failure(
               FailureCode.invalidInput, 'Danmaku binds to a file or episode.');
@@ -206,7 +208,7 @@ final class DanmakuStore {
         return id;
       });
   Future<List<JsonMap>> bindings(String entityId) async {
-    await identities.entity(entityId);
+    entityId = (await identities.entity(entityId))['id'] as String;
     return [
       for (final b in await db.query('danmaku_bindings',
           where: 'entity_id = ?',

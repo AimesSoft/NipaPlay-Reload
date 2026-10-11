@@ -10,6 +10,7 @@ import 'package:path/path.dart' as p;
 import 'classic_projection.dart';
 import 'media_probe.dart';
 import 'identity_store.dart';
+import 'file_identity_merge.dart';
 import 'metadata_provider.dart';
 
 final class MediaService {
@@ -37,7 +38,7 @@ final class MediaService {
       throw const Failure(
           FailureCode.invalidInput, 'Choose ID, path or current.');
     }
-    if (id != null && id != 'current') return id;
+    if (id != null && id != 'current') return canonicalFileId(store.database, id);
     final locator = path ?? currentPath?.call();
     if (locator == null) {
       throw const Failure(FailureCode.notFound, 'No current video.');
@@ -210,6 +211,7 @@ final class MediaService {
     String? id = input['entityId'] as String?;
     if (id != null) {
       final entity = await store.entity(id);
+      id = entity['id'] as String;
       if (entity['kind'] != 'file') {
         throw const Failure(
             FailureCode.invalidInput, 'entityId must reference a file.');
