@@ -170,7 +170,7 @@ void main() {
         'general.pictureInPicturePosition': 'bottomLeft',
         'general.defaultHomeTab': 'video',
         'network.httpProxy': 'http://127.0.0.1:7890',
-        'plugins.githubProxyUrl': 'https://example.invalid/',
+        'plugins.githubProxyUrl': '',
         'webdavQuick.defaultServerName': 'experiment-server',
         'webdavQuick.defaultDirectory': '/anime',
         'webdavQuick.sortPreset': 'name_desc',
@@ -399,12 +399,12 @@ function pluginHandleUIAction(actionId) { return {type:'text',title:'Fixture',co
         await listening.cancel();
         await server.close(force: true);
       });
-      await call('settings.set', {
-        'key': 'plugins.githubProxyUrl',
-        'value': 'http://127.0.0.1:${server.port}/',
-        'reason': 'X18 loopback fixture'
-      });
       await HttpOverrides.runZoned(() async {
+        await call('settings.set', {
+          'key': 'plugins.githubProxyUrl',
+          'value': 'http://127.0.0.1:${server.port}/',
+          'reason': 'X18 loopback fixture'
+        });
         final market = await call('plugins.market', {'refresh': true});
         expect((market['plugins'] as List).single['downloadUrl'],
             endsWith('/plugins/x18-market.js'));

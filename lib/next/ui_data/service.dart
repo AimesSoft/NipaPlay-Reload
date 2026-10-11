@@ -219,10 +219,12 @@ final class UiDataService implements NextUiData {
     final name = _display(title?['title']);
     return UiTask(
         taskId: job.jobId,
-        title: '${_taskVerb(job.type)}${name == null ? '' : '《$name》'}',
+        title: job.state == JobState.waitingUser ? '等待你确认删除' :
+            '${_taskVerb(job.type)}${name == null ? '' : '《$name》'}',
         state: switch (job.state) {
           JobState.queued || JobState.waitingRetry => UiTaskState.queued,
           JobState.paused ||
+          JobState.waitingUser ||
           JobState.needsDecision ||
           JobState.interrupted =>
             UiTaskState.paused,
@@ -722,6 +724,7 @@ String _ratingSource(String source) => switch (source) {
       _ => Uri.tryParse(source)?.host ?? '评分'
     };
 String _taskVerb(String type) => switch (type) {
+      'disk_deletion' => '删除文件',
       'download' => '下载',
       'danmaku.fetch' => '准备弹幕',
       'danmaku.align' => '对齐弹幕',

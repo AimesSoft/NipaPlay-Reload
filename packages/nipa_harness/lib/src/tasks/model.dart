@@ -5,6 +5,7 @@ enum JobState {
   running,
   paused,
   needsDecision,
+  waitingUser,
   waitingRetry,
   interrupted,
   cancelling,
@@ -14,6 +15,7 @@ enum JobState {
 
   String get wireName => switch (this) {
         needsDecision => 'needs_decision',
+        waitingUser => 'waiting_user',
         waitingRetry => 'waiting_retry',
         _ => name,
       };
@@ -26,6 +28,7 @@ enum JobState {
         running => {
             paused,
             needsDecision,
+            waitingUser,
             waitingRetry,
             interrupted,
             cancelling,
@@ -35,12 +38,14 @@ enum JobState {
         paused => {queued, interrupted, cancelling}.contains(next),
         needsDecision =>
           {queued, interrupted, cancelling, failed}.contains(next),
+        waitingUser => {running, interrupted, cancelling, failed}.contains(next),
         waitingRetry =>
           {queued, paused, interrupted, cancelling, failed}.contains(next),
         interrupted => {
             running,
             paused,
             needsDecision,
+            waitingUser,
             waitingRetry,
             cancelling,
             succeeded,

@@ -24,6 +24,7 @@ import 'media/metadata_provider.dart';
 import 'next_database.dart';
 import 'tasks/device_identity.dart';
 import 'tasks/sqlite_job_store.dart';
+import 'tasks/user_consent.dart';
 import 'settings/application_settings.dart';
 import 'settings/download_settings.dart';
 import 'settings/registry.dart';
@@ -72,6 +73,7 @@ final class NextCore {
   late final Directory root;
   late final String deviceId;
   late final TaskEngine engine;
+  final diskDeletion = DiskDeletion();
   final hooks = HarnessHooks();
   final harnessLocation = HarnessLocation();
   final DownloadRuntime downloads;
@@ -148,11 +150,13 @@ final class NextCore {
       ...accountExecutors(accounts),
       ...danmaku.executors,
       hooks,
+      diskDeletion,
     ];
     engine = TaskEngine(store: jobs, ownerDeviceId: deviceId, executors: [
       for (final executor in executors) OriginExecutor(executor, database)
     ]);
     hooks.engine = engine;
+    diskDeletion.engine = engine;
     followups = Followups(database, engine, harnessLocation);
     hooks.observeEvent = followups.hookEvent;
     downloads.attach(engine, root);
@@ -169,7 +173,7 @@ final class NextCore {
             File('${root.path}/journal.jsonl'), harnessLocation,
             changeHistory).view, followups.view]);
     uiData = UiDataService(media.service, engine, state, stateSources, root, credentialVault);
-    capabilities = List.unmodifiable([
+    capabilities = List.unmodifiable(diskDeletion.protect([
       CredentialCapability(credentials),
       TaskCapability(engine),
       FollowupCapability(followups),
@@ -186,7 +190,7 @@ final class NextCore {
       ClassicOperations(settings),
       MeshCapability(mesh),
       state,
-    ].map(InvocationScopeCapability.new));
+    ]).map(InvocationScopeCapability.new));
     await engine.start();
     await uiData.start();
     followups.start();

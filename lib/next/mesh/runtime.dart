@@ -9,6 +9,9 @@ import 'package:nipa_harness/mcp.dart';
 import 'package:nipa_harness/nipa_harness.dart';
 import 'package:nipaplay/security/credential_vault.dart';
 import 'package:nipaplay/src/rust/api/mesh.dart' show MeshIncoming;
+import 'package:nipaplay/services/remote_control_settings.dart';
+import 'package:nipaplay/services/remote_control_access_guard_service.dart';
+import 'package:shelf/shelf.dart';
 import 'coordinator.dart';
 import 'discovery.dart';
 import 'identity.dart';
@@ -19,6 +22,19 @@ bool meshActionAllowed(String id) =>
 
 /// Trust anchors are release inputs, never learned from the coordinator.
 const meshProductionIssuerPem = '';
+
+Future<Failure?> authorizeMeshPeer(String deviceId, String name) async {
+  if (!await RemoteControlSettings.isReceiverEnabled()) {
+    return const Failure(FailureCode.unavailable, 'Classic remote control receiver is disabled.');
+  }
+  final guard = RemoteControlAccessGuardService.instance;
+  await guard.loadTrustedDevices();
+  final result = await guard.evaluate(Request('POST', Uri.parse('http://localhost/mesh'),
+      headers: {'x-nipaplay-remote-client-id': deviceId,
+        'x-nipaplay-remote-client-name': name}), requestAccess: true);
+  return result.isAuthorized ? null : Failure(FailureCode.conflict,
+      'Classic remote control access is ${result.status.name}; the user must allow this device in NipaPlay.');
+}
 
 final class MeshRuntime {
   MeshRuntime(
@@ -542,6 +558,13 @@ final class MeshRuntime {
         throw const FormatException('Mesh RPC response mismatch.');
       }
       if (response['error'] != null) {
+        final error = response['error'] as JsonMap;
+        if (error['code'] == -32001 && error['data'] is JsonMap) {
+          final denial = error['data'] as JsonMap;
+          throw Failure(
+              FailureCode.values.firstWhere((c) => c.wireName == denial['code']),
+              denial['message'] as String);
+        }
         throw const Failure(
             FailureCode.invalidInput, 'Remote RPC rejected the request.');
       }
@@ -616,6 +639,15 @@ final class MeshRuntime {
           deadline <= DateTime.now().millisecondsSinceEpoch) {
         throw const Failure(
             FailureCode.unavailable, 'Mesh peer was revoked or disconnected.');
+      }
+      final peer = _devices.singleWhere((d) => d['device_id'] == event.deviceId);
+      final denied = await authorizeMeshPeer(event.deviceId,
+          peer['device_name'] as String? ?? '另一台设备');
+      if (denied != null) {
+        response = McpRpc.error(_rpcId(event.body), -32001, denied.message);
+        (response['error'] as JsonMap)['data'] = denied.toJson();
+        await native.respond(node, event.requestId, jsonEncode(response));
+        return;
       }
       final rpc = McpRpc(_harness!,
           serverInfo: const McpServerInfo(

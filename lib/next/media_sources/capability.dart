@@ -228,9 +228,10 @@ final _specs = [
       id: 'media.sources.remove',
       title: 'Remove a media source',
       description:
-          'Remove a Classic source connection immediately, without deleting disk files. Indexed file identities, bindings and playback history remain. No confirmation parameter.',
-      effect: Effect.write,
-      input: ObjectSchema({'sourceId': _text}, required: ['sourceId']),
+          'Remove a source connection without confirmation. Indexed file identities, bindings and playback history remain; no disk files are deleted.',
+      effect: Effect.destructive,
+      input: ObjectSchema({'sourceId': _text},
+          required: ['sourceId']),
       output: ObjectSchema({
         'sourceId': _text,
         'removed': BooleanSchema(),

@@ -33,7 +33,7 @@
 ./nipa describe danmaku.import                # 某项能力的输入、输出与副作用
 ./nipa call media.files.list '{"root": "/path"}'
 ./nipa call ACTION @input.json                # 输入较大时用文件
-./nipa call ACTION '{...}' --execute          # 破坏性操作不加 --execute 只预览
+./nipa call ACTION '{...}'                    # 删硬盘文件返回任务，等待用户在 NipaPlay 点删除；其他操作直接执行
 ./nipa query library.episodes '{"limit": 20}' # 只读查询有说明的状态
 ./nipa watch TASK_ID --seconds 40             # 有界地等待任务
 ./nipa --device NAME call ...                 # 同一账号下 Mesh 中的其他设备

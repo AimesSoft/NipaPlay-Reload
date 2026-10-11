@@ -23,10 +23,10 @@ final class _MeshAction extends Action<MeshJson, JsonEncodable> {
       id: 'mesh.$operation',
       title: 'Mesh $operation',
       description: operation == 'devices'
-          ? 'List same-account devices, reachability, and their authenticated Action catalogs.'
+          ? 'List same-account devices, reachability, and their authenticated Action catalogs. Remote requests obey the peer’s Classic receiver switch and device authorization; unknown peers need user approval in that peer’s NipaPlay UI.'
           : effect == Effect.destructive
-              ? 'Invoke a destructive Action on a device; explicit user authorization is required.'
-              : 'Invoke a non-destructive Action directly on a same-account device.',
+              ? 'Invoke a destructive Action on an authorized device. Only disk-file deletion waits for the user in that device’s NipaPlay UI; other operations execute directly and are audited.'
+              : 'Invoke a non-destructive Action directly on a same-account device authorized by Classic remote control.',
       effect: effect,
       input: operation == 'devices'
           ? const ObjectSchema({})
