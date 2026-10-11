@@ -27,7 +27,7 @@ import 'package:nipaplay/themes/nipaplay/widgets/large_screen_mode_scope.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/large_screen_page_scaffold.dart';
 import 'package:nipaplay_core/services/web_remote_access_service.dart';
 import 'package:nipaplay/services/playback_service.dart';
-import 'package:nipaplay/l10n/l10n.dart';
+import 'package:nipaplay_ui_common/l10n/l10n.dart';
 
 class NewSeriesPage extends StatefulWidget {
   const NewSeriesPage({super.key});

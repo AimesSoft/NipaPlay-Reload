@@ -1,6 +1,6 @@
 import 'package:nipaplay/themes/cupertino/cupertino_adaptive_platform_ui.dart';
 import 'package:nipaplay/themes/cupertino/cupertino_imports.dart';
-import 'package:nipaplay/l10n/l10n.dart';
+import 'package:nipaplay_ui_common/l10n/l10n.dart';
 import 'package:provider/provider.dart';
 
 import 'package:nipaplay_core/models/shared_remote_library.dart';

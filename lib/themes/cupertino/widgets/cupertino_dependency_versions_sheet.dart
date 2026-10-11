@@ -3,7 +3,7 @@ import 'package:kmbal_ionicons/kmbal_ionicons.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import 'package:nipaplay/themes/cupertino/cupertino_imports.dart';
-import 'package:nipaplay/l10n/l10n.dart';
+import 'package:nipaplay_ui_common/l10n/l10n.dart';
 import 'package:nipaplay/themes/cupertino/widgets/cupertino_bottom_sheet.dart';
 import 'package:nipaplay/themes/cupertino/widgets/cupertino_settings_group_card.dart';
 import 'package:nipaplay/themes/cupertino/widgets/cupertino_settings_tile.dart';

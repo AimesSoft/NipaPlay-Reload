@@ -1,7 +1,7 @@
 import 'package:nipaplay/themes/cupertino/cupertino_adaptive_platform_ui.dart';
 import 'package:flutter/services.dart';
 import 'package:nipaplay/themes/cupertino/cupertino_imports.dart';
-import 'package:nipaplay/l10n/l10n.dart';
+import 'package:nipaplay_ui_common/l10n/l10n.dart';
 import 'package:nipaplay/themes/cupertino/widgets/cupertino_bottom_sheet.dart';
 import 'package:nipaplay_core/services/webdav_service.dart';
 

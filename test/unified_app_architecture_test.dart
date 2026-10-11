@@ -16,7 +16,7 @@ import 'package:nipaplay/app/unified_app_virtual_windows.dart';
 import 'package:nipaplay/app/unified_home_components.dart';
 import 'package:nipaplay/app/unified_media_library_sections.dart';
 import 'package:nipaplay/downloads/unified_torrent_page_model.dart';
-import 'package:nipaplay/l10n/app_localizations.dart';
+import 'package:nipaplay_ui_common/l10n/app_localizations.dart';
 import 'package:nipaplay/models/playable_item.dart';
 import 'package:nipaplay/models/playback_detail_context.dart';
 import 'package:nipaplay/models/watch_history_model.dart';

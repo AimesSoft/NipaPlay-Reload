@@ -4,7 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:kmbal_ionicons/kmbal_ionicons.dart';
 import 'package:nipaplay_ui_common/app/app_display_surface.dart';
 import 'package:nipaplay_ui_common/app/app_display_surface_scope.dart';
-import 'package:nipaplay/l10n/l10n.dart';
+import 'package:nipaplay_ui_common/l10n/l10n.dart';
 import 'package:nipaplay/player_abstraction/player_factory.dart';
 import 'package:nipaplay_core/services/app_http_proxy.dart';
 import 'package:nipaplay_core/services/nipaplay_server_router.dart';

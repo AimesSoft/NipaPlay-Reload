@@ -1,14 +1,37 @@
 {
-  "batch": "p2-batchA-l10n",
-  "moves": [
-    {"from": "lib/l10n/app_en.arb", "to": "packages/nipaplay_ui_common/lib/l10n/app_en.arb"},
-    {"from": "lib/l10n/app_zh.arb", "to": "packages/nipaplay_ui_common/lib/l10n/app_zh.arb"},
-    {"from": "lib/l10n/app_zh_Hant.arb", "to": "packages/nipaplay_ui_common/lib/l10n/app_zh_Hant.arb"},
-    {"from": "lib/l10n/app_locale_utils.dart", "to": "packages/nipaplay_ui_common/lib/l10n/app_locale_utils.dart"},
-    {"from": "lib/l10n/app_localizations.dart", "to": "packages/nipaplay_ui_common/lib/l10n/app_localizations.dart"},
-    {"from": "lib/l10n/app_localizations_en.dart", "to": "packages/nipaplay_ui_common/lib/l10n/app_localizations_en.dart"},
-    {"from": "lib/l10n/app_localizations_zh.dart", "to": "packages/nipaplay_ui_common/lib/l10n/app_localizations_zh.dart"},
-    {"from": "lib/l10n/l10n.dart", "to": "packages/nipaplay_ui_common/lib/l10n/l10n.dart"},
-    {"from": "l10n.yaml", "to": "packages/nipaplay_ui_common/l10n.yaml"}
-  ]
+ "batch": "p2-batchA-l10n",
+ "moves": [
+  {
+   "from": "lib/l10n/app_en.arb",
+   "to": "packages/nipaplay_ui_common/lib/l10n/app_en.arb"
+  },
+  {
+   "from": "lib/l10n/app_zh.arb",
+   "to": "packages/nipaplay_ui_common/lib/l10n/app_zh.arb"
+  },
+  {
+   "from": "lib/l10n/app_zh_Hant.arb",
+   "to": "packages/nipaplay_ui_common/lib/l10n/app_zh_Hant.arb"
+  },
+  {
+   "from": "lib/l10n/app_locale_utils.dart",
+   "to": "packages/nipaplay_ui_common/lib/l10n/app_locale_utils.dart"
+  },
+  {
+   "from": "lib/l10n/app_localizations.dart",
+   "to": "packages/nipaplay_ui_common/lib/l10n/app_localizations.dart"
+  },
+  {
+   "from": "lib/l10n/app_localizations_en.dart",
+   "to": "packages/nipaplay_ui_common/lib/l10n/app_localizations_en.dart"
+  },
+  {
+   "from": "lib/l10n/app_localizations_zh.dart",
+   "to": "packages/nipaplay_ui_common/lib/l10n/app_localizations_zh.dart"
+  },
+  {
+   "from": "lib/l10n/l10n.dart",
+   "to": "packages/nipaplay_ui_common/lib/l10n/l10n.dart"
+  }
+ ]
 }

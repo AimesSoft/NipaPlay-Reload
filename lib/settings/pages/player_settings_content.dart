@@ -2,7 +2,7 @@ import 'dart:io' if (dart.library.io) 'dart:io';
 import 'package:flutter/cupertino.dart' as cupertino;
 import 'package:flutter/material.dart';
 import 'package:kmbal_ionicons/kmbal_ionicons.dart';
-import 'package:nipaplay/l10n/l10n.dart';
+import 'package:nipaplay_ui_common/l10n/l10n.dart';
 import 'package:nipaplay/providers/settings_provider.dart';
 import 'package:nipaplay/settings/adaptive_settings_widgets.dart';
 import 'package:nipaplay/settings/adaptive_settings_scope.dart';

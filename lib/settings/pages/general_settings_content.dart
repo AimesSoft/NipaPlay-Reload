@@ -2,7 +2,7 @@ import 'package:flutter/cupertino.dart' as cupertino;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:kmbal_ionicons/kmbal_ionicons.dart';
-import 'package:nipaplay/l10n/l10n.dart';
+import 'package:nipaplay_ui_common/l10n/l10n.dart';
 import 'package:nipaplay/providers/webdav_quick_access_provider.dart';
 import 'package:nipaplay/services/desktop_exit_preferences.dart';
 import 'package:nipaplay/services/desktop_picture_in_picture_preferences.dart';

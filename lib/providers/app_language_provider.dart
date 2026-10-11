@@ -1,6 +1,6 @@
 import 'package:flutter/widgets.dart';
 import 'package:nipaplay_core/constants/settings_keys.dart';
-import 'package:nipaplay/l10n/app_locale_utils.dart';
+import 'package:nipaplay_ui_common/l10n/app_locale_utils.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 enum AppLanguageMode {

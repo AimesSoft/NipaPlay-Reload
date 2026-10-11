@@ -1,0 +1,12 @@
+{
+  "batch": "p2-batchB-pure-models",
+  "moves": [
+    {"from": "lib/media_library/media_source_option.dart"},
+    {"from": "lib/media_library/media_library_section_order_store.dart"},
+    {"from": "lib/media_library/unified_library_management_model.dart"},
+    {"from": "lib/settings/unified_setting_content_type.dart"},
+    {"from": "lib/settings/adaptive_settings_scope.dart"},
+    {"from": "lib/settings/about_settings_data.dart"},
+    {"from": "lib/playback/unified_playback_entry_model.dart"}
+  ]
+}

@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:nipaplay_ui_common/app/app_page_ids.dart';
-import 'package:nipaplay/l10n/app_localizations.dart';
+import 'package:nipaplay_ui_common/l10n/app_localizations.dart';
 import 'package:nipaplay/player_abstraction/player_abstraction.dart';
 import 'package:nipaplay/plugins/plugin_service.dart';
 import 'package:nipaplay/providers/appearance_settings_provider.dart';

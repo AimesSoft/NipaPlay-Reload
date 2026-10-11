@@ -3,7 +3,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:kmbal_ionicons/kmbal_ionicons.dart';
 import 'package:nipaplay_ui_common/app/app_page_ids.dart';
-import 'package:nipaplay/l10n/l10n.dart';
+import 'package:nipaplay_ui_common/l10n/l10n.dart';
 import 'package:nipaplay/models/emby_model.dart';
 import 'package:nipaplay/models/jellyfin_model.dart';
 import 'package:nipaplay_core/models/shared_remote_library.dart';

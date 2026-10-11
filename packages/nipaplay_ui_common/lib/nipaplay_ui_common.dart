@@ -10,3 +10,8 @@ export 'app/app_navigation_scope.dart';
 export 'app/app_page_component.dart';
 export 'app/app_page_ids.dart';
 export 'app/unified_app_actions.dart';
+
+// ---- 批次 A: l10n 本地化层 ----
+export 'l10n/l10n.dart';
+export 'l10n/app_locale_utils.dart';
+export 'l10n/app_localizations.dart';

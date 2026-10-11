@@ -44,6 +44,14 @@
   "danmaku_abstraction/danmaku_content_item.dart",
   "danmaku_abstraction/positioned_danmaku_item.dart",
   "danmaku_next/danmaku_next_log.dart",
+  "l10n/app_en.arb",
+  "l10n/app_locale_utils.dart",
+  "l10n/app_localizations.dart",
+  "l10n/app_localizations_en.dart",
+  "l10n/app_localizations_zh.dart",
+  "l10n/app_zh.arb",
+  "l10n/app_zh_Hant.arb",
+  "l10n/l10n.dart",
   "models/anime_detail_display_mode.dart",
   "models/background_image_render_mode.dart",
   "models/bangumi_collection_submit_result.dart",
@@ -342,6 +350,20 @@
     "app/app_page_component.dart",
     "app/app_page_ids.dart",
     "app/unified_app_actions.dart"
+   ]
+  },
+  {
+   "batch": "p2-batchA-l10n",
+   "count": 8,
+   "files": [
+    "l10n/app_en.arb",
+    "l10n/app_locale_utils.dart",
+    "l10n/app_localizations.dart",
+    "l10n/app_localizations_en.dart",
+    "l10n/app_localizations_zh.dart",
+    "l10n/app_zh.arb",
+    "l10n/app_zh_Hant.arb",
+    "l10n/l10n.dart"
    ]
   }
  ]

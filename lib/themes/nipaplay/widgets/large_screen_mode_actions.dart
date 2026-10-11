@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:nipaplay/l10n/l10n.dart';
+import 'package:nipaplay_ui_common/l10n/l10n.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/menu_button.dart';
 import 'package:nipaplay/utils/theme_notifier.dart';
 import 'package:provider/provider.dart';

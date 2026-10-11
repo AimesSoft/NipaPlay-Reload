@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:nipaplay/l10n/app_locale_utils.dart';
+import 'package:nipaplay_ui_common/l10n/app_locale_utils.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:nipaplay_core/models/bangumi_model.dart';
 import 'package:pinyin/pinyin.dart';

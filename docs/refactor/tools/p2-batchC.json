@@ -1,0 +1,12 @@
+{
+  "batch": "p2-batchC-clean-widgets",
+  "moves": [
+    {"from": "lib/widgets/about_version_banner_text.dart"},
+    {"from": "lib/widgets/adaptive_markdown.dart"},
+    {"from": "lib/widgets/danmaku_density_chart.dart"},
+    {"from": "lib/widgets/in_view_dialog.dart"},
+    {"from": "lib/widgets/intro_skip_button.dart"},
+    {"from": "lib/widgets/desktop_picture_in_picture_scope.dart"},
+    {"from": "lib/widgets/user_activity/user_activity_view_model.dart"}
+  ]
+}

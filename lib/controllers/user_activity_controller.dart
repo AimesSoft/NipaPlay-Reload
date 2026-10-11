@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:nipaplay/l10n/l10n.dart';
+import 'package:nipaplay_ui_common/l10n/l10n.dart';
 import 'package:nipaplay/services/dandanplay_service.dart';
 import 'package:nipaplay/services/debug_log_service.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/themed_anime_detail.dart';

@@ -4,7 +4,7 @@ import 'package:flutter/foundation.dart'
 import 'package:flutter/material.dart';
 import 'package:kmbal_ionicons/kmbal_ionicons.dart';
 import 'package:nipaplay_core/constants/settings_keys.dart';
-import 'package:nipaplay/l10n/l10n.dart';
+import 'package:nipaplay_ui_common/l10n/l10n.dart';
 import 'package:nipaplay/services/danmaku_cache_manager.dart';
 import 'package:nipaplay/services/file_picker_service.dart';
 import 'package:nipaplay/settings/adaptive_settings_scope.dart';

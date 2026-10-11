@@ -3,7 +3,7 @@ import 'package:flutter/cupertino.dart' as cupertino;
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:kmbal_ionicons/kmbal_ionicons.dart';
-import 'package:nipaplay/l10n/l10n.dart';
+import 'package:nipaplay_ui_common/l10n/l10n.dart';
 import 'package:nipaplay/plugins/models/plugin_descriptor.dart';
 import 'package:nipaplay/plugins/models/plugin_ui_action_result.dart';
 import 'package:nipaplay/plugins/models/plugin_ui_entry.dart';

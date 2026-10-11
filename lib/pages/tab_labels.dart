@@ -1,6 +1,6 @@
 // tab_labels.dart
 import 'package:flutter/material.dart';
-import 'package:nipaplay/l10n/l10n.dart';
+import 'package:nipaplay_ui_common/l10n/l10n.dart';
 import 'package:nipaplay/utils/app_accent_color.dart';
 import 'package:nipaplay/app/unified_app_pages.dart';
 

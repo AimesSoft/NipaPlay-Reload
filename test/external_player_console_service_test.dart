@@ -6,7 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:nipaplay_core/constants/danmaku/mode.dart';
 import 'package:nipaplay_core/constants/media_extensions.dart';
-import 'package:nipaplay/l10n/app_localizations.dart';
+import 'package:nipaplay_ui_common/l10n/app_localizations.dart';
 import 'package:nipaplay_core/models/danmaku/blocked_item.dart';
 import 'package:nipaplay_core/models/danmaku/danmaku_item.dart';
 import 'package:nipaplay_core/models/danmaku/style.dart';
