@@ -556,17 +556,21 @@ abstract class MediaServerServiceBase {
 
   /// Full catalog discovery, including items with no playback history.
   Future<List<Map<String, dynamic>>> browseCatalog(
-      {String? parentId, bool recursive = false}) async {
+      {String? parentId,
+      bool recursive = false,
+      String fields = 'ParentId,SeriesName,SeriesId,SeasonId,Path,MediaSources',
+      List<String>? itemIds}) async {
     if (!isConnected) throw StateError(notConnectedMessage);
     final session = (serverUrl, userId, accessToken);
     final endpoint = Uri(path: '/Items', queryParameters: {
       'userId': userId!,
       if (parentId != null) 'ParentId': parentId,
+      if (itemIds != null) 'Ids': itemIds.join(','),
       'Recursive': '$recursive',
-      'IncludeItemTypes': recursive
+      if (itemIds == null) 'IncludeItemTypes': recursive
           ? 'Episode,Movie,Video'
           : 'CollectionFolder,Folder,Series,Season,Episode,Movie,Video',
-      'Fields': 'ParentId,SeriesName,SeriesId,SeasonId,Path,MediaSources',
+      'Fields': fields,
       'SortBy': 'SortName',
       'SortOrder': 'Ascending',
       'Limit': '2147483647',

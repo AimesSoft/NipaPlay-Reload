@@ -527,6 +527,12 @@ static char *np_list_dir_json(const char *host, int port, const char *username,
     np_json_append(&json, &len, &cap, is_dir ? "true" : "false");
     np_json_append(&json, &len, &cap, ",\"size\":");
     np_json_append(&json, &len, &cap, size_buf);
+    char modified_buf[64];
+    snprintf(modified_buf, sizeof(modified_buf), "%llu",
+             (unsigned long long)(ent->st.smb2_mtime * 1000 +
+                                  ent->st.smb2_mtime_nsec / 1000000));
+    np_json_append(&json, &len, &cap, ",\"lastModifiedMs\":");
+    np_json_append(&json, &len, &cap, modified_buf);
     np_json_append(&json, &len, &cap, ",\"isShare\":false}");
 
     free(escaped_name);

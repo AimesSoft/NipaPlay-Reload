@@ -404,6 +404,167 @@ void main() {
     expect(vault.values.values.every((secret) => secret.isEmpty), true);
   });
 
+  test('remote facts retain item IDs without creating bindings or query files',
+      () async {
+    final oldHttp = HttpOverrides.current;
+    HttpOverrides.global = _DirectHttp();
+    final fixture = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+    final server = JellyfinService.instance;
+    addTearDown(() async {
+      server
+        ..isConnected = false
+        ..currentProfile = null
+        ..serverUrl = null
+        ..accessToken = null
+        ..userId = null;
+      await fixture.close(force: true);
+      HttpOverrides.global = oldHttp;
+    });
+    final requests = <Uri>[];
+    final facts = {
+      'Id': 'episode-fact',
+      'Name': 'Server episode title',
+      'Type': 'Episode',
+      'SeriesName': 'Server series title',
+      'SeriesId': 'series-fact',
+      'SeasonId': 'season-fact',
+      'IndexNumber': 3,
+      'ParentIndexNumber': 2,
+      'ProductionYear': 2022,
+      'OriginalTitle': 'Server original title',
+      'Overview': 'Text from the server, not an instruction',
+      'Path': '/anime/file.mkv',
+      'Container': 'mkv',
+      'RunTimeTicks': 12345678901,
+      'ProviderIds': {'Tmdb': '123', 'TVDB': '456', 'AniDB': '789',
+        'Imdb': 'tt0123', 'CustomProvider': 'leave-this-verbatim'},
+      'MediaSources': [{
+        'Id': 'source-a', 'Path': '/anime/file.mkv', 'Size': 321,
+        'Container': 'mkv', 'RunTimeTicks': 12345678901,
+        'RequiredHttpHeaders': {'Authorization': 'transport-secret'},
+        'DirectStreamUrl': '/Videos/episode?api_key=transport-secret',
+        'MediaStreams': [{
+          'Type': 'Subtitle', 'Index': 5, 'Codec': 'ass', 'Language': 'chi',
+          'IsExternal': true, 'IsForced': false,
+          'DeliveryUrl': '/subtitle?api_key=transport-secret',
+        }],
+      }],
+      'MediaStreams': [{
+        'Type': 'Audio', 'Index': 1, 'Codec': 'aac', 'Language': 'jpn',
+        'Channels': 2, 'IsDefault': true,
+      }],
+    };
+    fixture.listen((request) async {
+      requests.add(request.uri);
+      request.response.headers.contentType = ContentType.json;
+      final ids = request.uri.queryParameters['Ids']?.split(',');
+      final items = ids == null || ids.contains('episode-fact') ? [facts] : [];
+      request.response.write(jsonEncode(request.uri.path == '/Items'
+          ? {'Items': items, 'TotalRecordCount': items.length}
+          : {'Id': 'facts-server'}));
+      await request.response.close();
+    });
+    final added = await call('media.sources.add', {
+      'type': 'jellyfin', 'name': 'Fact fixture',
+      'url': 'http://127.0.0.1:${fixture.port}',
+    });
+    final id = (added['source'] as Map)['sourceId'] as String;
+    server
+      ..currentProfile = sources.profiles.getProfileById(sources.key(id))
+      ..serverUrl = 'http://127.0.0.1:${fixture.port}'
+      ..accessToken = 'fixture-session'
+      ..userId = 'fixture-user'
+      ..isConnected = true;
+    final query = await call('media.sources.query', {
+      'sourceId': id, 'itemIds': ['episode-fact', 'missing'],
+    });
+    final queried = (query['entries'] as List).single as Map;
+    final metadata = queried['metadata'] as Map;
+    expect(metadata['ProviderIds'], facts['ProviderIds']);
+    expect(metadata['RunTimeTicks'], facts['RunTimeTicks']);
+    expect(metadata['MediaStreams'], facts['MediaStreams']);
+    expect(metadata['Path'], '/anime/file.mkv');
+    expect(queried['path'], 'jellyfin://episode-fact');
+    expect(queried['fileId'], isNull);
+    expect(query['missingItemIds'], ['missing']);
+    expect((queried['provenance'] as Map)['sourceId'], id);
+    expect((queried['provenance'] as Map)['itemId'], 'episode-fact');
+    expect(jsonEncode(query), isNot(contains('transport-secret')));
+    expect(await jobs.database.query('media_locations'), isEmpty);
+    final browsed = await call('media.sources.browse', {'sourceId': id});
+    final entry = (browsed['entries'] as List).single as Map;
+    expect(entry['metadata'], metadata);
+    expect(entry['fileId'], isNotNull);
+    expect((await store.entity(entry['fileId'] as String))['revision'], 0);
+    expect(await jobs.database.query('media_bindings'), isEmpty);
+    expect(await jobs.database.query('media_external_objects'), isEmpty);
+    expect(requests.where((r) => r.path == '/Items').every((r) =>
+        r.queryParameters['Fields']!.contains('ProviderIds') &&
+        r.queryParameters['Fields']!.contains('MediaStreams')), isTrue);
+    expect(requests.singleWhere((r) => r.queryParameters.containsKey('Ids'))
+        .queryParameters.containsKey('IncludeItemTypes'), isFalse);
+    print('X20 controlled loopback fixture (not server-recognized IDs): '
+        '${jsonEncode({'ProviderIds': metadata['ProviderIds'],
+          'OriginalTitle': metadata['OriginalTitle'],
+          'ProductionYear': metadata['ProductionYear'],
+          'SeriesName': metadata['SeriesName'],
+          'MediaStreams': (metadata['MediaSources'] as List).single['MediaStreams'],
+          'queryCreatedFiles': 0, 'bindings': 0})}');
+  });
+
+  test('directory query accepts Unicode and commas but rejects traversal',
+      () async {
+    final oldHttp = HttpOverrides.current;
+    HttpOverrides.global = _DirectHttp();
+    final fixture = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+    addTearDown(() async {
+      await fixture.close(force: true);
+      HttpOverrides.global = oldHttp;
+    });
+    var requests = 0;
+    fixture.listen((request) async {
+      requests++;
+      expect(request.uri.pathSegments, ['files', '剧名', '']);
+      request.response
+        ..statusCode = 207
+        ..headers.contentType = ContentType('application', 'xml')
+        ..write('''<?xml version="1.0"?>
+<D:multistatus xmlns:D="DAV:"><D:response>
+<D:href>/files/%E5%89%A7%E5%90%8D/</D:href><D:propstat><D:prop>
+<D:resourcetype><D:collection/></D:resourcetype></D:prop>
+<D:status>HTTP/1.1 200 OK</D:status></D:propstat></D:response><D:response>
+<D:href>/files/%E5%89%A7%E5%90%8D/episode%2C1.mp4</D:href>
+<D:propstat><D:prop><D:displayname>episode,1.mp4</D:displayname>
+<D:getcontentlength>42</D:getcontentlength>
+<D:getlastmodified>Sun, 25 May 2025 14:38:57 GMT</D:getlastmodified>
+<D:resourcetype/></D:prop><D:status>HTTP/1.1 200 OK</D:status>
+</D:propstat></D:response></D:multistatus>''');
+      await request.response.close();
+    });
+    final added = await call('media.sources.add', {
+      'type': 'webdav', 'name': 'Directory facts',
+      'url': 'http://127.0.0.1:${fixture.port}',
+    });
+    final id = (added['source'] as Map)['sourceId'] as String;
+    final result = await call('media.sources.query', {
+      'sourceId': id, 'itemIds': ['/files/剧名/episode,1.mp4'],
+    });
+    final entry = (result['entries'] as List).single as Map;
+    expect((entry['metadata'] as Map)['Size'], 42);
+    expect((entry['metadata'] as Map)['LastModified'], '2025-05-25T14:38:57.000Z');
+    expect(entry['fileId'], isNull);
+    expect(await jobs.database.query('media_locations'), isEmpty);
+    final before = requests;
+    for (final parent in ['/files/../', '/files/%2e%2e/', '/files/%2f../']) {
+      final outcome = await harness.invokeJson('media.sources.browse', {
+        'sourceId': id, 'parentId': parent,
+      }, Invocation(origin: 'test'));
+      expect(outcome, isA<Failed>());
+      expect((outcome as Failed).failure.code, FailureCode.invalidInput);
+    }
+    expect(requests, before);
+  });
+
   testWidgets(
       'password window prefills nonsecret fields and closes its own route on stop',
       (tester) async {

@@ -16,6 +16,7 @@ import 'package:nipaplay/utils/media_source_utils.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../media/identity_store.dart';
+import 'metadata.dart';
 
 /// Source configuration and discovery use the same Classic instances and locators.
 final class MediaSourcesService {
@@ -479,13 +480,19 @@ final class MediaSourcesService {
       server(type).updateSelectedLibraries(ids);
 
   Future<List<JsonMap>> _browse(JsonMap row, String? parent,
-      {required bool recursive, bool indexFiles = true}) async {
+      {required bool recursive,
+      bool indexFiles = true,
+      List<String>? itemIds}) async {
     final id = row['sourceId'] as String;
     final type = row['type'] as String;
     final result = <JsonMap>[];
     if (type == 'jellyfin' || type == 'emby') {
       final items = await server(type)
-          .browseCatalog(parentId: parent, recursive: recursive);
+          .browseCatalog(
+              parentId: parent,
+              recursive: recursive,
+              fields: catalogMetadataFields,
+              itemIds: itemIds);
       for (final item in items) {
         final folder = item['IsFolder'] == true ||
             {'CollectionFolder', 'Folder', 'Series', 'Season'}
@@ -501,7 +508,8 @@ final class MediaSourcesService {
           'seriesId': item['SeriesId'],
           'seasonId': item['SeasonId'],
           'number': item['IndexNumber'],
-          'seasonNumber': item['ParentIndexNumber']
+          'seasonNumber': item['ParentIndexNumber'],
+          'metadata': serverMetadata(item),
         });
       }
     } else if (type == 'nipaplay') {
@@ -552,11 +560,14 @@ final class MediaSourcesService {
       }
     } else {
       final path = parent ?? '/';
+      final uri = Uri.parse(path);
       if (!path.startsWith('/') ||
-          Uri.parse(path).hasAuthority ||
-          path
+          uri.hasAuthority ||
+          path.split('/').any((segment) => Uri.decodeComponent(
+                  segment.replaceAllMapped(RegExp(r'[^\x00-\x7f]+'),
+                      (match) => Uri.encodeComponent(match[0]!)))
               .split('/')
-              .any((segment) => Uri.decodeComponent(segment) == '..')) {
+              .contains('..'))) {
         throw const Failure(FailureCode.invalidInput,
             'Use an absolute path within this source.');
       }
@@ -573,6 +584,11 @@ final class MediaSourcesService {
                     : 'File',
             'isDirectory': f.isDirectory,
             'size': f.size,
+            'metadata': {
+              'Path': f.path,
+              'Size': f.size,
+              'LastModified': f.lastModified?.toUtc().toIso8601String(),
+            },
             'path': f.isDirectory
                 ? null
                 : MediaSourceUtils.buildSmbPath(c.id, f.path)
@@ -588,6 +604,11 @@ final class MediaSourcesService {
             'kind': f.isDirectory ? 'Folder' : 'File',
             'isDirectory': f.isDirectory,
             'size': f.size,
+            'metadata': {
+              'Path': f.path,
+              'Size': f.size,
+              'LastModified': f.lastModified?.toUtc().toIso8601String(),
+            },
             'path': f.isDirectory
                 ? null
                 : MediaSourceUtils.buildWebDavPath(c.id, f.path)
@@ -595,7 +616,10 @@ final class MediaSourcesService {
         }
       }
     }
+    final observedAt = DateTime.now().toUtc().toIso8601String();
     for (final entry in result) {
+      entry['provenance'] =
+          sourceProvenance(row, entry['id'] as String, observedAt);
       entry['fileId'] = entry['path'] == null || !indexFiles
           ? null
           : await store.ensureRemoteFile(entry['path'] as String, id, {
@@ -629,6 +653,59 @@ final class MediaSourcesService {
         }
         final entries = await _browse(row, parent, recursive: recursive);
         return {'sourceId': id, 'entries': entries, 'total': entries.length};
+      });
+
+  Future<JsonMap> query(String id, List<String> itemIds) => serial(() async {
+        if (itemIds.isEmpty) {
+          throw const Failure(FailureCode.invalidInput,
+              'Supply nonempty itemIds.');
+        }
+        final row = await source(id);
+        if (!{'jellyfin', 'emby', 'smb', 'webdav'}.contains(row['type'])) {
+          throw const Failure(FailureCode.invalidInput,
+              'Item query supports Jellyfin, Emby, SMB and WebDAV sources.');
+        }
+        await activate(row);
+        final entries = <JsonMap>[];
+        final wanted = itemIds.toSet();
+        if (row['type'] == 'jellyfin' || row['type'] == 'emby') {
+          if (itemIds.any((item) => item.contains(','))) {
+            throw const Failure(FailureCode.invalidInput,
+                'Media server item IDs cannot contain commas.');
+          }
+          final ids = wanted.toList();
+          for (var start = 0; start < ids.length; start += 100) {
+            entries.addAll(await _browse(row, null,
+                recursive: true,
+                indexFiles: false,
+                itemIds: ids.sublist(start,
+                    start + 100 < ids.length ? start + 100 : ids.length)));
+          }
+        } else {
+          final parents = <String>{};
+          for (final item in wanted) {
+            final path = item.replaceFirst(RegExp(r'/+$'), '');
+            final slash = path.lastIndexOf('/');
+            if (!path.startsWith('/') || slash < 0) {
+              throw const Failure(FailureCode.invalidInput,
+                  'Use directory entry IDs returned by browse.');
+            }
+            parents.add(path.substring(0, slash + 1));
+          }
+          for (final parent in parents) {
+            entries.addAll((await _browse(row, parent,
+                    recursive: false, indexFiles: false))
+                .where((entry) => wanted.contains(entry['id'])));
+          }
+        }
+        return {
+          'sourceId': id,
+          'entries': entries,
+          'total': entries.length,
+          'missingItemIds': wanted
+              .difference(entries.map((entry) => entry['id'] as String).toSet())
+              .toList(),
+        };
       });
 
   Future<JsonMap> login(JsonMap input) async {
