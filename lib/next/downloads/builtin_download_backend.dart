@@ -91,6 +91,9 @@ final class BuiltinDownloadBackend implements DownloadBackend {
         output: DownloadLocation(
             path: resolvedOutput ?? task.outputFolder, isLocal: true),
         libraryKey: task.autoScanKey,
+        state: task.state,
+        downloadSpeedBytesPerSecond: task.downloadSpeedBytesPerSecond,
+        uploadSpeedBytesPerSecond: task.uploadSpeedBytesPerSecond,
         completed: task.progressBytes,
         total: task.totalBytes,
         finished: task.finished,

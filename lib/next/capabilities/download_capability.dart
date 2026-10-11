@@ -3,6 +3,7 @@ import 'package:nipa_harness/nipa_harness.dart';
 import '../downloads/download_backend.dart';
 import '../downloads/download_service.dart';
 import '../downloads/download_source.dart';
+import '../downloads/download_paths.dart';
 
 final _downloadJobSchema = ObjectSchema({
   ...jobSnapshotSchema.properties,
@@ -25,6 +26,51 @@ const _backendSchema = ObjectSchema({
 ]);
 const _idSchema = StringSchema(minLength: 1);
 const _idsSchema = ArraySchema(_idSchema);
+const _downloadTaskSchema = ObjectSchema({
+  'handle': _idSchema,
+  'infoHash': _idSchema,
+  'title': StringSchema(),
+  'outputDirectory': _idSchema,
+  'local': BooleanSchema(),
+  'completedBytes': IntegerSchema(minimum: 0),
+  'totalBytes': IntegerSchema(minimum: 0),
+  'finished': BooleanSchema(),
+  'paused': BooleanSchema(),
+  'error': StringSchema(nullable: true),
+  'state': StringSchema(),
+  'downloadSpeedBytesPerSecond': IntegerSchema(minimum: 0),
+  'uploadSpeedBytesPerSecond': IntegerSchema(minimum: 0),
+  'files': ArraySchema(ObjectSchema({
+    'index': IntegerSchema(minimum: 0),
+    'path': _idSchema,
+    'local': BooleanSchema(),
+    'expectedSize': IntegerSchema(minimum: 0),
+    'included': BooleanSchema(),
+    'isVideo': BooleanSchema(),
+    'imported': BooleanSchema(),
+    'identificationPending': BooleanSchema(),
+    'media': ObjectSchema({}, additionalProperties: true),
+  }, required: [
+    'index',
+    'path',
+    'local',
+    'expectedSize',
+    'included',
+    'isVideo'
+  ])),
+}, required: [
+  'handle',
+  'infoHash',
+  'title',
+  'outputDirectory',
+  'local',
+  'completedBytes',
+  'totalBytes',
+  'finished',
+  'paused',
+  'error',
+  'files'
+], nullable: true);
 
 final class DownloadCapability implements Capability {
   DownloadCapability(
@@ -37,6 +83,8 @@ final class DownloadCapability implements Capability {
             'set_paused',
             'pause',
             'resume',
+            'read',
+            'import',
             'remove',
             'delete'
           ])
@@ -69,24 +117,34 @@ final class _DownloadAction extends Action<_DownloadJson, _DownloadJson> {
         title: '$operation download',
         description: switch (operation) {
           'add' =>
-            'Accept source or sources: magnet URIs, HTTP(S) torrent URLs or local .torrent paths. Returns queued jobs after metadata validation, deduplicated by backend and infoHash. Batch results preserve input order and individual failures.',
+            'Accept source or sources: magnet URIs, HTTP(S) torrent URLs or local .torrent paths. Optional downloadDirectory and createFolderForTask override defaults for these new tasks without changing settings. Returns queued jobs after metadata validation, deduplicated by backend and infoHash; an existing task keeps its original directory. Batch results preserve input order and individual failures.',
           'set_paused' =>
             'Set paused for jobId or jobIds, including downloading and seeding. Returns persisted jobs and individual batch failures.',
           'pause' =>
             'Compatibility alias for download.set_paused with paused=true.',
           'resume' =>
             'Compatibility alias for download.set_paused with paused=false.',
+          'read' =>
+            'Read live backend state and file indices/paths for jobId or jobIds, including completed seeding tasks. Use download.play with a playable file index or playback.open with a completed local path.',
+          'import' =>
+            'Scan completed local video files for jobId or jobIds with the Classic scanner, even when automatic scanning is disabled. Verifies file sizes first; returns current imported/identification status. Does not rewrite historical download receipts.',
           'remove' =>
             'Remove session entries for jobId or jobIds, keeping downloaded files. Returns per-item persisted jobs and failures.',
           _ =>
             'Delete session entries and data for jobId or jobIds. Each item checks output containment and records its own destructive audit, including failures.',
         },
-        effect: operation == 'delete' ? Effect.destructive : Effect.write,
+        effect: operation == 'delete'
+            ? Effect.destructive
+            : operation == 'read'
+                ? Effect.read
+                : Effect.write,
         input: operation == 'add'
             ? const ObjectSchema({
                 'source': _idSchema,
                 'sources': _idsSchema,
                 'backend': _backendSchema,
+                'downloadDirectory': _idSchema,
+                'createFolderForTask': BooleanSchema(),
               }, oneOfRequired: [
                 ['source'],
                 ['sources']
@@ -103,12 +161,14 @@ final class _DownloadAction extends Action<_DownloadJson, _DownloadJson> {
               ]),
         output: ObjectSchema({
           'job': _downloadJobSchema,
+          'task': _downloadTaskSchema,
           'results': ArraySchema(ObjectSchema({
             'index': const IntegerSchema(minimum: 0),
             'source': _idSchema,
             'jobId': _idSchema,
             'status': const StringSchema(values: ['completed', 'failed']),
             'job': _downloadJobSchema,
+            'task': _downloadTaskSchema,
             'error': const ObjectSchema({}, additionalProperties: true),
           }, required: const [
             'index',
@@ -149,7 +209,22 @@ final class _DownloadAction extends Action<_DownloadJson, _DownloadJson> {
       if (!await downloads.executor.isEnabled()) {
         throw const Failure(FailureCode.unavailable, 'Downloader is disabled.');
       }
-      job = await downloads.add(await sources.prepare(target), backend: ref);
+      final directory = json['downloadDirectory'] as String?;
+      if (directory != null) validateDownloadDirectory(directory);
+      final prepared = await sources.prepare(target);
+      job = await downloads.add(
+          DownloadRequest(
+            source: prepared.source,
+            infoHash: prepared.infoHash,
+            title: prepared.title,
+            downloadDirectory: directory,
+            createFolderForTask: json['createFolderForTask'] as bool?,
+          ),
+          backend: ref);
+    } else if (operation == 'read') {
+      return downloads.read(target);
+    } else if (operation == 'import') {
+      return downloads.importCompleted(target);
     } else {
       job = switch (operation) {
         'pause' => await downloads.pause(target),

@@ -23,6 +23,7 @@ import 'next_database.dart';
 import 'tasks/device_identity.dart';
 import 'tasks/sqlite_job_store.dart';
 import 'settings/application_settings.dart';
+import 'settings/download_settings.dart';
 import 'settings/registry.dart';
 import 'settings/capability.dart';
 import 'settings/classic_settings.dart';
@@ -106,6 +107,7 @@ final class NextCore {
     settings = SettingsRegistry(database, [
       ...ApplicationSettings.entries(),
       ...ClassicSettings.entries(),
+      ...DownloadSettings.entries(),
       meshAddressSetting(mesh),
       harnessLocation.setting
     ]);
@@ -140,6 +142,7 @@ final class NextCore {
       CredentialCapability(credentials),
       TaskCapability(engine),
       downloads.capability,
+      downloads.metadataCapability,
       media.capability,
       MediaSourcesCapability(mediaSources),
       AccountsCapability(accounts),

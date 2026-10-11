@@ -133,6 +133,59 @@ final class DownloadService {
         if (task != null && !task.paused) await backend.pause(task.handle);
         return engine.get(jobId);
       });
+
+  Future<DownloadSnapshot?> snapshot(String jobId) async {
+    final job = await _downloadJob(jobId);
+    return _task(backends.resolve(_ref(job)), job);
+  }
+
+  Future<JsonMap> read(String jobId) async => {
+        'job': (await _downloadJob(jobId)).toJson(),
+        'task': (await snapshot(jobId))?.toJson(),
+      };
+
+  Future<JsonMap> importCompleted(String jobId) => _serial(() async {
+        final job = await _downloadJob(jobId);
+        final backend = backends.resolve(_ref(job));
+        final task = await _task(backend, job);
+        if (task == null) {
+          throw const Failure(FailureCode.notFound,
+              'Download is absent from its backend session.');
+        }
+        if (!task.finished || !task.output.isLocal) {
+          throw const Failure(FailureCode.conflict,
+              'Import requires a completed local download.');
+        }
+        final videos = task.files
+            .where((f) => f.included && f.isVideo && f.location.isLocal)
+            .toList();
+        for (final file in videos) {
+          await checkedDownloadPath(task.output.path, file.location.path);
+          if (await backend.readSize(file) != file.expectedSize) {
+            throw const Failure(FailureCode.conflict,
+                'Completed video is missing or has an incorrect size.');
+          }
+        }
+        if (library.isBusy) {
+          throw const Failure(FailureCode.unavailable, 'Media scanner is busy.',
+              retryable: true);
+        }
+        await library.importFiles(
+            videos.map((f) => f.location.path).toList(), task.output.path);
+        await library.markImported(task.importKey);
+        final result = task.toJson();
+        for (final file in (result['files'] as List).cast<JsonMap>()) {
+          final media = await library.lookup(file['path'] as String);
+          file['imported'] = media != null;
+          if (media != null) file['media'] = media;
+          if (file['included'] == true &&
+              file['isVideo'] == true &&
+              media == null) {
+            file['identificationPending'] = true;
+          }
+        }
+        return {'job': (await engine.get(jobId)).toJson(), 'task': result};
+      });
   Future<Job> resume(String jobId) => _serial(() async {
         final job = await _downloadJob(jobId);
         final backend = backends.resolve(_ref(job));
