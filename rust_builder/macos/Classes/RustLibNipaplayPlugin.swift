@@ -481,14 +481,19 @@ public final class RustLibNipaplayPlugin: NSObject, FlutterPlugin {
     let customFontFamily = (dict["customFontFamily"] as? String) ?? ""
     let customFontFilePath = (dict["customFontFilePath"] as? String) ?? ""
 
-    let ok = frameJson.withCString { ptr in
-      customFontFamily.withCString { familyPtr in
-        customFontFilePath.withCString { filePtr in
-          next2_engine_set_frame(handle, ptr, fontSize, outlineWidth, shadowStyle, opacity, familyPtr, filePtr) != 0
+    // SetFrame waits for the renderer, including glyph generation. Keep that
+    // wait off the platform thread used by SQLite and player method channels.
+    // Share the initialization queue to order frames with resize and disposal.
+    initQueue.async {
+      let ok = frameJson.withCString { ptr in
+        customFontFamily.withCString { familyPtr in
+          customFontFilePath.withCString { filePtr in
+            next2_engine_set_frame(handle, ptr, fontSize, outlineWidth, shadowStyle, opacity, familyPtr, filePtr) != 0
+          }
         }
       }
+      DispatchQueue.main.async { result(ok) }
     }
-    result(ok)
   }
 
   private func resetScene(arguments: Any?, result: @escaping FlutterResult) {
