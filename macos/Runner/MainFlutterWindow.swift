@@ -1598,6 +1598,26 @@ class MainFlutterWindow: NSWindow {
     )
 
     RegisterGeneratedPlugins(registry: flutterViewController)
+
+    let instanceChannel = FlutterMethodChannel(
+      name: "nipaplay/instance", binaryMessenger: flutterEngine.binaryMessenger)
+    instanceChannel.setMethodCallHandler { [weak self] call, result in
+      guard call.method == "facts" else {
+        result(FlutterMethodNotImplemented)
+        return
+      }
+      guard let window = self else {
+        result(FlutterError(code: "window_closed", message: "The main window has closed", details: nil))
+        return
+      }
+      result([
+        "executablePath": Bundle.main.executableURL!.resolvingSymlinksInPath().path,
+        "appBundlePath": Bundle.main.bundleURL.resolvingSymlinksInPath().path,
+        "windowTitle": window.title,
+        "windowId": window.windowNumber,
+        "viewId": flutterViewController.viewIdentifier,
+      ])
+    }
     
     // 注册自定义安全书签插件
     SecurityBookmarkPlugin.register(with: flutterViewController.registrar(forPlugin: "SecurityBookmarkPlugin"))

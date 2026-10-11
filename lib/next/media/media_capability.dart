@@ -10,7 +10,12 @@ const _refSchema = ObjectSchema({
   'provider': _text,
   'objectType': _text,
   'externalId': _text,
-  'scope': StringSchema()
+  'scope': StringSchema(description:
+      'Provider object namespace, always a string (not a local ID or binding scope object). '
+      'Work: "". Dandanplay episode: "anime/<animeId>"; Bangumi episode: "subject/<subjectId>". '
+      'TMDB season: "tv/<tvId>/season/<seasonNumber>"; episode: '
+      '"tv/<tvId>/season/<seasonNumber>/episode/<episodeNumber>". '
+      'Use the exact ref returned by metadata; externalId is the provider object ID, not an episode number.')
 }, required: [
   'provider',
   'objectType',
@@ -399,17 +404,47 @@ final _specs = [
       ])),
   _spec(
       'media.identity.bind_batch',
-      'Atomically accept explicit bindings. Use ref + existing entityId + kind for any external work/release/episode, with no provider fetch or cascade. Files can use ref + entityId + exactly one localEpisodeIds target where that ref is already accepted (including an earlier entry in this batch). New provider namespaces must be HTTPS origins; host canonicalizes case, default port and trailing slash. Or use workRef/releaseRef/episodeRefs for built-in catalogue validation and file links. Indexed remote files use location evidence without local byte probing. Use source browse fileId when paths belong to multiple servers. Preserves reason/evidence; host derives boundBy. requestId is durable and cannot be reused with different input.',
+      'Atomically accept explicit bindings in one batch. Local hierarchy is work -> release -> episode; files link to episodes. '
+      'Two input modes must not be mixed within an entry. '
+      '(1) Catalogue mode: every entry supplies workRef. kind=work binds/creates only the work; '
+      'kind=release binds/creates the work and release; kind=episode binds/creates the work, release and exactly one episodeRef; '
+      'kind=file also links an indexed file to one or more distinct episodeRefs. '
+      'Without local IDs, the same provider refs reuse the same local hierarchy within this batch. '
+      'For Dandanplay anime and Bangumi subject, omit releaseRef or repeat workRef: their episode catalogue is the release. '
+      'TMDB TV requires releaseRef of objectType=season for all non-work entries. '
+      'Work refs have scope=""; Dandanplay episode scope="anime/<animeId>", Bangumi episode scope="subject/<subjectId>"; '
+      'TMDB season scope="tv/<tvId>/season/<number>" and episode scope adds "/episode/<number>". '
+      'externalId is always the actual provider object ID, not the displayed episode number. '
+      'Example (replace ANIME_ID and EPISODE_ID with verified provider IDs): '
+      '{"requestId":"chosen-series-1","entries":['
+      '{"kind":"work","workRef":{"provider":"dandanplay","objectType":"anime","externalId":"ANIME_ID","scope":""},"reason":"User selected this work"},'
+      '{"kind":"release","workRef":{"provider":"dandanplay","objectType":"anime","externalId":"ANIME_ID","scope":""},"reason":"This anime is its episode catalogue"},'
+      '{"kind":"episode","workRef":{"provider":"dandanplay","objectType":"anime","externalId":"ANIME_ID","scope":""},"episodeRefs":[{"provider":"dandanplay","objectType":"episode","externalId":"EPISODE_ID","scope":"anime/ANIME_ID"}],"reason":"Verified episode identity"}]}. '
+      '(2) Direct mode: ref + existing entityId + kind binds an external work/release/episode without fetching metadata, creating parents or cascading. '
+      'Direct file bindings also require exactly one localEpisodeIds target where this ref is already accepted (including an earlier entry). '
+      'New direct provider namespaces must be HTTPS origins; host canonicalizes them. '
+      'Indexed remote files use source browse fileId as entityId and need no local byte probing. '
+      'Preserves reason/evidence; host derives boundBy. requestId is durable and cannot be reused with different input.',
       Effect.write,
       const ObjectSchema({
         'requestId': _text,
         'entries': ArraySchema(ObjectSchema({
           'kind': StringSchema(values: ['work', 'release', 'episode', 'file']),
-          'entityId': _text,
-          'path': _text,
-          'workId': _text,
-          'releaseId': _text,
-          'localEpisodeIds': ArraySchema(_text),
+          'entityId': StringSchema(minLength: 1, description:
+              'Existing local entity of this entry kind. Required in direct mode. '
+              'Catalogue mode: optional for work/release/episode (omitted creates or reuses by ref); '
+              'file requires exactly one entityId (browse fileId) or path.'),
+          'path': StringSchema(minLength: 1, description:
+              'Catalogue file only: alternative to entityId; remote location must already be indexed.'),
+          'workId': StringSchema(minLength: 1, description:
+              'Catalogue non-work entry: optional existing local parent work ID, not an external provider ID. '
+              'Omit to reuse/create the work from workRef.'),
+          'releaseId': StringSchema(minLength: 1, description:
+              'Catalogue episode/file: optional existing local parent release ID under workId. '
+              'Omit to reuse/create from releaseRef (or workRef for anime/subject/movie).'),
+          'localEpisodeIds': ArraySchema(_text, description:
+              'Catalogue: existing local episode IDs corresponding one-to-one with episodeRefs under the selected release. '
+              'For kind=episode use entityId instead. Direct file: exactly one existing episode with this accepted ref.'),
           'workRef': _refSchema,
           'ref': _refSchema,
           'releaseRef': _refSchema,

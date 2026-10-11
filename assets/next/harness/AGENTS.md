@@ -23,6 +23,8 @@
 
 `./nipa` 连接本机的 NipaPlay。NipaPlay 需要正在运行，并在「设置 → 实验室」中开启了 NipaPlay Next。连不上时，提醒用户检查这两点。
 
+这台机器上可能装着多个 NipaPlay（正式版、开发构建、实验副本）；按应用名或 bundle id 打开的未必是 `nipa` 连接的那个实例。`nipa status` 的实例事实和 `ui.*` 的界面操作、截图来自当前连接的实例。
+
 ```bash
 ./nipa status                                 # 应用与任务概况，最多列 10 个未结束任务
 ./nipa list                                   # 当前全部能力的 ID、副作用与标题

@@ -17,7 +17,6 @@ import 'package:nipaplay/providers/emby_provider.dart';
 import 'package:nipaplay/services/bangumi_service.dart';
 import 'package:nipaplay/services/episode_file_selection_service.dart';
 import 'package:nipaplay/services/playback_service.dart';
-import 'package:nipaplay/utils/tab_change_notifier.dart';
 import 'package:nipaplay/utils/video_player_state.dart';
 import 'package:nipaplay/utils/globals.dart' as globals;
 import 'package:nipaplay/player_abstraction/player_factory.dart';
@@ -27,7 +26,9 @@ import 'package:provider/provider.dart';
 import 'agent_endpoint.dart';
 import 'capabilities/history_capability.dart';
 import 'capabilities/library_capability.dart';
-import 'capabilities/navigation_capability.dart';
+import 'capabilities/ui_capability.dart';
+import 'capabilities/ui_capture.dart';
+import 'instance_facts.dart';
 import 'capabilities/classic_ui_open.dart';
 import 'capabilities/playback_capability.dart';
 import 'capabilities/download_playback_capability.dart';
@@ -97,7 +98,6 @@ final class NextRuntime extends ChangeNotifier {
             labs.enableErikaPlayerKernel);
     final settings = context.read<SettingsProvider>();
     final player = context.read<VideoPlayerState>();
-    final navigation = context.read<TabChangeNotifier>();
     final history = ServiceProvider.watchHistoryProvider;
     final seriesDetail = BangumiService.instance.getAnimeDetailsFromMemory;
     final playback = PlaybackCapability(
@@ -119,7 +119,7 @@ final class NextRuntime extends ChangeNotifier {
         seriesDetail: seriesDetail,
       ),
       playback,
-      NavigationCapability(changePage: navigation.changePage,
+      UiCapability(
         media: () => core.media.service,
         openPage: ClassicUiOpen().page,
         openDetail: ClassicUiOpen().detail,
@@ -204,8 +204,11 @@ final class NextRuntime extends ChangeNotifier {
           data.buffer.asUint8List(data.offsetInBytes, data.lengthInBytes);
     }
     final packageInfo = await PackageInfo.fromPlatform();
+    final instanceFacts = InstanceFacts(packageInfo.version);
     _harness = Harness(
       [
+        InstanceCapability(instanceFacts),
+        UiCaptureCapability(ClassicUiCapture(instanceFacts).capture),
         for (final capability in capabilities)
           InvocationScopeCapability(FileIndexingCapability(capability, core.media.service.store)),
         PlaybackControlsCapability(ClassicPlaybackControls(_player)),
@@ -224,6 +227,7 @@ final class NextRuntime extends ChangeNotifier {
     _endpoint = AgentEndpoint(
       harness: _harness,
       appVersion: packageInfo.version,
+      instanceFacts: instanceFacts.read,
       seed: seed,
       seedRepository: Directory('${root.path}/harness-seed'),
       port: LabProfile.active ? 0 : kDebugMode && Platform.environment['NIPAPLAY_AGENT_PORT'] != null

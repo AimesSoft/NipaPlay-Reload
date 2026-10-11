@@ -31,9 +31,11 @@ void main() {
       'files': [
         {'path': '/out/video', 'expectedSize': 10, 'actualSize': 10}
       ]
-    }));
+    }), phase: 'connected');
     expect(completed.jobId, submitted.jobId);
     expect(completed.state, JobState.succeeded);
+    expect(completed.phase, 'connected');
+    expect((await engine.get(submitted.jobId)).phase, 'connected');
     expect((await engine.get(submitted.jobId)).checkpoint, {'nativeId': 42});
     final events = await store.events(submitted.jobId);
     expect(events.map((e) => e.kind), [

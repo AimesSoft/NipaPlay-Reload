@@ -55,8 +55,8 @@ final class JobContext {
           error: error,
           checkpoint: checkpoint);
 
-  Future<Job> succeed(JobReceipt receipt) =>
-      _update('succeeded', state: JobState.succeeded, receipt: receipt);
+  Future<Job> succeed(JobReceipt receipt, {String? phase}) =>
+      _update('succeeded', state: JobState.succeeded, phase: phase, receipt: receipt);
 
   Future<Job> fail(Failure error, JobReceipt receipt) =>
       _update('failed', state: JobState.failed, error: error, receipt: receipt);

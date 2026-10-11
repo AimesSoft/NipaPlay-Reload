@@ -71,6 +71,7 @@ void main() {
         harness: Harness([]),
         seed: {'nipa': cli},
         appVersion: 'x8-fixture',
+        instanceFacts: () async => {'pid': pid, 'windowTitle': 'Fixture'},
         credentialFile: credentials,
         port: 0);
     await endpoint.start(repository);

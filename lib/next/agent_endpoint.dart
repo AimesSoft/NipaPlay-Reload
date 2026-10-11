@@ -13,6 +13,7 @@ import 'package:nipaplay/security/credential_vault.dart';
 import 'endpoint_file.dart';
 import 'harness_repository.dart';
 import 'harness_redaction.dart';
+import 'instance_facts.dart';
 
 sealed class AgentEndpointStatus {
   const AgentEndpointStatus();
@@ -38,10 +39,12 @@ final class AgentEndpoint {
       {required Harness harness,
       required this.seed,
       required String appVersion,
+      Future<JsonMap> Function()? instanceFacts,
       File? credentialFile,
       Directory? seedRepository,
       int? port})
       : _harness = harness,
+        _instanceFacts = instanceFacts ?? InstanceFacts(appVersion).read,
         _appVersion = appVersion,
         _port = LabProfile.active ? 0 : port ?? 47811,
         credentialFile = credentialFile ?? defaultEndpointFile,
@@ -51,6 +54,7 @@ final class AgentEndpoint {
                 'harness-seed'));
 
   final Harness _harness;
+  final Future<JsonMap> Function() _instanceFacts;
   final Map<String, List<int>> seed;
   final String _appVersion;
   final int _port;
@@ -247,6 +251,7 @@ final class AgentEndpoint {
           .toEnvelope();
       return _response({
         'status': 'running',
+        'instance': await _instanceFacts(),
         if (LabProfile.active)
           'profile': {
             'name': LabProfile.name,

@@ -1061,7 +1061,10 @@ final class IdentityStore {
     final existing = await entity(id, db: tx);
     if (existing['kind'] != kind || existing['parent_id'] != parent) {
       throw Failure(FailureCode.conflict,
-          '$id is not a $kind under the selected parent.');
+          'Expected local entity $id to be kind=$kind with parentId=$parent; '
+          'actual kind=${existing['kind']}, parentId=${existing['parent_id']}. '
+          'entityId identifies the entry itself; workId/releaseId identify its parents. '
+          'Omit local IDs to create/reuse the hierarchy by catalogue refs.');
     }
     return id;
   }

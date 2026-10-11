@@ -467,7 +467,23 @@ final class MediaService {
             }
             if (!entry.containsKey('workRef')) {
               throw const Failure(
-                  FailureCode.invalidInput, 'Choose ref or workRef.');
+                  FailureCode.invalidInput, 'Expected workRef to create/reuse a catalogue hierarchy, '
+                  'or ref + entityId to bind an existing entity directly. '
+                  'An episode catalogue entry requires workRef + exactly one episodeRefs; '
+                  'Dandanplay/Bangumi reuse workRef as release, TMDB TV also requires releaseRef.');
+            }
+            final unsupported = switch (kind) {
+              'work' => const {'workId', 'releaseId', 'releaseRef', 'localEpisodeIds', 'startMs', 'endMs'},
+              'release' => const {'releaseId', 'localEpisodeIds', 'startMs', 'endMs'},
+              'episode' => const {'localEpisodeIds', 'startMs', 'endMs'},
+              _ => const <String>{},
+            };
+            final ignored = entry.keys.where(unsupported.contains).toList();
+            if (ignored.isNotEmpty) {
+              throw Failure(FailureCode.invalidInput,
+                  'kind=$kind cannot use $ignored. entityId identifies the existing $kind itself; '
+                  'workId is the parent work for release/episode/file; releaseId is the parent release for episode/file; '
+                  'localEpisodeIds is for file links. Omit local IDs to create/reuse by catalogue refs.');
             }
             if ((kind == 'file' &&
                     (entry.containsKey('entityId') ==
@@ -480,7 +496,14 @@ final class MediaService {
             if (!{'tv', 'movie', 'subject', 'anime'}
                 .contains(workRef.objectType)) {
               throw const Failure(FailureCode.invalidInput,
-                  'workRef must identify a work catalogue.');
+                  'Expected workRef with provider/objectType tmdb/tv or tmdb/movie, '
+                  'bangumi/subject, or dandanplay/anime, and scope="". '
+                  'An episode ref belongs in episodeRefs, not workRef.');
+            }
+            if (workRef.scope.isNotEmpty) {
+              throw const Failure(FailureCode.invalidInput,
+                  'Expected workRef.scope="" for a root work catalogue; '
+                  'episode namespaces belong in episodeRefs[].scope.');
             }
             final work = await get(workRef);
             final releaseRef = entry['releaseRef'] == null
@@ -533,8 +556,17 @@ final class MediaService {
               final members =
                   catalogue.where((ep) => same(ep.ref, episodeRef)).toList();
               if (members.length != 1) {
+                final expected = catalogue
+                    .where((ep) => ep.ref.externalId == episodeRef.externalId)
+                    .map((ep) => ep.ref.toJson()).toList();
                 throw Failure(FailureCode.invalidInput,
-                    'Episode ${episodeRef.externalId} is not a member of the selected release catalogue.');
+                    'Episode ref ${jsonEncode(episodeRef.toJson())} is not a member of '
+                    'the selected release catalogue ${jsonEncode(release.ref.toJson())}. '
+                    '${expected.isEmpty ? 'Expected an actual episode object ID and its exact provider/objectType/scope from this catalogue, not an episode number; media.metadata.get_batch returns its episode refs.' : 'Expected episodeRefs to contain ${jsonEncode(expected)}; scope is the provider namespace string, not a local release ID.'}',
+                    violations: [SchemaViolation(
+                        '/entries/$index/episodeRefs/${selected.length}',
+                        expected.isEmpty ? 'Expected a ref from the selected release catalogue.'
+                            : 'Expected ${jsonEncode(expected)}.')]);
               }
               selected.add(members.single);
             }
@@ -565,7 +597,7 @@ final class MediaService {
             });
           } on Failure catch (error) {
             throw Failure(error.code, 'Entry $index: ${error.message}',
-                violations: [
+                violations: error.violations.isNotEmpty ? error.violations : [
                   SchemaViolation('/entries/$index', error.message)
                 ]);
           }

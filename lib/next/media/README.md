@@ -41,6 +41,14 @@ Action id 是 Harness 名称；MCP 名称把点替换为下划线。输入输出
 ## 绑定与不变量
 
 `bind_batch.entries` 的 `kind` 是 work/release/episode/file。
+本地层级为 work → release → episode；文件通过关联指向 episode。目录模式中
+kind=episode 已保存所选集及其作品、版本；同批的作品、版本条目复用同一身份。
+省略本地 ID 时按来源 ref 建立或复用；entityId 是条目自身，workId/releaseId 是父实体，
+不是外部编号。Bangumi subject、弹弹play anime 的 releaseRef 可省略（复用 workRef）；
+TMDB TV 的非 work 条目必须给出 season releaseRef。work ref.scope 为空字符串，
+弹弹play episode.scope 为 `anime/<animeId>`，Bangumi 为 `subject/<subjectId>`，
+TMDB season 为 `tv/<tvId>/season/<number>`，episode 在其后追加 `/episode/<number>`。
+外部集编号使用实际 object ID，不用显示集数。完整输入示例和字段语义在 `nipa describe` 中。
 除内置目录模式外，`kind` + 既有 `entityId` + `ref` + `reason` 可以直接绑定
 work/release/episode 的任意外部对象：不请求 provider、不建立父实体或文件关联。
 宿主仍校验实体层级、同来源身份冲突、同种本地实体的外部对象唯一归属，并记录理由与证据。

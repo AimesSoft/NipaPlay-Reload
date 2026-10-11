@@ -833,7 +833,7 @@ final class MediaSourcesService {
             'sourceId': id,
             'connected': true,
             'method': input['method']
-          }));
+          }), phase: 'connected');
       return;
     }
     Future<JsonMap> unchanged() async {
@@ -886,7 +886,7 @@ final class MediaSourcesService {
                   'sourceId': id,
                   'connected': true,
                   'method': input['method']
-                }));
+                }), phase: 'connected');
             return;
           }
           await Future.any([
@@ -970,7 +970,7 @@ final class MediaSourcesService {
                 'sourceId': id,
                 'connected': true,
                 'method': input['method']
-              }));
+              }), phase: 'connected');
           return;
         }
         stopped = true;
