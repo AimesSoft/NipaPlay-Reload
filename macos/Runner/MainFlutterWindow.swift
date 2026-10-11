@@ -1121,6 +1121,7 @@ private final class DesktopMultiWindowHostPlugin: NSObject, FlutterPlugin {
   private var dragStates: [Int: WindowDragState] = [:]
   private var detachedPlayerClasses: Set<ObjectIdentifier> = []
   private var interactivePopupClasses: Set<ObjectIdentifier> = []
+  private var agentFullscreenStyles: [Int: (NSWindow.StyleMask, NSWindow.CollectionBehavior)] = [:]
 
   static func register(with registrar: FlutterPluginRegistrar) {
     let channel = FlutterMethodChannel(
@@ -1177,6 +1178,29 @@ private final class DesktopMultiWindowHostPlugin: NSObject, FlutterPlugin {
       let alwaysOnTop = boolValue(arguments["alwaysOnTop"]) ?? false
       applyAlwaysOnTop(alwaysOnTop, to: window)
       result(alwaysOnTop)
+    case "setAgentFullscreen":
+      let enabled = boolValue(arguments["enabled"]) ?? false
+      if window.styleMask.contains(.fullScreen) != enabled {
+        if enabled && window.nipaplayIsDetachedPlayerWindow {
+          if agentFullscreenStyles[window.windowNumber] == nil {
+            agentFullscreenStyles[window.windowNumber] = (window.styleMask, window.collectionBehavior)
+            NotificationCenter.default.addObserver(self, selector: #selector(restoreAgentFullscreen(_:)),
+              name: NSWindow.didExitFullScreenNotification, object: window)
+            NotificationCenter.default.addObserver(self, selector: #selector(discardAgentFullscreen(_:)),
+              name: NSWindow.willCloseNotification, object: window)
+          }
+          // AppKit cannot fullscreen a nonactivating borderless player.
+          // Only Agent fullscreen requests change this window configuration.
+          window.styleMask.remove(.nonactivatingPanel)
+          window.styleMask.insert(.titled)
+          window.collectionBehavior.remove(.fullScreenAuxiliary)
+          window.collectionBehavior.insert(.fullScreenPrimary)
+        }
+        window.toggleFullScreen(nil)
+      } else if !enabled {
+        restoreAgentFullscreen(Notification(name: NSWindow.didExitFullScreenNotification, object: window))
+      }
+      result(nil)
     case "setPictureInPictureMode":
       applyPictureInPictureMode(arguments, to: window)
       result(nil)
@@ -1246,6 +1270,22 @@ private final class DesktopMultiWindowHostPlugin: NSObject, FlutterPlugin {
       }
       return Int64(controller.viewIdentifier) == viewIdentifier
     })
+  }
+
+  @objc private func restoreAgentFullscreen(_ notification: Notification) {
+    guard let window = notification.object as? NSWindow,
+      let saved = agentFullscreenStyles.removeValue(forKey: window.windowNumber) else { return }
+    window.styleMask = saved.0
+    window.collectionBehavior = saved.1
+    NotificationCenter.default.removeObserver(self, name: NSWindow.didExitFullScreenNotification, object: window)
+    NotificationCenter.default.removeObserver(self, name: NSWindow.willCloseNotification, object: window)
+  }
+
+  @objc private func discardAgentFullscreen(_ notification: Notification) {
+    guard let window = notification.object as? NSWindow else { return }
+    agentFullscreenStyles.removeValue(forKey: window.windowNumber)
+    NotificationCenter.default.removeObserver(self, name: NSWindow.didExitFullScreenNotification, object: window)
+    NotificationCenter.default.removeObserver(self, name: NSWindow.willCloseNotification, object: window)
   }
 
   private func makeFrameless(_ window: NSWindow) {

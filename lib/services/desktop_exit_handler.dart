@@ -46,6 +46,10 @@ class DesktopExitHandler
 
   static final DesktopExitHandler instance = DesktopExitHandler._();
 
+  Future<void> minimizeToTray() => _minimizeToTrayOrTaskbar();
+  Future<void> showMainWindow() => _showMainWindow();
+  Future<void> quit() => _exitApp();
+
   @visibleForTesting
   static bool supportsWindowCloseInterception({
     required bool isWindows,

@@ -1,5 +1,6 @@
 import 'package:nipaplay/utils/video_player_state.dart';
 import 'package:nipaplay/services/external_player_console_service.dart';
+import 'package:nipaplay/utils/globals.dart' as globals;
 
 import 'classic_playback_controls.dart';
 
@@ -34,6 +35,8 @@ final class VideoPlayerStatePort implements PlayerPort {
     }
     return PlaybackSnapshot(
         player: 'internal',
+        volume: _state.currentSystemVolume,
+        brightness: globals.isMobilePlatform ? _state.currentScreenBrightness : null,
         status: _state.status.name,
         hasVideo: _state.hasVideo,
         paused: _state.isPaused,

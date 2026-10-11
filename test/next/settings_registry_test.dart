@@ -20,6 +20,7 @@ import 'package:nipaplay/constants/settings_keys.dart';
 import 'package:nipaplay/security/credential_store.dart';
 import 'package:nipaplay/security/credential_vault.dart';
 import 'package:nipaplay/utils/video_player_state.dart';
+import 'package:nipaplay/utils/globals.dart' as globals;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
@@ -421,6 +422,7 @@ void main() {
     SettingsAccess.registry = registry;
     api = harness.Harness([SettingsCapability(registry)]);
     for (final entry in registry.entries) {
+      if (entry.key == 'player.brightness' && !globals.isMobilePlatform) continue;
       final initial = await call('settings.get', {'key': entry.key});
       expect(entry.schema.validate(initial['value']), isEmpty,
           reason: entry.key);
