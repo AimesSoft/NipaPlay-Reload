@@ -78,7 +78,10 @@ class _PasswordDialogState extends State<_PasswordDialog> {
                   obscureText: true,
                   enableSuggestions: false,
                   autocorrect: false,
-                  decoration: const InputDecoration(labelText: '密码'),
+                  decoration: InputDecoration(
+                      labelText: widget.source['type'] == 'dandanplay_remote'
+                          ? 'API 密钥'
+                          : '密码'),
                   onSubmitted: (_) => login()),
             ])),
         actions: [

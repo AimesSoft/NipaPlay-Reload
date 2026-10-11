@@ -37,6 +37,12 @@ class MultiAddressServerService {
         'id': '${profile.serverType}:${profile.id}', 'type': profile.serverType,
         'name': profile.serverName, 'url': profile.currentAddress?.normalizedUrl,
         'username': profile.username,
+        'addresses': [for (final address in profile.addresses) {
+          'id': address.id, 'url': address.normalizedUrl, 'name': address.name,
+          'priority': address.priority, 'enabled': address.isEnabled,
+          'lastSuccessTime': address.lastSuccessTime?.toIso8601String(),
+          'lastFailureTime': address.lastFailureTime?.toIso8601String(),
+          'failureCount': address.failureCount}],
       }
     ]);
   }

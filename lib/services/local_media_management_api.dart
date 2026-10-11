@@ -517,9 +517,32 @@ class LocalMediaManagementApi {
     return videoFiles;
   }
 
+
+  Future<Map<String, int>> scrapeWebDav(WebDAVConnection connection, String folderPath) async {
+    final files = await _collectWebDavVideoFiles(connection, folderPath);
+    final result = await _scrapeRemoteFiles(sourceLabel: 'WebDAV', migrateProgress: true,
+      candidates: [for (final file in files) _RemoteScrapeCandidate(
+        filePath: MediaSourceUtils.buildWebDavPath(connection.id, file.path),
+        probePath: _webdavService.getFileUrl(connection, file.path), fileName: file.name)]);
+    await ServiceProvider.watchHistoryProvider.refresh();
+    return {'total': result.total, 'matched': result.matched, 'failed': result.failed};
+  }
+
+  Future<Map<String, int>> scrapeSmb(SMBConnection connection, String folderPath) async {
+    await SMBProxyService.instance.initialize();
+    final files = await _collectSmbVideoFiles(connection, folderPath);
+    final result = await _scrapeRemoteFiles(sourceLabel: 'SMB', migrateProgress: true,
+      candidates: [for (final file in files) _RemoteScrapeCandidate(
+        filePath: MediaSourceUtils.buildSmbPath(connection.id, file.path),
+        probePath: SMBProxyService.instance.buildStreamUrl(connection, file.path), fileName: file.name)]);
+    await ServiceProvider.watchHistoryProvider.refresh();
+    return {'total': result.total, 'matched': result.matched, 'failed': result.failed};
+  }
+
   Future<_RemoteScrapeResult> _scrapeRemoteFiles({
     required String sourceLabel,
     required List<_RemoteScrapeCandidate> candidates,
+    bool migrateProgress = false,
   }) async {
     int matched = 0;
     int failed = 0;
@@ -549,6 +572,9 @@ class LocalMediaManagementApi {
 
         final existingHistory =
             await WatchHistoryManager.getHistoryItem(candidate.filePath);
+        final migrated = migrateProgress && existingHistory == null && animeId > 0 && episodeId > 0
+            ? await WatchHistoryManager.getClearedHistoryItemByEpisode(animeId, episodeId) : null;
+        final progressSource = existingHistory ?? migrated;
         final rawAnimeTitle = videoInfo['animeTitle'] ?? match['animeTitle'];
         final rawEpisodeTitle =
             videoInfo['episodeTitle'] ?? match['episodeTitle'];
@@ -558,37 +584,40 @@ class LocalMediaManagementApi {
         final hashString = rawHash?.toString();
         final durationFromMatch = (videoInfo['duration'] is int)
             ? videoInfo['duration'] as int
-            : (existingHistory?.duration ?? 0);
-        final preserveProgress = existingHistory != null &&
-            existingHistory.watchProgress > 0.01 &&
-            !existingHistory.isFromScan;
+            : (progressSource?.duration ?? 0);
+        final preserveProgress = progressSource != null &&
+            progressSource.watchProgress > 0.01 &&
+            !progressSource.isFromScan;
 
         final historyItem = WatchHistoryItem(
           filePath: candidate.filePath,
           animeName: animeTitle?.isNotEmpty == true
               ? animeTitle!
-              : (existingHistory?.animeName ??
+              : (progressSource?.animeName ??
                   p.basenameWithoutExtension(candidate.fileName)),
           episodeTitle: episodeTitle?.isNotEmpty == true
               ? episodeTitle
-              : existingHistory?.episodeTitle,
+              : progressSource?.episodeTitle,
           episodeId: episodeId,
           animeId: animeId,
           watchProgress: preserveProgress
-              ? existingHistory.watchProgress
-              : (existingHistory?.watchProgress ?? 0.0),
+              ? progressSource.watchProgress
+              : (progressSource?.watchProgress ?? 0.0),
           lastPosition: preserveProgress
-              ? existingHistory.lastPosition
-              : (existingHistory?.lastPosition ?? 0),
+              ? progressSource.lastPosition
+              : (progressSource?.lastPosition ?? 0),
           duration: durationFromMatch,
           lastWatchTime: DateTime.now(),
-          thumbnailPath: existingHistory?.thumbnailPath,
+          thumbnailPath: progressSource?.thumbnailPath,
           isFromScan: !preserveProgress,
           videoHash: hashString?.isNotEmpty == true
               ? hashString
-              : existingHistory?.videoHash,
+              : progressSource?.videoHash,
         );
         await WatchHistoryManager.addOrUpdateHistory(historyItem);
+        if (migrated != null && migrated.filePath != candidate.filePath) {
+          await WatchHistoryManager.removeHistoryItem(migrated.filePath);
+        }
         matched++;
       } catch (e) {
         failed++;
