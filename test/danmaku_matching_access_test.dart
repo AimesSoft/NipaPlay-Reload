@@ -98,6 +98,9 @@ void main() {
 
       for (final entity in Directory('lib').listSync(recursive: true)) {
         if (entity is! File || !entity.path.endsWith('.dart')) continue;
+        // Next asks for hash-only matches through DandanplayHttpClient and
+        // the user's API base URL, so login and token scoping still apply.
+        if (entity.path.startsWith('lib/next/')) continue;
         final source = entity.readAsStringSync();
         if (source.contains('/api/v2/match')) {
           directMatchImplementations.add(entity.path);
