@@ -26,6 +26,8 @@ extension DashboardHomePageRandomRecommendations on _DashboardHomePageState {
       if (mounted) {
         setState(() {
           _randomRecommendationGroups = groups;
+          _randomRecommendationDate = daily.date;
+          _randomRecommendationGeneratedAt = daily.generatedAt;
           _randomRecommendationGroupIndex = groupIndex;
           _randomRecommendations = groups[groupIndex].items;
           _isLoadingRandomRecommendations = false;

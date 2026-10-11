@@ -27,7 +27,8 @@ import 'package:nipaplay/services/playback_service.dart';
 import 'package:nipaplay/l10n/l10n.dart';
 
 class NewSeriesPage extends StatefulWidget {
-  const NewSeriesPage({super.key});
+  const NewSeriesPage({super.key, this.deferInitialLoad = false});
+  final bool deferInitialLoad;
 
   @override
   State<NewSeriesPage> createState() => _NewSeriesPageState();
@@ -85,7 +86,13 @@ class _NewSeriesPageState extends State<NewSeriesPage>
   @override
   void initState() {
     super.initState();
-    _loadAnimes();
+    if (widget.deferInitialLoad) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _loadAnimes();
+      });
+    } else {
+      _loadAnimes();
+    }
   }
 
   @override

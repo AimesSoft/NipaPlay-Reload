@@ -28,6 +28,14 @@ import 'package:nipaplay/utils/video_player_state.dart';
 import 'package:provider/provider.dart';
 
 class DeveloperOptionsSettingsContent extends StatelessWidget {
+  void openWindow(BuildContext context, String window) {
+    switch (window) {
+      case 'logs': _openDebugLogViewer(context);
+      case 'dependency_versions': _openDependencyVersions(context);
+      case 'ui_preview': _openNipaplayUiPreview(context);
+      case 'build_info': _showBuildInfo(context);
+    }
+  }
   const DeveloperOptionsSettingsContent({super.key});
 
   @override

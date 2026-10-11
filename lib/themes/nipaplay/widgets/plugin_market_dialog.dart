@@ -79,7 +79,28 @@ class PluginMarketDialog extends StatefulWidget {
   State<PluginMarketDialog> createState() => _PluginMarketDialogState();
 }
 
-class _PluginMarketDialogState extends State<PluginMarketDialog> {
+abstract interface class PluginMarketNavigation {
+  String? get readmePluginId;
+  Future<bool> openReadme(String id);
+}
+
+class _PluginMarketDialogState extends State<PluginMarketDialog>
+    implements PluginMarketNavigation {
+  late final Future<void> _initialLoad;
+  @override
+  String? get readmePluginId => _showReadme ? _selectedPlugin?.id : null;
+  @override
+  Future<bool> openReadme(String id) async {
+    await _initialLoad;
+    if (!mounted) return false;
+    for (final plugin in _plugins) {
+      if (plugin.id == id) {
+        await _showPluginReadme(plugin);
+        return mounted && readmePluginId == id;
+      }
+    }
+    return false;
+  }
   static Color get _accentColor => AppAccentColors.current;
 
   final TextEditingController _searchController = TextEditingController();
@@ -112,7 +133,7 @@ class _PluginMarketDialogState extends State<PluginMarketDialog> {
   void initState() {
     super.initState();
     _loadAppVersion();
-    _loadPlugins();
+    _initialLoad = _loadPlugins();
   }
 
   Future<void> _loadAppVersion() async {

@@ -146,6 +146,7 @@ void main() {
       final png = File('${root.path}/background.png');
       await png.writeAsBytes([137, 80, 78, 71]);
       final overrides = <String, Object?>{
+        'appearance.quarterlyReviewSort': 'ratingHigh',
         'appearance.accentColor': 'blue',
         'appearance.folderNameDisplayMode': 'multiline',
         'appearance.windowDisplayMode': 'filledScreen',

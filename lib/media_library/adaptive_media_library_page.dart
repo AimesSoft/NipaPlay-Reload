@@ -50,7 +50,22 @@ class AdaptiveMediaLibraryPage extends StatefulWidget {
       _AdaptiveMediaLibraryPageState();
 }
 
-class _AdaptiveMediaLibraryPageState extends State<AdaptiveMediaLibraryPage> {
+abstract interface class ClassicLibraryNavigation {
+  String get selectedLibrarySection;
+  bool selectLibrarySection(String id);
+}
+
+class _AdaptiveMediaLibraryPageState extends State<AdaptiveMediaLibraryPage>
+    implements ClassicLibraryNavigation {
+  @override
+  String get selectedLibrarySection => _renderedSectionId;
+  String _renderedSectionId = '';
+  @override
+  bool selectLibrarySection(String id) {
+    if (!_buildCurrentSections().any((section) => section.id == id)) return false;
+    _selectSection(id);
+    return true;
+  }
   String _selectedSectionId = MediaLibrarySectionIds.local;
   LibraryManagementViewMode _managementViewMode =
       LibraryManagementViewMode.icons;
@@ -331,6 +346,7 @@ class _AdaptiveMediaLibraryPageState extends State<AdaptiveMediaLibraryPage> {
         final selectedSection = sections.isEmpty
             ? null
             : sections[selectedIndex < 0 ? 0 : selectedIndex];
+        _renderedSectionId = selectedSection?.id ?? '';
 
         return AdaptiveMediaLibraryScaffold(
           sections: sections,

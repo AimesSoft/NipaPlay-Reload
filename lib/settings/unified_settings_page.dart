@@ -25,7 +25,15 @@ class UnifiedSettingsPage extends material.StatefulWidget {
       _UnifiedSettingsPageState();
 }
 
-class _UnifiedSettingsPageState extends material.State<UnifiedSettingsPage> {
+abstract interface class UnifiedSettingsSelection {
+  String? get selectedSettingsEntry;
+}
+
+class _UnifiedSettingsPageState extends material.State<UnifiedSettingsPage>
+    implements UnifiedSettingsSelection {
+  @override
+  String? get selectedSettingsEntry => _actualEntryId;
+  String? _actualEntryId;
   final material.ScrollController _phoneScrollController =
       material.ScrollController();
   String? _selectedEntryId;
@@ -112,7 +120,8 @@ class _UnifiedSettingsPageState extends material.State<UnifiedSettingsPage> {
     _didOpenPhoneInitialEntry = true;
     material.WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
-      openUnifiedCupertinoSettingEntry(context, target!);
+      _actualEntryId = target!.id;
+      openUnifiedCupertinoSettingEntry(context, target);
     });
   }
 
@@ -126,6 +135,7 @@ class _UnifiedSettingsPageState extends material.State<UnifiedSettingsPage> {
     }
 
     final selectedEntry = _effectiveDesktopEntry(entries);
+    _actualEntryId = selectedEntry.id;
     final content = material.KeyedSubtree(
       key: material.ValueKey<String>(selectedEntry.id),
       child: selectedEntry.buildPage(
