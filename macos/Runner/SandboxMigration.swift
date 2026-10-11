@@ -2,7 +2,6 @@ import Foundation
 import CryptoKit
 import Darwin
 import ObjectiveC.runtime
-import Security
 
 @_silgen_name("sandbox_init")
 private func installWriteSandbox(_ profile: UnsafePointer<CChar>, _ flags: UInt64,
@@ -24,10 +23,6 @@ enum LabProfile {
             throw NSError(domain: "LabProfile", code: 1,
                           userInfo: [NSLocalizedDescriptionKey: "Invalid NIPAPLAY_PROFILE"])
         }
-        if CommandLine.arguments.contains("--nipaplay-lab-vault-broker") {
-            LabVaultBroker.serve(profile: value)
-            exit(EXIT_SUCCESS)
-        }
         let directory = FileManager.default.homeDirectoryForCurrentUser
             .appendingPathComponent("Library/Application Support/NipaPlay/LabProfiles/\(value)")
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
@@ -46,16 +41,18 @@ enum LabProfile {
         let replacement = class_getClassMethod(LabUserDefaults.self, #selector(LabUserDefaults.labStandard))!
         method_exchangeImplementations(original, replacement)
         setenv("TMPDIR", canonical.appendingPathComponent("temp").path + "/", 1)
-        // Legacy Keychain writes happen in the caller. Keep that API in a narrow
-        // broker rather than granting the media process access to login.keychain.
-        try LabVaultBroker.start()
         let quoted = canonical.path.replacingOccurrences(of: "\\", with: "\\\\").replacingOccurrences(of: "\"", with: "\\\"")
+        let keychains = FileManager.default.homeDirectoryForCurrentUser
+            .appendingPathComponent("Library/Keychains").path
+            .replacingOccurrences(of: "\\", with: "\\\\").replacingOccurrences(of: "\"", with: "\\\"")
         let policy = """
         (version 1)
         (allow default)
         (deny file-write*)
         (allow file-write* (subpath "\(quoted)"))
         (allow file-write-data (literal "/dev/null") (literal "/dev/tty"))
+        (deny file-read* (subpath "\(keychains)"))
+        (deny mach-lookup (global-name "com.apple.securityd") (global-name "com.apple.securityd.xpc") (global-name "com.apple.SecurityServer"))
         """
         var error: UnsafeMutablePointer<CChar>?
         let status = policy.withCString { installWriteSandbox($0, 0, &error) }
@@ -74,124 +71,84 @@ enum LabProfile {
     }
 }
 
-enum LabVaultBroker {
-    private static var process: Process?
-    private static var input: FileHandle!
-    private static var output: FileHandle!
+/// Disposable lab credentials stay in the profile; this backend never calls Security.
+enum LabFileVault {
     private static let queue = DispatchQueue(label: "nipaplay.lab-vault")
 
-    static func start() throws {
-        let child = Process()
-        let request = Pipe(), response = Pipe()
-        child.executableURL = Bundle.main.executableURL!
-        child.arguments = ["--nipaplay-lab-vault-broker"]
-        child.standardInput = request
-        child.standardOutput = response
-        child.standardError = FileHandle.standardError
-        try child.run()
-        request.fileHandleForReading.closeFile()
-        response.fileHandleForWriting.closeFile()
-        process = child
-        input = request.fileHandleForWriting
-        output = response.fileHandleForReading
+    static func call(_ arguments: [String: Any], completion: @escaping (Any?, String?) -> Void) {
+        let file = LabProfile.root!.appendingPathComponent("credential-vault.json")
+        queue.async {
+            do {
+                let value = try operate(arguments, file: file)
+                DispatchQueue.main.async { completion(value, nil) }
+            } catch {
+                let code = (error as? Failure)?.code ?? "vault_operation_failed"
+                DispatchQueue.main.async { completion(nil, code) }
+            }
+        }
     }
 
-    private static func line(_ handle: FileHandle) throws -> Data? {
-        var data = Data()
-        while let byte = try handle.read(upToCount: 1), !byte.isEmpty {
-            if byte[0] == 10 { return data }
-            data.append(byte)
+    private struct Failure: Error {
+        let code: String
+    }
+
+    static func operate(_ request: [String: Any], file: URL) throws -> String? {
+        guard let operation = request["operation"] as? String,
+              ["read", "write", "delete"].contains(operation),
+              let namespace = request["namespace"] as? String, !namespace.isEmpty,
+              let key = request["key"] as? String, !key.isEmpty,
+              !namespace.contains("\0"), !key.contains("\0") else {
+            throw Failure(code: "invalid_reference")
         }
+        let account = "\(namespace.utf8.count):\(namespace)\(key)"
+        var values = try read(file)
+        switch operation {
+        case "read":
+            return values[account]
+        case "write":
+            guard let secret = request["secret"] as? String else {
+                throw Failure(code: "invalid_reference")
+            }
+            values[account] = secret
+        default:
+            values.removeValue(forKey: account)
+        }
+        try save(values, file: file)
         return nil
     }
 
-    static func call(_ arguments: [String: Any], completion: @escaping (Any?, String?) -> Void) {
-        queue.async {
-            do {
-                guard process?.isRunning == true else { throw failure("system_vault_unavailable") }
-                var data = try JSONSerialization.data(withJSONObject: arguments)
-                data.append(10)
-                try input.write(contentsOf: data)
-                guard let reply = try line(output) else { throw failure("system_vault_unavailable") }
-                let value = try JSONSerialization.jsonObject(with: reply) as! [String: Any]
-                DispatchQueue.main.async { completion(value["value"], value["error"] as? String) }
-            } catch {
-                DispatchQueue.main.async { completion(nil, "system_vault_unavailable") }
-            }
+    private static func read(_ file: URL) throws -> [String: String] {
+        let descriptor = open(file.path, O_RDONLY | O_NOFOLLOW | O_NONBLOCK)
+        if descriptor < 0 {
+            if errno == ENOENT { return [:] }
+            throw Failure(code: "file_permissions_failed")
         }
+        let handle = FileHandle(fileDescriptor: descriptor, closeOnDealloc: true)
+        defer { handle.closeFile() }
+        var info = stat()
+        guard fstat(descriptor, &info) == 0,
+              info.st_mode & S_IFMT == S_IFREG, info.st_uid == getuid(),
+              info.st_mode & 0o777 == 0o600, info.st_nlink == 1 else {
+            throw Failure(code: "file_permissions_failed")
+        }
+        let data = try handle.readToEnd() ?? Data()
+        return try JSONDecoder().decode([String: String].self, from: data)
     }
 
-    private static func failure(_ code: String) -> NSError { NSError(domain: code, code: 1) }
-    private static func errorCode(_ status: OSStatus) -> String {
-        switch status {
-        case -128: return "storage_authorization_cancelled"
-        case -25293: return "storage_access_denied"
-        case -25308: return "storage_interaction_required"
-        case -25291, -25292, -25294, -25295: return "system_vault_unavailable"
-        default: return "vault_operation_failed"
+    private static func save(_ values: [String: String], file: URL) throws {
+        let pending = file.deletingLastPathComponent().appendingPathComponent(".vault-\(UUID().uuidString)")
+        let descriptor = open(pending.path, O_WRONLY | O_CREAT | O_EXCL | O_NOFOLLOW, 0o600)
+        guard descriptor >= 0 else { throw Failure(code: "file_permissions_failed") }
+        let handle = FileHandle(fileDescriptor: descriptor, closeOnDealloc: true)
+        defer {
+            handle.closeFile()
+            unlink(pending.path)
         }
-    }
-
-    private static func operate(_ request: [String: Any], profile: String) -> [String: Any] {
-        guard let operation = request["operation"] as? String,
-              let namespace = request["namespace"] as? String, !namespace.isEmpty,
-              let key = request["key"] as? String, !key.isEmpty,
-              !namespace.contains("\0"), !key.contains("\0") else { return ["error": "invalid_reference"] }
-        let scoped = "lab:\(profile):\(namespace)"
-        let account = "\(scoped.utf8.count):\(scoped)\(key)"
-        let service = "com.nipaplay.credential-vault.v1"
-        var keychain: SecKeychain?
-        var status = SecKeychainCopyDomainDefault(.user, &keychain)
-        if status != 0 { return ["error": errorCode(status)] }
-        var item: SecKeychainItem?
-        var length: UInt32 = 0
-        var secret: UnsafeMutableRawPointer?
-        if operation == "read" {
-            status = SecKeychainFindGenericPassword(keychain, UInt32(service.utf8.count), service,
-                UInt32(account.utf8.count), account, &length, &secret, nil)
-            if status == errSecItemNotFound { return [:] }
-            if status != 0 { return ["error": errorCode(status)] }
-            defer { SecKeychainItemFreeContent(nil, secret) }
-            if length == 0 { return ["value": ""] }
-            guard let secret, let value = String(data: Data(bytes: secret, count: Int(length)), encoding: .utf8) else {
-                return ["error": "vault_operation_failed"]
-            }
-            return ["value": value]
+        try handle.write(contentsOf: JSONEncoder().encode(values))
+        try handle.synchronize()
+        guard rename(pending.path, file.path) == 0 else {
+            throw Failure(code: "vault_operation_failed")
         }
-        status = SecKeychainFindGenericPassword(keychain, UInt32(service.utf8.count), service,
-            UInt32(account.utf8.count), account, nil, nil, &item)
-        if operation == "delete" {
-            if status == errSecItemNotFound { return [:] }
-            if status == 0 { status = SecKeychainItemDelete(item!) }
-        } else if operation == "write", let value = request["secret"] as? String {
-            let bytes = value.utf8CString
-            status = bytes.withUnsafeBytes { buffer in
-                if status == errSecItemNotFound {
-                    return SecKeychainAddGenericPassword(keychain, UInt32(service.utf8.count), service,
-                        UInt32(account.utf8.count), account, UInt32(bytes.count - 1), buffer.baseAddress!, nil)
-                }
-                if status == 0 { return SecKeychainItemModifyAttributesAndData(item!, nil, UInt32(bytes.count - 1), buffer.baseAddress) }
-                return status
-            }
-        } else { return ["error": "invalid_reference"] }
-        return status == 0 ? [:] : ["error": errorCode(status)]
-    }
-
-    static func serve(profile: String) {
-        let parent = getppid()
-        let lifecycle = DispatchSource.makeTimerSource(queue: DispatchQueue.global())
-        lifecycle.schedule(deadline: .now() + 1, repeating: 1)
-        lifecycle.setEventHandler { if getppid() != parent { _exit(EXIT_SUCCESS) } }
-        lifecycle.resume()
-        defer { lifecycle.cancel() }
-        do {
-            while let data = try line(FileHandle.standardInput) {
-                let request = try JSONSerialization.jsonObject(with: data) as! [String: Any]
-                var reply = try JSONSerialization.data(withJSONObject: operate(request, profile: profile))
-                reply.append(10)
-                try FileHandle.standardOutput.write(contentsOf: reply)
-            }
-        } catch { exit(EXIT_FAILURE) }
     }
 }
 

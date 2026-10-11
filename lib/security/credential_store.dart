@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'package:crypto/crypto.dart';
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:nipaplay/utils/lab_profile.dart';
 import 'credential_vault.dart';
 import 'secret_redactor.dart';
 import 'vault_backend.dart';
@@ -95,7 +96,10 @@ final class CredentialStore {
       _ => '请检查系统凭据存储的访问权限。',
     };
     notices.value = [
-      if (failures.isNotEmpty) '凭据访问或迁移失败。$guidance 现有凭据已保留；未回落到明文存储。',
+      if (failures.isNotEmpty)
+        LabProfile.active
+            ? '实验凭据文件访问或迁移失败。请检查实验目录内保险库文件的权限；现有测试凭据已保留。'
+            : '凭据访问或迁移失败。$guidance 现有凭据已保留；未回落到明文存储。',
       for (final entry in failures.entries)
         vault.blocked.containsKey(entry.key)
             ? '${entry.key}: ${switch (entry.value) {

@@ -74,7 +74,7 @@ class SecurityBookmarkPlugin: NSObject, FlutterPlugin {
                 result(FlutterError(code: "invalid_reference", message: "Lab profile required", details: nil))
                 return
             }
-            LabVaultBroker.call(arguments) { value, error in
+            LabFileVault.call(arguments) { value, error in
                 if let error { result(FlutterError(code: error, message: error, details: nil)) }
                 else { result(value) }
             }
