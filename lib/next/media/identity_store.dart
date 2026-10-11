@@ -11,6 +11,7 @@ import 'package:nipaplay/models/watch_history_model.dart';
 
 import 'metadata_provider.dart';
 import 'metadata_snapshot.dart';
+import 'file_identity_merge.dart';
 
 String stableMediaId(String prefix, Object value) =>
     '$prefix-${sha256.convert(utf8.encode(jsonEncode(_canonical(value))))}';
@@ -60,11 +61,20 @@ final class IdentityStore {
     if (locator.trim().isEmpty) {
       throw const Failure(FailureCode.invalidInput, 'File path is empty.');
     }
-    final rows = await tx.query('media_locations',
+    await mergeLegacyRemoteFile(tx, ownerDeviceId, locator);
+    var rows = await tx.query('media_locations',
         where:
             'owner_device_id = ? AND locator = ?${source == null ? '' : ' AND source=?'}',
         whereArgs: [ownerDeviceId, locator, if (source != null) source]);
-    if (rows.length > 1) {
+    if (source != null && source != 'local' && source != 'remote' && rows.isEmpty) {
+      final legacy = await tx.query('media_locations', where: "owner_device_id=? AND locator=? AND source='remote'", whereArgs: [ownerDeviceId, locator]);
+      final scoped = await tx.query('media_locations', where: "owner_device_id=? AND locator=? AND source!='remote'", whereArgs: [ownerDeviceId, locator]);
+      if (legacy.isNotEmpty && scoped.isEmpty) {
+        await tx.update('media_locations', {'source': source}, where: 'id=?', whereArgs: [legacy.single['id']]);
+        rows = [{...legacy.single, 'source': source}];
+      }
+    }
+    if (rows.map((r) => r['file_id']).toSet().length > 1) {
       throw const Failure(FailureCode.conflict,
           'This path belongs to multiple sources; use the source browse fileId.');
     }
@@ -112,6 +122,7 @@ final class IdentityStore {
           }));
 
   Future<JsonMap> entity(String id, {DatabaseExecutor? db}) async {
+    id = await canonicalFileId(db ?? database, id);
     final rows = await (db ?? database)
         .query('media_entities', where: 'id = ?', whereArgs: [id]);
     if (rows.isEmpty) {
@@ -213,8 +224,8 @@ final class IdentityStore {
             return id;
           }));
 
-  Future<List<JsonMap>> locations(String fileId) => database
-      .query('media_locations', where: 'file_id = ?', whereArgs: [fileId]);
+  Future<List<JsonMap>> locations(String fileId) async => database
+      .query('media_locations', where: 'file_id = ?', whereArgs: [await canonicalFileId(database, fileId)]);
 
   /// Only visible Classic matches become identities; retained IDs remain evidence.
   Future<int> importLegacy(List<JsonMap> history,
@@ -222,12 +233,11 @@ final class IdentityStore {
     for (final row in history) {
       await _filesChanged((added) => database.transaction((tx) async {
             final locator = row['filePath'] as String;
-            final fileId = await _ensureFile(tx, locator, added,
-                locator.contains('://') ? 'remote' : 'local');
+            final fileId = await _ensureFile(tx, locator, added);
             final location = (await tx.query('media_locations',
                     where: 'file_id=? AND locator=?',
                     whereArgs: [fileId, locator]))
-                .single;
+                .first;
             final evidence = <String, Object?>{
               'animeId': row['animeId'],
               'episodeId': row['episodeId'],
@@ -705,6 +715,7 @@ final class IdentityStore {
       });
 
   Future<JsonMap> identity(String id) async {
+    id = await canonicalFileId(database, id);
     final row = await entity(id);
     final bindings = await database.rawQuery(
         'SELECT b.*, o.provider, o.object_type, o.external_id, o.scope AS object_scope FROM media_bindings b JOIN media_external_objects o ON o.id = b.object_id WHERE b.entity_id = ? ORDER BY b.created_at, b.id',
@@ -801,6 +812,7 @@ final class IdentityStore {
   }
 
   Future<JsonMap> mergedMetadata(String entityId) async {
+    entityId = await canonicalFileId(database, entityId);
     final ids = await _metadataEntities(entityId);
     final rows = await _metadataSnapshots(ids);
     final fields = <String, Object?>{}, provenance = <String, Object?>{};
@@ -887,6 +899,7 @@ final class IdentityStore {
   Future<void> overrideField(
       String id, String field, Object? value, Invocation invocation,
       {String mode = 'persistent'}) async {
+    id = await canonicalFileId(database, id);
     final ids = await _metadataEntities(id);
     final edit = {
       'entity_id': id,
@@ -1076,7 +1089,9 @@ final class IdentityStore {
             if (saved != null) return saved;
             final results = <JsonMap>[];
             for (var index = 0; index < entries.length; index++) {
-              final entry = entries[index];
+              final entry = {...entries[index],
+                if (entries[index]['entityId'] is String)
+                  'entityId': await canonicalFileId(tx, entries[index]['entityId'] as String)};
               try {
                 final kind = entry['kind'] as String;
                 if (entry.containsKey('ref')) {
@@ -1370,7 +1385,9 @@ final class IdentityStore {
         if (saved != null) return saved;
         final results = <JsonMap>[];
         for (var index = 0; index < entries.length; index++) {
-          final entry = entries[index];
+          final entry = {...entries[index],
+            if (entries[index]['entityId'] is String)
+              'entityId': await canonicalFileId(tx, entries[index]['entityId'] as String)};
           try {
             final id = entry['entityId'] as String;
             final entityRow = await entity(id, db: tx);

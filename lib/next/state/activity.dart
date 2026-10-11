@@ -383,7 +383,7 @@ final class ActivityView {
           'body:${row['sequence']}',
           row['at'] as String,
           type,
-          recordedType.startsWith('ui.shelf_') ? facts['title'] as String :
+          recordedType.startsWith('ui.shelf_') || recordedType == 'history.watched' ? facts['title'] as String :
           '${(after is Map ? after['name'] : null) ?? (before is Map ? before['name'] : null) ?? row['subject_id']} · $type',
           'body_changes',
           facts,

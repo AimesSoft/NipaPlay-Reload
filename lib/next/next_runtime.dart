@@ -28,6 +28,8 @@ import 'package:provider/provider.dart';
 
 import 'agent_endpoint.dart';
 import 'capabilities/history_capability.dart';
+import 'capabilities/watched_history.dart';
+import 'package:nipaplay/models/watch_history_database.dart';
 import 'capabilities/library_capability.dart';
 import 'capabilities/ui_capability.dart';
 import 'capabilities/ui_capture.dart';
@@ -228,6 +230,8 @@ final class NextRuntime extends ChangeNotifier {
       };
     };
     return NextRuntime._(labs, player, [
+      WatchedHistoryCapability(WatchedHistory(() => core.media.service,
+          () => WatchHistoryDatabase.instance.database, history.refresh)),
       LibraryCapability(
         history: () => history.history,
         seriesDetail: seriesDetail,
@@ -300,6 +304,10 @@ final class NextRuntime extends ChangeNotifier {
     await _classicSettings!.ready;
     await _classicSettings!.plugins.ready;
     _syncPluginSettings();
+    core.stateSources.calendar = () async => [
+      for (final anime in await BangumiService.instance.cachedCalendarDetails())
+        Map<String, Object?>.from(anime.toJson())
+    ];
     _classicSettings!.plugins.addListener(_syncPluginSettings);
     core.stateSources.history = () => [
           for (final item in ServiceProvider.watchHistoryProvider.history)

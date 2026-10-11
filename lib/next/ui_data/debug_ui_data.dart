@@ -135,6 +135,7 @@ Map<String, Object?> _work(UiWork w) => {
       'originalTitle': w.originalTitle,
       'year': w.year,
       'genres': w.genres,
+      'danmaku': w.danmaku,
       'episodeCount': w.episodeCount,
       'studio': w.studio,
       'overview': w.overview,
