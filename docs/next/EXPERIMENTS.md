@@ -282,3 +282,15 @@
 判读：实验隔离只覆盖 NipaPlay 进程，Agent 以用户身份在整台机器上行动，这是设计如此；问题在于它不知道机器上有多个 NipaPlay，也没有办法直接“看到”自己连接的那个实例的界面，只好用 computer use 去找。
 
 因此改：`nipa status` 报告所连接实例的进程事实（PID、可执行文件路径、窗口标题）；种子 AGENTS.md 写明“机器上可能有多个 NipaPlay，按应用名或 bundle id 打开的未必是你连接的那个”；增加界面截图能力，让 Agent 不借助 computer use 也能看到用户看到的界面。
+
+## 2026-10-11 · 事件：去沙箱迁移替换了用户的通讯录与 iCloud 目录
+
+现象（用户发现，当晚）：通讯录服务反复报“路径不存在、无法创建数据库”，FaceTime、身份服务读通讯录失败，登录界面转圈，Messages 反复跳转。`~/Library/Application Support/AddressBook` 与 `SyncServices` 是指向 `/Application Support/...` 的断链，状态变更时间 10 月 11 日 04:10:52。
+
+查明：这两个链接与旧沙盒容器 `Data/Library/Application Support/` 里的同名链接逐字相同（`../../../../../Application Support/AddressBook`，在容器里指回真实目录，搬到主目录后指向根目录下不存在的位置）。04:10:52 是去沙箱版第一次在用户机器上启动、执行迁移（X2/X2b，`macos/Runner/SandboxMigration.swift`）的时间；迁移日志 `journal.plist` 列出了全部单元。缺陷：迁移把容器 `Library` 各类目下的**每一项**都当作 NipaPlay 的数据，先把主目录里同名的真实目录挪进迁移归档，再发布容器里的版本。被替换的系统项：`AddressBook`、`SyncServices`（链接）、`iCloud`（换成旧沙盒应用自己的 `Accounts`）、`CrashReporter`；另新建了断链 `Library/Images/People`，以及共享缓存 `flutter_engine`、`vulkan` 等。代码注释写了“容器里有指向系统共享目录的链接，只归档、绝不穿越”，但只防住了第一层，没有防住类目下的链接与同名系统目录。审查时没有发现，责任在主控。
+
+影响范围：迁移代码只在 `next` 分支，没有进入 main，没有真实用户受影响；只有用户这台机器执行过。
+
+处理（用户同意后）：退出通讯录、FaceTime、信息；把断链和被替换的目录整体挪到 `~/NipaPlay-restore-20261011/after-migration/`；用 `ditto` 从迁移归档 `ordinary-archive` 复制回四个原目录，与归档逐项比对一致，`SyncServices` 内部链接与原来一致；移走 `Images/People` 断链；迁移归档原样保留。请用户重启以重新加载相关服务。迁移日志已标记完成，不会重跑。
+
+修复：迁移只发布名字明确属于 NipaPlay 的条目（等于或以 bundle id 开头，或包含 `nipaplay`），类目下的链接一律跳过；其余留在私有归档。共享的缓存根目录不再迁移（缓存可重建）。新增回归测试“shared container mirrors stay out of the user's Library”，原生迁移测试 42 项通过。

@@ -526,6 +526,11 @@ final class SandboxMigration {
                 // Containers have links to shared system directories. Archive those links, never traverse them.
                 guard try isDirectory(category) else { continue }
                 for entry in try children(category) {
+                    // A container mirrors shared user data (AddressBook, iCloud, Images/People,
+                    // shared caches) as links or private copies. Outside the sandbox those names
+                    // belong to the system and other apps; on 2026-10-11 publishing them replaced the
+                    // user's real Contacts and iCloud directories. Only NipaPlay's own entries move.
+                    guard try !isSymbolicLink(entry), ownedByApp(entry.lastPathComponent) else { continue }
                     let relative = "Library/\(category.lastPathComponent)/\(entry.lastPathComponent)"
                     try add(entry, relative)
                 }
@@ -544,6 +549,13 @@ final class SandboxMigration {
         return [candidate, candidate + "-wal", candidate + "-shm", candidate + "-journal"]
     }
 
+    private func ownedByApp(_ name: String) -> Bool {
+        name == bundleID || name.hasPrefix(bundleID + ".") || name.lowercased().contains("nipaplay")
+    }
+    private func isSymbolicLink(_ url: URL) throws -> Bool {
+        guard try exists(url) else { return false }
+        return try fm.attributesOfItem(atPath: url.path)[.type] as? FileAttributeType == .typeSymbolicLink
+    }
     private func exists(_ url: URL) throws -> Bool {
         var info = stat()
         if lstat(url.path, &info) == 0 { return true }

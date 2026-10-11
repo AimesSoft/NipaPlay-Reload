@@ -60,7 +60,6 @@ private final class Fixture {
         try write("Library/Application Support/\(bundleID)/old-font.ttf", "ordinary-font", in: home)
         try write("Library/Application Support/NipaPlay/torrent_session/old-session", "ordinary-session", in: home)
         try write("Library/Caches/\(bundleID)/old-image", "ordinary-cache", in: home)
-        try write("Library/Caches/temporary-image", "ordinary-temporary", in: home)
         preferences = ["flutter.locale": "en", "ordinary-only": 17]
         try writeOrdinaryPreferences()
     }
@@ -123,7 +122,8 @@ private final class Fixture {
         try expect(text("Documents/nipaplay/legacy-only.json") == "legacy", "legacy documents missing")
         try expect(text("Library/Application Support/\(bundleID)/fonts/font.ttf") == "font", "support missing")
         try expect(text("Library/Application Support/NipaPlay/torrent_session/session.json") == "torrent-resume", "Rust torrent session missing")
-        try expect(text("Library/Caches/temporary-image") == "temporary", "temporary cache missing")
+        try expect(text("container-copy/Library/Caches/temporary-image", in: state) == "temporary", "shared cache root not archived")
+        try expect((try? text("Library/Caches/temporary-image")) != "temporary", "shared cache root published")
         try expect(text("container-copy/tmp/download.partial", in: state) == "partial-download", "tmp archive missing")
         try expect(text("container-copy/Library/Keychains/private.db", in: state) == "archive-only-keychain", "Keychain archive missing")
         try expect(preferences["flutter.locale"] as? String == "zh", "preferences missing")
@@ -244,19 +244,19 @@ enum SandboxMigrationTests {
         }
         try test("direct Library SQLite files activate container DB and WAL and archive ordinary-only sidecars") { f in
             try f.seed()
-            try f.write("Library/Caches/images.db", "container-db")
-            try f.write("Library/Caches/images.db-wal", "container-wal")
-            try f.write("Library/Caches/images.db", "ordinary-db", in: f.home)
-            try f.write("Library/Caches/images.db-shm", "ordinary-shm", in: f.home)
-            try f.write("Library/Caches/images.db-journal", "ordinary-journal", in: f.home)
+            try f.write("Library/Application Support/nipaplay-images.db", "container-db")
+            try f.write("Library/Application Support/nipaplay-images.db-wal", "container-wal")
+            try f.write("Library/Application Support/nipaplay-images.db", "ordinary-db", in: f.home)
+            try f.write("Library/Application Support/nipaplay-images.db-shm", "ordinary-shm", in: f.home)
+            try f.write("Library/Application Support/nipaplay-images.db-journal", "ordinary-journal", in: f.home)
             try f.migrator().run()
-            try f.expect(f.text("Library/Caches/images.db") == "container-db", "container cache DB missing")
-            try f.expect(f.text("Library/Caches/images.db-wal") == "container-wal", "cache WAL generations mixed")
-            try f.expect(!fm.fileExists(atPath: f.home.appendingPathComponent("Library/Caches/images.db-shm").path), "ordinary SHM still active")
-            try f.expect(!fm.fileExists(atPath: f.home.appendingPathComponent("Library/Caches/images.db-journal").path), "ordinary journal still active")
-            try f.expect(f.text("ordinary-archive/Library/Caches/images.db", in: f.state) == "ordinary-db", "ordinary DB archive missing")
-            try f.expect(f.text("ordinary-archive/Library/Caches/images.db-shm", in: f.state) == "ordinary-shm", "ordinary SHM archive missing")
-            try f.expect(f.text("ordinary-archive/Library/Caches/images.db-journal", in: f.state) == "ordinary-journal", "ordinary journal archive missing")
+            try f.expect(f.text("Library/Application Support/nipaplay-images.db") == "container-db", "container cache DB missing")
+            try f.expect(f.text("Library/Application Support/nipaplay-images.db-wal") == "container-wal", "cache WAL generations mixed")
+            try f.expect(!fm.fileExists(atPath: f.home.appendingPathComponent("Library/Application Support/nipaplay-images.db-shm").path), "ordinary SHM still active")
+            try f.expect(!fm.fileExists(atPath: f.home.appendingPathComponent("Library/Application Support/nipaplay-images.db-journal").path), "ordinary journal still active")
+            try f.expect(f.text("ordinary-archive/Library/Application Support/nipaplay-images.db", in: f.state) == "ordinary-db", "ordinary DB archive missing")
+            try f.expect(f.text("ordinary-archive/Library/Application Support/nipaplay-images.db-shm", in: f.state) == "ordinary-shm", "ordinary SHM archive missing")
+            try f.expect(f.text("ordinary-archive/Library/Application Support/nipaplay-images.db-journal", in: f.state) == "ordinary-journal", "ordinary journal archive missing")
         }
         for point in ["snapshotCopied", "planned", "unitCopied:0", "unitPublished:0", "preferencesWritten", "preferencesPublished"] {
             try test("interruption at \(point) resumes on next launch") { f in
@@ -404,16 +404,16 @@ enum SandboxMigrationTests {
         }
         try test("ordinary-only SQLite sidecar reappearing after archival blocks publication") { f in
             try f.seed()
-            try f.write("Library/Caches/images.db", "container-db")
-            try f.write("Library/Caches/images.db-shm", "ordinary-shm", in: f.home)
+            try f.write("Library/Application Support/nipaplay-images.db", "container-db")
+            try f.write("Library/Application Support/nipaplay-images.db-shm", "ordinary-shm", in: f.home)
             let interrupted = f.migrator()
             interrupted.checkpoint = { if $0 == "unitCopied:0" { throw Interrupted.simulatedKill } }
             do { try interrupted.run() } catch Interrupted.simulatedKill {}
-            try f.write("Library/Caches/images.db-shm", "external-shm", in: f.home)
+            try f.write("Library/Application Support/nipaplay-images.db-shm", "external-shm", in: f.home)
             do { try f.migrator().run(); throw Interrupted.simulatedKill }
             catch let error as NSError { try f.expect(error.domain == "NipaPlaySandboxMigration", "wrong failure") }
-            try f.expect(f.text("Library/Caches/images.db-shm") == "external-shm", "new sidecar overwritten")
-            try f.expect(f.text("ordinary-archive/Library/Caches/images.db-shm", in: f.state) == "ordinary-shm", "old sidecar archive changed")
+            try f.expect(f.text("Library/Application Support/nipaplay-images.db-shm") == "external-shm", "new sidecar overwritten")
+            try f.expect(f.text("ordinary-archive/Library/Application Support/nipaplay-images.db-shm", in: f.state) == "ordinary-shm", "old sidecar archive changed")
         }
         try test("corrupt ordinary archive blocks recovery and retains ordinary staging and container") { f in
             try f.seed()
@@ -495,6 +495,36 @@ enum SandboxMigrationTests {
                          "source socket changed")
             let index = try PropertyListSerialization.propertyList(from: Data(contentsOf: f.state.appendingPathComponent("volatile-sockets.plist")), format: nil) as! [String]
             try f.expect(index == ["/tmp/mpv.sock"], "socket metadata not indexed")
+        }
+        try test("shared container mirrors stay out of the user's Library") { f in
+            try f.seed()
+            // A real container links shared user data back to ~/Library with relative paths.
+            for name in ["AddressBook", "SyncServices"] {
+                try fm.createDirectory(at: f.source.appendingPathComponent("Library/Application Support"), withIntermediateDirectories: true)
+                try fm.createSymbolicLink(atPath: f.source.appendingPathComponent("Library/Application Support/\(name)").path,
+                                          withDestinationPath: "../../../../../Application Support/\(name)")
+                try f.write("Library/Application Support/\(name)/data", "user-\(name)", in: f.home)
+            }
+            try fm.createDirectory(at: f.source.appendingPathComponent("Library/Images"), withIntermediateDirectories: true)
+            try fm.createSymbolicLink(atPath: f.source.appendingPathComponent("Library/Images/People").path,
+                                      withDestinationPath: "../../../../../Images/People")
+            try f.write("Library/Application Support/iCloud/Accounts/container", "container-icloud")
+            try f.write("Library/Application Support/iCloud/Accounts/user", "user-icloud", in: f.home)
+            try f.write("Library/Application Support/CrashReporter/report.plist", "container-report")
+            try f.write("Library/Caches/flutter_engine/shader", "container-shader")
+            try f.write("Library/Caches/flutter_engine/shader", "user-shader", in: f.home)
+            try f.migrator().run()
+            try f.checkImported()
+            for name in ["AddressBook", "SyncServices"] {
+                try f.expect(f.text("Library/Application Support/\(name)/data") == "user-\(name)", "\(name) replaced")
+            }
+            try f.expect(f.text("Library/Application Support/iCloud/Accounts/user") == "user-icloud", "iCloud replaced")
+            try f.expect(!fm.fileExists(atPath: f.home.appendingPathComponent("Library/Application Support/iCloud/Accounts/container").path), "container iCloud published")
+            try f.expect(!fm.fileExists(atPath: f.home.appendingPathComponent("Library/Application Support/CrashReporter").path), "CrashReporter published")
+            try f.expect(f.text("Library/Caches/flutter_engine/shader") == "user-shader", "shared cache replaced")
+            var info = stat()
+            try f.expect(lstat(f.home.appendingPathComponent("Library/Images/People").path, &info) != 0, "People link published")
+            try f.expect(f.text("container-copy/Library/Application Support/iCloud/Accounts/container", in: f.state) == "container-icloud", "container mirror not archived")
         }
         print("All \(count) migration tests passed; fixtures were isolated temporary directories.")
     }
