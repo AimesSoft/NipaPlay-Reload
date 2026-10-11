@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/widgets.dart';
 import 'package:window_manager/window_manager.dart';
 
@@ -9,9 +11,12 @@ import '../widgets/icons.dart';
 import '../widgets/nipa_avatar.dart';
 import '../widgets/progress.dart';
 import 'shell_controller.dart';
+import 'window_chrome.dart';
 
-/// `.chrome`: navigation left, background work / search / Nipa right. The
-/// empty bar drags the window; double click zooms it.
+/// `.chrome`: navigation left, background work / search / Nipa right, all
+/// on the centre line of the bar, which on macOS is also the traffic
+/// lights' (see [NextWindowChrome]). The empty bar drags the window; double
+/// click zooms it.
 class NextTopBar extends StatelessWidget {
   const NextTopBar({super.key});
 
@@ -20,6 +25,23 @@ class NextTopBar extends StatelessWidget {
     (NextSection.library, '片库'),
     (NextSection.activity, '动态'),
   ];
+
+  /// Space between the traffic lights and the first section.
+  static const _afterLights = 16.0;
+  static const _avatar = 28.0;
+  static const _search = 32.0;
+  static const _gap = 12.0;
+
+  /// Right edges of the popovers' anchors, from the window's right edge.
+  static const avatarRight = NextMetrics.chromeEdge;
+  static const tasksRight =
+      NextMetrics.chromeEdge + _avatar + _gap + _search + _gap;
+
+  /// Sections line up with the content column beside the traffic lights;
+  /// in full screen, with no lights, they move out to the bar's margin.
+  static double _left(NextChromeLayout chrome) => chrome.fullScreen
+      ? NextMetrics.chromeEdge
+      : math.max(NextMetrics.gutter, chrome.leading + _afterLights);
 
   Future<void> _zoom() async {
     if (await windowManager.isMaximized()) {
@@ -42,23 +64,26 @@ class NextTopBar extends StatelessWidget {
             onDoubleTap: _zoom,
           ),
         ),
-        Positioned(
-          left: 0,
-          right: 0,
-          top: 0,
-          height: NextMetrics.chromeRow,
-          child: Padding(
-            padding: const EdgeInsets.only(left: NextMetrics.gutter, right: 28),
+        Positioned.fill(
+          child: ValueListenableBuilder(
+            valueListenable: NextWindowChrome.layout,
+            builder: (context, chrome, row) => AnimatedPadding(
+              duration: NextMotion.page,
+              curve: NextMotion.ease,
+              padding: EdgeInsets.only(
+                  left: _left(chrome), right: NextMetrics.chromeEdge),
+              child: row,
+            ),
             child: ListenableBuilder(
               listenable: shell,
               builder: (context, _) => Row(children: [
-                for (final (section, label) in _sections) ...[
+                for (final (i, (section, label)) in _sections.indexed) ...[
+                  if (i > 0) const SizedBox(width: 30),
                   _NavItem(
                     label: label,
                     active: shell.section == section,
                     onTap: () => shell.go(section),
                   ),
-                  const SizedBox(width: 30),
                 ],
                 const Spacer(),
                 ValueListenableBuilder(
@@ -71,7 +96,7 @@ class NextTopBar extends StatelessWidget {
                           ? const SizedBox.shrink()
                           : Padding(
                               key: const ValueKey('tasks'),
-                              padding: const EdgeInsets.only(right: 14),
+                              padding: const EdgeInsets.only(right: _gap),
                               child: _TaskPill(
                                 progress: shell.totalProgress,
                                 onTap: () =>
@@ -82,8 +107,11 @@ class NextTopBar extends StatelessWidget {
                   },
                 ),
                 NextIconButton(
-                    glyph: NextGlyph.search, label: '搜索', onTap: shell.ask),
-                const SizedBox(width: 14),
+                    glyph: NextGlyph.search,
+                    label: '搜索',
+                    size: _search,
+                    onTap: shell.ask),
+                const SizedBox(width: _gap),
                 ListenableBuilder(
                   listenable: shell.conversation,
                   builder: (context, _) {
@@ -93,7 +121,7 @@ class NextTopBar extends StatelessWidget {
                       semanticLabel: 'Nipa',
                       pressScale: 0.94,
                       builder: (context, hovered) => NipaAvatar(
-                        size: 30,
+                        size: _avatar,
                         mood: c.mood,
                         hasNews: c.unseen,
                         sentence: c.moodSentence,
@@ -110,6 +138,9 @@ class NextTopBar extends StatelessWidget {
   }
 }
 
+/// A section: the label on the bar's centre line, the crimson dot a fixed
+/// distance under the glyphs when it is the current one. The whole bar
+/// height is the target.
 class _NavItem extends StatelessWidget {
   const _NavItem(
       {required this.label, required this.active, required this.onTap});
@@ -123,39 +154,42 @@ class _NavItem extends StatelessWidget {
         semanticLabel: label,
         pressScale: 0.96,
         builder: (context, hovered) => SizedBox(
-          height: NextMetrics.chromeRow,
-          child: Stack(
-            clipBehavior: Clip.none,
-            alignment: Alignment.center,
-            children: [
-              AnimatedDefaultTextStyle(
-                duration: const Duration(milliseconds: 180),
-                style: NextText.sans(14,
-                    weight: FontWeight.w500,
-                    letterSpacing: 0.28,
-                    color:
-                        active || hovered ? NextColors.paper : NextColors.p3),
-                child: Text(label),
-              ),
-              Positioned(
-                bottom: -6,
-                child: AnimatedOpacity(
-                  opacity: active ? 1 : 0,
-                  duration: const Duration(milliseconds: 220),
-                  child: Container(
-                    width: 4,
-                    height: 4,
-                    decoration: const BoxDecoration(
-                      shape: BoxShape.circle,
-                      color: NextColors.accent,
-                      boxShadow: [
-                        BoxShadow(color: NextColors.accent, blurRadius: 10)
-                      ],
+          height: NextMetrics.topBar,
+          child: Center(
+            child: Stack(
+              clipBehavior: Clip.none,
+              alignment: Alignment.center,
+              children: [
+                AnimatedDefaultTextStyle(
+                  duration: const Duration(milliseconds: 180),
+                  style: NextText.sans(14,
+                      weight: FontWeight.w500,
+                      letterSpacing: 0.28,
+                      height: 20 / 14,
+                      color:
+                          active || hovered ? NextColors.paper : NextColors.p3),
+                  child: Text(label),
+                ),
+                Positioned(
+                  bottom: -7,
+                  child: AnimatedOpacity(
+                    opacity: active ? 1 : 0,
+                    duration: const Duration(milliseconds: 220),
+                    child: Container(
+                      width: 4,
+                      height: 4,
+                      decoration: const BoxDecoration(
+                        shape: BoxShape.circle,
+                        color: NextColors.accent,
+                        boxShadow: [
+                          BoxShadow(color: NextColors.accent, blurRadius: 10)
+                        ],
+                      ),
                     ),
                   ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
         ),
       );
@@ -214,8 +248,10 @@ class NextPopovers extends StatelessWidget {
               ),
             ),
           Positioned(
-            top: 56,
-            right: which == NextPopover.tasks ? 104 : 20,
+            top: NextMetrics.topBar + 4,
+            right: which == NextPopover.tasks
+                ? NextTopBar.tasksRight - 14
+                : NextTopBar.avatarRight - 8,
             child: AnimatedSwitcher(
               duration: const Duration(milliseconds: 180),
               transitionBuilder: (child, animation) => FadeTransition(

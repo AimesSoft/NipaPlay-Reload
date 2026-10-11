@@ -11,7 +11,7 @@ import '../widgets/artwork.dart';
 /// state B like the full-height stage (`center 35%`). The artwork is laid
 /// out once for B; A is reached with a transform, so switching states,
 /// the slow push-in (1.00 → 1.05 over 20 s) and scrolling only change
-/// transforms and opacity. A new backdrop cross-fades in 600 ms.
+/// transforms and opacity. A new backdrop cross-fades in [fade].
 class HeroBackdrop extends StatefulWidget {
   const HeroBackdrop({
     super.key,
@@ -20,6 +20,7 @@ class HeroBackdrop extends StatefulWidget {
     required this.staged,
     required this.scroll,
     required this.viewport,
+    this.fade = NextMotion.crossfade,
   });
 
   final String? image;
@@ -27,6 +28,9 @@ class HeroBackdrop extends StatefulWidget {
   final bool staged;
   final ScrollController scroll;
   final Size viewport;
+
+  /// How long a new backdrop takes to cross-fade in.
+  final Duration fade;
 
   /// Height of state A's hero: the first shelf starts 24 px below it.
   static double heroHeight(double viewportHeight) => viewportHeight - 240;
@@ -118,7 +122,7 @@ class _HeroBackdropState extends State<HeroBackdrop>
         Positioned.fromRect(
           rect: b,
           child: AnimatedSwitcher(
-            duration: NextMotion.crossfade,
+            duration: widget.fade,
             switchInCurve: Curves.easeInOut,
             switchOutCurve: Curves.easeInOut,
             layoutBuilder: (current, previous) => Stack(

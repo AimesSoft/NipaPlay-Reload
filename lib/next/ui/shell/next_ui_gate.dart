@@ -6,6 +6,7 @@ import 'package:provider/provider.dart';
 
 import 'next_shell.dart';
 import 'next_ui_preference.dart';
+import 'window_chrome.dart';
 
 /// Chooses between Classic and the Next shell.
 ///
@@ -49,13 +50,16 @@ class _NextUiGateState extends State<NextUiGate> {
         fit: StackFit.expand,
         children: [
           _classic(!playing),
-          Offstage(
-            offstage: playing,
-            child: TickerMode(
-              enabled: !playing,
-              child: ExcludeFocus(
-                excluding: playing,
-                child: NextShell(onLeave: () => preference.setEnabled(false)),
+          NextWindowChromeScope(
+            active: !playing,
+            child: Offstage(
+              offstage: playing,
+              child: TickerMode(
+                enabled: !playing,
+                child: ExcludeFocus(
+                  excluding: playing,
+                  child: NextShell(onLeave: () => preference.setEnabled(false)),
+                ),
               ),
             ),
           ),
