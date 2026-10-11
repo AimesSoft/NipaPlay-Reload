@@ -33,6 +33,8 @@ import 'mesh/capability.dart';
 import 'mesh/debug_claim_names.dart';
 import 'state/query.dart';
 import 'state/views.dart';
+import 'state/change_history.dart';
+import 'state/activity.dart';
 import 'harness_hooks.dart';
 import 'harness_location.dart';
 
@@ -78,6 +80,7 @@ final class NextCore {
   late final List<Capability> capabilities;
   final StateSources stateSources = StateSources();
   late final StateCapability state;
+  late final ChangeHistory changeHistory;
 
   Future<void> _initialize(
       Directory? suppliedRoot,
@@ -93,12 +96,19 @@ final class NextCore {
     deviceId = await loadDeviceIdentity(root);
     final database = await openNextDatabase(root, factory: databaseFactory);
     final jobs = SqliteJobStore.fromDatabase(database);
+    changeHistory = ChangeHistory(database);
+    BodyChanges.attached = changeHistory;
     media = await MediaRuntime.create(root, jobs.database, deviceId,
         classic: classic,
         authorizedRoots: authorizedRoots,
         providers: mediaProviders,
         durationProbe: mediaDurationProbe);
     mediaSources = MediaSourcesService(media.service.store);
+    for (final provider in ['dandanplay', 'bangumi']) {
+      changeHistory.seed('account:$provider', [
+        {'id': provider, ...accounts.status(provider)}..remove('provider')
+      ]);
+    }
     mesh = MeshRuntime(
         root: root,
         vault: credentialVault,
@@ -118,13 +128,16 @@ final class NextCore {
         authorizeLocalFile: media.service.authorizedPath);
     danmaku.service.exporter = DanmakuExporter(danmaku.service.store,
         (path) => media.service.authorizedPath(path, directory: true));
-    engine = TaskEngine(store: jobs, ownerDeviceId: deviceId, executors: [
+    final executors = [
       downloads.executor,
       ...media.executors,
       ...mediaSourcesExecutors(mediaSources),
       ...accountExecutors(accounts),
       ...danmaku.executors,
       hooks,
+    ];
+    engine = TaskEngine(store: jobs, ownerDeviceId: deviceId, executors: [
+      for (final executor in executors) OriginExecutor(executor, database)
     ]);
     hooks.engine = engine;
     downloads.attach(engine, root);
@@ -132,12 +145,14 @@ final class NextCore {
     mediaSources.engine = engine;
     accounts.attach(engine);
     danmaku.attach(engine);
-    state = StateCapability(publicStateViews(
+    state = StateCapability([...publicStateViews(
         media: media.service,
         settings: settings,
         danmaku: danmaku.service,
         mesh: mesh,
-        sources: stateSources));
+        sources: stateSources), ActivityView(media.service, settings,
+            File('${root.path}/journal.jsonl'), harnessLocation,
+            changeHistory).view]);
     capabilities = List.unmodifiable([
       CredentialCapability(credentials),
       TaskCapability(engine),
@@ -151,7 +166,7 @@ final class NextCore {
       ClassicOperations(settings),
       MeshCapability(mesh),
       state,
-    ]);
+    ].map(InvocationScopeCapability.new));
     await engine.start();
     await downloads.start();
     await media.start();
@@ -168,6 +183,8 @@ final class NextCore {
       ApplicationSettings.authorizePath = null;
     }
     await settings.drain();
+    if (identical(BodyChanges.attached, changeHistory)) BodyChanges.attached = null;
+    await changeHistory.drain();
     await hooks.disable();
     harnessLocation.dispose();
     await mesh.close();

@@ -1,6 +1,7 @@
 import 'package:nipaplay/utils/dandanplay_comments.dart';
 import 'package:nipaplay/security/credential_store.dart';
 import 'dart:convert';
+import '../next/state/change_history.dart';
 import 'dart:async';
 import 'dart:io' if (dart.library.io) 'dart:io';
 import 'package:crypto/crypto.dart';
@@ -163,6 +164,9 @@ class DandanplayService {
     _userName = prefs.getString('dandanplay_username');
     _screenName = prefs.getString('dandanplay_screenname');
     _loadLinkedBangumiFromPrefs(prefs);
+    BodyChanges.seed('account:dandanplay', [
+      {'id': 'dandanplay', 'loggedIn': _isLoggedIn, 'username': _userName}
+    ]);
     // loadToken 内部在距上次续期超过 21 天时会发起一次网络续期请求。
     // 加超时护栏：超时就沿用本地已缓存的 token 继续启动，
     // 续期交由后续请求自然重试，不阻塞首帧。
@@ -269,6 +273,9 @@ class DandanplayService {
       _lastTokenRenewKey,
       DateTime.now().millisecondsSinceEpoch,
     );
+    BodyChanges.observe('account:dandanplay', [
+      {'id': 'dandanplay', 'loggedIn': true, 'username': username}
+    ]);
   }
 
   static Future<void> clearLoginInfo() async {
@@ -288,6 +295,9 @@ class DandanplayService {
     await prefs.remove(_lastTokenRenewKey);
     await prefs.remove(_linkedBangumiAccountKey);
     await prefs.remove(_loginTimestampKey);
+    BodyChanges.observe('account:dandanplay', [
+      {'id': 'dandanplay', 'loggedIn': false, 'username': null}
+    ]);
   }
 
   // 检查并刷新Token

@@ -8,6 +8,8 @@ import 'package:nipaplay/next/capabilities/library_capability.dart';
 import 'package:nipaplay/next/media/providers.dart';
 import 'package:nipaplay/next/next_core.dart';
 import 'package:nipaplay/next/state/query.dart';
+import 'package:nipaplay/next/state/change_history.dart';
+import 'package:nipaplay/next/tasks/sqlite_job_store.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
@@ -50,6 +52,7 @@ void main() {
           mediaProviders: [TmdbMetadataProvider(tmdb)],
           mediaDurationProbe: (_) async => 10000);
       await core.ready;
+      await core.harnessLocation.setPath('${root.path}/harness');
       history = [];
       core.stateSources.history = () => history;
       core.stateSources.continueWatching = () => history;
@@ -60,6 +63,80 @@ void main() {
     tearDown(() async {
       await core.close();
       await root.delete(recursive: true);
+    });
+
+    test('activity preserves revocation evidence and setting provenance without writes', () async {
+      final path = '${root.path}/fact.mkv';
+      await File(path).writeAsString('offline');
+      final id = await core.media.service.index(path);
+      final result = await call(api, 'media.identity.bind_batch', {
+        'requestId': 'activity-bind', 'entries': [tmdbBinding(id, episodes: [1])]
+      });
+      final workId = (result['entries'] as List).first['workId'] as String;
+      await call(api, 'media.identity.unbind_batch', {
+        'requestId': 'activity-unbind', 'entries': [{'entityId': workId, 'reason': 'withdraw'}]
+      });
+      await core.settings.set('next.harnessPath', '${root.path}/new-harness',
+          Invocation(origin: 'mesh:peer', id: 'remote-edit'));
+      final db = core.media.service.store.database;
+      final before = await db.rawQuery('SELECT total_changes() AS n');
+      final bindingRows = await db.query('media_bindings');
+      final evidenceRows = await db.query('media_evidence');
+      final rows = (await call(api, 'state.query', {
+        'view': 'activity', 'filter': {'entityIds': {'contains': workId}}, 'limit': 100
+      }))['rows'] as List;
+      expect(rows.where((r) => r['type'] == 'identity.bound'), hasLength(1));
+      expect(rows.where((r) => r['type'] == 'identity.revoked'), hasLength(1));
+      expect(rows.where((r) => r['type'] == 'identity.revoked').single['origin'], 'mcp');
+      final changes = (await call(api, 'state.query', {
+        'view': 'activity', 'filter': {'type': {'eq': 'settings.changed'}}
+      }))['rows'] as List;
+      final edit = changes.single;
+      expect(edit['originDeviceId'], 'peer');
+      expect(edit['invocationId'], 'remote-edit');
+      expect(edit['facts']['after'], '${root.path}/new-harness');
+      expect(await db.rawQuery('SELECT total_changes() AS n'), before);
+      expect(await db.query('media_bindings'), bindingRows);
+      expect(await db.query('media_evidence'), evidenceRows);
+    });
+
+    test('activity retains account transitions and receipt entity attribution', () async {
+      BodyChanges.seed('account:fixture', [{'id': 'fixture', 'loggedIn': false}]);
+      await BodyChanges.fromUser(() async {
+        BodyChanges.observe('account:fixture', [{'id': 'fixture', 'loggedIn': true}]);
+      });
+      await core.changeHistory.drain();
+      final db = core.media.service.store.database;
+      final now = DateTime.now().toUtc();
+      final job = Job(
+          jobId: 'output-fixture', type: 'library.scan', title: 'Scan fixture',
+          state: JobState.succeeded, phase: 'done',
+          progress: JobProgress(completed: 1, unit: 'files'),
+          createdAt: now, updatedAt: now, ownerDeviceId: core.deviceId,
+          revision: 0, input: {}, checkpoint: {}, details: {},
+          receipt: JobReceipt(verification: VerificationLevel.verified,
+              details: {'fileIds': ['file-output']}));
+      await SqliteJobStore.fromDatabase(db).commit(job,
+          JobEvent(jobId: job.jobId, revision: 0, kind: 'submitted',
+              at: now, snapshot: job.toJson()), expectedRevision: null);
+      final account = (await call(api, 'state.query', {
+        'view': 'activity', 'filter': {'type': {'eq': 'account.logged_in'}}
+      }))['rows'] as List;
+      expect(account.single['actor'], 'user');
+      expect(account.single['facts']['before']['loggedIn'], false);
+      expect(account.single['facts']['after']['loggedIn'], true);
+      final output = (await call(api, 'state.query', {
+        'view': 'activity', 'filter': {'entityIds': {'contains': 'file-output'}}
+      }))['rows'] as List;
+      expect(output.map((r) => r['type']), contains('task.receipt'));
+      expect(output.every((r) => r['jobId'] == job.jobId), true);
+      BodyChanges.seed('source:fixture', []);
+      BodyChanges.observe('source:fixture', [{
+        'id': 'fixture-source', 'url': 'https://user:private-history-marker@example.test/path?token=private-history-marker#private-history-marker'
+      }]);
+      await core.changeHistory.drain();
+      expect(jsonEncode(await db.query('body_changes')),
+          isNot(contains('private-history-marker')));
     });
 
     test(
@@ -185,7 +262,7 @@ void main() {
         'snapshot': jsonEncode(job.toJson())
       });
       final description = await call(api, 'state.describe', {});
-      expect((description['views'] as List).length, 20);
+      expect((description['views'] as List).length, 21);
       final before = await db.rawQuery('SELECT total_changes() AS changes');
       for (final view in core.state.views.values) {
         final result = await call(api, 'state.query', {'view': view.name});

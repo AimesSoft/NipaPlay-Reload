@@ -227,7 +227,8 @@ final class AgentEndpoint {
       });
     }
     return _response((await _harness.invokeJson(
-            action.spec.id, input, Invocation(origin: 'harness_cli')))
+            action.spec.id, input, Invocation(origin: request.headers['x-nipa-hook'] == null
+                ? 'harness_cli' : 'hook:${request.headers['x-nipa-hook']}')))
         .toEnvelope());
   }
 

@@ -6,6 +6,12 @@ import 'package:nipa_harness/nipa_harness.dart';
 
 typedef StateReader = Future<List<JsonMap>> Function(int offset, int limit);
 
+final class StateRows {
+  const StateRows(this.rows, {this.warnings = const []});
+  final List<JsonMap> rows;
+  final List<String> warnings;
+}
+
 final class StateRelation {
   const StateRelation(this.view, this.localField, this.foreignField);
   final String view, localField, foreignField;
@@ -19,10 +25,12 @@ final class StateView {
       required this.description,
       required this.fields,
       required this.read,
+      this.readAll,
       this.relations = const {}});
   final String name, description;
   final ObjectSchema fields;
   final StateReader read;
+  final Future<StateRows> Function()? readAll;
   final Map<String, StateRelation> relations;
   JsonMap describe() => {
         'view': name,
@@ -51,7 +59,7 @@ const stateQueryInput = ObjectSchema({
   'filter': ObjectSchema({},
       additionalProperties: true,
       description:
-          'Field to operator/value objects. All predicates are combined with AND. Only registered scalar fields are filterable.'),
+          'Field to operator/value objects. Predicates use AND. Scalar fields are filterable; arrays support contains with an exact member.'),
   'select': ArraySchema(StringSchema(),
       description:
           'Top-level field projection. Omitted means all public fields.'),
@@ -159,7 +167,7 @@ final class StateCapability implements Capability {
     }
     final filter = query['filter'] as Map? ?? {};
     for (final e in filter.entries) {
-      field(e.key as String, scalar: true);
+      field(e.key as String);
       if (e.value is! Map || (e.value as Map).isEmpty) {
         _invalid('invalid_filter', 'Expected operator/value predicates.');
       }
@@ -168,7 +176,11 @@ final class StateCapability implements Capability {
             .contains(predicate.key)) {
           _invalid('invalid_filter', 'Unknown filter operator.');
         }
-        final schema = view.fields.properties[e.key]!;
+        final fieldSchema = view.fields.properties[e.key]!;
+        if (fieldSchema is ObjectSchema || fieldSchema is ArraySchema && predicate.key != 'contains') {
+          _invalid('invalid_filter', 'Objects cannot be filtered; arrays support contains only.');
+        }
+        final schema = fieldSchema is ArraySchema ? fieldSchema.items : fieldSchema;
         if (predicate.key == 'in') {
           if (predicate.value is! List) {
             _invalid('invalid_filter', 'in expects an array.');
@@ -184,7 +196,7 @@ final class StateCapability implements Capability {
           _invalid(
               'invalid_filter', 'Filter value type differs from the field.');
         }
-        if (predicate.key == 'contains' &&
+        if (fieldSchema is! ArraySchema && predicate.key == 'contains' &&
             (schema is! StringSchema || predicate.value == null)) {
           _invalid('invalid_filter', 'contains requires a text field.');
         }
@@ -298,7 +310,7 @@ List<JsonMap> _match(List<JsonMap> rows, JsonMap query) {
                   'contains' => actual is String &&
                       actual
                           .toLowerCase()
-                          .contains((p.value as String).toLowerCase()),
+                          .contains((p.value as String).toLowerCase()) || actual is List && actual.contains(p.value),
                   'gt' => actual != null &&
                       p.value != null &&
                       _compare(actual, p.value) > 0,
@@ -438,6 +450,23 @@ final class _ReadContext {
   }
 
   Future<List<JsonMap>> rows(StateView view, {int startOffset = 0}) async {
+    if (view.readAll != null) {
+      if (!cache.containsKey(view.name)) {
+        final Future<StateRows> pending;
+        try {
+          pending = view.readAll!();
+          final source = timeoutMs == null ? await pending : await pending.timeout(
+              Duration(milliseconds: (timeoutMs! - clock.elapsedMilliseconds).clamp(1, timeoutMs!)),
+              onTimeout: () => const StateRows([], warnings: ['time_limit']));
+          warnings.addAll(source.warnings);
+          cache[view.name] = [for (final row in source.rows) publicValue(row, view.fields) as JsonMap];
+        } on Failure catch (failure) {
+          throw Failure(failure.code, 'state_source_failed', retryable: failure.retryable);
+        }
+        observed[view.name] = DateTime.now().toUtc().toIso8601String();
+      }
+      return cache[view.name]!.skip(startOffset).toList();
+    }
     if (cache.containsKey(view.name)) return cache[view.name]!;
     final result = <JsonMap>[];
     var offset = startOffset;

@@ -1,10 +1,26 @@
 import 'package:nipa_harness/nipa_harness.dart';
 
 import 'media_models.dart';
+import '../media/media_service.dart';
+import 'ui_open.dart';
 
 final class NavigationCapability implements Capability {
-  NavigationCapability({required void Function(String pageId) changePage})
-      : actions = [NavigateAction._(changePage)];
+  NavigationCapability({
+    required void Function(String pageId) changePage,
+    MediaService Function()? media,
+    Future<bool> Function(String page)? openPage,
+    Future<bool> Function(int animeId)? openDetail,
+    Future<Outcome<JsonEncodable>> Function(
+            JsonMap input, Invocation invocation)?
+        play,
+  }) : actions = [
+          NavigateAction._(changePage),
+          UiOpenAction(
+              media: media,
+              openPage: openPage,
+              openDetail: openDetail,
+              play: play)
+        ];
 
   @override
   final List<Action> actions;

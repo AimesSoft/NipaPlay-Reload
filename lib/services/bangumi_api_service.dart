@@ -1,5 +1,6 @@
 import 'package:nipaplay/security/credential_store.dart';
 import 'dart:convert';
+import '../next/state/change_history.dart';
 import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:nipaplay/services/dandanplay_http_client.dart' as http;
@@ -80,6 +81,9 @@ class BangumiApiService {
         debugPrint('[Bangumi API] 服务初始化完成，登录状态: $_isLoggedIn');
         return;
       }
+      BodyChanges.seed('account:bangumi', [
+        {'id': 'bangumi', 'loggedIn': _isLoggedIn, 'username': _userInfo?['username']}
+      ]);
 
       if (_accessToken != null && _isLoggedIn) {
         // 验证Token有效性
@@ -253,6 +257,9 @@ class BangumiApiService {
         await CredentialStore.instance.write(prefs, _tokenKey, token);
         await prefs.setString(_userInfoKey, json.encode(userData));
         await prefs.setBool(_isLoggedInKey, true);
+        BodyChanges.observe('account:bangumi', [
+          {'id': 'bangumi', 'loggedIn': true, 'username': userData['username']}
+        ]);
 
         debugPrint(
           '[Bangumi API] Token保存成功，用户: ${userData['username'] ?? 'unknown'}',
@@ -291,6 +298,9 @@ class BangumiApiService {
       await CredentialStore.instance.delete(prefs, _tokenKey);
       await prefs.remove(_userInfoKey);
       await prefs.remove(_isLoggedInKey);
+      BodyChanges.observe('account:bangumi', [
+        {'id': 'bangumi', 'loggedIn': false, 'username': null}
+      ]);
 
       debugPrint('[Bangumi API] Token已清除');
 

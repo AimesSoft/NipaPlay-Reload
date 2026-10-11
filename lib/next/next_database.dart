@@ -9,6 +9,7 @@ import 'media/metadata_edit_migration.dart';
 import 'media/classic_match_migration.dart';
 import 'tasks/job_migration.dart';
 import 'settings/migration.dart';
+import 'state/change_history.dart';
 
 // Each position is a released database version. Append new domain migrations.
 const _migrations = [
@@ -19,7 +20,8 @@ const _migrations = [
   migrateMediaPrimitives,
   migrateMetadataEdits,
   migrateDanmakuImports,
-  migrateClassicMatches
+  migrateClassicMatches,
+  migrateChangeHistory
 ];
 
 Future<void> _migrate(Database db, int oldVersion, int newVersion) async {

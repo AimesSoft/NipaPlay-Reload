@@ -8,6 +8,7 @@ import 'package:nipaplay/models/torrent_task.dart';
 import 'package:nipaplay/services/torrent_download_service.dart';
 
 import '../capabilities/download_capability.dart';
+import '../state/change_history.dart';
 import '../capabilities/download_metadata_capability.dart';
 import 'download_backend.dart';
 import 'download_executor.dart';
@@ -130,7 +131,7 @@ final class DownloadRuntime extends ChangeNotifier {
   }
 
   Future<void> _adoptNative(int id) async {
-    await downloads.adopt(_backend, await _backend.read(id.toString()));
+    await BodyChanges.fromUser(() async => downloads.adopt(_backend, await _backend.read(id.toString())));
     await refresh();
   }
 
@@ -165,11 +166,11 @@ final class DownloadRuntime extends ChangeNotifier {
   }
 
   Future<void> pause(int id) async {
-    await downloads.pause((await _job(id)).jobId);
+    await BodyChanges.fromUser(() async => downloads.pause((await _job(id)).jobId));
   }
 
   Future<void> resume(int id) async {
-    await downloads.resume((await _job(id)).jobId);
+    await BodyChanges.fromUser(() async => downloads.resume((await _job(id)).jobId));
   }
 
   Future<void> forget(int id) async {

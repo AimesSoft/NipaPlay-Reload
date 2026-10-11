@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import '../state/change_history.dart';
 
 import 'package:crypto/crypto.dart';
 import 'package:nipa_harness/nipa_harness.dart';
@@ -161,10 +162,18 @@ final class IdentityStore {
                     },
                     where: 'id = ?',
                     whereArgs: [fileId]);
+                final revoked = await tx.query('media_bindings', columns: ['id'],
+                    where: "entity_id=? AND status='accepted' AND source!='classic_match'",
+                    whereArgs: [fileId]);
                 await tx.update('media_bindings', {'status': 'revoked'},
                     where:
                         'entity_id = ? AND status = ? AND source!=\'classic_match\'',
                     whereArgs: [fileId, 'accepted']);
+                for (final binding in revoked) {
+                  await _audit(tx, binding['id'] as String,
+                      {'reason': 'File content changed after indexing.'},
+                      Invocation(origin: 'application'), event: 'unbind');
+                }
                 await _pruneFileLinks(tx, fileId);
                 await _queueFileProjection(
                     tx, fileId, (file['revision'] as int) + 1, bindingRevision,
@@ -238,6 +247,9 @@ final class IdentityStore {
             if (previous.isNotEmpty && previous.single['binding_id'] != null) {
               await tx.update('media_bindings', {'status': 'revoked'},
                   where: 'id=?', whereArgs: [previous.single['binding_id']]);
+              await _audit(tx, previous.single['binding_id'] as String,
+                  {'reason': 'Classic matching observation superseded.'},
+                  Invocation(origin: 'classic_history'), event: 'unbind');
             }
             final observationId = newMediaId('classic-observation');
             final at = DateTime.now().toUtc();
@@ -297,7 +309,8 @@ final class IdentityStore {
                   'language': record.language,
                   'fetched_at': at.toIso8601String(),
                   'fields': jsonEncode(
-                      {...record.toJson(), 'source': 'classic_match'})
+                      {...record.toJson(), 'source': 'classic_match',
+                        'receivedAt': at.toUtc().toIso8601String(), 'origin': 'classic_history'})
                 });
               }
               // A readback of our durable projection is a delivery fact, not a new Classic decision.
@@ -521,6 +534,7 @@ final class IdentityStore {
 
   Future<String> _snapshot(
       DatabaseExecutor tx, String objectId, MetadataRecord record) async {
+    final invocation = BodyChanges.invocation;
     final id = stableMediaId('snapshot',
         [objectId, record.language, record.fetchedAt.toIso8601String()]);
     await tx.insert(
@@ -530,7 +544,8 @@ final class IdentityStore {
           'object_id': objectId,
           'language': record.language,
           'fetched_at': record.fetchedAt.toUtc().toIso8601String(),
-          'fields': jsonEncode(record.toJson())
+          'fields': jsonEncode({...record.toJson(), 'receivedAt': _now,
+            'origin': invocation?.origin, 'invocationId': invocation?.id})
         },
         conflictAlgorithm: ConflictAlgorithm.ignore);
     return id;
@@ -670,8 +685,24 @@ final class IdentityStore {
       ],
       orderBy: 'binding_revision');
   Future<void> finishProjection(String id, String state) =>
-      database.update('media_projection_outbox', {'state': state},
-          where: 'id = ?', whereArgs: [id]);
+      database.transaction((tx) async {
+        final previous = (await tx.query('media_projection_outbox',
+            where: 'id=?', whereArgs: [id])).single;
+        await tx.update('media_projection_outbox', {'state': state},
+            where: 'id=?', whereArgs: [id]);
+        if (state == 'conflict' && previous['state'] != state) {
+          final invocation = BodyChanges.invocation;
+          await tx.insert('body_changes', {
+            'at': _now, 'type': 'identity.projection_conflict',
+            'subject_id': previous['file_id'],
+            'actor': 'system', 'origin': invocation?.origin ?? 'application',
+            'invocation_id': invocation?.id,
+            'facts': jsonEncode({'projectionId': id, 'fileId': previous['file_id'],
+              'before': previous['state'], 'after': state,
+              'reason': 'Classic matching differs from this projection; neither identity was discarded.'}),
+          });
+        }
+      });
 
   Future<JsonMap> identity(String id) async {
     final row = await entity(id);

@@ -2,6 +2,7 @@ import 'package:nipaplay/security/credential_store.dart';
 import 'package:nipaplay/security/stored_credential.dart';
 import 'package:nipaplay/security/credential_vault.dart';
 import 'dart:convert';
+import '../next/state/change_history.dart';
 import 'dart:io';
 
 import 'package:dio/dio.dart';
@@ -232,6 +233,17 @@ class WebDAVService {
 
   Future<void> initialize() async {
     await _loadConnections();
+    observeChanges(initializing: true);
+  }
+
+  void observeChanges({bool initializing = false}) {
+    final record = initializing ? BodyChanges.seed : BodyChanges.observe;
+    record('source:webdav', [
+      for (final c in _connections) {
+        'id': 'webdav:${c.id}', 'type': 'webdav', 'name': c.name,
+        'url': c.url, 'username': c.username, 'connected': c.isConnected,
+      }
+    ]);
   }
 
   Future<void> _loadConnections() async {
@@ -271,6 +283,7 @@ class WebDAVService {
       final connectionsJson =
           json.encode(_connections.map((e) => e.toJson()).toList());
       await CredentialStore.instance.write(prefs, _connectionsKey, connectionsJson);
+      observeChanges();
     } catch (e) {
       print('保存WebDAV连接失败: $e');
     }
@@ -305,6 +318,7 @@ class WebDAVService {
     _connections
       ..clear()
       ..addAll(replacement);
+    observeChanges();
     _connectionTombstones.remove(normalized.id);
     await _saveConnectionTombstones();
     clearDirectoryCache();
@@ -315,6 +329,7 @@ class WebDAVService {
         await SharedPreferences.getInstance(),
         _connectionsKey,
         jsonEncode(_connections.map((c) => c.toJson()).toList()));
+    observeChanges();
     await _saveConnectionTombstones();
   }
 

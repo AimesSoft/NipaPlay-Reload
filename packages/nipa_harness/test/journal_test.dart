@@ -62,4 +62,26 @@ void main() {
     expect(lines.skip(1).map((line) => (jsonDecode(line) as JsonMap)['effect']),
         ['read', 'read']);
   });
+
+  test('journal keeps result IDs while excluding output secrets', () async {
+    final observer = RecordingObserver();
+    final action = FixtureAction(
+        effect: Effect.write,
+        output: const ObjectSchema(
+            {'jobId': StringSchema(), 'session': StringSchema(secret: true)}),
+        onRun: (_, __) async => const Completed(FixtureJson({
+              'jobId': 'job-result',
+              'session': 'private-session',
+              'token': 'private-token'
+            })));
+    await Harness([
+      FixtureCapability([action])
+    ], observers: [
+      observer
+    ]).invokeJson(action.spec.id, {}, Invocation(origin: 'mesh:peer'));
+    final record = observer.records.single.toJson();
+    expect((record['result'] as Map)['jobId'], 'job-result');
+    expect(jsonEncode(record), isNot(contains('private-session')));
+    expect(jsonEncode(record), isNot(contains('private-token')));
+  });
 }

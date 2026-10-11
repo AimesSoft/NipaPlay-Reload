@@ -57,7 +57,7 @@ void main() {
     expect(((metadata['provenance'] as Map)['title'] as Map)['invocationId'],
         'legacy-invocation');
   });
-  for (final oldVersion in [0, 1, 2, 3, 4, 5, 6, 7]) {
+  for (final oldVersion in [0, 1, 2, 3, 4, 5, 6, 7, 8]) {
     test('database v$oldVersion upgrades to the complete shared schema',
         () async {
       final root = await Directory.systemTemp.createTemp('next-migration-');
@@ -69,7 +69,8 @@ void main() {
         migrateSettings,
         migrateMediaPrimitives,
         migrateMetadataEdits,
-        migrateDanmakuImports
+        migrateDanmakuImports,
+        migrateClassicMatches
       ];
       if (oldVersion > 0) {
         final old =
@@ -86,8 +87,10 @@ void main() {
       }
       var db = await openNextDatabase(root, factory: databaseFactoryFfi);
       addTearDown(() => db.close());
-      expect(await db.getVersion(), 8);
+      expect(await db.getVersion(), 9);
       for (final table in [
+        'body_changes',
+        'task_origins',
         'jobs',
         'media_entities',
         'danmaku_bindings',
@@ -229,7 +232,8 @@ void main() {
       expect(
           await upgraded
               .rawQuery('SELECT * FROM "${entry.key}" ORDER BY rowid'),
-          entry.value,
+          [for (final row in entry.value) {...row,
+            if (entry.key == 'job_events') ...{'origin': null, 'invocation_id': null}}],
           reason: entry.key);
     }
     expect(await upgraded.rawQuery('PRAGMA foreign_key_check'), isEmpty);

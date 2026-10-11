@@ -123,7 +123,8 @@ final class DanmakuStore {
               {'operation': 'replaced', 'replacementId': id, ...provenance});
         }
         await _event(tx, id, revision, invocation.id,
-            {'operation': 'import', ...provenance});
+            {'operation': 'import', 'entryCount': entries.length,
+              'cacheKey': key, 'video': video.toJson(), ...provenance});
         return binding(id, tx: tx);
       });
   Future<JsonMap> binding(String id,
@@ -196,6 +197,8 @@ final class DanmakuStore {
         });
         await _event(tx, id, 0, invocation.id, {
           'operation': 'attach',
+          'origin': invocation.origin,
+          'actor': invocation.origin == 'gui' ? 'user' : 'agent',
           'video': video.toJson(),
           'reason': reason,
           'url': url
