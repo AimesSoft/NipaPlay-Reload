@@ -247,6 +247,7 @@ class _NextHomePageState extends State<NextHomePage> {
             // The push-in animates every frame: keep it off the page's layer.
             RepaintBoundary(
               child: HeroBackdrop(
+                workId: backdropWork?.workId,
                 image: backdropWork?.artwork.backdrop,
                 tint: backdropWork?.artwork.tint,
                 staged: staged,
@@ -414,6 +415,7 @@ class _Shelves extends StatelessWidget {
               itemBuilder: (context, j) {
                 final item = shelf.items[j];
                 return PosterCard(
+                  workId: item.work.workId,
                   image: item.work.artwork.poster,
                   tint: item.work.artwork.tint,
                   title: item.work.title,
@@ -436,6 +438,7 @@ class _Shelves extends StatelessWidget {
                 final item = shelf.items[j];
                 final progress = item.episode?.progress;
                 return WideCard(
+                  workId: item.work.workId,
                   image: item.episode?.still != null &&
                           shelf.kind == UiShelfKind.continueWatching &&
                           item.work.artwork.backdrop == null

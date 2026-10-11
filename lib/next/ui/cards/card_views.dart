@@ -2,6 +2,7 @@ import 'package:flutter/widgets.dart';
 
 import '../../ui_data/ui_data.dart';
 import '../theme/tokens.dart';
+import '../widgets/art_origin.dart';
 import '../widgets/artwork.dart';
 import '../widgets/buttons.dart';
 import '../widgets/cards.dart';
@@ -61,6 +62,7 @@ class CardStack extends StatelessWidget {
                 key: ValueKey('pick-$i-$j-${items[j].work.workId}'),
                 index: flat++,
                 child: PosterCard(
+                  workId: items[j].work.workId,
                   image: items[j].work.artwork.poster,
                   tint: items[j].work.artwork.tint,
                   title: items[j].work.title,
@@ -225,10 +227,17 @@ class WorkRowCard extends StatelessWidget {
                     offset: Offset(0, 6))
               ],
             ),
-            child: ClipRRect(
-              borderRadius: BorderRadius.circular(8),
-              child: NextImage(work.artwork.poster,
-                  shape: ArtShape.poster, tint: work.artwork.tint),
+            child: ArtOrigin(
+              workId: work.workId,
+              image: work.artwork.poster,
+              tint: work.artwork.tint,
+              shape: ArtShape.poster,
+              radius: 8,
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(8),
+                child: NextImage(work.artwork.poster,
+                    shape: ArtShape.poster, tint: work.artwork.tint),
+              ),
             ),
           ),
           const SizedBox(width: 14),
@@ -287,6 +296,7 @@ class EpisodeCardView extends StatelessWidget {
           children: [
             Stack(children: [
               WideCard(
+                workId: work.workId,
                 image: episode.still ?? work.artwork.backdrop,
                 tint: work.artwork.tint,
                 width: width,

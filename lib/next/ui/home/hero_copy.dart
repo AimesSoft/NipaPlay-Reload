@@ -1,5 +1,3 @@
-import 'dart:ui' show ImageFilter;
-
 import 'package:flutter/widgets.dart';
 
 import '../../ui_data/ui_data.dart';
@@ -10,6 +8,7 @@ import '../widgets/buttons.dart';
 import '../widgets/nipa_avatar.dart';
 import '../widgets/progress.dart';
 import '../widgets/words.dart';
+import '../widgets/work_title.dart';
 
 /// State A's copy (`.copy`): Nipa's line, logo or Songti title, one meta
 /// line, two lines of overview, play and detail.
@@ -79,7 +78,7 @@ class HeroCopy extends StatelessWidget {
             ),
           ),
           if (preparing != null) preparing!,
-          _Title(work: work),
+          WorkTitle(work: work),
           MetaLine(work),
           if (overview != null && overview.isNotEmpty)
             Padding(
@@ -102,70 +101,6 @@ class HeroCopy extends StatelessWidget {
             NextButton.ghost(label: '详情', onTap: onDetail),
           ]),
         ],
-      ),
-    );
-  }
-}
-
-/// `.logo` (96 high, drop shadow) or the Songti title when there is none.
-class _Title extends StatelessWidget {
-  const _Title({required this.work});
-  final UiWork work;
-
-  /// 64 px as in the concept; long titles step down to stay within two
-  /// lines of the 600 px column.
-  static double _serifSize(String title) => title.characters.length <= 8
-      ? 64
-      : title.characters.length <= 12
-          ? 52
-          : 44;
-
-  @override
-  Widget build(BuildContext context) {
-    final serif = Padding(
-      padding: const EdgeInsets.only(top: 18, bottom: 10),
-      child: Text(work.title,
-          maxLines: 2,
-          overflow: TextOverflow.ellipsis,
-          style: NextText.serif(_serifSize(work.title),
-              letterSpacing: _serifSize(work.title) * 0.04, height: 1.08)),
-    );
-    final logo = work.artwork.logo;
-    if (logo == null) return serif;
-    return Padding(
-      padding: const EdgeInsets.only(top: 20, bottom: 16),
-      child: Transform.translate(
-        offset: const Offset(-6, 0),
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 460, maxHeight: 96),
-          child: SizedBox(
-            height: 96,
-            child: Stack(clipBehavior: Clip.none, children: [
-              // drop-shadow(0 6px 24px rgba(0,0,0,.45)), one small layer.
-              Positioned.fill(
-                top: 6,
-                bottom: -6,
-                child: ImageFiltered(
-                  imageFilter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
-                  child: ColorFiltered(
-                    colorFilter: const ColorFilter.mode(
-                        Color(0x73000000), BlendMode.srcIn),
-                    child: NextImage(logo,
-                        shape: ArtShape.logo,
-                        fit: BoxFit.contain,
-                        alignment: Alignment.centerLeft),
-                  ),
-                ),
-              ),
-              Positioned.fill(
-                child: NextImage(logo,
-                    shape: ArtShape.logo,
-                    fit: BoxFit.contain,
-                    alignment: Alignment.centerLeft),
-              ),
-            ]),
-          ),
-        ),
       ),
     );
   }
