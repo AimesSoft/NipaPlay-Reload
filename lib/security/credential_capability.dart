@@ -1,4 +1,5 @@
 import 'package:nipa_harness/nipa_harness.dart';
+import 'package:nipaplay/utils/lab_profile.dart';
 import 'credential_store.dart';
 import 'credential_vault.dart';
 
@@ -52,7 +53,9 @@ final class _StatusResult implements JsonEncodable {
   final CredentialStore store;
   @override
   JsonMap toJson() => {
-        'backend': store.desktop ? 'system' : 'legacy',
+        'backend': LabProfile.active
+            ? 'labFile'
+            : (store.desktop ? 'system' : 'legacy'),
         'notices': store.notices.value,
         'failures': [
           for (final entry in store.failures.entries)
@@ -70,15 +73,17 @@ final class _Retry extends Action<CredentialRef, _RetryResult> {
   _Retry(this.store);
   final CredentialStore store;
   @override
-  ActionSpec get spec => const ActionSpec(
+  ActionSpec get spec => ActionSpec(
         id: 'credentials.retry',
         title: '主动重试指定凭据',
-        description: '用户要求重试时，解除指定条目的本次运行授权拒绝并读取一次；可能显示系统授权窗口，仅返回存在状态。',
+        description: LabProfile.active
+            ? '主动重试实验文件保险库中的指定条目，仅返回存在状态。'
+            : '用户要求重试时，解除指定条目的本次运行授权拒绝并读取一次；可能显示系统授权窗口，仅返回存在状态。',
         effect: Effect.write,
-        input: ObjectSchema(
+        input: const ObjectSchema(
             {'namespace': StringSchema(), 'key': StringSchema()},
             required: ['namespace', 'key']),
-        output: ObjectSchema({
+        output: const ObjectSchema({
           'reference': ObjectSchema(
               {'namespace': StringSchema(), 'key': StringSchema()},
               required: ['namespace', 'key']),

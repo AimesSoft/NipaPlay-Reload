@@ -3,6 +3,14 @@ const SERVICE: &str = "com.nipaplay.credential-vault.v1";
 pub(crate) struct VaultService;
 
 impl VaultService {
+    fn require_system_profile() -> Result<(), String> {
+        #[cfg(all(target_os = "macos", debug_assertions))]
+        if std::env::var_os("NIPAPLAY_LAB_ROOT").is_some() {
+            return Err("lab_system_vault_disabled".into());
+        }
+        Ok(())
+    }
+
     fn account(namespace: &str, key: &str) -> Result<String, String> {
         if namespace.is_empty() || key.is_empty() || namespace.contains('\0') || key.contains('\0')
         {
@@ -40,6 +48,7 @@ impl VaultService {
     }
 
     pub(crate) fn read(namespace: &str, key: &str) -> Result<Option<String>, String> {
+        Self::require_system_profile()?;
         #[cfg(target_os = "macos")]
         return macos::read(&Self::account(namespace, key)?);
         #[cfg(any(target_os = "windows", all(target_os = "linux", not(feature = "ohos"))))]
@@ -69,6 +78,7 @@ impl VaultService {
     }
 
     pub(crate) fn write(namespace: &str, key: &str, secret: &str) -> Result<(), String> {
+        Self::require_system_profile()?;
         #[cfg(target_os = "macos")]
         return macos::write(&Self::account(namespace, key)?, secret);
         #[cfg(any(target_os = "windows", all(target_os = "linux", not(feature = "ohos"))))]
@@ -88,6 +98,7 @@ impl VaultService {
     }
 
     pub(crate) fn delete(namespace: &str, key: &str) -> Result<(), String> {
+        Self::require_system_profile()?;
         #[cfg(target_os = "macos")]
         return macos::delete(&Self::account(namespace, key)?);
         #[cfg(any(target_os = "windows", all(target_os = "linux", not(feature = "ohos"))))]
@@ -305,6 +316,22 @@ mod macos {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[cfg(all(target_os = "macos", debug_assertions))]
+    #[test]
+    fn lab_calls_are_rejected_before_reference_or_keychain_access() {
+        let previous = std::env::var_os("NIPAPLAY_LAB_ROOT");
+        std::env::set_var("NIPAPLAY_LAB_ROOT", "/test-only/lab");
+        let read = VaultService::read("", "");
+        let write = VaultService::write("", "", "test-only");
+        let delete = VaultService::delete("", "");
+        match previous {
+            Some(value) => std::env::set_var("NIPAPLAY_LAB_ROOT", value),
+            None => std::env::remove_var("NIPAPLAY_LAB_ROOT"),
+        }
+        assert_eq!(read, Err("lab_system_vault_disabled".into()));
+        assert_eq!(write, Err("lab_system_vault_disabled".into()));
+        assert_eq!(delete, Err("lab_system_vault_disabled".into()));
+    }
     #[cfg(target_os = "macos")]
     #[test]
     fn authorization_status_codes_are_distinct() {
