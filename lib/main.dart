@@ -94,6 +94,7 @@ import 'package:nipaplay/services/external_player_console_service.dart';
 import 'package:nipaplay/services/single_instance_service.dart';
 import 'package:nipaplay/utils/lab_profile.dart';
 import 'package:nipaplay/services/desktop_startup_window_preferences.dart';
+import 'package:nipaplay/services/desktop_startup_window_placement.dart';
 import 'package:nipaplay/danmaku_abstraction/danmaku_kernel_factory.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/splash_screen.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/web_remote_access_gate.dart';
@@ -631,8 +632,11 @@ Future<void> _main(List<String> args) async {
           await windowManager.maximize();
         } else {
           await windowManager.setSize(startupSize);
-          await windowManager
-              .setAlignment(_resolveStartupWindowAlignment(startupPosition));
+          await windowManager.setPosition(await desktopStartupWindowPosition(
+            await windowManager.getSize(),
+            _resolveStartupWindowAlignment(startupPosition),
+            devicePixelRatio: windowManager.getDevicePixelRatio(),
+          ));
         }
         await windowManager.show();
         await windowManager.focus();
