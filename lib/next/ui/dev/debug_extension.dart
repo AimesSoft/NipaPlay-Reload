@@ -5,12 +5,17 @@ import 'dart:developer';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/widgets.dart';
+import 'package:provider/provider.dart';
+import 'package:window_manager/window_manager.dart';
 
 import '../../ui_data/ui_data.dart';
 import '../cards/card_views.dart';
 import '../home/stage.dart';
+import '../shell/next_ui_preference.dart';
 import '../shell/shell_controller.dart';
+import '../shell/window_chrome.dart';
 import '../theme/tokens.dart';
+import '../widgets/buttons.dart';
 import '../widgets/cards.dart';
 import '../widgets/nipa_avatar.dart';
 import '../widgets/shelf.dart';
@@ -33,9 +38,15 @@ import 'fake_world.dart';
 ///   (default: the hero); `escape`.
 /// - `popover` `which=tasks|nipa|none`; `panel` `open=true|false`.
 /// - `reduce` `on=true|false|system`.
+/// - `interface` `next=true|false`: “使用 Next 界面” on or off.
+/// - `window` [`size=WxH`] [`maximize=true|false`] [`fullscreen=true|false`]:
+///   resize, zoom, or enter / leave full screen without activating it.
+/// - `chrome`: where the top bar's items are and where the traffic lights
+///   end.
 abstract final class NextUiDebug {
   static NextShellController? _shell;
   static BuildContext? _context;
+  static NextUiPreference? _preference;
   static bool _installed = false;
   static bool _pointerAdded = false;
   static const _device = 7701;
@@ -44,6 +55,7 @@ abstract final class NextUiDebug {
     if (!NextUiDev.enabled) return;
     _shell = shell;
     _context = context;
+    _preference = context.read<NextUiPreference>();
     if (_installed) return;
     _installed = true;
     registerExtension('ext.nipaplay.nextui', (_, params) async {
@@ -65,6 +77,31 @@ abstract final class NextUiDebug {
   }
 
   static Future<Map<String, Object?>> _run(Map<String, String> p) async {
+    // These also work from Classic, once Next has been shown.
+    switch (p['op']) {
+      case 'interface':
+        await _preference!.setEnabled(p['next'] != 'false');
+        await _settle();
+        return {'next': _preference!.enabled};
+      case 'window':
+        if (p['size'] case final size?) {
+          final [w, h] = size.split('x').map(double.parse).toList();
+          await windowManager.setSize(Size(w, h));
+        }
+        if (p['maximize'] case final on?) {
+          await (on == 'true'
+              ? windowManager.maximize()
+              : windowManager.unmaximize());
+        }
+        if (p['fullscreen'] case final on?) {
+          await windowManager.setFullScreen(on == 'true');
+        }
+        await _settle();
+        return {'size': (await windowManager.getSize()).toString()};
+      case 'chrome':
+        await _settle();
+        return _chrome();
+    }
     final shell = _shell;
     if (shell == null) throw StateError('The Next shell is not showing');
     final c = shell.conversation;
@@ -211,6 +248,43 @@ abstract final class NextUiDebug {
     (context as Element).visitChildren(visit);
     final screen = Offset.zero & MediaQuery.sizeOf(context);
     return found.where((b) => screen.contains(_center(b))).toList();
+  }
+
+  /// The top bar's items and the traffic lights' edge, in logical pixels.
+  static Map<String, Object?> _chrome() {
+    final items = <String, List<double>>{};
+    void visit(Element element) {
+      final widget = element.widget;
+      if (widget is Offstage && widget.offstage) return;
+      final box = element.findRenderObject();
+      if (box is RenderBox && box.attached && box.hasSize) {
+        final rect = box.localToGlobal(Offset.zero) & box.size;
+        final name = switch (widget) {
+          RichText(:final text)
+              when const {'首页', '片库', '动态'}.contains(text.toPlainText()) =>
+            text.toPlainText(),
+          NipaAvatar() => 'avatar',
+          NextIconButton() => 'search',
+          _ => null,
+        };
+        if (name != null && rect.top < NextMetrics.topBar) {
+          items[name] = [rect.left, rect.top, rect.width, rect.height]
+              .map((v) => (v * 100).round() / 100)
+              .toList();
+        }
+      }
+      element.visitChildren(visit);
+    }
+
+    if (_context case final Element context? when context.mounted) {
+      context.visitChildren(visit);
+    }
+    final layout = NextWindowChrome.layout.value;
+    return {
+      'leading': layout.leading,
+      'fullScreen': layout.fullScreen,
+      'items': items,
+    };
   }
 
   static Offset _center(RenderBox box) =>
