@@ -7,7 +7,7 @@ import 'package:nipaplay/services/server_connectivity_service.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/hover_scale_text_button.dart';
 import 'package:nipaplay/utils/app_accent_color.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
-import 'package:nipaplay/services/web_remote_access_service.dart';
+import 'package:nipaplay_core/services/web_remote_access_service.dart';
 
 class BangumiMyCommentData {
   final String nickname;

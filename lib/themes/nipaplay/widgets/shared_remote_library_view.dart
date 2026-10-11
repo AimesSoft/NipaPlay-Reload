@@ -7,7 +7,7 @@ import 'package:path/path.dart' as p;
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-import 'package:nipaplay/models/shared_remote_library.dart';
+import 'package:nipaplay_core/models/shared_remote_library.dart';
 import 'package:nipaplay/models/watch_history_model.dart';
 import 'package:nipaplay/providers/appearance_settings_provider.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/themed_anime_detail.dart';

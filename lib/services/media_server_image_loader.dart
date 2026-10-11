@@ -2,8 +2,8 @@ import 'dart:async';
 import 'dart:typed_data';
 
 import 'package:nipaplay/services/dandanplay_http_client.dart' as http;
-import 'package:nipaplay/services/media_server_transport.dart';
-import 'package:nipaplay/services/web_remote_access_service.dart';
+import 'package:nipaplay_core/services/media_server_transport.dart';
+import 'package:nipaplay_core/services/web_remote_access_service.dart';
 
 final Map<String, Uri> _mediaServerBaseUris = {};
 

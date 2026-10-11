@@ -3,9 +3,9 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as transport;
 import 'package:nipaplay/services/dandanplay_service.dart';
-import 'package:nipaplay/services/nipaplay_server_router.dart';
+import 'package:nipaplay_core/services/nipaplay_server_router.dart';
 import 'package:nipaplay_core/utils/http_header_utils.dart';
-import 'package:nipaplay/utils/network_settings.dart';
+import 'package:nipaplay_core/utils/network_settings.dart';
 
 export 'package:http/http.dart'
     hide get, post, put, patch, delete, head, read, readBytes;

@@ -18,7 +18,7 @@ import 'web_ui_proxy_api.dart';
 import 'network_media_settings_api.dart';
 import 'remote_control_api_service.dart';
 import 'remote_text_input_service.dart';
-import 'remote_control_settings.dart';
+import 'package:nipaplay_core/services/remote_control_settings.dart';
 import 'package:path/path.dart' as p;
 
 class WebApiService {

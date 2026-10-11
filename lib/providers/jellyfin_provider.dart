@@ -6,7 +6,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:nipaplay/models/jellyfin_model.dart';
 import 'package:nipaplay/services/jellyfin_service.dart';
 import 'package:nipaplay/models/watch_history_model.dart';
-import 'package:nipaplay/services/web_remote_access_service.dart';
+import 'package:nipaplay_core/services/web_remote_access_service.dart';
 
 class JellyfinProvider extends ChangeNotifier {
   final JellyfinService _jellyfinService = JellyfinService.instance;

@@ -5,7 +5,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:nipaplay/services/media_server_image_loader.dart';
 import 'package:nipaplay/services/media_server_service_base.dart';
 import 'package:nipaplay/services/dandanplay_http_client.dart';
-import 'package:nipaplay/utils/network_settings.dart';
+import 'package:nipaplay_core/utils/network_settings.dart';
 
 void main() {
   test('image downloads cannot anonymously call a Dandanplay API', () async {

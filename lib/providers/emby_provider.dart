@@ -6,7 +6,7 @@ import 'package:nipaplay/models/emby_model.dart';
 import 'package:nipaplay/services/emby_service.dart';
 import 'package:nipaplay/models/watch_history_model.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:nipaplay/services/web_remote_access_service.dart';
+import 'package:nipaplay_core/services/web_remote_access_service.dart';
 
 class EmbyProvider extends ChangeNotifier {
   final EmbyService _embyService = EmbyService.instance;

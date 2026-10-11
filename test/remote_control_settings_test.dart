@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:nipaplay/services/remote_control_settings.dart';
+import 'package:nipaplay_core/services/remote_control_settings.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {

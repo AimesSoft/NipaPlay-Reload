@@ -4,7 +4,7 @@ import 'package:http/http.dart' as http;
 import 'package:nipaplay_core/models/media_server_playback.dart';
 import '../models/watch_history_model.dart';
 import 'emby_service.dart';
-import 'media_server_transport.dart';
+import 'package:nipaplay_core/services/media_server_transport.dart';
 
 /// Emby播放记录同步服务
 /// 基于Jellyfin同步服务实现，适配Emby API接口差异

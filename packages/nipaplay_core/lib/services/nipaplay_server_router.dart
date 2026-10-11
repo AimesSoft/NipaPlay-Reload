@@ -3,7 +3,7 @@ import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
-import 'package:nipaplay/utils/network_settings.dart';
+import 'package:nipaplay_core/utils/network_settings.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 /// 一次自动判定的结果快照，用于网络设置界面展示诊断信息。

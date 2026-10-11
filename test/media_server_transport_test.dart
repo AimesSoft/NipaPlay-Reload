@@ -3,7 +3,7 @@ import 'dart:async';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:nipaplay/services/media_server_image_loader.dart';
-import 'package:nipaplay/services/media_server_transport.dart';
+import 'package:nipaplay_core/services/media_server_transport.dart';
 
 void main() {
   test('adds the app User-Agent unless the caller already supplied one',

@@ -7,7 +7,7 @@ import 'package:shelf_router/shelf_router.dart';
 import 'package:shelf_cors_headers/shelf_cors_headers.dart';
 import 'package:shelf_static/shelf_static.dart';
 import 'web_api_service.dart';
-import 'package:nipaplay/services/nipaplay_lan_discovery.dart';
+import 'package:nipaplay_core/services/nipaplay_lan_discovery.dart';
 
 class WebServerService {
   // 兼容旧版本：历史上使用 web_server_enabled 来表示“自动启动”

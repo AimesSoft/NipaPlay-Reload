@@ -8,7 +8,7 @@ import 'package:nipaplay/models/watch_history_model.dart';
 import 'package:nipaplay/services/security_bookmark_service.dart';
 import 'package:nipaplay/src/rust/api/torrent.dart' as rust_torrent;
 import 'package:nipaplay/src/rust/rust_init.dart';
-import 'package:nipaplay/utils/settings_storage.dart';
+import 'package:nipaplay_core/utils/settings_storage.dart';
 import 'package:nipaplay/utils/storage_service.dart';
 import 'package:path/path.dart' as p;
 

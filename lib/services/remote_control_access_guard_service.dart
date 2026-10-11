@@ -2,7 +2,7 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
-import 'package:nipaplay/services/remote_control_settings.dart';
+import 'package:nipaplay_core/services/remote_control_settings.dart';
 import 'package:nipaplay/utils/globals.dart' as globals;
 import 'package:shelf/shelf.dart';
 

@@ -4,7 +4,7 @@ import 'package:nipaplay/services/dandanplay_service.dart';
 import 'package:nipaplay/services/debug_log_service.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/themed_anime_detail.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
-import 'package:nipaplay/services/web_remote_access_service.dart';
+import 'package:nipaplay_core/services/web_remote_access_service.dart';
 
 /// 用户活动记录的业务逻辑控制器
 /// 包含所有共享的功能和状态管理

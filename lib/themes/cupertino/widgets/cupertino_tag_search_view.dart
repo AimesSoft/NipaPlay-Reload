@@ -2,7 +2,7 @@ import 'package:flutter/cupertino.dart';
 import 'package:flutter/foundation.dart';
 import 'package:nipaplay_core/models/search_model.dart';
 import 'package:nipaplay/search/tag_search_controller.dart';
-import 'package:nipaplay/services/web_remote_access_service.dart';
+import 'package:nipaplay_core/services/web_remote_access_service.dart';
 import 'package:nipaplay/themes/cupertino/cupertino_adaptive_platform_ui.dart';
 import 'package:nipaplay/themes/cupertino/widgets/cupertino_bottom_sheet.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/cached_network_image_widget.dart';

@@ -5,7 +5,7 @@ import 'package:nipaplay_core/constants/settings_keys.dart';
 import 'package:nipaplay_core/utils/http_user_agent.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-import 'media_server_transport_client_stub.dart'
+import 'package:nipaplay_core/services/media_server_transport_client_stub.dart'
     if (dart.library.io) 'media_server_transport_client_io.dart' as platform;
 
 /// Sends Emby/Jellyfin HTTP requests through one configurable transport.

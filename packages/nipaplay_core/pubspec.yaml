@@ -14,3 +14,7 @@ dependencies:
   charset: ^2.0.1
   cp949_codec: ^1.0.1
   enough_convert: ^1.6.0
+  shared_preferences: ^2.2.2
+  http: ^1.2.0
+  crypto: ^3.0.3
+  uuid: ^4.4.0

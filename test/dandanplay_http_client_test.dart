@@ -4,7 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 import 'package:nipaplay/services/dandanplay_http_client.dart';
-import 'package:nipaplay/utils/network_settings.dart';
+import 'package:nipaplay_core/utils/network_settings.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {

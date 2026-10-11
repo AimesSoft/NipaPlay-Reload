@@ -18,7 +18,7 @@ import 'package:tray_manager/tray_manager.dart';
 import 'package:window_manager/window_manager.dart';
 import 'package:provider/provider.dart';
 import 'package:nipaplay/utils/video_player_state.dart';
-import 'package:nipaplay/services/playback_position_store.dart';
+import 'package:nipaplay_core/services/playback_position_store.dart';
 
 import 'desktop_exit_preferences.dart';
 import 'package:nipaplay/utils/app_accent_color.dart';

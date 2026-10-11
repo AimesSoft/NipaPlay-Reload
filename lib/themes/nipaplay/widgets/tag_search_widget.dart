@@ -21,7 +21,7 @@ import 'package:nipaplay/themes/nipaplay/widgets/history_like_list_card.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/keyboard_activatable.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/nipaplay_window.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/tvos_remote_text_input_scope.dart';
-import 'package:nipaplay/services/web_remote_access_service.dart';
+import 'package:nipaplay_core/services/web_remote_access_service.dart';
 import 'package:nipaplay/utils/app_accent_color.dart';
 import 'package:nipaplay/app/app_display_surface.dart';
 import 'package:nipaplay/app/app_display_surface_scope.dart';

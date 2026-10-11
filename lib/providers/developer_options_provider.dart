@@ -1,7 +1,7 @@
 import 'package:flutter/foundation.dart';
 import 'package:nipaplay_core/constants/settings_keys.dart';
-import 'package:nipaplay/utils/settings_storage.dart';
-import 'package:nipaplay/services/certificate_trust_service.dart';
+import 'package:nipaplay_core/utils/settings_storage.dart';
+import 'package:nipaplay_core/services/certificate_trust_service.dart';
 
 /// 开发者选项Provider
 /// 管理应用中的开发者相关设置

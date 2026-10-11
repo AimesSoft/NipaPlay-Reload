@@ -9,7 +9,7 @@ import 'package:kmbal_ionicons/kmbal_ionicons.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_snackbar.dart';
 import 'package:nipaplay/providers/appearance_settings_provider.dart';
 import 'package:provider/provider.dart';
-import 'package:nipaplay/services/web_remote_access_service.dart';
+import 'package:nipaplay_core/services/web_remote_access_service.dart';
 
 class TranslationButton extends StatefulWidget {
   final int animeId;

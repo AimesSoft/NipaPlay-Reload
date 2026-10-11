@@ -5,8 +5,8 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'package:nipaplay/providers/service_provider.dart';
-import 'package:nipaplay/services/nipaplay_lan_discovery.dart';
-import 'package:nipaplay/services/remote_control_settings.dart';
+import 'package:nipaplay_core/services/nipaplay_lan_discovery.dart';
+import 'package:nipaplay_core/services/remote_control_settings.dart';
 
 class RemoteControlDiscoveredDevice {
   const RemoteControlDiscoveredDevice({

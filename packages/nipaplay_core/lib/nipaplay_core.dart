@@ -66,3 +66,18 @@ export 'utils/danmaku_parser.dart';
 export 'utils/danmaku/style.dart';
 export 'utils/danmaku_xml_utils.dart';
 export 'utils/legacy_charset_decoder.dart';
+
+// ---- Batch 4: network foundation / settings storage / host discovery ----
+export 'models/shared_remote_library.dart';
+export 'services/certificate_trust_service.dart';
+export 'services/http_client_initializer.dart';
+export 'services/media_server_device_id_service.dart';
+export 'services/media_server_transport.dart';
+export 'services/nipaplay_lan_discovery.dart';
+export 'services/nipaplay_server_router.dart';
+export 'services/playback_position_store.dart';
+export 'services/remote_control_settings.dart';
+export 'services/system_proxy_service.dart';
+export 'services/web_remote_access_service.dart';
+export 'utils/network_settings.dart';
+export 'utils/settings_storage.dart';

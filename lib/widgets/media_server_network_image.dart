@@ -5,7 +5,7 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:nipaplay/services/media_server_image_loader.dart';
 import 'package:nipaplay/services/dandanplay_http_client.dart';
-import 'package:nipaplay/utils/network_settings.dart';
+import 'package:nipaplay_core/utils/network_settings.dart';
 
 export 'package:nipaplay/services/media_server_image_loader.dart'
     show loadMediaServerImage;

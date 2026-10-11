@@ -10,7 +10,7 @@ import 'package:nipaplay/themes/nipaplay/widgets/large_screen_focusable_action.d
 import 'package:nipaplay/themes/nipaplay/widgets/large_screen_mode_scope.dart';
 import 'package:nipaplay/providers/appearance_settings_provider.dart';
 import 'package:provider/provider.dart';
-import 'package:nipaplay/services/web_remote_access_service.dart';
+import 'package:nipaplay_core/services/web_remote_access_service.dart';
 
 class AnimeCard extends StatefulWidget {
   final String name;

@@ -2,8 +2,8 @@ import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'package:nipaplay/services/debug_log_service.dart';
 import 'package:flutter/foundation.dart';
-import 'package:nipaplay/services/web_remote_access_service.dart';
-import 'package:nipaplay/services/nipaplay_server_router.dart';
+import 'package:nipaplay_core/services/web_remote_access_service.dart';
+import 'package:nipaplay_core/services/nipaplay_server_router.dart';
 
 class LogShareService {
   static const String _sharePath = '/nipaplay.php';

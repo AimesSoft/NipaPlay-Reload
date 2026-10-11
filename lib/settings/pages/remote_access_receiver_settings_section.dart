@@ -7,7 +7,7 @@ import 'package:nipaplay/providers/remote_access_settings_provider.dart';
 import 'package:nipaplay/providers/service_provider.dart';
 import 'package:nipaplay/services/remote_access_qr_service.dart';
 import 'package:nipaplay/services/remote_control_access_guard_service.dart';
-import 'package:nipaplay/services/remote_control_settings.dart';
+import 'package:nipaplay_core/services/remote_control_settings.dart';
 import 'package:nipaplay/settings/adaptive_settings_widgets.dart';
 import 'package:nipaplay/settings/adaptive_settings_scope.dart';
 import 'package:nipaplay/themes/cupertino/cupertino_adaptive_platform_ui.dart';

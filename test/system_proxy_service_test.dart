@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:nipaplay/services/system_proxy_service.dart';
+import 'package:nipaplay_core/services/system_proxy_service.dart';
 
 void main() {
   tearDown(() {

@@ -1,7 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:nipaplay/services/nipaplay_server_router.dart';
+import 'package:nipaplay_core/services/nipaplay_server_router.dart';
 import 'package:nipaplay/services/random_recommendation_service.dart';
-import 'package:nipaplay/utils/network_settings.dart';
+import 'package:nipaplay_core/utils/network_settings.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 /// 预置自动判定缓存，避免测试真的发起网络探测。

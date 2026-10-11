@@ -7,7 +7,7 @@ import 'package:nipaplay_core/models/media_server_playback.dart';
 import 'package:nipaplay_core/models/server_profile_model.dart';
 import 'package:path_provider/path_provider.dart'
     if (dart.library.html) 'package:nipaplay/utils/mock_path_provider.dart';
-import 'package:nipaplay/services/web_remote_access_service.dart';
+import 'package:nipaplay_core/services/web_remote_access_service.dart';
 import 'dart:io' if (dart.library.io) 'dart:io';
 import 'debug_log_service.dart';
 import 'package:nipaplay_core/models/jellyfin_transcode_settings.dart';

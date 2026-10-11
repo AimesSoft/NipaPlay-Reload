@@ -4,7 +4,7 @@ import 'package:http/http.dart' as http;
 import 'package:nipaplay_core/models/media_server_playback.dart';
 import 'package:nipaplay/models/watch_history_model.dart';
 import 'jellyfin_service.dart';
-import 'media_server_transport.dart';
+import 'package:nipaplay_core/services/media_server_transport.dart';
 
 /// 简化的Jellyfin播放记录同步服务
 /// 实现最小化的播放记录同步功能

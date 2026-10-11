@@ -12,7 +12,7 @@ import 'package:nipaplay/settings/adaptive_settings_widgets.dart';
 import 'package:nipaplay/themes/cupertino/cupertino_adaptive_platform_ui.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_dropdown.dart';
 import 'package:nipaplay/utils/image_cache_manager.dart';
-import 'package:nipaplay/utils/settings_storage.dart';
+import 'package:nipaplay_core/utils/settings_storage.dart';
 import 'package:nipaplay/utils/video_player_state.dart';
 import 'package:provider/provider.dart';
 

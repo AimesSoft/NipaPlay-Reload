@@ -14,7 +14,7 @@ import 'package:nipaplay/models/jellyfin_model.dart';
 import 'package:nipaplay/models/emby_model.dart';
 import 'package:nipaplay/models/playable_item.dart';
 import 'package:nipaplay/models/watch_history_model.dart';
-import 'package:nipaplay/models/shared_remote_library.dart';
+import 'package:nipaplay_core/models/shared_remote_library.dart';
 import 'package:nipaplay/services/playback_service.dart';
 import 'package:nipaplay/services/smb_proxy_service.dart';
 import 'package:nipaplay/services/smb_service.dart';

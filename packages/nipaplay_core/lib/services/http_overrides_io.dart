@@ -2,9 +2,9 @@
 import 'dart:io';
 
 import 'package:flutter/foundation.dart';
-import 'certificate_trust_service.dart';
+import 'package:nipaplay_core/services/certificate_trust_service.dart';
 import 'package:nipaplay_core/services/app_http_proxy.dart';
-import 'system_proxy_service.dart';
+import 'package:nipaplay_core/services/system_proxy_service.dart';
 
 /// 在非 Web 平台，为 Dart IO 网络栈设置证书例外规则
 class NipaHttpOverrides extends HttpOverrides {

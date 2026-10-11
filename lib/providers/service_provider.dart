@@ -4,7 +4,7 @@ import 'dart:async';
 import 'package:nipaplay/services/server_history_sync_service.dart';
 import 'package:nipaplay/services/web_server_service.dart';
 import 'package:nipaplay/services/scan_service.dart';
-import 'package:nipaplay/services/remote_control_settings.dart';
+import 'package:nipaplay_core/services/remote_control_settings.dart';
 
 import 'dandanplay_remote_provider.dart';
 import 'emby_provider.dart';

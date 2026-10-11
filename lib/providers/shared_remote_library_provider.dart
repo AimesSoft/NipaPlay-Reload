@@ -7,15 +7,15 @@ import 'package:http/http.dart' as http;
 import 'package:http/io_client.dart';
 import 'package:path/path.dart' as p;
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:nipaplay/services/remote_control_settings.dart';
+import 'package:nipaplay_core/services/remote_control_settings.dart';
 import 'package:nipaplay_core/services/process_memory_cache.dart';
-import 'package:nipaplay/services/web_remote_access_service.dart';
+import 'package:nipaplay_core/services/web_remote_access_service.dart';
 import 'package:nipaplay/services/webdav_service.dart';
 import 'package:nipaplay/services/smb_service.dart';
 import 'package:nipaplay/utils/media_source_utils.dart';
 
 import 'package:nipaplay/models/playable_item.dart';
-import 'package:nipaplay/models/shared_remote_library.dart';
+import 'package:nipaplay_core/models/shared_remote_library.dart';
 import 'package:nipaplay/models/watch_history_model.dart';
 
 typedef _RemoteDirectoryCacheKey = ({

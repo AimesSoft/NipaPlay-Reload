@@ -9,8 +9,8 @@ import 'package:nipaplay_core/models/server_profile_model.dart';
 import 'package:nipaplay/services/multi_address_server_service.dart';
 import 'package:nipaplay/utils/url_name_generator.dart';
 import 'debug_log_service.dart';
-import 'media_server_device_id_service.dart';
-import 'media_server_transport.dart';
+import 'package:nipaplay_core/services/media_server_device_id_service.dart';
+import 'package:nipaplay_core/services/media_server_transport.dart';
 import 'dart:io' if (dart.library.io) 'dart:io';
 
 abstract class MediaServerServiceBase {

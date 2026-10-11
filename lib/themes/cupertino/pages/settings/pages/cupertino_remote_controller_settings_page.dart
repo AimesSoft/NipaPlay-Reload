@@ -4,7 +4,7 @@ import 'dart:convert';
 import 'package:flutter/services.dart';
 import 'package:nipaplay/providers/shared_remote_library_provider.dart';
 import 'package:nipaplay/services/remote_control_client_service.dart';
-import 'package:nipaplay/services/remote_control_settings.dart';
+import 'package:nipaplay_core/services/remote_control_settings.dart';
 import 'package:nipaplay/services/remote_access_qr_service.dart';
 import 'package:nipaplay/services/remote_text_input_service.dart';
 import 'package:nipaplay/settings/pages/remote_access_receiver_settings_section.dart';

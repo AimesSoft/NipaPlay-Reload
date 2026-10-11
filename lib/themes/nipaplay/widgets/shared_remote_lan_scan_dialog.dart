@@ -12,7 +12,7 @@ import 'package:nipaplay/app/app_display_surface.dart';
 import 'package:nipaplay/app/app_display_surface_scope.dart';
 import 'package:nipaplay/media_library/adaptive_media_library_primitives.dart';
 import 'package:nipaplay/providers/shared_remote_library_provider.dart';
-import 'package:nipaplay/services/nipaplay_lan_discovery.dart';
+import 'package:nipaplay_core/services/nipaplay_lan_discovery.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_dialog.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_snackbar.dart';
 import 'package:nipaplay/themes/cupertino/widgets/cupertino_bottom_sheet.dart';

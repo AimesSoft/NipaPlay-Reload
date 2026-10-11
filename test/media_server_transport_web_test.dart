@@ -3,7 +3,7 @@ library;
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
-import 'package:nipaplay/services/media_server_transport.dart';
+import 'package:nipaplay_core/services/media_server_transport.dart';
 
 void main() {
   test('browser transports do not try to set the restricted User-Agent header',

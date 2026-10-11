@@ -1,8 +1,8 @@
-import 'certificate_trust_service.dart';
-import 'system_proxy_service.dart';
+import 'package:nipaplay_core/services/certificate_trust_service.dart';
+import 'package:nipaplay_core/services/system_proxy_service.dart';
 
 // 分平台导入：IO 使用 HttpOverrides，Web 使用空实现
-import 'http_overrides_io.dart'
+import 'package:nipaplay_core/services/http_overrides_io.dart'
     if (dart.library.html) 'http_overrides_web.dart';
 
 class HttpClientInitializer {

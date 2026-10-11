@@ -8,7 +8,7 @@ import 'package:nipaplay/models/watch_history_model.dart';
 import 'package:nipaplay/models/playable_item.dart';
 import 'package:nipaplay_core/models/dandanplay_remote_model.dart';
 import 'package:nipaplay_core/models/bangumi_model.dart';
-import 'package:nipaplay/models/shared_remote_library.dart';
+import 'package:nipaplay_core/models/shared_remote_library.dart';
 import 'package:nipaplay/providers/dandanplay_remote_provider.dart';
 import 'package:nipaplay/providers/appearance_settings_provider.dart';
 import 'package:nipaplay/services/bangumi_service.dart';

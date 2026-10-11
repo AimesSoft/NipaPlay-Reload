@@ -5,7 +5,7 @@ import 'package:qr_flutter/qr_flutter.dart';
 
 import 'package:nipaplay/services/debug_log_service.dart';
 import 'package:nipaplay/services/log_share_service.dart';
-import 'package:nipaplay/utils/settings_storage.dart';
+import 'package:nipaplay_core/utils/settings_storage.dart';
 import 'package:nipaplay/themes/cupertino/widgets/cupertino_bottom_sheet.dart';
 
 class CupertinoDebugLogViewerSheet extends StatefulWidget {

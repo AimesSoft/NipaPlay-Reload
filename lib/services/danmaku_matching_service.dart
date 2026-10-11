@@ -2,7 +2,7 @@ import 'dart:convert';
 
 import 'package:nipaplay/services/dandanplay_http_client.dart' as http;
 import 'package:nipaplay/services/dandanplay_service.dart';
-import 'package:nipaplay/services/web_remote_access_service.dart';
+import 'package:nipaplay_core/services/web_remote_access_service.dart';
 
 /// Shared data source for every manual or batch danmaku matching surface.
 class DanmakuMatchingService {

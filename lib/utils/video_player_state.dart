@@ -2,7 +2,7 @@ library video_player_state;
 
 export 'package:nipaplay_core/utils/video_aspect_geometry.dart' show VideoAspectMode;
 
-import 'package:nipaplay/services/playback_position_store.dart';
+import 'package:nipaplay_core/services/playback_position_store.dart';
 import 'package:nipaplay/services/plugin_playback_service.dart';
 import 'package:nipaplay/plugins/url_resolver.dart';
 import 'package:nipaplay_core/utils/video_aspect_geometry.dart';
@@ -85,8 +85,8 @@ import 'package:nipaplay/services/intro_skip/danmaku_intro_detector.dart';
 import 'package:nipaplay/services/intro_skip/aniskip_service.dart';
 import 'package:nipaplay/services/intro_skip/skip_id_resolver.dart';
 import 'package:nipaplay/services/intro_skip/episode_number_extractor.dart';
-import 'package:nipaplay/services/web_remote_access_service.dart';
-import 'package:nipaplay/utils/network_settings.dart';
+import 'package:nipaplay_core/services/web_remote_access_service.dart';
+import 'package:nipaplay_core/utils/network_settings.dart';
 import 'package:nipaplay/plugins/plugin_service.dart';
 import 'package:nipaplay/plugins/danmaku/titan_danmaku_settings.dart';
 

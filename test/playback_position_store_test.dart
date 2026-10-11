@@ -2,7 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:nipaplay/services/playback_position_store.dart';
+import 'package:nipaplay_core/services/playback_position_store.dart';
 
 void main() {
   test('overlapping saves retain other files and a later backward seek',

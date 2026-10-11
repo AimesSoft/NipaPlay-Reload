@@ -7,7 +7,7 @@ import 'package:nipaplay_core/models/media_server_playback.dart';
 import 'package:nipaplay_core/models/server_profile_model.dart';
 import 'package:nipaplay_core/services/media_server_playback_client.dart';
 import 'package:nipaplay/services/media_server_image_loader.dart';
-import 'package:nipaplay/services/web_remote_access_service.dart';
+import 'package:nipaplay_core/services/web_remote_access_service.dart';
 import 'package:path_provider/path_provider.dart'
     if (dart.library.html) 'package:nipaplay/utils/mock_path_provider.dart';
 import 'dart:io' if (dart.library.io) 'dart:io';

@@ -13,7 +13,7 @@ import 'package:nipaplay/themes/cupertino/widgets/cupertino_bottom_sheet.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_snackbar.dart';
 import 'package:nipaplay/utils/video_player_state.dart';
 import 'package:nipaplay/models/playable_item.dart';
-import 'package:nipaplay/models/shared_remote_library.dart';
+import 'package:nipaplay_core/models/shared_remote_library.dart';
 import 'package:nipaplay/providers/settings_provider.dart';
 import 'package:nipaplay/services/playback_service.dart';
 import 'package:nipaplay/services/smb_proxy_service.dart';

@@ -6,7 +6,7 @@ import 'package:file_selector/file_selector.dart';
 import 'package:intl/intl.dart';
 import 'package:nipaplay/services/debug_log_service.dart';
 import 'package:nipaplay/services/log_share_service.dart';
-import 'package:nipaplay/utils/settings_storage.dart';
+import 'package:nipaplay_core/utils/settings_storage.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_snackbar.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_dialog.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/hover_scale_text_button.dart';

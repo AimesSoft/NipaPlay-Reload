@@ -14,7 +14,7 @@ import 'package:nipaplay/utils/anime_info_parse.dart';
 import 'package:nipaplay/utils/color.dart';
 import 'package:nipaplay/utils/dandanplay_auth.dart';
 import 'package:nipaplay/utils/file_hash.dart';
-import 'package:nipaplay/utils/network_settings.dart';
+import 'package:nipaplay_core/utils/network_settings.dart';
 import 'package:nipaplay/utils/storage_service.dart';
 
 part 'anime_info_models.dart';

@@ -5,7 +5,7 @@ import 'package:crypto/crypto.dart';
 import 'package:flutter/foundation.dart';
 import 'package:nipaplay/services/dandanplay_http_client.dart' as http;
 import 'package:nipaplay/services/dandanplay_service.dart';
-import 'package:nipaplay/utils/network_settings.dart';
+import 'package:nipaplay_core/utils/network_settings.dart';
 
 class ServerConnectivityService {
   static final ServerConnectivityService instance =

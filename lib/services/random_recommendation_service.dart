@@ -3,7 +3,7 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'package:nipaplay_core/models/search_model.dart';
-import 'package:nipaplay/services/nipaplay_server_router.dart';
+import 'package:nipaplay_core/services/nipaplay_server_router.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 class RandomRecommendationService {

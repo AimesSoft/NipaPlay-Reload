@@ -5,8 +5,8 @@ import 'dart:math';
 
 import 'package:nipaplay/plugins/url_resolver.dart';
 import 'package:nipaplay_core/services/app_http_proxy.dart';
-import 'package:nipaplay/services/certificate_trust_service.dart';
-import 'package:nipaplay/services/system_proxy_service.dart';
+import 'package:nipaplay_core/services/certificate_trust_service.dart';
+import 'package:nipaplay_core/services/system_proxy_service.dart';
 
 /// Exposes a bounded set of media sources to players that cannot pass headers.
 class PluginMediaProxy {
