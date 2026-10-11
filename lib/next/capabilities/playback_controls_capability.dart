@@ -125,6 +125,12 @@ final class PlaybackControlsCapability implements Capability {
               'Save a screenshot or GIF',
               'Actually generates and saves media using Classic capture/export. '
                   'Screenshots use the Classic save directory unless outputPath is specified. '
+                  'includeDanmaku defaults to the screenshot setting. Erika snapshots '
+                  'exclude native danmaku even when includeDanmaku=true; this does not '
+                  'mean tracks are unloaded or danmaku is invisible on screen. Screenshot '
+                  'results report danmakuRequested, danmakuIncluded and danmakuReason. '
+                  'danmakuIncluded describes inclusion of the displayed layer, not proof '
+                  'of visible comments at this position. '
                   'GIF requires outputPath, startMs and endMs; maximum duration is 30 seconds. '
                   'Existing output files are never overwritten.',
               Effect.write,
@@ -142,7 +148,24 @@ final class PlaybackControlsCapability implements Capability {
               }, required: [
                 'kind'
               ]),
-              port.capture),
+              port.capture,
+              output: const ObjectSchema({
+                'path': StringSchema(),
+                'bytes': IntegerSchema(minimum: 0),
+                'kind': StringSchema(values: ['screenshot', 'gif']),
+                'danmakuRequested': BooleanSchema(
+                    description:
+                        'Screenshot request after applying the default setting.'),
+                'danmakuIncluded': BooleanSchema(
+                    description: 'Whether the displayed danmaku layer is included. '
+                        'It may be empty; this is not on-screen comment telemetry.'),
+                'danmakuReason': StringSchema(
+                    nullable: true,
+                    description:
+                        'Why the screenshot excludes danmaku; null when included.'),
+              }, required: [
+                'path', 'bytes', 'kind'
+              ], additionalProperties: true)),
           _Operation(
               'playback.close',
               'Close current playback',
@@ -176,14 +199,15 @@ final class PlaybackControlData implements JsonEncodable {
 final class _Operation
     extends Action<PlaybackControlData, PlaybackControlData> {
   _Operation(String id, String title, String description, Effect effect,
-      ObjectSchema input, this._run)
+      ObjectSchema input, this._run,
+      {ObjectSchema output = const ObjectSchema({}, additionalProperties: true)})
       : spec = ActionSpec(
             id: id,
             title: title,
             description: description,
             effect: effect,
             input: input,
-            output: const ObjectSchema({}, additionalProperties: true));
+            output: output);
   final Future<JsonMap> Function(JsonMap) _run;
   @override
   final ActionSpec spec;

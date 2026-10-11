@@ -347,6 +347,10 @@ abstract final class ApplicationSettings {
             'player.customUserAgent' =>
               '视频请求的 User-Agent；空字符串使用内核默认值，下次打开视频生效。',
             'player.screenshotDirectory' => '截图保存目录；空字符串恢复应用的默认目录。',
+            'player.screenshotIncludeDanmaku' =>
+              '截图时保留显示中的弹幕层。Erika 原生弹幕不在截图中，即使开启此项也不包含；截图没有弹幕不能据此判断轨道未加载或屏幕上不可见。',
+            'danmaku.visible' =>
+              '弹幕显示开关，也作用于 Erika 原生弹幕；值为 true 不代表当前时刻屏幕上已有弹幕。轨道加载、时间位置与过滤仍影响实际显示。',
             'player.externalPath' ||
             'subtitle.fontDir' ||
             'danmaku.fontFilePath' =>

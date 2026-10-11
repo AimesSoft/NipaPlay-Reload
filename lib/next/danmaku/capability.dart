@@ -94,7 +94,8 @@ const _track = ObjectSchema({
   'status': StringSchema(),
   'stale': BooleanSchema(),
   'video': _video,
-  'enabled': BooleanSchema(),
+  'enabled': BooleanSchema(
+      description: 'Track display switch; not proof of visible comments.'),
   'deduplicate': BooleanSchema(),
   'displayFold': BooleanSchema(),
   'offsetMs': IntegerSchema(),
@@ -102,7 +103,9 @@ const _track = ObjectSchema({
   'evidence': _evidence,
   'boundBy': StringSchema(),
   'cacheKey': StringSchema(nullable: true),
-  'loaded': BooleanSchema(),
+  'loaded': BooleanSchema(
+      description: 'Mounted in the player track registry, including '
+          'Erika native danmaku. Does not prove comments are visible at the current position.'),
   'coverage': ArraySchema(_coverage)
 }, required: [
   'entityId',
@@ -320,7 +323,7 @@ final _specs = [
       const ObjectSchema(
           {'entityId': _text, 'path': _text, 'current': BooleanSchema()}),
       const ObjectSchema({'tracks': ArraySchema(_track)}, required: ['tracks']),
-      'List bindings and all current player tracks, including Classic and local pools with origin/platform/platformVideoId. Accept entityId, path or current (default). Missing file locations are indexed without inferring work identity; no fetch or binding is created.'),
+      'List bindings and all current player tracks, including Classic and local pools with origin/platform/platformVideoId. loaded means mounted in the player registry, including Erika native danmaku; enabled is a track display switch. Neither reports whether comments are currently visible on screen. Accept entityId, path or current (default). Missing file locations are indexed without inferring work identity; no fetch or binding is created.'),
   for (final field in ['enabled', 'deduplicate'])
     _spec(
         field == 'enabled' ? 'danmaku.set_enabled' : 'danmaku.set_dedup',

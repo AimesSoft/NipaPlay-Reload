@@ -597,6 +597,18 @@ final class ClassicPlaybackControls implements PlaybackControlsPort {
       }
       final format =
           extension == '.png' ? ScreenshotFormat.png : ScreenshotFormat.jpeg;
+      final danmakuRequested = input['includeDanmaku'] as bool? ??
+          state.screenshotCaptureIncludesDanmaku;
+      final kernel = state.player.getPlayerKernelName();
+      final String? danmakuReason = kernel == 'Erika'
+          ? 'Erika native danmaku is not included in snapshots, even when '
+              'includeDanmaku is true. This does not indicate unloaded tracks '
+              'or invisible on-screen danmaku.'
+          : !danmakuRequested
+              ? 'Danmaku was excluded by includeDanmaku or the screenshot setting.'
+              : !state.danmakuVisible
+                  ? 'The danmaku display switch is off.'
+                  : null;
       final path = await state.captureScreenshot(
           format: format,
           includeDanmaku: input['includeDanmaku'] as bool?,
@@ -614,7 +626,10 @@ final class ClassicPlaybackControls implements PlaybackControlsPort {
       return {
         'path': file.path,
         'bytes': await file.length(),
-        'kind': 'screenshot'
+        'kind': 'screenshot',
+        'danmakuRequested': danmakuRequested,
+        'danmakuIncluded': danmakuReason == null,
+        'danmakuReason': danmakuReason,
       };
     }
     final start = (input['startMs'] as num?)?.toInt();

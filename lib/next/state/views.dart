@@ -589,7 +589,8 @@ List<StateView> publicStateViews(
               _int('Fixed offset in milliseconds; positive advances danmaku.'),
           'cacheKey': _text('Dataset identity; null means not acquired.'),
           'cacheRevision': _revision,
-          'loaded': _bool('Currently mounted in the local player.'),
+          'loaded': _bool('Currently mounted in the local player, including Erika '
+              'native danmaku; not proof of visible comments.'),
           'boundBy': _text('Host-recorded actor.'),
           'provenance': importProvenanceSchema,
           'createdAt': _time
@@ -642,7 +643,8 @@ List<StateView> publicStateViews(
           'revision': _revision,
           'offsetMs': _int('Fixed milliseconds; positive advances danmaku.'),
           'count': _int('Loaded entry count.'),
-          'enabled': _bool('Current display property.'),
+          'enabled': _bool('Track display switch, including Erika native danmaku; '
+              'not proof of visible comments at the current position.'),
           'deduplicate': _bool('Current display folding property.')
         }),
         read: (offset, limit) async =>
