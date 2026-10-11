@@ -19,6 +19,7 @@ import 'package:window_manager/window_manager.dart';
 import 'package:provider/provider.dart';
 import 'package:nipaplay/utils/video_player_state.dart';
 import 'package:nipaplay/services/playback_position_store.dart';
+import 'package:nipaplay/next/next_runtime.dart';
 
 import 'desktop_exit_preferences.dart';
 import 'package:nipaplay/utils/app_accent_color.dart';
@@ -403,6 +404,10 @@ class DesktopExitHandler
   }
 
   Future<void> _prepareForExit() async {
+    final chatContext = _navigatorKey?.currentContext;
+    if (chatContext != null) {
+      await chatContext.read<NextRuntime?>()?.closeChat();
+    }
     try {
       final context = _navigatorKey?.currentContext;
       if (context != null && context.mounted) {

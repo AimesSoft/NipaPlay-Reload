@@ -107,6 +107,61 @@ void main() {
   });
 
   test(
+      'chat disclosure revokes both endpoints and records session origin without credentials',
+      () async {
+    final journal = File('${root.path}/invocations.jsonl');
+    endpoint = AgentEndpoint(
+        harness:
+            Harness([_WriteCapability()], observers: [JsonlJournal(journal)]),
+        seed: {},
+        appVersion: 'test',
+        credentialFile: credentials,
+        port: 0);
+    final running = await endpoint.start(repository) as AgentEndpointRunning;
+    final before = jsonDecode(await credentials.readAsString()) as Map;
+    final call = await client.postUrl(running.url.replace(path: '/harness'));
+    call.headers.set('Authorization', 'Bearer ${before['token']}');
+    call.headers.set('X-NipaPlay-Chat', 'nipa-session-123');
+    call.write(jsonEncode(
+        {'operation': 'call', 'action': 'fixture.write', 'input': {}}));
+    final response = await call.close();
+    expect(response.statusCode, 200);
+    await response.drain<void>();
+    expect(jsonDecode(await journal.readAsString())['origin'],
+        'harness_cli:chat:nipa-session-123');
+    expect(
+        endpoint.chatEnvironment({
+          'PATH': '/bin',
+          'NIPAPLAY_AGENT_TOKEN': 'synthetic',
+          'OTHER': before['token'] as String
+        }),
+        {'PATH': '/bin'});
+    await endpoint.inspectChatText('output: ${before['token']}');
+    final after = jsonDecode(await credentials.readAsString()) as Map;
+    expect(after['token'], isNot(before['token']));
+    for (final path in ['/mcp', '/harness']) {
+      final rejected = await client.postUrl(running.url.replace(path: path));
+      rejected.headers.set('Authorization', 'Bearer ${before['token']}');
+      expect((await rejected.close()).statusCode, 401);
+    }
+    final log =
+        await File('${endpoint.seedRepository.parent.path}/journal.jsonl')
+            .readAsString();
+    expect(log, contains('chat.endpoint_token_rotated'));
+    expect(log, isNot(contains(before['token'])));
+    expect(log, isNot(contains(after['token'])));
+    final token = after['token'] as String;
+    final (first, pending) =
+        await endpoint.protectChatDelta('', token.substring(0, 20));
+    expect(first, '');
+    final (second, remainder) =
+        await endpoint.protectChatDelta(pending, token.substring(20));
+    expect('$first$second$remainder', isNot(contains(token)));
+    final splitRotated = jsonDecode(await credentials.readAsString()) as Map;
+    expect(splitRotated['token'], isNot(token));
+  });
+
+  test(
       'credentials cannot be placed inside the repository including via symlink',
       () async {
     await repository.create();
@@ -129,4 +184,25 @@ void main() {
     }
     expect(await credentials.exists(), isFalse);
   });
+}
+
+final class _WriteCapability implements Capability {
+  @override
+  List<Action> get actions => [_WriteAction()];
+}
+
+final class _WriteAction extends Action<NoInput, NoInput> {
+  @override
+  ActionSpec get spec => const ActionSpec(
+      id: 'fixture.write',
+      title: 'Write',
+      description: 'Fixture',
+      effect: Effect.write,
+      input: ObjectSchema({}),
+      output: ObjectSchema({}));
+  @override
+  NoInput decodeInput(JsonMap json) => const NoInput();
+  @override
+  Future<Outcome<NoInput>> run(NoInput input, Invocation invocation) async =>
+      const Completed(NoInput());
 }

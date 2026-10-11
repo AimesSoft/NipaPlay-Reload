@@ -58,6 +58,80 @@ final class AgentEndpoint {
   final Directory seedRepository;
   HttpServer? _server;
   AgentEndpointRunning? _running;
+  McpEndpoint? _mcp;
+  Future<void> _rotation = Future.value();
+  final _chatTokens = <String>{};
+
+  /// Hold a token prefix until the next delta, so logs cannot reconstruct it.
+  Future<(String, String)> protectChatDelta(
+      String previous, String delta) async {
+    final text = '$previous$delta';
+    await inspectChatText(text);
+    final safe = redactHarnessText(text);
+    var keep = 0;
+    for (final token in _chatTokens) {
+      for (var length = 1;
+          length < token.length && length <= safe.length;
+          length++) {
+        if (length > keep && safe.endsWith(token.substring(0, length))) {
+          keep = length;
+        }
+      }
+    }
+    return (
+      safe.substring(0, safe.length - keep),
+      safe.substring(safe.length - keep)
+    );
+  }
+
+  /// Inspect before publishing either user input or subprocess output.
+  Future<void> inspectChatText(String text) {
+    final token = _mcp?.token;
+    if (token == null ||
+        ![token, Uri.encodeComponent(token), Uri.encodeQueryComponent(token)]
+            .any(text.contains)) {
+      return _rotation;
+    }
+    final endpoint = _mcp!;
+    endpoint.token =
+        _newToken(); // Revoke synchronously, before the file write.
+    final running = _running!;
+    _rotation = _rotation.then((_) async {
+      await writeEndpointFile(credentialFile,
+          running.url.replace(path: '/harness'), endpoint.token);
+      final journal = File('${seedRepository.parent.path}/journal.jsonl');
+      await journal.writeAsString(
+          '${jsonEncode({
+                'event': 'chat.endpoint_token_rotated',
+                'origin': 'chat_host',
+                'startedAt': DateTime.now().toUtc().toIso8601String(),
+              })}\n',
+          mode: FileMode.append,
+          flush: true);
+    });
+    return _rotation;
+  }
+
+  String _newToken() {
+    final random = Random.secure();
+    final token = base64Url
+        .encode(List.generate(32, (_) => random.nextInt(256)))
+        .replaceAll('=', '');
+    SecretRedactor.remember(const CredentialRef('agent', 'token'), token);
+    _chatTokens.add(token);
+    return token;
+  }
+
+  Map<String, String> chatEnvironment(Map<String, String> environment) {
+    final token = _mcp?.token;
+    return {
+      for (final entry in environment.entries)
+        if (!(token != null && entry.value.contains(token)) &&
+            !RegExp(r'^NIPAPLAY_.*TOKEN$', caseSensitive: false)
+                .hasMatch(entry.key))
+          entry.key: entry.value
+    };
+  }
 
   Future<AgentEndpointStatus> start(Directory repository) async {
     try {
@@ -101,15 +175,10 @@ final class AgentEndpoint {
         p.isWithin(seedPath, repoPath)) {
       throw ArgumentError('Seed repository must be separate from the harness.');
     }
-    final random = Random.secure();
-    final token = base64Url
-        .encode(List.generate(32, (_) => random.nextInt(256)))
-        .replaceAll('=', '');
-    SecretRedactor.remember(const CredentialRef('agent', 'token'), token);
-    final endpoint = McpEndpoint(_harness,
+    final endpoint = _mcp = McpEndpoint(_harness,
         serverInfo: McpServerInfo(
             name: 'nipaplay', title: 'NipaPlay', version: _appVersion),
-        token: token,
+        token: _newToken(),
         jsonHandler: _json,
         instructions:
             'NipaPlay exposes media, playback, download, danmaku, settings, '
@@ -129,7 +198,7 @@ final class AgentEndpoint {
         throw StateError('Harness is not a directory.');
       }
       await writeEndpointFile(
-          credentialFile, url.replace(path: '/harness'), token);
+          credentialFile, url.replace(path: '/harness'), endpoint.token);
     } catch (_) {
       await stop();
       rethrow;
@@ -162,6 +231,11 @@ final class AgentEndpoint {
       return _response({'error': 'Expected a JSON object.'}, 400);
     }
     final operation = decoded['operation'];
+    final chat = request.headers['x-nipaplay-chat'];
+    if (chat != null && !RegExp(r'^[a-zA-Z0-9_-]{1,128}$').hasMatch(chat)) {
+      return _response({'error': 'Invalid chat session.'}, 400);
+    }
+    final origin = chat == null ? 'harness_cli' : 'harness_cli:chat:$chat';
     if (decoded.containsKey('full') && decoded['full'] is! bool) {
       return _response({'error': 'Expected boolean full.'}, 400);
     }
@@ -169,14 +243,16 @@ final class AgentEndpoint {
     final full = decoded['full'] != false;
     if (operation == 'status') {
       final tasks = (await _harness.invokeJson(
-              'task.list', {}, Invocation(origin: 'harness_cli')))
+              'task.list', {}, Invocation(origin: origin)))
           .toEnvelope();
       return _response({
         'status': 'running',
-        if (LabProfile.active) 'profile': {
-          'name': LabProfile.name, 'root': LabProfile.root,
-          'externalFiles': 'readOnly',
-        },
+        if (LabProfile.active)
+          'profile': {
+            'name': LabProfile.name,
+            'root': LabProfile.root,
+            'externalFiles': 'readOnly',
+          },
         'version': _appVersion,
         'repository': _running?.repository.path,
         'harnessSeed':
@@ -227,7 +303,7 @@ final class AgentEndpoint {
       });
     }
     return _response((await _harness.invokeJson(
-            action.spec.id, input, Invocation(origin: 'harness_cli')))
+            action.spec.id, input, Invocation(origin: origin)))
         .toEnvelope());
   }
 
@@ -256,8 +332,10 @@ final class AgentEndpoint {
   }
 
   Future<void> stop() async {
+    await _rotation;
     await _server?.close(force: true);
     _server = null;
     _running = null;
+    _mcp = null;
   }
 }
