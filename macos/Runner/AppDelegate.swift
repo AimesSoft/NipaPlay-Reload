@@ -11,9 +11,42 @@ class AppDelegate: FlutterAppDelegate {
   @IBOutlet weak var playerMenu: NSMenu?
 
   private var didConfigureBundledMoltenVK = false
+  private var quietLaunchFront: NSRunningApplication?
+  private var quietLaunchObserver: NSObjectProtocol?
 
   @objc override func applicationWillFinishLaunching(_ notification: Notification) {
     configureBundledMoltenVKIfAvailable()
+    if LabProfile.quiet {
+      // Launched from the user's terminal, macOS hands activation to the new
+      // process; remember whom to give it back to.
+      quietLaunchFront = NSWorkspace.shared.frontmostApplication
+    }
+  }
+
+  /// A quiet lab instance returns the front to whoever had it, during the
+  /// first seconds after launch only; later the user may click it freely.
+  private func keepLabInstanceBehind() {
+    let returnFront = { [weak self] in
+      guard NSApp.isActive, let previous = self?.quietLaunchFront,
+            previous.processIdentifier != ProcessInfo.processInfo.processIdentifier else { return }
+      NSApp.windows.forEach { $0.orderBack(nil) }
+      if #available(macOS 14.0, *) {
+        NSApp.yieldActivation(to: previous)
+        previous.activate()
+      } else {
+        previous.activate(options: [])
+      }
+    }
+    returnFront()
+    quietLaunchObserver = NotificationCenter.default.addObserver(
+      forName: NSApplication.didBecomeActiveNotification, object: nil, queue: .main
+    ) { _ in returnFront() }
+    DispatchQueue.main.asyncAfter(deadline: .now() + 6) { [weak self] in
+      if let observer = self?.quietLaunchObserver {
+        NotificationCenter.default.removeObserver(observer)
+      }
+      self?.quietLaunchObserver = nil
+    }
   }
   
   @objc override func applicationDidFinishLaunching(_ notification: Notification) {
@@ -21,6 +54,7 @@ class AppDelegate: FlutterAppDelegate {
     if LabProfile.quiet {
       // The nib window is visible at launch; keep a lab instance behind.
       NSApp.windows.forEach { $0.orderBack(nil) }
+      keepLabInstanceBehind()
     }
     print("[AppDelegate] 应用启动")
   }
