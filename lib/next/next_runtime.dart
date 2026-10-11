@@ -53,6 +53,7 @@ import 'harness_hooks.dart';
 import 'harness_repository.dart';
 import 'chat/chat_host.dart';
 import 'chat/debug_chat.dart';
+import 'ui_data/debug_ui_data.dart';
 import 'harness_redaction.dart';
 import 'state/change_history.dart';
 
@@ -237,6 +238,7 @@ final class NextRuntime extends ChangeNotifier {
     );
     if (_disposed) return;
     if (kDebugMode && LabProfile.active) installDebugChat(() => chat);
+    if (kDebugMode && LabProfile.active) installDebugUiData(ServiceProvider.nextCore);
     _labs.addListener(_queueEndpointUpdate);
     _location!.addListener(_queueEndpointUpdate);
     notifyListeners();

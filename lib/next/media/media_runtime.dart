@@ -63,9 +63,19 @@ final class MediaRuntime {
             provider: 'tmdb',
             baseUri: Uri.parse('https://api.themoviedb.org'),
             client: tmdb,
+            headers: (_) async {
+              final secret = await credentials
+                  .resolve(const CredentialRef('metadata', 'tmdb'));
+              return secret.contains('.')
+                  ? {'Authorization': 'Bearer $secret'}
+                  : {};
+            },
             privateQuery: () async => {
-                  'api_key': await credentials
-                      .resolve(const CredentialRef('metadata', 'tmdb'))
+                  if (!(await credentials
+                          .resolve(const CredentialRef('metadata', 'tmdb')))
+                      .contains('.'))
+                    'api_key': await credentials
+                        .resolve(const CredentialRef('metadata', 'tmdb'))
                 })),
         BangumiMetadataProvider(HttpMetadataTransport(
             provider: 'bangumi',
