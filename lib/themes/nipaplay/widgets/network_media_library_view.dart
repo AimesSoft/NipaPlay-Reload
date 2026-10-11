@@ -27,8 +27,8 @@ import 'package:nipaplay/themes/nipaplay/widgets/emby_library_card.dart';
 import 'package:kmbal_ionicons/kmbal_ionicons.dart';
 import 'package:nipaplay/utils/app_accent_color.dart';
 import 'package:nipaplay/media_library/adaptive_media_library_primitives.dart';
-import 'package:nipaplay/app/app_display_surface.dart';
-import 'package:nipaplay/app/app_display_surface_scope.dart';
+import 'package:nipaplay_ui_common/app/app_display_surface.dart';
+import 'package:nipaplay_ui_common/app/app_display_surface_scope.dart';
 import 'package:nipaplay/themes/cupertino/widgets/cupertino_bottom_sheet.dart';
 import 'package:nipaplay/widgets/in_view_dialog.dart';
 

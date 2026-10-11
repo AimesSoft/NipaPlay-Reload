@@ -15,7 +15,7 @@ import 'package:nipaplay/utils/video_player_state.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/loading_overlay.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/floating_action_glass_button.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_snackbar.dart';
-import 'package:nipaplay/app/app_page_ids.dart';
+import 'package:nipaplay_ui_common/app/app_page_ids.dart';
 import 'package:nipaplay/utils/tab_change_notifier.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/tag_search_widget.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;

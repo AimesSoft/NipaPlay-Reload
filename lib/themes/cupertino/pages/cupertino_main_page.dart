@@ -1,6 +1,6 @@
-import 'package:nipaplay/app/app_navigation_scope.dart';
-import 'package:nipaplay/app/app_display_surface.dart';
-import 'package:nipaplay/app/app_page_ids.dart';
+import 'package:nipaplay_ui_common/app/app_navigation_scope.dart';
+import 'package:nipaplay_ui_common/app/app_display_surface.dart';
+import 'package:nipaplay_ui_common/app/app_page_ids.dart';
 import 'package:nipaplay/app/unified_app_pages.dart';
 import 'package:nipaplay/l10n/l10n.dart';
 import 'package:nipaplay/plugins/plugin_service.dart';

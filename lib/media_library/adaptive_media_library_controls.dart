@@ -1,8 +1,8 @@
 import 'package:flutter/cupertino.dart' as cupertino;
 import 'package:flutter/material.dart' as material;
 import 'package:flutter/services.dart' show KeyDownEvent, LogicalKeyboardKey;
-import 'package:nipaplay/app/app_display_surface.dart';
-import 'package:nipaplay/app/app_display_surface_scope.dart';
+import 'package:nipaplay_ui_common/app/app_display_surface.dart';
+import 'package:nipaplay_ui_common/app/app_display_surface_scope.dart';
 import 'package:nipaplay/app/unified_media_library_sections.dart';
 import 'package:nipaplay/media_library/adaptive_media_collection_view.dart';
 import 'package:nipaplay/media_library/media_source_option.dart';

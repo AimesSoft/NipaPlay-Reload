@@ -22,7 +22,7 @@ import 'package:nipaplay/themes/nipaplay/widgets/tv_safe_blur.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/back_button_widget.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/anime_info_widget.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/shadow_action_button.dart';
-import 'package:nipaplay/app/app_navigation_scope.dart';
+import 'package:nipaplay_ui_common/app/app_navigation_scope.dart';
 import 'package:flutter/gestures.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/send_danmaku_button.dart';
 import 'package:kmbal_ionicons/kmbal_ionicons.dart';

@@ -9,8 +9,8 @@ import 'package:path/path.dart' as path;
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-import 'package:nipaplay/app/app_display_surface.dart';
-import 'package:nipaplay/app/app_display_surface_scope.dart';
+import 'package:nipaplay_ui_common/app/app_display_surface.dart';
+import 'package:nipaplay_ui_common/app/app_display_surface_scope.dart';
 import 'package:nipaplay/app/unified_media_library_sections.dart';
 import 'package:nipaplay/media_library/adaptive_media_library_primitives.dart';
 import 'package:nipaplay/media_library/media_collection_empty_content.dart';

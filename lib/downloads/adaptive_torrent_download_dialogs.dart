@@ -1,6 +1,6 @@
 import 'package:flutter/widgets.dart';
-import 'package:nipaplay/app/app_display_surface.dart';
-import 'package:nipaplay/app/app_display_surface_scope.dart';
+import 'package:nipaplay_ui_common/app/app_display_surface.dart';
+import 'package:nipaplay_ui_common/app/app_display_surface_scope.dart';
 import 'package:nipaplay/downloads/unified_torrent_page_model.dart';
 import 'package:nipaplay_core/models/torrent_task.dart';
 import 'package:nipaplay/themes/cupertino/widgets/cupertino_torrent_download_dialogs.dart';

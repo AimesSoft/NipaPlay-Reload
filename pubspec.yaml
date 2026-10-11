@@ -160,6 +160,8 @@ dependencies:
     path: packages/danmaku_canvas
   nipaplay_core:
     path: packages/nipaplay_core
+  nipaplay_ui_common:
+    path: packages/nipaplay_ui_common
   nipaplay_smb2:
     path: packages/nipaplay_smb2
   battery_plus: ^7.0.0

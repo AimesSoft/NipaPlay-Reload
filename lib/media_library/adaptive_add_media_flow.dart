@@ -3,9 +3,9 @@ import 'package:flutter/material.dart';
 import 'package:path/path.dart' as path;
 import 'package:provider/provider.dart';
 
-import 'package:nipaplay/app/app_display_surface.dart';
-import 'package:nipaplay/app/app_display_surface_scope.dart';
-import 'package:nipaplay/app/app_page_ids.dart';
+import 'package:nipaplay_ui_common/app/app_display_surface.dart';
+import 'package:nipaplay_ui_common/app/app_display_surface_scope.dart';
+import 'package:nipaplay_ui_common/app/app_page_ids.dart';
 import 'package:nipaplay/media_library/adaptive_media_library_controls.dart';
 import 'package:nipaplay/providers/dandanplay_remote_provider.dart';
 import 'package:nipaplay/providers/shared_remote_library_provider.dart';

@@ -1,9 +1,9 @@
 import 'package:flutter/cupertino.dart';
-import 'package:nipaplay/app/app_page_ids.dart';
-import 'package:nipaplay/app/app_display_surface.dart';
-import 'package:nipaplay/app/app_display_surface_scope.dart';
+import 'package:nipaplay_ui_common/app/app_page_ids.dart';
+import 'package:nipaplay_ui_common/app/app_display_surface.dart';
+import 'package:nipaplay_ui_common/app/app_display_surface_scope.dart';
 import 'package:nipaplay/app/adaptive_app_page_content.dart';
-import 'package:nipaplay/app/app_page_component.dart';
+import 'package:nipaplay_ui_common/app/app_page_component.dart';
 import 'package:nipaplay/l10n/app_localizations.dart';
 
 class AppPageAvailability {

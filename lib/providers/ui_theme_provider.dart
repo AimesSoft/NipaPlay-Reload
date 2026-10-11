@@ -1,7 +1,7 @@
 import 'dart:collection';
 
 import 'package:flutter/foundation.dart';
-import 'package:nipaplay/app/app_display_surface.dart';
+import 'package:nipaplay_ui_common/app/app_display_surface.dart';
 import 'package:nipaplay/themes/theme_descriptor.dart';
 import 'package:nipaplay/themes/theme_ids.dart';
 import 'package:nipaplay/themes/theme_registry.dart';

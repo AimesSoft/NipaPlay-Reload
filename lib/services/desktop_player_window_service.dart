@@ -3,7 +3,7 @@ import 'dart:async';
 import 'package:desktop_multi_window/desktop_multi_window.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart';
-import 'package:nipaplay/app/app_page_ids.dart';
+import 'package:nipaplay_ui_common/app/app_page_ids.dart';
 import 'package:nipaplay/pages/desktop_player_window.dart';
 import 'package:nipaplay/services/desktop_picture_in_picture_preferences.dart';
 import 'package:nipaplay/utils/globals.dart' as globals;

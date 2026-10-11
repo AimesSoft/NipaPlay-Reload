@@ -1,0 +1,16 @@
+name: nipaplay_ui_common
+description: "NipaPlay shared UI layer: display-surface contracts, l10n, data-driven settings/media-library models, self-contained widgets. No app-state dependencies."
+publish_to: 'none'
+version: 0.1.0
+
+environment:
+  sdk: ^3.5.3
+
+dependencies:
+  flutter:
+    sdk: flutter
+  flutter_localizations:
+    sdk: flutter
+  intl: any
+  nipaplay_core:
+    path: ../nipaplay_core

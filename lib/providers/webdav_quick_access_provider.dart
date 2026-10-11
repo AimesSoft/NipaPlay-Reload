@@ -2,7 +2,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:nipaplay_core/services/webdav_service.dart';
-import 'package:nipaplay/app/app_page_ids.dart';
+import 'package:nipaplay_ui_common/app/app_page_ids.dart';
 import 'package:nipaplay/utils/globals.dart' as globals;
 
 /// WebDAV 搜索范围

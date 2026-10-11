@@ -5,7 +5,7 @@ import 'package:nipaplay/providers/settings_provider.dart';
 import 'package:nipaplay/utils/video_player_state.dart';
 import 'package:provider/provider.dart';
 import 'package:nipaplay/utils/tab_change_notifier.dart';
-import 'package:nipaplay/app/app_page_ids.dart';
+import 'package:nipaplay_ui_common/app/app_page_ids.dart';
 import 'package:nipaplay/utils/globals.dart' as globals;
 import 'package:nipaplay/pages/anime_detail_page.dart';
 import 'package:nipaplay/services/external_player_console_window_service.dart';

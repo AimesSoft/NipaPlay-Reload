@@ -1,0 +1,11 @@
+{
+  "batch": "p2-batch0-app-contracts",
+  "moves": [
+    {"from": "lib/app/app_display_surface.dart"},
+    {"from": "lib/app/app_display_surface_scope.dart"},
+    {"from": "lib/app/app_navigation_scope.dart"},
+    {"from": "lib/app/app_page_component.dart"},
+    {"from": "lib/app/app_page_ids.dart"},
+    {"from": "lib/app/unified_app_actions.dart"}
+  ]
+}

@@ -8,8 +8,8 @@ import 'package:flutter/material.dart';
 import 'package:http/io_client.dart';
 import 'package:kmbal_ionicons/kmbal_ionicons.dart';
 
-import 'package:nipaplay/app/app_display_surface.dart';
-import 'package:nipaplay/app/app_display_surface_scope.dart';
+import 'package:nipaplay_ui_common/app/app_display_surface.dart';
+import 'package:nipaplay_ui_common/app/app_display_surface_scope.dart';
 import 'package:nipaplay/media_library/adaptive_media_library_primitives.dart';
 import 'package:nipaplay/providers/shared_remote_library_provider.dart';
 import 'package:nipaplay_core/services/nipaplay_lan_discovery.dart';

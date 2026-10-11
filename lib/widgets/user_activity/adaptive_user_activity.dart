@@ -1,6 +1,6 @@
 import 'package:flutter/widgets.dart';
-import 'package:nipaplay/app/app_display_surface.dart';
-import 'package:nipaplay/app/app_display_surface_scope.dart';
+import 'package:nipaplay_ui_common/app/app_display_surface.dart';
+import 'package:nipaplay_ui_common/app/app_display_surface_scope.dart';
 import 'package:nipaplay/controllers/user_activity_controller.dart';
 import 'package:nipaplay/widgets/user_activity/cupertino_user_activity.dart';
 import 'package:nipaplay/widgets/user_activity/desktop_user_activity.dart';

@@ -1,5 +1,5 @@
 import 'package:flutter/widgets.dart';
-import 'package:nipaplay/app/app_display_surface.dart';
+import 'package:nipaplay_ui_common/app/app_display_surface.dart';
 
 class AppDisplaySurfaceScope extends InheritedWidget {
   const AppDisplaySurfaceScope({

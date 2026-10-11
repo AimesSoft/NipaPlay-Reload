@@ -1,5 +1,11 @@
 {
  "moved": [
+  "app/app_display_surface.dart",
+  "app/app_display_surface_scope.dart",
+  "app/app_navigation_scope.dart",
+  "app/app_page_component.dart",
+  "app/app_page_ids.dart",
+  "app/unified_app_actions.dart",
   "constants/acknowledgements.dart",
   "constants/danmaku/ass_kind.dart",
   "constants/danmaku/mode.dart",
@@ -324,6 +330,18 @@
     "utils/file_hash.dart",
     "utils/platform_utils.dart",
     "utils/platform_utils_stub.dart"
+   ]
+  },
+  {
+   "batch": "p2-batch0-app-contracts",
+   "count": 6,
+   "files": [
+    "app/app_display_surface.dart",
+    "app/app_display_surface_scope.dart",
+    "app/app_navigation_scope.dart",
+    "app/app_page_component.dart",
+    "app/app_page_ids.dart",
+    "app/unified_app_actions.dart"
    ]
   }
  ]

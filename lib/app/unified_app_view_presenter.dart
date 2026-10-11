@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
-import 'package:nipaplay/app/app_display_surface.dart';
-import 'package:nipaplay/app/app_display_surface_scope.dart';
+import 'package:nipaplay_ui_common/app/app_display_surface.dart';
+import 'package:nipaplay_ui_common/app/app_display_surface_scope.dart';
 import 'package:nipaplay/app/unified_app_virtual_windows.dart';
 import 'package:nipaplay/l10n/app_localizations.dart';
 import 'package:nipaplay/providers/app_language_provider.dart';

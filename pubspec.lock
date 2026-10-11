@@ -1006,6 +1006,13 @@ packages:
       relative: true
     source: path
     version: "0.0.1"
+  nipaplay_ui_common:
+    dependency: "direct main"
+    description:
+      path: "packages/nipaplay_ui_common"
+      relative: true
+    source: path
+    version: "0.1.0"
   octo_image:
     dependency: transitive
     description:

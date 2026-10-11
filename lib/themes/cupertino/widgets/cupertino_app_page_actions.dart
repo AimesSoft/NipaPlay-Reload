@@ -1,8 +1,8 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart' show ThemeMode;
-import 'package:nipaplay/app/app_page_ids.dart';
-import 'package:nipaplay/app/unified_app_actions.dart';
+import 'package:nipaplay_ui_common/app/app_page_ids.dart';
+import 'package:nipaplay_ui_common/app/unified_app_actions.dart';
 import 'package:nipaplay/app/unified_app_view_presenter.dart';
 import 'package:nipaplay/themes/cupertino/cupertino_imports.dart';
 import 'package:nipaplay/themes/cupertino/widgets/cupertino_glass_button_group.dart';

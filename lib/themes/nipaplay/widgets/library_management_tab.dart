@@ -48,8 +48,8 @@ import 'package:nipaplay/utils/app_accent_color.dart';
 import 'package:nipaplay/media_library/adaptive_media_library_primitives.dart';
 import 'package:nipaplay/media_library/adaptive_library_management_overview.dart';
 import 'package:nipaplay/media_library/unified_library_management_model.dart';
-import 'package:nipaplay/app/app_display_surface.dart';
-import 'package:nipaplay/app/app_display_surface_scope.dart';
+import 'package:nipaplay_ui_common/app/app_display_surface.dart';
+import 'package:nipaplay_ui_common/app/app_display_surface_scope.dart';
 
 enum LibraryManagementSection { local, webdav, smb }
 

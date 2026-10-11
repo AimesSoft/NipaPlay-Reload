@@ -1,4 +1,4 @@
-import 'package:nipaplay/app/app_page_ids.dart';
+import 'package:nipaplay_ui_common/app/app_page_ids.dart';
 
 enum UnifiedAppActionKind {
   command,

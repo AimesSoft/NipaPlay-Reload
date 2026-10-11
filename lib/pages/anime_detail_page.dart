@@ -56,8 +56,8 @@ import 'package:nipaplay/themes/nipaplay/widgets/immersive_media_detail_route.da
 import 'package:nipaplay/themes/nipaplay/widgets/text_input_dialog.dart';
 import 'package:nipaplay/pages/tab_labels.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/nipaplay_main_tab_bar.dart';
-import 'package:nipaplay/app/app_display_surface.dart';
-import 'package:nipaplay/app/app_display_surface_scope.dart';
+import 'package:nipaplay_ui_common/app/app_display_surface.dart';
+import 'package:nipaplay_ui_common/app/app_display_surface_scope.dart';
 import 'package:nipaplay/media_library/adaptive_media_library_primitives.dart';
 import 'package:nipaplay/themes/cupertino/widgets/cupertino_bottom_sheet.dart';
 

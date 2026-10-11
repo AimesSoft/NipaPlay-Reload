@@ -31,10 +31,14 @@ import sys
 
 REPO = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 STATE_FILE = os.path.join(REPO, 'docs', 'refactor', 'tools', 'moved_state.json')
-SCAN_ROOTS = ['lib', 'test', os.path.join('packages', 'nipaplay_core', 'lib')]
+# 目标包由 --target 指定 (默认 nipaplay_core); CORE_LIB 必须 posix 斜杠 (供 relpath 使用)
+TARGET = 'nipaplay_core'
+SCAN_ROOTS = ['lib', 'test',
+              'packages/nipaplay_core/lib',
+              'packages/nipaplay_ui_common/lib']
 APP_PKG = 'package:nipaplay/'
 CORE_PKG = 'package:nipaplay_core/'
-CORE_LIB = os.path.join('packages', 'nipaplay_core', 'lib')
+CORE_LIB = 'packages/nipaplay_core/lib'
 
 DIRECTIVE_RE = re.compile(
     r"^(\s*(?:@Deprecated\([^\)]*\)\s*)?(?:import|export|part)\s+)(['\"])([^'\"]+)\2(.*)$")
@@ -96,8 +100,13 @@ def main():
         print(__doc__)
         sys.exit(2)
     dry = '--dry-run' in sys.argv
+    global TARGET, CORE_PKG, CORE_LIB
+    if '--target' in sys.argv:
+        TARGET = sys.argv[sys.argv.index('--target') + 1]
+        CORE_PKG = 'package:' + TARGET + '/'
+        CORE_LIB = 'packages/' + TARGET + '/lib'
     manifest = json.load(open(sys.argv[1], encoding='utf-8'))
-    moves = [(to_posix(m['from']), to_posix(m.get('to') or ('packages/nipaplay_core/lib/' + to_posix(m['from'])[4:]))) for m in manifest['moves']]
+    moves = [(to_posix(m['from']), to_posix(m.get('to') or (CORE_LIB + '/' + to_posix(m['from'])[4:]))) for m in manifest['moves']]
     batch = manifest.get('batch', 'unnamed')
 
     state = {'moved': []}
@@ -112,7 +121,7 @@ def main():
         lr = lib_rel(src)
         if lr is None:
             sys.exit(f'[FAIL] 源不在 lib/ 下: {src}')
-        dst = entry_dst or ('packages/nipaplay_core/lib/' + lr)
+        dst = entry_dst or (CORE_LIB + '/' + lr)
         if not os.path.exists(os.path.join(REPO, src)):
             sys.exit(f'[FAIL] 源不存在: {src}')
         if lr in already:
