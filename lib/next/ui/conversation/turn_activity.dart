@@ -44,6 +44,11 @@ class TurnActivity {
 
   /// From history, where the clock was not watched.
   Duration? recorded;
+
+  /// Time spent waiting for your answer, which is not thinking.
+  Duration _waited = Duration.zero;
+  DateTime? _waitingSince;
+  bool get waiting => _waitingSince != null;
   final steps = <ActivityStep>[];
 
   /// The steps are unfolded under the line.
@@ -51,8 +56,28 @@ class TurnActivity {
 
   bool get running => endedAt == null && recorded == null;
 
-  Duration elapsed([DateTime? now]) =>
-      recorded ?? (endedAt ?? now ?? DateTime.now()).difference(startedAt);
+  /// How long Nipa has been at it, without the time it waited for you.
+  Duration elapsed([DateTime? now]) {
+    if (recorded case final r?) return r;
+    final end = endedAt ?? now ?? DateTime.now();
+    final waiting = _waitingSince == null
+        ? Duration.zero
+        : end.difference(_waitingSince!);
+    return end.difference(startedAt) - _waited - waiting;
+  }
+
+  /// Nipa asked something; the clock stops until [endWait].
+  void beginWait([DateTime? at]) {
+    if (!running || _waitingSince != null) return;
+    _waitingSince = at ?? DateTime.now();
+  }
+
+  void endWait([DateTime? at]) {
+    final since = _waitingSince;
+    if (since == null) return;
+    _waited += (at ?? endedAt ?? DateTime.now()).difference(since);
+    _waitingSince = null;
+  }
 
   /// Steps worth counting and listing (the card mechanism is not one).
   int get stepCount => steps.where((s) => s is! ThoughtStep).length;
@@ -85,6 +110,7 @@ class TurnActivity {
         return false;
       case 'turn/completed':
         endedAt = DateTime.now();
+        endWait(endedAt);
         for (final s in steps) {
           if (s is CommandStep) s.running = false;
           if (s is ToolStep) s.running = false;

@@ -5,30 +5,14 @@ import 'package:flutter/foundation.dart';
 import '../../ui_data/ui_data.dart';
 import '../widgets/nipa_avatar.dart';
 import '../widgets/words.dart';
+import 'chat_context.dart';
 import 'chat_port.dart';
 import 'conversation.dart';
+import 'next_sayings.dart';
 import 'session_choice.dart';
 import 'turn_activity.dart';
 
-/// What the interface adds to what you said, and how it is taken off again
-/// when the message is shown.
-abstract final class ChatContext {
-  static const _mark = '[NipaPlay 界面]';
-  static const _followup = '[NipaPlay followup';
-
-  /// [text] asked from [work]'s page: the agent gets the work along.
-  static String about(String text, UiWork work) =>
-      '$text\n\n$_mark 这句话是在《${work.title}》的页面上问的'
-      '（作品 ID：${work.workId}）。';
-
-  static String strip(String text) {
-    final at = text.indexOf(_mark);
-    return (at < 0 ? text : text.substring(0, at)).trim();
-  }
-
-  /// A turn NipaPlay started on Nipa's behalf, not something you said.
-  static bool isFollowup(String text) => text.startsWith(_followup);
-}
+export 'chat_context.dart';
 
 /// A conversation as Codex keeps it, for the panel's menu.
 @immutable
@@ -45,16 +29,14 @@ final class ChatSession {
 
 sealed class PanelEntry {}
 
-/// The work you asked about from its page, above what you said.
-final class AboutEntry extends PanelEntry {
-  AboutEntry(this.work);
-  final UiWork work;
-}
-
-/// Something you said.
+/// Something you said, with the work it was about and the files you
+/// dropped in.
 final class YouEntry extends PanelEntry {
-  YouEntry(this.text, {this.echoed = true});
+  YouEntry(this.text,
+      {this.about, this.files = const [], this.echoed = true});
   final String text;
+  final String? about;
+  final List<String> files;
 
   /// Codex has it (shown before that, as soon as you send).
   bool echoed;
@@ -343,7 +325,7 @@ class PanelChat extends ChangeNotifier {
       final items = (turn['items'] as List? ?? const []).whereType<Map>();
       final said = items
           .where((item) => item['type'] == 'userMessage')
-          .map(_userText)
+          .map((item) => _youOf(item)?.text)
           .firstOrNull;
       // “重新发” leaves a silent, interrupted attempt behind: show it once.
       if (turn['status'] == 'interrupted' &&
@@ -353,7 +335,7 @@ class PanelChat extends ChangeNotifier {
         final next = (shown[i + 1]['items'] as List? ?? const [])
             .whereType<Map>()
             .where((item) => item['type'] == 'userMessage')
-            .map(_userText)
+            .map((item) => _youOf(item)?.text)
             .firstOrNull;
         if (next == said) continue;
       }
@@ -371,8 +353,7 @@ class PanelChat extends ChangeNotifier {
         switch (item['type']) {
           case 'userMessage':
             _userItems.add('${item['id']}');
-            final text = _userText(item);
-            if (text != null && text.isNotEmpty) list.add(YouEntry(text));
+            if (_youOf(item) case final you?) list.add(you);
             place();
           case 'agentMessage':
             place();
@@ -470,17 +451,22 @@ class PanelChat extends ChangeNotifier {
         _ => null,
       };
 
-  static String? _userText(Map item) {
+  /// What you said in a user message, as it is shown: null for a turn
+  /// NipaPlay started for Nipa, or when nothing was said.
+  static YouEntry? _youOf(Map item) {
     final content = item['content'];
-    final text = content is List
+    final raw = content is List
         ? content
             .whereType<Map>()
             .where((part) => part['type'] == 'text')
             .map((part) => part['text'] as String? ?? '')
             .join()
         : '';
-    if (ChatContext.isFollowup(text)) return null;
-    return ChatContext.strip(text);
+    if (ChatContext.isFollowup(raw)) return null;
+    final text = ChatContext.strip(raw);
+    final files = ChatContext.files(raw);
+    if (text.isEmpty && files.isEmpty) return null;
+    return YouEntry(text, about: ChatContext.aboutTitle(raw), files: files);
   }
 
   // —— Saying something ——
@@ -488,42 +474,74 @@ class PanelChat extends ChangeNotifier {
   /// Whether the input takes text now.
   bool get acceptsTyping => !(question != null && secretAsked);
 
-  /// Sends [text]: an answer while Nipa asks, `steer` while this session's
-  /// turn runs, otherwise a new turn (and, for a new session, its thread).
+  /// Files dropped into the panel, going with what you say next.
+  List<String> attachments = const [];
+
+  void attach(List<String> paths) {
+    attachments = [
+      ...attachments,
+      for (final p in paths)
+        if (!attachments.contains(p)) p
+    ];
+    _notify();
+  }
+
+  void detach(String path) {
+    attachments = [
+      for (final p in attachments)
+        if (p != path) p
+    ];
+    _notify();
+  }
+
+  /// The “关于《X》” tag's ×: what you say no longer goes with the work.
+  void dropAbout() {
+    about = null;
+    _notify();
+  }
+
+  /// Sends [text] (and the files dropped in): an answer while Nipa asks,
+  /// `steer` while this session's turn runs, otherwise a new turn (and, for
+  /// a new session, its thread). While the panel is about a work, every
+  /// sentence goes with it.
   Future<void> say(String text) async {
     text = text.trim();
-    if (text.isEmpty || !acceptsTyping) return;
-    if (question != null) return answerText(text);
+    if (!acceptsTyping) return;
+    if (question != null) {
+      if (text.isNotEmpty) await answerText(text);
+      return;
+    }
+    final files = attachments;
+    if (text.isEmpty && files.isEmpty) return;
     trouble = null;
+    attachments = const [];
+    var input = ChatContext.withFiles(text, files);
+    if (about case final work?) input = ChatContext.about(input, work);
+    final you =
+        YouEntry(text, about: about?.title, files: files, echoed: false);
     final current = thread;
     if (current != null && running && port.busy) {
-      entries = [...entries, YouEntry(text, echoed: false)];
+      entries = [...entries, you];
       _notify();
       home.followRound(current, text, steer: true);
       try {
-        await port.steer(text);
+        await port.steer(input);
       } catch (error) {
         debugPrint('[NextUi] steer failed: $error');
       }
       return;
     }
     _current = TurnActivity();
-    entries = [
-      ...entries,
-      if (about case final work?) AboutEntry(work),
-      YouEntry(text, echoed: false),
-      ActivityEntry(_current!),
-    ];
+    entries = [...entries, you, ActivityEntry(_current!)];
     _lastSaid = text;
-    _lastInput = about == null ? text : ChatContext.about(text, about!);
-    about = null;
+    _lastInput = input;
     running = true;
     streaming = false;
     working = false;
     quiet = false;
     _quietWaived = null;
     _notify();
-    await _start(_lastInput!, text);
+    await _start(input, text);
   }
 
   Future<void> _start(String input, String text) async {
@@ -584,7 +602,7 @@ class PanelChat extends ChangeNotifier {
     final you = entries.whereType<YouEntry>().lastOrNull;
     final text = _lastSaid ?? you?.text;
     if (text == null) return;
-    final input = _lastSaid == null ? text : (_lastInput ?? text);
+    final input = _lastInput ?? text;
     quiet = false;
     _quietWaived = null;
     _notify();
@@ -642,9 +660,18 @@ class PanelChat extends ChangeNotifier {
           q['id'] as String: [_chosen[q['id']] ?? text],
       });
 
+  /// The turn a question belongs to, whose clock stops while it waits.
+  TurnActivity? _asking(ChatEvent request) {
+    final params = request['params'];
+    final turn = params is Map ? params['turnId'] as String? : null;
+    return _seen[turn] ??
+        (threadIdOf(request) == thread ? _current : null);
+  }
+
   Future<void> _answer(Map<String, List<String>> answers) async {
     final request = question;
     if (request == null) return;
+    _asking(request)?.endWait();
     _questions.remove(thread);
     _chosen.clear();
     _notify();
@@ -658,7 +685,11 @@ class PanelChat extends ChangeNotifier {
 
   /// Answered on the home.
   void dropQuestion(Object requestId) {
-    _questions.removeWhere((_, q) => q['id'] == requestId);
+    _questions.removeWhere((_, q) {
+      if (q['id'] != requestId) return false;
+      _asking(q)?.endWait();
+      return true;
+    });
     _notify();
   }
 
@@ -667,6 +698,7 @@ class PanelChat extends ChangeNotifier {
     if (target == null) return;
     _questions[target] = event;
     if (target == thread) _chosen.clear();
+    _asking(event)?.beginWait();
     _notify();
   }
 
@@ -770,11 +802,14 @@ class PanelChat extends ChangeNotifier {
           when _itemType(params) == 'userMessage':
         final item = params['item'] as Map;
         if (!_userItems.add('${item['id']}')) return;
-        final text = _userText(item);
-        if (text == null || text.isEmpty) return;
+        final said = _youOf(item);
+        if (said == null) return;
         final waiting = entries
             .whereType<YouEntry>()
-            .where((e) => !e.echoed && e.text == text)
+            .where((e) =>
+                !e.echoed &&
+                e.text == said.text &&
+                e.files.length == said.files.length)
             .firstOrNull;
         if (waiting != null) {
           waiting.echoed = true;
@@ -783,8 +818,8 @@ class PanelChat extends ChangeNotifier {
         // Started elsewhere: the bubble goes above this turn's line.
         final line = entries.lastOrNull;
         entries = line is ActivityEntry && line.activity.running
-            ? [...entries.take(entries.length - 1), YouEntry(text), line]
-            : [...entries, YouEntry(text)];
+            ? [...entries.take(entries.length - 1), said, line]
+            : [...entries, said];
       case 'item/started' when _itemType(params) == 'agentMessage':
         _nipaOrNew(params['item']['id'] as String);
       case 'item/started' when _isTool(_itemType(params)):
@@ -874,6 +909,38 @@ class PanelChat extends ChangeNotifier {
       quiet = next;
       _notify();
     }
+  }
+
+  // —— What comes next ——
+
+  /// Two or three things you might say after Nipa's last reply, from the
+  /// reply and the cards with it; empty while it works or asks.
+  List<String> get nextSayings {
+    if (running || loading || question != null || quiet || trouble != null) {
+      return const [];
+    }
+    final said = entries.lastIndexWhere((e) => e is YouEntry);
+    final after = entries.skip(said + 1).toList();
+    final reply = after.whereType<NipaEntry>().lastOrNull?.text ?? '';
+    if (reply.isEmpty) return const [];
+    return NextSayings.after(reply, [
+      for (final e in after.whereType<CardsEntry>()) ...e.cards,
+    ]);
+  }
+
+  /// What this conversation set going that is still under way: downloads
+  /// and the steps waiting after them, from its cards' live state; the
+  /// latest first.
+  List<Underway> get underway {
+    final found = <Underway>[];
+    final titles = <String>{};
+    for (final entry in entries.reversed.whereType<CardsEntry>()) {
+      for (final card in entry.cards) {
+        final item = Underway.of(card);
+        if (item != null && titles.add(item.title)) found.add(item);
+      }
+    }
+    return found;
   }
 
   // —— Cards ——

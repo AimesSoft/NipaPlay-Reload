@@ -2,6 +2,7 @@ import 'package:flutter/scheduler.dart';
 import 'package:flutter/widgets.dart';
 
 import '../cards/card_views.dart';
+import '../conversation/chat_context.dart';
 import '../conversation/conversation.dart';
 import '../theme/tokens.dart';
 import '../widgets/activity_line.dart';
@@ -42,7 +43,12 @@ class ConverseStage extends StatelessWidget {
               Text('你', style: NextText.sans(14, color: NextColors.p3)),
               const SizedBox(width: 10),
               Flexible(
-                child: Text(c.said!,
+                child: Text(
+                    [
+                      if (c.said!.isNotEmpty) c.said!,
+                      if (c.saidFiles.isNotEmpty)
+                        c.saidFiles.map(DroppedFile.name).join('、'),
+                    ].join('  ·  '),
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis,
                     style: NextText.sans(14, color: NextColors.p2)),
@@ -139,13 +145,16 @@ class StreamingReply extends StatefulWidget {
 
 class _StreamingReplyState extends State<StreamingReply>
     with SingleTickerProviderStateMixin {
-  late final Ticker _ticker = createTicker(_tick);
+  // Made at once: a ticker first made in dispose would look up the tree
+  // while it is being torn down, and the rest of it would never be freed.
+  late final Ticker _ticker;
   double _shown = 0;
   Duration _last = Duration.zero;
 
   @override
   void initState() {
     super.initState();
+    _ticker = createTicker(_tick);
     _shown = widget.text.length.toDouble();
   }
 

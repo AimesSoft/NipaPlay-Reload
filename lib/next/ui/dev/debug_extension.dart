@@ -1,10 +1,12 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:developer';
+import 'dart:ui' as ui;
 
 import 'package:flutter/gestures.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/scheduler.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'package:provider/provider.dart';
 import 'package:window_manager/window_manager.dart';
@@ -16,7 +18,11 @@ import '../conversation/panel_chat.dart';
 import '../conversation/turn_activity.dart';
 import '../detail/detail_page.dart';
 import '../detail/episodes.dart';
+import '../home/ask_bar.dart';
 import '../home/stage.dart';
+import '../pages/discover_page.dart';
+import '../panel/chat_panel.dart';
+import '../widgets/drop_zone.dart';
 import '../shell/next_ui_preference.dart';
 import '../pages/library_page.dart';
 import '../shell/shell_controller.dart';
@@ -72,6 +78,15 @@ import 'fake_world.dart';
 ///   resize, zoom, or enter / leave full screen without activating it.
 /// - `chrome`: where the top bar's items are and where the traffic lights
 ///   end.
+/// - `scroll` `to=px`: the page showing scrolls (its outermost scroller).
+/// - `discover` [`day=0..6`] [`source=`] [`list=N`]: the 发现 page's tabs
+///   (0 = Sunday), as tapping them would.
+/// - `press` `label=` [`area=panel|discover|hero|…`]: the synthetic mouse
+///   clicks the first visible button or menu item with that label.
+/// - `drag` `target=panel|ask` [`do=enter|exit`] and `drop` `target=panel|ask`
+///   `paths=a|b`: a file drag from Finder as the native drop plugin reports
+///   it (entered → updated → performOperation), over the middle of the
+///   panel or the home's input bar; nothing moves the OS pointer.
 abstract final class NextUiDebug {
   static NextShellController? _shell;
   static BuildContext? _context;
@@ -312,6 +327,63 @@ abstract final class NextUiDebug {
             throw ArgumentError('do must be fake, open or cancel');
         }
         await Future<void>.delayed(const Duration(milliseconds: 400));
+      case 'scroll':
+        final position = _find<ScrollableState>()?.position;
+        if (position == null) throw StateError('Nothing scrolls here');
+        await position.animateTo(
+            double.parse(p['to'] ?? '0').clamp(0, position.maxScrollExtent),
+            duration: const Duration(milliseconds: 400),
+            curve: NextMotion.ease);
+        await _settle();
+        return {'scroll': position.pixels, ..._status(shell)};
+      case 'discover':
+        final page = _find<DiscoverDebug>();
+        if (page == null) throw StateError('The 发现 page is not showing');
+        page.debugChoose(
+            day: int.tryParse(p['day'] ?? ''),
+            source: p['source'],
+            list: int.tryParse(p['list'] ?? ''));
+        await Future<void>.delayed(const Duration(milliseconds: 400));
+        return {...page.debugStatus(), ..._status(shell)};
+      case 'press':
+        await _settle();
+        final label = p['label'] ?? '';
+        final buttons = _pressables(label, p['area']);
+        if (buttons.isEmpty) throw StateError('No visible “$label”');
+        final at = _center(buttons.first);
+        _hoverAt(at);
+        _click([at.dx.round(), at.dy.round()]);
+        await Future<void>.delayed(const Duration(milliseconds: 300));
+        return {'at': [at.dx.round(), at.dy.round()], ..._status(shell)};
+      case 'drag':
+        final at = _dropPoint(p['target']);
+        if (p['do'] == 'exit') {
+          await _native('exited', null);
+        } else {
+          await _native('entered', [at.dx, at.dy]);
+          await _native('updated', [at.dx, at.dy + 1]);
+        }
+        await Future<void>.delayed(const Duration(milliseconds: 300));
+        return {
+          'at': [at.dx.round(), at.dy.round()],
+          'claimed': NextDropZones.claims(at),
+          ..._status(shell)
+        };
+      case 'drop':
+        final at = _dropPoint(p['target']);
+        final paths = (p['paths'] ?? '').split('|').where((s) => s.isNotEmpty);
+        await _native('entered', [at.dx, at.dy]);
+        await _native('updated', [at.dx, at.dy + 1]);
+        final claimed = NextDropZones.claims(at);
+        await _native('performOperation_macos', [
+          for (final path in paths) {'path': path}
+        ]);
+        await Future<void>.delayed(const Duration(milliseconds: 300));
+        return {
+          'at': [at.dx.round(), at.dy.round()],
+          'claimed': claimed,
+          ..._status(shell)
+        };
       case 'reduce':
         NextMotion.forceReduced = switch (p['on']) {
           'true' => true,
@@ -347,6 +419,8 @@ abstract final class NextUiDebug {
           ? NextMotion.reduced(_context!)
           : null,
       'askText': shell.askText.text,
+      'askFiles': shell.askFiles.value,
+      'saidFiles': c.saidFiles,
       'homeThread': c.threadId,
       'session': {
         'main': shell.choice.main,
@@ -360,14 +434,20 @@ abstract final class NextUiDebug {
         'entries': [
           for (final e in shell.panel.entries)
             switch (e) {
-              AboutEntry(:final work) => 'about: ${work.title}',
-              YouEntry(:final text) => 'you: $text',
+              YouEntry(:final text, :final about, :final files) =>
+                'you: $text${about == null ? '' : ' (about $about)'}'
+                    '${files.isEmpty ? '' : ' +files ${files.join(', ')}'}',
               NipaEntry(:final text) => 'nipa: $text',
               CardsEntry(:final cards) => 'cards: ${cards.length}',
               ActivityEntry(:final activity) => activity.running
                   ? 'doing: ${activity.doing} (${activity.steps.length})'
                   : 'done: ${activity.summary}',
             }
+        ],
+        'attachments': shell.panel.attachments,
+        'nextSayings': shell.panel.nextSayings,
+        'underway': [
+          for (final u in shell.panel.underway) '${u.title}: ${u.line}'
         ],
         'running': shell.panel.running,
         'quiet': shell.panel.quiet,
@@ -379,6 +459,109 @@ abstract final class NextUiDebug {
         'trouble': shell.panel.trouble,
       },
     };
+  }
+
+  /// The first state of type [T] on a page that is showing.
+  static T? _find<T>() {
+    T? found;
+    void visit(Element element) {
+      final widget = element.widget;
+      if (widget is TickerMode && !widget.enabled) return;
+      if (widget is Offstage && widget.offstage) return;
+      if (element is StatefulElement && element.state is T) {
+        found ??= element.state as T;
+      }
+      element.visitChildren(visit);
+    }
+
+    final context = _context;
+    if (context == null || !context.mounted) return null;
+    (context as Element).visitChildren(visit);
+    return found;
+  }
+
+  /// Visible buttons and menu items labelled [label], optionally under the
+  /// side panel or the 发现 page only.
+  static List<RenderBox> _pressables(String label, String? area) {
+    final found = <RenderBox>[];
+    final scope = switch (area) {
+      'panel' => ChatPanelLayer,
+      'discover' => DiscoverPage,
+      _ => null,
+    };
+    void visit(Element element, bool inArea) {
+      final widget = element.widget;
+      if (widget is Offstage && widget.offstage) return;
+      if (widget is TickerMode && !widget.enabled) return;
+      inArea = inArea || widget.runtimeType == scope;
+      if (widget is Pressable && widget.semanticLabel == label && inArea) {
+        final box = element.findRenderObject();
+        if (box is RenderBox && box.attached && box.hasSize) found.add(box);
+        return;
+      }
+      element.visitChildren((child) => visit(child, inArea));
+    }
+
+    final context = _context;
+    if (context == null || !context.mounted) return found;
+    (context as Element).visitChildren((child) => visit(child, scope == null));
+    final screen = Offset.zero & MediaQuery.sizeOf(context);
+    return found.where((b) => screen.contains(_center(b))).toList();
+  }
+
+  /// The middle of the side panel or of the home's input bar.
+  static Offset _dropPoint(String? target) {
+    final scope = switch (target) {
+      'panel' => ChatPanelLayer,
+      'ask' => AskBar,
+      _ => throw ArgumentError('target must be panel or ask'),
+    };
+    RenderBox? box;
+    void visit(Element element, bool inArea) {
+      final widget = element.widget;
+      if (widget is Offstage && widget.offstage) return;
+      if (widget is TickerMode && !widget.enabled) return;
+      inArea = inArea || widget.runtimeType == scope;
+      if (widget is NextDropZone && inArea) {
+        box ??= element.findRenderObject() as RenderBox?;
+        return;
+      }
+      element.visitChildren((child) => visit(child, inArea));
+    }
+
+    (_context! as Element).visitChildren((child) => visit(child, false));
+    if (box == null) throw StateError('No $target to drop on');
+    return _center(box!);
+  }
+
+  /// A message from the native drop plugin, as Finder's drag produces it.
+  static Future<void> _native(String method, Object? arguments) {
+    final done = Completer<void>();
+    ui.channelBuffers.push(
+        'desktop_drop',
+        const StandardMethodCodec()
+            .encodeMethodCall(MethodCall(method, arguments)),
+        (_) => done.complete());
+    return done.future;
+  }
+
+  /// The synthetic mouse moves to [at] first, so hover effects follow.
+  static void _hoverAt(Offset at) {
+    final binding = GestureBinding.instance;
+    final viewId = View.of(_context!).viewId;
+    if (!_pointerAdded) {
+      binding.handlePointerEvent(PointerAddedEvent(
+          viewId: viewId,
+          device: _device,
+          kind: PointerDeviceKind.mouse,
+          position: at));
+      _pointerAdded = true;
+    }
+    binding.handlePointerEvent(PointerHoverEvent(
+        viewId: viewId,
+        device: _device,
+        kind: PointerDeviceKind.mouse,
+        position: at));
   }
 
   /// The detail page on top, if one is showing.
@@ -408,6 +591,8 @@ abstract final class NextUiDebug {
       'shelf' => Shelf,
       'episodes' => EpisodeRow,
       'library' => LibraryPage,
+      'discover' => DiscoverPage,
+      'panel' => ChatPanelLayer,
       _ => null,
     };
     void visit(Element element) {
@@ -459,7 +644,8 @@ abstract final class NextUiDebug {
         final rect = box.localToGlobal(Offset.zero) & box.size;
         final name = switch (widget) {
           RichText(:final text)
-              when const {'首页', '片库', '动态'}.contains(text.toPlainText()) =>
+              when const {'首页', '发现', '片库', '动态'}
+                  .contains(text.toPlainText()) =>
             text.toPlainText(),
           NipaAvatar() => 'avatar',
           NextIconButton() => 'search',

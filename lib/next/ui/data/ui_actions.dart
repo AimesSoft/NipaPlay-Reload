@@ -8,4 +8,11 @@ abstract interface class NextUiActions {
   Future<void> pauseTask(String taskId);
   Future<void> resumeTask(String taskId);
   Future<void> cancelTask(String taskId);
+
+  /// Marks [episodes] watched or not, through `history.mark_watched_batch`
+  /// like the agent. False when NipaPlay could not (no watch record yet).
+  Future<bool> markWatched(List<UiEpisode> episodes, {required bool watched});
+
+  /// Opens NipaPlay's own login window for [provider] (`accounts.login`).
+  Future<void> login(String provider);
 }

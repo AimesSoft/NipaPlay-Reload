@@ -20,8 +20,15 @@ enum ArtShape {
   final double aspect;
 }
 
-/// A local artwork file decoded for its displayed size (`cacheWidth`), fading
-/// in over a tint gradient while it loads. Missing files show only the tint.
+/// Where an artwork comes from: a local file, or (for works NipaPlay only
+/// knows from discovery) an image on the web.
+ImageProvider artProvider(String path) =>
+    path.startsWith('https://') || path.startsWith('http://')
+        ? NetworkImage(path)
+        : FileImage(File(path));
+
+/// An artwork decoded for its displayed size (`cacheWidth`), fading in over
+/// a tint gradient while it loads. Missing files show only the tint.
 class NextImage extends StatelessWidget {
   const NextImage(
     this.path, {
@@ -64,7 +71,7 @@ class NextImage extends StatelessWidget {
       );
       final width = decodeWidth(box, dpr, shape);
       return Image(
-        image: ResizeImage.resizeIfNeeded(width, null, FileImage(File(file))),
+        image: ResizeImage.resizeIfNeeded(width, null, artProvider(file)),
         fit: fit,
         alignment: alignment,
         width: box.width,

@@ -11,7 +11,7 @@ import '../detail/work_route.dart';
 import '../theme/tokens.dart';
 import '../widgets/art_origin.dart';
 
-enum NextSection { home, library, activity }
+enum NextSection { home, discover, library, activity }
 
 enum NextPopover { none, tasks, nipa }
 
@@ -51,6 +51,9 @@ class NextShellController extends ChangeNotifier {
   final navigatorKey = GlobalKey<NavigatorState>(debugLabel: 'next');
   final askFocus = FocusNode(debugLabel: 'next.ask');
   final askText = TextEditingController();
+
+  /// Files dropped on the home's input bar, going with what is said there.
+  final askFiles = ValueNotifier<List<String>>(const []);
 
   /// Pictures a work can open from (shared element transitions).
   final origins = ArtOrigins();
@@ -135,10 +138,12 @@ class NextShellController extends ChangeNotifier {
         .addPostFrameCallback((_) => panelFocus.requestFocus());
   }
 
+  /// Closing the panel brings it back to the main session.
   void closePanel() {
     if (!panelOpen.value) return;
     panelOpen.value = false;
     panel.hide();
+    if (!choice.onMain) choice.backToMain();
     panelFocus.unfocus(disposition: UnfocusDisposition.previouslyFocusedChild);
   }
 
@@ -220,6 +225,7 @@ class NextShellController extends ChangeNotifier {
     scrolled.dispose();
     askFocus.dispose();
     askText.dispose();
+    askFiles.dispose();
     services.logins.onRequest = null;
     panel.dispose();
     choice.dispose();

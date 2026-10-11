@@ -38,11 +38,12 @@ class _ActivityLineState extends State<ActivityLine> {
     final canOpen = widget.expandable && a.steps.isNotEmpty;
     final Widget line;
     if (a.running) {
-      final doing = widget.asking ? '在等你回答' : a.doing;
+      final asking = widget.asking || a.waiting;
+      final doing = asking ? '在等你回答' : a.doing;
       line = Row(mainAxisSize: MainAxisSize.min, children: [
         NipaAvatar(
             size: 20,
-            mood: widget.asking
+            mood: asking
                 ? NipaMood.waiting
                 : doing != '在想'
                     ? NipaMood.acting
@@ -54,8 +55,11 @@ class _ActivityLineState extends State<ActivityLine> {
               overflow: TextOverflow.ellipsis,
               style: NextText.sans(13, color: NextColors.p2)),
         ),
-        Text('  ·  ', style: NextText.sans(13, color: NextColors.p4)),
-        _Clock(since: a.startedAt),
+        // Waiting for you is not thinking: the clock is away meanwhile.
+        if (!asking) ...[
+          Text('  ·  ', style: NextText.sans(13, color: NextColors.p4)),
+          _Clock(activity: a),
+        ],
       ]);
     } else {
       line = Text(a.summary, style: NextText.sans(12.5, color: NextColors.p3));
@@ -93,10 +97,10 @@ class _ActivityLineState extends State<ActivityLine> {
   }
 }
 
-/// m:ss since [since]; only this text rebuilds each second.
+/// m:ss of the turn's thinking; only this text rebuilds each second.
 class _Clock extends StatefulWidget {
-  const _Clock({required this.since});
-  final DateTime since;
+  const _Clock({required this.activity});
+  final TurnActivity activity;
 
   @override
   State<_Clock> createState() => _ClockState();
@@ -119,7 +123,7 @@ class _ClockState extends State<_Clock> {
 
   @override
   Widget build(BuildContext context) => Text(
-        TurnActivity.clock(DateTime.now().difference(widget.since)),
+        TurnActivity.clock(widget.activity.elapsed()),
         style: NextText.num(12.5, color: NextColors.p3),
       );
 }

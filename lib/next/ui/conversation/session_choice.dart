@@ -5,10 +5,10 @@ import 'package:flutter/foundation.dart';
 import 'chat_port.dart';
 
 /// Which session things go into. Each harness has one main session, kept
-/// by the host, and everything goes into it by default: the home's input
-/// bar, ⌘K, the avatar. Another session becomes current only when you pick
-/// it in the panel or open a new conversation there; picking the main
-/// session makes it current again. The host is told what you picked, so the
+/// by the host. The home's input bar always talks to it. The side panel
+/// opens on it too; picking another session there, or opening a new
+/// conversation, changes only the panel, and closing the panel brings it
+/// back to the main one. The host is told what the panel shows, so the
 /// agent's session list says the same.
 class SessionChoice extends ChangeNotifier {
   SessionChoice(this.port);
@@ -19,14 +19,15 @@ class SessionChoice extends ChangeNotifier {
   String? main;
   Future<void>? _loading;
 
-  /// Another session you picked; null: the main one.
+  /// Another session picked in the panel; null: the main one.
   String? _picked;
 
   /// You opened a new conversation; it is created with what you say.
   bool fresh = false;
 
-  /// The session shown and talked to. Null: one still to be created (the
-  /// new conversation you opened, or the harness's first main session).
+  /// The session the panel shows and talks to. Null: one still to be
+  /// created (the new conversation you opened, or the harness's first main
+  /// session).
   String? get current => fresh ? null : (_picked ?? main);
 
   bool get onMain => !fresh && _picked == null;
@@ -83,16 +84,27 @@ class SessionChoice extends ChangeNotifier {
 
   Future<String?>? _creating;
 
-  /// The session to say something on, created if needed. Null while the
-  /// host runs another turn and cannot open one: try again once it is free.
+  /// The panel's session to say something on, created if needed. Null
+  /// while the host runs another turn and cannot open one: try again once it
+  /// is free.
   Future<String?> target() async {
     await load();
     if (current case final id?) return id;
-    return _creating ??= _create().whenComplete(() => _creating = null);
+    return _creating ??= _create(fresh).whenComplete(() => _creating = null);
   }
 
-  Future<String?> _create() async {
-    final opening = fresh;
+  /// The main session (the home's input bar), created if the harness has
+  /// none yet. Null while the host cannot open it.
+  Future<String?> mainTarget() async {
+    await load();
+    if (main case final id?) return id;
+    return _creatingMain ??=
+        _create(false).whenComplete(() => _creatingMain = null);
+  }
+
+  Future<String?>? _creatingMain;
+
+  Future<String?> _create(bool opening) async {
     final id = opening ? await port.newThread() : await port.mainThread();
     if (id == null) return null;
     if (opening) {

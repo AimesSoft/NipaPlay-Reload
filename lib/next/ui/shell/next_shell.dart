@@ -10,6 +10,7 @@ import '../dev/debug_extension.dart';
 import '../home/home_page.dart';
 import '../detail/work_route.dart';
 import '../pages/activity_page.dart';
+import '../pages/discover_page.dart';
 import '../pages/library_page.dart';
 import '../panel/chat_panel.dart';
 import '../theme/tokens.dart';
@@ -182,7 +183,7 @@ class _NextShellState extends State<NextShell> {
   }
 }
 
-/// Home, library and activity. Visited sections stay alive (scroll position
+/// Home, discover, library and activity. Visited sections stay alive (scroll position
 /// kept); the entering one fades in from 0.98.
 class _Sections extends StatefulWidget {
   const _Sections();
@@ -229,6 +230,7 @@ class _SectionsState extends State<_Sections>
 
   static Widget _page(NextSection s) => switch (s) {
         NextSection.home => const NextHomePage(),
+        NextSection.discover => const DiscoverPage(),
         NextSection.library => const LibraryPage(),
         NextSection.activity => const ActivityPage(),
       };

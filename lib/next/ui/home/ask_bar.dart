@@ -4,12 +4,15 @@ import 'package:flutter/widgets.dart';
 
 import '../shell/shell_controller.dart';
 import '../theme/tokens.dart';
+import '../widgets/attachments.dart';
 import '../widgets/buttons.dart';
+import '../widgets/drop_zone.dart';
 import '../widgets/glass.dart';
 import '../widgets/nipa_avatar.dart';
 
 /// `.askbar`: the input that stays under the hero, and 2–3 suggestions.
-/// Tapping a suggestion says it.
+/// Tapping a suggestion says it. Files dropped on it wait above it and go
+/// with what you say next.
 class AskBar extends StatefulWidget {
   const AskBar({
     super.key,
@@ -21,6 +24,9 @@ class AskBar extends StatefulWidget {
     this.suggestions = const [],
     this.hint = '今天想看什么？',
     this.maxWidth = double.infinity,
+    this.attachments = const [],
+    this.onAttach,
+    this.onDetach,
   });
 
   final FocusNode focusNode;
@@ -31,6 +37,11 @@ class AskBar extends StatefulWidget {
   final List<String> suggestions;
   final String hint;
   final double maxWidth;
+  final List<String> attachments;
+
+  /// Files dropped on the bar; null: it takes none (the panel is open).
+  final ValueChanged<List<String>>? onAttach;
+  final ValueChanged<String>? onDetach;
 
   @override
   State<AskBar> createState() => _AskBarState();
@@ -70,16 +81,16 @@ class _AskBarState extends State<AskBar> {
 
   void _send([String? value]) {
     final text = (value ?? _text.text).trim();
-    if (text.isEmpty) return;
+    if (text.isEmpty && widget.attachments.isEmpty) return;
     _text.clear();
     widget.onSay(text);
   }
 
   @override
   Widget build(BuildContext context) {
-    final empty = _text.text.isEmpty;
+    final empty = _text.text.isEmpty && widget.attachments.isEmpty;
     const fieldWidth = 640.0;
-    final field = Glass(
+    final glass = Glass(
       radius: BorderRadius.circular(28),
       color: const Color(0x9916161C),
       borderColor: const Color(0x24FFFFFF),
@@ -111,7 +122,8 @@ class _AskBarState extends State<AskBar> {
                 cursorHeight: 18,
                 style: NextText.sans(15.5),
                 decoration: InputDecoration.collapsed(
-                  hintText: widget.hint,
+                  hintText:
+                      widget.attachments.isEmpty ? widget.hint : '想让 Nipa 做什么？',
                   hintStyle: NextText.sans(15.5, color: NextColors.p3),
                 ),
               ),
@@ -127,20 +139,46 @@ class _AskBarState extends State<AskBar> {
       ),
     );
 
+    final field = NextDropZone(
+      enabled: widget.onAttach != null,
+      onDrop: (paths) => widget.onAttach?.call(paths),
+      builder: (context, over) => Stack(children: [
+        glass,
+        Positioned.fill(
+          child: DropGlow(over: over, radius: BorderRadius.circular(28)),
+        ),
+      ]),
+    );
     final chips = widget.suggestions;
     return SizedBox(
       width: widget.maxWidth.isFinite ? widget.maxWidth : null,
-      child: Row(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         mainAxisSize: MainAxisSize.min,
         children: [
-          field,
-          if (chips.isNotEmpty && empty)
-            Flexible(
-              child: Padding(
-                padding: const EdgeInsets.only(left: 14),
-                child: _FittingChips(chips: chips, onTap: _send),
+          if (widget.attachments.isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.only(left: 8, bottom: 10),
+              child: SizedBox(
+                width: fieldWidth,
+                child: AttachmentStrip(
+                    paths: widget.attachments,
+                    onRemove: (p) => widget.onDetach?.call(p)),
               ),
             ),
+          Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              field,
+              if (chips.isNotEmpty && empty)
+                Flexible(
+                  child: Padding(
+                    padding: const EdgeInsets.only(left: 14),
+                    child: _FittingChips(chips: chips, onTap: _send),
+                  ),
+                ),
+            ],
+          ),
         ],
       ),
     );

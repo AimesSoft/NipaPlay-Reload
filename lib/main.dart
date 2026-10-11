@@ -69,6 +69,7 @@ import 'package:nipaplay/next/next_runtime.dart';
 import 'package:nipaplay/next/ui/shell/next_ui_gate.dart';
 import 'package:nipaplay/next/ui/shell/next_ui_preference.dart';
 import 'package:nipaplay/next/ui/shell/window_chrome.dart';
+import 'package:nipaplay/next/ui/widgets/drop_zone.dart';
 import 'package:nipaplay/plugins/plugin_service.dart';
 import 'package:nipaplay/src/rust/api/startup_commands.dart'
     as startup_commands;
@@ -1111,11 +1112,17 @@ class _NipaPlayAppState extends State<NipaPlayApp> with WidgetsBindingObserver {
         }
       },
       child: DropTarget(
+        // Over Next's drop places (its side panel, its input bar) the files
+        // go to Nipa instead; nowhere else is affected.
         onDragEntered: (details) {
           setState(() {
-            _isDragging = true;
+            _isDragging = !NextDropZones.claims(details.globalPosition);
           });
           debugPrint('[DragDrop] onDragEntered');
+        },
+        onDragUpdated: (details) {
+          final dragging = !NextDropZones.claims(details.globalPosition);
+          if (dragging != _isDragging) setState(() => _isDragging = dragging);
         },
         onDragExited: (details) {
           setState(() {
@@ -1128,7 +1135,8 @@ class _NipaPlayAppState extends State<NipaPlayApp> with WidgetsBindingObserver {
             _isDragging = false;
           });
           debugPrint('[DragDrop] onDragDone: ${details.files.length} files');
-          if (details.files.isNotEmpty) {
+          if (details.files.isNotEmpty &&
+              !NextDropZones.claims(details.globalPosition)) {
             final filePath = details.files.first.path;
             debugPrint('[DragDrop] Handling file: $filePath');
             _handleDroppedFile(filePath);

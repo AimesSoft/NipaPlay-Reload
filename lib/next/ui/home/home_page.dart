@@ -5,6 +5,7 @@ import 'package:flutter/widgets.dart';
 import '../../ui_data/ui_data.dart';
 import '../cards/card_views.dart';
 import '../conversation/conversation.dart';
+import '../conversation/next_sayings.dart';
 import '../shell/shell_controller.dart';
 import '../theme/tokens.dart';
 import '../widgets/cards.dart';
@@ -13,6 +14,7 @@ import '../widgets/words.dart';
 import 'ask_bar.dart';
 import 'hero_backdrop.dart';
 import 'hero_copy.dart';
+import 'hero_danmaku.dart';
 import 'stage.dart';
 
 /// The home: state A (hero, input, shelves), B (talking in place) and C
@@ -122,7 +124,12 @@ class _NextHomePageState extends State<NextHomePage> {
         .where((s) => s.kind == UiShelfKind.recent)
         .expand((s) => s.items)
         .firstOrNull;
+    final airing = home.shelves
+        .where((s) => s.kind == UiShelfKind.airing)
+        .expand((s) => s.items)
+        .firstOrNull;
     return (recent ??
+            airing ??
             first((i) => i.badge != null) ??
             home.shelves
                 .where((s) => s.kind == UiShelfKind.continueWatching)
@@ -198,22 +205,37 @@ class _NextHomePageState extends State<NextHomePage> {
           .expand((s) => s.items)
           .firstOrNull;
       if (watching != null) out.add('接着看《${watching.work.title}》');
+      bool other(UiShelfItem i) => i.work.workId != watching?.work.workId;
       final updated = home.shelves
-          .expand((s) => s.items)
-          .where(
-              (i) => i.badge != null && i.work.workId != watching?.work.workId)
-          .firstOrNull;
+              .where((s) => s.kind == UiShelfKind.airing)
+              .expand((s) => s.items)
+              .where(other)
+              .firstOrNull ??
+          home.shelves
+              .expand((s) => s.items)
+              .where((i) => i.badge != null && other(i))
+              .firstOrNull;
       if (updated != null) out.add('${updated.work.title}更新了');
     }
     out.add('来点轻松的');
     return out;
   }
 
+  /// After a round on the stage: what you might say next (the same rules
+  /// as the side panel's).
+  List<String> _nextSayings() {
+    final c = _conv;
+    if (c.inProgress || c.question != null || c.reply.isEmpty) return const [];
+    return NextSayings.after(c.reply, c.cards);
+  }
+
   // —— Interaction ——
 
   void _say(String text) {
     _heroOverride = null;
-    _conv.say(text);
+    final files = _shell!.askFiles.value;
+    _shell!.askFiles.value = const [];
+    _conv.say(text, files: files);
   }
 
   /// A card held still for 600 ms is previewed; 300 ms after the pointer
@@ -269,6 +291,7 @@ class _NextHomePageState extends State<NextHomePage> {
                 fade: staged ? NextMotion.crossfade : _previewFade,
               ),
             ),
+            if (!staged) _danmaku(size, preview ?? hero),
             CustomScrollView(
               controller: _scroll,
               slivers: [
@@ -281,6 +304,26 @@ class _NextHomePageState extends State<NextHomePage> {
         },
       );
     });
+  }
+
+  /// The hero work's danmaku in the sky, scrolling away with the hero.
+  Widget _danmaku(Size size, UiWork? work) {
+    final area = HeroDanmaku.area(size);
+    return Positioned.fromRect(
+      rect: area,
+      child: AnimatedBuilder(
+        animation: _scroll,
+        builder: (context, child) => Transform.translate(
+          offset: Offset(0, _scroll.hasClients ? -_scroll.offset : 0),
+          child: child,
+        ),
+        child: AnimatedSwitcher(
+          duration: _previewFade,
+          child: HeroDanmaku(
+              key: ValueKey(work?.workId), lines: work?.danmaku ?? const []),
+        ),
+      ),
+    );
   }
 
   Widget _shelvesWidget() {
@@ -399,16 +442,33 @@ class _NextHomePageState extends State<NextHomePage> {
           SizedBox(height: staged ? 28 : 32),
           Padding(
             padding: const EdgeInsets.only(left: NextMetrics.gutter),
-            child: AskBar(
-              focusNode: shell.askFocus,
-              controller: shell.askText,
-              onSay: _say,
-              mood: c.mood,
-              moodSentence: c.moodSentence,
-              hint:
-                  c.question != null ? '也可以直接说' : (staged ? '继续说…' : '今天想看什么？'),
-              suggestions: staged ? const [] : _suggestions(),
-              maxWidth: size.width - NextMetrics.gutter - 32,
+            child: ListenableBuilder(
+              listenable: Listenable.merge([shell.askFiles, shell.panelOpen]),
+              builder: (context, _) => AskBar(
+                focusNode: shell.askFocus,
+                controller: shell.askText,
+                onSay: _say,
+                mood: c.mood,
+                moodSentence: c.moodSentence,
+                hint: c.question != null
+                    ? '也可以直接说'
+                    : (staged ? '继续说…' : '今天想看什么？'),
+                suggestions: staged ? _nextSayings() : _suggestions(),
+                maxWidth: size.width - NextMetrics.gutter - 32,
+                attachments: shell.askFiles.value,
+                // While the panel is open, files go there.
+                onAttach: shell.panelOpen.value
+                    ? null
+                    : (paths) => shell.askFiles.value = [
+                          ...shell.askFiles.value,
+                          for (final p in paths)
+                            if (!shell.askFiles.value.contains(p)) p
+                        ],
+                onDetach: (path) => shell.askFiles.value = [
+                  for (final p in shell.askFiles.value)
+                    if (p != path) p
+                ],
+              ),
             ),
           ),
           SizedBox(height: staged ? 40 : 34),

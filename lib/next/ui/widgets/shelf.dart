@@ -14,6 +14,7 @@ class Shelf extends StatelessWidget {
     this.gutter = NextMetrics.gutter,
     this.gap = 16,
     this.storageKey,
+    this.trailing,
   });
 
   final String title;
@@ -26,6 +27,9 @@ class Shelf extends StatelessWidget {
   /// Keeps the horizontal position when coming back to the page.
   final String? storageKey;
 
+  /// Beside the title, e.g. tabs that choose what the row shows.
+  final Widget? trailing;
+
   @override
   Widget build(BuildContext context) => Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -33,9 +37,19 @@ class Shelf extends StatelessWidget {
         children: [
           Padding(
             padding: EdgeInsets.only(left: gutter),
-            child: Text(title,
-                style: NextText.sans(19,
-                    weight: FontWeight.w600, letterSpacing: 0.4)),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.baseline,
+              textBaseline: TextBaseline.alphabetic,
+              children: [
+                Text(title,
+                    style: NextText.sans(19,
+                        weight: FontWeight.w600, letterSpacing: 0.4)),
+                if (trailing case final t?) ...[
+                  const SizedBox(width: 28),
+                  Flexible(child: t),
+                ],
+              ],
+            ),
           ),
           const SizedBox(height: 16),
           SizedBox(
