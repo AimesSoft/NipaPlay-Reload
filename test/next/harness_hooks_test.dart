@@ -62,7 +62,8 @@ void main() {
     expect(jobs.map((j) => j!.jobId).toSet(), hasLength(1));
     await engine.start();
     final job = await terminal(engine, jobs.first!.jobId);
-    expect(job.state, JobState.succeeded);
+    expect(job.state, JobState.succeeded,
+        reason: jsonEncode(job.receipt?.toJson()));
     final raw = jsonEncode(job.toStorageJson());
     for (final value in [
       'synthetic-hook-token',
@@ -127,4 +128,29 @@ void main() {
     expect(recovered.receipt!.details['reason'], 'interrupted_no_replay');
     expect(await File('${repository.path}/should-not-run').exists(), false);
   }, skip: Platform.isWindows);
+
+  test('queued hooks from an earlier process cannot replay after restart',
+      () async {
+    await program('touch should-not-run');
+    final queued = (await hooks.emit('playback.started', '/old.mkv', {}))!;
+    await hooks.disable();
+    hooks = HarnessHooks();
+    hooks.engine = engine;
+    hooks.enable(repository, File('${root.path}/private/endpoint.json'));
+    await engine.start();
+    final recovered = await terminal(engine, queued.jobId);
+    expect(recovered.state, JobState.failed);
+    expect(await File('${repository.path}/should-not-run').exists(), false);
+  }, skip: Platform.isWindows);
+
+  test('invalid schedule cannot launch a program and leaves an error fact', () async {
+    final errors = <String>[];
+    hooks.scheduleError = (error) async => errors.add(error);
+    await File('${repository.path}/hooks/schedules.json').writeAsString(jsonEncode([
+      {'id': 'escape', 'program': '../outside', 'everySeconds': 1}
+    ]));
+    await hooks.schedules.tick(DateTime.now());
+    expect(errors, hasLength(1));
+    expect(await engine.list(type: hooks.type), isEmpty);
+  });
 }

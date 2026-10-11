@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:nipa_harness/nipa_harness.dart';
 import 'package:nipaplay/next/followups/service.dart';
+import 'package:nipaplay/next/chat/session_store.dart';
 import 'package:nipaplay/next/harness_location.dart';
 import 'package:nipaplay/next/tasks/sqlite_job_store.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -146,5 +147,59 @@ void main() {
     }
     expect(await followups.list(), isEmpty);
     expect(await store.database.query('followup_events'), isEmpty);
+  });
+
+  test('main identifiers survive selections, reopen, and harness changes',
+      () async {
+    var sessions = SessionStore(store.database);
+    await sessions.select(root.path, 'main-thread');
+    await sessions.select(root.path, 'another-thread');
+    await sessions.select('${root.path}/other', 'other-main');
+    await followups.close();
+    await engine.close();
+    store = await SqliteJobStore.open(root, factory: databaseFactoryFfi);
+    engine = TaskEngine(
+        store: store, ownerDeviceId: 'fixture', executors: [FakeExecutor()]);
+    await engine.start();
+    followups = Followups(store.database, engine, location);
+    sessions = SessionStore(store.database);
+    expect(await sessions.main(root.path), 'main-thread');
+    expect(await sessions.main('${root.path}/other'), 'other-main');
+    expect(
+        (await store.database.query('harness_sessions',
+                where: 'repository=?', whereArgs: [root.path]))
+            .single['current_thread'],
+        'another-thread');
+  });
+
+  test(
+      'wake retains facts while unavailable and discovery retains caller provenance',
+      () async {
+    final invocation =
+        Invocation(origin: 'hook:fixture-job', id: 'wake-constraint');
+    final wake = await followups.wake({
+      'instruction': 'Inspect the change',
+      'facts': {'version': '2', 'cookie': 'private-cookie'}
+    }, invocation);
+    await followups.sweep();
+    await followups.sweep();
+    final row = (await followups.list()).single;
+    expect(row['id'], wake['id']);
+    expect(row['state'], 'ready');
+    expect(row['threadId'], isNull);
+    expect(row['origin'], invocation.origin);
+    expect(((row['trigger'] as Map)['facts'] as Map)['version'], '2');
+    expect(((row['trigger'] as Map)['facts'] as Map)['cookie'], '[redacted]');
+    await followups.discover({
+      'title': 'A version appeared',
+      'source': 'fixture',
+      'facts': {'version': '2', 'cookie': 'private-cookie'}
+    }, invocation);
+    final discovery =
+        (await store.database.query('harness_discoveries')).single;
+    expect(discovery['origin'], invocation.origin);
+    expect(discovery['invocation_id'], invocation.id);
+    expect(discovery['facts'], isNot(contains('private-cookie')));
+    expect(await store.database.rawQuery('PRAGMA foreign_key_check'), isEmpty);
   });
 }

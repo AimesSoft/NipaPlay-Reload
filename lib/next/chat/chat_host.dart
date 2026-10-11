@@ -6,6 +6,7 @@ import 'dart:math';
 import '../agent_endpoint.dart';
 import '../harness_redaction.dart';
 import 'liveness.dart';
+import 'session_store.dart';
 
 typedef ChatMessage = Map<String, dynamic>;
 
@@ -18,13 +19,19 @@ final class ChatRpcError implements Exception {
 
 /// One stdio server, with Codex owning thread history and NipaPlay owning facts.
 final class ChatHost {
-  ChatHost({required this.endpoint, required this.repository, this.labRoot})
+  ChatHost(
+      {required this.endpoint,
+      required this.repository,
+      this.labRoot,
+      this.sessions})
       : sessionId = 'nipa-${DateTime.now().microsecondsSinceEpoch}-'
             '${Random.secure().nextInt(1 << 32).toRadixString(16)}';
 
   final AgentEndpoint endpoint;
   final Directory repository;
   final Directory? labRoot;
+  final SessionStore? sessions;
+  String? mainThreadId;
   final String sessionId;
   final liveness = ChatLiveness();
   final _events = StreamController<ChatMessage>.broadcast();
@@ -55,11 +62,13 @@ final class ChatHost {
   Map<String, String> launchEnvironment = {};
 
   bool get available => _process != null && !_closing && !_transportClosed;
-  bool get busy => liveness.status == 'inProgress' || liveness.status == 'starting';
+  bool get busy =>
+      liveness.status == 'inProgress' || liveness.status == 'starting';
 
   Future<T> _control<T>(Future<T> Function() operation) {
     final result = _controls.then((_) => operation());
-    _controls = result.then<void>((_) {}, onError: (Object error, StackTrace stack) {});
+    _controls =
+        result.then<void>((_) {}, onError: (Object error, StackTrace stack) {});
     return result;
   }
 
@@ -339,7 +348,10 @@ final class ChatHost {
       'method': 'host/error',
       'params': {'message': text}
     });
-    _events.add({'method': 'host/error', 'params': {'message': text}});
+    _events.add({
+      'method': 'host/error',
+      'params': {'message': text}
+    });
   }
 
   void _flushReasoning() {
@@ -373,7 +385,46 @@ final class ChatHost {
         'sandbox': 'danger-full-access',
         'approvalPolicy': 'never'
       };
-  Future<ChatMessage> startThread() => _control(() => _select('thread/start', _common));
+  Future<ChatMessage> startThread() =>
+      _control(() => _select('thread/start', _common));
+
+  /// Select the durable main thread. Explicit new conversations use startThread.
+  Future<ChatMessage> getMainSession() => _control(_mainSession);
+  Future<ChatMessage> _mainSession() async {
+    final id = mainThreadId ?? await sessions?.main(repository.path);
+    if (id == null) return _select('thread/start', _common);
+    mainThreadId = id;
+    if (threadId == id) {
+      return {
+        'thread': _public(await readThread(id)),
+        'model': model,
+        'modelProvider': provider,
+        ...header
+      };
+    }
+    return _select('thread/resume', {..._common, 'threadId': id});
+  }
+
+  Future<ChatMessage> newConversation() => startThread();
+  Future<ChatMessage> switchSession(String id) => resumeThread(id);
+  Future<ChatMessage> listSessions({String? cursor, int limit = 30}) async {
+    final result = await listThreads(cursor: cursor, limit: limit);
+    final main = mainThreadId ?? await sessions?.main(repository.path);
+    return {
+      ...result,
+      'mainThreadId': main,
+      'currentThreadId': threadId,
+      'data': [
+        for (final item in result['data'] as List)
+          {
+            ...item as Map,
+            'isMain': item['id'] == main,
+            'isCurrent': item['id'] == threadId
+          }
+      ]
+    };
+  }
+
   Future<ChatMessage> resumeThread(String id) =>
       _control(() => _select('thread/resume', {..._common, 'threadId': id}));
   Future<ChatMessage> _select(String method, ChatMessage params) async {
@@ -383,7 +434,21 @@ final class ChatHost {
     final response = await _request(method, params);
     thread = _public(Map<String, dynamic>.from(response['thread'] as Map));
     threadId = thread!['id'] as String;
-    if (method == 'thread/start') _freshThreads[threadId!] = thread!;
+    if (method == 'thread/start') {
+      // Codex lazily writes an empty rollout. Naming materializes it without
+      // inventing a user message or opening a model turn.
+      await _request('thread/name/set', {
+        'threadId': threadId,
+        'name': await sessions?.main(repository.path) == null
+            ? 'NipaPlay 主会话'
+            : 'NipaPlay 对话',
+      });
+    }
+    if ((thread!['turns'] as List).isEmpty) {
+      _freshThreads[threadId!] = thread!;
+    }
+    await sessions?.select(repository.path, threadId!);
+    mainThreadId ??= await sessions?.main(repository.path) ?? threadId;
     model = response['model'] as String;
     provider = response['modelProvider'] as String;
     return Map<String, dynamic>.from(redactHarnessJson(response) as Map);
@@ -401,9 +466,10 @@ final class ChatHost {
   List<ChatMessage> _input(String text) => [
         {'type': 'text', 'text': text}
       ];
-  Future<ChatMessage> startTurn(String text) => _control(() => _startTurn(text));
+  Future<ChatMessage> startTurn(String text) =>
+      _control(() => _startTurn(text));
   Future<ChatMessage> _startTurn(String text) async {
-    if (threadId == null) throw StateError('Select a thread first');
+    if (threadId == null) await _mainSession();
     if (liveness.status == 'inProgress' || liveness.status == 'starting') {
       throw StateError('Use steer for an active turn');
     }
@@ -429,29 +495,41 @@ final class ChatHost {
   Future<ChatMessage> readThread(String id) async {
     // Codex cannot includeTurns until a newly started thread has its first input.
     if (_freshThreads[id] case final fresh?) return fresh;
-    final result = await _request('thread/read', {'threadId': id, 'includeTurns': true});
+    final result =
+        await _request('thread/read', {'threadId': id, 'includeTurns': true});
     return Map<String, dynamic>.from(result['thread'] as Map);
   }
 
   /// Serialize with UI selection/start. Wait while the host has an active turn.
   Future<String?> prepareFollowup(String? id) => _control(() async {
-    if (busy) return null;
-    if (id == null) {
-      await _select('thread/start', _common);
-      return threadId;
-    }
-    final history = await readThread(id);
-    if ((history['turns'] as List).cast<Map>().any((turn) => turn['status'] == 'inProgress')) return null;
-    return id;
-  });
+        if (busy) return null;
+        if (id == null) {
+          await _mainSession();
+          return threadId;
+        }
+        final history = await readThread(id);
+        if ((history['turns'] as List)
+            .cast<Map>()
+            .any((turn) => turn['status'] == 'inProgress')) {
+          return null;
+        }
+        return id;
+      });
 
-  Future<ChatMessage?> startFollowup(String id, String text) => _control(() async {
-    if (busy) return null;
-    final history = await readThread(id);
-    if ((history['turns'] as List).cast<Map>().any((turn) => turn['status'] == 'inProgress')) return null;
-    if (threadId != id) await _select('thread/resume', {..._common, 'threadId': id});
-    return _startTurn(text);
-  });
+  Future<ChatMessage?> startFollowup(String id, String text) =>
+      _control(() async {
+        if (busy) return null;
+        final history = await readThread(id);
+        if ((history['turns'] as List)
+            .cast<Map>()
+            .any((turn) => turn['status'] == 'inProgress')) {
+          return null;
+        }
+        if (threadId != id) {
+          await _select('thread/resume', {..._common, 'threadId': id});
+        }
+        return _startTurn(text);
+      });
   Future<ChatMessage> interrupt() async => _public(await _request(
       'turn/interrupt', {'threadId': threadId, 'turnId': liveness.turnId}));
   Future<void> answerUserInput(
@@ -475,6 +553,7 @@ final class ChatHost {
   Map<String, Object?> get header => {
         'sessionId': sessionId,
         'threadId': threadId,
+        'mainThreadId': mainThreadId,
         'model': model,
         'provider': provider,
         'cwd': repository.path

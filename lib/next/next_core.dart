@@ -44,6 +44,7 @@ import 'followups/service.dart';
 import 'followups/capability.dart';
 import 'ui_data/service.dart';
 import 'ui_data/capability.dart';
+import 'chat/session_store.dart';
 
 /// Application-owned task and capability composition, independent of Labs.
 final class NextCore {
@@ -91,6 +92,7 @@ final class NextCore {
   late final StateCapability state;
   late final ChangeHistory changeHistory;
   late final Followups followups;
+  late final SessionStore sessions;
   late final UiDataService uiData;
 
   Future<void> _initialize(
@@ -158,6 +160,12 @@ final class NextCore {
     hooks.engine = engine;
     diskDeletion.engine = engine;
     followups = Followups(database, engine, harnessLocation);
+    sessions = SessionStore(database);
+    hooks.scheduleError = (error) async {
+      await followups.discover({'title': '定时配置无效',
+        'source': 'hooks/schedules.json', 'facts': {'error': error}},
+        Invocation(origin: 'application'));
+    };
     hooks.observeEvent = followups.hookEvent;
     downloads.attach(engine, root);
     media.attach(engine);

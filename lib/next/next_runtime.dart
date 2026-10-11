@@ -400,10 +400,12 @@ final class NextRuntime extends ChangeNotifier {
       if (status case AgentEndpointRunning(:final repository)) {
         await _attachHooks(repository);
         final host = chat = ChatHost(endpoint: _endpoint, repository: repository,
+          sessions: ServiceProvider.nextCore.sessions,
           labRoot: LabProfile.active ? Directory(LabProfile.root) : null);
         if (kDebugMode && LabProfile.active) recordDebugChat(host);
         try {
           await host.start();
+          await host.getMainSession();
           await ServiceProvider.nextCore.followups.attach(host);
         } catch (error) {
           chatError = redactHarnessText(error.toString());
