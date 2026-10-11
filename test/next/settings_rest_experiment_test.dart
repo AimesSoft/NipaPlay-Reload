@@ -523,7 +523,7 @@ function pluginHandleUIAction(actionId) { return {type:'text',title:'Fixture',co
       expect(classic.webdav.searchMaxResults, 500);
       expect(
           (await registry.get('webdavQuick.searchMaxResults'))['value'], 500);
-      // Verify the existing Classic backup treatment of plugin enable lists.
+      // Verify the repaired Classic backup treatment of plugin enable lists.
       final builtin = classic.plugins.plugins.firstWhere(
           (p) => p.manifest.id == 'builtin.cn_danmaku_regex_filter');
       final enableKey = 'plugins.enabled.${builtin.manifest.id}';
@@ -547,13 +547,13 @@ function pluginHandleUIAction(actionId) { return {type:'text',title:'Fixture',co
         'categories': ['preferences']
       });
       final restoredEnabled = prefs.getStringList('plugin_enabled_ids');
-      expect(restoredEnabled, isEmpty);
+      expect(restoredEnabled, [builtin.manifest.id]);
       final probeData = jsonDecode(await File(probe).readAsString()) as Map;
       final exportedEnabled =
           probeData['preferences']['settings']['plugin_enabled_ids'];
-      expect(exportedEnabled, isA<Map>());
+      expect(exportedEnabled, [builtin.manifest.id]);
       print(
-          'X18 existing Classic backup limitation: plugin_enabled_ids exported=${jsonEncode(exportedEnabled)}; before=[builtin.cn_danmaku_regex_filter]; after=[]');
+          'X18 repaired Classic backup: plugin_enabled_ids exported=${jsonEncode(exportedEnabled)}; after=${jsonEncode(restoredEnabled)}');
       await call('shortcuts.reset', {'reason': 'X18 reset'});
       expect(HotkeyService().allShortcuts, HotkeyService.defaultShortcuts);
       print('X18 reset: WebDAV maxResults=500; shortcuts=19 defaults');

@@ -39,11 +39,17 @@ final class CredentialStore {
     'server_profiles': 'accessToken',
   };
   static bool isSecretKey(String key) =>
-      scalarKeys.contains(key) ||
-      key.startsWith('plugin_text_setting_') ||
-      (key.startsWith('plugin_') &&
-          !key.startsWith('plugin_switch_setting_')) ||
-      key.startsWith('credential_vault_');
+      key != 'plugin_enabled_ids' &&
+      key != 'plugin_downloader_override' &&
+      key != 'last_token_renew_time' &&
+      key != 'dandanplay_remote_token_required' &&
+      !key.startsWith('plugin_switch_setting_') &&
+      (scalarKeys.contains(key) ||
+          key.startsWith('credential_vault_') ||
+          RegExp(
+                  r'password|passwd|token|secret|api[\s_-]?key|cookie|authorization|密码|密碼|密钥|密鑰|令牌|憑證|凭证',
+                  caseSensitive: false)
+              .hasMatch(key));
   static CredentialRef preferenceRef(String key) =>
       key.startsWith('credential_vault_')
           ? CredentialRef.fromJson(Map<String, Object?>.from(
@@ -155,9 +161,9 @@ final class CredentialStore {
       }
       return jsonEncode(items);
     }
-    if (!isSecretKey(key)) return raw;
     final ref = _decodeRef(raw);
     if (ref == preferenceRef(key)) return _readRef(ref!);
+    if (!isSecretKey(key)) return raw;
     if (desktop) {
       try {
         await write(prefs, key, raw);
@@ -197,6 +203,8 @@ final class CredentialStore {
     }
     try {
       final retired = <CredentialRef>{};
+      final previousValue = prefs.get(key);
+      final storedRef = previousValue is String ? _decodeRef(previousValue) : null;
       if (compositeKeys.containsKey(key)) {
         final previous = prefs.getString(key);
         if (previous != null) {
@@ -220,10 +228,12 @@ final class CredentialStore {
           if (ref != null) retired.remove(ref);
         }
         value = jsonEncode(items);
-      } else if (isSecretKey(key)) {
+      } else if (isSecretKey(key) || storedRef == preferenceRef(key)) {
         final ref = preferenceRef(key);
         await verifiedWrite(ref, value);
-        value = jsonEncode(ref.placeholder);
+        value = storedRef == ref
+            ? previousValue as String
+            : jsonEncode(ref.placeholder);
       }
       if (!await SettingsAccess.persist(key, () => prefs.setString(key, value))) {
         throw StateError('preferences_write_failed');
@@ -296,12 +306,20 @@ final class CredentialStore {
     }
   }
 
-  /// Portable export never resolves a reference, including failed migrations.
-  Object? exportPreference(String key, Object? value) {
+  /// Secrets travel as references; previously vaulted public text travels by value.
+  Future<Object?> exportPreference(String key, Object? value) async {
     if (value == null) return null;
     if (isSecretKey(key)) return preferenceRef(key).placeholder;
     if (compositeKeys.containsKey(key) && value is String) {
       return jsonEncode(exportItems(key, jsonDecode(value) as List));
+    }
+    if (value is String) {
+      final ref = _decodeRef(value);
+      if (ref == preferenceRef(key)) {
+        final resolved = await _readRef(ref!);
+        if (resolved == null) throw StateError('credential_missing');
+        return resolved;
+      }
     }
     return value;
   }

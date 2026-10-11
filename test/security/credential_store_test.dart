@@ -23,10 +23,49 @@ void main() {
     vault = MemoryVault();
     store = CredentialStore(vault, desktop: true);
   });
+  test('public plugin preferences keep values and existing vault entries', () async {
+    const publicText = 'plugin_text_setting_demo::label';
+    for (final key in [
+      'plugin_enabled_ids', 'plugin_downloader_override',
+      'plugin_switch_setting_token.demo::enabled', publicText,
+      'plugin_demo_cache', 'plugin_github_proxy_url',
+      'last_token_renew_time', 'dandanplay_remote_token_required',
+    ]) {
+      expect(CredentialStore.isSecretKey(key), false, reason: key);
+    }
+    for (final suffix in ['password', 'cookie', 'accessToken', 'api_key', 'API key', 'secret', 'authorization', '密码']) {
+      expect(CredentialStore.isSecretKey('plugin_text_setting_demo::$suffix'), true);
+      expect(CredentialStore.isSecretKey('ordinary_$suffix'), true);
+    }
+    final ref = CredentialStore.preferenceRef(publicText);
+    await vault.write(ref, '原来的公开文本');
+    final stored = jsonEncode(ref.placeholder);
+    await prefs.setString(publicText, stored);
+    expect(await store.read(prefs, publicText), '原来的公开文本');
+    expect(await store.exportPreference(publicText, stored), '原来的公开文本');
+    expect(prefs.getString(publicText), stored);
+    expect(vault.values, {ref: '原来的公开文本'});
+    expect(vault.writes[ref], 1);
+    await store.write(prefs, publicText, '原来的公开文本');
+    expect(prefs.getString(publicText), stored);
+    expect(vault.values, {ref: '原来的公开文本'});
+    expect(await store.exportPreference('plugin_enabled_ids', ['demo']), ['demo']);
+    expect(await store.exportPreference('plugin_downloader_override', true), true);
+    expect(await store.exportPreference('last_token_renew_time', 123), 123);
+    expect(await store.exportPreference('dandanplay_remote_token_required', true), true);
+  });
+  test('missing formerly vaulted public text fails export without changing storage', () async {
+    const key = 'plugin_text_setting_demo::label';
+    final raw = jsonEncode(CredentialStore.preferenceRef(key).placeholder);
+    await prefs.setString(key, raw);
+    await expectLater(store.exportPreference(key, raw), throwsStateError);
+    expect(prefs.getString(key), raw);
+    expect(vault.values, isEmpty);
+  });
   test('all verified scalar and plugin keys migrate without relogin', () async {
     final keys = {
       ...CredentialStore.scalarKeys,
-      'plugin_text_setting_demo::key',
+      'plugin_text_setting_demo::api_key',
       'plugin_demo_token'
     };
     for (final key in keys) {
@@ -37,7 +76,7 @@ void main() {
     for (final key in keys) {
       expect(prefs.getString(key), isNot(contains('test-secret')));
       expect(await store.read(prefs, key), 'test-secret-$key');
-      expect(store.exportPreference(key, prefs.getString(key)),
+      expect(await store.exportPreference(key, prefs.getString(key)),
           CredentialStore.preferenceRef(key).placeholder);
     }
     expect(prefs.getString('dandanplay_username'), 'public-user');
@@ -64,7 +103,7 @@ void main() {
         containsAll(['system_vault_unavailable', 'vault_readback_mismatch']));
     expect(prefs.getString('vault_migration_failures_v1'),
         isNot(contains('old-')));
-    expect(jsonEncode(store.exportPreference('dandanplay_token', 'old-dandan')),
+    expect(jsonEncode(await store.exportPreference('dandanplay_token', 'old-dandan')),
         isNot(contains('old-dandan')));
     vault.failWrite = null;
     vault.mismatch = null;

@@ -411,7 +411,7 @@ class _BackupRestorePageState extends State<BackupRestorePage> {
         categories: categories,
       );
 
-      if (restoreResult.success) {
+      if (restoreResult.status != 'failed') {
         // 刷新观看历史
         if (mounted) {
           final watchHistoryProvider =
@@ -442,7 +442,16 @@ class _BackupRestorePageState extends State<BackupRestorePage> {
           parts.add('账户${r.success ? "✓" : "✗"}');
         }
 
-        _showMessage('恢复完成: ${parts.join(" ")}，部分数据需要重启应用生效');
+        final credentialSkips = restoreResult.credentialSkips;
+        if (credentialSkips.isEmpty) {
+          _showMessage('恢复完成: ${parts.join(" ")}，部分数据需要重启应用生效');
+        } else {
+          final details = credentialSkips
+              .map((item) => '${item['path']}：${(item['references'] as List).map((ref) => ref['reason']).join(', ')}')
+              .join('；');
+          final summary = restoreResult.status == 'skipped' ? '恢复已跳过' : '部分恢复';
+          _showMessage('$summary：已跳过 ${credentialSkips.length} 项凭据引用，保留现值。$details。其余数据需要重启应用生效');
+        }
       } else {
         _showMessage('恢复失败: ${restoreResult.errorMessage ?? "未知错误"}',
             isError: true);

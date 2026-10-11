@@ -52,7 +52,8 @@ Future<Map<String, dynamic>> sealPortableCredentials(
 
 /// Hydrates only on the receiving host; the transport sees references exclusively.
 Future<Map<String, dynamic>> hydratePortableCredentials(
-    Map<String, dynamic> data, CredentialStore store) async {
+    Map<String, dynamic> data, CredentialStore store,
+    {void Function(CredentialRef ref, String reason)? onUnresolved}) async {
   var missing = false;
   Future<Object?> visit(Object? value, {String? field}) async {
     if (value is String && value.startsWith('{"credentialRef":')) {
@@ -60,9 +61,18 @@ Future<Map<String, dynamic>> hydratePortableCredentials(
     }
     final ref = credentialReference(value);
     if (ref != null) {
-      final secret = await store.vault.read(ref);
+      String? secret;
+      try {
+        secret = await store.vault.read(ref);
+      } catch (error) {
+        if (onUnresolved == null) rethrow;
+        onUnresolved(ref, store.failures[ref] ?? error.runtimeType.toString());
+        missing = true;
+        return field == 'password' ? '' : null;
+      }
       if (secret == null) {
         missing = true;
+        onUnresolved?.call(ref, 'credential_missing');
         return field == 'password' ? '' : null;
       }
       return secret;

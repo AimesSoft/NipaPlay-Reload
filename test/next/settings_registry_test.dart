@@ -317,8 +317,8 @@ void main() {
     final denied = {
       ...CredentialStore.scalarKeys,
       ...CredentialStore.compositeKeys.keys,
-      'plugin_text_setting_fixture::key',
-      'plugin_fixture_custom_value',
+      'plugin_text_setting_fixture::api_key',
+      'plugin_fixture_token',
       'credential_vault_private_ref',
       'tmdb',
       'metadata.tmdb',
@@ -328,6 +328,10 @@ void main() {
       'next/endpoint.json',
     };
     final exposed = (await registry.describe()).map((entry) => entry['key']);
+    for (final key in ['plugin_enabled_ids', 'plugin_downloader_override',
+      'plugin_text_setting_fixture::label', 'plugin_fixture_custom_value']) {
+      expect(isSettingDenied(key), false, reason: key);
+    }
     for (final key in denied) {
       expect(isSettingDenied(key), isTrue, reason: key);
       expect(exposed, isNot(contains(key)));
