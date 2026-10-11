@@ -191,7 +191,8 @@ class FullBackupService {
     for (final key in settingsKeys) {
       final value = prefs.get(key);
       if (value != null) {
-        settingsMap[key] = CredentialStore.instance.exportPreference(key, value);
+        settingsMap[key] =
+            await CredentialStore.instance.exportPreference(key, value);
       }
     }
     result['settings'] = settingsMap;
@@ -570,7 +571,11 @@ class FullBackupService {
       }
 
       _completeRestoreResult(result);
-      if (result.success) debugPrint('备份恢复完成');
+      if (result.status != 'failed') {
+        debugPrint(result.credentialSkips.isEmpty
+            ? '备份恢复完成'
+            : '${result.status == 'skipped' ? '备份恢复已跳过' : '备份部分恢复'}：已跳过 ${result.credentialSkips.length} 项无法解析的凭据引用，保留现值');
+      }
     } catch (e) {
       debugPrint('导入备份失败: $e');
       result.success = false;
@@ -586,6 +591,7 @@ class FullBackupService {
   ) {
     target.restoredCount += batch.restoredCount;
     target.skippedCount += batch.skippedCount;
+    target.skippedItems.addAll(batch.skippedItems);
     if (!batch.success) {
       target.success = false;
       target.errorMessage ??= batch.errorMessage;
@@ -657,22 +663,76 @@ class FullBackupService {
         return;
       }
     }
-    result.success = true;
+    final credentialSkips = result.credentialSkips;
+    result.success = credentialSkips.isEmpty;
+    if (credentialSkips.isNotEmpty) {
+      for (final categoryResult
+          in categoryResults.whereType<CategoryRestoreResult>()) {
+        if (categoryResult.skippedItems
+            .any((item) => item['reason'] == 'credential_unresolved')) {
+          categoryResult.success = false;
+        }
+      }
+      result.errorMessage = '已跳过 ${credentialSkips.length} 项无法解析的凭据引用，保留现值';
+    }
   }
 
   // ---------- 偏好设置恢复 ----------
+
+  Future<Map<String, dynamic>> _hydrateRestoreData(
+      Map<String, dynamic> data, CategoryRestoreResult result,
+      {Set<String> recordLists = const {}}) async {
+    Future<Object?> hydrate(Object? value, String path) async {
+      final unresolved = <Map<String, dynamic>>[];
+      final hydrated = await hydratePortableCredentials(
+          {path: value}, CredentialStore.instance,
+          onUnresolved: (ref, reason) => unresolved.add({
+                'credentialRef': ref.toJson(),
+                'reason': reason,
+              }));
+      if (unresolved.isNotEmpty) {
+        result.skippedCount++;
+        result.skippedItems.add({
+          'path': path,
+          'reason': 'credential_unresolved',
+          'references': unresolved,
+        });
+        debugPrint('已跳过 $path：凭据引用无法解析，保留现值 (${unresolved.map((e) => e['reason']).join(', ')})');
+        return null;
+      }
+      return hydrated[path];
+    }
+
+    final restored = <String, dynamic>{};
+    for (final entry in data.entries) {
+      final value = entry.value;
+      if (recordLists.contains(entry.key) && value is List) {
+        final items = <dynamic>[];
+        for (var i = 0; i < value.length; i++) {
+          final item = await hydrate(value[i], '${entry.key}[$i]');
+          if (item != null) items.add(item);
+        }
+        // An entirely skipped list must not replace an existing list with [].
+        if (value.isEmpty || items.isNotEmpty) restored[entry.key] = items;
+      } else {
+        final item = await hydrate(value, entry.key);
+        if (item != null) restored[entry.key] = item;
+      }
+    }
+    return restored;
+  }
 
   Future<CategoryRestoreResult> _restorePreferences(
       Map<String, dynamic> preferencesData) async {
     final result = CategoryRestoreResult();
 
     try {
-      preferencesData = await hydratePortableCredentials(preferencesData, CredentialStore.instance);
       final prefs = await SharedPreferences.getInstance();
 
       // 恢复软件设置
-      final settings = preferencesData['settings'] as Map<String, dynamic>?;
-      if (settings != null) {
+      final rawSettings = preferencesData['settings'] as Map<String, dynamic>?;
+      if (rawSettings != null) {
+        final settings = await _hydrateRestoreData(rawSettings, result);
         int restoredCount = 0;
         for (final entry in settings.entries) {
           try {
@@ -689,17 +749,24 @@ class FullBackupService {
             } else if (value is List) {
               await SettingsAccess.persist(key, () => prefs.setStringList(
                   key, value.map((e) => e.toString()).toList()));
+            } else {
+              result.skippedCount++;
+              result.skippedItems.add(
+                  {'path': key, 'reason': 'unsupported_preference_type'});
+              continue;
             }
             restoredCount++;
           } catch (e) {
             debugPrint('恢复设置项 ${entry.key} 失败: $e');
+            result.success = false;
+            result.errorMessage = '设置项 ${entry.key} 恢复失败';
           }
         }
         result.restoredCount = restoredCount;
         debugPrint('恢复了 $restoredCount 项偏好设置');
       }
 
-      result.success = true;
+      result.success = result.errorMessage == null;
     } catch (e) {
       debugPrint('恢复偏好设置失败: $e');
       result.success = false;
@@ -716,7 +783,8 @@ class FullBackupService {
     final result = CategoryRestoreResult();
 
     try {
-      mediaLibrariesData = await hydratePortableCredentials(mediaLibrariesData, CredentialStore.instance);
+      mediaLibrariesData = await _hydrateRestoreData(mediaLibrariesData, result,
+          recordLists: {'serverProfiles', 'webdavConnections', 'smbConnections'});
       final prefs = await SharedPreferences.getInstance();
 
       // 1. 恢复本地媒体库路径
@@ -725,6 +793,7 @@ class FullBackupService {
       if (localLibs != null) {
         final folderList = localLibs.cast<String>().toList();
         await prefs.setStringList('nipaplay_scanned_folders', folderList);
+        result._restoredOtherData = true;
         result.localLibraryCount = folderList.length;
         debugPrint('恢复了 ${folderList.length} 个本地媒体库路径');
       }
@@ -769,6 +838,7 @@ class FullBackupService {
       if (embySelectedLibs != null) {
         await prefs.setStringList('emby_selected_library_ids',
             embySelectedLibs.cast<String>().toList());
+        result._restoredOtherData = true;
       }
 
       final jellyfinSelectedLibs =
@@ -776,6 +846,7 @@ class FullBackupService {
       if (jellyfinSelectedLibs != null) {
         await prefs.setStringList('jellyfin_selected_library_ids',
             jellyfinSelectedLibs.cast<String>().toList());
+        result._restoredOtherData = true;
       }
 
       // 4. 恢复排序设置
@@ -783,6 +854,7 @@ class FullBackupService {
           mediaLibrariesData['embyLibrarySortSettings'] as String?;
       if (embySortSettings != null) {
         await prefs.setString('emby_library_sort_settings', embySortSettings);
+        result._restoredOtherData = true;
       }
 
       final jellyfinSortSettings =
@@ -790,6 +862,7 @@ class FullBackupService {
       if (jellyfinSortSettings != null) {
         await prefs.setString(
             'jellyfin_library_sort_settings', jellyfinSortSettings);
+        result._restoredOtherData = true;
       }
 
       // 5. 恢复 WebDAV 连接配置（按稳定 ID 合并，验证成功后才替换）
@@ -808,6 +881,7 @@ class FullBackupService {
                 'WebDAV连接 ${connection.name} 验证失败，已保留原有连接',
               );
             }
+            result._restoredOtherData = true;
           }
           debugPrint('恢复了 ${webdavConnectionsData.length} 个WebDAV连接');
         } catch (e) {
@@ -835,6 +909,7 @@ class FullBackupService {
               } else {
                 await smbService.addConnection(connection);
               }
+              result._restoredOtherData = true;
             } catch (e) {
               debugPrint('恢复单条SMB连接失败: $e');
             }
@@ -854,8 +929,10 @@ class FullBackupService {
           if (baseUrl != null && baseUrl.isNotEmpty) {
             final apiToken = dandanplayRemoteData['apiToken'] as String?;
             // 使用 connect 方法恢复连接（会验证并持久化）
-            await DandanplayRemoteService.instance
-                .connect(baseUrl, token: apiToken);
+            if (await DandanplayRemoteService.instance
+                .connect(baseUrl, token: apiToken)) {
+              result._restoredOtherData = true;
+            }
             debugPrint('恢复了弹弹play远程服务配置');
           }
         } catch (e) {
@@ -874,6 +951,7 @@ class FullBackupService {
                 dandanplayRemoteData['tokenRequired'] as bool? ?? false;
             await prefs.setBool(
                 'dandanplay_remote_token_required', tokenRequired);
+            result._restoredOtherData = true;
           } catch (_) {}
         }
       }
@@ -889,6 +967,7 @@ class FullBackupService {
         await prefs.setBool('web_server_auto_start', autoStart);
         await prefs.setInt('web_server_port', port);
         await prefs.setBool('web_server_ipv6_enabled', ipv6Enabled);
+        result._restoredOtherData = true;
         debugPrint('恢复了Nipaplay媒体库共享配置');
       }
 
@@ -932,7 +1011,10 @@ class FullBackupService {
     final result = CategoryRestoreResult();
 
     try {
-      watchHistoryData = (await hydratePortableCredentials({'items': watchHistoryData}, CredentialStore.instance))['items'] as List;
+      watchHistoryData = (await _hydrateRestoreData(
+              {'items': watchHistoryData}, result,
+              recordLists: {'items'}))['items'] as List? ??
+          [];
       final database = WatchHistoryDatabase.instance;
       final items = <WatchHistoryItem>[];
 
@@ -995,7 +1077,10 @@ class FullBackupService {
     final result = CategoryRestoreResult();
 
     try {
-      episodeMatchesData = (await hydratePortableCredentials({'items': episodeMatchesData}, CredentialStore.instance))['items'] as List;
+      episodeMatchesData = (await _hydrateRestoreData(
+              {'items': episodeMatchesData}, result,
+              recordLists: {'items'}))['items'] as List? ??
+          [];
       final database = WatchHistoryDatabase.instance;
       final matches = <EpisodeMatchRestoreItem>[];
 
@@ -1048,7 +1133,8 @@ class FullBackupService {
     final result = CategoryRestoreResult();
 
     try {
-      accountsData = await hydratePortableCredentials(accountsData, CredentialStore.instance);
+      accountsData = await _hydrateRestoreData(accountsData, result,
+          recordLists: {'serverAccounts'});
       final prefs = await SharedPreferences.getInstance();
 
       // 1. 恢复弹弹play 账户
@@ -1320,6 +1406,23 @@ class BackupRestoreResult {
   CategoryRestoreResult? episodeMatchesResult;
   CategoryRestoreResult? accountsResult;
 
+  Iterable<CategoryRestoreResult> get _categories => [
+        preferencesResult,
+        mediaLibrariesResult,
+        watchHistoryResult,
+        episodeMatchesResult,
+        accountsResult,
+      ].whereType<CategoryRestoreResult>();
+
+  String get status => _categories.any((result) => result.status == 'failed') ||
+          (!success && credentialSkips.isEmpty)
+      ? 'failed'
+      : credentialSkips.isEmpty
+          ? 'completed'
+          : _categories.any((result) => result.hasRestoredData)
+              ? 'partial'
+              : 'skipped';
+
   /// 获取恢复的总记录数
   int get totalRestoredCount {
     return (preferencesResult?.restoredCount ?? 0) +
@@ -1330,9 +1433,18 @@ class BackupRestoreResult {
 
   /// 获取跳过的总记录数
   int get totalSkippedCount {
-    return (watchHistoryResult?.skippedCount ?? 0) +
-        (episodeMatchesResult?.skippedCount ?? 0);
+    return (preferencesResult?.skippedCount ?? 0) +
+        (mediaLibrariesResult?.skippedCount ?? 0) +
+        (watchHistoryResult?.skippedCount ?? 0) +
+        (episodeMatchesResult?.skippedCount ?? 0) +
+        (accountsResult?.skippedCount ?? 0);
   }
+
+  List<Map<String, dynamic>> get credentialSkips => [
+        for (final result in _categories)
+          ...result.skippedItems
+              .where((item) => item['reason'] == 'credential_unresolved'),
+      ];
 }
 
 /// 单个类别的恢复结果
@@ -1341,6 +1453,8 @@ class CategoryRestoreResult {
   String? errorMessage;
   int restoredCount = 0;
   int skippedCount = 0;
+  final List<Map<String, dynamic>> skippedItems = [];
+  bool _restoredOtherData = false;
 
   // 偏好设置特有
   int localLibraryCount = 0;
@@ -1350,6 +1464,21 @@ class CategoryRestoreResult {
   bool dandanplayRestored = false;
   bool bangumiRestored = false;
   int serverAccountCount = 0;
+
+  bool get hasRestoredData =>
+      _restoredOtherData ||
+      restoredCount > 0 ||
+      localLibraryCount > 0 ||
+      serverProfileCount > 0 ||
+      serverAccountCount > 0 ||
+      dandanplayRestored ||
+      bangumiRestored;
+
+  String get status => errorMessage != null
+      ? 'failed'
+      : skippedItems.any((item) => item['reason'] == 'credential_unresolved')
+          ? (hasRestoredData ? 'partial' : 'skipped')
+          : (success ? 'completed' : 'failed');
 }
 
 /// 备份预览信息

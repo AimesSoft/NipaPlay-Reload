@@ -102,6 +102,7 @@ final class ClassicOperations implements Capability {
         if (result.watchHistoryResult != null) await this.reloadHistory();
         return {
           'success': result.success,
+          'status': result.status,
           'error': result.errorMessage,
           'restoredCount': result.totalRestoredCount,
           'skippedCount': result.totalSkippedCount,
@@ -392,8 +393,10 @@ final class ClassicOperations implements Capability {
 
   static JsonMap categoryResult(CategoryRestoreResult r) => {
         'success': r.success,
+        'status': r.status,
         'restoredCount': r.restoredCount,
         'skippedCount': r.skippedCount,
+        'skippedItems': r.skippedItems,
         'error': r.errorMessage,
         'localLibraryCount': r.localLibraryCount,
         'serverProfileCount': r.serverProfileCount,

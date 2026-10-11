@@ -111,9 +111,85 @@ void main() {
     await prefs.remove('dandanplay_logged_in');
     final restored = await service.restoreFromData(
         backupData: backup, categories: {BackupCategory.accounts});
-    expect(restored.success, true);
+    expect(restored.success, false);
+    expect(restored.status, 'skipped');
+    expect(restored.accountsResult!.skippedCount, 3);
+    expect(restored.accountsResult!.dandanplayRestored, false);
     expect(prefs.getBool('dandanplay_logged_in') ?? false, false);
     expect(store.notices.value.join(), contains('重新登录'));
+  });
+  test('unresolved references retain preferences, connections and active login', () async {
+    await store.migrate(prefs);
+    await prefs.setStringList('plugin_enabled_ids', ['current']);
+    await prefs.setBool('plugin_downloader_override', true);
+    await prefs.setString('plugin_text_setting_demo::label', 'current public');
+    await prefs.setStringList('nipaplay_scanned_folders', ['current library']);
+    final snapshot = {for (final key in prefs.getKeys()) key: prefs.get(key)};
+    final backend = store.vault.backend as MemoryVault;
+    final secrets = Map<CredentialRef, String>.from(backend.values);
+    const missing = CredentialRef('old-backup', 'absent');
+    final result = await FullBackupService().restoreFromData(backupData: {
+      'version': 2,
+      'preferences': {'settings': {
+        for (final key in ['plugin_enabled_ids', 'plugin_downloader_override', 'plugin_text_setting_demo::label'])
+          key: CredentialStore.preferenceRef(key).placeholder,
+        'spoiler_ai_api_key': missing.placeholder,
+      }},
+      'accounts': {
+        'dandanplay': {'isLoggedIn': true, 'token': missing.placeholder, 'username': 'overwrite'},
+        'bangumi': {'isLoggedIn': true, 'accessToken': missing.placeholder},
+        'serverAccounts': [{'id': 'server', 'accessToken': missing.placeholder}],
+      },
+      'mediaLibraries': {
+        'localMediaLibraries': ['remote library', jsonEncode(missing.placeholder)],
+        'serverProfiles': [{'id': 'server', 'accessToken': missing.placeholder}],
+        'webdavConnections': [{'id': 'webdav', 'password': missing.placeholder}],
+        'smbConnections': [{'id': 'smb', 'password': missing.placeholder}],
+        'dandanplayRemote': {'baseUrl': 'https://example.invalid', 'apiToken': missing.placeholder},
+      },
+    }, categories: {BackupCategory.preferences, BackupCategory.accounts, BackupCategory.mediaLibraries});
+    expect(result.status, 'skipped');
+    expect(result.success, false);
+    expect(result.totalRestoredCount, 0);
+    expect(result.totalSkippedCount, 12);
+    expect(result.credentialSkips, hasLength(12));
+    expect({for (final key in prefs.getKeys()) key: prefs.get(key)}, snapshot);
+    expect(backend.values, secrets);
+  });
+  test('vault refusal skips a reference and continues ordinary restore', () async {
+    const ref = CredentialRef('backup', 'denied');
+    (store.vault.backend as MemoryVault).denied = ref;
+    final snapshot = prefs.getString('spoiler_ai_api_key');
+    final result = await FullBackupService().restoreFromData(backupData: {
+      'version': 2,
+      'preferences': {'settings': {'spoiler_ai_api_key': ref.placeholder, 'language': 'english'}},
+    }, categories: {BackupCategory.preferences});
+    expect(result.status, 'partial');
+    expect(result.success, false);
+    expect(result.totalRestoredCount, 1);
+    expect(result.totalSkippedCount, 1);
+    expect(result.preferencesResult!.skippedItems.single['references'], [
+      {'credentialRef': ref.toJson(), 'reason': 'storage_access_denied'}
+    ]);
+    expect(prefs.getString('spoiler_ai_api_key'), snapshot);
+    expect(prefs.getString('language'), 'english');
+  });
+  test('media-library partial restore counts preserved credentials separately', () async {
+    final current = prefs.getString('server_profiles');
+    final result = await FullBackupService().restoreFromData(backupData: {
+      'version': 2,
+      'mediaLibraries': {
+        'serverProfiles': [{'id': 'server', 'accessToken': const CredentialRef('backup', 'missing').placeholder}],
+        'embySelectedLibraryIds': ['public selection'],
+      },
+    }, categories: {BackupCategory.mediaLibraries});
+    expect(result.success, false);
+    expect(result.status, 'partial');
+    expect(result.mediaLibrariesResult!.status, 'partial');
+    expect(result.mediaLibrariesResult!.serverProfileCount, 0);
+    expect(result.totalSkippedCount, 1);
+    expect(prefs.getString('server_profiles'), current);
+    expect(prefs.getStringList('emby_selected_library_ids'), ['public selection']);
   });
   test(
       'credential-bearing playback URLs travel only as references and hydrate on the host',
