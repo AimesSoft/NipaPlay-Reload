@@ -163,6 +163,25 @@ class JellyfinService extends MediaServerServiceBase
     _availableLibraries = [];
   }
 
+  Future<List<PlaybackMediaSource>> getPlaybackMediaSources(String itemId) async {
+    await ensureSavedConnection();
+    if (!_isConnected || _userId == null) {
+      throw StateError('Not connected to a Jellyfin server.');
+    }
+    final response = await _makeAuthenticatedRequest(
+      '/Items/$itemId/PlaybackInfo?UserId=$_userId',
+    );
+    if (response.statusCode != 200) {
+      throw StateError(
+          'Unable to load Jellyfin media sources (HTTP ${response.statusCode}).');
+    }
+    final data = json.decode(response.body) as Map<String, dynamic>;
+    return [
+      for (final source in data['MediaSources'] as List)
+        PlaybackMediaSource.fromJson(Map<String, dynamic>.from(source as Map))
+    ];
+  }
+
   /// 获取服务器端的媒体技术元数据（容器/编解码器/Profile/Level/HDR/声道/码率等）
   /// 返回统一结构：
   /// {
@@ -1691,7 +1710,7 @@ class JellyfinService extends MediaServerServiceBase
 
   /// 下载外挂字幕文件
   Future<String?> downloadSubtitleFile(
-      String itemId, int subtitleIndex, String format) async {
+      String itemId, int subtitleIndex, String format, {String? mediaSourceId}) async {
     if (kIsWeb) return null;
     if (!_isConnected || _accessToken == null) {
       throw Exception('未连接到Jellyfin服务器');
@@ -1715,11 +1734,17 @@ class JellyfinService extends MediaServerServiceBase
         return null;
       }
 
-      final mediaSourceId = mediaSources[0]['Id'];
+      final selectedSources = mediaSourceId == null
+          ? mediaSources
+          : mediaSources.where((source) => source['Id'] == mediaSourceId).toList();
+      if (selectedSources.isEmpty) {
+        throw StateError('The selected Jellyfin media source is unavailable.');
+      }
+      final resolvedMediaSourceId = selectedSources.first['Id'];
 
       // 构建字幕下载URL
       final subtitleUrl =
-          '$_serverUrl/Videos/$itemId/$mediaSourceId/Subtitles/$subtitleIndex/Stream.$format?ApiKey=$_accessToken';
+          '$_serverUrl/Videos/$itemId/$resolvedMediaSourceId/Subtitles/$subtitleIndex/Stream.$format?ApiKey=$_accessToken';
 
       debugPrint(
         'JellyfinService: 下载字幕文件: ${Uri.parse(subtitleUrl).replace(queryParameters: const <String, String>{})}',
@@ -1738,7 +1763,8 @@ class JellyfinService extends MediaServerServiceBase
         // 保存到临时文件
         final tempDir = await getTemporaryDirectory();
         await tempDir.create(recursive: true);
-        final fileName = 'jellyfin_subtitle_${itemId}_$subtitleIndex.$format';
+        final sourceSuffix = mediaSourceId == null ? '' : '_${Uri.encodeComponent(resolvedMediaSourceId.toString())}';
+        final fileName = 'jellyfin_subtitle_$itemId${sourceSuffix}_$subtitleIndex.$format';
         final filePath = '${tempDir.path}/$fileName';
 
         final file = File(filePath);

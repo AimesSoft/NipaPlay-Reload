@@ -169,7 +169,7 @@ class CupertinoAudioTracksPane extends StatelessWidget {
             MediaServerMenuSurface.cupertinoAudio,
             isEmby,
             () async {
-              videoState.player.activeAudioTracks = [index];
+              videoState.selectEmbeddedAudioTrack(index);
             },
             () async {
               if (source == null || preference == null) return false;

@@ -16,7 +16,7 @@ import 'package:nipaplay/utils/external_player_danmaku_ass.dart';
 
 
 /// 使用 PotPlayer 的 Windows 消息接口管理播放状态, 并用 ASS 文件承载弹幕.
-class PotPlayerSession extends ChangeNotifier implements ExternalPlayerLaunchSession {
+class PotPlayerSession extends ChangeNotifier implements ExternalPlayerLaunchSession, ExternalPlayerTelemetrySession {
 
   factory PotPlayerSession({
     required String playerPath,
@@ -252,6 +252,12 @@ class PotPlayerSession extends ChangeNotifier implements ExternalPlayerLaunchSes
       (_) => _refreshState(),
     );
     _refreshState();
+  }
+
+  @override
+  Future<bool> refreshPlaybackState() async {
+    _refreshState();
+    return !isClosed && _windowHandle != 0 && position != null;
   }
 
   void _refreshState() {

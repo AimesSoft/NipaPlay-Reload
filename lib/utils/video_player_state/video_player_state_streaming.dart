@@ -642,6 +642,7 @@ extension JellyfinQualitySwitch on VideoPlayerState {
     int? serverSubtitleIndex,
     bool burnInSubtitle = false,
     int? audioStreamIndex,
+    String? mediaSourceId,
   }) async {
     try {
       if (_currentVideoPath == null ||
@@ -681,7 +682,7 @@ extension JellyfinQualitySwitch on VideoPlayerState {
         subtitleStreamIndex: serverSubtitleIndex,
         burnInSubtitle: burnInSubtitle,
         playSessionId: _currentPlaybackSession?.playSessionId,
-        mediaSourceId: _currentPlaybackSession?.mediaSourceId,
+        mediaSourceId: mediaSourceId ?? _currentPlaybackSession?.mediaSourceId,
       );
       _currentPlaybackSession = newSession;
       JellyfinPlaybackSyncService().updatePlaybackSession(newSession);

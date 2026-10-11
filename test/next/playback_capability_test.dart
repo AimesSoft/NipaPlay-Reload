@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:nipa_harness/nipa_harness.dart';
 import 'package:nipaplay/next/capabilities/playback_capability.dart';
@@ -15,6 +17,39 @@ void main() {
   });
 
   group('playback.open', () {
+    test('a fresh file needs no history and does not synthesize a history row', () async {
+      final directory = await Directory.systemTemp.createTemp('x13-new-file-');
+      addTearDown(() => directory.delete(recursive: true));
+      final file = await File('${directory.path}/new.mkv').writeAsString('source');
+      fixture = PlaybackFixture(rows: []);
+      await invokeCompleted(fixture.harness, 'playback.open', {'path': file.path});
+      expect(fixture.started.single.historyItem, isNull);
+      expect(fixture.started.single.videoPath, file.path);
+      expect(fixture.rows, isEmpty);
+      expect(await file.readAsString(), 'source');
+    });
+
+    test('an unrecorded URL reaches Classic without an invented identity', () async {
+      fixture = PlaybackFixture(rows: []);
+      await invokeCompleted(fixture.harness, 'playback.open', {'path': 'https://example.test/video.mp4'});
+      expect(fixture.started.single.historyItem, isNull);
+      expect(fixture.started.single.animeId, isNull);
+      expect(fixture.started.single.episodeId, isNull);
+    });
+
+    test('a file URL resolves to the same local history identity', () async {
+      final row = fixture.rows.single;
+      await invokeCompleted(fixture.harness, 'playback.open', {'path': Uri.file(row.filePath).toString()});
+      expect(fixture.started.single.videoPath, row.filePath);
+      expect(fixture.started.single.historyItem, same(row));
+    });
+
+    test('Classic receives non-HTTP streaming URLs without a scheme allowlist', () async {
+      fixture = PlaybackFixture(rows: []);
+      await invokeCompleted(fixture.harness, 'playback.open', {'path': 'rtsp://example.test/live'});
+      expect(fixture.started.single.videoPath, 'rtsp://example.test/live');
+    });
+
     test('opens by path, copies history fields and bypasses file selection',
         () async {
       final row = watchItem('/media/path.mkv',
@@ -168,18 +203,12 @@ void main() {
       {'animeId': 10, 'episodeId': 100, 'startPositionMs': 250},
     ]) {
       test(
-          'rejects an external start position before any playback or lookup: $input',
+          'opens and seeks an external player with a specified position: $input',
           () async {
         fixture.external = true;
-        final failure = await invokeFailed(
-            fixture.harness, 'playback.open', input, FailureCode.unavailable);
-        expect(failure.message, contains('external player'));
-        expect(fixture.started, isEmpty);
-        expect(fixture.pathLoads, isEmpty);
-        expect(fixture.episodeLoads, isEmpty);
-        expect(fixture.selectionHistoryLoads, isEmpty);
-        expect(fixture.matchLoads, isEmpty);
-        expect(fixture.player.seeks, isEmpty);
+        await invokeCompleted(fixture.harness, 'playback.open', input);
+        expect(fixture.started, hasLength(1));
+        expect(fixture.player.seeks, [Duration(milliseconds: input['startPositionMs'] as int)]);
       });
     }
 

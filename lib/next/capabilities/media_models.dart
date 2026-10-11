@@ -226,6 +226,8 @@ final class ContinueItem implements JsonEncodable {
 }
 
 const playbackSnapshotSchema = ObjectSchema({
+  'player': StringSchema(values: ['internal', 'external']),
+  'external': ObjectSchema({}, additionalProperties: true),
   'status': StringSchema(),
   'hasVideo': BooleanSchema(),
   'paused': BooleanSchema(),
@@ -270,6 +272,8 @@ final class PlaybackSnapshot implements JsonEncodable {
     required this.rate,
     required this.canPrevious,
     required this.canNext,
+    this.external,
+    this.player,
   });
 
   final String status;
@@ -285,9 +289,13 @@ final class PlaybackSnapshot implements JsonEncodable {
   final double rate;
   final bool canPrevious;
   final bool canNext;
+  final JsonMap? external;
+  final String? player;
 
   @override
   JsonMap toJson() => {
+        if (external != null) 'external': external,
+        if (player != null) 'player': player,
         'status': status,
         'hasVideo': hasVideo,
         'paused': paused,
@@ -423,7 +431,8 @@ final class ContinueWatchingOutput implements JsonEncodable {
 const playbackOpenInputSchema = ObjectSchema({
   'path': StringSchema(
     minLength: 1,
-    description: 'Exact recorded media location to play. Mutually exclusive '
+    description: 'Absolute local file path, URL, jellyfin://itemId or emby://itemId. '
+        'Watch history is optional. Mutually exclusive '
         'with animeId and episodeId.',
   ),
   'animeId': IntegerSchema(

@@ -1,6 +1,13 @@
 part of video_player_state;
 
 extension VideoPlayerStateSubtitles on VideoPlayerState {
+  void selectEmbeddedAudioTrack(int index) {
+    player.activeAudioTracks = [index];
+  }
+
+  void selectEmbeddedSubtitleTrack(int index) {
+    player.activeSubtitleTracks = index < 0 ? [] : [index];
+  }
   void _attachPluginDanmakuFilter() {
     _detachPluginDanmakuFilter();
 

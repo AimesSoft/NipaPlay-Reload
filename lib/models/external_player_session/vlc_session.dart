@@ -13,7 +13,7 @@ import 'package:nipaplay/models/external_player_session/session.dart';
 
 
 /// 管理 Linux 平台上的 VLC 进程和生命周期.
-class VlcSession extends ChangeNotifier implements ExternalPlayerLaunchSession {
+class VlcSession extends ChangeNotifier implements ExternalPlayerLaunchSession, ExternalPlayerTelemetrySession {
 
   VlcSession({
     required this.playerPath,
@@ -198,6 +198,17 @@ class VlcSession extends ChangeNotifier implements ExternalPlayerLaunchSession {
       return;
     }
     _scheduleNextProcessPoll();
+  }
+
+  @override
+  Future<bool> refreshPlaybackState() async {
+    final nextState = await _readVlcState();
+    if (nextState == null || isClosed) return false;
+    position = nextState.position;
+    duration = nextState.duration;
+    isPaused = nextState.isPaused;
+    notifyListeners();
+    return true;
   }
 
   Future<bool> _refreshProcessState(Timer timer) async {

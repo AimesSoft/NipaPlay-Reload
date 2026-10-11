@@ -21,7 +21,7 @@ import 'package:nipaplay/utils/external_player_danmaku_ass.dart';
 /// 管理一个 Linux, macOS 或 Windows mpv 进程, IPC, 播放状态和 ASS 弹幕交互.
 ///
 /// 本类保存当前媒体路径; 番剧和剧集展示信息由控制台服务管理.
-class MpvSession extends ChangeNotifier implements ExternalPlayerLaunchSession {
+class MpvSession extends ChangeNotifier implements ExternalPlayerLaunchSession, ExternalPlayerTelemetrySession {
 
   // 私有字段
   final String _playerPath; // 外部播放器的可执行文件路径
@@ -540,6 +540,17 @@ class MpvSession extends ChangeNotifier implements ExternalPlayerLaunchSession {
 
     // 继续轮询
     _scheduleNextProcessPoll();
+  }
+
+  @override
+  Future<bool> refreshPlaybackState() async {
+    final nextState = await _readMpvState();
+    if (nextState == null || isClosed) return false;
+    _position = nextState.position;
+    _duration = nextState.duration;
+    _isPaused = nextState.isPaused;
+    notifyListeners();
+    return true;
   }
 
   Future<bool> _refreshProcessState(Timer timer) async {

@@ -293,9 +293,9 @@ class _CupertinoSubtitleTracksPaneState
 
           videoState.setExternalSubtitle("");
           if (trackIndex >= 0) {
-            videoState.player.activeSubtitleTracks = [trackIndex];
+            videoState.selectEmbeddedSubtitleTrack(trackIndex);
           } else {
-            videoState.player.activeSubtitleTracks = [];
+            videoState.selectEmbeddedSubtitleTrack(-1);
           }
           if (mounted) setState(() {});
           didApply = true;
