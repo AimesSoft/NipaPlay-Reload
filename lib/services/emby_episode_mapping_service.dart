@@ -1,4 +1,6 @@
 import 'dart:async';
+import 'emby_service.dart';
+import 'scoped_media_server_mapping.dart';
 import 'package:flutter/foundation.dart';
 import 'package:sqflite/sqflite.dart';
 import 'package:nipaplay/models/emby_model.dart';
@@ -22,6 +24,11 @@ class EmbyEpisodeMappingService {
   final Map<String, int?> _episodePredictionCache = {};
   DateTime? _lastCacheClean;
 
+  void invalidateCache() {
+    _animeMappingCache.clear();
+    _episodePredictionCache.clear();
+  }
+
   /// 初始化数据库
   Future<void> initialize() async {
     if (_database != null) return;
@@ -33,33 +40,7 @@ class EmbyEpisodeMappingService {
     final mainDb = await WatchHistoryDatabase.instance.database;
     _database = mainDb;
 
-    // 创建映射表（简化版本，移除复杂的偏移量字段）
-    await _database!.execute('''
-      CREATE TABLE IF NOT EXISTS emby_dandanplay_mapping (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        emby_series_id TEXT NOT NULL,
-        emby_series_name TEXT,
-        emby_season_id TEXT,
-        dandanplay_anime_id INTEGER NOT NULL,
-        dandanplay_anime_title TEXT,
-        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-        UNIQUE(emby_series_id, emby_season_id, dandanplay_anime_id)
-      )
-    ''');
-
-    await _database!.execute('''
-      CREATE TABLE IF NOT EXISTS emby_episode_mapping (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        emby_episode_id TEXT NOT NULL UNIQUE,
-        emby_index_number INTEGER,
-        dandanplay_episode_id INTEGER NOT NULL,
-        mapping_id INTEGER NOT NULL,
-        confirmed BOOLEAN DEFAULT FALSE,
-        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-        FOREIGN KEY (mapping_id) REFERENCES emby_dandanplay_mapping (id)
-      )
-    ''');
+    await ensureMediaServerMappingTables(_database!, 'emby');
 
     debugPrint('[Emby映射服务] 数据库初始化完成');
     
@@ -91,13 +72,16 @@ class EmbyEpisodeMappingService {
     if (kIsWeb) return 0;
     await initialize();
 
+    embySeriesId = await writableSeriesId(_database!, 'emby',
+        mediaServerProfileScope(EmbyService.instance.currentProfile), embySeriesId);
+
     debugPrint('[Emby映射服务] 创建动画映射: $embySeriesName -> $dandanplayAnimeTitle');
 
     // 检查是否已存在映射
     final existing = await _database!.query(
       'emby_dandanplay_mapping',
-      where: 'emby_series_id = ? AND emby_season_id = ? AND dandanplay_anime_id = ?',
-      whereArgs: [embySeriesId, embySeasonId, dandanplayAnimeId],
+      where: 'emby_series_id = ? AND emby_season_id ${embySeasonId == null ? 'IS NULL' : '= ?'} AND dandanplay_anime_id = ?',
+      whereArgs: [embySeriesId, if (embySeasonId != null) embySeasonId, dandanplayAnimeId],
     );
 
     if (existing.isNotEmpty) {
@@ -114,6 +98,7 @@ class EmbyEpisodeMappingService {
         whereArgs: [mappingId],
       );
       debugPrint('[Emby映射服务] 更新现有动画映射: ID=$mappingId');
+      invalidateCache();
       return mappingId;
     } else {
       // 创建新映射
@@ -128,6 +113,7 @@ class EmbyEpisodeMappingService {
         },
       );
       debugPrint('[Emby映射服务] 创建新动画映射: ID=$mappingId');
+      invalidateCache();
       return mappingId;
     }
   }
@@ -142,6 +128,10 @@ class EmbyEpisodeMappingService {
   }) async {
     if (kIsWeb) return;
     await initialize();
+
+    embyEpisodeId = await writableEpisodeId(
+        _database!, 'emby', embyEpisodeId, mappingId,
+        profileScope: mediaServerProfileScope(EmbyService.instance.currentProfile));
 
     debugPrint('[Emby映射服务] 记录剧集映射: Emby集$embyIndexNumber -> DandanPlay集$dandanplayEpisodeId');
 
@@ -158,13 +148,7 @@ class EmbyEpisodeMappingService {
       conflictAlgorithm: ConflictAlgorithm.replace,
     );
 
-    // 清理相关缓存
-    final cacheKeyToRemove = _episodePredictionCache.keys
-        .where((key) => key.startsWith(embyEpisodeId))
-        .toList();
-    for (final key in cacheKeyToRemove) {
-      _episodePredictionCache.remove(key);
-    }
+    invalidateCache();
 
     // 如果是确认的映射，更新相关统计信息
     if (confirmed) {
@@ -180,8 +164,12 @@ class EmbyEpisodeMappingService {
     if (kIsWeb) return null;
     await initialize();
 
+    final scoped = await scopedAnimeMapping(_database!, 'emby',
+        mediaServerProfileScope(EmbyService.instance.currentProfile), embySeriesId, embySeasonId);
+    if (scoped != null) return scoped;
+
     // 生成缓存键
-    final cacheKey = '${embySeriesId}_${embySeasonId ?? 'null'}';
+    final cacheKey = '${mediaServerProfileScope(EmbyService.instance.currentProfile)}|${embySeriesId}_${embySeasonId ?? 'null'}';
     
     // 检查缓存
     if (_animeMappingCache.containsKey(cacheKey)) {
@@ -191,8 +179,8 @@ class EmbyEpisodeMappingService {
 
     final results = await _database!.query(
       'emby_dandanplay_mapping',
-      where: 'emby_series_id = ? AND (emby_season_id = ? OR emby_season_id IS NULL)',
-      whereArgs: [embySeriesId, embySeasonId],
+      where: 'emby_series_id = ? AND (emby_season_id IS NULL${embySeasonId == null ? '' : ' OR emby_season_id = ?'})',
+      whereArgs: [embySeriesId, if (embySeasonId != null) embySeasonId],
       orderBy: 'emby_season_id IS NULL, updated_at DESC', // 优先匹配指定季节
     );
 
@@ -210,6 +198,10 @@ class EmbyEpisodeMappingService {
     if (kIsWeb) return null;
     await initialize();
 
+    final scoped = await scopedEpisodeMapping(_database!, 'emby',
+        mediaServerProfileScope(EmbyService.instance.currentProfile), embyEpisodeId);
+    if (scoped != null) return scoped;
+
     final results = await _database!.query(
       'emby_episode_mapping',
       where: 'emby_episode_id = ?',
@@ -226,6 +218,10 @@ class EmbyEpisodeMappingService {
     if (kIsWeb) return null;
     await initialize();
 
+    final scoped = await scopedEpisodeMapping(_database!, 'emby',
+        mediaServerProfileScope(EmbyService.instance.currentProfile), embyEpisode.id);
+    if (scoped != null) return scoped['dandanplay_episode_id'] as int;
+
     // 如果没有集号信息，无法预测
     if (embyEpisode.indexNumber == null) {
       debugPrint('[Emby映射服务] Emby剧集缺少集号信息，无法预测映射');
@@ -233,7 +229,7 @@ class EmbyEpisodeMappingService {
     }
 
     // 生成缓存键
-    final cacheKey = '${embyEpisode.id}_${embyEpisode.indexNumber}';
+    final cacheKey = '${mediaServerProfileScope(EmbyService.instance.currentProfile)}|${embyEpisode.id}_${embyEpisode.indexNumber}';
     
     // 检查缓存
     if (_episodePredictionCache.containsKey(cacheKey)) {
@@ -347,7 +343,7 @@ class EmbyEpisodeMappingService {
     if (episodeMappings.isNotEmpty) {
       final nextMapping = episodeMappings.first;
       debugPrint('[Emby映射服务] 找到下一集映射: 第${nextMapping['emby_index_number']}集');
-      return Map<String, dynamic>.from(nextMapping);
+      return mediaServerMappingForDisplay('emby', nextMapping);
     }
 
     debugPrint('[Emby映射服务] 未找到下一集的现有映射');
@@ -385,7 +381,7 @@ class EmbyEpisodeMappingService {
     if (episodeMappings.isNotEmpty) {
       final prevMapping = episodeMappings.first;
       debugPrint('[Emby映射服务] 找到上一集映射: 第${prevMapping['emby_index_number']}集');
-      return Map<String, dynamic>.from(prevMapping);
+      return mediaServerMappingForDisplay('emby', prevMapping);
     }
 
     debugPrint('[Emby映射服务] 未找到上一集的现有映射');
@@ -411,7 +407,12 @@ class EmbyEpisodeMappingService {
         FROM emby_episode_mapping eem
         INNER JOIN emby_dandanplay_mapping edm ON eem.mapping_id = edm.id
         WHERE eem.dandanplay_episode_id = ? AND edm.dandanplay_anime_id = ?
-      ''', [currentEpisodeId, currentAnimeId]);
+          AND (eem.emby_episode_id NOT LIKE 'next:%'
+            OR substr(eem.emby_episode_id,1,length(?))=?)
+        ORDER BY eem.emby_episode_id LIKE 'next:%' DESC
+      ''', [currentEpisodeId, currentAnimeId,
+        scopedMediaServerId(mediaServerProfileScope(EmbyService.instance.currentProfile) ?? '', ''),
+        scopedMediaServerId(mediaServerProfileScope(EmbyService.instance.currentProfile) ?? '', '')]);
 
       debugPrint('[Emby映射服务] 查询结果数量: ${currentMappingResults.length}');
       if (currentMappingResults.isNotEmpty) {
@@ -460,7 +461,7 @@ class EmbyEpisodeMappingService {
         debugPrint('[Emby映射服务] ✅ 找到下一集的现有映射: $nextMapping');
         debugPrint('[Emby映射服务] - 下一集集号: ${nextMapping['emby_index_number']}');
         debugPrint('[Emby映射服务] - 下一集弹幕ID: ${nextMapping['dandanplay_episode_id']}');
-        return Map<String, dynamic>.from(nextMapping);
+        return mediaServerMappingForDisplay('emby', nextMapping);
       }
 
       // 4. 如果没有现有映射，尝试基于已有映射推算下一集
@@ -503,7 +504,7 @@ class EmbyEpisodeMappingService {
           'confirmed': 0, // 标记为预测映射
         };
         debugPrint('[Emby映射服务] ✅ 返回推算的映射: $predictedMapping');
-        return predictedMapping;
+        return mediaServerMappingForDisplay('emby', predictedMapping);
       } else {
         debugPrint('[Emby映射服务] ❌ 没有已有映射记录，无法推算');
       }
@@ -534,7 +535,12 @@ class EmbyEpisodeMappingService {
         FROM emby_episode_mapping eem
         INNER JOIN emby_dandanplay_mapping edm ON eem.mapping_id = edm.id
         WHERE eem.dandanplay_episode_id = ? AND edm.dandanplay_anime_id = ?
-      ''', [currentEpisodeId, currentAnimeId]);
+          AND (eem.emby_episode_id NOT LIKE 'next:%'
+            OR substr(eem.emby_episode_id,1,length(?))=?)
+        ORDER BY eem.emby_episode_id LIKE 'next:%' DESC
+      ''', [currentEpisodeId, currentAnimeId,
+        scopedMediaServerId(mediaServerProfileScope(EmbyService.instance.currentProfile) ?? '', ''),
+        scopedMediaServerId(mediaServerProfileScope(EmbyService.instance.currentProfile) ?? '', '')]);
 
       if (currentMappingResults.isEmpty) {
         debugPrint('[Emby映射服务] 未找到当前剧集的映射记录');
@@ -566,7 +572,7 @@ class EmbyEpisodeMappingService {
       if (previousMappingResults.isNotEmpty) {
         final previousMapping = previousMappingResults.first;
         debugPrint('[Emby映射服务] 找到上一集的现有映射: 第${previousMapping['emby_index_number']}集');
-        return Map<String, dynamic>.from(previousMapping);
+        return mediaServerMappingForDisplay('emby', previousMapping);
       }
 
       // 4. 如果没有现有映射，尝试基于已有映射推算上一集
@@ -602,7 +608,7 @@ class EmbyEpisodeMappingService {
           'mapping_id': mappingId,
           'confirmed': 0, // 标记为预测映射
         };
-        return predictedMapping;
+        return mediaServerMappingForDisplay('emby', predictedMapping);
       } else {
         debugPrint('[Emby映射服务] 没有已有映射记录，无法推算');
       }
@@ -633,8 +639,12 @@ class EmbyEpisodeMappingService {
     if (kIsWeb) return null;
     await initialize();
 
+    final scoped = await scopedEpisodeMapping(_database!, 'emby',
+        mediaServerProfileScope(EmbyService.instance.currentProfile), embyEpisodeId);
+    if (scoped != null) return scoped['dandanplay_episode_id'] as int;
+
     // 生成缓存键
-    final cacheKey = '${embyEpisodeId}_${embyIndexNumber}_${embySeriesId}_${embySeasonId ?? 'null'}';
+    final cacheKey = '${mediaServerProfileScope(EmbyService.instance.currentProfile)}|${embyEpisodeId}_${embyIndexNumber}_${embySeriesId}_${embySeasonId ?? 'null'}';
     
     // 检查缓存
     if (_episodePredictionCache.containsKey(cacheKey)) {
@@ -792,13 +802,7 @@ class EmbyEpisodeMappingService {
       whereArgs: [mappingId],
     );
 
-    // 清理相关缓存
-    final cacheKeyToRemove = _animeMappingCache.keys
-        .where((key) => key.startsWith('${embySeriesId}_'))
-        .toList();
-    for (final key in cacheKeyToRemove) {
-      _animeMappingCache.remove(key);
-    }
+    invalidateCache();
 
     debugPrint('[Emby映射服务] 已删除动画映射: $embySeriesId');
   }

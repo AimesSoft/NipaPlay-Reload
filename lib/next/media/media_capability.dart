@@ -399,7 +399,7 @@ final _specs = [
       ])),
   _spec(
       'media.identity.bind_batch',
-      'Atomically accept explicit bindings. Use ref + existing entityId + kind for any external work/release/episode, with no provider fetch or cascade. New provider namespaces must be HTTPS origins; host canonicalizes case, default port and trailing slash. Or use workRef/releaseRef/episodeRefs for built-in catalogue validation and file links. Preserves reason/evidence; host derives boundBy. requestId is durable and cannot be reused with different input.',
+      'Atomically accept explicit bindings. Use ref + existing entityId + kind for any external work/release/episode, with no provider fetch or cascade. Files can use ref + entityId + exactly one localEpisodeIds target where that ref is already accepted (including an earlier entry in this batch). New provider namespaces must be HTTPS origins; host canonicalizes case, default port and trailing slash. Or use workRef/releaseRef/episodeRefs for built-in catalogue validation and file links. Indexed remote files use location evidence without local byte probing. Use source browse fileId when paths belong to multiple servers. Preserves reason/evidence; host derives boundBy. requestId is durable and cannot be reused with different input.',
       Effect.write,
       const ObjectSchema({
         'requestId': _text,

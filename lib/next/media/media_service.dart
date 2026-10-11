@@ -348,6 +348,59 @@ final class MediaService {
     return {'files': results};
   }
 
+  Future<({String path, String? fileId, JsonMap probe, bool locationOnly})>
+      _bindingFile(JsonMap entry) async {
+    String? id = entry['entityId'] as String?;
+    final uri =
+        entry['path'] == null ? null : Uri.tryParse(entry['path'] as String);
+    if (id == null &&
+        uri != null &&
+        uri.scheme.isNotEmpty &&
+        uri.scheme != 'file') {
+      final locations = await store.database.query('media_locations',
+          where: 'owner_device_id=? AND locator=?',
+          whereArgs: [store.ownerDeviceId, entry['path']]);
+      if (locations.length > 1) {
+        throw const Failure(FailureCode.conflict,
+            'This path belongs to multiple sources; use the source browse fileId.');
+      }
+      if (locations.isEmpty) {
+        throw const Failure(FailureCode.notFound,
+            'Remote path is not indexed; browse its source or use an indexed fileId.');
+      }
+      id = locations.single['file_id'] as String;
+    }
+    if (id != null) {
+      final file = await store.entity(id);
+      if (file['kind'] != 'file') {
+        throw const Failure(
+            FailureCode.invalidInput, 'entityId must reference a file.');
+      }
+      final locations = (await store.locations(id))
+          .where((row) => row['owner_device_id'] == store.ownerDeviceId)
+          .toList();
+      if (locations.isEmpty) {
+        throw const Failure(
+            FailureCode.unavailable, 'File has no location on this device.');
+      }
+      if (locations.every((row) => row['source'] != 'local')) {
+        return (
+          path: locations.first['locator'] as String,
+          fileId: id,
+          probe: (file['attributes'] as JsonMap)['probe'] as JsonMap,
+          locationOnly: true
+        );
+      }
+    }
+    final info = await readFile(entry);
+    return (
+      path: info.path,
+      fileId: info.fileId,
+      probe: info.probe,
+      locationOnly: false
+    );
+  }
+
   Future<JsonMap> bindBatch(JsonMap input, Invocation invocation) =>
       mutate(() async {
         await store.importLegacy(await classic.history());
@@ -380,8 +433,11 @@ final class MediaService {
           try {
             final kind = entry['kind'] as String;
             if (entry.containsKey('ref')) {
-              if (kind == 'file' ||
-                  !entry.containsKey('entityId') ||
+              if (!entry.containsKey('entityId') ||
+                  (kind == 'file'
+                      ? (entry['localEpisodeIds'] is! List ||
+                          (entry['localEpisodeIds'] as List).length != 1)
+                      : entry.containsKey('localEpisodeIds')) ||
                   entry.keys.any((key) => const {
                         'path',
                         'workRef',
@@ -389,15 +445,20 @@ final class MediaService {
                         'episodeRefs',
                         'workId',
                         'releaseId',
-                        'localEpisodeIds',
                         'startMs',
                         'endMs'
                       }.contains(key))) {
                 throw const Failure(FailureCode.invalidInput,
-                    'Direct ref bindings require an existing work/release/episode entityId, without catalogue or file fields.');
+                    'Direct ref bindings require an existing entityId without catalogue fields; files also require exactly one localEpisodeIds target with that accepted ref.');
               }
+              final info = kind == 'file' ? await _bindingFile(entry) : null;
               prepared.add({
                 ...entry,
+                if (info != null) ...{
+                  'probe': info.probe,
+                  'verifiedPath': info.path,
+                  'locationOnly': info.locationOnly
+                },
                 'ref': canonicalExternalRef(
                         Map<String, Object?>.from(entry['ref'] as Map))
                     .toJson()
@@ -488,7 +549,7 @@ final class MediaService {
               throw const Failure(FailureCode.invalidInput,
                   'endMs must be greater than startMs.');
             }
-            final info = kind == 'file' ? await readFile(entry) : null;
+            final info = kind == 'file' ? await _bindingFile(entry) : null;
             final id = info == null ? entry['entityId'] : info.fileId;
             prepared.add({
               ...entry,
@@ -498,7 +559,8 @@ final class MediaService {
               'episodes': [for (final ep in selected) ep.toJson()],
               if (info != null) ...{
                 'probe': info.probe,
-                'verifiedPath': info.path
+                'verifiedPath': info.path,
+                'locationOnly': info.locationOnly
               }
             });
           } on Failure catch (error) {
@@ -511,6 +573,7 @@ final class MediaService {
         for (var index = 0; index < prepared.length; index++) {
           final entry = prepared[index];
           if (entry['kind'] != 'file') continue;
+          if (entry['locationOnly'] == true) continue;
           try {
             final fresh = await probe(entry['verifiedPath'] as String,
                 includeDuration: false);

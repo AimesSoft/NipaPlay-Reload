@@ -1581,8 +1581,9 @@ class EpisodeNavigationService {
             // 如果没有当前剧集的弹幕ID，尝试直接查找下一集的映射
             final mapping = await JellyfinEpisodeMappingService.instance.getEpisodeMapping(nextEpisode.id);
             if (mapping != null) {
+              nextAnimeId = mapping['dandanplay_anime_id'] as int?;
               final mappingId = mapping['mapping_id'] as int?;
-              if (mappingId != null) {
+              if (mappingId != null && mapping['dandanplay_anime_id'] == null) {
                 final animeMapping = await JellyfinEpisodeMappingService.instance.getAnimeMapping(
                   jellyfinSeriesId: seriesId,
                   jellyfinSeasonId: seasonId,
@@ -1858,8 +1859,9 @@ class EpisodeNavigationService {
             // 如果没有当前剧集的弹幕ID，尝试直接查找上一集的映射
             final mapping = await EmbyEpisodeMappingService.instance.getEpisodeMapping(previousEpisode.id);
             if (mapping != null) {
+              previousAnimeId = mapping['dandanplay_anime_id'] as int?;
               final mappingId = mapping['mapping_id'] as int?;
-              if (mappingId != null) {
+              if (mappingId != null && mapping['dandanplay_anime_id'] == null) {
                 final animeMapping = await EmbyEpisodeMappingService.instance.getAnimeMapping(
                   embySeriesId: seriesId,
                   embySeasonId: seasonId,
@@ -2025,8 +2027,9 @@ class EpisodeNavigationService {
             // 如果没有当前剧集的弹幕ID，尝试直接查找下一集的映射
             final mapping = await EmbyEpisodeMappingService.instance.getEpisodeMapping(nextEpisode.id);
             if (mapping != null) {
+              nextAnimeId = mapping['dandanplay_anime_id'] as int?;
               final mappingId = mapping['mapping_id'] as int?;
-              if (mappingId != null) {
+              if (mappingId != null && mapping['dandanplay_anime_id'] == null) {
                 final animeMapping = await EmbyEpisodeMappingService.instance.getAnimeMapping(
                   embySeriesId: seriesId,
                   embySeasonId: seasonId,

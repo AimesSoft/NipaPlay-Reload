@@ -598,7 +598,16 @@ final class MediaSourcesService {
     for (final entry in result) {
       entry['fileId'] = entry['path'] == null || !indexFiles
           ? null
-          : await store.ensureFile(entry['path'] as String);
+          : await store.ensureRemoteFile(entry['path'] as String, id, {
+              'type': type,
+              if (type == 'jellyfin' || type == 'emby')
+                'serverId': server(type).currentProfile?.serverId,
+              'itemId': entry['id'],
+              'seriesId': entry['seriesId'],
+              'seasonId': entry['seasonId'],
+              'number': entry['number'],
+              'name': entry['name'],
+            });
     }
     return result;
   }

@@ -55,13 +55,18 @@ final class IdentityStore {
           : _ensureFile(db, locator);
 
   Future<String> _ensureFile(DatabaseExecutor tx, String locator,
-      [List<JsonMap>? added]) async {
+      [List<JsonMap>? added, String? source]) async {
     if (locator.trim().isEmpty) {
       throw const Failure(FailureCode.invalidInput, 'File path is empty.');
     }
     final rows = await tx.query('media_locations',
-        where: 'owner_device_id = ? AND locator = ?',
-        whereArgs: [ownerDeviceId, locator]);
+        where:
+            'owner_device_id = ? AND locator = ?${source == null ? '' : ' AND source=?'}',
+        whereArgs: [ownerDeviceId, locator, if (source != null) source]);
+    if (rows.length > 1) {
+      throw const Failure(FailureCode.conflict,
+          'This path belongs to multiple sources; use the source browse fileId.');
+    }
     if (rows.isNotEmpty) return rows.first['file_id'] as String;
     final id = newMediaId('file');
     await tx.insert('media_entities', {
@@ -74,7 +79,7 @@ final class IdentityStore {
     await tx.insert('media_locations', {
       'id': newMediaId('location'),
       'file_id': id,
-      'source': locator.contains('://') ? 'remote' : 'local',
+      'source': source ?? (locator.contains('://') ? 'remote' : 'local'),
       'owner_device_id': ownerDeviceId,
       'locator': locator,
       'available': 1
@@ -82,6 +87,28 @@ final class IdentityStore {
     added?.add({'fileId': id, 'path': locator});
     return id;
   }
+
+  Future<String> ensureRemoteFile(
+          String locator, String sourceId, JsonMap metadata) =>
+      _filesChanged((added) => database.transaction((tx) async {
+            final serverId = metadata['serverId'] as String?;
+            final sourceScope = serverId == null
+                ? sourceId
+                : '$sourceId@${Uri.encodeComponent(serverId)}';
+            final id = await _ensureFile(tx, locator, added, sourceScope);
+            final file = await entity(id, db: tx);
+            await tx.update(
+                'media_entities',
+                {
+                  'attributes': jsonEncode({
+                    ...file['attributes'] as JsonMap,
+                    'remoteSource': {'sourceId': sourceId, ...metadata}
+                  })
+                },
+                where: 'id=?',
+                whereArgs: [id]);
+            return id;
+          }));
 
   Future<JsonMap> entity(String id, {DatabaseExecutor? db}) async {
     final rows = await (db ?? database)
@@ -186,7 +213,8 @@ final class IdentityStore {
     for (final row in history) {
       await _filesChanged((added) => database.transaction((tx) async {
             final locator = row['filePath'] as String;
-            final fileId = await _ensureFile(tx, locator, added);
+            final fileId = await _ensureFile(tx, locator, added,
+                locator.contains('://') ? 'remote' : 'local');
             final location = (await tx.query('media_locations',
                     where: 'file_id=? AND locator=?',
                     whereArgs: [fileId, locator]))
@@ -953,7 +981,11 @@ final class IdentityStore {
         'origin': invocation.origin,
         if (file != null) ...{
           'fileRevision': file['revision'],
-          'probe': (file['attributes'] as JsonMap)['probe']
+          'probe': (file['attributes'] as JsonMap)['probe'],
+          if ((file['attributes'] as JsonMap)['remoteSource'] != null) ...{
+            'remoteSource': (file['attributes'] as JsonMap)['remoteSource'],
+            'locator': input['verifiedPath'],
+          }
         }
       })
     });
@@ -1014,6 +1046,11 @@ final class IdentityStore {
               try {
                 final kind = entry['kind'] as String;
                 if (entry.containsKey('ref')) {
+                  if (kind == 'file') {
+                    results.add(await _bindFileReference(
+                        tx, entry, key, invocation, index));
+                    continue;
+                  }
                   final id = entry['entityId'] as String;
                   final target = await entity(id, db: tx);
                   if (target['kind'] != kind || kind == 'file') {
@@ -1393,6 +1430,114 @@ final class IdentityStore {
         return result;
       });
 
+  Future<JsonMap> _bindFileReference(DatabaseExecutor tx, JsonMap entry,
+      String key, Invocation invocation, int index) async {
+    final fileId = entry['entityId'] as String;
+    final file = await entity(fileId, db: tx);
+    final attrs = file['attributes'] as JsonMap;
+    final episodeId = (entry['localEpisodeIds'] as List).single as String;
+    final episode = await entity(episodeId, db: tx);
+    final ref = ExternalRef.fromJson(entry['ref'] as JsonMap);
+    final accepted = await tx.query('media_bindings',
+        where: 'entity_id=? AND object_id=? AND status=?',
+        whereArgs: [
+          episodeId,
+          stableMediaId('object', ref.toJson()),
+          'accepted'
+        ]);
+    if (file['kind'] != 'file' ||
+        episode['kind'] != 'episode' ||
+        accepted.isEmpty) {
+      throw const Failure(FailureCode.invalidInput,
+          'File ref requires an existing episode with the same accepted external identity.');
+    }
+    final links =
+        await tx.rawQuery('''SELECT DISTINCT l.* FROM media_file_episodes l
+      JOIN media_bindings f ON f.entity_id=l.file_id
+      JOIN media_bindings e ON e.entity_id=l.episode_id AND e.object_id=f.object_id
+      WHERE l.file_id=? AND f.status='accepted' AND f.source!='classic_match'
+        AND e.status='accepted' ''', [fileId]);
+    if (links.any((row) =>
+        row['episode_id'] != episodeId ||
+        row['relation'] != 'exact' ||
+        row['start_ms'] != null ||
+        row['end_ms'] != null)) {
+      throw const Failure(FailureCode.conflict,
+          'File is already linked with different episodes or intervals; unbind it explicitly.');
+    }
+    final probe = entry['probe'] as JsonMap;
+    if (!isLocationOnlyMediaProbe(attrs['probe'] as JsonMap) &&
+        ['size', 'modifiedAt', 'headMd5']
+            .any((key) => probe[key] != (attrs['probe'] as JsonMap)[key])) {
+      throw const Failure(
+          FailureCode.conflict, 'File changed since indexing; scan again.');
+    }
+    final record = MetadataRecord(
+        ref: ref,
+        title: '',
+        kind: 'episode',
+        fetchedAt: DateTime.now().toUtc());
+    await _checkObjects(tx, fileId, [record]);
+    final previous = await tx.query('media_bindings',
+        where: 'entity_id=? AND status=?', whereArgs: [fileId, 'accepted']);
+    final scope = decodeMediaJson(accepted.first['scope']);
+    final binding = await _bindRecord(
+        tx,
+        fileId,
+        record,
+        'exact',
+        scope,
+        invocation.origin == 'gui' ? 'user' : 'agent',
+        'explicit_binding',
+        invocation,
+        key,
+        attrs['bindingRevision'] as int,
+        saveMetadata: false);
+    await _audit(tx, binding, entry, invocation, file: {
+      ...file,
+      'attributes': {...attrs, 'probe': probe}
+    });
+    await tx.insert(
+        'media_file_episodes',
+        {
+          'file_id': fileId,
+          'episode_id': episodeId,
+          'relation': 'exact',
+          'ordinal': 0,
+          'start_ms': null,
+          'end_ms': null
+        },
+        conflictAlgorithm: ConflictAlgorithm.ignore);
+    final added = !previous.any((row) => row['id'] == binding);
+    final revision = (attrs['bindingRevision'] as int) + (added ? 1 : 0);
+    await tx.update(
+        'media_entities',
+        {
+          'attributes': jsonEncode(
+              {...attrs, 'probe': probe, 'bindingRevision': revision})
+        },
+        where: 'id=?',
+        whereArgs: [fileId]);
+    if (added) {
+      await tx.update('media_bindings', {'revision': revision},
+          where: 'id=?', whereArgs: [binding]);
+      await _queueFileProjection(tx, fileId, file['revision'] as int, revision);
+    }
+    final projections = await tx.query('media_projection_outbox',
+        where: 'file_id=? AND binding_revision=?',
+        whereArgs: [fileId, revision]);
+    final release = await entity(episode['parent_id'] as String, db: tx);
+    return {
+      'index': index,
+      'workId': release['parent_id'],
+      'releaseId': release['id'],
+      'episodeIds': [episodeId],
+      'fileId': fileId,
+      'classicProjectionId': projections.map((row) => row['id']).firstOrNull,
+      'bindingIds': [binding]
+    };
+  }
+
   Future<void> _queueFileProjection(
       DatabaseExecutor tx, String fileId, int fileRevision, int bindingRevision,
       {List<JsonMap> removed = const []}) async {
@@ -1474,6 +1619,11 @@ final class IdentityStore {
       };
     }
     if (payload == null) return;
+    final remote = (await entity(fileId, db: tx))['attributes'] as JsonMap;
+    if (remote['remoteSource'] case final Map target
+        when target['type'] == 'jellyfin' || target['type'] == 'emby') {
+      payload['remoteTarget'] = target;
+    }
     await tx.insert('media_projection_outbox', {
       'id': stableMediaId('projection', [fileId, bindingRevision]),
       'file_id': fileId,

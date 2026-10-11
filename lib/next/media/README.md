@@ -46,6 +46,11 @@ work/release/episode 的任意外部对象：不请求 provider、不建立父�
 宿主仍校验实体层级、同来源身份冲突、同种本地实体的外部对象唯一归属，并记录理由与证据。
 直接绑定不能混入 `workRef` 等目录模式字段。任意来源的外部目录关系由 Agent 判断，宿主保存其证据。
 
+文件也可使用 `kind=file` + 既有 `entityId` + `ref` + 单个 `localEpisodeIds`。
+该 ref 必须已经 accepted 在指定的本地 Episode 上（可在同一 batch 的前一条显式绑定）；
+宿主核对这个关联，不请求来源或创建空快照，不允许覆盖另一组文件集关联。
+这样任意 HTTPS 来源的 opaque 身份也能关联本地或远程文件，仍复用同一身份、证据、回执与撤销。
+
 新来源的 `ref.provider` 使用 HTTPS origin，例如 `https://movie.douban.com`，
 禁止自由昵称；大小写、空白、默认 443 端口、末尾斜线与 hostname 末尾点统一。
 路径、查询、fragment、userinfo 不属于来源命名空间；内置 `tmdb` / `bangumi` / `dandanplay` 保持原名。
@@ -56,6 +61,16 @@ work/release/episode 的任意外部对象：不请求 provider、不建立父�
 省略时按外部对象建立对应实体。每条输入明确给出 `workRef` 和理由：
 TV 的季身份使用 `releaseRef`，文件或集的身份使用 `episodeRefs`。
 Movie 本身就是对应播放单元。Bangumi subject、弹弹play anime 是各自的集目录。
+
+远程文件先通过 `media.sources.browse/sync` 登记，绑定使用返回的 `fileId`（输入字段
+`entityId`）。SMB、WebDAV、共享 HTTP 流与 Jellyfin/Emby 均使用同一绑定事务、来源与证据。
+远程绑定保存已登记位置和已有 probe，不要求下载、读取字节或登录服务器；本地文件仍执行
+内容探测与批量提交前的修订校验。哈希匹配仍需要本机内容。
+
+远程发现的 `media_locations.source` 是来源作用域（`sourceId`；Jellyfin/Emby 另包含实际 serverId），文件按来源、设备、locator 隔离。
+播放 path 保持 Classic 格式。同一路径对应多个来源时，按 path 绑定返回 conflict，要求使用
+浏览返回的 fileId。旧的无服务器归属位置保留为独立证据，不自动归到当前连接。
+已登记远程路径唯一时可直接按 path 绑定；未登记远程路径返回 not_found。
 
 `workId`、`releaseId`、`localEpisodeIds` 显式指向跨来源共用的本地身份；
 代码校验层级和父实体，不猜测不同来源的映射。只建立输入涉及的集及其父实体，
@@ -105,6 +120,17 @@ Classic 写事务同时向 `next_classic_projection_journal` 追加该 projectio
 `bind_batch` / `unbind_batch` 文件条目含可空 `classicProjectionId`，生产 Classic 端口返回
 `classicProjection` 的逐路径 status / restored；成功回执持久保存，旧 requestId 重试返回
 该操作的原确认结果，不会撤销后续绑定。投影日志保留供恢复和审计，不清理原 outbox。
+
+Jellyfin/Emby 的单集弹弹play投影使用既有 `${type}_dandanplay_mapping` 和
+`${type}_episode_mapping`，服务器 profile、实际 serverId 与 item ID 组成作用域键。Classic 映射服务按当前
+profile/serverId 读回作用域映射，返回实际服务器 item ID；无新版映射时沿用旧查询。
+连接配置改指另一台服务器时，即使 profile ID 没变，也不会复用原服务器的文件和新版映射。
+无 SeriesId 的独立文件用 `item:<itemId>` 作为目录锚，不推断它所属的系列。
+完整映射行与前像、后像在同一 Classic 事务写入 `next_remote_projection_journal`；
+撤销核对原行（含 ID 与字段），删除自己新建的集映射，最后一个引用退出时收回自己新建的目录。
+独立同集映射保持 unchanged；被 Classic 修改的映射保持原值并报告 conflict。
+旧的无服务器归属剧集映射不能安全认领；Next 身份提交后投影返回 conflict，要求先在 Classic
+处理旧映射。TMDB、Bangumi 等不向 Classic 写映射。
 
 ## 存储与升级
 

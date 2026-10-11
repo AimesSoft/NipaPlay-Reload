@@ -1103,18 +1103,18 @@ class _PlaylistMenuState extends State<PlaylistMenu> {
             .getEpisodeMapping(episode.id);
         if (existingMapping != null) {
           finalEpisodeId = existingMapping['dandanplay_episode_id'] as int?;
-
-          // 通过系列ID获取动画映射
-          final animeMapping =
-              await JellyfinEpisodeMappingService.instance.getAnimeMapping(
-            jellyfinSeriesId: episode.seriesId!,
-            jellyfinSeasonId: episode.seasonId,
-          );
-
-          if (animeMapping != null) {
-            finalAnimeId = animeMapping['dandanplay_anime_id'] as int?;
-            debugPrint(
-                '[播放列表] 从现有映射获取弹幕ID: animeId=$finalAnimeId, episodeId=$finalEpisodeId');
+          finalAnimeId = existingMapping['dandanplay_anime_id'] as int?;
+          if (finalAnimeId == null) {
+            final animeMapping =
+                await JellyfinEpisodeMappingService.instance.getAnimeMapping(
+              jellyfinSeriesId: episode.seriesId!,
+              jellyfinSeasonId: episode.seasonId,
+            );
+            if (animeMapping != null) {
+              finalAnimeId = animeMapping['dandanplay_anime_id'] as int?;
+              debugPrint(
+                  '[播放列表] 从现有映射获取弹幕ID: animeId=$finalAnimeId, episodeId=$finalEpisodeId');
+            }
           }
         } else {
           // 2. 如果没有现有映射，尝试智能预测
@@ -1232,18 +1232,18 @@ class _PlaylistMenuState extends State<PlaylistMenu> {
             .getEpisodeMapping(episode.id);
         if (existingMapping != null) {
           finalEpisodeId = existingMapping['dandanplay_episode_id'] as int?;
-
-          // 通过系列ID获取动画映射
-          final animeMapping =
-              await EmbyEpisodeMappingService.instance.getAnimeMapping(
-            embySeriesId: episode.seriesId!,
-            embySeasonId: episode.seasonId,
-          );
-
-          if (animeMapping != null) {
-            finalAnimeId = animeMapping['dandanplay_anime_id'] as int?;
-            debugPrint(
-                '[播放列表] 从现有Emby映射获取弹幕ID: animeId=$finalAnimeId, episodeId=$finalEpisodeId');
+          finalAnimeId = existingMapping['dandanplay_anime_id'] as int?;
+          if (finalAnimeId == null) {
+            final animeMapping =
+                await EmbyEpisodeMappingService.instance.getAnimeMapping(
+              embySeriesId: episode.seriesId!,
+              embySeasonId: episode.seasonId,
+            );
+            if (animeMapping != null) {
+              finalAnimeId = animeMapping['dandanplay_anime_id'] as int?;
+              debugPrint(
+                  '[播放列表] 从现有Emby映射获取弹幕ID: animeId=$finalAnimeId, episodeId=$finalEpisodeId');
+            }
           }
         } else {
           // 2. 如果没有现有映射，尝试智能预测
