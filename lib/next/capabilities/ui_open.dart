@@ -3,6 +3,7 @@ import 'package:nipaplay/app/app_page_ids.dart';
 import 'package:path/path.dart' as p;
 
 import '../media/media_service.dart';
+import 'ui_targets.dart';
 
 final class UiOpenValue implements JsonEncodable {
   const UiOpenValue(this.value);
@@ -12,10 +13,12 @@ final class UiOpenValue implements JsonEncodable {
 }
 
 final class UiOpenAction extends Action<UiOpenValue, UiOpenValue> {
-  const UiOpenAction({this.media, this.openPage, this.openDetail, this.play});
+  const UiOpenAction(
+      {this.media, this.openPage, this.openDetail, this.openTarget, this.play});
   final MediaService Function()? media;
   final Future<bool> Function(String page)? openPage;
   final Future<bool> Function(int animeId)? openDetail;
+  final Future<JsonMap?> Function(JsonMap target)? openTarget;
   final Future<Outcome<JsonEncodable>> Function(JsonMap, Invocation)? play;
   @override
   ActionSpec get spec => const ActionSpec(
@@ -23,11 +26,56 @@ final class UiOpenAction extends Action<UiOpenValue, UiOpenValue> {
         title: 'Open a visible Classic target',
         effect: Effect.write,
         description:
-            'Supply exactly one page, entityId or path. Opens Classic work details or file/episode playback. '
+            'Supply exactly one page, dialog, animeId, serverItem, sourceItem, libraryItem, aboutLink, system, entityId or path. '
+            'page=settings accepts subpage (defaults about); page=media_library accepts subpage for library section. '
+            'Settings and dialogs use existing Classic forms; user enters secrets. Dialog connection forms add a server; no credentials accepted. '
+            'serverItem={provider:jellyfin|emby,itemId} uses the currently active Classic server. animeId supports direct positive or custom negative Classic IDs. '
+            'sourceItem={provider:nipaplay|dandanplay_remote,animeId} opens Classic shared/remote details with its episode loader on the active Classic source. '
+            'libraryItem={source:local|webdav|smb,animeId} follows the Classic library card: records recently opened, clears NEW baseline and passes its episode context. '
+            'dialog=quarterly_comment requires reviewAnimeId from discover.home.review; opens the existing Bangumi editor when signed in. '
+            'aboutLink=community|repository|qq_group|website|sponsor uses the Classic URL; qr=true displays its QR dialog (TV defaults to QR). '
+            'system=harness|logs dispatches the existing system folder opener. External URLs/folders report OS acceptance, not visible window verification. '
+            'dialog=video_picker|video_gallery initiates the existing Classic selection/play flow; user selects or cancels. video_gallery is mobile-only. Native picker visibility is outside Flutter observation. '
             'Returns opened=false with the reason when no current interface can display the target. '
             'Multiple playable locations return an executable choice; nothing opens until chosen.',
         input: ObjectSchema({
-          'page': StringSchema(values: AppPageIds.primaryOrder),
+          'page': StringSchema(
+              values: [...AppPageIds.primaryOrder, 'settings', 'new_series']),
+          'subpage': StringSchema(
+              minLength: 1,
+              description:
+                  'For settings: appearance/language/general/storage/network/backup_restore/player/danmaku/external_player/shortcuts/remote_access/remote_media_library/downloader/developer_options/labs/plugins/about/webdav_quick. Only currently available Classic pages can open. For media_library: local_library/local_management/webdav_library/webdav_management/smb_library/smb_management/shared_library/shared_management/dandanplay/jellyfin/emby.'),
+          'dialog': StringSchema(values: uiDialogs),
+          'pluginId': StringSchema(
+              minLength: 1,
+              description:
+                  'Required only for dialog=plugin_readme. Use plugins.market IDs.'),
+          'reviewAnimeId': IntegerSchema(minimum: 1),
+          'aboutLink': StringSchema(values: uiAboutLinks),
+          'qr': BooleanSchema(),
+          'system': StringSchema(values: ['harness', 'logs']),
+          'animeId': IntegerSchema(),
+          'serverItem': ObjectSchema({
+            'provider': StringSchema(values: ['jellyfin', 'emby']),
+            'itemId': StringSchema(minLength: 1),
+          }, required: [
+            'provider',
+            'itemId'
+          ]),
+          'sourceItem': ObjectSchema({
+            'provider': StringSchema(values: ['nipaplay', 'dandanplay_remote']),
+            'animeId': IntegerSchema(),
+          }, required: [
+            'provider',
+            'animeId'
+          ]),
+          'libraryItem': ObjectSchema({
+            'source': StringSchema(values: ['local', 'webdav', 'smb']),
+            'animeId': IntegerSchema(),
+          }, required: [
+            'source',
+            'animeId'
+          ]),
           'entityId': StringSchema(minLength: 1),
           'path': StringSchema(minLength: 1),
         }),
@@ -58,16 +106,16 @@ final class UiOpenAction extends Action<UiOpenValue, UiOpenValue> {
         'target': target,
         'actual': null,
         'reason': reason,
-        'message': '目前没有界面能显示它：$reason',
+        'message': '暂时无法打开。',
       }));
   Completed<UiOpenValue> _opened(JsonMap target, JsonMap actual) =>
       Completed(UiOpenValue({
-        'opened': true,
-        'interface': 'classic',
+        'opened': actual['matched'] != false,
+        'interface': actual['presentation'] == 'system' ? 'system' : 'classic',
         'target': target,
         'actual': actual,
-        'reason': null,
-        'message': null,
+        'reason': actual['matched'] == false ? '目标界面当前不可用。' : null,
+        'message': actual['matched'] == false ? '暂时无法打开。' : null,
       }));
 
   Future<Outcome<UiOpenValue>> _play(
@@ -94,9 +142,62 @@ final class UiOpenAction extends Action<UiOpenValue, UiOpenValue> {
   Future<Outcome<UiOpenValue>> run(
       UiOpenValue input, Invocation invocation) async {
     final target = input.value;
-    if (target.length != 1) {
+    final keys = [
+      'page',
+      'dialog',
+      'animeId',
+      'serverItem',
+      'sourceItem',
+      'libraryItem',
+      'aboutLink',
+      'system',
+      'entityId',
+      'path'
+    ];
+    if (keys.where(target.containsKey).length != 1 ||
+        (target.containsKey('subpage') &&
+            !['settings', 'media_library'].contains(target['page']))) {
       throw const Failure(FailureCode.invalidInput,
-          'Supply exactly one page, entityId or path.');
+          'Supply exactly one target. subpage is only valid with settings or media_library.');
+    }
+    if ((target['dialog'] == 'plugin_readme') !=
+        target.containsKey('pluginId')) {
+      throw const Failure(FailureCode.invalidInput,
+          'pluginId is required only for dialog=plugin_readme.');
+    }
+    if ((target['dialog'] == 'quarterly_comment') !=
+            target.containsKey('reviewAnimeId') ||
+        (target.containsKey('qr') && !target.containsKey('aboutLink'))) {
+      throw const Failure(FailureCode.invalidInput,
+          'reviewAnimeId is required only for quarterly_comment; qr only applies to aboutLink.');
+    }
+    if (target['page'] == 'settings' &&
+        target.containsKey('subpage') &&
+        !uiSettingsSubpages.contains(target['subpage'])) {
+      throw const Failure(
+          FailureCode.invalidInput, 'Unknown settings subpage.');
+    }
+    if (target.containsKey('dialog') ||
+        target.containsKey('serverItem') ||
+        target.containsKey('sourceItem') ||
+        target.containsKey('libraryItem') ||
+        target.containsKey('aboutLink') ||
+        target.containsKey('system') ||
+        target['page'] == 'settings' ||
+        target['page'] == 'new_series' ||
+        target.containsKey('subpage')) {
+      final actual = await openTarget?.call(target);
+      return actual == null
+          ? _unavailable(target, '目标界面当前不可用。')
+          : _opened(target, actual);
+    }
+    if (target['animeId'] case final int id) {
+      if (id == 0)
+        throw const Failure(
+            FailureCode.invalidInput, 'animeId must be nonzero.');
+      if (openDetail == null || !await openDetail!(id))
+        return _unavailable(target, '作品详情尚未就绪。');
+      return _opened(target, {'kind': 'work_detail', 'animeId': id});
     }
     if (target['page'] case final String page) {
       if (openPage == null || !await openPage!(page)) {
@@ -155,7 +256,7 @@ final class UiOpenAction extends Action<UiOpenValue, UiOpenValue> {
           '该${entity['kind']}没有唯一已接受的弹弹play作品身份，Classic 作品详情仅支持弹弹play；Next 事实页尚未实现。');
     }
     final animeId = int.tryParse(bindings.single['external_id'] as String);
-    if (animeId == null || animeId <= 0) {
+    if (animeId == null || animeId == 0) {
       return _unavailable(target, '弹弹play作品 ID 无法用于 Classic 详情页。');
     }
     if (openDetail == null || !await openDetail!(animeId)) {

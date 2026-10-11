@@ -406,8 +406,27 @@ class AdaptiveMediaCollectionView extends material.StatefulWidget {
       _AdaptiveMediaCollectionViewState();
 }
 
+abstract interface class ClassicLibraryCardNavigation {
+  String get librarySource;
+  bool openLibraryAnime(int animeId);
+}
+
 class _AdaptiveMediaCollectionViewState
-    extends material.State<AdaptiveMediaCollectionView> {
+    extends material.State<AdaptiveMediaCollectionView>
+    implements ClassicLibraryCardNavigation {
+  @override
+  String get librarySource => widget.source.name;
+  @override
+  bool openLibraryAnime(int animeId) {
+    final history = context.read<WatchHistoryProvider>().history;
+    for (final item in history) {
+      if (item.animeId == animeId && mediaLibraryItemMatchesSource(item, widget.source)) {
+        unawaited(_openAnimeDetail(item));
+        return true;
+      }
+    }
+    return false;
+  }
   final material.TextEditingController _searchController =
       material.TextEditingController();
   final Map<int, BangumiAnime> _details = <int, BangumiAnime>{};

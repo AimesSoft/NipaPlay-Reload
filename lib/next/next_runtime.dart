@@ -30,6 +30,7 @@ import 'capabilities/ui_capability.dart';
 import 'capabilities/ui_capture.dart';
 import 'instance_facts.dart';
 import 'capabilities/classic_ui_open.dart';
+import 'capabilities/discover_capability.dart';
 import 'capabilities/playback_capability.dart';
 import 'capabilities/download_playback_capability.dart';
 import 'settings/download_settings.dart';
@@ -120,10 +121,16 @@ final class NextRuntime extends ChangeNotifier {
         seriesDetail: seriesDetail,
       ),
       playback,
+      DiscoverCapability(),
       UiCapability(
         media: () => core.media.service,
         openPage: ClassicUiOpen().page,
         openDetail: ClassicUiOpen().detail,
+        openTarget: ClassicUiOpen(harnessPath: () async {
+          await core.harnessLocation.ready;
+          return core.harnessLocation.path;
+        }).target,
+        close: ClassicUiOpen().close,
         play: (input, invocation) => playbackApi.invokeJson('playback.open', input, invocation)),
     ]);
   }

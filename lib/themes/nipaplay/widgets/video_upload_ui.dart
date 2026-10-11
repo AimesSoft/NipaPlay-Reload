@@ -38,8 +38,15 @@ class VideoUploadUI extends StatefulWidget {
   State<VideoUploadUI> createState() => _VideoUploadUIState();
 }
 
+abstract interface class ClassicVideoPickerNavigation {
+  Future<void> pickVideo(bool gallery);
+}
+
 class _VideoUploadUIState extends State<VideoUploadUI>
-    with SingleTickerProviderStateMixin {
+    with SingleTickerProviderStateMixin implements ClassicVideoPickerNavigation {
+  @override
+  Future<void> pickVideo(bool gallery) =>
+      gallery ? _pickMediaFromGallery() : _handleUploadVideo();
   late final AnimationController _mascotController;
   late final Animation<double> _mascotScale;
   final TextEditingController _urlController = TextEditingController();

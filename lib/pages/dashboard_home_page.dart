@@ -90,6 +90,7 @@ part '../themes/nipaplay/widgets/dashboard_home_page_trending.dart';
 part '../themes/nipaplay/widgets/dashboard_home_page_quarterly_review.dart';
 part '../themes/nipaplay/widgets/dashboard_home_page_quarterly_review_logic.dart';
 part '../themes/cupertino/widgets/cupertino_home_page_controls.dart';
+part 'dashboard_home_access.dart';
 
 /// 一次推荐位封面升级的结果，用于把多次 setState 合并成一次。
 class _UpgradedRecommendation {
@@ -107,7 +108,90 @@ class DashboardHomePage extends StatefulWidget {
 }
 
 class _DashboardHomePageState extends State<DashboardHomePage>
-    with AutomaticKeepAliveClientMixin, PageActivityMixin {
+    with AutomaticKeepAliveClientMixin, PageActivityMixin
+    implements DashboardHomeAccess {
+  @override
+  Map<String, dynamic> get homeSnapshot => _snapshot();
+
+  @override
+  Future<Map<String, dynamic>> refreshHome() async {
+    if (_isVideoPlayerActive() || _isLoadingRecommended ||
+        _isContinueWatchingRefreshInProgress) {
+      return {'refreshed': false, 'reason': 'busy', ..._snapshot()};
+    }
+    await Future.wait([
+      _refreshContinueWatchingData('主页手动刷新', syncRemote: true),
+      _loadData(forceRefreshRecommended: true, forceRefreshRandom: true,
+          forceRefreshToday: true, forceRefreshTrending: true),
+    ]);
+    return {'refreshed': true, ..._snapshot()};
+  }
+
+  @override
+  Future<Map<String, dynamic>> recommendations({bool next = false}) async {
+    if (_isLoadingRandomRecommendations) {
+      return {'changed': false, 'reason': 'busy', ..._snapshot()};
+    }
+    if (_randomRecommendationGroups.isEmpty) {
+      final daily = await RandomRecommendationService.instance.fetchDailyRecommendations();
+      setState(() {
+        _randomRecommendationGroups = daily.groups;
+        _randomRecommendationDate = daily.date;
+        _randomRecommendationGeneratedAt = daily.generatedAt;
+        _randomRecommendationGroupIndex %= daily.groups.length;
+        _randomRecommendations = daily.groups[_randomRecommendationGroupIndex].items;
+      });
+    }
+    if (next) _showNextRandomRecommendationGroup();
+    return {'changed': next, ..._snapshot()};
+  }
+
+  @override
+  Future<void> setReviewSort(String sort) => _setQuarterlyReviewSort(
+      _QuarterlyReviewSort.values.byName(sort));
+
+  @override
+  void openHomeDialog(String dialog) {
+    final phone = AppDisplaySurfaceScope.of(context) == AppDisplaySurface.phone;
+    switch (dialog) {
+      case 'watch_history': unawaited(_showWatchHistoryDialog());
+      case 'trending': unawaited(_showFullTrendingList(cupertinoStyle: phone));
+      case 'trending_filter': unawaited(_showTrendingFilter(cupertinoStyle: phone));
+    }
+  }
+
+  @override
+  bool openQuarterlyComment(int animeId) {
+    if (!BangumiApiService.isLoggedIn || _isEditingQuarterlyReviewComment) return false;
+    for (final item in _quarterlyReviewItems) {
+      if (item.anime.id == animeId &&
+          QuarterlyReviewCache.subjectId(item.anime.bangumiUrl) != null) {
+        unawaited(_editQuarterlyReviewComment(item));
+        return true;
+      }
+    }
+    return false;
+  }
+
+  @override
+  bool openSourceDetail(String provider, int animeId) {
+    if (provider == 'nipaplay') {
+      final shared = Provider.of<SharedRemoteLibraryProvider>(context, listen: false);
+      if (!shared.animeSummaries.any((s) => s.animeId == animeId)) return false;
+      unawaited(_onSharedRemoteRecommendedTap('shared:$animeId'));
+      return true;
+    }
+    final remote = Provider.of<DandanplayRemoteProvider>(context, listen: false);
+    if (!remote.isConnected) return false;
+    for (final group in remote.animeGroups) {
+      if (group.animeId == animeId) {
+        _onDandanplayGroupTap(group);
+        return true;
+      }
+    }
+    return false;
+  }
+
   bool get _isLargeScreenModeActive {
     return NipaplayLargeScreenHomeScope.isActive(context);
   }
@@ -175,6 +259,8 @@ class _DashboardHomePageState extends State<DashboardHomePage>
   // 推荐内容数据
   List<RecommendedItem> _recommendedItems = [];
   bool _isLoadingRecommended = false;
+  String? _randomRecommendationDate;
+  DateTime? _randomRecommendationGeneratedAt;
   bool _isLoadingRecentContent = false;
 
   // 待处理的刷新请求

@@ -388,9 +388,27 @@ final class ActivityView {
     // Attempts remain distinct from committed domain changes, including previews.
     for (final invocation in invocations.values) {
       final action = invocation['actionId'] as String;
+      final result = invocation['result'] as Map?;
+      final interfaceTitle = action == 'ui.capture'
+          ? (result?['path'] != null ? '界面已截取' : '界面暂时无法截取')
+          : action == 'ui.close'
+          ? (result?['closed'] == true ? '窗口已关闭' : '没有可关闭的窗口')
+          : action.startsWith('ui.')
+              ? (result?['opened'] != true ? '暂时无法打开界面'
+                  : (result?['actual'] as Map?)?['kind'] == 'native_picker_request' ? '已发起视频选择'
+                  : (result?['actual'] as Map?)?['kind'] == 'folder_request' ? '已请求打开文件夹'
+                  : (result?['actual'] as Map?)?['kind'] == 'webpage_request' ? '已请求打开网页'
+                  : '界面已打开')
+              : action == 'discover.refresh'
+                  ? (result?['refreshed'] == true ? '首页已刷新' : '首页暂时无法刷新')
+                  : action == 'discover.recommendations' && (invocation['input'] as Map?)?['next'] == true
+                      ? (result?['changed'] == true ? '推荐已更新' : '推荐暂时无法更新')
+                      : invocation['status'] == 'completed' ? '发现内容已载入' : '发现内容暂时无法载入';
       final conflict = invocation['failureCode'] == 'conflict';
       if (!conflict &&
           !action.startsWith('media.sources.') &&
+          !action.startsWith('ui.') &&
+          !action.startsWith('discover.') &&
           !action.startsWith('accounts.')) {
         continue;
       }
@@ -405,6 +423,7 @@ final class ActivityView {
                   ? 'identity.conflict'
                   : 'invocation.conflict'
               : 'invocation.result',
+          action.startsWith('ui.') || action.startsWith('discover.') ? interfaceTitle :
           '$action · ${invocation['status']}${conflict ? ' · 冲突' : ''}',
           'journal',
           {

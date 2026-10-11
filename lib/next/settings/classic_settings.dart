@@ -25,6 +25,7 @@ import 'package:nipaplay/utils/globals.dart' as globals;
 import 'package:nipaplay/utils/hotkey_service.dart';
 import 'package:nipaplay/utils/theme_notifier.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import '../capabilities/classic_home.dart';
 
 import 'application_settings.dart';
 import 'denylist.dart';
@@ -746,6 +747,17 @@ final class ClassicSettings {
         500,
         'webdav_search_max_results',
         (p, v) => p.setSearchMaxResults(v as int));
+    add('appearance.quarterlyReviewSort', '季度回顾排序',
+        const StringSchema(values: ['airDate', 'commentNewest', 'commentOldest', 'ratingHigh', 'ratingLow']),
+        'airDate', 'quarterly_review_sort_v1', (value) async {
+          final home = classicHome();
+          if (home != null) {
+            await home.setReviewSort(value as String);
+          } else {
+            await (await SharedPreferences.getInstance()).setString('quarterly_review_sort_v1', value as String);
+          }
+        }, source: 'lib/themes/nipaplay/widgets/dashboard_home_page_quarterly_review_logic.dart',
+        setter: '_setQuarterlyReviewSort');
     return entries;
   }
 

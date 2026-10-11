@@ -27,7 +27,20 @@ class AboutSettingsContent extends StatefulWidget {
   State<AboutSettingsContent> createState() => _AboutSettingsContentState();
 }
 
-class _AboutSettingsContentState extends State<AboutSettingsContent> {
+abstract interface class AboutWindowNavigation {
+  void showAppreciation();
+  void showLinkQr(String title, String url);
+}
+
+class _AboutSettingsContentState extends State<AboutSettingsContent>
+    implements AboutWindowNavigation {
+  @override
+  void showAppreciation() => _showAppreciationQR();
+
+  @override
+  void showLinkQr(String title, String url) {
+    _showAboutQrDialog(title: title, content: _buildUrlQrContent(context, url));
+  }
   late final String _buildTargetLabel = getBuildTargetLabel();
   String _version = '';
   bool _versionLoadFailed = false;
