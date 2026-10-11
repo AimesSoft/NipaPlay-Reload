@@ -74,6 +74,6 @@ NipaPlay 在事件发生时运行 `hooks/` 中的同名程序，结果记为任�
 - 修复已有工具时，先看它为什么失败；解析失败不等于"没有结果"。
 - git 远端 `nipaplay` 指向应用维护的本地种子仓库；应用升级会更新种子，你需要时自己 `git fetch nipaplay` 并合并 `nipaplay/main`，冲突由你判断，应用不改写这个 harness。
 - `./nipa status` 的 `harnessSeed` 给出种子 `path`、当前 `head` 和已抓取的 `trackingHead`。`trackingBehindSeed=true` 表示应抓取更新；`missing_remote` 表示尚未配置远端，`not_fetched` 表示尚未抓取，`different_remote` 表示远端指向另一处，未知状态不等于已同步。此检查只读，不执行 fetch 或合并；`current` 只说明远端跟踪引用最新，不表示你已合并。
-- 写的辅助脚本下次还用得到，就放进仓库并提交，不要留在 `/tmp`。
+- 写的辅助脚本下次还用得到，就放进仓库并提交，不要留在 `/tmp`。边做边提交：工具能用了就先提交，不必等整件事做完；对话可能随时中断，没提交的东西下次就找不到了。
 - 用了别人的开源工具（例如从 GitHub 找到的），在仓库里记下来源、版本和许可，便于复现和升级。
 - 秘密、令牌、运行记录不进入 git（见 `.gitignore`）。`nipa` 连接 NipaPlay 的凭据在仓库以外。
