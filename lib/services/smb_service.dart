@@ -119,6 +119,7 @@ class SMBFileEntry {
   final bool isDirectory;
   final int? size;
   final bool isShare;
+  final DateTime? lastModified;
 
   const SMBFileEntry({
     required this.name,
@@ -126,6 +127,7 @@ class SMBFileEntry {
     required this.isDirectory,
     this.size,
     this.isShare = false,
+    this.lastModified,
   });
 }
 
@@ -444,6 +446,10 @@ class SMBService {
               path: _normalizePath(file.path),
               isDirectory: file.isDirectory(),
               size: file.size > 0 ? file.size : null,
+              lastModified: file.lastModified == 0
+                  ? null
+                  : DateTime.fromMillisecondsSinceEpoch(file.lastModified,
+                      isUtc: true),
             ),
           )
           .toList();

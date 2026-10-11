@@ -57,6 +57,10 @@ class Smb2NativeService {
                 ? e['size'] as int
                 : int.tryParse(e['size']?.toString() ?? ''),
             isShare: e['isShare'] == true,
+            lastModified: e['lastModifiedMs'] == null
+                ? null
+                : DateTime.fromMillisecondsSinceEpoch(
+                    e['lastModifiedMs'] as int, isUtc: true),
           ),
         )
         .toList();

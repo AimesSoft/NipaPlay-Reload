@@ -32,6 +32,38 @@ const _configuration = {
   'port': IntegerSchema(minimum: 1, maximum: 65535),
   'domain': StringSchema(),
 };
+const _provenance = ObjectSchema({
+  'sourceId': _text,
+  'type': _text,
+  'name': StringSchema(),
+  'url': _text,
+  'itemId': _text,
+  'observedAt': _text,
+}, required: ['sourceId', 'type', 'name', 'url', 'itemId', 'observedAt']);
+const _metadata = ObjectSchema({
+  'Name': StringSchema(nullable: true),
+  'SeriesName': StringSchema(nullable: true),
+  'SeasonName': StringSchema(nullable: true),
+  'IndexNumber': IntegerSchema(nullable: true),
+  'ParentIndexNumber': IntegerSchema(nullable: true),
+  'ProductionYear': IntegerSchema(nullable: true),
+  'OriginalTitle': StringSchema(nullable: true),
+  'Overview': StringSchema(nullable: true),
+  'Path': StringSchema(nullable: true),
+  'Container': StringSchema(nullable: true),
+  'Size': IntegerSchema(nullable: true, description: 'Bytes, as reported.'),
+  'LastModified': StringSchema(nullable: true, description: 'UTC ISO 8601.'),
+  'RunTimeTicks': IntegerSchema(nullable: true,
+      description: 'Server runtime in 100 nanosecond ticks.'),
+  'ProviderIds': ObjectSchema({}, additionalProperties: true, nullable: true,
+      description: 'IDs of this item only; native provider keys and values.'),
+  'MediaSources': ArraySchema(
+      ObjectSchema({}, additionalProperties: true), nullable: true),
+  'MediaStreams': ArraySchema(
+      ObjectSchema({}, additionalProperties: true), nullable: true),
+}, additionalProperties: true,
+    description:
+        'Facts supplied by provenance server, retaining native keys and values. Missing fields mean the server did not supply them; no parent IDs are inherited or recognition inferred. Playback credential URLs/headers are excluded. Entry path is the Classic locator; metadata.Path is the server file path.');
 const _entry = ObjectSchema({
   'id': _text,
   'name': StringSchema(),
@@ -45,6 +77,8 @@ const _entry = ObjectSchema({
   'seasonId': StringSchema(nullable: true),
   'number': IntegerSchema(nullable: true),
   'seasonNumber': IntegerSchema(nullable: true),
+  'provenance': _provenance,
+  'metadata': _metadata,
 }, required: [
   'id',
   'name',
@@ -52,7 +86,8 @@ const _entry = ObjectSchema({
   'isDirectory',
   'size',
   'path',
-  'fileId'
+  'fileId',
+  'provenance',
 ]);
 
 final class MediaSourcesCapability implements Capability {
@@ -197,7 +232,7 @@ final _specs = [
       id: 'media.sources.browse',
       title: 'Browse remote content',
       description:
-          'Discover a source root or parentId (library/folder/series/season) including never-played items. Returns full list using Classic pagination. recursive is available for Jellyfin/Emby; directory recursion uses sync. Each playable result enters the unified file index with the same Classic path and fileId; titles and server hierarchy remain source facts, no inferred identity or watch history.',
+          'Discover a source root or parentId (library/folder/series/season) including never-played items. Returns complete metadata and source provenance using Classic pagination. recursive is available for Jellyfin/Emby; directory recursion uses sync. Each playable result enters the unified file index with the same Classic path and fileId. ProviderIds describe only their own item; query seriesId/seasonId for parent facts. No inferred identity or watch history.',
       effect: Effect.write,
       input: ObjectSchema(
           {'sourceId': _text, 'parentId': _text, 'recursive': BooleanSchema()},
@@ -211,6 +246,20 @@ final _specs = [
         'entries',
         'total'
       ])),
+  const ActionSpec(
+      id: 'media.sources.query',
+      title: 'Query remote item metadata',
+      description:
+          'Fetch live facts for a batch of Jellyfin/Emby item IDs or SMB/WebDAV entry paths returned by browse. Includes metadata and server provenance; missingItemIds lists IDs not returned by the server. Query series/season IDs explicitly for their ProviderIds; no inheritance or recognition. Does not register files or write bindings; fileId is null.',
+      effect: Effect.read,
+      input: ObjectSchema({'sourceId': _text, 'itemIds': ArraySchema(_text)},
+          required: ['sourceId', 'itemIds']),
+      output: ObjectSchema({
+        'sourceId': _text,
+        'entries': ArraySchema(_entry),
+        'total': IntegerSchema(minimum: 0),
+        'missingItemIds': ArraySchema(_text),
+      }, required: ['sourceId', 'entries', 'total', 'missingItemIds'])),
   const ActionSpec(
       id: 'media.sources.sync',
       title: 'Synchronize source discovery',
@@ -272,6 +321,9 @@ final class _SourceAction extends Action<_Json, _Json> {
           result = await service.browse(
               json['sourceId'] as String, json['parentId'] as String?,
               recursive: json['recursive'] == true);
+        case 'media.sources.query':
+          result = await service.query(json['sourceId'] as String,
+              (json['itemIds'] as List).cast<String>());
         case 'media.sources.sync':
           final id = json['sourceId'] as String;
           final source = await service.source(id);
