@@ -5,7 +5,7 @@ import 'package:nipaplay/providers/appearance_settings_provider.dart';
 import 'package:nipaplay/utils/app_accent_color.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/cached_network_image_widget.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/large_screen_focusable_action.dart';
-import 'package:nipaplay/themes/nipaplay/widgets/large_screen_mode_scope.dart';
+import 'package:nipaplay_ui_common/themes/nipaplay/widgets/large_screen_mode_scope.dart';
 import 'package:provider/provider.dart';
 
 class HorizontalAnimeCard extends StatelessWidget {

@@ -9,7 +9,7 @@ import 'package:nipaplay/services/remote_access_qr_service.dart';
 import 'package:nipaplay/services/remote_control_access_guard_service.dart';
 import 'package:nipaplay_core/services/remote_control_settings.dart';
 import 'package:nipaplay/settings/adaptive_settings_widgets.dart';
-import 'package:nipaplay/settings/adaptive_settings_scope.dart';
+import 'package:nipaplay_ui_common/settings/adaptive_settings_scope.dart';
 import 'package:nipaplay/themes/cupertino/cupertino_adaptive_platform_ui.dart';
 import 'package:nipaplay/themes/cupertino/widgets/cupertino_bottom_sheet.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/tvos_remote_text_input_scope.dart';

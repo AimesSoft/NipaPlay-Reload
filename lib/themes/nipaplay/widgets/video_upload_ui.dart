@@ -12,7 +12,7 @@ import 'package:image_picker/image_picker.dart';
 import 'package:nipaplay/models/playable_item.dart';
 import 'package:nipaplay/media_library/adaptive_add_media_flow.dart';
 import 'package:nipaplay/playback/adaptive_playback_entry_view.dart';
-import 'package:nipaplay/playback/unified_playback_entry_model.dart';
+import 'package:nipaplay_ui_common/playback/unified_playback_entry_model.dart';
 import 'package:nipaplay/media_library/adaptive_media_library_primitives.dart';
 import 'package:nipaplay/player_abstraction/player_factory.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_dialog.dart';

@@ -7,7 +7,7 @@ import 'package:nipaplay_ui_common/app/app_display_surface.dart';
 import 'package:nipaplay_ui_common/app/app_display_surface_scope.dart';
 import 'package:nipaplay_ui_common/app/app_navigation_scope.dart';
 import 'package:nipaplay_ui_common/app/app_page_ids.dart';
-import 'package:nipaplay/themes/nipaplay/widgets/settings_no_ripple_theme.dart';
+import 'package:nipaplay_ui_common/themes/nipaplay/widgets/settings_no_ripple_theme.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/tv_safe_blur.dart';
 import 'package:nipaplay/utils/globals.dart' as globals;
 import 'package:nipaplay/utils/video_player_state.dart';

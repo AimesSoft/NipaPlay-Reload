@@ -1,7 +1,7 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:nipaplay/widgets/in_view_dialog.dart';
+import 'package:nipaplay_ui_common/widgets/in_view_dialog.dart';
 
 void main() {
   for (final platform in <TargetPlatform>[

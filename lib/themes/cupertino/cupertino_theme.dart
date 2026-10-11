@@ -7,7 +7,7 @@ import 'package:provider/provider.dart';
 import 'package:nipaplay/providers/appearance_settings_provider.dart';
 import 'package:nipaplay_ui_common/app/app_display_surface.dart';
 import 'package:nipaplay/themes/theme_descriptor.dart';
-import 'package:nipaplay/themes/theme_ids.dart';
+import 'package:nipaplay_ui_common/themes/theme_ids.dart';
 import 'package:nipaplay/utils/app_theme.dart';
 
 class PhoneThemeDescriptor extends ThemeDescriptor {

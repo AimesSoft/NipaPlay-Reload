@@ -14,7 +14,7 @@ import 'package:nipaplay/providers/jellyfin_provider.dart';
 import 'package:nipaplay/providers/shared_remote_library_provider.dart';
 import 'package:nipaplay_core/services/media_server_device_id_service.dart';
 import 'package:nipaplay/services/remote_access_qr_service.dart';
-import 'package:nipaplay/settings/adaptive_settings_scope.dart';
+import 'package:nipaplay_ui_common/settings/adaptive_settings_scope.dart';
 import 'package:nipaplay/settings/adaptive_settings_navigation.dart';
 import 'package:nipaplay/settings/adaptive_settings_widgets.dart';
 import 'package:nipaplay/settings/widgets/media_server_connection_user_agent_setting.dart';

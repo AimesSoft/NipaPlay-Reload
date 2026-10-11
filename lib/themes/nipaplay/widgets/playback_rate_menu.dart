@@ -7,7 +7,7 @@ import 'base_settings_menu.dart';
 import 'blur_button.dart';
 import 'blur_snackbar.dart';
 import 'player_menu_theme.dart';
-import 'settings_hint_text.dart';
+import 'package:nipaplay_ui_common/themes/nipaplay/widgets/settings_hint_text.dart';
 
 class PlaybackRateMenu extends StatefulWidget {
   final VoidCallback onClose;

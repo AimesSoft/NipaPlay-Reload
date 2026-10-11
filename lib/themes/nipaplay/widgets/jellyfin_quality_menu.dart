@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'base_settings_menu.dart';
 import 'player_menu_theme.dart';
-import 'settings_hint_text.dart';
+import 'package:nipaplay_ui_common/themes/nipaplay/widgets/settings_hint_text.dart';
 import 'blur_snackbar.dart';
 import 'fluent_settings_switch.dart';
 import 'package:nipaplay_core/models/jellyfin_transcode_settings.dart';

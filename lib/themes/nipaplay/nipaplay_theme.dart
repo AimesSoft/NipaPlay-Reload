@@ -7,8 +7,8 @@ import 'package:provider/provider.dart';
 import 'package:nipaplay/providers/appearance_settings_provider.dart';
 import 'package:nipaplay/providers/theme_background_reveal_provider.dart';
 import 'package:nipaplay/themes/theme_descriptor.dart';
-import 'package:nipaplay/themes/theme_ids.dart';
-import 'package:nipaplay/themes/nipaplay/widgets/ui_scale_wrapper.dart';
+import 'package:nipaplay_ui_common/themes/theme_ids.dart';
+import 'package:nipaplay_ui_common/themes/nipaplay/widgets/ui_scale_wrapper.dart';
 import 'package:nipaplay/utils/app_theme.dart';
 
 class DesktopTabletThemeDescriptor extends ThemeDescriptor {

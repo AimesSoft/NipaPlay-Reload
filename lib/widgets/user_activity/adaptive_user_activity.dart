@@ -4,7 +4,7 @@ import 'package:nipaplay_ui_common/app/app_display_surface_scope.dart';
 import 'package:nipaplay/controllers/user_activity_controller.dart';
 import 'package:nipaplay/widgets/user_activity/cupertino_user_activity.dart';
 import 'package:nipaplay/widgets/user_activity/desktop_user_activity.dart';
-import 'package:nipaplay/widgets/user_activity/user_activity_view_model.dart';
+import 'package:nipaplay_ui_common/widgets/user_activity/user_activity_view_model.dart';
 
 class AdaptiveUserActivity extends StatefulWidget {
   const AdaptiveUserActivity({super.key});

@@ -3,7 +3,7 @@ import 'package:adaptive_platform_ui/src/widgets/ios26/ios26_popup_menu_button.d
     show IOS26PopupMenuButton;
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:nipaplay/settings/adaptive_settings_scope.dart';
+import 'package:nipaplay_ui_common/settings/adaptive_settings_scope.dart';
 import 'package:nipaplay/settings/adaptive_settings_widgets.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_dropdown.dart';
 

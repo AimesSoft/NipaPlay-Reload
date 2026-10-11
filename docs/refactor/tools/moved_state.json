@@ -52,6 +52,9 @@
   "l10n/app_zh.arb",
   "l10n/app_zh_Hant.arb",
   "l10n/l10n.dart",
+  "media_library/media_library_section_order_store.dart",
+  "media_library/media_source_option.dart",
+  "media_library/unified_library_management_model.dart",
   "models/anime_detail_display_mode.dart",
   "models/background_image_render_mode.dart",
   "models/bangumi_collection_submit_result.dart",
@@ -81,6 +84,7 @@
   "models/torrent_magnet_preview.dart",
   "models/torrent_task.dart",
   "models/trending_bangumi.dart",
+  "playback/unified_playback_entry_model.dart",
   "player_abstraction/abstract_player.dart",
   "player_abstraction/erika_gif_export.dart",
   "player_abstraction/erika_gif_export_io.dart",
@@ -119,6 +123,9 @@
   "services/system_proxy_service.dart",
   "services/web_remote_access_service.dart",
   "services/webdav_service.dart",
+  "settings/about_settings_data.dart",
+  "settings/adaptive_settings_scope.dart",
+  "settings/unified_setting_content_type.dart",
   "src/rust/api/ass_converter.dart",
   "src/rust/api/client_notifications.dart",
   "src/rust/api/danmaku_analytics.dart",
@@ -141,6 +148,16 @@
   "src/rust/rust_external_library_io.dart",
   "src/rust/rust_external_library_web.dart",
   "src/rust/rust_init.dart",
+  "themes/nipaplay/widgets/bounce_hover_scale.dart",
+  "themes/nipaplay/widgets/control_shadow.dart",
+  "themes/nipaplay/widgets/custom_refresh_indicator.dart",
+  "themes/nipaplay/widgets/large_screen_mode_scope.dart",
+  "themes/nipaplay/widgets/settings_hint_text.dart",
+  "themes/nipaplay/widgets/settings_no_ripple_theme.dart",
+  "themes/nipaplay/widgets/transparent_page_route.dart",
+  "themes/nipaplay/widgets/typing_text.dart",
+  "themes/nipaplay/widgets/ui_scale_wrapper.dart",
+  "themes/theme_ids.dart",
   "utils/anime4k_shader_manager.dart",
   "utils/app_platform.dart",
   "utils/crt_shader_manager.dart",
@@ -160,7 +177,14 @@
   "utils/platform_utils.dart",
   "utils/platform_utils_stub.dart",
   "utils/settings_storage.dart",
-  "utils/video_aspect_geometry.dart"
+  "utils/video_aspect_geometry.dart",
+  "widgets/about_version_banner_text.dart",
+  "widgets/adaptive_markdown.dart",
+  "widgets/danmaku_density_chart.dart",
+  "widgets/desktop_picture_in_picture_scope.dart",
+  "widgets/in_view_dialog.dart",
+  "widgets/intro_skip_button.dart",
+  "widgets/user_activity/user_activity_view_model.dart"
  ],
  "batches": [
   {
@@ -364,6 +388,48 @@
     "l10n/app_zh.arb",
     "l10n/app_zh_Hant.arb",
     "l10n/l10n.dart"
+   ]
+  },
+  {
+   "batch": "p2-batchB-pure-models",
+   "count": 7,
+   "files": [
+    "media_library/media_library_section_order_store.dart",
+    "media_library/media_source_option.dart",
+    "media_library/unified_library_management_model.dart",
+    "playback/unified_playback_entry_model.dart",
+    "settings/about_settings_data.dart",
+    "settings/adaptive_settings_scope.dart",
+    "settings/unified_setting_content_type.dart"
+   ]
+  },
+  {
+   "batch": "p2-batchC-clean-widgets",
+   "count": 7,
+   "files": [
+    "widgets/about_version_banner_text.dart",
+    "widgets/adaptive_markdown.dart",
+    "widgets/danmaku_density_chart.dart",
+    "widgets/desktop_picture_in_picture_scope.dart",
+    "widgets/in_view_dialog.dart",
+    "widgets/intro_skip_button.dart",
+    "widgets/user_activity/user_activity_view_model.dart"
+   ]
+  },
+  {
+   "batch": "p2-batchD-themes-primitives",
+   "count": 10,
+   "files": [
+    "themes/nipaplay/widgets/bounce_hover_scale.dart",
+    "themes/nipaplay/widgets/control_shadow.dart",
+    "themes/nipaplay/widgets/custom_refresh_indicator.dart",
+    "themes/nipaplay/widgets/large_screen_mode_scope.dart",
+    "themes/nipaplay/widgets/settings_hint_text.dart",
+    "themes/nipaplay/widgets/settings_no_ripple_theme.dart",
+    "themes/nipaplay/widgets/transparent_page_route.dart",
+    "themes/nipaplay/widgets/typing_text.dart",
+    "themes/nipaplay/widgets/ui_scale_wrapper.dart",
+    "themes/theme_ids.dart"
    ]
   }
  ]

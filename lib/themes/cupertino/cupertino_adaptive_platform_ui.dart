@@ -15,7 +15,7 @@ import 'package:nipaplay_ui_common/app/app_display_surface.dart';
 import 'package:nipaplay_ui_common/app/app_display_surface_scope.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_snackbar.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/large_screen_editable_slider.dart';
-import 'package:nipaplay/themes/nipaplay/widgets/large_screen_mode_scope.dart';
+import 'package:nipaplay_ui_common/themes/nipaplay/widgets/large_screen_mode_scope.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/large_screen_player_menu_components.dart';
 
 typedef AdaptiveSnackBarType = platform_ui.AdaptiveSnackBarType;

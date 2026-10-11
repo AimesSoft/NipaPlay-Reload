@@ -4,7 +4,7 @@ import 'package:nipaplay_ui_common/app/app_display_surface_scope.dart';
 import 'package:liquid_glass_widgets/liquid_glass_widgets.dart';
 import 'package:provider/provider.dart';
 import 'package:nipaplay/providers/bottom_bar_provider.dart';
-import 'package:nipaplay/themes/nipaplay/widgets/large_screen_mode_scope.dart';
+import 'package:nipaplay_ui_common/themes/nipaplay/widgets/large_screen_mode_scope.dart';
 
 class CupertinoBottomSheetOption<T> {
   const CupertinoBottomSheetOption({

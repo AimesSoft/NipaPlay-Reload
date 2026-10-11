@@ -1,6 +1,6 @@
 import 'package:nipaplay/providers/appearance_settings_provider.dart';
 import 'package:nipaplay/themes/cupertino/cupertino_imports.dart';
-import 'package:nipaplay/media_library/unified_library_management_model.dart';
+import 'package:nipaplay_ui_common/media_library/unified_library_management_model.dart';
 import 'package:nipaplay/themes/cupertino/widgets/cupertino_bottom_sheet.dart';
 import 'package:provider/provider.dart';
 

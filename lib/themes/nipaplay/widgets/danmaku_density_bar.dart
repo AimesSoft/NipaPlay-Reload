@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:nipaplay/services/danmaku_density_analyzer.dart';
 import 'package:nipaplay/utils/video_player_state.dart';
-import 'package:nipaplay/widgets/danmaku_density_chart.dart';
+import 'package:nipaplay_ui_common/widgets/danmaku_density_chart.dart';
 import 'package:provider/provider.dart';
 
 class DanmakuDensityBar extends StatelessWidget {

@@ -1,0 +1,15 @@
+{
+  "batch": "p2-batchD-themes-primitives",
+  "moves": [
+    {"from": "lib/themes/theme_ids.dart"},
+    {"from": "lib/themes/nipaplay/widgets/typing_text.dart"},
+    {"from": "lib/themes/nipaplay/widgets/bounce_hover_scale.dart"},
+    {"from": "lib/themes/nipaplay/widgets/transparent_page_route.dart"},
+    {"from": "lib/themes/nipaplay/widgets/control_shadow.dart"},
+    {"from": "lib/themes/nipaplay/widgets/custom_refresh_indicator.dart"},
+    {"from": "lib/themes/nipaplay/widgets/settings_no_ripple_theme.dart"},
+    {"from": "lib/themes/nipaplay/widgets/large_screen_mode_scope.dart"},
+    {"from": "lib/themes/nipaplay/widgets/settings_hint_text.dart"},
+    {"from": "lib/themes/nipaplay/widgets/ui_scale_wrapper.dart"}
+  ]
+}

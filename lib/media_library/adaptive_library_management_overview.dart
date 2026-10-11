@@ -3,7 +3,7 @@ import 'package:flutter/material.dart' as material;
 import 'package:nipaplay_ui_common/app/app_display_surface.dart';
 import 'package:nipaplay_ui_common/app/app_display_surface_scope.dart';
 import 'package:nipaplay/media_library/adaptive_media_library_primitives.dart';
-import 'package:nipaplay/media_library/unified_library_management_model.dart';
+import 'package:nipaplay_ui_common/media_library/unified_library_management_model.dart';
 import 'package:nipaplay/providers/appearance_settings_provider.dart';
 import 'package:nipaplay/themes/cupertino/widgets/cupertino_library_management_overview.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/library_management_layout.dart';

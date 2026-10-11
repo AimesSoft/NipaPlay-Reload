@@ -24,20 +24,20 @@ import 'package:nipaplay_core/models/torrent_task.dart';
 import 'package:nipaplay/media_library/adaptive_media_library_page.dart';
 import 'package:nipaplay/media_library/adaptive_library_management_overview.dart';
 import 'package:nipaplay/media_library/media_collection_empty_content.dart';
-import 'package:nipaplay/media_library/unified_library_management_model.dart';
+import 'package:nipaplay_ui_common/media_library/unified_library_management_model.dart';
 import 'package:nipaplay/pages/dashboard_home_page.dart';
 import 'package:nipaplay/pages/account/account_page_view_model.dart';
 import 'package:nipaplay/pages/external_player_console_page.dart';
 import 'package:nipaplay/pages/torrent_download_page.dart';
 import 'package:nipaplay/pages/webdav_browser_page.dart';
 import 'package:nipaplay/playback/adaptive_playback_entry_view.dart';
-import 'package:nipaplay/playback/unified_playback_entry_model.dart';
+import 'package:nipaplay_ui_common/playback/unified_playback_entry_model.dart';
 import 'package:nipaplay/providers/appearance_settings_provider.dart';
 import 'package:nipaplay/providers/bottom_bar_provider.dart';
 import 'package:nipaplay/providers/home_sections_settings_provider.dart';
-import 'package:nipaplay/settings/adaptive_settings_scope.dart';
+import 'package:nipaplay_ui_common/settings/adaptive_settings_scope.dart';
 import 'package:nipaplay/settings/adaptive_settings_widgets.dart';
-import 'package:nipaplay/settings/unified_setting_content_type.dart';
+import 'package:nipaplay_ui_common/settings/unified_setting_content_type.dart';
 import 'package:nipaplay/settings/unified_setting_content.dart';
 import 'package:nipaplay/services/playback_source_service.dart';
 import 'package:nipaplay/themes/cupertino/cupertino_adaptive_platform_ui.dart';
@@ -1632,7 +1632,7 @@ void main() {
 
   test('add media uses one model with adaptive renderers', () {
     final model = File(
-      'lib/media_library/media_source_option.dart',
+      'packages/nipaplay_ui_common/lib/media_library/media_source_option.dart',
     ).readAsStringSync();
     final host = File(
       'lib/media_library/adaptive_media_library_controls.dart',

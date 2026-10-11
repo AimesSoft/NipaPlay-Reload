@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:nipaplay/models/emby_model.dart';
 import 'package:nipaplay/services/emby_service.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/large_screen_focusable_action.dart';
-import 'package:nipaplay/themes/nipaplay/widgets/large_screen_mode_scope.dart';
+import 'package:nipaplay_ui_common/themes/nipaplay/widgets/large_screen_mode_scope.dart';
 import 'package:nipaplay/widgets/media_server_network_image.dart';
 
 class EmbyLibraryCard extends StatelessWidget {

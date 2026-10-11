@@ -6,7 +6,7 @@ import 'package:flutter/material.dart' as material;
 import 'package:nipaplay_ui_common/app/app_display_surface.dart';
 import 'package:nipaplay_ui_common/app/app_display_surface_scope.dart';
 import 'package:nipaplay/media_library/adaptive_media_library_primitives.dart';
-import 'package:nipaplay/playback/unified_playback_entry_model.dart';
+import 'package:nipaplay_ui_common/playback/unified_playback_entry_model.dart';
 import 'package:nipaplay/utils/globals.dart' as globals;
 
 class AdaptivePlaybackEntryView extends material.StatelessWidget {

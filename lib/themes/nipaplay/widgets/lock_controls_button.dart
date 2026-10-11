@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:kmbal_ionicons/kmbal_ionicons.dart';
 import 'tooltip_bubble.dart';
-import 'control_shadow.dart';
+import 'package:nipaplay_ui_common/themes/nipaplay/widgets/control_shadow.dart';
 import 'keyboard_activatable.dart';
 
 class LockControlsButton extends StatefulWidget {

@@ -10,7 +10,7 @@ import 'package:nipaplay/services/single_instance_service.dart';
 import 'package:nipaplay/services/smb2_native_service_ffi.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_dialog.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/hover_scale_text_button.dart';
-import 'package:nipaplay/themes/nipaplay/widgets/settings_no_ripple_theme.dart';
+import 'package:nipaplay_ui_common/themes/nipaplay/widgets/settings_no_ripple_theme.dart';
 import 'package:nipaplay/utils/globals.dart' as globals;
 import 'package:path/path.dart' as path;
 import 'package:path_provider/path_provider.dart';

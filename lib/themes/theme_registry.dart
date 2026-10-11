@@ -1,7 +1,7 @@
 import 'package:nipaplay/themes/cupertino/cupertino_theme.dart';
 import 'package:nipaplay/themes/nipaplay/nipaplay_theme.dart';
 import 'package:nipaplay/themes/theme_descriptor.dart';
-import 'package:nipaplay/themes/theme_ids.dart';
+import 'package:nipaplay_ui_common/themes/theme_ids.dart';
 
 class ThemeRegistry {
   static final Map<String, ThemeDescriptor> _themes = {

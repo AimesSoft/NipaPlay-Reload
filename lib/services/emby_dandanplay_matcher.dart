@@ -13,7 +13,7 @@ import 'package:nipaplay/themes/nipaplay/widgets/blur_button.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/tvos_remote_text_input_scope.dart';
 import 'package:nipaplay/utils/remote_media_fetcher.dart';
 import 'package:nipaplay/providers/settings_provider.dart';
-import 'package:nipaplay/widgets/in_view_dialog.dart';
+import 'package:nipaplay_ui_common/widgets/in_view_dialog.dart';
 import 'package:provider/provider.dart';
 
 /// 负责将Emby媒体与DandanPlay的内容匹配，以获取弹幕和元数据

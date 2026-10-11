@@ -12,5 +12,8 @@ dependencies:
   flutter_localizations:
     sdk: flutter
   intl: any
+  flutter_markdown: ^0.7.1
+  markdown: ^7.0.0
+  glassmorphism: ^3.0.0
   nipaplay_core:
     path: ../nipaplay_core

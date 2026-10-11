@@ -6,7 +6,7 @@ import 'package:nipaplay_core/utils/danmaku/style.dart';
 import 'package:nipaplay/utils/video_player_state.dart';
 import 'base_settings_menu.dart';
 import 'player_menu_theme.dart';
-import 'settings_hint_text.dart';
+import 'package:nipaplay_ui_common/themes/nipaplay/widgets/settings_hint_text.dart';
 import 'dart:convert';
 import 'dart:io';
 import 'blur_button.dart';

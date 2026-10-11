@@ -7,7 +7,7 @@ import 'package:nipaplay/utils/video_player_state.dart';
 import 'package:nipaplay/utils/player_kernel_manager.dart';
 import 'base_settings_menu.dart';
 import 'player_menu_theme.dart';
-import 'settings_hint_text.dart';
+import 'package:nipaplay_ui_common/themes/nipaplay/widgets/settings_hint_text.dart';
 import 'package:nipaplay/services/jellyfin_service.dart';
 import 'package:nipaplay/services/emby_service.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_snackbar.dart';

@@ -6,11 +6,11 @@ import 'package:kmbal_ionicons/kmbal_ionicons.dart';
 import 'package:nipaplay_ui_common/l10n/l10n.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_button.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/large_screen_focusable_action.dart';
-import 'package:nipaplay/themes/nipaplay/widgets/large_screen_mode_scope.dart';
+import 'package:nipaplay_ui_common/themes/nipaplay/widgets/large_screen_mode_scope.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/nipaplay_main_tab_bar.dart';
 import 'package:nipaplay/utils/app_accent_color.dart';
 import 'package:nipaplay/widgets/media_server_network_image.dart';
-import 'package:nipaplay/widgets/user_activity/user_activity_view_model.dart';
+import 'package:nipaplay_ui_common/widgets/user_activity/user_activity_view_model.dart';
 
 /// NipaPlay/Fluent renderer for shared user activity data.
 class DesktopUserActivity extends StatefulWidget {

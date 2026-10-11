@@ -5,8 +5,8 @@ import 'package:nipaplay_ui_common/app/app_display_surface.dart';
 import 'package:nipaplay_ui_common/app/app_display_surface_scope.dart';
 import 'package:nipaplay/app/unified_media_library_sections.dart';
 import 'package:nipaplay/media_library/adaptive_media_collection_view.dart';
-import 'package:nipaplay/media_library/media_source_option.dart';
-import 'package:nipaplay/media_library/unified_library_management_model.dart';
+import 'package:nipaplay_ui_common/media_library/media_source_option.dart';
+import 'package:nipaplay_ui_common/media_library/unified_library_management_model.dart';
 import 'package:nipaplay/models/watch_history_model.dart';
 import 'package:nipaplay/themes/cupertino/widgets/cupertino_media_library_section_picker.dart';
 import 'package:nipaplay/themes/cupertino/widgets/cupertino_app_page_header.dart';
@@ -16,7 +16,7 @@ import 'package:nipaplay/themes/nipaplay/widgets/dandanplay_remote_library_view.
 import 'package:nipaplay/themes/nipaplay/widgets/hover_scale_text_button.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/library_management_tab.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/large_screen_focusable_action.dart';
-import 'package:nipaplay/themes/nipaplay/widgets/large_screen_mode_scope.dart';
+import 'package:nipaplay_ui_common/themes/nipaplay/widgets/large_screen_mode_scope.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/large_screen_page_scaffold.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/large_screen_view_container.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/media_server_selection_sheet.dart';
@@ -26,7 +26,7 @@ import 'package:nipaplay/themes/nipaplay/widgets/shared_remote_library_view.dart
 import 'package:nipaplay/utils/app_accent_color.dart';
 import 'package:nipaplay/utils/globals.dart' as globals;
 import 'package:nipaplay/services/large_screen_ui_sfx_service.dart';
-import 'package:nipaplay/widgets/in_view_dialog.dart';
+import 'package:nipaplay_ui_common/widgets/in_view_dialog.dart';
 import 'package:provider/provider.dart';
 
 class AdaptiveMediaLibraryScaffold extends material.StatelessWidget {

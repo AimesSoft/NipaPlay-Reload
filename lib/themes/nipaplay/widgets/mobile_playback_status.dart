@@ -4,7 +4,7 @@ import 'package:battery_plus/battery_plus.dart';
 import 'package:flutter/cupertino.dart' show CupertinoIcons;
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
-import 'package:nipaplay/themes/nipaplay/widgets/control_shadow.dart';
+import 'package:nipaplay_ui_common/themes/nipaplay/widgets/control_shadow.dart';
 
 class MobilePlaybackStatus extends StatefulWidget {
   const MobilePlaybackStatus({

@@ -8,7 +8,7 @@ import 'package:nipaplay/themes/nipaplay/widgets/player_overlay_surface.dart';
 import 'package:nipaplay/utils/globals.dart' as globals;
 import 'package:nipaplay/utils/video_player_state.dart';
 import 'package:nipaplay_core/player_abstraction/player_data_models.dart';
-import 'control_shadow.dart';
+import 'package:nipaplay_ui_common/themes/nipaplay/widgets/control_shadow.dart';
 
 class VideoProgressBar extends StatefulWidget {
   final VideoPlayerState videoState;

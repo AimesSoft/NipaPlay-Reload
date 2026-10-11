@@ -5,7 +5,7 @@ import 'package:nipaplay_core/constants/settings_keys.dart';
 import 'package:nipaplay_ui_common/l10n/app_localizations.dart';
 import 'package:nipaplay/providers/appearance_settings_provider.dart';
 import 'package:nipaplay/services/media_server_service_base.dart';
-import 'package:nipaplay/settings/adaptive_settings_scope.dart';
+import 'package:nipaplay_ui_common/settings/adaptive_settings_scope.dart';
 import 'package:nipaplay/settings/widgets/media_server_connection_user_agent_setting.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:provider/provider.dart';

@@ -8,7 +8,7 @@ import 'package:nipaplay/providers/shared_remote_library_provider.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/themed_anime_detail.dart';
 import 'package:nipaplay/utils/cupertino_settings_colors.dart';
 import 'package:nipaplay/widgets/media_server_network_image.dart';
-import 'package:nipaplay/widgets/user_activity/user_activity_view_model.dart';
+import 'package:nipaplay_ui_common/widgets/user_activity/user_activity_view_model.dart';
 
 class CupertinoUserActivity extends StatefulWidget {
   const CupertinoUserActivity({super.key, required this.data});

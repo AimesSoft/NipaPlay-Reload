@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:kmbal_ionicons/kmbal_ionicons.dart';
 import 'tooltip_bubble.dart';
 import 'package:nipaplay/utils/shortcut_tooltip_manager.dart'; // 使用新的快捷键提示管理器
-import 'control_shadow.dart';
+import 'package:nipaplay_ui_common/themes/nipaplay/widgets/control_shadow.dart';
 import 'keyboard_activatable.dart';
 
 class SendDanmakuButton extends StatefulWidget {

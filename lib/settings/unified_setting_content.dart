@@ -16,7 +16,7 @@ import 'package:nipaplay/settings/pages/plugin_settings_content.dart';
 import 'package:nipaplay/settings/pages/remote_media_library_settings_content.dart';
 import 'package:nipaplay/settings/pages/storage_settings_content.dart';
 import 'package:nipaplay/settings/pages/webdav_quick_settings_content.dart';
-import 'package:nipaplay/settings/unified_setting_content_type.dart';
+import 'package:nipaplay_ui_common/settings/unified_setting_content_type.dart';
 import 'package:nipaplay/themes/cupertino/pages/settings/pages/cupertino_remote_controller_settings_page.dart';
 import 'package:nipaplay/themes/nipaplay/pages/settings/backup_restore_page.dart';
 

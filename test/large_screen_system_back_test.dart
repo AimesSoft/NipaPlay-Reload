@@ -11,7 +11,7 @@ import 'package:nipaplay/providers/home_sections_settings_provider.dart';
 import 'package:nipaplay/providers/settings_provider.dart';
 import 'package:nipaplay/services/large_screen_ui_sfx_service.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/android_tv_remote_key_scope.dart';
-import 'package:nipaplay/themes/nipaplay/widgets/large_screen_mode_scope.dart';
+import 'package:nipaplay_ui_common/themes/nipaplay/widgets/large_screen_mode_scope.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/large_screen_scaffold_layout.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/large_screen_tab_panel.dart';
 import 'package:nipaplay/utils/video_player_state.dart';

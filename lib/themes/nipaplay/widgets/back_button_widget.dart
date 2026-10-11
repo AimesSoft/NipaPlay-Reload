@@ -5,7 +5,7 @@ import 'package:nipaplay/services/auto_next_episode_service.dart';
 import 'tooltip_bubble.dart';
 import 'package:nipaplay/utils/globals.dart' as globals;
 import 'blur_snackbar.dart';
-import 'control_shadow.dart';
+import 'package:nipaplay_ui_common/themes/nipaplay/widgets/control_shadow.dart';
 import 'keyboard_activatable.dart';
 
 class BackButtonWidget extends StatefulWidget {

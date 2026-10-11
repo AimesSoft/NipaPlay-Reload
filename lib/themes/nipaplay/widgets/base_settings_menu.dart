@@ -5,7 +5,7 @@ import 'package:provider/provider.dart';
 import 'package:nipaplay/utils/globals.dart' as globals;
 import 'arrow_menu_container.dart';
 import 'player_menu_theme.dart';
-import 'settings_no_ripple_theme.dart';
+import 'package:nipaplay_ui_common/themes/nipaplay/widgets/settings_no_ripple_theme.dart';
 
 class SettingsMenuScope extends InheritedWidget {
   final double? width;

@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_dropdown.dart';
-import 'package:nipaplay/themes/nipaplay/widgets/ui_scale_wrapper.dart';
+import 'package:nipaplay_ui_common/themes/nipaplay/widgets/ui_scale_wrapper.dart';
 
 void main() {
   testWidgets('positions dropdown in overlay coordinates when UI is scaled', (

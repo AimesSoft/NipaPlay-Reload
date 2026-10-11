@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:kmbal_ionicons/kmbal_ionicons.dart';
-import 'package:nipaplay/media_library/media_source_option.dart';
+import 'package:nipaplay_ui_common/media_library/media_source_option.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_dialog.dart';
 
 class MediaServerSelectionSheet extends StatelessWidget {

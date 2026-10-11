@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/anime_info_widget.dart';
-import 'package:nipaplay/themes/nipaplay/widgets/control_shadow.dart';
+import 'package:nipaplay_ui_common/themes/nipaplay/widgets/control_shadow.dart';
 import 'package:nipaplay/utils/video_player_state.dart';
 
 class _FakeVideoPlayerState extends ChangeNotifier implements VideoPlayerState {

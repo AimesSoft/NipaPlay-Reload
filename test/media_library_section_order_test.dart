@@ -10,7 +10,7 @@ import 'package:nipaplay/app/unified_media_library_sections.dart';
 import 'package:nipaplay_core/constants/settings_keys.dart';
 import 'package:nipaplay/media_library/adaptive_media_library_controls.dart';
 import 'package:nipaplay/media_library/adaptive_media_library_page.dart';
-import 'package:nipaplay/media_library/media_library_section_order_store.dart';
+import 'package:nipaplay_ui_common/media_library/media_library_section_order_store.dart';
 import 'package:nipaplay/models/watch_history_model.dart';
 import 'package:nipaplay/providers/appearance_settings_provider.dart';
 import 'package:nipaplay/providers/bottom_bar_provider.dart';

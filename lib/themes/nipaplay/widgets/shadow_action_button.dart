@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'tooltip_bubble.dart';
-import 'control_shadow.dart';
+import 'package:nipaplay_ui_common/themes/nipaplay/widgets/control_shadow.dart';
 
 class ShadowActionButton extends StatefulWidget {
   final String? tooltip;

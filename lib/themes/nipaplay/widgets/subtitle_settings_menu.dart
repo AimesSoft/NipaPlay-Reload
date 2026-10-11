@@ -12,7 +12,7 @@ import 'blur_button.dart';
 import 'blur_snackbar.dart';
 import 'blur_dropdown.dart';
 import 'fluent_settings_switch.dart';
-import 'settings_hint_text.dart';
+import 'package:nipaplay_ui_common/themes/nipaplay/widgets/settings_hint_text.dart';
 import 'settings_slider.dart';
 
 class SubtitleSettingsMenu extends StatefulWidget {

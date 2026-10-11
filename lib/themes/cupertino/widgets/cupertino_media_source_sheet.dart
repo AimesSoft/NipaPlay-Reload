@@ -1,6 +1,6 @@
 import 'package:flutter/cupertino.dart';
 import 'package:flutter_svg/flutter_svg.dart';
-import 'package:nipaplay/media_library/media_source_option.dart';
+import 'package:nipaplay_ui_common/media_library/media_source_option.dart';
 import 'package:nipaplay/themes/cupertino/widgets/cupertino_bottom_sheet.dart';
 
 class CupertinoMediaSourceSheet extends StatelessWidget {

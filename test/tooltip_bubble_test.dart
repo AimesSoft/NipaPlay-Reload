@@ -3,7 +3,7 @@ import 'dart:ui' show PointerDeviceKind;
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/tooltip_bubble.dart';
-import 'package:nipaplay/themes/nipaplay/widgets/ui_scale_wrapper.dart';
+import 'package:nipaplay_ui_common/themes/nipaplay/widgets/ui_scale_wrapper.dart';
 
 void main() {
   testWidgets('positions tooltip in overlay coordinates when UI is scaled',

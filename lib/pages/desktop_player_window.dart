@@ -12,7 +12,7 @@ import 'package:nipaplay/services/desktop_player_window_service.dart';
 import 'package:nipaplay/utils/app_theme.dart';
 import 'package:nipaplay/utils/theme_notifier.dart';
 import 'package:nipaplay/utils/video_player_state.dart';
-import 'package:nipaplay/widgets/desktop_picture_in_picture_scope.dart';
+import 'package:nipaplay_ui_common/widgets/desktop_picture_in_picture_scope.dart';
 import 'package:provider/provider.dart';
 
 /// The player surface rendered in the secondary FlutterView.

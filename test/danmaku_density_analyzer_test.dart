@@ -1,6 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:nipaplay/services/danmaku_density_analyzer.dart';
-import 'package:nipaplay/widgets/danmaku_density_chart.dart';
+import 'package:nipaplay_ui_common/widgets/danmaku_density_chart.dart';
 
 void main() {
   group('DanmakuDensityAnalyzer', () {
