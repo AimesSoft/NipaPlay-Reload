@@ -78,6 +78,24 @@ void main() {
     expect(library.importedKeys, contains(backend.snapshot.importKey));
   });
 
+  test('readding a removed success creates a new job and preserves its receipt',
+      () async {
+    backend.present = true;
+    await backend.finish();
+    library.autoImport = false;
+    final original = await downloads.add(testRequest);
+    final done = await untilState(engine, original.jobId, JobState.succeeded);
+    final receipt = jsonEncode(done.receipt!.toJson());
+    expect((await downloads.add(testRequest)).jobId, original.jobId);
+    await downloads.remove(original.jobId);
+    final replacement = await downloads.add(testRequest);
+    expect(replacement.jobId, isNot(original.jobId));
+    expect(jsonEncode((await engine.get(original.jobId)).receipt!.toJson()),
+        receipt);
+    expect((await engine.list(type: 'download')).map((j) => j.jobId),
+        containsAll([original.jobId, replacement.jobId]));
+  });
+
   test(
       'directory overrides survive persistence and duplicate adds do not move data',
       () async {

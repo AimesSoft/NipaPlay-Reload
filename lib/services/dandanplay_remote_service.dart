@@ -31,6 +31,28 @@ class DandanplayRemoteService {
   bool _isRefreshing = false;
 
   bool get isConnected => _isConnected;
+  Future<Map<String, Object?>> probeUrl(String baseUrl) async {
+    final welcome = await _fetchWelcome(_normalizeBaseUrl(baseUrl));
+    return {
+      'connected': true,
+      'tokenRequired': welcome.tokenRequired,
+      'version': welcome.version,
+    };
+  }
+  Future<void> configureAddress(String baseUrl) async {
+    final normalized = _normalizeBaseUrl(baseUrl);
+    if (normalized != _baseUrl) {
+      _apiToken = null;
+      _cachedEpisodes = [];
+      _lastSyncedAt = null;
+      _lastError = null;
+      _tokenRequired = false;
+      _isConnected = false;
+      _baseUrl = normalized;
+      await _persistSettings();
+      _notifyConnectionState(false);
+    }
+  }
   String? get serverUrl => _baseUrl;
   bool get tokenRequired => _tokenRequired;
   String? get lastError => _lastError;

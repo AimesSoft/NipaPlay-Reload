@@ -78,6 +78,8 @@ class JellyfinProvider extends ChangeNotifier {
   }
   
   // 保存排序设置到SharedPreferences
+  Future<void> persistLibrarySortSettings() => _saveSortSettings();
+
   Future<void> _saveSortSettings() async {
     try {
       final prefs = await SharedPreferences.getInstance();

@@ -44,7 +44,7 @@ final class DownloadService {
         final jobs = await engine.list(type: 'download');
         final existing = jobs.where((job) =>
             _matches(job, backend, request.infoHash) &&
-            (!job.state.isTerminal || job.state == JobState.succeeded));
+            !job.state.isTerminal);
         if (existing.isNotEmpty) return existing.last;
         final previous =
             jobs.where((job) => _matches(job, backend, request.infoHash));

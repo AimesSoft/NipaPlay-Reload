@@ -16,6 +16,8 @@ import 'media/media_runtime.dart';
 import 'media/media_probe.dart';
 import 'media_sources/service.dart';
 import 'media_sources/capability.dart';
+import 'media_sources/sync.dart';
+import 'media_sources/remote_admin.dart';
 import 'accounts/service.dart';
 import 'accounts/capability.dart';
 import 'media/metadata_provider.dart';
@@ -77,6 +79,7 @@ final class NextCore {
   CredentialVault get credentialVault => credentials.vault;
   late final MediaRuntime media;
   late final MediaSourcesService mediaSources;
+  late final SyncService sync;
   final accounts = AccountsService();
   late final DanmakuRuntime danmaku;
   late final SettingsRegistry settings;
@@ -110,6 +113,7 @@ final class NextCore {
         providers: mediaProviders,
         durationProbe: mediaDurationProbe);
     mediaSources = MediaSourcesService(media.service.store);
+    sync = SyncService(mediaSources);
     for (final provider in ['dandanplay', 'bangumi']) {
       changeHistory.seed('account:$provider', [
         {'id': provider, ...accounts.status(provider)}..remove('provider')
@@ -124,6 +128,7 @@ final class NextCore {
       ...ApplicationSettings.entries(),
       ...ClassicSettings.entries(),
       ...DownloadSettings.entries(),
+      ...sync.settings(),
       meshAddressSetting(mesh),
       harnessLocation.setting
     ]);
@@ -138,6 +143,8 @@ final class NextCore {
       downloads.executor,
       ...media.executors,
       ...mediaSourcesExecutors(mediaSources),
+      SyncExecutor(sync),
+      RemoteConnectionExecutor(mediaSources),
       ...accountExecutors(accounts),
       ...danmaku.executors,
       hooks,
@@ -171,6 +178,8 @@ final class NextCore {
       downloads.metadataCapability,
       media.capability,
       MediaSourcesCapability(mediaSources),
+      SyncCapability(sync),
+      RemoteAdminCapability(mediaSources),
       AccountsCapability(accounts),
       danmaku.capability,
       SettingsCapability(settings),
