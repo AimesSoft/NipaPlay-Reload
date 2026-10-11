@@ -1,0 +1,55 @@
+import 'package:flutter/widgets.dart';
+
+import '../theme/tokens.dart';
+
+/// A titled, horizontally scrolling row (`.shelf`). Cards may scale and
+/// cast shadows past the row, so the viewport does not clip vertically.
+class Shelf extends StatelessWidget {
+  const Shelf({
+    super.key,
+    required this.title,
+    required this.height,
+    required this.itemCount,
+    required this.itemBuilder,
+    this.gutter = NextMetrics.gutter,
+    this.gap = 16,
+    this.storageKey,
+  });
+
+  final String title;
+  final double height;
+  final int itemCount;
+  final IndexedWidgetBuilder itemBuilder;
+  final double gutter;
+  final double gap;
+
+  /// Keeps the horizontal position when coming back to the page.
+  final String? storageKey;
+
+  @override
+  Widget build(BuildContext context) => Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Padding(
+            padding: EdgeInsets.only(left: gutter),
+            child: Text(title,
+                style: NextText.sans(19,
+                    weight: FontWeight.w600, letterSpacing: 0.4)),
+          ),
+          const SizedBox(height: 16),
+          SizedBox(
+            height: height,
+            child: ListView.separated(
+              key: storageKey == null ? null : PageStorageKey(storageKey),
+              scrollDirection: Axis.horizontal,
+              clipBehavior: Clip.none,
+              padding: EdgeInsets.only(left: gutter, right: 56),
+              itemCount: itemCount,
+              separatorBuilder: (_, __) => SizedBox(width: gap),
+              itemBuilder: itemBuilder,
+            ),
+          ),
+        ],
+      );
+}

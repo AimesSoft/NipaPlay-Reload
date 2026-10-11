@@ -4,6 +4,7 @@ import 'package:kmbal_ionicons/kmbal_ionicons.dart';
 import 'package:nipaplay/l10n/l10n.dart';
 import 'package:nipaplay/next/agent_endpoint.dart';
 import 'package:nipaplay/next/next_runtime.dart';
+import 'package:nipaplay/next/ui/shell/next_ui_preference.dart';
 import 'package:nipaplay/player_abstraction/player_factory.dart';
 import 'package:nipaplay/providers/labs_settings_provider.dart';
 import 'package:nipaplay/services/folder_opener.dart';
@@ -140,6 +141,21 @@ class LabsSettingsContent extends StatelessWidget {
                           await labsSettings.setEnableAgentEndpoint(enabled);
                         },
                       ),
+                      if (labsSettings.enableAgentEndpoint)
+                        AdaptiveSettingsTile.toggle(
+                          title: _text(context, '使用 Next 界面',
+                              '使用 Next 介面', 'Use the Next Interface'),
+                          subtitle: _text(
+                            context,
+                            '用 Next 的首页替换主界面，可随时回到经典界面',
+                            '用 Next 的首頁取代主介面，可隨時回到經典介面',
+                            'Replace the main interface with Next. You can switch back at any time.',
+                          ),
+                          icon: Ionicons.sparkles_outline,
+                          phoneIcon: cupertino.CupertinoIcons.sparkles,
+                          value: context.watch<NextUiPreference>().enabled,
+                          onChanged: context.read<NextUiPreference>().setEnabled,
+                        ),
                       AdaptiveSettingsTile.button(
                         title: _text(context, 'Harness 仓库路径', 'Harness 倉庫路徑',
                             'Harness Repository Path'),

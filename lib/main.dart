@@ -66,6 +66,8 @@ import 'package:nipaplay/providers/jellyfin_transcode_provider.dart';
 import 'package:nipaplay/providers/emby_transcode_provider.dart';
 import 'package:nipaplay/providers/labs_settings_provider.dart';
 import 'package:nipaplay/next/next_runtime.dart';
+import 'package:nipaplay/next/ui/shell/next_ui_gate.dart';
+import 'package:nipaplay/next/ui/shell/next_ui_preference.dart';
 import 'package:nipaplay/plugins/plugin_service.dart';
 import 'package:nipaplay/src/rust/api/startup_commands.dart'
     as startup_commands;
@@ -701,6 +703,8 @@ Future<void> _main(List<String> args) async {
                 lazy: false,
                 create: NextRuntime.fromContext,
               ),
+            if (!kIsWeb)
+              ChangeNotifierProvider(create: (_) => NextUiPreference()),
           ],
           child: DesktopMultiWindowHost(
             child: NipaPlayApp(
@@ -1203,7 +1207,10 @@ class _NipaPlayAppState extends State<NipaPlayApp> with WidgetsBindingObserver {
                     ? WebRemoteAccessGate(
                         child: MainPage(launchFilePath: widget.launchFilePath),
                       )
-                    : MainPage(launchFilePath: widget.launchFilePath),
+                    : NextUiGate(
+                        classic:
+                            MainPage(launchFilePath: widget.launchFilePath),
+                      ),
                 AppDisplaySurface.phone: () => kIsWeb
                     ? WebRemoteAccessGate(
                         child: CupertinoMainPage(
