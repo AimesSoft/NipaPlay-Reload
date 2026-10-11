@@ -1,12 +1,14 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:math';
+import 'dart:io';
 
 import 'package:nipa_harness/nipa_harness.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:nipaplay/security/secret_redactor.dart';
 
 import '../chat/chat_host.dart';
+import '../chat/turn_process_store.dart';
 import '../harness_location.dart';
 import '../harness_redaction.dart';
 import '../state/views.dart' show publicTaskFacts;
@@ -38,6 +40,14 @@ final class Followups {
   final TaskEngine engine;
   final HarnessLocation location;
   ChatHost? _host;
+  Future<JsonMap> turnProcess(String threadId, String turnId) async {
+    await location.ready;
+    final host = _host;
+    if (host != null) return host.turnProcess(threadId, turnId);
+    final saved = TurnProcessStore(TurnProcessStore.fileFor(
+        File(database.path).parent, location.path)).read(threadId, turnId);
+    return {'found': saved != null, 'process': saved};
+  }
   String _unavailable = 'Embedded chat host is not running.';
   StreamSubscription<Job>? _jobs;
   StreamSubscription<ChatMessage>? _chatEvents;

@@ -21,6 +21,28 @@ Codex 0.144.1 defers writing an empty rollout until its first content. On creati
 the host sets a plain session name through `thread/name/set` before storing the
 identifier; this materializes an empty session without a synthetic user turn.
 
+`chat.turn.process {threadId, turnId}` reads `{found, process}` from the active
+harness, even if its model host is unavailable. The process contains actual
+origin, start/end/status/durationMs and ordered commandExecution/reasoning items.
+Commands retain command, exitCode, durationMs, status and redacted
+aggregatedOutput. Reasoning retains the summary supplied by Codex, never raw
+reasoning content. Missing or evicted records return found=false.
+
+The host saves these facts at turn boundaries and item start/completion, after
+secret inspection/redaction, by atomically replacing a file under the Next data
+directory's `turn-process/` (one file per absolute harness path). Each file keeps
+at most 60 turns and 4 MiB. Each turn keeps at most 128 items, with commands capped
+at 4096 Unicode characters, outputs at 8192 and up to eight summary parts at
+2048 each; truncation is recorded. Oldest turns are evicted first. Output deltas
+are not persisted: an abruptly stopped command retains its started fact and
+unknown exit status, with its final output unavailable. Earlier runs cannot be
+reconstructed from the invocation journal.
+
+`readThread` supplements Codex history with these retained items, preserving
+Codex's messages and replacing its folded process items rather than duplicating steps.
+Y3's existing `TurnActivity.fromHistory` therefore restores expandable steps
+after restarting without a second sidebar protocol.
+
 `agent.wake` persists an immediate followup with instruction and arbitrary facts;
 missing threadId always targets main. `followup.register` in embedded chat keeps
 its registering thread; missing threadId outside chat targets main. Both use

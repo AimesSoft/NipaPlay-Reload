@@ -11,6 +11,7 @@ import '../media/media_service.dart';
 import '../media/metadata_provider.dart';
 import '../state/query.dart';
 import '../state/views.dart';
+import '../settings/registry.dart';
 import 'artwork.dart';
 import 'airing.dart';
 import 'heat.dart';
@@ -30,6 +31,22 @@ final class UiDataService implements NextUiData {
   final ArtworkCache artwork;
   final EpisodeHeat heat;
   Database get db => media.store.database;
+  static const _openingKey = 'preference:hero-opening-seconds';
+  Future<int> _openingSeconds() async {
+    final rows = await db.query('ui_cache', where: 'id=?', whereArgs: [_openingKey]);
+    return rows.isEmpty ? 180 : jsonDecode(rows.single['payload'] as String) as int;
+  }
+  SettingEntry get openingSetting => SettingEntry(
+      key: 'next.heroOpeningSeconds', title: '开头弹幕时长',
+      description: '从每集开头多少秒里挑选首页弹幕。',
+      schema: const IntegerSchema(minimum: 30, maximum: 300), defaultValue: 180,
+      storageKey: _openingKey, storageKind: 'sqlite',
+      reader: 'UiDataService', writer: 'UiDataService',
+      read: _openingSeconds, decodeStorage: (value) => value ?? 180,
+      write: (value) async {
+        await db.insert('ui_cache', {'id': _openingKey, 'fingerprint': 'preference', 'payload': jsonEncode(value)}, conflictAlgorithm: ConflictAlgorithm.replace);
+        _changed();
+      });
   final _changes = StreamController<void>.broadcast();
   final _tasks = StreamController<List<UiTask>>.broadcast();
   StreamSubscription<Job>? _jobs;
@@ -138,7 +155,8 @@ final class UiDataService implements NextUiData {
         ],
         artwork: uiArtwork(art),
         next: next,
-        danmaku: await heat.comments([for (final e in episodes) (e.episodeId, e.runtime?.inMilliseconds)]));
+        danmaku: await heat.comments([for (final e in episodes) (e.episodeId, e.runtime?.inMilliseconds)],
+            openingWindow: Duration(seconds: await _openingSeconds())));
   }
 
   @override

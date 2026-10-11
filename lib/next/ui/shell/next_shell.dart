@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 
 import '../data/services.dart';
+import '../../work_detail_bridge.dart';
 import '../dev/debug_extension.dart';
 import '../home/home_page.dart';
 import '../detail/work_route.dart';
@@ -43,6 +44,7 @@ class _NextShellState extends State<NextShell> {
 
   @override
   void dispose() {
+    WorkDetailBridge.detach(this);
     if (kDebugMode) NextUiDebug.detach(_shell);
     _shell.dispose();
     _services.dispose();
@@ -75,6 +77,14 @@ class _NextShellState extends State<NextShell> {
     // Hidden while Classic's player shows a video: logins open at once then.
     final showing = TickerMode.valuesOf(context).enabled;
     _services.logins.showing = () => showing && mounted;
+    WorkDetailBridge.attach(this, (id) async {
+      if (!mounted || !_services.logins.showing()) return null;
+      final work = await _services.data.work(id);
+      if (!mounted || !_services.logins.showing()) return null;
+      if (work == null || _shell.navigatorKey.currentState == null) return false;
+      _shell.openWork(work);
+      return true;
+    });
     final base = Theme.of(context);
     return Theme(
       data: ThemeData(

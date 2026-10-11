@@ -61,6 +61,7 @@ import 'harness_location.dart';
 import 'harness_hooks.dart';
 import 'harness_repository.dart';
 import 'chat/chat_host.dart';
+import 'work_detail_bridge.dart';
 import 'chat/debug_chat.dart';
 import 'ui_data/debug_ui_data.dart';
 import 'harness_redaction.dart';
@@ -246,6 +247,7 @@ final class NextRuntime extends ChangeNotifier {
         media: () => core.media.service,
         openPage: ClassicUiOpen().page,
         openDetail: ClassicUiOpen().detail,
+        openWork: WorkDetailBridge.open,
         openTarget: ClassicUiOpen(harnessPath: () async {
           await core.harnessLocation.ready;
           return core.harnessLocation.path;

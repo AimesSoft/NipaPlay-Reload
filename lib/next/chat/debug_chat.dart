@@ -43,6 +43,8 @@ void installDebugChat(ChatHost? Function() current) {
             'liveness': host.liveness.snapshot(DateTime.now()),
             'environment': host.launchEnvironment
           };
+        case 'read':
+          result = await host.readThread(params['threadId']!);
         case 'close':
           await host.close();
           result = {'closed': true};
