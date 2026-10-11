@@ -35,6 +35,14 @@ import 'media/file_indexing.dart';
 import 'media_sources/login_dialog.dart';
 import 'accounts/login_dialog.dart';
 import 'settings/application_settings.dart';
+import 'settings/classic_settings.dart';
+import 'package:nipaplay/plugins/plugin_service.dart';
+import 'package:nipaplay/providers/app_language_provider.dart';
+import 'package:nipaplay/providers/appearance_settings_provider.dart';
+import 'package:nipaplay/providers/developer_options_provider.dart';
+import 'package:nipaplay/providers/home_sections_settings_provider.dart';
+import 'package:nipaplay/providers/webdav_quick_access_provider.dart';
+import 'package:nipaplay/utils/theme_notifier.dart';
 import 'harness_location.dart';
 import 'harness_hooks.dart';
 import 'harness_repository.dart';
@@ -46,6 +54,16 @@ final class NextRuntime extends ChangeNotifier {
 
   factory NextRuntime.fromContext(BuildContext context) {
     final labs = context.read<LabsSettingsProvider>();
+    ClassicSettings.attached = ClassicSettings(
+      appearance: context.read<AppearanceSettingsProvider>(),
+      language: context.read<AppLanguageProvider>(),
+      home: context.read<HomeSectionsSettingsProvider>(),
+      theme: context.read<ThemeNotifier>(),
+      developer: context.read<DeveloperOptionsProvider>(),
+      labs: labs,
+      webdav: context.read<WebDAVQuickAccessProvider>(),
+      plugins: context.read<PluginService>(),
+    );
     final core = ServiceProvider.nextCore;
     core.ready.then((_) {
       if (!context.mounted) return;
@@ -108,6 +126,13 @@ final class NextRuntime extends ChangeNotifier {
   late Future<void> _operations;
   AgentEndpointStatus _endpointStatus = const AgentEndpointStopped();
   bool _disposed = false;
+  ClassicSettings? _classicSettings;
+
+  void _syncPluginSettings() {
+    final classic = _classicSettings!;
+    ServiceProvider.nextCore.settings.replaceGroup('plugins.enabled.', []);
+    ServiceProvider.nextCore.settings.replaceGroup('plugins.settings.', classic.pluginEntries());
+  }
 
   Harness get harness => _harness;
   TaskEngine get taskEngine => _taskEngine;
@@ -122,6 +147,11 @@ final class NextRuntime extends ChangeNotifier {
   Future<void> _initialize(List<Capability> capabilities) async {
     final core = ServiceProvider.nextCore;
     await core.ready;
+    _classicSettings = ClassicSettings.current;
+    await _classicSettings!.ready;
+    await _classicSettings!.plugins.ready;
+    _syncPluginSettings();
+    _classicSettings!.plugins.addListener(_syncPluginSettings);
     core.stateSources.history = () => [
           for (final item in ServiceProvider.watchHistoryProvider.history)
             item.toJson()
@@ -281,6 +311,8 @@ final class NextRuntime extends ChangeNotifier {
   @override
   void dispose() {
     _disposed = true;
+    _classicSettings?.plugins.removeListener(_syncPluginSettings);
+    if (identical(ClassicSettings.attached, _classicSettings)) ClassicSettings.attached = null;
     _labs.removeListener(_queueEndpointUpdate);
     _location?.removeListener(_queueEndpointUpdate);
     _operations = _operations.then((_) async {

@@ -1,3 +1,4 @@
+import 'package:nipaplay/next/settings/registry.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -26,6 +27,28 @@ bool shouldBlockDesktopHotkeys({
 /// 热键管理服务，用于替代Flutter内部的键盘事件处理
 class HotkeyService extends ChangeNotifier {
   static final HotkeyService _instance = HotkeyService._internal();
+  static const Map<String, String> defaultShortcuts = {
+      'play_pause': '空格',
+      'fullscreen': 'Enter',
+      'rewind': '←',
+      'forward': '→',
+      'toggle_danmaku': 'D',
+      'volume_up': '↑',
+      'volume_down': '↓',
+      'speed_up': ']',
+      'speed_down': '[',
+      'speed_reset': '退格',
+      'previous_episode': 'Shift+←',
+      'next_episode': 'Shift+→',
+      'send_danmaku': 'C', // 添加发送弹幕快捷键
+      'skip': 'S', // 添加跳过快捷键
+      'step_forward': 'E', // 逐帧前进
+      'step_backward': 'Q', // 逐帧后退
+      'resize_to_video': 'R', // 窗口适配视频
+      'toggle_picture_in_picture': 'P', // 切换画中画
+      'toggle_detached_player': 'W', // 移入/移回独立窗口
+    };
+
   static const String _shortcutsKey = 'keyboard_shortcuts';
   static const int _longPressThreshold = 800; // 长按阈值（毫秒）
 
@@ -164,27 +187,7 @@ class HotkeyService extends ChangeNotifier {
 
     // 先加载默认值
     Map<String, String> currentShortcutsConfig = {};
-    currentShortcutsConfig.addAll({
-      'play_pause': '空格',
-      'fullscreen': 'Enter',
-      'rewind': '←',
-      'forward': '→',
-      'toggle_danmaku': 'D',
-      'volume_up': '↑',
-      'volume_down': '↓',
-      'speed_up': ']',
-      'speed_down': '[',
-      'speed_reset': '退格',
-      'previous_episode': 'Shift+←',
-      'next_episode': 'Shift+→',
-      'send_danmaku': 'C', // 添加发送弹幕快捷键
-      'skip': 'S', // 添加跳过快捷键
-      'step_forward': 'E', // 逐帧前进
-      'step_backward': 'Q', // 逐帧后退
-      'resize_to_video': 'R', // 窗口适配视频
-      'toggle_picture_in_picture': 'P', // 切换画中画
-      'toggle_detached_player': 'W', // 移入/移回独立窗口
-    });
+    currentShortcutsConfig.addAll(defaultShortcuts);
 
     if (savedShortcutsString != null) {
       try {
@@ -217,7 +220,7 @@ class HotkeyService extends ChangeNotifier {
   // 保存快捷键配置
   Future<void> saveShortcuts() async {
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(_shortcutsKey, json.encode(_shortcuts));
+    await SettingsAccess.persist(_shortcutsKey, () => prefs.setString(_shortcutsKey, json.encode(_shortcuts)));
   }
 
   // 注册所有热键
@@ -1030,6 +1033,8 @@ class HotkeyService extends ChangeNotifier {
   }
 
   // 更新快捷键
+  bool isValidShortcut(String value) => _parseKeyString(value) != null;
+
   Future<void> updateShortcut(String action, String shortcut) async {
     ////debugPrint('[HotkeyService] 更新快捷键: $action -> $shortcut');
     _shortcuts[action] = shortcut;

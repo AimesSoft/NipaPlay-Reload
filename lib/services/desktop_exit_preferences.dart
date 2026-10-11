@@ -1,3 +1,4 @@
+import 'package:nipaplay/next/settings/registry.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 enum DesktopExitBehavior {
@@ -45,10 +46,9 @@ class DesktopExitPreferences {
     final prefs = await SharedPreferences.getInstance();
     final raw = serialize(behavior);
     if (raw == null) {
-      await prefs.remove(key);
+      await SettingsAccess.persist(key, () => prefs.remove(key));
       return;
     }
-    await prefs.setString(key, raw);
+    await SettingsAccess.persist(key, () => prefs.setString(key, raw));
   }
 }
-

@@ -1,3 +1,4 @@
+import 'package:nipaplay/next/settings/registry.dart';
 import 'package:flutter/widgets.dart';
 import 'package:nipaplay/constants/settings_keys.dart';
 import 'package:nipaplay/l10n/app_locale_utils.dart';
@@ -43,7 +44,7 @@ class AppLanguageProvider with ChangeNotifier {
     }
     _mode = mode;
     _resolvedLocale = _resolveLocale();
-    await _prefs.setString(SettingsKeys.appLanguageMode, _modeToStorage(mode));
+    await SettingsAccess.persist(SettingsKeys.appLanguageMode, () => _prefs.setString(SettingsKeys.appLanguageMode, _modeToStorage(mode)));
     notifyListeners();
   }
 

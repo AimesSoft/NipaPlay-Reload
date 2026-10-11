@@ -6,6 +6,7 @@ import 'package:nipaplay/models/anime_detail_display_mode.dart';
 import 'package:nipaplay/models/background_image_render_mode.dart';
 
 class ThemeNotifier with ChangeNotifier {
+  Future<void> pendingSave = Future.value();
   static const String backgroundImageRenderModeKey =
       'background_image_render_mode';
   static const String backgroundImageOverlayOpacityKey =
@@ -47,7 +48,7 @@ class ThemeNotifier with ChangeNotifier {
 
   set themeMode(ThemeMode mode) {
     _themeMode = mode;
-    SettingsStorage.saveString('themeMode', mode.toString().split('.').last).then((_) {
+    pendingSave = SettingsStorage.saveString('themeMode', mode.toString().split('.').last).then((_) {
       ////////debugPrint('Theme mode saved: ${mode.toString().split('.').last}'); // 添加日志输出
     });
     notifyListeners();
@@ -56,7 +57,7 @@ class ThemeNotifier with ChangeNotifier {
   set backgroundImageMode(String mode) {
     if (_backgroundImageMode != mode) {
       _backgroundImageMode = mode;
-      SettingsStorage.saveString('backgroundImageMode', mode).then((_) {
+      pendingSave = SettingsStorage.saveString('backgroundImageMode', mode).then((_) {
         ////////debugPrint('Background image mode saved: $mode'); // 添加日志输出
       });
       globals.backgroundImageMode = mode; // 更新全局变量
@@ -67,7 +68,7 @@ class ThemeNotifier with ChangeNotifier {
   set customBackgroundPath(String path) {
     if (_customBackgroundPath != path) {
       _customBackgroundPath = path;
-      SettingsStorage.saveString('customBackgroundPath', path).then((_) {
+      pendingSave = SettingsStorage.saveString('customBackgroundPath', path).then((_) {
         ////////debugPrint('Custom background path saved: $path'); // 添加日志输出
       });
       globals.customBackgroundPath = path; // 更新全局变量
@@ -78,7 +79,7 @@ class ThemeNotifier with ChangeNotifier {
   set animeDetailDisplayMode(AnimeDetailDisplayMode mode) {
     if (_animeDetailDisplayMode != mode) {
       _animeDetailDisplayMode = mode;
-      SettingsStorage
+      pendingSave = SettingsStorage
           .saveString('anime_detail_display_mode', mode.storageKey)
           .then((_) {
         ////////debugPrint('Anime detail display mode saved: ${mode.storageKey}');
@@ -90,7 +91,7 @@ class ThemeNotifier with ChangeNotifier {
   set backgroundImageRenderMode(BackgroundImageRenderMode mode) {
     if (_backgroundImageRenderMode != mode) {
       _backgroundImageRenderMode = mode;
-      SettingsStorage.saveString(backgroundImageRenderModeKey, mode.storageKey);
+      pendingSave = SettingsStorage.saveString(backgroundImageRenderModeKey, mode.storageKey);
       notifyListeners();
     }
   }
@@ -99,7 +100,7 @@ class ThemeNotifier with ChangeNotifier {
     final double clampedValue = value.clamp(0.0, 1.0);
     if (_backgroundImageOverlayOpacity != clampedValue) {
       _backgroundImageOverlayOpacity = clampedValue;
-      SettingsStorage.saveDouble(
+      pendingSave = SettingsStorage.saveDouble(
         backgroundImageOverlayOpacityKey,
         clampedValue,
       );

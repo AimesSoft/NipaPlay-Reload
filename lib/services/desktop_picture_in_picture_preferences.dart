@@ -1,3 +1,4 @@
+import 'package:nipaplay/next/settings/registry.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 enum DesktopPictureInPicturePosition {
@@ -42,6 +43,6 @@ class DesktopPictureInPicturePreferences {
     DesktopPictureInPicturePosition position,
   ) async {
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(_positionKey, serializePosition(position));
+    await SettingsAccess.persist(_positionKey, () => prefs.setString(_positionKey, serializePosition(position)));
   }
 }

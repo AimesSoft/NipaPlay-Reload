@@ -1,3 +1,4 @@
+import 'package:nipaplay/next/settings/registry.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -339,7 +340,7 @@ class WebDAVQuickAccessProvider extends ChangeNotifier {
 
     try {
       final prefs = await SharedPreferences.getInstance();
-      await prefs.setBool(_keyShowWebDAVTab, value);
+      await SettingsAccess.persist(_keyShowWebDAVTab, () => prefs.setBool(_keyShowWebDAVTab, value));
       notifyListeners();
     } catch (e) {
       debugPrint('保存 WebDAV Tab 显示设置失败: $e');
@@ -360,7 +361,7 @@ class WebDAVQuickAccessProvider extends ChangeNotifier {
 
     try {
       final prefs = await SharedPreferences.getInstance();
-      await prefs.setString(_keyDefaultHomeTab, tabName);
+      await SettingsAccess.persist(_keyDefaultHomeTab, () => prefs.setString(_keyDefaultHomeTab, tabName));
       notifyListeners();
     } catch (e) {
       debugPrint('保存默认主页 Tab 设置失败: $e');
@@ -394,7 +395,7 @@ class WebDAVQuickAccessProvider extends ChangeNotifier {
 
     try {
       final prefs = await SharedPreferences.getInstance();
-      await prefs.setString(_keySortPreset, preset.value);
+      await SettingsAccess.persist(_keySortPreset, () => prefs.setString(_keySortPreset, preset.value));
       notifyListeners();
     } catch (e) {
       debugPrint('保存排序设置失败: $e');
@@ -409,7 +410,7 @@ class WebDAVQuickAccessProvider extends ChangeNotifier {
 
     try {
       final prefs = await SharedPreferences.getInstance();
-      await prefs.setString(_keyDefaultServerName, serverName);
+      await SettingsAccess.persist(_keyDefaultServerName, () => prefs.setString(_keyDefaultServerName, serverName));
       notifyListeners();
     } catch (e) {
       debugPrint('保存默认服务器设置失败: $e');
@@ -429,7 +430,7 @@ class WebDAVQuickAccessProvider extends ChangeNotifier {
 
     try {
       final prefs = await SharedPreferences.getInstance();
-      await prefs.setString(_keyDefaultDirectory, directory);
+      await SettingsAccess.persist(_keyDefaultDirectory, () => prefs.setString(_keyDefaultDirectory, directory));
       notifyListeners();
     } catch (e) {
       debugPrint('保存默认目录设置失败: $e');
@@ -450,7 +451,7 @@ class WebDAVQuickAccessProvider extends ChangeNotifier {
 
     try {
       final prefs = await SharedPreferences.getInstance();
-      await prefs.setBool(_keyAutoEnterSeasonFolder, value);
+      await SettingsAccess.persist(_keyAutoEnterSeasonFolder, () => prefs.setBool(_keyAutoEnterSeasonFolder, value));
       notifyListeners();
     } catch (e) {
       debugPrint('保存自动进入 Season 文件夹设置失败: $e');
@@ -465,7 +466,7 @@ class WebDAVQuickAccessProvider extends ChangeNotifier {
 
     try {
       final prefs = await SharedPreferences.getInstance();
-      await prefs.setString(_keySeasonFolderPattern, pattern);
+      await SettingsAccess.persist(_keySeasonFolderPattern, () => prefs.setString(_keySeasonFolderPattern, pattern));
       notifyListeners();
     } catch (e) {
       debugPrint('保存 Season 文件夹匹配模式失败: $e');
@@ -480,7 +481,7 @@ class WebDAVQuickAccessProvider extends ChangeNotifier {
 
     try {
       final prefs = await SharedPreferences.getInstance();
-      await prefs.setBool(_keyShowPathBreadcrumb, value);
+      await SettingsAccess.persist(_keyShowPathBreadcrumb, () => prefs.setBool(_keyShowPathBreadcrumb, value));
       notifyListeners();
     } catch (e) {
       debugPrint('保存路径面包屑显示设置失败: $e');
@@ -495,7 +496,7 @@ class WebDAVQuickAccessProvider extends ChangeNotifier {
 
     try {
       final prefs = await SharedPreferences.getInstance();
-      await prefs.setBool(_keyBgmIdQuickMatch, value);
+      await SettingsAccess.persist(_keyBgmIdQuickMatch, () => prefs.setBool(_keyBgmIdQuickMatch, value));
       notifyListeners();
     } catch (e) {
       debugPrint('保存 bgmid 快速匹配设置失败: $e');
@@ -530,7 +531,7 @@ class WebDAVQuickAccessProvider extends ChangeNotifier {
 
     try {
       final prefs = await SharedPreferences.getInstance();
-      await prefs.setString(_keyBgmIdMatchPattern, pattern);
+      await SettingsAccess.persist(_keyBgmIdMatchPattern, () => prefs.setString(_keyBgmIdMatchPattern, pattern));
       notifyListeners();
     } catch (e) {
       debugPrint('保存 bgmid 匹配规则失败: $e');
@@ -545,7 +546,7 @@ class WebDAVQuickAccessProvider extends ChangeNotifier {
 
     try {
       final prefs = await SharedPreferences.getInstance();
-      await prefs.setBool(_keyTmdbIdQuickMatch, value);
+      await SettingsAccess.persist(_keyTmdbIdQuickMatch, () => prefs.setBool(_keyTmdbIdQuickMatch, value));
       notifyListeners();
     } catch (e) {
       debugPrint('保存 tmdbId 快速匹配设置失败: $e');
@@ -578,7 +579,7 @@ class WebDAVQuickAccessProvider extends ChangeNotifier {
 
     try {
       final prefs = await SharedPreferences.getInstance();
-      await prefs.setString(_keyTmdbIdMatchPattern, pattern);
+      await SettingsAccess.persist(_keyTmdbIdMatchPattern, () => prefs.setString(_keyTmdbIdMatchPattern, pattern));
       notifyListeners();
     } catch (e) {
       debugPrint('保存 tmdbId 匹配规则失败: $e');
@@ -593,7 +594,7 @@ class WebDAVQuickAccessProvider extends ChangeNotifier {
 
     try {
       final prefs = await SharedPreferences.getInstance();
-      await prefs.setBool(_keyEpisodeOffset, value);
+      await SettingsAccess.persist(_keyEpisodeOffset, () => prefs.setBool(_keyEpisodeOffset, value));
       notifyListeners();
     } catch (e) {
       debugPrint('保存剧集偏移设置失败: $e');
@@ -610,7 +611,7 @@ class WebDAVQuickAccessProvider extends ChangeNotifier {
 
     try {
       final prefs = await SharedPreferences.getInstance();
-      await prefs.setBool(_keyEnableSearch, value);
+      await SettingsAccess.persist(_keyEnableSearch, () => prefs.setBool(_keyEnableSearch, value));
       notifyListeners();
     } catch (e) {
       debugPrint('保存搜索功能开关设置失败: $e');
@@ -625,7 +626,7 @@ class WebDAVQuickAccessProvider extends ChangeNotifier {
 
     try {
       final prefs = await SharedPreferences.getInstance();
-      await prefs.setString(_keySearchScope, scope.value);
+      await SettingsAccess.persist(_keySearchScope, () => prefs.setString(_keySearchScope, scope.value));
       notifyListeners();
     } catch (e) {
       debugPrint('保存搜索范围设置失败: $e');
@@ -642,7 +643,7 @@ class WebDAVQuickAccessProvider extends ChangeNotifier {
 
     try {
       final prefs = await SharedPreferences.getInstance();
-      await prefs.setInt(_keySearchDepthLimit, limit);
+      await SettingsAccess.persist(_keySearchDepthLimit, () => prefs.setInt(_keySearchDepthLimit, limit));
       notifyListeners();
     } catch (e) {
       debugPrint('保存搜索层级限制设置失败: $e');
@@ -658,7 +659,7 @@ class WebDAVQuickAccessProvider extends ChangeNotifier {
     try {
       final prefs = await SharedPreferences.getInstance();
       final targetValues = targets.map((t) => t.value).toList();
-      await prefs.setStringList(_keySearchTargets, targetValues);
+      await SettingsAccess.persist(_keySearchTargets, () => prefs.setStringList(_keySearchTargets, targetValues));
       notifyListeners();
     } catch (e) {
       debugPrint('保存搜索目标类型设置失败: $e');
@@ -687,7 +688,7 @@ class WebDAVQuickAccessProvider extends ChangeNotifier {
 
     try {
       final prefs = await SharedPreferences.getInstance();
-      await prefs.setInt(_keySearchTimeout, timeout.seconds);
+      await SettingsAccess.persist(_keySearchTimeout, () => prefs.setInt(_keySearchTimeout, timeout.seconds));
       notifyListeners();
     } catch (e) {
       debugPrint('保存搜索超时设置失败: $e');
@@ -704,7 +705,7 @@ class WebDAVQuickAccessProvider extends ChangeNotifier {
 
     try {
       final prefs = await SharedPreferences.getInstance();
-      await prefs.setInt(_keySearchRequestInterval, intervalMs);
+      await SettingsAccess.persist(_keySearchRequestInterval, () => prefs.setInt(_keySearchRequestInterval, intervalMs));
       notifyListeners();
     } catch (e) {
       debugPrint('保存搜索请求间隔设置失败: $e');
@@ -721,7 +722,7 @@ class WebDAVQuickAccessProvider extends ChangeNotifier {
 
     try {
       final prefs = await SharedPreferences.getInstance();
-      await prefs.setInt(_keySearchMaxResults, maxResults);
+      await SettingsAccess.persist(_keySearchMaxResults, () => prefs.setInt(_keySearchMaxResults, maxResults));
       notifyListeners();
     } catch (e) {
       debugPrint('保存搜索最大结果数设置失败: $e');
@@ -822,27 +823,27 @@ class WebDAVQuickAccessProvider extends ChangeNotifier {
 
     try {
       final prefs = await SharedPreferences.getInstance();
-      await prefs.remove(_keyShowWebDAVTab);
-      await prefs.remove(_keyDefaultServerName);
-      await prefs.remove(_keyDefaultDirectory);
-      await prefs.remove(_keyDefaultHomeTab);
-      await prefs.remove(_keySortPreset);
-      await prefs.remove(_keyAutoEnterSeasonFolder);
-      await prefs.remove(_keySeasonFolderPattern);
-      await prefs.remove(_keyShowPathBreadcrumb);
-      await prefs.remove(_keyBgmIdQuickMatch);
-      await prefs.remove(_keyBgmIdMatchPattern);
-      await prefs.remove(_keyTmdbIdQuickMatch);
-      await prefs.remove(_keyTmdbIdMatchPattern);
-      await prefs.remove(_keyEpisodeOffset);
+      await SettingsAccess.persist(_keyShowWebDAVTab, () => prefs.remove(_keyShowWebDAVTab));
+      await SettingsAccess.persist(_keyDefaultServerName, () => prefs.remove(_keyDefaultServerName));
+      await SettingsAccess.persist(_keyDefaultDirectory, () => prefs.remove(_keyDefaultDirectory));
+      await SettingsAccess.persist(_keyDefaultHomeTab, () => prefs.remove(_keyDefaultHomeTab));
+      await SettingsAccess.persist(_keySortPreset, () => prefs.remove(_keySortPreset));
+      await SettingsAccess.persist(_keyAutoEnterSeasonFolder, () => prefs.remove(_keyAutoEnterSeasonFolder));
+      await SettingsAccess.persist(_keySeasonFolderPattern, () => prefs.remove(_keySeasonFolderPattern));
+      await SettingsAccess.persist(_keyShowPathBreadcrumb, () => prefs.remove(_keyShowPathBreadcrumb));
+      await SettingsAccess.persist(_keyBgmIdQuickMatch, () => prefs.remove(_keyBgmIdQuickMatch));
+      await SettingsAccess.persist(_keyBgmIdMatchPattern, () => prefs.remove(_keyBgmIdMatchPattern));
+      await SettingsAccess.persist(_keyTmdbIdQuickMatch, () => prefs.remove(_keyTmdbIdQuickMatch));
+      await SettingsAccess.persist(_keyTmdbIdMatchPattern, () => prefs.remove(_keyTmdbIdMatchPattern));
+      await SettingsAccess.persist(_keyEpisodeOffset, () => prefs.remove(_keyEpisodeOffset));
       // 清除搜索功能相关设置
-      await prefs.remove(_keyEnableSearch);
-      await prefs.remove(_keySearchScope);
-      await prefs.remove(_keySearchDepthLimit);
-      await prefs.remove(_keySearchTargets);
-      await prefs.remove(_keySearchTimeout);
-      await prefs.remove(_keySearchRequestInterval);
-      await prefs.remove(_keySearchMaxResults);
+      await SettingsAccess.persist(_keyEnableSearch, () => prefs.remove(_keyEnableSearch));
+      await SettingsAccess.persist(_keySearchScope, () => prefs.remove(_keySearchScope));
+      await SettingsAccess.persist(_keySearchDepthLimit, () => prefs.remove(_keySearchDepthLimit));
+      await SettingsAccess.persist(_keySearchTargets, () => prefs.remove(_keySearchTargets));
+      await SettingsAccess.persist(_keySearchTimeout, () => prefs.remove(_keySearchTimeout));
+      await SettingsAccess.persist(_keySearchRequestInterval, () => prefs.remove(_keySearchRequestInterval));
+      await SettingsAccess.persist(_keySearchMaxResults, () => prefs.remove(_keySearchMaxResults));
       notifyListeners();
     } catch (e) {
       debugPrint('重置 WebDAV 快捷设置失败: $e');

@@ -54,7 +54,8 @@ bool isSettingDenied(String key) {
   final segmented = key
       .replaceAllMapped(RegExp(r'([a-z])([A-Z])'), (m) => '${m[1]}_${m[2]}')
       .toLowerCase();
-  return CredentialStore.isSecretKey(normalized) ||
+  return (CredentialStore.isSecretKey(normalized) &&
+          normalized != 'plugin_enabled_ids') ||
       settingsDenylist.any((v) => v.toLowerCase() == normalized) ||
       settingsDeniedPrefixes
           .any((v) => normalized.startsWith(v.toLowerCase())) ||
