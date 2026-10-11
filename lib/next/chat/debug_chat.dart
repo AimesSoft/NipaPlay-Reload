@@ -16,6 +16,10 @@ void installDebugChat(ChatHost? Function() current) {
       switch (params['op']) {
         case 'start':
           result = await host.startThread();
+        case 'main':
+          result = await host.getMainSession();
+        case 'sessions':
+          result = await host.listSessions(cursor: params['cursor']);
         case 'resume':
           result = await host.resumeThread(params['threadId']!);
         case 'list':

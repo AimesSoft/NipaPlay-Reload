@@ -44,7 +44,7 @@ final class DownloadService {
         final jobs = await engine.list(type: 'download');
         final existing = jobs.where((job) =>
             _matches(job, backend, request.infoHash) &&
-            (!job.state.isTerminal || job.state == JobState.succeeded));
+            !job.state.isTerminal);
         if (existing.isNotEmpty) return existing.last;
         final previous =
             jobs.where((job) => _matches(job, backend, request.infoHash));
@@ -233,6 +233,12 @@ final class DownloadService {
               }
             }
             await backend.delete(task.handle);
+            for (final file in task.files) {
+              if (file.included && await backend.readSize(file) != null) {
+                throw const Failure(FailureCode.unavailable,
+                    'Download session was removed but a downloaded file remains.');
+              }
+            }
           } else {
             await backend.remove(task.handle);
           }

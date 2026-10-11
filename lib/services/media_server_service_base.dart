@@ -554,25 +554,43 @@ abstract class MediaServerServiceBase {
     return (data['Items'] as List).cast<Map<String, dynamic>>();
   }
 
+  Future<bool> probeAddress(String url) async {
+    if (currentProfile == null ||
+        await getServerId(url) != currentProfile!.serverId) {
+      throw StateError('Address belongs to a different server.');
+    }
+    final response = await _sendAuthenticatedRequest(
+      _buildRequestUri(systemInfoPath, baseUrl: url),
+      method: 'GET',
+      headers: await buildAuthorizationHeaders(),
+      timeout: const Duration(seconds: 10),
+    );
+    return response.statusCode == 200;
+  }
+
   /// Full catalog discovery, including items with no playback history.
   Future<List<Map<String, dynamic>>> browseCatalog(
       {String? parentId,
       bool recursive = false,
       String fields = 'ParentId,SeriesName,SeriesId,SeasonId,Path,MediaSources',
-      List<String>? itemIds}) async {
+      List<String>? itemIds,
+      String? searchTerm,
+      String sortBy = 'SortName',
+      String sortOrder = 'Ascending'}) async {
     if (!isConnected) throw StateError(notConnectedMessage);
     final session = (serverUrl, userId, accessToken);
     final endpoint = Uri(path: '/Items', queryParameters: {
       'userId': userId!,
       if (parentId != null) 'ParentId': parentId,
       if (itemIds != null) 'Ids': itemIds.join(','),
+      if (searchTerm != null) 'SearchTerm': searchTerm,
       'Recursive': '$recursive',
       if (itemIds == null) 'IncludeItemTypes': recursive
           ? 'Episode,Movie,Video'
           : 'CollectionFolder,Folder,Series,Season,Episode,Movie,Video',
       'Fields': fields,
-      'SortBy': 'SortName',
-      'SortOrder': 'Ascending',
+      'SortBy': sortBy,
+      'SortOrder': sortOrder,
       'Limit': '2147483647',
     }).toString();
     return loadMediaServerItems<Map<String, dynamic>>(

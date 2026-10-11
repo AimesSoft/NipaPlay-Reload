@@ -1072,6 +1072,19 @@ class SharedRemoteLibraryProvider extends ChangeNotifier {
     }
   }
 
+  Future<bool> probeLibraryUrl(String baseUrl) async {
+    final response = await _sendGetRequest(
+      Uri.parse('$baseUrl/api/media/local/share/animes'),
+      timeout: const Duration(seconds: 10),
+    );
+    if (response.statusCode != HttpStatus.ok) {
+      throw HttpException('HTTP ${response.statusCode}');
+    }
+    final payload = json.decode(utf8.decode(response.bodyBytes))
+        as Map<String, dynamic>;
+    return (payload['items'] ?? payload['data']) is List;
+  }
+
   Future<void> refreshScanStatus({bool showLoading = true}) async {
     final host = activeHost;
     if (host == null) {

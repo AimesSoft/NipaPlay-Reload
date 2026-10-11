@@ -13,6 +13,9 @@ import 'package:nipaplay/next/media/identity_store.dart';
 import 'package:nipaplay/next/media_sources/capability.dart';
 import 'package:nipaplay/next/media_sources/login_dialog.dart';
 import 'package:nipaplay/next/media_sources/service.dart';
+import 'package:nipaplay/next/media_sources/sync.dart';
+import 'package:nipaplay/utils/auto_sync_settings.dart';
+import 'package:nipaplay/services/backup_category.dart';
 import 'package:nipaplay/next/tasks/sqlite_job_store.dart';
 import 'package:nipaplay/providers/shared_remote_library_provider.dart';
 import 'package:nipaplay/security/credential_store.dart';
@@ -37,6 +40,7 @@ void main() {
   late CredentialStore previous;
 
   setUp(() async {
+    AutoSyncSettings.resetForTesting();
     previous = CredentialStore.instance;
     vault = MemoryVault();
     CredentialStore.instance = CredentialStore(vault, desktop: true);
@@ -85,7 +89,7 @@ void main() {
   }
 
   test(
-      'metadata editing and list preserve unresolved refs; removal previews and keeps files',
+      'metadata editing and list preserve unresolved refs; removal keeps files',
       () async {
     const ref = CredentialRef('webdav_connections', 'one');
     vault.values[ref] = 'never-output-this-password';
@@ -118,15 +122,28 @@ void main() {
     expect(
         (await call(
             'media.sources.remove', {'sourceId': 'webdav:one'}))['removed'],
-        false);
-    expect(await sources.source('webdav:one'), isNotEmpty);
-    expect(
-        (await call('media.sources.remove',
-            {'sourceId': 'webdav:one', 'confirm': true}))['removed'],
         true);
     expect((await call('media.sources.list', {}))['sources'], isEmpty);
     expect(await store.ensureFile('webdav://one/new.mkv'), fileId);
     expect((await store.entity(fileId))['revision'], 0);
+  });
+
+  test('sync endpoint changes clear credentials; category patches retain settings', () async {
+    final sync = SyncService(sources);
+    await AutoSyncSettings.saveWebDavConfiguration(serverUrl: 'http://example.test/dav/',
+      username: 'viewer', password: 'sync-private', remotePath: '/sync', intervalMinutes: 15,
+      categories: {BackupCategory.watchHistory}, syncOnRecordChange: true);
+    await sync.configure({'intervalMinutes': 20});
+    expect(await AutoSyncSettings.getPassword(), 'sync-private');
+    expect((await sync.configuration())['categories'], ['watchHistory']);
+    await expectLater(sync.configure({'categories': <String>[]}), throwsA(isA<Failure>()));
+    expect(await AutoSyncSettings.getPassword(), 'sync-private');
+    await sync.configure({'url': 'http://other.test/dav'});
+    expect(await AutoSyncSettings.getPassword(), '');
+    expect(await AutoSyncSettings.getSyncOnRecordChange(), true);
+    expect(await AutoSyncSettings.getRemotePath(), '/sync');
+    expect(jsonEncode(await sync.status()), isNot(contains('sync-private')));
+    expect(SyncCapability(sync).actions.every((a) => !a.spec.input.properties.containsKey('password')), true);
   });
 
   test(
@@ -283,16 +300,16 @@ void main() {
   });
 
   test(
-      'password login is secret in schema and restart cannot replay a supplied password',
+      'login accepts no password and restart cannot replay a legacy supplied password',
       () async {
     expect(
-        (harness
-                .lookup('media.sources.login')!
-                .spec
-                .input
-                .properties['password'] as StringSchema)
-            .secret,
-        true);
+        harness
+            .lookup('media.sources.login')!
+            .spec
+            .input
+            .properties
+            .containsKey('password'),
+        false);
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(
         'webdav_connections',

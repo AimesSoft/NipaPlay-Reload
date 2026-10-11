@@ -97,12 +97,12 @@ const _specs = [
       id: 'accounts.episodes.update',
       title: 'Update account episode watch state',
       description:
-          'Update a batch of episode IDs through Classic. Bangumi state: 0 uncollected, 1 wish, 2 done, 3 dropped. Dandanplay supports only 2 watched; its Classic endpoint cannot undo watched state. Each write is acknowledged independently.',
+          'Mark a batch of episode IDs watched through Classic. Both providers accept only state=2, as in Classic episode progress. Each write is acknowledged independently.',
       effect: Effect.write,
       input: ObjectSchema({
         'provider': _provider,
         'items': ArraySchema(ObjectSchema(
-            {'episodeId': _id, 'state': IntegerSchema(minimum: 0, maximum: 3)},
+            {'episodeId': _id, 'state': IntegerSchema(minimum: 2, maximum: 2)},
             required: ['episodeId', 'state']))
       }, required: [
         'provider',

@@ -2,6 +2,7 @@ import 'package:flutter/widgets.dart';
 
 import '../../ui_data/ui_data.dart';
 import '../theme/tokens.dart';
+import '../widgets/art_origin.dart';
 import '../widgets/artwork.dart';
 import '../widgets/buttons.dart';
 import '../widgets/cards.dart';
@@ -39,12 +40,16 @@ class CardStack extends StatelessWidget {
     required this.callbacks,
     this.focusedWorkId,
     this.width = 460,
+    this.posterWidth = 176,
   });
 
   final List<UiCard> cards;
   final CardCallbacks callbacks;
   final String? focusedWorkId;
   final double width;
+
+  /// Candidates' posters (2:3, the gap scaled alike).
+  final double posterWidth;
 
   @override
   Widget build(BuildContext context) {
@@ -53,18 +58,46 @@ class CardStack extends StatelessWidget {
     for (var i = 0; i < cards.length; i++) {
       final card = cards[i];
       if (i > 0) children.add(const SizedBox(height: 14));
+      // Episodes one after another sit side by side, as far as they fit.
+      if (card is UiEpisodeCard &&
+          i + 1 < cards.length &&
+          cards[i + 1] is UiEpisodeCard) {
+        final run = <UiEpisodeCard>[];
+        while (i < cards.length && cards[i] is UiEpisodeCard) {
+          run.add(cards[i++] as UiEpisodeCard);
+        }
+        i--;
+        children.add(Wrap(spacing: 18, runSpacing: 14, children: [
+          for (final (j, e) in run.indexed)
+            StaggerIn(
+              key: ValueKey('episode-$i-$j-${e.episode.episodeId}'),
+              index: flat++,
+              // The view aligns itself in whatever width it gets.
+              child: SizedBox(
+                width: 256,
+                child: EpisodeCardView(
+                    work: e.work, episode: e.episode, callbacks: callbacks),
+              ),
+            ),
+        ]));
+        continue;
+      }
       switch (card) {
         case UiCandidatesCard(:final items):
-          children.add(Wrap(spacing: 18, runSpacing: 18, children: [
+          final gap = posterWidth * 18 / 176;
+          children.add(Wrap(spacing: gap, runSpacing: gap, children: [
             for (var j = 0; j < items.length; j++)
               StaggerIn(
                 key: ValueKey('pick-$i-$j-${items[j].work.workId}'),
                 index: flat++,
                 child: PosterCard(
+                  workId: items[j].work.workId,
                   image: items[j].work.artwork.poster,
                   tint: items[j].work.artwork.tint,
                   title: items[j].work.title,
                   reason: items[j].reason,
+                  width: posterWidth,
+                  height: posterWidth * 252 / 176,
                   selected: items[j].work.workId == focusedWorkId,
                   onOpen: callbacks.onOpen == null
                       ? null
@@ -212,7 +245,8 @@ class WorkRowCard extends StatelessWidget {
       builder: (context, hovered) => CardSurface(
         selected: selected || hovered,
         padding: const EdgeInsets.all(12),
-        child: Row(children: [
+        child:
+            Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
           Container(
             width: 52,
             height: 74,
@@ -225,10 +259,17 @@ class WorkRowCard extends StatelessWidget {
                     offset: Offset(0, 6))
               ],
             ),
-            child: ClipRRect(
-              borderRadius: BorderRadius.circular(8),
-              child: NextImage(work.artwork.poster,
-                  shape: ArtShape.poster, tint: work.artwork.tint),
+            child: ArtOrigin(
+              workId: work.workId,
+              image: work.artwork.poster,
+              tint: work.artwork.tint,
+              shape: ArtShape.poster,
+              radius: 8,
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(8),
+                child: NextImage(work.artwork.poster,
+                    shape: ArtShape.poster, tint: work.artwork.tint),
+              ),
             ),
           ),
           const SizedBox(width: 14),
@@ -236,6 +277,7 @@ class WorkRowCard extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
+                const SizedBox(height: 2),
                 Text(work.title,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
@@ -247,8 +289,14 @@ class WorkRowCard extends StatelessWidget {
               ],
             ),
           ),
-          NextIcon(NextGlyph.chevronRight,
-              size: 14, color: hovered ? NextColors.paper : NextColors.p2),
+          SizedBox(
+            height: 74,
+            child: Center(
+              child: NextIcon(NextGlyph.chevronRight,
+                  size: 12,
+                  color: hovered ? NextColors.paper : NextColors.p2),
+            ),
+          ),
         ]),
       ),
     );
@@ -287,6 +335,7 @@ class EpisodeCardView extends StatelessWidget {
           children: [
             Stack(children: [
               WideCard(
+                workId: work.workId,
                 image: episode.still ?? work.artwork.backdrop,
                 tint: work.artwork.tint,
                 width: width,
@@ -435,6 +484,8 @@ class _StepRow extends StatelessWidget {
               ),
             ),
           ),
+          // The concept's empty time column keeps this gutter.
+          const SizedBox(width: 12),
         ],
       ),
     );

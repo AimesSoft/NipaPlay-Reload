@@ -100,12 +100,52 @@ final class Followups {
       );
 
   Future<JsonMap> register(JsonMap input, Invocation invocation) =>
+      _register(input, invocation, false);
+
+  Future<JsonMap> wake(JsonMap input, Invocation invocation) =>
+      _register(input, invocation, true);
+
+  Future<JsonMap> session(String operation,
+      {String? threadId, String? cursor}) async {
+    final host = _host;
+    if (host == null || !host.available) {
+      throw Failure(FailureCode.unavailable, _unavailable);
+    }
+    return switch (operation) {
+      'main' => await host.getMainSession(),
+      'new' => await host.newConversation(),
+      'switch' => await host.switchSession(threadId!),
+      _ => await host.listSessions(cursor: cursor),
+    };
+  }
+
+  Future<JsonMap> discover(JsonMap input, Invocation invocation) async {
+    await location.ready;
+    final safe = publicHarnessFacts(input) as JsonMap;
+    final at = DateTime.now().toUtc().toIso8601String();
+    final sequence = await database.insert('harness_discoveries', {
+      'at': at,
+      'origin': invocation.origin,
+      'invocation_id': invocation.id,
+      'repository': location.path,
+      'title': safe['title'],
+      'source': safe['source'],
+      'facts': jsonEncode(safe['facts']),
+    });
+    return {'id': 'discovery:$sequence', 'at': at, ...safe};
+  }
+
+  Future<JsonMap> _register(
+          JsonMap input, Invocation invocation, bool immediate) =>
       _serial(() async {
-        final condition = Map<String, Object?>.from(input['when'] as Map);
+        final condition = immediate
+            ? <String, Object?>{'kind': 'wake'}
+            : Map<String, Object?>.from(input['when'] as Map);
         final task = condition['jobId'] as String?;
         final event = condition['event'] as String?;
-        if ((task == null) == (event == null) ||
-            (task != null && condition.containsKey('objectId'))) {
+        if (!immediate &&
+            ((task == null) == (event == null) ||
+                (task != null && condition.containsKey('objectId')))) {
           throw const Failure(FailureCode.invalidInput,
               'when must contain exactly jobId, or event with optional objectId.');
         }
@@ -113,7 +153,9 @@ final class Followups {
         await location.ready;
         String? threadId = input['threadId'] as String?;
         const prefix = 'harness_cli:chat:';
-        if (threadId == null && invocation.origin.startsWith(prefix)) {
+        if (!immediate &&
+            threadId == null &&
+            invocation.origin.startsWith(prefix)) {
           final session = invocation.origin.substring(prefix.length);
           if (_host?.sessionId != session || _host?.threadId == null) {
             throw const Failure(FailureCode.unavailable,
@@ -128,14 +170,16 @@ final class Followups {
         final row = <String, Object?>{
           'id': 'followup-${DateTime.now().microsecondsSinceEpoch}-'
               '${Random.secure().nextInt(1 << 32).toRadixString(16)}',
-          'state': 'waiting',
+          'state': immediate ? 'ready' : 'waiting',
           'title': input['title'] ?? input['instruction'],
           'instruction': input['instruction'],
           'condition': condition,
           'hookCursor': cursor,
-          'waitingFor': task != null
-              ? 'task $task enters succeeded/failed/cancelled'
-              : '$event${condition['objectId'] == null ? '' : ' for ${condition['objectId']}'}',
+          'waitingFor': immediate
+              ? 'Waiting for an idle chat host.'
+              : task != null
+                  ? 'task $task enters succeeded/failed/cancelled'
+                  : '$event${condition['objectId'] == null ? '' : ' for ${condition['objectId']}'}',
           'repository': location.path,
           'threadId': threadId,
           'turnId': null,
@@ -143,7 +187,13 @@ final class Followups {
           'invocationId': invocation.id,
           'createdAt': now,
           'updatedAt': now,
-          'trigger': null,
+          'trigger': immediate
+              ? {
+                  'kind': 'agent.wake',
+                  'occurredAt': now,
+                  'facts': publicHarnessFacts(input['facts'])
+                }
+              : null,
           'reason': null,
           'turnStatus': null,
         };
@@ -151,7 +201,7 @@ final class Followups {
         await database.transaction((tx) async {
           await tx.insert('followups', {
             'id': safe['id'],
-            'state': 'waiting',
+            'state': safe['state'],
             'snapshot': jsonEncode(safe)
           });
           await _event(
@@ -386,7 +436,7 @@ final class Followups {
 
   String _marker(JsonMap row) => '[NipaPlay followup ${row['id']}]';
   String _prompt(JsonMap row) => '${_marker(row)}\n'
-      '你登记的后续条件已满足。这是宿主自动开启的新回合。根据以下登记说明和触发事实继续处理，下一步由你决定。\n'
+      '这是宿主派发的新回合。说明和触发事实如下，下一步由你决定。\n'
       '登记来源：${row['origin']}\n登记说明：\n${row['instruction']}\n'
       '触发事实（任务终态不等于成功，请依据状态与回执判断）：\n${jsonEncode(row['trigger'])}';
 

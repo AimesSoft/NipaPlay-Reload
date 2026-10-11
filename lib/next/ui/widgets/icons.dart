@@ -11,7 +11,8 @@ enum NextGlyph {
   pause,
   chevronRight,
   chevronLeft,
-  check
+  check,
+  plus
 }
 
 class NextIcon extends StatelessWidget {
@@ -98,6 +99,9 @@ class _GlyphPainter extends CustomPainter {
               ..lineTo(10, 17)
               ..lineTo(19, 7),
             line);
+      case NextGlyph.plus:
+        canvas.drawLine(const Offset(12, 5), const Offset(12, 19), line);
+        canvas.drawLine(const Offset(5, 12), const Offset(19, 12), line);
     }
   }
 

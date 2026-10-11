@@ -1,6 +1,7 @@
 import 'package:nipaplay/next/settings/registry.dart';
 import 'package:nipaplay/security/portable_credentials.dart';
 import 'package:nipaplay/security/credential_store.dart';
+import 'package:nipaplay/security/credential_vault.dart';
 import 'dart:io';
 import 'dart:convert';
 export 'package:nipaplay/services/backup_category.dart';
@@ -38,10 +39,12 @@ import 'package:crypto/crypto.dart';
 class FullBackupService {
   static const int _backupFormatVersion = 2;
 
-  FullBackupService({WebDAVService? webDavService})
+  FullBackupService({WebDAVService? webDavService,
+    this.allowInlineCredentials = true})
       : _webDavService = webDavService ?? WebDAVService.instance;
 
   final WebDAVService _webDavService;
+  final bool allowInlineCredentials;
 
   // ==================== 导出（信息收集） ====================
 
@@ -500,6 +503,8 @@ class FullBackupService {
   Future<BackupRestoreResult> importBackup({
     required String filePath,
     required Set<BackupCategory> categories,
+    bool Function(String)? preferenceKeyAllowed,
+    Future<bool> Function(String, Object?)? preferenceRestorer,
   }) async {
     final result = BackupRestoreResult();
 
@@ -525,6 +530,8 @@ class FullBackupService {
         result.preferencesResult = await _restorePreferences(
           await IncrementalSyncNativeCodec.decodeJsonMap(
               restorePlan.preferencesJson),
+          keyAllowed: preferenceKeyAllowed,
+          restorer: preferenceRestorer,
         );
       }
       if (restorePlan.mediaLibrariesJson.isNotEmpty) {
@@ -602,6 +609,8 @@ class FullBackupService {
   Future<BackupRestoreResult> restoreFromData({
     required Map<String, dynamic> backupData,
     required Set<BackupCategory> categories,
+    bool Function(String)? preferenceKeyAllowed,
+    Future<bool> Function(String, Object?)? preferenceRestorer,
   }) async {
     final result = BackupRestoreResult();
 
@@ -615,7 +624,8 @@ class FullBackupService {
       if (categories.contains(BackupCategory.preferences) &&
           backupData.containsKey('preferences')) {
         result.preferencesResult = await _restorePreferences(
-            backupData['preferences'] as Map<String, dynamic>);
+            backupData['preferences'] as Map<String, dynamic>,
+            keyAllowed: preferenceKeyAllowed, restorer: preferenceRestorer);
       }
       if (categories.contains(BackupCategory.mediaLibraries) &&
           backupData.containsKey('mediaLibraries')) {
@@ -683,6 +693,11 @@ class FullBackupService {
       Map<String, dynamic> data, CategoryRestoreResult result,
       {Set<String> recordLists = const {}}) async {
     Future<Object?> hydrate(Object? value, String path) async {
+      if (!allowInlineCredentials && _hasInlineCredentials(value)) {
+        result.skippedCount++;
+        result.skippedItems.add({'path': path, 'reason': 'forbidden_credential_input'});
+        return null;
+      }
       final unresolved = <Map<String, dynamic>>[];
       final hydrated = await hydratePortableCredentials(
           {path: value}, CredentialStore.instance,
@@ -722,8 +737,42 @@ class FullBackupService {
     return restored;
   }
 
+  bool _hasInlineCredentials(Object? value) {
+    if (credentialReference(value) != null) return false;
+    if (value is Map) {
+      return value.entries.any((entry) =>
+          (CredentialStore.isSecretKey(entry.key as String) &&
+              entry.value is String && (entry.value as String).isNotEmpty &&
+              !_isEncodedCredentialRef(entry.value as String)) ||
+          _hasInlineCredentials(entry.value));
+    }
+    if (value is List) return value.any(_hasInlineCredentials);
+    if (value is String &&
+        (value.startsWith('{') || value.startsWith('['))) {
+      try {
+        return _hasInlineCredentials(jsonDecode(value));
+      } on FormatException {
+        return false;
+      }
+    }
+    return value is String && RegExp(
+        r'(?:[?&](?:token|api_?key|access_?token)=|\w+://[^/\s]+:[^/\s]+@)',
+        caseSensitive: false).hasMatch(value);
+  }
+
+  bool _isEncodedCredentialRef(String value) {
+    if (!value.startsWith('{')) return false;
+    try {
+      return credentialReference(jsonDecode(value)) != null;
+    } on FormatException {
+      return false;
+    }
+  }
+
   Future<CategoryRestoreResult> _restorePreferences(
-      Map<String, dynamic> preferencesData) async {
+      Map<String, dynamic> preferencesData,
+      {bool Function(String)? keyAllowed,
+      Future<bool> Function(String, Object?)? restorer}) async {
     final result = CategoryRestoreResult();
 
     try {
@@ -732,12 +781,25 @@ class FullBackupService {
       // 恢复软件设置
       final rawSettings = preferencesData['settings'] as Map<String, dynamic>?;
       if (rawSettings != null) {
-        final settings = await _hydrateRestoreData(rawSettings, result);
+        final permitted = <String, dynamic>{};
+        for (final entry in rawSettings.entries) {
+          if (keyAllowed != null && !keyAllowed(entry.key)) {
+            result.skippedCount++;
+            result.skippedItems.add({'path': entry.key, 'reason': 'forbidden_setting'});
+          } else {
+            permitted[entry.key] = entry.value;
+          }
+        }
+        final settings = await _hydrateRestoreData(permitted, result);
         int restoredCount = 0;
         for (final entry in settings.entries) {
           try {
             final key = entry.key;
             final value = entry.value;
+            if (restorer != null && await restorer(key, value)) {
+              restoredCount++;
+              continue;
+            }
             if (value is bool) {
               await SettingsAccess.persist(key, () => prefs.setBool(key, value));
             } else if (value is int) {
@@ -758,6 +820,10 @@ class FullBackupService {
             restoredCount++;
           } catch (e) {
             debugPrint('恢复设置项 ${entry.key} 失败: $e');
+            if (restorer != null) {
+              result.skippedCount++;
+              result.skippedItems.add({'path': entry.key, 'reason': 'setting_rejected'});
+            }
             result.success = false;
             result.errorMessage = '设置项 ${entry.key} 恢复失败';
           }

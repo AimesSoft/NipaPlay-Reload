@@ -378,7 +378,7 @@ void main() {
   });
 
   test(
-      'full episode files keep all 50000 entries and allow an explicitly empty refresh',
+      'full episode files keep all 50000 entries and empty refresh cannot erase them',
       () async {
     final data = [
       for (var i = 0; i < 50000; i++)
@@ -406,11 +406,12 @@ void main() {
       expect(() => parseLocalDanmakuBytes(utf8.encode(content)),
           throwsFormatException,
           reason: 'Classic still rejects empty local pools');
-      final empty =
-          await call('danmaku.import', input(platform: 'custom-platform'));
-      expect(empty['bindingId'], result['bindingId']);
-      expect(empty['count'], 0);
-      expect(video.danmakuTracks.values.single['count'], 0);
+      final empty = await api.invokeJson('danmaku.import',
+          input(platform: 'custom-platform'), Invocation(origin: 'mcp'));
+      expect(empty, isA<Failed>());
+      expect(video.danmakuTracks.values.single['count'], 50000);
+      final binding = await core.danmaku.service.store.binding(result['bindingId'] as String);
+      expect(await core.danmaku.service.store.entries(binding['cache_key'] as String), hasLength(50000));
     }
   });
 

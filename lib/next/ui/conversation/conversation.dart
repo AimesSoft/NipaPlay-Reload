@@ -6,14 +6,19 @@ import '../../ui_data/ui_data.dart';
 import '../widgets/nipa_avatar.dart';
 import '../widgets/words.dart';
 import 'chat_port.dart';
+import 'session_choice.dart';
+import 'turn_activity.dart';
 
 /// The home's conversation: the latest round on the stage (state B) and
-/// whatever Nipa does on its own afterwards (state C).
+/// whatever Nipa does on its own afterwards (state C). What you say here
+/// goes into the current session ([SessionChoice], the main one unless you
+/// picked another); the stage shows only its latest round.
 ///
 /// Events come from [ChatPort.display]. Cards come from
 /// [NextUiData.cards]; the agent presents them, NipaPlay resolves them.
 class Conversation extends ChangeNotifier {
-  Conversation({required this.port, required this.data}) {
+  Conversation(
+      {required this.port, required this.data, required this.choice}) {
     _subs = [
       port.display.listen(_onEvent),
       port.questions.listen(_onQuestion),
@@ -26,6 +31,7 @@ class Conversation extends ChangeNotifier {
 
   final ChatPort port;
   final NextUiData data;
+  final SessionChoice choice;
   late final List<StreamSubscription<Object?>> _subs;
 
   static const quietAfter = Duration(minutes: 3);
@@ -48,7 +54,23 @@ class Conversation extends ChangeNotifier {
   /// Three minutes without any event during our turn.
   bool quiet = false;
 
+  /// What Nipa does in this round: the live line, then “想了 … · … 步”.
+  TurnActivity? round;
+
   String? _thread, _turn;
+
+  /// A turn of ours is being started: its first events have no turn to
+  /// match yet.
+  bool _expecting = false;
+
+  /// The thread on the stage, for the panel's “展开”.
+  String? get threadId => _thread;
+
+  /// A thread whose turn the side panel started: not background work.
+  bool Function(String threadId)? drivenElsewhere;
+
+  /// A question was answered here (the panel drops its copy).
+  void Function(Object requestId)? onAnswered;
   final _messages = <String, StringBuffer>{};
   String? _latestMessage;
   Timer? _idle;
@@ -105,15 +127,15 @@ class Conversation extends ChangeNotifier {
 
   // —— Saying something ——
 
-  /// Says [text] on the home. From state A this opens a new conversation;
-  /// on the stage it continues the current one.
+  /// Says [text] on the home, in the current session: a new round on the
+  /// stage, or more for the round still running.
   Future<void> say(String text) async {
     text = text.trim();
     if (text.isEmpty) return;
     _touch();
     if (question != null) return answerText(text);
-    final newIntent = !staged || _thread == null;
-    if (!newIntent && inProgress && port.busy && _turn != null) {
+    final sameRound = staged && _thread != null && _thread == choice.current;
+    if (sameRound && inProgress && port.busy && _turn != null) {
       said = text;
       _notify();
       try {
@@ -129,13 +151,14 @@ class Conversation extends ChangeNotifier {
     cards = const [];
     trouble = null;
     quiet = false;
+    round = TurnActivity();
     inProgress = true;
     streaming = false;
     working = false;
     _turn = null;
     _messages.clear();
     _latestMessage = null;
-    if (newIntent) _thread = null;
+    _thread = null;
     _notify();
     await _start(text);
   }
@@ -149,21 +172,26 @@ class Conversation extends ChangeNotifier {
     }
     try {
       while (!_disposed) {
-        _thread ??= await port.newThread();
+        _thread ??= await choice.target();
         if (_thread == null) {
           await _waitUntilFree();
           continue;
         }
+        // Another turn in the same session (a follow-up) goes first.
+        await _waitUntilFree();
+        _expecting = true;
         final response = await port.startTurn(_thread!, text);
         if (response == null) {
-          await _waitUntilFree();
+          _expecting = false;
           continue;
         }
         _turn = turnIdOf(response) ?? _turn;
+        _expecting = false;
         break;
       }
     } catch (error) {
       debugPrint('[NextUi] turn did not start: $error');
+      _expecting = false;
       inProgress = false;
       trouble = '这次没接上，再说一次试试？';
     }
@@ -189,6 +217,7 @@ class Conversation extends ChangeNotifier {
     quiet = false;
     reply = '';
     cards = const [];
+    round = TurnActivity();
     inProgress = true;
     _notify();
     await _start(text);
@@ -219,12 +248,55 @@ class Conversation extends ChangeNotifier {
       await port.answer(request['id'] as Object, {
         for (final q in items) q['id'] as String: [answer],
       });
+      onAnswered?.call(request['id'] as Object);
     } catch (error) {
       debugPrint('[NextUi] answer failed: $error');
     }
   }
 
+  /// Answered in the panel.
+  void dropQuestion(Object requestId) {
+    if (question?['id'] != requestId) return;
+    question = null;
+    _notify();
+  }
+
+  /// The panel said [text] on [threadId]. On the stage's thread the stage
+  /// follows that round (a new one, or the running one steered); once the
+  /// stage is gone the panel simply owns the thread.
+  void followRound(String threadId, String text, {bool steer = false}) {
+    if (threadId != _thread) return;
+    if (!staged) {
+      if (!steer) _thread = null;
+      return;
+    }
+    _touch();
+    said = text;
+    if (!steer) {
+      round = TurnActivity();
+      reply = '';
+      cards = const [];
+      trouble = null;
+      quiet = false;
+      question = null;
+      inProgress = true;
+      streaming = false;
+      working = false;
+      _turn = null;
+      _expecting = true;
+      _messages.clear();
+      _latestMessage = null;
+    }
+    _notify();
+  }
+
   void _onQuestion(ChatEvent event) {
+    final thread = threadIdOf(event);
+    if (thread != null &&
+        thread != _thread &&
+        (drivenElsewhere?.call(thread) ?? false)) {
+      return;
+    }
     question = event;
     if (!staged) unseen = true;
     _notify();
@@ -265,15 +337,23 @@ class Conversation extends ChangeNotifier {
         ? Map<String, dynamic>.from(event['params'] as Map)
         : const <String, dynamic>{};
     if (method == 'host/liveness') return _liveness(params);
+    if (method == 'host/reasoning') {
+      if (inProgress && (round?.apply(method, params) ?? false)) _notify();
+      return;
+    }
     if (method.startsWith('host/')) return;
     final thread = threadIdOf(event);
+    final turn =
+        params['turnId'] ?? (params['turn'] is Map ? params['turn']['id'] : null);
+    // The stage's round. Another turn on the same session (a follow-up in
+    // the main session) is background work, as anywhere else.
+    final ourTurn = turn != null && turn == _turn;
     final ours = thread != null
-        ? thread == _thread
-        : (inProgress &&
-            (params['turnId'] == null || params['turnId'] == _turn));
+        ? thread == _thread && (ourTurn || (_expecting && _turn == null))
+        : (inProgress && (turn == null || ourTurn));
     if (ours) {
       _ours(method, params);
-    } else {
+    } else if (thread == null || !(drivenElsewhere?.call(thread) ?? false)) {
       _background(method, params, thread);
     }
   }
@@ -304,9 +384,14 @@ class Conversation extends ChangeNotifier {
   void _ours(String method, Map<String, dynamic> params) {
     _touch();
     quiet = false;
+    if (method == 'turn/started' && (round == null || !round!.running)) {
+      round = TurnActivity();
+    }
+    final changed = round?.apply(method, params) ?? false;
     switch (method) {
       case 'turn/started':
         _turn = (params['turn'] as Map?)?['id'] as String? ?? _turn;
+        _expecting = false;
         inProgress = true;
       case 'item/started':
         final type = _itemType(params);
@@ -359,6 +444,7 @@ class Conversation extends ChangeNotifier {
         }
         _refreshCards();
       default:
+        if (changed) _notify();
         return;
     }
     _notify();

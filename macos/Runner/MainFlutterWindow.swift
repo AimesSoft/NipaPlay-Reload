@@ -1562,11 +1562,17 @@ private final class DesktopMultiWindowHostPlugin: NSObject, FlutterPlugin {
 
 class MainFlutterWindow: NSWindow {
   private var nipaplayFlutterEngine: FlutterEngine?
+  private var nextChrome: NextWindowChrome?
 
   override func awakeFromNib() {
     do {
       try LabProfile.install()
       if let profile = LabProfile.name { title = "NipaPlay · LAB [\(profile)]" }
+      if LabProfile.quiet {
+        // Experiments run beside the user: an accessory app is never
+        // activated at launch and takes neither the Dock nor the menu bar.
+        NSApp.setActivationPolicy(.accessory)
+      }
       try SandboxMigration.runBeforeEngine()
     } catch {
       let alert = NSAlert()
@@ -1673,6 +1679,7 @@ class MainFlutterWindow: NSWindow {
     SystemSharePlugin.register(with: flutterViewController.registrar(forPlugin: "SystemSharePlugin"))
     ClipboardImagePlugin.register(with: flutterViewController.registrar(forPlugin: "ClipboardImagePlugin"))
     MacOSNativeVideoPlugin.register(with: flutterViewController.registrar(forPlugin: "MacOSNativeVideoPlugin"))
+    nextChrome = NextWindowChrome(window: self, messenger: flutterEngine.binaryMessenger)
 
     super.awakeFromNib()
   }
@@ -1684,5 +1691,80 @@ class MainFlutterWindow: NSWindow {
       return false
     }
     return environment["NIPAPLAY_MACOS_HDR_TRANSPARENT_FLUTTER"] != "0"
+  }
+}
+
+/// Next's window chrome. While the Next shell is on screen the main window
+/// has a unified toolbar, so AppKit itself gives the title bar band the
+/// 52 pt height of Safari's and centres the traffic lights in it, through
+/// resizing, screen and backing changes. The toolbar has no items: Flutter
+/// still receives every click in the band and draws the bar. Full screen
+/// runs without it, as Classic does, so no toolbar band stays pinned over
+/// the content; AppKit keeps a hidden toolbar hidden after leaving full
+/// screen, so it is taken off and put back instead. Without Next the window
+/// is exactly as Classic configured it. Dart is told where the lights end
+/// (0 in full screen, where they are not in the window).
+final class NextWindowChrome: NSObject {
+  private weak var window: NSWindow?
+  private let channel: FlutterMethodChannel
+  private let toolbar = NSToolbar(identifier: "nipaplay.next.chrome")
+  private var observers: [NSObjectProtocol] = []
+  private var classic: (NSWindow.ToolbarStyle, NSTitlebarSeparatorStyle)?
+
+  init(window: NSWindow, messenger: FlutterBinaryMessenger) {
+    self.window = window
+    channel = FlutterMethodChannel(name: "nipaplay/next_chrome", binaryMessenger: messenger)
+    super.init()
+    toolbar.allowsUserCustomization = false
+    channel.setMethodCallHandler { [weak self] call, result in
+      guard let self, call.method == "set", let active = call.arguments as? Bool else {
+        result(FlutterMethodNotImplemented)
+        return
+      }
+      self.set(active: active)
+      result(self.layout())
+    }
+  }
+
+  private var fullScreen: Bool { window?.styleMask.contains(.fullScreen) ?? false }
+
+  private func set(active: Bool) {
+    guard let window, active != (classic != nil) else { return }
+    if active {
+      classic = (window.toolbarStyle, window.titlebarSeparatorStyle)
+      window.titlebarSeparatorStyle = .none
+      window.toolbarStyle = .unified
+      if !fullScreen { window.toolbar = toolbar }
+      let center = NotificationCenter.default
+      observers = [
+        NSWindow.willEnterFullScreenNotification, NSWindow.didEnterFullScreenNotification,
+        NSWindow.willExitFullScreenNotification, NSWindow.didExitFullScreenNotification,
+      ].map { name in
+        center.addObserver(forName: name, object: window, queue: .main) { [weak self] note in
+          self?.fullScreenChanged(note.name)
+        }
+      }
+    } else if let classic {
+      observers.forEach(NotificationCenter.default.removeObserver)
+      observers = []
+      window.toolbar = nil
+      window.toolbarStyle = classic.0
+      window.titlebarSeparatorStyle = classic.1
+      self.classic = nil
+    }
+  }
+
+  private func fullScreenChanged(_ name: Notification.Name) {
+    if name == NSWindow.willEnterFullScreenNotification { window?.toolbar = nil }
+    if name == NSWindow.didExitFullScreenNotification { window?.toolbar = toolbar }
+    channel.invokeMethod("layout", arguments: layout())
+  }
+
+  private func layout() -> [String: Any] {
+    guard !fullScreen, let zoom = window?.standardWindowButton(.zoomButton), !zoom.isHidden,
+      let superview = zoom.superview else {
+      return ["leading": 0.0, "fullScreen": fullScreen]
+    }
+    return ["leading": Double(superview.convert(zoom.frame, to: nil).maxX), "fullScreen": false]
   }
 }

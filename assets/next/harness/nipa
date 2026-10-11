@@ -129,10 +129,6 @@ class Client:
         if not self.device:
             return self.request("call", action=action, input=inputs, execute=execute)
         spec = self.describe(action)
-        if spec["effect"] == "destructive" and not execute:
-            return {"status": "preview", "action": action, "input": inputs,
-                    "deviceId": self.device["deviceId"], "effect": "destructive",
-                    "description": spec["description"], "executed": False}
         gateway = "mesh.invoke_destructive" if spec["effect"] == "destructive" else "mesh.invoke"
         return self.request("call", action=gateway, input={
             "deviceId": self.device["deviceId"], "action": action, "input": inputs}, execute=execute)
@@ -143,7 +139,7 @@ class Client:
         while snapshot.get("status") == "completed":
             job = snapshot["result"]["job"]
             remaining = end - time.monotonic()
-            if job["state"] in {"succeeded", "failed", "cancelled", "needs_decision", "paused"} or remaining <= 0:
+            if job["state"] in {"succeeded", "failed", "cancelled", "needs_decision", "waiting_user", "paused"} or remaining <= 0:
                 return snapshot
             snapshot = self.call("task.wait", {"jobId": task, "afterRevision": job["revision"],
                                                 "timeoutMs": max(0, int(remaining * 1000))})

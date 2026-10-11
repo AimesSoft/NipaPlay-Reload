@@ -30,7 +30,7 @@ class _NextHomePageState extends State<NextHomePage> {
   StreamSubscription<void>? _changes;
   UiHome? _home;
 
-  /// A: the shelf card hovered for 600 ms.
+  /// A: the shelf card held for 600 ms, previewed in the hero.
   UiWork? _shelfFocus;
   Timer? _focusTimer;
   Timer? _seenTimer;
@@ -76,6 +76,8 @@ class _NextHomePageState extends State<NextHomePage> {
     _wasStaged = staged;
     if (staged) {
       _stageFocus = null;
+      _focusTimer?.cancel();
+      _shelfFocus = null;
       if (_scroll.hasClients && _scroll.offset > 0) {
         _scroll.animateTo(0,
             duration: const Duration(milliseconds: 420),
@@ -130,6 +132,14 @@ class _NextHomePageState extends State<NextHomePage> {
   }
 
   UiWork? _heroWork() => _heroOverride ?? _baseHero();
+
+  /// The shelf work previewed in place of [hero]: not while talking, not
+  /// with reduced motion, and not when it is the hero already.
+  UiWork? _preview(UiWork? hero,
+          {required bool staged, required bool reduced}) =>
+      staged || reduced || _shelfFocus?.workId == hero?.workId
+          ? null
+          : _shelfFocus;
 
   /// The one work a conversation ended on (a single work or episode card),
   /// which then takes the hero. Candidates or a mere hover settle nothing.
@@ -206,11 +216,13 @@ class _NextHomePageState extends State<NextHomePage> {
     _conv.say(text);
   }
 
+  /// A card held still for 600 ms is previewed; 300 ms after the pointer
+  /// leaves the shelf the hero returns. Crossing cards only restarts the
+  /// wait, so a quick pass changes nothing.
   void _hoverShelf(UiWork work, bool on) {
     if (NextMotion.reduced(context) || _conv.staged) return;
     _focusTimer?.cancel();
-    _focusTimer = Timer(
-        on ? NextMotion.hoverFocus : const Duration(milliseconds: 250), () {
+    _focusTimer = Timer(on ? NextMotion.hoverFocus : _previewLinger, () {
       if (mounted) setState(() => _shelfFocus = on ? work : null);
     });
   }
@@ -240,24 +252,27 @@ class _NextHomePageState extends State<NextHomePage> {
           final staged = _conv.staged;
           final reduced = NextMotion.reduced(context);
           final hero = _heroWork();
+          final preview = _preview(hero, staged: staged, reduced: reduced);
           final backdropWork = staged
               ? (reduced ? hero : (_stageWork() ?? hero))
-              : (_shelfFocus ?? hero);
+              : (preview ?? hero);
           return Stack(fit: StackFit.expand, children: [
             // The push-in animates every frame: keep it off the page's layer.
             RepaintBoundary(
               child: HeroBackdrop(
+                workId: backdropWork?.workId,
                 image: backdropWork?.artwork.backdrop,
                 tint: backdropWork?.artwork.tint,
                 staged: staged,
                 scroll: _scroll,
                 viewport: size,
+                fade: staged ? NextMotion.crossfade : _previewFade,
               ),
             ),
             CustomScrollView(
               controller: _scroll,
               slivers: [
-                SliverToBoxAdapter(child: _region(size, hero)),
+                SliverToBoxAdapter(child: _region(size, hero, preview)),
                 SliverToBoxAdapter(child: _shelvesWidget()),
                 const SliverToBoxAdapter(child: SizedBox(height: 64)),
               ],
@@ -276,7 +291,7 @@ class _NextHomePageState extends State<NextHomePage> {
     return _shelves!;
   }
 
-  Widget _region(Size size, UiWork? hero) {
+  Widget _region(Size size, UiWork? hero, UiWork? preview) {
     final c = _conv;
     final staged = c.staged;
     final h = size.height;
@@ -294,6 +309,9 @@ class _NextHomePageState extends State<NextHomePage> {
               conversation: c,
               callbacks: _stageCallbacks,
               focusedWorkId: _stageWork()?.workId,
+              onViewAll: c.threadId == null
+                  ? null
+                  : () => shell.openPanelOn(c.threadId!),
             ),
           ),
         ),
@@ -320,26 +338,39 @@ class _NextHomePageState extends State<NextHomePage> {
           alignment: Alignment.bottomLeft,
           child: Padding(
             padding: const EdgeInsets.only(
-                left: NextMetrics.gutter, top: NextMetrics.topBar + 20),
+                left: NextMetrics.gutter, top: NextMetrics.topBar + 40),
             child: hero == null
                 ? const SizedBox.shrink()
                 : ValueListenableBuilder(
                     valueListenable: shell.tasks,
                     builder: (context, _, __) {
                       final active = shell.activeTasks;
-                      return HeroCopy(
-                        work: hero,
-                        line: line,
-                        leadWithTitle: line != null && line == heroNote,
-                        mood: c.mood,
-                        moodSentence: c.moodSentence,
-                        onPlay: () => shell.play(hero),
-                        onDetail: () => shell.openWork(hero),
-                        preparing: active.isEmpty
+                      return _HeroPreview(
+                        preview: preview == null
                             ? null
-                            : PreparingLine(
-                                tasks: active,
-                                preparation: c.latestPreparation),
+                            : HeroCopy(
+                                key: ValueKey(preview.workId),
+                                work: preview,
+                                line: null,
+                                mood: c.mood,
+                                moodSentence: c.moodSentence,
+                                onPlay: () => shell.play(preview),
+                                onDetail: () => shell.openWork(preview),
+                              ),
+                        child: HeroCopy(
+                          work: hero,
+                          line: line,
+                          leadWithTitle: line != null && line == heroNote,
+                          mood: c.mood,
+                          moodSentence: c.moodSentence,
+                          onPlay: () => shell.play(hero),
+                          onDetail: () => shell.openWork(hero),
+                          preparing: active.isEmpty
+                              ? null
+                              : PreparingLine(
+                                  tasks: active,
+                                  preparation: c.latestPreparation),
+                        ),
                       );
                     },
                   ),
@@ -387,6 +418,48 @@ class _NextHomePageState extends State<NextHomePage> {
   }
 }
 
+const _previewFade = Duration(milliseconds: 400);
+const _previewLinger = Duration(milliseconds: 300);
+
+/// The hero's copy with a shelf preview over it. The copy keeps its place,
+/// so the shelves (and the card under the pointer) never move, and fades
+/// out with Nipa's line and the preparing line; the previewed work's copy,
+/// bottom-aligned with it, fades in.
+class _HeroPreview extends StatelessWidget {
+  const _HeroPreview({required this.preview, required this.child});
+  final Widget? preview;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) => Stack(
+        clipBehavior: Clip.none,
+        alignment: Alignment.bottomLeft,
+        children: [
+          AnimatedOpacity(
+            opacity: preview == null ? 1 : 0,
+            duration: _previewFade,
+            curve: Curves.easeInOut,
+            child: IgnorePointer(ignoring: preview != null, child: child),
+          ),
+          Positioned(
+            left: 0,
+            bottom: 0,
+            child: AnimatedSwitcher(
+              duration: _previewFade,
+              switchInCurve: Curves.easeInOut,
+              switchOutCurve: Curves.easeInOut,
+              layoutBuilder: (current, previous) => Stack(
+                clipBehavior: Clip.none,
+                alignment: Alignment.bottomLeft,
+                children: [...previous, if (current != null) current],
+              ),
+              child: preview ?? const SizedBox.shrink(key: ValueKey('none')),
+            ),
+          ),
+        ],
+      );
+}
+
 /// The shelves: continue watching (16:9 with progress), Nipa's shelves
 /// (posters with a reason), recently added.
 class _Shelves extends StatelessWidget {
@@ -414,6 +487,7 @@ class _Shelves extends StatelessWidget {
               itemBuilder: (context, j) {
                 final item = shelf.items[j];
                 return PosterCard(
+                  workId: item.work.workId,
                   image: item.work.artwork.poster,
                   tint: item.work.artwork.tint,
                   title: item.work.title,
@@ -436,6 +510,7 @@ class _Shelves extends StatelessWidget {
                 final item = shelf.items[j];
                 final progress = item.episode?.progress;
                 return WideCard(
+                  workId: item.work.workId,
                   image: item.episode?.still != null &&
                           shelf.kind == UiShelfKind.continueWatching &&
                           item.work.artwork.backdrop == null

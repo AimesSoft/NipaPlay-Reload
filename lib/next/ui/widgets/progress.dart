@@ -75,8 +75,9 @@ class ThinBar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final reduced = NextMotion.reduced(context);
+    // The track spans the available width even under loose constraints.
     return SizedBox(
-      width: width,
+      width: width ?? double.infinity,
       height: height,
       child: ClipRRect(
         borderRadius: BorderRadius.circular(height),

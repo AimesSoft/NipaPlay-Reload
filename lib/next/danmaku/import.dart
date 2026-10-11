@@ -12,10 +12,8 @@ Future<List<DanmakuEntry>> readImportedDanmaku(
         String path, String platform, String videoId) =>
     Isolate.run(() async {
       try {
-        final data = parseLocalDanmakuBytes(await File(path).readAsBytes(),
-            allowEmpty: true);
+        final data = parseLocalDanmakuBytes(await File(path).readAsBytes());
         final comments = data['comments'] as List;
-        if (comments.isEmpty) return <DanmakuEntry>[];
         final rows = parseDanmakuListInBackground(comments);
         if (rows.isNotEmpty) {
           return [

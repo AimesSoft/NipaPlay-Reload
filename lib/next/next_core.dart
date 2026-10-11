@@ -16,12 +16,15 @@ import 'media/media_runtime.dart';
 import 'media/media_probe.dart';
 import 'media_sources/service.dart';
 import 'media_sources/capability.dart';
+import 'media_sources/sync.dart';
+import 'media_sources/remote_admin.dart';
 import 'accounts/service.dart';
 import 'accounts/capability.dart';
 import 'media/metadata_provider.dart';
 import 'next_database.dart';
 import 'tasks/device_identity.dart';
 import 'tasks/sqlite_job_store.dart';
+import 'tasks/user_consent.dart';
 import 'settings/application_settings.dart';
 import 'settings/download_settings.dart';
 import 'settings/registry.dart';
@@ -41,6 +44,7 @@ import 'followups/service.dart';
 import 'followups/capability.dart';
 import 'ui_data/service.dart';
 import 'ui_data/capability.dart';
+import 'chat/session_store.dart';
 
 /// Application-owned task and capability composition, independent of Labs.
 final class NextCore {
@@ -70,6 +74,7 @@ final class NextCore {
   late final Directory root;
   late final String deviceId;
   late final TaskEngine engine;
+  final diskDeletion = DiskDeletion();
   final hooks = HarnessHooks();
   final harnessLocation = HarnessLocation();
   final DownloadRuntime downloads;
@@ -77,6 +82,7 @@ final class NextCore {
   CredentialVault get credentialVault => credentials.vault;
   late final MediaRuntime media;
   late final MediaSourcesService mediaSources;
+  late final SyncService sync;
   final accounts = AccountsService();
   late final DanmakuRuntime danmaku;
   late final SettingsRegistry settings;
@@ -86,6 +92,7 @@ final class NextCore {
   late final StateCapability state;
   late final ChangeHistory changeHistory;
   late final Followups followups;
+  late final SessionStore sessions;
   late final UiDataService uiData;
 
   Future<void> _initialize(
@@ -110,6 +117,7 @@ final class NextCore {
         providers: mediaProviders,
         durationProbe: mediaDurationProbe);
     mediaSources = MediaSourcesService(media.service.store);
+    sync = SyncService(mediaSources);
     for (final provider in ['dandanplay', 'bangumi']) {
       changeHistory.seed('account:$provider', [
         {'id': provider, ...accounts.status(provider)}..remove('provider')
@@ -124,6 +132,7 @@ final class NextCore {
       ...ApplicationSettings.entries(),
       ...ClassicSettings.entries(),
       ...DownloadSettings.entries(),
+      ...sync.settings(),
       meshAddressSetting(mesh),
       harnessLocation.setting
     ]);
@@ -138,15 +147,25 @@ final class NextCore {
       downloads.executor,
       ...media.executors,
       ...mediaSourcesExecutors(mediaSources),
+      SyncExecutor(sync),
+      RemoteConnectionExecutor(mediaSources),
       ...accountExecutors(accounts),
       ...danmaku.executors,
       hooks,
+      diskDeletion,
     ];
     engine = TaskEngine(store: jobs, ownerDeviceId: deviceId, executors: [
       for (final executor in executors) OriginExecutor(executor, database)
     ]);
     hooks.engine = engine;
+    diskDeletion.engine = engine;
     followups = Followups(database, engine, harnessLocation);
+    sessions = SessionStore(database);
+    hooks.scheduleError = (error) async {
+      await followups.discover({'title': '定时配置无效',
+        'source': 'hooks/schedules.json', 'facts': {'error': error}},
+        Invocation(origin: 'application'));
+    };
     hooks.observeEvent = followups.hookEvent;
     downloads.attach(engine, root);
     media.attach(engine);
@@ -162,7 +181,7 @@ final class NextCore {
             File('${root.path}/journal.jsonl'), harnessLocation,
             changeHistory).view, followups.view]);
     uiData = UiDataService(media.service, engine, state, stateSources, root, credentialVault);
-    capabilities = List.unmodifiable([
+    capabilities = List.unmodifiable(diskDeletion.protect([
       CredentialCapability(credentials),
       TaskCapability(engine),
       FollowupCapability(followups),
@@ -171,13 +190,15 @@ final class NextCore {
       downloads.metadataCapability,
       media.capability,
       MediaSourcesCapability(mediaSources),
+      SyncCapability(sync),
+      RemoteAdminCapability(mediaSources),
       AccountsCapability(accounts),
       danmaku.capability,
       SettingsCapability(settings),
       ClassicOperations(settings),
       MeshCapability(mesh),
       state,
-    ].map(InvocationScopeCapability.new));
+    ]).map(InvocationScopeCapability.new));
     await engine.start();
     await uiData.start();
     followups.start();

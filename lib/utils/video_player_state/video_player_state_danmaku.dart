@@ -693,6 +693,7 @@ extension VideoPlayerStateDanmaku on VideoPlayerState {
       'usesMediaTimeline': true,
       if (requestChange != null) 'requestChange': requestChange,
     }, enabled);
+    _notifyPluginDanmakuLoaded(entries);
     _updateMergedDanmakuList();
     _notifyListeners();
     return true;
@@ -1470,7 +1471,7 @@ extension VideoPlayerStateDanmaku on VideoPlayerState {
   void removeSourceDanmakuTrack(String trackId) {
     final track = _danmakuTracks[trackId];
     if (track == null) return;
-    if (track['origin'] == 'auto_remote' || track['source'] == 'local') {
+    if (trackId == 'dandanplay' || track['origin'] == 'auto_remote' || track['source'] == 'local') {
       for (final key in ['bindingId', 'bindingRevision', 'cacheKey', 'cacheRevision', 'requestChange']) {
         track.remove(key);
       }

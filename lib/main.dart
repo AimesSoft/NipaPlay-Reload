@@ -68,6 +68,7 @@ import 'package:nipaplay/providers/labs_settings_provider.dart';
 import 'package:nipaplay/next/next_runtime.dart';
 import 'package:nipaplay/next/ui/shell/next_ui_gate.dart';
 import 'package:nipaplay/next/ui/shell/next_ui_preference.dart';
+import 'package:nipaplay/next/ui/shell/window_chrome.dart';
 import 'package:nipaplay/plugins/plugin_service.dart';
 import 'package:nipaplay/src/rust/api/startup_commands.dart'
     as startup_commands;
@@ -619,7 +620,9 @@ Future<void> _main(List<String> args) async {
               .environment['NIPAPLAY_DISABLE_WINDOWS_TRANSPARENT_BACKGROUND'] !=
           '1';
       WindowOptions windowOptions = WindowOptions(
-        skipTaskbar: false,
+        // window_manager maps this to the activation policy; quiet lab
+        // instances stay accessory so they are never activated.
+        skipTaskbar: LabProfile.quiet,
         titleBarStyle: TitleBarStyle.hidden,
         backgroundColor:
             transparentWindowBackground ? Colors.transparent : null,
@@ -2120,8 +2123,13 @@ Widget _buildGlobalAppOverlay(
         appChild,
       const _SystemResourceOverlay(),
       if (LabProfile.active)
-        Positioned(
-          top: 8, right: 12,
+        ValueListenableBuilder<bool>(
+          valueListenable: NextWindowChrome.showing,
+          builder: (context, next, classicBadge) => next
+              ? Positioned(
+                  left: 14, bottom: 12,
+                  child: NextLabBadge(profile: LabProfile.name!))
+              : Positioned(top: 8, right: 12, child: classicBadge!),
           child: IgnorePointer(child: Material(
             color: const Color(0xff9c2f00),
             borderRadius: BorderRadius.circular(6),

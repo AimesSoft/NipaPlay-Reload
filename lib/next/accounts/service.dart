@@ -290,6 +290,9 @@ final class AccountsService {
   Future<JsonMap> updateEpisode(String provider, JsonMap item) async {
     requireLogin(provider);
     final id = item['episodeId'] as int, state = item['state'] as int;
+    if (state != 2) {
+      throw const Failure(FailureCode.invalidInput, 'Classic episode progress accepts only watched (state=2).');
+    }
     if (provider == 'dandanplay') {
       // Classic ignores isWatched=false and still posts playhistory. Do not claim an undo.
       if (state != 2) {

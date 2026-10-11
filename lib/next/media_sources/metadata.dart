@@ -36,6 +36,8 @@ const _itemFields = {
   'CommunityRating',
   'OfficialRating',
   'Tags',
+  'ImageTags',
+  'UserData',
 };
 
 // Playback URLs and required headers are transport credentials, not metadata.

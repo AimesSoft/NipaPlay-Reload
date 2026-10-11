@@ -1,17 +1,20 @@
 import 'dart:async';
 import 'dart:io';
 import 'package:nipaplay/utils/lab_profile.dart';
+import 'package:nipaplay/utils/media_source_utils.dart';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart' show kDebugMode;
 import 'package:flutter/services.dart';
 import 'package:nipa_harness/nipa_harness.dart';
 import 'package:nipaplay/models/watch_history_model.dart';
+import 'package:nipaplay/models/playable_item.dart';
 import 'package:nipaplay/providers/labs_settings_provider.dart';
 import 'package:nipaplay/providers/service_provider.dart';
 import 'package:nipaplay/providers/settings_provider.dart';
 import 'package:nipaplay/providers/downloader_settings_provider.dart';
 import 'package:nipaplay/providers/shared_remote_library_provider.dart';
+import 'package:nipaplay/providers/dandanplay_remote_provider.dart';
 import 'package:nipaplay/providers/jellyfin_provider.dart';
 import 'package:nipaplay/providers/emby_provider.dart';
 import 'package:nipaplay/services/bangumi_service.dart';
@@ -83,10 +86,29 @@ final class NextRuntime extends ChangeNotifier {
     core.ready.then((_) {
       if (!context.mounted) return;
       core.mediaSources.shared = context.read<SharedRemoteLibraryProvider>();
+      core.mediaSources.dandanRemoteProvider =
+          context.read<DandanplayRemoteProvider>();
       core.mediaSources.shared!.observeChanges();
       core.mediaSources.updateGuiSelection = (type, ids) => type == 'jellyfin'
           ? context.read<JellyfinProvider>().updateSelectedLibraries(ids)
           : context.read<EmbyProvider>().updateSelectedLibraries(ids);
+      core.mediaSources.applySort = (type, sorts) async {
+        if (type == 'jellyfin') {
+          final provider = context.read<JellyfinProvider>();
+          for (final sort in sorts) {
+            provider.setLibrarySortSettings(sort['libraryId'] as String,
+                sort['sortBy'] as String, sort['sortOrder'] as String);
+          }
+          await provider.persistLibrarySortSettings();
+        } else {
+          final provider = context.read<EmbyProvider>();
+          for (final sort in sorts) {
+            provider.setLibrarySortSettings(sort['libraryId'] as String,
+                sort['sortBy'] as String, sort['sortOrder'] as String);
+          }
+          await provider.persistLibrarySortSettings();
+        }
+      };
       core.mediaSources.requestPassword = (source, stopped) {
         if (!context.mounted) {
           throw const Failure(
@@ -114,6 +136,97 @@ final class NextRuntime extends ChangeNotifier {
       fileSelection: EpisodeFileSelectionService(),
     );
     final playbackApi = Harness([playback]);
+    core.mediaSources.playItem = (source, itemId, position) async {
+      final type = source['type'];
+      PlayableItem item;
+      if (type == 'dandanplay_remote') {
+        final service = core.mediaSources.dandanRemote;
+        await core.mediaSources.refreshDandanRemote();
+        final episodes =
+            service.cachedEpisodes.where((e) => e.entryId == itemId);
+        if (episodes.isEmpty) {
+          throw const Failure(
+              FailureCode.notFound, 'Remote episode not found.');
+        }
+        final e = episodes.single;
+        final url = service.buildEpisodeStreamUrl(
+            hash: e.hasHash ? e.hash : null, entryId: e.entryId);
+        if (url == null) {
+          throw const Failure(
+              FailureCode.unavailable, 'Remote episode has no stream.');
+        }
+        final recorded = await WatchHistoryManager.getHistoryItem(url);
+        final history = recorded ??
+            WatchHistoryItem(
+                filePath: url,
+                animeName: e.animeTitle,
+                episodeTitle: e.episodeTitle,
+                animeId: e.animeId,
+                episodeId: e.episodeId,
+                watchProgress: 0,
+                lastPosition: 0,
+                duration: e.duration ?? 0,
+                lastWatchTime: DateTime.now(),
+                videoHash: e.hash);
+        item = PlayableItem(
+            videoPath: url,
+            actualPlayUrl: url,
+            title: e.animeTitle,
+            subtitle: e.episodeTitle,
+            animeId: e.animeId,
+            episodeId: e.episodeId,
+            historyItem: history);
+      } else if (type == 'nipaplay') {
+        final sharing = core.mediaSources.sharing;
+        await sharing.refreshLibrary(userInitiated: true);
+        PlayableItem? found;
+        for (final anime in sharing.animeSummaries) {
+          final episodes =
+              await sharing.loadAnimeEpisodes(anime.animeId, force: true);
+          for (final episode in episodes) {
+            if (episode.shareId == itemId) {
+              found = sharing.buildPlayableItem(anime: anime, episode: episode);
+            }
+          }
+          if (found != null) break;
+        }
+        if (found == null) {
+          throw const Failure(
+              FailureCode.notFound, 'Shared episode not found.');
+        }
+        item = found;
+      } else {
+        final path = switch (type) {
+          'jellyfin' || 'emby' => '$type://$itemId',
+          'smb' => MediaSourceUtils.buildSmbPath(
+              core.mediaSources.key(source['sourceId'] as String), itemId),
+          'webdav' => MediaSourceUtils.buildWebDavPath(
+              core.mediaSources.key(source['sourceId'] as String), itemId),
+          _ => throw const Failure(
+              FailureCode.invalidInput, 'Unsupported media source.')
+        };
+        final outcome = await playbackApi.invokeJson(
+            'playback.open',
+            {'path': path, if (position != null) 'startPositionMs': position},
+            BodyChanges.invocation ?? Invocation(origin: 'application'));
+        if (outcome is Failed) throw outcome.failure;
+        return outcome.toEnvelope();
+      }
+      if (!await PlaybackService()
+          .play(item, episodeFileSelectionHandled: true)) {
+        throw const Failure(
+            FailureCode.unavailable, 'NipaPlay cannot start playback.');
+      }
+      if (position != null) {
+        await VideoPlayerStatePort(player)
+            .seekTo(Duration(milliseconds: position));
+      }
+      return {
+        'sourceId': source['sourceId'],
+        'itemId': itemId,
+        'state': VideoPlayerStatePort(player).snapshot().toJson()
+      };
+    };
     return NextRuntime._(labs, player, [
       LibraryCapability(
         history: () => history.history,
@@ -287,10 +400,12 @@ final class NextRuntime extends ChangeNotifier {
       if (status case AgentEndpointRunning(:final repository)) {
         await _attachHooks(repository);
         final host = chat = ChatHost(endpoint: _endpoint, repository: repository,
+          sessions: ServiceProvider.nextCore.sessions,
           labRoot: LabProfile.active ? Directory(LabProfile.root) : null);
         if (kDebugMode && LabProfile.active) recordDebugChat(host);
         try {
           await host.start();
+          await host.getMainSession();
           await ServiceProvider.nextCore.followups.attach(host);
         } catch (error) {
           chatError = redactHarnessText(error.toString());

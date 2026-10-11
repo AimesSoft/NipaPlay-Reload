@@ -12,7 +12,8 @@ const _source = ObjectSchema({
   'url': _text,
   'username': StringSchema(),
   'connected': BooleanSchema(),
-  'connectionState': StringSchema(values: ['connected', 'unverified']),
+  'connectionState':
+      StringSchema(values: ['connected', 'unverified', 'failed']),
   'selectedLibraries': ArraySchema(_text),
 }, required: [
   'sourceId',
@@ -23,7 +24,7 @@ const _source = ObjectSchema({
   'connected',
   'connectionState',
   'selectedLibraries'
-]);
+], additionalProperties: true);
 const _configuration = {
   'name': _text,
   'url': _text,
@@ -39,7 +40,14 @@ const _provenance = ObjectSchema({
   'url': _text,
   'itemId': _text,
   'observedAt': _text,
-}, required: ['sourceId', 'type', 'name', 'url', 'itemId', 'observedAt']);
+}, required: [
+  'sourceId',
+  'type',
+  'name',
+  'url',
+  'itemId',
+  'observedAt'
+]);
 const _metadata = ObjectSchema({
   'Name': StringSchema(nullable: true),
   'SeriesName': StringSchema(nullable: true),
@@ -53,15 +61,18 @@ const _metadata = ObjectSchema({
   'Container': StringSchema(nullable: true),
   'Size': IntegerSchema(nullable: true, description: 'Bytes, as reported.'),
   'LastModified': StringSchema(nullable: true, description: 'UTC ISO 8601.'),
-  'RunTimeTicks': IntegerSchema(nullable: true,
-      description: 'Server runtime in 100 nanosecond ticks.'),
-  'ProviderIds': ObjectSchema({}, additionalProperties: true, nullable: true,
+  'RunTimeTicks': IntegerSchema(
+      nullable: true, description: 'Server runtime in 100 nanosecond ticks.'),
+  'ProviderIds': ObjectSchema({},
+      additionalProperties: true,
+      nullable: true,
       description: 'IDs of this item only; native provider keys and values.'),
-  'MediaSources': ArraySchema(
-      ObjectSchema({}, additionalProperties: true), nullable: true),
-  'MediaStreams': ArraySchema(
-      ObjectSchema({}, additionalProperties: true), nullable: true),
-}, additionalProperties: true,
+  'MediaSources':
+      ArraySchema(ObjectSchema({}, additionalProperties: true), nullable: true),
+  'MediaStreams':
+      ArraySchema(ObjectSchema({}, additionalProperties: true), nullable: true),
+},
+    additionalProperties: true,
     description:
         'Facts supplied by provenance server, retaining native keys and values. Missing fields mean the server did not supply them; no parent IDs are inherited or recognition inferred. Playback credential URLs/headers are excluded. Entry path is the Classic locator; metadata.Path is the server file path.');
 const _entry = ObjectSchema({
@@ -99,14 +110,81 @@ final class MediaSourcesCapability implements Capability {
 
 final _specs = [
   const ActionSpec(
+      id: 'media.sources.sort',
+      title: '设置媒体库排序',
+      description:
+          'Save a batch of Jellyfin/Emby Classic per-library sorting preferences. sorts[] contains libraryId, sortBy (server field names, comma separated), sortOrder Ascending/Descending. Uses Classic Provider and persistence, applies to subsequent Classic library loads. Empty sorts is invalid. For temporary request ordering use browse sortBy/sortOrder.',
+      effect: Effect.write,
+      input: ObjectSchema({
+        'sourceId': _text,
+        'sorts': ArraySchema(ObjectSchema({
+          'libraryId': _text,
+          'sortBy': _text,
+          'sortOrder': StringSchema(values: ['Ascending', 'Descending'])
+        }, required: [
+          'libraryId',
+          'sortBy',
+          'sortOrder'
+        ]))
+      }, required: [
+        'sourceId',
+        'sorts'
+      ]),
+      output: ObjectSchema({}, additionalProperties: true)),
+  const ActionSpec(
+      id: 'media.sources.scrape',
+      title: '识别远程媒体',
+      description:
+          'Submit Classic WebDAV/SMB recursive video recognition from explicit paths[]. Uses Classic remote byte/hash matching, saved credentials and history. Requires the Classic Dandanplay matching account to be logged in. Preserves existing progress and migrates only previously cleared episode progress. Returns jobId; task.wait returns per-directory total/matched/failed counts. Cancellation stops between directories. This writes Classic matching/history; media.sources.sync only discovers files.',
+      effect: Effect.write,
+      input: ObjectSchema({'sourceId': _text, 'paths': ArraySchema(_text)},
+          required: ['sourceId', 'paths']),
+      output: ObjectSchema({'jobId': _text}, required: ['jobId'])),
+  const ActionSpec(
+      id: 'media.sources.play',
+      title: '播放远程影片',
+      description:
+          'Play itemId returned by browse/query in the context of sourceId. Activates that Classic source first. Dandanplay remote and NipaPlay shared items retain Classic episode identity and resume context; credentials remain internal. Optional startPositionMs overrides resume. Returns the Classic player snapshot. Does not open a password prompt; log in first.',
+      effect: Effect.write,
+      input: ObjectSchema({
+        'sourceId': _text,
+        'itemId': _text,
+        'startPositionMs': IntegerSchema(minimum: 0)
+      }, required: [
+        'sourceId',
+        'itemId'
+      ]),
+      output: ObjectSchema({}, additionalProperties: true)),
+  const ActionSpec(
       id: 'media.sources.check',
       title: 'Check a media source connection',
       description:
-          'Perform an authenticated live catalog request through the Classic client for this source and update its last observed connection state. Credential denial or connection failure returns a failure. Listing sources itself never reads secrets or probes the network.',
+          'With sourceId, perform an authenticated live catalog request through Classic and persist success/failure status. With type plus url (or SMB host/port/domain), test temporary configuration without saving it or requesting credentials. Temporary Jellyfin/Emby/Dandanplay tests probe public identity/welcome, WebDAV/SMB use anonymous credentials, NipaPlay uses existing same-origin host credentials if available. No passwords are accepted. Failure to authenticate temporary settings means use add then login. Listing sources itself never probes the network.',
       effect: Effect.write,
-      input: _sourceId,
-      output: ObjectSchema({'source': _source, 'checked': BooleanSchema()},
-          required: ['source', 'checked'])),
+      input: ObjectSchema({
+        'sourceId': _text,
+        'type': StringSchema(values: [
+          'jellyfin',
+          'emby',
+          'smb',
+          'webdav',
+          'nipaplay',
+          'dandanplay_remote'
+        ]),
+        ..._configuration
+      }, oneOfRequired: [
+        ['sourceId'],
+        ['type']
+      ]),
+      output: ObjectSchema({
+        'source': _source,
+        'checked': BooleanSchema(),
+        'connected': BooleanSchema(),
+        'authenticated': BooleanSchema(),
+        'serverId': _text,
+        'tokenRequired': BooleanSchema(),
+        'version': _text
+      }, additionalProperties: true)),
   const ActionSpec(
       id: 'media.sources.list',
       title: 'List media sources',
@@ -120,11 +198,17 @@ final _specs = [
       id: 'media.sources.add',
       title: 'Configure a media source',
       description:
-          'Add a Classic Jellyfin, Emby, SMB, WebDAV or NipaPlay shared source. HTTP sources require url; SMB requires host and optionally port/domain. Saves address and username; use login separately. NipaPlay sharing uses the existing paired-host client.',
+          'Add a Classic Jellyfin, Emby, SMB, WebDAV, NipaPlay shared or dandanplay_remote source. HTTP sources require url; SMB requires host and optionally port/domain. Saves address and username; use login separately. Classic has one dandanplay_remote source, use update to replace its address. NipaPlay sharing uses the existing paired-host client.',
       effect: Effect.write,
       input: ObjectSchema({
-        'type': StringSchema(
-            values: ['jellyfin', 'emby', 'smb', 'webdav', 'nipaplay']),
+        'type': StringSchema(values: [
+          'jellyfin',
+          'emby',
+          'smb',
+          'webdav',
+          'nipaplay',
+          'dandanplay_remote'
+        ]),
         ..._configuration
       }, required: [
         'type',
@@ -144,9 +228,9 @@ final _specs = [
       id: 'media.sources.remove',
       title: 'Remove a media source',
       description:
-          'Preview or remove a source connection. Indexed file identities, bindings and playback history remain.',
+          'Remove a source connection without confirmation. Indexed file identities, bindings and playback history remain; no disk files are deleted.',
       effect: Effect.destructive,
-      input: ObjectSchema({'sourceId': _text, 'confirm': BooleanSchema()},
+      input: ObjectSchema({'sourceId': _text},
           required: ['sourceId']),
       output: ObjectSchema({
         'sourceId': _text,
@@ -162,13 +246,11 @@ final _specs = [
       id: 'media.sources.login',
       title: 'Initiate media source login',
       description:
-          'Auto uses Jellyfin Quick Connect when enabled, otherwise opens NipaPlay with address and username prefilled; the user enters only the password. A quickConnect result contains a code that must be given to the user to approve in Jellyfin, and a jobId for task.wait to await the approval result. Approval expires after ten minutes. If the user supplied a password in conversation, pass password (secret, never journaled); it is used only in memory, the saved session goes into the vault. Window opens the password dialog.',
+          'Auto uses Jellyfin Quick Connect when enabled, otherwise opens NipaPlay with address and username prefilled. Only the user enters the password or dandanplay_remote API token in that window. A quickConnect result contains a code to give the user and jobId for task.wait. Approval expires after ten minutes. No secrets are accepted as tool inputs. An unauthenticated NipaPlay shared source can connect directly.',
       effect: Effect.write,
       input: ObjectSchema({
         'sourceId': _text,
-        'method': StringSchema(
-            values: ['auto', 'quickConnect', 'window', 'password']),
-        'password': StringSchema(secret: true)
+        'method': StringSchema(values: ['auto', 'quickConnect', 'window']),
       }, required: [
         'sourceId'
       ]),
@@ -232,11 +314,18 @@ final _specs = [
       id: 'media.sources.browse',
       title: 'Browse remote content',
       description:
-          'Discover a source root or parentId (library/folder/series/season) including never-played items. Returns complete metadata and source provenance using Classic pagination. recursive is available for Jellyfin/Emby; directory recursion uses sync. Each playable result enters the unified file index with the same Classic path and fileId. ProviderIds describe only their own item; query seriesId/seasonId for parent facts. No inferred identity or watch history.',
+          'Discover a source root or parentId (library/folder/series/season) including never-played items. Jellyfin/Emby searchTerm is server-side and can span all libraries; use recursive=true for playable results. sortBy (server field names, comma separated) and sortOrder Ascending/Descending control that request. Other source types filter names in the requested directory or series. Dandanplay remote root returns series; parentId is animeId or unmatched. Returns complete metadata and source provenance using Classic pagination. Directory recursion uses sync. Play with media.sources.play {sourceId,itemId}. Each playable result enters the unified file index. No inferred identity or watch history.',
       effect: Effect.write,
-      input: ObjectSchema(
-          {'sourceId': _text, 'parentId': _text, 'recursive': BooleanSchema()},
-          required: ['sourceId']),
+      input: ObjectSchema({
+        'sourceId': _text,
+        'parentId': _text,
+        'recursive': BooleanSchema(),
+        'searchTerm': _text,
+        'sortBy': _text,
+        'sortOrder': StringSchema(values: ['Ascending', 'Descending'])
+      }, required: [
+        'sourceId'
+      ]),
       output: ObjectSchema({
         'sourceId': _text,
         'entries': ArraySchema(_entry),
@@ -250,7 +339,7 @@ final _specs = [
       id: 'media.sources.query',
       title: 'Query remote item metadata',
       description:
-          'Fetch live facts for a batch of Jellyfin/Emby item IDs or SMB/WebDAV entry paths returned by browse. Includes metadata and server provenance; missingItemIds lists IDs not returned by the server. Query series/season IDs explicitly for their ProviderIds; no inheritance or recognition. Does not register files or write bindings; fileId is null.',
+          'Fetch live facts for a batch of Jellyfin/Emby item IDs, SMB/WebDAV entry paths, or Dandanplay remote/NipaPlay shared episode IDs returned by browse. Includes metadata, source provenance and shared peer progress; missingItemIds lists IDs not returned by the server. Query series/season IDs explicitly for their ProviderIds; no inheritance or recognition. Does not register files or write bindings; fileId is null.',
       effect: Effect.read,
       input: ObjectSchema({'sourceId': _text, 'itemIds': ArraySchema(_text)},
           required: ['sourceId', 'itemIds']),
@@ -259,14 +348,20 @@ final _specs = [
         'entries': ArraySchema(_entry),
         'total': IntegerSchema(minimum: 0),
         'missingItemIds': ArraySchema(_text),
-      }, required: ['sourceId', 'entries', 'total', 'missingItemIds'])),
+      }, required: [
+        'sourceId',
+        'entries',
+        'total',
+        'missingItemIds'
+      ])),
   const ActionSpec(
       id: 'media.sources.sync',
       title: 'Synchronize source discovery',
       description:
-          'Submit a cancellable task to recursively discover selected libraries and register all playable files in the unified index. Repeated sync preserves file IDs and bindings; missing items are not deleted. Use tasks.wait for completion.',
+          'Submit a cancellable task to recursively discover libraries and register playable files in the unified index. Optional parentIds[] starts from explicit library/series IDs or SMB/WebDAV directories; otherwise uses select. Empty selections are invalid. Repeated sync preserves file IDs and bindings; missing items are not deleted. Use task.wait for completion. Recognition is media.sources.scrape.',
       effect: Effect.write,
-      input: _sourceId,
+      input: ObjectSchema({'sourceId': _text, 'parentIds': ArraySchema(_text)},
+          required: ['sourceId']),
       output: ObjectSchema({'sourceId': _text, 'jobId': _text},
           required: ['sourceId', 'jobId'])),
 ];
@@ -292,8 +387,34 @@ final class _SourceAction extends Action<_Json, _Json> {
       await service.ensureInitialized();
       final JsonMap result;
       switch (spec.id) {
+        case 'media.sources.sort':
+          result = await service.sort(json);
+        case 'media.sources.scrape':
+          final row = await service.source(json['sourceId'] as String);
+          if (!{'webdav', 'smb'}.contains(row['type']) ||
+              (json['paths'] as List).isEmpty) {
+            throw const Failure(FailureCode.invalidInput,
+                'Choose a WebDAV/SMB source and nonempty paths.');
+          }
+          final job = await service.engine.submit(
+              type: 'media.sources.scrape', title: '识别远程媒体', input: json);
+          result = {'jobId': job.jobId};
+        case 'media.sources.play':
+          result = await service.serial(() async {
+            final source = await service.source(json['sourceId'] as String);
+            await service.activate(source);
+            final play = service.playItem;
+            if (play == null) {
+              throw const Failure(FailureCode.unavailable,
+                  'The NipaPlay player is not attached.');
+            }
+            return play(source, json['itemId'] as String,
+                json['startPositionMs'] as int?);
+          });
         case 'media.sources.check':
-          result = await service.check(json['sourceId'] as String);
+          result = json['sourceId'] == null
+              ? await service.testConfiguration(json)
+              : await service.check(json['sourceId'] as String);
         case 'media.sources.list':
           result = {'sources': await service.list()};
         case 'media.sources.add':
@@ -301,15 +422,7 @@ final class _SourceAction extends Action<_Json, _Json> {
         case 'media.sources.update':
           result = await service.configure(json, update: true);
         case 'media.sources.remove':
-          final id = json['sourceId'] as String;
-          result = json['confirm'] == true
-              ? await service.remove(id)
-              : {
-                  'sourceId': id,
-                  'removed': false,
-                  'indexedFilesPreserved': true,
-                  'source': await service.source(id)
-                };
+          result = await service.remove(json['sourceId'] as String);
         case 'media.sources.login':
           result = await service.login(json);
         case 'media.sources.libraries':
@@ -320,14 +433,19 @@ final class _SourceAction extends Action<_Json, _Json> {
         case 'media.sources.browse':
           result = await service.browse(
               json['sourceId'] as String, json['parentId'] as String?,
-              recursive: json['recursive'] == true);
+              recursive: json['recursive'] == true,
+              searchTerm: json['searchTerm'] as String?,
+              sortBy: json['sortBy'] as String? ?? 'SortName',
+              sortOrder: json['sortOrder'] as String? ?? 'Ascending');
         case 'media.sources.query':
           result = await service.query(json['sourceId'] as String,
               (json['itemIds'] as List).cast<String>());
         case 'media.sources.sync':
           final id = json['sourceId'] as String;
           final source = await service.source(id);
-          final selected = await service.selection(id);
+          final selected = json['parentIds'] == null
+              ? await service.selection(id)
+              : (json['parentIds'] as List).cast<String>();
           if (selected.isEmpty) {
             throw const Failure(FailureCode.invalidInput,
                 'Select libraries before synchronizing.');
@@ -369,6 +487,7 @@ Object? _public(Object? value) {
 List<JobExecutor> mediaSourcesExecutors(MediaSourcesService service) => [
       _Executor('media.sources.login', service.completeLogin),
       _Executor('media.sources.sync', service.synchronize),
+      _Executor('media.sources.scrape', service.scrape),
     ];
 
 final class _Executor implements JobExecutor {

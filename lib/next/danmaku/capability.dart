@@ -176,7 +176,7 @@ const _change = ObjectSchema({
   'trackId': _text,
   'expectedRevision': IntegerSchema(minimum: 0),
   'enabled': BooleanSchema(),
-  'offsetMs': IntegerSchema(minimum: -7200000, maximum: 7200000),
+  'offsetMs': IntegerSchema(),
   'displayFold': BooleanSchema(),
   'reason': _text
 }, oneOfRequired: [
@@ -244,7 +244,7 @@ final _specs = [
           'optional platformId, sourceEntryId, originSource, sender, sentAt (strings), fontSize (positive integer). '
           'No registered source is required. Supply platform/platformVideoId; host records actor, origin and timestamp. '
           'Target entityId (file or episode), path, or current playback (default). '
-          'Reimport replaces the same platform/video pool atomically, preserving track settings; malformed files leave the old track unchanged. '
+          'Reimport replaces the same platform/video pool atomically, preserving track settings; empty or malformed files are rejected and leave the old track unchanged. '
           'Mounted immediately when the target is playing. File data stays in host storage; do not send large comment arrays through tool arguments.'),
   _spec(
       'danmaku.sources',
@@ -340,7 +340,7 @@ final _specs = [
       const ObjectSchema({
         'bindingId': _text,
         'revision': IntegerSchema(minimum: 0),
-        'offsetMs': IntegerSchema(minimum: -7200000, maximum: 7200000)
+        'offsetMs': IntegerSchema()
       }, required: [
         'bindingId',
         'revision',
@@ -355,7 +355,7 @@ final _specs = [
       _bindingInput,
       const ObjectSchema({'bindingId': _text, 'revision': IntegerSchema()},
           required: ['bindingId', 'revision']),
-      'Revoke this managed binding and remove its player track; source cache and provenance remain available.'),
+      'Revoke this managed binding; source cache and provenance remain available. Classic local, automatic and Dandanplay tracks remain loaded with their managed binding detached. Other managed tracks are removed.'),
   _spec(
       'danmaku.analyze_alignment',
       Effect.read,

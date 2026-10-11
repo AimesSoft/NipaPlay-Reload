@@ -4,8 +4,12 @@ import 'package:flutter/widgets.dart';
 
 import '../../ui_data/ui_data.dart';
 import '../conversation/conversation.dart';
+import '../conversation/panel_chat.dart';
+import '../conversation/session_choice.dart';
 import '../data/services.dart';
+import '../detail/work_route.dart';
 import '../theme/tokens.dart';
+import '../widgets/art_origin.dart';
 
 enum NextSection { home, library, activity }
 
@@ -15,7 +19,20 @@ enum NextPopover { none, tasks, nipa }
 /// conversation and tasks are listened to where they are shown.
 class NextShellController extends ChangeNotifier {
   NextShellController(this.services, {required this.onLeave}) {
-    conversation = Conversation(port: services.chat, data: services.data);
+    choice = SessionChoice(services.chat);
+    conversation = Conversation(
+        port: services.chat, data: services.data, choice: choice);
+    panel = PanelChat(
+        port: services.chat,
+        data: services.data,
+        home: conversation,
+        choice: choice);
+    // A login card must be seen: the panel comes up for it.
+    services.logins.onRequest = () {
+      if (!panelOpen.value) openPanel();
+    };
+    origins.reference =
+        () => navigatorKey.currentContext?.findRenderObject() as RenderBox?;
     _tasks = services.data.tasks().listen((list) {
       tasks.value = list;
       if (activeTasks.isEmpty && popover == NextPopover.tasks) closePopover();
@@ -26,6 +43,8 @@ class NextShellController extends ChangeNotifier {
 
   /// Leaves Next for Classic (turns the preference off).
   final VoidCallback onLeave;
+  /// Where what you say goes: the main session unless you picked another.
+  late final SessionChoice choice;
   late final Conversation conversation;
   late final StreamSubscription<List<UiTask>> _tasks;
   final tasks = ValueNotifier<List<UiTask>>(const []);
@@ -33,8 +52,14 @@ class NextShellController extends ChangeNotifier {
   final askFocus = FocusNode(debugLabel: 'next.ask');
   final askText = TextEditingController();
 
-  /// The conversation side panel's slot (the panel itself is next stage).
+  /// Pictures a work can open from (shared element transitions).
+  final origins = ArtOrigins();
+
+  /// The conversation side panel.
   final panelOpen = ValueNotifier<bool>(false);
+  late final PanelChat panel;
+  final panelFocus = FocusNode(debugLabel: 'next.panel');
+  final panelText = TextEditingController();
 
   /// Content scrolled under the top bar: show its scrim.
   final scrolled = ValueNotifier<bool>(false);
@@ -68,33 +93,75 @@ class NextShellController extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// ⌘K. On the home it focuses the input bar. Elsewhere it will open the
-  /// conversation panel (next stage); until then it goes home and focuses.
+  /// ⌘K. On the home it focuses the input bar; on any other page (or with
+  /// the panel already open) it opens the side panel.
   void ask() {
-    if (section != NextSection.home ||
-        (navigatorKey.currentState?.canPop() ?? false)) {
-      go(NextSection.home);
-    }
+    if (panelOpen.value) return panelFocus.requestFocus();
+    final onHome = section == NextSection.home &&
+        !(navigatorKey.currentState?.canPop() ?? false);
+    if (!onHome) return openPanel();
     popover = NextPopover.none;
     notifyListeners();
     WidgetsBinding.instance
         .addPostFrameCallback((_) => askFocus.requestFocus());
   }
 
-  /// Slot for the conversation side panel (next stage): until it exists,
-  /// asking happens in the home's input bar.
-  void openPanel() {
+  /// Opens the side panel on the current session (the main one unless you
+  /// picked another). With [about] (“问 Nipa” on a work's page) the input
+  /// reads “问问《片名》” and the work goes to the agent with what you say.
+  void openPanel({UiWork? about}) => _openPanel(about: about);
+
+  /// Opens the side panel on one session (the home's “展开”).
+  void openPanelOn(String threadId) => _openPanel(threadId: threadId);
+
+  /// Opens the side panel about [work] and says [text] there for you, in
+  /// the current session (the detail page's “下载全部”).
+  void sayAbout(UiWork work, String text) =>
+      _openPanel(about: work, say: text);
+
+  void _openPanel({UiWork? about, String? threadId, String? say}) {
+    if (popover != NextPopover.none) {
+      popover = NextPopover.none;
+      notifyListeners();
+    }
+    Future<void> open() async {
+      await panel.show(threadId: threadId, about: about);
+      if (say != null) await panel.say(say);
+    }
+
+    unawaited(open());
     panelOpen.value = true;
-    ask();
+    WidgetsBinding.instance
+        .addPostFrameCallback((_) => panelFocus.requestFocus());
   }
 
-  void closePanel() => panelOpen.value = false;
+  void closePanel() {
+    if (!panelOpen.value) return;
+    panelOpen.value = false;
+    panel.hide();
+    panelFocus.unfocus(disposition: UnfocusDisposition.previouslyFocusedChild);
+  }
 
-  /// Slot for the detail page (next stage): a placeholder route for now.
+  /// The work's detail page. The picture it was opened from (under the
+  /// pointer, or the largest one on screen) grows into the page's backdrop;
+  /// under reduced motion the page only fades in.
   void openWork(UiWork work) {
+    final nav = navigatorKey.currentState;
+    if (nav == null) return;
     popover = NextPopover.none;
     notifyListeners();
-    navigatorKey.currentState?.pushNamed('/work', arguments: work);
+    final origin =
+        NextMotion.reduced(nav.context) ? null : origins.find(work.workId);
+    if (origin != null && origin.lifts) origin.hidden = true;
+    // The page draws its own bar scrim and title; the section's comes back
+    // with it.
+    final from = section, wasScrolled = scrolled.value;
+    scrolled.value = false;
+    nav
+        .pushNamed('/work', arguments: WorkRouteArgs(work, origin: origin))
+        .then((_) {
+      if (section == from) scrolled.value = wasScrolled;
+    });
   }
 
   void play(UiWork work, {UiEpisode? episode}) {
@@ -117,6 +184,10 @@ class NextShellController extends ChangeNotifier {
 
   /// Esc: closes what is on top, one layer at a time.
   bool escape() {
+    if (panelOpen.value && panel.menuOpen) {
+      panel.closeMenu();
+      return true;
+    }
     if (panelOpen.value) {
       closePanel();
       return true;
@@ -149,6 +220,11 @@ class NextShellController extends ChangeNotifier {
     scrolled.dispose();
     askFocus.dispose();
     askText.dispose();
+    services.logins.onRequest = null;
+    panel.dispose();
+    choice.dispose();
+    panelFocus.dispose();
+    panelText.dispose();
     panelOpen.dispose();
     super.dispose();
   }

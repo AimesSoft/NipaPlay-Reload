@@ -294,19 +294,6 @@ final class AgentEndpoint {
       return _response(
           {'error': 'Expected object input and boolean execute.'}, 400);
     }
-    if (action.spec.effect == Effect.destructive &&
-        decoded['execute'] != true) {
-      final violations = action.spec.input.validate(input);
-      return _response({
-        'status': 'preview',
-        'action': action.spec.id,
-        'effect': 'destructive',
-        'input': input,
-        'executed': false,
-        'description': action.spec.description,
-        'violations': [for (final v in violations) v.toJson()]
-      });
-    }
     return _response((await _harness.invokeJson(
             action.spec.id, input, Invocation(origin: request.headers['x-nipa-hook'] == null
                 ? origin : 'hook:${request.headers['x-nipa-hook']}')))

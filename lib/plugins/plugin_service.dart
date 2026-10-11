@@ -429,6 +429,7 @@ class PluginService extends ChangeNotifier {
   Future<String?> installRemotePlugin(String id, {
     String? proxyUrl,
     String? updateForId,
+    bool allowScriptRemoval = true,
   }) async {
     await _ready;
     final remote = getRemotePluginInfo(id);
@@ -440,7 +441,8 @@ class PluginService extends ChangeNotifier {
         : _applyProxyIfNeeded(remote.proxyDownloadUrl, proxyUrl);
     final response = await http.get(Uri.parse(url));
     if (response.statusCode != 200) throw StateError('下载插件失败: ${response.statusCode}');
-    return importPluginFromContent(response.body, updateForId: updateForId);
+    return importPluginFromContent(response.body, updateForId: updateForId,
+        allowScriptRemoval: allowScriptRemoval);
   }
 
   void _setupEventListeners() {
@@ -1456,14 +1458,16 @@ class PluginService extends ChangeNotifier {
   }
 
   Future<String?> importPluginFromContent(String script,
-      {String? updateForId}) async {
-    return _importPluginFromContent(script, updateForId: updateForId);
+      {String? updateForId, bool allowScriptRemoval = true}) async {
+    return _importPluginFromContent(script, updateForId: updateForId,
+        allowScriptRemoval: allowScriptRemoval);
   }
 
   Future<String?> _importPluginFromContent(
     String script, {
     String? updateForId,
     bool allowSameVersionUpdate = false,
+    bool allowScriptRemoval = true,
   }) async {
     final parsed = _parsePluginMetadata(script);
     final manifest = parsed.manifest;
@@ -1500,6 +1504,9 @@ class PluginService extends ChangeNotifier {
         );
       }
       if (existingLocalId != manifest.id) {
+        if (!allowScriptRemoval) {
+          throw StateError('插件标识改变会删除旧脚本；请先调用 plugins.delete，等待用户同意删除后再安装。');
+        }
         final pluginDir = await _pluginStorage.getPluginDirectoryPath();
         if (pluginDir != null) {
           await _pluginStorage.deleteScript('$pluginDir/${existingLocalId}.js');

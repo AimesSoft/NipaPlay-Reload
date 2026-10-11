@@ -12,6 +12,7 @@ import 'settings/migration.dart';
 import 'state/change_history.dart';
 import 'followups/migration.dart';
 import 'ui_data/migration.dart';
+import 'chat/session_store.dart';
 
 // Each position is a released database version. Append new domain migrations.
 const _migrations = [
@@ -26,6 +27,7 @@ const _migrations = [
   migrateChangeHistory,
   migrateFollowups,
   migrateUiData,
+  migrateSessions,
 ];
 
 Future<void> _migrate(Database db, int oldVersion, int newVersion) async {

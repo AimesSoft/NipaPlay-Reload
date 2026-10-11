@@ -1,6 +1,7 @@
 import 'package:flutter/widgets.dart';
 
 import '../theme/tokens.dart';
+import 'art_origin.dart';
 import 'artwork.dart';
 import 'buttons.dart';
 import 'progress.dart';
@@ -54,6 +55,8 @@ class WideCard extends StatefulWidget {
     this.onPlay,
     this.onHover,
     this.selected = false,
+    this.label,
+    this.workId,
   });
 
   final String? image;
@@ -68,6 +71,13 @@ class WideCard extends StatefulWidget {
   final VoidCallback? onPlay;
   final ValueChanged<bool>? onHover;
   final bool selected;
+
+  /// Set in the bottom left corner over the shade, e.g. an episode number.
+  final Widget? label;
+
+  /// The work this picture stands for: opening it flies the picture into
+  /// the detail page.
+  final String? workId;
 
   @override
   State<WideCard> createState() => _WideCardState();
@@ -86,103 +96,114 @@ class _WideCardState extends State<WideCard> with _HoverCard {
         onTap: widget.onOpen,
         child: hoverScale(
           context,
-          Container(
-            width: widget.width,
-            height: widget.height,
-            decoration: BoxDecoration(
-              borderRadius: radius,
-              boxShadow: [
-                if (widget.selected)
-                  const BoxShadow(color: NextColors.paper, spreadRadius: 2),
-                const BoxShadow(
-                    color: Color(0x59000000),
-                    blurRadius: 30,
-                    offset: Offset(0, 10)),
-              ],
-            ),
-            foregroundDecoration: BoxDecoration(
-              borderRadius: radius,
-              border: Border.all(color: const Color(0x0FFFFFFF)),
-            ),
-            child: ClipRRect(
-              borderRadius: radius,
-              child: Stack(fit: StackFit.expand, children: [
-                NextImage(widget.image, tint: widget.tint),
-                if (widget.title != null || widget.caption != null)
-                  const DecoratedBox(
-                    decoration: BoxDecoration(
-                      gradient: LinearGradient(
-                        begin: Alignment.bottomCenter,
-                        end: Alignment.topCenter,
-                        colors: [
-                          Color(0xC7000000),
-                          Color(0x33000000),
-                          Color(0x00000000)
-                        ],
-                        stops: [0, 0.46, 0.7],
-                      ),
-                    ),
-                  ),
-                if (widget.badge != null)
-                  Positioned(
-                    left: 12,
-                    top: 12,
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 8, vertical: 4),
+          _origin(
+            widget.workId,
+            image: widget.image,
+            tint: widget.tint,
+            shape: ArtShape.wide,
+            child: Container(
+              width: widget.width,
+              height: widget.height,
+              decoration: BoxDecoration(
+                borderRadius: radius,
+                boxShadow: [
+                  if (widget.selected)
+                    const BoxShadow(color: NextColors.paper, spreadRadius: 2),
+                  const BoxShadow(
+                      color: Color(0x59000000),
+                      blurRadius: 30,
+                      offset: Offset(0, 10)),
+                ],
+              ),
+              foregroundDecoration: BoxDecoration(
+                borderRadius: radius,
+                border: Border.all(color: const Color(0x0FFFFFFF)),
+              ),
+              child: ClipRRect(
+                borderRadius: radius,
+                child: Stack(fit: StackFit.expand, children: [
+                  NextImage(widget.image, tint: widget.tint),
+                  if (widget.title != null ||
+                      widget.caption != null ||
+                      widget.label != null)
+                    const DecoratedBox(
                       decoration: BoxDecoration(
-                        color: const Color(0x80000000),
-                        borderRadius: BorderRadius.circular(6),
+                        gradient: LinearGradient(
+                          begin: Alignment.bottomCenter,
+                          end: Alignment.topCenter,
+                          colors: [
+                            Color(0xC7000000),
+                            Color(0x33000000),
+                            Color(0x00000000)
+                          ],
+                          stops: [0, 0.46, 0.7],
+                        ),
                       ),
-                      child: Text(widget.badge!,
-                          style: NextText.sans(11,
-                              weight: FontWeight.w600, color: NextColors.p2)),
                     ),
-                  ),
-                if (widget.title != null || widget.caption != null)
-                  Positioned(
-                    left: 14,
-                    right: 14,
-                    bottom: 20,
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        if (widget.title != null)
-                          Text(widget.title!,
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: NextText.sans(14.5,
-                                  weight: FontWeight.w600,
-                                  shadows: const [
-                                    Shadow(
-                                        color: Color(0x80000000),
-                                        blurRadius: 6,
-                                        offset: Offset(0, 1))
-                                  ])),
-                        if (widget.caption != null) ...[
-                          const SizedBox(height: 3),
-                          Text(widget.caption!,
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: NextText.sans(11.5, color: NextColors.p2)),
+                  if (widget.badge != null)
+                    Positioned(
+                      left: 12,
+                      top: 12,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 8, vertical: 4),
+                        decoration: BoxDecoration(
+                          color: const Color(0x80000000),
+                          borderRadius: BorderRadius.circular(6),
+                        ),
+                        child: Text(widget.badge!,
+                            style: NextText.sans(11,
+                                weight: FontWeight.w600, color: NextColors.p2)),
+                      ),
+                    ),
+                  if (widget.title != null || widget.caption != null)
+                    Positioned(
+                      left: 14,
+                      right: 14,
+                      bottom: 20,
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          if (widget.title != null)
+                            Text(widget.title!,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: NextText.sans(14.5,
+                                    weight: FontWeight.w600,
+                                    shadows: const [
+                                      Shadow(
+                                          color: Color(0x80000000),
+                                          blurRadius: 6,
+                                          offset: Offset(0, 1))
+                                    ])),
+                          if (widget.caption != null) ...[
+                            const SizedBox(height: 3),
+                            Text(widget.caption!,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style:
+                                    NextText.sans(11.5, color: NextColors.p2)),
+                          ],
                         ],
-                      ],
+                      ),
                     ),
-                  ),
-                if (widget.progress != null)
-                  Positioned(
-                    left: 14,
-                    right: 14,
-                    bottom: 11,
-                    child: ThinBar(
-                      progress: widget.progress!,
-                      track: const Color(0x38FFFFFF),
-                      fill: NextColors.paper,
+                  if (widget.label != null)
+                    Positioned(left: 12, bottom: 12, child: widget.label!),
+                  if (widget.progress != null)
+                    Positioned(
+                      left: 14,
+                      right: 14,
+                      bottom: 11,
+                      child: ThinBar(
+                        progress: widget.progress!,
+                        track: const Color(0x38FFFFFF),
+                        fill: NextColors.paper,
+                      ),
                     ),
-                  ),
-                playOverlay(widget.onPlay, size: 44),
-              ]),
+                  playOverlay(widget.onPlay, size: 44),
+                ]),
+              ),
             ),
           ),
         ),
@@ -190,6 +211,22 @@ class _WideCardState extends State<WideCard> with _HoverCard {
     );
   }
 }
+
+/// Wraps a card's picture in an [ArtOrigin] when it stands for a work.
+Widget _origin(String? workId,
+        {required String? image,
+        required int? tint,
+        required ArtShape shape,
+        required Widget child}) =>
+    workId == null
+        ? child
+        : ArtOrigin(
+            workId: workId,
+            image: image,
+            tint: tint,
+            shape: shape,
+            radius: 12,
+            child: child);
 
 /// The poster card (`.pick`): 2:3 artwork with a title and one reason below.
 class PosterCard extends StatefulWidget {
@@ -205,12 +242,16 @@ class PosterCard extends StatefulWidget {
     this.onOpen,
     this.onPlay,
     this.onHover,
+    this.workId,
   });
 
   final String? image;
   final int? tint;
   final String title;
   final String? reason;
+
+  /// See [WideCard.workId].
+  final String? workId;
   final double width;
   final double height;
   final bool selected;
@@ -248,41 +289,47 @@ class _PosterCardState extends State<PosterCard> with _HoverCard {
                     0, widget.selected && !reduced ? -6 : 0, 0),
                 child: hoverScale(
                   context,
-                  AnimatedContainer(
-                    duration: const Duration(milliseconds: 400),
-                    curve: NextMotion.ease,
-                    height: widget.height,
-                    decoration: BoxDecoration(
-                      borderRadius: radius,
-                      boxShadow: widget.selected
-                          ? const [
-                              BoxShadow(
-                                  color: NextColors.paper, spreadRadius: 2),
-                              BoxShadow(
-                                  color: Color(0x99000000),
-                                  blurRadius: 50,
-                                  offset: Offset(0, 22)),
-                            ]
-                          : const [
-                              BoxShadow(
-                                  color: Color(0x00F5F1EA), spreadRadius: 0),
-                              BoxShadow(
-                                  color: Color(0x80000000),
-                                  blurRadius: 40,
-                                  offset: Offset(0, 18)),
-                            ],
-                    ),
-                    foregroundDecoration: BoxDecoration(
-                      borderRadius: radius,
-                      border: Border.all(color: const Color(0x14FFFFFF)),
-                    ),
-                    child: ClipRRect(
-                      borderRadius: radius,
-                      child: Stack(fit: StackFit.expand, children: [
-                        NextImage(widget.image,
-                            shape: ArtShape.poster, tint: widget.tint),
-                        playOverlay(widget.onPlay),
-                      ]),
+                  _origin(
+                    widget.workId,
+                    image: widget.image,
+                    tint: widget.tint,
+                    shape: ArtShape.poster,
+                    child: AnimatedContainer(
+                      duration: const Duration(milliseconds: 400),
+                      curve: NextMotion.ease,
+                      height: widget.height,
+                      decoration: BoxDecoration(
+                        borderRadius: radius,
+                        boxShadow: widget.selected
+                            ? const [
+                                BoxShadow(
+                                    color: NextColors.paper, spreadRadius: 2),
+                                BoxShadow(
+                                    color: Color(0x99000000),
+                                    blurRadius: 50,
+                                    offset: Offset(0, 22)),
+                              ]
+                            : const [
+                                BoxShadow(
+                                    color: Color(0x00F5F1EA), spreadRadius: 0),
+                                BoxShadow(
+                                    color: Color(0x80000000),
+                                    blurRadius: 40,
+                                    offset: Offset(0, 18)),
+                              ],
+                      ),
+                      foregroundDecoration: BoxDecoration(
+                        borderRadius: radius,
+                        border: Border.all(color: const Color(0x14FFFFFF)),
+                      ),
+                      child: ClipRRect(
+                        borderRadius: radius,
+                        child: Stack(fit: StackFit.expand, children: [
+                          NextImage(widget.image,
+                              shape: ArtShape.poster, tint: widget.tint),
+                          playOverlay(widget.onPlay),
+                        ]),
+                      ),
                     ),
                   ),
                 ),

@@ -38,6 +38,32 @@ abstract final class Words {
 
   static String runtime(Duration d) => '${d.inMinutes} 分';
 
+  /// “第一季”, “第二季”…; season 0 holds the specials.
+  static String season(int? season) {
+    if (season == null) return '剧集';
+    if (season == 0) return '特别篇';
+    return '第${_chinese(season)}季';
+  }
+
+  static String _chinese(int n) {
+    const digits = ['零', '一', '二', '三', '四', '五', '六', '七', '八', '九'];
+    if (n < 10) return digits[n];
+    if (n < 20) return '十${n % 10 == 0 ? '' : digits[n % 10]}';
+    if (n < 100) {
+      return '${digits[n ~/ 10]}十${n % 10 == 0 ? '' : digits[n % 10]}';
+    }
+    return '$n';
+  }
+
+  /// How long something took: “32 秒”, “2 分 5 秒”, “1 小时 3 分”.
+  static String duration(Duration d) {
+    final s = (d.inMilliseconds / 1000).round().clamp(1, 1 << 31);
+    if (s < 60) return '$s 秒';
+    if (s < 3600) return s % 60 == 0 ? '${s ~/ 60} 分钟' : '${s ~/ 60} 分 ${s % 60} 秒';
+    final m = (s % 3600) ~/ 60;
+    return m == 0 ? '${s ~/ 3600} 小时' : '${s ~/ 3600} 小时 $m 分';
+  }
+
   /// The first sentence, for Nipa's one line after a conversation.
   static String firstSentence(String text) {
     final trimmed = text.trim();
@@ -67,10 +93,12 @@ class MetaLine extends StatelessWidget {
       {super.key,
       this.allRatings = false,
       this.studio = false,
+      this.genres = true,
       this.size = 13.5});
   final UiWork work;
   final bool allRatings;
   final bool studio;
+  final bool genres;
   final double size;
 
   @override
@@ -97,9 +125,9 @@ class MetaLine extends StatelessWidget {
       parts.add(Text('${work.year}',
           style: NextText.num(size, color: NextColors.p2)));
     }
-    final genres = Words.genres(work);
-    if (genres.isNotEmpty) {
-      parts.add(Text(genres.join(' · '),
+    final shownGenres = genres ? Words.genres(work) : const <String>[];
+    if (shownGenres.isNotEmpty) {
+      parts.add(Text(shownGenres.join(' · '),
           style: NextText.sans(size, color: NextColors.p2)));
     }
     if (work.episodeCount != null) {

@@ -74,6 +74,18 @@ abstract final class NextText {
         leadingDistribution: TextLeadingDistribution.even,
       );
 
+  /// Commands and their output.
+  static TextStyle mono(double size,
+          {Color color = NextColors.p2, double height = 1.5}) =>
+      TextStyle(
+        fontFamily: 'Menlo',
+        fontFamilyFallback: const ['Monaco', 'Courier'],
+        fontSize: size,
+        color: color,
+        height: height,
+        decoration: TextDecoration.none,
+      );
+
   static TextStyle num(double size,
           {FontWeight weight = FontWeight.w500,
           Color color = NextColors.paper,
@@ -119,11 +131,14 @@ abstract final class NextMotion {
 abstract final class NextMetrics {
   /// Left edge of content, leaving room for the window's traffic lights.
   static const gutter = 96.0;
-  static const topBar = 64.0;
 
-  /// Height of the row the top bar's items sit in, centred on the native
-  /// traffic lights of a hidden-title-bar macOS window (≈ 17 pt).
-  static const chromeRow = 34.0;
+  /// The top bar. On macOS the window's title bar band has the same height,
+  /// so the traffic lights and every item of the bar share its centre line.
+  static const topBar = 52.0;
+
+  /// The bar's outer margin: on the right, and on the left in full screen
+  /// where there are no traffic lights.
+  static const chromeEdge = 28.0;
 }
 
 const nextShadowCard = <BoxShadow>[
