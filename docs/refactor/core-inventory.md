@@ -1,7 +1,17 @@
 # nipaplay_core 抽取盘点（Phase 1）
 
-> 生成时间：2026-10-12 ｜ 仓库：`NipaPlay-Reload-features`（branch `nipaplay`，基线 commit 见 git log）
+> 生成时间：2026-10-12 ｜ 仓库：`NipaPlay-Reload-features`（branch `nipaplay`，基线 commit 11c2786b）
+> **执行状态：阶段一五个批次全部完成**（commit aca5caad → 449eaebd，共 147 个文件 git mv 进 core）。
 > 结论先行：**本阶段只搬"无 UI 依赖且不在依赖环上"的文件**；含 Widget 的文件原地不动；4 处循环依赖只记录链路，等待人工决策。
+
+## 0. 执行与计划的偏差（as-executed）
+1. **core 布局无 `src/` 层**：app 内 import 走公共路径（`package:nipaplay_core/models/...`），避免 204+ 条 `implementation_imports` lint。
+2. **Batch 1 实际 39 文件**：额外纳入 emby 选择簇（emby_media_selection[模型]、emby_media_source_selection、emby_media_preference_store、emby_media_selection_controller）。
+3. **Batch 2 落位**：原 player_abstraction/ 下的文件保持同名目录（`core/lib/player_abstraction/`），新接口在 `core/lib/player/nipa_player.dart`。
+4. **Batch 5**：`lib/src/rust/**` 落位为 `core/lib/rust/**`（去 src 层）；实测 frb 生成代码**不依赖 rust_lib_nipaplay**（自带 dlopen 加载器），core 只需 flutter_rust_bridge。
+5. **迁移引擎两次修复**（记录于 commit 历史）：行尾保真改写（行内拼接 URI）、rewrite_map 按实际 dst 计算。
+6. **4 个 app 文件加 `ignore_for_file: invalid_use_of_internal_member`**：RustLib.instance 在 frb 生成代码中标记 @internal，跨包访问告警；行为无影响。
+7. **2 个源码扫描型测试更新路径**（settings_keys.dart 扫描）+ 1 个（erika_gif_export_io.dart 扫描）。
 
 ## 1. 范围与决策记录
 
