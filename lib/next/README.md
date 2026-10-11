@@ -43,6 +43,12 @@ Mesh 的身份、证书和去重文件独立持久化，不新增 `next.db` 迁�
 `~/nipaplay-harness`；`next.harnessPath` 设置和实验室共用 `HarnessLocation`。
 已有路径不写入任何文件。初次种子包含无令牌的 Codex 配置、`nipa`、hooks 说明。
 应用在 `next/harness-seed` 维护本地 git 历史，种子内容变化时提交一次。
+
+`nipa status.instance` 与 `app.instance` 读取同一进程事实：PID、可执行文件和
+应用包路径、主窗口标题/ID、实验配置和版本。`ui.open` 观察实际可见的 Classic
+页面或详情；`ui.capture` 把当前进程主窗口的整个 Flutter 内容保存为临时 PNG，
+回执含实例事实、尺寸与局限。原生覆盖层（包括 Erika 弹幕）、系统窗口边框、
+其他窗口和外部播放器不在该场景中。文件属于宿主设备，不经 Mesh 传输。
 新 harness 从它克隆，远端名为 `nipaplay`，分支为 `main`；Agent 自行 fetch 与合并。
 已有 harness 的工作区和 git 配置都不改写。CLI 默认列能力索引与任务概况，
 `list/status --full` 取完整内容，`describe ACTION` 取单项契约。

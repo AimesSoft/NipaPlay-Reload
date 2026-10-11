@@ -49,8 +49,9 @@ void main() {
           'imported': false
         }
       ]
-    }));
+    }), phase: 'connected');
     final expected = await engine.get(job.jobId);
+    expect(expected.phase, 'connected');
     await engine.close();
     store = await SqliteJobStore.open(root, factory: databaseFactoryFfi);
     engine = TaskEngine(

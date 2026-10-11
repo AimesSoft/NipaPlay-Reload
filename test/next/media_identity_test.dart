@@ -178,8 +178,9 @@ void main() {
         },
         Invocation(origin: 'mcp')) as Failed;
     expect(result.failure.code, FailureCode.invalidInput);
-    expect(result.failure.violations.single.path, '/entries/1');
+    expect(result.failure.violations.single.path, '/entries/1/episodeRefs/0');
     expect(result.failure.message, contains('not a member'));
+    expect(result.failure.message, contains(jsonEncode(mediaEpisodeRef(2))));
     expect(await f.jobs.database.query('media_bindings'), isEmpty);
     expect(await f.jobs.database.query('media_binding_operations'), isEmpty);
   });

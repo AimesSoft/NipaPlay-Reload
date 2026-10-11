@@ -1,5 +1,4 @@
 import 'package:nipa_harness/nipa_harness.dart';
-import 'package:nipaplay/app/app_page_ids.dart';
 import 'package:nipaplay/models/bangumi_model.dart';
 
 ({String title, String? originalTitle, String? imageUrl}) resolveSeriesTitles(
@@ -574,37 +573,4 @@ final class PlaybackSwitchEpisodeInput implements JsonEncodable {
 
   @override
   JsonMap toJson() => {'direction': direction};
-}
-
-const navigateInputSchema = ObjectSchema({
-  'page': StringSchema(
-    values: AppPageIds.primaryOrder,
-    description: 'Primary page to show.',
-  ),
-}, required: [
-  'page'
-]);
-
-final class NavigateInput implements JsonEncodable {
-  const NavigateInput({required this.page});
-
-  final String page;
-
-  @override
-  JsonMap toJson() => {'page': page};
-}
-
-const navigateOutputSchema = ObjectSchema({
-  'page': StringSchema(values: AppPageIds.primaryOrder),
-}, required: [
-  'page'
-]);
-
-final class NavigateOutput implements JsonEncodable {
-  const NavigateOutput({required this.page});
-
-  final String page;
-
-  @override
-  JsonMap toJson() => {'page': page};
 }
