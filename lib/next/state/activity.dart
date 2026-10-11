@@ -5,6 +5,7 @@ import 'package:nipa_harness/nipa_harness.dart';
 import 'package:nipaplay/security/secret_redactor.dart';
 
 import '../harness_location.dart';
+import '../capabilities/local_playback_operations.dart' show localOperationTitles;
 import '../media/identity_store.dart';
 import '../media/media_service.dart';
 import '../settings/denylist.dart';
@@ -391,7 +392,8 @@ final class ActivityView {
       final conflict = invocation['failureCode'] == 'conflict';
       if (!conflict &&
           !action.startsWith('media.sources.') &&
-          !action.startsWith('accounts.')) {
+          !action.startsWith('accounts.') &&
+          !localOperationTitles.containsKey(action)) {
         continue;
       }
       final input = invocation['input'] as Map? ?? {};
@@ -405,7 +407,9 @@ final class ActivityView {
                   ? 'identity.conflict'
                   : 'invocation.conflict'
               : 'invocation.result',
-          '$action · ${invocation['status']}${conflict ? ' · 冲突' : ''}',
+          localOperationTitles.containsKey(action)
+              ? '${localOperationTitles[action]}${invocation['status'] == 'failed' ? '失败' : invocation['status'] == 'completed' ? '完成' : '等待选择'}'
+              : '$action · ${invocation['status']}${conflict ? ' · 冲突' : ''}',
           'journal',
           {
             'action': action,

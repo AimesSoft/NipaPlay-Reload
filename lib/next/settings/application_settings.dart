@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
 import 'package:nipa_harness/nipa_harness.dart';
@@ -13,6 +14,8 @@ import 'package:nipaplay/player_abstraction/player_factory.dart';
 import 'package:nipaplay/plugins/danmaku/titan_danmaku_settings.dart';
 import 'package:nipaplay/providers/settings_provider.dart';
 import 'package:nipaplay/services/danmaku_spoiler_filter_service.dart';
+import 'package:nipaplay/services/external_player_console_service.dart';
+import 'package:nipaplay/services/external_player_console_window_service.dart';
 import 'package:nipaplay/utils/anime4k_shader_manager.dart';
 import 'package:nipaplay/utils/crt_shader_manager.dart';
 import 'package:nipaplay/utils/danmaku/style.dart';
@@ -20,6 +23,7 @@ import 'package:nipaplay/utils/globals.dart' as globals;
 import 'package:nipaplay/utils/video_player_state.dart';
 import 'package:nipaplay/utils/external_player_utils.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:path/path.dart' as p;
 import 'registry.dart';
 
 abstract final class ApplicationSettings {
@@ -338,6 +342,8 @@ abstract final class ApplicationSettings {
           key: key,
           title: displayTitle,
           description: switch (key) {
+            'player.volume' => '普通播放音量，0–1；桌面控制播放器并保存 Classic 音量，移动端控制系统音量。与音量增强独立。',
+            'player.brightness' => '移动端应用亮度，0–1；即时生效，不保存为长期偏好。',
             'danmaku.manualOffset' =>
               '当前会话的弹幕手动偏移（秒）；沿用播放器的偏移方向，不增加持久偏好。切换视频是否保留由 rememberOffset 控制。',
             'danmaku.fontSize' => '弹幕字号；0 使用设备默认字号，正值为指定字号。保存后用于后续播放。',
@@ -351,7 +357,7 @@ abstract final class ApplicationSettings {
               '截图时保留显示中的弹幕层。Erika 原生弹幕不在截图中，即使开启此项也不包含；截图没有弹幕不能据此判断轨道未加载或屏幕上不可见。',
             'danmaku.visible' =>
               '弹幕显示开关，也作用于 Erika 原生弹幕；值为 true 不代表当前时刻屏幕上已有弹幕。轨道加载、时间位置与过滤仍影响实际显示。',
-            'player.externalPath' ||
+            'player.externalPath' => '外部播放器程序的绝对路径；可使用媒体目录外已安装的程序，或调用 playback.external_player_path 由用户选择/检测 mpv。空字符串清除。',
             'subtitle.fontDir' ||
             'danmaku.fontFilePath' =>
               '$displayTitle；路径须属于已授权的文件范围。字体文件会通过现有导入流程保存为应用内副本。',
@@ -717,6 +723,20 @@ abstract final class ApplicationSettings {
         setter: 'setMinimalProgressBarColor',
         source:
             'lib/utils/video_player_state/video_player_state_preferences.dart');
+    add('player.volume', '播放音量',
+        const NumberSchema(minimum: 0, maximum: 1), 0.5,
+        globals.isMobilePlatform ? '@runtime:player.volume' : 'player_volume',
+        (value) => player.setPlaybackVolume((value as num).toDouble()),
+        setter: 'setPlaybackVolume', scope: 'device',
+        visible: () => video != null,
+        runtimeRead: globals.isMobilePlatform ? () async => player.currentSystemVolume : null);
+    add('player.brightness', '播放亮度',
+        const NumberSchema(minimum: 0, maximum: 1), 0.5,
+        '@runtime:player.brightness',
+        (value) => player.setPlaybackBrightness((value as num).toDouble()),
+        setter: 'setPlaybackBrightness', scope: 'device',
+        visible: () => video != null && globals.isMobilePlatform,
+        runtimeRead: () async => player.currentScreenBrightness);
     add(
         'player.playbackEndAction',
         'player.playbackEndAction',
@@ -909,6 +929,11 @@ abstract final class ApplicationSettings {
         false,
         'external_player_console_window_mode', (value) async {
       await preferences.setExternalPlayerConsoleWindowMode(value as bool);
+      if (value && ExternalPlayerConsoleService.hasActiveSession) {
+        await ExternalPlayerConsoleWindowService.instance.showControlsWindow();
+      } else if (!value) {
+        await ExternalPlayerConsoleWindowService.instance.closeAll();
+      }
     },
         setter: 'setExternalPlayerConsoleWindowMode',
         source: 'lib/providers/settings_provider.dart');
@@ -941,12 +966,16 @@ abstract final class ApplicationSettings {
         source: 'lib/providers/settings_provider.dart');
     add('player.externalPath', 'player.externalPath', const StringSchema(), '',
         'external_player_path', (value) async {
-      await preferences.setExternalPlayerPath(value as String);
+      final path = value as String;
+      if (path.isNotEmpty && (!p.isAbsolute(path) ||
+          await FileSystemEntity.type(path) == FileSystemEntityType.notFound)) {
+        throw const Failure(FailureCode.invalidInput, 'Use an existing absolute player executable or application bundle path.');
+      }
+      await preferences.setExternalPlayerPath(path);
     },
         setter: 'setExternalPlayerPath',
         source: 'lib/providers/settings_provider.dart',
-        scope: 'device',
-        path: true);
+        scope: 'device');
     add(
         'player.externalType',
         'player.externalType',
@@ -1346,7 +1375,7 @@ abstract final class ApplicationSettings {
     add(
         'danmaku.manualOffset',
         '弹幕手动偏移',
-        const NumberSchema(minimum: -30, maximum: 30),
+        const NumberSchema(),
         0.0,
         '@runtime:danmaku.manualOffset', (value) async {
       await setManualOffset((value as num).toDouble());

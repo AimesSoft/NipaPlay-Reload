@@ -1119,7 +1119,8 @@ int _exactEndStreak = 0;
     if (_useSystemVolume) return;
     try {
       final prefs = await SharedPreferences.getInstance();
-      await prefs.setDouble(_playerVolumeKey, volume.clamp(0.0, 1.0));
+      await SettingsAccess.persist(_playerVolumeKey,
+          () => prefs.setDouble(_playerVolumeKey, volume.clamp(0.0, 1.0)));
     } catch (e) {
       debugPrint('保存播放器音量失败: $e');
     }
@@ -1824,6 +1825,44 @@ int _exactEndStreak = 0;
 
   // Volume Getters
   double get currentSystemVolume => _currentVolume;
+
+  Future<void> setPlaybackVolume(double value) async {
+    if (!value.isFinite || value < 0 || value > 1) {
+      throw ArgumentError.value(value, 'volume', 'Expected 0–1.');
+    }
+    if (_useSystemVolume) {
+      await _initializeSystemVolumeController();
+      _isSystemVolumeUpdating = true;
+      try {
+        await VolumeController.instance.setVolume(value);
+      } finally {
+        _isSystemVolumeUpdating = false;
+      }
+    }
+    _currentVolume = value;
+    _initialDragVolume = value;
+    applyPlayerVolume();
+    _notifyListeners();
+    if (!_useSystemVolume) {
+      _volumePersistenceTimer?.cancel();
+      final prefs = await SharedPreferences.getInstance();
+      await SettingsAccess.persist(_playerVolumeKey,
+          () => prefs.setDouble(_playerVolumeKey, value));
+    }
+  }
+
+  Future<void> setPlaybackBrightness(double value) async {
+    if (!globals.isMobilePlatform || kIsWeb) {
+      throw UnsupportedError('Playback brightness requires a mobile platform.');
+    }
+    if (!value.isFinite || value < 0 || value > 1) {
+      throw ArgumentError.value(value, 'brightness', 'Expected 0–1.');
+    }
+    await ScreenBrightness().setScreenBrightness(value);
+    _currentBrightness = value;
+    _initialDragBrightness = value;
+    _notifyListeners();
+  }
 
   void _syncNativeDanmakuGlobalOffset() {
     try {

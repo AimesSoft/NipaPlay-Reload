@@ -238,6 +238,8 @@ const playbackSnapshotSchema = ObjectSchema({
   'positionMs': IntegerSchema(),
   'durationMs': IntegerSchema(),
   'rate': NumberSchema(),
+  'volume': NumberSchema(minimum: 0, maximum: 1, nullable: true),
+  'brightness': NumberSchema(minimum: 0, maximum: 1, nullable: true),
   'canPrevious': BooleanSchema(),
   'canNext': BooleanSchema(),
 }, required: [
@@ -273,6 +275,8 @@ final class PlaybackSnapshot implements JsonEncodable {
     required this.canNext,
     this.external,
     this.player,
+    this.volume,
+    this.brightness,
   });
 
   final String status;
@@ -290,11 +294,15 @@ final class PlaybackSnapshot implements JsonEncodable {
   final bool canNext;
   final JsonMap? external;
   final String? player;
+  final double? volume;
+  final double? brightness;
 
   @override
   JsonMap toJson() => {
         if (external != null) 'external': external,
         if (player != null) 'player': player,
+        if (player != null) 'volume': volume,
+        if (player != null) 'brightness': brightness,
         'status': status,
         'hasVideo': hasVideo,
         'paused': paused,

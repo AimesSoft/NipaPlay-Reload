@@ -5,6 +5,7 @@ import 'package:nipaplay/l10n/l10n.dart';
 import 'package:nipaplay/models/danmaku/blocked_item.dart';
 import 'package:nipaplay/models/danmaku/danmaku_item.dart';
 import 'package:nipaplay/models/danmaku/style.dart';
+import 'package:nipaplay/providers/labs_settings_provider.dart';
 import 'package:nipaplay/services/danmaku/danmaku_service.dart';
 import 'package:nipaplay/services/external_player_console_service.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/large_screen_editable_slider.dart';
@@ -13,6 +14,9 @@ import 'package:nipaplay/themes/nipaplay/widgets/large_screen_page_scaffold.dart
 import 'package:nipaplay/utils/app_accent_color.dart';
 import 'package:nipaplay/utils/video_player_state.dart';
 import 'package:provider/provider.dart';
+
+bool _audienceView(BuildContext context) =>
+    context.watch<LabsSettingsProvider?>()?.enableAgentEndpoint ?? false;
 
 /// 桌面端 mpv 外部播放会话控制台。
 enum ExternalPlayerConsolePane {
@@ -290,13 +294,14 @@ class _ConsoleWorkspace extends StatelessWidget {
 
   Widget _buildSessionPanel(BuildContext context) {
     final localizations = context.l10n;
+    final audience = _audienceView(context);
     return NipaplayLargeScreenPanel(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           NipaplayLargeScreenSectionHeader(
             title: _localized(context, '播放会话', '播放工作階段', 'Playback Session'),
-            subtitle: _localized(
+            subtitle: audience ? null : _localized(
               context,
               'mpv 播放状态与精确定位',
               'mpv 播放狀態與精確定位',
@@ -318,15 +323,15 @@ class _ConsoleWorkspace extends StatelessWidget {
               localizations.externalPlayerConsoleUnknownEpisode,
             ),
           ),
-          _DetailRow(
+          if (!audience) _DetailRow(
             label: localizations.externalPlayerConsoleEpisodeId,
             value: episodeId?.toString() ?? '-',
           ),
-          _DetailRow(
+          if (!audience) _DetailRow(
             label: localizations.externalPlayerConsoleProcessId,
             value: processId?.toString() ?? '-',
           ),
-          _DetailRow(
+          if (!audience) _DetailRow(
             label: localizations.externalPlayerConsoleMediaPath,
             value: mediaPath ?? '-',
           ),
@@ -379,7 +384,7 @@ class _ConsoleWorkspace extends StatelessWidget {
         children: [
           NipaplayLargeScreenSectionHeader(
             title: _localized(context, '弹幕显示', '彈幕顯示', 'Danmaku Appearance'),
-            subtitle: _localized(
+            subtitle: _audienceView(context) ? null : _localized(
               context,
               '修改后会立即重新生成并加载弹幕',
               '修改後會立即重新產生並載入彈幕',
@@ -930,7 +935,9 @@ class _DanmakuBlockRuleEditorState extends State<_DanmakuBlockRuleEditor> {
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               Text(
-                                item.value,
+                                _audienceView(context) && item.type == BlockedItemType.userId
+                                    ? _localized(context, '已屏蔽的发送者', '已封鎖的傳送者', 'Blocked sender')
+                                    : item.value,
                                 maxLines: 1,
                                 overflow: TextOverflow.ellipsis,
                                 style: const TextStyle(
@@ -1188,7 +1195,7 @@ class _DanmakuRow extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final localizations = context.l10n;
-    final sender = item.senderId ??
+    final sender = _audienceView(context) ? '' : item.senderId ??
         localizations.externalPlayerConsoleDanmakuUnknownSender;
     final type = switch (item.mode) {
       DanmakuMode.scroll ||
@@ -1248,8 +1255,8 @@ class _DanmakuRow extends StatelessWidget {
                 Row(
                   children: [
                     _DanmakuColor(color: color, label: colorText),
-                    const SizedBox(width: 14),
-                    Expanded(
+                    if (!_audienceView(context)) const SizedBox(width: 14),
+                    if (!_audienceView(context)) Expanded(
                       child: Text(
                         '${localizations.externalPlayerConsoleDanmakuSender}: $sender',
                         maxLines: 1,
@@ -1273,7 +1280,7 @@ class _DanmakuRow extends StatelessWidget {
                     child: _DanmakuColor(color: color, label: colorText)),
                 SizedBox(
                     width: 64, child: Text(type, style: _mutedStyle(context))),
-                SizedBox(
+                if (!_audienceView(context)) SizedBox(
                   width: 120,
                   child: Text(
                     sender,

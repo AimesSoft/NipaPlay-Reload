@@ -35,6 +35,9 @@ import 'capabilities/download_playback_capability.dart';
 import 'settings/download_settings.dart';
 import 'capabilities/playback_controls_capability.dart';
 import 'capabilities/classic_playback_controls.dart';
+import 'capabilities/local_playback_operations.dart';
+import 'capabilities/local_library_operations.dart';
+import 'capabilities/debug_local_operations.dart';
 import 'capabilities/video_player_state_port.dart';
 import 'media/file_indexing.dart';
 import 'media_sources/login_dialog.dart';
@@ -133,6 +136,7 @@ final class NextRuntime extends ChangeNotifier {
   late final Harness _harness;
   late final AgentEndpoint _endpoint;
   late final TaskEngine _taskEngine;
+  late final LocalLibraryOperations _localLibrary;
   HarnessLocation? _location;
   late final HarnessHooks _hooks;
   StreamSubscription<Job>? _jobEvents;
@@ -207,6 +211,10 @@ final class NextRuntime extends ChangeNotifier {
     }
     final packageInfo = await PackageInfo.fromPlatform();
     final instanceFacts = InstanceFacts(packageInfo.version);
+    final localPlayback = LocalPlaybackOperations(_player, core.settings,
+        () => globals.navigatorKey.currentContext!);
+    final localLibrary = _localLibrary = LocalLibraryOperations(
+        ServiceProvider.scanService, ServiceProvider.watchHistoryProvider);
     _harness = Harness(
       [
         InstanceCapability(instanceFacts),
@@ -214,6 +222,8 @@ final class NextRuntime extends ChangeNotifier {
         for (final capability in capabilities)
           InvocationScopeCapability(FileIndexingCapability(capability, core.media.service.store)),
         PlaybackControlsCapability(ClassicPlaybackControls(_player)),
+        InvocationScopeCapability(localPlayback),
+        InvocationScopeCapability(localLibrary),
         FileIndexingCapability(
             DownloadPlaybackCapability(
                 core.downloads, (item) => PlaybackService().play(item)),
@@ -239,6 +249,7 @@ final class NextRuntime extends ChangeNotifier {
     if (_disposed) return;
     if (kDebugMode && LabProfile.active) installDebugChat(() => chat);
     if (kDebugMode && LabProfile.active) installDebugUiData(ServiceProvider.nextCore);
+    if (kDebugMode && LabProfile.active) installDebugLocalOperations(_player);
     _labs.addListener(_queueEndpointUpdate);
     _location!.addListener(_queueEndpointUpdate);
     notifyListeners();
@@ -264,6 +275,7 @@ final class NextRuntime extends ChangeNotifier {
     chatError = null;
     final AgentEndpointStatus status;
     if (enabled) {
+      await _localLibrary.attachClassicHistory();
       status = await _endpoint.start(Directory(repositoryPath));
       if (status case AgentEndpointRunning(:final repository)) {
         await _attachHooks(repository);
