@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'package:http/http.dart' as http;
 
 import 'package:flutter/material.dart';
 import 'package:nipa_harness/nipa_harness.dart';
@@ -29,6 +30,18 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'application_settings.dart';
 import 'denylist.dart';
 import 'registry.dart';
+import '../tasks/user_consent.dart';
+
+List<SchemaViolation> validateGithubProxy(Object? value) {
+  final text = (value as String).trim();
+  if (text.isEmpty) return [];
+  final uri = Uri.tryParse(text);
+  if ((!text.startsWith('http://') && !text.startsWith('https://')) ||
+      !text.endsWith('/') || uri == null || !uri.hasAuthority || uri.host.isEmpty) {
+    return [const SchemaViolation('/value', 'Use an HTTP(S) URL ending in /, or empty to disable.')];
+  }
+  return [];
+}
 
 /// Bind to the same providers that Classic widgets consume.
 final class ClassicSettings {
@@ -321,7 +334,9 @@ final class ClassicSettings {
         'blurPower',
         (v) =>
             ApplicationSettings.preferences.setBlurPower((v as num).toDouble()),
-        source: 'lib/providers/settings_provider.dart');
+        source: 'lib/providers/settings_provider.dart',
+        validate: (v) => [0, 5, 15, 25, if (!globals.isTelevision) ...[50, 100]].contains(v)
+            ? [] : [const SchemaViolation('/value', 'Choose a Classic blur preset.')]);
     const homeSource = 'lib/providers/home_sections_settings_provider.dart';
     final sectionKeys =
         HomeSectionType.values.map((e) => e.storageKey).toList();
@@ -527,9 +542,20 @@ final class ClassicSettings {
         const StringSchema(),
         '',
         SettingsKeys.githubProxyUrl,
-        (v) => ApplicationSettings.preferences.setGithubProxyUrl(v as String),
+        (v) async {
+          final value = (v as String).trim();
+          if (value.isNotEmpty) {
+            final response = await http.get(Uri.parse('${value}https://raw.githubusercontent.com/AimesSoft/Nipaplay-plugins/refs/heads/main/plugins.json'))
+                .timeout(const Duration(seconds: 10));
+            if (response.statusCode != 200) {
+              throw Failure(FailureCode.unavailable, 'GitHub proxy connectivity check failed (${response.statusCode}); previous value retained.');
+            }
+          }
+          await ApplicationSettings.preferences.setGithubProxyUrl(value);
+        },
         source: 'lib/providers/settings_provider.dart',
-        description: '插件市场与更新使用的 GitHub 加速前缀；空字符串保留 Classic 的自动探测方式。');
+        description: '插件市场与更新使用的 GitHub 加速前缀；空字符串关闭加速。非空值须为 HTTP(S) 地址并以 / 结尾；沿用 Classic 请求插件索引测试，HTTP 200 才保存。',
+        validate: validateGithubProxy);
     const developerSource = 'lib/providers/developer_options_provider.dart';
     add(
         'diagnostics.showSystemResources',
@@ -583,9 +609,16 @@ final class ClassicSettings {
         if (HotkeyService().allShortcuts.isEmpty) {
           await HotkeyService().loadShortcuts();
         }
+        final conflict = HotkeyService().allShortcuts.entries.any(
+            (entry) => entry.key != shortcut.key && entry.value == v);
+        if (conflict && !await showUserConsent('快捷键冲突',
+            '这个快捷键已被其他操作使用，要替换吗？', '替换')) {
+          throw const Failure(FailureCode.conflict, '用户没有同意替换快捷键');
+        }
         await HotkeyService().updateShortcut(shortcut.key, v as String);
       },
           source: 'lib/utils/hotkey_service.dart',
+          description: '沿用 Classic 快捷键格式与冲突提示；冲突时由用户在应用内选择替换或取消。替换与 Classic 一样只更新目标动作。',
           setter: 'updateShortcut',
           decode: (raw) => raw == null
               ? shortcut.value

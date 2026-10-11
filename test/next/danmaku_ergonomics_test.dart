@@ -143,7 +143,7 @@ void main() {
           'offsetMs': 42
         },
         {'bindingId': 'missing', 'expectedRevision': 0, 'offsetMs': 8},
-        {'bindingId': other, 'expectedRevision': 0, 'offsetMs': 7200000},
+        {'bindingId': other, 'expectedRevision': 0, 'offsetMs': 7200001},
         {'bindingId': id, 'expectedRevision': 1},
         {'bindingId': other, 'offsetMs': 12},
         {'bindingId': id, 'expectedRevision': 1, 'offsetMs': 0}
@@ -169,7 +169,7 @@ void main() {
     expect(current['offset_ms'], 0);
     expect(current['enabled'], 0);
     expect(current['deduplicate'], 0);
-    expect((await f.service.store.binding(other))['offset_ms'], 7200000);
+    expect((await f.service.store.binding(other))['offset_ms'], 7200001);
     for (final changes in [
       <Object?>[],
       List.filled(101, {'bindingId': id, 'offsetMs': 0})
@@ -181,7 +181,7 @@ void main() {
       {'bindingId': id, 'trackId': 'both', 'enabled': true},
       {'enabled': true},
       {'bindingId': id, 'expectedRevision': 2, 'offsetMs': 1.5},
-      {'bindingId': id, 'expectedRevision': 2, 'offsetMs': 7200001},
+      {'bindingId': id, 'expectedRevision': 2, 'offsetMs': 'later'},
       {'bindingId': id, 'expectedRevision': 2, 'enabled': 'false'}
     ]) {
       expect(

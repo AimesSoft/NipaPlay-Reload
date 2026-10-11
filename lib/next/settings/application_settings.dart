@@ -7,6 +7,7 @@ import 'package:nipaplay/danmaku_abstraction/danmaku_kernel_factory.dart';
 import 'package:nipaplay/danmaku_next/next2_platform_support.dart';
 import 'package:nipaplay/l10n/app_locale_utils.dart';
 import 'package:nipaplay/models/danmaku_auto_load_strategy.dart';
+import 'package:nipaplay/models/danmaku/style.dart';
 import 'package:nipaplay/player_abstraction/hwdec_type.dart';
 import 'package:nipaplay/player_abstraction/player_data_models.dart';
 import 'package:nipaplay/player_abstraction/player_factory.dart';
@@ -21,6 +22,9 @@ import 'package:nipaplay/utils/video_player_state.dart';
 import 'package:nipaplay/utils/external_player_utils.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'registry.dart';
+import '../tasks/user_consent.dart';
+import 'package:nipaplay/services/file_picker_service.dart';
+import 'package:nipaplay/utils/mpv_utils.dart';
 
 abstract final class ApplicationSettings {
   static const _titles = <String, String>{
@@ -102,6 +106,9 @@ abstract final class ApplicationSettings {
       () => globals.isTelevision || PlayerFactory.isHarmonyOS;
 
   static Schema dynamicSchema(String key, Schema fallback) => switch (key) {
+        'seek.stepSeconds' => NumberSchema(
+            minimum: video?.seekStepMinSeconds ?? 1 / VideoPlayerState.defaultSeekStepFrameRate,
+            maximum: video?.seekStepMaxSeconds ?? VideoPlayerState.fallbackSeekStepMaxSeconds),
         'player.kernel' => StringSchema(
             values: PlayerFactory.supportedKernelTypes
                 .where((v) => v != PlayerKernelType.erika || erikaVisible())
@@ -358,13 +365,23 @@ abstract final class ApplicationSettings {
             'danmaku.spoilerPreventionEnabled' =>
               '使用用户已配置的 AI 接口过滤剧透弹幕；未完成接口配置时不能启用。',
             'player.timelinePreviewEnabled' =>
-              '启用 MDK 时间轴截图预览，会创建后台播放器并增加解码与缓存开销。',
+              '启用 MDK 时间轴截图预览，会创建后台播放器并增加解码与缓存开销；应用内先显示 Classic 性能警告，由用户选择。',
+            'player.externalEnabled' =>
+              '启用前沿用 Classic 自动检测 mpv；未检测到且未配置路径时打开用户选择器，取消则失败并保持关闭。',
             _ =>
               '调整$displayTitle。${apply == 'immediate' ? '沿用当前播放器的即时应用方式' : '保存偏好，生效方式为 $apply'}。',
           },
           schema: schema,
           dynamicSchema: () => dynamicSchema(key, schema),
           validateValue: (value) {
+            if (key == 'danmaku.fontSize' && value != 0 &&
+                (value as num) < DanmakuStyle.minDanmakuFontSize) {
+              return [const SchemaViolation('/value', 'Use 0 for automatic size or 12–60 pixels.')];
+            }
+            if (key == 'player.minimalProgressBarColor' &&
+                ![0xFFFF7274, 0xFF40C7FF, 0xFF6DFF69, 0xFF4CFFB1, 0xFFFFFFFF].contains(value)) {
+              return [const SchemaViolation('/value', 'Choose a Classic preset color.')];
+            }
             if (key == 'danmaku.supersample' &&
                 ![0.0, 1.5, 2.0].contains(value)) {
               return [
@@ -556,6 +573,11 @@ abstract final class ApplicationSettings {
         const BooleanSchema(),
         false,
         'timeline_preview_enabled', (value) async {
+      if (value == true && !player.timelinePreviewEnabled &&
+          !await showUserConsent('开启警告',
+              '开启时间轴截图预览会在后台生成截图，可能导致播放卡顿或性能下降。要开启吗？', '开启')) {
+        throw const Failure(FailureCode.conflict, '用户没有同意开启时间轴截图预览');
+      }
       await player.setTimelinePreviewEnabled(value as bool);
     },
         setter: 'setTimelinePreviewEnabled',
@@ -867,6 +889,15 @@ abstract final class ApplicationSettings {
         source: 'lib/providers/settings_provider.dart');
     add('player.externalEnabled', 'player.externalEnabled',
         const BooleanSchema(), false, 'external_player_enabled', (value) async {
+      if (value == true && preferences.externalPlayerPath.trim().isEmpty) {
+        final path = await detectInstalledMpv() ??
+            await FilePickerService().pickExternalPlayerExecutable();
+        if (path == null || path.trim().isEmpty) {
+          throw const Failure(FailureCode.conflict, '用户没有选择外部播放器');
+        }
+        await preferences.setExternalPlayerPath(path);
+        await preferences.setExternalPlayerType(detectExternalPlayerType(path));
+      }
       await preferences.setUseExternalPlayer(value as bool);
     },
         setter: 'setUseExternalPlayer',
@@ -1177,7 +1208,8 @@ abstract final class ApplicationSettings {
     add(
         'danmaku.fontSize',
         '弹幕字体大小',
-        const NumberSchema(minimum: 0, maximum: 100),
+        const NumberSchema(minimum: 0,
+            maximum: DanmakuStyle.maxDanmakuFontSize),
         0.0,
         'danmaku_font_size', (value) async {
       await player.setDanmakuFontSize((value as num).toDouble(), commit: true);
@@ -1346,7 +1378,7 @@ abstract final class ApplicationSettings {
     add(
         'danmaku.manualOffset',
         '弹幕手动偏移',
-        const NumberSchema(minimum: -30, maximum: 30),
+        const NumberSchema(),
         0.0,
         '@runtime:danmaku.manualOffset', (value) async {
       await setManualOffset((value as num).toDouble());
@@ -1875,7 +1907,7 @@ abstract final class ApplicationSettings {
     add(
         'danmaku.titan.limit',
         'danmaku.titan.limit',
-        const IntegerSchema(minimum: 0, maximum: 5000),
+        const IntegerSchema(minimum: 0, maximum: 1000),
         300,
         'titan_danmaku_settings',
         (value) async {
@@ -1926,7 +1958,7 @@ abstract final class ApplicationSettings {
     add(
         'danmaku.titan.offsetTop',
         'danmaku.titan.offsetTop',
-        const IntegerSchema(minimum: -1000, maximum: 1000),
+        const IntegerSchema(minimum: -100, maximum: 100),
         3,
         'titan_danmaku_settings',
         (value) async {
@@ -1943,7 +1975,7 @@ abstract final class ApplicationSettings {
     add(
         'danmaku.titan.offsetBottom',
         'danmaku.titan.offsetBottom',
-        const IntegerSchema(minimum: -1000, maximum: 1000),
+        const IntegerSchema(minimum: -100, maximum: 100),
         0,
         'titan_danmaku_settings',
         (value) async {

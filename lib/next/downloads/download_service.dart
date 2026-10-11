@@ -233,6 +233,12 @@ final class DownloadService {
               }
             }
             await backend.delete(task.handle);
+            for (final file in task.files) {
+              if (file.included && await backend.readSize(file) != null) {
+                throw const Failure(FailureCode.unavailable,
+                    'Download session was removed but a downloaded file remains.');
+              }
+            }
           } else {
             await backend.remove(task.handle);
           }

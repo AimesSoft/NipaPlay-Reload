@@ -430,7 +430,10 @@ void main() {
       expect((await call('settings.get', {'key': entry.key}))['value'],
           entry.defaultValue,
           reason: entry.key);
-      final value = switch (entry.schema) {
+      final value = switch (entry.key) {
+        'player.timelinePreviewEnabled' || 'player.externalEnabled' => false,
+        'player.minimalProgressBarColor' => 0xFF40C7FF,
+        _ => switch (entry.schema) {
         harness.BooleanSchema() => !(initial['value'] as bool),
         harness.StringSchema(:final values) when values != null =>
           values.firstWhere((v) => v != initial['value'],
@@ -443,6 +446,7 @@ void main() {
               : (minimum ?? 0.0),
         harness.ArraySchema() => ['screen this word'],
         _ => entry.defaultValue,
+        },
       };
       // Enabling spoiler analysis requires a user-supplied secret configuration.
       if (entry.key == 'danmaku.spoilerPreventionEnabled') {

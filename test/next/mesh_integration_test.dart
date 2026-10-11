@@ -16,6 +16,8 @@ import 'package:nipaplay/next/mesh/native.dart';
 import 'package:nipaplay/next/mesh/runtime.dart';
 import 'package:nipaplay/security/credential_vault.dart';
 import 'package:nipaplay/src/rust/frb_generated.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:nipaplay/services/remote_control_settings.dart';
 
 final class _Vault implements CredentialVault {
   final values = <CredentialRef, String>{};
@@ -188,6 +190,11 @@ final class _Rig {
         coordinator: MeshCoordinator(base, () async => _jwt(account)),
         name: name,
         broadcast: false);
+    await RemoteControlSettings.addTrustedDevice({
+      'clientKey': 'id:${mesh.identity!.deviceId}',
+      'clientId': mesh.identity!.deviceId,
+      'clientName': name,
+    });
     // Loopback is a manually supplied development address.
     await File('${root.path}/mesh.json')
         .writeAsString(jsonEncode({'coordinator': base.toString()}));
@@ -283,6 +290,7 @@ void main() {
     await caDirectory.delete(recursive: true);
   });
   setUp(() async {
+    SharedPreferences.setMockInitialValues({});
     rig = _Rig(await Directory.systemTemp.createTemp('mesh-tls-'), caDirectory,
         native);
     await rig.start();

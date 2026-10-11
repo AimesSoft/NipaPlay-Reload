@@ -71,6 +71,10 @@ final class SettingEntry {
           'step': step ?? remote!['step'],
         if (key == 'danmaku.supersample') 'enum': [0.0, 1.5, 2.0],
         if (key == 'danmaku.outlineWidth') 'enum': [0.0, 1.0, 2.0],
+        if (key == 'player.minimalProgressBarColor')
+          'enum': [0xFFFF7274, 0xFF40C7FF, 0xFF6DFF69, 0xFF4CFFB1, 0xFFFFFFFF],
+        if (key == 'appearance.blurPower')
+          'enum': [0, 5, 15, 25, if ((_schema as NumberSchema).maximum! > 25) ...[50, 100]],
         if (key.startsWith('subtitle.') && key.toLowerCase().endsWith('color'))
           'pattern': r'^#[0-9A-Fa-f]{8}$',
         'storage': {

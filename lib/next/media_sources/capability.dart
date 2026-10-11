@@ -144,9 +144,9 @@ final _specs = [
       id: 'media.sources.remove',
       title: 'Remove a media source',
       description:
-          'Preview or remove a source connection. Indexed file identities, bindings and playback history remain.',
+          'Remove a source connection without confirmation. Indexed file identities, bindings and playback history remain; no disk files are deleted.',
       effect: Effect.destructive,
-      input: ObjectSchema({'sourceId': _text, 'confirm': BooleanSchema()},
+      input: ObjectSchema({'sourceId': _text},
           required: ['sourceId']),
       output: ObjectSchema({
         'sourceId': _text,
@@ -302,14 +302,7 @@ final class _SourceAction extends Action<_Json, _Json> {
           result = await service.configure(json, update: true);
         case 'media.sources.remove':
           final id = json['sourceId'] as String;
-          result = json['confirm'] == true
-              ? await service.remove(id)
-              : {
-                  'sourceId': id,
-                  'removed': false,
-                  'indexedFilesPreserved': true,
-                  'source': await service.source(id)
-                };
+          result = await service.remove(id);
         case 'media.sources.login':
           result = await service.login(json);
         case 'media.sources.libraries':

@@ -85,7 +85,7 @@ void main() {
   }
 
   test(
-      'metadata editing and list preserve unresolved refs; removal previews and keeps files',
+      'metadata editing and removal preserve unresolved refs and indexed files',
       () async {
     const ref = CredentialRef('webdav_connections', 'one');
     vault.values[ref] = 'never-output-this-password';
@@ -118,11 +118,6 @@ void main() {
     expect(
         (await call(
             'media.sources.remove', {'sourceId': 'webdav:one'}))['removed'],
-        false);
-    expect(await sources.source('webdav:one'), isNotEmpty);
-    expect(
-        (await call('media.sources.remove',
-            {'sourceId': 'webdav:one', 'confirm': true}))['removed'],
         true);
     expect((await call('media.sources.list', {}))['sources'], isEmpty);
     expect(await store.ensureFile('webdav://one/new.mkv'), fileId);

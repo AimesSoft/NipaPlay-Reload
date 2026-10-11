@@ -38,6 +38,9 @@ final class JobContext {
   Future<Job> running({String? phase}) =>
       _update('running', state: JobState.running, phase: phase);
 
+  Future<Job> waitingUser({String phase = 'waiting_user'}) =>
+      _update('waiting_user', state: JobState.waitingUser, phase: phase);
+
   Future<Job> needsDecision(Decision decision, {JsonMap? checkpoint}) {
     if (decision.options.isEmpty) {
       throw ArgumentError('A decision needs executable options.');
@@ -150,7 +153,8 @@ final class TaskEngine {
       if (_started) return;
       for (final job in await store.list()) {
         if (job.ownerDeviceId != ownerDeviceId) continue;
-        if (job.state == JobState.running || job.state == JobState.cancelling) {
+        if (job.state == JobState.running || job.state == JobState.cancelling ||
+            job.state == JobState.waitingUser) {
           await _commit(
               _change(job, state: JobState.interrupted), job, 'interrupted');
         }
