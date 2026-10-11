@@ -2,18 +2,34 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:nipa_harness/nipa_harness.dart';
 import 'package:nipaplay/utils/globals.dart' as globals;
+import 'package:window_manager/window_manager.dart';
 
-Future<String?> showMediaSourceLogin(
-    JsonMap source, Future<void> stopped) async {
-  final context = globals.navigatorKey.currentState?.overlay?.context;
-  if (context == null) {
+Future<T?> showNextLogin<T>(Widget Function(BuildContext) builder) async {
+  final navigator = globals.navigatorKey.currentState;
+  final context = navigator?.overlay?.context;
+  if (navigator == null || context == null) {
     throw const Failure(
         FailureCode.unavailable, 'The NipaPlay login window is not ready.');
   }
-  return showDialog<String>(
-      context: context,
-      barrierDismissible: false,
-      builder: (_) => _PasswordDialog(source: source, stopped: stopped));
+  if (globals.isDesktop) {
+    if (await windowManager.isMinimized()) await windowManager.restore();
+    await windowManager.show();
+    await windowManager.focus();
+  }
+  if (!context.mounted) {
+    throw const Failure(
+        FailureCode.unavailable, 'The NipaPlay login window has closed.');
+  }
+  // Flutter 3.44 showDialog chooses an experimental native dialog under
+  // windowing. Its new FlutterView stays at zero metrics. Use the main view.
+  return navigator.push<T>(DialogRoute<T>(
+      context: context, barrierDismissible: false, builder: builder));
+}
+
+Future<String?> showMediaSourceLogin(
+    JsonMap source, Future<void> stopped) async {
+  return showNextLogin<String>(
+      (_) => _PasswordDialog(source: source, stopped: stopped));
 }
 
 class _PasswordDialog extends StatefulWidget {

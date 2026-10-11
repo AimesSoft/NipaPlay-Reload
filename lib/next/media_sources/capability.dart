@@ -127,7 +127,7 @@ final _specs = [
       id: 'media.sources.login',
       title: 'Initiate media source login',
       description:
-          'Auto uses Jellyfin Quick Connect when enabled, otherwise opens NipaPlay with address and username prefilled; the user enters only the password. Quick Connect returns code and a jobId; approve elsewhere and use tasks.wait. If the user supplied a password in conversation, pass password (secret, never journaled); it is used only in memory, the saved session goes into the vault. Use window to force a password dialog. Approval expires after ten minutes.',
+          'Auto uses Jellyfin Quick Connect when enabled, otherwise opens NipaPlay with address and username prefilled; the user enters only the password. A quickConnect result contains a code that must be given to the user to approve in Jellyfin, and a jobId for task.wait to await the approval result. Approval expires after ten minutes. If the user supplied a password in conversation, pass password (secret, never journaled); it is used only in memory, the saved session goes into the vault. Window opens the password dialog.',
       effect: Effect.write,
       input: ObjectSchema({
         'sourceId': _text,
@@ -142,6 +142,23 @@ final _specs = [
         'method': _text,
         'jobId': _text,
         'code': _text,
+        'approval': ObjectSchema({
+          'code': _text,
+          'message': _text,
+          'expiresAt': _text,
+          'wait': ObjectSchema({
+            'action': _text,
+            'input': ObjectSchema({'jobId': _text}, required: ['jobId'])
+          }, required: [
+            'action',
+            'input'
+          ])
+        }, required: [
+          'code',
+          'message',
+          'expiresAt',
+          'wait'
+        ]),
         'connected': BooleanSchema()
       }, required: [
         'sourceId',

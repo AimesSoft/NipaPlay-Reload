@@ -286,7 +286,7 @@ final _specs = [
       Effect.write,
       const ObjectSchema(_fetchFields, required: ['video', 'requestId']),
       _job,
-      'Create a cancellable segmented acquisition/cache task for one explicit video/range. Does not modify player tracks. requestId makes retries idempotent.'),
+      'Create a cancellable segmented acquisition/cache task for one explicit video/range. Does not modify player tracks. requestId makes retries idempotent. A failed acquisition receipt also reports available Classic cache, assigned/partial Next cache and currently loaded matching player tracks; existing comments do not prove this request succeeded.'),
   _spec(
       'danmaku.attach',
       Effect.write,

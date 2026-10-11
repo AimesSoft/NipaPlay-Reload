@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter/material.dart' hide Action;
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
@@ -406,6 +407,11 @@ void main() {
   testWidgets(
       'password window prefills nonsecret fields and closes its own route on stop',
       (tester) async {
+    tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+        const MethodChannel('window_manager'),
+        (call) async => call.method == 'isMinimized' ? false : null);
+    addTearDown(() => tester.binding.defaultBinaryMessenger
+        .setMockMethodCallHandler(const MethodChannel('window_manager'), null));
     await tester.pumpWidget(MaterialApp(
         navigatorKey: globals.navigatorKey, home: const SizedBox()));
     final stopFirst = Completer<void>(), stopSecond = Completer<void>();

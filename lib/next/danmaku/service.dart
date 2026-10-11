@@ -7,6 +7,7 @@ import 'store.dart';
 import 'export.dart';
 import 'alignment.dart';
 import 'import.dart';
+import 'package:nipaplay/services/danmaku_cache_manager.dart';
 
 final class DanmakuPlaybackTarget {
   const DanmakuPlaybackTarget(this.path, this.generation,
@@ -83,6 +84,46 @@ final class DanmakuService {
   List<JsonMap> get registry => player is DanmakuTrackRegistry
       ? (player as DanmakuTrackRegistry).registry
       : const [];
+
+  Future<JsonMap> availability(
+      DanmakuVideo video, String attemptedCacheKey, String? bindingId) async {
+    final classic = video.sourceId == 'dandanplay'
+        ? await DanmakuCacheManager.getDanmakuFromCache(video.videoId)
+        : null;
+    final binding = bindingId == null
+        ? null
+        : await store.binding(bindingId, active: false);
+    final assignedKey = binding?['cache_key'] as String?;
+    final assignedCount =
+        assignedKey == null ? 0 : (await store.entries(assignedKey)).length;
+    final attemptedCount = (await store.entries(attemptedCacheKey)).length;
+    final tracks = registry
+        .where((track) =>
+            track['platform'] == video.sourceId &&
+            track['platformVideoId'] == video.videoId)
+        .toList();
+    return {
+      'observedAt': DateTime.now().toUtc().toIso8601String(),
+      'classicCache': {
+        'present': classic != null,
+        'count': classic?.length ?? 0
+      },
+      'assignedCache': {'cacheKey': assignedKey, 'count': assignedCount},
+      'attemptedCache': {
+        'cacheKey': attemptedCacheKey,
+        'count': attemptedCount
+      },
+      'player': {
+        'loaded': tracks.isNotEmpty,
+        'count': tracks.fold<int>(
+            0, (sum, track) => sum + (track['count'] as int? ?? 0)),
+        'tracks': tracks,
+      },
+      'meaning':
+          'Cache and player availability observed at receipt time; existing comments do not verify this acquisition or requested coverage.'
+    };
+  }
+
   Future<String> resolveEntity(JsonMap input) async {
     final id = input['entityId'] as String?;
     final path = input['path'] as String?;

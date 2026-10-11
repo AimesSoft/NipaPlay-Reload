@@ -67,7 +67,9 @@ final class HttpDanmakuHost implements DanmakuHost {
       cancel.stopped.then((_) => requestCancellation.cancel());
       final request = http.AbortableRequest('GET', uri,
           abortTrigger: requestCancellation.stopped)
-        ..followRedirects = false
+        // Comment pools redirect to Dandanplay's CAS CDN. Delegate this to
+        // the Classic client's redirect handling, as Classic playback does.
+        ..followRedirects = profile == 'dandanplay.comments'
         ..headers['Accept'] = 'application/json';
       cancel.check();
       final bytes = await (() async {

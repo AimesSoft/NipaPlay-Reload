@@ -702,7 +702,19 @@ final class MediaSourcesService {
         'sourceId': row['sourceId'],
         'method': method,
         'jobId': job.jobId,
-        if (code != null) 'code': code
+        if (code != null) ...{
+          'code': code,
+          'approval': {
+            'code': code,
+            'message':
+                'Give this code to the user to approve in Jellyfin. Await the approval result with the returned task.',
+            'expiresAt': job.input['expiresAt'],
+            'wait': {
+              'action': 'task.wait',
+              'input': {'jobId': job.jobId}
+            }
+          }
+        }
       };
     } catch (_) {
       _passwords.remove(jobId);
