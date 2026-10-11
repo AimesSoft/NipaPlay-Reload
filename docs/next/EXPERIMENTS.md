@@ -143,3 +143,18 @@
 - **身体的缺陷（用户数据受影响，已恢复）**：为测试“能识别时”的链路，Agent 把《穹庐下的魔女》第 1 集（Classic 中原本未匹配）临时绑定到弹弹play，随后撤销，并报告“临时绑定已撤销”。实际上绑定经 X5 的投影写进了 Classic，撤销只撤了 Next 一侧；投影还把这一行的 `anime_name` 写成了空字符串。逐行对比迁移前备份后，主控退出应用，把这一行恢复原值；Classic 库现与备份完全一致。
 
 判读：hook 机制成立。投影是单向的：写入 Classic 的匹配不会随撤销收回，Agent 也看不见这一点，于是报告与事实不符。交给 X8：撤销时收回自己的投影（Classic 之后没被改过时），投影不清空字段；同时让 `nipa status` 报告种子状态（实验 4）。
+
+## 2026-10-11 · 实验 6：陌生来源（豆瓣）
+
+假设：应用不新增内置来源，也能接收 Agent 从任意来源取得的身份与元数据，并在界面显示。
+
+做了什么：用户消息：“给《长安十二时辰》补上豆瓣的信息，评分、简介这些，我想在 NipaPlay 里看到。”
+
+观察到：
+- Agent 写了 `tools/douban_metadata.py`，用豆瓣公开的移动端接口（`m.douban.com/rexxar/api/v2`，需要 Referer，不需要登录，不绕过付费墙），取到 subject 26849758：评分 8.1、52 万人评价、导演、主演、简介。存档在 `records/metadata/`。
+- **身体收不下结构化事实**：`media.identity.bind_batch` 以 `douban` 为来源被拒（`Unknown metadata provider douban`）——身份只接受内置的 tmdb / bangumi / dandanplay；合并元数据只有 title、originalTitle、overview、imageUrl、year 五个字段，没有评分。Agent 只好把“豆瓣评分 + 类型 + 首播 + 主创 + 简介”拼成一段文字，用 `media.metadata.override` 写进 `overview`。
+- 发现 work 与 release 两层各有 overview，界面不同入口取的层不同，于是两层都写。
+- 为弄清界面显示什么，Agent 读了本机的 NipaPlay 源码和 `next.db` 的表结构（只读），还用了用户 Codex 里的 Playwright 技能。资源用得很开放，符合“不做孤岛”。
+- 收尾验证时，用户的模型服务 CPA 出现 Cloudflare 1033（隧道源站不可达），会话失败；之后恢复。工作此前已提交。
+
+判读：假设不成立。不预设来源是对的，但身份与元数据的数据契约把来源和字段都写死了，Agent 拿到的事实只能降格成文本。交给 X9：身份接受任意来源命名空间并记录来源；元数据接受来自任意来源的结构化快照（评分等常见字段有结构，其他字段不丢）；一部作品对外呈现一致的元数据视图。
