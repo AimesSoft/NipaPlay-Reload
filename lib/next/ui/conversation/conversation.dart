@@ -105,7 +105,7 @@ class Conversation extends ChangeNotifier {
 
   // —— Saying something ——
 
-  /// Says [text] on the home. From state A this opens a new conversation;
+  /// Says [text] on the home. From state A this selects the main conversation;
   /// on the stage it continues the current one.
   Future<void> say(String text) async {
     text = text.trim();
@@ -149,7 +149,7 @@ class Conversation extends ChangeNotifier {
     }
     try {
       while (!_disposed) {
-        _thread ??= await port.newThread();
+        _thread ??= await port.mainThread();
         if (_thread == null) {
           await _waitUntilFree();
           continue;

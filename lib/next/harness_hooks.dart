@@ -6,16 +6,27 @@ import 'package:crypto/crypto.dart';
 import 'package:nipa_harness/nipa_harness.dart';
 import 'package:path/path.dart' as p;
 import 'harness_redaction.dart';
+import 'harness_schedules.dart';
 
 /// User programs execute once per accepted event, with persisted task receipts.
 final class HarnessHooks implements JobExecutor {
-  HarnessHooks({this.timeout = const Duration(seconds: 60)});
+  HarnessHooks(
+      {this.timeout = const Duration(seconds: 60),
+      this.scheduledTimeout = const Duration(minutes: 15)}) {
+    schedules = HarnessSchedules(_scheduled, (error) async {
+      await scheduleError?.call(error);
+    });
+  }
   final Duration timeout;
+  final Duration scheduledTimeout;
+  late final HarnessSchedules schedules;
+  Future<void> Function(String error)? scheduleError;
   late TaskEngine engine;
-  Future<void> Function(String event, String objectId, JsonMap payload)? observeEvent;
+  Future<void> Function(String event, String objectId, JsonMap payload)?
+      observeEvent;
   Directory? _repository;
   File? _credentialFile;
-  int _generation = 0;
+  int _generation = DateTime.now().microsecondsSinceEpoch;
   final _processes = <String, Process>{};
   final _done = <String, Future<void>>{};
   Future<void> _submissions = Future.value();
@@ -29,6 +40,7 @@ final class HarnessHooks implements JobExecutor {
     _generation++;
     _repository = repository;
     _credentialFile = credentialFile;
+    schedules.enable(repository);
   }
 
   Future<void> taskChanged(Job job) async {
@@ -39,6 +51,7 @@ final class HarnessHooks implements JobExecutor {
 
   Future<void> disable() async {
     _generation++;
+    await schedules.disable();
     _repository = null;
     _credentialFile = null;
     await _submissions;
@@ -47,6 +60,34 @@ final class HarnessHooks implements JobExecutor {
           Platform.isWindows ? ProcessSignal.sigterm : ProcessSignal.sigkill);
     }
     await Future.wait(_done.values.toList());
+  }
+
+  Future<void> _scheduled(JsonMap schedule, DateTime due) async {
+    final repository = _repository;
+    final credentialFile = _credentialFile;
+    if (repository == null || credentialFile == null) return;
+    final id = schedule['id'] as String;
+    final jobs = await engine.list(type: type);
+    if (jobs.any((job) =>
+        !job.state.isTerminal &&
+        job.input['repository'] == repository.path &&
+        job.input['scheduleId'] == id)) {
+      return;
+    }
+    await engine.submit(type: type, title: '定时脚本 $id', input: {
+      'event': 'schedule',
+      'objectId': id,
+      'scheduleId': id,
+      'occurredAt': due.toUtc().toIso8601String(),
+      'data': schedule,
+      'generation': _generation,
+      'program': p.join(repository.path, schedule['program'] as String),
+      'repository': repository.path,
+      'credentialFile': credentialFile.path,
+    }, details: {
+      'event': 'schedule',
+      'objectId': id
+    });
   }
 
   Future<Job?> emit(String event, String objectId, JsonMap data) async {
@@ -173,7 +214,8 @@ final class HarnessHooks implements JobExecutor {
             .transform(const Utf8Decoder(allowMalformed: true))
             .listen(err.add, onDone: stderrDone.complete);
         final deadline = Completer<int?>();
-        final timer = Timer(timeout, () {
+        final timer =
+            Timer(input['scheduleId'] == null ? timeout : scheduledTimeout, () {
           timedOut = true;
           deadline.complete(null);
           process.kill(Platform.isWindows

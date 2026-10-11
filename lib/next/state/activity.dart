@@ -118,6 +118,14 @@ final class ActivityView {
       });
     }
 
+    for (final row in await db.query('harness_discoveries')) {
+      add('discovery:${row['sequence']}', row['at'] as String,
+          'harness.discovery', row['title'] as String, 'harness_discoveries',
+          {'source': row['source'], 'repository': row['repository'],
+            'facts': decodeMediaJson(row['facts'])},
+          origin: row['origin'] as String,
+          invocationId: row['invocation_id'] as String);
+    }
     final jobs = {
       for (final row in await db.query('jobs'))
         row['job_id'] as String: decodeMediaJson(row['snapshot'])

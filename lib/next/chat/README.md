@@ -9,6 +9,26 @@ The host exposes `startThread`, `resumeThread`, `listThreads` (cwd and cursor),
 Codex's history; it creates no second transcript store. `header` contains the
 actual model/provider returned by Codex, the cwd, session and thread IDs.
 
+X31 adds `getMainSession`, `newConversation`, `listSessions` (isMain/isCurrent)
+and `switchSession`. The app-owned `harness_sessions` table stores only main and
+current thread identifiers per absolute harness path. Startup resumes main;
+an unavailable persisted thread reports an error rather than replacing history.
+Codex owns the transcript and context compression. `ChatPort.mainThread` is the
+default for home/⌘K/avatar conversation entry; `newThread` is explicitly new.
+`ChatPort.listThreads` and `switchThread` expose the same session controls.
+Equivalent Actions are `chat.session.main/new/list/switch`.
+Codex 0.144.1 defers writing an empty rollout until its first content. On creation
+the host sets a plain session name through `thread/name/set` before storing the
+identifier; this materializes an empty session without a synthetic user turn.
+
+`agent.wake` persists an immediate followup with instruction and arbitrary facts;
+missing threadId always targets main. `followup.register` in embedded chat keeps
+its registering thread; missing threadId outside chat targets main. Both use
+the same one-shot queue, idle-host checks and acknowledgement reconciliation.
+`activity.report` persists source/title/facts plus actual invocation origin;
+it does not open a turn. Scripts inherit the hook task origin through `nipa`.
+These primitives make no content, polling or decision policy.
+
 Streams:
 
 - `events`: redacted protocol messages and `host/stderr`; do not render this

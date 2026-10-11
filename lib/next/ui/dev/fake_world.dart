@@ -429,6 +429,14 @@ final class FakeChatPort implements ChatPort {
 
   @override
   Future<String?> newThread() async => _busy ? null : 'fake-thread-${++_n}';
+  @override
+  Future<String?> mainThread() async => _busy ? null : 'fake-main';
+  @override
+  Future<ChatEvent> listThreads({String? cursor}) async => {
+    'data': [{'id': 'fake-main', 'isMain': true}], 'nextCursor': null,
+  };
+  @override
+  Future<String?> switchThread(String threadId) async => _busy ? null : threadId;
 
   void _at(int ms, void Function() f) =>
       _timers.add(Timer(Duration(milliseconds: ms), f));

@@ -4,7 +4,7 @@
 
 ## 环境
 
-尚未了解。第一次对话时，和用户一起弄清楚下面这些，并写在这里：
+尚未了解。可在实际操作中积累这些事实：
 
 - 媒体放在哪里；
 - 有哪些设备；
@@ -15,9 +15,11 @@
 
 之后发现新的事实或习惯，随时补充，写清是何时、怎样确认的。
 
-## 开始一次会话
+## 会话与实时状态
 
-先运行 `./nipa status`。仓库里的记录和笔记是历史，不能代替实时查询；之前对话的结论可能已经过时。
+`./nipa status` 提供实时概况。仓库里的记录和笔记是历史，之前对话的结论可能已经过时。
+每个 harness 有持久主会话，重启可续上同一条 Codex 线程。明确开的新对话有自己的线程；
+在其中登记的后续回到该对话。终端没有会话号时登记的后续回主会话。历史与压缩由 Codex 管理。
 
 ## nipa
 
@@ -42,9 +44,9 @@
 Windows 上把 `./nipa` 换成 `python nipa`。连接凭据默认在 macOS/Linux 的 `~/.config/nipaplay/endpoint.json`、Windows 的 `%APPDATA%\NipaPlay\endpoint.json`；`NIPAPLAY_ENDPOINT_FILE` 可指定其他位置。
 
 - 能力随 NipaPlay 的版本变化，以 `./nipa list` 为准。
-- 先看概况，再用 `describe ACTION` 取输入与输出契约、`call task.list` 筛选任务、`call task.get '{"jobId":"..."}'` 取单个任务详情。查询默认每页 50 行，可用 `limit`、`select` 与返回的 `nextCursor` 控制读取范围。
+- `describe ACTION` 给出输入与输出契约，`call task.list` 可筛选任务，`call task.get '{"jobId":"..."}'` 给出单个任务详情。查询默认每页 50 行，可用 `limit`、`select` 与返回的 `nextCursor` 控制读取范围。
 - 返回任务只代表已受理。只有状态为 `succeeded`、并且回执经过验证，才算完成。`watch` 是有界的等待，不是后台守护。
-- 关闭对话不会中断 NipaPlay 里的任务。但对话结束后，不要承诺你会在后台继续监视。
+- 关闭对话不会中断 NipaPlay 里的任务。定时脚本只在 NipaPlay 运行且 Next 开启时执行。
 - 违反数据约束时，会返回明确的错误，说明是哪一条、为什么。按错误修正后重试。
 - 不要直接修改 NipaPlay 的数据库和设置文件，通过 `nipa` 操作。
 
@@ -69,15 +71,19 @@ Windows 上把 `./nipa` 换成 `python nipa`。连接凭据默认在 macOS/Linux
 
 ## hooks
 
-NipaPlay 在事件发生时运行 `hooks/` 中的同名程序，结果记为任务回执。可用的事件和输入格式见 `hooks/README.md`。用户希望某件事在没有对话时也自动发生，就写一个 hook。
+NipaPlay 可以在事件发生时或按你声明的时间运行 `hooks/` 中的脚本，结果记为任务回执和 activity。
+声明方式及输入格式见 `hooks/README.md`。脚本可以通过 `agent.wake` 叫醒你，也可以通过
+`activity.report` 记一条有来源的发现。耗时的巡查适合交给脚本，需要判断时再叫醒自己。
+用户在追的番，可以通过字幕组的 RSS 之类的来源知道有没有更新。查什么、多久查一次、何时叫醒，
+由你根据用户意图决定并写进自己的 harness。
 
 ## 维护这个 harness
 
-- 缺什么就在这里写：代码、测试，以及写进本文件的用法和实测限制，然后提交到 git。
+- 这个仓库可保存辅助代码、测试、用法和实测限制；git 提交便于下次继续使用。
 - 做事的经验也记在这里，下次不必重学：什么快、什么慢、哪里会失败、用户的习惯。
-- 修复已有工具时，先看它为什么失败；解析失败不等于"没有结果"。
+- 工具的失败输出是排查依据；解析失败不等于"没有结果"。
 - git 远端 `nipaplay` 指向应用维护的本地种子仓库；应用升级会更新种子，你需要时自己 `git fetch nipaplay` 并合并 `nipaplay/main`，冲突由你判断，应用不改写这个 harness。
 - `./nipa status` 的 `harnessSeed` 给出种子 `path`、当前 `head` 和已抓取的 `trackingHead`。`trackingBehindSeed=true` 表示应抓取更新；`missing_remote` 表示尚未配置远端，`not_fetched` 表示尚未抓取，`different_remote` 表示远端指向另一处，未知状态不等于已同步。此检查只读，不执行 fetch 或合并；`current` 只说明远端跟踪引用最新，不表示你已合并。
-- 写的辅助脚本下次还用得到，就放进仓库并提交，不要留在 `/tmp`。边做边提交：工具能用了就先提交，不必等整件事做完；对话可能随时中断，没提交的东西下次就找不到了。
+- 可复用的辅助脚本放进仓库，能用了就及时提交，不必等整件事做完：`/tmp` 会被清理，对话也可能随时中断，没提交的东西下次就找不到了。
 - 用了别人的开源工具（例如从 GitHub 找到的），在仓库里记下来源、版本和许可，便于复现和升级。
 - 秘密、令牌、运行记录不进入 git（见 `.gitignore`）。`nipa` 连接 NipaPlay 的凭据在仓库以外。

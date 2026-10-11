@@ -20,8 +20,13 @@ abstract interface class ChatPort {
   /// `item/tool/requestUserInput` requests.
   Stream<ChatEvent> get questions;
 
-  /// Opens a fresh thread. Null while another turn is running.
+  /// Gets the durable main thread. Null while another turn is running.
+  Future<String?> mainThread();
+
+  /// Explicitly opens a fresh conversation. Null while another turn is running.
   Future<String?> newThread();
+  Future<ChatEvent> listThreads({String? cursor});
+  Future<String?> switchThread(String threadId);
 
   /// Starts a turn on [threadId]. Returns the server's response, or null
   /// while another turn is running.
@@ -81,10 +86,33 @@ final class ChatHostPort implements ChatPort {
   Stream<ChatEvent> get questions => _questions.stream;
 
   @override
-  Future<String?> newThread() async {
+  Future<String?> mainThread() async {
     final host = _current;
     if (host == null) throw StateError('chat host unavailable');
     return host.prepareFollowup(null);
+  }
+
+  @override
+  Future<String?> newThread() async {
+    final host = _current;
+    if (host == null) throw StateError('chat host unavailable');
+    if (host.busy) return null;
+    return (await host.newConversation())['thread']['id'] as String;
+  }
+
+  @override
+  Future<ChatEvent> listThreads({String? cursor}) async {
+    final host = _current;
+    if (host == null) throw StateError('chat host unavailable');
+    return host.listSessions(cursor: cursor);
+  }
+
+  @override
+  Future<String?> switchThread(String threadId) async {
+    final host = _current;
+    if (host == null) throw StateError('chat host unavailable');
+    if (host.busy) return null;
+    return (await host.switchSession(threadId))['thread']['id'] as String;
   }
 
   @override
