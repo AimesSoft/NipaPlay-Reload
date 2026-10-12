@@ -161,7 +161,9 @@ final class ChatHost {
     // Reapply host-owned values after shell startup files; keep user's PATH/proxy.
     final script = '${removed.isEmpty ? '' : 'unset ${removed.join(' ')}; '}'
         'export NIPAPLAY_CHAT="\$1"; '
-        '${labRoot == null ? '' : 'export CODEX_HOME="\$2" TMPDIR="\$3"; '}'
+        // zsh writes here-documents under TMPPREFIX (default /tmp/zsh),
+        // which a lab profile may not write; keep them in its temp.
+        '${labRoot == null ? '' : 'export CODEX_HOME="\$2" TMPDIR="\$3" TMPPREFIX="\$3/zsh"; '}'
         r'exec codex app-server -c "shell_environment_policy.set.NIPAPLAY_CHAT=\"$1\""';
     _process = await Process.start(
         shell,
