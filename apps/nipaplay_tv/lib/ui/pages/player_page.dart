@@ -9,7 +9,7 @@ import 'package:nipaplay_ui_common/l10n/app_localizations.dart';
 import 'package:nipaplay_ui_common/l10n/l10n.dart';
 
 import '../../danmaku/tv_danmaku_overlay.dart';
-import '../../player/video_player_nipa_adapter.dart';
+import '../../player/tv_player_kernel_registry.dart';
 
 /// TV 播放页：core 的 [NipaPlayer] 接口 + TV 自建播放控件与弹幕渲染。
 ///
@@ -21,18 +21,23 @@ class TvPlayerPage extends StatefulWidget {
     required this.source,
     this.title = '',
     this.danmakuItems = const [],
+    this.kernel,
   });
 
   final MediaSource source;
   final String title;
   final List<DanmakuItem> danmakuItems;
 
+  /// 指定内核；null 时用用户设置（TvPlayerKernelRegistry.loadSelected）。
+  final TvPlayerKernel? kernel;
+
   @override
   State<TvPlayerPage> createState() => _TvPlayerPageState();
 }
 
 class _TvPlayerPageState extends State<TvPlayerPage> {
-  final _player = VideoPlayerNipaAdapter();
+  TvPlayerKernel? _kernel;
+  NipaPlayer? _player;
   StreamSubscription<PlayerState>? _stateSub;
   StreamSubscription<Duration>? _posSub;
 
@@ -46,21 +51,25 @@ class _TvPlayerPageState extends State<TvPlayerPage> {
   @override
   void initState() {
     super.initState();
-    _stateSub = _player.stateStream.listen((s) {
-      if (mounted) setState(() => _state = s);
-    });
-    _posSub = _player.positionStream.listen((p) {
-      if (mounted) setState(() => _position = p);
-    });
     _boot();
     _scheduleHide();
   }
 
   Future<void> _boot() async {
     try {
-      await _player.initialize(const PlayerConfig());
-      await _player.load(widget.source);
-      await _player.play();
+      final kernel = widget.kernel ?? await TvPlayerKernelRegistry.loadSelected();
+      final player = TvPlayerKernelRegistry.create(kernel);
+      _kernel = kernel;
+      _player = player;
+      _stateSub = player.stateStream.listen((s) {
+        if (mounted) setState(() => _state = s);
+      });
+      _posSub = player.positionStream.listen((p) {
+        if (mounted) setState(() => _position = p);
+      });
+      await player.initialize(const PlayerConfig());
+      await player.load(widget.source);
+      await player.play();
     } catch (e) {
       if (mounted) setState(() => _error = e);
     }
@@ -71,7 +80,7 @@ class _TvPlayerPageState extends State<TvPlayerPage> {
     _hideTimer?.cancel();
     _stateSub?.cancel();
     _posSub?.cancel();
-    _player.dispose();
+    _player?.dispose();
     super.dispose();
   }
 
@@ -88,29 +97,30 @@ class _TvPlayerPageState extends State<TvPlayerPage> {
   }
 
   Future<void> _togglePlay() async {
-    if (_player.isPlaying) {
-      await _player.pause();
+    if (_isPlaying()) {
+      await _player?.pause();
     } else {
-      await _player.play();
+      await _player?.play();
     }
     _scheduleHide();
   }
 
   Future<void> _seekBy(int seconds) async {
     final target = _position + Duration(seconds: seconds);
+    final duration = _duration();
     final clamped = target < Duration.zero
         ? Duration.zero
-        : (target > _player.duration ? _player.duration : target);
-    await _player.seek(clamped);
+        : (target > duration ? duration : target);
+    await _player?.seek(clamped);
     _scheduleHide();
   }
 
   /// 触摸拖动进度条：按比例 seek。
   Future<void> _seekToFraction(double fraction) async {
     final f = fraction.clamp(0.0, 1.0);
-    final duration = _player.duration;
+    final duration = _duration();
     if (duration.inMilliseconds == 0) return;
-    await _player.seek(Duration(
+    await _player?.seek(Duration(
         milliseconds: (duration.inMilliseconds * f).round()));
     _scheduleHide();
   }
@@ -159,7 +169,7 @@ class _TvPlayerPageState extends State<TvPlayerPage> {
   @override
   Widget build(BuildContext context) {
     final l10n = context.l10n;
-    final duration = _player.duration;
+    final duration = _duration();
     final total = duration.inMilliseconds == 0 ? 1 : duration.inMilliseconds;
     final progress =
         (_position.inMilliseconds / total).clamp(0.0, 1.0).toDouble();
@@ -181,8 +191,8 @@ class _TvPlayerPageState extends State<TvPlayerPage> {
             Center(
               child: _error != null
                   ? _errorPane(l10n)
-                  : (_player.isInitialized
-                      ? _player.buildSurface()
+                  : (_initialized()
+                      ? buildKernelSurface(_kernel!, _player!)
                       : const Center(
                           child: CircularProgressIndicator(
                               color: Color(0xFF26C6DA)))),
@@ -307,7 +317,7 @@ class _TvPlayerPageState extends State<TvPlayerPage> {
                       ),
                     ),
                     const SizedBox(width: 12),
-                    Text(_fmt(_player.duration),
+                    Text(_fmt(_duration()),
                         style: Theme.of(context).textTheme.bodyMedium),
                   ],
                 ),
@@ -342,6 +352,19 @@ class _TvPlayerPageState extends State<TvPlayerPage> {
       ),
     );
   }
+
+  bool _isPlaying() =>
+      (_kernel == null || _player == null)
+          ? false
+          : kernelIsPlaying(_kernel!, _player!);
+
+  Duration _duration() =>
+      (_kernel == null || _player == null) ? Duration.zero
+          : kernelDuration(_kernel!, _player!);
+
+  bool _initialized() =>
+      (_kernel != null && _player != null) &&
+      kernelIsInitialized(_kernel!, _player!);
 
   String _stateLabel(PlayerState s) => switch (s) {
         PlayerState.idle => '就绪',

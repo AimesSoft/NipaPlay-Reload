@@ -6,6 +6,7 @@ import 'package:nipaplay_ui_common/l10n/l10n.dart';
 import 'package:nipaplay_ui_common/media_library/unified_library_management_model.dart';
 
 import '../focusable_card.dart';
+import '../widgets/tv_anime_card.dart';
 
 /// 媒体库页：添加/管理媒体源（本地文件、WebDAV、媒体服务器、SMB）。
 ///
@@ -199,14 +200,11 @@ class _LibraryPageState extends State<LibraryPage> {
             _emptyState(context)
           else if (_viewMode == LibraryManagementViewMode.icons)
             Wrap(
-              spacing: 14,
-              runSpacing: 14,
+              spacing: 20,
+              runSpacing: 24,
               children: [
                 for (var i = 0; i < _sources.length; i++)
-                  SizedBox(
-                    width: 300,
-                    child: _sourceCard(context, i),
-                  ),
+                  _cardWithDelete(context, i),
               ],
             )
           else
@@ -219,6 +217,38 @@ class _LibraryPageState extends State<LibraryPage> {
                   ),
               ],
             ),
+        ],
+      ),
+    );
+  }
+
+  /// 卡片视图：番剧卡片 + 悬浮删除按钮（沿用普通版新版卡片的视觉语言）。
+  Widget _cardWithDelete(BuildContext context, int index) {
+    final entry = _sources[index];
+    return SizedBox(
+      width: 200,
+      child: Stack(
+        clipBehavior: Clip.none,
+        children: [
+          TvAnimeCard(
+            name: entry.name,
+            imageUrl: entry.coverUrl,
+            source: entry.kind.label,
+            rating: entry.rating,
+            showNewBadge: entry.isNew,
+            onTap: () {},
+          ),
+          Positioned(
+            top: -8,
+            right: -8,
+            child: FocusableCard(
+              onActivate: () => _removeSource(index),
+              borderRadius: 999,
+              padding: const EdgeInsets.all(6),
+              accentColor: Colors.redAccent,
+              child: const Icon(Icons.close, size: 16),
+            ),
+          ),
         ],
       ),
     );
@@ -318,16 +348,27 @@ class _MediaSourceEntry {
     required this.name,
     required this.location,
     required this.kind,
+    this.coverUrl = '',
+    this.rating,
+    this.isNew = false,
   });
 
   final String name;
   final String location;
   final _SourceKind kind;
 
+  /// 封面（网络 URL 或本地路径）。
+  final String coverUrl;
+  final double? rating;
+  final bool isNew;
+
   String encode() => jsonEncode({
         'n': name,
         'l': location,
         'k': kind.name,
+        if (coverUrl.isNotEmpty) 'c': coverUrl,
+        if (rating != null) 'r': rating,
+        if (isNew) 'new': true,
       });
 
   static _MediaSourceEntry? tryDecode(String raw) {
@@ -342,6 +383,9 @@ class _MediaSourceEntry {
         name: (map['n'] as String?) ?? '未命名',
         location: (map['l'] as String?) ?? '',
         kind: kind,
+        coverUrl: (map['c'] as String?) ?? '',
+        rating: (map['r'] as num?)?.toDouble(),
+        isNew: map['new'] == true,
       );
     } catch (_) {
       return null;
@@ -361,18 +405,21 @@ class _AddMediaDialog extends StatefulWidget {
 class _AddMediaDialogState extends State<_AddMediaDialog> {
   late final TextEditingController _nameCtrl;
   late final TextEditingController _locCtrl;
+  late final TextEditingController _coverCtrl;
 
   @override
   void initState() {
     super.initState();
     _nameCtrl = TextEditingController();
     _locCtrl = TextEditingController();
+    _coverCtrl = TextEditingController();
   }
 
   @override
   void dispose() {
     _nameCtrl.dispose();
     _locCtrl.dispose();
+    _coverCtrl.dispose();
     super.dispose();
   }
 
@@ -393,7 +440,12 @@ class _AddMediaDialogState extends State<_AddMediaDialog> {
         ? widget.kind.label
         : _nameCtrl.text.trim();
     Navigator.of(context).pop(
-      _MediaSourceEntry(name: name, location: loc, kind: widget.kind),
+      _MediaSourceEntry(
+        name: name,
+        location: loc,
+        kind: widget.kind,
+        coverUrl: _coverCtrl.text.trim(),
+      ),
     );
   }
 
@@ -423,6 +475,15 @@ class _AddMediaDialogState extends State<_AddMediaDialog> {
               decoration: InputDecoration(
                 labelText: '地址',
                 hintText: _hint,
+              ),
+              onSubmitted: (_) => _submit(),
+            ),
+            const SizedBox(height: 14),
+            TextField(
+              controller: _coverCtrl,
+              decoration: const InputDecoration(
+                labelText: '封面图（可选）',
+                hintText: 'https://.../poster.jpg 或本地路径',
               ),
               onSubmitted: (_) => _submit(),
             ),

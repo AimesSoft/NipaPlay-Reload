@@ -100,4 +100,50 @@ void main() {
     expect(find.text('添加 本地文件'), findsOneWidget);
     await capture(tester, 'p5_add_media_dialog_1080p');
   });
+
+  testWidgets('library shows anime cards after adding a source', (tester) async {
+    tester.view.physicalSize = tvSize;
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.reset);
+    SharedPreferences.setMockInitialValues({
+      'tv.media_sources': [
+        '{"n":"CLANNAD","l":"/sdcard/Movies","k":"localFolder","c":"","new":true}',
+        '{"n":"Fate/stay night","l":"https://dav.example/dav","k":"webdav","r":8.6}',
+      ],
+    });
+
+    await tester.pumpWidget(harness(const TvAppShell()));
+    await tester.pump(const Duration(milliseconds: 200));
+    await tester.tap(find.text('媒体库'));
+    await tester.pump(const Duration(milliseconds: 500));
+
+    // 番剧卡片应出现（名称 + 来源标签）
+    expect(find.text('CLANNAD'), findsOneWidget);
+    expect(find.text('Fate/stay night'), findsOneWidget);
+    await capture(tester, 'p6_library_cards_1080p');
+  });
+
+  testWidgets('settings exposes player kernel picker and bangumi mirror',
+      (tester) async {
+    tester.view.physicalSize = tvSize;
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.reset);
+
+    await tester.pumpWidget(harness(const TvAppShell()));
+    await tester.pump(const Duration(milliseconds: 200));
+    await tester.tap(find.text('设置'));
+    await tester.pump(const Duration(milliseconds: 400));
+
+    // 播放器分区：内核选择入口
+    await tester.tap(find.text('播放器'));
+    await tester.pump(const Duration(milliseconds: 400));
+    expect(find.text('播放内核'), findsOneWidget);
+    await capture(tester, 'p6_settings_kernel_1080p');
+
+    // 网络分区：Bangumi 镜像入口
+    await tester.tap(find.text('网络'));
+    await tester.pump(const Duration(milliseconds: 400));
+    expect(find.text('Bangumi 镜像 / API 服务器'), findsOneWidget);
+    await capture(tester, 'p6_settings_bangumi_1080p');
+  });
 }
