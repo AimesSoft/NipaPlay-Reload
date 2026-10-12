@@ -4,6 +4,7 @@ import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import '../media/identity_store.dart';
 import '../media/metadata_provider.dart';
 import 'source.dart';
+import 'sidecar.dart';
 
 final class DanmakuStore {
   const DanmakuStore(this.identities);
@@ -12,12 +13,81 @@ final class DanmakuStore {
   String get now => DateTime.now().toUtc().toIso8601String();
   JsonMap decodeBinding(JsonMap b) => {
         ...b,
+        'local_file':
+            b['local_file'] == null ? null : decodeMediaJson(b['local_file']),
         'video': decodeMediaJson(b['video']),
         'evidence': decodeMediaJson(b['evidence']),
         'alignment': decodeMediaJson(b['alignment']),
         'provenance':
             b['provenance'] == null ? null : decodeMediaJson(b['provenance'])
       };
+
+  Future<void> recordSidecar(String entityId, JsonMap facts) =>
+      db.transaction((tx) async {
+        final entity = await identities.entity(entityId, db: tx);
+        final imported = await tx.query('danmaku_bindings', columns: ['id'],
+            where: "entity_id=? AND entity_revision=? AND status='accepted' AND local_file IS NULL AND json_extract(provenance, '\$.filePath')=?",
+            whereArgs: [entity['id'], entity['revision'], facts['path']]);
+        if (imported.isNotEmpty) return;
+        final id = stableMediaId('danmaku-sidecar', entity['id'] as String);
+        final previous =
+            await tx.query('danmaku_bindings', where: 'id=?', whereArgs: [id]);
+        final b = previous.firstOrNull;
+        final video = DanmakuVideo(
+            sourceId: 'local',
+            videoId: facts['path'] as String,
+            title: (facts['path'] as String).split('/').last,
+            durationMs: 0,
+            objectType: 'file');
+        final objectId = stableMediaId('object', ExternalRef('local', 'file', facts['path'] as String).toJson());
+        await tx.insert(
+            'media_external_objects',
+            {
+              'id': objectId,
+              'provider': 'local',
+              'object_type': 'file',
+              'external_id': facts['path'],
+              'scope': ''
+            },
+            conflictAlgorithm: ConflictAlgorithm.ignore);
+        final revision = (b?['revision'] as int? ?? -1) + 1;
+        final values = <String, Object?>{
+          'entity_id': entity['id'],
+          'entity_revision': entity['revision'],
+          'object_id': objectId,
+          'video': jsonEncode(video.toJson()),
+          'revision': revision,
+          'cache_key': facts['available'] == true ? 'sidecar:$id' : null,
+          'cache_revision': (b?['cache_revision'] as int? ?? 0) + 1,
+          'local_file': jsonEncode(facts),
+        };
+        if (b == null) {
+          await tx.insert('danmaku_bindings', {
+            ...values,
+            'id': id,
+            'status': 'accepted',
+            'enabled': 1,
+            'deduplicate': 1,
+            'offset_ms': 0,
+            'alignment': jsonEncode({'method': 'identity', 'confirmed': false}),
+            'evidence':
+                jsonEncode({'reason': 'Video sidecar file', 'url': null}),
+            'bound_by': 'automatic',
+            'invocation_id': 'application:sidecar',
+            'created_at': now
+          });
+        } else {
+          await tx.update('danmaku_bindings', values,
+              where: 'id=?', whereArgs: [id]);
+        }
+        await _event(tx, id, revision, 'application:sidecar', {
+          'operation': 'sidecar_observed',
+          'actor': 'automatic',
+          'origin': 'application',
+          for (final entry in facts.entries)
+            if (entry.key != 'timeCounts') entry.key: entry.value
+        });
+      });
 
   Future<JsonMap> importEntries(
           String entityId,
@@ -68,7 +138,11 @@ final class DanmakuStore {
         final provenance = {
           'platform': video.sourceId,
           'platformVideoId': video.videoId,
-          'actor': invocation.origin == 'gui' ? 'user' : 'agent',
+          'actor': invocation.origin == 'application:playback'
+              ? 'automatic'
+              : invocation.origin == 'gui'
+                  ? 'user'
+                  : 'agent',
           'origin': invocation.origin,
           'importedAt': timestamp,
           'filePath': filePath,
@@ -100,6 +174,7 @@ final class DanmakuStore {
           'cache_revision': (b?['cache_revision'] as int? ?? 0) + 1,
           'cache_job_id': null,
           'provenance': jsonEncode(provenance),
+          'local_file': null,
         };
         if (b == null) {
           await tx.insert('danmaku_bindings', {
@@ -115,7 +190,10 @@ final class DanmakuStore {
           await tx.update('danmaku_bindings', values,
               where: 'id = ?', whereArgs: [id]);
         }
-        for (final duplicate in previous.skip(1)) {
+        final pointers = await tx.query('danmaku_bindings',
+            where: "entity_id=? AND status='accepted' AND local_file IS NOT NULL AND json_extract(local_file, '\$.path')=? AND id!=?",
+            whereArgs: [entityId, filePath, id]);
+        for (final duplicate in [...previous.skip(1), ...pointers]) {
           final rev = (duplicate['revision'] as int) + 1;
           await tx.update(
               'danmaku_bindings', {'status': 'revoked', 'revision': rev},
@@ -341,6 +419,12 @@ final class DanmakuStore {
   }
 
   Future<List<DanmakuEntry>> entries(String key) async {
+    if (key.startsWith('sidecar:')) {
+      final b = await binding(key.substring(8));
+      final facts = b['local_file'] as JsonMap;
+      if (facts['available'] != true) return [];
+      return readSidecarEntries(facts['path'] as String);
+    }
     final rows = await db.query('danmaku_cache_chunks',
         where: 'cache_key = ?', whereArgs: [key], orderBy: 'chunk_index');
     final entries = <DanmakuEntry>[];
@@ -379,12 +463,27 @@ final class DanmakuStore {
     return entries;
   }
 
-  Future<List<JsonMap>> coverage(String key) async => db.query(
-      'danmaku_cache_chunks',
-      columns: ['chunk_index', 'start_ms', 'end_ms', 'coverage', 'fetched_at'],
-      where: 'cache_key = ?',
-      whereArgs: [key],
-      orderBy: 'chunk_index');
+  Future<List<JsonMap>> coverage(String key) async {
+    if (key.startsWith('sidecar:')) {
+      final b = await binding(key.substring(8), active: false);
+      final facts = b['local_file'] as JsonMap;
+      return [
+        {...facts}..remove('timeCounts')
+      ];
+    }
+    return db.query('danmaku_cache_chunks',
+        columns: [
+          'chunk_index',
+          'start_ms',
+          'end_ms',
+          'coverage',
+          'fetched_at'
+        ],
+        where: 'cache_key = ?',
+        whereArgs: [key],
+        orderBy: 'chunk_index');
+  }
+
   Future<void> deleteCache(String key) => db.transaction((tx) async {
         await tx.delete('danmaku_cache_chunks',
             where: 'cache_key = ?', whereArgs: [key]);

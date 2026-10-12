@@ -111,6 +111,7 @@ void main() {
         mediaProviders: [],
         mediaDurationProbe: (_) async => 3000000);
     await core.ready;
+    await core.danmaku.stopIndexing();
     final media = File('${root.path}/episode.mkv');
     await media.writeAsString('offline synthetic video');
     entityId = await core.media.service.index(media.path);

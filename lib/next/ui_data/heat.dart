@@ -11,7 +11,7 @@ final class EpisodeHeat {
   const EpisodeHeat(this.store);
   final DanmakuStore store;
 
-  Future<List<JsonMap>> _tracks(String id) async {
+  Future<List<JsonMap>> tracks(String id) async {
     final links = await store.db.rawQuery(
         'SELECT fe.*,(SELECT COUNT(*) FROM media_file_episodes x WHERE x.file_id=fe.file_id) AS episode_count '
         'FROM media_file_episodes fe WHERE fe.episode_id=? ORDER BY fe.file_id',
@@ -43,7 +43,7 @@ final class EpisodeHeat {
   }
 
   Future<List<double>?> load(String id, int? runtimeMs) async {
-    final tracks = await _tracks(id);
+    final tracks = await this.tracks(id);
     final chunks = <JsonMap>[];
     for (final key in tracks.map((b) => b['cache_key']).toSet()) {
       chunks.addAll(await store.db.query('danmaku_cache_chunks',
@@ -69,11 +69,23 @@ final class EpisodeHeat {
           jsonEncode([track['cache_key'], start, end, track['offset_ms']]))) {
         continue;
       }
-      for (final entry in await store.entries(track['cache_key'] as String)) {
-        final fileTime = entry.sourceTimeMs + (track['offset_ms'] as int);
+      final local = track['local_file'] as JsonMap?;
+      final counts = local != null
+          ? Map<String, Object?>.from(local['timeCounts'] as Map)
+          : <String, Object?>{};
+      if (local == null) {
+        for (final entry in await store.entries(track['cache_key'] as String)) {
+          final t = entry.sourceTimeMs.toString();
+          counts[t] = (counts[t] as int? ?? 0) + 1;
+        }
+      }
+      for (final entry in counts.entries) {
+        final fileTime = int.parse(entry.key) + (track['offset_ms'] as int);
         if (fileTime < start || end != null && fileTime >= end) continue;
         final time = fileTime - start;
-        if (runtimeMs == null || time < runtimeMs) times.add(time);
+        if (runtimeMs == null || time < runtimeMs) {
+          times.addAll(List<int>.filled(entry.value as int, time));
+        }
       }
     }
     List<double>? result;
@@ -102,7 +114,7 @@ final class EpisodeHeat {
     final result = <String>[], seen = <String>{}, seenTracks = <String>{};
     for (final (id, duration) in episodes.take(maxEpisodes)) {
       final candidates = <({String text, int time})>[];
-      for (final track in await _tracks(id)) {
+      for (final track in await tracks(id)) {
         final start = track['start'] as int, end = track['end'] as int?;
         if (!seenTracks.add(jsonEncode([track['cache_key'], start, end, track['offset_ms']]))) continue;
         for (final entry in await store.entries(track['cache_key'] as String)) {

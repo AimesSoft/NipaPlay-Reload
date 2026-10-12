@@ -30,6 +30,7 @@ const _migrations = [
   migrateUiData,
   migrateSessions,
   migrateFileAliases,
+  migrateDanmakuSidecars,
 ];
 
 Future<void> _migrate(Database db, int oldVersion, int newVersion) async {

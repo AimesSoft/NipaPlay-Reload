@@ -8,6 +8,8 @@ import 'danmaku_test_support.dart';
 final class _Player extends Fake implements VideoPlayerState {
   final listeners = <VoidCallback>{};
   @override
+  Future<bool> Function(String path)? nextLocalDanmakuLoader;
+  @override
   String? get currentVideoPath => '/fixture/delayed.mkv';
   @override
   int get playbackGeneration => 1;
@@ -44,9 +46,11 @@ void main() {
     runtime.startRestoring(harness, player);
     runtime.startRestoring(harness, player);
     expect(player.listeners, hasLength(1));
+    expect(player.nextLocalDanmakuLoader, isNotNull);
     expect(runtime.service.player.target!.durationMs, 360000);
     await runtime.stopRestoring();
     expect(player.listeners, isEmpty);
+    expect(player.nextLocalDanmakuLoader, isNull);
     expect(runtime.service.player.target, isNull);
     runtime.startRestoring(harness, player);
     expect(player.listeners, hasLength(1));

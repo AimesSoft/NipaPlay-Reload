@@ -21,7 +21,7 @@ final class PlaybackControlsCapability implements Capability {
               'playback.tracks',
               'List player tracks',
               'Lists embedded, mounted external and server audio/subtitle tracks. '
-                  'Indexes are scoped to kind and origin; use these values in select_track.',
+                  'Also lists Next managed danmaku tracks with binding ID and count. Audio/subtitle indexes are scoped to kind and origin; use these values in select_track.',
               Effect.read,
               const ObjectSchema({}),
               port.tracks),

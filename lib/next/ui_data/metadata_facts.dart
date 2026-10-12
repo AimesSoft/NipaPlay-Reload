@@ -63,7 +63,34 @@ extension UiMetadataFacts on UiDataService {
     final episodeFacts = <JsonMap>[];
     for (final e in episodes) {
       final m = await media.store.mergedMetadata(e.episodeId);
+      final tracks = await heat.tracks(e.episodeId);
+      final danmaku = <JsonMap>[];
+      for (final track in tracks) {
+        final local = track['local_file'] as JsonMap?;
+        final video = track['video'] as JsonMap;
+        final count = local?['count'] ??
+            (await heat.store.entries(track['cache_key'] as String)).length;
+        danmaku.add({
+          'bindingId': track['id'],
+          'source': video['sourceId'],
+          'platform': local?['platform'] ?? video['sourceId'],
+          'platformVideoId': local?['platformVideoId'] ?? video['videoId'],
+          'count': count,
+          'enabled': track['enabled'] == 1,
+          'origin': local != null
+              ? 'sidecar'
+              : track['bound_by'] == 'automatic' ? 'playback' : track['provenance'] != null
+                  ? 'import'
+                  : 'binding',
+          if (local != null) 'file': {...local}..remove('timeCounts'),
+        });
+      }
       episodeFacts.add({
+        'danmaku': {
+          'available': danmaku.isNotEmpty,
+          'tracks': danmaku,
+          'count': danmaku.fold<int>(0, (n, t) => n + (t['count'] as int))
+        },
         'episodeId': e.episodeId,
         'number': e.number,
         'season': e.season,
@@ -112,6 +139,9 @@ extension UiMetadataFacts on UiDataService {
         'total': episodes.length,
         'titles': episodes.where((e) => e.title != null).length,
         'stills': episodes.where((e) => e.still != null).length,
+        'danmaku': episodeFacts
+            .where((e) => (e['danmaku'] as JsonMap)['available'] == true)
+            .length,
         'items': episodeFacts
       }
     };

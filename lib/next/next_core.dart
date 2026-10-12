@@ -213,6 +213,7 @@ final class NextCore {
     followups.start();
     await downloads.start();
     await media.start();
+    danmaku.startIndexing();
     mesh.attach(Harness(capabilities));
     await mesh.startConfigured();
   }
@@ -236,6 +237,7 @@ final class NextCore {
     await mesh.close();
     await downloads.stop();
     await danmaku.stopRestoring();
+    await danmaku.stopIndexing();
     final jobs = await engine.list(type: 'download');
     await media.quiesce();
     await engine.close();

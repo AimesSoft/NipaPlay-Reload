@@ -8,6 +8,8 @@ import 'export.dart';
 import 'alignment.dart';
 import 'import.dart';
 import 'package:nipaplay/services/danmaku_cache_manager.dart';
+import 'package:nipaplay/utils/danmaku_parser.dart';
+import 'package:nipaplay/utils/dandanplay_comments.dart';
 
 final class DanmakuPlaybackTarget {
   const DanmakuPlaybackTarget(this.path, this.generation,
@@ -49,6 +51,12 @@ final class DanmakuService {
   final DanmakuPlayerPort player;
   final Map<String, JsonMap> _localCacheProvenance = {};
   Future<JsonMap> _provenance(JsonMap binding) async {
+    if (binding['local_file'] case final JsonMap facts) {
+      return {
+        'platform': facts['platform'],
+        'platformVideoId': facts['platformVideoId']
+      };
+    }
     final video = binding['video'] as JsonMap;
     if (video['sourceId'] == 'local') {
       if (binding['cache_key'] == null) {
@@ -472,6 +480,36 @@ final class DanmakuService {
     final mounts = <String, ({JsonMap binding, int start, int? end})>{};
     for (final location in locations) {
       final fileId = location['file_id'] as String;
+      for (final track in registry.where(
+          (t) => t['origin'] == 'auto_remote' && t['bindingId'] == null)) {
+        final videoId = track['platformVideoId'] as String?;
+        if (videoId == null) continue;
+        final cached = await DanmakuCacheManager.getDanmakuFromCache(videoId);
+        if (cached == null || player.target?.generation != target.generation) {
+          continue;
+        }
+        final rows =
+            parseDanmakuListInBackground(restoreDandanplayOrigins(cached));
+        final b = await store.importEntries(
+            fileId,
+            DanmakuVideo(
+                sourceId: 'dandanplay',
+                videoId: videoId,
+                title: videoId,
+                durationMs: target.durationMs, objectType: 'episode'),
+            [
+              for (var i = 0; i < rows.length; i++)
+                classicDanmakuEntry(rows[i], i, 'dandanplay', videoId,
+                  platform: rows[i]['source'] as String? ?? 'unknown',
+                  originVideoId: rows[i]['platformVideoId'] as String?, preserveDeclaredOrigin: true)
+            ],
+            target.path,
+            'Acquired during playback',
+            Invocation(origin: 'application:playback'));
+        if (player is DanmakuTrackRegistry) {
+          (player as DanmakuTrackRegistry).reuse(target, b);
+        }
+      }
       final file = await store.identities.entity(fileId);
       for (final b in await store.bindings(fileId)) {
         if (b['status'] == 'accepted' &&
@@ -606,13 +644,20 @@ final class DanmakuService {
       for (final b in rows)
         {
           'origin': b['provenance'] != null
-              ? b['bound_by'] == 'agent'
+              ? b['bound_by'] == 'automatic' ? 'playback' : b['bound_by'] == 'agent'
                   ? 'agent_import'
                   : 'manual_import'
               : (b['video'] as JsonMap)['sourceId'] == 'local'
                   ? 'manual_import'
                   : 'binding',
           'source': (b['video'] as JsonMap)['sourceId'],
+          if (b['local_file'] case final JsonMap facts) ...{
+            'origin': 'sidecar',
+            'localFile': {...facts}..remove('timeCounts'),
+            'count': facts['count'],
+            'available': facts['available'],
+            'readAt': facts['readAt'],
+          },
           if ((b['video'] as JsonMap)['sourceId'] == 'local')
             'filePath': (b['video'] as JsonMap)['videoId'],
           ...await _provenance(b),

@@ -203,6 +203,7 @@ final class IdentityStore {
                   whereArgs: [fileId]);
               await tx.update('media_locations', {'available': 1},
                   where: 'id = ?', whereArgs: [locations.single['id']]);
+              added.add({'fileId': fileId, 'path': locator});
               return fileId;
             }
             final id = newMediaId('file');

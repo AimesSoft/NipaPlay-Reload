@@ -199,3 +199,12 @@ actions，另增 primaryActions、compatibility（alias/legacyRecovery）和 beh
 ~/development/flutter-3.44.6/bin/flutter test --no-pub test/next test/danmaku_track_timing_test.dart test/danmaku_track_dialog_windowing_test.dart test/danmaku_track_overlay_entry_test.dart test/danmaku_track_popup_barrier_test.dart
 git diff --check
 ```
+
+
+## 视频旁的弹幕与播放取得的池
+
+本地文件入索引（含扫描、下载登记和已有路径的重新索引）会通知单读者后台队列。队列和 Classic 共用 `localDanmakuCandidates` 的排名、八候选上限及解析入口；保存第一份可播放的 XML/JSON。应用启动和每 30 秒复核已索引本地位置：大小、修改时间与文件内容修订未变就不重读；改变就刷新原绑定；消失或解析失败保留上次读到的事实并标为不可用。文件恢复仍使用原绑定 ID，用户的开关和偏移保留。
+
+`danmaku_bindings.local_file` 是本地路径引用，含声明的平台/视频号、条数、大小、修改与读取时间及无正文的时间计数。`cache_key=sidecar:<bindingId>` 表示路径池；不写 `danmaku_cache_chunks`。热度使用持久时间计数；主视觉与播放器按引用读取正文，最多四个池留在进程内。公开 `danmaku.bindings.localFile`、`danmaku.tracks`、`danmaku.tracks(entityId)` 和 `media.metadata.ui_facts.episodes.items[].danmaku` 提供同一绑定的覆盖事实，时间计数不进入公开查询。不可用轨道不会进入热度、主视觉候选或播放挂载；上次读取时间、条数和错误仍可查询。
+
+Next 连接播放器后，同名自动加载进入这些绑定，不再调用 Classic 的第二次目录查找。`playback.tracks` 额外列出已有绑定的弹幕轨道，含 `bindingId`、来源与条数。Next 未连接时，Classic 沿用原先自动加载的策略与排名。Next 播放期间成功加载的弹弹play Classic 原始缓存也保存为 `automatic` 绑定，保留聚合池里显式的平台来源、复用当前播放器轨道；后续播放及界面能读取同一池。此路径不发出新的网络请求，也不代替 Classic 的自动匹配设置。

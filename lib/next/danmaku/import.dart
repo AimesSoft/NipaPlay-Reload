@@ -18,7 +18,7 @@ Future<List<DanmakuEntry>> readImportedDanmaku(
         if (rows.isNotEmpty) {
           return [
             for (var index = 0; index < rows.length; index++)
-              _classicEntry(rows[index], index, platform, videoId)
+              classicDanmakuEntry(rows[index], index, platform, videoId)
           ];
         }
         // Keep the acquisition JSON contract alongside Classic's local formats.
@@ -77,8 +77,9 @@ Future<List<DanmakuEntry>> readImportedDanmaku(
       }
     });
 
-DanmakuEntry _classicEntry(
-    Map<String, dynamic> row, int index, String platform, String videoId) {
+DanmakuEntry classicDanmakuEntry(
+    Map<String, dynamic> row, int index, String sourceId, String videoId,
+    {String? platform, String? originVideoId, bool preserveDeclaredOrigin = false}) {
   final seconds = row['time'] as num;
   if (!seconds.isFinite) {
     throw FormatException('Comment time at index $index must be finite.');
@@ -86,10 +87,10 @@ DanmakuEntry _classicEntry(
   final type = row['type'];
   final mode = row['originalType'] ?? row['originalMode'] ?? type;
   return DanmakuEntry(
-    sourceId: platform,
+    sourceId: sourceId,
     videoId: videoId,
-    platform: platform,
-    originVideoId: videoId,
+    platform: platform ?? sourceId,
+    originVideoId: preserveDeclaredOrigin ? originVideoId : videoId,
     sourceTimeMs: (seconds * 1000).round(),
     text: row['content'] as String,
     mode: mode is int

@@ -16,6 +16,7 @@ import 'source.dart';
 import 'sources.dart';
 import 'store.dart';
 import 'local_source.dart';
+import 'sidecar.dart';
 
 /// Forwards track operations to the host player once the widget tree created it.
 final class _HostPlayerPort
@@ -71,6 +72,11 @@ final class DanmakuRuntime {
   Harness? _harness;
   VideoPlayerState? _player;
   Future<void> _controls = Future.value();
+  late final sidecars = SidecarIndexer(service.store, () async {
+    _changed();
+  });
+  void startIndexing() => sidecars.start();
+  Future<void> stopIndexing() => sidecars.close();
   static Future<DanmakuRuntime> create(IdentityStore identities,
       {Future<String> Function(String path)? authorizeLocalFile}) async {
     final ddp = DandanplayHttpClient();
@@ -120,9 +126,17 @@ final class DanmakuRuntime {
   /// Binds the host player and follows playback state. Call after `engine.start()`.
   void startRestoring(Harness harness, VideoPlayerState player) {
     _player?.removeListener(_changed);
+    _player?.nextLocalDanmakuLoader = null;
     _stopped = false;
     _harness = harness;
     _player = player;
+    player.nextLocalDanmakuLoader = (path) async {
+      if (path.contains('://')) return false;
+      final id = await service.store.identities.ensureFile(path);
+      final found = await sidecars.inspect(id, path);
+      await service.refreshCurrent();
+      return found;
+    };
     _port.attach(VideoDanmakuPort(player,
         requestChange: (id, operation, value) =>
             _control(id, operation, value)));
@@ -153,6 +167,7 @@ final class DanmakuRuntime {
   Future<void> stopRestoring() async {
     _stopped = true;
     _player?.removeListener(_changed);
+    _player?.nextLocalDanmakuLoader = null;
     await _restoring;
     await _controls;
     _port.detach();
