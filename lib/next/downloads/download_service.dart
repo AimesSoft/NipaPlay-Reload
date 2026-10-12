@@ -43,8 +43,7 @@ final class DownloadService {
         backends.resolve(backend);
         final jobs = await engine.list(type: 'download');
         final existing = jobs.where((job) =>
-            _matches(job, backend, request.infoHash) &&
-            !job.state.isTerminal);
+            _matches(job, backend, request.infoHash) && !job.state.isTerminal);
         if (existing.isNotEmpty) return existing.last;
         final previous =
             jobs.where((job) => _matches(job, backend, request.infoHash));
@@ -72,6 +71,7 @@ final class DownloadService {
           if (latest.state == JobState.cancelled && task.paused) return latest;
           // Turning automatic import back on must also process old completed data.
           if (latest.state == JobState.succeeded &&
+              task.finished &&
               !(task.finished &&
                   task.output.isLocal &&
                   await library.enabled &&
@@ -139,10 +139,98 @@ final class DownloadService {
     return _task(backends.resolve(_ref(job)), job);
   }
 
-  Future<JsonMap> read(String jobId) async => {
-        'job': (await _downloadJob(jobId)).toJson(),
-        'task': (await snapshot(jobId))?.toJson(),
-      };
+  Future<JsonMap> read(String jobId) async {
+    final job = await _downloadJob(jobId);
+    final backend = backends.resolve(_ref(job));
+    final task = await _task(backend, job);
+    final facts = task?.toJson();
+    if (task != null) {
+      for (final entry in task.files.indexed) {
+        if (entry.$2.complete && entry.$2.location.isLocal) {
+          final row = (facts!['files'] as List)[entry.$1] as JsonMap;
+          final size = await backend.readSize(entry.$2);
+          row['actualSize'] = size;
+          row['playable'] =
+              row['playable'] == true && size == entry.$2.expectedSize;
+          if (row['playable'] == true) {
+            try {
+              await checkedDownloadPath(
+                  task.output.path, entry.$2.location.path);
+            } on Failure catch (failure) {
+              if (failure.code != FailureCode.invalidInput) rethrow;
+              row['playable'] = false;
+              row['playbackUnavailableReason'] = failure.message;
+            }
+          }
+        }
+      }
+    }
+    return {'job': job.toJson(), 'task': facts};
+  }
+
+  Future<JsonMap> selectFiles(String jobId, List<int> indices) =>
+      _serial(() async {
+        final job = await _downloadJob(jobId);
+        if (job.state == JobState.cancelling ||
+            job.state == JobState.cancelled) {
+          throw const Failure(FailureCode.conflict, 'Download was cancelled.');
+        }
+        final backend = backends.resolve(_ref(job));
+        if (backend is! SelectableDownloadBackend) {
+          throw const Failure(FailureCode.unavailable,
+              'Backend does not support file selection.');
+        }
+        final task = await _task(backend, job);
+        if (task == null) {
+          throw const Failure(
+              FailureCode.notFound, 'Download session is missing.');
+        }
+        if (indices.toSet().length != indices.length ||
+            indices.any((index) => index < 0 || index >= task.files.length)) {
+          throw const Failure(FailureCode.invalidInput,
+              'File indices must be unique manifest indices.');
+        }
+        final wasPaused = task.paused;
+        if (!job.state.isTerminal && job.state != JobState.paused) {
+          await engine.pause(jobId);
+          await executor.quiesce(jobId);
+        }
+        final current = await backend.read(task.handle);
+        if (!current.paused) await backend.pause(task.handle);
+        try {
+          await (backend as SelectableDownloadBackend)
+              .selectFiles(task.handle, indices);
+        } finally {
+          if (!wasPaused) {
+            await backend.resume(task.handle);
+            if (!job.state.isTerminal) await engine.resume(jobId);
+          }
+        }
+        final changed = await backend.read(task.handle);
+        if (changed.files.indexed
+            .any((entry) => entry.$2.included != indices.contains(entry.$1))) {
+          throw const Failure(
+              FailureCode.conflict, 'Backend selection readback differs.');
+        }
+        // Expanding a finished selection starts a new observation; the old receipt stays intact.
+        if (job.state.isTerminal && !changed.finished) {
+          final replacement = await engine.submit(
+              type: 'download',
+              title: changed.title,
+              input: {
+                ...job.input,
+                'adopted': true,
+                'completedFiles': job.checkpoint['completedFiles'] ?? []
+              },
+              details: job.details,
+              phase: 'downloading');
+          return {'job': replacement.toJson(), 'task': changed.toJson()};
+        }
+        return {
+          'job': (await engine.get(jobId)).toJson(),
+          'task': changed.toJson()
+        };
+      });
 
   Future<JsonMap> importCompleted(String jobId) => _serial(() async {
         final job = await _downloadJob(jobId);

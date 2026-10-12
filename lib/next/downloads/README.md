@@ -3,6 +3,19 @@
 Agent controls use the same Classic torrent session and preferences. Discover
 jobs with `task.list` (`type: download`); `download.read` accepts `jobId` or
 `jobIds` and returns live backend state, rates, output paths and indexed files.
+Each file reports `completedBytes` (checked piece bytes; null while metadata/checking
+is unavailable), `complete`, disk-ready `playable`, and engine `streamable`.
+`health` reports live/seen/connecting/queued/dead peers, observation start,
+last observed increase, checked-byte delta and sample interval. Time without
+progress counts from the first observation until an increase is seen; it does not
+claim anything about earlier process history. The public librqbit API exposes
+neither seeder counts nor peer piece availability, so those fields are explicitly
+null. `health.sources` includes the live per-peer counters and counts peers that
+have supplied bytes / checked pieces on their current retained peer record. That
+is evidence of data supplied, not a promise of future availability or a seeder
+classification. `lastProgressAt` is null until an increase is actually observed.
+`disk.availableBytes` uses statvfs (Unix) or GetDiskFreeSpaceExW (Windows)
+for the actual task output directory; failures carry an error and a null value.
 The job receipt remains a historical completion observation; live seeding pause
 state comes from `task.paused` in this read result.
 
@@ -19,12 +32,20 @@ temporary handle without adding a task. `download.directories` returns the
 default and recent choices; `download.forget_directories` removes recent choices
 without changing the default or touching downloaded data.
 
-`download.play` takes `jobId` and `fileIndex` from `download.read.files` and uses
-Classic's selected-video playback source. Completed files play from disk even
-without a recognized library entry; unfinished paused files resume and stream.
+`download.play` takes `jobId` and `fileIndex` from `download.read.files`. Complete
+local files play from size/path-verified disk locations, even while the parent is
+unfinished or paused, without resuming the remaining download. Unfinished paused
+files retain Classic's resume-and-stream playback source.
 `playback.open` also accepts a completed local path after the session is removed.
-File selection here means selecting a video to play. Classic currently has no
-download inclusion editor, priority control or rate-limit setter.
+`download.add.fileIndices` supplies the initial inclusion selection atomically.
+`download.select_files` replaces inclusion for one or several tasks, retaining
+paths/data and reading back the result. Empty includes no files; omitted on add
+includes all. Indices come from the full manifest, including unselected files.
+The engine has no ordinary file-priority API. Controls quiesce the observation
+worker and pause/reopen native storage for selection changes. Expanding a
+completed selection returns a new observation job; the prior receipt stays
+immutable and duplicate add returns the current hash's job. Classic calls omit
+the optional selection and keep their prior behavior.
 
 `download.import` scans completed local videos, including when automatic scan is
 off. It checks containment and actual sizes, reuses the Classic scanner and
@@ -64,6 +85,20 @@ adapter also reports `classicScanPending` when no Classic history entry exists;
 enabled automatic scanning still gets its one identification attempt. This implementation does not create
 an alternative identity store or launch identification tasks. Historical download
 receipts remain snapshots; identification results belong to those later tasks.
+
+Before whole-task completion, checked individual files are size/path verified,
+registered through the same library adapter and persisted under
+`checkpoint.completedFiles`. Enabled Classic identification attempts use separate
+per-file scan markers and are not repeated by the final batch. These facts
+authorize only their canonical local files, including while the task is paused
+or later cancelled. Removing the session preserves that access; a missing file
+or a symlink replaced with a different target does not inherit it.
+`download.file_completed` has objectId `JOB_ID:FILE_INDEX` and data
+`{jobId, infoHash, file}`. Hooks and followups consume the same persisted fact;
+no hook program is needed for a followup. Hook submission is once per file object
+across restart, and followups recover post-registration completion from task
+checkpoints if publication was interrupted. Selection expansion carries prior
+file observations with their original event objects, so it does not republish them.
 
 Completion receipts retain `fileIds` and the then-known `workIds`, including
 per-file `media.fileId/workIds`. UI task/work association can follow those files'

@@ -1,8 +1,13 @@
+import 'dart:io';
+
 import 'package:nipa_harness/nipa_harness.dart';
 import 'package:nipaplay/models/playable_item.dart';
+import 'package:nipaplay/models/watch_history_model.dart';
 import 'package:nipaplay/services/torrent_download_service.dart';
+import 'package:path/path.dart' as p;
 
 import '../downloads/download_runtime.dart';
+import '../downloads/download_paths.dart';
 
 final class DownloadPlaybackCapability implements Capability {
   DownloadPlaybackCapability(
@@ -28,7 +33,7 @@ final class _PlayDownload extends Action<_Json, _Json> {
         id: 'download.play',
         title: 'Play a download file',
         description:
-            'Play the video at fileIndex from download.read. Uses Classic disk/history resolution for completed files, including unimported files, and Classic streaming for unfinished files. Resumes a paused unfinished task as the Classic Play button does.',
+            'Play an included video at fileIndex from download.read. A complete, size-verified local file plays from disk without resuming the rest of the task. Unfinished files use Classic streaming and resume a paused task. finished describes the task; fileComplete describes the selected file.',
         effect: Effect.write,
         input: ObjectSchema({
           'jobId': StringSchema(minLength: 1),
@@ -41,6 +46,7 @@ final class _PlayDownload extends Action<_Json, _Json> {
           'path': StringSchema(minLength: 1),
           'fileIndex': IntegerSchema(minimum: 0),
           'finished': BooleanSchema(),
+          'fileComplete': BooleanSchema(),
         }, required: [
           'path',
           'fileIndex',
@@ -57,22 +63,51 @@ final class _PlayDownload extends Action<_Json, _Json> {
       throw const Failure(
           FailureCode.notFound, 'Download is absent from its backend session.');
     }
+    final index = (input.json['fileIndex'] as num).toInt();
+    if (index >= snapshot.files.length ||
+        !snapshot.files[index].included ||
+        !snapshot.files[index].isVideo) {
+      throw const Failure(
+          FailureCode.invalidInput, 'fileIndex must select an included video.');
+    }
+    final observed = snapshot.files[index];
+    final completeLocal = observed.complete && observed.location.isLocal;
+    if (completeLocal) {
+      final path = await checkedDownloadPath(
+          snapshot.output.path, observed.location.path);
+      final local = File(path);
+      if (!await local.exists() ||
+          await local.length() != observed.expectedSize) {
+        throw const Failure(FailureCode.unavailable,
+            'Completed video is missing or has an incorrect size.');
+      }
+      final history = await WatchHistoryManager.getHistoryItem(path);
+      if (!await start(PlayableItem(
+          videoPath: path,
+          historyItem: history,
+          title: history?.animeName ?? p.basename(path),
+          subtitle: history?.episodeTitle ?? snapshot.title))) {
+        throw const Failure(FailureCode.unavailable,
+            'NipaPlay cannot start playback right now.',
+            retryable: true);
+      }
+      return Completed(_Json({
+        'path': path,
+        'fileIndex': index,
+        'finished': snapshot.finished,
+        'fileComplete': true
+      }));
+    }
     final service = TorrentDownloadService.instance;
     final task = (await service.listTasks())
         .singleWhere((t) => t.id.toString() == snapshot.handle);
+    final file = (await service.listPlayableFiles(task))
+        .singleWhere((f) => f.index == index);
     if (!task.canPlay) {
       throw const Failure(FailureCode.unavailable,
           'Download has no playable metadata or has a backend error.',
           retryable: true);
     }
-    final index = (input.json['fileIndex'] as num).toInt();
-    final files =
-        (await service.listPlayableFiles(task)).where((f) => f.index == index);
-    if (files.isEmpty) {
-      throw const Failure(
-          FailureCode.invalidInput, 'fileIndex must select an included video.');
-    }
-    final file = files.single;
     if (!task.finished && task.isPaused) await runtime.downloads.resume(id);
     final source = await service.getPlaybackSource(task, file);
     if (!await start(PlayableItem(
@@ -89,7 +124,8 @@ final class _PlayDownload extends Action<_Json, _Json> {
     return Completed(_Json({
       'path': source.videoPath,
       'fileIndex': index,
-      'finished': task.finished
+      'finished': task.finished,
+      'fileComplete': observed.complete
     }));
   }
 }

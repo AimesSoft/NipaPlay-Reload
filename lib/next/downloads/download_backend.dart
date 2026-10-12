@@ -27,10 +27,13 @@ final class DownloadFile {
       {required this.location,
       required this.expectedSize,
       required this.isVideo,
+      this.completedBytes,
       this.included = true});
   final DownloadLocation location;
   final int expectedSize;
   final bool isVideo, included;
+  final int? completedBytes;
+  bool get complete => completedBytes == expectedSize;
 }
 
 final class DownloadSnapshot {
@@ -48,6 +51,8 @@ final class DownloadSnapshot {
       this.downloadSpeedBytesPerSecond,
       this.uploadSpeedBytesPerSecond,
       this.error,
+      this.health,
+      this.disk,
       this.files = const []});
   final String handle, infoHash, title;
   final DownloadLocation output;
@@ -59,6 +64,7 @@ final class DownloadSnapshot {
   final int? downloadSpeedBytesPerSecond, uploadSpeedBytesPerSecond;
   String get importKey => libraryKey ?? '$infoHash|${output.path}';
   final List<DownloadFile> files;
+  final JsonMap? health, disk;
 
   JsonMap toJson() => {
         'handle': handle,
@@ -71,6 +77,8 @@ final class DownloadSnapshot {
         'finished': finished,
         'paused': paused,
         'error': error,
+        if (health != null) 'health': health,
+        if (disk != null) 'disk': disk,
         if (state != null) 'state': state,
         if (downloadSpeedBytesPerSecond != null)
           'downloadSpeedBytesPerSecond': downloadSpeedBytesPerSecond,
@@ -85,6 +93,17 @@ final class DownloadSnapshot {
               'expectedSize': files[i].expectedSize,
               'included': files[i].included,
               'isVideo': files[i].isVideo,
+              'completedBytes': files[i].completedBytes,
+              'complete': files[i].complete,
+              'playable': files[i].included &&
+                  files[i].isVideo &&
+                  files[i].complete &&
+                  files[i].location.isLocal,
+              'streamable': files[i].included &&
+                  files[i].isVideo &&
+                  state == 'live' &&
+                  !paused &&
+                  error == null,
             }
         ],
       };
@@ -96,15 +115,18 @@ final class DownloadRequest implements JsonEncodable {
       required this.infoHash,
       required this.title,
       this.downloadDirectory,
+      this.fileIndices,
       this.createFolderForTask});
   final String source, infoHash, title;
   final String? downloadDirectory;
   final bool? createFolderForTask;
+  final List<int>? fileIndices;
   factory DownloadRequest.fromJson(JsonMap json) => DownloadRequest(
       source: json['source'] as String,
       infoHash: json['infoHash'] as String,
       title: json['title'] as String,
       downloadDirectory: json['downloadDirectory'] as String?,
+      fileIndices: (json['fileIndices'] as List?)?.cast<int>(),
       createFolderForTask: json['createFolderForTask'] as bool?);
   @override
   JsonMap toJson() => {
@@ -112,6 +134,7 @@ final class DownloadRequest implements JsonEncodable {
         'infoHash': infoHash,
         'title': title,
         if (downloadDirectory != null) 'downloadDirectory': downloadDirectory,
+        if (fileIndices != null) 'fileIndices': fileIndices,
         if (createFolderForTask != null)
           'createFolderForTask': createFolderForTask,
       };
@@ -137,6 +160,10 @@ abstract interface class DownloadBackend {
 
   /// Returns null for a missing file; remote adapters perform remote readback.
   Future<int?> readSize(DownloadFile file);
+}
+
+abstract interface class SelectableDownloadBackend {
+  Future<void> selectFiles(String handle, List<int> indices);
 }
 
 final class DownloadBackends {

@@ -78,6 +78,80 @@ void main() {
     expect(library.importedKeys, contains(backend.snapshot.importKey));
   });
 
+  test(
+      'selection readback preserves hash identity, paths and prior completion evidence',
+      () async {
+    final job = await downloads.add(testRequest);
+    await backend.addEntered.future;
+    while (!backend.present) {
+      await Future<void>.delayed(const Duration(milliseconds: 2));
+    }
+    final changed = await call(
+        'download.select_files', {'jobId': job.jobId, 'fileIndices': []});
+    expect((changed['job'] as Map)['jobId'], job.jobId);
+    expect(
+        ((changed['task'] as Map)['files'] as List).single['included'], false);
+    expect((await downloads.add(testRequest)).jobId, job.jobId);
+    await expectLater(
+        downloads.selectFiles(job.jobId, [9]), throwsA(isA<Failure>()));
+    expect((await downloads.snapshot(job.jobId))!.files.single.location.path,
+        backend.video.location.path);
+    await engine.cancel(job.jobId);
+  });
+
+  test('a checked first file is persisted while the parent remains incomplete',
+      () async {
+    backend.present = true;
+    final first = File('${root.path}/first.mp4');
+    await first.writeAsString('data');
+    backend.overrideFiles = [
+      DownloadFile(
+          location: DownloadLocation(path: first.path, isLocal: true),
+          expectedSize: 4,
+          completedBytes: 4,
+          isVideo: true),
+      DownloadFile(
+          location:
+              DownloadLocation(path: '${root.path}/second.mp4', isLocal: true),
+          expectedSize: 4,
+          completedBytes: 0,
+          isVideo: true),
+    ];
+    final job = await downloads.add(testRequest);
+    Job current;
+    final deadline = DateTime.now().add(const Duration(seconds: 3));
+    do {
+      current = await engine.get(job.jobId);
+      if (current.checkpoint['completedFiles'] == null ||
+          (current.checkpoint['completedFiles'] as List).isEmpty) {
+        expect(current.state.isTerminal, false,
+            reason: jsonEncode(current.toJson()));
+        expect(DateTime.now().isBefore(deadline), true,
+            reason: jsonEncode(current.toJson()));
+        await Future<void>.delayed(const Duration(milliseconds: 10));
+      } else {
+        break;
+      }
+    } while (true);
+    expect(current.state.isTerminal, false);
+    final row = (current.checkpoint['completedFiles'] as List).single as Map;
+    expect(row['verification'], 'verified');
+    expect(row['index'], 0);
+    expect(row['actualSize'], 4);
+    expect(library.scans, [
+      [first.path]
+    ]);
+    await downloads.pause(job.jobId);
+    expect((await engine.get(job.jobId)).checkpoint['completedFiles'], [row]);
+    await downloads.resume(job.jobId);
+    await Future<void>.delayed(const Duration(milliseconds: 30));
+    expect(library.scans, [
+      [first.path]
+    ]);
+    expect((await engine.get(job.jobId)).checkpoint['completedFiles'], [row]);
+    await engine.cancel(job.jobId);
+  });
+
   test('readding a removed success creates a new job and preserves its receipt',
       () async {
     backend.present = true;

@@ -32,6 +32,7 @@ final class HarnessHooks implements JobExecutor {
   Future<void> _submissions = Future.value();
   static const events = {
     'download.completed',
+    'download.file_completed',
     'library.file_added',
     'playback.started'
   };
@@ -43,9 +44,30 @@ final class HarnessHooks implements JobExecutor {
     schedules.enable(repository);
   }
 
+  final _fileOccurrences = <String>{};
+
   Future<void> taskChanged(Job job) async {
+    await fileCompletions(job);
     if (job.type == 'download' && job.state == JobState.succeeded) {
       await emit('download.completed', job.jobId, job.toJson());
+    }
+  }
+
+  Future<void> fileCompletions(Job job) async {
+    if (job.type == 'download') {
+      for (final row in (job.checkpoint['completedFiles'] as List? ?? [])
+          .cast<JsonMap>()) {
+        final objectId = row['objectId'] as String;
+        if (row['verification'] == 'verified' &&
+            !_fileOccurrences.contains(objectId)) {
+          await emit('download.file_completed', objectId, {
+            'jobId': row['jobId'],
+            'infoHash': job.input['infoHash'],
+            'file': row,
+          });
+          _fileOccurrences.add(objectId);
+        }
+      }
     }
   }
 
@@ -102,7 +124,9 @@ final class HarnessHooks implements JobExecutor {
       final payload = redactHarnessJson({
         'event': event,
         'objectId': objectId,
-        'occurredAt': DateTime.now().toUtc().toIso8601String(),
+        'occurredAt': event == 'download.file_completed'
+            ? (data['file'] as Map)['completedAt']
+            : DateTime.now().toUtc().toIso8601String(),
         'data': data,
       }) as JsonMap;
       await observeEvent?.call(event, objectId, payload);
@@ -125,7 +149,8 @@ final class HarnessHooks implements JobExecutor {
           sha256.convert(utf8.encode(jsonEncode([event, objectId]))).toString();
       final jobs = await engine.list(type: type);
       for (final job in jobs) {
-        if (!job.state.isTerminal && job.input['eventKey'] == eventKey) {
+        if ((!job.state.isTerminal || event == 'download.file_completed') &&
+            job.input['eventKey'] == eventKey) {
           return job;
         }
       }

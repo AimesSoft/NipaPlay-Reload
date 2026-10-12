@@ -40,6 +40,8 @@ const _downloadTaskSchema = ObjectSchema({
   'state': StringSchema(),
   'downloadSpeedBytesPerSecond': IntegerSchema(minimum: 0),
   'uploadSpeedBytesPerSecond': IntegerSchema(minimum: 0),
+  'health': ObjectSchema({}, additionalProperties: true),
+  'disk': ObjectSchema({}, additionalProperties: true),
   'files': ArraySchema(ObjectSchema({
     'index': IntegerSchema(minimum: 0),
     'path': _idSchema,
@@ -47,6 +49,12 @@ const _downloadTaskSchema = ObjectSchema({
     'expectedSize': IntegerSchema(minimum: 0),
     'included': BooleanSchema(),
     'isVideo': BooleanSchema(),
+    'completedBytes': IntegerSchema(minimum: 0, nullable: true),
+    'actualSize': IntegerSchema(minimum: 0, nullable: true),
+    'complete': BooleanSchema(),
+    'playable': BooleanSchema(),
+    'playbackUnavailableReason': StringSchema(),
+    'streamable': BooleanSchema(),
     'imported': BooleanSchema(),
     'identificationPending': BooleanSchema(),
     'media': ObjectSchema({}, additionalProperties: true),
@@ -84,6 +92,7 @@ final class DownloadCapability implements Capability {
             'pause',
             'resume',
             'read',
+            'select_files',
             'import',
             'remove',
             'delete'
@@ -125,7 +134,9 @@ final class _DownloadAction extends Action<_DownloadJson, _DownloadJson> {
           'resume' =>
             'Compatibility alias for download.set_paused with paused=false.',
           'read' =>
-            'Read live backend state and file indices/paths for jobId or jobIds, including completed seeding tasks. Use download.play with a playable file index or playback.open with a completed local path.',
+            'Read checked bytes, completeness and playback facts per file, live peer counts, progress observation times and available disk bytes for jobId or jobIds. Unknown seed/piece availability is null. Completed seeding tasks remain readable. File events use objectId JOB_ID:FILE_INDEX.',
+          'select_files' =>
+            'Replace the included file indices for jobId or jobIds without deleting data or changing paths. Empty selects none. The builtin engine supports inclusion changes, not file priority. Readback verifies the selection. Expanding a finished selection returns a new observation job; the previous receipt is preserved.',
           'import' =>
             'Scan completed local video files for jobId or jobIds with the Classic scanner, even when automatic scanning is disabled. Verifies file sizes first; returns current imported/identification status. Does not rewrite historical download receipts.',
           'remove' =>
@@ -145,6 +156,7 @@ final class _DownloadAction extends Action<_DownloadJson, _DownloadJson> {
                 'backend': _backendSchema,
                 'downloadDirectory': _idSchema,
                 'createFolderForTask': BooleanSchema(),
+                'fileIndices': ArraySchema(IntegerSchema(minimum: 0)),
               }, oneOfRequired: [
                 ['source'],
                 ['sources']
@@ -153,8 +165,11 @@ final class _DownloadAction extends Action<_DownloadJson, _DownloadJson> {
                 'jobId': _idSchema,
                 'jobIds': _idsSchema,
                 if (operation == 'set_paused') 'paused': const BooleanSchema(),
+                if (operation == 'select_files')
+                  'fileIndices': const ArraySchema(IntegerSchema(minimum: 0)),
               }, required: [
-                if (operation == 'set_paused') 'paused'
+                if (operation == 'set_paused') 'paused',
+                if (operation == 'select_files') 'fileIndices'
               ], oneOfRequired: const [
                 ['jobId'],
                 ['jobIds']
@@ -212,6 +227,11 @@ final class _DownloadAction extends Action<_DownloadJson, _DownloadJson> {
       final directory = json['downloadDirectory'] as String?;
       if (directory != null) validateDownloadDirectory(directory);
       final prepared = await sources.prepare(target);
+      final indices = (json['fileIndices'] as List?)?.cast<int>();
+      if (indices != null && indices.toSet().length != indices.length) {
+        throw const Failure(
+            FailureCode.invalidInput, 'File indices must be unique.');
+      }
       job = await downloads.add(
           DownloadRequest(
             source: prepared.source,
@@ -219,12 +239,16 @@ final class _DownloadAction extends Action<_DownloadJson, _DownloadJson> {
             title: prepared.title,
             downloadDirectory: directory,
             createFolderForTask: json['createFolderForTask'] as bool?,
+            fileIndices: (json['fileIndices'] as List?)?.cast<int>(),
           ),
           backend: ref);
     } else if (operation == 'read') {
       return downloads.read(target);
     } else if (operation == 'import') {
       return downloads.importCompleted(target);
+    } else if (operation == 'select_files') {
+      return downloads.selectFiles(
+          target, (json['fileIndices'] as List).cast<int>());
     } else {
       job = switch (operation) {
         'pause' => await downloads.pause(target),

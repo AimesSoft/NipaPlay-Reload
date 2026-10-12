@@ -311,6 +311,7 @@ class TorrentDownloadService {
     required int previewId,
     String? downloadDirectory,
     bool? createFolderForTask,
+    List<int>? onlyFiles,
   }) async {
     final downloadDir = await _resolveDownloadDirectoryForAction(
       downloadDirectory,
@@ -325,6 +326,7 @@ class TorrentDownloadService {
       final json = await rust_torrent.torrentAddMagnet(
         magnetUri: magnetUri,
         previewId: previewId,
+        onlyFiles: onlyFiles == null ? null : Int32List.fromList(onlyFiles),
         downloadDir: downloadDir,
         createFolderForTask: createFolder,
       );
@@ -337,7 +339,7 @@ class TorrentDownloadService {
   }
 
   Future<TorrentAddResult> addMagnetWithPreview(
-    String magnetUri, {String? downloadDirectory, bool? createFolderForTask, Future<void>? stopRequested}
+    String magnetUri, {String? downloadDirectory, bool? createFolderForTask, List<int>? onlyFiles, Future<void>? stopRequested}
   ) async {
     final request = TorrentPreviewRequest();
     var finished = false;
@@ -346,6 +348,7 @@ class TorrentDownloadService {
       final preview = await previewMagnet(magnetUri,
           downloadDirectory: downloadDirectory, request: request);
       return await addMagnet(magnetUri, previewId: preview.requestId,
+          onlyFiles: onlyFiles,
           downloadDirectory: downloadDirectory,
           createFolderForTask: createFolderForTask);
     } finally {
@@ -358,6 +361,7 @@ class TorrentDownloadService {
     String torrentFilePath, {
     String? downloadDirectory,
     bool? createFolderForTask,
+    List<int>? onlyFiles,
   }) async {
     final downloadDir = await _resolveDownloadDirectoryForAction(
       downloadDirectory,
@@ -370,6 +374,7 @@ class TorrentDownloadService {
     try {
       await _initSession(downloadDir);
       final json = await rust_torrent.torrentAddFile(
+        onlyFiles: onlyFiles == null ? null : Int32List.fromList(onlyFiles),
         torrentFilePath: torrentFilePath,
         downloadDir: downloadDir,
         createFolderForTask: createFolder,

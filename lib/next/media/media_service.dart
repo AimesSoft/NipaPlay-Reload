@@ -102,6 +102,15 @@ final class MediaService {
         AND json_extract(f.value, '$.local')=1
         AND json_extract(f.value, '$.included')=1
         AND json_extract(f.value, '$.actualSize')=json_extract(f.value, '$.expectedSize')
+        UNION
+        SELECT json_extract(f.value, '$.canonicalPath') AS path
+        FROM jobs j, json_each(j.snapshot, '$.checkpoint.completedFiles') f
+        WHERE j.type='download'
+        AND json_extract(f.value, '$.verification')='verified'
+        AND json_extract(f.value, '$.complete')=1
+        AND json_extract(f.value, '$.local')=1
+        AND json_extract(f.value, '$.included')=1
+        AND json_extract(f.value, '$.actualSize')=json_extract(f.value, '$.expectedSize')
       ''');
       shown = _shown = (
         at: now,
@@ -150,8 +159,17 @@ final class MediaService {
           AND json_extract(f.value, '$.local')=1
           AND json_extract(f.value, '$.included')=1
           AND json_extract(f.value, '$.actualSize')=json_extract(f.value, '$.expectedSize')
-          AND coalesce(json_extract(f.value, '$.canonicalPath'), json_extract(f.value, '$.path'))=? LIMIT 1
-        ''', [path]);
+          AND coalesce(json_extract(f.value, '$.canonicalPath'), json_extract(f.value, '$.path'))=?
+          UNION ALL
+          SELECT 1 FROM jobs j, json_each(j.snapshot, '$.checkpoint.completedFiles') f
+          WHERE j.type='download'
+          AND json_extract(f.value, '$.verification')='verified'
+          AND json_extract(f.value, '$.complete')=1
+          AND json_extract(f.value, '$.local')=1
+          AND json_extract(f.value, '$.included')=1
+          AND json_extract(f.value, '$.actualSize')=json_extract(f.value, '$.expectedSize')
+          AND json_extract(f.value, '$.canonicalPath')=? LIMIT 1
+        ''', [path, path]);
         allowed = completed.isNotEmpty;
       }
       if (!allowed) {
