@@ -9,7 +9,10 @@ import '../focusable_card.dart';
 /// 设置页：TV 瓦片，覆盖 ui_common [UnifiedSettingContentType] 的分类，
 /// 开关值经 core 的 [SettingsStorage] 持久化。
 class SettingsPage extends StatefulWidget {
-  const SettingsPage({super.key});
+  const SettingsPage({super.key, this.entryFocusNode});
+
+  /// 壳在切换到本页时把焦点交给这里的入口卡片。
+  final FocusNode? entryFocusNode;
 
   @override
   State<SettingsPage> createState() => _SettingsPageState();
@@ -97,7 +100,7 @@ class _SettingsPageState extends State<SettingsPage> {
                 final s = _sections[i];
                 final active = s.$1 == _section;
                 return FocusableCard(
-                  autofocus: i == 0,
+                  focusNode: i == 0 ? widget.entryFocusNode : null,
                   onActivate: () => setState(() => _section = s.$1),
                   borderRadius: 12,
                   accentColor:

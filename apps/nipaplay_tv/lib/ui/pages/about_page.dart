@@ -6,7 +6,10 @@ import '../focusable_card.dart';
 
 /// 关于页：复用 ui_common 的 AboutSettingsData 契约与 core 的致谢常量。
 class AboutPage extends StatelessWidget {
-  const AboutPage({super.key});
+  const AboutPage({super.key, this.entryFocusNode});
+
+  /// 壳在切换到本页时把焦点交给这里的入口卡片。
+  final FocusNode? entryFocusNode;
 
   @override
   Widget build(BuildContext context) {
@@ -19,6 +22,7 @@ class AboutPage extends StatelessWidget {
           Text(l10n.about, style: Theme.of(context).textTheme.headlineMedium),
           const SizedBox(height: 20),
           FocusableCard(
+            focusNode: entryFocusNode,
             onActivate: () {},
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,

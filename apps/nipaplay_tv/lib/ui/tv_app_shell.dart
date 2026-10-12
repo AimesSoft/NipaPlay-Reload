@@ -7,8 +7,13 @@ import 'pages/home_page.dart';
 import 'pages/library_page.dart';
 import 'pages/settings_page.dart';
 
-/// TV 应用壳：左侧焦点导航栏 + 右侧内容面板。
-/// D-pad 左右可在导航栏与内容区之间穿越，上下在区内移动，确认键激活。
+/// TV 应用壳：左侧导航栏 + 右侧内容面板。
+///
+/// 焦点模型：
+/// - 导航项自带 focusNode，切页时把焦点交给新页面的入口卡片，
+///   避免"高光留在旧页/旧导航项"的问题（IndexedStack 会同时构建全部页面）；
+/// - 导航项用 [FocusableCard.selected] 常驻显示"当前所在页"，
+///   与焦点高亮分离，所以即使焦点在内容区，导航也能看出当前在哪一页。
 class TvAppShell extends StatefulWidget {
   const TvAppShell({super.key});
 
@@ -19,7 +24,30 @@ class TvAppShell extends StatefulWidget {
 class _TvAppShellState extends State<TvAppShell> {
   int _pageIndex = 0;
 
-  void _activate(int index) => setState(() => _pageIndex = index);
+  /// 各页面的入口焦点节点：切页后由壳主动 requestFocus。
+  final _pageEntryFocus = <int, FocusNode>{
+    0: FocusNode(debugLabel: 'home-entry'),
+    1: FocusNode(debugLabel: 'library-entry'),
+    2: FocusNode(debugLabel: 'settings-entry'),
+    3: FocusNode(debugLabel: 'about-entry'),
+  };
+
+  @override
+  void dispose() {
+    for (final node in _pageEntryFocus.values) {
+      node.dispose();
+    }
+    super.dispose();
+  }
+
+  void _activate(int index) {
+    setState(() => _pageIndex = index);
+    // 切页后把焦点移交给新页面的入口卡片（下一帧，等新页面挂载）。
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      _pageEntryFocus[index]?.requestFocus();
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -58,6 +86,7 @@ class _TvAppShellState extends State<TvAppShell> {
                           horizontal: 12, vertical: 6),
                       child: FocusableCard(
                         autofocus: i == 0,
+                        selected: _pageIndex == i,
                         onActivate: () => _activate(i),
                         borderRadius: 12,
                         padding: const EdgeInsets.symmetric(
@@ -91,11 +120,11 @@ class _TvAppShellState extends State<TvAppShell> {
               policy: OrderedTraversalPolicy(),
               child: IndexedStack(
                 index: _pageIndex,
-                children: const [
-                  HomePage(),
-                  LibraryPage(),
-                  SettingsPage(),
-                  AboutPage(),
+                children: [
+                  HomePage(entryFocusNode: _pageEntryFocus[0]),
+                  LibraryPage(entryFocusNode: _pageEntryFocus[1]),
+                  SettingsPage(entryFocusNode: _pageEntryFocus[2]),
+                  AboutPage(entryFocusNode: _pageEntryFocus[3]),
                 ],
               ),
             ),

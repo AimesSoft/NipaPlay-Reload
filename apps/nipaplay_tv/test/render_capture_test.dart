@@ -78,4 +78,26 @@ void main() {
     expect(find.text('通用'), findsWidgets);
     await capture(tester, 'p4_settings_1080p');
   });
+
+  testWidgets('switching pages moves highlight and library exposes add entry',
+      (tester) async {
+    tester.view.physicalSize = tvSize;
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.reset);
+
+    await tester.pumpWidget(harness(const TvAppShell()));
+    await tester.pump(const Duration(milliseconds: 200));
+
+    // 切到媒体库：高光应随选中态迁移，且页面出现"添加媒体"入口
+    await tester.tap(find.text('媒体库'));
+    await tester.pump(const Duration(milliseconds: 400));
+    expect(find.text('添加媒体'), findsOneWidget);
+    expect(find.text('添加来源'), findsOneWidget);
+
+    // 打开添加对话框（触摸路径）
+    await tester.tap(find.text('添加媒体'));
+    await tester.pump(const Duration(milliseconds: 300));
+    expect(find.text('添加 本地文件'), findsOneWidget);
+    await capture(tester, 'p5_add_media_dialog_1080p');
+  });
 }

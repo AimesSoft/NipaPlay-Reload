@@ -8,7 +8,10 @@ import 'player_page.dart';
 
 /// 首页：可聚焦入口网格。首个入口进入播放页（本地演示视频 + 弹幕）。
 class HomePage extends StatelessWidget {
-  const HomePage({super.key});
+  const HomePage({super.key, this.entryFocusNode});
+
+  /// 壳在切换到本页时把焦点交给这里的入口卡片。
+  final FocusNode? entryFocusNode;
 
   /// 内置示例弹幕（B 站 XML 协议），交给 core 解析。
   static const _demoXml = '''
@@ -35,7 +38,7 @@ class HomePage extends StatelessWidget {
               style: Theme.of(context).textTheme.headlineMedium),
           const SizedBox(height: 20),
           FocusableCard(
-            autofocus: true,
+            focusNode: entryFocusNode,
             onActivate: () => _openDemo(context),
             child: Row(
               children: [
