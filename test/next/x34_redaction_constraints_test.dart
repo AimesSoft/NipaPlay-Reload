@@ -66,6 +66,9 @@ print(json.dumps(module["redact"](data, ["x34-known+/ secret"])))
       'https://lain.bgm.tv/pic/cover/l/01/d5/504950_WmdZx.jpg',
       'https://image.tmdb.org/t/p/original/xJHokMbljvjADYdit5fK5VQsXEG.jpg',
       'https://mikanani.me/RSS/Bangumi?bangumiId=3141&subgroupid=370',
+      'http://192.168.1.5:8096/Items/0f3c2a9b8d7e4c1fa2b3c4d5e6f70812/Images/Primary',
+      'jellyfin://28e774baf8f2fd279e7d58da9890a7d2/Items/0f3c2a9b8d7e4c1fa2b3c4d5e6f70812',
+      'https://api.example.com/v1/works/550e8400-e29b-41d4-a716-446655440000',
     ]) {
       expect(redactPrivateUrls(public), public);
     }

@@ -56,7 +56,8 @@ def redact(value, secrets=()):
             names += [k for k, _ in urllib.parse.parse_qsl(uri.fragment)]
             private = (uri.username is not None or uri.password is not None
                        or any(re.search(r"pass|auth|token|secret|cookie|sess|key|sig|credential|secure|hash|private|uid|^sid$|^code$", k, re.I) for k in names)
-                       or any(re.fullmatch(r"[A-Za-z0-9_-]{24,}", seg) for seg in uri.path.split("/")))
+                       or (any(re.fullmatch(r"(announce|scrape|rss|feed|torrentrss|download|dl)(\.php)?", seg, re.I) for seg in uri.path.split("/"))
+                           and any(re.fullmatch(r"[A-Za-z0-9_-]{24,}", seg) for seg in uri.path.split("/"))))
             return "[redacted URL]" if private else raw
         except ValueError:
             return "[redacted URL]"
