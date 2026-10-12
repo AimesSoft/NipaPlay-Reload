@@ -6,6 +6,13 @@ import '../harness_redaction.dart';
 
 /// Bounded, redacted execution facts, separate from Codex's transcript.
 final class TurnProcessStore {
+  /// What the store keeps itself; Codex's history keeps the rest.
+  static const _process = {
+    'commandExecution',
+    'reasoning',
+    'collabAgentToolCall',
+  };
+
   static File fileFor(Directory root, String harnessPath) => File(
       '${root.path}/turn-process/${sha256.convert(utf8.encode(harnessPath))}.json');
   TurnProcessStore(this.file,
@@ -35,10 +42,7 @@ final class TurnProcessStore {
   void restore(String threadId, Map turn) {
     final saved = read(threadId, turn['id'] as String);
     if (saved == null) return;
-    bool own(Object? item) =>
-        item is Map &&
-        item['type'] != 'commandExecution' &&
-        item['type'] != 'reasoning';
+    bool own(Object? item) => item is Map && !_process.contains(item['type']);
     final codex = [
       for (final item in turn['items'] as List)
         if (own(item)) item as Map
@@ -112,7 +116,7 @@ final class TurnProcessStore {
       final item = params['item'] as Map;
       final items = row['items'] as List;
       final index = items.indexWhere((v) => v['id'] == item['id']);
-      if (item['type'] != 'commandExecution' && item['type'] != 'reasoning') {
+      if (!_process.contains(item['type'])) {
         // Where Codex's own item came, without its content.
         if (index >= 0 || items.length >= 128) return;
         items.add({'id': item['id'], 'type': item['type'], 'marker': true});
@@ -151,6 +155,16 @@ final class TurnProcessStore {
                       .inMilliseconds
                   : null),
           'aggregatedOutput': clip(item['aggregatedOutput'], 8192),
+        },
+        // A helper sent off: what it was asked and where it works.
+        if (item['type'] == 'collabAgentToolCall') ...{
+          'tool': item['tool'],
+          'prompt': clip(item['prompt'], 4096),
+          'receiverThreadIds': [
+            for (final id in (item['receiverThreadIds'] as List? ?? const [])
+                .take(8))
+              '$id'
+          ],
         },
         if (item['type'] == 'reasoning') ...{
           'summary': [
