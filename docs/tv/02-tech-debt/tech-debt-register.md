@@ -26,3 +26,4 @@
 - 缓解/拆解方案：
 - 结论：可进入开发 / 需调整后再开发 / 不做
 ```
+| TD-006 | 弹幕匹配无本地缓存：每次进播放页都请求 match + comment（手机版有 DanmakuCacheManager） | 低 | 播放页首屏 | 重复请求浪费时间/流量；弱网下失败即无弹幕 | 按 episodeId 缓存 comments 到本地（SettingsStorage 或文件），TTL 与手机版对齐 | Open |
