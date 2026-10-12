@@ -18,6 +18,7 @@ final class DownloadService {
   final DownloadExecutor executor;
   final DownloadBackends backends;
   final DownloadLibrary library;
+  Future<JsonMap?> Function(Invocation)? returnTarget;
   Future<void> _tail = Future.value();
 
   Future<T> _serial<T>(Future<T> Function() operation) async {
@@ -38,7 +39,8 @@ final class DownloadService {
       _ref(job).key == ref.key && job.input['infoHash'] == infoHash;
 
   Future<Job> add(DownloadRequest request,
-          {DownloadBackendRef backend = const DownloadBackendRef.builtin()}) =>
+          {DownloadBackendRef backend = const DownloadBackendRef.builtin(),
+          Invocation? invocation}) =>
       _serial(() async {
         backends.resolve(backend);
         final jobs = await engine.list(type: 'download');
@@ -52,10 +54,15 @@ final class DownloadService {
                 .any((task) => task.infoHash == request.infoHash)) {
           return previous.last;
         }
+        final target =
+            invocation == null ? null : await returnTarget?.call(invocation);
         return engine.submit(
             type: 'download',
             title: request.title,
-            input: request.toJson(),
+            input: {
+              ...request.toJson(),
+              if (target != null) 'returnTo': target
+            },
             details: {'backend': backend.toJson()},
             phase: 'downloading');
       });

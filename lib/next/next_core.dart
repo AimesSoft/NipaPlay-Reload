@@ -182,6 +182,7 @@ final class NextCore {
     };
     hooks.observeEvent = followups.hookEvent;
     downloads.attach(engine, root);
+    downloads.downloads.returnTarget = followups.downloadReturnTarget;
     media.attach(engine);
     mediaSources.engine = engine;
     accounts.attach(engine);

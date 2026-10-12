@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 
 import 'package:nipa_harness/nipa_harness.dart';
 import 'package:nipaplay/constants/settings_keys.dart';
@@ -27,7 +28,8 @@ final class AppDownloadLibrary implements DownloadLibrary {
     await media.syncClassicHistory();
     final fileId = await media.store.ensureFile(path);
     final links = await media.store.database.rawQuery(
-        'SELECT DISTINCT r.parent_id AS workId FROM media_file_episodes fe '
+        'SELECT DISTINCT r.parent_id AS workId, e.id AS episodeId, '
+        'e.attributes AS episodeFacts FROM media_file_episodes fe '
         'JOIN media_entities e ON e.id=fe.episode_id '
         'JOIN media_entities r ON r.id=e.parent_id WHERE fe.file_id=?',
         [fileId]);
@@ -36,7 +38,15 @@ final class AppDownloadLibrary implements DownloadLibrary {
       return {
         'path': path,
         'fileId': fileId,
-        'workIds': [for (final row in links) row['workId']],
+        'workIds': {for (final row in links) row['workId']}.toList(),
+        'episodes': [
+          for (final row in links)
+            {
+              'episodeId': row['episodeId'],
+              'workId': row['workId'],
+              'facts': jsonDecode(row['episodeFacts'] as String)
+            }
+        ],
         'identificationPending': links.isEmpty,
         'classicScanPending': item == null
       };
@@ -44,7 +54,15 @@ final class AppDownloadLibrary implements DownloadLibrary {
     return {
       'path': item.filePath,
       'fileId': fileId,
-      'workIds': [for (final row in links) row['workId']],
+      'workIds': {for (final row in links) row['workId']}.toList(),
+      'episodes': [
+        for (final row in links)
+          {
+            'episodeId': row['episodeId'],
+            'workId': row['workId'],
+            'facts': jsonDecode(row['episodeFacts'] as String)
+          }
+      ],
       'identificationPending': links.isEmpty,
       'animeId': item.animeId,
       'episodeId': item.episodeId,
