@@ -29,16 +29,53 @@ final class TurnProcessStore {
         : jsonDecode(jsonEncode(row)) as Map<String, dynamic>;
   }
 
+  /// Puts the saved process back into Codex's [turn], in the order it
+  /// happened: saved markers stand for Codex's own items (messages, tools),
+  /// matched by type in order.
   void restore(String threadId, Map turn) {
     final saved = read(threadId, turn['id'] as String);
     if (saved == null) return;
-    turn['items'] = [
+    bool own(Object? item) =>
+        item is Map &&
+        item['type'] != 'commandExecution' &&
+        item['type'] != 'reasoning';
+    final codex = [
       for (final item in turn['items'] as List)
-        if (item['type'] != 'commandExecution' && item['type'] != 'reasoning')
-          item,
-      ...saved['items'] as List,
+        if (own(item)) item as Map
     ];
-    turn['durationMs'] ??= saved['durationMs'];
+    final process = saved['items'] as List;
+    if (!process.any((v) => v is Map && v['marker'] == true)) {
+      turn['items'] = [...codex, ...process];
+    } else {
+      final byType = <Object?, List<Map>>{};
+      for (final item in codex) {
+        (byType[item['type']] ??= []).add(item);
+      }
+      final used = <Object?, int>{};
+      final merged = <Object?>[];
+      for (final v in process.cast<Map>()) {
+        if (v['marker'] != true) {
+          merged.add(v);
+          continue;
+        }
+        final list = byType[v['type']] ?? const [];
+        final i = used[v['type']] ?? 0;
+        if (i < list.length) {
+          merged.add(list[i]);
+          used[v['type']] = i + 1;
+        }
+      }
+      final seen = <Object?, int>{};
+      for (final item in codex) {
+        final i = seen[item['type']] ?? 0;
+        seen[item['type']] = i + 1;
+        if (i >= (used[item['type']] ?? 0)) merged.add(item);
+      }
+      turn['items'] = merged;
+    }
+    if (turn['durationMs'] == null && saved['durationMs'] != null) {
+      turn['durationMs'] = saved['durationMs'];
+    }
   }
 
   void observe(Map<String, dynamic> message, String origin, DateTime now) {
@@ -73,10 +110,15 @@ final class TurnProcessStore {
           .inMilliseconds;
     } else if (method == 'item/started' || method == 'item/completed') {
       final item = params['item'] as Map;
-      if (item['type'] != 'commandExecution' && item['type'] != 'reasoning')
-        return;
       final items = row['items'] as List;
       final index = items.indexWhere((v) => v['id'] == item['id']);
+      if (item['type'] != 'commandExecution' && item['type'] != 'reasoning') {
+        // Where Codex's own item came, without its content.
+        if (index >= 0 || items.length >= 128) return;
+        items.add({'id': item['id'], 'type': item['type'], 'marker': true});
+        _save();
+        return;
+      }
       if (index < 0 && items.length >= 128) {
         row['truncated'] = true;
         return;
@@ -110,7 +152,7 @@ final class TurnProcessStore {
                   : null),
           'aggregatedOutput': clip(item['aggregatedOutput'], 8192),
         },
-        if (item['type'] == 'reasoning')
+        if (item['type'] == 'reasoning') ...{
           'summary': [
             for (final part in (item['summary'] as List? ?? const []).take(8))
               {
@@ -118,6 +160,13 @@ final class TurnProcessStore {
                 'text': clip(part is Map ? part['text'] : part, 2048)
               }
           ],
+          // Models that think without a summary keep their thinking here.
+          if ((item['summary'] as List? ?? const []).isEmpty)
+            'content': [
+              for (final part in (item['content'] as List? ?? const []).take(8))
+                clip(part is Map ? part['text'] : part, 4096)
+            ],
+        },
       };
       if (index < 0) {
         items.add(safe);

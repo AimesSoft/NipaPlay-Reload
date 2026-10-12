@@ -589,7 +589,7 @@ class _WorkDetailPageState extends State<WorkDetailPage>
       NextButton.ghost(
         label: '问 Nipa',
         leading: const NipaAvatar(size: 20),
-        onTap: () => shell.openPanel(about: work),
+        onTap: () => shell.openChat(about: work),
       ),
       if (menu.isNotEmpty) ...[
         const SizedBox(width: 12),

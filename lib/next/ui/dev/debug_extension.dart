@@ -14,12 +14,12 @@ import 'package:window_manager/window_manager.dart';
 import '../../accounts/login_dialog.dart';
 import '../../ui_data/ui_data.dart';
 import '../cards/card_views.dart';
-import '../conversation/panel_chat.dart';
-import '../conversation/turn_activity.dart';
+import '../chat/chat_frame.dart';
+import '../chat/transcript.dart';
+import '../conversation/nipa_chat.dart';
 import '../detail/detail_page.dart';
 import '../detail/episodes.dart';
 import '../home/ask_bar.dart';
-import '../home/stage.dart';
 import '../pages/discover_page.dart';
 import '../panel/chat_panel.dart';
 import '../widgets/drop_zone.dart';
@@ -43,9 +43,11 @@ import 'fake_world.dart';
 ///
 /// Ops (`op=`):
 /// - `status`
-/// - `home` `state=A|B|C` [`text=`]: A leaves the stage; B says [text]
-///   (default “来点轻松的”); C wakes Nipa (scripted chat only).
-/// - `fill` `text=`: put text in the input bar without sending; `send`.
+/// - `home` `state=A|B|C` [`text=`]: A folds the conversation away; B says
+///   [text] (default “来点轻松的”) and expands it; C folds it and wakes
+///   Nipa (scripted chat only).
+/// - `fill` `text=`: put text in the input without sending; `send` sends
+///   it as Enter does where the conversation is.
 /// - `hover` `index=N` [`area=stage|shelf|avatar|episodes|library`]: a
 ///   synthetic mouse hovers the N-th visible card (no OS pointer moves);
 ///   `index=-1` leaves.
@@ -60,17 +62,21 @@ import 'fake_world.dart';
 /// - `dilate` `factor=`: slow animations down (1 is normal), to capture a
 ///   transition mid-way.
 /// - `popover` `which=tasks|nipa|none`.
-/// - `panel` `open=true|false` [`about=<workId>` | `thread=<id>|home` |
-///   `new=true`]: the side panel, on a work, a session, or a fresh one.
-/// - `panelfill` `text=`; `panelsay` `text=`; `choose` `label=` (an option
-///   of the question shown in the panel); `sessions` `open=true|false`.
+/// - `chat` `open=true|false` [`about=<workId>`] [`thread=<id>|main` |
+///   `new=true`]: the conversation where it is (the home expanded, the
+///   side panel elsewhere), about a work, on a session, or a fresh one.
+/// - `say` `text=`: say it in the conversation; `stop`: the stop button;
+///   `choose` `label=` (an option of the question shown); `sessions`
+///   `open=true|false`.
+/// - `steps` [`turn=-1`] [`fold=open|closed`] [`group=N|all`]
+///   [`open=true|false`] [`output=N`]: a turn's folded work, its step
+///   groups, the N-th command's output.
+/// - `transcript` `to=top|bottom|<px>`: scroll the conversation.
 /// - `stall`: the running scripted turn has been silent for three minutes;
-///   `quiet` `do=wait|resend` presses “再等等” / “重新发” in the panel.
+///   `quiet` `do=wait|resend` presses “再等等” / “重新发”.
 /// - `login` `do=fake|open|cancel` [`platform=`]: a scripted login card
 ///   (fake opens NipaPlay's real login window on demand, no account), press
 ///   the first card's button, or cancel the scripted one.
-/// - `activity` `open=true|false` [`output=N`]: unfold the panel's latest
-///   activity line (and the N-th command's output).
 /// - `reduce` `on=true|false|system`.
 /// - `interface` `next=true|false`: “使用 Next 界面” on or off.
 /// - `window` [`size=WxH` | `width=` `height=`] [`maximize=true|false`]
@@ -151,7 +157,7 @@ abstract final class NextUiDebug {
     }
     final shell = _shell;
     if (shell == null) throw StateError('The Next shell is not showing');
-    final c = shell.conversation;
+    final c = shell.chat;
     switch (p['op']) {
       case 'status':
         break;
@@ -159,12 +165,13 @@ abstract final class NextUiDebug {
         shell.go(NextSection.home);
         switch (p['state']) {
           case 'A':
-            c.dismiss();
+            shell.foldHomeChat();
           case 'B':
             await _settle();
             unawaited(c.say(p['text'] ?? '来点轻松的'));
+            shell.openChat();
           case 'C':
-            c.dismiss();
+            shell.foldHomeChat();
             final chat = shell.services.chat;
             if (chat is! FakeChatPort) {
               throw StateError('C needs background work; only the scripted '
@@ -175,10 +182,7 @@ abstract final class NextUiDebug {
             throw ArgumentError('state must be A, B or C');
         }
       case 'fill':
-        shell.go(NextSection.home);
         final text = p['text'] ?? '';
-        shell.askFocus.requestFocus();
-        await _settle();
         shell.askText.value = TextEditingValue(
             text: text,
             selection: TextSelection.collapsed(offset: text.length));
@@ -186,6 +190,54 @@ abstract final class NextUiDebug {
         final text = shell.askText.text;
         shell.askText.clear();
         unawaited(c.say(text));
+        if (shell.onHome) shell.openChat();
+      case 'say':
+        unawaited(c.say(p['text'] ?? ''));
+        if (shell.onHome) shell.openChat();
+      case 'stop':
+        unawaited(c.stop());
+        await Future<void>.delayed(const Duration(milliseconds: 300));
+      case 'steps':
+        final index = int.tryParse(p['turn'] ?? '-1') ?? -1;
+        final turns = c.turns;
+        if (turns.isEmpty) throw StateError('No turns');
+        final turn = turns[index < 0 ? turns.length + index : index];
+        if (p['fold'] case final fold?) turn.unfolded = fold == 'open';
+        final groups = turn.parts.whereType<StepsPart>().toList();
+        final which = p['group'];
+        final open = p['open'];
+        if (open != null) {
+          for (final (i, g) in groups.indexed) {
+            if (which == null || which == 'all' || int.tryParse(which) == i) {
+              g.open = open == 'true';
+            }
+          }
+        }
+        if (int.tryParse(p['output'] ?? '') case final n?) {
+          turn.steps.whereType<CommandStep>().toList()[n].outputShown = true;
+        }
+        // Rebuild what shows them.
+        c.viewChanged();
+        await Future<void>.delayed(const Duration(milliseconds: 300));
+      case 'transcript':
+        final scroll = ChatTranscript.debugController;
+        if (scroll == null || !scroll.hasClients) {
+          throw StateError('No conversation is showing');
+        }
+        final max = scroll.position.maxScrollExtent;
+        final to = switch (p['to']) {
+          'top' => 0.0,
+          'bottom' || null => max,
+          final px => double.parse(px).clamp(0.0, max),
+        };
+        await scroll.animateTo(to,
+            duration: const Duration(milliseconds: 300), curve: NextMotion.ease);
+        await Future<void>.delayed(const Duration(milliseconds: 200));
+        return {
+          'offset': scroll.offset,
+          'max': scroll.position.maxScrollExtent,
+          ..._status(shell)
+        };
       case 'hover':
         await _settle();
         return _hover(int.parse(p['index'] ?? '0'), p['area']);
@@ -244,57 +296,42 @@ abstract final class NextUiDebug {
         } else if (shell.popover != which) {
           shell.togglePopover(which);
         }
-      case 'panel':
+      case 'chat' || 'panel':
         final about = p['about'];
         final thread = p['thread'];
         if (p['open'] == 'false') {
           shell.closePanel();
-        } else if (about != null) {
-          final work = await shell.services.data.work(about);
+          shell.foldHomeChat();
+          break;
+        }
+        UiWork? work;
+        if (about != null) {
+          work = await shell.services.data.work(about);
           if (work == null) throw StateError('No such work');
-          shell.openPanel(about: work);
+        }
+        shell.openChat(about: work);
+        if (thread == 'main') {
+          unawaited(c.selectMain());
         } else if (thread != null) {
-          final id = thread == 'home' ? c.threadId : thread;
-          if (id == null) throw StateError('The home has no conversation');
-          shell.openPanelOn(id);
-        } else {
-          shell.openPanel();
-          if (p['new'] == 'true') shell.panel.startNew();
+          unawaited(c.select(thread));
+        } else if (p['new'] == 'true') {
+          c.startNew();
         }
         await Future<void>.delayed(const Duration(milliseconds: 500));
-      case 'panelfill':
-        final text = p['text'] ?? '';
-        shell.panelText.value = TextEditingValue(
-            text: text,
-            selection: TextSelection.collapsed(offset: text.length));
-      case 'panelsay':
-        unawaited(shell.panel.say(p['text'] ?? ''));
       case 'choose':
         final label = p['label'];
-        final q = shell.panel.questionItems.firstOrNull;
+        final q = c.questionItems.firstOrNull;
         if (q == null || label == null) throw StateError('No question');
-        unawaited(shell.panel.choose(q['id'] as String, label));
+        unawaited(c.choose(q['id'] as String, label));
       case 'sessions':
-        if ((p['open'] != 'false') != shell.panel.menuOpen) {
-          shell.panel.toggleMenu();
-        }
-        await Future<void>.delayed(const Duration(milliseconds: 300));
-      case 'activity':
-        final line = shell.panel.entries.whereType<ActivityEntry>().lastOrNull;
-        if (line == null) throw StateError('No activity in the panel');
-        line.activity.shown = p['open'] != 'false';
-        if (int.tryParse(p['output'] ?? '') case final n?) {
-          final commands = line.activity.steps.whereType<CommandStep>().toList();
-          commands[n].outputShown = true;
-        }
-        shell.panel.viewChanged();
+        if ((p['open'] != 'false') != c.menuOpen) c.toggleMenu();
         await Future<void>.delayed(const Duration(milliseconds: 300));
       case 'quiet':
         switch (p['do']) {
           case 'wait':
-            shell.panel.keepWaiting();
+            c.keepWaiting();
           case 'resend':
-            unawaited(shell.panel.resend());
+            unawaited(c.resend());
           default:
             throw ArgumentError('do must be wait or resend');
         }
@@ -402,61 +439,64 @@ abstract final class NextUiDebug {
   static Completer<void>? _fakeLoginStop;
 
   static Map<String, Object?> _status(NextShellController shell) {
-    final c = shell.conversation;
+    final c = shell.chat;
+    String part(TurnPart p) => switch (p) {
+          SaidPart(:final text, :final about, :final files, :final echoed) =>
+            'you${echoed ? '' : ' (sending)'}: $text'
+                '${about == null ? '' : ' (about $about)'}'
+                '${files.isEmpty ? '' : ' +files ${files.join(', ')}'}',
+          ReplyPart(:final text) => 'nipa: $text',
+          StepsPart() => 'steps${p.open ? ' (open)' : ''}: '
+              '${ChatTurn.summary(p)}',
+        };
     return {
       'section': shell.section.name,
       'popover': shell.popover.name,
       'panelOpen': shell.panelOpen.value,
-      'staged': c.staged,
+      'homeChatOpen': shell.homeChatOpen.value,
+      'visible': c.visible,
       'mood': c.mood.name,
       'unseen': c.unseen,
-      'said': c.said,
-      'reply': c.reply,
-      'cards': c.cards.length,
-      'line': c.backgroundActive ? c.activity : c.latestLine,
+      'doing': c.doing,
+      'line': c.doing ?? c.latestLine,
       'tasks': shell.activeTasks.length,
       'reduced': _context != null && _context!.mounted
           ? NextMotion.reduced(_context!)
           : null,
       'askText': shell.askText.text,
-      'askFiles': shell.askFiles.value,
-      'saidFiles': c.saidFiles,
-      'homeThread': c.threadId,
-      'session': {
-        'main': shell.choice.main,
-        'current': shell.choice.current,
-        'onMain': shell.choice.onMain,
-        'fresh': shell.choice.fresh,
-      },
-      'panel': {
-        'thread': shell.panel.thread,
-        'about': shell.panel.about?.title,
-        'entries': [
-          for (final e in shell.panel.entries)
-            switch (e) {
-              YouEntry(:final text, :final about, :final files) =>
-                'you: $text${about == null ? '' : ' (about $about)'}'
-                    '${files.isEmpty ? '' : ' +files ${files.join(', ')}'}',
-              NipaEntry(:final text) => 'nipa: $text',
-              CardsEntry(:final cards) => 'cards: ${cards.length}',
-              ActivityEntry(:final activity) => activity.running
-                  ? 'doing: ${activity.doing} (${activity.steps.length})'
-                  : 'done: ${activity.summary}',
+      'chat': {
+        'main': c.main,
+        'thread': c.thread,
+        'onMain': c.onMain,
+        'fresh': c.fresh,
+        'title': c.title,
+        'about': c.about?.title,
+        'loading': c.loading,
+        'turns': [
+          for (final t in c.turns)
+            {
+              'status': t.status,
+              if (t.followup) 'followup': true,
+              'elapsed': ChatTurn.span(t.elapsed()),
+              if (t.foldable) 'folded': !t.unfolded,
+              'parts': [
+                for (final p in t.parts)
+                  if (!t.folded(p)) part(p) else '(folded) ${part(p)}'
+              ],
+              if (t.cards.isNotEmpty) 'cards': t.cards.length,
             }
         ],
-        'attachments': shell.panel.attachments,
-        'nextSayings': shell.panel.nextSayings,
-        'underway': [
-          for (final u in shell.panel.underway) '${u.title}: ${u.line}'
-        ],
-        'running': shell.panel.running,
-        'quiet': shell.panel.quiet,
-        'question': shell.panel.question != null,
-        'hint': shell.panel.hint,
-        'sessions': [for (final s in shell.panel.sessions) s.title],
-        'menuOpen': shell.panel.menuOpen,
+        'attachments': c.attachments,
+        'nextSayings': c.nextSayings,
+        'underway': [for (final u in c.underway) '${u.title}: ${u.line}'],
+        'running': c.running,
+        'quiet': c.quiet,
+        'question': c.question != null,
+        'hint': c.hint,
+        'sessions': [for (final s in c.sessions) s.title],
+        'menuOpen': c.menuOpen,
         'logins': [for (final l in shell.services.logins.pending) l.platform],
-        'trouble': shell.panel.trouble,
+        'trouble': c.trouble,
       },
     };
   }
@@ -485,7 +525,7 @@ abstract final class NextUiDebug {
   static List<RenderBox> _pressables(String label, String? area) {
     final found = <RenderBox>[];
     final scope = switch (area) {
-      'panel' => ChatPanelLayer,
+      'panel' || 'chat' => ChatFrame,
       'discover' => DiscoverPage,
       _ => null,
     };
@@ -587,7 +627,7 @@ abstract final class NextUiDebug {
   static List<RenderBox> _cards(String? area) {
     final found = <RenderBox>[];
     final scope = switch (area) {
-      'stage' => ConverseStage,
+      'stage' || 'chat' => ChatFrame,
       'shelf' => Shelf,
       'episodes' => EpisodeRow,
       'library' => LibraryPage,

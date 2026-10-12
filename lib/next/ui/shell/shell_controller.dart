@@ -3,9 +3,7 @@ import 'dart:async';
 import 'package:flutter/widgets.dart';
 
 import '../../ui_data/ui_data.dart';
-import '../conversation/conversation.dart';
-import '../conversation/panel_chat.dart';
-import '../conversation/session_choice.dart';
+import '../conversation/nipa_chat.dart';
 import '../data/services.dart';
 import '../detail/work_route.dart';
 import '../theme/tokens.dart';
@@ -19,18 +17,13 @@ enum NextPopover { none, tasks, nipa }
 /// conversation and tasks are listened to where they are shown.
 class NextShellController extends ChangeNotifier {
   NextShellController(this.services, {required this.onLeave}) {
-    choice = SessionChoice(services.chat);
-    conversation = Conversation(
-        port: services.chat, data: services.data, choice: choice);
-    panel = PanelChat(
-        port: services.chat,
-        data: services.data,
-        home: conversation,
-        choice: choice);
-    // A login card must be seen: the panel comes up for it.
+    chat = NipaChat(port: services.chat, data: services.data);
+    // A login card must be seen: the conversation comes up for it.
     services.logins.onRequest = () {
-      if (!panelOpen.value) openPanel();
+      if (!chatShown) openChat();
     };
+    panelOpen.addListener(_syncVisible);
+    homeChatOpen.addListener(_syncVisible);
     origins.reference =
         () => navigatorKey.currentContext?.findRenderObject() as RenderBox?;
     _tasks = services.data.tasks().listen((list) {
@@ -43,14 +36,20 @@ class NextShellController extends ChangeNotifier {
 
   /// Leaves Next for Classic (turns the preference off).
   final VoidCallback onLeave;
-  /// Where what you say goes: the main session unless you picked another.
-  late final SessionChoice choice;
-  late final Conversation conversation;
+  /// The conversation with Nipa: on the home, expanded or folded away;
+  /// on every other page, in the side panel.
+  late final NipaChat chat;
   late final StreamSubscription<List<UiTask>> _tasks;
   final tasks = ValueNotifier<List<UiTask>>(const []);
   final navigatorKey = GlobalKey<NavigatorState>(debugLabel: 'next');
   final askFocus = FocusNode(debugLabel: 'next.ask');
+
+  /// What you are writing to Nipa, the same wherever the conversation is.
   final askText = TextEditingController();
+
+  /// The home's conversation is expanded.
+  final homeChatOpen = ValueNotifier<bool>(false);
+  final homeChatFocus = FocusNode(debugLabel: 'next.homeChat');
 
   /// Files dropped on the home's input bar, going with what is said there.
   final askFiles = ValueNotifier<List<String>>(const []);
@@ -58,11 +57,9 @@ class NextShellController extends ChangeNotifier {
   /// Pictures a work can open from (shared element transitions).
   final origins = ArtOrigins();
 
-  /// The conversation side panel.
+  /// The conversation side panel (not on the home, which has its own).
   final panelOpen = ValueNotifier<bool>(false);
-  late final PanelChat panel;
   final panelFocus = FocusNode(debugLabel: 'next.panel');
-  final panelText = TextEditingController();
 
   /// Content scrolled under the top bar: show its scrim.
   final scrolled = ValueNotifier<bool>(false);
@@ -89,61 +86,92 @@ class NextShellController extends ChangeNotifier {
   void go(NextSection target) {
     navigatorKey.currentState?.popUntil((route) => route.isFirst);
     popover = NextPopover.none;
+    // The home has the conversation itself: the panel's carries on there.
+    if (target == NextSection.home && panelOpen.value) {
+      _closePanel();
+      homeChatOpen.value = true;
+    }
     if (section != target) {
       section = target;
       scrolled.value = false;
     }
     notifyListeners();
+    _syncVisible();
   }
 
-  /// ⌘K. On the home it focuses the input bar; on any other page (or with
-  /// the panel already open) it opens the side panel.
+  /// On the home itself, not a page pushed over it.
+  bool get onHome =>
+      section == NextSection.home &&
+      !(navigatorKey.currentState?.canPop() ?? false);
+
+  /// The conversation is on screen.
+  bool get chatShown => panelOpen.value || (onHome && homeChatOpen.value);
+
+  void _syncVisible() => chat.setVisible(chatShown);
+
+  /// ⌘K: the input where the conversation is: the home's bar, the
+  /// expanded conversation, or the side panel.
   void ask() {
     if (panelOpen.value) return panelFocus.requestFocus();
-    final onHome = section == NextSection.home &&
-        !(navigatorKey.currentState?.canPop() ?? false);
-    if (!onHome) return openPanel();
+    if (!onHome) return openChat();
     popover = NextPopover.none;
     notifyListeners();
-    WidgetsBinding.instance
-        .addPostFrameCallback((_) => askFocus.requestFocus());
+    WidgetsBinding.instance.addPostFrameCallback((_) =>
+        (homeChatOpen.value ? homeChatFocus : askFocus).requestFocus());
   }
 
-  /// Opens the side panel on the current session (the main one unless you
-  /// picked another). With [about] (“问 Nipa” on a work's page) the input
-  /// reads “问问《片名》” and the work goes to the agent with what you say.
-  void openPanel({UiWork? about}) => _openPanel(about: about);
-
-  /// Opens the side panel on one session (the home's “展开”).
-  void openPanelOn(String threadId) => _openPanel(threadId: threadId);
-
-  /// Opens the side panel about [work] and says [text] there for you, in
-  /// the current session (the detail page's “下载全部”).
-  void sayAbout(UiWork work, String text) =>
-      _openPanel(about: work, say: text);
-
-  void _openPanel({UiWork? about, String? threadId, String? say}) {
+  /// Opens the conversation: expanded on the home, the side panel
+  /// elsewhere. With [about] (“问 Nipa” on a work's page) what you say goes
+  /// with that work.
+  void openChat({UiWork? about}) {
     if (popover != NextPopover.none) {
       popover = NextPopover.none;
       notifyListeners();
     }
-    Future<void> open() async {
-      await panel.show(threadId: threadId, about: about);
-      if (say != null) await panel.say(say);
+    if (about != null) chat.setAbout(about);
+    if (onHome) {
+      homeChatOpen.value = true;
+      WidgetsBinding.instance
+          .addPostFrameCallback((_) => homeChatFocus.requestFocus());
+      return;
     }
-
-    unawaited(open());
     panelOpen.value = true;
     WidgetsBinding.instance
         .addPostFrameCallback((_) => panelFocus.requestFocus());
   }
 
-  /// Closing the panel brings it back to the main session.
+  /// The avatar: opens the conversation, or puts it away.
+  void toggleChat() {
+    if (chatShown) {
+      if (panelOpen.value) return closePanel();
+      return foldHomeChat();
+    }
+    openChat();
+  }
+
+  /// Says [text] about [work] for you (the detail page's “下载全部”).
+  void sayAbout(UiWork work, String text) {
+    openChat(about: work);
+    unawaited(chat.say(text));
+  }
+
+  /// The home's conversation folds away; it goes on, and the home tells
+  /// how it ends.
+  void foldHomeChat() {
+    if (!homeChatOpen.value) return;
+    homeChatOpen.value = false;
+    homeChatFocus.unfocus();
+  }
+
   void closePanel() {
     if (!panelOpen.value) return;
+    _closePanel();
+  }
+
+  void _closePanel() {
     panelOpen.value = false;
-    panel.hide();
-    if (!choice.onMain) choice.backToMain();
+    chat.closeMenu();
+    if (chat.about != null) chat.setAbout(null);
     panelFocus.unfocus(disposition: UnfocusDisposition.previouslyFocusedChild);
   }
 
@@ -154,6 +182,7 @@ class NextShellController extends ChangeNotifier {
     final nav = navigatorKey.currentState;
     if (nav == null) return;
     popover = NextPopover.none;
+    if (panelOpen.value) _closePanel();
     notifyListeners();
     final origin =
         NextMotion.reduced(nav.context) ? null : origins.find(work.workId);
@@ -166,7 +195,9 @@ class NextShellController extends ChangeNotifier {
         .pushNamed('/work', arguments: WorkRouteArgs(work, origin: origin))
         .then((_) {
       if (section == from) scrolled.value = wasScrolled;
+      _syncVisible();
     });
+    WidgetsBinding.instance.addPostFrameCallback((_) => _syncVisible());
   }
 
   void play(UiWork work, {UiEpisode? episode}) {
@@ -177,7 +208,7 @@ class NextShellController extends ChangeNotifier {
 
   void togglePopover(NextPopover which) {
     popover = popover == which ? NextPopover.none : which;
-    if (popover == NextPopover.nipa) conversation.markSeen();
+    if (popover == NextPopover.nipa) chat.markSeen();
     notifyListeners();
   }
 
@@ -189,8 +220,8 @@ class NextShellController extends ChangeNotifier {
 
   /// Esc: closes what is on top, one layer at a time.
   bool escape() {
-    if (panelOpen.value && panel.menuOpen) {
-      panel.closeMenu();
+    if (chat.menuOpen && chatShown) {
+      chat.closeMenu();
       return true;
     }
     if (panelOpen.value) {
@@ -206,8 +237,8 @@ class NextShellController extends ChangeNotifier {
       nav.pop();
       return true;
     }
-    if (section == NextSection.home && conversation.staged) {
-      conversation.dismiss();
+    if (onHome && homeChatOpen.value) {
+      foldHomeChat();
       return true;
     }
     if (askFocus.hasFocus) {
@@ -220,18 +251,19 @@ class NextShellController extends ChangeNotifier {
   @override
   void dispose() {
     _tasks.cancel();
-    conversation.dispose();
+    panelOpen.removeListener(_syncVisible);
+    homeChatOpen.removeListener(_syncVisible);
+    chat.dispose();
     tasks.dispose();
     scrolled.dispose();
     askFocus.dispose();
     askText.dispose();
     askFiles.dispose();
     services.logins.onRequest = null;
-    panel.dispose();
-    choice.dispose();
     panelFocus.dispose();
-    panelText.dispose();
     panelOpen.dispose();
+    homeChatOpen.dispose();
+    homeChatFocus.dispose();
     super.dispose();
   }
 }

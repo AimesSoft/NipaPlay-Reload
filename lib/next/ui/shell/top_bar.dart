@@ -115,9 +115,9 @@ class NextTopBar extends StatelessWidget {
                     onTap: shell.ask),
                 const SizedBox(width: _gap),
                 ListenableBuilder(
-                  listenable: shell.conversation,
+                  listenable: shell.chat,
                   builder: (context, _) {
-                    final c = shell.conversation;
+                    final c = shell.chat;
                     // Click: the conversation; right click or long press:
                     // the menu (back to Classic).
                     return GestureDetector(
@@ -125,7 +125,7 @@ class NextTopBar extends StatelessWidget {
                           shell.togglePopover(NextPopover.nipa),
                       onLongPress: () => shell.togglePopover(NextPopover.nipa),
                       child: Pressable(
-                        onTap: shell.openPanel,
+                        onTap: shell.toggleChat,
                         semanticLabel: 'Nipa',
                         pressScale: 0.94,
                         builder: (context, hovered) => NipaAvatar(
@@ -341,7 +341,7 @@ class _NipaMenu extends StatelessWidget {
       MenuItem(
         label: '问 Nipa',
         trailing: const KeyHint('⌘ K'),
-        onTap: shell.openPanel,
+        onTap: shell.openChat,
       ),
       MenuItem(
         label: '回到经典界面',

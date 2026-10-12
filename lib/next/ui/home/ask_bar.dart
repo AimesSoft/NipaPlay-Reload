@@ -2,17 +2,21 @@ import 'package:flutter/material.dart' show InputDecoration, TextField;
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 
+import '../chat/composer.dart';
 import '../shell/shell_controller.dart';
 import '../theme/tokens.dart';
 import '../widgets/attachments.dart';
 import '../widgets/buttons.dart';
 import '../widgets/drop_zone.dart';
 import '../widgets/glass.dart';
+import '../widgets/icons.dart';
 import '../widgets/nipa_avatar.dart';
 
 /// `.askbar`: the input that stays under the hero, and 2–3 suggestions.
 /// Tapping a suggestion says it. Files dropped on it wait above it and go
-/// with what you say next.
+/// with what you say next. It talks to the conversation folded away
+/// behind it: the chevron (or the avatar) expands it, and while a turn
+/// runs the send button stops it.
 class AskBar extends StatefulWidget {
   const AskBar({
     super.key,
@@ -27,6 +31,9 @@ class AskBar extends StatefulWidget {
     this.attachments = const [],
     this.onAttach,
     this.onDetach,
+    this.running = false,
+    this.onStop,
+    this.onExpand,
   });
 
   final FocusNode focusNode;
@@ -42,6 +49,13 @@ class AskBar extends StatefulWidget {
   /// Files dropped on the bar; null: it takes none (the panel is open).
   final ValueChanged<List<String>>? onAttach;
   final ValueChanged<String>? onDetach;
+
+  /// A turn runs: with nothing typed, the send button stops it.
+  final bool running;
+  final VoidCallback? onStop;
+
+  /// Expands the conversation; null while there is none yet.
+  final VoidCallback? onExpand;
 
   @override
   State<AskBar> createState() => _AskBarState();
@@ -108,7 +122,7 @@ class _AskBarState extends State<AskBar> {
                 size: 38,
                 mood: widget.mood,
                 sentence: widget.moodSentence,
-                onTap: NextShellScope.of(context).openPanel),
+                onTap: NextShellScope.of(context).openChat),
             const SizedBox(width: 12),
             Expanded(
               child: TextField(
@@ -128,12 +142,42 @@ class _AskBarState extends State<AskBar> {
                 ),
               ),
             ),
-            if (empty && !widget.focusNode.hasFocus) ...[
+            if (empty && !widget.focusNode.hasFocus && widget.onExpand == null) ...[
               const KeyHint('⌘ K'),
               const SizedBox(width: 12),
             ] else
               const SizedBox(width: 12),
-            SendButton(onTap: _send),
+            if (widget.onExpand case final expand?) ...[
+              Pressable(
+                onTap: expand,
+                semanticLabel: '展开对话',
+                builder: (context, hovered) => AnimatedContainer(
+                  duration: const Duration(milliseconds: 140),
+                  width: 32,
+                  height: 32,
+                  alignment: Alignment.center,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: hovered
+                        ? const Color(0x1FFFFFFF)
+                        : const Color(0x00FFFFFF),
+                  ),
+                  child: RotatedBox(
+                    quarterTurns: 3,
+                    child: NextIcon(NextGlyph.chevronRight,
+                        size: 14,
+                        color: hovered ? NextColors.paper : NextColors.p3),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 8),
+            ],
+            SendOrStop(
+              stop: widget.running && empty,
+              onSend: _send,
+              onStop: widget.onStop ?? () {},
+              size: 38,
+            ),
           ]),
         ),
       ),

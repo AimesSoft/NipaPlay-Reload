@@ -15,11 +15,11 @@ class ActivityPage extends StatelessWidget {
     final shell = NextShellScope.of(context);
     final actions = shell.services.actions;
     return ListenableBuilder(
-      listenable: Listenable.merge([shell.tasks, shell.conversation]),
+      listenable: Listenable.merge([shell.tasks, shell.chat]),
       builder: (context, _) {
         final tasks = shell.activeTasks;
-        final c = shell.conversation;
-        final line = c.backgroundActive ? c.activity : c.latestLine;
+        final c = shell.chat;
+        final line = c.doing ?? c.latestLine;
         return ListView(
           key: const PageStorageKey('activity'),
           padding: const EdgeInsets.fromLTRB(
@@ -33,7 +33,7 @@ class ActivityPage extends StatelessWidget {
                     size: 28,
                     mood: c.mood,
                     sentence: c.moodSentence,
-                    onTap: shell.openPanel),
+                    onTap: shell.openChat),
                 const SizedBox(width: 12),
                 Expanded(child: NipaSentence(line)),
               ]),

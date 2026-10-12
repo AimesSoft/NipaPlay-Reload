@@ -4,21 +4,26 @@ import 'package:flutter/widgets.dart';
 
 import '../../ui_data/ui_data.dart';
 import '../cards/card_views.dart';
-import '../conversation/conversation.dart';
-import '../conversation/next_sayings.dart';
+import '../chat/chat_frame.dart';
+import '../conversation/nipa_chat.dart';
 import '../shell/shell_controller.dart';
 import '../theme/tokens.dart';
+import '../widgets/attachments.dart';
 import '../widgets/cards.dart';
+import '../widgets/drop_zone.dart';
+import '../widgets/icons.dart';
 import '../widgets/shelf.dart';
 import '../widgets/words.dart';
 import 'ask_bar.dart';
 import 'hero_backdrop.dart';
 import 'hero_copy.dart';
 import 'hero_danmaku.dart';
-import 'stage.dart';
 
-/// The home: state A (hero, input, shelves), B (talking in place) and C
-/// (background work and follow-ups), per INTERACTION.md.
+/// The home: the hero, the input bar and the shelves; and the conversation
+/// with Nipa, expanded over them or folded away. Saying something on the
+/// bar goes into the conversation and expands it; folding it leaves it
+/// going on, with Nipa's line on the hero telling what it is doing and,
+/// afterwards, how it ended.
 class NextHomePage extends StatefulWidget {
   const NextHomePage({super.key});
 
@@ -32,33 +37,34 @@ class _NextHomePageState extends State<NextHomePage> {
   StreamSubscription<void>? _changes;
   UiHome? _home;
 
-  /// A: the shelf card held for 600 ms, previewed in the hero.
+  /// The shelf card held for 600 ms, previewed in the hero.
   UiWork? _shelfFocus;
   Timer? _focusTimer;
   Timer? _seenTimer;
 
-  /// B: the card hovered or selected on the stage.
-  UiWork? _stageFocus;
+  /// The card hovered in the expanded conversation.
+  UiWork? _chatFocus;
 
   /// After a conversation, the work it settled on.
   UiWork? _heroOverride;
-  bool _wasStaged = false;
+  bool _wasOpen = false;
 
   /// Shelves rebuild only when the home data changes, not per reply delta.
   Widget? _shelves;
   UiHome? _shelvesFor;
 
-  Conversation get _conv => _shell!.conversation;
+  NipaChat get _chat => _shell!.chat;
 
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
     final shell = NextShellScope.of(context);
     if (identical(shell, _shell)) return;
-    _shell?.conversation.removeListener(_conversationChanged);
+    _shell?.homeChatOpen.removeListener(_openChanged);
     _changes?.cancel();
     _shell = shell;
-    shell.conversation.addListener(_conversationChanged);
+    _wasOpen = shell.homeChatOpen.value;
+    shell.homeChatOpen.addListener(_openChanged);
     _changes = shell.services.data.changes.listen((_) => _load());
     _load();
   }
@@ -72,21 +78,16 @@ class _NextHomePageState extends State<NextHomePage> {
     }
   }
 
-  void _conversationChanged() {
-    final staged = _conv.staged;
-    if (staged == _wasStaged) return;
-    _wasStaged = staged;
-    if (staged) {
-      _stageFocus = null;
-      _focusTimer?.cancel();
-      _shelfFocus = null;
-      if (_scroll.hasClients && _scroll.offset > 0) {
-        _scroll.animateTo(0,
-            duration: const Duration(milliseconds: 420),
-            curve: NextMotion.ease);
-      }
-    } else {
-      final settled = _settledWork();
+  void _openChanged() {
+    final open = _shell!.homeChatOpen.value;
+    if (open == _wasOpen) return;
+    _wasOpen = open;
+    _focusTimer?.cancel();
+    _shelfFocus = null;
+    _chatFocus = null;
+    if (!open) {
+      // Folded: the work the conversation settled on takes the hero.
+      final settled = _chat.settledWork;
       if (settled != null && settled.workId != _baseHero()?.workId) {
         _heroOverride = settled;
       }
@@ -96,7 +97,7 @@ class _NextHomePageState extends State<NextHomePage> {
 
   @override
   void dispose() {
-    _shell?.conversation.removeListener(_conversationChanged);
+    _shell?.homeChatOpen.removeListener(_openChanged);
     _changes?.cancel();
     _focusTimer?.cancel();
     _seenTimer?.cancel();
@@ -140,49 +141,16 @@ class _NextHomePageState extends State<NextHomePage> {
 
   UiWork? _heroWork() => _heroOverride ?? _baseHero();
 
-  /// The shelf work previewed in place of [hero]: not while talking, not
-  /// with reduced motion, and not when it is the hero already.
-  UiWork? _preview(UiWork? hero,
-          {required bool staged, required bool reduced}) =>
-      staged || reduced || _shelfFocus?.workId == hero?.workId
-          ? null
-          : _shelfFocus;
+  /// The shelf work previewed in place of [hero]: not with reduced motion,
+  /// and not when it is the hero already.
+  UiWork? _preview(UiWork? hero, {required bool reduced}) =>
+      reduced || _shelfFocus?.workId == hero?.workId ? null : _shelfFocus;
 
-  /// The one work a conversation ended on (a single work or episode card),
-  /// which then takes the hero. Candidates or a mere hover settle nothing.
-  UiWork? _settledWork() {
-    final works = <UiWork>[];
-    for (final card in _conv.cards) {
-      switch (card) {
-        case UiCandidatesCard():
-          return null;
-        case UiWorkCard(:final work):
-          works.add(work);
-        case UiEpisodeCard(:final work, :final episode):
-          works.add(UiWork(
-            workId: work.workId,
-            title: work.title,
-            originalTitle: work.originalTitle,
-            year: work.year,
-            genres: work.genres,
-            episodeCount: work.episodeCount,
-            studio: work.studio,
-            overview: work.overview,
-            ratings: work.ratings,
-            artwork: work.artwork,
-            next: episode,
-          ));
-        default:
-      }
-    }
-    final ids = works.map((w) => w.workId).toSet();
-    return ids.length == 1 ? works.last : null;
-  }
-
-  /// B's focused work: hovered/selected, else the first one presented.
-  UiWork? _stageWork() {
-    if (_stageFocus != null) return _stageFocus;
-    for (final card in _conv.cards) {
+  /// The work the expanded conversation is about: hovered, else the first
+  /// one its last turn presented.
+  UiWork? _chatWork() {
+    if (_chatFocus != null) return _chatFocus;
+    for (final card in _chat.turns.lastOrNull?.cards ?? const <UiCard>[]) {
       switch (card) {
         case UiCandidatesCard(:final items) when items.isNotEmpty:
           return items.first.work;
@@ -221,40 +189,32 @@ class _NextHomePageState extends State<NextHomePage> {
     return out;
   }
 
-  /// After a round on the stage: what you might say next (the same rules
-  /// as the side panel's).
-  List<String> _nextSayings() {
-    final c = _conv;
-    if (c.inProgress || c.question != null || c.reply.isEmpty) return const [];
-    return NextSayings.after(c.reply, c.cards);
-  }
-
   // —— Interaction ——
 
+  /// Said on the bar: into the conversation, which opens.
   void _say(String text) {
     _heroOverride = null;
-    final files = _shell!.askFiles.value;
-    _shell!.askFiles.value = const [];
-    _conv.say(text, files: files);
+    unawaited(_chat.say(text));
+    _shell!.openChat();
   }
 
   /// A card held still for 600 ms is previewed; 300 ms after the pointer
   /// leaves the shelf the hero returns. Crossing cards only restarts the
   /// wait, so a quick pass changes nothing.
   void _hoverShelf(UiWork work, bool on) {
-    if (NextMotion.reduced(context) || _conv.staged) return;
+    if (NextMotion.reduced(context) || _shell!.homeChatOpen.value) return;
     _focusTimer?.cancel();
     _focusTimer = Timer(on ? NextMotion.hoverFocus : _previewLinger, () {
       if (mounted) setState(() => _shelfFocus = on ? work : null);
     });
   }
 
-  CardCallbacks get _stageCallbacks => CardCallbacks(
+  CardCallbacks get _chatCallbacks => CardCallbacks(
         onOpen: _shell!.openWork,
         onPlay: (work, episode) => _shell!.play(work, episode: episode),
         onFocus: (work) {
-          if (_stageFocus?.workId != work.workId) {
-            setState(() => _stageFocus = work);
+          if (_chatFocus?.workId != work.workId) {
+            setState(() => _chatFocus = work);
           }
         },
         onPauseTask: (t) => _shell!.services.actions.pauseTask(t.taskId),
@@ -266,17 +226,18 @@ class _NextHomePageState extends State<NextHomePage> {
 
   @override
   Widget build(BuildContext context) {
+    final shell = _shell!;
     return LayoutBuilder(builder: (context, constraints) {
       final size = constraints.biggest;
       return ListenableBuilder(
-        listenable: _conv,
+        listenable: Listenable.merge([_chat, shell.homeChatOpen]),
         builder: (context, _) {
-          final staged = _conv.staged;
+          final open = shell.homeChatOpen.value;
           final reduced = NextMotion.reduced(context);
           final hero = _heroWork();
-          final preview = _preview(hero, staged: staged, reduced: reduced);
-          final backdropWork = staged
-              ? (reduced ? hero : (_stageWork() ?? hero))
+          final preview = open ? null : _preview(hero, reduced: reduced);
+          final backdropWork = open
+              ? (reduced ? hero : (_chatWork() ?? hero))
               : (preview ?? hero);
           return Stack(fit: StackFit.expand, children: [
             // The push-in animates every frame: keep it off the page's layer.
@@ -288,20 +249,28 @@ class _NextHomePageState extends State<NextHomePage> {
                 soft: backdropWork != null &&
                     backdropWork.artwork.backdrop == null,
                 tint: backdropWork?.artwork.tint,
-                staged: staged,
+                staged: open,
                 scroll: _scroll,
                 viewport: size,
-                fade: staged ? NextMotion.crossfade : _previewFade,
+                fade: open ? NextMotion.crossfade : _previewFade,
               ),
             ),
-            if (!staged) _danmaku(size, preview ?? hero),
-            CustomScrollView(
-              controller: _scroll,
-              slivers: [
-                SliverToBoxAdapter(child: _region(size, hero, preview)),
-                SliverToBoxAdapter(child: _shelvesWidget()),
-                const SliverToBoxAdapter(child: SizedBox(height: 64)),
-              ],
+            if (!open) _danmaku(size, preview ?? hero),
+            AnimatedSwitcher(
+              duration: const Duration(milliseconds: 320),
+              switchInCurve: Curves.easeOut,
+              switchOutCurve: Curves.easeIn,
+              child: open
+                  ? _HomeChat(key: const ValueKey('chat'), page: this)
+                  : CustomScrollView(
+                      key: const ValueKey('home'),
+                      controller: _scroll,
+                      slivers: [
+                        SliverToBoxAdapter(child: _region(size, hero, preview)),
+                        SliverToBoxAdapter(child: _shelvesWidget()),
+                        const SliverToBoxAdapter(child: SizedBox(height: 64)),
+                      ],
+                    ),
             ),
           ]);
         },
@@ -337,146 +306,142 @@ class _NextHomePageState extends State<NextHomePage> {
     return _shelves!;
   }
 
+  /// The hero with Nipa's line, then the input bar.
   Widget _region(Size size, UiWork? hero, UiWork? preview) {
-    final c = _conv;
-    final staged = c.staged;
+    final c = _chat;
     final h = size.height;
     final shell = _shell!;
-    final Widget top;
-    if (staged) {
-      top = ConstrainedBox(
-        key: const ValueKey('stage'),
-        constraints: BoxConstraints(minHeight: h - 288, minWidth: size.width),
-        child: Align(
-          alignment: Alignment.topLeft,
-          child: Padding(
-            padding: const EdgeInsets.only(left: NextMetrics.gutter, top: 118),
-            child: ConverseStage(
-              conversation: c,
-              callbacks: _stageCallbacks,
-              focusedWorkId: _stageWork()?.workId,
-              onViewAll: c.threadId == null
-                  ? null
-                  : () => shell.openPanelOn(c.threadId!),
-            ),
-          ),
-        ),
-      );
-    } else {
-      final heroNote = _heroOverride == null ? _home?.hero?.note : null;
-      final line = c.backgroundActive
-          ? (c.activity ?? '在忙')
-          : (c.latestLine ?? heroNote);
-      // The line on the home is the news itself: once it has been on
-      // screen for a moment, the avatar's dot goes away.
-      if (c.unseen &&
-          line == c.latestLine &&
-          TickerMode.valuesOf(context).enabled) {
-        _seenTimer ??= Timer(const Duration(seconds: 3), () {
-          _seenTimer = null;
-          if (mounted && TickerMode.valuesOf(context).enabled) c.markSeen();
-        });
-      }
-      top = ConstrainedBox(
-        key: const ValueKey('hero'),
-        constraints: BoxConstraints(minHeight: h - 338, minWidth: size.width),
-        child: Align(
-          alignment: Alignment.bottomLeft,
-          child: Padding(
-            padding: const EdgeInsets.only(
-                left: NextMetrics.gutter, top: NextMetrics.topBar + 40),
-            child: hero == null
-                ? const SizedBox.shrink()
-                : ValueListenableBuilder(
-                    valueListenable: shell.tasks,
-                    builder: (context, _, __) {
-                      final active = shell.activeTasks;
-                      return _HeroPreview(
-                        preview: preview == null
-                            ? null
-                            : HeroCopy(
-                                key: ValueKey(preview.workId),
-                                work: preview,
-                                line: null,
-                                mood: c.mood,
-                                moodSentence: c.moodSentence,
-                                onPlay: () => shell.play(preview),
-                                onDetail: () => shell.openWork(preview),
-                              ),
-                        child: HeroCopy(
-                          work: hero,
-                          line: line,
-                          leadWithTitle: line != null && line == heroNote,
-                          mood: c.mood,
-                          moodSentence: c.moodSentence,
-                          onPlay: () => shell.play(hero),
-                          onDetail: () => shell.openWork(hero),
-                          preparing: active.isEmpty
-                              ? null
-                              : PreparingLine(
-                                  tasks: active,
-                                  preparation: c.latestPreparation),
-                        ),
-                      );
-                    },
-                  ),
-          ),
-        ),
-      );
+    final heroNote = _heroOverride == null ? _home?.hero?.note : null;
+    final line = c.doing ?? c.latestLine ?? heroNote;
+    // The line on the home is the news itself: once it has been on screen
+    // for a moment, the avatar's dot goes away.
+    if (c.unseen &&
+        line == c.latestLine &&
+        TickerMode.valuesOf(context).enabled) {
+      _seenTimer ??= Timer(const Duration(seconds: 3), () {
+        _seenTimer = null;
+        if (mounted && TickerMode.valuesOf(context).enabled) c.markSeen();
+      });
     }
-    return AnimatedSize(
-      duration: const Duration(milliseconds: 480),
-      curve: NextMotion.ease,
-      alignment: Alignment.topCenter,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          AnimatedSwitcher(
-            duration: const Duration(milliseconds: 380),
-            switchInCurve: Curves.easeOut,
-            switchOutCurve: Curves.easeIn,
-            layoutBuilder: (current, previous) => Stack(
-              alignment: Alignment.topLeft,
-              children: [...previous, if (current != null) current],
-            ),
-            child: top,
-          ),
-          SizedBox(height: staged ? 28 : 32),
-          Padding(
-            padding: const EdgeInsets.only(left: NextMetrics.gutter),
-            child: ListenableBuilder(
-              listenable: Listenable.merge([shell.askFiles, shell.panelOpen]),
-              builder: (context, _) => AskBar(
-                focusNode: shell.askFocus,
-                controller: shell.askText,
-                onSay: _say,
-                mood: c.mood,
-                moodSentence: c.moodSentence,
-                hint: c.question != null
-                    ? '也可以直接说'
-                    : (staged ? '继续说…' : '今天想看什么？'),
-                suggestions: staged ? _nextSayings() : _suggestions(),
-                maxWidth: size.width - NextMetrics.gutter - 32,
-                attachments: shell.askFiles.value,
-                // While the panel is open, files go there.
-                onAttach: shell.panelOpen.value
-                    ? null
-                    : (paths) => shell.askFiles.value = [
-                          ...shell.askFiles.value,
-                          for (final p in paths)
-                            if (!shell.askFiles.value.contains(p)) p
-                        ],
-                onDetach: (path) => shell.askFiles.value = [
-                  for (final p in shell.askFiles.value)
-                    if (p != path) p
-                ],
-              ),
-            ),
-          ),
-          SizedBox(height: staged ? 40 : 34),
-        ],
+    final top = ConstrainedBox(
+      constraints: BoxConstraints(minHeight: h - 338, minWidth: size.width),
+      child: Align(
+        alignment: Alignment.bottomLeft,
+        child: Padding(
+          padding: const EdgeInsets.only(
+              left: NextMetrics.gutter, top: NextMetrics.topBar + 40),
+          child: hero == null
+              ? const SizedBox.shrink()
+              : ValueListenableBuilder(
+                  valueListenable: shell.tasks,
+                  builder: (context, _, __) {
+                    final active = shell.activeTasks;
+                    return _HeroPreview(
+                      preview: preview == null
+                          ? null
+                          : HeroCopy(
+                              key: ValueKey(preview.workId),
+                              work: preview,
+                              line: null,
+                              mood: c.mood,
+                              moodSentence: c.moodSentence,
+                              onPlay: () => shell.play(preview),
+                              onDetail: () => shell.openWork(preview),
+                            ),
+                      child: HeroCopy(
+                        work: hero,
+                        line: line,
+                        leadWithTitle: line != null && line == heroNote,
+                        mood: c.mood,
+                        moodSentence: c.moodSentence,
+                        onPlay: () => shell.play(hero),
+                        onDetail: () => shell.openWork(hero),
+                        preparing: active.isEmpty
+                            ? null
+                            : PreparingLine(
+                                tasks: active,
+                                preparation: c.latestPreparation),
+                      ),
+                    );
+                  },
+                ),
+        ),
       ),
+    );
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        top,
+        const SizedBox(height: 32),
+        Padding(
+          padding: const EdgeInsets.only(left: NextMetrics.gutter),
+          child: AskBar(
+            focusNode: shell.askFocus,
+            controller: shell.askText,
+            onSay: _say,
+            mood: c.mood,
+            moodSentence: c.moodSentence,
+            hint: c.running ? '补充，或者改主意' : '今天想看什么？',
+            suggestions: _suggestions(),
+            maxWidth: size.width - NextMetrics.gutter - 32,
+            attachments: c.attachments,
+            onAttach: c.attach,
+            onDetach: c.detach,
+            running: c.running,
+            onStop: c.stop,
+            onExpand: c.turns.isEmpty && !c.loading ? null : shell.openChat,
+          ),
+        ),
+        const SizedBox(height: 34),
+      ],
+    );
+  }
+}
+
+/// The conversation expanded over the home: the backdrop stays, dimmed;
+/// the conversation takes the page, the composer at its foot. The chevron
+/// (or Esc) folds it away again.
+class _HomeChat extends StatelessWidget {
+  const _HomeChat({super.key, required this.page});
+  final _NextHomePageState page;
+
+  @override
+  Widget build(BuildContext context) {
+    final shell = NextShellScope.of(context);
+    return NextDropZone(
+      onDrop: shell.chat.attach,
+      builder: (context, over) => Stack(fit: StackFit.expand, children: [
+        // The picture stays as the room's light; the words need the dark.
+        const DecoratedBox(
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topCenter,
+              end: Alignment.bottomCenter,
+              colors: [Color(0x9908080B), Color(0xC708080B), Color(0xE008080B)],
+              stops: [0, 0.45, 1],
+            ),
+          ),
+        ),
+        Padding(
+          padding: const EdgeInsets.only(top: NextMetrics.topBar + 6),
+          child: ChatFrame(
+            focusNode: shell.homeChatFocus,
+            columnWidth: 780,
+            textSize: 15.5,
+            posterWidth: 168,
+            sidePadding: 40,
+            callbacks: page._chatCallbacks,
+            trailing: FrameButton(
+              glyph: NextGlyph.chevronRight,
+              turns: 1,
+              label: '收起',
+              onTap: shell.foldHomeChat,
+            ),
+          ),
+        ),
+        Positioned.fill(child: DropGlow(over: over, radius: BorderRadius.zero)),
+      ]),
     );
   }
 }

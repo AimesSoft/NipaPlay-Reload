@@ -84,6 +84,51 @@ void main() {
     }
   });
 
+  test('a turn read back keeps its process between the messages', () async {
+    final root = await Directory.systemTemp.createTemp('x33-order-');
+    try {
+      final store = TurnProcessStore(File('${root.path}/facts.json'));
+      final now = DateTime.utc(2026);
+      void event(String method, Map params) => store.observe({
+            'method': method,
+            'params': {'threadId': 'one', 'turnId': 't', ...params}
+          }, 'origin', now);
+      store.observe({
+        'method': 'turn/started',
+        'params': {
+          'threadId': 'one',
+          'turn': {'id': 't'}
+        }
+      }, 'origin', now);
+      for (final item in [
+        {'id': 'u', 'type': 'userMessage'},
+        {'id': 'r', 'type': 'reasoning', 'summary': [], 'content': ['想']},
+        {'id': 'm1', 'type': 'agentMessage'},
+        {'id': 'c', 'type': 'commandExecution', 'command': 'ls'},
+        {'id': 'm2', 'type': 'agentMessage'},
+      ]) {
+        event('item/started', {'item': item});
+        event('item/completed', {'item': item});
+      }
+      // Codex's history: its own items, under its own IDs.
+      final history = {
+        'id': 't',
+        'items': <Map>[
+          {'id': 'item-1', 'type': 'userMessage', 'text': '你的话'},
+          {'id': 'item-2', 'type': 'agentMessage', 'text': '先看看'},
+          {'id': 'item-3', 'type': 'agentMessage', 'text': '好了'},
+        ]
+      };
+      store.restore('one', history);
+      store.restore('one', history);
+      expect((history['items'] as List).map((v) => v['id']),
+          ['item-1', 'r', 'item-2', 'c', 'item-3']);
+      expect(((history['items'] as List)[1] as Map)['content'], ['想']);
+    } finally {
+      await root.delete(recursive: true);
+    }
+  });
+
   test('invisible Next preserves Classic work routing and direct anime targets',
       () async {
     final f = MediaFixture();

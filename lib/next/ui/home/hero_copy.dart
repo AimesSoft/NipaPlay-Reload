@@ -70,7 +70,7 @@ class HeroCopy extends StatelessWidget {
                             size: 28,
                             mood: mood,
                             sentence: moodSentence,
-                            onTap: NextShellScope.of(context).openPanel),
+                            onTap: NextShellScope.of(context).openChat),
                         const SizedBox(width: 12),
                         Expanded(
                           child: NipaSentence(line!,
