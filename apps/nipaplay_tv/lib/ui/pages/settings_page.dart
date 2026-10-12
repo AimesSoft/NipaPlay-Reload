@@ -2,11 +2,12 @@ import 'package:flutter/material.dart';
 import 'package:nipaplay_core/constants/settings_keys.dart';
 import 'package:nipaplay_core/utils/settings_storage.dart';
 import 'package:nipaplay_ui_common/l10n/l10n.dart';
+import 'package:nipaplay_ui_common/settings/unified_setting_content_type.dart';
 
 import '../focusable_card.dart';
 
-/// 设置页：开关项经 core 的 SettingsStorage 持久化（SharedPreferences）。
-/// 展示"TV 版 UI + core 存储契约"的接线；阶段四扩充为完整 TV 设置瓦片。
+/// 设置页：TV 瓦片，覆盖 ui_common [UnifiedSettingContentType] 的分类，
+/// 开关值经 core 的 [SettingsStorage] 持久化。
 class SettingsPage extends StatefulWidget {
   const SettingsPage({super.key});
 
@@ -16,12 +17,41 @@ class SettingsPage extends StatefulWidget {
 
 class _SettingsPageState extends State<SettingsPage> {
   final _toggles = <String, bool>{};
+  UnifiedSettingContentType _section = UnifiedSettingContentType.general;
 
-  static const _items = [
-    ('tv.settings.hardwareDecode', '硬件解码（阶段四接 NipaPlayer）'),
-    ('tv.settings.danmaku', '弹幕（阶段四接引擎渲染）'),
-    ('tv.settings.autoPlayNext', '自动连播'),
+  static const _sections = [
+    (UnifiedSettingContentType.general, '通用', Icons.tune),
+    (UnifiedSettingContentType.player, '播放器', Icons.play_circle_outline),
+    (UnifiedSettingContentType.danmaku, '弹幕', Icons.subtitles_outlined),
+    (UnifiedSettingContentType.network, '网络', Icons.wifi),
+    (UnifiedSettingContentType.storage, '存储', Icons.folder_outlined),
+    (UnifiedSettingContentType.appearance, '外观', Icons.palette_outlined),
   ];
+
+  static const _itemsBySection = {
+    UnifiedSettingContentType.general: [
+      ('tv.settings.autoPlayNext', '自动连播'),
+      ('tv.settings.resumePlayback', '记忆播放进度'),
+    ],
+    UnifiedSettingContentType.player: [
+      ('tv.settings.hardwareDecode', '硬件解码'),
+      ('tv.settings.showControlsOnStart', '起播显示控件'),
+    ],
+    UnifiedSettingContentType.danmaku: [
+      ('tv.settings.danmaku', '显示弹幕'),
+      ('tv.settings.danmakuTop', '顶部弹幕'),
+      ('tv.settings.danmakuBottom', '底部弹幕'),
+    ],
+    UnifiedSettingContentType.network: [
+      ('tv.settings.proxy', '使用 HTTP 代理'),
+    ],
+    UnifiedSettingContentType.storage: [
+      ('tv.settings.cacheDanmaku', '缓存弹幕'),
+    ],
+    UnifiedSettingContentType.appearance: [
+      ('tv.settings.compactCards', '紧凑卡片'),
+    ],
+  };
 
   @override
   void initState() {
@@ -31,8 +61,11 @@ class _SettingsPageState extends State<SettingsPage> {
 
   Future<void> _load() async {
     final map = <String, bool>{};
-    for (final item in _items) {
-      map[item.$1] = await SettingsStorage.loadBool(item.$1, defaultValue: true);
+    for (final entry in _itemsBySection.entries) {
+      for (final item in entry.value) {
+        map[item.$1] =
+            await SettingsStorage.loadBool(item.$1, defaultValue: true);
+      }
     }
     if (mounted) setState(() => _toggles.addAll(map));
   }
@@ -45,47 +78,81 @@ class _SettingsPageState extends State<SettingsPage> {
   @override
   Widget build(BuildContext context) {
     final l10n = context.l10n;
-    return SingleChildScrollView(
+    final items = _itemsBySection[_section] ?? const [];
+    return Padding(
       padding: const EdgeInsets.all(24),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(l10n.tabSettings,
               style: Theme.of(context).textTheme.headlineMedium),
-          const SizedBox(height: 8),
-          Text(l10n.settingsBasicSection,
-              style: Theme.of(context)
-                  .textTheme
-                  .bodyLarge
-                  ?.copyWith(color: Colors.white38)),
-          const SizedBox(height: 16),
-          for (final item in _items)
-            Padding(
-              padding: const EdgeInsets.only(bottom: 12),
-              child: FocusableCard(
-                onActivate: () =>
-                    _toggle(item.$1, !(_toggles[item.$1] ?? true)),
-                child: Row(
-                  children: [
-                    Expanded(
-                      child: Text(item.$2,
+          const SizedBox(height: 18),
+          SizedBox(
+            height: 56,
+            child: ListView.separated(
+              scrollDirection: Axis.horizontal,
+              itemCount: _sections.length,
+              separatorBuilder: (_, _) => const SizedBox(width: 12),
+              itemBuilder: (context, i) {
+                final s = _sections[i];
+                final active = s.$1 == _section;
+                return FocusableCard(
+                  autofocus: i == 0,
+                  onActivate: () => setState(() => _section = s.$1),
+                  borderRadius: 12,
+                  accentColor:
+                      active ? const Color(0xFF26C6DA) : Colors.white24,
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: 16, vertical: 10),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(s.$3, size: 20),
+                      const SizedBox(width: 8),
+                      Text(s.$2,
                           style: Theme.of(context).textTheme.bodyLarge),
-                    ),
-                    const SizedBox(width: 12),
-                    Switch(
-                      value: _toggles[item.$1] ?? true,
-                      onChanged: (v) => _toggle(item.$1, v),
-                    ),
-                  ],
-                ),
-              ),
+                    ],
+                  ),
+                );
+              },
             ),
-          const SizedBox(height: 8),
-          Text('存储键空间示例: ${SettingsKeys.appLanguageMode}（core/constants/settings_keys.dart）',
-              style: Theme.of(context)
-                  .textTheme
-                  .bodyMedium
-                  ?.copyWith(color: Colors.white24)),
+          ),
+          const SizedBox(height: 20),
+          Expanded(
+            child: ListView(
+              children: [
+                for (final item in items)
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 12),
+                    child: FocusableCard(
+                      onActivate: () =>
+                          _toggle(item.$1, !(_toggles[item.$1] ?? true)),
+                      child: Row(
+                        children: [
+                          Expanded(
+                            child: Text(item.$2,
+                                style:
+                                    Theme.of(context).textTheme.bodyLarge),
+                          ),
+                          Switch(
+                            value: _toggles[item.$1] ?? true,
+                            onChanged: (v) => _toggle(item.$1, v),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                const SizedBox(height: 8),
+                Text(
+                  '分区契约: ui_common UnifiedSettingContentType · 存储: core SettingsStorage（示例键 ${SettingsKeys.appLanguageMode}）',
+                  style: Theme.of(context)
+                      .textTheme
+                      .bodyMedium
+                      ?.copyWith(color: Colors.white24),
+                ),
+              ],
+            ),
+          ),
         ],
       ),
     );
