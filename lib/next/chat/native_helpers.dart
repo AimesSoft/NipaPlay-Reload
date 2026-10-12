@@ -104,7 +104,12 @@ final class _NativeHelpers {
   }
 
   String _sentence(String text, int limit) {
-    final sentence = text.trim().split(RegExp(r'[\n。！？]')).first.trim();
+    final sentence = text
+        .trim()
+        .split(RegExp(r'[\n。！？]'))
+        .first
+        .trim()
+        .replaceFirst(RegExp(r'^(任务|目标|Task)\s*[：:]\s*'), '');
     return sentence.length > limit
         ? '${sentence.substring(0, limit)}…'
         : sentence;
@@ -260,9 +265,12 @@ final class _NativeHelpers {
     try {
       while (true) {
         final change = changed.future;
+        // A child just spawned has no turn yet; one found on restart names
+        // the turn it was in, which history can tell has ended.
         final initializing =
             context.job.input['observedSessionId'] == chat.sessionId &&
                 context.job.checkpoint['turnId'] == null &&
+                context.job.input['turnId'] == null &&
                 chat.livenessFor(child).turnId == null;
         final history = initializing ? null : await chat.readThread(child);
         final turns = (history?['turns'] as List? ?? []).cast<Map>();
