@@ -316,6 +316,11 @@ class _VideoDimensionSnapshot {
 
 class VideoPlayerState extends ChangeNotifier implements WindowListener {
   Future<bool> Function(String path)? nextLocalDanmakuLoader;
+  Future<bool> Function(String path)? get nextSubtitleLoader => _subtitleManager.nextSubtitleLoader;
+  set nextSubtitleLoader(Future<bool> Function(String path)? loader) {
+    _subtitleManager.nextSubtitleLoader = loader;
+  }
+  Future<void> Function(String path, int? index, String? external)? nextSubtitleSelection;
   late Player _player;
   ValueListenable<bool>? _playerBuffering;
 

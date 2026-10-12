@@ -47,6 +47,8 @@ import 'ui/shell/next_ui_preference.dart';
 import 'ui_data/capability.dart';
 import 'chat/session_store.dart';
 import 'chat/helpers.dart';
+import 'subtitles/library.dart';
+import 'subtitles/capability.dart';
 
 /// Application-owned task and capability composition, independent of Labs.
 final class NextCore {
@@ -61,6 +63,7 @@ final class NextCore {
     DatabaseFactory? databaseFactory,
     Iterable<MetadataProvider>? mediaProviders,
     Future<int?> Function(String) mediaDurationProbe = probeMediaDuration,
+    Future<JsonMap> Function(String) mediaSubtitleProbe = probeMediaInfo,
     Duration downloadRefreshInterval = const Duration(seconds: 5),
   }) : downloads = DownloadRuntime(
             backend: downloadBackend,
@@ -69,7 +72,7 @@ final class NextCore {
             loadImportedKeys: loadImportedKeys,
             refreshInterval: downloadRefreshInterval) {
     ready = _initialize(root, databaseFactory, classic, authorizedRoots,
-        mediaProviders, mediaDurationProbe);
+        mediaProviders, mediaDurationProbe, mediaSubtitleProbe);
   }
 
   late final Future<void> ready;
@@ -87,6 +90,7 @@ final class NextCore {
   late final SyncService sync;
   final accounts = AccountsService();
   late final DanmakuRuntime danmaku;
+  late final SubtitleLibrary subtitles;
   late final SettingsRegistry settings;
   late final MeshRuntime mesh;
   late final List<Capability> capabilities;
@@ -103,7 +107,8 @@ final class NextCore {
       ClassicMetadataPort classic,
       Iterable<String> Function() authorizedRoots,
       Iterable<MetadataProvider>? mediaProviders,
-      Future<int?> Function(String) mediaDurationProbe) async {
+      Future<int?> Function(String) mediaDurationProbe,
+      Future<JsonMap> Function(String) mediaSubtitleProbe) async {
     await debugDandanplayClaimNames(credentialVault);
     root = suppliedRoot ??
         Directory(
@@ -146,6 +151,7 @@ final class NextCore {
         authorizeLocalFile: media.service.authorizedPath);
     danmaku.service.exporter = DanmakuExporter(danmaku.service.store,
         (path) => media.service.authorizedPath(path, directory: true));
+    subtitles = SubtitleLibrary(media.service, root, probe: mediaSubtitleProbe);
     final helpers = Helpers();
     final executors = [
       helpers,
@@ -189,6 +195,7 @@ final class NextCore {
             File('${root.path}/journal.jsonl'), harnessLocation,
             changeHistory).view, followups.view]);
     uiData = UiDataService(media.service, engine, state, stateSources, root, credentialVault);
+    uiData.subtitles = subtitles;
     settings.register([uiData.openingSetting]);
     capabilities = List.unmodifiable(diskDeletion.protect([
       CredentialCapability(credentials),
@@ -203,6 +210,7 @@ final class NextCore {
       RemoteAdminCapability(mediaSources),
       AccountsCapability(accounts),
       danmaku.capability,
+      SubtitleCapability(subtitles),
       SettingsCapability(settings),
       ClassicOperations(settings),
       MeshCapability(mesh),
@@ -214,6 +222,7 @@ final class NextCore {
     await downloads.start();
     await media.start();
     danmaku.startIndexing();
+    subtitles.start();
     mesh.attach(Harness(capabilities));
     await mesh.startConfigured();
   }
@@ -238,6 +247,7 @@ final class NextCore {
     await downloads.stop();
     await danmaku.stopRestoring();
     await danmaku.stopIndexing();
+    await subtitles.close();
     final jobs = await engine.list(type: 'download');
     await media.quiesce();
     await engine.close();

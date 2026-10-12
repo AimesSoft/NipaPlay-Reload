@@ -194,7 +194,11 @@ final class MediaService {
       } finally {
         await stream.close();
       }
-      final duration = includeDuration ? await durationProbe(path) : null;
+      final info = !includeDuration
+          ? <String, Object?>{}
+          : durationProbe == probeMediaDuration
+              ? await probeMediaInfo(path)
+              : <String, Object?>{'durationMs': await durationProbe(path)};
       final after = await file.stat();
       if (before.size != after.size || before.modified != after.modified) {
         throw const Failure(
@@ -204,7 +208,8 @@ final class MediaService {
         'size': after.size,
         'modifiedAt': after.modified.toUtc().toIso8601String(),
         'headMd5': md5.convert(bytes).toString(),
-        'durationMs': duration
+        'durationMs': info['durationMs'],
+        if (info.containsKey('subtitles')) 'subtitles': info['subtitles'],
       };
     } on FileSystemException catch (error) {
       throw _fileFailure(error);

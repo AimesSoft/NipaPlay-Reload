@@ -31,6 +31,19 @@ class SubtitleService {
     return sha1.convert(utf8.encode(videoPath)).toString();
   }
 
+  /// Read persisted choices without pruning files or updating the Classic cache.
+  Future<({List<Map<String, dynamic>> subtitles, int? activeIndex})>
+      readExternalSubtitlePreferences(String videoPath) async {
+    final prefs = await SharedPreferences.getInstance();
+    final key = _getVideoHashKey(videoPath);
+    final stored = prefs.getString('external_subtitles_$key');
+    return (
+      subtitles: stored == null ? <Map<String, dynamic>>[] :
+          (json.decode(stored) as List).map((s) => Map<String, dynamic>.from(s as Map)).toList(),
+      activeIndex: prefs.getInt('last_active_subtitle_$key'),
+    );
+  }
+
   /// 加载指定视频的外部字幕列表
   Future<List<Map<String, dynamic>>> loadExternalSubtitles(
       String videoPath) async {

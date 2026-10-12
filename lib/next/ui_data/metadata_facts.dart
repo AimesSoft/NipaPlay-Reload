@@ -1,6 +1,7 @@
 import 'package:nipa_harness/nipa_harness.dart';
 
 import 'service.dart';
+import '../subtitles/library.dart';
 
 extension UiMetadataFacts on UiDataService {
   Future<JsonMap> metadataFacts(String workId) async {
@@ -65,6 +66,9 @@ extension UiMetadataFacts on UiDataService {
       final m = await media.store.mergedMetadata(e.episodeId);
       final tracks = await heat.tracks(e.episodeId);
       final danmaku = <JsonMap>[];
+      final subtitleTracks =
+          await (subtitles ?? SubtitleLibrary(media, mediaRoot))
+              .episodeTracks(e.episodeId);
       for (final track in tracks) {
         final local = track['local_file'] as JsonMap?;
         final video = track['video'] as JsonMap;
@@ -86,6 +90,16 @@ extension UiMetadataFacts on UiDataService {
         });
       }
       episodeFacts.add({
+        'subtitles': {
+          'files': await (subtitles ?? SubtitleLibrary(media, mediaRoot)).episodeFiles(e.episodeId),
+          'available': subtitleTracks.any((t) => t['available'] == true),
+          'languages': subtitleTracks
+              .where((t) => t['available'] == true)
+              .map((t) => t['language'])
+              .toSet()
+              .toList(),
+          'tracks': subtitleTracks,
+        },
         'danmaku': {
           'available': danmaku.isNotEmpty,
           'tracks': danmaku,
@@ -141,6 +155,9 @@ extension UiMetadataFacts on UiDataService {
         'stills': episodes.where((e) => e.still != null).length,
         'danmaku': episodeFacts
             .where((e) => (e['danmaku'] as JsonMap)['available'] == true)
+            .length,
+        'subtitles': episodeFacts
+            .where((e) => (e['subtitles'] as JsonMap)['available'] == true)
             .length,
         'items': episodeFacts
       }

@@ -405,6 +405,7 @@ final class NextRuntime extends ChangeNotifier {
     chatError = null;
     final AgentEndpointStatus status;
     if (enabled) {
+      ServiceProvider.nextCore.subtitles.attachPlayer(_player);
       await _localLibrary.attachClassicHistory();
       status = await _endpoint.start(Directory(repositoryPath));
       if (status case AgentEndpointRunning(:final repository)) {
@@ -425,6 +426,7 @@ final class NextRuntime extends ChangeNotifier {
         }
       }
     } else {
+      ServiceProvider.nextCore.subtitles.detachPlayer();
       await _endpoint.stop();
       status = const AgentEndpointStopped();
     }
@@ -513,6 +515,7 @@ final class NextRuntime extends ChangeNotifier {
   @override
   void dispose() {
     _disposed = true;
+    ServiceProvider.nextCore.subtitles.detachPlayer();
     _classicSettings?.plugins.removeListener(_syncPluginSettings);
     if (identical(ClassicSettings.attached, _classicSettings)) ClassicSettings.attached = null;
     _labs.removeListener(_queueEndpointUpdate);
