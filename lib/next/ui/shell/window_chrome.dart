@@ -120,8 +120,14 @@ class NextLabBadge extends StatelessWidget {
                     shape: BoxShape.circle, color: Color(0xFFE0782F)),
               ),
               const SizedBox(width: 5),
-              Text('LAB · $profile',
-                  style: NextText.num(10, color: NextColors.p3)),
+              // Ends before the content column (cards start at the gutter).
+              ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 58),
+                child: Text('LAB · $profile',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: NextText.num(10, color: NextColors.p3)),
+              ),
             ]),
           ),
         ),

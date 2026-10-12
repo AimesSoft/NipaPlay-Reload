@@ -2,6 +2,7 @@ import 'package:flutter/widgets.dart';
 
 import '../../ui_data/ui_data.dart';
 import '../cards/card_views.dart';
+import '../chat/transcript.dart' show Shimmer;
 import '../shell/shell_controller.dart';
 import '../theme/tokens.dart';
 import '../widgets/artwork.dart';
@@ -73,9 +74,19 @@ class HeroCopy extends StatelessWidget {
                             onTap: NextShellScope.of(context).openChat),
                         const SizedBox(width: 12),
                         Expanded(
-                          child: NipaSentence(line!,
-                              lead: leadWithTitle ? work.title : null,
-                              maxLines: 1),
+                          // While Nipa works, light passes over what it is
+                          // doing.
+                          child: mood == NipaMood.thinking ||
+                                  mood == NipaMood.acting
+                              ? Align(
+                                  alignment: Alignment.centerLeft,
+                                  child: Shimmer(
+                                      text: line!,
+                                      style: NextText.sans(15.5)),
+                                )
+                              : NipaSentence(line!,
+                                  lead: leadWithTitle ? work.title : null,
+                                  maxLines: 1),
                         ),
                       ]),
                     ),

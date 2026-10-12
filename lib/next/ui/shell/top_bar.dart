@@ -39,10 +39,10 @@ class NextTopBar extends StatelessWidget {
   static const tasksRight =
       NextMetrics.chromeEdge + _avatar + _gap + _search + _gap;
 
-  /// Sections line up with the content column beside the traffic lights;
-  /// in full screen, with no lights, they move out to the bar's margin.
+  /// Sections line up with the content column, past the traffic lights
+  /// when they would reach it; in full screen there are none.
   static double _left(NextChromeLayout chrome) => chrome.fullScreen
-      ? NextMetrics.chromeEdge
+      ? NextMetrics.gutter
       : math.max(NextMetrics.gutter, chrome.leading + _afterLights);
 
   Future<void> _zoom() async {
