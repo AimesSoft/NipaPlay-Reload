@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
 import 'danmaku/migration.dart';
+import 'danmaku/files.dart';
 import 'media/media_migration.dart';
 import 'media/primitives_migration.dart';
 import 'media/metadata_edit_migration.dart';
@@ -31,6 +32,7 @@ const _migrations = [
   migrateSessions,
   migrateFileAliases,
   migrateDanmakuSidecars,
+  migrateDanmakuFiles,
 ];
 
 Future<void> _migrate(Database db, int oldVersion, int newVersion) async {
@@ -50,11 +52,20 @@ Future<Database> openNextDatabase(Directory root,
       factory = databaseFactory;
     }
   }
-  return factory.openDatabase('${root.path}/next.db',
+  final db = await factory.openDatabase('${root.path}/next.db',
       options: OpenDatabaseOptions(
         version: _migrations.length,
         onConfigure: (db) => db.execute('PRAGMA foreign_keys = ON'),
         onCreate: (db, version) => _migrate(db, 0, version),
         onUpgrade: _migrate,
       ));
+  try {
+    final files = DanmakuFiles(db);
+    await files.migrate();
+    await files.prune();
+    return db;
+  } catch (_) {
+    await db.close();
+    rethrow;
+  }
 }

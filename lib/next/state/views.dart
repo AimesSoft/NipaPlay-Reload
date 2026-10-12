@@ -648,9 +648,12 @@ List<StateView> publicStateViews(
           'endMs': _int('Coverage end in source milliseconds.'),
           'coverage': _text('Acquired coverage status.'),
           'fetchedAt': _time,
-          'entryCount': _int('Number of stored entries in this chunk.')
+          'entryCount': _int('Number of stored entries in this chunk.'),
+          'filePath': _text('Relative content file inside the Next data directory.'),
+          'byteCount': _int('Stored content bytes.'),
+          'storageKind': _text('imported unique copy or recoverable cache.')
         }),
-        'SELECT cache_key AS cacheKey,chunk_index AS chunkIndex,start_ms AS startMs,end_ms AS endMs,coverage,fetched_at AS fetchedAt,json_array_length(payload) AS entryCount FROM danmaku_cache_chunks ORDER BY cache_key,chunk_index'),
+        'SELECT cache_key AS cacheKey,chunk_index AS chunkIndex,start_ms AS startMs,end_ms AS endMs,coverage,fetched_at AS fetchedAt,COALESCE(entry_count,json_array_length(payload)) AS entryCount,file_path AS filePath,byte_count AS byteCount,storage_kind AS storageKind FROM danmaku_cache_chunks ORDER BY cache_key,chunk_index'),
     StateView(
         name: 'danmaku.tracks',
         description:

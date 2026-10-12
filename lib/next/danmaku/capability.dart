@@ -69,7 +69,11 @@ const _coverage = ObjectSchema({
   'start_ms': IntegerSchema(),
   'end_ms': IntegerSchema(),
   'coverage': StringSchema(),
-  'fetched_at': StringSchema()
+  'fetched_at': StringSchema(),
+  'file_path': StringSchema(nullable: true),
+  'entry_count': IntegerSchema(nullable: true),
+  'byte_count': IntegerSchema(nullable: true),
+  'storage_kind': StringSchema(nullable: true)
 }, required: [
   'chunk_index',
   'start_ms',
@@ -355,7 +359,7 @@ final _specs = [
       _bindingInput,
       const ObjectSchema({'bindingId': _text, 'revision': IntegerSchema()},
           required: ['bindingId', 'revision']),
-      'Revoke this managed binding; source cache and provenance remain available. Classic local, automatic and Dandanplay tracks remain loaded with their managed binding detached. Other managed tracks are removed.'),
+      'Revoke this managed binding; unreferenced imported content files are deleted, provenance remains. Recoverable source cache remains subject to the cache budget. Classic local, automatic and Dandanplay tracks remain loaded with their managed binding detached. Other managed tracks are removed.'),
   _spec(
       'danmaku.analyze_alignment',
       Effect.read,
@@ -445,6 +449,12 @@ final _specs = [
             required: ['jobId', 'revision']),
         _job,
         'Legacy recovery only: execute an existing persisted alignment decision option with a task revision check. New analysis returns data and offsets are set through danmaku.update.'),
+  _spec(
+      'danmaku.cache_prune',
+      Effect.write,
+      const ObjectSchema({'maxBytes': IntegerSchema(minimum: 0)}),
+      const ObjectSchema({}, additionalProperties: true),
+      'Reclaim oldest recoverable danmaku pools to maxBytes (default 128 MiB). Imported unique copies are excluded. Defers while acquisition tasks are active; unloads evicted pools. Also collects unreferenced content files.'),
   _spec(
       'danmaku.cache_delete',
       Effect.destructive,
@@ -621,6 +631,11 @@ final class _Action extends Action<_Data, _Data> {
         case 'danmaku.cache_delete':
           await service.deleteCache(j['cacheKey'] as String);
           return result({'deleted': true});
+        case 'danmaku.cache_prune':
+          final pruned = await service.store.files
+              .prune(maxBytes: j['maxBytes'] as int? ?? 128 * 1024 * 1024);
+          await service.refreshCurrent();
+          return result(pruned);
         case 'danmaku.export':
           final exporter = service.exporter;
           if (exporter == null) {

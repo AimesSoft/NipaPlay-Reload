@@ -5,11 +5,13 @@ import '../media/identity_store.dart';
 import '../media/metadata_provider.dart';
 import 'source.dart';
 import 'sidecar.dart';
+import 'files.dart';
 
 final class DanmakuStore {
   const DanmakuStore(this.identities);
   final IdentityStore identities;
   Database get db => identities.database;
+  DanmakuFiles get files => DanmakuFiles(db);
   String get now => DateTime.now().toUtc().toIso8601String();
   JsonMap decodeBinding(JsonMap b) => {
         ...b,
@@ -149,13 +151,16 @@ final class DanmakuStore {
           'note': note,
         };
         final key = newMediaId('danmaku-import');
+        final reference = await files.write(
+            [for (final e in entries) e.toJson()],
+            invocation.origin == 'application:playback' ? 'cache' : 'imported');
         await tx.insert('danmaku_cache_chunks', {
           'cache_key': key,
           'chunk_index': 0,
           'start_ms': 0,
           'end_ms': entries.fold<int>(
               0, (end, e) => e.sourceTimeMs >= end ? e.sourceTimeMs + 1 : end),
-          'payload': jsonEncode([for (final e in entries) e.toJson()]),
+          ...reference,
           'coverage': 'importedPool',
           'fetched_at': timestamp,
         });
@@ -201,10 +206,21 @@ final class DanmakuStore {
           await _event(tx, duplicate['id'] as String, rev, invocation.id,
               {'operation': 'replaced', 'replacementId': id, ...provenance});
         }
-        await _event(tx, id, revision, invocation.id,
-            {'operation': 'import', 'entryCount': entries.length,
-              'cacheKey': key, 'video': video.toJson(), ...provenance});
+        await _event(tx, id, revision, invocation.id, {
+          'operation': 'import',
+          'entryCount': entries.length,
+          'cacheKey': key,
+          'video': video.toJson(),
+          ...provenance
+        });
+        await files.release(tx, [
+          for (final old in [...previous, ...pointers])
+            if (old['cache_key'] != null) old['cache_key'] as String
+        ]);
         return binding(id, tx: tx);
+      }).then((b) async {
+        await files.collect();
+        return b;
       });
   Future<JsonMap> binding(String id,
       {DatabaseExecutor? tx, bool active = true}) async {
@@ -334,7 +350,13 @@ final class DanmakuStore {
           'origin': invocation.origin,
           'actor': invocation.origin == 'gui' ? 'user' : 'agent'
         });
+        if (values['status'] == 'revoked' && b['cache_key'] != null) {
+          await files.release(tx, [b['cache_key'] as String]);
+        }
         return binding(id, tx: tx, active: values['status'] != 'revoked');
+      }).then((b) async {
+        if (values['status'] == 'revoked') await files.collect();
+        return b;
       });
   Future<void> assignCache(String id, String key, String jobId,
           {int? expectedCacheRevision}) =>
@@ -356,7 +378,10 @@ final class DanmakuStore {
             },
             where: 'id = ?',
             whereArgs: [id]);
-      });
+        if (b['cache_key'] != null && b['cache_key'] != key) {
+          await files.release(tx, [b['cache_key'] as String]);
+        }
+      }).then((_) => files.collect());
   String cacheKey(DanmakuVideo v, DanmakuSource source,
           {String? refreshJobId}) =>
       stableMediaId('danmaku-cache', [
@@ -369,23 +394,27 @@ final class DanmakuStore {
         if (refreshJobId != null) {'refreshJobId': refreshJobId}
       ]);
   Future<DanmakuChunkResult?> chunk(String key, DanmakuChunk c,
-      {bool fresh = true}) async {
-    final rows = await db.query('danmaku_cache_chunks',
-        where: 'cache_key = ? AND chunk_index = ?', whereArgs: [key, c.index]);
-    if (rows.isEmpty) return null;
-    final row = rows.single;
-    if (row['start_ms'] != c.startMs ||
-        row['end_ms'] != c.endMs ||
-        fresh &&
-            DateTime.parse(row['fetched_at'] as String).isBefore(
-                DateTime.now().toUtc().subtract(const Duration(hours: 2)))) {
-      return null;
-    }
-    return DanmakuChunkResult([
-      for (final e in jsonDecode(row['payload'] as String) as List)
-        DanmakuEntry.fromJson(Map<String, Object?>.from(e as Map))
-    ], coverage: row['coverage'] as String);
-  }
+          {bool fresh = true}) =>
+      db.transaction((tx) async {
+        final rows = await tx.query('danmaku_cache_chunks',
+            where: 'cache_key = ? AND chunk_index = ?',
+            whereArgs: [key, c.index]);
+        if (rows.isEmpty) return null;
+        final row = rows.single;
+        if (row['start_ms'] != c.startMs ||
+            row['end_ms'] != c.endMs ||
+            fresh &&
+                DateTime.parse(row['fetched_at'] as String).isBefore(
+                    DateTime.now()
+                        .toUtc()
+                        .subtract(const Duration(hours: 2)))) {
+          return null;
+        }
+        return DanmakuChunkResult([
+          for (final e in await files.read(row))
+            DanmakuEntry.fromJson(Map<String, Object?>.from(e as Map))
+        ], coverage: row['coverage'] as String);
+      });
 
   Future<void> saveChunk(
       String key, DanmakuChunk c, DanmakuChunkResult result) async {
@@ -397,18 +426,22 @@ final class DanmakuStore {
         throw const SourceFailure(SourceStatus.schemaChanged);
       }
     }
-    await db.insert(
-        'danmaku_cache_chunks',
-        {
-          'cache_key': key,
-          'chunk_index': c.index,
-          'start_ms': c.startMs,
-          'end_ms': c.endMs,
-          'payload': jsonEncode([for (final e in result.entries) e.toJson()]),
-          'coverage': result.coverage,
-          'fetched_at': now
-        },
-        conflictAlgorithm: ConflictAlgorithm.replace);
+    await db.transaction((tx) async {
+      final reference = await files
+          .write([for (final e in result.entries) e.toJson()], 'cache');
+      await tx.insert(
+          'danmaku_cache_chunks',
+          {
+            'cache_key': key,
+            'chunk_index': c.index,
+            'start_ms': c.startMs,
+            'end_ms': c.endMs,
+            ...reference,
+            'coverage': result.coverage,
+            'fetched_at': now
+          },
+          conflictAlgorithm: ConflictAlgorithm.replace);
+    });
     final readback = await chunk(key, c, fresh: false);
     if (readback == null ||
         jsonEncode([for (final e in readback.entries) e.toJson()]) !=
@@ -416,6 +449,7 @@ final class DanmakuStore {
       throw const Failure(
           FailureCode.conflict, 'Danmaku cache readback failed.');
     }
+    await files.collect();
   }
 
   Future<List<DanmakuEntry>> entries(String key) async {
@@ -425,42 +459,45 @@ final class DanmakuStore {
       if (facts['available'] != true) return [];
       return readSidecarEntries(facts['path'] as String);
     }
-    final rows = await db.query('danmaku_cache_chunks',
-        where: 'cache_key = ?', whereArgs: [key], orderBy: 'chunk_index');
-    final entries = <DanmakuEntry>[];
-    final seen = <String>{};
-    for (final row in rows) {
-      for (final raw in jsonDecode(row['payload'] as String) as List) {
-        final e = DanmakuEntry.fromJson(Map<String, Object?>.from(raw as Map));
-        final identity = e.sourceEntryId != null
-            ? jsonEncode([e.sourceId, e.videoId, e.sourceEntryId])
-            : e.platformId != null
-                ? jsonEncode([
-                    e.sourceId,
-                    e.videoId,
-                    e.platform,
-                    e.originVideoId,
-                    e.platformId
-                  ])
-                : e.sender != null
-                    ? jsonEncode([
-                        e.sourceId,
-                        e.videoId,
-                        e.platform,
-                        e.sender,
-                        e.sourceTimeMs,
-                        e.text,
-                        e.mode,
-                        e.colorRgb
-                      ])
-                    : null;
-        if (identity == null || seen.add(identity)) {
-          entries.add(e);
+    return db.transaction((tx) async {
+      final rows = await tx.query('danmaku_cache_chunks',
+          where: 'cache_key = ?', whereArgs: [key], orderBy: 'chunk_index');
+      final entries = <DanmakuEntry>[];
+      final seen = <String>{};
+      for (final row in rows) {
+        for (final raw in await files.read(row)) {
+          final e =
+              DanmakuEntry.fromJson(Map<String, Object?>.from(raw as Map));
+          final identity = e.sourceEntryId != null
+              ? jsonEncode([e.sourceId, e.videoId, e.sourceEntryId])
+              : e.platformId != null
+                  ? jsonEncode([
+                      e.sourceId,
+                      e.videoId,
+                      e.platform,
+                      e.originVideoId,
+                      e.platformId
+                    ])
+                  : e.sender != null
+                      ? jsonEncode([
+                          e.sourceId,
+                          e.videoId,
+                          e.platform,
+                          e.sender,
+                          e.sourceTimeMs,
+                          e.text,
+                          e.mode,
+                          e.colorRgb
+                        ])
+                      : null;
+          if (identity == null || seen.add(identity)) {
+            entries.add(e);
+          }
         }
       }
-    }
-    entries.sort((a, b) => a.sourceTimeMs.compareTo(b.sourceTimeMs));
-    return entries;
+      entries.sort((a, b) => a.sourceTimeMs.compareTo(b.sourceTimeMs));
+      return entries;
+    });
   }
 
   Future<List<JsonMap>> coverage(String key) async {
@@ -477,7 +514,11 @@ final class DanmakuStore {
           'start_ms',
           'end_ms',
           'coverage',
-          'fetched_at'
+          'fetched_at',
+          'file_path',
+          'entry_count',
+          'byte_count',
+          'storage_kind'
         ],
         where: 'cache_key = ?',
         whereArgs: [key],
@@ -489,5 +530,5 @@ final class DanmakuStore {
             where: 'cache_key = ?', whereArgs: [key]);
         await tx.update('danmaku_bindings', {'cache_key': null},
             where: 'cache_key = ?', whereArgs: [key]);
-      });
+      }).then((_) => files.collect());
 }
