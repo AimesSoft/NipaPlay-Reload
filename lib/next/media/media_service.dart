@@ -38,7 +38,8 @@ final class MediaService {
       throw const Failure(
           FailureCode.invalidInput, 'Choose ID, path or current.');
     }
-    if (id != null && id != 'current') return canonicalFileId(store.database, id);
+    if (id != null && id != 'current')
+      return canonicalFileId(store.database, id);
     final locator = path ?? currentPath?.call();
     if (locator == null) {
       throw const Failure(FailureCode.notFound, 'No current video.');
@@ -69,6 +70,59 @@ final class MediaService {
       throw Failure(FailureCode.invalidInput, 'Unknown metadata provider $id.');
     }
     return result;
+  }
+
+  ({DateTime at, List<String> roots, Set<String> downloads})? _shown;
+
+  /// Whether a recorded local [locator] may be shown, mostly without
+  /// touching the files: queries list many rows, and on a busy network
+  /// share every path lookup waits behind the reads. Inside a configured
+  /// folder (resolved at most every few seconds) or a verified download is
+  /// enough; anything else is decided by [authorizedPath].
+  Future<bool> mayShow(String locator) async {
+    final now = DateTime.now();
+    var shown = _shown;
+    if (shown == null ||
+        now.difference(shown.at) > const Duration(seconds: 5)) {
+      final roots = <String>[];
+      for (final root in authorizedRoots()) {
+        if (!p.isAbsolute(root)) continue;
+        try {
+          roots.add(await Directory(root).resolveSymbolicLinks());
+        } on FileSystemException {
+          continue;
+        }
+      }
+      final rows = await store.database.rawQuery(r'''
+        SELECT coalesce(json_extract(f.value, '$.canonicalPath'), json_extract(f.value, '$.path')) AS path
+        FROM jobs j, json_each(j.snapshot, '$.receipt.details.files') f
+        WHERE j.type='download' AND j.state='succeeded'
+        AND json_extract(j.snapshot, '$.receipt.verification')='verified'
+        AND json_extract(j.snapshot, '$.receipt.details.downloadComplete')=1
+        AND json_extract(f.value, '$.local')=1
+        AND json_extract(f.value, '$.included')=1
+        AND json_extract(f.value, '$.actualSize')=json_extract(f.value, '$.expectedSize')
+      ''');
+      shown = _shown = (
+        at: now,
+        roots: roots,
+        downloads: {
+          for (final r in rows)
+            if (r['path'] is String) r['path'] as String
+        }
+      );
+    }
+    if (shown.roots
+            .any((root) => locator == root || p.isWithin(root, locator)) ||
+        shown.downloads.contains(locator)) {
+      return true;
+    }
+    try {
+      await authorizedPath(locator);
+      return true;
+    } on Failure {
+      return false;
+    }
   }
 
   Future<String> authorizedPath(String locator,
@@ -482,20 +536,34 @@ final class MediaService {
             }
             if (!entry.containsKey('workRef')) {
               throw const Failure(
-                  FailureCode.invalidInput, 'Expected workRef to create/reuse a catalogue hierarchy, '
+                  FailureCode.invalidInput,
+                  'Expected workRef to create/reuse a catalogue hierarchy, '
                   'or ref + entityId to bind an existing entity directly. '
                   'An episode catalogue entry requires workRef + exactly one episodeRefs; '
                   'Dandanplay/Bangumi reuse workRef as release, TMDB TV also requires releaseRef.');
             }
             final unsupported = switch (kind) {
-              'work' => const {'workId', 'releaseId', 'releaseRef', 'localEpisodeIds', 'startMs', 'endMs'},
-              'release' => const {'releaseId', 'localEpisodeIds', 'startMs', 'endMs'},
+              'work' => const {
+                  'workId',
+                  'releaseId',
+                  'releaseRef',
+                  'localEpisodeIds',
+                  'startMs',
+                  'endMs'
+                },
+              'release' => const {
+                  'releaseId',
+                  'localEpisodeIds',
+                  'startMs',
+                  'endMs'
+                },
               'episode' => const {'localEpisodeIds', 'startMs', 'endMs'},
               _ => const <String>{},
             };
             final ignored = entry.keys.where(unsupported.contains).toList();
             if (ignored.isNotEmpty) {
-              throw Failure(FailureCode.invalidInput,
+              throw Failure(
+                  FailureCode.invalidInput,
                   'kind=$kind cannot use $ignored. entityId identifies the existing $kind itself; '
                   'workId is the parent work for release/episode/file; releaseId is the parent release for episode/file; '
                   'localEpisodeIds is for file links. Omit local IDs to create/reuse by catalogue refs.');
@@ -510,13 +578,15 @@ final class MediaService {
             final workRef = ref(entry['workRef']);
             if (!{'tv', 'movie', 'subject', 'anime'}
                 .contains(workRef.objectType)) {
-              throw const Failure(FailureCode.invalidInput,
+              throw const Failure(
+                  FailureCode.invalidInput,
                   'Expected workRef with provider/objectType tmdb/tv or tmdb/movie, '
                   'bangumi/subject, or dandanplay/anime, and scope="". '
                   'An episode ref belongs in episodeRefs, not workRef.');
             }
             if (workRef.scope.isNotEmpty) {
-              throw const Failure(FailureCode.invalidInput,
+              throw const Failure(
+                  FailureCode.invalidInput,
                   'Expected workRef.scope="" for a root work catalogue; '
                   'episode namespaces belong in episodeRefs[].scope.');
             }
@@ -573,15 +643,20 @@ final class MediaService {
               if (members.length != 1) {
                 final expected = catalogue
                     .where((ep) => ep.ref.externalId == episodeRef.externalId)
-                    .map((ep) => ep.ref.toJson()).toList();
-                throw Failure(FailureCode.invalidInput,
+                    .map((ep) => ep.ref.toJson())
+                    .toList();
+                throw Failure(
+                    FailureCode.invalidInput,
                     'Episode ref ${jsonEncode(episodeRef.toJson())} is not a member of '
                     'the selected release catalogue ${jsonEncode(release.ref.toJson())}. '
                     '${expected.isEmpty ? 'Expected an actual episode object ID and its exact provider/objectType/scope from this catalogue, not an episode number; media.metadata.get_batch returns its episode refs.' : 'Expected episodeRefs to contain ${jsonEncode(expected)}; scope is the provider namespace string, not a local release ID.'}',
-                    violations: [SchemaViolation(
-                        '/entries/$index/episodeRefs/${selected.length}',
-                        expected.isEmpty ? 'Expected a ref from the selected release catalogue.'
-                            : 'Expected ${jsonEncode(expected)}.')]);
+                    violations: [
+                      SchemaViolation(
+                          '/entries/$index/episodeRefs/${selected.length}',
+                          expected.isEmpty
+                              ? 'Expected a ref from the selected release catalogue.'
+                              : 'Expected ${jsonEncode(expected)}.')
+                    ]);
               }
               selected.add(members.single);
             }
@@ -612,9 +687,9 @@ final class MediaService {
             });
           } on Failure catch (error) {
             throw Failure(error.code, 'Entry $index: ${error.message}',
-                violations: error.violations.isNotEmpty ? error.violations : [
-                  SchemaViolation('/entries/$index', error.message)
-                ]);
+                violations: error.violations.isNotEmpty
+                    ? error.violations
+                    : [SchemaViolation('/entries/$index', error.message)]);
           }
         }
         for (var index = 0; index < prepared.length; index++) {

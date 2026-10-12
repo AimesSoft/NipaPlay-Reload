@@ -434,11 +434,7 @@ List<StateView> publicStateViews(
       final locator = row['locator'] as String?;
       var visible = true;
       if (row['source'] == 'local' && locator != null) {
-        try {
-          await media.authorizedPath(locator);
-        } on Failure {
-          visible = false;
-        }
+        visible = await media.mayShow(locator);
       }
       JsonMap? watched;
       for (final entry in sources.history?.call() ?? []) {
