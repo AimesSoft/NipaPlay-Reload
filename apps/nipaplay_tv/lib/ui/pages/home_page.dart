@@ -8,6 +8,7 @@ import '../../data/tv_recent_play_store.dart';
 import '../../data/tv_account_service.dart';
 import '../../data/tv_trending_client.dart';
 import '../widgets/tv_anime_card.dart';
+import 'anime_detail_page.dart';
 import 'player_page.dart';
 
 /// 首页：Bangumi 排行榜新番 Top10 + 最近播放。
@@ -100,7 +101,7 @@ class _HomePageState extends State<HomePage> {
           const SizedBox(height: 12),
           if (_trending != null && _trending!.isNotEmpty)
             SizedBox(
-              height: 336,
+              height: 404,
               child: ListView.separated(
                 scrollDirection: Axis.horizontal,
                 itemCount: _trending!.length,
@@ -117,7 +118,7 @@ class _HomePageState extends State<HomePage> {
                     isOnAir: anime.isOnAir ?? false,
                     showNewBadge: i < 3,
                     source: '第 ${item.rank} 名',
-                    onTap: () => _showInfo(context, title),
+                    onTap: () => _openAnime(context, item),
                   );
                 },
               ),
@@ -145,7 +146,7 @@ class _HomePageState extends State<HomePage> {
             _emptyHint(context, '还没有播放记录')
           else
             SizedBox(
-              height: 336,
+              height: 404,
               child: ListView.separated(
                 scrollDirection: Axis.horizontal,
                 itemCount: _recent.length,
@@ -156,7 +157,9 @@ class _HomePageState extends State<HomePage> {
                     name: r.title,
                     imageUrl: r.coverUrl,
                     episodeLabel: r.episodeLabel,
-                    source: '最近播放',
+                    source: r.sourceLabel.isNotEmpty
+                        ? '${r.sourceLabel} · 最近播放'
+                        : '最近播放',
                     onTap: () => _openRecent(context, r),
                   );
                 },
@@ -243,23 +246,12 @@ class _HomePageState extends State<HomePage> {
     if (mounted) _load();
   }
 
-  void _showInfo(BuildContext context, String title) {
-    showDialog<void>(
-      context: context,
-      builder: (_) => AlertDialog(
-        backgroundColor: const Color(0xFF1A2026),
-        title: Text(title),
-        content: const Text('该条目来自 Bangumi 榜单，尚未关联可播放的媒体源。\n'
-            '在「媒体库」添加媒体源后即可播放。'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(),
-            child: const Text('知道了'),
-          ),
-        ],
-      ),
+  Future<void> _openAnime(BuildContext context, TrendingBangumiItem item) async {
+    await Navigator.of(context).push(
+      MaterialPageRoute(builder: (_) => TvAnimeDetailPage(anime: item.anime)),
     );
   }
+
 }
 
 /// 可聚焦操作片：遥控确认键与触摸均可用（TV 遥控适配）。

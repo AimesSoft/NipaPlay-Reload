@@ -75,5 +75,10 @@ Duration kernelDuration(TvPlayerKernel kernel, NipaPlayer player) =>
 bool kernelIsPlaying(TvPlayerKernel kernel, NipaPlayer player) =>
     (player as ErikaNipaAdapter).isPlaying;
 
+/// 画面超分设置（仅 Erika 支持；其它内核 no-op）。
+Future<void> kernelSetUpscaler(NipaPlayer player, String mode) async {
+  await (player as ErikaNipaAdapter).setUpscaler(mode);
+}
+
 bool kernelIsInitialized(TvPlayerKernel kernel, NipaPlayer player) =>
     (player as ErikaNipaAdapter).isInitialized;

@@ -2,7 +2,6 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:nipaplay_core/services/web_remote_access_service.dart';
 
 /// TV 版番剧卡片：移植普通版新版卡片（`themes/nipaplay/widgets/anime_card.dart`）
 /// 的视觉语言——竖版海报、圆角、底部渐变遮罩、来源/评分/在播徽标、NEW 标识——
@@ -56,9 +55,12 @@ class _TvAnimeCardState extends State<TvAnimeCard> {
 
   bool get _highlighted => _focused || _hovered;
 
-  /// 封面经 core 的 web 代理（与普通版一致的取图路径）。
-  String get _resolvedImage =>
-      WebRemoteAccessService.imageProxyUrl(widget.imageUrl) ?? widget.imageUrl;
+  /// 封面直接用原始 URL。
+  ///
+  /// 注意：**不要**经 `WebRemoteAccessService.imageProxyUrl()` —— 那是普通版
+  /// 依赖本地 web 服务器的图片代理，TV 版没有该服务器，会导致封面全部加载失败。
+  /// 弹弹网关的图片地址已自带 token，Bangumi 图床直连可达。
+  String get _resolvedImage => widget.imageUrl;
 
   bool get _isLocalFile {
     final u = widget.imageUrl;
@@ -225,6 +227,7 @@ class _TvAnimeCardState extends State<TvAnimeCard> {
     return Image.network(
       _resolvedImage,
       fit: BoxFit.cover,
+      headers: const {'User-Agent': 'NipaPlay/1.0'},
       errorBuilder: (_, _, _) => _placeholder(),
       loadingBuilder: (context, child, progress) {
         if (progress == null) return child;

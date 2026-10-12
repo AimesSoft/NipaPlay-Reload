@@ -4,6 +4,8 @@ import 'package:nipaplay_core/utils/network_settings.dart';
 
 import 'package:nipaplay_core/utils/settings_storage.dart';
 import 'package:nipaplay_ui_common/l10n/l10n.dart';
+
+import '../../data/tv_recent_play_store.dart';
 import 'package:nipaplay_ui_common/settings/unified_setting_content_type.dart';
 
 import '../focusable_card.dart';
@@ -22,6 +24,10 @@ class SettingsPage extends StatefulWidget {
 
 class _SettingsPageState extends State<SettingsPage> {
   final _toggles = <String, bool>{};
+  double _danmakuArea = 0.5;
+  bool _danmakuOn = true;
+  String _upscaler = 'off';
+  String _videoFit = 'auto';
   UnifiedSettingContentType _section = UnifiedSettingContentType.general;
   String _bangumiServer = NetworkSettings.bangumiDefaultServer;
   bool _bangumiCustom = false;
@@ -75,9 +81,17 @@ class _SettingsPageState extends State<SettingsPage> {
       }
     }
     final bangumi = await NetworkSettings.getBangumiServer();
+    final area = await TvPlaybackPrefs.danmakuArea();
+    final danmakuOn = await TvPlaybackPrefs.danmakuOn();
+    final upscaler = await TvPlaybackPrefs.upscaler();
+    final fit = await TvPlaybackPrefs.videoFit();
     if (mounted) {
       setState(() {
         _toggles.addAll(map);
+        _danmakuArea = area;
+        _danmakuOn = danmakuOn;
+        _upscaler = upscaler;
+        _videoFit = fit;
         _bangumiServer = bangumi;
         _bangumiCustom = NetworkSettings.isCustomBangumiServer(bangumi);
       });
@@ -162,6 +176,106 @@ class _SettingsPageState extends State<SettingsPage> {
     }
   }
 
+  /// 循环切换画面超分档位（artCNN 模型按需加载，首次会有卡顿）。
+  Future<void> _cycleUpscaler() async {
+    const modes = ['off', 'artCnnC4F16', 'artCnnC4F32', 'artCnnC4F16Ds'];
+    final idx = modes.indexOf(_upscaler);
+    setState(() => _upscaler = modes[(idx + 1) % modes.length]);
+    await TvPlaybackPrefs.setUpscaler(_upscaler);
+  }
+
+  /// 循环切换播放画面比例。
+  Future<void> _cycleVideoFit() async {
+    const modes = ['auto', '16:9', '4:3'];
+    final idx = modes.indexOf(_videoFit);
+    setState(() => _videoFit = modes[(idx + 1) % modes.length]);
+    await TvPlaybackPrefs.setVideoFit(_videoFit);
+  }
+
+  /// 通用「点击循环切换」设置卡。
+  Widget _cycleCard({
+    required IconData icon,
+    required String title,
+    required String value,
+    required Future<void> Function() onTap,
+  }) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: FocusableCard(
+        onActivate: () => onTap(),
+        child: Row(
+          children: [
+            Icon(icon, size: 22),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(title,
+                      style: Theme.of(context).textTheme.bodyLarge),
+                  Text(
+                    value,
+                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                        color: const Color(0xFF26C6DA)),
+                  ),
+                ],
+              ),
+            ),
+            const Icon(Icons.chevron_right, size: 20, color: Colors.white38),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// 滑块设置卡（弹幕占比）。
+  Widget _sliderCard({
+    required String title,
+    required IconData icon,
+    required double value,
+    required String label,
+    required ValueChanged<double> onChanged,
+  }) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: FocusableCard(
+        onActivate: () =>
+            onChanged(value >= 0.9 ? 0.1 : (value + 0.1)),
+        child: Row(
+          children: [
+            Icon(icon, size: 22),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Row(
+                    children: [
+                      Text(title,
+                          style: Theme.of(context).textTheme.bodyLarge),
+                      const Spacer(),
+                      Text(label,
+                          style: const TextStyle(
+                              color: Color(0xFF26C6DA), fontSize: 15)),
+                    ],
+                  ),
+                  Slider(
+                    value: value,
+                    min: 0.1,
+                    max: 0.9,
+                    onChanged: onChanged,
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   Future<void> _toggle(String key, bool value) async {
     await SettingsStorage.saveBool(key, value);
     if (mounted) setState(() => _toggles[key] = value);
@@ -214,7 +328,7 @@ class _SettingsPageState extends State<SettingsPage> {
           Expanded(
             child: ListView(
               children: [
-                if (_section == UnifiedSettingContentType.player)
+                if (_section == UnifiedSettingContentType.player) ...[
                   Padding(
                     padding: const EdgeInsets.only(bottom: 12),
                     child: FocusableCard(
@@ -245,6 +359,44 @@ class _SettingsPageState extends State<SettingsPage> {
                       ),
                     ),
                   ),
+                  _cycleCard(
+                    icon: Icons.auto_fix_high,
+                    title: '画面超分（Erika artCNN）',
+                    value: _upscaler == 'off'
+                        ? '关闭 · 最流畅'
+                        : '$_upscaler · 首次开启需加载模型，可能卡顿数秒',
+                    onTap: _cycleUpscaler,
+                  ),
+                  _cycleCard(
+                    icon: Icons.aspect_ratio,
+                    title: '播放画面比例',
+                    value: _videoFit,
+                    onTap: _cycleVideoFit,
+                  ),
+                ],
+                if (_section == UnifiedSettingContentType.danmaku) ...[
+                  _sliderCard(
+                    title: '弹幕画面占比',
+                    icon: Icons.subtitles_outlined,
+                    value: _danmakuArea,
+                    label: '${(_danmakuArea * 100).round()}%',
+                    onChanged: (v) {
+                      setState(() => _danmakuArea = v);
+                      TvPlaybackPrefs.setDanmakuArea(v);
+                    },
+                  ),
+                  _cycleCard(
+                    icon: Icons.blur_circular,
+                    title: '弹幕渲染引擎 / 显示',
+                    value: _danmakuOn
+                        ? '开 · TV 自建引擎（轨道分配 + 滚动绘制）'
+                        : '关 · 播放页亦可用 D 键临时开关',
+                    onTap: () async {
+                      setState(() => _danmakuOn = !_danmakuOn);
+                      await TvPlaybackPrefs.setDanmakuOn(_danmakuOn);
+                    },
+                  ),
+                ],
                 if (_section == UnifiedSettingContentType.network)
                   Padding(
                     padding: const EdgeInsets.only(bottom: 12),

@@ -72,6 +72,17 @@ class ErikaNipaAdapter implements NipaPlayer {
     _stateController.add(next);
   }
 
+  /// 画面超分（仅 Erika 具备）：off / artCNN-C4F16 / C4F32 / C4F16-DS。
+  Future<void> setUpscaler(String mode) async {
+    final m = switch (mode) {
+      'artCnnC4F16' => ErikaUpscalerMode.artCnnC4F16,
+      'artCnnC4F32' => ErikaUpscalerMode.artCnnC4F32,
+      'artCnnC4F16Ds' => ErikaUpscalerMode.artCnnC4F16Ds,
+      _ => ErikaUpscalerMode.off,
+    };
+    await _player.setUpscaler(m);
+  }
+
   @override
   Future<void> play() async {
     await _player.play();

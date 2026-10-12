@@ -4,6 +4,7 @@ import 'package:nipaplay_ui_common/l10n/l10n.dart';
 import 'focusable_card.dart';
 import 'pages/about_page.dart';
 import 'pages/profile_page.dart';
+import '../data/tv_media_sources.dart';
 import 'pages/home_page.dart';
 import 'pages/library_page.dart';
 import 'pages/settings_page.dart';
@@ -32,6 +33,19 @@ class _TvAppShellState extends State<TvAppShell> {
   );
   int _navIndex = 0;
 
+  /// 已配置的媒体连接（全部）。
+  List<TvMediaSource> _mediaSources = const [];
+
+  /// 钉选到侧边栏的连接（用户手动选择）。
+  List<TvMediaSource> get _pinnedSources =>
+      _mediaSources.where((s) => s.pinned).toList();
+
+  /// 侧栏点入的源 key（进入后直接显示该源的番剧列表）。
+  String? _openedSourceKey;
+  int? _activeSourceIndex;
+  /// 递增请求令牌：保证重复点击同一来源也能触发页面刷新。
+  int _sourceRequestId = 0;
+
   /// 遥控焦点兜底：任何时刻焦点都不允许为空，否则 D-pad 将彻底失灵。
   void _ensureFocus() {
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -57,6 +71,30 @@ class _TvAppShellState extends State<TvAppShell> {
     super.initState();
     // 焦点变化后兜底检查，避免遥控操作中途失焦。
     FocusManager.instance.addListener(_ensureFocus);
+    _reloadSources();
+  }
+
+  Future<void> _reloadSources() async {
+    final list = await TvMediaSourceStore.load();
+    if (mounted) setState(() => _mediaSources = list);
+  }
+
+  /// 打开某个媒体连接：切到媒体库页并聚焦该源（index 为 pinned 列表下标）。
+  void _openSource(int index) {
+    final pinned = _pinnedSources;
+    if (index < 0 || index >= pinned.length) return;
+    final target = pinned[index];
+    final realIndex = _mediaSources.indexWhere(
+        (s) => s.location == target.location && s.kind == target.kind);
+    setState(() {
+      _pageIndex = 1;
+      _activeSourceIndex = realIndex >= 0 ? realIndex : null;
+      _sourceRequestId++;
+      _openedSourceKey = '${target.kind.name}|${target.location}';
+    });
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _pageEntryFocus[1]?.requestFocus();
+    });
   }
 
   @override
@@ -72,7 +110,13 @@ class _TvAppShellState extends State<TvAppShell> {
   }
 
   void _activate(int index) {
-    setState(() => _pageIndex = index);
+    setState(() {
+      _pageIndex = index;
+      if (index == 1) {
+        _activeSourceIndex = null;
+        _openedSourceKey = null;
+      }
+    });
     // 切页后把焦点移交给新页面的入口卡片（下一帧，等新页面挂载）。
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
@@ -126,7 +170,7 @@ class _TvAppShellState extends State<TvAppShell> {
                     ),
                   ),
                   const SizedBox(height: 8),
-                  for (var i = 0; i < tabs.length; i++)
+                  for (var i = 0; i < tabs.length; i++) ...[
                     Padding(
                       padding: const EdgeInsets.symmetric(
                           horizontal: 12, vertical: 6),
@@ -159,6 +203,35 @@ class _TvAppShellState extends State<TvAppShell> {
                         ),
                       ),
                     ),
+                    // 「媒体库」下方：逐个列出已添加的媒体连接
+                    if (i == 1 && _pinnedSources.isNotEmpty)
+                      for (var k = 0; k < _pinnedSources.length; k++)
+                        Padding(
+                          padding: const EdgeInsets.fromLTRB(28, 2, 12, 2),
+                          child: FocusableCard(
+                            onActivate: () => _openSource(k),
+                            borderRadius: 10,
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 12, vertical: 9),
+                            child: Row(
+                              children: [
+                                Icon(_pinnedSources[k].icon,
+                                    size: 18, color: const Color(0xFF26C6DA)),
+                                const SizedBox(width: 8),
+                                Expanded(
+                                  child: Text(
+                                    _pinnedSources[k].name,
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: const TextStyle(
+                                        fontSize: 14, color: Colors.white70),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                  ],
                 ],
               ),
             ),
@@ -173,7 +246,13 @@ class _TvAppShellState extends State<TvAppShell> {
                     entryFocusNode: _pageEntryFocus[0],
                     onRequestLogin: () => _activate(2), // 跳到「我的」登录
                   ),
-                  LibraryPage(entryFocusNode: _pageEntryFocus[1]),
+                  LibraryPage(
+                    entryFocusNode: _pageEntryFocus[1],
+                    activeSourceIndex: _activeSourceIndex,
+                    sourceRequestId: _sourceRequestId,
+                    initialContentSource: _openedSourceKey,
+                    onSourcesChanged: _reloadSources,
+                  ),
                   ProfilePage(entryFocusNode: _pageEntryFocus[2]),
                   SettingsPage(entryFocusNode: _pageEntryFocus[3]),
                   AboutPage(entryFocusNode: _pageEntryFocus[4]),

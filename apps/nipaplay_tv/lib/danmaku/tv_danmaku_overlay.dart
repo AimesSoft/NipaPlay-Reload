@@ -18,6 +18,7 @@ class TvDanmakuOverlay extends StatefulWidget {
     this.fontSize = 26,
     this.opacity = 0.9,
     this.speedPxPerSecond = 220,
+    this.areaRatio = 0.5,
   });
 
   final List<DanmakuItem> items;
@@ -26,6 +27,9 @@ class TvDanmakuOverlay extends StatefulWidget {
   final double fontSize;
   final double opacity;
   final double speedPxPerSecond;
+
+  /// 弹幕占画面高度比例（0.1 - 1.0），由设置项控制。
+  final double areaRatio;
 
   @override
   State<TvDanmakuOverlay> createState() => _TvDanmakuOverlayState();
@@ -70,7 +74,7 @@ class _TvDanmakuOverlayState extends State<TvDanmakuOverlay>
   }
 
   void _spawn(DanmakuItem item) {
-    final laneCount = math.max(1, ((_height * 0.55) / (widget.fontSize * 1.5)).floor());
+    final laneCount = math.max(1, ((_height * widget.areaRatio) / (widget.fontSize * 1.5)).floor());
     if (item.mode.isScrolling) {
       _scrollTracks.add(_Track(item: item, lane: _pickLane(laneCount)));
     } else if (item.mode == DanmakuMode.top) {
@@ -116,7 +120,7 @@ class _TvDanmakuOverlayState extends State<TvDanmakuOverlay>
         _width = constraints.maxWidth;
         _height = constraints.maxHeight;
         final laneCount = math.max(
-            1, ((_height * 0.55) / (widget.fontSize * 1.5)).floor());
+            1, ((_height * widget.areaRatio) / (widget.fontSize * 1.5)).floor());
         // 清理已离屏的滚动弹幕
         _scrollTracks.removeWhere((t) => t.x < -t.width - 40);
         _topActive.removeWhere((_) => false);

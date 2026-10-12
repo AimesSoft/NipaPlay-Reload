@@ -34,6 +34,9 @@ class TvAccountService {
 
   bool get isLoggedIn => _loggedIn;
   String? get userName => _userName;
+
+  /// 当前登录 token（供弹弹网关鉴权）。未登录返回 null。
+  String? get token => _loggedIn ? _token : null;
   String? get screenName => _screenName;
 
   Future<void> load() async {

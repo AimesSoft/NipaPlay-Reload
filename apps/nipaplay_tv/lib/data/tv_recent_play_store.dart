@@ -2,6 +2,50 @@ import 'dart:convert';
 
 import 'package:nipaplay_core/utils/settings_storage.dart';
 
+/// 播放偏好键空间（core SettingsStorage 之上）。
+class TvPlaybackPrefs {
+  TvPlaybackPrefs._();
+  static const danmakuAreaKey = 'tv.danmaku.areaRatio';   // 0.1 - 1.0
+  static const danmakuOnKey = 'tv.danmaku.on';
+  static const upscalerKey = 'tv.player.upscaler';       // off / anime4k / etc
+  static const videoFitKey = 'tv.player.videoFit';       // contain / cover / fill / 16:9 / 4:3
+
+  static Future<double> danmakuArea() async {
+    final raw = await SettingsStorage.loadString(danmakuAreaKey);
+    final v = double.tryParse(raw);
+    if (v == null || v < 0.1) return 0.5;
+    return v.clamp(0.1, 1.0);
+  }
+
+  static Future<void> setDanmakuArea(double v) async {
+    await SettingsStorage.saveString(danmakuAreaKey, v.toStringAsFixed(2));
+  }
+
+  static Future<bool> danmakuOn() async {
+    return (await SettingsStorage.loadString(danmakuOnKey)) != 'off';
+  }
+
+  static Future<void> setDanmakuOn(bool v) async {
+    await SettingsStorage.saveString(danmakuOnKey, v ? 'on' : 'off');
+  }
+
+  static Future<String> upscaler() async {
+    return (await SettingsStorage.loadString(upscalerKey)) ;
+  }
+
+  static Future<void> setUpscaler(String v) async {
+    await SettingsStorage.saveString(upscalerKey, v);
+  }
+
+  static Future<String> videoFit() async {
+    return (await SettingsStorage.loadString(videoFitKey)) ;
+  }
+
+  static Future<void> setVideoFit(String v) async {
+    await SettingsStorage.saveString(videoFitKey, v);
+  }
+}
+
 /// 最近播放记录（TV 版本地）。
 ///
 /// 阶段四说明：正式实现应复用 core 的 watch_history 模型；该模型仍受依赖环
@@ -13,6 +57,7 @@ class TvRecentPlay {
     required this.playedAt,
     this.coverUrl = '',
     this.episodeLabel,
+    this.sourceLabel = '',
   });
 
   final String title;
@@ -21,12 +66,16 @@ class TvRecentPlay {
   final String coverUrl;
   final String? episodeLabel;
 
+  /// 来源媒体连接（弹弹远程 / WebDAV 等），用于最近播放标注。
+  final String sourceLabel;
+
   Map<String, dynamic> toJson() => {
         't': title,
         'u': sourceUri,
         'at': playedAt.millisecondsSinceEpoch,
         if (coverUrl.isNotEmpty) 'c': coverUrl,
         if (episodeLabel != null) 'e': episodeLabel,
+        if (sourceLabel.isNotEmpty) 'src': sourceLabel,
       };
 
   static TvRecentPlay? fromJson(Map<String, dynamic> j) {
@@ -40,6 +89,7 @@ class TvRecentPlay {
           (j['at'] as num?)?.toInt() ?? 0),
       coverUrl: (j['c'] as String?) ?? '',
       episodeLabel: j['e'] as String?,
+      sourceLabel: (j['src'] as String?) ?? '',
     );
   }
 }
@@ -48,6 +98,16 @@ class TvRecentPlayStore {
   TvRecentPlayStore._();
   static const _key = 'tv.recent_play';
   static const _max = 20;
+
+  /// 播放进度：key = 媒体地址（uri），value = 播放位置毫秒。
+  static Future<int> progressOf(String sourceUri) async {
+    final raw = await SettingsStorage.loadString('tv.progress.$sourceUri');
+    return int.tryParse(raw) ?? 0;
+  }
+
+  static Future<void> saveProgress(String sourceUri, int millis) async {
+    await SettingsStorage.saveString('tv.progress.$sourceUri', '$millis');
+  }
 
   static Future<List<TvRecentPlay>> load() async {
     final raw = await SettingsStorage.loadStringList(_key);
