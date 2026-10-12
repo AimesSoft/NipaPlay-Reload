@@ -57,7 +57,7 @@ void main() {
             where: 'cache_key = ?', whereArgs: [binding['cache_key']]))
         .single;
     final raw = [
-      for (final row in jsonDecode(chunk['payload'] as String) as List)
+      for (final row in await f.service.store.files.read(chunk))
         DanmakuEntry.fromJson(Map<String, Object?>.from(row as Map))
     ];
     expect(result['count'], classic.length);

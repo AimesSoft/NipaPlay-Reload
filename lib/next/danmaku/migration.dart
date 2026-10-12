@@ -12,6 +12,20 @@ Future<void> migrateDanmakuImports(DatabaseExecutor db) =>
 Future<void> migrateDanmakuSidecars(DatabaseExecutor db) =>
     db.execute('ALTER TABLE danmaku_bindings ADD COLUMN local_file TEXT');
 
+Future<void> migrateDanmakuFiles(DatabaseExecutor db) async {
+  await db
+      .execute('ALTER TABLE danmaku_cache_chunks ADD COLUMN file_path TEXT');
+  await db.execute(
+      'ALTER TABLE danmaku_cache_chunks ADD COLUMN entry_count INTEGER');
+  await db.execute(
+      'ALTER TABLE danmaku_cache_chunks ADD COLUMN byte_count INTEGER');
+  await db.execute(
+      "ALTER TABLE danmaku_cache_chunks ADD COLUMN storage_kind TEXT CHECK(storage_kind IN ('imported','cache'))");
+  await db.execute(
+      'CREATE TABLE danmaku_storage_state (needs_vacuum INTEGER NOT NULL)');
+  await db.insert('danmaku_storage_state', {'needs_vacuum': 0});
+}
+
 const _tables = [
   '''CREATE TABLE danmaku_bindings (
     id TEXT PRIMARY KEY, entity_id TEXT NOT NULL REFERENCES media_entities(id),

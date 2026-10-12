@@ -31,7 +31,7 @@
 Next 注册的内置来源只有弹弹play与 local。优酷、B 站在线来源及应用内平台登录
 已删除，Action 不再接受平台会话引用，也不返回平台会话状态。钥匙串里已有的
 `next.platform-session/<platform>.v1` 条目保持原样；Next 不再读取、更新或删除它们。
-既有绑定、外部视频身份、缓存、对齐、事件与任务记录不迁移、不清理；轨道查询、
+删除来源的变更保留既有绑定、外部视频身份、缓存、对齐、事件与任务记录；轨道查询、
 播放恢复、属性修改和导出直接使用保存的事实，不依赖来源仍被注册。
 旧来源不能再在线刷新，尚未结束的旧获取任务恢复时因来源未注册失败，已提交数据保留。
 
@@ -53,7 +53,8 @@ XML 的 32 位 ARGB 和其他 Classic 支持的颜色使用相同颜色转换，
 通过 Classic 颜色转换存为 24 位 RGB；
 可选 `platformId`、`sourceEntryId`、`originSource`、`sender`、`sentAt` 为字符串，
 `fontSize` 为正整数。平台和视频身份使用调用参数，actor/origin/UTC 时间由宿主
-记录在 `provenance`，每次交入追加审计事件。输入文件只读取，内容保存进宿主缓存，
+记录在 `provenance`，每次交入追加审计事件。输入文件只读取，内容保存成宿主数据目录
+`next/danmaku/<sha256>.json` 文件，数据库记录相对引用、条数、范围、字节数与存储类别，
 后续播放恢复不依赖原文件仍存在。空数组或 `<i/>` 表示明确交入空弹幕池。
 
 Classic 格式的条目采用现有解析器的默认值和筛选语义，不再单独检查 XML 根名、
@@ -61,7 +62,8 @@ Classic 格式的条目采用现有解析器的默认值和筛选语义，不再
 非空输入无法产生可解析弹幕时也报告失败。Classic 本地加载仍拒绝空池；只有
 交入入口显式允许空 JSON 数组和不含 `<d>` 的 `<i/>`，不把损坏的 XML 当空刷新。
 
-解析和转换在独立 isolate 完成，再用一个数据库事务提交缓存、绑定和来源。相同
+解析、编码与文件写入在独立 isolate 完成；写完 flush、回读验证后原子换名，再用同一个
+数据库事务提交文件引用、绑定和来源。相同
 平台/视频再次交入即替换，保留启用、偏移和折叠设置；解析或提交失败保留旧轨道。
 交入前已启动的抓取任务不能覆盖后来交入的弹幕池。File/Episode 同视频轨道在
 播放时合并为一个，重新恢复时优先使用最新交入结果。返回 `bindingId`、`revision`、
@@ -78,13 +80,32 @@ Classic 格式的条目采用现有解析器的默认值和筛选语义，不再
 
 ## 追加存储
 
+数据库 v15 为内容引用追加 `file_path / entry_count / byte_count / storage_kind`。
+旧内容在打开数据库时逐行迁移，保留原 JSON 的全部条目、顺序与字段；文件先完成并
+验证，事务再清空大 payload（留下 `[]`）并提交引用。中断后继续尚未迁移的行。
+全部行完成后执行一次 VACUUM，持久标记在成功后清除；整理中断也会在下次打开时重试。
+迁移不删除既有无绑定的导入行，以保留可能仅剩的副本。
+
+`storage_kind=imported` 是明确交入的唯一副本；`cache` 是在线分段与
+`application:playback` 回写的可重新获取内容。两者均存文件，读取校验哈希和条数。
+刷新或撤销后，没有其他 accepted 绑定引用的导入池移除；共享文件等到最后一个
+数据库引用释放才删除。事务回滚或中断遗留的无引用文件在启动、刷新、撤销及清理时收集。
+缓存在启动时按最旧池回收到 128 MiB，也可调用 `danmaku.cache_prune(maxBytes)`；
+它清空被回收池的绑定指针并刷新播放，绝不回收 imported。存在未结束的获取任务时延后。
+`cache_delete` 仍是明确指定池的破坏性操作，可以删除交入内容。
+
+现有 `backup.*` 和 WebDAV `sync.*` 只覆盖 Classic 类别（preferences、mediaLibraries、
+watchHistory、episodeMatches、accounts），不覆盖 `next.db`、`next/artwork/` 或
+`next/danmaku/`。离线备份 Next 必须在退出应用后同时保留数据库与内容目录；只拷
+`next.db` 不包含交入弹幕。Mesh 的远程 Action 调用也不复制本机弹幕文件。
+
 MA 的 v2 身份迁移保持原样，MB 在 `next_database.dart` 的迁移序列末尾追加 v3
 （`migrateDanmaku`），不改已发布位置。新库与旧库共用同一序列，都执行到最新版本。
 
 | 表 | 语义 |
 |---|---|
 | danmaku_bindings | 引用 MA File/Episode 与 media_external_objects；记录实体修订、启用、去重、绝对偏移、对齐、证据、宿主绑定者、绑定修订和已提交缓存 |
-| danmaku_cache_chunks | 来源/视频/版本/网关域名/public/内容选项组成新获取的 cache key；旧 key 按原值读取；保存各段原始时间条目、覆盖及抓取时间；TTL 两小时 |
+| danmaku_cache_chunks | 来源/视频/版本/网关域名/public/内容选项组成新获取的 cache key；旧 key 按原值读取；保存各段内容文件引用、条数、范围、覆盖及抓取时间；在线缓存新鲜期两小时 |
 | danmaku_alignment_candidates | 存量对齐任务的锚点、固定偏移候选、残差、置信说明和显式选择；关联绑定修订 |
 | danmaku_binding_events | 追加的 attach、控制、解绑与对齐选择审计记录；不抹去旧证据 |
 
@@ -174,12 +195,13 @@ requestId 只用于存量任务查找。
 | sources / search / episodes / resolve / tracks | read | 瞬时声明/候选/目录/明确视频/全部轨道与覆盖；tracks 可登记缺失文件位置，不建绑定、任务或弹幕缓存 |
 | fetch | write | 立即返回 jobId；只获取缓存，不改播放轨道 |
 | attach | write | 明确绑定及获取任务，或复用已有轨道；复用/已存在时 jobId=null，回执带 status/trackId |
-| set_enabled / set_dedup / offset / detach | write | 绑定修订 CAS；绝对设置；解绑保留缓存 |
+| set_enabled / set_dedup / offset / detach | write | 绑定修订 CAS；绝对设置；解绑释放无引用的交入池，保留来源审计 |
 | analyze_alignment | read | 估计、逐锚点偏移/残差、证据、置信与限制；无持久化或任务 |
 | update | write | 批量绝对属性修改，逐项结果；绑定 CAS、轨道播放状态、显示折叠 |
 | align / align_apply / align_keep | write | 仅存量任务查找/恢复；新任务迁移到只读分析加属性更新 |
 | export | write | 授权媒体目录中的新 JSON 文件；raw 或 mapped，按 bytes/SHA-256 回读；不覆盖现有文件 |
 | cache_delete | destructive | 删除明确 cacheKey；活动获取任务引用该缓存时返回 conflict，先停止任务 |
+| cache_prune | write | 按空间回收可重新获取的缓存；默认 128 MiB，交入唯一副本不参与，有活动获取任务则延后 |
 
 上表各项带 `danmaku.` 前缀。export 的 mapped 指一条绑定映射后的源数据，不是
 播放器经过过滤的最终显示列表，也不包含其他轨道。
