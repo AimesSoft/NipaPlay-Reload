@@ -46,6 +46,7 @@ import 'ui_data/service.dart';
 import 'ui/shell/next_ui_preference.dart';
 import 'ui_data/capability.dart';
 import 'chat/session_store.dart';
+import 'chat/helpers.dart';
 
 /// Application-owned task and capability composition, independent of Labs.
 final class NextCore {
@@ -145,7 +146,9 @@ final class NextCore {
         authorizeLocalFile: media.service.authorizedPath);
     danmaku.service.exporter = DanmakuExporter(danmaku.service.store,
         (path) => media.service.authorizedPath(path, directory: true));
+    final helpers = Helpers();
     final executors = [
+      helpers,
       downloads.executor,
       ...media.executors,
       ...mediaSourcesExecutors(mediaSources),
@@ -162,6 +165,9 @@ final class NextCore {
     hooks.engine = engine;
     diskDeletion.engine = engine;
     followups = Followups(database, engine, harnessLocation);
+    helpers.engine = engine;
+    helpers.followups = followups;
+    followups.helpers = helpers;
     sessions = SessionStore(database);
     hooks.scheduleError = (error) async {
       await followups.discover({'title': '定时配置无效',

@@ -12,11 +12,56 @@ final class FollowupCapability implements Capability {
           _FollowupAction(service, 'wake'),
           _FollowupAction(service, 'discover'),
           _TurnProcessAction(service),
+          _HelperAction(service, false),
+          _HelperAction(service, true),
           for (final operation in ['main', 'new', 'list', 'switch'])
             _SessionAction(service, operation),
         ];
   @override
   final List<Action> actions;
+}
+
+final class _HelperAction extends Action<_Json, _Json> {
+  const _HelperAction(this.service, this.reporting);
+  final Followups service;
+  final bool reporting;
+  @override
+  ActionSpec get spec => ActionSpec(
+      id: reporting ? 'agent.helper.report' : 'agent.helper',
+      title: reporting ? '更新帮手正在做的事' : '把事情交给帮手',
+      description: reporting
+          ? 'A running helper reports one short viewer-facing sentence about its current activity. jobId defaults to its own task.'
+          : 'Start a background helper in its own Codex thread in this harness. '
+              'Supply a short viewer-facing title and an instruction with the goal, context and requested result. '
+              'At most two helpers run simultaneously; additional helpers queue. '
+              'Returns immediately with jobId; task.cancel stops it. '
+              'Completion (including failure/cancellation) returns through a durable followup to the calling conversation; '
+              'outside embedded chat defaults to main, or pass threadId. '
+              'Helper ui.present cards appear in its conversation and are shared with the parent conversation when it finishes.',
+      effect: Effect.write,
+      input: reporting
+          ? const ObjectSchema({
+              'jobId': StringSchema(minLength: 1),
+              'currentActivity': StringSchema(minLength: 1),
+            }, required: [
+              'currentActivity'
+            ])
+          : const ObjectSchema({
+              'title': StringSchema(minLength: 1),
+              'instruction': StringSchema(minLength: 1),
+              'threadId': StringSchema(minLength: 1),
+            }, required: [
+              'title',
+              'instruction'
+            ]),
+      output: const ObjectSchema({}, additionalProperties: true));
+  @override
+  _Json decodeInput(JsonMap input) => _Json(input);
+  @override
+  Future<Outcome<_Json>> run(_Json input, Invocation invocation) async =>
+      Completed(_Json(reporting
+          ? await service.helpers!.report(input.value, invocation)
+          : await service.helpers!.delegate(input.value, invocation)));
 }
 
 final class _TurnProcessAction extends Action<_Json, _Json> {

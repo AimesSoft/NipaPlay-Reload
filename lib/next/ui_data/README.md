@@ -1,8 +1,8 @@
 # Next 的界面数据
 
-界面在 `await core.ready` 后使用 `core.uiData`（实现 `NextUiData`）。接口文件 `ui_data.dart` 保持原样。订阅 `changes` 后重新读取首页、作品、剧集和卡片；`tasks()` 每个订阅先收到完整任务列表，随后在任务修改时收到新列表。界面退出时取消订阅，NextCore 负责关闭服务。
+界面在 `await core.ready` 后使用 `core.uiData`（实现 `NextUiData`）。订阅 `changes` 后重新读取首页、作品、剧集和卡片；`tasks()` 每个订阅先收到完整任务列表，随后在任务修改时收到新列表。界面退出时取消订阅，NextCore 负责关闭服务。
 
-`workId / episodeId / taskId` 和书架 `id` 用于点击、定位和调用能力，不是显示文字。其余文字为作品元数据、简短的观看提示或 Agent 的短句。任务标题由任务类型与关联作品生成，不显示底层任务标题、路径、日志、来源链或回执。
+`workId / episodeId / taskId` 和书架 `id` 用于点击、定位和调用能力，不是显示文字。其余文字为作品元数据、简短的观看提示或 Agent 的短句。普通任务标题由任务类型与关联作品生成；帮手使用 Agent 给的简短标题。
 
 ## 首页与移除
 
@@ -37,6 +37,33 @@ GUI 可用 `core.uiData.removeShelf(id, workId: ...)` 移除一项，省略 work
 | preparation | title、可选 workId、steps: [{label, detail?, 三选一 taskId / entityId / followupId}] |
 
 引用在整个批次写入前验证；缺失引用的错误说明应查询的视图及 ID 语义。步骤不可提交 state/progress，实时读取任务或后续；实体步骤表示已经找到该作品/剧集。没有额外的状态常量或第二份任务状态。接口的 failed 合并失败和取消，paused 合并暂停、等待决定及中断；等待重试映射为 queued。remaining 无可靠估计时为 null。
+
+X37 的帮手同样使用 `ui.present`，其活动来源为 `harness_cli:helper:<jobId>`。
+原卡片位于帮手线程的实际回合；帮手结果的后续派发时，引用也追加到发起线程的实际后续回合。
+重复对账不会重复复制。卡片中的任务仍实时解析，不保存第二份任务状态。
+
+## 后台任务契约（X37）
+
+`UiTask` 原字段保持兼容；新增字段默认可省略。
+
+| 字段 | 含义 |
+|---|---|
+| taskId | 持久任务号，可用于 `task.get/cancel`，不是显示文字 |
+| title | 观众看到的短标题；帮手使用调用者提供的 title |
+| state | queued/running/paused/finished/failed；容量等待是 queued，取消仍映射 failed |
+| kind | `UiTaskKind.background`（默认）或 `helper`，区分普通任务与帮手 |
+| startedAt | 实际开始处理的 UTC 时间；帮手进入线程时记录，尚未开始或没有该事实时 null |
+| currentActivity | 一句现在在做什么；帮手可用 `agent.helper.report` 更新，否则显示宿主的简短状态；其他任务可为空 |
+| summary | 结束回执里的结果摘要；尚未结束或没有摘要时 null；是帮手的报告，业务结果需查对应回执 |
+| threadId | 帮手的 Codex 线程号，可打开其对话；排队尚未建线程或普通任务为 null |
+| parentThreadId | 结果返回的发起会话线程号；普通任务为 null |
+| cancelled | 是否确实取消，默认 false；可区分 failed 中的取消与错误 |
+| artwork | 已缓存的关联作品图片，无关联或缓存时 null |
+| progress | 可核实的 0–1 进度；未知为 null，帮手始终 null，包括完成后 |
+| remaining | 有可靠估计时的剩余时长，否则 null |
+
+没有进度也是正常后台任务。不得把 null 补成 0%、完成时补成 100% 或用思考/命令次数估算帮手进度。
+两个帮手同时运行，更多的按创建顺序等待；这个上限不限制主会话。
 
 ## 图片与热度
 

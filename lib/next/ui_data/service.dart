@@ -243,7 +243,8 @@ final class UiDataService implements NextUiData {
     final name = _display(title?['title']);
     return UiTask(
         taskId: job.jobId,
-        title: job.state == JobState.waitingUser ? '等待你确认删除' :
+        title: job.type == 'agent.helper' ? job.title :
+            job.state == JobState.waitingUser ? '等待你确认删除' :
             '${_taskVerb(job.type)}${name == null ? '' : '《$name》'}',
         state: switch (job.state) {
           JobState.queued || JobState.waitingRetry => UiTaskState.queued,
@@ -257,7 +258,15 @@ final class UiDataService implements NextUiData {
           _ => UiTaskState.running,
         },
         artwork: art == null ? null : uiArtwork(art),
-        progress: _progress(job));
+        kind: job.type == 'agent.helper' ? UiTaskKind.helper : UiTaskKind.background,
+        startedAt: job.details['startedAt'] == null ? null :
+            DateTime.parse(job.details['startedAt'] as String),
+        currentActivity: job.details['currentActivity'] as String?,
+        summary: job.receipt?.details['summary'] as String?,
+        threadId: job.details['threadId'] as String?,
+        parentThreadId: job.input['parentThreadId'] as String?,
+        cancelled: job.state == JobState.cancelled,
+        progress: job.type == 'agent.helper' ? null : _progress(job));
   }
 
   double? _progress(Job job) => job.state == JobState.succeeded
@@ -520,12 +529,11 @@ final class UiDataService implements NextUiData {
       });
 
   Future<JsonMap> present(JsonMap input, Invocation invocation) async {
-    const prefix = 'harness_cli:chat:';
-    if (!invocation.origin.startsWith(prefix)) {
+    if (!invocation.origin.startsWith('harness_cli:chat:') &&
+        !invocation.origin.startsWith('harness_cli:helper:')) {
       throw const Failure(FailureCode.invalidInput,
           'ui.present requires NIPAPLAY_CHAT from the current embedded chat; do not supply threadId or turnId.');
     }
-    final session = invocation.origin.substring(prefix.length);
     final journal = File('${mediaRoot.path}/journal.jsonl');
     JsonMap? boundary;
     if (await journal.exists()) {
@@ -533,7 +541,7 @@ final class UiDataService implements NextUiData {
         if (line.isEmpty) continue;
         final row = decodeMediaJson(line);
         if (row['event'] == 'chat.turn_boundary' &&
-            row['origin'] == '$prefix$session') {
+            row['origin'] == invocation.origin) {
           boundary = row;
         }
       }

@@ -34,7 +34,21 @@ final class ChatHost {
   final SessionStore? sessions;
   String? mainThreadId;
   final String sessionId;
-  final liveness = ChatLiveness();
+  final threadLiveness = <String, ChatLiveness>{};
+  final _idleLiveness = ChatLiveness();
+  ChatLiveness get liveness =>
+      threadId == null ? _idleLiveness : livenessFor(threadId!);
+  ChatLiveness livenessFor(String id) =>
+      threadLiveness.putIfAbsent(id, ChatLiveness.new);
+  bool busyFor(String id) =>
+      const {'inProgress', 'starting'}.contains(livenessFor(id).status);
+  final threadOrigins = <String, String>{};
+  String originFor(String id) =>
+      threadOrigins[id] ?? 'harness_cli:chat:$sessionId';
+  String? threadForOrigin(String origin) => origin ==
+          'harness_cli:chat:$sessionId'
+      ? threadId
+      : threadOrigins.entries.where((e) => e.value == origin).firstOrNull?.key;
   final _events = StreamController<ChatMessage>.broadcast();
   final _display = StreamController<ChatMessage>.broadcast();
   final _questions = StreamController<ChatMessage>.broadcast();
@@ -43,9 +57,16 @@ final class ChatHost {
   Stream<ChatMessage> get events => _events.stream;
 
   /// Reasoning is combined into at most one update per 100 ms per item.
-  Stream<ChatMessage> get display => _display.stream;
+  Stream<ChatMessage> get display => _display.stream.where((message) =>
+      !const {'host/liveness', 'host/reasoning'}.contains(message['method']) ||
+      message['params']['threadId'] == threadId);
+
+  /// Every thread, including background helpers. All thread-local host messages
+  /// carry params.threadId; the legacy display selects foreground host updates.
+  Stream<ChatMessage> get threadDisplay => _display.stream;
   Stream<ChatMessage> get userInputRequests => _questions.stream;
   final _pending = <int, Completer<ChatMessage>>{};
+  final _requestThreads = <int, String>{};
   final _inputRequests = <Object, ChatMessage>{};
   final _reasoning = <String, StringBuffer>{};
   final _deltaTails = <String, ChatMessage>{};
@@ -158,12 +179,17 @@ final class ChatHost {
         includeParentEnvironment: false);
     _reader = _read();
     _stderr = _readErrors();
-    _clock = Timer.periodic(
-        const Duration(seconds: 1),
-        (_) => _display.add({
-              'method': 'host/liveness',
-              'params': liveness.snapshot(DateTime.now())
-            }));
+    _clock = Timer.periodic(const Duration(seconds: 1), (_) {
+      for (final entry in threadLiveness.entries) {
+        _display.add({
+          'method': 'host/liveness',
+          'params': {
+            'threadId': entry.key,
+            ...entry.value.snapshot(DateTime.now())
+          }
+        });
+      }
+    });
     await _request('initialize', {
       'clientInfo': {'name': 'nipaplay', 'title': 'NipaPlay', 'version': '0.1'},
       'capabilities': {'experimentalApi': false}
@@ -183,16 +209,20 @@ final class ChatHost {
         }
         final message =
             Map<String, dynamic>.from(redactHarnessJson(decoded) as Map);
-        liveness.observe(message, DateTime.now());
         final wireMethod = decoded['method'] as String? ?? '';
         final wireParams = decoded['params'] as Map?;
-        processes.observe(message, 'harness_cli:chat:$sessionId', DateTime.now());
+        final eventThread = wireParams?['threadId'] as String? ??
+            _requestThreads[message['id']];
+        if (eventThread != null) {
+          livenessFor(eventThread).observe(message, DateTime.now());
+          processes.observe(message, originFor(eventThread), DateTime.now());
+        }
         if (wireMethod == 'turn/started' || wireMethod == 'turn/completed') {
           File('${endpoint.seedRepository.parent.path}/journal.jsonl')
               .writeAsStringSync(
                   '${jsonEncode({
                         'event': 'chat.turn_boundary',
-                        'origin': 'harness_cli:chat:$sessionId',
+                        'origin': originFor(eventThread!),
                         'threadId': wireParams!['threadId'],
                         'turnId': wireParams['turn']['id'],
                         'phase': wireMethod == 'turn/started'
@@ -212,7 +242,8 @@ final class ChatHost {
           'item/fileChange/outputDelta'
         }.contains(wireMethod)) {
           if (wireParams?['delta'] case final String delta) {
-            final key = '$wireMethod:${wireParams!['itemId']}:'
+            final key =
+                '${wireParams!['threadId']}:$wireMethod:${wireParams['itemId']}:'
                 '${wireParams['contentIndex'] ?? wireParams['summaryIndex']}';
             final previous =
                 _deltaTails[key]?['params']['delta'] as String? ?? '';
@@ -232,8 +263,9 @@ final class ChatHost {
           final itemId = wireParams?['item']?['id'];
           for (final key in _deltaTails.keys.toList()) {
             final tail = _deltaTails[key]!;
-            if (wireMethod == 'turn/completed' ||
-                tail['params']['itemId'] == itemId) {
+            if (tail['params']['threadId'] == eventThread &&
+                (wireMethod == 'turn/completed' ||
+                    tail['params']['itemId'] == itemId)) {
               _deltaTails.remove(key);
               if (tail['params']['delta'] != '') {
                 final safe = _public(tail);
@@ -252,6 +284,7 @@ final class ChatHost {
         if (id is int &&
             (message.containsKey('result') || message.containsKey('error'))) {
           final pending = _pending.remove(id);
+          _requestThreads.remove(id);
           if (pending != null) {
             if (message['error'] case final Map error) {
               pending.completeError(
@@ -294,6 +327,7 @@ final class ChatHost {
         completer.completeError(StateError('app-server connection closed'));
       }
       _pending.clear();
+      _requestThreads.clear();
       _flushReasoning();
     }
   }
@@ -332,7 +366,8 @@ final class ChatHost {
 
   void _showReasoning(ChatMessage message) {
     final params = message['params'] as Map;
-    final key = '${params['itemId']}:${message['method']}:'
+    final key =
+        '${params['threadId']}:${params['itemId']}:${message['method']}:'
         '${params['contentIndex'] ?? params['summaryIndex']}';
     (_reasoning[key] ??= StringBuffer()).write(params['delta']);
     _flush ??= Timer(const Duration(milliseconds: 100), _flushReasoning);
@@ -352,7 +387,9 @@ final class ChatHost {
 
   void _transportError(String text) {
     _transportClosed = true;
-    liveness.latestError = text;
+    for (final live in threadLiveness.values) {
+      live.latestError = text;
+    }
     _display.add({
       'method': 'host/error',
       'params': {'message': text}
@@ -369,7 +406,11 @@ final class ChatHost {
     for (final entry in _reasoning.entries) {
       _display.add({
         'method': 'host/reasoning',
-        'params': {'key': entry.key, 'delta': entry.value.toString()}
+        'params': {
+          'threadId': entry.key.split(':').first,
+          'key': entry.key.substring(entry.key.indexOf(':') + 1),
+          'delta': entry.value.toString()
+        }
       });
     }
     _reasoning.clear();
@@ -385,6 +426,9 @@ final class ChatHost {
     final id = ++_nextId;
     final result = Completer<ChatMessage>();
     _pending[id] = result;
+    if (params['threadId'] case final String target) {
+      _requestThreads[id] = target;
+    }
     _send({'id': id, 'method': method, 'params': params});
     return result.future;
   }
@@ -396,6 +440,47 @@ final class ChatHost {
       };
   Future<ChatMessage> startThread() =>
       _control(() => _select('thread/start', _common));
+
+  /// Does not select the foreground conversation or change its durable pointer.
+  Future<String> helperThread(String helperId, String title,
+      {String? resumeId}) async {
+    final origin = 'harness_cli:helper:$helperId';
+    final response =
+        await _request(resumeId == null ? 'thread/start' : 'thread/resume', {
+      ..._common,
+      if (resumeId != null) 'threadId': resumeId,
+      'config': {
+        'shell_environment_policy.set.NIPAPLAY_CHAT': 'helper-$helperId'
+      },
+    });
+    final history = Map<String, dynamic>.from(response['thread'] as Map);
+    final id = history['id'] as String;
+    threadOrigins[id] = origin;
+    if ((history['turns'] as List).isEmpty) _freshThreads[id] = history;
+    if (resumeId == null)
+      await _request('thread/name/set', {
+        'threadId': id,
+        'name': title,
+      });
+    return id;
+  }
+
+  Future<ChatMessage> startThreadTurn(String id, String text) =>
+      _control(() => _startThreadTurn(id, text));
+  Future<ChatMessage> _startThreadTurn(String id, String text) async {
+    final live = livenessFor(id);
+    if (busyFor(id)) throw StateError('Use steer for an active turn');
+    live.starting(DateTime.now());
+    _freshThreads.remove(id);
+    try {
+      return _public(await _request(
+          'turn/start', {'threadId': id, 'input': _input(text)}));
+    } catch (error) {
+      live.status = 'startFailed';
+      live.endedAt = DateTime.now();
+      rethrow;
+    }
+  }
 
   /// Select the durable main thread. Explicit new conversations use startThread.
   Future<ChatMessage> getMainSession() => _control(_mainSession);
@@ -440,7 +525,16 @@ final class ChatHost {
     if (liveness.status == 'inProgress' || liveness.status == 'starting') {
       throw StateError('Interrupt the current turn before switching threads');
     }
-    final response = await _request(method, params);
+    final selectedId = params['threadId'] as String?;
+    final origin = selectedId == null ? null : threadOrigins[selectedId];
+    final response = await _request(method, {
+      ...params,
+      if (origin != null)
+        'config': {
+          'shell_environment_policy.set.NIPAPLAY_CHAT':
+              'helper-${origin.substring('harness_cli:helper:'.length)}'
+        }
+    });
     thread = _public(Map<String, dynamic>.from(response['thread'] as Map));
     threadId = thread!['id'] as String;
     if (method == 'thread/start') {
@@ -482,22 +576,13 @@ final class ChatHost {
     if (liveness.status == 'inProgress' || liveness.status == 'starting') {
       throw StateError('Use steer for an active turn');
     }
-    liveness.starting(DateTime.now());
-    _freshThreads.remove(threadId);
-    try {
-      return _public(await _request(
-          'turn/start', {'threadId': threadId, 'input': _input(text)}));
-    } catch (error) {
-      liveness.status = 'startFailed';
-      liveness.endedAt = DateTime.now();
-      rethrow;
-    }
+    return _startThreadTurn(threadId!, text);
   }
 
-  Future<ChatMessage> steer(String text) async =>
+  Future<ChatMessage> steer(String text, {String? onThread}) async =>
       _public(await _request('turn/steer', {
-        'threadId': threadId,
-        'expectedTurnId': liveness.turnId,
+        'threadId': onThread ?? threadId,
+        'expectedTurnId': livenessFor(onThread ?? threadId!).turnId,
         'input': _input(text)
       }));
 
@@ -543,8 +628,11 @@ final class ChatHost {
         }
         return _startTurn(text);
       });
-  Future<ChatMessage> interrupt() async => _public(await _request(
-      'turn/interrupt', {'threadId': threadId, 'turnId': liveness.turnId}));
+  Future<ChatMessage> interrupt({String? onThread}) async =>
+      _public(await _request('turn/interrupt', {
+        'threadId': onThread ?? threadId,
+        'turnId': livenessFor(onThread ?? threadId!).turnId
+      }));
   Future<void> answerUserInput(
       Object id, Map<String, List<String>> answers) async {
     if (!_inputRequests.containsKey(id)) {

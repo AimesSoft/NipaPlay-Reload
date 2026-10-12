@@ -8,6 +8,7 @@ import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:nipaplay/security/secret_redactor.dart';
 
 import '../chat/chat_host.dart';
+import '../chat/helpers.dart';
 import '../chat/turn_process_store.dart';
 import '../harness_location.dart';
 import '../harness_redaction.dart';
@@ -40,6 +41,7 @@ final class Followups {
   final TaskEngine engine;
   final HarnessLocation location;
   ChatHost? _host;
+  Helpers? helpers;
   Future<JsonMap> turnProcess(String threadId, String turnId) async {
     await location.ready;
     final host = _host;
@@ -79,6 +81,7 @@ final class Followups {
   Future<void> attach(ChatHost? host, {String? reason}) async {
     await _chatEvents?.cancel();
     _host = host;
+    helpers?.attach(host);
     _unavailable = reason ?? 'Embedded chat host is not running.';
     _chatEvents = host?.events.listen((message) {
       if (message['method'] == 'turn/completed' ||
@@ -162,16 +165,15 @@ final class Followups {
         if (task != null) await engine.get(task);
         await location.ready;
         String? threadId = input['threadId'] as String?;
-        const prefix = 'harness_cli:chat:';
         if (!immediate &&
             threadId == null &&
-            invocation.origin.startsWith(prefix)) {
-          final session = invocation.origin.substring(prefix.length);
-          if (_host?.sessionId != session || _host?.threadId == null) {
+            (invocation.origin.startsWith('harness_cli:chat:') ||
+                invocation.origin.startsWith('harness_cli:helper:'))) {
+          threadId = _host?.threadForOrigin(invocation.origin);
+          if (threadId == null) {
             throw const Failure(FailureCode.unavailable,
                 'Chat session has no selected thread; specify threadId explicitly.');
           }
-          threadId = _host!.threadId;
         }
         final cursor = (await database.rawQuery(
                 'SELECT COALESCE(MAX(sequence),0) AS cursor FROM followup_hook_events'))
@@ -372,6 +374,13 @@ final class Followups {
               }
               row['turnId'] = response['turn']['id'];
               row['turnStatus'] = response['turn']['status'];
+              if ((row['condition'] as Map)['jobId'] case final String jobId) {
+                final job = await engine.get(jobId);
+                if (job.type == 'agent.helper') {
+                  await helpers?.shareCards(
+                      job, target, row['turnId'] as String);
+                }
+              }
               await _save(row, 'started', 'started',
                   origin: 'harness_cli:chat:${host.sessionId}');
             } catch (error) {
@@ -411,6 +420,13 @@ final class Followups {
               final turn = matches.first;
               row['turnId'] = turn['id'];
               row['turnStatus'] = turn['status'];
+              if ((row['condition'] as Map)['jobId'] case final String jobId) {
+                final job = await engine.get(jobId);
+                if (job.type == 'agent.helper') {
+                  await helpers?.shareCards(
+                      job, row['threadId'] as String, turn['id'] as String);
+                }
+              }
               if (turn['status'] == 'inProgress') {
                 if (row['state'] == 'dispatching') {
                   await _save(row, 'started', 'started');
