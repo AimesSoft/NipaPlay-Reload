@@ -117,6 +117,18 @@ final class ClassicPlaybackControls implements PlaybackControlsPort {
         }
       }
     }
+    result.addAll([
+      for (final entry in state.danmakuTracks.entries)
+        if (entry.value['bindingId'] != null)
+          {
+            'kind': 'danmaku', 'origin': entry.value['origin'],
+            'trackId': entry.key, 'bindingId': entry.value['bindingId'],
+            'source': entry.value['source'], 'platform': entry.value['platform'],
+            'platformVideoId': entry.value['platformVideoId'],
+            'filePath': entry.value['filePath'], 'count': entry.value['count'],
+            'enabled': state.danmakuTrackEnabled[entry.key] == true,
+          }
+    ]);
     return {'tracks': result};
   }
 

@@ -174,7 +174,7 @@ final class VideoDanmakuPort
         metadata: {
           ..._metadata(binding, startMs, endMs),
           'origin': binding['provenance'] != null
-              ? binding['bound_by'] == 'agent'
+              ? binding['bound_by'] == 'automatic' ? 'playback' : binding['bound_by'] == 'agent'
                   ? 'agent_import'
                   : 'manual_import'
               : local
@@ -183,6 +183,7 @@ final class VideoDanmakuPort
           if (binding['provenance'] != null)
             'provenance': binding['provenance'],
           ...provenance,
+          if (binding['local_file'] != null) 'origin': 'sidecar',
           if (local) 'filePath': v['videoId'],
           'name': '${v['sourceId']} · ${v['title']}',
           'source': v['sourceId'],

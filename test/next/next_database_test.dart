@@ -95,7 +95,7 @@ void main() {
       }
       var db = await openNextDatabase(root, factory: databaseFactoryFfi);
       addTearDown(() => db.close());
-      expect(await db.getVersion(), 13);
+      expect(await db.getVersion(), 14);
       for (final table in [
         'harness_sessions',
         'media_file_aliases',

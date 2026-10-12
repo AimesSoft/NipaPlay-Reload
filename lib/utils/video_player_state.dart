@@ -13,6 +13,7 @@ import 'video_frame_image.dart';
 import 'screenshot_encoding.dart';
 
 import 'package:nipaplay/utils/local_danmaku_file.dart';
+import 'package:nipaplay/utils/local_danmaku_match.dart';
 import 'package:nipaplay/utils/danmaku_track_timing.dart';
 import 'package:nipaplay/utils/danmaku_source_merge.dart';
 import 'package:nipaplay/utils/dandanplay_comments.dart';
@@ -314,6 +315,7 @@ class _VideoDimensionSnapshot {
 }
 
 class VideoPlayerState extends ChangeNotifier implements WindowListener {
+  Future<bool> Function(String path)? nextLocalDanmakuLoader;
   late Player _player;
   ValueListenable<bool>? _playerBuffering;
 

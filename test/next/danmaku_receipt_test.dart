@@ -83,6 +83,33 @@ void main() {
         binding['cache_key']);
     expect(f.player.data[binding['id']], hasLength(3));
   });
+  test('automatic playback acquisition persists the raw Classic pool and reuses its track once', () async {
+    final id = await f.file();
+    final raw = ((jsonDecode(utf8.decode(f.host.responses['dandanplay.comments']!)) as Map)['comments'] as List)
+        .map((r) => parseDandanplayComment(Map<String, dynamic>.from(r as Map))).toList();
+    await DanmakuCacheManager.saveDanmakuToCache(ddpVideo.videoId, 17864, raw);
+    f.player.classicTracks.add({
+      'trackId': 'dandanplay', 'origin': 'auto_remote', 'platform': 'dandanplay',
+      'platformVideoId': ddpVideo.videoId, 'count': raw.length,
+    });
+    await f.service.refreshCurrent();
+    final binding = (await f.service.store.bindings(id)).single;
+    expect(binding['bound_by'], 'automatic');
+    expect((binding['provenance'] as Map)['origin'], 'application:playback');
+    expect((await f.service.store.entries(binding['cache_key'] as String)), hasLength(3));
+    final entries = await f.service.store.entries(binding['cache_key'] as String);
+    expect(entries.first.platform, 'bilibili');
+    expect(entries.first.originVideoId, '101');
+    expect(entries.last.platform, 'unknown');
+    expect(entries.last.originVideoId, isNull);
+    expect(f.player.reuseCount, 1);
+    expect(f.player.installCount, 0);
+    await f.service.refreshCurrent();
+    expect((await f.service.store.bindings(id)), hasLength(1));
+    expect((await f.service.store.bindings(id)).single['revision'], binding['revision']);
+    expect(f.player.classicTracks, hasLength(1));
+  });
+
   test('first fetch failure reports no cached or loaded comments', () async {
     f.host.failures['segmented.chunk:0'] = const SourceFailure(
         SourceStatus.accessDenied,

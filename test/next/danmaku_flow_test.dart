@@ -74,7 +74,7 @@ void main() {
     await db.close();
     final upgraded =
         await SqliteJobStore.open(root, factory: databaseFactoryFfi);
-    expect(await upgraded.database.getVersion(), 13);
+    expect(await upgraded.database.getVersion(), 14);
     expect((await upgraded.database.query('media_entities')).single,
         {...entity, 'parent_id': null});
     expect(

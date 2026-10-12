@@ -1,17 +1,5 @@
 part of video_player_state;
 
-class _LocalDanmakuCandidate {
-  final String filePath;
-  final String fileName;
-  final int score;
-
-  const _LocalDanmakuCandidate({
-    required this.filePath,
-    required this.fileName,
-    required this.score,
-  });
-}
-
 class _SpoilerAiRequestConfig {
   final SpoilerAiApiFormat apiFormat;
   final String apiUrl;
@@ -140,6 +128,7 @@ extension VideoPlayerStateDanmaku on VideoPlayerState {
   Future<bool> _autoDetectAndLoadLocalDanmakuFromVideoDirectory(
       String videoPath) async {
     if (_isDisposed || kIsWeb) return false;
+    if (nextLocalDanmakuLoader != null) return nextLocalDanmakuLoader!(videoPath);
 
     if (videoPath.startsWith('http://') ||
         videoPath.startsWith('https://') ||
@@ -158,67 +147,10 @@ extension VideoPlayerStateDanmaku on VideoPlayerState {
         _playbackGeneration == targetGeneration;
 
     try {
-      final dirPath = p.dirname(videoPath);
-      final dir = Directory(dirPath);
-      if (!await dir.exists()) return false;
-
-      final videoBaseName = p.basenameWithoutExtension(videoPath).toLowerCase();
-
-      final candidates = <_LocalDanmakuCandidate>[];
-      await for (final entity in dir.list(followLinks: false)) {
-        if (!canContinue()) return false;
-        if (entity is! File) continue;
-
-        final filePath = entity.path;
-        final fileName = p.basename(filePath);
-        final lowerName = fileName.toLowerCase();
-        final ext = p.extension(lowerName);
-        if (ext != '.json' && ext != '.xml') continue;
-
-        // 很多目录会带有配置/元数据 JSON/XML，做个简单打分再尝试解析。
-        final nameNoExt = p.basenameWithoutExtension(lowerName);
-        int score = 0;
-        if (nameNoExt == videoBaseName) {
-          score += 100;
-        } else if (nameNoExt.startsWith(videoBaseName)) {
-          score += 80;
-        } else if (nameNoExt.contains(videoBaseName)) {
-          score += 60;
-        }
-
-        if (lowerName.contains('danmaku') ||
-            lowerName.contains('barrage') ||
-            lowerName.contains('comment') ||
-            lowerName.contains('弹幕')) {
-          score += 20;
-        }
-
-        // 轻微偏好 XML（更常见的B站格式）
-        if (ext == '.xml') score += 3;
-        if (score <= 0) continue;
-
-        candidates.add(_LocalDanmakuCandidate(
-          filePath: filePath,
-          fileName: fileName,
-          score: score,
-        ));
-      }
-
+      final candidates = await localDanmakuCandidates(videoPath);
       if (!canContinue()) return false;
-      if (candidates.isEmpty) return false;
-
-      candidates.sort((a, b) {
-        final scoreCompare = b.score.compareTo(a.score);
-        if (scoreCompare != 0) return scoreCompare;
-        return a.fileName.compareTo(b.fileName);
-      });
-
-      const maxTryCount = 8;
-      for (final candidate in candidates.take(maxTryCount)) {
+      for (final filePath in candidates) {
         if (!canContinue()) return false;
-        final filePath = candidate.filePath;
-
-        // 避免同一文件在一次初始化里被重复加载
         final alreadyLoaded = _danmakuTracks.values.any((track) =>
             track['source'] == 'local' && track['filePath'] == filePath);
         if (alreadyLoaded) continue;

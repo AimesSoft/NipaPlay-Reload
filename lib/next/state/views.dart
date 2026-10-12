@@ -619,13 +619,16 @@ List<StateView> publicStateViews(
               'native danmaku; not proof of visible comments.'),
           'boundBy': _text('Host-recorded actor.'),
           'provenance': importProvenanceSchema,
-          'createdAt': _time
+          'createdAt': _time,
+          'localFile': const ObjectSchema({}, additionalProperties: true)
         }),
-        'SELECT id AS bindingId,entity_id AS entityId,entity_revision AS entityRevision,revision,status,video,enabled,deduplicate,offset_ms AS offsetMs,cache_key AS cacheKey,cache_revision AS cacheRevision,bound_by AS boundBy,created_at AS createdAt,provenance FROM danmaku_bindings ORDER BY id',
+        'SELECT local_file AS localFile,id AS bindingId,entity_id AS entityId,entity_revision AS entityRevision,revision,status,video,enabled,deduplicate,offset_ms AS offsetMs,cache_key AS cacheKey,cache_revision AS cacheRevision,bound_by AS boundBy,created_at AS createdAt,provenance FROM danmaku_bindings ORDER BY id',
         transform: (row) async {
       final video = decodeMediaJson(row['video']);
       return {
         ...row,
+        if (row['localFile'] != null)
+          'localFile': decodeMediaJson(row['localFile'])..remove('timeCounts'),
         if (row['provenance'] != null)
           'provenance': decodeMediaJson(row['provenance']),
         'sourceId': video['sourceId'],
