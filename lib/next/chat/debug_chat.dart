@@ -27,9 +27,9 @@ void installDebugChat(ChatHost? Function() current) {
         case 'turn':
           result = await host.startTurn(params['text']!);
         case 'steer':
-          result = await host.steer(params['text']!);
+          result = await host.steer(params['text']!, onThread: params['threadId']);
         case 'interrupt':
-          result = await host.interrupt();
+          result = await host.interrupt(onThread: params['threadId']);
         case 'answer':
           final answers = jsonDecode(params['answers']!) as Map;
           await host.answerUserInput(jsonDecode(params['id']!), {
@@ -41,6 +41,8 @@ void installDebugChat(ChatHost? Function() current) {
           result = {
             'header': host.header,
             'liveness': host.liveness.snapshot(DateTime.now()),
+            'threads': {for (final entry in host.threadLiveness.entries)
+              entry.key: entry.value.snapshot(DateTime.now())},
             'environment': host.launchEnvironment
           };
         case 'read':

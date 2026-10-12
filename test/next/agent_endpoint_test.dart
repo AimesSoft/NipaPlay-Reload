@@ -130,6 +130,14 @@ void main() {
     await response.drain<void>();
     expect(jsonDecode(await journal.readAsString())['origin'],
         'harness_cli:chat:nipa-session-123');
+    final helperCall = await client.postUrl(running.url.replace(path: '/harness'));
+    helperCall.headers.set('Authorization', 'Bearer ${before['token']}');
+    helperCall.headers.set('X-NipaPlay-Chat', 'helper-job-fixture');
+    helperCall.write(jsonEncode(
+        {'operation': 'call', 'action': 'fixture.write', 'input': {}}));
+    await (await helperCall.close()).drain<void>();
+    expect(jsonDecode((await journal.readAsLines()).last)['origin'],
+        'harness_cli:helper:job-fixture');
     expect(
         endpoint.chatEnvironment({
           'PATH': '/bin',

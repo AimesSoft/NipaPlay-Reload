@@ -86,6 +86,11 @@ final _historyFields = ObjectSchema({
   ..._progressFields.properties,
 });
 final _receiptDetails = ObjectSchema({
+  'summary': _text('Helper final reply, redacted; not proof of domain completion.'),
+  'resultVerification': _text('Helper-reported domain outcome remains unverified; verified receipt only verifies the turn ended.'),
+  'threadId': _text('Helper Codex thread ID.'),
+  'turnId': _text('Helper Codex turn ID.'),
+  'turnStatus': _text('Actual helper turn status.'),
   'sourceId': _text('Media source ID.'),
   'provider': _text('Account provider.'),
   'connected': _bool('Verified connection result.'),
@@ -145,6 +150,9 @@ final _receipt = ObjectSchema({
     description:
         'Public receipt whitelist; domain-specific storage and credentials are excluded.');
 final _taskFields = ObjectSchema({
+  'threadId': _text('Helper Codex thread ID; null before dispatch or for other tasks.'),
+  'startedAt': _time,
+  'currentActivity': _text('Short viewer-facing helper activity sentence.'),
   'jobId': _text('Stable persisted task ID.'),
   'type': _text('Registered executor type.'),
   'title': _text('Task title.'),

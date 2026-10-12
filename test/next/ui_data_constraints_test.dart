@@ -27,13 +27,15 @@ void main() {
   late UiDataService service;
   late Harness harness;
   late FakeExecutor executor;
+  late FakeExecutor helperExecutor;
   setUp(() async {
     sqfliteFfiInit();
     root = await Directory.systemTemp.createTemp('ui-data-constraints-');
     store = await SqliteJobStore.open(root, factory: databaseFactoryFfi);
     executor = FakeExecutor();
+    helperExecutor = FakeExecutor(type: 'agent.helper');
     engine = TaskEngine(
-        store: store, ownerDeviceId: 'fixture', executors: [executor]);
+        store: store, ownerDeviceId: 'fixture', executors: [executor, helperExecutor]);
     await engine.start();
     final media = MediaService(
         store: IdentityStore(store.database, 'fixture'),
@@ -76,6 +78,36 @@ void main() {
   });
   Future<Outcome> call(String action, JsonMap input) => harness.invokeJson(
       action, input, Invocation(origin: 'harness_cli:chat:fixture'));
+
+  test('helper cards and tasks retain thread, summary and unknown progress', () async {
+    final job = await engine.submit(type: 'agent.helper', title: '补齐弹幕',
+        input: {'parentThreadId': 'parent'}, details: {
+          'threadId': 'helper-thread', 'startedAt': '2026-10-12T00:00:00Z',
+          'currentActivity': '正在整理弹幕',
+        });
+    final context = await helperExecutor.entered.future;
+    final task = (await service.tasks().first).single;
+    expect(task.kind, UiTaskKind.helper);
+    expect(task.title, '补齐弹幕');
+    expect(task.threadId, 'helper-thread');
+    expect(task.parentThreadId, 'parent');
+    expect(task.currentActivity, '正在整理弹幕');
+    expect(task.progress, isNull);
+    await File('${root.path}/journal.jsonl').writeAsString('${jsonEncode({
+      'event': 'chat.turn_boundary', 'origin': 'harness_cli:helper:${job.jobId}',
+      'threadId': 'helper-thread', 'turnId': 'helper-turn', 'phase': 'started',
+    })}\n', mode: FileMode.append);
+    expect(await harness.invokeJson('ui.present', {'cards': [
+      {'kind': 'task', 'taskId': job.jobId}
+    ]}, Invocation(origin: 'harness_cli:helper:${job.jobId}')), isA<Completed>());
+    expect(await service.cards(threadId: 'parent'), isEmpty);
+    expect(await service.cards(threadId: 'helper-thread'), hasLength(1));
+    await context.succeed(JobReceipt(verification: VerificationLevel.verified,
+        details: {'summary': '九集已检查'}));
+    final finished = (await service.tasks().first).single;
+    expect(finished.summary, '九集已检查');
+    expect(finished.progress, isNull);
+  });
 
   test('artwork batches keep provenance and source files; invalid batch cannot edit metadata', () async {
     final recorder = ui.PictureRecorder();

@@ -60,6 +60,10 @@ Streams:
   (100 ms), and a `host/liveness` snapshot every second. Unknown item kinds are
   ignored here. The reasoning key identifies item, method and content index;
   delta text is appended to that section. Completed items contain final content.
+- `threadDisplay`: the same display events for every thread. `host/reasoning`
+  and `host/liveness` carry `params.threadId`; coalescing and liveness are isolated
+  by thread. `display` keeps foreground-only host reasoning/liveness updates for
+  the existing UI, which already routes normal protocol events by threadId.
 - `userInputRequests`: `item/tool/requestUserInput` requests, retaining their RPC
   ID and questions. Answer with `{questionId: [answer, ...]}`. Other server
   requests receive JSON-RPC error -32601.
@@ -90,6 +94,46 @@ In macOS lab profiles, blocking Keychain access also prevents Codex's default
 TLS trust loading. X23 used a public `/etc/ssl/cert.pem` copy in the profile and
 set CODEX_CA_CERTIFICATE and SSL_CERT_FILE to it when launching the lab instance.
 No TLS verification or write restriction was relaxed.
+
+X37 uses concurrent threads in this one app-server (verified with Codex
+0.144.1). `threadLiveness` / `livenessFor(id)` and `busyFor(id)` describe each
+thread; `liveness` / `busy` still mean the selected foreground conversation.
+`startThreadTurn`, `steer(onThread:)`, and `interrupt(onThread:)` target one
+thread. Helpers never change the main/current durable session pointers.
+
+`agent.helper {title, instruction, threadId?}` accepts a background task and
+returns `{jobId, parentThreadId, helperLimit: 2}`. The instruction is opaque:
+goal, context and requested result come from the Agent. The caller's conversation
+is the return target; terminal calls default to main. Each helper gets its own
+Codex thread and thread-local `NIPAPLAY_CHAT=helper-<jobId>` configuration, sharing
+the same harness cwd. Calls and X33 process records use
+`harness_cli:helper:<jobId>`. Only two helpers run at once. Other tasks use the
+existing waiting_retry state as a FIFO capacity queue (checked every two
+seconds); NextUiData projects them as queued, without percentage or ETA.
+`agent.helper.report {currentActivity, jobId?}` updates a short viewer-facing
+sentence from that running helper. `task.cancel` interrupts only its thread;
+cancelling before dispatch creates no model turn.
+
+Each helper automatically registers one durable X25/X31 task-terminal followup.
+Success, failure and cancellation return to the original conversation, waiting
+while that conversation is busy. The receipt records actual threadId, turnId,
+turnStatus and a redacted final reply (up to 8192 characters). A verified helper
+receipt verifies that its Codex turn completed; `resultVerification: unverified`
+explicitly leaves its claimed domain result for the parent to check. It does
+not prove that danmaku, downloads or other delegated goals succeeded.
+
+Helper `ui.present` cards initially belong to its own thread/turn. At result
+delivery they are also copied as references to the parent's actual followup
+turn, idempotently, so the viewer sees them in the result conversation. Live
+task/card state is still resolved by UiDataService. No UI files changed.
+
+Jobs and return conditions persist through restart. Recovery reads the existing
+helper thread and its marked turn, never repeats an ambiguous dispatch. An
+interrupted model turn is reported as failed with its actual interrupted status;
+continuing its goal is an Agent decision. Switching harness or disabling Next
+detaches the helper host; it waits for that harness to be available. Helpers
+share files, settings and body facts: thread isolation is not a separate working
+copy or a lock on Agent edits.
 
 The lab-only debug VM extension `ext.nipaplay.chat` supports start/resume/list,
 turn/steer/interrupt/answer/status/close. `scripts/next/x23_vm.py` calls it via

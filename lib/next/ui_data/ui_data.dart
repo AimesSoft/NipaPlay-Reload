@@ -154,6 +154,8 @@ final class UiShelfItem {
 
 enum UiTaskState { queued, running, paused, finished, failed }
 
+enum UiTaskKind { background, helper }
+
 final class UiTask {
   const UiTask({
     required this.taskId,
@@ -162,6 +164,13 @@ final class UiTask {
     this.artwork,
     this.progress,
     this.remaining,
+    this.kind = UiTaskKind.background,
+    this.startedAt,
+    this.currentActivity,
+    this.summary,
+    this.threadId,
+    this.parentThreadId,
+    this.cancelled = false,
   });
   final String taskId;
   final String title;
@@ -169,6 +178,13 @@ final class UiTask {
   final UiArtwork? artwork;
   final double? progress;
   final Duration? remaining;
+  final UiTaskKind kind;
+  final DateTime? startedAt;
+  final String? currentActivity;
+  final String? summary;
+  final String? threadId;
+  final String? parentThreadId;
+  final bool cancelled;
 }
 
 enum UiStepState { done, running, waiting, failed }

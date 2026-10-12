@@ -4,6 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:nipa_harness/nipa_harness.dart';
 import 'package:nipaplay/next/followups/service.dart';
 import 'package:nipaplay/next/chat/session_store.dart';
+import 'package:nipaplay/next/chat/helpers.dart';
 import 'package:nipaplay/next/harness_location.dart';
 import 'package:nipaplay/next/tasks/sqlite_job_store.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -95,6 +96,44 @@ void main() {
         ['followup.registered', 'followup.cancelled']);
     expect(events.last['origin'], 'gui');
     expect(events.last['invocation_id'], 'cancel-constraint');
+  });
+
+  test('helper recovery preserves one return and cancellation without a host',
+      () async {
+    await followups.close();
+    await engine.close();
+    store = await SqliteJobStore.open(root, factory: databaseFactoryFfi);
+    final helpers = Helpers();
+    engine = TaskEngine(
+        store: store, ownerDeviceId: 'fixture', executors: [helpers]);
+    followups = Followups(store.database, engine, location);
+    helpers.engine = engine;
+    helpers.followups = followups;
+    followups.helpers = helpers;
+    await engine.start();
+    final job =
+        await engine.submit(type: 'agent.helper', title: '补齐弹幕', input: {
+      'parentThreadId': 'original-thread',
+      'repository': root.path,
+      'instruction': '保留已有的轨道',
+    });
+    while ((await engine.get(job.jobId)).state != JobState.waitingRetry) {
+      await engine.wait(job.jobId, timeout: const Duration(seconds: 1));
+    }
+    expect((await followups.list()).single['threadId'], 'original-thread');
+    await engine.cancel(job.jobId);
+    while (!(await engine.get(job.jobId)).state.isTerminal) {
+      await engine.wait(job.jobId, timeout: const Duration(seconds: 1));
+    }
+    await followups.sweep();
+    final rows = await followups.list();
+    expect(rows, hasLength(1));
+    expect(rows.single['state'], 'ready');
+    expect((rows.single['trigger'] as Map)['state'], 'cancelled');
+    expect(
+        ((rows.single['trigger'] as Map)['receipt'] as Map)['details']
+            ['summary'],
+        '帮手任务已停止');
   });
 
   for (final state in [JobState.failed, JobState.cancelled]) {
