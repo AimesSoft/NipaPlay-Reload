@@ -188,6 +188,31 @@ void main() {
     expect(await store.database.query('followup_events'), isEmpty);
   });
 
+  test('native wait consumption is durable and never rewrites the receipt', () async {
+    final job = await engine.submit(type: 'test', title: '原生帮手');
+    final context = await executor.entered.future;
+    final row = await followups.register({
+      'when': {'jobId': job.jobId}, 'threadId': 'parent', 'instruction': '交回结果'
+    }, Invocation(origin: 'codex_native:child'));
+    await context.succeed(verified(details: {'summary': '每集完整表格'}));
+    await followups.sweep();
+    final receipt = (await engine.get(job.jobId)).receipt!.toJson();
+    final taken = <String, Object?>{'threadId': 'parent', 'turnId': 'wait-turn',
+      'itemId': 'wait-item', 'helperTurnId': 'child-turn'};
+    await followups.consumeHelperResult(job.jobId, taken);
+    await followups.consumeHelperResult(job.jobId, taken);
+    await followups.close();
+    followups = Followups(store.database, engine, location);
+    await followups.sweep();
+    final saved = (await followups.list()).single;
+    expect(saved['id'], row['id']);
+    expect(saved['state'], 'cancelled');
+    expect(saved['consumedBy'], taken);
+    expect((await engine.get(job.jobId)).receipt!.toJson(), receipt);
+    expect(await store.database.query('followup_events',
+        where: 'type=?', whereArgs: ['followup.consumed']), hasLength(1));
+  });
+
   test('main identifiers survive selections, reopen, and harness changes',
       () async {
     var sessions = SessionStore(store.database);

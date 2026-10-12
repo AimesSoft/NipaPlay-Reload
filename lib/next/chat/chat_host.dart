@@ -342,6 +342,7 @@ final class ChatHost {
         'commandExecution',
         'fileChange',
         'mcpToolCall',
+        'collabAgentToolCall',
         'plan',
         'webSearch'
       }.contains((m['params'] as Map)['item']['type']);
@@ -557,11 +558,13 @@ final class ChatHost {
     return Map<String, dynamic>.from(redactHarnessJson(response) as Map);
   }
 
-  Future<ChatMessage> listThreads({String? cursor, int limit = 30}) async =>
+  Future<ChatMessage> listThreads({String? cursor, int limit = 30,
+      List<String>? sourceKinds}) async =>
       _public(await _request('thread/list', {
         'cwd': repository.path,
         'modelProviders': [],
         'limit': limit,
+        if (sourceKinds != null) 'sourceKinds': sourceKinds,
         if (cursor != null) 'cursor': cursor
       }));
   ChatMessage _public(ChatMessage message) =>

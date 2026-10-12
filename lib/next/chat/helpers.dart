@@ -5,7 +5,10 @@ import 'package:nipa_harness/nipa_harness.dart';
 
 import '../followups/service.dart';
 import '../harness_redaction.dart';
+import '../state/change_history.dart';
 import 'chat_host.dart';
+
+part 'native_helpers.dart';
 
 /// Capacity and receipts, with no policy about which work to delegate.
 final class Helpers implements JobExecutor {
@@ -15,6 +18,9 @@ final class Helpers implements JobExecutor {
   late TaskEngine engine;
   late Followups followups;
   ChatHost? host;
+  late final _native = _NativeHelpers(this);
+  Future<Map?> nativeResultTaken(Job job, ChatHost chat) =>
+      _native.taken(job, chat);
   final _slots = <String>{};
   Completer<void> _attachment = Completer<void>();
 
@@ -22,6 +28,7 @@ final class Helpers implements JobExecutor {
     host = value;
     _attachment.complete();
     _attachment = Completer<void>();
+    _native.attach(value);
   }
 
   Future<JsonMap> delegate(JsonMap input, Invocation invocation) async {
@@ -46,6 +53,8 @@ final class Helpers implements JobExecutor {
       'origin': invocation.origin,
       'invocationId': invocation.id
     }, details: {
+      'source': 'host',
+      'parentThreadId': parent,
       'currentActivity': '等待帮手接手'
     });
     await _returnFor(job);
@@ -63,12 +72,17 @@ final class Helpers implements JobExecutor {
     if ((await followups.list()).any((row) =>
         (row['condition'] as Map)['jobId'] == job.jobId &&
         row['instruction'] == '帮手已结束，请根据它的结果回应用户。')) return;
-    await followups.register({
-      'when': {'jobId': job.jobId},
-      'threadId': job.input['parentThreadId'],
-      'title': job.title,
-      'instruction': '帮手已结束，请根据它的结果回应用户。',
-    }, Invocation(origin: 'harness_cli:helper:${job.jobId}'));
+    await followups.register(
+        {
+          'when': {'jobId': job.jobId},
+          'threadId': job.input['parentThreadId'],
+          'title': job.title,
+          'instruction': '帮手已结束，请根据它的结果回应用户。',
+        },
+        Invocation(
+            origin: job.input['source'] == 'codexNative'
+                ? 'codex_native:${job.input['threadId']}'
+                : 'harness_cli:helper:${job.jobId}'));
   }
 
   Future<JsonMap> report(JsonMap input, Invocation invocation) async {
@@ -97,6 +111,10 @@ final class Helpers implements JobExecutor {
   Future<void> recover(JobContext context) => _run(context);
 
   Future<void> _run(JobContext context) async {
+    if (context.job.input['source'] == 'codexNative') {
+      await _native.run(context);
+      return;
+    }
     final job = context.job;
     final chat = host;
     await _returnFor(job);

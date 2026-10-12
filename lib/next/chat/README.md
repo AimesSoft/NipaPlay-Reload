@@ -101,7 +101,7 @@ thread; `liveness` / `busy` still mean the selected foreground conversation.
 `startThreadTurn`, `steer(onThread:)`, and `interrupt(onThread:)` target one
 thread. Helpers never change the main/current durable session pointers.
 
-`agent.helper {title, instruction, threadId?}` accepts a background task and
+`agent.dispatch {title, instruction, threadId?}` accepts a host-dispatched task and
 returns `{jobId, parentThreadId, helperLimit: 2}`. The instruction is opaque:
 goal, context and requested result come from the Agent. The caller's conversation
 is the return target; terminal calls default to main. Each helper gets its own
@@ -110,7 +110,7 @@ the same harness cwd. Calls and X33 process records use
 `harness_cli:helper:<jobId>`. Only two helpers run at once. Other tasks use the
 existing waiting_retry state as a FIFO capacity queue (checked every two
 seconds); NextUiData projects them as queued, without percentage or ETA.
-`agent.helper.report {currentActivity, jobId?}` updates a short viewer-facing
+`agent.dispatch.report {currentActivity, jobId?}` updates a short viewer-facing
 sentence from that running helper. `task.cancel` interrupts only its thread;
 cancelling before dispatch creates no model turn.
 
@@ -134,6 +134,45 @@ continuing its goal is an Agent decision. Switching harness or disabling Next
 detaches the helper host; it waits for that harness to be available. Helpers
 share files, settings and body facts: thread isolation is not a separate working
 copy or a lock on Agent edits.
+
+## Native helpers (X38)
+
+Codex `collabAgentToolCall` items are included in the display stream. A completed
+`spawnAgent` adopts every receiver thread as a persisted helper; NipaPlay never
+starts a duplicate turn or waits in the parent's turn. `pendingInit` precedes the
+child's `turn/started`, so history is read only once that turn exists. The title
+is the first short sentence of the redacted prompt. Native tasks retain the
+existing executor type `agent.helper`, with `source: codexNative` (host dispatch
+uses `source: host`), child and parent thread IDs, actual start time, latest
+assistant sentence or infrastructure activity, and the complete final answer.
+Reusing a child with `sendInput` creates another execution receipt in that same
+thread without rewriting the previous terminal task. Native concurrency belongs
+to Codex, not the host's two dispatch slots.
+
+`task.cancel` reconciles the child turn and sends `turn/interrupt`. Adoption marks
+the already existing effect as committed, including before the local executor
+starts; cancellation cannot falsely claim there was no model turn. Restart
+reconciles native thread history, never sends another `turn/start`, and preserves
+the task, return condition and receipt.
+
+One task-terminal followup returns the result to the parent when idle. A completed
+parent `wait` that contains that child's completed result consumes this return,
+persisting `consumedBy` with the wait item, parent turn and helper turn. Timeouts,
+running states and other senders do not consume it. Before delivery, parent
+history is checked again to reconcile wait events missed at shutdown. Consumption
+cancels only the return condition; the task's final answer remains intact.
+
+The public X37 dispatch actions were renamed to `agent.dispatch` and
+`agent.dispatch.report`: scripts/hooks can open an independent model turn even
+without a running parent turn, which native model tools cannot do. Stored
+`agent.helper` jobs are unchanged; old harness scripts must use the new action
+IDs after merging the seed. There is no deprecated second delegation alias.
+
+Native tasks, return origins and turn-process records use `codex_native:<threadId>`.
+Codex's native child shell currently inherits its parent's `NIPAPLAY_CHAT`, so
+individual `nipa` calls still carry that inherited CLI origin; these calls are
+not relabelled by guessing from command text. X38 does not claim thread-local
+native card/call attribution where Codex has not supplied it.
 
 The lab-only debug VM extension `ext.nipaplay.chat` supports start/resume/list,
 turn/steer/interrupt/answer/status/close. `scripts/next/x23_vm.py` calls it via

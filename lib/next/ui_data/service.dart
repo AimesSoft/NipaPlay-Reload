@@ -266,6 +266,7 @@ final class UiDataService implements NextUiData {
         threadId: job.details['threadId'] as String?,
         parentThreadId: job.input['parentThreadId'] as String?,
         cancelled: job.state == JobState.cancelled,
+        source: job.details['source'] as String?,
         progress: job.type == 'agent.helper' ? null : _progress(job));
   }
 

@@ -238,6 +238,17 @@ final class Followups {
         return _public(row);
       });
 
+  Future<void> consumeHelperResult(String jobId, JsonMap taken) => _serial(() async {
+        for (final row in await _rows()) {
+          if ((row['condition'] as Map)['jobId'] == jobId &&
+              {'waiting', 'ready'}.contains(row['state'])) {
+            row['consumedBy'] = taken;
+            await _save(row, 'cancelled', 'consumed',
+                origin: 'codex_native:wait', reason: 'Parent collected this result with wait.');
+          }
+        }
+      });
+
   Future<JsonMap> _get(String id) async {
     final rows =
         await database.query('followups', where: 'id=?', whereArgs: [id]);
@@ -364,6 +375,16 @@ final class Followups {
               final target =
                   await host!.prepareFollowup(row['threadId'] as String?);
               if (target == null) continue;
+              if ((row['condition'] as Map)['jobId'] case final String jobId) {
+                final job = await engine.get(jobId);
+                final taken = await helpers?.nativeResultTaken(job, host);
+                if (taken != null) {
+                  row['consumedBy'] = taken;
+                  await _save(row, 'cancelled', 'consumed',
+                      origin: 'codex_native:wait', reason: 'Parent collected this result with wait.');
+                  continue;
+                }
+              }
               row['threadId'] = target;
               await _save(row, 'dispatching', 'dispatching');
               final response = await host.startFollowup(target, _prompt(row));

@@ -27,11 +27,12 @@ final class _HelperAction extends Action<_Json, _Json> {
   final bool reporting;
   @override
   ActionSpec get spec => ActionSpec(
-      id: reporting ? 'agent.helper.report' : 'agent.helper',
-      title: reporting ? '更新帮手正在做的事' : '把事情交给帮手',
+      id: reporting ? 'agent.dispatch.report' : 'agent.dispatch',
+      title: reporting ? '更新宿主帮手正在做的事' : '启动宿主帮手回合',
       description: reporting
           ? 'A running helper reports one short viewer-facing sentence about its current activity. jobId defaults to its own task.'
-          : 'Start a background helper in its own Codex thread in this harness. '
+          : 'Host-side dispatch for scripts and hooks, including when no parent Agent turn is running. '
+              'Codex native subagents are also visible as helpers; this action starts an independent host-managed turn. '
               'Supply a short viewer-facing title and an instruction with the goal, context and requested result. '
               'At most two helpers run simultaneously; additional helpers queue. '
               'Returns immediately with jobId; task.cancel stops it. '
