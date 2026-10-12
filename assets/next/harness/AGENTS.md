@@ -143,6 +143,14 @@ Windows 上把 `./nipa` 换成 `python nipa`。连接凭据默认在 macOS/Linux
   - `plugins.*`：插件。
 - **普通公开链接**会原样返回；带登录凭据、令牌、签名或访问密钥的链接会被脱敏。`ui.capture` 默认返回长边不超过 1280 像素的截图，传 `originalSize:true` 返回原尺寸。
 
+## 预制的外部工具
+
+`tools/` 里有 Python 标准库脚本：`mikan.py` 查询蜜柑番组、字幕组、RSS 与种子；
+`discovery.py` 查询 Nyaa、AnimeTosho 的公开候选；`api.py` 查询公开 JSON API；
+`danmaku.py` 查询外部 danmu-api 或取得公开 B 站 XML。参数和限制见 `tools/README.md`、
+各脚本的 `--help`。它们只在外面找东西，结果通过 `nipa` 交入 NipaPlay。
+它们只是起点，你可以改、扩充或换掉；按实际任务积累经验。
+
 ## 关于 NipaPlay 的事实
 
 - **媒体身份可以来自多个来源**：弹弹play、Bangumi、TMDB 等。弹弹play 没有收录，不等于无法识别；电视剧、电影常常只有 TMDB 身份。内容哈希匹配只能给出弹弹play 的 ID。文件名需要你自己理解，NipaPlay 不会替你解析。
