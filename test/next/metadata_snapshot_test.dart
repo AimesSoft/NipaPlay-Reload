@@ -53,7 +53,8 @@ void main() {
         classic: MemoryClassic(),
         authorizedRoots: () => [root.path],
         mediaProviders: [TmdbMetadataProvider(tmdb)],
-        mediaDurationProbe: (_) async => 10000);
+        mediaDurationProbe: (_) async => 10000,
+        mediaSubtitleProbe: (_) async => {'subtitles': <Object?>[]});
     await core.ready;
     api = Harness(core.capabilities);
   }

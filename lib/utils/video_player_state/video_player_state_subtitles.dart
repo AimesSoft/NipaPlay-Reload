@@ -7,6 +7,9 @@ extension VideoPlayerStateSubtitles on VideoPlayerState {
 
   void selectEmbeddedSubtitleTrack(int index) {
     player.activeSubtitleTracks = index < 0 ? [] : [index];
+    if (nextSubtitleSelection != null && currentVideoPath != null) {
+      unawaited(nextSubtitleSelection!(currentVideoPath!, index, null));
+    }
   }
   void _attachPluginDanmakuFilter() {
     _detachPluginDanmakuFilter();
@@ -167,12 +170,18 @@ extension VideoPlayerStateSubtitles on VideoPlayerState {
     _subtitleManager.setExternalSubtitle(path,
         isManualSetting: isManualSetting);
     _notifyListeners();
+    if (isManualSetting && nextSubtitleSelection != null && currentVideoPath != null) {
+      unawaited(nextSubtitleSelection!(currentVideoPath!, null, path));
+    }
   }
 
   // 强制设置外部字幕（手动操作）
   void forceSetExternalSubtitle(String path) {
     _subtitleManager.forceSetExternalSubtitle(path);
     _notifyListeners();
+    if (nextSubtitleSelection != null && currentVideoPath != null) {
+      unawaited(nextSubtitleSelection!(currentVideoPath!, null, path));
+    }
   }
 
   // 桥接方法：预加载字幕文件
@@ -186,12 +195,27 @@ extension VideoPlayerStateSubtitles on VideoPlayerState {
     await _subtitleManager.addExternalSubtitleToStack(path,
         displayName: displayName);
     _notifyListeners();
+    if (nextSubtitleSelection != null && currentVideoPath != null) {
+      await nextSubtitleSelection!(currentVideoPath!, null, path);
+    }
+  }
+
+  Future<void> registerNextSubtitleCandidate(String path, String title) =>
+      _subtitleManager.registerExternalSubtitleCandidate(path, displayName: title);
+
+  Future<void> addNextSubtitle(String path, String title) async {
+    await _subtitleManager.addExternalSubtitleToStack(path, displayName: title);
+    _notifyListeners();
   }
 
   // 桥接方法：取消挂载外部字幕（从叠层/内核移除）
   Future<void> removeExternalSubtitle(String path) async {
     await _subtitleManager.removeExternalSubtitleFromStack(path);
     _notifyListeners();
+    if (nextSubtitleSelection != null && currentVideoPath != null) {
+      await nextSubtitleSelection!(currentVideoPath!,
+          player.activeSubtitleTracks.firstOrNull ?? -1, getActiveExternalSubtitlePath());
+    }
   }
 
   // 桥接方法：获取当前活跃的外部字幕文件路径

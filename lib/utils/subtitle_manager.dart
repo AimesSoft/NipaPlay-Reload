@@ -50,6 +50,7 @@ class SubtitleManager extends ChangeNotifier {
 
   // 外部字幕自动加载回调
   Function(String path, String fileName)? onExternalSubtitleAutoLoaded;
+  Future<bool> Function(String path)? nextSubtitleLoader;
   void Function(String message)? onUserNotification;
 
   // 构造函数
@@ -1357,6 +1358,8 @@ class SubtitleManager extends ChangeNotifier {
     bool isCurrent() =>
         _currentVideoPath == videoPath && detectionToken == _subtitleLoadToken;
     if (!isCurrent()) return;
+    final nextLoader = nextSubtitleLoader;
+    if (nextLoader != null && await nextLoader(videoPath)) return;
     try {
       debugPrint('SubtitleManager: 自动检测字幕文件...');
 

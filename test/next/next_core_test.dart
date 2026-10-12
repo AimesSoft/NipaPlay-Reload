@@ -8,11 +8,13 @@ import 'package:nipaplay/next/next_core.dart';
 import 'package:nipaplay/next/danmaku/source.dart';
 import 'package:nipaplay/next/tasks/sqlite_job_store.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import 'download_test_support.dart';
 import 'media_test_support.dart';
 
 void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
   late Directory root, mediaFolder;
   late FakeDownloadBackend backend;
   late FakeDownloadLibrary library;
@@ -31,6 +33,7 @@ void main() {
         classic: classic,
         authorizedRoots: () => [mediaFolder.path],
         mediaDurationProbe: (_) async => 1440000,
+        mediaSubtitleProbe: (_) async => {'subtitles': <Object?>[]},
         mediaProviders: [
           TmdbMetadataProvider(tmdb),
           DandanplayMetadataProvider(dandanplay),
@@ -45,6 +48,7 @@ void main() {
   }
 
   setUp(() async {
+    SharedPreferences.setMockInitialValues({});
     sqfliteFfiInit();
     root = await Directory.systemTemp.createTemp('next-core-');
     mediaFolder = await Directory('${root.path}/media').create();
@@ -84,7 +88,7 @@ void main() {
     expect(core.danmaku.service.store.db,
         same((core.engine.store as SqliteJobStore).database));
     final db = core.media.service.store.database;
-    expect(await db.getVersion(), 14);
+    expect(await db.getVersion(), 15);
     expect(await db.query('settings_changes'), isEmpty);
     expect(await db.query('danmaku_bindings'), isEmpty);
     expect((await db.rawQuery('PRAGMA foreign_key_check')), isEmpty);

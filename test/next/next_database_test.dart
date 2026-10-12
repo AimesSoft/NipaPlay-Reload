@@ -13,6 +13,7 @@ import 'package:nipaplay/next/media/primitives_migration.dart';
 import 'package:nipaplay/next/media/identity_store.dart';
 import 'package:nipaplay/next/media/metadata_edit_migration.dart';
 import 'package:nipaplay/next/media/classic_match_migration.dart';
+import 'package:nipaplay/next/media/file_identity_merge.dart';
 import 'package:nipaplay/next/state/change_history.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
@@ -61,7 +62,7 @@ void main() {
     expect(((metadata['provenance'] as Map)['title'] as Map)['invocationId'],
         'legacy-invocation');
   });
-  for (final oldVersion in [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]) {
+  for (final oldVersion in [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14]) {
     test('database v$oldVersion upgrades to the complete shared schema',
         () async {
       final root = await Directory.systemTemp.createTemp('next-migration-');
@@ -79,6 +80,8 @@ void main() {
         migrateFollowups,
         migrateUiData,
         migrateSessions,
+        migrateFileAliases,
+        migrateDanmakuSidecars,
       ];
       if (oldVersion > 0) {
         final old =
@@ -95,9 +98,10 @@ void main() {
       }
       var db = await openNextDatabase(root, factory: databaseFactoryFfi);
       addTearDown(() => db.close());
-      expect(await db.getVersion(), 14);
+      expect(await db.getVersion(), 15);
       for (final table in [
         'harness_sessions',
+        'file_subtitles',
         'media_file_aliases',
         'harness_discoveries',
         'ui_presentations',

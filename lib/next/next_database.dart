@@ -14,6 +14,7 @@ import 'followups/migration.dart';
 import 'ui_data/migration.dart';
 import 'chat/session_store.dart';
 import 'media/file_identity_merge.dart';
+import 'subtitles/migration.dart';
 
 // Each position is a released database version. Append new domain migrations.
 const _migrations = [
@@ -31,6 +32,7 @@ const _migrations = [
   migrateSessions,
   migrateFileAliases,
   migrateDanmakuSidecars,
+  migrateSubtitles,
 ];
 
 Future<void> _migrate(Database db, int oldVersion, int newVersion) async {
