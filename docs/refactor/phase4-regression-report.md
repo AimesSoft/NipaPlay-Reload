@@ -24,11 +24,11 @@
 |---|---|
 | `flutter analyze`（TV 应用） | **No issues found** |
 | `flutter test`（TV 应用） | 冒烟 + 2 个渲染取证测试全过；其中设置页测试用 `tap('设置')` **验证触摸路径已接通** |
-| `gradlew assembleDebug` | **BUILD SUCCESSFUL** |
+| `gradlew assembleDebug` | **BUILD SUCCESSFUL**（含触摸修复与 NipaPlay 图标，最终 APK 已安装到手机） |
 | `adb install -r` → 手机 | **Success**（OnePlus PKG110） |
 | 应用启动 | `am start` 成功，进程存活，Flutter 引擎正常 |
 | 1080p 渲染取证 | `build/screenshots/p4_shell_1080p.png`、`p4_settings_1080p.png`（侧栏+卡片+焦点环+开关瓦片布局正确；文字显示方块为测试环境无中文字体，真机正常） |
-| 普通版零影响 | analyze error 0；test 通过数与失败集合与阶段三持平（见 logs/p4_normal_regression.log） |
+| 普通版零影响 | analyze lib/test **error 0**；test **846 通过 / 4 失败**，失败集合为基线预存子集（logs/p4_normal_regression.log） |
 
 ## 3. 架构验证结论（四阶段主线收束）
 ```
