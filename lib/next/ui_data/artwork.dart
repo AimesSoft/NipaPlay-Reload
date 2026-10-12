@@ -24,17 +24,14 @@ final class ArtworkCache {
 
   Future<JsonMap> cached(String entityId) async {
     final identities = await _identities(entityId);
-    if (identities.isEmpty) return {};
-    if (identities.any((o) => o['provider'] == 'tmdb') &&
-        await vault.read(const CredentialRef('metadata', 'tmdb')) == null) {
-      return {};
-    }
     final fields =
         (await media.store.mergedMetadata(entityId))['fields'] as JsonMap;
     final fingerprint = jsonEncode([
       for (final o in identities) o['id'],
       fields['imageUrl'],
-      fields['artworkUrls']
+      fields['artworkUrls'],
+      for (final kind in ['backdrop', 'poster', 'logo', 'still'])
+        fields['artwork.$kind']
     ]);
     final rows = await media.store.database.query('ui_cache',
         where: 'id=? AND fingerprint=?',
@@ -82,18 +79,15 @@ final class ArtworkCache {
 
   Future<JsonMap> _load(String id) async {
     final identities = await _identities(id);
-    if (identities.isEmpty) return {};
     final tmdb = identities.where((o) => o['provider'] == 'tmdb').firstOrNull;
-    if (tmdb != null &&
-        await vault.read(const CredentialRef('metadata', 'tmdb')) == null) {
-      return {};
-    }
     final metadata = await media.store.mergedMetadata(id);
     final fields = metadata['fields'] as JsonMap;
     final fingerprint = jsonEncode([
       for (final o in identities) o['id'],
       fields['imageUrl'],
-      fields['artworkUrls']
+      fields['artworkUrls'],
+      for (final kind in ['backdrop', 'poster', 'logo', 'still'])
+        fields['artwork.$kind']
     ]);
     final cacheId = 'artwork:$id';
     final saved = await media.store.database.query('ui_cache',
@@ -105,7 +99,8 @@ final class ArtworkCache {
     var urls = fields['artworkUrls'] is Map
         ? Map<String, Object?>.from(fields['artworkUrls'] as Map)
         : <String, Object?>{};
-    if (tmdb != null) {
+    if (tmdb != null &&
+        await vault.read(const CredentialRef('metadata', 'tmdb')) != null) {
       // A TMDB identity never silently borrows another show's images.
       final provider = media.providers['tmdb']! as TmdbMetadataProvider;
       final type = tmdb['object_type'] as String;
@@ -175,17 +170,21 @@ final class ArtworkCache {
             },
             'https://api.themoviedb.org$path');
       }
-    } else if (urls.isEmpty && fields['imageUrl'] is String) {
+    } else if (tmdb == null && fields['imageUrl'] is String) {
       final entity = await media.store.entity(id);
-      urls = {
-        entity['kind'] == 'episode' ? 'still' : 'poster': fields['imageUrl']
-      };
+      urls.putIfAbsent(entity['kind'] == 'episode' ? 'still' : 'poster',
+          () => fields['imageUrl']);
+    }
+    for (final kind in ['backdrop', 'poster', 'logo', 'still']) {
+      if (fields['artwork.$kind'] case final Map edit) {
+        urls[kind] = edit['url'] ?? Uri.file(edit['file'] as String).toString();
+      }
     }
     final result = <String, Object?>{};
     for (final kind in ['backdrop', 'poster', 'logo', 'still']) {
       if (urls[kind] case final String url) result[kind] = await _download(url);
     }
-    if (result['backdrop'] case final String path) {
+    if (result['backdrop'] ?? result['poster'] case final String path) {
       result['tint'] = await _tint(path);
     }
     final updated = (await media.store.mergedMetadata(id))['fields'] as JsonMap;
@@ -196,7 +195,9 @@ final class ArtworkCache {
           'fingerprint': jsonEncode([
             for (final o in identities) o['id'],
             updated['imageUrl'],
-            updated['artworkUrls']
+            updated['artworkUrls'],
+            for (final kind in ['backdrop', 'poster', 'logo', 'still'])
+              updated['artwork.$kind']
           ]),
           'payload': jsonEncode(result)
         },
@@ -215,6 +216,7 @@ final class ArtworkCache {
 
   Future<String> _download(String url) async {
     final uri = Uri.parse(url);
+    if (uri.scheme == 'file') return uri.toFilePath();
     if (!{'https', 'http'}.contains(uri.scheme) || uri.userInfo.isNotEmpty) {
       throw const Failure(FailureCode.invalidInput,
           'Artwork must use an HTTP(S) URL without credentials.');
@@ -238,6 +240,41 @@ final class ArtworkCache {
     return file.path;
   }
 
+  /// Validate/copy before committing an edit; local inputs survive removal.
+  Future<JsonMap> prepare({String? url, String? file}) async {
+    if ((url == null) == (file == null)) {
+      throw const Failure(
+          FailureCode.invalidInput, 'Supply exactly one url or file.');
+    }
+    if (url != null) {
+      final uri = Uri.tryParse(url);
+      if (uri == null ||
+          !{'http', 'https'}.contains(uri.scheme) ||
+          uri.host.isEmpty ||
+          uri.userInfo.isNotEmpty) {
+        throw const Failure(
+            FailureCode.invalidInput, 'url must be HTTP(S) without userinfo.');
+      }
+      await _download(url);
+      return {'url': url};
+    }
+    if (!File(file!).isAbsolute || !await File(file).exists()) {
+      throw const Failure(FailureCode.invalidInput,
+          'file must be an existing absolute local path.');
+    }
+    final bytes = await File(file).readAsBytes();
+    final codec = await ui.instantiateImageCodec(bytes);
+    codec.dispose();
+    final target = File('${root.path}/artwork/${sha256.convert(bytes)}.png');
+    await target.parent.create(recursive: true);
+    if (!await target.exists()) {
+      final staging = File('${target.path}.pending');
+      await staging.writeAsBytes(bytes, flush: true);
+      await staging.rename(target.path);
+    }
+    return {'file': target.path, 'originalFile': file};
+  }
+
   Future<int> _tint(String path) async {
     final codec = await ui.instantiateImageCodec(await File(path).readAsBytes(),
         targetWidth: 64);
@@ -259,6 +296,7 @@ final class ArtworkCache {
     }
     frame.image.dispose();
     codec.dispose();
+    if (bins.isEmpty) return 0xff000000;
     final dominant = bins.values.reduce((a, b) => a[0] >= b[0] ? a : b);
     return 0xff000000 |
         (dominant[1] ~/ dominant[0]) << 16 |

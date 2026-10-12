@@ -1,8 +1,9 @@
 import 'package:nipaplay/security/secret_redactor.dart';
 import 'package:nipa_harness/nipa_harness.dart';
 import 'state/query.dart' show publicValue;
+import 'public_url.dart';
 
-/// Public source facts retain locator identity, but no URL credentials or queries.
+/// Public source facts retain public locators and remove secrets.
 Object? publicHarnessFacts(Object? value) {
   final safe = publicValue(SecretRedactor.json(value),
       const ObjectSchema({}, additionalProperties: true));
@@ -32,9 +33,7 @@ Object? publicHarnessFacts(Object? value) {
 }
 
 String redactHarnessText(String value) {
-  var result = SecretRedactor.text(value);
-  result = result.replaceAll(
-      RegExp(r'''\b(?:https?|magnet)://[^\s"<>]+'''), '[redacted URL]');
+  var result = SecretRedactor.text(redactPrivateUrls(value));
   return result.replaceAllMapped(
       RegExp(r'''((?:cookie|secret|passkey)["']?\s*[=:]\s*)([^\r\n]+)''',
           caseSensitive: false),

@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:io';
+import 'dart:ui' as ui;
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:nipa_harness/nipa_harness.dart';
@@ -11,6 +12,7 @@ import 'package:nipaplay/next/tasks/sqlite_job_store.dart';
 import 'package:nipaplay/next/ui_data/capability.dart';
 import 'package:nipaplay/next/ui_data/service.dart';
 import 'package:nipaplay/next/ui_data/ui_data.dart';
+import 'package:nipaplay/next/ui_data/metadata_facts.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
 import '../../packages/nipa_harness/test/task_support.dart';
@@ -74,6 +76,42 @@ void main() {
   });
   Future<Outcome> call(String action, JsonMap input) => harness.invokeJson(
       action, input, Invocation(origin: 'harness_cli:chat:fixture'));
+
+  test('artwork batches keep provenance and source files; invalid batch cannot edit metadata', () async {
+    final recorder = ui.PictureRecorder();
+    final canvas = ui.Canvas(recorder);
+    canvas.drawColor(const ui.Color(0xffaa4422), ui.BlendMode.src);
+    final picture = recorder.endRecording();
+    final image = await picture.toImage(32, 48);
+    final bytes = (await image.toByteData(format: ui.ImageByteFormat.png))!;
+    final file = File('${root.path}/input.png');
+    await file.writeAsBytes(bytes.buffer.asUint8List());
+    image.dispose(); picture.dispose();
+    JsonMap entry(String id, String kind) => {'entityId': id, 'kind': kind,
+      'file': file.path, 'source': {'label': 'fixture source', 'url': 'https://example.test/art'}};
+    final before = await store.database.query('media_metadata_edits');
+    expect(await call('media.artwork.set', {'entries': [entry('w1', 'poster'), entry('w2', 'still')]}), isA<Failed>());
+    expect(await store.database.query('media_metadata_edits'), before);
+    expect(await call('media.artwork.set', {'entries': [{...entry('w1', 'poster'), 'url': 'https://example.test/a'}]}), isA<Failed>());
+    expect(await store.database.query('media_metadata_edits'), before);
+    expect(await call('media.artwork.set', {'entries': [entry('w1', 'poster'), entry('w1', 'logo')]}), isA<Completed>());
+    await file.delete();
+    final work = (await service.work('w1'))!;
+    expect(await File(work.artwork.poster!).exists(), true);
+    expect(work.artwork.tint, 0xffaa4422);
+    final edits = await store.database.query('media_metadata_edits');
+    expect(edits, hasLength(2));
+    expect(edits.every((e) => e['origin'] == 'harness_cli:chat:fixture' && e['invocation_id'] != null), true);
+    final metadata = (await service.media.store.mergedMetadata('w1'))['fields'] as Map;
+    expect((metadata['artwork.poster'] as Map)['source'], {'label': 'fixture source', 'url': 'https://example.test/art'});
+    final facts = await service.metadataFacts('w1');
+    expect((facts['fields'] as Map)['poster']['path'], work.artwork.poster);
+    expect(facts['heroImage'], 'poster');
+    await service.media.store.overrideField('w1', 'overview', '中文简介', Invocation(origin: 'mcp'), language: 'zh-CN');
+    expect(((await service.metadataFacts('w1'))['fields'] as Map)['overview']['language'], 'zh-CN');
+    await service.media.store.overrideField('w1', 'overview', 'English synopsis', Invocation(origin: 'mcp'));
+    expect(((await service.metadataFacts('w1'))['fields'] as Map)['overview']['language'], 'unknown');
+  });
 
   test(
       'shelves validate every reference before replacement; removal keeps facts',

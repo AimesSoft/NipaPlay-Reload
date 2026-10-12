@@ -293,7 +293,7 @@ void main() {
       final file = (((((downloads['rows'] as List).single as Map)['receipt']
               as Map)['details'] as Map)['files'] as List)
           .single as Map;
-      expect(file['path'], 'https://example.test/video.mkv');
+      expect(file['path'], '[redacted URL]');
       expect(file['expectedSize'], 42);
       expect(await db.rawQuery('SELECT total_changes() AS changes'), before);
       expect(tmdb.requests, isEmpty);

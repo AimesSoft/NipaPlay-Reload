@@ -48,12 +48,24 @@ def redact(value, secrets=()):
         return [redact(v, secrets) for v in value]
     if not isinstance(value, str):
         return value
+    def public_url(match):
+        raw = match.group(0)
+        try:
+            uri = urllib.parse.urlsplit(raw)
+            names = [k for k, _ in urllib.parse.parse_qsl(uri.query)]
+            names += [k for k, _ in urllib.parse.parse_qsl(uri.fragment)]
+            private = (uri.username is not None or uri.password is not None
+                       or any(re.search(r"pass|auth|token|secret|cookie|sess|key|sig|credential|secure|hash|private|uid|^sid$|^code$", k, re.I) for k in names)
+                       or any(re.fullmatch(r"[A-Za-z0-9_-]{24,}", seg) for seg in uri.path.split("/")))
+            return "[redacted URL]" if private else raw
+        except ValueError:
+            return "[redacted URL]"
+    value = re.sub(r"(?<![a-zA-Z0-9+.-])[a-zA-Z][a-zA-Z0-9+.-]{0,31}://[^\s<>\"'\\]+", public_url, value)
     for secret in sorted((s for s in secrets if s), key=len, reverse=True):
         for form in {secret, urllib.parse.quote(secret, safe=""),
                      urllib.parse.quote_plus(secret)}:
             value = value.replace(form, "[redacted]")
     value = re.sub(r"\b(Bearer|Basic)\s+[^\s\"',}]+", r"\1 [redacted]", value, flags=re.I)
-    value = re.sub(r"\b(?:https?|magnet)://[^\s\"<>]+", "[redacted URL]", value)
     value = re.sub(r"(?i)((?:password|secret|token|cookie|authorization|api[_-]?key|passkey)[\"']?\s*[=:]\s*)[^\s,}]+",
                    r"\1[redacted]", value)
     return value
