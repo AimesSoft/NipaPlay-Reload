@@ -283,7 +283,10 @@ class _NextHomePageState extends State<NextHomePage> {
             RepaintBoundary(
               child: HeroBackdrop(
                 workId: backdropWork?.workId,
-                image: backdropWork?.artwork.backdrop,
+                image: backdropWork?.artwork.backdrop ??
+                    backdropWork?.artwork.poster,
+                soft: backdropWork != null &&
+                    backdropWork.artwork.backdrop == null,
                 tint: backdropWork?.artwork.tint,
                 staged: staged,
                 scroll: _scroll,
@@ -576,6 +579,7 @@ class _Shelves extends StatelessWidget {
                           item.work.artwork.backdrop == null
                       ? item.episode!.still
                       : item.work.artwork.backdrop,
+                  poster: item.work.artwork.poster,
                   tint: item.work.artwork.tint,
                   title: item.work.title,
                   caption: item.caption,

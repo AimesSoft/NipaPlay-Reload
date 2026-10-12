@@ -23,11 +23,15 @@ class HeroBackdrop extends StatefulWidget {
     required this.scroll,
     required this.viewport,
     this.fade = NextMotion.crossfade,
+    this.soft = false,
   });
 
   /// The work shown: opening it flies this picture into its detail page.
   final String? workId;
   final String? image;
+
+  /// [image] is a poster standing in for missing wide art.
+  final bool soft;
   final int? tint;
   final bool staged;
   final ScrollController scroll;
@@ -139,6 +143,8 @@ class _HeroBackdropState extends State<HeroBackdrop>
               key: ValueKey(widget.image),
               child: widget.image == null
                   ? NoArtGlow(tint: widget.tint)
+                  : widget.soft
+                  ? SoftArt(widget.image!, tint: widget.tint)
                   : NextImage(
                       widget.image,
                       tint: widget.tint,

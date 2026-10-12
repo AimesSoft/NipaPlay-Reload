@@ -57,9 +57,13 @@ class WideCard extends StatefulWidget {
     this.selected = false,
     this.label,
     this.workId,
+    this.poster,
   });
 
   final String? image;
+
+  /// Used when there is no wide [image]: a soft fill with the poster centred.
+  final String? poster;
   final int? tint;
   final String? title;
   final String? caption;
@@ -122,7 +126,9 @@ class _WideCardState extends State<WideCard> with _HoverCard {
               child: ClipRRect(
                 borderRadius: radius,
                 child: Stack(fit: StackFit.expand, children: [
-                  NextImage(widget.image, tint: widget.tint),
+                  widget.image == null && widget.poster != null
+                      ? PosterFill(widget.poster!, tint: widget.tint)
+                      : NextImage(widget.image, tint: widget.tint),
                   if (widget.title != null ||
                       widget.caption != null ||
                       widget.label != null)

@@ -1,3 +1,5 @@
+import 'dart:ui' show ImageFilter;
+
 import 'dart:io';
 import 'dart:math' as math;
 
@@ -119,4 +121,42 @@ class _Placeholder extends StatelessWidget {
       ),
     );
   }
+}
+
+
+/// A poster standing in for missing wide art: out of focus and dimmed.
+class SoftArt extends StatelessWidget {
+  const SoftArt(this.poster, {super.key, this.tint});
+  final String poster;
+  final int? tint;
+
+  @override
+  Widget build(BuildContext context) => ClipRect(
+        child: Stack(fit: StackFit.expand, children: [
+          ImageFiltered(
+            imageFilter: ImageFilter.blur(sigmaX: 30, sigmaY: 30),
+            child: Transform.scale(
+                scale: 1.15, child: NextImage(poster, tint: tint)),
+          ),
+          const ColoredBox(color: Color(0x33000000)),
+        ]),
+      );
+}
+
+/// Wide art made from a poster: a soft fill with the poster itself centred.
+class PosterFill extends StatelessWidget {
+  const PosterFill(this.poster, {super.key, this.tint});
+  final String poster;
+  final int? tint;
+
+  @override
+  Widget build(BuildContext context) => Stack(fit: StackFit.expand, children: [
+        SoftArt(poster, tint: tint),
+        Center(
+          child: AspectRatio(
+            aspectRatio: 2 / 3,
+            child: NextImage(poster, tint: tint),
+          ),
+        ),
+      ]);
 }
