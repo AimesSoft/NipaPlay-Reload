@@ -21,6 +21,7 @@ class FocusableCard extends StatefulWidget {
     this.autofocus = false,
     this.selected = false,
     this.focusNode,
+    this.onFocused,
     this.borderRadius = 16,
     this.accentColor = const Color(0xFF26C6DA),
     this.padding = const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
@@ -32,6 +33,9 @@ class FocusableCard extends StatefulWidget {
 
   /// 外部焦点节点：供壳/页面在切换时主动把焦点交给本卡片。
   final FocusNode? focusNode;
+
+  /// 获得焦点时的回调（壳用它记录当前导航项，供返回键回退）。
+  final VoidCallback? onFocused;
 
   /// 是否为"当前选中项"：常驻描边+淡色底，与焦点态叠加显示。
   final bool selected;
@@ -84,7 +88,10 @@ class _FocusableCardState extends State<FocusableCard> {
     return Focus(
       focusNode: widget.focusNode,
       autofocus: widget.autofocus,
-      onFocusChange: (v) => setState(() => _focused = v),
+      onFocusChange: (v) {
+        setState(() => _focused = v);
+        if (v) widget.onFocused?.call();
+      },
       onKeyEvent: (node, event) {
         final isActivate = event is KeyDownEvent &&
             (event.logicalKey == LogicalKeyboardKey.select ||

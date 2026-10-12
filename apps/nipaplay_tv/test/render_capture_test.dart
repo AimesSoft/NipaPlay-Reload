@@ -146,4 +146,44 @@ void main() {
     expect(find.text('Bangumi 镜像 / API 服务器'), findsOneWidget);
     await capture(tester, 'p6_settings_bangumi_1080p');
   });
+
+  testWidgets('remote: every nav entry keeps highlight and focus survives',
+      (tester) async {
+    tester.view.physicalSize = tvSize;
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.reset);
+
+    await tester.pumpWidget(harness(const TvAppShell()));
+    await tester.pump(const Duration(milliseconds: 300));
+
+    // 逐个切页：每次点击后焦点必须仍然存在（遥控不失焦）
+    for (final label in ['媒体库', '我的', '设置', '关于', '主页']) {
+      await tester.tap(find.text(label).first);
+      await tester.pump(const Duration(milliseconds: 350));
+      expect(FocusManager.instance.primaryFocus, isNotNull,
+          reason: '切到「$label」后焦点丢失，遥控将失灵');
+    }
+    await capture(tester, 'p8_nav_after_switching_1080p');
+  });
+
+  testWidgets('remote: settings section highlight follows selection',
+      (tester) async {
+    tester.view.physicalSize = tvSize;
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.reset);
+
+    await tester.pumpWidget(harness(const TvAppShell()));
+    await tester.pump(const Duration(milliseconds: 250));
+    await tester.tap(find.text('设置').first);
+    await tester.pump(const Duration(milliseconds: 350));
+
+    // 逐个点分区：每次都要有焦点（分区 chip 是遥控可导航的）
+    for (final section in ['通用', '播放器', '弹幕', '网络', '存储', '外观']) {
+      await tester.tap(find.text(section).first);
+      await tester.pump(const Duration(milliseconds: 300));
+      expect(FocusManager.instance.primaryFocus, isNotNull,
+          reason: '切到分区「$section」后焦点丢失');
+    }
+    await capture(tester, 'p8_settings_section_1080p');
+  });
 }

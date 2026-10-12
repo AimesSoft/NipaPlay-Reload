@@ -1,141 +1,298 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:nipaplay_core/models/trending_bangumi.dart';
 import 'package:nipaplay_core/player/nipa_player.dart';
 import 'package:nipaplay_ui_common/l10n/l10n.dart';
 
-import '../../danmaku/tv_danmaku_source.dart';
-import '../focusable_card.dart';
+import '../../data/tv_recent_play_store.dart';
+import '../../data/tv_trending_client.dart';
+import '../widgets/tv_anime_card.dart';
 import 'player_page.dart';
 
-/// 首页：可聚焦入口网格。首个入口进入播放页（本地演示视频 + 弹幕）。
-class HomePage extends StatelessWidget {
+/// 首页：Bangumi 排行榜新番 Top10 + 最近播放。
+///
+/// 封面与榜单均来自 Bangumi/弹弹网关（经 core 的服务器路由，跟随用户镜像设置）。
+class HomePage extends StatefulWidget {
   const HomePage({super.key, this.entryFocusNode});
 
-  /// 壳在切换到本页时把焦点交给这里的入口卡片。
   final FocusNode? entryFocusNode;
 
-  /// 内置示例弹幕（B 站 XML 协议），交给 core 解析。
-  static const _demoXml = '''
-<i>
-  <d p="1.2,1,25,16777215,0,0,user1,d1">NipaPlay TV 启动成功</d>
-  <d p="2.0,1,25,16711680,0,0,user2,d2">弹幕来自 core 的 XML 解析</d>
-  <d p="2.8,5,25,65280,0,0,user3,d3">顶部弹幕 · 十英尺可读</d>
-  <d p="3.6,1,25,16776960,0,0,user4,d4">D-pad 左右可快进快退</d>
-  <d p="4.4,4,25,16711935,0,0,user5,d5">底部弹幕示例</d>
-  <d p="5.2,1,25,16777215,0,0,user6,d6">core + ui_common 架构验证</d>
-  <d p="6.4,1,25,16711935,0,0,user7,d7">咪啪～☆</d>
-</i>
-''';
+  @override
+  State<HomePage> createState() => _HomePageState();
+}
+
+class _HomePageState extends State<HomePage> {
+  List<TrendingBangumiItem>? _trending;
+  List<TvRecentPlay> _recent = const [];
+  Object? _error;
+  bool _loading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
+    final recent = await TvRecentPlayStore.load();
+    if (!mounted) return;
+    setState(() => _recent = recent);
+    try {
+      final items = await TvTrendingClient.instance.fetchTop(limit: 10);
+      if (!mounted) return;
+      setState(() {
+        _trending = items;
+        _loading = false;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _error = e;
+        _loading = false;
+      });
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
     final l10n = context.l10n;
-    return SingleChildScrollView(
+    return ListView(
       padding: const EdgeInsets.all(24),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(l10n.tabHome,
-              style: Theme.of(context).textTheme.headlineMedium),
-          const SizedBox(height: 20),
-          FocusableCard(
-            focusNode: entryFocusNode,
-            onActivate: () => _openDemo(context),
-            child: Row(
-              children: [
-                const Icon(Icons.play_circle_filled,
-                    size: 34, color: Color(0xFF26C6DA)),
-                const SizedBox(width: 16),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text('播放演示视频',
-                          style: Theme.of(context).textTheme.titleLarge),
-                      const SizedBox(height: 4),
-                      Text('NipaPlayer 接口（core）+ video_player 内核（TV）+ 弹幕渲染',
-                          style: Theme.of(context)
-                              .textTheme
-                              .bodyMedium
-                              ?.copyWith(color: Colors.white54)),
-                    ],
-                  ),
-                ),
-              ],
+      children: [
+        Row(
+          children: [
+            Text(l10n.tabHome,
+                style: Theme.of(context).textTheme.headlineMedium),
+            const Spacer(),
+            TvActionChip(
+              focusNode: widget.entryFocusNode,
+              icon: Icons.refresh,
+              label: '刷新',
+              onTap: _load,
             ),
+          ],
+        ),
+        const SizedBox(height: 18),
+        if (_loading)
+          const Padding(
+            padding: EdgeInsets.symmetric(vertical: 40),
+            child: Center(
+                child: CircularProgressIndicator(color: Color(0xFF26C6DA))),
+          )
+        else ...[
+          if (_error != null) _errorBanner(context),
+          _sectionTitle(context, 'Bangumi 排行榜 · 新番 Top10'),
+          const SizedBox(height: 12),
+          if (_trending != null && _trending!.isNotEmpty)
+            SizedBox(
+              height: 336,
+              child: ListView.separated(
+                scrollDirection: Axis.horizontal,
+                itemCount: _trending!.length,
+                separatorBuilder: (_, _) => const SizedBox(width: 18),
+                itemBuilder: (context, i) {
+                  final item = _trending![i];
+                  final anime = item.anime;
+                  final title =
+                      anime.nameCn.isNotEmpty ? anime.nameCn : anime.name;
+                  return TvAnimeCard(
+                    name: title,
+                    imageUrl: anime.imageUrl,
+                    rating: anime.rating,
+                    isOnAir: anime.isOnAir ?? false,
+                    showNewBadge: i < 3,
+                    source: '第 ${item.rank} 名',
+                    onTap: () => _showInfo(context, title),
+                  );
+                },
+              ),
+            )
+          else
+            _emptyHint(context, '排行榜暂无数据'),
+          const SizedBox(height: 28),
+          Row(
+            children: [
+              _sectionTitle(context, '最近播放'),
+              const Spacer(),
+              if (_recent.isNotEmpty)
+                TvActionChip(
+                  icon: Icons.delete_sweep_outlined,
+                  label: '清空',
+                  onTap: () async {
+                    await TvRecentPlayStore.clear();
+                    if (mounted) setState(() => _recent = const []);
+                  },
+                ),
+            ],
           ),
-          const SizedBox(height: 14),
-          FocusableCard(
-            onActivate: () {},
-            child: Row(
-              children: [
-                const Icon(Icons.subtitles_outlined,
-                    size: 30, color: Color(0xFF26C6DA)),
-                const SizedBox(width: 16),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(l10n.tabDanmakuConsole,
-                          style: Theme.of(context).textTheme.titleLarge),
-                      const SizedBox(height: 4),
-                      Text('解析与时间轴已在 core；渲染层为 TV 自建（轨道分配 + 滚动绘制）',
-                          style: Theme.of(context)
-                              .textTheme
-                              .bodyMedium
-                              ?.copyWith(color: Colors.white54)),
-                    ],
-                  ),
-                ),
-              ],
+          const SizedBox(height: 12),
+          if (_recent.isEmpty)
+            _emptyHint(context, '还没有播放记录')
+          else
+            SizedBox(
+              height: 336,
+              child: ListView.separated(
+                scrollDirection: Axis.horizontal,
+                itemCount: _recent.length,
+                separatorBuilder: (_, _) => const SizedBox(width: 18),
+                itemBuilder: (context, i) {
+                  final r = _recent[i];
+                  return TvAnimeCard(
+                    name: r.title,
+                    imageUrl: r.coverUrl,
+                    episodeLabel: r.episodeLabel,
+                    source: '最近播放',
+                    onTap: () => _openRecent(context, r),
+                  );
+                },
+              ),
             ),
-          ),
-          const SizedBox(height: 14),
-          FocusableCard(
-            onActivate: () {},
-            child: Row(
-              children: [
-                const Icon(Icons.dns_outlined,
-                    size: 30, color: Color(0xFF26C6DA)),
-                const SizedBox(width: 16),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text('媒体服务器 / WebDAV',
-                          style: Theme.of(context).textTheme.titleLarge),
-                      const SizedBox(height: 4),
-                      Text('客户端与主机发现已在 core（webdav_service / lan_discovery）',
-                          style: Theme.of(context)
-                              .textTheme
-                              .bodyMedium
-                              ?.copyWith(color: Colors.white54)),
-                    ],
-                  ),
-                ),
-              ],
+        ],
+      ],
+    );
+  }
+
+  Widget _sectionTitle(BuildContext context, String text) =>
+      Text(text, style: Theme.of(context).textTheme.titleLarge);
+
+  Widget _emptyHint(BuildContext context, String text) => Padding(
+        padding: const EdgeInsets.symmetric(vertical: 28),
+        child: Center(
+          child: Text(text,
+              style: Theme.of(context)
+                  .textTheme
+                  .bodyLarge
+                  ?.copyWith(color: Colors.white38)),
+        ),
+      );
+
+  Widget _errorBanner(BuildContext context) => Container(
+        margin: const EdgeInsets.only(bottom: 16),
+        padding: const EdgeInsets.all(14),
+        decoration: BoxDecoration(
+          color: Colors.redAccent.withValues(alpha: 0.12),
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(color: Colors.redAccent.withValues(alpha: 0.4)),
+        ),
+        child: Row(
+          children: [
+            const Icon(Icons.cloud_off, color: Colors.redAccent, size: 20),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Text(
+                  '排行榜加载失败：$_error\n可在「设置 → 网络」更换弹弹/Bangumi 服务器',
+                  style: const TextStyle(color: Colors.white70, fontSize: 14)),
             ),
+          ],
+        ),
+      );
+
+  Future<void> _openRecent(BuildContext context, TvRecentPlay r) async {
+    await Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => TvPlayerPage(
+          source: MediaSource(uri: r.sourceUri),
+          title: r.title,
+        ),
+      ),
+    );
+    if (mounted) _load();
+  }
+
+  void _showInfo(BuildContext context, String title) {
+    showDialog<void>(
+      context: context,
+      builder: (_) => AlertDialog(
+        backgroundColor: const Color(0xFF1A2026),
+        title: Text(title),
+        content: const Text('该条目来自 Bangumi 榜单，尚未关联可播放的媒体源。\n'
+            '在「媒体库」添加媒体源后即可播放。'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('知道了'),
           ),
         ],
       ),
     );
   }
+}
 
-  Future<void> _openDemo(BuildContext context) async {
-    final path = await demoFilePath();
-    final items = TvDanmakuSource.parseBilibiliXml(_demoXml);
-    if (!context.mounted) return;
-    if (path == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('未找到演示视频，请先推送到应用目录')),
-      );
-      return;
-    }
-    Navigator.of(context).push(
-      MaterialPageRoute(
-        builder: (_) => TvPlayerPage(
-          source: MediaSource(uri: Uri.file(path).toString()),
-          title: '演示视频',
-          danmakuItems: items,
+/// 可聚焦操作片：遥控确认键与触摸均可用（TV 遥控适配）。
+class TvActionChip extends StatefulWidget {
+  const TvActionChip({
+    super.key,
+    required this.icon,
+    required this.label,
+    required this.onTap,
+    this.focusNode,
+  });
+
+  final IconData icon;
+  final String label;
+  final VoidCallback onTap;
+  final FocusNode? focusNode;
+
+  @override
+  State<TvActionChip> createState() => _TvActionChipState();
+}
+
+class _TvActionChipState extends State<TvActionChip> {
+  bool _focused = false;
+  bool _hovered = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final hot = _focused || _hovered;
+    return Focus(
+      focusNode: widget.focusNode,
+      onFocusChange: (v) => setState(() => _focused = v),
+      onKeyEvent: (node, event) {
+        if (event is KeyDownEvent &&
+            (event.logicalKey == LogicalKeyboardKey.select ||
+                event.logicalKey == LogicalKeyboardKey.enter ||
+                event.logicalKey == LogicalKeyboardKey.space ||
+                event.logicalKey == LogicalKeyboardKey.gameButtonA)) {
+          widget.onTap();
+          return KeyEventResult.handled;
+        }
+        return KeyEventResult.ignored;
+      },
+      child: MouseRegion(
+        onEnter: (_) => setState(() => _hovered = true),
+        onExit: (_) => setState(() => _hovered = false),
+        cursor: SystemMouseCursors.click,
+        child: GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTap: widget.onTap,
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 140),
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 9),
+            decoration: BoxDecoration(
+              color: hot
+                  ? const Color(0xFF26C6DA).withValues(alpha: 0.18)
+                  : Colors.white.withValues(alpha: 0.05),
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(
+                color: hot ? const Color(0xFF26C6DA) : Colors.white24,
+                width: hot ? 2 : 1,
+              ),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(widget.icon, size: 18),
+                const SizedBox(width: 8),
+                Text(widget.label,
+                    style:
+                        const TextStyle(fontSize: 15, color: Colors.white70)),
+              ],
+            ),
+          ),
         ),
       ),
     );

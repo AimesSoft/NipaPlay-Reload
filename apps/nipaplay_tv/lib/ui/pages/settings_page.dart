@@ -190,10 +190,11 @@ class _SettingsPageState extends State<SettingsPage> {
                 final active = s.$1 == _section;
                 return FocusableCard(
                   focusNode: i == 0 ? widget.entryFocusNode : null,
+                  // 选中态常驻：切换分区时高光跟随（用户反馈的缺陷）
+                  selected: active,
                   onActivate: () => setState(() => _section = s.$1),
                   borderRadius: 12,
-                  accentColor:
-                      active ? const Color(0xFF26C6DA) : Colors.white24,
+                  accentColor: const Color(0xFF26C6DA),
                   padding: const EdgeInsets.symmetric(
                       horizontal: 16, vertical: 10),
                   child: Row(

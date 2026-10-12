@@ -11,7 +11,7 @@ import 'package:nipaplay_core/models/dandanplay_remote_model.dart';
 import 'package:nipaplay_core/models/shared_remote_library.dart';
 import 'package:nipaplay/models/watch_history_model.dart';
 import 'package:nipaplay/providers/shared_remote_library_provider.dart';
-import 'package:nipaplay/services/dandanplay_remote_service.dart';
+import 'package:nipaplay_core/services/dandanplay_remote_service.dart';
 import 'package:nipaplay/services/emby_service.dart';
 import 'package:nipaplay/services/jellyfin_service.dart';
 import 'package:nipaplay/services/smb_proxy_service.dart';

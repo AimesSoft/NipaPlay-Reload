@@ -1,0 +1,6 @@
+{
+  "batch": "p8-dandanplay-remote-to-core",
+  "moves": [
+    {"from": "lib/services/dandanplay_remote_service.dart"}
+  ]
+}

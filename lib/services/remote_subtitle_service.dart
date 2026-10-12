@@ -11,7 +11,7 @@ import 'package:nipaplay_core/constants/media_extensions.dart';
 import 'package:nipaplay/services/smb2_native_service.dart';
 import 'package:nipaplay/services/smb_service.dart';
 import 'package:nipaplay_core/services/webdav_service.dart';
-import 'package:nipaplay/services/dandanplay_remote_service.dart';
+import 'package:nipaplay_core/services/dandanplay_remote_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:nipaplay/utils/media_source_utils.dart';
 import 'package:nipaplay/utils/storage_service.dart';

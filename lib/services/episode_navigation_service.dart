@@ -8,7 +8,7 @@ import 'package:nipaplay/models/emby_model.dart';
 import 'package:nipaplay_core/models/dandanplay_remote_model.dart';
 import 'package:nipaplay/services/jellyfin_service.dart';
 import 'package:nipaplay/services/emby_service.dart';
-import 'package:nipaplay/services/dandanplay_remote_service.dart';
+import 'package:nipaplay_core/services/dandanplay_remote_service.dart';
 import 'package:nipaplay/services/jellyfin_episode_mapping_service.dart';
 import 'package:nipaplay/services/emby_episode_mapping_service.dart';
 import 'package:nipaplay/services/dandanplay_service.dart';

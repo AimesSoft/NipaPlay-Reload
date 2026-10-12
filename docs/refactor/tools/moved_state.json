@@ -96,6 +96,7 @@
   "services/app_http_proxy.dart",
   "services/backup_category.dart",
   "services/certificate_trust_service.dart",
+  "services/dandanplay_remote_service.dart",
   "services/emby_media_preference_store.dart",
   "services/emby_media_selection_controller.dart",
   "services/emby_media_selection_resolver.dart",
@@ -430,6 +431,13 @@
     "themes/nipaplay/widgets/typing_text.dart",
     "themes/nipaplay/widgets/ui_scale_wrapper.dart",
     "themes/theme_ids.dart"
+   ]
+  },
+  {
+   "batch": "p8-dandanplay-remote-to-core",
+   "count": 1,
+   "files": [
+    "services/dandanplay_remote_service.dart"
    ]
   }
  ]

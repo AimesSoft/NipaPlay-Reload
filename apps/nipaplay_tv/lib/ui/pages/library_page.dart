@@ -1,10 +1,13 @@
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
+import 'package:nipaplay_core/services/dandanplay_remote_service.dart';
+import 'package:nipaplay_core/services/webdav_service.dart';
 import 'package:nipaplay_core/utils/settings_storage.dart';
 import 'package:nipaplay_ui_common/l10n/l10n.dart';
 import 'package:nipaplay_ui_common/media_library/unified_library_management_model.dart';
 
+import '../../data/tv_account_service.dart';
 import '../focusable_card.dart';
 import '../widgets/tv_anime_card.dart';
 
@@ -28,6 +31,7 @@ class _LibraryPageState extends State<LibraryPage> {
   LibraryManagementViewMode _viewMode = LibraryManagementViewMode.icons;
   final List<_MediaSourceEntry> _sources = [];
   bool _loading = true;
+  String? _testing;
 
   @override
   void initState() {
@@ -67,6 +71,59 @@ class _LibraryPageState extends State<LibraryPage> {
     if (result == null) return;
     setState(() => _sources.add(result));
     await _persist();
+  }
+
+  /// 测试已添加来源的连通性。
+  ///
+  /// - WebDAV：走 core 的 [WebDAVService.testConnection]（与普通版同一实现）；
+  /// - 弹弹远程：走 core 的 [DandanplayRemoteService.connect]，**需先登录账号**；
+  /// - 其它类型：仅做 URL 可达性提示（暂无专用客户端）。
+  Future<void> _testSource(_MediaSourceEntry entry) async {
+    setState(() => _testing = entry.location);
+    String message;
+    bool ok = false;
+    try {
+      switch (entry.kind) {
+        case _SourceKind.webdav:
+          ok = await WebDAVService.instance.testConnection(
+            WebDAVConnection(
+              name: entry.name,
+              url: entry.location,
+              username: entry.username ?? '',
+              password: entry.password ?? '',
+            ),
+          );
+          message = ok ? 'WebDAV 连接成功' : 'WebDAV 连接失败（请检查地址与账号密码）';
+          break;
+        case _SourceKind.dandanplayRemote:
+          if (!TvAccountService.instance.isLoggedIn) {
+            message = '弹弹远程服务需先登录账号（「我的」→ 登录）';
+            break;
+          }
+          ok = await DandanplayRemoteService.instance
+              .connect(entry.location, token: entry.token);
+          message = ok ? '弹弹远程服务连接成功' : '弹弹远程服务连接失败';
+          break;
+        case _SourceKind.emby:
+        case _SourceKind.jellyfin:
+        case _SourceKind.smb:
+        case _SourceKind.localFile:
+        case _SourceKind.localFolder:
+        case _SourceKind.url:
+          message = '该类型暂不支持连通性测试（已保存地址）';
+          ok = true;
+          break;
+      }
+    } catch (e) {
+      ok = false;
+      message = '连接失败：$e';
+    }
+    if (!mounted) return;
+    setState(() => _testing = null);
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+      content: Text(message),
+      backgroundColor: ok ? const Color(0xFF2E7D32) : const Color(0xFFB71C1C),
+    ));
   }
 
   Future<void> _removeSource(int index) async {
@@ -236,7 +293,7 @@ class _LibraryPageState extends State<LibraryPage> {
             source: entry.kind.label,
             rating: entry.rating,
             showNewBadge: entry.isNew,
-            onTap: () {},
+            onTap: () => _testSource(entry),
           ),
           Positioned(
             top: -8,
@@ -249,6 +306,20 @@ class _LibraryPageState extends State<LibraryPage> {
               child: const Icon(Icons.close, size: 16),
             ),
           ),
+          if (_testing == entry.location)
+            const Positioned.fill(
+              child: ColoredBox(
+                color: Color(0x99000000),
+                child: Center(
+                  child: SizedBox(
+                    width: 26,
+                    height: 26,
+                    child: CircularProgressIndicator(
+                        strokeWidth: 2.5, color: Color(0xFF26C6DA)),
+                  ),
+                ),
+              ),
+            ),
         ],
       ),
     );
@@ -303,7 +374,9 @@ class _LibraryPageState extends State<LibraryPage> {
                     overflow: TextOverflow.ellipsis,
                     style: Theme.of(context).textTheme.titleLarge),
                 const SizedBox(height: 2),
-                Text('${entry.kind.label} · ${entry.location}',
+                Text(_testing == entry.location
+                        ? '测试连接中…'
+                        : '${entry.kind.label} · ${entry.location}',
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: Theme.of(context)
@@ -314,6 +387,13 @@ class _LibraryPageState extends State<LibraryPage> {
             ),
           ),
           // 删除（触摸/确认键均可）
+          FocusableCard(
+            onActivate: () => _testSource(entry),
+            borderRadius: 10,
+            padding: const EdgeInsets.all(8),
+            child: const Icon(Icons.wifi_tethering, size: 20),
+          ),
+          const SizedBox(width: 8),
           FocusableCard(
             onActivate: () => _removeSource(index),
             borderRadius: 10,
@@ -335,6 +415,7 @@ enum _SourceKind {
   emby('Emby', LibraryManagementIcon.server),
   jellyfin('Jellyfin', LibraryManagementIcon.server),
   smb('SMB 共享', LibraryManagementIcon.server),
+  dandanplayRemote('弹弹远程服务', LibraryManagementIcon.cloud),
   url('网络串流 URL', LibraryManagementIcon.browse);
 
   const _SourceKind(this.label, this.icon);
@@ -351,6 +432,9 @@ class _MediaSourceEntry {
     this.coverUrl = '',
     this.rating,
     this.isNew = false,
+    this.username,
+    this.password,
+    this.token,
   });
 
   final String name;
@@ -362,6 +446,11 @@ class _MediaSourceEntry {
   final double? rating;
   final bool isNew;
 
+  /// 认证信息（WebDAV 用账号密码；弹弹远程用 token）。
+  final String? username;
+  final String? password;
+  final String? token;
+
   String encode() => jsonEncode({
         'n': name,
         'l': location,
@@ -369,6 +458,9 @@ class _MediaSourceEntry {
         if (coverUrl.isNotEmpty) 'c': coverUrl,
         if (rating != null) 'r': rating,
         if (isNew) 'new': true,
+        if (username != null && username!.isNotEmpty) 'un': username,
+        if (password != null && password!.isNotEmpty) 'pw': password,
+        if (token != null && token!.isNotEmpty) 'tk': token,
       });
 
   static _MediaSourceEntry? tryDecode(String raw) {
@@ -386,6 +478,9 @@ class _MediaSourceEntry {
         coverUrl: (map['c'] as String?) ?? '',
         rating: (map['r'] as num?)?.toDouble(),
         isNew: map['new'] == true,
+        username: map['un'] as String?,
+        password: map['pw'] as String?,
+        token: map['tk'] as String?,
       );
     } catch (_) {
       return null;
@@ -405,21 +500,26 @@ class _AddMediaDialog extends StatefulWidget {
 class _AddMediaDialogState extends State<_AddMediaDialog> {
   late final TextEditingController _nameCtrl;
   late final TextEditingController _locCtrl;
-  late final TextEditingController _coverCtrl;
+  late final TextEditingController _userCtrl;
+  late final TextEditingController _passCtrl;
+
+  bool get _needsAuth => widget.kind == _SourceKind.webdav;
 
   @override
   void initState() {
     super.initState();
     _nameCtrl = TextEditingController();
     _locCtrl = TextEditingController();
-    _coverCtrl = TextEditingController();
+    _userCtrl = TextEditingController();
+    _passCtrl = TextEditingController();
   }
 
   @override
   void dispose() {
     _nameCtrl.dispose();
     _locCtrl.dispose();
-    _coverCtrl.dispose();
+    _userCtrl.dispose();
+    _passCtrl.dispose();
     super.dispose();
   }
 
@@ -430,6 +530,7 @@ class _AddMediaDialogState extends State<_AddMediaDialog> {
         _SourceKind.emby => 'http://192.168.1.10:8096',
         _SourceKind.jellyfin => 'http://192.168.1.10:8096',
         _SourceKind.smb => 'smb://192.168.1.10/share',
+        _SourceKind.dandanplayRemote => 'http://192.168.3.39:30000',
         _SourceKind.url => 'https://example.com/stream.m3u8',
       };
 
@@ -444,7 +545,6 @@ class _AddMediaDialogState extends State<_AddMediaDialog> {
         name: name,
         location: loc,
         kind: widget.kind,
-        coverUrl: _coverCtrl.text.trim(),
       ),
     );
   }
@@ -469,6 +569,12 @@ class _AddMediaDialogState extends State<_AddMediaDialog> {
               ),
               onSubmitted: (_) => _submit(),
             ),
+            if (widget.kind == _SourceKind.dandanplayRemote)
+              const Padding(
+                padding: EdgeInsets.only(bottom: 10),
+                child: Text('弹弹远程服务需先在「我的」登录弹弹play账号',
+                    style: TextStyle(color: Colors.orangeAccent, fontSize: 13)),
+              ),
             const SizedBox(height: 14),
             TextField(
               controller: _locCtrl,
@@ -478,15 +584,20 @@ class _AddMediaDialogState extends State<_AddMediaDialog> {
               ),
               onSubmitted: (_) => _submit(),
             ),
-            const SizedBox(height: 14),
-            TextField(
-              controller: _coverCtrl,
-              decoration: const InputDecoration(
-                labelText: '封面图（可选）',
-                hintText: 'https://.../poster.jpg 或本地路径',
+            if (_needsAuth) ...[
+              const SizedBox(height: 14),
+              TextField(
+                controller: _userCtrl,
+                decoration: const InputDecoration(labelText: '用户名'),
               ),
-              onSubmitted: (_) => _submit(),
-            ),
+              const SizedBox(height: 14),
+              TextField(
+                controller: _passCtrl,
+                obscureText: true,
+                decoration: const InputDecoration(labelText: '密码'),
+                onSubmitted: (_) => _submit(),
+              ),
+            ],
           ],
         ),
       ),

@@ -3,7 +3,7 @@ import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 
 import 'package:nipaplay_core/models/dandanplay_remote_model.dart';
-import 'package:nipaplay/services/dandanplay_remote_service.dart';
+import 'package:nipaplay_core/services/dandanplay_remote_service.dart';
 import 'package:nipaplay_core/services/web_remote_access_service.dart';
 
 class DandanplayRemoteProvider extends ChangeNotifier {

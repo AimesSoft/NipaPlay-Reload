@@ -12,7 +12,7 @@ import 'package:nipaplay/utils/storage_service.dart';
 import 'package:nipaplay/services/multi_address_server_service.dart';
 import 'package:nipaplay_core/services/webdav_service.dart';
 import 'package:nipaplay/services/smb_service.dart';
-import 'package:nipaplay/services/dandanplay_remote_service.dart';
+import 'package:nipaplay_core/services/dandanplay_remote_service.dart';
 import 'package:nipaplay/services/bangumi_service.dart';
 import 'package:nipaplay_core/services/incremental_sync_native_codec.dart';
 import 'package:nipaplay_core/services/backup_category.dart';

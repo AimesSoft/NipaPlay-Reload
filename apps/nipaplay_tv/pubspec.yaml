@@ -39,6 +39,8 @@ dependencies:
   shared_preferences: ^2.2.2
   # --- 播放内核：仅 Erika（TV 版瘦身：移除 media_kit/fvp/video_player）---
   erika_flutter: 0.2.1
+  http: ^1.2.0
+  crypto: ^3.0.3
 
   # The following adds the Cupertino Icons font to your application.
   # Use with the CupertinoIcons class for iOS style icons.

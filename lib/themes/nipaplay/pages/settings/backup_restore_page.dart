@@ -17,7 +17,7 @@ import 'package:nipaplay/services/multi_address_server_service.dart';
 import 'package:nipaplay_core/services/webdav_service.dart';
 import 'package:nipaplay/services/smb_service.dart';
 import 'package:nipaplay/services/system_share_service.dart';
-import 'package:nipaplay/services/dandanplay_remote_service.dart';
+import 'package:nipaplay_core/services/dandanplay_remote_service.dart';
 import 'package:nipaplay/utils/auto_sync_settings.dart';
 import 'package:nipaplay/utils/app_accent_color.dart';
 import 'package:nipaplay/utils/backup_file_type_groups.dart';
