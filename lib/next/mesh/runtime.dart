@@ -16,6 +16,7 @@ import 'coordinator.dart';
 import 'discovery.dart';
 import 'identity.dart';
 import 'native.dart';
+import 'device_source.dart';
 
 bool meshActionAllowed(String id) =>
     ['task.', 'download.', 'media.library.', 'playback.'].any(id.startsWith);
@@ -36,7 +37,7 @@ Future<Failure?> authorizeMeshPeer(String deviceId, String name) async {
       'Classic remote control access is ${result.status.name}; the user must allow this device in NipaPlay.');
 }
 
-final class MeshRuntime {
+final class MeshRuntime implements MeshDeviceSource {
   MeshRuntime(
       {required this.root,
       required this.vault,

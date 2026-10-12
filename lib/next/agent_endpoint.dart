@@ -1,7 +1,7 @@
 import 'dart:convert';
 import 'dart:io';
 import 'dart:math';
-import 'package:nipaplay/utils/lab_profile.dart';
+import 'platform/lab_profile.dart';
 
 import 'package:nipa_harness/mcp.dart';
 import 'package:nipa_harness/nipa_harness.dart';

@@ -9,13 +9,13 @@ import '../capabilities/media_models.dart';
 import '../media/identity_store.dart';
 import '../media/media_service.dart';
 import '../media/metadata_snapshot.dart';
-import '../mesh/runtime.dart';
+import '../mesh/device_source.dart';
 import '../settings/denylist.dart';
 import '../settings/registry.dart';
 import 'query.dart';
 
 Future<String?> visibleLocator(String? locator, MediaService media) async {
-  if (locator == null || Uri.tryParse(locator)?.hasScheme == true) {
+  if (locator == null || !p.isAbsolute(locator)) {
     return locator;
   }
   try {
@@ -198,7 +198,7 @@ List<StateView> publicStateViews(
     {required MediaService media,
     required SettingsRegistry settings,
     required DanmakuService danmaku,
-    required MeshRuntime mesh,
+    required MeshDeviceSource mesh,
     required StateSources sources}) {
   final db = media.store.database;
   StateView sql(

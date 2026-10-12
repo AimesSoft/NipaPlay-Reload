@@ -6,8 +6,7 @@ import 'package:crypto/crypto.dart';
 import 'package:nipa_harness/nipa_harness.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:uuid/uuid.dart';
-import 'package:nipaplay/app/unified_media_library_sections.dart';
-import 'package:nipaplay/models/watch_history_model.dart';
+import 'classic_history_eligibility.dart';
 
 import 'metadata_provider.dart';
 import 'metadata_snapshot.dart';
@@ -250,10 +249,9 @@ final class IdentityStore {
             final fingerprint = stableMediaId('legacy', evidence);
             if (row['classicMetadata'] case final Map cached) {
               final animeId = row['animeId'] as int?;
-              final item = WatchHistoryItem.fromJson(row);
+              final eligible = eligibleClassicHistory(row);
               if (animeId != null && animeId > 0 &&
-                  UnifiedMediaLibrarySource.values.any((source) =>
-                    mediaLibraryItemMatchesSource(item, source)) &&
+                  eligible &&
                   (row['episodeId'] as int? ?? 0) > 0 &&
                   (row['animeName'] as String).isNotEmpty &&
                   row['episodeTitle'] != null) {
@@ -291,9 +289,7 @@ final class IdentityStore {
             String? bindingId;
             final animeId = row['animeId'] as int?,
                 episodeId = row['episodeId'] as int?;
-            final item = WatchHistoryItem.fromJson(row);
-            final eligible = UnifiedMediaLibrarySource.values
-                .any((source) => mediaLibraryItemMatchesSource(item, source));
+            final eligible = eligibleClassicHistory(row);
             final matched = eligible &&
                 animeId != null &&
                 animeId > 0 &&

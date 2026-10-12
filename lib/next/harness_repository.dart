@@ -1,5 +1,5 @@
 import 'dart:io';
-import 'package:nipaplay/utils/lab_profile.dart';
+import 'platform/lab_profile.dart';
 
 import 'package:path/path.dart' as p;
 

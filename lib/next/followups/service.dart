@@ -10,7 +10,7 @@ import 'package:nipaplay/security/secret_redactor.dart';
 import '../chat/chat_host.dart';
 import '../chat/helpers.dart';
 import '../chat/turn_process_store.dart';
-import '../harness_location.dart';
+import '../repository_location.dart';
 import '../harness_redaction.dart';
 import '../state/views.dart' show publicTaskFacts;
 import '../state/query.dart';
@@ -39,7 +39,7 @@ final class Followups {
   Followups(this.database, this.engine, this.location);
   final Database database;
   final TaskEngine engine;
-  final HarnessLocation location;
+  final RepositoryLocation location;
   ChatHost? _host;
   Helpers? helpers;
   Future<JsonMap> turnProcess(String threadId, String turnId) async {

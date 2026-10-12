@@ -2,9 +2,9 @@ import 'dart:async';
 import 'dart:io';
 import 'dart:isolate';
 
-import 'package:flutter/foundation.dart';
+import '../platform/report_error.dart';
 import 'package:nipa_harness/nipa_harness.dart';
-import 'package:nipaplay/utils/local_danmaku_file.dart';
+import 'package:nipaplay/utils/local_danmaku_bytes.dart';
 import 'package:nipaplay/utils/local_danmaku_match.dart';
 import 'package:nipaplay/utils/danmaku_parser.dart';
 
@@ -113,8 +113,7 @@ final class SidecarIndexer {
       try {
         await inspect(id, file['path'] as String);
       } catch (error, stack) {
-        FlutterError.reportError(FlutterErrorDetails(
-            exception: error, stack: stack, library: 'Next sidecar indexing'));
+        reportNextError(error, stack, 'Next sidecar indexing');
       }
     }
   }

@@ -13,7 +13,7 @@ import '../state/query.dart';
 import '../state/views.dart';
 import '../settings/registry.dart';
 import 'artwork.dart';
-import 'airing.dart';
+import 'no_airing.dart' if (dart.library.ui) 'airing.dart';
 import 'heat.dart';
 import 'ui_data.dart';
 

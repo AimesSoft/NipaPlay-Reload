@@ -1,7 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 
-import 'package:flutter/foundation.dart';
+import '../platform/report_error.dart';
 import 'package:nipa_harness/nipa_harness.dart';
 import 'package:nipaplay/security/secret_redactor.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
@@ -109,8 +109,7 @@ final class ChangeHistory {
       // Report storage failures without changing Classic's successful write.
       unawaited(
           _writes.then<void>((_) {}, onError: (Object error, StackTrace stack) {
-        FlutterError.reportError(FlutterErrorDetails(
-            exception: error, stack: stack, library: 'Next change history'));
+        reportNextError(error, stack, 'Next change history');
       }));
     }
   }
