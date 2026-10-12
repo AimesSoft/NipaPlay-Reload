@@ -99,7 +99,7 @@ final class _ScanExecutor implements JobExecutor {
             .stop({'discovered': discovered, 'indexed': discovered})) {
           return;
         }
-        if (entry is! File ||
+        if (!await FileSystemEntity.isFile(entry.path) ||
             !_videoExtensions.contains(p.extension(entry.path).toLowerCase())) {
           continue;
         }

@@ -7,6 +7,8 @@ import 'package:nipaplay/models/watch_history_database.dart';
 import 'package:nipaplay/services/anime_deletion_tombstones.dart';
 import 'package:nipaplay/services/jellyfin_episode_mapping_service.dart';
 import 'package:nipaplay/services/emby_episode_mapping_service.dart';
+import 'package:nipaplay/services/bangumi_service.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import 'identity_store.dart';
 import 'remote_classic_projection.dart';
@@ -42,6 +44,48 @@ final class WatchHistoryMetadataPort implements ReversibleClassicMetadataPort {
     final history = WatchHistoryDatabase.instance;
     await history.migrateFromJson();
     final db = await history.database;
+    final prefs = await SharedPreferences.getInstance();
+    JsonMap? cachedMetadata(int? animeId) {
+      if (animeId == null) return null;
+      final saved = prefs.getString('bangumi_detail_$animeId');
+      final cache = saved == null ? null : jsonDecode(saved) as Map;
+      final anime = BangumiService.instance.getAnimeDetailsFromMemory(animeId);
+      final detail = anime?.toJson() ?? cache?['animeDetail'] as Map?;
+      if (detail == null) return null;
+      final background =
+          prefs.getString('bangumi_custom_background_$animeId') ??
+              detail['backgroundImageUrl'];
+      return {
+        'language': switch (detail['language']) {
+          'zh' => 'zh-CN',
+          'zh_Hant' => 'zh-TW',
+          final String language => language,
+          _ => 'und'
+        },
+        'fetchedAt': cache?['timestamp'] == null
+            ? null
+            : DateTime.fromMillisecondsSinceEpoch(cache!['timestamp'] as int)
+                .toUtc()
+                .toIso8601String(),
+        'fields': {
+          if (detail['name_cn'] ?? detail['name'] case final String title)
+            if (title.isNotEmpty) 'title': title,
+          if (detail['name'] case final String title)
+            if (title.isNotEmpty) 'originalTitle': title,
+          if (detail['summary'] case final String summary)
+            if (summary.isNotEmpty) 'overview': summary,
+          if (detail['imageUrl'] case final String image)
+            if (image.isNotEmpty) 'imageUrl': image,
+          if (background is String && background.isNotEmpty)
+            'artworkUrls': {'backdrop': background},
+          if (detail['totalEpisodes'] case final int count)
+            if (count > 0) 'episodeCount': count,
+          if (detail['tags'] case final List tags)
+            if (tags.isNotEmpty) 'genres': tags,
+        }
+      };
+    }
+
     // Read failure must not be mistaken for an empty library.
     return [
       for (final row in await db.query('watch_history'))
@@ -59,6 +103,7 @@ final class WatchHistoryMetadataPort implements ReversibleClassicMetadataPort {
           'thumbnailPath': row['thumbnail_path'],
           'isFromScan': row['is_from_scan'] == 1,
           'mediaKey': row['media_key'],
+          'classicMetadata': cachedMetadata(row['anime_id'] as int?),
         }
     ];
   }

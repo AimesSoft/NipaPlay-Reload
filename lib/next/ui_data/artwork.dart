@@ -101,7 +101,6 @@ final class ArtworkCache {
         : <String, Object?>{};
     if (tmdb != null &&
         await vault.read(const CredentialRef('metadata', 'tmdb')) != null) {
-      // A TMDB identity never silently borrows another show's images.
       final provider = media.providers['tmdb']! as TmdbMetadataProvider;
       final type = tmdb['object_type'] as String;
       final path = type == 'episode' || type == 'season'
@@ -133,7 +132,7 @@ final class ArtworkCache {
 
         String? image(Object? path, String size) =>
             path == null ? null : 'https://image.tmdb.org/t/p/$size$path';
-        urls = {
+        final fetched = <String, Object?>{
           'identity': tmdb['id'],
           'backdrop': image(
               choose('backdrops', [null, 'ja', 'zh', 'en']) ??
@@ -145,6 +144,8 @@ final class ArtworkCache {
           'logo': image(choose('logos', ['zh', 'ja', 'en', null]), 'original'),
           'still': image(row['still_path'], 'w780'),
         };
+        urls = {...urls, for (final entry in fetched.entries)
+          if (entry.value != null) entry.key: entry.value};
         await _snapshot(
             tmdb,
             {
@@ -170,10 +171,11 @@ final class ArtworkCache {
             },
             'https://api.themoviedb.org$path');
       }
-    } else if (tmdb == null && fields['imageUrl'] is String) {
+    }
+    if (fields['imageUrl'] is String) {
       final entity = await media.store.entity(id);
-      urls.putIfAbsent(entity['kind'] == 'episode' ? 'still' : 'poster',
-          () => fields['imageUrl']);
+      final kind = entity['kind'] == 'episode' ? 'still' : 'poster';
+      urls[kind] ??= fields['imageUrl'];
     }
     for (final kind in ['backdrop', 'poster', 'logo', 'still']) {
       if (fields['artwork.$kind'] case final Map edit) {

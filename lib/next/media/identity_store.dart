@@ -247,6 +247,30 @@ final class IdentityStore {
               'provenance': 'legacy_unknown'
             };
             final fingerprint = stableMediaId('legacy', evidence);
+            if (row['classicMetadata'] case final Map cached) {
+              final animeId = row['animeId'] as int?;
+              final item = WatchHistoryItem.fromJson(row);
+              if (animeId != null && animeId > 0 &&
+                  UnifiedMediaLibrarySource.values.any((source) =>
+                    mediaLibraryItemMatchesSource(item, source)) &&
+                  (row['episodeId'] as int? ?? 0) > 0 &&
+                  (row['animeName'] as String).isNotEmpty &&
+                  row['episodeTitle'] != null) {
+                final ref = ExternalRef('dandanplay', 'anime', '$animeId');
+                await tx.insert('media_snapshots', {
+                  'id': stableMediaId('classic-cache', [ref.toJson(), cached]),
+                  'object_id': await _object(tx, ref),
+                  'language': cached['language'],
+                  'fetched_at': cached['fetchedAt'] ?? DateTime.now().toUtc().toIso8601String(),
+                  'fields': jsonEncode({
+                    'ref': ref.toJson(), 'metadata': cached['fields'],
+                    'language': cached['language'], 'fetchedAt': cached['fetchedAt'],
+                    'receivedAt': DateTime.now().toUtc().toIso8601String(),
+                    'source': 'classic_cache', 'origin': 'classic_history',
+                  })
+                }, conflictAlgorithm: ConflictAlgorithm.ignore);
+              }
+            }
             final previous = await tx.rawQuery(
                 'SELECT o.* FROM media_classic_current c JOIN media_classic_observations o ON o.id=c.observation_id WHERE c.location_id=?',
                 [location['id']]);
@@ -1646,6 +1670,8 @@ final class IdentityStore {
         throw const Failure(FailureCode.conflict,
             'Dandanplay work metadata is missing for projection.');
       }
+      final observed = await tx.rawQuery(
+          'SELECT 1 FROM media_classic_current c JOIN media_locations l ON l.id=c.location_id WHERE l.file_id=? LIMIT 1', [fileId]);
       Future<String?> title(String objectId) async {
         final snapshots = await tx.query('media_snapshots',
             where: 'object_id=?',
@@ -1657,8 +1683,12 @@ final class IdentityStore {
         }
         for (final snapshot in snapshots) {
           final fields = decodeMediaJson(snapshot['fields']);
-          final value = fields['title'] as String;
-          if (fields['source'] != 'classic_match' && value.trim().isNotEmpty) {
+          if (observed.isNotEmpty &&
+              {'classic_match', 'classic_cache'}.contains(fields['source'])) {
+            continue;
+          }
+          final value = (fields['metadata'] as Map? ?? fields)['title'] as String?;
+          if (value != null && value.trim().isNotEmpty) {
             return value;
           }
         }

@@ -270,6 +270,7 @@ final class UiDataService implements NextUiData {
       job.input['workId'],
       job.input['entityId'],
       job.input['fileId'],
+      ...?job.receipt?.details['workIds'] as List?,
       ...?job.receipt?.details['fileIds'] as List?
     ];
     for (final id in ids.whereType<String>()) {

@@ -87,6 +87,19 @@ final class MediaService {
         final canonical = await Directory(root).resolveSymbolicLinks();
         if (path == canonical || p.isWithin(canonical, path)) allowed = true;
       }
+      if (!allowed && !directory) {
+        final completed = await store.database.rawQuery(r'''
+          SELECT 1 FROM jobs j, json_each(j.snapshot, '$.receipt.details.files') f
+          WHERE j.type='download' AND j.state='succeeded'
+          AND json_extract(j.snapshot, '$.receipt.verification')='verified'
+          AND json_extract(j.snapshot, '$.receipt.details.downloadComplete')=1
+          AND json_extract(f.value, '$.local')=1
+          AND json_extract(f.value, '$.included')=1
+          AND json_extract(f.value, '$.actualSize')=json_extract(f.value, '$.expectedSize')
+          AND coalesce(json_extract(f.value, '$.canonicalPath'), json_extract(f.value, '$.path'))=? LIMIT 1
+        ''', [path]);
+        allowed = completed.isNotEmpty;
+      }
       if (!allowed) {
         throw const Failure(FailureCode.unavailable,
             'Path is outside the configured media folders.');
@@ -183,7 +196,7 @@ final class MediaService {
     try {
       await for (final entry
           in Directory(root).list(recursive: true, followLinks: false)) {
-        if (entry is File &&
+        if (await FileSystemEntity.isFile(entry.path) &&
             {
               '.mkv',
               '.mp4',
