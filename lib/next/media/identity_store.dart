@@ -853,9 +853,20 @@ final class IdentityStore {
         });
       }
       for (final field in values.keys) {
+        int languageRank(Object? language, Object? value) {
+          if (value is String && RegExp(r'[\u3041-\u3096\u30a1-\u30fa]').hasMatch(value)) return 2;
+          return switch ((language as String? ?? '').toLowerCase()) {
+            'zh-cn' || 'zh-hans' || 'zh-hans-cn' => 0,
+            'zh' => 1,
+            _ => 2,
+          };
+        }
+        final preferChinese = (field == 'title' || field == 'overview') &&
+            fields.containsKey(field) && languageRank(row['language'], values[field]) <
+                languageRank((provenance[field] as Map)['language'], fields[field]);
         if (values[field] != null &&
             values[field] != '' &&
-            !fields.containsKey(field)) {
+            (!fields.containsKey(field) || preferChinese)) {
           fields[field] = values[field];
           provenance[field] = {
             'provider': row['provider'],
@@ -888,6 +899,8 @@ final class IdentityStore {
       fields[row['field'] as String] = jsonDecode(row['value'] as String);
       provenance[row['field'] as String] = {
         'provider': row['actor'],
+        'actor': row['actor'],
+        'changedAt': row['changed_at'],
         'invocationId': row['invocation_id'],
         'origin': row['origin'],
         'mode': row['mode']
@@ -897,30 +910,55 @@ final class IdentityStore {
   }
 
   Future<void> overrideField(
-      String id, String field, Object? value, Invocation invocation,
-      {String mode = 'persistent'}) async {
-    id = await canonicalFileId(database, id);
-    final ids = await _metadataEntities(id);
-    final edit = {
-      'entity_id': id,
-      'field': field,
-      'value': jsonEncode(value),
-      'mode': mode,
-      'actor': invocation.origin == 'gui' ? 'user' : 'agent',
-      'origin': invocation.origin,
-      'invocation_id': invocation.id,
-      'changed_at': _now
-    };
+          String id, String field, Object? value, Invocation invocation,
+          {String mode = 'persistent', String? language}) async {
+    final languageField = '${field}Language';
+    final ids = await _metadataEntities(await canonicalFileId(database, id));
+    final hasLanguage = (await database.query('media_overrides',
+        where: 'entity_id IN (${List.filled(ids.length, '?').join(',')}) AND field=?',
+        whereArgs: [...ids, languageField])).isNotEmpty;
+    await overrideFields([
+        {'entityId': id, 'field': field, 'value': value, 'mode': mode},
+        if ((field == 'title' || field == 'overview') && (language != null || hasLanguage))
+          {
+            'entityId': id,
+            'field': '${field}Language',
+            'value': language,
+            'mode': mode
+          }
+      ], invocation);
+  }
+
+  Future<void> overrideFields(
+      List<JsonMap> entries, Invocation invocation) async {
+    final edits = <(JsonMap, List<String>)>[];
+    for (final entry in entries) {
+      final id = await canonicalFileId(database, entry['entityId'] as String);
+      final ids = await _metadataEntities(id);
+      final edit = <String, Object?>{
+        'entity_id': id,
+        'field': entry['field'],
+        'value': jsonEncode(entry['value']),
+        'mode': entry['mode'] ?? 'persistent',
+        'actor': invocation.origin == 'gui' ? 'user' : 'agent',
+        'origin': invocation.origin,
+        'invocation_id': invocation.id,
+        'changed_at': _now
+      };
+      edits.add((edit, ids));
+    }
     await database.transaction((tx) async {
-      await tx.insert('media_metadata_edits', edit);
-      if (mode == 'clear') {
-        await tx.delete('media_overrides',
-            where:
-                'entity_id IN (${List.filled(ids.length, '?').join(',')}) AND field=?',
-            whereArgs: [...ids, field]);
-      } else {
-        await tx.insert('media_overrides', edit,
-            conflictAlgorithm: ConflictAlgorithm.replace);
+      for (final (edit, ids) in edits) {
+        await tx.insert('media_metadata_edits', edit);
+        if (edit['mode'] == 'clear') {
+          await tx.delete('media_overrides',
+              where:
+                  'entity_id IN (${List.filled(ids.length, '?').join(',')}) AND field=?',
+              whereArgs: [...ids, edit['field']]);
+        } else {
+          await tx.insert('media_overrides', edit,
+              conflictAlgorithm: ConflictAlgorithm.replace);
+        }
       }
     });
   }

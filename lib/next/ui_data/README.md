@@ -40,9 +40,17 @@ GUI 可用 `core.uiData.removeShelf(id, workId: ...)` 移除一项，省略 work
 
 ## 图片与热度
 
-图片从作品/剧集已接受的身份取得，沿用现有作品/发行的 contains 关系与单集的 exact 关系。TMDB 复用原 MetadataTransport、正常凭据解析和应用的系统代理；支持保险库的 API key 与 Bearer 读取令牌。没有 TMDB 身份时沿用已有来源的 imageUrl；没有身份或 TMDB 凭据则图片为 null。
+`media.metadata.ui_facts {workId}` 直接读取同一个 `NextUiData.work/episodes`，返回所有作品资料和逐集标题/截图的 `available/value/path/source`、简介与标题语言、截图覆盖数量、优先主视觉图与 tint。没有假名证据时语言采用声明值，缺少声明就是 unknown；发现日文假名时 language=ja，保留 declaredLanguage 与 languageBasis，避免把中文请求参数误当简介的实际语言。生成的集数注明来自本地剧集目录。读取可能填充可删除的图片缓存。
 
-TMDB 的图片 URL、语言选择、评分、类型、集数、制作公司和单集时长追加到原 `media_snapshots`，保留对象身份、来源、抓取时间和收到时间；本地图片是可删除的投影。背景优先语言为 null 的图；Logo 为中文、日文、英文、中性图。文件按 URL 哈希存到 Next 数据目录的 artwork，解码验证后原子发布。tint 将背景缩到 64 像素宽，对 RGB 色箱计数，并取最多色箱的平均色，包含 ARGB alpha。
+`media.artwork.set` 输入 `entries:[{entityId,kind,url或file,source:{label,url?}}]`。backdrop/poster/logo 的 entityId 是作品，still 的 entityId 是单集；url 是无 userinfo 的 HTTP(S)，file 是本机绝对路径，两者恰好一个。整批图片解码、复制/缓存成功后，原子写入既有 `media_overrides/media_metadata_edits`，activity 的 metadata.edited 保留来源、调用者与 invocationId。四种图片独立覆盖；来源快照、身份与旧编辑全部保留。文件以内容哈希复制，原文件可删除；URL 沿用 X26 的 URL 哈希下载缓存。覆盖不需要平台身份或平台凭据，并在来源刷新后保留。
+
+标题与简介仍用 `media.metadata.override`：field=title 是显示标题，field=overview 是简介，支持 language:"zh-CN"。语言与文字采用相同的 persistent/correction/clear 生命周期，替换文字时未声明语言就恢复 unknown，不继承旧语言。来源文字优先简体中文，显式用户/Agent 编辑仍优先。
+
+没有图片覆盖时，从作品/剧集已接受的身份取得，沿用现有作品/发行的 contains 关系与单集的 exact 关系。TMDB 复用原 MetadataTransport、正常凭据解析和应用的系统代理；支持保险库的 API key 与 Bearer 读取令牌。没有 TMDB 身份时沿用已有来源的 imageUrl；没有 TMDB 凭据时仍能读取已保存的图片事实和独立覆盖。
+
+TMDB 的图片 URL、语言选择、评分、类型、集数、制作公司和单集时长追加到原 `media_snapshots`，保留对象身份、来源、抓取时间和收到时间；本地图片是可删除的投影。背景优先语言为 null 的图；Logo 为中文、日文、英文、中性图。文件按 URL 哈希存到 Next 数据目录的 artwork，解码验证后原子发布。tint 将背景（缺少时使用海报）缩到 64 像素宽，对 RGB 色箱计数，并取最多色箱的平均色，包含 ARGB alpha。
+
+普通公开 URL 包括非秘密查询参数会原样进入 Agent 输出；userinfo、令牌、签名查询/片段和已知秘密仍脱敏。服务端和种子 nipa 同时应用此约束。`ui.capture` 默认 PNG 长边至多 1280 像素，不放大小图；originalSize:true 返回原尺寸。输出同时包含 originalWidth/originalHeight，与 instance 一起确定截图来自当前连接实例。
 
 每集热度汇总当前有效绑定的所有缓存，包含剧集轨道及关联文件轨道，不因播放时关闭轨道而遗漏已有弹幕。相同缓存/时间范围/偏移只计一次；每个来源内部沿用原缓存读取的去重。文件轨道按剧集范围裁剪，偏移后映射到剧集时间轴；没有范围的多集文件不猜测。60 个等宽桶按最高桶归一化，无弹幕为 null；无时长时用最后一条弹幕的时间作为跨度。绑定、修订、偏移、范围、时长、缓存内容/收到时间进入缓存指纹，变化后重算。
 

@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:math' as math;
 import 'dart:ui' as ui;
 
 import 'package:flutter/rendering.dart';
@@ -13,7 +14,7 @@ final class ClassicUiCapture {
   const ClassicUiCapture(this.facts);
   final InstanceFacts facts;
 
-  Future<JsonMap> capture() async {
+  Future<JsonMap> capture({bool originalSize = false}) async {
     final instance = await facts.read();
     final viewId = instance['viewId'] ??
         (globals.navigatorKey.currentContext == null
@@ -35,8 +36,12 @@ final class ClassicUiCapture {
     }
     WidgetsBinding.instance.scheduleFrame();
     await WidgetsBinding.instance.endOfFrame;
+    final physical = view.flutterView.physicalSize;
+    final scale = originalSize
+        ? 1.0
+        : math.min(1.0, 1280 / math.max(physical.width, physical.height));
     final image = await (layer as OffsetLayer)
-        .toImage(ui.Offset.zero & view.flutterView.physicalSize);
+        .toImage(ui.Offset.zero & physical, pixelRatio: scale);
     try {
       final png = (await image.toByteData(format: ui.ImageByteFormat.png))!;
       final directory =
@@ -53,6 +58,8 @@ final class ClassicUiCapture {
         'mimeType': 'image/png',
         'width': image.width,
         'height': image.height,
+        'originalWidth': physical.width.round(),
+        'originalHeight': physical.height.round(),
         'capturedAt': DateTime.now().toUtc().toIso8601String(),
         'instance': instance,
         'surface': 'main_window_flutter_content',
@@ -69,7 +76,7 @@ final class ClassicUiCapture {
 }
 
 final class UiCaptureCapability implements Capability {
-  UiCaptureCapability(Future<JsonMap> Function() capture)
+  UiCaptureCapability(Future<JsonMap> Function({bool originalSize}) capture)
       : actions = [UiCaptureAction(capture)];
   @override
   final List<Action> actions;
@@ -77,7 +84,7 @@ final class UiCaptureCapability implements Capability {
 
 final class UiCaptureAction extends Action<InstanceValue, InstanceValue> {
   const UiCaptureAction(this.capture);
-  final Future<JsonMap> Function() capture;
+  final Future<JsonMap> Function({bool originalSize}) capture;
   @override
   ActionSpec get spec => const ActionSpec(
         id: 'ui.capture',
@@ -85,18 +92,21 @@ final class UiCaptureAction extends Action<InstanceValue, InstanceValue> {
         description:
             'Capture the entire Flutter content of the connected NipaPlay main window, '
             'including pages, controls and dialogs, into a local PNG file readable by the Agent. '
+            'Default PNG long edge is at most 1280 physical pixels, with aspect ratio preserved and no upscaling; originalSize=true requests full resolution. '
             'No application-name lookup or screen-recording permission is used. '
             'Erika native danmaku, native video overlays/platform views outside the Flutter scene, '
             'the OS window frame, other windows and external players are omitted; '
             'the result always states these limitations. The file is temporary and on the host device.',
         effect: Effect.read,
-        input: ObjectSchema({}),
+        input: ObjectSchema({'originalSize': BooleanSchema()}),
         output: ObjectSchema({
           'path': StringSchema(),
           'bytes': IntegerSchema(),
           'mimeType': StringSchema(),
           'width': IntegerSchema(),
           'height': IntegerSchema(),
+          'originalWidth': IntegerSchema(),
+          'originalHeight': IntegerSchema(),
           'capturedAt': StringSchema(),
           'instance': instanceFactsSchema,
           'surface': StringSchema(),
@@ -118,5 +128,6 @@ final class UiCaptureAction extends Action<InstanceValue, InstanceValue> {
   @override
   Future<Outcome<InstanceValue>> run(
           InstanceValue input, Invocation invocation) async =>
-      Completed(InstanceValue(await capture()));
+      Completed(InstanceValue(await capture(
+          originalSize: input.value['originalSize'] as bool? ?? false)));
 }

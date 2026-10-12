@@ -1,6 +1,7 @@
 import 'package:nipa_harness/nipa_harness.dart';
 
 import 'service.dart';
+import 'metadata_facts.dart';
 
 const _text = StringSchema(minLength: 1);
 const _ref = StringSchema(minLength: 1);
@@ -34,10 +35,53 @@ final class UiDataCapability implements Capability {
       : actions = [
           _UiAction(service, 'present'),
           _UiAction(service, 'shelves.put'),
-          _UiAction(service, 'shelves.remove')
+          _UiAction(service, 'shelves.remove'),
+          _MetadataAction(service, false),
+          _MetadataAction(service, true)
         ];
   @override
   final List<Action> actions;
+}
+
+final class _MetadataAction extends Action<_Json, _Json> {
+  const _MetadataAction(this.service, this.write);
+  final UiDataService service;
+  final bool write;
+  @override
+  ActionSpec get spec => ActionSpec(
+      id: write ? 'media.artwork.set' : 'media.metadata.ui_facts',
+      title: write ? '设置作品与剧集图片' : '读取界面元数据完整情况',
+      description: write
+          ? 'Set independent persistent artwork overrides in one atomic batch. backdrop/poster/logo require entityId of a work; still requires an episode. Each entry supplies exactly one HTTP(S) url without userinfo or absolute local file, plus source:{label,url?}. Images are decoded and cached by X26 before commit; local files are copied. Source, actor and invocation are retained in metadata edits/activity. Overrides survive metadata refresh and need no provider identity or credentials. Text title/overview use media.metadata.override.'
+          : 'Read the same NextUiData work/episodes as the viewer: availability, actual values/local image paths, source provenance, synopsis/title language, ratings, per-episode titles/stills and coverage counts. Includes heroImage fallback and tint. Missing fields remain explicit. Language uses observed Japanese kana when present, otherwise declared language or unknown; declaredLanguage is retained. Does not change domain metadata; reading may populate the disposable image cache.',
+      effect: write ? Effect.write : Effect.read,
+      input: write
+          ? const ObjectSchema({
+              'entries': ArraySchema(ObjectSchema({
+                'entityId': _ref,
+                'kind': StringSchema(
+                    values: ['backdrop', 'poster', 'logo', 'still']),
+                'url': _ref,
+                'file': _ref,
+                'source': ObjectSchema({'label': _text, 'url': _text},
+                    required: ['label'])
+              }, required: [
+                'entityId',
+                'kind',
+                'source'
+              ]))
+            }, required: [
+              'entries'
+            ])
+          : const ObjectSchema({'workId': _ref}, required: ['workId']),
+      output: const ObjectSchema({}, additionalProperties: true));
+  @override
+  _Json decodeInput(JsonMap json) => _Json(json);
+  @override
+  Future<Outcome<_Json>> run(_Json input, Invocation invocation) async =>
+      Completed(_Json(write
+          ? await service.setArtwork(input.value, invocation)
+          : await service.metadataFacts(input.value['workId'] as String)));
 }
 
 final class _Json implements JsonEncodable {

@@ -3,6 +3,7 @@ import 'dart:convert';
 
 import 'package:crypto/crypto.dart';
 import 'package:nipa_harness/nipa_harness.dart';
+import '../public_url.dart';
 
 typedef StateReader = Future<List<JsonMap>> Function(int offset, int limit);
 
@@ -377,22 +378,7 @@ Object? publicValue(Object? value, Schema schema) {
     return [for (final v in value) publicValue(v, schema.items)];
   }
   if (value is String) {
-    if (!value.contains('://')) return value;
-    // Public locator URLs contain no userinfo, query parameters or fragments.
-    return value.replaceAllMapped(
-        RegExp(
-            r'''(?<![a-zA-Z0-9+.-])[a-zA-Z][a-zA-Z0-9+.-]{0,31}://[^\s<>"'\\]+'''),
-        (match) {
-      final uri = Uri.tryParse(match[0]!);
-      return uri == null
-          ? '[redacted-url]'
-          : Uri(
-                  scheme: uri.scheme,
-                  host: uri.host,
-                  port: uri.hasPort ? uri.port : null,
-                  path: uri.path)
-              .toString();
-    });
+    return redactPrivateUrls(value);
   }
   if (value is num || value is bool) return value;
   return null;

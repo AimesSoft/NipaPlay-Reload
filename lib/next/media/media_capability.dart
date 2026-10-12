@@ -619,7 +619,7 @@ final _specs = [
       ])),
   _spec(
       'media.metadata.override',
-      'Edit one metadata field. Work/release edits share the work view: latest active edit wins, and clear removes this field’s active edits across the work/release family while retaining the audit log. Episode/file edits remain local. The host records actor, origin and invocationId. Persistent overrides survive refresh; corrections expire on newer snapshots in the same view. Missing entities return not_found.',
+      'Edit title (display title), originalTitle, overview (synopsis) or legacy imageUrl. title/overview accept optional language (e.g. zh-CN); omitted language is unknown. Work/release edits share the work view: latest active edit wins; clear removes active edits across the family, retaining the audit log. Episode/file edits remain local. Host records actor, origin and invocationId. Persistent overrides survive refresh; corrections expire on newer snapshots. Use media.artwork.set for backdrop/poster/logo/episode still. Missing entities return not_found.',
       Effect.write,
       const ObjectSchema({
         'entityId': _text,
@@ -629,6 +629,7 @@ final _specs = [
             nullable: true,
             description:
                 'Replacement text; null is an explicit empty value. Ignored for clear.'),
+        'language': _text,
         'mode': StringSchema(
             values: ['persistent', 'correction', 'clear'],
             description:
@@ -790,9 +791,13 @@ final class _MediaAction extends Action<_JsonValue, _JsonValue> {
         }
         result = {'results': results};
       case 'media.metadata.override':
-        await store.overrideField(json['entityId'] as String,
-            json['field'] as String, json['value'], invocation,
-            mode: json['mode'] as String? ?? 'persistent');
+        await service.mutate(() => store.overrideField(
+            json['entityId'] as String,
+            json['field'] as String,
+            json['value'],
+            invocation,
+            language: json['language'] as String?,
+            mode: json['mode'] as String? ?? 'persistent'));
         result = {
           'identity': await _identity(store, json['entityId'] as String)
         };
