@@ -97,6 +97,7 @@ class NipaChat extends ChangeNotifier {
       unawaited(refreshSessions());
     }
   }
+
   bool menuOpen = false;
 
   Timer? _bootTimer;
@@ -758,6 +759,7 @@ class NipaChat extends ChangeNotifier {
       quiet = false;
       _quietWaived = null;
     }
+    _noteHelpers(params);
     final changed = turn.apply(method, params);
     switch (method) {
       case 'item/completed':
@@ -790,7 +792,22 @@ class NipaChat extends ChangeNotifier {
   }
 
   /// A turn in a session not shown: what it is doing, for the home.
+  /// Codex's own sub-agents are helpers: their threads are not sessions
+  /// of yours, nor what Nipa is doing on the home.
+  void _noteHelpers(Map params) {
+    final item = params['item'];
+    if (item is! Map || item['type'] != 'collabAgentToolCall') return;
+    final ids = item['receiverThreadIds'];
+    if (ids is! List || ids.isEmpty) return;
+    final title = ChatTurn.helperTitle('${item['prompt'] ?? ''}');
+    for (final id in ids) {
+      _helpers.putIfAbsent('$id', () => title.isEmpty ? '帮手' : title);
+    }
+    _elsewhere.removeWhere((_, turn) => _helpers.containsKey(turn.threadId));
+  }
+
   void _watch(String method, Map params, String threadId) {
+    _noteHelpers(params);
     // Helpers show in the background panel; their result comes back here.
     if (_helpers.containsKey(threadId)) return;
     final id = _turnOf(params);

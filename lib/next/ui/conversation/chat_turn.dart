@@ -77,6 +77,21 @@ final class ReplyPart extends TurnPart {
   String text;
 }
 
+/// Work handed to a helper (Codex's own sub-agents): sent off, waited
+/// for, told more.
+final class HelperStep extends ActivityStep {
+  HelperStep(super.id, this.tool);
+  String tool;
+
+  /// What the helper was asked to do.
+  String prompt = '';
+
+  /// The helpers' threads, to open their conversations.
+  List<String> threads = const [];
+  @override
+  bool running = true;
+}
+
 /// Steps in a row, between two things said.
 final class StepsPart extends TurnPart {
   final steps = <ActivityStep>[];
@@ -356,6 +371,19 @@ class ChatTurn {
           }
         }
         return true;
+      case 'collabAgentToolCall':
+        final step = _find<HelperStep>(itemId) ??
+            _add(HelperStep(itemId, '${item['tool'] ?? ''}'));
+        step.tool = '${item['tool'] ?? step.tool}';
+        if (item['prompt'] case final String prompt) step.prompt = prompt;
+        if (item['receiverThreadIds'] case final List ids when ids.isNotEmpty) {
+          step.threads = [for (final id in ids) '$id'];
+        }
+        if (done ||
+            (item['status'] != null && item['status'] != 'inProgress')) {
+          step.running = false;
+        }
+        return true;
       case 'webSearch' || 'mcpToolCall' || 'dynamicToolCall' || 'fileChange':
         final label = switch (_itemType(params)) {
           'webSearch' => '搜索网页',
@@ -397,6 +425,8 @@ class ChatTurn {
   void _settle() {
     for (final s in steps) {
       switch (s) {
+        case HelperStep():
+          s.running = false;
         case CommandStep():
           s.running = false;
         case ToolStep():
@@ -484,7 +514,24 @@ class ChatTurn {
         ThoughtStep() => null,
         CommandStep(:final command) => verb(command),
         ToolStep(:final label) => label,
+        HelperStep(:final tool) => switch (tool) {
+            'spawnAgent' => '派帮手',
+            'wait' => '等帮手',
+            'sendInput' => '给帮手补充',
+            'closeAgent' => '收回帮手',
+            _ => '和帮手协作',
+          },
       };
+
+  /// A helper's work in a few words, from what it was asked: its first
+  /// sentence, without a “任务：” label.
+  static String helperTitle(String prompt) {
+    var line = prompt.trim().split('\n').first.trim();
+    line = line.replaceFirst(RegExp(r'^(任务|目标|Task)\s*[：:]\s*'), '');
+    final end = line.indexOf(RegExp(r'[。！？.!?；;]'));
+    if (end > 0) line = line.substring(0, end);
+    return line.length > 36 ? '${line.substring(0, 36)}…' : line;
+  }
 
   /// The command without the login-shell wrapper Codex puts around it.
   static String bare(String command) {

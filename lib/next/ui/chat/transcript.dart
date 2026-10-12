@@ -7,6 +7,7 @@ import 'package:flutter_markdown/flutter_markdown.dart';
 import '../cards/card_views.dart';
 import '../conversation/nipa_chat.dart';
 import '../data/login_requests.dart';
+import '../shell/shell_controller.dart';
 import '../theme/tokens.dart';
 import '../widgets/attachments.dart';
 import '../widgets/buttons.dart';
@@ -575,6 +576,7 @@ class _Steps extends StatelessWidget {
                     CommandStep() => _Command(key: ObjectKey(step), step: step),
                     ToolStep() => Text(step.label,
                         style: NextText.sans(12.5, color: NextColors.p2)),
+                    HelperStep() => _Helper(step: step),
                   },
                 ],
               ],
@@ -602,6 +604,46 @@ class _Thought extends StatelessWidget {
             style: NextText.sans(12.5, color: NextColors.p3, height: 1.6)),
       ),
     );
+  }
+}
+
+/// Work handed to a helper: what it was asked, and its conversation.
+class _Helper extends StatelessWidget {
+  const _Helper({required this.step});
+  final HelperStep step;
+
+  @override
+  Widget build(BuildContext context) {
+    final shell = NextShellScope.of(context);
+    final title =
+        step.prompt.isEmpty ? null : ChatTurn.helperTitle(step.prompt);
+    return Row(children: [
+      Flexible(
+        child: Text.rich(
+          TextSpan(children: [
+            TextSpan(
+                text: ChatTurn.phrase(step),
+                style: NextText.sans(12.5, color: NextColors.p2)),
+            if (title != null)
+              TextSpan(
+                  text: '  $title',
+                  style: NextText.sans(12.5, color: NextColors.p3)),
+          ]),
+          maxLines: 2,
+          overflow: TextOverflow.ellipsis,
+        ),
+      ),
+      for (final thread in step.threads.take(1)) ...[
+        const SizedBox(width: 10),
+        Pressable(
+          onTap: () => shell.openConversation(thread),
+          semanticLabel: '打开帮手的对话',
+          builder: (context, hovered) => Text('打开',
+              style: NextText.sans(12.5,
+                  color: hovered ? NextColors.paper : NextColors.accent2)),
+        ),
+      ],
+    ]);
   }
 }
 
