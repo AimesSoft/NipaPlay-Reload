@@ -42,12 +42,19 @@ class TvLibraryEpisode {
     required this.playUri,
     this.thumbnailUrl = '',
     this.matched = false,
+    this.fileName = '',
+    this.fileHash = '',
   });
 
   final String title;
   final String playUri;
   final String thumbnailUrl;
   final bool matched;
+
+  /// 原始文件名（如 `Kill la Kill 01 [BD 1920x1080 HEVC].mkv`）与文件哈希。
+  /// **弹幕匹配必须用它**——playUri 是流地址（含 UUID），用它匹配永远失败。
+  final String fileName;
+  final String fileHash;
 }
 
 /// 把各类媒体源解析为统一的番剧条目列表。
@@ -151,7 +158,8 @@ class TvLibraryLoader {
         '分组 ${groups.length} 个');
     final items = <TvLibraryItem>[];
     groups.forEach((title, list) {
-      list.sort((a, b) => a.episodeTitle.compareTo(b.episodeTitle));
+        // 自然排序：第1话 < 第2话 < 第10话（字符串排序会把第10话排到第1话前）
+        list.sort((a, b) => _naturalCompare(a.episodeTitle, b.episodeTitle));
       final first = list.first;
       items.add(TvLibraryItem(
         title: title,
@@ -167,12 +175,29 @@ class TvLibraryLoader {
                   playUri: '$base/api/v1/stream/id/${e.entryId}',
                   thumbnailUrl: _remoteImage(base, e.hash, token),
                   matched: e.animeId != null,
+                  fileName: e.name,
+                  fileHash: e.hash,
                 ))
             .toList(),
       ));
     });
     return items;
   }
+
+  /// 自然排序：数字片段按数值比（第1话 < 第2话 < 第10话）。
+  static int _naturalCompare(String a, String b) {
+    final ra = RegExp(r'\d+').allMatches(a).map((m) => m.group(0)!).toList();
+    final rb = RegExp(r'\d+').allMatches(b).map((m) => m.group(0)!).toList();
+    final n = ra.length < rb.length ? ra.length : rb.length;
+    for (var i = 0; i < n; i++) {
+      final na = int.tryParse(ra[i]) ?? 0;
+      final nb = int.tryParse(rb[i]) ?? 0;
+      if (na != nb) return na.compareTo(nb);
+    }
+    if (ra.length != rb.length) return ra.length.compareTo(rb.length);
+    return a.compareTo(b);
+  }
+
 
   static String _remoteImage(String base, String hash, String? token) {
     if (hash.isEmpty) return '';

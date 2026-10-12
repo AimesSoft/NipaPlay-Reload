@@ -1,5 +1,6 @@
 import 'dart:convert';
 
+import 'package:crypto/crypto.dart';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'package:nipaplay_core/constants/danmaku/mode.dart';
@@ -27,11 +28,24 @@ class TvDanmakuLoader {
   static const _timeout = Duration(seconds: 20);
   static const _userAgent = 'NipaPlay/1.0';
 
-  Map<String, String> _headers(String? token) => {
-        'Accept': 'application/json',
-        'User-Agent': _userAgent,
-        if (token != null && token.isNotEmpty) 'Authorization': 'Bearer $token',
-      };
+  static const _appId = 'nipaplayv1';
+  static const _appSecret = 'server-managed';
+
+  /// 与主应用 `DandanplayService` 相同的请求头签名（网关要求）。
+  Map<String, String> _headers(String? token, String apiPath) {
+    final timestamp = (DateTime.now().toUtc().millisecondsSinceEpoch / 1000)
+        .round();
+    final source = '$_appId$timestamp$apiPath$_appSecret';
+    final signature = base64Encode(sha256.convert(utf8.encode(source)).bytes);
+    return {
+      'Accept': 'application/json',
+      'User-Agent': _userAgent,
+      'X-AppId': _appId,
+      'X-Timestamp': '$timestamp',
+      'X-Signature': signature,
+      if (token != null && token.isNotEmpty) 'Authorization': 'Bearer $token',
+    };
+  }
 
   /// 加载某视频文件的弹幕。
   ///
@@ -53,19 +67,27 @@ class TvDanmakuLoader {
       final base = await NipaplayServerRouter.instance.effectiveServer();
       final token = account.token;
 
-      // 1) 匹配（主应用用 POST + 签名；TV 侧用 GET + token，网关同样接受）
-      final matchUri = Uri.parse('$base/api/v2/match').replace(
-        queryParameters: {
-          'fileName': fileName,
-          'fileSize': '$fileSize',
-          if (fileHash != null && fileHash.isNotEmpty) 'fileHash': fileHash,
-        },
-      );
-      debugPrint('[TVDanmaku] match GET $matchUri '
+      // 1) 匹配：与主应用一致 — POST /api/v2/match + 签名头 + JSON body
+      const matchPath = '/api/v2/match';
+      final matchUri = Uri.parse('$base$matchPath');
+      debugPrint('[TVDanmaku] match POST $matchUri file=$fileName '
           '(loggedIn=${account.isLoggedIn}, token=${token != null})');
-      final matchResp =
-          await http.get(matchUri, headers: _headers(token)).timeout(_timeout);
-      debugPrint('[TVDanmaku] match HTTP ${matchResp.statusCode}');
+      final matchHeaders = <String, String>{
+        ..._headers(token, matchPath),
+        'Content-Type': 'application/json',
+      };
+      final matchResp = await http
+          .post(matchUri,
+              headers: matchHeaders,
+              body: json.encode({
+                'fileName': fileName,
+                'fileHash': fileHash ?? '',
+                'fileSize': fileSize,
+                'matchMode': 'hashAndFileName',
+              }))
+          .timeout(_timeout);
+      debugPrint('[TVDanmaku] match HTTP ${matchResp.statusCode} '
+          '${utf8.decode(matchResp.bodyBytes, allowMalformed: true).substring(0, (matchResp.bodyBytes.length > 180 ? 180 : matchResp.bodyBytes.length))}');
       if (matchResp.statusCode != 200) {
         debugPrint('[TVDanmaku] match HTTP ${matchResp.statusCode}');
         return null;
@@ -80,11 +102,13 @@ class TvDanmakuLoader {
       }
 
       // 2) 拉取弹幕（端点与主应用一致）
-      final danmakuUri = Uri.parse(
-          '$base/api/v2/comment/$episodeId?withRelated=true');
+      final commentPath = '/api/v2/comment/$episodeId';
+      final danmakuUri =
+          Uri.parse('$base$commentPath?withRelated=true&chConvert=0');
       debugPrint('[TVDanmaku] comment GET $danmakuUri');
-      final danmakuResp =
-          await http.get(danmakuUri, headers: _headers(token)).timeout(_timeout);
+      final danmakuResp = await http
+          .get(danmakuUri, headers: _headers(token, commentPath))
+          .timeout(_timeout);
       debugPrint('[TVDanmaku] comment HTTP ${danmakuResp.statusCode}');
       if (danmakuResp.statusCode != 200) {
         debugPrint('[TVDanmaku] comment HTTP ${danmakuResp.statusCode}');

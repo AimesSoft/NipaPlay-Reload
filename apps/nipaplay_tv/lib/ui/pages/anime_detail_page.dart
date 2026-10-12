@@ -444,6 +444,8 @@ class _TvAnimeDetailPageState extends State<TvAnimeDetailPage> {
         builder: (_) => TvPlayerPage(
           source: MediaSource(uri: ep.playUri),
           title: '$_title · ${ep.title}',
+          fileName: ep.fileName,
+          fileHash: ep.fileHash,
         ),
       ),
     );
@@ -555,7 +557,8 @@ class _EpisodeTileState extends State<_EpisodeTile> {
                 ),
                 const SizedBox(height: 8),
                 Text(
-                  '第 ${widget.index + 1} 话  ${widget.episode.title}',
+                  // episode.title already contains 第X话, no index prefix
+                  widget.episode.title,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: TextStyle(

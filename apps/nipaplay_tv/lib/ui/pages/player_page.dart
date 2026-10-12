@@ -25,7 +25,13 @@ class TvPlayerPage extends StatefulWidget {
     this.title = '',
     this.danmakuItems = const [],
     this.kernel,
+    this.fileName = '',
+    this.fileHash = '',
   });
+
+  /// 弹幕匹配用的原始文件名与哈希（远程流 playUri 是 UUID，不能用来匹配）。
+  final String fileName;
+  final String fileHash;
 
   final MediaSource source;
   final String title;
@@ -68,6 +74,8 @@ class _TvPlayerPageState extends State<TvPlayerPage> {
   }
 
   Future<void> _boot() async {
+    // 弹幕匹配最先发起（不等播放内核就绪，避免被 await 挂起阻塞）
+    unawaited(_loadDanmaku());
     try {
       final kernel = widget.kernel ?? await TvPlayerKernelRegistry.loadSelected();
       final player = TvPlayerKernelRegistry.create(kernel);
@@ -105,8 +113,6 @@ class _TvPlayerPageState extends State<TvPlayerPage> {
       // 画面超分：仅 Erika 具备
       await kernelSetUpscaler(player, up);
       await player.play();
-      // 自动加载弹幕（按文件名匹配弹弹play）
-      unawaited(_loadDanmaku());
     } catch (e) {
       if (mounted) setState(() => _error = e);
     }
@@ -549,12 +555,18 @@ class _TvPlayerPageState extends State<TvPlayerPage> {
 
   /// 进入播放页时自动匹配并加载弹幕。
   Future<void> _loadDanmaku() async {
-    final uri = Uri.tryParse(widget.source.uri);
-    if (uri == null) return;
-    final fileName = uri.pathSegments.isEmpty
-        ? uri.path
-        : uri.pathSegments.last;
-    if (fileName.isEmpty) return;
+    // 弹幕匹配用原始文件名（widget.fileName 优先）；流地址里的 UUID 无效
+    var fileName = widget.fileName;
+    if (fileName.isEmpty) {
+      final uri = Uri.tryParse(widget.source.uri);
+      if (uri == null) return;
+      fileName =
+          uri.pathSegments.isEmpty ? uri.path : uri.pathSegments.last;
+    }
+    if (fileName.isEmpty) {
+      debugPrint('[TVDanmaku] 无可用文件名，跳过');
+      return;
+    }
     setState(() {
       _danmakuLoading = true;
       _danmakuHint = null;
@@ -562,6 +574,7 @@ class _TvPlayerPageState extends State<TvPlayerPage> {
     final items = await TvDanmakuLoader.instance.loadForFile(
       fileName: fileName,
       fileSize: 0,
+      fileHash: widget.fileHash.isEmpty ? null : widget.fileHash,
     );
     if (!mounted) return;
     setState(() {

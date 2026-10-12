@@ -60,7 +60,7 @@ class _LibraryPageState extends State<LibraryPage> {
 
   /// 番剧列表页：点入某源后展示该源的番剧卡片。
   bool _showContent = false;
-  String _sortMode = 'recent'; // recent | name | episodes
+  String _sortMode = 'watch'; // watch(观看顺序) | name(名称)
   List<TvLibraryItem> _contentItems = const [];
   String? _contentSourceName;
   bool _isContentLoading = false;
@@ -766,7 +766,7 @@ class _LibraryPageState extends State<LibraryPage> {
   }
 
   void _cycleSort() {
-    const modes = ['recent', 'name', 'episodes'];
+    const modes = ['watch', 'name'];
     final idx = modes.indexOf(_sortMode);
     setState(() {
       _sortMode = modes[(idx + 1) % modes.length];
@@ -799,7 +799,7 @@ class _LibraryPageState extends State<LibraryPage> {
   String get _sortLabel => switch (_sortMode) {
         'name' => '名称排序',
         'episodes' => '集数排序',
-        _ => '最近添加',
+        _ => '观看顺序',
       };
 
   String _nameOfLocation(String location) {
