@@ -10,7 +10,8 @@ const testRequest = DownloadRequest(
     infoHash: testHash,
     title: 'Episode');
 
-final class FakeDownloadBackend implements DownloadBackend {
+final class FakeDownloadBackend
+    implements DownloadBackend, SelectableDownloadBackend {
   FakeDownloadBackend(this.root,
       {this.reference = const DownloadBackendRef.builtin()});
   final Directory root;
@@ -99,6 +100,20 @@ final class FakeDownloadBackend implements DownloadBackend {
     additions++;
     present = true;
     return snapshot;
+  }
+
+  @override
+  Future<void> selectFiles(String handle, List<int> indices) async {
+    _online();
+    overrideFiles = [
+      for (final entry in snapshot.files.indexed)
+        DownloadFile(
+            location: entry.$2.location,
+            expectedSize: entry.$2.expectedSize,
+            isVideo: entry.$2.isVideo,
+            completedBytes: entry.$2.completedBytes,
+            included: indices.contains(entry.$1))
+    ];
   }
 
   @override

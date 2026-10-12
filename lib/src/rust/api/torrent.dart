@@ -6,7 +6,7 @@
 import '../frb_generated.dart';
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 
-// These functions are ignored because they are not marked as `pub`: `add_to_session`, `add_torrent_options`, `begin`, `bounded_preview`, `cancel`, `current_api`, `current_session`, `default_session_dir`, `ensure_stream_server`, `file_stem_folder_name`, `file_stem_or_name`, `handle_stream_request`, `normalize_download_dir`, `normalize_torrent_id`, `parse_http_request`, `parse_range`, `parse_stream_path`, `read_http_request`, `resolve_preview`, `response_to_json`, `sanitize_folder_name`, `torrent_log`, `torrent_metadata_display_name`, `torrent_metadata_folder_name`, `torrent_preview_to_json`, `torrent_runtime`, `url_path_segment_encode`, `write_simple_response`
+// These functions are ignored because they are not marked as `pub`: `add_to_session`, `add_torrent_options`, `available_disk_bytes`, `begin`, `bounded_preview`, `cancel`, `current_api`, `current_session`, `default_session_dir`, `disk_space`, `ensure_stream_server`, `file_stem_folder_name`, `file_stem_or_name`, `handle_stream_request`, `normalize_download_dir`, `normalize_torrent_id`, `parse_http_request`, `parse_range`, `parse_stream_path`, `read_http_request`, `resolve_preview`, `response_to_json`, `sanitize_folder_name`, `torrent_log`, `torrent_metadata_display_name`, `torrent_metadata_folder_name`, `torrent_preview_to_json`, `torrent_runtime`, `url_path_segment_encode`, `write_simple_response`
 // These types are ignored because they are neither used by any `pub` functions nor (for structs and enums) marked `#[frb(unignore)]`: `HttpRange`, `PreviewRegistry`, `PreviewRequest`, `TorrentRuntime`, `TorrentStreamServer`
 // These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `clone`
 // These functions are ignored (category: IgnoreBecauseOwnerTyShouldIgnore): `default`
@@ -28,21 +28,25 @@ Future<String> torrentAddMagnet(
         {required String magnetUri,
         required String downloadDir,
         required bool createFolderForTask,
-        required int previewId}) =>
+        required int previewId,
+        Int32List? onlyFiles}) =>
     RustLib.instance.api.crateApiTorrentTorrentAddMagnet(
         magnetUri: magnetUri,
         downloadDir: downloadDir,
         createFolderForTask: createFolderForTask,
-        previewId: previewId);
+        previewId: previewId,
+        onlyFiles: onlyFiles);
 
 Future<String> torrentAddFile(
         {required String torrentFilePath,
         required String downloadDir,
-        required bool createFolderForTask}) =>
+        required bool createFolderForTask,
+        Int32List? onlyFiles}) =>
     RustLib.instance.api.crateApiTorrentTorrentAddFile(
         torrentFilePath: torrentFilePath,
         downloadDir: downloadDir,
-        createFolderForTask: createFolderForTask);
+        createFolderForTask: createFolderForTask,
+        onlyFiles: onlyFiles);
 
 Future<String> torrentPreviewMagnet(
         {required String magnetUri,
@@ -56,6 +60,15 @@ Future<String> torrentList({required String downloadDir}) =>
 
 Future<String> torrentDetails({required int id}) =>
     RustLib.instance.api.crateApiTorrentTorrentDetails(id: id);
+
+/// Next observes checked piece bytes independently of Classic's list snapshot.
+Future<String> torrentDownloadFacts({required int id}) =>
+    RustLib.instance.api.crateApiTorrentTorrentDownloadFacts(id: id);
+
+Future<void> torrentSelectFiles(
+        {required int id, required List<int> fileIndices}) =>
+    RustLib.instance.api
+        .crateApiTorrentTorrentSelectFiles(id: id, fileIndices: fileIndices);
 
 Future<String> torrentStreamUrl(
         {required int id, required int fileId, required String filename}) =>

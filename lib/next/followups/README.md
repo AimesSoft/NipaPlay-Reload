@@ -5,6 +5,10 @@
 every terminal state, including failures and cancellations. Hook conditions
 await the next application event after registration; no hook program is needed.
 `download.completed` can also be recovered from persisted successful downloads.
+`download.file_completed` uses objectId `JOB_ID:FILE_INDEX`, carries checked file
+facts and media registration, and is recovered from `checkpoint.completedFiles`.
+Its occurrence is persisted once per object; other hook events keep their
+occurrence semantics. Registration waits for a completion after its creation.
 Playback is an occurrence in NipaPlay, rather than a predicate on an offline
 player. File-added refers to the existing library event, rather than filesystem
 watching.

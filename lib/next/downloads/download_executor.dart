@@ -86,6 +86,10 @@ final class DownloadExecutor implements JobExecutor {
       // A crash between native add and this checkpoint is reconciled by hash.
       if (!stopped || context.job.cancelRequestedAt != null) {
         await context.markSideEffectCommitted(checkpoint: {
+          ...context.job.checkpoint,
+          'completedFiles': context.job.checkpoint['completedFiles'] ??
+              context.job.input['completedFiles'] ??
+              [],
           'infoHash': task.infoHash,
           'handle': task.handle,
           'output': task.output.path,
@@ -129,6 +133,8 @@ final class DownloadExecutor implements JobExecutor {
           return;
         }
         if (context.job.state == JobState.interrupted) await context.running();
+        await _completedFiles(context, backend, task);
+        if (stopped) continue;
         if (task.finished) break;
         await context.report(
             phase: 'downloading',
@@ -210,16 +216,20 @@ final class DownloadExecutor implements JobExecutor {
             phase: 'importing',
             progress: JobProgress(
                 completed: 0, total: localVideos.length, unit: 'files'));
-        final pending = localVideos
-            .where((f) =>
-                files.singleWhere(
-                        (row) => row['path'] == f.location.path)['imported'] !=
-                    true ||
-                (files.singleWhere(
-                            (row) => row['path'] == f.location.path)['media']
-                        as Map?)?['classicScanPending'] ==
-                    true)
-            .toList();
+        final pending = <DownloadFile>[];
+        for (final f in localVideos) {
+          final index = task.files.indexOf(f);
+          if (!await library.wasImported('${task.importKey}:file:$index') &&
+              (files.singleWhere((row) => row['path'] == f.location.path)[
+                          'imported'] !=
+                      true ||
+                  (files.singleWhere(
+                              (row) => row['path'] == f.location.path)['media']
+                          as Map?)?['classicScanPending'] ==
+                      true)) {
+            pending.add(f);
+          }
+        }
         if (pending.isNotEmpty) {
           if (context.job.cancelRequestedAt != null) {
             await _finishCancelled(context, backend, task, files,
@@ -314,6 +324,66 @@ final class DownloadExecutor implements JobExecutor {
     }
   }
 
+  Future<void> _completedFiles(JobContext context, DownloadBackend backend,
+      DownloadSnapshot task) async {
+    final completed = (context.job.checkpoint['completedFiles'] as List? ?? [])
+        .cast<JsonMap>()
+        .toList();
+    for (var index = 0; index < task.files.length; index++) {
+      final file = task.files[index];
+      if (!file.included ||
+          !file.complete ||
+          completed.any((row) => row['index'] == index)) {
+        continue;
+      }
+      if (file.location.isLocal) {
+        await checkedDownloadPath(task.output.path, file.location.path);
+      }
+      final size = await backend.readSize(file);
+      if (size != file.expectedSize) continue;
+      final scanKey = '${task.importKey}:file:$index';
+      if (file.isVideo &&
+          file.location.isLocal &&
+          await library.enabled &&
+          !await library.wasImported(scanKey)) {
+        if (library.isBusy) continue;
+        await library.importFiles([file.location.path], task.output.path);
+        await library.markImported(scanKey);
+      }
+      final media = file.isVideo && file.location.isLocal
+          ? await library.lookup(file.location.path)
+          : null;
+      completed.add({
+        'objectId': '${context.job.jobId}:$index',
+        'jobId': context.job.jobId,
+        'index': index,
+        'path': file.location.path,
+        if (file.location.isLocal)
+          'canonicalPath':
+              await File(file.location.path).resolveSymbolicLinks(),
+        'expectedSize': file.expectedSize,
+        'actualSize': size,
+        'completedBytes': file.completedBytes,
+        'complete': true,
+        'verification': 'verified',
+        'local': file.location.isLocal,
+        'included': file.included,
+        'isVideo': file.isVideo,
+        'imported': media != null,
+        if (media != null) 'media': media,
+        if (file.isVideo &&
+            (media == null || media['identificationPending'] == true))
+          'identificationPending': true,
+        'completedAt': DateTime.now().toUtc().toIso8601String(),
+      });
+      // Persist before task observers publish the file event. Recovery reads this fact.
+      await context.report(checkpoint: {
+        ...context.job.checkpoint,
+        'completedFiles': completed.toList(),
+      });
+    }
+  }
+
   Future<void> _finishCancelled(JobContext context, DownloadBackend backend,
       DownloadSnapshot task, List<JsonMap> files,
       {String? reason}) async {
@@ -377,7 +447,8 @@ final class DownloadExecutor implements JobExecutor {
         'expectedSize': file.expectedSize,
         'actualSize': size,
         if (size != null && file.location.isLocal)
-          'canonicalPath': await File(file.location.path).resolveSymbolicLinks(),
+          'canonicalPath':
+              await File(file.location.path).resolveSymbolicLinks(),
         'local': file.location.isLocal,
         'included': file.included,
         'imported': false,

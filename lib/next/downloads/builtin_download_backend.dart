@@ -1,18 +1,29 @@
 import 'dart:io';
+import 'dart:convert';
 
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart'
     show AnyhowException;
 import 'package:nipa_harness/nipa_harness.dart';
 import 'package:nipaplay/models/torrent_task.dart';
 import 'package:nipaplay/services/torrent_download_service.dart';
+import 'package:nipaplay/src/rust/api/torrent.dart' as native;
 import 'package:path/path.dart' as p;
 
 import 'download_backend.dart';
 import 'download_paths.dart';
 
-final class BuiltinDownloadBackend implements DownloadBackend {
+final class BuiltinDownloadBackend
+    implements DownloadBackend, SelectableDownloadBackend {
   BuiltinDownloadBackend(this.service);
   final TorrentDownloadService service;
+  final _observations = <String,
+      ({
+    DateTime since,
+    DateTime? lastProgress,
+    int bytes,
+    DateTime at,
+    int previousBytes
+  })>{};
   @override
   DownloadBackendRef get reference => const DownloadBackendRef.builtin();
   @override
@@ -33,8 +44,56 @@ final class BuiltinDownloadBackend implements DownloadBackend {
         }
         final task = matches.single;
         final output = await service.resolveTaskOutputDirectory(task);
-        return _snapshot(await service.getTaskDetails(task),
-            resolvedOutput: output);
+        final facts = jsonDecode(await native.torrentDownloadFacts(id: task.id))
+            as JsonMap;
+        final details = TorrentTask.fromMap(
+            {...facts['details'] as JsonMap, 'stats': facts['stats']});
+        final stats = facts['stats'] as JsonMap;
+        final progress = (stats['file_progress'] as List).cast<int>();
+        final now = DateTime.now().toUtc();
+        final observationKey = '${task.infoHash}|$output';
+        final previous = _observations[observationKey];
+        final bytes = progress.fold<int>(0, (a, b) => a + b);
+        final observation = (
+          since: previous?.since ?? now,
+          lastProgress: previous != null && bytes > previous.bytes
+              ? now
+              : previous?.lastProgress,
+          bytes: bytes,
+          at: now,
+          previousBytes: previous?.bytes ?? bytes
+        );
+        _observations[observationKey] = observation;
+        final peers = ((stats['live'] as Map?)?['snapshot']
+            as Map?)?['peer_stats'] as Map?;
+        return _snapshot(details,
+            resolvedOutput: output,
+            progress: progress,
+            disk: facts['disk'] as JsonMap,
+            health: {
+              'observedAt': now.toIso8601String(),
+              'observingSince': observation.since.toIso8601String(),
+              'lastProgressAt': observation.lastProgress?.toIso8601String(),
+              'secondsWithoutProgress': now
+                  .difference(observation.lastProgress ?? observation.since)
+                  .inSeconds,
+              'sampleSeconds': previous == null
+                  ? 0
+                  : now.difference(previous.at).inMilliseconds / 1000,
+              'checkedBytesChange': bytes - observation.previousBytes,
+              'connectedPeers': peers?['live'],
+              'seenPeers': peers?['seen'],
+              'connectingPeers': peers?['connecting'],
+              'queuedPeers': peers?['queued'],
+              'deadPeers': peers?['dead'],
+              'sources': facts['sources'],
+              'seeders': null,
+              'pieceAvailability': null,
+              'availabilityReason':
+                  'librqbit public API does not expose peer bitfields or tracker seed counts',
+              'fileSelectionSupported': true,
+              'filePrioritySupported': false,
+            });
       });
 
   @override
@@ -46,10 +105,12 @@ final class BuiltinDownloadBackend implements DownloadBackend {
       final result = await _nativeCall(() async =>
           request.source.startsWith('magnet:')
               ? await service.addMagnetWithPreview(request.source,
+                  onlyFiles: request.fileIndices,
                   stopRequested: stopRequested,
                   downloadDirectory: request.downloadDirectory,
                   createFolderForTask: request.createFolderForTask)
               : await service.addTorrentFile(request.source,
+                  onlyFiles: request.fileIndices,
                   downloadDirectory: request.downloadDirectory,
                   createFolderForTask: request.createFolderForTask));
       return read(result.id.toString());
@@ -58,6 +119,11 @@ final class BuiltinDownloadBackend implements DownloadBackend {
       rethrow;
     }
   }
+
+  @override
+  Future<void> selectFiles(String handle, List<int> indices) =>
+      _nativeCall(() => native.torrentSelectFiles(
+          id: int.parse(handle), fileIndices: indices));
 
   @override
   Future<void> pause(String handle) =>
@@ -83,7 +149,11 @@ final class BuiltinDownloadBackend implements DownloadBackend {
     return await local.exists() ? await local.length() : null;
   }
 
-  DownloadSnapshot _snapshot(TorrentTask task, {String? resolvedOutput}) =>
+  DownloadSnapshot _snapshot(TorrentTask task,
+          {String? resolvedOutput,
+          List<int> progress = const [],
+          JsonMap? health,
+          JsonMap? disk}) =>
       DownloadSnapshot(
         handle: task.id.toString(),
         infoHash: task.infoHash.toLowerCase(),
@@ -98,6 +168,8 @@ final class BuiltinDownloadBackend implements DownloadBackend {
         total: task.totalBytes,
         finished: task.finished,
         paused: task.isPaused,
+        health: health,
+        disk: disk,
         error: task.hasError
             ? task.error ?? 'Torrent backend reported an error.'
             : null,
@@ -109,6 +181,8 @@ final class BuiltinDownloadBackend implements DownloadBackend {
                       resolvedOutput ?? task.outputFolder, file.displayName)),
                   isLocal: true),
               expectedSize: file.length,
+              completedBytes:
+                  file.index < progress.length ? progress[file.index] : null,
               isVideo: file.isVideo,
               included: file.included,
             )

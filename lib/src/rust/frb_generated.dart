@@ -85,7 +85,7 @@ class RustLib extends BaseEntrypoint<RustLibApi, RustLibApiImpl, RustLibWire> {
   String get codegenVersion => '2.12.0';
 
   @override
-  int get rustContentHash => -442041820;
+  int get rustContentHash => 1404128226;
 
   static const kDefaultExternalLibraryLoaderConfig =
       ExternalLibraryLoaderConfig(
@@ -328,13 +328,15 @@ abstract class RustLibApi extends BaseApi {
   Future<String> crateApiTorrentTorrentAddFile(
       {required String torrentFilePath,
       required String downloadDir,
-      required bool createFolderForTask});
+      required bool createFolderForTask,
+      Int32List? onlyFiles});
 
   Future<String> crateApiTorrentTorrentAddMagnet(
       {required String magnetUri,
       required String downloadDir,
       required bool createFolderForTask,
-      required int previewId});
+      required int previewId,
+      Int32List? onlyFiles});
 
   int crateApiTorrentTorrentBeginPreview();
 
@@ -343,6 +345,8 @@ abstract class RustLibApi extends BaseApi {
   Future<void> crateApiTorrentTorrentDelete({required int id});
 
   Future<String> crateApiTorrentTorrentDetails({required int id});
+
+  Future<String> crateApiTorrentTorrentDownloadFacts({required int id});
 
   Future<void> crateApiTorrentTorrentForget({required int id});
 
@@ -359,6 +363,9 @@ abstract class RustLibApi extends BaseApi {
       required int requestId});
 
   Future<void> crateApiTorrentTorrentResume({required int id});
+
+  Future<void> crateApiTorrentTorrentSelectFiles(
+      {required int id, required List<int> fileIndices});
 
   Future<String> crateApiTorrentTorrentStreamUrl(
       {required int id, required int fileId, required String filename});
@@ -2113,13 +2120,15 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   Future<String> crateApiTorrentTorrentAddFile(
       {required String torrentFilePath,
       required String downloadDir,
-      required bool createFolderForTask}) {
+      required bool createFolderForTask,
+      Int32List? onlyFiles}) {
     return handler.executeNormal(NormalTask(
       callFfi: (port_) {
         final serializer = SseSerializer(generalizedFrbRustBinding);
         sse_encode_String(torrentFilePath, serializer);
         sse_encode_String(downloadDir, serializer);
         sse_encode_bool(createFolderForTask, serializer);
+        sse_encode_opt_list_prim_i_32_strict(onlyFiles, serializer);
         pdeCallFfi(generalizedFrbRustBinding, serializer,
             funcId: 60, port: port_);
       },
@@ -2128,7 +2137,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
         decodeErrorData: sse_decode_String,
       ),
       constMeta: kCrateApiTorrentTorrentAddFileConstMeta,
-      argValues: [torrentFilePath, downloadDir, createFolderForTask],
+      argValues: [torrentFilePath, downloadDir, createFolderForTask, onlyFiles],
       apiImpl: this,
     ));
   }
@@ -2136,7 +2145,12 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   TaskConstMeta get kCrateApiTorrentTorrentAddFileConstMeta =>
       const TaskConstMeta(
         debugName: "torrent_add_file",
-        argNames: ["torrentFilePath", "downloadDir", "createFolderForTask"],
+        argNames: [
+          "torrentFilePath",
+          "downloadDir",
+          "createFolderForTask",
+          "onlyFiles"
+        ],
       );
 
   @override
@@ -2144,7 +2158,8 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       {required String magnetUri,
       required String downloadDir,
       required bool createFolderForTask,
-      required int previewId}) {
+      required int previewId,
+      Int32List? onlyFiles}) {
     return handler.executeNormal(NormalTask(
       callFfi: (port_) {
         final serializer = SseSerializer(generalizedFrbRustBinding);
@@ -2152,6 +2167,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
         sse_encode_String(downloadDir, serializer);
         sse_encode_bool(createFolderForTask, serializer);
         sse_encode_i_32(previewId, serializer);
+        sse_encode_opt_list_prim_i_32_strict(onlyFiles, serializer);
         pdeCallFfi(generalizedFrbRustBinding, serializer,
             funcId: 61, port: port_);
       },
@@ -2160,7 +2176,13 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
         decodeErrorData: sse_decode_String,
       ),
       constMeta: kCrateApiTorrentTorrentAddMagnetConstMeta,
-      argValues: [magnetUri, downloadDir, createFolderForTask, previewId],
+      argValues: [
+        magnetUri,
+        downloadDir,
+        createFolderForTask,
+        previewId,
+        onlyFiles
+      ],
       apiImpl: this,
     ));
   }
@@ -2172,7 +2194,8 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           "magnetUri",
           "downloadDir",
           "createFolderForTask",
-          "previewId"
+          "previewId",
+          "onlyFiles"
         ],
       );
 
@@ -2274,13 +2297,38 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       );
 
   @override
-  Future<void> crateApiTorrentTorrentForget({required int id}) {
+  Future<String> crateApiTorrentTorrentDownloadFacts({required int id}) {
     return handler.executeNormal(NormalTask(
       callFfi: (port_) {
         final serializer = SseSerializer(generalizedFrbRustBinding);
         sse_encode_i_32(id, serializer);
         pdeCallFfi(generalizedFrbRustBinding, serializer,
             funcId: 66, port: port_);
+      },
+      codec: SseCodec(
+        decodeSuccessData: sse_decode_String,
+        decodeErrorData: sse_decode_String,
+      ),
+      constMeta: kCrateApiTorrentTorrentDownloadFactsConstMeta,
+      argValues: [id],
+      apiImpl: this,
+    ));
+  }
+
+  TaskConstMeta get kCrateApiTorrentTorrentDownloadFactsConstMeta =>
+      const TaskConstMeta(
+        debugName: "torrent_download_facts",
+        argNames: ["id"],
+      );
+
+  @override
+  Future<void> crateApiTorrentTorrentForget({required int id}) {
+    return handler.executeNormal(NormalTask(
+      callFfi: (port_) {
+        final serializer = SseSerializer(generalizedFrbRustBinding);
+        sse_encode_i_32(id, serializer);
+        pdeCallFfi(generalizedFrbRustBinding, serializer,
+            funcId: 67, port: port_);
       },
       codec: SseCodec(
         decodeSuccessData: sse_decode_unit,
@@ -2307,7 +2355,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
         sse_encode_String(downloadDir, serializer);
         sse_encode_opt_String(sessionDir, serializer);
         pdeCallFfi(generalizedFrbRustBinding, serializer,
-            funcId: 67, port: port_);
+            funcId: 68, port: port_);
       },
       codec: SseCodec(
         decodeSuccessData: sse_decode_unit,
@@ -2332,7 +2380,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
         final serializer = SseSerializer(generalizedFrbRustBinding);
         sse_encode_String(downloadDir, serializer);
         pdeCallFfi(generalizedFrbRustBinding, serializer,
-            funcId: 68, port: port_);
+            funcId: 69, port: port_);
       },
       codec: SseCodec(
         decodeSuccessData: sse_decode_String,
@@ -2356,7 +2404,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
         final serializer = SseSerializer(generalizedFrbRustBinding);
         sse_encode_i_32(id, serializer);
         pdeCallFfi(generalizedFrbRustBinding, serializer,
-            funcId: 69, port: port_);
+            funcId: 70, port: port_);
       },
       codec: SseCodec(
         decodeSuccessData: sse_decode_unit,
@@ -2386,7 +2434,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
         sse_encode_String(downloadDir, serializer);
         sse_encode_i_32(requestId, serializer);
         pdeCallFfi(generalizedFrbRustBinding, serializer,
-            funcId: 70, port: port_);
+            funcId: 71, port: port_);
       },
       codec: SseCodec(
         decodeSuccessData: sse_decode_String,
@@ -2411,7 +2459,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
         final serializer = SseSerializer(generalizedFrbRustBinding);
         sse_encode_i_32(id, serializer);
         pdeCallFfi(generalizedFrbRustBinding, serializer,
-            funcId: 71, port: port_);
+            funcId: 72, port: port_);
       },
       codec: SseCodec(
         decodeSuccessData: sse_decode_unit,
@@ -2430,6 +2478,33 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       );
 
   @override
+  Future<void> crateApiTorrentTorrentSelectFiles(
+      {required int id, required List<int> fileIndices}) {
+    return handler.executeNormal(NormalTask(
+      callFfi: (port_) {
+        final serializer = SseSerializer(generalizedFrbRustBinding);
+        sse_encode_i_32(id, serializer);
+        sse_encode_list_prim_i_32_loose(fileIndices, serializer);
+        pdeCallFfi(generalizedFrbRustBinding, serializer,
+            funcId: 73, port: port_);
+      },
+      codec: SseCodec(
+        decodeSuccessData: sse_decode_unit,
+        decodeErrorData: sse_decode_String,
+      ),
+      constMeta: kCrateApiTorrentTorrentSelectFilesConstMeta,
+      argValues: [id, fileIndices],
+      apiImpl: this,
+    ));
+  }
+
+  TaskConstMeta get kCrateApiTorrentTorrentSelectFilesConstMeta =>
+      const TaskConstMeta(
+        debugName: "torrent_select_files",
+        argNames: ["id", "fileIndices"],
+      );
+
+  @override
   Future<String> crateApiTorrentTorrentStreamUrl(
       {required int id, required int fileId, required String filename}) {
     return handler.executeNormal(NormalTask(
@@ -2439,7 +2514,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
         sse_encode_i_32(fileId, serializer);
         sse_encode_String(filename, serializer);
         pdeCallFfi(generalizedFrbRustBinding, serializer,
-            funcId: 72, port: port_);
+            funcId: 74, port: port_);
       },
       codec: SseCodec(
         decodeSuccessData: sse_decode_String,
@@ -2466,7 +2541,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
         sse_encode_String(namespace, serializer);
         sse_encode_String(key, serializer);
         pdeCallFfi(generalizedFrbRustBinding, serializer,
-            funcId: 73, port: port_);
+            funcId: 75, port: port_);
       },
       codec: SseCodec(
         decodeSuccessData: sse_decode_unit,
@@ -2492,7 +2567,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
         sse_encode_String(namespace, serializer);
         sse_encode_String(key, serializer);
         pdeCallFfi(generalizedFrbRustBinding, serializer,
-            funcId: 74, port: port_);
+            funcId: 76, port: port_);
       },
       codec: SseCodec(
         decodeSuccessData: sse_decode_opt_String,
@@ -2521,7 +2596,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
         sse_encode_String(key, serializer);
         sse_encode_String(secret, serializer);
         pdeCallFfi(generalizedFrbRustBinding, serializer,
-            funcId: 75, port: port_);
+            funcId: 77, port: port_);
       },
       codec: SseCodec(
         decodeSuccessData: sse_decode_unit,
@@ -2870,6 +2945,18 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  List<int> dco_decode_list_prim_i_32_loose(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return raw as List<int>;
+  }
+
+  @protected
+  Int32List dco_decode_list_prim_i_32_strict(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return raw as Int32List;
+  }
+
+  @protected
   Int64List dco_decode_list_prim_i_64_strict(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     return dcoDecodeInt64List(raw);
@@ -3022,6 +3109,12 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   int? dco_decode_opt_box_autoadd_u_32(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     return raw == null ? null : dco_decode_box_autoadd_u_32(raw);
+  }
+
+  @protected
+  Int32List? dco_decode_opt_list_prim_i_32_strict(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return raw == null ? null : dco_decode_list_prim_i_32_strict(raw);
   }
 
   @protected
@@ -3907,6 +4000,20 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  List<int> sse_decode_list_prim_i_32_loose(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    var len_ = sse_decode_i_32(deserializer);
+    return deserializer.buffer.getInt32List(len_);
+  }
+
+  @protected
+  Int32List sse_decode_list_prim_i_32_strict(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    var len_ = sse_decode_i_32(deserializer);
+    return deserializer.buffer.getInt32List(len_);
+  }
+
+  @protected
   Int64List sse_decode_list_prim_i_64_strict(SseDeserializer deserializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     var len_ = sse_decode_i_32(deserializer);
@@ -4150,6 +4257,18 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
 
     if (sse_decode_bool(deserializer)) {
       return (sse_decode_box_autoadd_u_32(deserializer));
+    } else {
+      return null;
+    }
+  }
+
+  @protected
+  Int32List? sse_decode_opt_list_prim_i_32_strict(
+      SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    if (sse_decode_bool(deserializer)) {
+      return (sse_decode_list_prim_i_32_strict(deserializer));
     } else {
       return null;
     }
@@ -4994,6 +5113,23 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  void sse_encode_list_prim_i_32_loose(
+      List<int> self, SseSerializer serializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_i_32(self.length, serializer);
+    serializer.buffer
+        .putInt32List(self is Int32List ? self : Int32List.fromList(self));
+  }
+
+  @protected
+  void sse_encode_list_prim_i_32_strict(
+      Int32List self, SseSerializer serializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_i_32(self.length, serializer);
+    serializer.buffer.putInt32List(self);
+  }
+
+  @protected
   void sse_encode_list_prim_i_64_strict(
       Int64List self, SseSerializer serializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
@@ -5202,6 +5338,17 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     sse_encode_bool(self != null, serializer);
     if (self != null) {
       sse_encode_box_autoadd_u_32(self, serializer);
+    }
+  }
+
+  @protected
+  void sse_encode_opt_list_prim_i_32_strict(
+      Int32List? self, SseSerializer serializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    sse_encode_bool(self != null, serializer);
+    if (self != null) {
+      sse_encode_list_prim_i_32_strict(self, serializer);
     }
   }
 

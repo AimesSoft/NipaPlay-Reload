@@ -453,6 +453,11 @@ final class NextRuntime extends ChangeNotifier {
     _jobEvents = _taskEngine.changes.listen((job) {
       _queueHook(() => _hooks.taskChanged(job));
     });
+    _queueHook(() async {
+      for (final job in await _taskEngine.list(type: 'download')) {
+        await _hooks.fileCompletions(job);
+      }
+    });
     _fileEvents = store.fileChanges.listen((file) => _queueHook(() async {
           final path = file['path'] as String;
           if (_libraryPaths.add(path)) {

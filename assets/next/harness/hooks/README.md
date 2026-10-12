@@ -7,6 +7,7 @@
 | 程序名 | 触发时机 | data 内容 |
 | --- | --- | --- |
 | `download.completed` | 下载任务完成并验证入库 | 下载的完整 job 快照，含文件回执 |
+| `download.file_completed` | 单个文件的全部片段通过引擎校验，路径/大小核对且本地视频登记入库 | `jobId`、`infoHash`、`file`（索引、路径、校验大小、完成时间、当前媒体关联）；objectId 为 `jobId:fileIndex` |
 | `library.file_added` | 文件首次进入本机媒体索引或 Classic 媒体库 | `path`，索引事件另含 `fileId` |
 | `playback.started` | 一段播放首次进入 playing；暂停后继续不重复 | `path` |
 
@@ -19,6 +20,9 @@
 查找，用 `./nipa watch JOB_ID` 等待。回执记录退出码、耗时、是否超时，以及脱敏后的
 stdout/stderr 末尾（各最多 8192 字符）。退出码 0 才成功；最长运行 60 秒。
 同一事件与对象的任务在未结束时不会重复提交；结束后再次发生的事件可以运行。
+`download.file_completed` 是持久完成事实，同一对象只运行一次；重启不会重跑已提交的 hook。
+`followup.register` 的 `when: {"event":"download.file_completed","objectId":"任务号:文件索引"}`
+可以等待这个文件；省略 objectId 等待下一个文件完成。事件不要求存在 hook 程序，重启可从任务校验记录恢复登记之后发生的完成。
 关闭 Next 会终止正在运行的 hooks。应用重启后的中断任务不会重跑，避免重复副作用。
 hooks 是普通程序，Agent 可以在用户的授权范围内编写和修改它们。
 

@@ -222,6 +222,7 @@ pub fn torrent_add_magnet(
     download_dir: String,
     create_folder_for_task: bool,
     preview_id: i32,
+    only_files: Option<Vec<i32>>,
 ) -> Result<String, String> {
     let magnet = Magnet::parse(magnet_uri.trim())
         .map_err(|error| format!("invalid magnet URI: {error:#}"))?;
@@ -245,7 +246,8 @@ pub fn torrent_add_magnet(
         None
     };
     let mut options = add_torrent_options(normalized_dir, folder);
-    options.only_files = metadata.only_files.clone();
+    options.only_files = only_files.map(|files| files.into_iter().map(normalize_torrent_id).collect::<Result<Vec<_>, _>>())
+        .transpose()?.or_else(|| metadata.only_files.clone());
     options.initial_peers = Some(metadata.seen_peers.clone());
     options.trackers = Some(magnet.trackers);
     add_to_session(
@@ -259,6 +261,7 @@ pub fn torrent_add_file(
     torrent_file_path: String,
     download_dir: String,
     create_folder_for_task: bool,
+    only_files: Option<Vec<i32>>,
 ) -> Result<String, String> {
     let torrent_file_path = torrent_file_path.trim();
     let normalized_dir = normalize_download_dir(download_dir)?;
@@ -266,10 +269,12 @@ pub fn torrent_add_file(
     let folder = create_folder_for_task.then(|| file_stem_folder_name(torrent_file_path));
     let add = AddTorrent::from_local_filename(torrent_file_path)
         .map_err(|error| format!("failed to read torrent file: {error:#}"))?;
+    let mut options = add_torrent_options(normalized_dir, folder);
+    options.only_files = only_files.map(|files| files.into_iter().map(normalize_torrent_id).collect::<Result<Vec<_>, _>>()).transpose()?;
     add_to_session(
         torrent_runtime(),
         add,
-        add_torrent_options(normalized_dir, folder),
+        options,
     )
 }
 
@@ -393,6 +398,87 @@ pub fn torrent_details(id: i32) -> Result<String, String> {
         .api_torrent_details(id.into())
         .map_err(|error| format!("failed to get torrent details: {error:#}"))?;
     response_to_json(&response)
+}
+
+/// Next observes checked piece bytes independently of Classic's list snapshot.
+pub fn torrent_download_facts(id: i32) -> Result<String, String> {
+    let id = normalize_torrent_id(id)?;
+    let api = current_api(torrent_runtime())?;
+    let details = api.api_torrent_details(id.into())
+        .map_err(|error| format!("failed to get torrent details: {error:#}"))?;
+    let stats = api.api_stats_v1(id.into())
+        .map_err(|error| format!("failed to get torrent stats: {error:#}"))?;
+    let sources = if stats.live.is_some() {
+        let peers = api.api_peer_stats(id.into(), Default::default())
+            .map_err(|error| format!("failed to get peer stats: {error:#}"))?;
+        serde_json::json!({
+            "connectedPeersWithCheckedPieces": peers.peers.values()
+                .filter(|peer| peer.counters.downloaded_and_checked_pieces > 0).count(),
+            "connectedPeersWithFetchedBytes": peers.peers.values()
+                .filter(|peer| peer.counters.fetched_bytes > 0).count(),
+            "peers": peers.peers,
+        })
+    } else {
+        serde_json::Value::Null
+    };
+    let disk = disk_space(&details.output_folder);
+    response_to_json(&serde_json::json!({"details": details, "stats": stats, "disk": disk, "sources": sources}))
+}
+
+pub fn torrent_select_files(id: i32, file_indices: Vec<i32>) -> Result<(), String> {
+    let id = normalize_torrent_id(id)?;
+    let state = torrent_runtime();
+    let api = current_api(state)?;
+    let details = api.api_torrent_details(id.into())
+        .map_err(|error| format!("failed to get torrent details: {error:#}"))?;
+    let files = file_indices.into_iter().map(normalize_torrent_id)
+        .collect::<Result<std::collections::HashSet<_>, _>>()?;
+    let manifest = details.files.ok_or_else(|| "torrent metadata is not ready".to_string())?;
+    if files.iter().any(|index| *index >= manifest.len()) {
+        return Err("file index is outside the torrent manifest".to_string());
+    }
+    state.runtime.block_on(api.api_torrent_action_update_only_files(id.into(), &files))
+        .map(|_| ())
+        .map_err(|error| format!("failed to select torrent files: {error:#}"))
+}
+
+#[flutter_rust_bridge::frb(ignore)]
+fn disk_space(path: &str) -> serde_json::Value {
+    match available_disk_bytes(path) {
+        Ok(bytes) => serde_json::json!({"path": path, "availableBytes": bytes}),
+        Err(error) => serde_json::json!({"path": path, "availableBytes": null, "error": error}),
+    }
+}
+
+#[cfg(unix)]
+#[flutter_rust_bridge::frb(ignore)]
+fn available_disk_bytes(path: &str) -> Result<u64, String> {
+    let path = std::ffi::CString::new(path).map_err(|error| error.to_string())?;
+    let mut stats = std::mem::MaybeUninit::<libc::statvfs>::uninit();
+    // statvfs writes the complete structure on success; f_bavail excludes reserved blocks.
+    if unsafe { libc::statvfs(path.as_ptr(), stats.as_mut_ptr()) } != 0 {
+        return Err(std::io::Error::last_os_error().to_string());
+    }
+    let stats = unsafe { stats.assume_init() };
+    Ok(stats.f_bavail as u64 * stats.f_frsize as u64)
+}
+
+#[cfg(windows)]
+#[flutter_rust_bridge::frb(ignore)]
+fn available_disk_bytes(path: &str) -> Result<u64, String> {
+    use std::os::windows::ffi::OsStrExt;
+    #[link(name = "kernel32")]
+    extern "system" {
+        fn GetDiskFreeSpaceExW(path: *const u16, available: *mut u64,
+            total: *mut u64, free: *mut u64) -> i32;
+    }
+    let path = std::ffi::OsStr::new(path).encode_wide().chain(Some(0)).collect::<Vec<_>>();
+    let mut available = 0;
+    if unsafe { GetDiskFreeSpaceExW(path.as_ptr(), &mut available,
+        std::ptr::null_mut(), std::ptr::null_mut()) } == 0 {
+        return Err(std::io::Error::last_os_error().to_string());
+    }
+    Ok(available)
 }
 
 pub fn torrent_stream_url(id: i32, file_id: i32, filename: String) -> Result<String, String> {

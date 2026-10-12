@@ -260,6 +260,11 @@ final class Followups {
 
   Future<void> hookEvent(String event, String objectId, JsonMap payload) =>
       _serial(() async {
+        if (event == 'download.file_completed' && (await database.query(
+            'followup_hook_events', where: 'event=? AND object_id=?',
+            whereArgs: [event, objectId], limit: 1)).isNotEmpty) {
+          return;
+        }
         await database.insert('followup_hook_events', {
           'event': event,
           'object_id': objectId,
@@ -316,11 +321,13 @@ final class Followups {
             } else {
               final matches = await database.query('followup_hook_events',
                   where:
-                      'sequence>? AND event=?${condition['objectId'] == null ? '' : ' AND object_id=?'}',
+                      'sequence>? AND event=?${condition['objectId'] == null ? '' : ' AND object_id=?'}'
+                      '${condition['event'] == 'download.file_completed' ? " AND json_extract(payload,'\$.occurredAt')>=?" : ""}',
                   whereArgs: [
                     row['hookCursor'],
                     condition['event'],
                     if (condition['objectId'] != null) condition['objectId']
+                    ,if (condition['event'] == 'download.file_completed') row['createdAt']
                   ],
                   orderBy: 'sequence',
                   limit: 1);
@@ -329,6 +336,25 @@ final class Followups {
                     jsonDecode(matches.single['payload'] as String) as JsonMap;
               }
               // Download completion can be reconstructed from the persisted task.
+              if (trigger == null &&
+                  condition['event'] == 'download.file_completed') {
+                for (final job in await engine.list(type: 'download')) {
+                  for (final file in (job.checkpoint['completedFiles'] as List? ?? []).cast<JsonMap>()) {
+                    final objectId = file['objectId'] as String;
+                    if (file['verification'] != 'verified' ||
+                        condition['objectId'] != null && condition['objectId'] != objectId ||
+                        DateTime.parse(file['completedAt'] as String)
+                            .isBefore(DateTime.parse(row['createdAt'] as String))) {
+                      continue;
+                    }
+                    trigger = {'event': 'download.file_completed', 'objectId': objectId,
+                      'occurredAt': file['completedAt'],
+                      'data': {'jobId': file['jobId'], 'infoHash': job.input['infoHash'], 'file': file}};
+                    break;
+                  }
+                  if (trigger != null) break;
+                }
+              }
               if (trigger == null &&
                   condition['event'] == 'download.completed') {
                 for (final job in await engine.list(
