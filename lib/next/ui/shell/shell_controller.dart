@@ -75,6 +75,28 @@ class NextShellController extends ChangeNotifier {
             t
       ];
 
+  /// What the background panel lists: what runs, latest first, then the
+  /// helpers that came back, the latest three.
+  List<UiTask> get backgroundItems {
+    int latest(UiTask a, UiTask b) => (b.startedAt ?? DateTime(0))
+        .compareTo(a.startedAt ?? DateTime(0));
+    final done = [
+      for (final t in tasks.value)
+        if (t.kind == UiTaskKind.helper &&
+            (t.state == UiTaskState.finished || t.state == UiTaskState.failed))
+          t
+    ]..sort(latest);
+    return [...activeTasks..sort(latest), ...done.take(3)];
+  }
+
+  /// A session's conversation, shown where the conversation is (a helper's,
+  /// from the background panel).
+  void openConversation(String threadId) {
+    closePopover();
+    unawaited(chat.select(threadId));
+    openChat();
+  }
+
   /// Overall progress of background work, 0..1.
   double get totalProgress {
     final active = activeTasks;

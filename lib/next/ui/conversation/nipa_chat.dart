@@ -42,6 +42,7 @@ class NipaChat extends ChangeNotifier {
       port.display.listen(_onEvent),
       port.questions.listen(_onQuestion),
       data.changes.listen((_) => _cardsChanged()),
+      data.tasks().listen(_tasksChanged),
     ];
     _boot();
   }
@@ -75,8 +76,27 @@ class NipaChat extends ChangeNotifier {
 
   bool get onMain => !fresh && (thread == null || thread == main);
 
-  /// The main session first, then the others, latest first.
+  /// The main session first, then the others, latest first. Helpers'
+  /// threads are not among them: they open from the background panel.
   List<ChatSession> sessions = const [];
+
+  /// Helpers' threads, with what each was sent to do.
+  final _helpers = <String, String>{};
+
+  void _tasksChanged(List<UiTask> tasks) {
+    var changed = false;
+    for (final t in tasks) {
+      if (t.kind != UiTaskKind.helper || t.threadId == null) continue;
+      if (_helpers[t.threadId!] != t.title) {
+        _helpers[t.threadId!] = t.title;
+        changed = true;
+      }
+    }
+    if (changed) {
+      _elsewhere.removeWhere((_, turn) => _helpers.containsKey(turn.threadId));
+      unawaited(refreshSessions());
+    }
+  }
   bool menuOpen = false;
 
   Timer? _bootTimer;
@@ -108,7 +128,7 @@ class NipaChat extends ChangeNotifier {
       int rank(ChatSession s) => s.id == main ? 0 : 1;
       sessions = [
         for (final t in list)
-          if (t['id'] is String)
+          if (t['id'] is String && !_helpers.containsKey(t['id']))
             ChatSession(t['id'] as String, _title(t['preview']),
                 _time(t['updatedAt'] ?? t['createdAt'])),
       ]..sort((a, b) => rank(a) != rank(b)
@@ -139,6 +159,7 @@ class NipaChat extends ChangeNotifier {
     if (onMain) return 'Nipa';
     final id = thread;
     if (id == null) return '新的对话';
+    if (_helpers[id] case final helper?) return helper;
     return sessions.where((s) => s.id == id).firstOrNull?.title ?? 'Nipa';
   }
 
@@ -162,10 +183,11 @@ class NipaChat extends ChangeNotifier {
     _show(null);
   }
 
+  /// Shows [id]. The host's current session moves only when a turn
+  /// starts there: looking at a helper must not hold up the main session.
   Future<void> select(String id) async {
     fresh = false;
     menuOpen = false;
-    unawaited(_tellHost(id));
     await _open(id);
   }
 
@@ -174,18 +196,7 @@ class NipaChat extends ChangeNotifier {
     menuOpen = false;
     final id = main;
     if (id == null) return _show(null);
-    unawaited(_tellHost(id));
     await _open(id);
-  }
-
-  /// The host's current session follows the one shown; while a turn runs
-  /// it cannot switch, and the next turn here switches it anyway.
-  Future<void> _tellHost(String id) async {
-    try {
-      await port.switchThread(id);
-    } catch (error) {
-      debugPrint('[NextUi] session not switched: $error');
-    }
   }
 
   Future<String?>? _creating;
@@ -407,12 +418,12 @@ class NipaChat extends ChangeNotifier {
       _notify();
       return;
     }
-    if (current != null && port.busy) {
+    if (current != null && thread != null && port.busyOn(thread!)) {
       current.parts.add(said);
       quiet = false;
       _notify();
       try {
-        await port.steer(input);
+        await port.steer(input, threadId: thread);
         said.echoed = true;
         _notify();
       } catch (error) {
@@ -506,7 +517,7 @@ class NipaChat extends ChangeNotifier {
       return;
     }
     try {
-      await port.interrupt();
+      await port.interrupt(threadId: thread);
     } catch (error) {
       debugPrint('[NextUi] interrupt failed: $error');
     }
@@ -558,7 +569,8 @@ class NipaChat extends ChangeNotifier {
     quiet = false;
     await stop();
     final deadline = DateTime.now().add(const Duration(seconds: 10));
-    while (port.busy && DateTime.now().isBefore(deadline)) {
+    while ((thread != null && port.busyOn(thread!)) &&
+        DateTime.now().isBefore(deadline)) {
       await Future<void>.delayed(const Duration(milliseconds: 300));
     }
     // Shown once: the stopped attempt goes, the same words go out again.
@@ -653,8 +665,10 @@ class NipaChat extends ChangeNotifier {
   void _onEvent(ChatEvent event) {
     final method = event['method'] as String? ?? '';
     final params = event['params'] as Map? ?? const {};
+    final about = params['threadId'] as String?;
     switch (method) {
       case 'host/liveness':
+        if (about != null && about != thread) return;
         return _liveness(params);
       case 'host/error':
         if (live case final turn? when !turn.queued) {
@@ -662,10 +676,19 @@ class NipaChat extends ChangeNotifier {
         }
         return;
       case 'host/reasoning':
-        // The host runs one turn at a time: it is that one's.
-        final turn = (live != null && !live!.queued)
-            ? live
-            : _elsewhere.values.where((t) => t.running).lastOrNull;
+        // The thread's running turn; without one named, the current one's.
+        final ChatTurn? turn;
+        if (about == null || about == thread) {
+          turn = (live != null && !live!.queued)
+              ? live
+              : (about == null
+                  ? _elsewhere.values.where((t) => t.running).lastOrNull
+                  : null);
+        } else {
+          turn = _elsewhere.values
+              .where((t) => t.running && t.threadId == about)
+              .lastOrNull;
+        }
         if (turn != null && !loading && turn.apply(method, params)) {
           _notify();
         }
@@ -768,12 +791,14 @@ class NipaChat extends ChangeNotifier {
 
   /// A turn in a session not shown: what it is doing, for the home.
   void _watch(String method, Map params, String threadId) {
+    // Helpers show in the background panel; their result comes back here.
+    if (_helpers.containsKey(threadId)) return;
     final id = _turnOf(params);
     if (id == null) return;
     var turn = _elsewhere[id];
     if (turn == null) {
       if (method != 'turn/started') return;
-      turn = _elsewhere[id] = ChatTurn(id: id);
+      turn = _elsewhere[id] = ChatTurn(id: id)..threadId = threadId;
       while (_elsewhere.length > 8) {
         _elsewhere.remove(_elsewhere.keys.first);
       }

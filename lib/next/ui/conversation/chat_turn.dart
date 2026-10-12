@@ -92,6 +92,9 @@ class ChatTurn {
       : startedAt = startedAt ?? DateTime.now();
 
   String? id;
+
+  /// The session it runs in, when watched from elsewhere.
+  String? threadId;
   DateTime startedAt;
   DateTime? endedAt;
 

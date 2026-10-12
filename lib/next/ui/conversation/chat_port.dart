@@ -12,8 +12,12 @@ abstract interface class ChatPort {
   /// A host is running and can take a turn.
   bool get available;
 
-  /// A turn is running (ours or a follow-up's).
+  /// The host's current session has a turn running (ours or a
+  /// follow-up's); a turn on another session waits for it.
   bool get busy;
+
+  /// A turn runs on [threadId] (helpers run beside the current session).
+  bool busyOn(String threadId);
 
   /// Display messages: items, deltas, turn boundaries, `host/liveness`.
   Stream<ChatEvent> get display;
@@ -39,12 +43,13 @@ abstract interface class ChatPort {
   /// while another turn is running.
   Future<ChatEvent?> startTurn(String threadId, String text);
 
-  /// Adds input to the running turn.
-  Future<void> steer(String text);
+  /// Adds input to the turn running on [threadId] (default: the current
+  /// session's).
+  Future<void> steer(String text, {String? threadId});
 
   /// A thread with its turns and their items (Codex's own history).
   Future<ChatEvent> readThread(String threadId);
-  Future<void> interrupt();
+  Future<void> interrupt({String? threadId});
   Future<void> answer(Object requestId, Map<String, List<String>> answers);
   void dispose();
 }
@@ -73,7 +78,8 @@ final class ChatHostPort implements ChatPort {
     _questionSub?.cancel();
     _host = host;
     if (host != null) {
-      _displaySub = host.display.listen(_display.add);
+      // Every session's events; the host's own ones name their thread.
+      _displaySub = host.threadDisplay.listen(_display.add);
       _questionSub = host.userInputRequests.listen(_questions.add);
     }
   }
@@ -88,6 +94,9 @@ final class ChatHostPort implements ChatPort {
 
   @override
   bool get busy => _current?.busy ?? false;
+
+  @override
+  bool busyOn(String threadId) => _current?.busyFor(threadId) ?? false;
 
   @override
   Stream<ChatEvent> get display => _display.stream;
@@ -133,7 +142,8 @@ final class ChatHostPort implements ChatPort {
   }
 
   @override
-  Future<void> steer(String text) async => _current?.steer(text);
+  Future<void> steer(String text, {String? threadId}) async =>
+      _current?.steer(text, onThread: threadId);
 
   /// Redacted like the live display stream, so history shows what the
   /// live view showed.
@@ -146,7 +156,8 @@ final class ChatHostPort implements ChatPort {
   }
 
   @override
-  Future<void> interrupt() async => _current?.interrupt();
+  Future<void> interrupt({String? threadId}) async =>
+      _current?.interrupt(onThread: threadId);
 
   @override
   Future<void> answer(

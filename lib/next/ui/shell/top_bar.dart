@@ -3,14 +3,12 @@ import 'dart:math' as math;
 import 'package:flutter/widgets.dart';
 import 'package:window_manager/window_manager.dart';
 
-import '../cards/card_views.dart';
 import '../theme/tokens.dart';
 import '../widgets/buttons.dart';
-import '../widgets/glass.dart';
 import '../widgets/icons.dart';
 import '../widgets/menu.dart';
 import '../widgets/nipa_avatar.dart';
-import '../widgets/progress.dart';
+import 'background.dart';
 import 'shell_controller.dart';
 import 'window_chrome.dart';
 
@@ -99,8 +97,7 @@ class NextTopBar extends StatelessWidget {
                           : Padding(
                               key: const ValueKey('tasks'),
                               padding: const EdgeInsets.only(right: _gap),
-                              child: _TaskPill(
-                                progress: shell.totalProgress,
+                              child: BackgroundEntry(
                                 onTap: () =>
                                     shell.togglePopover(NextPopover.tasks),
                               ),
@@ -204,39 +201,6 @@ class _NavItem extends StatelessWidget {
       );
 }
 
-/// `.task-pill`: a ring with the overall percentage.
-class _TaskPill extends StatelessWidget {
-  const _TaskPill({required this.progress, required this.onTap});
-  final double progress;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) => Pressable(
-        onTap: onTap,
-        semanticLabel: '后台任务',
-        builder: (context, hovered) => Glass(
-          blur: 18,
-          saturate: 1.5,
-          color: hovered ? const Color(0x8C1A1A22) : const Color(0x6B0A0A0E),
-          borderColor: NextColors.line2,
-          radius: BorderRadius.circular(16),
-          highlight: false,
-          child: SizedBox(
-            height: 32,
-            child: Padding(
-              padding: const EdgeInsets.only(left: 10, right: 14),
-              child: Row(mainAxisSize: MainAxisSize.min, children: [
-                ProgressRing(progress: progress),
-                const SizedBox(width: 10),
-                Text('${(progress * 100).round()}%',
-                    style: NextText.num(12, color: NextColors.p2)),
-              ]),
-            ),
-          ),
-        ),
-      );
-}
-
 /// Popovers under the top bar. A transparent barrier closes them.
 class NextPopovers extends StatelessWidget {
   const NextPopovers({super.key});
@@ -272,7 +236,8 @@ class NextPopovers extends StatelessWidget {
                 ),
               ),
               child: switch (which) {
-                NextPopover.tasks => const _TaskPanel(key: ValueKey('tasks')),
+                NextPopover.tasks =>
+                  const BackgroundPanel(key: ValueKey('tasks')),
                 NextPopover.nipa => const _NipaMenu(key: ValueKey('nipa')),
                 NextPopover.none => const SizedBox.shrink(),
               },
@@ -280,53 +245,6 @@ class NextPopovers extends StatelessWidget {
           ),
         ]);
       },
-    );
-  }
-}
-
-class _TaskPanel extends StatelessWidget {
-  const _TaskPanel({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    final shell = NextShellScope.of(context);
-    final actions = shell.services.actions;
-    return Glass(
-      blur: 30,
-      color: const Color(0xC2121218),
-      borderColor: const Color(0x1AFFFFFF),
-      radius: BorderRadius.circular(18),
-      shadows: const [
-        BoxShadow(
-            color: Color(0x80000000), blurRadius: 50, offset: Offset(0, 20))
-      ],
-      padding: const EdgeInsets.fromLTRB(14, 12, 12, 12),
-      child: SizedBox(
-        width: 340,
-        child: ValueListenableBuilder(
-          valueListenable: shell.tasks,
-          builder: (context, _, __) => Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              for (final (i, task) in shell.activeTasks.indexed) ...[
-                if (i > 0)
-                  Container(
-                      height: 1,
-                      margin: const EdgeInsets.symmetric(vertical: 10),
-                      color: NextColors.line),
-                TaskRow(
-                  task: task,
-                  callbacks: CardCallbacks(
-                    onPauseTask: (t) => actions.pauseTask(t.taskId),
-                    onResumeTask: (t) => actions.resumeTask(t.taskId),
-                    onCancelTask: (t) => actions.cancelTask(t.taskId),
-                  ),
-                ),
-              ],
-            ],
-          ),
-        ),
-      ),
     );
   }
 }

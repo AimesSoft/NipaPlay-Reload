@@ -20,6 +20,8 @@ final class FakeWorld implements NextUiData, NextUiActions, NextDiscoverData {
     if (tasks) {
       _tasks['fake-task-frieren'] = _FakeTask(
           'fake-task-frieren', '葬送的芙莉莲', sample('frieren').artwork, 0.47);
+      _helpers.add(_FakeHelper('fake-helper-dungeon', '补全《迷宫饭》的弹幕',
+          'fake-thread-weekend', DateTime.now().subtract(const Duration(minutes: 2))));
       _ticker = Timer.periodic(const Duration(seconds: 1), (_) => _tick());
     }
     _followupAfter = followupAfter;
@@ -47,6 +49,9 @@ final class FakeWorld implements NextUiData, NextUiActions, NextDiscoverData {
   final _changes = StreamController<void>.broadcast();
   final _taskStream = StreamController<List<UiTask>>.broadcast();
   final _tasks = <String, _FakeTask>{};
+
+  /// Helpers Nipa sent off, by the scripted world.
+  final _helpers = <_FakeHelper>[];
   Timer? _ticker;
   int? _followupAfter;
 
@@ -416,10 +421,16 @@ final class FakeWorld implements NextUiData, NextUiActions, NextDiscoverData {
     yield* _taskStream.stream;
   }
 
-  List<UiTask> _taskList() => [for (final t in _tasks.values) t.view];
+  List<UiTask> _taskList() => [
+        for (final t in _tasks.values) t.view,
+        for (final h in _helpers) h.view,
+      ];
 
   void _tick() {
     var changed = false;
+    for (final h in _helpers) {
+      if (h.tick()) changed = true;
+    }
     for (final t in _tasks.values) {
       if (t.state == UiTaskState.running && t.progress < 1) {
         t.progress = (t.progress + 0.004).clamp(0, 1);
@@ -449,6 +460,9 @@ final class FakeWorld implements NextUiData, NextUiActions, NextDiscoverData {
 
   @override
   Future<void> cancelTask(String taskId) async {
+    for (final h in _helpers) {
+      if (h.id == taskId) h.cancel();
+    }
     _tasks.remove(taskId);
     _taskStream.add(_taskList());
   }
@@ -665,6 +679,9 @@ final class FakeChatPort implements ChatPort {
 
   @override
   bool get busy => _busy;
+
+  @override
+  bool busyOn(String threadId) => _busy && _turnThread == threadId;
 
   @override
   Stream<ChatEvent> get display => _display.stream;
@@ -1478,7 +1495,7 @@ final class FakeChatPort implements ChatPort {
   }
 
   @override
-  Future<void> steer(String text) async {
+  Future<void> steer(String text, {String? threadId}) async {
     final thread = _turnThread, turn = _turn;
     if (!_busy || thread == null || turn == null) return;
     final item = <String, dynamic>{
@@ -1493,7 +1510,7 @@ final class FakeChatPort implements ChatPort {
   }
 
   @override
-  Future<void> interrupt() async {
+  Future<void> interrupt({String? threadId}) async {
     for (final t in _timers) {
       t.cancel();
     }
@@ -1517,4 +1534,47 @@ final class FakeChatPort implements ChatPort {
     _display.close();
     _questions.close();
   }
+}
+
+/// A helper at work in its own conversation: what it is doing changes
+/// every few seconds; after a while it comes back with a summary.
+class _FakeHelper {
+  _FakeHelper(this.id, this.title, this.threadId, this.startedAt);
+  final String id;
+  final String title;
+  final String threadId;
+  final DateTime startedAt;
+  UiTaskState state = UiTaskState.running;
+  bool cancelled = false;
+  int _ticks = 0;
+  static const _doing = ['在找第 3 集的弹幕', '在导入第 4 集', '在对齐第 6 集的时间轴', '在导入第 9 集'];
+
+  String? get _now => state == UiTaskState.running
+      ? _doing[(_ticks ~/ 6) % _doing.length]
+      : null;
+
+  bool tick() {
+    if (state != UiTaskState.running) return false;
+    _ticks++;
+    if (_ticks >= 90) state = UiTaskState.finished;
+    return _ticks % 6 == 0 || state != UiTaskState.running;
+  }
+
+  void cancel() {
+    if (state != UiTaskState.running) return;
+    state = UiTaskState.failed;
+    cancelled = true;
+  }
+
+  UiTask get view => UiTask(
+        taskId: id,
+        title: title,
+        state: state,
+        kind: UiTaskKind.helper,
+        startedAt: startedAt,
+        currentActivity: _now,
+        summary: state == UiTaskState.finished ? '13 集都补上了，共 4120 条。' : null,
+        threadId: threadId,
+        cancelled: cancelled,
+      );
 }
