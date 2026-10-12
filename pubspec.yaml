@@ -241,6 +241,7 @@ flutter:
     - assets/next/harness/.gitignore
     - assets/next/harness/.codex/config.toml
     - assets/next/harness/hooks/README.md
+    - assets/next/harness/tools/
     - packages/adaptive_platform_ui/pubspec.yaml
     - packages/danmaku_canvas/pubspec.yaml
     - packages/nipaplay_smb2/pubspec.yaml
