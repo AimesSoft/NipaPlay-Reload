@@ -100,6 +100,16 @@ across restart, and followups recover post-registration completion from task
 checkpoints if publication was interrupted. Selection expansion carries prior
 file observations with their original event objects, so it does not republish them.
 
+Conversation downloads added through the Action capture a durable `returnTo` target
+at submission. Next's followup observer automatically returns registered video
+completion facts and terminal receipts to that conversation (helper sources return
+to the recorded parent), including when the original turn has ended. Scripts,
+hooks and GUI additions have no implicit return target. The first batch is eligible
+immediately, subsequent files coalesce within a one-minute dispatch interval, and
+termination flushes remaining facts. Matching explicit followups take precedence;
+file object coverage persists across restart and expanded selection. This does not
+choose notification wording, playback, identity binding, or further download work.
+
 Completion receipts retain `fileIds` and the then-known `workIds`, including
 per-file `media.fileId/workIds`. UI task/work association can follow those files'
 current episode links after later identification. Verified, successful receipts

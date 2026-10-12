@@ -9,6 +9,22 @@ await the next application event after registration; no hook program is needed.
 facts and media registration, and is recovered from `checkpoint.completedFiles`.
 Its occurrence is persisted once per object; other hook events keep their
 occurrence semantics. Registration waits for a completion after its creation.
+
+Conversation-originated `download.add` stores `returnTo` in the new task input.
+Chat CLI sources return to the selected thread at submission; host/native helper
+sources return to their recorded parent. Scripts, hooks and GUI submissions have
+no implicit conversation. Repeated add does not take ownership of an existing task.
+The observer publishes verified, registered video files and every terminal outcome
+as factual automatic followups, without prescribing Agent actions. The first batch
+is immediately eligible; later batches wait until one minute after the preceding
+dispatch, accumulating all file facts. Terminal outcomes flush the pending batch
+immediately. Busy/unavailable hosts keep accumulating in one pending batch.
+Coverage and due times live in existing followup snapshots, survive restart, and
+include file object IDs inherited by expanded selections. Before dispatch, matching
+Agent registrations in the same repository/thread own their occurrences instead;
+cancelled or failed registrations do not suppress new automatic delivery. Playback
+and identity in this input describe the verified completion time, not a later disk
+or binding change. The Agent can read current state when it acts.
 Playback is an occurrence in NipaPlay, rather than a predicate on an offline
 player. File-added refers to the existing library event, rather than filesystem
 watching.

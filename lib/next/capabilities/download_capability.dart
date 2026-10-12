@@ -241,7 +241,8 @@ final class _DownloadAction extends Action<_DownloadJson, _DownloadJson> {
             createFolderForTask: json['createFolderForTask'] as bool?,
             fileIndices: (json['fileIndices'] as List?)?.cast<int>(),
           ),
-          backend: ref);
+          backend: ref,
+          invocation: invocation);
     } else if (operation == 'read') {
       return downloads.read(target);
     } else if (operation == 'import') {

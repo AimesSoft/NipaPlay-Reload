@@ -15,6 +15,8 @@ import '../harness_redaction.dart';
 import '../state/views.dart' show publicTaskFacts;
 import '../state/query.dart';
 
+part 'download_returns.dart';
+
 const followupFields = ObjectSchema({
   'id': StringSchema(),
   'state': StringSchema(),
@@ -305,7 +307,13 @@ final class Followups {
   }
 
   Future<void> sweep() => _serial(() async {
-        for (final row in await _rows()) {
+        await _collectDownloadReturns();
+        final rows = await _rows();
+        // Resolve one-shot subscriptions before deciding which facts they own.
+        for (final row in [
+          ...rows.where((row) => row['automatic'] != 'download'),
+          ...rows.where((row) => row['automatic'] == 'download'),
+        ]) {
           if (row['state'] == 'waiting') {
             final condition = row['condition'] as Map;
             JsonMap? trigger;
@@ -384,6 +392,18 @@ final class Followups {
           }
           final host = _host;
           if (row['state'] == 'ready') {
+            if (row['automatic'] == 'download') {
+              await _filterDownloadReturn(row, await _rows());
+              if (row['state'] == 'cancelled') continue;
+              if (DateTime.now().toUtc().isBefore(
+                  DateTime.parse(row['deliverAfter'] as String))) {
+                final reason = 'Batching download facts until ${row['deliverAfter']}.';
+                if (row['reason'] != reason) {
+                  await _save(row, 'ready', 'pending', reason: reason);
+                }
+                continue;
+              }
+            }
             final reason = host == null || !host.available
                 ? host?.liveness.latestError ?? _unavailable
                 : host.repository.path != row['repository']
@@ -412,6 +432,9 @@ final class Followups {
                 }
               }
               row['threadId'] = target;
+              if (row['automatic'] == 'download') {
+                row['dispatchedAt'] = DateTime.now().toUtc().toIso8601String();
+              }
               await _save(row, 'dispatching', 'dispatching');
               final response = await host.startFollowup(target, _prompt(row));
               if (response == null) {
