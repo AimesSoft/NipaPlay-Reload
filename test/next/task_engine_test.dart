@@ -95,6 +95,20 @@ void main() {
     expect(await store.events(job.jobId), hasLength(1));
   });
 
+  test('adopted effect cannot be cancelled as a never-started job', () async {
+    final job = await engine.submit(type: 'test', title: 'Native child',
+        sideEffectCommitted: true);
+    final cancelled = await engine.cancel(job.jobId);
+    expect(cancelled.state, JobState.cancelling);
+    expect(cancelled.sideEffectCommitted, isTrue);
+    expect(cancelled.receipt, isNull);
+    await engine.start();
+    final context = await executor.recovered.future;
+    await context.cancelled(JobReceipt(verification: VerificationLevel.unverified,
+        details: {'turnStatus': 'interrupted'}));
+    expect((await engine.get(job.jobId)).state, JobState.cancelled);
+  });
+
   test(
       'CAS rejects duplicate submissions and stale updates without extra events',
       () async {

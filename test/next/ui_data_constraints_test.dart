@@ -84,10 +84,12 @@ void main() {
         input: {'parentThreadId': 'parent'}, details: {
           'threadId': 'helper-thread', 'startedAt': '2026-10-12T00:00:00Z',
           'currentActivity': '正在整理弹幕',
+          'source': 'codexNative',
         });
     final context = await helperExecutor.entered.future;
     final task = (await service.tasks().first).single;
     expect(task.kind, UiTaskKind.helper);
+    expect(task.source, 'codexNative');
     expect(task.title, '补齐弹幕');
     expect(task.threadId, 'helper-thread');
     expect(task.parentThreadId, 'parent');

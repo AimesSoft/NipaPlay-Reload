@@ -58,11 +58,14 @@ X37 的帮手同样使用 `ui.present`，其活动来源为 `harness_cli:helper:
 | threadId | 帮手的 Codex 线程号，可打开其对话；排队尚未建线程或普通任务为 null |
 | parentThreadId | 结果返回的发起会话线程号；普通任务为 null |
 | cancelled | 是否确实取消，默认 false；可区分 failed 中的取消与错误 |
+| source | 可选来源：`codexNative` 为原生子代理，`host` 为 `agent.dispatch` 的宿主派发；原任务兼容 null |
 | artwork | 已缓存的关联作品图片，无关联或缓存时 null |
 | progress | 可核实的 0–1 进度；未知为 null，帮手始终 null，包括完成后 |
 | remaining | 有可靠估计时的剩余时长，否则 null |
 
 没有进度也是正常后台任务。不得把 null 补成 0%、完成时补成 100% 或用思考/命令次数估算帮手进度。
+
+X38 原生子代理复用上述字段：标题取 prompt 的短句，currentActivity 取最新助手短句或实际工具阶段，summary 保留最后完整回答；取消仍是 failed + cancelled=true。没有修改作品或图片投影。
 两个帮手同时运行，更多的按创建顺序等待；这个上限不限制主会话。
 
 ## 图片与热度

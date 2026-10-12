@@ -171,6 +171,7 @@ final class UiTask {
     this.threadId,
     this.parentThreadId,
     this.cancelled = false,
+    this.source,
   });
   final String taskId;
   final String title;
@@ -185,6 +186,7 @@ final class UiTask {
   final String? threadId;
   final String? parentThreadId;
   final bool cancelled;
+  final String? source;
 }
 
 enum UiStepState { done, running, waiting, failed }

@@ -172,6 +172,7 @@ final class TaskEngine {
       JsonMap input = const {},
       JsonMap details = const {},
       String phase = 'queued',
+      bool sideEffectCommitted = false,
       String? jobId}) async {
     if (!_executors.containsKey(type)) {
       throw Failure(
@@ -190,6 +191,7 @@ final class TaskEngine {
           updatedAt: now,
           ownerDeviceId: ownerDeviceId,
           revision: 0,
+          sideEffectCommitted: sideEffectCommitted,
           input: input,
           details: details);
       await _commit(job, null, 'submitted');
@@ -249,7 +251,8 @@ final class TaskEngine {
           state: JobState.cancelling,
           cancelRequestedAt: DateTime.now().toUtc());
       // Only a never-started job has no external effects to reconcile.
-      if (job.state == JobState.queued && job.revision == 0) {
+      if (job.state == JobState.queued && job.revision == 0 &&
+          !job.sideEffectCommitted) {
         next = _change(next,
             state: JobState.cancelled,
             receipt: JobReceipt(
