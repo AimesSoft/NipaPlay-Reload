@@ -24,7 +24,8 @@ final class ChatHost {
       {required this.endpoint,
       required this.repository,
       this.labRoot,
-      this.sessions})
+      this.sessions,
+      this.codexExecutable})
       : sessionId = 'nipa-${DateTime.now().microsecondsSinceEpoch}-'
             '${Random.secure().nextInt(1 << 32).toRadixString(16)}';
 
@@ -32,6 +33,7 @@ final class ChatHost {
   final Directory repository;
   final Directory? labRoot;
   final SessionStore? sessions;
+  final String? codexExecutable;
   String? mainThreadId;
   final String sessionId;
   final threadLiveness = <String, ChatLiveness>{};
@@ -91,6 +93,7 @@ final class ChatHost {
       };
 
   bool get available => _process != null && !_closing && !_transportClosed;
+  int? get processId => _process?.pid;
   bool get busy =>
       liveness.status == 'inProgress' || liveness.status == 'starting';
 
@@ -101,36 +104,8 @@ final class ChatHost {
     return result;
   }
 
-  Future<void> start() async {
-    if (_process != null) throw StateError('Chat server already started.');
-    if (Platform.isWindows) {
-      throw UnsupportedError('Chat login-shell launch requires a POSIX shell.');
-    }
-    final shell = Platform.environment['SHELL'] ?? '/bin/zsh';
-    final inherited = endpoint.chatEnvironment(Platform.environment);
-    final login = await Process.run(shell, ['-l', '-c', 'exec /usr/bin/env -0'],
-        environment: inherited,
-        includeParentEnvironment: false,
-        stdoutEncoding: null,
-        stderrEncoding: null,
-        workingDirectory: repository.path);
-    if (login.exitCode != 0) {
-      throw ProcessException(
-          shell, ['-l'], 'Cannot read login environment', login.exitCode);
-    }
-    final env = <String, String>{};
-    for (final field
-        in utf8.decode(login.stdout as List<int>).split('\u0000')) {
-      final eq = field.indexOf('=');
-      if (eq > 0) env[field.substring(0, eq)] = field.substring(eq + 1);
-    }
-    final clean = endpoint.chatEnvironment(env);
-    final removed = env.keys.where((key) => !clean.containsKey(key)).toList();
-    if (removed
-        .any((key) => !RegExp(r'^[A-Za-z_][A-Za-z0-9_]*$').hasMatch(key))) {
-      throw StateError(
-          'Cannot unset a secret environment name in login shell.');
-    }
+  Future<void> _launchWindows() async {
+    final clean = endpoint.chatEnvironment(Platform.environment);
     clean['NIPAPLAY_CHAT'] = sessionId;
     if (labRoot case final root?) {
       final home = Directory('${root.path}/codex-home');
@@ -139,8 +114,14 @@ final class ChatHost {
             'Prepare provider configuration inside the lab CODEX_HOME.');
       }
       clean['CODEX_HOME'] = home.path;
-      clean['TMPDIR'] =
+      clean['TEMP'] = clean['TMP'] =
           (await Directory('${root.path}/temp').create(recursive: true)).path;
+    }
+    final executable = codexExecutable ??
+        Platform.environment['NIPAPLAY_CODEX_EXECUTABLE'] ??
+        'codex.exe';
+    if (!executable.toLowerCase().endsWith('.exe')) {
+      throw ArgumentError('Windows chat requires the native Codex .exe path.');
     }
     launchEnvironment = {
       for (final key in [
@@ -148,37 +129,106 @@ final class ChatHost {
         'HTTP_PROXY',
         'HTTPS_PROXY',
         'ALL_PROXY',
-        'http_proxy',
-        'https_proxy',
-        'all_proxy',
         'NO_PROXY',
         'CODEX_HOME',
-        'TMPDIR',
+        'TEMP',
+        'TMP',
         'NIPAPLAY_CHAT'
       ])
         if (clean[key] != null) key: redactHarnessText(clean[key]!)
     };
-    // Reapply host-owned values after shell startup files; keep user's PATH/proxy.
-    final script = '${removed.isEmpty ? '' : 'unset ${removed.join(' ')}; '}'
-        'export NIPAPLAY_CHAT="\$1"; '
-        // zsh writes here-documents under TMPPREFIX (default /tmp/zsh),
-        // which a lab profile may not write; keep them in its temp.
-        '${labRoot == null ? '' : 'export CODEX_HOME="\$2" TMPDIR="\$3" TMPPREFIX="\$3/zsh"; '}'
-        r'exec codex app-server -c "shell_environment_policy.set.NIPAPLAY_CHAT=\"$1\""';
     _process = await Process.start(
-        shell,
+        executable,
         [
-          '-l',
+          'app-server',
           '-c',
-          script,
-          'nipaplay-chat',
-          sessionId,
-          clean['CODEX_HOME'] ?? '',
-          clean['TMPDIR'] ?? ''
+          'shell_environment_policy.set.NIPAPLAY_CHAT="$sessionId"'
         ],
         workingDirectory: repository.path,
-        environment: inherited,
+        environment: clean,
         includeParentEnvironment: false);
+  }
+
+  Future<void> start() async {
+    if (_process != null) throw StateError('Chat server already started.');
+    if (Platform.isWindows) {
+      await _launchWindows();
+    } else {
+      final shell = Platform.environment['SHELL'] ?? '/bin/zsh';
+      final inherited = endpoint.chatEnvironment(Platform.environment);
+      final login = await Process.run(
+          shell, ['-l', '-c', 'exec /usr/bin/env -0'],
+          environment: inherited,
+          includeParentEnvironment: false,
+          stdoutEncoding: null,
+          stderrEncoding: null,
+          workingDirectory: repository.path);
+      if (login.exitCode != 0) {
+        throw ProcessException(
+            shell, ['-l'], 'Cannot read login environment', login.exitCode);
+      }
+      final env = <String, String>{};
+      for (final field
+          in utf8.decode(login.stdout as List<int>).split('\u0000')) {
+        final eq = field.indexOf('=');
+        if (eq > 0) env[field.substring(0, eq)] = field.substring(eq + 1);
+      }
+      final clean = endpoint.chatEnvironment(env);
+      final removed = env.keys.where((key) => !clean.containsKey(key)).toList();
+      if (removed
+          .any((key) => !RegExp(r'^[A-Za-z_][A-Za-z0-9_]*$').hasMatch(key))) {
+        throw StateError(
+            'Cannot unset a secret environment name in login shell.');
+      }
+      clean['NIPAPLAY_CHAT'] = sessionId;
+      if (labRoot case final root?) {
+        final home = Directory('${root.path}/codex-home');
+        if (!await File('${home.path}/config.toml').exists()) {
+          throw StateError(
+              'Prepare provider configuration inside the lab CODEX_HOME.');
+        }
+        clean['CODEX_HOME'] = home.path;
+        clean['TMPDIR'] =
+            (await Directory('${root.path}/temp').create(recursive: true)).path;
+      }
+      launchEnvironment = {
+        for (final key in [
+          'PATH',
+          'HTTP_PROXY',
+          'HTTPS_PROXY',
+          'ALL_PROXY',
+          'http_proxy',
+          'https_proxy',
+          'all_proxy',
+          'NO_PROXY',
+          'CODEX_HOME',
+          'TMPDIR',
+          'NIPAPLAY_CHAT'
+        ])
+          if (clean[key] != null) key: redactHarnessText(clean[key]!)
+      };
+      // Reapply host-owned values after shell startup files; keep user's PATH/proxy.
+      final script = '${removed.isEmpty ? '' : 'unset ${removed.join(' ')}; '}'
+          'export NIPAPLAY_CHAT="\$1"; '
+          // zsh writes here-documents under TMPPREFIX (default /tmp/zsh),
+          // which a lab profile may not write; keep them in its temp.
+          '${labRoot == null ? '' : 'export CODEX_HOME="\$2" TMPDIR="\$3" TMPPREFIX="\$3/zsh"; '}'
+          r'exec codex app-server -c "shell_environment_policy.set.NIPAPLAY_CHAT=\"$1\""';
+      _process = await Process.start(
+          shell,
+          [
+            '-l',
+            '-c',
+            script,
+            'nipaplay-chat',
+            sessionId,
+            clean['CODEX_HOME'] ?? '',
+            clean['TMPDIR'] ?? ''
+          ],
+          workingDirectory: repository.path,
+          environment: inherited,
+          includeParentEnvironment: false);
+    }
     _reader = _read();
     _stderr = _readErrors();
     _clock = Timer.periodic(const Duration(seconds: 1), (_) {

@@ -7,7 +7,8 @@ import 'package:crypto/crypto.dart';
 import 'package:nipa_harness/nipa_harness.dart';
 import 'package:path/path.dart' as p;
 
-import 'classic_projection.dart';
+import 'classic_metadata_port.dart';
+import 'projection.dart';
 import 'media_probe.dart';
 import 'identity_store.dart';
 import 'file_identity_merge.dart';
@@ -137,7 +138,7 @@ final class MediaService {
   Future<String> authorizedPath(String locator,
       {bool directory = false}) async {
     try {
-      if (!p.isAbsolute(locator) || Uri.tryParse(locator)?.hasScheme == true) {
+      if (!p.isAbsolute(locator)) {
         throw const Failure(FailureCode.unavailable,
             'MA filesystem scanning requires a native local path.');
       }
@@ -446,6 +447,7 @@ final class MediaService {
     final uri =
         entry['path'] == null ? null : Uri.tryParse(entry['path'] as String);
     if (id == null &&
+        !p.isAbsolute(entry['path'] as String? ?? '') &&
         uri != null &&
         uri.scheme.isNotEmpty &&
         uri.scheme != 'file') {

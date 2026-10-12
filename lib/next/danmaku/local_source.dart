@@ -1,8 +1,8 @@
 import 'dart:io';
 import 'package:nipa_harness/nipa_harness.dart';
-import 'package:nipaplay/utils/local_danmaku_file.dart';
+import 'package:nipaplay/utils/local_danmaku_bytes.dart';
 import 'package:nipaplay/utils/danmaku_parser.dart';
-import 'package:nipaplay/utils/danmaku_xml_utils.dart';
+import 'package:nipaplay/utils/danmaku_xml_parse.dart';
 import 'source.dart';
 
 /// Explicit local imports use Classic's parser; discovery remains with Classic.

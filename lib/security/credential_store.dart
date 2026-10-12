@@ -5,6 +5,7 @@ import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:nipaplay/utils/lab_profile.dart';
 import 'credential_vault.dart';
+import 'credential_key_policy.dart';
 import 'secret_redactor.dart';
 import 'vault_backend.dart';
 import 'session_credential_vault.dart';
@@ -23,33 +24,9 @@ final class CredentialStore {
   final TargetPlatform platform;
   final ValueNotifier<List<String>> notices = ValueNotifier(const []);
   final Map<CredentialRef, String> failures = {};
-  static const scalarKeys = {
-    'dandanplay_token',
-    'dandanplay_app_secret',
-    'bangumi_access_token',
-    'dandanplay_remote_api_token',
-    'incremental_sync_webdav_password',
-    'emby_access_token',
-    'jellyfin_access_token',
-    'spoiler_ai_api_key',
-  };
-  static const compositeKeys = {
-    'webdav_connections': 'password',
-    'smb_connections': 'password',
-    'server_profiles': 'accessToken',
-  };
-  static bool isSecretKey(String key) =>
-      key != 'plugin_enabled_ids' &&
-      key != 'plugin_downloader_override' &&
-      key != 'last_token_renew_time' &&
-      key != 'dandanplay_remote_token_required' &&
-      !key.startsWith('plugin_switch_setting_') &&
-      (scalarKeys.contains(key) ||
-          key.startsWith('credential_vault_') ||
-          RegExp(
-                  r'password|passwd|token|secret|api[\s_-]?key|cookie|authorization|密码|密碼|密钥|密鑰|令牌|憑證|凭证',
-                  caseSensitive: false)
-              .hasMatch(key));
+  static const scalarKeys = CredentialKeyPolicy.scalarKeys;
+  static const compositeKeys = CredentialKeyPolicy.compositeKeys;
+  static bool isSecretKey(String key) => CredentialKeyPolicy.isSecretKey(key);
   static CredentialRef preferenceRef(String key) =>
       key.startsWith('credential_vault_')
           ? CredentialRef.fromJson(Map<String, Object?>.from(

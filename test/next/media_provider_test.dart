@@ -7,7 +7,8 @@ import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 import 'package:nipa_harness/nipa_harness.dart';
 import 'package:nipaplay/next/media/metadata_provider.dart';
-import 'package:nipaplay/next/media/provider_transport.dart';
+import 'package:nipaplay/next/media/provider_transport.dart' hide VaultCredentialResolver;
+import 'package:nipaplay/next/media/vault_credential_resolver.dart';
 import 'package:nipaplay/next/media/providers.dart';
 
 import 'media_test_support.dart';

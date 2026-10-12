@@ -7,7 +7,7 @@ import 'store.dart';
 import 'export.dart';
 import 'alignment.dart';
 import 'import.dart';
-import 'package:nipaplay/services/danmaku_cache_manager.dart';
+import 'classic_cache.dart';
 import 'package:nipaplay/utils/danmaku_parser.dart';
 import 'package:nipaplay/utils/dandanplay_comments.dart';
 

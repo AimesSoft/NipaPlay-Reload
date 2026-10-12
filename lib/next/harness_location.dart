@@ -4,8 +4,9 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import 'harness_repository.dart';
 import 'settings/registry.dart';
+import 'repository_location.dart';
 
-final class HarnessLocation extends ChangeNotifier {
+final class HarnessLocation extends ChangeNotifier implements RepositoryLocation {
   static const storageKey = 'next_harness_path';
   late final Future<void> ready = _load();
   String _path = defaultHarnessPath;

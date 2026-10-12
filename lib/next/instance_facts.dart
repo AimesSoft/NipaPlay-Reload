@@ -1,28 +1,16 @@
 import 'dart:io';
 
-import 'package:flutter/services.dart';
 import 'package:nipa_harness/nipa_harness.dart';
-import 'package:window_manager/window_manager.dart';
-
-import '../utils/lab_profile.dart';
+import 'platform/lab_profile.dart';
+import 'platform/instance_native_io.dart'
+    if (dart.library.ui) 'platform/instance_native_flutter.dart';
 
 final class InstanceFacts {
   const InstanceFacts(this.version);
   final String version;
 
   Future<JsonMap> read() async {
-    final native = Platform.isMacOS
-        ? (await const MethodChannel('nipaplay/instance')
-            .invokeMapMethod<String, Object?>('facts'))!
-        : <String, Object?>{
-            'executablePath': Platform.resolvedExecutable,
-            'appBundlePath': null,
-            'windowTitle': Platform.isWindows || Platform.isLinux
-                ? await windowManager.getTitle()
-                : null,
-            'windowId': null,
-            'viewId': null,
-          };
+    final native = await readNativeInstanceFacts();
     return {
       'pid': pid,
       ...native,

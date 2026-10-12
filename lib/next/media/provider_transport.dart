@@ -4,47 +4,21 @@ import 'dart:io';
 
 import 'package:http/http.dart' as http;
 import 'package:nipa_harness/nipa_harness.dart';
-import 'package:nipaplay/services/dandanplay_http_client.dart';
+import '../network/no_dandanplay_client.dart'
+    if (dart.library.ui) '../../services/dandanplay_http_client.dart'
+    show DandanplayLoginRequired;
 
 import '../network/api_uri.dart';
-import '../network/dandanplay_gateway.dart';
+import '../network/metadata_gateway.dart';
 import '../network/http_diagnostics.dart';
 
 import 'metadata_provider.dart';
-import 'package:nipaplay/security/credential_store.dart';
-import 'package:nipaplay/security/credential_file_migration.dart';
-import 'package:nipaplay/security/secret_redactor.dart';
+export 'no_vault_credential_resolver.dart'
+    if (dart.library.ui) 'vault_credential_resolver.dart';
 
 abstract interface class MetadataTransport {
   Future<JsonMap> request(String path,
       {Map<String, String> query = const {}, JsonMap? body});
-}
-
-final class VaultCredentialResolver implements CredentialResolver {
-  VaultCredentialResolver(this.root, {CredentialStore? store})
-      : store = store ?? CredentialStore.instance;
-  final Directory root;
-  final CredentialStore store;
-  @override
-  Future<String> resolve(CredentialRef ref) async {
-    await migrateCredentialFiles(root, store, only: ref);
-    if (store.vault.blocked.containsKey(ref)) {
-      throw StateError(store.vault.blocked[ref]!);
-    }
-    String? secret;
-    final file = File('${root.path}/credentials.json');
-    if (await file.exists()) {
-      final values = jsonDecode(await file.readAsString()) as Map;
-      // Keep using the old value if migration failed, including non-desktop.
-      if (values[ref.key] is String) secret = values[ref.key] as String;
-    }
-    secret ??= await store.vault.read(ref);
-    if (secret == null || secret.isEmpty) {
-      throw Failure(FailureCode.unavailable, '$ref is not configured.');
-    }
-    SecretRedactor.remember(ref, secret);
-    return secret;
-  }
 }
 
 final class HttpMetadataTransport implements MetadataTransport {
@@ -60,7 +34,7 @@ final class HttpMetadataTransport implements MetadataTransport {
         _headers = headers,
         _privateQuery = privateQuery;
 
-  HttpMetadataTransport.dandanplay(DandanplayGateway gateway,
+  HttpMetadataTransport.dandanplay(MetadataGateway gateway,
       {this.interval = const Duration(milliseconds: 250)})
       : provider = 'dandanplay',
         baseUri = Uri(),
@@ -71,7 +45,7 @@ final class HttpMetadataTransport implements MetadataTransport {
   final String provider;
   final Uri baseUri;
   final http.Client _client;
-  final DandanplayGateway? _gateway;
+  final MetadataGateway? _gateway;
   final Future<Map<String, String>> Function(String path)? _headers;
   final Future<Map<String, String>> Function()? _privateQuery;
   final Duration interval;

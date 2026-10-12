@@ -1,6 +1,6 @@
 import 'dart:convert';
 import 'dart:io';
-import 'dart:ui' as ui;
+import 'raster_io.dart' if (dart.library.ui) 'raster_flutter.dart';
 
 import 'package:crypto/crypto.dart';
 import 'package:http/http.dart' as http;
@@ -233,8 +233,7 @@ final class ArtworkCache {
           'Artwork download returned HTTP ${response.statusCode}.');
     }
     // Verify raster data before publishing a path, including logos.
-    final codec = await ui.instantiateImageCodec(response.bodyBytes);
-    codec.dispose();
+    await validateRaster(response.bodyBytes);
     await file.parent.create(recursive: true);
     final staging = File('${file.path}.pending');
     await staging.writeAsBytes(response.bodyBytes, flush: true);
@@ -265,8 +264,7 @@ final class ArtworkCache {
           'file must be an existing absolute local path.');
     }
     final bytes = await File(file).readAsBytes();
-    final codec = await ui.instantiateImageCodec(bytes);
-    codec.dispose();
+    await validateRaster(bytes);
     final target = File('${root.path}/artwork/${sha256.convert(bytes)}.png');
     await target.parent.create(recursive: true);
     if (!await target.exists()) {
@@ -277,34 +275,7 @@ final class ArtworkCache {
     return {'file': target.path, 'originalFile': file};
   }
 
-  Future<int> _tint(String path) async {
-    final codec = await ui.instantiateImageCodec(await File(path).readAsBytes(),
-        targetWidth: 64);
-    final frame = await codec.getNextFrame();
-    final data =
-        (await frame.image.toByteData(format: ui.ImageByteFormat.rawRgba))!;
-    final bins = <int, List<int>>{};
-    for (var i = 0; i < data.lengthInBytes; i += 4) {
-      if (data.getUint8(i + 3) < 128) continue;
-      final r = data.getUint8(i),
-          g = data.getUint8(i + 1),
-          b = data.getUint8(i + 2);
-      final bucket = bins.putIfAbsent(
-          (r >> 4) << 8 | (g >> 4) << 4 | b >> 4, () => [0, 0, 0, 0]);
-      bucket[0]++;
-      bucket[1] += r;
-      bucket[2] += g;
-      bucket[3] += b;
-    }
-    frame.image.dispose();
-    codec.dispose();
-    if (bins.isEmpty) return 0xff000000;
-    final dominant = bins.values.reduce((a, b) => a[0] >= b[0] ? a : b);
-    return 0xff000000 |
-        (dominant[1] ~/ dominant[0]) << 16 |
-        (dominant[2] ~/ dominant[0]) << 8 |
-        dominant[3] ~/ dominant[0];
-  }
+  Future<int> _tint(String path) async => rasterTint(await File(path).readAsBytes());
 
   void close() => _client.close();
 }
