@@ -5,33 +5,53 @@ import 'package:nipaplay_core/models/trending_bangumi.dart';
 import 'package:nipaplay_core/services/nipaplay_server_router.dart';
 import 'package:nipaplay_core/utils/network_settings.dart';
 
+import 'tv_account_service.dart';
+
+/// 排行榜需要登录但当前未登录时抛出（供 UI 引导到「我的」登录）。
+class TvLoginRequiredException implements Exception {
+  const TvLoginRequiredException();
+  @override
+  String toString() => '请先登录弹弹play账号后再使用排行榜（「我的」→ 登录）';
+}
+
 /// TV 版排行榜 / 新番客户端。
 ///
-/// 走 core 的 [NipaplayServerRouter] 选择有效网关（与普通版 `DandanplayService
-/// .getApiBaseUrl()` 同源），因此**自动跟随用户的弹弹服务器设置与主备切换**。
-/// 只实现 TV 首页需要的排行查询，避免把普通版 2878 行的 dandanplay 服务整包带进来。
+/// 关键：弹弹网关对 `/api/v2/*` **要求 `Authorization: Bearer <token>`**，
+/// 未登录时返回 401（`errorCode:401 请先登录弹弹play账号`）。因此本客户端
+/// 必须带 [TvAccountService] 的登录凭据；网关地址经 core 的
+/// [NipaplayServerRouter] 选择，**跟随用户的服务器/镜像设置**。
 class TvTrendingClient {
   TvTrendingClient._();
   static final TvTrendingClient instance = TvTrendingClient._();
 
   static const _timeout = Duration(seconds: 15);
-  static const _userAgent = 'NipaPlay/1.0 (TV)';
+  static const _userAgent = 'NipaPlay/1.0';
 
-  /// 拉取排行榜。默认取"全部·热度·日榜"，即新番热度 Top。
+  /// 拉取排行榜（新番热度 Top）。
   Future<List<TrendingBangumiItem>> fetchTop({
     TrendingRankingKind kind = TrendingRankingKind.allHot,
     TrendingPeriod period = TrendingPeriod.week,
     int limit = 10,
   }) async {
+    final account = TvAccountService.instance;
+    if (!account.isLoggedIn) {
+      throw const TvLoginRequiredException();
+    }
+
     final base = await NipaplayServerRouter.instance.effectiveServer();
-    final path =
-        TrendingBangumiQuery(kind: kind, period: period).apiPath;
+    final path = TrendingBangumiQuery(kind: kind, period: period).apiPath;
     final uri = Uri.parse('$base$path');
-    final resp = await http.get(uri, headers: const {
+
+    final resp = await http.get(uri, headers: {
       'Accept': 'application/json',
       'User-Agent': _userAgent,
+      // 弹弹网关鉴权：与普通版 DandanplayService.authorizationHeaders 一致。
+      ...account.authHeaders(),
     }).timeout(_timeout);
 
+    if (resp.statusCode == 401) {
+      throw const TvLoginRequiredException();
+    }
     if (resp.statusCode != 200) {
       throw Exception('排行榜请求失败：HTTP ${resp.statusCode}');
     }
@@ -42,7 +62,7 @@ class TvTrendingClient {
     return result.items.take(limit).toList();
   }
 
-  /// 当前生效的弹弹网关地址（用于设置页展示）。
+  /// 当前生效的弹弹网关地址（用于设置/我的页展示）。
   Future<String> effectiveServer() =>
       NipaplayServerRouter.instance.effectiveServer();
 

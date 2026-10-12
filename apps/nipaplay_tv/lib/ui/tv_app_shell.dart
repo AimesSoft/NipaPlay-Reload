@@ -169,7 +169,10 @@ class _TvAppShellState extends State<TvAppShell> {
               child: IndexedStack(
                 index: _pageIndex,
                 children: [
-                  HomePage(entryFocusNode: _pageEntryFocus[0]),
+                  HomePage(
+                    entryFocusNode: _pageEntryFocus[0],
+                    onRequestLogin: () => _activate(2), // 跳到「我的」登录
+                  ),
                   LibraryPage(entryFocusNode: _pageEntryFocus[1]),
                   ProfilePage(entryFocusNode: _pageEntryFocus[2]),
                   SettingsPage(entryFocusNode: _pageEntryFocus[3]),

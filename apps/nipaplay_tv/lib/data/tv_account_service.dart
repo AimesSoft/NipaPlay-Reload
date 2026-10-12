@@ -91,7 +91,9 @@ class TvAccountService {
     await _persist(
       token: token,
       userName: (data['userName'] as String?) ?? username,
-      screenName: (data['screenName'] as String?) ?? username,
+      screenName: ((data['user'] as Map?)?['screenName'] as String?) ??
+          (data['screenName'] as String?) ??
+          username,
     );
   }
 

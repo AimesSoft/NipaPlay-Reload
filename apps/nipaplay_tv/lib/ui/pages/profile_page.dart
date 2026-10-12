@@ -5,6 +5,7 @@ import 'package:nipaplay_ui_common/l10n/l10n.dart';
 
 import '../../data/tv_account_service.dart';
 import '../focusable_card.dart';
+import '../widgets/tv_input_dialog.dart';
 
 /// 我的：账号登录（弹弹play）+ 登录后可用能力说明。
 ///
@@ -221,48 +222,39 @@ class _LoginDialogState extends State<_LoginDialog> {
 
   @override
   Widget build(BuildContext context) {
-    return AlertDialog(
-      backgroundColor: const Color(0xFF1A2026),
-      title: const Text('登录弹弹play'),
-      content: SizedBox(
-        width: 520,
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            TextField(
-              controller: _user,
-              autofocus: true,
-              decoration: const InputDecoration(
-                labelText: '账号',
-                hintText: '弹弹play 用户名 / 邮箱',
-              ),
-            ),
-            const SizedBox(height: 14),
-            TextField(
-              controller: _pass,
-              obscureText: _obscure,
-              decoration: InputDecoration(
-                labelText: '密码',
-                suffixIcon: IconButton(
-                  icon: Icon(_obscure
-                      ? Icons.visibility_off_outlined
-                      : Icons.visibility_outlined),
-                  onPressed: () => setState(() => _obscure = !_obscure),
-                ),
-              ),
-              onSubmitted: (_) => _submit(),
-            ),
-          ],
-        ),
-      ),
+    return TvInputDialog(
+      title: '登录弹弹play',
+      maxWidth: 520,
       actions: [
         TextButton(
           onPressed: () => Navigator.of(context).pop(),
           child: const Text('取消'),
         ),
-        FilledButton(
-          onPressed: _submit,
-          child: const Text('登录'),
+        FilledButton(onPressed: _submit, child: const Text('登录')),
+      ],
+      children: [
+        TextField(
+          controller: _user,
+          autofocus: true,
+          decoration: const InputDecoration(
+            labelText: '账号',
+            hintText: '弹弹play 用户名 / 邮箱',
+          ),
+        ),
+        const SizedBox(height: 14),
+        TextField(
+          controller: _pass,
+          obscureText: _obscure,
+          decoration: InputDecoration(
+            labelText: '密码',
+            suffixIcon: IconButton(
+              icon: Icon(_obscure
+                  ? Icons.visibility_off_outlined
+                  : Icons.visibility_outlined),
+              onPressed: () => setState(() => _obscure = !_obscure),
+            ),
+          ),
+          onSubmitted: (_) => _submit(),
         ),
       ],
     );

@@ -10,6 +10,7 @@ import 'package:nipaplay_ui_common/media_library/unified_library_management_mode
 import '../../data/tv_account_service.dart';
 import '../focusable_card.dart';
 import '../widgets/tv_anime_card.dart';
+import '../widgets/tv_input_dialog.dart';
 
 /// 媒体库页：添加/管理媒体源（本地文件、WebDAV、媒体服务器、SMB）。
 ///
@@ -551,62 +552,51 @@ class _AddMediaDialogState extends State<_AddMediaDialog> {
 
   @override
   Widget build(BuildContext context) {
-    return AlertDialog(
-      backgroundColor: const Color(0xFF1A2026),
-      title: Text('添加 ${widget.kind.label}'),
-      content: SizedBox(
-        width: 560,
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            TextField(
-              controller: _nameCtrl,
-              autofocus: true,
-              decoration: const InputDecoration(
-                labelText: '名称（可选）',
-                hintText: '例如：我的电影',
-              ),
-              onSubmitted: (_) => _submit(),
-            ),
-            if (widget.kind == _SourceKind.dandanplayRemote)
-              const Padding(
-                padding: EdgeInsets.only(bottom: 10),
-                child: Text('弹弹远程服务需先在「我的」登录弹弹play账号',
-                    style: TextStyle(color: Colors.orangeAccent, fontSize: 13)),
-              ),
-            const SizedBox(height: 14),
-            TextField(
-              controller: _locCtrl,
-              decoration: InputDecoration(
-                labelText: '地址',
-                hintText: _hint,
-              ),
-              onSubmitted: (_) => _submit(),
-            ),
-            if (_needsAuth) ...[
-              const SizedBox(height: 14),
-              TextField(
-                controller: _userCtrl,
-                decoration: const InputDecoration(labelText: '用户名'),
-              ),
-              const SizedBox(height: 14),
-              TextField(
-                controller: _passCtrl,
-                obscureText: true,
-                decoration: const InputDecoration(labelText: '密码'),
-                onSubmitted: (_) => _submit(),
-              ),
-            ],
-          ],
-        ),
-      ),
+    return TvInputDialog(
+      title: '添加 ${widget.kind.label}',
       actions: [
         TextButton(
           onPressed: () => Navigator.of(context).pop(),
           child: const Text('取消'),
         ),
         FilledButton(onPressed: _submit, child: const Text('添加')),
+      ],
+      children: [
+        TextField(
+          controller: _nameCtrl,
+          autofocus: true,
+          decoration: const InputDecoration(
+            labelText: '名称（可选）',
+            hintText: '例如：我的电影',
+          ),
+          onSubmitted: (_) => _submit(),
+        ),
+        if (widget.kind == _SourceKind.dandanplayRemote)
+          const Padding(
+            padding: EdgeInsets.only(top: 10),
+            child: Text('弹弹远程服务需先在「我的」登录弹弹play账号',
+                style: TextStyle(color: Colors.orangeAccent, fontSize: 13)),
+          ),
+        const SizedBox(height: 14),
+        TextField(
+          controller: _locCtrl,
+          decoration: InputDecoration(labelText: '地址', hintText: _hint),
+          onSubmitted: (_) => _submit(),
+        ),
+        if (_needsAuth) ...[
+          const SizedBox(height: 14),
+          TextField(
+            controller: _userCtrl,
+            decoration: const InputDecoration(labelText: '用户名'),
+          ),
+          const SizedBox(height: 14),
+          TextField(
+            controller: _passCtrl,
+            obscureText: true,
+            decoration: const InputDecoration(labelText: '密码'),
+            onSubmitted: (_) => _submit(),
+          ),
+        ],
       ],
     );
   }

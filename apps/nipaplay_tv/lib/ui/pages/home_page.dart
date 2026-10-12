@@ -5,6 +5,7 @@ import 'package:nipaplay_core/player/nipa_player.dart';
 import 'package:nipaplay_ui_common/l10n/l10n.dart';
 
 import '../../data/tv_recent_play_store.dart';
+import '../../data/tv_account_service.dart';
 import '../../data/tv_trending_client.dart';
 import '../widgets/tv_anime_card.dart';
 import 'player_page.dart';
@@ -13,9 +14,12 @@ import 'player_page.dart';
 ///
 /// 封面与榜单均来自 Bangumi/弹弹网关（经 core 的服务器路由，跟随用户镜像设置）。
 class HomePage extends StatefulWidget {
-  const HomePage({super.key, this.entryFocusNode});
+  const HomePage({super.key, this.entryFocusNode, this.onRequestLogin});
 
   final FocusNode? entryFocusNode;
+
+  /// 未登录时点击「去登录」：由壳切到「我的」页。
+  final VoidCallback? onRequestLogin;
 
   @override
   State<HomePage> createState() => _HomePageState();
@@ -25,6 +29,7 @@ class _HomePageState extends State<HomePage> {
   List<TrendingBangumiItem>? _trending;
   List<TvRecentPlay> _recent = const [];
   Object? _error;
+  bool _needLogin = false;
   bool _loading = true;
 
   @override
@@ -37,7 +42,9 @@ class _HomePageState extends State<HomePage> {
     setState(() {
       _loading = true;
       _error = null;
+      _needLogin = false;
     });
+    await TvAccountService.instance.load();
     final recent = await TvRecentPlayStore.load();
     if (!mounted) return;
     setState(() => _recent = recent);
@@ -51,6 +58,7 @@ class _HomePageState extends State<HomePage> {
     } catch (e) {
       if (!mounted) return;
       setState(() {
+        _needLogin = e is TvLoginRequiredException;
         _error = e;
         _loading = false;
       });
@@ -84,7 +92,10 @@ class _HomePageState extends State<HomePage> {
                 child: CircularProgressIndicator(color: Color(0xFF26C6DA))),
           )
         else ...[
-          if (_error != null) _errorBanner(context),
+          if (_needLogin)
+            _loginPrompt(context)
+          else if (_error != null)
+            _errorBanner(context),
           _sectionTitle(context, 'Bangumi 排行榜 · 新番 Top10'),
           const SizedBox(height: 12),
           if (_trending != null && _trending!.isNotEmpty)
@@ -167,6 +178,35 @@ class _HomePageState extends State<HomePage> {
                   .textTheme
                   .bodyLarge
                   ?.copyWith(color: Colors.white38)),
+        ),
+      );
+
+  /// 未登录引导：排行榜由弹弹网关提供，需登录账号。
+  Widget _loginPrompt(BuildContext context) => Container(
+        margin: const EdgeInsets.only(bottom: 16),
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: const Color(0xFF26C6DA).withValues(alpha: 0.10),
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(
+              color: const Color(0xFF26C6DA).withValues(alpha: 0.45)),
+        ),
+        child: Row(
+          children: [
+            const Icon(Icons.lock_outline, color: Color(0xFF26C6DA), size: 22),
+            const SizedBox(width: 12),
+            const Expanded(
+              child: Text(
+                '排行榜由弹弹play网关提供，需登录账号后显示。\n请到「我的」登录弹弹play账号。',
+                style: TextStyle(color: Colors.white70, fontSize: 15, height: 1.4),
+              ),
+            ),
+            TvActionChip(
+              icon: Icons.person_outline,
+              label: '去登录',
+              onTap: () => widget.onRequestLogin?.call(),
+            ),
+          ],
         ),
       );
 
