@@ -61,8 +61,11 @@ class TvDanmakuLoader {
           if (fileHash != null && fileHash.isNotEmpty) 'fileHash': fileHash,
         },
       );
+      debugPrint('[TVDanmaku] match GET $matchUri '
+          '(loggedIn=${account.isLoggedIn}, token=${token != null})');
       final matchResp =
           await http.get(matchUri, headers: _headers(token)).timeout(_timeout);
+      debugPrint('[TVDanmaku] match HTTP ${matchResp.statusCode}');
       if (matchResp.statusCode != 200) {
         debugPrint('[TVDanmaku] match HTTP ${matchResp.statusCode}');
         return null;
@@ -79,8 +82,10 @@ class TvDanmakuLoader {
       // 2) 拉取弹幕（端点与主应用一致）
       final danmakuUri = Uri.parse(
           '$base/api/v2/comment/$episodeId?withRelated=true');
+      debugPrint('[TVDanmaku] comment GET $danmakuUri');
       final danmakuResp =
           await http.get(danmakuUri, headers: _headers(token)).timeout(_timeout);
+      debugPrint('[TVDanmaku] comment HTTP ${danmakuResp.statusCode}');
       if (danmakuResp.statusCode != 200) {
         debugPrint('[TVDanmaku] comment HTTP ${danmakuResp.statusCode}');
         return const [];

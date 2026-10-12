@@ -634,7 +634,7 @@ class _LibraryPageState extends State<LibraryPage> {
                 spacing: spacing,
                 runSpacing: 24,
                 children: [
-                  for (final item in _contentItems)
+                  for (final item in _sortedItems(_contentItems))
                     SizedBox(
                       width: cardWidth,
                       child: TvAnimeCard(
@@ -768,7 +768,32 @@ class _LibraryPageState extends State<LibraryPage> {
   void _cycleSort() {
     const modes = ['recent', 'name', 'episodes'];
     final idx = modes.indexOf(_sortMode);
-    setState(() => _sortMode = modes[(idx + 1) % modes.length]);
+    setState(() {
+      _sortMode = modes[(idx + 1) % modes.length];
+      // 内容页当前展示的条目也立即按新规则重排
+      _contentItems = _sortedItems(_contentItems);
+    });
+  }
+
+  /// 按当前排序方式整理番剧条目（内容页直接使用）。
+  ///
+  /// - recent：按来源内的原始顺序（后加入的在前，与主应用「最近添加」一致）
+  /// - name：按番剧名升序
+  /// - episodes：按总集数降序
+  List<TvLibraryItem> _sortedItems(List<TvLibraryItem> items) {
+    final copy = List.of(items);
+    switch (_sortMode) {
+      case 'name':
+        copy.sort((a, b) => a.title.compareTo(b.title));
+        break;
+      case 'episodes':
+        copy.sort((a, b) =>
+            b.episodes.length.compareTo(a.episodes.length));
+        break;
+      default:
+        break;
+    }
+    return copy;
   }
 
   String get _sortLabel => switch (_sortMode) {
