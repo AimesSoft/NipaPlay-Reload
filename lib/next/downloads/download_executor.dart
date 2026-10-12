@@ -213,8 +213,12 @@ final class DownloadExecutor implements JobExecutor {
         final pending = localVideos
             .where((f) =>
                 files.singleWhere(
-                    (row) => row['path'] == f.location.path)['imported'] !=
-                true)
+                        (row) => row['path'] == f.location.path)['imported'] !=
+                    true ||
+                (files.singleWhere(
+                            (row) => row['path'] == f.location.path)['media']
+                        as Map?)?['classicScanPending'] ==
+                    true)
             .toList();
         if (pending.isNotEmpty) {
           if (context.job.cancelRequestedAt != null) {
@@ -372,6 +376,8 @@ final class DownloadExecutor implements JobExecutor {
         'path': file.location.path,
         'expectedSize': file.expectedSize,
         'actualSize': size,
+        if (size != null && file.location.isLocal)
+          'canonicalPath': await File(file.location.path).resolveSymbolicLinks(),
         'local': file.location.isLocal,
         'included': file.included,
         'imported': false,
@@ -413,6 +419,14 @@ final class DownloadExecutor implements JobExecutor {
         'downloadComplete': task.finished,
         'paused': task.paused,
         'files': files,
+        'fileIds': {
+          for (final row in files)
+            if ((row['media'] as Map?)?['fileId'] case final String id) id
+        }.toList(),
+        'workIds': {
+          for (final row in files)
+            ...?((row['media'] as Map?)?['workIds'] as List?)
+        }.toList(),
         if (reason != null) 'reason': reason
       });
 }

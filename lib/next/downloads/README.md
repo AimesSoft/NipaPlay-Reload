@@ -46,8 +46,8 @@ Selected local videos without a confirmed library entry have
 receipt never claims an entry was registered merely because the scanner returned
 success. Remote files retain `requires_transfer` before any local registration.
 
-The current Classic adapter uses the existing scanner and recognized history
-entries. A completed scan attempt is recorded even if some files remain
+The Classic adapter registers completed local videos in Next and reads their
+current episode/work links as well as Classic matching. A completed scan attempt is recorded even if some files remain
 unidentified, so session observation and application restart cannot repeatedly
 scan the same torrent. Busy scanners and backend/file access failures still
 retry as operational errors; missing identities do not schedule download retries.
@@ -58,11 +58,20 @@ registration, and identification jobs/Decisions. Its integration point is
 the verified local paths, read back their entries (including unidentified
 entries), and let a separate identification task consume pending identities.
 An unidentified registered entry returned by `lookup` carries
-`identificationPending: true` in its media map. The executor then reports
-`imported: true` together with `identificationPending: true`, without rescanning
-the entry for recognition. This download implementation does not create
+`identificationPending: true` in its media map. The executor reports
+`imported: true` together with `identificationPending: true`. The application
+adapter also reports `classicScanPending` when no Classic history entry exists;
+enabled automatic scanning still gets its one identification attempt. This implementation does not create
 an alternative identity store or launch identification tasks. Historical download
 receipts remain snapshots; identification results belong to those later tasks.
+
+Completion receipts retain `fileIds` and the then-known `workIds`, including
+per-file `media.fileId/workIds`. UI task/work association can follow those files'
+current episode links after later identification. Verified, successful receipts
+authorize their included completed local files by canonical path, even outside
+library roots. This does not authorize the download directory or unfinished
+neighbours, add a scan root, or invent an identity. `imageUrl` is a poster for a
+work and a still for an episode; separate image roles remain independent facts.
 
 Cancellation pauses the backend and reads back the preserved files and any
 already submitted import. Its receipt records `paused`, per-file `retained` and
