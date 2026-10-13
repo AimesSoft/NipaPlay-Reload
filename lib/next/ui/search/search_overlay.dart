@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 
 import '../../ui_data/ui_data.dart';
+import '../data/search.dart';
 import '../theme/tokens.dart';
 import '../widgets/artwork.dart';
 import '../widgets/buttons.dart';
@@ -276,7 +277,8 @@ class _Panel extends StatelessWidget {
       );
 
   /// The recent terms, or each group's answer; what is not there says
-  /// nothing, except a failed group and an empty search, in one quiet line.
+  /// nothing, except a failed group (or source) and an empty search, in one
+  /// quiet line.
   List<Widget> _rows() {
     if (search.typed.isEmpty) {
       if (search.recent.isEmpty) return const [];
@@ -288,16 +290,20 @@ class _Panel extends StatelessWidget {
     final rows = <Widget>[];
     for (final MapEntry(key: kind, value: group) in search.groups.entries) {
       final shown = search.shown(kind);
-      if (shown.isNotEmpty) {
-        rows
-          ..add(_Heading(_titles[kind]!))
-          ..add(AnimatedOpacity(
+      if (shown.isNotEmpty || group.unanswered.isNotEmpty) {
+        rows.add(_Heading(_titles[kind]!));
+        if (shown.isNotEmpty) {
+          rows.add(AnimatedOpacity(
             opacity: group.loading ? 0.5 : 1,
             duration: const Duration(milliseconds: 160),
             child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: shown.map(_row).toList()),
           ));
+        }
+        for (final source in group.unanswered) {
+          rows.add(_Quiet('暂时搜不了', about: source));
+        }
       } else if (group.failed) {
         rows
           ..add(_Heading(_titles[kind]!))
@@ -412,13 +418,27 @@ class _Heading extends StatelessWidget {
 }
 
 class _Quiet extends StatelessWidget {
-  const _Quiet(this.text);
+  const _Quiet(this.text, {this.about});
   final String text;
+
+  /// What it is said of: a source, by its name.
+  final String? about;
 
   @override
   Widget build(BuildContext context) => Padding(
         padding: const EdgeInsets.fromLTRB(14, 8, 14, 10),
-        child: Text(text, style: NextText.sans(13.5, color: NextColors.p3)),
+        child: Text.rich(
+          TextSpan(children: [
+            if (about != null)
+              TextSpan(
+                  text: '$about  ',
+                  style: NextText.sans(13.5, color: NextColors.p2)),
+            TextSpan(text: text),
+          ]),
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: NextText.sans(13.5, color: NextColors.p3),
+        ),
       );
 }
 
@@ -480,6 +500,7 @@ class _RowState extends State<_Row> {
         WorkEntry(:final work) => work.title,
         EpisodeEntry(:final work, :final episode) =>
           '${work.title} ${Words.episode(episode.number)}',
+        SourceEntry(:final hit) => '${hit.title} ${hit.source.name}',
         NipaEntry() => '让 Nipa 找',
       };
 
@@ -504,9 +525,10 @@ class _RowState extends State<_Row> {
           ),
           child: switch (widget.entry) {
             RecentEntry(:final text) => _recent(text, on),
-            WorkEntry(:final work, :final source) => _work(work, source, on),
+            final WorkEntry e => _work(e.work, on, inLibrary: e.inLibrary),
             EpisodeEntry(:final work, :final episode) =>
               _episode(work, episode, on),
+            SourceEntry(:final hit) => _source(hit, on),
             NipaEntry(:final text) => _nipa(text, on),
           },
         ),
@@ -534,7 +556,8 @@ class _RowState extends State<_Row> {
         ]),
       );
 
-  Widget _work(UiWork work, String? source, bool on) {
+  /// [inLibrary]: found online, and the library has it.
+  Widget _work(UiWork work, bool on, {String? source, bool inLibrary = false}) {
     final meta = <String>[
       if (source != null) source,
       if (work.year case final year?) '$year',
@@ -562,12 +585,13 @@ class _RowState extends State<_Row> {
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: _title(on)),
-              if (meta.isNotEmpty || work.devices.isNotEmpty) ...[
+              if (meta.isNotEmpty || work.devices.isNotEmpty || inLibrary) ...[
                 const SizedBox(height: 4),
                 Row(children: [
                   if (meta.isNotEmpty) Text(meta, maxLines: 1, style: _meta),
-                  if (meta.isNotEmpty && work.devices.isNotEmpty)
+                  if (meta.isNotEmpty && (work.devices.isNotEmpty || inLibrary))
                     const SizedBox(width: 12),
+                  if (inLibrary) const _InLibrary(),
                   if (work.devices.isNotEmpty)
                     Flexible(child: DeviceMark(work.devices, size: 12)),
                 ]),
@@ -579,8 +603,48 @@ class _RowState extends State<_Row> {
     );
   }
 
-  Widget _episode(UiWork work, UiEpisode episode, bool on) {
+  /// [file]: a share's file of it, marked as one.
+  Widget _episode(UiWork work, UiEpisode episode, bool on,
+      {String? source, bool file = false}) {
     final title = episode.title;
+    // A source's episode may come without its number: its name alone.
+    final name = episode.number <= 0
+        ? title ?? ''
+        : title == null || title.isEmpty
+            ? Words.episode(episode.number)
+            : '${Words.episode(episode.number)} · $title';
+    final meta = [
+      if (work.title.isNotEmpty && work.title != name) work.title,
+      if (source != null) source,
+    ].join(' · ');
+    return _still(
+      name,
+      meta,
+      on,
+      image: episode.still ?? work.artwork.backdrop,
+      tint: work.artwork.tint,
+      file: file,
+      playable: episode.playable,
+    );
+  }
+
+  /// A row of a source: its works as the library's; an episode, a video or
+  /// a file under a still. Out of reach, what it held, dimmed.
+  Widget _source(UiSourceHit hit, bool on) {
+    final source = hit.source.name;
+    final row = switch ((hit.kind, hit.work, hit.episode)) {
+      (UiSourceHitKind.work, final work?, _) => _work(work, on, source: source),
+      (final kind, final work?, final episode?) => _episode(work, episode, on,
+          source: source, file: kind == UiSourceHitKind.file),
+      _ => _still(hit.title, source, on, file: true, playable: hit.playable),
+    };
+    return hit.reachable ? row : Opacity(opacity: 0.5, child: row);
+  }
+
+  /// A 16:9 picture (or, for a file, its mark), a name and a line under
+  /// it; the play mark when it plays.
+  Widget _still(String name, String meta, bool on,
+      {String? image, int? tint, bool file = false, bool playable = false}) {
     return SizedBox(
       height: 60,
       child: Row(children: [
@@ -589,8 +653,13 @@ class _RowState extends State<_Row> {
           child: SizedBox(
             width: 72,
             height: 40.5,
-            child: NextImage(episode.still ?? work.artwork.backdrop,
-                tint: work.artwork.tint),
+            child: Stack(fit: StackFit.expand, children: [
+              NextImage(image, tint: tint),
+              if (file)
+                const Center(
+                    child: NextIcon(NextGlyph.video,
+                        size: 16, color: NextColors.p3)),
+            ]),
           ),
         ),
         const SizedBox(width: 14),
@@ -599,20 +668,19 @@ class _RowState extends State<_Row> {
             mainAxisAlignment: MainAxisAlignment.center,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(
-                  title == null || title.isEmpty
-                      ? Words.episode(episode.number)
-                      : '${Words.episode(episode.number)} · $title',
+              Text(name,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: _title(on)),
-              const SizedBox(height: 4),
-              Text(work.title,
-                  maxLines: 1, overflow: TextOverflow.ellipsis, style: _meta),
+              if (meta.isNotEmpty) ...[
+                const SizedBox(height: 4),
+                Text(meta,
+                    maxLines: 1, overflow: TextOverflow.ellipsis, style: _meta),
+              ],
             ],
           ),
         ),
-        if (episode.playable) ...[
+        if (playable) ...[
           const SizedBox(width: 12),
           NextIcon(NextGlyph.play,
               size: 14, color: on ? NextColors.paper : NextColors.p4),
@@ -645,6 +713,23 @@ class _RowState extends State<_Row> {
               overflow: TextOverflow.ellipsis,
             ),
           ),
+        ]),
+      );
+}
+
+/// A work found online that the library has: a check and two words, as
+/// quiet as a device's mark.
+class _InLibrary extends StatelessWidget {
+  const _InLibrary();
+
+  @override
+  Widget build(BuildContext context) => Padding(
+        padding: const EdgeInsets.only(right: 12),
+        child: Row(mainAxisSize: MainAxisSize.min, children: [
+          const NextIcon(NextGlyph.check,
+              size: 11, color: NextColors.p2, stroke: 2),
+          const SizedBox(width: 4),
+          Text('已入库', style: NextText.sans(12, color: NextColors.p2)),
         ]),
       );
 }

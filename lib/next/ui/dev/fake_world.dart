@@ -595,6 +595,12 @@ final class FakeWorld implements NextUiData, NextUiActions, NextDiscoverData {
   }
 
   @override
+  Future<void> playFromSource(
+      {required String sourceId, required String itemId}) async {
+    debugPrint('[NextUi dev] play from $sourceId $itemId');
+  }
+
+  @override
   Future<bool> markWatched(List<UiEpisode> episodes,
       {required bool watched}) async {
     for (final e in episodes) {

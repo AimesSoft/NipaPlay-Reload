@@ -204,4 +204,15 @@ final class CoreUiActions implements NextUiActions {
       debugPrint('[NextUi] play failed: ${failure.message}');
     }
   }
+
+  /// Through the source, as its own page would: Classic's player again.
+  @override
+  Future<void> playFromSource(
+      {required String sourceId, required String itemId}) async {
+    final outcome = await runtime.harness.invokeJson('media.sources.play',
+        {'sourceId': sourceId, 'itemId': itemId}, Invocation(origin: 'gui'));
+    if (outcome case Failed(:final failure)) {
+      debugPrint('[NextUi] play from source failed: ${failure.message}');
+    }
+  }
 }

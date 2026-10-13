@@ -186,3 +186,106 @@
 - 按进程号退出了实例和 `flutter attach` 的附加进程（补做两项时重新启动过一次实例，也已按进程号退出）。
 - 删除了 `y9-dev`。
 - 用 `git checkout macos/Podfile.lock` 恢复了 `macos/Podfile.lock`。
+
+## Y10 接线
+
+2026-10-13，worktree `y10-search-wire`，分支 `next/y10-search-wire`。按 X56 报告第 4 节，把搜索面板接到新的只读搜索上。没有 commit、push，没有改后端、依赖或 Classic。代码只改了 `lib/next/ui/` 和 `test/next/ui_search_test.dart`。所有调用仍经 `runtime.harness`，使用 `Invocation(origin: 'gui')`。
+
+### 1. 片库组
+
+- 改为调用 `media.library.search_merged {query, limit: 12, episodeLimit: 4}`。
+- `works` 解码为 `UiWork`，`episodes` 解码为 `(UiWork, UiEpisode)`，直接填入 `UiLibraryHits`。
+- 年份、原名、集数、海报、设备、可播放状态都直接用合并目录给出的值，不再根据 episodes 数组估算集数。
+- 真实环境里片库组现在也有剧集结果（按剧集标题匹配）。
+
+### 2. 在线组
+
+- `media.metadata.search` 结果里的 `workId` 不为 null 时，`UiWork.workId` 直接用它，作品页按片库作品读取。为 null 时仍用 `Found.id`。
+- 去重改为按 workId：片库组已经显示的作品，不在在线组重复显示。原来按同名去重的做法已去掉，所以同名但不是同一部的作品会照常显示。
+- 已入库、但不在片库结果里的候选（例如译名不同）会保留，行内带一个“✓ 已入库”标记，打开的是片库作品页，不是未入库作品页。
+- 两个在线候选指向片库里同一部作品时，只显示一次。
+
+### 3. 来源组
+
+- **读取来源列表**：打开面板时读一次 `media.sources.list`，只保留 Jellyfin、Emby、SMB、WebDAV。每次打开面板都会重新读；读取失败时，下一次搜索会再读。
+- **逐个来源搜索**：每个来源单独调用 `media.sources.search {query, sourceIds: [id], limit: 3}`。哪个先返回就先显示哪个，行的顺序仍按来源列表的顺序，每个来源最多 3 行。
+- **出错**：
+  - 来源返回 error 或 `total` 为 null 时，视为这个来源失败。失败且没有结果的来源，在“来源”下单独显示一行“书房 Emby  暂时搜不了”，其他来源照常显示。
+  - 只要有来源失败，就不显示“没有找到”。
+  - 来源列表本身读取失败时，整组显示“暂时搜不了”。
+- **连接状态**：
+  - `connectionState = failed` 但带有缓存结果的共享：结果照常显示，但调暗为 50%，不显示播放标记。
+  - `unverified` 表示状态未知，不调暗。后端对这类文件给出 `playable = false`，所以不显示播放标记，但点击后仍会尝试播放。
+- **各类结果的打开方式**：
+  - Series、Movie：作为作品，ID 用 `workId`，没有时用 `sourceWorkId`，打开作品页。
+  - Episode、Video：作为剧集，ID 用 `episodeId`，没有时用 `sourceEpisodeId`；所属作品用 `workId`，没有时用 `sourceWorkId`。集数取 `IndexNumber`。播放规则和片库剧集相同：能播放时经 `NextUiActions.play` 播放，不能播放时打开作品页。
+  - File：
+    - 绑定到一集：按剧集处理；
+    - 只绑定到作品：打开作品页；
+    - 未绑定：经新增的 `NextUiActions.playFromSource` 调用 `media.sources.play {sourceId, itemId}`。
+  - 服务器上没有所属系列的 Episode 没有作品页，也走 `playFromSource`。
+- **itemId 的用途**：只用来和 sourceId 一起调用 `media.sources.play`，以及作为行的内部 key。从不当作 workId 使用，界面上不显示任何 ID，行里只显示来源的名字。
+
+### 4. 类型
+
+| 位置 | 改动 |
+|---|---|
+| `data/search.dart` | `NextSearchData` 增加 `sources()` 和 `searchSource(source, query, {limit})`，去掉旧的 `sources(query)`；新增 `UiSearchSource`、`UiSourceAnswer`（`failed`）、`UiSourceHitKind`；`UiSourceHit` 改为能承载作品、剧集或文件，字段有 `source`、`itemId`、`kind`、`title`、`work?`、`episode?`、`playable`、`reachable`；`CoreSearch` 换成上面这些调用，解码不信任字段类型 |
+| `data/ui_actions.dart`、`data/core_connect.dart` | `NextUiActions.playFromSource`，真实实现调用 `media.sources.play` |
+| `search/search_controller.dart` | `SourceEntry`；`SearchGroup.unanswered`；`WorkEntry.inLibrary`（去掉了 `source` 字段）；在线组按 workId 去重；来源列表在打开面板时读取；逐个来源搜索 |
+| `search/search_overlay.dart` | 来源行（作品用海报，剧集和文件用 16:9 小图，文件带视频标记）；已入库标记；单个来源出错的提示行；连不上的来源调暗 |
+| `shell/shell_controller.dart` | `openSearchEntry` 按来源行的种类打开作品页、播放，或从来源播放 |
+| `dev/fake_search.dart`、`dev/fake_world.dart`、`dev/debug_extension.dart` | 假数据世界见下一节；`fake_world` 实现 `playFromSource`（只记一行日志）；调试输出增加 `in library`、来源行和 `unanswered` |
+
+### 5. 假数据世界
+
+- **在线组**：也返回片库里的作品，带片库 workId。其中三部用别的译名：“间谍家家酒”“药师少女的独语”“电驭叛客：边缘行者”，搜这些名字时能看到已入库标记。
+- **来源组**：
+  - “客厅 Jellyfin”：系列和剧集；
+  - “家里的 NAS”：文件，部分未绑定，可以播放；
+  - “网盘”：状态未知，不显示播放标记；
+  - “书房 Emby”：连不上，默认出错。
+- **调试扩展**：`search fail=` 现在也接受来源 ID，例如 `fail=smb,emby` 表示共享连不上、只剩缓存结果。`fail=none` 表示什么都不出错，用来演示“没有找到”。
+
+### 6. 验证
+
+- `flutter analyze --no-pub lib/next/ui test/next/ui_search_test.dart`：没有问题。`git diff --check` 通过。
+- `test/next/ui_search_test.dart` 的 11 个测试全部通过。新增或改写的内容：
+  - **每个来源单独返回**：先返回的先显示；某个来源抛错或 `total` 为 null 时，只有它自己显示出错；旧查询的结果被丢弃；连不上的共享保留调暗的缓存结果；重新打开面板会重新读来源列表；列表读取失败时整组出错，下次搜索会重新读；没有来源时不显示来源组。
+  - **在线组按 workId 去重**：同名但不是同一部的作品保留；已入库的作品保留并带标记；同一部作品只出现一次。
+  - **真实调用**：片库组用真实的 `LibrarySearchIndex`，数据行由真实的 `workJson`/`episodeJson` 生成；在线组用真实的弹弹play 提供方，按 MediaService 的方式加上 `workId`；来源用按 X56 输出格式写的假 Action。逐项核对 `origin: gui`、`Effect.read`、解码结果，并确认 itemId 不会被当成 workId 或 episodeId。
+  - **界面**：来源的作品、剧集、文件行，已入库标记，单个来源出错的提示行；没有出现 ID，也不显示“没有找到”。
+  - **外壳**：来源剧集经 `play` 播放；未绑定的文件经 `playFromSource(smb-1, /下载/…)` 播放。
+- 排队、去掉代理变量后，完整跑了一次 `flutter test --no-pub test/next`：**555 个通过，7 个跳过，0 个失败**。`ui_gate_test`、`ui_library_test` 也单独跑过，全部通过。
+- **在应用里验证**（`y10-dev`，假数据和假对话，实例保持安静）：
+  - 截图前后都用 `lsappinfo front` 确认前台没有变，只截自己的窗口。
+  - 回车打开“间谍家家酒”，进入的是片库的“间谍过家家”作品页（`found: false`）。
+  - 在 NAS 的未绑定文件上回车，日志是 `[NextUi dev] play from smb /下载/[字幕组] 未知作品 - 01.mkv`。
+  - `fail=none` 时搜“冷门老番”会显示“没有找到”；Emby 出错时不显示。
+  - 日志里没有 overflow 或异常。
+- 真实 NextCore 没有在应用里运行，原因同第 3 节：不碰真实服务和凭据。
+
+截图在 `docs/next/evidence/y10/`：
+
+| 文件 | 内容 |
+|---|---|
+| `01-source-files.jpg` | 搜“mkv”：NAS 的文件（可以播放）、网盘的文件（状态未知，没有播放标记），最后一行“书房 Emby  暂时搜不了” |
+| `02-source-episodes.jpg` | 搜“魔法”：片库的剧集，以及 Jellyfin 里的同几集（“葬送的芙莉莲 · 客厅 Jellyfin”） |
+| `03-online-in-library.jpg` | 搜“家家酒”：在线组的“间谍家家酒 2022 ✓ 已入库” |
+| `04-in-library-opens-its-page.jpg` | 回车后打开的是片库的“间谍过家家”作品页 |
+| `05-share-out-of-reach.jpg` | NAS 连不上：缓存的“录屏 2026-09-30.mp4”被调暗、没有播放标记，Emby 单独一行出错 |
+
+### 7. 还有的缺口和我的取舍
+
+1. **来源的行没有海报。** `media.sources.search` 按设计不返回图片地址，界面也没有按条目调用 X48 图片供应者的入口，所以现在显示的是占位底色。需要海报的话，要后端或数据层补一个只读、可以懒加载的图片来源。
+2. **已绑定共享文件不知道作品名。** 搜索结果里只有 workId，所以这类行只显示文件名和来源名；点进作品页后，作品页会读到完整信息。
+3. **来源组和片库组不去重。** 已经绑定到片库作品的系列，会同时出现在两组，两行打开的是同一个页面。来源组本来就表示“来源里有什么”，所以我保留了。如果主控希望去掉重复，只需要在 `shown(sources)` 里按 workId 过滤。
+4. **状态未知的共享上的未绑定文件，点击时仍会尝试播放。** 失败时只记日志，和其他播放失败的处理一样。
+
+### 8. 收尾
+
+- **复制配置时发现的问题**：从 `ui-demo` 复制来的 `lab-profile.json` 里，`endpointFile` 仍然指向 `ui-demo/endpoint.json`。启动前我把它改成了 `y10-dev` 自己的路径。
+- **热重载的注意事项**：热重载只会发送 `flutter attach` 之后改过的文件。在 attach 之前改的文件需要 `touch` 一下，否则不会生效。
+- 按进程号退出了实例和 `flutter attach` 的附加进程，删除了 `y10-dev`，用 `git checkout` 恢复了 `macos/Podfile.lock`。
+- 没有启动 `/Applications/NipaPlay.app`，没有激活窗口、点击或移动鼠标，没有截全屏，没有碰 `ui-demo` 和其他实例，也没有读写钥匙串或真实数据。
+- `macos/Flutter/GeneratedPluginRegistrant.swift` 在开始前就已经被改过，没有动。
