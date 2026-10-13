@@ -9,6 +9,7 @@ import 'package:nipaplay/next/media/provider_transport.dart';
 import 'package:nipaplay/next/media/providers.dart';
 import 'package:nipaplay/next/mesh/library_codec.dart';
 import 'package:nipaplay/next/state/query.dart';
+import 'package:nipaplay/next/ui/dev/fake_settings.dart';
 import 'package:nipaplay/next/ui/conversation/chat_port.dart';
 import 'package:nipaplay/next/ui/data/discover.dart';
 import 'package:nipaplay/next/ui/data/search.dart';
@@ -443,6 +444,7 @@ NextUiServices _services(NextSearchData search, {NextUiActions? actions}) {
     library: lib,
     libraryActions: lib,
     search: search,
+    settings: FakeSettings(),
   );
 }
 

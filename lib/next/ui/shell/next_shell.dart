@@ -14,6 +14,7 @@ import '../pages/discover_page.dart';
 import '../pages/library_page.dart';
 import '../panel/chat_panel.dart';
 import '../search/search_overlay.dart';
+import '../settings/settings_page.dart';
 import '../theme/tokens.dart';
 import '../widgets/art_origin.dart';
 import '../widgets/grain.dart';
@@ -28,6 +29,15 @@ class NextShell extends StatefulWidget {
   /// Back to Classic.
   final VoidCallback onLeave;
 
+  /// The app menu's “偏好设置…” (⌘,): Next's settings while the shell is
+  /// on screen; false when it is not and Classic should open its own.
+  static bool openSettings() {
+    final shell = _NextShellState._shown;
+    if (shell == null || !shell.mounted || !shell._onScreen) return false;
+    shell._shell.openSettings();
+    return true;
+  }
+
   @override
   State<NextShell> createState() => _NextShellState();
 }
@@ -38,14 +48,19 @@ class _NextShellState extends State<NextShell> {
       NextShellController(_services, onLeave: widget.onLeave);
   final _focus = FocusNode(debugLabel: 'next.shell');
 
+  static _NextShellState? _shown;
+  bool _onScreen = false;
+
   @override
   void initState() {
     super.initState();
+    _shown = this;
     if (kDebugMode) NextUiDebug.attach(_shell, context);
   }
 
   @override
   void dispose() {
+    if (identical(_shown, this)) _shown = null;
     WorkDetailBridge.detach(this);
     if (kDebugMode) NextUiDebug.detach(_shell);
     _shell.dispose();
@@ -56,6 +71,7 @@ class _NextShellState extends State<NextShell> {
 
   Route<void> _route(RouteSettings settings) {
     if (settings.name == '/work') return workRoute(settings);
+    if (settings.name == '/settings') return settingsRoute(settings);
     return PageRouteBuilder<void>(
       settings: settings,
       opaque: false,
@@ -78,6 +94,7 @@ class _NextShellState extends State<NextShell> {
   Widget build(BuildContext context) {
     // Hidden while Classic's player shows a video: logins open at once then.
     final showing = TickerMode.valuesOf(context).enabled;
+    _onScreen = showing;
     _services.logins.showing = () => showing && mounted;
     WorkDetailBridge.attach(this, (id) async {
       if (!mounted || !_services.logins.showing()) return null;
@@ -185,7 +202,7 @@ class _NextShellState extends State<NextShell> {
 }
 
 /// ⌘K: the conversation's input. ⌘F: search, the Mac's Find (and free in
-/// every text field, unlike `/`). Esc: what is on top closes.
+/// every text field, unlike `/`). ⌘,: settings. Esc: what is on top closes.
 Map<ShortcutActivator, VoidCallback> nextShellShortcuts(
         NextShellController shell) =>
     {
@@ -195,6 +212,10 @@ Map<ShortcutActivator, VoidCallback> nextShellShortcuts(
           shell.openSearch,
       const SingleActivator(LogicalKeyboardKey.keyF, control: true):
           shell.openSearch,
+      const SingleActivator(LogicalKeyboardKey.comma, meta: true):
+          shell.openSettings,
+      const SingleActivator(LogicalKeyboardKey.comma, control: true):
+          shell.openSettings,
       const SingleActivator(LogicalKeyboardKey.escape): () => shell.escape(),
     };
 

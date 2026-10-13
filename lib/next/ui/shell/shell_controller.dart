@@ -8,6 +8,8 @@ import '../data/services.dart';
 import '../detail/work_route.dart';
 import '../search/recent_searches.dart';
 import '../search/search_controller.dart';
+import '../settings/settings_layout.dart';
+import '../settings/settings_page.dart';
 import '../theme/tokens.dart';
 import '../widgets/art_origin.dart';
 
@@ -72,6 +74,14 @@ class NextShellController extends ChangeNotifier {
 
   NextSection section = NextSection.home;
   NextPopover popover = NextPopover.none;
+
+  /// Where the open settings page should go next (⌘, or a link while it
+  /// is open); the page takes it and clears it.
+  final settingsTarget = ValueNotifier<SettingsTarget?>(null);
+  bool _settingsOpen = false;
+
+  /// The settings page is on top.
+  bool get settingsOpen => _settingsOpen;
 
   List<UiTask> get activeTasks => [
         for (final t in tasks.value)
@@ -230,6 +240,37 @@ class NextShellController extends ChangeNotifier {
     WidgetsBinding.instance.addPostFrameCallback((_) => _syncVisible());
   }
 
+  /// Settings (⌘, or the avatar's menu), at [section] or showing the
+  /// setting [key]. Again while open: it goes there.
+  void openSettings({SettingsSection? section, String? key}) {
+    final nav = navigatorKey.currentState;
+    if (nav == null) return;
+    if (popover != NextPopover.none) {
+      popover = NextPopover.none;
+      notifyListeners();
+    }
+    if (_settingsOpen) {
+      if (section != null || key != null) {
+        settingsTarget.value = SettingsTarget(section: section, key: key);
+      }
+      return;
+    }
+    _settingsOpen = true;
+    if (panelOpen.value) _closePanel();
+    final wasScrolled = scrolled.value;
+    final from = this.section;
+    scrolled.value = false;
+    nav
+        .pushNamed('/settings',
+            arguments: SettingsTarget(section: section, key: key))
+        .then((_) {
+      _settingsOpen = false;
+      if (this.section == from) scrolled.value = wasScrolled;
+      _syncVisible();
+    });
+    WidgetsBinding.instance.addPostFrameCallback((_) => _syncVisible());
+  }
+
   void play(UiWork work, {UiEpisode? episode}) {
     unawaited(services.actions
         .play(work, episode: episode ?? work.next)
@@ -322,6 +363,7 @@ class NextShellController extends ChangeNotifier {
     homeChatOpen.removeListener(_syncVisible);
     chat.dispose();
     search.dispose();
+    settingsTarget.dispose();
     tasks.dispose();
     scrolled.dispose();
     askFocus.dispose();

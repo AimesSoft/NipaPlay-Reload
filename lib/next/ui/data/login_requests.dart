@@ -30,11 +30,22 @@ class LoginRequests extends ChangeNotifier {
   /// A new card arrived (the shell makes sure it can be seen).
   VoidCallback? onRequest;
 
+  /// Platforms the person just asked to log in to from the interface (the
+  /// settings page): their window opens at once, without a card.
+  final _asked = <String>{};
+
+  /// The next login for [platform] is the person's own: open its window
+  /// directly. Forgotten after a minute if none comes.
+  void expect(String platform) {
+    _asked.add(platform);
+    Timer(const Duration(minutes: 1), () => _asked.remove(platform));
+  }
+
   /// Routes one login. [show] opens NipaPlay's own window and returns what
   /// the user entered; [stopped] completes when the login was cancelled.
   Future<T?> request<T>(
       String platform, Future<T?> Function() show, Future<void> stopped) {
-    if (!showing()) return show();
+    if (!showing() || _asked.remove(platform)) return show();
     final request = LoginRequest._(platform, show);
     pending.add(request);
     notifyListeners();

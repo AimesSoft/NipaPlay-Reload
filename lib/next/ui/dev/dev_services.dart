@@ -2,6 +2,7 @@ import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart';
+import 'package:nipa_harness/nipa_harness.dart';
 import 'package:nipaplay/utils/lab_profile.dart';
 import 'package:provider/provider.dart';
 
@@ -9,6 +10,7 @@ import '../../next_runtime.dart';
 import '../conversation/chat_port.dart';
 import '../data/services.dart';
 import '../theme/tokens.dart';
+import 'fake_settings.dart';
 import 'fake_world.dart';
 
 /// Development and screenshot switches. Only read in Debug lab profiles:
@@ -37,9 +39,19 @@ abstract final class NextUiDev {
       followupAfter: int.tryParse(env['NIPAPLAY_NEXT_UI_FAKE_FOLLOWUP'] ?? ''),
     );
     if (world == null) return null;
+    final runtime = context.read<NextRuntime>();
     final ChatPort chat = env['NIPAPLAY_NEXT_UI_FAKE_CHAT'] == '1'
         ? FakeChatPort(world)
-        : ChatHostPort(context.read<NextRuntime>());
+        : ChatHostPort(runtime);
+    // The registry's real contracts, read only; values stay in the script.
+    final settings = FakeSettings(describe: () async {
+      final outcome = await runtime.harness.invokeJson(
+          'settings.describe', {'limit': 1000}, Invocation(origin: 'gui'));
+      if (outcome case Completed(:final value)) {
+        return (value.toJson()['settings'] as List).cast<Map>();
+      }
+      throw StateError('settings.describe');
+    });
     return NextUiServices(
       data: world,
       actions: world,
@@ -48,7 +60,11 @@ abstract final class NextUiDev {
       library: world.catalog,
       libraryActions: world.catalog,
       search: world.search,
-      onDispose: world.dispose,
+      settings: settings,
+      onDispose: () {
+        world.dispose();
+        settings.dispose();
+      },
     );
   }
 }

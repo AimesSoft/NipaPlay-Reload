@@ -1,3 +1,4 @@
+import 'package:nipaplay/next/ui/shell/next_shell.dart';
 import 'package:nipaplay/security/secret_redactor.dart';
 import 'dart:convert';
 import 'package:nipaplay/security/credential_diagnostics_migration.dart';
@@ -1075,6 +1076,8 @@ class _NipaPlayAppState extends State<NipaPlayApp> with WidgetsBindingObserver {
         if (ctx != null) _showGlobalUploadDialog(ctx);
       },
       onOpenSettings: () {
+        // Next's own settings while its shell is on screen.
+        if (NextShell.openSettings()) return;
         final ctx = navigatorKey.currentState?.overlay?.context;
         if (ctx == null) return;
         unawaited(
