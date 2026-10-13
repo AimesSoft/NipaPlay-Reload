@@ -9,8 +9,10 @@ import '../../ui_data/ui_data.dart';
 import '../conversation/chat_port.dart';
 import '../dev/dev_services.dart';
 import 'core_connect.dart';
+import 'core_settings.dart';
 import 'discover.dart';
 import 'login_requests.dart';
+import 'settings_data.dart';
 import 'ui_actions.dart';
 
 /// Everything the Next shell talks to.
@@ -22,6 +24,7 @@ final class NextUiServices {
     required this.discover,
     required this.library,
     required this.libraryActions,
+    required this.settings,
     LoginRequests? logins,
     this.onDispose,
   }) : logins = logins ?? LoginRequests();
@@ -37,6 +40,10 @@ final class NextUiServices {
   /// in them directly.
   final NextLibraryData library;
   final NextLibraryActions libraryActions;
+
+  /// The settings page: the registry, accounts, sources, memory and what
+  /// only this device's person may change.
+  final NextSettingsData settings;
 
   /// Logins the agent asked for, waiting for the user's window.
   final LoginRequests logins;
@@ -61,6 +68,8 @@ final class NextUiServices {
     final logins = LoginRequests();
     final data = coreUiData(core);
     final library = CoreLocalLibrary(data);
+    final settings = CoreSettingsData(core, runtime, logins);
+    final detach = attachCoreLogins(core, logins);
     return NextUiServices(
       data: data,
       actions: coreUiActions(core, runtime),
@@ -68,8 +77,12 @@ final class NextUiServices {
       discover: CoreDiscover(runtime),
       library: library,
       libraryActions: library,
+      settings: settings,
       logins: logins,
-      onDispose: attachCoreLogins(core, logins),
+      onDispose: () {
+        detach();
+        settings.dispose();
+      },
     );
   }
 }

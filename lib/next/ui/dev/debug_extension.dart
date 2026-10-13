@@ -37,7 +37,10 @@ import '../widgets/nipa_avatar.dart';
 import '../widgets/shelf.dart';
 import '../widgets/words.dart';
 import 'dev_services.dart';
+import 'fake_settings.dart';
 import 'fake_world.dart';
+import '../settings/settings_layout.dart';
+import '../settings/settings_page.dart';
 
 /// `ext.nipaplay.nextui`: a VM-service-only driver for experiments and
 /// screenshots of the Next interface. Registered only in Debug builds with a
@@ -106,6 +109,13 @@ import 'fake_world.dart';
 ///   [`menu=sources|sort|edit|none`] [`open=<categoryId>`] [`sort=<id>`]
 ///   [`move=<categoryId>,<index>`] [`remove=<categoryId>`]: the 片库 page,
 ///   as its controls would; returns what it shows.
+/// - `settings` [`open=false`] [`section=<name>`] [`key=<setting>`]
+///   [`query=`] [`more=true|false`] [`source=<id>|new|none`]
+///   [`memory=<path>|none`] [`check=true`] [`advanced=true|false`]
+///   [`scroll=px|end`] [`reload=true`], and for the scripted world
+///   [`model=key|nokey|codex|nocodex`] [`mesh=online|offline|unavailable`]
+///   [`account=<provider>:in|out`]: the settings page, opened as ⌘, opens
+///   it, then as its rail, search and rows would; returns what it shows.
 /// - `cat` [`sort=<id>`] [`scroll=top|end|<px>` [`ms=`]]: the category
 ///   page on top; a timed scroll also reports how long its frames took.
 ///   `scroll` takes `ms=` too, for the page showing.
@@ -496,6 +506,34 @@ abstract final class NextUiDebug {
                   '${Words.canPlay(w) ? ' playable' : ''}'
           ],
         };
+      case 'settings':
+        final settings = shell.services.settings;
+        Map<String, Object?>? world;
+        if (const ['model', 'mesh', 'account'].any(p.containsKey)) {
+          if (settings is! FakeSettings) {
+            throw StateError('model, mesh and account need the scripted world');
+          }
+          world = settings.scenario(p);
+        }
+        if (p['open'] == 'false') {
+          if (shell.settingsOpen) shell.navigatorKey.currentState?.pop();
+          await Future<void>.delayed(const Duration(milliseconds: 400));
+          return _status(shell);
+        }
+        if (!shell.settingsOpen) {
+          shell.openSettings(
+              section: switch (p['section']) {
+            null => null,
+            final name => SettingsSection.values.byName(name),
+          });
+          await Future<void>.delayed(const Duration(milliseconds: 500));
+        }
+        final page = _find<SettingsDebug>();
+        if (page == null) throw StateError('The settings page is not showing');
+        await page.debug(p);
+        await Future<void>.delayed(const Duration(milliseconds: 600));
+        await _settle();
+        return {...page.debugStatus(), ...?world, ..._status(shell)};
       case 'reduce':
         NextMotion.forceReduced = switch (p['on']) {
           'true' => true,

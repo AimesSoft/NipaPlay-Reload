@@ -116,7 +116,7 @@ class NextTopBar extends StatelessWidget {
                   builder: (context, _) {
                     final c = shell.chat;
                     // Click: the conversation; right click or long press:
-                    // the menu (back to Classic).
+                    // the menu (settings, back to Classic).
                     return GestureDetector(
                       onSecondaryTap: () =>
                           shell.togglePopover(NextPopover.nipa),
@@ -260,6 +260,11 @@ class _NipaMenu extends StatelessWidget {
         label: '问 Nipa',
         trailing: const KeyHint('⌘ K'),
         onTap: shell.openChat,
+      ),
+      MenuItem(
+        label: '设置',
+        trailing: const KeyHint('⌘ ,'),
+        onTap: shell.openSettings,
       ),
       MenuItem(
         label: '回到经典界面',
