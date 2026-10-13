@@ -1,4 +1,5 @@
 import 'package:nipa_harness/nipa_harness.dart';
+import 'playback_inspection.dart';
 
 /// The host supplies Classic operations; the capability only describes inputs.
 abstract interface class PlaybackControlsPort {
@@ -183,6 +184,7 @@ final class PlaybackControlsCapability implements Capability {
               const ObjectSchema(
                   {'initialDirectory': StringSchema(minLength: 1)}),
               port.authorizeDirectory),
+          if (port is PlaybackInspectionPort) ...PlaybackInspectionCapability(port as PlaybackInspectionPort).actions,
         ];
 
   @override

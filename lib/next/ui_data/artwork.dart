@@ -256,8 +256,12 @@ final class ArtworkCache {
         throw const Failure(
             FailureCode.invalidInput, 'url must be HTTP(S) without userinfo.');
       }
-      await _download(url);
-      return {'url': url};
+      final path = await _download(url);
+      return {
+        'url': url,
+        'cachedPath': path,
+        'sha256': sha256.convert(await File(path).readAsBytes()).toString()
+      };
     }
     if (!File(file!).isAbsolute || !await File(file).exists()) {
       throw const Failure(FailureCode.invalidInput,
@@ -272,7 +276,11 @@ final class ArtworkCache {
       await staging.writeAsBytes(bytes, flush: true);
       await staging.rename(target.path);
     }
-    return {'file': target.path, 'originalFile': file};
+    return {
+      'file': target.path,
+      'originalFile': file,
+      'sha256': sha256.convert(bytes).toString()
+    };
   }
 
   Future<int> _tint(String path) async => rasterTint(await File(path).readAsBytes());

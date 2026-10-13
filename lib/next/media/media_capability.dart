@@ -4,6 +4,7 @@ import 'identity_store.dart';
 import 'media_service.dart';
 import 'metadata_provider.dart';
 import 'metadata_snapshot.dart';
+import 'catalog_capability.dart';
 
 const _text = StringSchema(minLength: 1);
 const _refSchema = ObjectSchema({
@@ -263,7 +264,9 @@ const _libraryWorkSchema = ObjectSchema({
 
 final class MediaCapability implements Capability {
   MediaCapability(MediaService service)
-      : actions = [for (final spec in _specs) _MediaAction(service, spec)];
+      : actions = [for (final spec in _specs) _MediaAction(service, spec),
+          ...CatalogCapability(service).actions,
+          _RefreshBatchAction(service)];
   @override
   final List<Action> actions;
 }
@@ -656,6 +659,35 @@ final class _JsonValue implements JsonEncodable {
   final JsonMap json;
   @override
   JsonMap toJson() => json;
+}
+
+final class _RefreshBatchAction extends Action<_JsonValue, _JsonValue> {
+  const _RefreshBatchAction(this.service);
+  final MediaService service;
+  @override
+  ActionSpec get spec => const ActionSpec(
+    id: 'media.metadata.refresh_batch', title: '批量刷新来源资料',
+    description: 'Schedule the same refresh as media.metadata.refresh for multiple refs. Each item is accepted independently (atomic:false), with index, job or structured error. Per-entry requestId deduplicates task acceptance.',
+    effect: Effect.write,
+    input: ObjectSchema({'entries': ArraySchema(ObjectSchema(
+      {'ref': _refSchema, 'language': _text, 'requestId': _text}, required: ['ref','requestId']))}, required: ['entries']),
+    output: ObjectSchema({}, additionalProperties: true));
+  @override
+  _JsonValue decodeInput(JsonMap json) => _JsonValue(json);
+  @override
+  Future<Outcome<_JsonValue>> run(_JsonValue input, Invocation invocation) async {
+    final entries = (input.json['entries'] as List).cast<JsonMap>();
+    if(entries.isEmpty || entries.length > 100) throw const Failure(FailureCode.invalidInput,'Batch must contain 1 to 100 entries.');
+    final single = _MediaAction(service, _specs.singleWhere((s) => s.id == 'media.metadata.refresh'));
+    final results = <JsonMap>[];
+    for(var i=0; i<entries.length; i++) {
+      try {
+        final result = await single.run(_JsonValue(entries[i]),invocation);
+        results.add({'index': i, ...result.toEnvelope()});
+      } on Failure catch(e) { results.add({'index': i,'status': 'failed','error':e.toJson()}); }
+    }
+    return Completed(_JsonValue({'atomic':false,'entries':results}));
+  }
 }
 
 final class _MediaAction extends Action<_JsonValue, _JsonValue> {

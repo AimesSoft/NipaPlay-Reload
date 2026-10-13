@@ -205,7 +205,12 @@ extension UiMetadataFacts on UiDataService {
               {
                 'entityId': e['entityId'],
                 'kind': (e['field'] as String).substring(8),
-                'saved': true
+                'saved': true,
+                'effectiveKind': (e['field'] as String).substring(8),
+                'path': (e['value'] as JsonMap)['file'] ??
+                    (e['value'] as JsonMap)['cachedPath'],
+                'sha256': (e['value'] as JsonMap)['sha256'],
+                'source': (e['value'] as JsonMap)['source'],
               }
           ]
         };

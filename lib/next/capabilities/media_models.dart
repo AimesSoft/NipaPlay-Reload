@@ -228,16 +228,24 @@ const playbackSnapshotSchema = ObjectSchema({
   'player': StringSchema(values: ['internal', 'external']),
   'external': ObjectSchema({}, additionalProperties: true),
   'status': StringSchema(),
+  'observedState': StringSchema(),
   'hasVideo': BooleanSchema(),
-  'paused': BooleanSchema(),
+  'paused': BooleanSchema(nullable: true),
   'path': StringSchema(nullable: true),
   'seriesTitle': StringSchema(nullable: true),
   'episodeTitle': StringSchema(nullable: true),
   'animeId': IntegerSchema(nullable: true),
   'episodeId': IntegerSchema(nullable: true),
-  'positionMs': IntegerSchema(),
-  'durationMs': IntegerSchema(),
-  'rate': NumberSchema(),
+  'positionMs': IntegerSchema(nullable: true),
+  'durationMs': IntegerSchema(nullable: true),
+  'rate': NumberSchema(nullable: true),
+  'sessionId': StringSchema(nullable: true),
+  'ready': BooleanSchema(nullable: true),
+  'buffering': BooleanSchema(nullable: true),
+  'bufferedPositionMs': IntegerSchema(nullable: true),
+  'error': ObjectSchema({}, nullable: true, additionalProperties: true),
+  'observedAt': StringSchema(nullable: true),
+  'supportedControls': ArraySchema(StringSchema()),
   'volume': NumberSchema(minimum: 0, maximum: 1, nullable: true),
   'brightness': NumberSchema(minimum: 0, maximum: 1, nullable: true),
   'canPrevious': BooleanSchema(),
@@ -277,19 +285,33 @@ final class PlaybackSnapshot implements JsonEncodable {
     this.player,
     this.volume,
     this.brightness,
+    this.sessionId,
+    this.ready,
+    this.buffering,
+    this.bufferedPositionMs,
+    this.error,
+    this.supportedControls = const [],
+    this.observedAt,
   });
 
   final String status;
   final bool hasVideo;
-  final bool paused;
+  final bool? paused;
   final String? path;
   final String? seriesTitle;
   final String? episodeTitle;
   final int? animeId;
   final int? episodeId;
-  final int positionMs;
-  final int durationMs;
-  final double rate;
+  final int? positionMs;
+  final int? durationMs;
+  final double? rate;
+  final String? sessionId;
+  final bool? ready;
+  final bool? buffering;
+  final int? bufferedPositionMs;
+  final JsonMap? error;
+  final List<String> supportedControls;
+  final DateTime? observedAt;
   final bool canPrevious;
   final bool canNext;
   final JsonMap? external;
@@ -304,6 +326,15 @@ final class PlaybackSnapshot implements JsonEncodable {
         if (player != null) 'volume': volume,
         if (player != null) 'brightness': brightness,
         'status': status,
+        'observedState': error != null ? 'error' : buffering == true ? 'buffering'
+            : ready == false && hasVideo ? 'loading' : status,
+        'sessionId': sessionId,
+        'ready': ready,
+        'buffering': buffering,
+        'bufferedPositionMs': bufferedPositionMs,
+        'error': error,
+        'observedAt': observedAt?.toUtc().toIso8601String(),
+        'supportedControls': supportedControls,
         'hasVideo': hasVideo,
         'paused': paused,
         'path': path,
@@ -486,6 +517,7 @@ const playbackOpenOutputSchema = ObjectSchema({
   'path': StringSchema(),
   'player': StringSchema(values: ['internal', 'external']),
   'state': playbackSnapshotSchema,
+  'commandStatus': StringSchema(values: ['accepted']),
 }, required: [
   'path',
   'player',
@@ -504,7 +536,7 @@ final class PlaybackOpenOutput implements JsonEncodable {
   final PlaybackSnapshot state;
 
   @override
-  JsonMap toJson() => {'path': path, 'player': player, 'state': state.toJson()};
+  JsonMap toJson() => {'path': path, 'player': player, 'state': state.toJson(), 'commandStatus': 'accepted'};
 }
 
 const playbackStateOutputSchema = ObjectSchema({

@@ -124,6 +124,7 @@ class Player implements core_player.AsyncExternalSubtitlePlayer {
   }
 
   bool get isBuffering => buffering.value;
+  bool get supportsBufferingTelemetry => _delegate is core_player.BufferingAwarePlayer;
   int get bufferedPosition => _delegate.bufferedPosition;
   void setBufferRange({int minMs = -1, int maxMs = -1, bool drop = false}) =>
       _delegate.setBufferRange(minMs: minMs, maxMs: maxMs, drop: drop);

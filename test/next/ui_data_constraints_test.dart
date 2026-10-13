@@ -128,10 +128,14 @@ void main() {
     expect(await store.database.query('media_metadata_edits'), before);
     expect(await call('media.artwork.set', {'entries': [{...entry('w1', 'poster'), 'url': 'https://example.test/a'}]}), isA<Failed>());
     expect(await store.database.query('media_metadata_edits'), before);
-    expect(await call('media.artwork.set', {'entries': [entry('w1', 'poster'), entry('w1', 'logo')]}), isA<Completed>());
+    final saved = await call('media.artwork.set', {'entries': [entry('w1', 'poster'), entry('w1', 'logo')]});
+    expect(saved, isA<Completed>());
+    final receipt = (saved as Completed).value.toJson()['entries'] as List;
     await file.delete();
     final work = (await service.work('w1'))!;
     expect(await File(work.artwork.poster!).exists(), true);
+    expect(receipt.first['path'], work.artwork.poster);
+    expect(receipt.first['sha256'], hasLength(64));
     expect(work.artwork.tint, 0xffaa4422);
     final edits = await store.database.query('media_metadata_edits');
     expect(edits, hasLength(2));

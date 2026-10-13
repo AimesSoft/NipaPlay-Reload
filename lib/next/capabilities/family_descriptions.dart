@@ -80,6 +80,7 @@ const danmakuFamilyDescription =
 
 
 const familyFacts = <String, String>{
+  'media.entities': r'''Local catalog entities have stable caller-supplied IDs and expectedRevision on update. parentId is an actual local parent, never an external ID. fileIds on an episode replace its local associations. Removal includes descendants, retains tombstones and exact relationship before-images, and returns undoId; restore refuses subsequent conflicting changes. These operations do not manufacture Classic platform matches.''',
   'ui':
       r'''- **两套界面**：Classic 是原来的界面；在「设置 → 实验室」开启 Next 后，主界面换成 Next。你工作的结果显示在 Next 里。两套界面共用同一个播放器。
 - **首页**：
@@ -106,11 +107,12 @@ const familyFacts = <String, String>{
 - **普通公开链接**会原样返回；带登录凭据、令牌、签名或访问密钥的链接会被脱敏。`ui.capture` 默认返回长边不超过 1280 像素的截图，传 `originalSize:true` 返回原尺寸。
 - **想让用户在 NipaPlay 里看到的，可以用 `ui.present` 和 `ui.shelves.put` 摆给他**：这些文字是给观众看的，用自然的短句，不写 ID，也不写过程。''',
   'media':
-      r'''NipaPlay 自己会做一部分：作品有 TMDB 身份时取图，同步 Classic 识别的结果，把下载完成的文件登记入库，发现并记录视频旁的同名 XML/JSON 弹幕、内嵌字幕轨和匹配的外挂字幕。`media.metadata.ui_facts` 告诉你一部作品现在还差什么。你的工作是：
+      r'''Files, local catalog, identity, metadata and artwork are independent facts. Local-only works use entities.put_batch without fabricated provider IDs. Catalog hierarchy is work → release → episode, with indexed fileIds on episodes. Batches declare atomicity. Changing/removing catalog associations requires a revision/impact preview and retains files, progress, prior facts and source audit. Removed local entities can be restored using undoId. Text and artwork clear reveal source facts and retain edit history; clearing an override is not deleting a disk file.
+NipaPlay 自己会做一部分：作品有 TMDB 身份时取图，同步 Classic 识别的结果，把下载完成的文件登记入库，发现并记录视频旁的同名 XML/JSON 弹幕、内嵌字幕轨和匹配的外挂字幕。`media.metadata.ui_facts` 告诉你一部作品现在还差什么。你的工作是：
 `media.metadata.ui_facts` 读的是和界面同一份数据，按作品给出下面每一项有没有、来自哪里；不必截图去猜。
 
 - **文件与剧集的对应**：一个文件对应到某一集，那一集才能播放。本地文件在片库根目录（`media.library.roots.*`）内，或是 NipaPlay 已验证完成下载的文件，才在 Next 中可访问；文件仍须实际存在。对应关系由 `media.identity.bind_batch` 写入；Classic 识别成功的文件会自动同步过来。
-- **身份**：作品与弹弹play、Bangumi、TMDB 或其他 HTTPS 来源的绑定。没有身份就没有作品，界面上也不会出现。用 `bind_batch` 和 `unbind_batch` 修改。
+- **身份**：作品与弹弹play、Bangumi、TMDB 或其他 HTTPS 来源的绑定。本地作品也可用 media.entities.put_batch 建立，不要求外部身份。用 `bind_batch` 和 `unbind_batch` 修改。
 - **资料**：各来源的快照合并而成，你的覆盖优先。界面显示标题、原名、简介、年份、类型、制作公司、集数、评分。
   - 标题和简介以简体中文优先；没有中文时显示已有的语言，不会自动翻译。
   - 缺标题时显示“未命名作品”；缺简介就没有简介正文；其他项缺了就省略。
@@ -143,7 +145,8 @@ const familyFacts = <String, String>{
   - **其他平台的弹幕**：你取回来的文件只是中间产物。用 `danmaku.import` 交给 NipaPlay 时，弹幕内容会保存成 NipaPlay 数据目录 `next/danmaku/` 里的文件，数据库记录引用、条数、时间范围和来源，绑在那一集或那个文件上；交完以后，原文件就不再需要。导入内容不会按缓存空间回收；刷新或撤销轨道后，不再被引用的旧文件会清掉。要刷新，就重新取一次、再交一次。中间文件放在这个仓库的 `records/`（不进 git），不需要写进视频所在的目录，那里可能是只读的。
 - **弹幕可以同时来自多个平台**：Next 内置的来源是经过 NipaPlay 网关的弹弹play；本地弹幕文件可以用 `danmaku.import` 交入（来源记为本地文件）；交入的弹幕可来自任意平台。同一平台的同一个视频只保留一条轨道，再次交入就是刷新。Next 没有内置优酷、B 站来源或应用内平台登录；已有的平台绑定、轨道与缓存仍可读取和播放。''',
   'subtitle':
-      r'''- **字幕**：按视频文件记录内嵌轨与匹配的外挂字幕，包含语言、标题、格式、来源、可用性和默认选择。内嵌语言来自容器声明，外挂语言来自文件名，未知记为 `und`；文件名语言不是内容核验，记录没有识别烧录在画面中的字幕。单视频目录的 `Subs/`、`Subtitles/` 下语言字幕也会记录。`media.metadata.ui_facts` 给出每集的字幕语言、内嵌或外挂轨道及覆盖。`subtitle.tracks` 读取记录；`subtitle.import` 批量交入字幕文件及语言、来源，内容复制进 NipaPlay 数据目录，交完原文件不再需要，视频目录可以只读。Next 播放时按记录恢复字幕：显式选择和已有 Classic 选择优先，之后按应用语言设置决定简中或繁中优先，再选中文、英文；文本外挂先于内嵌轨。默认选择及依据也在记录中，`subtitle.select` 可记录选择或关闭字幕。`playback.load_subtitle` 仍可为当前播放临时加载。
+      r'''Per-file subtitle facts persist independently from playback. Imports copy content into managed storage and batch errors retain index and recovery information. update edits imported language/title/source with expectedRevision; remove releases an imported association and retains its copy. reset_selection restores automatic selection; select null explicitly disables. Current internal playback and persistent selection use the same facts. copy_delete alone deletes unreferenced managed copies and returns NeedsDecision with an exact fingerprint. cues reads active external timed text with delay-aware current/context lines; embedded or bitmap limitations are explicit.
+- **字幕**：按视频文件记录内嵌轨与匹配的外挂字幕，包含语言、标题、格式、来源、可用性和默认选择。内嵌语言来自容器声明，外挂语言来自文件名，未知记为 `und`；文件名语言不是内容核验，记录没有识别烧录在画面中的字幕。单视频目录的 `Subs/`、`Subtitles/` 下语言字幕也会记录。`media.metadata.ui_facts` 给出每集的字幕语言、内嵌或外挂轨道及覆盖。`subtitle.tracks` 读取记录；`subtitle.import` 批量交入字幕文件及语言、来源，内容复制进 NipaPlay 数据目录，交完原文件不再需要，视频目录可以只读。Next 播放时按记录恢复字幕：显式选择和已有 Classic 选择优先，之后按应用语言设置决定简中或繁中优先，再选中文、英文；文本外挂先于内嵌轨。默认选择及依据也在记录中，`subtitle.select` 可记录选择或关闭字幕。`playback.load_subtitle` 仍可为当前播放临时加载。
 - 无界面宿主支持字幕事实、同名外挂索引、导入和显式默认选择；配置 ffprobe 时记录内嵌轨道，未配置时内嵌状态为 unavailable。它不播放字幕、不读取 Classic 字幕偏好或观看历史；默认字幕由调用者显式选择。''',
   'download':
       r'''- **下载器**：内置 BT 引擎支持 magnet、种子文件和 HTTP(S) 种子链接，使用 Classic 的下载目录设置；新任务可以指定目录和是否建立任务文件夹，重复添加同一哈希不会搬动已有文件。由你发起的下载，视频文件通过校验并登记入库时、任务完成或失败（含取消）时，事实都会自动作为后续回到发起它的会话；会话忙时排队。第一份文件事实立即入队，其余按一分钟合并，任务结束立即送回剩余事实；你已登记的同事件后续不会再多送一份。`download.read` 给出实际落盘路径、逐文件已校验字节、完整与可播状态、连接/已发现/待连接 peer、最近采样间的进展和所在盘可用字节。初始化时逐文件进度可能未知；公开引擎接口不提供做种数或来源持有的片段分布，返回 null。可以在添加时指定文件索引，也可以用 `download.select_files` 改变任务要下载的文件；不删除已下的数据。引擎没有普通文件优先级接口。
@@ -184,7 +187,8 @@ const familyFacts = <String, String>{
   'accounts':
       r'''- **需要登录的平台**：用户的浏览器里通常已经登录，直接使用这个登录状态；浏览器也没登录时，打开该平台的登录页，请用户自己登录，然后继续。''',
   'playback':
-      r'''播放器共用 Classic 和 Next；播放本地或媒体服务器上的文件，叠加字幕和弹幕。临时加载字幕用 playback.load_subtitle；持久事实用 subtitle。''',
+      r'''open/pause/seek/navigation accept commands; snapshots observe asynchronously. State reports sessionId, readiness, buffering, buffered position, error/recovery and actual supported controls. External unknown position/duration/pause/rate remain null. wait is bounded and detects a changed session; retry explicitly reloads the source through Classic and may preserve position. chapters exposes container markers and detected skip segments; navigate uses chapter, frame or active skip semantics. Backward frame stepping may be approximate. playlist reports the actual detail source list, without authenticated stream URLs.
+播放器共用 Classic 和 Next；播放本地或媒体服务器上的文件，叠加字幕和弹幕。临时加载字幕用 playback.load_subtitle；持久事实用 subtitle。''',
   'discover': r'''弹弹play 每日放送与推荐。''',
   'sync': r'''远程来源与多端同步。''',
   'plugins': r'''应用插件。''',

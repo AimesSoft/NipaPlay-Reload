@@ -31,6 +31,10 @@ extension VideoPlayerStatePlayerSetup on VideoPlayerState {
     bool episodeFileSelectionHandled = false,
   }) async {
     final resolutionGeneration = ++_sourceResolutionGeneration;
+    _lastPlaybackRequest = PlayableItem(videoPath: videoPath,
+        historyItem: historyItem, actualPlayUrl: actualPlayUrl,
+        playbackSession: playbackSession, detailContext: playbackDetailContext,
+        mediaKey: mediaKey);
     final previousPlaybackGeneration = _playbackGeneration;
     final resolutionContext = _context;
     bool resolutionCancelled() =>

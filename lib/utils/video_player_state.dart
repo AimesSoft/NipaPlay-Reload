@@ -367,6 +367,9 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
   /// the same video path.
   int get playbackGeneration => _playbackGeneration;
   int _sourceResolutionGeneration = 0;
+  int get playbackRequestGeneration => _sourceResolutionGeneration;
+  PlayableItem? _lastPlaybackRequest;
+  PlayableItem? get lastPlaybackRequest => _lastPlaybackRequest;
   int _playbackIntentGeneration = 0;
   int _dfmStartupGateToken = 0;
   Completer<void>? _dfmStartupGateCompleter;

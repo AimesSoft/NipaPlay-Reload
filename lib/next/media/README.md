@@ -1,5 +1,14 @@
 # 媒体能力原语
 
+本地自编目录不需要外部身份：`media.entities.put_batch` 原子保存 work → release →
+episode 与已有 fileIds。调用者给稳定 ID，修改要求 revision 与影响预览。
+`remove_batch` 默认只返回预览，执行保留实体前像、文件和观看进度，`restore` 按
+移除后的修订检查撤回；库视图隐藏 tombstone，实体审计仍保留。它不伪造 Classic
+或来源平台的编号。文字覆盖、来源刷新、资料完整情况各有 batch 接口；图片清除
+只收回覆盖，副本保留。详细契约与理由在 `nipa describe media` 和 X54 报告中。
+Classic 历史同步保留显式 local_catalog 文件关系。影响预览从当前观看历史读取进度，
+未观察到的值为 null；进度变化不使关联预览失效，实体和文件关系变化仍使它失效。
+
 Next 的媒体识别判断属于 Agent。代码提供文件信息、外部元数据和显式绑定，
 不解析文件名，不推断集号，不生成识别 Decision，也不把一个季的选择级联到目录文件。
 Classic 的扫描、匹配和自动弹幕策略保持原实现。

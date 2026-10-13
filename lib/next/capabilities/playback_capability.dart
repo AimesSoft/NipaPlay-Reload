@@ -278,12 +278,12 @@ final class PlaybackSeekAction
     if (!state.hasVideo) {
       throw const Failure(FailureCode.unavailable, 'No video is loaded.');
     }
-    final target = input.positionMs ?? state.positionMs + input.offsetMs!;
-    if (input.offsetMs != null && state.external?['positionMs'] == null && state.external != null) {
+    if (input.offsetMs != null && state.positionMs == null) {
       throw const Failure(FailureCode.unavailable, 'The external player cannot report position for a relative seek.');
     }
+    final target = input.positionMs ?? state.positionMs! + input.offsetMs!;
     await _player.seekTo(Duration(milliseconds: target.clamp(0,
-      state.external != null && state.durationMs == 0 ? target.abs() : state.durationMs)));
+      state.durationMs == null || state.external != null && state.durationMs == 0 ? target.abs() : state.durationMs!)));
     return Completed(PlaybackStateOutput(state: _player.snapshot()));
   }
 }

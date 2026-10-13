@@ -23,12 +23,15 @@ import '../public_url.dart';
 import 'webvtt.dart';
 import 'operations.dart';
 import 'detection.dart';
+import 'mutations.dart';
+import 'storage_lock.dart';
 
 export 'detection.dart';
 
 final class SubtitleLibrary implements SubtitleOperations {
   SubtitleLibrary(this.media, this.root, {this.probe = probeMediaInfo});
   final MediaService media;
+  @override
   final Directory root;
   final Future<JsonMap> Function(String) probe;
   IdentityStore get identities => media.store;
@@ -65,6 +68,7 @@ final class SubtitleLibrary implements SubtitleOperations {
     return rows.isEmpty
         ? {
             'fileId': id,
+            'revision': 0,
             'tracks': <JsonMap>[],
             'embeddedStatus': 'pending',
             'selection': null
@@ -73,6 +77,8 @@ final class SubtitleLibrary implements SubtitleOperations {
   }
 
   Future<void> _save(String id, JsonMap facts) async {
+    final old = await this.facts(id);
+    facts['revision'] = (old['revision'] as int? ?? 0) + 1;
     await db.insert(
         'file_subtitles', {'file_id': id, 'facts': jsonEncode(facts)},
         conflictAlgorithm: ConflictAlgorithm.replace);
@@ -202,6 +208,7 @@ final class SubtitleLibrary implements SubtitleOperations {
           in (await SubtitleService().readExternalSubtitlePreferences(path))
               .subtitles) {
         final subPath = t['path'] as String;
+        if ((old['detachedPaths'] as List? ?? []).contains(subPath)) continue;
         if (updated
             .any((x) => x['path'] == subPath || x['playbackPath'] == subPath)) {
           continue;
@@ -267,7 +274,7 @@ final class SubtitleLibrary implements SubtitleOperations {
                 (t['path'] == classic[active]['path'] ||
                     t['playbackPath'] == classic[active]['path'])))
         .firstOrNull;
-    if (previous != null &&
+    if (previous != null && facts['automaticSelection'] != true &&
         !(old?['basis'] == 'language_preference' &&
             old?['trackId'] == previous['id'])) {
       return {'trackId': previous['id'], 'basis': 'classic_choice'};
@@ -320,7 +327,10 @@ final class SubtitleLibrary implements SubtitleOperations {
   }
 
   @override
-  Future<JsonMap> importSubtitle(JsonMap input, Invocation invocation) async {
+  Future<JsonMap> importSubtitle(JsonMap input, Invocation invocation) =>
+      withSubtitleStorage(root, () => _importSubtitle(input, invocation));
+
+  Future<JsonMap> _importSubtitle(JsonMap input, Invocation invocation) async {
     final id = await canonicalFileId(db, input['fileId'] as String);
     final target =
         (await media.readFile({'entityId': id}, includeDuration: false)).path;
@@ -405,6 +415,8 @@ final class SubtitleLibrary implements SubtitleOperations {
           .where((t) => t['id'] != track['id'])
           .toList();
       value['tracks'] = [...tracks, track];
+      value['detachedPaths'] = (value['detachedPaths'] as List? ?? [])
+          .where((path) => path != track['path'] && path != track['playbackPath']).toList();
       value['selection'] = await _defaultSelection(target, value);
       await _save(id, value);
     });
@@ -431,6 +443,51 @@ final class SubtitleLibrary implements SubtitleOperations {
       };
       await _save(id, value);
     });
+    await _refreshPlayer(id);
+  }
+
+  @override
+  Future<JsonMap> mutateFacts(String fileId, String operation, JsonMap input, Invocation invocation) async {
+    final id = await canonicalFileId(db, fileId);
+    final path = (await media.readFile({'entityId':id}, includeDuration:false)).path;
+    final result = await _serial(id, () => mutateSubtitleFacts(this,id,operation,input,invocation,
+      defaultSelection:(value) => _defaultSelection(path,value)));
+    await _refreshPlayer(id);
+    result['factsCommitted'] = true;
+    result['playerApplied'] = _player?.currentVideoPath == path;
+    return result;
+  }
+
+  Future<void> _refreshPlayer(String id) async {
+    final player = _player;
+    if(player == null || player.currentVideoPath == null) return;
+    final locations = await db.query('media_locations', where:'file_id=? AND locator=?', whereArgs:[id,player.currentVideoPath]);
+    if(locations.isEmpty) return;
+    final value = await facts(id);
+    final selectionCallback = player.nextSubtitleSelection;
+    player.nextSubtitleSelection = null;
+    try {
+    player.subtitleTrackInfo.removeWhere((key, value) => key.startsWith('next:') && value['fileId'] == id);
+    for(final path in player.activeExternalSubtitlePaths.toList()) {
+      await player.removeExternalSubtitle(path);
+    }
+    for(final track in (value['tracks'] as List).cast<JsonMap>()) {
+      if(track['origin'] != 'embedded' && track['available'] == true) {
+        await player.registerNextSubtitleCandidate(track['playbackPath'] as String? ?? track['path'] as String,track['title'] as String);
+        player.subtitleManager.updateSubtitleTrackInfo('next:${track['id']}', {
+          ...track, 'fileId': id, 'trackId': track['id'], 'isActive': false,
+          'path': track['playbackPath'] ?? track['path'],
+        });
+      }
+    }
+    final selected = (value['selection'] as Map?)?['trackId'];
+    final track = (value['tracks'] as List).cast<JsonMap>().where((t)=>t['id']==selected).firstOrNull;
+    if(track == null) { player.player.activeSubtitleTracks = []; }
+    else if(track['origin']=='embedded') { player.player.activeSubtitleTracks=[track['index'] as int]; }
+    else { await player.addNextSubtitle(track['playbackPath'] as String? ?? track['path'] as String,track['title'] as String); }
+    } finally {
+      player.nextSubtitleSelection = selectionCallback;
+    }
   }
 
   @override

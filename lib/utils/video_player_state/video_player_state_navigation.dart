@@ -22,6 +22,11 @@ void _playbackDiag(String Function() messageBuilder) {
 }
 
 extension VideoPlayerStateNavigation on VideoPlayerState {
+  Future<List<PlaybackDetailEpisode>> readPlaybackPlaylist() async {
+    final context = _playbackDetailContext;
+    if (context == null) return const [];
+    return _playbackPlaylistCache.load(sourceKey: context.sourceKey, loader: context.episodeLoader);
+  }
   // 播放上一话
   Future<void> playPreviousEpisode() async {
     if (!canPlayPreviousEpisode || _currentVideoPath == null) {
