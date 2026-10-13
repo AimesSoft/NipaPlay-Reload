@@ -159,18 +159,25 @@ class NextSearch extends ChangeNotifier {
   }
 
   /// A group's rows. A work the library shows is not shown again as found
-  /// online: the same work by its library ID, whatever it is called there.
+  /// online or in a source: the same work by its library ID, whatever it is
+  /// called there.
   List<SearchEntry> shown(SearchGroupKind kind) {
     final group = _groups[kind];
     if (group == null) return const [];
-    if (kind != SearchGroupKind.online) return group.entries;
+    if (kind == SearchGroupKind.library) return group.entries;
     final have = {
       for (final e in _groups[SearchGroupKind.library]!.entries)
         if (e is WorkEntry) e.work.workId,
     };
     return [
       for (final e in group.entries)
-        if (e is! WorkEntry || !have.contains(e.work.workId)) e,
+        if (switch (e) {
+          WorkEntry(:final work) => !have.contains(work.workId),
+          SourceEntry(:final hit) when hit.kind == UiSourceHitKind.work =>
+            !have.contains(hit.work?.workId),
+          _ => true,
+        })
+          e,
     ];
   }
 
