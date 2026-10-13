@@ -16,11 +16,14 @@ import '../platform/report_error.dart';
 import 'operations.dart';
 import 'detection.dart';
 import 'webvtt.dart';
+import 'mutations.dart';
+import 'storage_lock.dart';
 
 /// Uses the same persisted facts and filename matcher, without Classic/player.
 final class SubtitleLibrary implements SubtitleOperations {
   SubtitleLibrary(this.media, this.root);
   final MediaService media;
+  @override
   final Directory root;
   @override
   Database get db => media.store.database;
@@ -42,6 +45,7 @@ final class SubtitleLibrary implements SubtitleOperations {
     return rows.isEmpty
         ? {
             'fileId': id,
+            'revision': 0,
             'tracks': <JsonMap>[],
             'embeddedStatus':
                 headlessFfprobe == null ? 'unavailable' : 'pending',
@@ -51,6 +55,8 @@ final class SubtitleLibrary implements SubtitleOperations {
   }
 
   Future<void> _save(String id, JsonMap value) async {
+    final old = await facts(id);
+    value['revision'] = (old['revision'] as int? ?? 0) + 1;
     await db.insert(
         'file_subtitles', {'file_id': id, 'facts': jsonEncode(value)},
         conflictAlgorithm: ConflictAlgorithm.replace);
@@ -155,6 +161,8 @@ final class SubtitleLibrary implements SubtitleOperations {
 
   @override
   Future<JsonMap> importSubtitle(JsonMap input, Invocation invocation) =>
+      withSubtitleStorage(root, () => _importSubtitle(input, invocation));
+  Future<JsonMap> _importSubtitle(JsonMap input, Invocation invocation) =>
       _serial(() async {
         final id = await canonicalFileId(db, input['fileId'] as String);
         await media.readFile({'entityId': id}, includeDuration: false);
@@ -265,6 +273,10 @@ final class SubtitleLibrary implements SubtitleOperations {
         };
         await _save(id, value);
       });
+  @override
+  Future<JsonMap> mutateFacts(String fileId, String operation, JsonMap input, Invocation invocation) =>
+      _serial(() async => {...await mutateSubtitleFacts(this,fileId,operation,input,invocation),
+        'factsCommitted': true, 'playerApplied': null, 'playerUnsupportedReason': 'headless_host'});
   @override
   Future<List<JsonMap>> episodeTracks(String id) async {
     final result = <JsonMap>[];

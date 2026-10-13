@@ -266,6 +266,14 @@ void main() {
       expect(result, {
         'state': {
           'status': 'playing',
+          'observedState': 'playing',
+          'sessionId': null,
+          'ready': null,
+          'buffering': null,
+          'bufferedPositionMs': null,
+          'error': null,
+          'observedAt': null,
+          'supportedControls': <String>[],
           'hasVideo': true,
           'paused': false,
           'path': '/media/episode.mkv',

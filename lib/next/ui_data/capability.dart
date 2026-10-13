@@ -2,6 +2,7 @@ import 'package:nipa_harness/nipa_harness.dart';
 
 import 'service.dart';
 import 'metadata_facts.dart';
+import '../capabilities/classic_action.dart';
 
 const _text = StringSchema(minLength: 1);
 const _ref = StringSchema(minLength: 1);
@@ -38,6 +39,36 @@ final class UiDataCapability implements Capability {
           _UiAction(service, 'shelves.remove'),
           _MetadataAction(service, false),
           _MetadataAction(service, true)
+          , ClassicAction(const ActionSpec(
+              id: 'media.artwork.clear', title: '清除图片覆盖',
+              description: 'Atomically clear explicit artwork overrides and reveal the source artwork. Keeps cached/local copies and edit provenance. Does not delete disk files.',
+              effect: Effect.write, input: ObjectSchema({'entries': ArraySchema(ObjectSchema({
+                'entityId': _ref, 'kind': StringSchema(values: ['backdrop','poster','logo','still'])
+              }, required: ['entityId','kind']))}, required: ['entries']),
+              output: ObjectSchema({}, additionalProperties: true)), (input, invocation) async {
+                final entries = (input['entries'] as List).cast<JsonMap>();
+                for(final e in entries) {
+                  final entity = await service.media.store.entity(e['entityId'] as String);
+                  if(entity['kind'] != (e['kind'] == 'still' ? 'episode' : 'work')) {
+                    throw const Failure(FailureCode.invalidInput, 'Artwork kind does not match entity kind.');
+                  }
+                }
+                await service.media.store.overrideFields([for(final e in entries)
+                  {'entityId':e['entityId'], 'field':'artwork.${e['kind']}', 'value':null, 'mode':'clear'}], invocation);
+                return {'atomic':true, 'entries':[for(final e in entries) {...e,'cleared':true,'copyRetained':true}]};
+              }),
+          ClassicAction(const ActionSpec(
+              id: 'media.metadata.ui_facts_batch', title: '批量读取资料完整情况',
+              description: 'Read the same metadata facts for multiple works. Each item returns facts or a structured failure; atomic:false.',
+              effect: Effect.read, input: ObjectSchema({'workIds': ArraySchema(_ref)}, required: ['workIds']),
+              output: ObjectSchema({}, additionalProperties: true)), (input, _) async {
+                final results = <JsonMap>[];
+                for(final id in (input['workIds'] as List).cast<String>()) {
+                  try { results.add({'workId':id,'facts':await service.metadataFacts(id)}); }
+                  on Failure catch(e) { results.add({'workId':id,'error':e.toJson()}); }
+                }
+                return {'atomic':false,'entries':results};
+              })
         ];
   @override
   final List<Action> actions;

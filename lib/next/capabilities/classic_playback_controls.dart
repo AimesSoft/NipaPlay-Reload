@@ -19,10 +19,13 @@ import 'package:nipaplay/utils/video_player_state.dart';
 import 'package:path/path.dart' as p;
 
 import 'playback_controls_capability.dart';
+import 'playback_inspection.dart';
 
-final class ClassicPlaybackControls implements PlaybackControlsPort {
+final class ClassicPlaybackControls implements PlaybackControlsPort, PlaybackInspectionPort {
   ClassicPlaybackControls(this.state);
   final VideoPlayerState state;
+  @override
+  Future<JsonMap> inspect(String operation, JsonMap input) => PlaybackInspection(state).call(operation,input);
 
   void _requireVideo() {
     if (!state.hasVideo) {
@@ -75,6 +78,10 @@ final class ClassicPlaybackControls implements PlaybackControlsPort {
   Future<JsonMap> tracks(JsonMap input) async {
     _requireVideo();
     final info = state.player.mediaInfo;
+    final externalTracks = <String, Map<String, dynamic>>{
+      for (final entry in state.subtitleTrackInfo.values)
+        if (entry['path'] is String) entry['path'] as String: entry,
+    };
     final result = <JsonMap>[
       for (final entry in (info.audio ?? []).asMap().entries)
         {
@@ -94,13 +101,16 @@ final class ClassicPlaybackControls implements PlaybackControlsPort {
           'language': entry.value.language,
           'selected': state.player.activeSubtitleTracks.contains(entry.key),
         },
-      for (final entry in state.subtitleTrackInfo.values)
+      for (final entry in externalTracks.values)
         if (entry['path'] is String)
           {
             'kind': 'subtitle',
             'origin': 'external',
             'path': entry['path'],
             'title': entry['title'] ?? entry['name'],
+            'language': entry['language'],
+            'source': entry['source'],
+            'trackId': entry['trackId'],
             'selected':
                 state.activeExternalSubtitlePaths.contains(entry['path']),
           },

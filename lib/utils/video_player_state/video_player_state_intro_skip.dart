@@ -47,6 +47,7 @@ SkipSegment? _detectIntroInBackground(_IntroSkipDetectRequest request) {
 /// 区间按 [SkipSegmentKind] 分槽存放，槽内按 [SkipSegmentSourceRank] 合并——这样
 /// 两路信号可以同时生效（弹幕给片头、AniSkip 给片尾），不会互相覆盖。
 extension VideoPlayerStateSkipSegments on VideoPlayerState {
+  List<SkipSegment> get detectedSkipSegments => List.unmodifiable(_skipSegments.values);
   /// 跳过片头功能总开关。
   bool get introSkipEnabled => _introSkipEnabled;
 

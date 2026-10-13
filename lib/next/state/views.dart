@@ -342,11 +342,11 @@ List<StateView> publicStateViews(
   }
 
   const workQuery =
-      'SELECT id,parent_id AS parentId,id AS workId,NULL AS releaseId,kind,revision,attributes FROM media_entities WHERE kind=\'work\' ORDER BY id';
+      'SELECT id,parent_id AS parentId,id AS workId,NULL AS releaseId,kind,revision,attributes FROM media_entities WHERE kind=\'work\' AND COALESCE(json_extract(attributes,\'\$.removed\'),0)=0 ORDER BY id';
   const releaseQuery =
-      'SELECT id,parent_id AS parentId,parent_id AS workId,id AS releaseId,kind,revision,attributes FROM media_entities WHERE kind=\'release\' ORDER BY id';
+      'SELECT id,parent_id AS parentId,parent_id AS workId,id AS releaseId,kind,revision,attributes FROM media_entities WHERE kind=\'release\' AND COALESCE(json_extract(attributes,\'\$.removed\'),0)=0 ORDER BY id';
   const episodeQuery =
-      'SELECT e.id,e.parent_id AS parentId,r.parent_id AS workId,r.id AS releaseId,e.kind,e.revision,e.attributes FROM media_entities e JOIN media_entities r ON r.id=e.parent_id WHERE e.kind=\'episode\' ORDER BY e.id';
+      'SELECT e.id,e.parent_id AS parentId,r.parent_id AS workId,r.id AS releaseId,e.kind,e.revision,e.attributes FROM media_entities e JOIN media_entities r ON r.id=e.parent_id WHERE e.kind=\'episode\' AND COALESCE(json_extract(e.attributes,\'\$.removed\'),0)=0 ORDER BY e.id';
   return [
     sql(
         'media.entities',

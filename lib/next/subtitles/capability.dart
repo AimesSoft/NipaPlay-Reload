@@ -2,6 +2,7 @@ import 'dart:io';
 import 'package:nipa_harness/nipa_harness.dart';
 import '../capabilities/classic_action.dart';
 import 'operations.dart';
+import 'edit_capability.dart';
 
 const _text = StringSchema(minLength: 1);
 
@@ -13,17 +14,39 @@ final class SubtitleCapability implements Capability {
                   id: 'subtitle.tracks',
                   title: '读取文件字幕事实',
                   description:
-                      'Read persistent per-file embedded and external subtitle tracks, language, title, format, provenance, availability, probe status and default selection. Omit fileIds to read all indexed subtitle facts. No video probing.',
+                      'Read persistent per-file embedded and external subtitle tracks, language, title, format, provenance, availability, probe status and default selection. Omit fileIds to read indexed facts ordered by fileId. Optional limit (1–200) and afterFileId provide keyset pagination; nextAfterFileId is null at the end. Without limit retains the full-result contract. No video probing.',
                   effect: Effect.read,
-                  input: ObjectSchema({'fileIds': ArraySchema(_text)}),
+                  input: ObjectSchema({
+                    'fileIds': ArraySchema(_text),
+                    'limit': IntegerSchema(minimum: 1, maximum: 200),
+                    'afterFileId': _text,
+                  }),
                   output: ObjectSchema({}, additionalProperties: true)),
               (input, invocation) async {
-            final ids = input['fileIds'] as List? ??
-                (await library.db.query('file_subtitles'))
+            final requested = input['fileIds'] as List?;
+            final after = input['afterFileId'] as String?;
+            if (requested != null && after != null) {
+              throw const Failure(FailureCode.invalidInput,
+                  'afterFileId applies only when fileIds is omitted.');
+            }
+            final limit = input['limit'] as int?;
+            if (requested != null && limit != null) {
+              throw const Failure(FailureCode.invalidInput,
+                  'limit applies only when fileIds is omitted.');
+            }
+            final ids = requested ??
+                (await library.db.query('file_subtitles',
+                    where: after == null ? null : 'file_id > ?',
+                    whereArgs: after == null ? null : [after],
+                    orderBy: 'file_id',
+                    limit: limit == null ? null : limit + 1))
                     .map((r) => r['file_id'])
                     .toList();
+            final page = limit == null ? ids : ids.take(limit).toList();
             return {
-              'files': [for (final id in ids) await library.facts(id as String)]
+              'files': [for (final id in page) await library.facts(id as String)],
+              'nextAfterFileId': requested == null && limit != null && ids.length > limit
+                  ? page.last : null,
             };
           }),
           ClassicAction(
@@ -58,26 +81,30 @@ final class SubtitleCapability implements Capability {
                   FailureCode.invalidInput, 'entries must not be empty.');
             }
             final results = <JsonMap>[];
-            for (final entry in entries) {
+            for (var index = 0; index < entries.length; index++) {
+              final entry = entries[index];
               try {
-                results.add(await library.importSubtitle(entry, invocation));
+                results.add({'index': index, ...await library.importSubtitle(entry, invocation)});
               } on Failure catch (error) {
                 results.add({
                   'fileId': entry['fileId'],
                   'saved': false,
-                  'error': error.message
+                  'index': index, 'inputTrackRef': entry['filePath'],
+                  'error': {...error.toJson(), 'recoveryAction': 'subtitle.tracks'}
                 });
-              } on FileSystemException catch (error) {
+              } on FileSystemException {
                 results.add({
                   'fileId': entry['fileId'],
                   'saved': false,
-                  'error': error.message
+                  'index': index, 'inputTrackRef': entry['filePath'],
+                  'error': {'code': 'file_unreadable', 'message': 'Cannot read subtitle file.', 'retryable': true, 'recoveryAction': 'subtitle.import'}
                 });
               } on FormatException catch (error) {
                 results.add({
                   'fileId': entry['fileId'],
                   'saved': false,
-                  'error': error.message
+                  'index': index, 'inputTrackRef': entry['filePath'],
+                  'error': {'code': 'invalid_subtitle', 'message': error.message, 'retryable': false, 'recoveryAction': 'subtitle.import'}
                 });
               }
             }
@@ -103,6 +130,7 @@ final class SubtitleCapability implements Capability {
                 input['fileId'] as String, input['trackId'] as String?);
             return await library.facts(input['fileId'] as String);
           }),
+          ...SubtitleEditCapability(library).actions,
         ];
   @override
   final List<Action> actions;

@@ -471,7 +471,7 @@ final class IdentityStore {
 
   Future<void> _pruneFileLinks(DatabaseExecutor tx, String fileId) async {
     await tx.rawDelete(
-        'DELETE FROM media_file_episodes WHERE file_id=? AND NOT EXISTS ('
+        'DELETE FROM media_file_episodes WHERE file_id=? AND relation<>\'local_catalog\' AND NOT EXISTS ('
         'SELECT 1 FROM media_bindings f JOIN media_bindings e ON e.object_id=f.object_id '
         'WHERE f.entity_id=? AND f.status=\'accepted\' AND e.entity_id=media_file_episodes.episode_id AND e.status=\'accepted\')',
         [fileId, fileId]);
@@ -837,6 +837,15 @@ final class IdentityStore {
     final ids = await _metadataEntities(entityId);
     final rows = await _metadataSnapshots(ids);
     final fields = <String, Object?>{}, provenance = <String, Object?>{};
+    for (final id in ids) {
+      final local = await entity(id);
+      final attrs = local['attributes'] as JsonMap;
+      if (attrs['localOnly'] == true && !fields.containsKey('title')) {
+        fields['title'] = attrs['title'];
+        provenance['title'] = {'provider': 'local', 'source': 'local_catalog',
+          'language': 'und', 'entityId': id};
+      }
+    }
     final ratings = <JsonMap>[];
     final seenRatings = <String>{}, seenSubmitted = <String>{};
     for (final row in rows) {
@@ -887,7 +896,7 @@ final class IdentityStore {
                 languageRank((provenance[field] as Map)['language'], fields[field]);
         if (values[field] != null &&
             values[field] != '' &&
-            (!fields.containsKey(field) || preferChinese)) {
+            (!fields.containsKey(field) || preferChinese || (provenance[field] as Map?)?['source'] == 'local_catalog')) {
           fields[field] = values[field];
           provenance[field] = {
             'provider': row['provider'],
@@ -989,6 +998,7 @@ final class IdentityStore {
         where: 'kind = ?', whereArgs: ['work'], orderBy: 'id');
     final results = <JsonMap>[];
     for (final work in works) {
+      if (decodeMediaJson(work['attributes'])['removed'] == true) continue;
       final id = work['id'] as String;
       final metadata = await mergedMetadata(id);
       final fields = metadata['fields'] as JsonMap;
@@ -1016,6 +1026,7 @@ final class IdentityStore {
         where: 'parent_id = ? AND kind = ?', whereArgs: [workId, 'release']);
     return [
       for (final release in releases)
+        if (decodeMediaJson(release['attributes'])['removed'] != true)
         {
           ...release,
           'attributes': decodeMediaJson(release['attributes']),
@@ -1028,7 +1039,7 @@ final class IdentityStore {
   Future<List<JsonMap>> _episodes(String releaseId) async {
     final episodes = await database.query('media_entities',
         where: 'parent_id = ? AND kind = ?', whereArgs: [releaseId, 'episode']);
-    final ordered = List<JsonMap>.of(episodes)
+    final ordered = episodes.where((e) => decodeMediaJson(e['attributes'])['removed'] != true).toList()
       ..sort((a, b) {
         final aa = decodeMediaJson(a['attributes']),
             bb = decodeMediaJson(b['attributes']);

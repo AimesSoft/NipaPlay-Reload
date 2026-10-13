@@ -14,6 +14,7 @@ import 'endpoint_file.dart';
 import 'harness_repository.dart';
 import 'harness_redaction.dart';
 import 'instance_facts.dart';
+import 'capabilities/catalog_family_descriptions.dart';
 
 sealed class AgentEndpointStatus {
   const AgentEndpointStatus();
@@ -285,6 +286,10 @@ final class AgentEndpoint {
           400);
     }
     final action = _harness.lookup(decoded['action'] as String);
+    if (operation == 'describe' && action == null) {
+      final family = describeCatalogFamily(decoded['action'] as String, _harness.catalog);
+      if (family != null) return _response(family, 200, false);
+    }
     if (action == null) return _response({'error': 'Unknown Action.'}, 404);
     if (operation == 'describe') {
       return _response(_describe(action.spec), 200, false);
