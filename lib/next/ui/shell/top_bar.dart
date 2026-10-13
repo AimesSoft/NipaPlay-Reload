@@ -109,7 +109,7 @@ class NextTopBar extends StatelessWidget {
                     glyph: NextGlyph.search,
                     label: '搜索',
                     size: _search,
-                    onTap: shell.ask),
+                    onTap: shell.openSearch),
                 const SizedBox(width: _gap),
                 ListenableBuilder(
                   listenable: shell.chat,

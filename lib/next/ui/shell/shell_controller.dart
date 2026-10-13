@@ -6,6 +6,8 @@ import '../../ui_data/ui_data.dart';
 import '../conversation/nipa_chat.dart';
 import '../data/services.dart';
 import '../detail/work_route.dart';
+import '../search/recent_searches.dart';
+import '../search/search_controller.dart';
 import '../theme/tokens.dart';
 import '../widgets/art_origin.dart';
 
@@ -63,6 +65,10 @@ class NextShellController extends ChangeNotifier {
 
   /// Content scrolled under the top bar: show its scrim.
   final scrolled = ValueNotifier<bool>(false);
+
+  /// The search panel (⌘F, the top bar's search).
+  late final search =
+      NextSearch(services.search, store: const PreferenceRecentSearches());
 
   NextSection section = NextSection.home;
   NextPopover popover = NextPopover.none;
@@ -134,6 +140,7 @@ class NextShellController extends ChangeNotifier {
   /// ⌘K: the input where the conversation is: the home's bar, the
   /// expanded conversation, or the side panel.
   void ask() {
+    closeSearch(restoreFocus: false);
     if (panelOpen.value) return panelFocus.requestFocus();
     if (!onHome) return openChat();
     popover = NextPopover.none;
@@ -146,6 +153,7 @@ class NextShellController extends ChangeNotifier {
   /// elsewhere. With [about] (“问 Nipa” on a work's page) what you say goes
   /// with that work.
   void openChat({UiWork? about}) {
+    closeSearch(restoreFocus: false);
     if (popover != NextPopover.none) {
       popover = NextPopover.none;
       notifyListeners();
@@ -228,6 +236,38 @@ class NextShellController extends ChangeNotifier {
         .catchError((Object e) => debugPrint('[NextUi] play failed: $e')));
   }
 
+  /// ⌘F: the search panel, over whatever shows.
+  void openSearch() {
+    closePopover();
+    search.show();
+  }
+
+  void closeSearch({bool restoreFocus = true}) =>
+      search.hide(restoreFocus: restoreFocus);
+
+  /// A row of the search panel: a work opens its page; an episode plays;
+  /// Nipa gets the words to look for, in the conversation's input, not yet
+  /// said.
+  void openSearchEntry(SearchEntry entry) {
+    if (entry case RecentEntry(:final text)) return search.searchNow(text);
+    search.remember();
+    closeSearch(restoreFocus: false);
+    switch (entry) {
+      case WorkEntry(:final work):
+        openWork(work);
+      case EpisodeEntry(:final work, :final episode):
+        play(work, episode: episode);
+      case NipaEntry(:final text):
+        final words = '帮我找「$text」';
+        askText.value = TextEditingValue(
+            text: words,
+            selection: TextSelection.collapsed(offset: words.length));
+        openChat();
+      case RecentEntry():
+        break;
+    }
+  }
+
   void togglePopover(NextPopover which) {
     popover = popover == which ? NextPopover.none : which;
     if (popover == NextPopover.nipa) chat.markSeen();
@@ -242,6 +282,10 @@ class NextShellController extends ChangeNotifier {
 
   /// Esc: closes what is on top, one layer at a time.
   bool escape() {
+    if (search.isOpen) {
+      closeSearch();
+      return true;
+    }
     if (chat.menuOpen && chatShown) {
       chat.closeMenu();
       return true;
@@ -276,6 +320,7 @@ class NextShellController extends ChangeNotifier {
     panelOpen.removeListener(_syncVisible);
     homeChatOpen.removeListener(_syncVisible);
     chat.dispose();
+    search.dispose();
     tasks.dispose();
     scrolled.dispose();
     askFocus.dispose();

@@ -11,6 +11,7 @@ import '../dev/dev_services.dart';
 import 'core_connect.dart';
 import 'discover.dart';
 import 'login_requests.dart';
+import 'search.dart';
 import 'ui_actions.dart';
 
 /// Everything the Next shell talks to.
@@ -22,6 +23,7 @@ final class NextUiServices {
     required this.discover,
     required this.library,
     required this.libraryActions,
+    required this.search,
     LoginRequests? logins,
     this.onDispose,
   }) : logins = logins ?? LoginRequests();
@@ -37,6 +39,9 @@ final class NextUiServices {
   /// in them directly.
   final NextLibraryData library;
   final NextLibraryActions libraryActions;
+
+  /// The search panel's groups.
+  final NextSearchData search;
 
   /// Logins the agent asked for, waiting for the user's window.
   final LoginRequests logins;
@@ -68,6 +73,7 @@ final class NextUiServices {
       discover: CoreDiscover(runtime),
       library: library,
       libraryActions: library,
+      search: CoreSearch(() => runtime.harness),
       logins: logins,
       onDispose: attachCoreLogins(core, logins),
     );

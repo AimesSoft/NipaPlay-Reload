@@ -27,6 +27,8 @@ import '../shell/next_ui_preference.dart';
 import '../library/category_page.dart';
 import '../library/fan_cover.dart';
 import '../pages/library_page.dart';
+import '../search/search_controller.dart';
+import '../search/search_overlay.dart';
 import '../shell/shell_controller.dart';
 import '../shell/window_chrome.dart';
 import '../theme/tokens.dart';
@@ -109,6 +111,12 @@ import 'fake_world.dart';
 /// - `cat` [`sort=<id>`] [`scroll=top|end|<px>` [`ms=`]]: the category
 ///   page on top; a timed scroll also reports how long its frames took.
 ///   `scroll` takes `ms=` too, for the page showing.
+/// - `search` [`open=true|false`] [`text=`] [`key=down|up|enter|escape,…`]
+///   [`fail=library,online,sources|none`] [`clear=true`] [`wait=ms`]: the
+///   search panel (what ⌘F opens), typed into as the keyboard would (the
+///   debounce applies; `wait`, 300 by default, lets groups answer before
+///   the keys), its keys, the scripted
+///   groups that fail, its recent terms cleared; returns what it shows.
 abstract final class NextUiDebug {
   static NextShellController? _shell;
   static BuildContext? _context;
@@ -496,6 +504,53 @@ abstract final class NextUiDebug {
                   '${Words.canPlay(w) ? ' playable' : ''}'
           ],
         };
+      case 'search':
+        final search = shell.search;
+        if (p['fail'] case final fail?) {
+          final data = shell.services.search;
+          if (data is! FakeSearch) {
+            throw StateError('Only the scripted world fails on demand');
+          }
+          data.failing
+            ..clear()
+            ..addAll(fail == 'none' ? const [] : fail.split(','));
+        }
+        if (p['open'] == 'false') {
+          shell.closeSearch();
+        } else if (p['open'] == 'true' || p['text'] != null) {
+          shell.openSearch();
+        }
+        if (p['clear'] == 'true') search.clearRecent();
+        await _settle();
+        if (p['text'] case final text?) {
+          search.text.value = TextEditingValue(
+              text: text,
+              selection: TextSelection.collapsed(offset: text.length));
+        }
+        // The groups answer before the keys choose.
+        await Future<void>.delayed(
+            Duration(milliseconds: int.tryParse(p['wait'] ?? '') ?? 300));
+        for (final key in (p['key'] ?? '').split(',')) {
+          switch (key) {
+            case 'down' || 'up':
+              search.move(key == 'down' ? 1 : -1);
+            case 'enter':
+              final entry = await search.submit();
+              if (entry != null) shell.openSearchEntry(entry);
+            case 'escape':
+              shell.escape();
+            case '':
+              break;
+            default:
+              throw ArgumentError('key must be down, up, enter or escape');
+          }
+          await _settle();
+        }
+        if (p['key'] != null) {
+          await Future<void>.delayed(const Duration(milliseconds: 300));
+        }
+        await _settle();
+        return {..._status(shell), 'search': _search(shell)};
       case 'reduce':
         NextMotion.forceReduced = switch (p['on']) {
           'true' => true,
@@ -548,6 +603,34 @@ abstract final class NextUiDebug {
   }
   static Completer<void>? _fakeLoginStop;
 
+  static Map<String, Object?> _search(NextShellController shell) {
+    final s = shell.search;
+    String row(SearchEntry e) => switch (e) {
+          RecentEntry(:final text) => text,
+          WorkEntry(:final work, :final source) =>
+            source == null ? work.title : '${work.title} ($source)',
+          EpisodeEntry(:final work, :final episode) =>
+            '${work.title} ${episode.number} ${episode.title ?? ''}',
+          NipaEntry(:final text) => 'nipa: $text',
+        };
+    return {
+      'open': s.isOpen,
+      'typed': s.typed,
+      'query': s.query,
+      'loading': s.loading,
+      'nothingFound': s.nothingFound,
+      'recent': s.recent,
+      'selected': s.selected == null ? null : row(s.selected!),
+      'groups': {
+        for (final MapEntry(key: kind, value: g) in s.groups.entries)
+          kind.name: {
+            'state': g.state.name,
+            'rows': [for (final e in s.shown(kind)) row(e)],
+          }
+      },
+    };
+  }
+
   static Map<String, Object?> _status(NextShellController shell) {
     final c = shell.chat;
     String part(TurnPart p) => switch (p) {
@@ -574,6 +657,7 @@ abstract final class NextUiDebug {
           ? NextMotion.reduced(_context!)
           : null,
       'askText': shell.askText.text,
+      'search': shell.search.isOpen ? shell.search.typed : null,
       'chat': {
         'main': c.main,
         'thread': c.thread,
@@ -637,6 +721,7 @@ abstract final class NextUiDebug {
     final scope = switch (area) {
       'panel' || 'chat' => ChatFrame,
       'discover' => DiscoverPage,
+      'search' => SearchLayer,
       _ => null,
     };
     void visit(Element element, bool inArea) {

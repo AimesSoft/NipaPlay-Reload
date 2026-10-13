@@ -47,6 +47,7 @@ abstract final class NextUiDev {
       discover: world,
       library: world.catalog,
       libraryActions: world.catalog,
+      search: world.search,
       onDispose: world.dispose,
     );
   }
