@@ -1,0 +1,120 @@
+import 'dart:convert';
+import 'package:nipa_harness/nipa_harness.dart';
+import '../chat/chat_host.dart';
+import '../harness_redaction.dart';
+import 'service.dart';
+
+/// Field projections of existing facts, in their original order and wording.
+Future<JsonMap> recentMemoryFacts(ChatHost host, List<JsonMap> jobs,
+    List<JsonMap> followups, List<JsonMap> activity, String? current) async {
+  String? source;
+  final messages = <JsonMap>[];
+  final sessions = await host.listThreads(limit: 30, sortKey: 'updated_at');
+  for (final row in sessions['data'] as List) {
+    if (host.threadOrigins.containsKey(row['id'])) {
+      continue;
+    }
+    final thread = await host.readThread(row['id'] as String);
+    for (final turn in thread['turns'] as List) {
+      for (final item in turn['items'] as List) {
+        if (item['type'] == 'userMessage') {
+          for (final part in item['content'] as List) {
+            if (part['type'] == 'text') {
+              messages.add({'role': 'user', 'text': part['text']});
+            }
+          }
+        } else if (item['type'] == 'agentMessage') {
+          messages.add({'role': 'assistant', 'text': item['text']});
+        }
+      }
+    }
+    if (messages.isNotEmpty) {
+      source = row['id'] as String;
+      break;
+    }
+  }
+  final sections = <(String, String, int)>[
+    (
+      '最近会话 ${source ?? '无'} 最后几句话',
+      jsonEncode(messages.reversed.take(6).toList().reversed.toList()),
+      1250
+    ),
+    (
+      '未结束任务',
+      jsonEncode(jobs
+          .map((r) => {
+                for (final key in [
+                  'jobId',
+                  'type',
+                  'state',
+                  'title',
+                  'phase',
+                  'currentActivity'
+                ])
+                  if (r.containsKey(key)) key: r[key],
+              })
+          .toList()),
+      500
+    ),
+    (
+      '未结束后续',
+      jsonEncode(followups
+          .map((r) => {
+                for (final key in [
+                  'id',
+                  'title',
+                  'state',
+                  'instruction',
+                  'waitingFor',
+                  'threadId'
+                ])
+                  if (r.containsKey(key)) key: r[key],
+              })
+          .toList()),
+      400
+    ),
+    (
+      '最近动态',
+      jsonEncode(activity
+          .take(5)
+          .map((r) => {
+                for (final key in ['at', 'title', 'actor', 'type', 'facts'])
+                  if (r.containsKey(key)) key: r[key],
+              })
+          .toList()),
+      450
+    ),
+  ];
+  final omitted = <String>[];
+  final output = <String>[];
+  for (final (label, raw, limit) in sections) {
+    final runes = redactMemoryText(raw).runes.toList();
+    final cut = runes.length > limit;
+    final tail = label.startsWith('最近会话');
+    final side = tail ? '开头' : '尾部';
+    if (cut) omitted.add('$label $side ${runes.length - limit} 字符');
+    final snippet =
+        tail && cut ? runes.skip(runes.length - limit) : runes.take(limit);
+    output.add('$label：\n${String.fromCharCodes(snippet)}'
+        '${cut ? '\n[截断：此节$side ${runes.length - limit} 字符未注入]' : ''}');
+  }
+  if (messages.length > 6) omitted.add('最近会话较早的 ${messages.length - 6} 句话');
+  if (activity.length > 5) omitted.add('较早的 ${activity.length - 5} 条动态');
+  if (sessions['nextCursor'] != null) {
+    omitted.add('30 个会话之外的历史未扫描');
+  }
+  final text = output.join('\n');
+  assert(text.runes.length <= HarnessMemory.recentCharacters);
+  return {
+    'text': redactHarnessText(text),
+    'sourceThreadId': source,
+    'truncated': omitted.isNotEmpty,
+    'omitted': omitted,
+    'limits': {
+      'characters': HarnessMemory.recentCharacters,
+      'messages': 6,
+      'activity': 5,
+      'sessionsScanned': 30
+    }
+  };
+}

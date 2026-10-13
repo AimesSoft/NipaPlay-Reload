@@ -168,6 +168,24 @@ final class SettingsRegistry {
     };
   }
 
+  /// Current values and their latest provenance, rather than copied settings.
+  Future<List<JsonMap>> preferences() async {
+    await drain();
+    final rows = <JsonMap>[];
+    for (final entry in entries.where((e) => e.visible() && e.scope == 'user' && e.apply != 'runtime')) {
+      final current = await get(entry.key);
+      final provenance = current['provenance'] as Map?;
+      if (provenance == null || provenance['changedBy'] == 'migration' ||
+          provenance['origin'] == 'application') {
+        continue;
+      }
+      rows.add({'key': entry.key, 'title': entry.title, 'value': current['value'],
+        'changedAt': provenance['changedAt'], 'changedBy': provenance['changedBy'],
+        'reason': provenance['reason']});
+    }
+    return rows;
+  }
+
   Future<List<JsonMap>> describe(
       {String? domain,
       String? keyword,

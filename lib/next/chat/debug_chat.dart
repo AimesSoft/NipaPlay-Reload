@@ -4,6 +4,7 @@ import 'dart:io';
 
 import '../../utils/lab_profile.dart';
 import '../harness_redaction.dart';
+import 'package:nipa_harness/nipa_harness.dart' show Invocation;
 import 'chat_host.dart';
 
 /// VM-service-only lab driver. Absent from the harness catalog and release builds.
@@ -47,6 +48,16 @@ void installDebugChat(ChatHost? Function() current) {
           };
         case 'read':
           result = await host.readThread(params['threadId']!);
+        case 'compact':
+          result = await host.compactThread(params['threadId']!);
+        case 'hooks':
+          result = await host.listHooks();
+        case 'memoryEdit':
+          result = await host.memory!.edit(params['path']!, params['content']!,
+              params['revision']!, Invocation(origin: 'gui'));
+        case 'memoryDelete':
+          result = await host.memory!.delete(params['path']!, params['revision']!,
+              Invocation(origin: 'gui'));
         case 'close':
           await host.close();
           result = {'closed': true};
