@@ -45,6 +45,8 @@ abstract final class NextUiDev {
       actions: world,
       chat: chat,
       discover: world,
+      library: world.catalog,
+      libraryActions: world.catalog,
       onDispose: world.dispose,
     );
   }

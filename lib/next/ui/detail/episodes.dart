@@ -6,6 +6,7 @@ import '../../ui_data/ui_data.dart';
 import '../theme/tokens.dart';
 import '../widgets/buttons.dart';
 import '../widgets/cards.dart';
+import '../widgets/devices.dart';
 import '../widgets/icons.dart';
 import '../widgets/words.dart';
 
@@ -110,7 +111,8 @@ class _EpisodeRowState extends State<EpisodeRow> {
 
 /// `.ep`: 16:9 still with the big number, title and runtime, the danmaku
 /// heat line. Watched episodes have a full bar; the current one a white
-/// outline. Hover scales 1.03 and shows play; a click plays.
+/// outline. Hover scales 1.03 and shows play; a click plays. One that
+/// plays from another device names it before the runtime.
 class EpisodeTile extends StatelessWidget {
   const EpisodeTile({
     super.key,
@@ -163,6 +165,10 @@ class EpisodeTile extends StatelessWidget {
                     overflow: TextOverflow.ellipsis,
                     style: NextText.sans(13.5, weight: FontWeight.w600)),
               ),
+              if (episode.device case final device?) ...[
+                const SizedBox(width: 8),
+                DeviceMark([device]),
+              ],
               if (episode.runtime != null) ...[
                 const SizedBox(width: 8),
                 NumText(Words.runtime(episode.runtime!),
