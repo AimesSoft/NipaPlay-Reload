@@ -305,6 +305,9 @@ final class UiDataService implements NextUiData {
   }
 
   @override
+  Future<List<UiWork>> library() => throw UnimplementedError('X47');
+
+  @override
   Future<UiHome> home() async {
     final shelves = <UiShelf>[];
     final continuing = <UiShelfItem>[];

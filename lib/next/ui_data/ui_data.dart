@@ -10,6 +10,10 @@ abstract interface class NextUiData {
   Future<UiWork?> work(String workId);
   Future<List<UiEpisode>> episodes(String workId, {int? season});
 
+  /// Every work the user has, on this device and the others in the mesh, one
+  /// entry per real work; most recently added first.
+  Future<List<UiWork>> library();
+
   /// Cards the agent presented in a chat turn, with live state resolved.
   Future<List<UiCard>> cards({required String threadId, String? turnId});
 
@@ -52,6 +56,7 @@ final class UiWork {
     this.artwork = const UiArtwork(),
     this.next,
     this.danmaku = const [],
+    this.devices = const [],
   });
   final String workId;
   final String title;
@@ -70,6 +75,10 @@ final class UiWork {
   /// A few short comments viewers left on this work, for drifting over the
   /// hero. Empty when there are none.
   final List<String> danmaku;
+
+  /// Other devices holding some of its episodes. Empty when everything is
+  /// on this device.
+  final List<UiDevice> devices;
 }
 
 final class UiEpisode {
@@ -84,6 +93,7 @@ final class UiEpisode {
     this.progress,
     this.heat,
     this.playable = false,
+    this.device,
   });
   final String episodeId;
   final String workId;
@@ -101,7 +111,23 @@ final class UiEpisode {
   /// Danmaku density over the episode, normalised to 0..1, or null when
   /// there are no comments yet.
   final List<double>? heat;
+
+  /// Whether it can be played right now, from here or from [device].
   final bool playable;
+
+  /// The device it plays from; null when the file is on this device.
+  final UiDevice? device;
+}
+
+/// Another device in the user's mesh, as viewers know it.
+final class UiDevice {
+  const UiDevice({required this.name, this.online = true});
+
+  /// The name its host gave it, e.g. “工作站”.
+  final String name;
+
+  /// False when it cannot be reached now; its works show from the last look.
+  final bool online;
 }
 
 final class UiHome {

@@ -74,6 +74,9 @@ final class _WhenReady implements NextUiData {
       (await _data).episodes(workId, season: season);
 
   @override
+  Future<List<UiWork>> library() async => (await _data).library();
+
+  @override
   Future<List<UiCard>> cards(
           {required String threadId, String? turnId}) async =>
       (await _data).cards(threadId: threadId, turnId: turnId);
