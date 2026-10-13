@@ -36,6 +36,7 @@ import 'capabilities/library_capability.dart';
 import 'capabilities/ui_capability.dart';
 import 'capabilities/ui_capture.dart';
 import 'instance_facts.dart';
+import 'app_capabilities.dart';
 import 'capabilities/classic_ui_open.dart';
 import 'capabilities/discover_capability.dart';
 import 'capabilities/playback_capability.dart';
@@ -378,6 +379,10 @@ final class NextRuntime extends ChangeNotifier {
     _harness = Harness(
       [
         FamilyDescriptionCapability(() => _harness.catalog),
+        AppCapabilities(host: 'gui', catalog: () => _harness.catalog,
+            media: core.media.service, danmaku: core.danmaku.service,
+            settings: core.settings, vault: core.credentialVault,
+            programEnabled: () => core.programs.enabled),
         InstanceCapability(instanceFacts),
         UiCaptureCapability(ClassicUiCapture(instanceFacts).capture),
         for (final capability in capabilities)

@@ -22,7 +22,7 @@ void main() {
         ['subtitle.tracks']);
     expect(meshActionAllowed('capability.describe'), true);
     expect(meshActionAllowed('state.describe'), true);
-    expect(meshActionAllowed('settings.set'), false);
+    expect(meshActionAllowed('settings.set'), true);
     final missing = (await harness.invokeJson('capability.describe',
             {'family': 'download'}, Invocation(origin: 'fixture')))
         .toEnvelope();

@@ -4,8 +4,7 @@ import 'dart:io';
 
 import 'package:http/http.dart' as http;
 import 'package:nipa_harness/nipa_harness.dart';
-import '../network/no_dandanplay_client.dart'
-    if (dart.library.ui) '../../services/dandanplay_http_client.dart'
+import '../../services/dandanplay_http_client.dart'
     show DandanplayLoginRequired;
 
 import '../network/api_uri.dart';

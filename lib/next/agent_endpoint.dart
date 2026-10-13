@@ -269,13 +269,15 @@ final class AgentEndpoint {
       });
     }
     if (operation == 'list') {
+      final availability = await _capabilityFacts();
       return _response({
         'actions': [
           for (final spec in _harness.catalog)
             if (full)
-              _describe(spec)
+              {..._describe(spec), ...?availability[spec.id]}
             else
-              {'id': spec.id, 'effect': spec.effect.name, 'title': spec.title}
+              {'id': spec.id, 'effect': spec.effect.name, 'title': spec.title,
+                ...?availability[spec.id]}
         ]
       }, 200, false);
     }
@@ -298,7 +300,8 @@ final class AgentEndpoint {
       return _response({'error': 'Unknown Action: $name. Run ./nipa list; then ./nipa describe ACTION.'}, 404);
     }
     if (operation == 'describe') {
-      return _response(_describe(action.spec), 200, false);
+      return _response({..._describe(action.spec),
+          ...?(await _capabilityFacts())[action.spec.id]}, 200, false);
     }
     final input = decoded['input'] ?? <String, Object?>{};
     if (input is! Map<String, Object?> ||
@@ -310,6 +313,19 @@ final class AgentEndpoint {
             action.spec.id, input, Invocation(origin: request.headers['x-nipa-hook'] == null
                 ? origin : 'hook:${request.headers['x-nipa-hook']}')))
         .toEnvelope());
+  }
+
+  Future<Map<String, JsonMap>> _capabilityFacts() async {
+    if (_harness.lookup('app.capabilities') == null) return {};
+    final outcome = await _harness.invokeJson('app.capabilities', {},
+        Invocation(origin: 'application:catalog'));
+    if (outcome is! Completed) return {};
+    final rows = outcome.value.toJson()['actions'] as List;
+    return {for (final raw in rows) (raw as JsonMap)['id'] as String: {
+      for (final key in ['available', 'availabilityScope', 'requiredHostSetup',
+        'availabilityReason', 'remoteCallable', 'requiredUserPresence', 'lifecycle', 'replacement'])
+        if (raw.containsKey(key)) key: raw[key]
+    }};
   }
 
   JsonMap _taskSummary(JsonMap envelope) {

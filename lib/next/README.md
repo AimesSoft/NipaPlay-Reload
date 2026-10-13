@@ -9,6 +9,11 @@ Classic 下载页使用 `core.downloads`，`NextRuntime` 把
 
 只读公开状态通过 `state.describe` / `state.query` 提供，契约与边界见 [state/README.md](state/README.md)。Agent 用 `nipa list` 读取当前全部能力。
 
+`app.capabilities` 返回当前宿主功能、provider/source 前置、设置键和逐 Action 的
+远程范围；`nipa describe app` 是此族说明。GUI 和纯 Dart 宿主共用在线 provider
+工厂与弹弹play网关客户端，秘密只通过宿主保险库引用读取。详情见
+[无界面宿主](../../docs/next/HEADLESS.md) 和 [X53 报告](../../docs/next/X53_REPORT.md)。
+
 启动顺序：读取设备身份 → 打开并迁移 `next.db` → 创建领域运行时（媒体先导入
 旧历史）→ 收集全部执行器创建 TaskEngine → 向各领域注入同一引擎并收集
 Capability → `engine.start()` 恢复持久任务 → 启动下载会话观察与页面外自动入库

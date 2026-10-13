@@ -23,13 +23,16 @@ final class _MeshAction extends Action<MeshJson, JsonEncodable> {
       id: 'mesh.$operation',
       title: 'Mesh $operation',
       description: operation == 'devices'
-          ? 'List same-account devices, authenticated self-descriptions, reachability, and Action catalogs. Self-descriptions include host roles, storage paths, read-only media roots and the device hosting Nipa. Remote access is authorized by each host.'
+          ? 'List same-account devices, authenticated self-descriptions, reachability, and Action catalogs. Filter by deviceIds, or set includeCatalog:false to omit schemas for topology queries. Self-descriptions include host roles, storage paths, read-only media roots and the device hosting Nipa. Remote access is authorized by each host; JSON responses remain bounded by the 1 MiB Mesh frame.'
           : effect == Effect.destructive
               ? 'Invoke a destructive Action on an authorized device. Only disk-file deletion waits for the user in that device’s NipaPlay UI; other operations execute directly and are audited.'
               : 'Invoke a non-destructive Action on a same-account device authorized by its host. A download started from a conversation returns completion facts to that originating device and thread.',
       effect: effect,
       input: operation == 'devices'
-          ? const ObjectSchema({})
+          ? const ObjectSchema({
+              'deviceIds': ArraySchema(StringSchema(minLength: 1)),
+              'includeCatalog': BooleanSchema(),
+            })
           : const ObjectSchema({
               'deviceId': StringSchema(minLength: 1),
               'action': StringSchema(minLength: 1),
@@ -46,7 +49,9 @@ final class _MeshAction extends Action<MeshJson, JsonEncodable> {
   Future<Outcome<JsonEncodable>> run(
       MeshJson input, Invocation invocation) async {
     if (operation == 'devices') {
-      return Completed(MeshJson(await runtime.devices()));
+      return Completed(MeshJson(await runtime.devices(
+          deviceIds: (input.json['deviceIds'] as List?)?.cast<String>(),
+          includeCatalog: input.json['includeCatalog'] as bool? ?? true)));
     }
     return runtime.invoke(input.json['deviceId'] as String,
         input.json['action'] as String, input.json['input'] as JsonMap,

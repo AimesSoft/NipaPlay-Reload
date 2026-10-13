@@ -1,5 +1,6 @@
 import 'package:nipaplay/services/dandanplay_http_client.dart';
-import 'package:nipaplay/services/dandanplay_service.dart';
+import '../headless/gateway_host.dart'
+    if (dart.library.ui) 'package:nipaplay/services/dandanplay_service.dart';
 
 import 'api_uri.dart';
 import 'metadata_gateway.dart';

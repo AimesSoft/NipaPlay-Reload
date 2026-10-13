@@ -23,27 +23,31 @@ Future<void> main(List<String> arguments) async {
   final options = <String, String>{};
   var stop = false;
   var enroll = false;
+  var enrollCredential = false;
   for (var i = 0; i < arguments.length; i++) {
     final key = arguments[i];
     if (key == '--help') {
       stdout.writeln('NipaPlay headless\n'
           '  --data ABSOLUTE_DIR (required; independent of GUI data)\n'
-          '  --media-root ABSOLUTE_DIR (repeatable; media are read-only)\n'
+          '  --media-root ABSOLUTE_DIR (repeatable; indexing/download destinations are read-only)\n'
           '  --port NUMBER (default 0; IPv4 loopback only)\n'
           '  --seed ABSOLUTE_DIR (default assets/next/harness)\n'
           '  --ffprobe ABSOLUTE_EXECUTABLE (optional duration probe)\n'
           '  --native-library ABSOLUTE_LIBRARY (default beside executable)\n'
           '  --enroll-token-stdin --data DIR (host-only account enrollment)\n'
-          '  Host files in data: mesh.json (trust/join), download.json (network configuration)\n'
+          '  --enroll-credential-stdin --credential-namespace NAME --credential-key KEY --data DIR (host-only vault enrollment)\n'
+          '  Host files in data: mesh.json (trust/join), download.json (network configuration), network.json (gateway routing)\n'
           '  --stop --data ABSOLUTE_DIR (stop that instance)');
       return;
     }
     if (key == '--enroll-token-stdin') { enroll = true; continue; }
+    if (key == '--enroll-credential-stdin') { enrollCredential = true; continue; }
     if (key == '--stop') {
       stop = true;
       continue;
     }
-    if (!{'--data', '--media-root', '--port', '--seed', '--ffprobe', '--native-library'}
+    if (!{'--data', '--media-root', '--port', '--seed', '--ffprobe', '--native-library',
+          '--credential-namespace', '--credential-key'}
             .contains(key) ||
         i + 1 == arguments.length) {
       stderr.writeln('Invalid option: $key');
@@ -64,15 +68,31 @@ Future<void> main(List<String> arguments) async {
     return;
   }
   final root = Directory(await _canonicalDirectory(p.normalize(data)));
-  if (enroll) {
-    if (!await File(p.join(root.path, 'headless.json')).exists()) {
+  if (enroll || enrollCredential) {
+    final marker = File(p.join(root.path, 'headless.json'));
+    if (!await marker.exists()) {
       throw StateError('Initialize the isolated headless data directory before enrollment.');
     }
-    final value = (await stdin.transform(utf8.decoder).join()).trim();
-    if (value.isEmpty || value.length > 4096 || RegExp(r'\s').hasMatch(value)) throw StateError('invalid_token_input');
-    await HeadlessVault(Directory(p.join(root.path, 'vault'))).write(const CredentialRef('preferences', 'dandanplay_token'), value);
-    stdout.writeln('Test account token enrolled.');
+    final configuration = jsonDecode(await marker.readAsString()) as Map;
+    if (configuration['format'] != 1 || configuration['host'] != 'nipaplay-headless') {
+      throw StateError('Unrecognized headless data directory.');
+    }
+    if (enroll && enrollCredential) throw ArgumentError('Choose one host enrollment mode.');
+    final namespace = enroll ? 'preferences' : options['--credential-namespace'];
+    final key = enroll ? 'dandanplay_token' : options['--credential-key'];
+    if (namespace == null || namespace.isEmpty || namespace.contains('\u0000') ||
+        key == null || key.isEmpty || key.contains('\u0000')) {
+      throw ArgumentError('Credential namespace and key are required.');
+    }
+    final supplied = await stdin.transform(utf8.decoder).join();
+    final value = enroll ? supplied.trim() : supplied;
+    if (value.isEmpty || value.length > 4096 || enroll && RegExp(r'\s').hasMatch(value)) throw StateError('invalid_credential_input');
+    await HeadlessVault(Directory(p.join(root.path, 'vault'))).write(CredentialRef(namespace, key), value);
+    stdout.writeln('Host credential enrolled.');
     return;
+  }
+  if (options.containsKey('--credential-namespace') || options.containsKey('--credential-key')) {
+    throw ArgumentError('Credential references belong to host enrollment mode.');
   }
   final running = File(p.join(root.path, 'running.json'));
   final stopRequest = File(p.join(root.path, 'stop.request'));

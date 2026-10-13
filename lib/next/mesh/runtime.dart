@@ -18,13 +18,16 @@ export 'host.dart' show authorizeMeshPeer;
 
 bool meshActionAllowed(String id) =>
     ['task.', 'download.', 'media.', 'danmaku.', 'playback.', 'subtitle.',
-      'history.', 'followup.', 'program.', 'discover.', 'sync.', 'ui.']
-        .any(id.startsWith) ||
-    const {'agent.wake', 'activity.report', 'state.query', 'state.describe', 'capability.describe', 'app.instance',
-      'settings.get', 'settings.describe', 'settings.history',
-      'accounts.status', 'accounts.collections.get', 'accounts.collections.update',
-      'accounts.episodes.get', 'accounts.episodes.update',
-      'accounts.bangumi.sync', 'accounts.bangumi.sync_status'}.contains(id);
+      'history.', 'followup.', 'program.', 'discover.', 'sync.', 'ui.',
+      'settings.', 'accounts.', 'state.', 'window.', 'app.', 'diagnostics.',
+      'backup.', 'plugins.', 'chat.', 'memory.', 'appearance.', 'shortcuts.',
+      'webdav_quick.'].any(id.startsWith) ||
+    const {'agent.wake', 'agent.dispatch', 'agent.dispatch.report',
+      'capability.describe', 'activity.report', 'credentials.status', 'credentials.retry',
+      'mesh.devices', 'mesh.invoke', 'mesh.invoke_destructive'}.contains(id);
+
+String? meshActionRestriction(String id) => meshActionAllowed(id) ? null :
+    'No remote contract is registered for this action; host credential enrollment stays local.';
 
 /// Trust anchors are release inputs, never learned from the coordinator.
 const meshProductionIssuerPem = '';
@@ -444,19 +447,21 @@ final class MeshRuntime implements MeshDeviceSource {
         (jsonDecode(await file.readAsString()) as JsonMap)['addresses'] ?? []);
   }
 
-  Future<JsonMap> devices() async {
+  Future<JsonMap> devices({List<String>? deviceIds, bool includeCatalog = true}) async {
     if (_node == null) return {'status': status, 'devices': <Object?>[]};
     await refreshDevices();
     return {
       'status': status,
       if (discoveryNotice != null) 'discoveryNotice': discoveryNotice,
       'devices': [
-        for (final device in _devices) await _describe(device),
+        for (final device in _devices)
+          if (deviceIds == null || deviceIds.contains(device['device_id']))
+            await _describe(device, includeCatalog: includeCatalog),
       ]
     };
   }
 
-  Future<JsonMap> _describe(JsonMap device) async {
+  Future<JsonMap> _describe(JsonMap device, {bool includeCatalog = true}) async {
     final id = device['device_id'] as String;
     if (device['revoked'] == true) {
       _reachability[id] = false;
@@ -468,7 +473,7 @@ final class MeshRuntime implements MeshDeviceSource {
       };
     }
     try {
-      final tools = await _catalog(id);
+      final tools = includeCatalog ? await _catalog(id) : null;
       _reachability[id] = true;
       final description = await rpc(id, 'mesh/describe', {});
       _descriptions[id] = {
@@ -481,7 +486,8 @@ final class MeshRuntime implements MeshDeviceSource {
       };
       await File('${root.path}/mesh-host-facts.json')
           .writeAsString(jsonEncode(_descriptions), flush: true);
-      return {...device, 'deviceId': id, 'online': true, 'actions': tools,
+      return {...device, 'deviceId': id, 'online': true,
+        if (includeCatalog) 'actions': tools,
         'description': description};
     } on Failure {
       _reachability[id] = false;
@@ -489,7 +495,7 @@ final class MeshRuntime implements MeshDeviceSource {
         ...device,
         'deviceId': id,
         'online': false,
-        'actions': _catalogs[id] ?? <Object?>[]
+        if (includeCatalog) 'actions': _catalogs[id] ?? <Object?>[]
       };
     }
   }
@@ -749,6 +755,9 @@ final class MeshRuntime implements MeshDeviceSource {
           'roles': hostConfiguration['roles'] ?? <String>[],
           'storage': hostConfiguration['storage'] ?? <Object?>[],
           if (describeSelf != null) ...await describeSelf!(),
+          if (_harness!.lookup('app.capabilities') != null)
+            'capabilities': (await _harness!.invokeJson('app.capabilities', {},
+                Invocation(origin: 'mesh:describe'))).toEnvelope(),
         }};
         await native.respond(node, event.requestId, jsonEncode(response));
         return;
@@ -789,6 +798,14 @@ final class MeshRuntime implements MeshDeviceSource {
               frame, Invocation(origin: 'mesh:${event.deviceId}', id: id)),
           zoneValues: {#meshReturnTarget: returnTo}) ??
           {'jsonrpc': '2.0', 'id': null, 'result': <String, Object?>{}};
+      final result = response['result'] as JsonMap?;
+      if (result?.containsKey('structuredContent') == true) {
+        // Mesh consumers decode structuredContent; duplicating it as escaped
+        // text can exceed the frame limit even when the complete result fits.
+        result!['content'] = [
+          {'type': 'text', 'text': 'Complete Action outcome is in structuredContent.'}
+        ];
+      }
     } on FormatException {
       response = McpRpc.error(
           _rpcId(event.body), -32600, 'Invalid or replayed Mesh request.');

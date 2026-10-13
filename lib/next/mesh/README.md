@@ -3,13 +3,14 @@
 NextCore 创建 MeshRuntime、三个 Mesh Action 和 mesh.addressCandidates 设置项，
 并管理 transport 生命周期。NextRuntime 将包含播放能力和 journal 的同一个 Harness
 交回 Core；回环 MCP 和 Mesh 复用 nipa_harness/mcp.dart 的 JSON-RPC 分派器。
-Mesh 不依赖 Labs 端点开关。可远程调用范围为 task.*、download.*、media.*、
-danmaku.*、playback.*、subtitle.*、history.*、followup.*、program.*、discover.*、
-sync.*、ui.*、state.query、agent.wake、activity.report、app.instance；另有设置读取
-settings.get/describe/history，以及 accounts.status、collections.get/update、
-episodes.get/update、bangumi.sync/sync_status。具体以目标宿主已注册目录为准。
-没有远程 settings.set/reset、accounts.login/logout、credentials 或 Mesh 管理入口。
-逐族理由与缺口见 [X46_REPORT](../../../docs/next/X46_REPORT.md)。
+Mesh 不依赖 Labs 端点开关。X53 让目标设备的领域、设置、账号、窗口、退出、
+诊断、备份、插件、对话与记忆能力遵循和本机相同的写入契约；删除与覆盖保留
+既有 NeedsDecision。具体以目标宿主注册的实时目录为准。`app.capabilities`
+列出每项 effect、remoteCallable、限制理由、用户在场条件与宿主前置准备；
+认证设备自描述携带同一份事实。Mesh 查询和转发也可远程调用；信任配置与秘密
+登记仍通过宿主接口完成，没有新增接受秘密或改写宿主授权的 Action。
+远程登录可打开目标设备的用户登录交互；程序执行仍由目标 program.json 授权。
+逐族理由与观察见 [X53_REPORT](../../../docs/next/X53_REPORT.md)。
 
 `program.run` 由目标宿主 `<next-data>/program.json` 的 `enabled:true` 独立授权，
 默认 false、重启生效；不注册为 Agent 设置。普通用户进程在目标 harness 执行，
@@ -35,6 +36,9 @@ DNS 标签使用公钥 SHA-256 摘要的十六进制，格式为 d-前32字符.�
 
 每个 TLS 连接传输一个 JSON-RPC 请求和响应：4 字节网络字节序长度，随后 UTF-8 JSON，
 上限 1 MiB。文件读取响应另有下述二进制格式。initialize、ping、tools/list、tools/call 与回环 MCP 使用相同分派逻辑。
+Mesh 的 tools/call 保留完整 structuredContent，text 只指出结构化结果位置，避免重复
+转义整个结果而耗尽帧。`mesh.devices` 可传 deviceIds 筛选、includeCatalog:false
+省略完整 schema；省略参数仍返回原来的完整设备目录。它仍受 1 MiB 响应上限约束。
 Mesh 帧增加 mesh: {invocationId, nonce, deadline}；deadline 使用 Unix 毫秒，必须在
 当前时间到 1 小时内。ID/nonce 均至少 22 个 base64url 字符。按来源设备分别去重，
 先持久化无秘密的去重记录，再进入 Harness；重启不会重置仍有效的窗口。

@@ -9,6 +9,7 @@ import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
 import '../agent_endpoint.dart';
 import '../instance_facts.dart';
+import '../app_capabilities.dart';
 import '../next_database.dart';
 import '../tasks/device_identity.dart';
 import '../tasks/sqlite_job_store.dart';
@@ -27,8 +28,14 @@ import '../media/identity_store.dart';
 import '../media/media_service.dart';
 import '../media/media_capability.dart';
 import '../media/media_executors.dart';
-import '../media/providers.dart';
-import '../media/provider_transport.dart';
+import '../media/media_probe_io.dart' show headlessFfprobe;
+import '../media/online_providers.dart';
+import '../network/dandanplay_gateway.dart';
+import '../../services/dandanplay_http_client.dart';
+import '../../utils/network_settings.dart';
+import 'routing_preferences.dart' as routing;
+import '../danmaku/host.dart';
+import '../danmaku/sources.dart';
 import '../danmaku/service.dart';
 import '../danmaku/store.dart';
 import '../danmaku/local_source.dart';
@@ -95,6 +102,8 @@ final class HeadlessCore {
   late final SubtitleLibrary subtitles;
   final hooks = HarnessHooks();
   final _client = http.Client();
+  DandanplayHttpClient? _dandanplay;
+  DandanplayHttpClient? _danmakuClient;
   StreamSubscription<Job>? _jobs;
   StreamSubscription<JsonMap>? _files;
   Future<void> _events = Future.value();
@@ -117,17 +126,20 @@ final class HeadlessCore {
     BodyChanges.attached = history;
     final identity = await loadDeviceIdentity(root);
     await Directory(p.join(root.path, 'downloads')).create(recursive: true);
+    await routing.SharedPreferences.configure(root);
+    vault = HeadlessVault(Directory(p.join(root.path, 'vault')));
+    Future<Map<String, String>> authorization() async {
+      final token = await vault.read(const CredentialRef('preferences', 'dandanplay_token'));
+      return token == null || token.isEmpty ? {} : {'Authorization': 'Bearer $token'};
+    }
+    final ddp = _dandanplay = DandanplayHttpClient(authorization: authorization);
+    final gateway = DandanplayGateway(client: ddp);
     media = MediaService(
         store: IdentityStore(database, identity),
-        providers: [
-          BangumiMetadataProvider(HttpMetadataTransport(
-              provider: 'bangumi',
-              baseUri: Uri.parse('https://api.bgm.tv'),
-              client: _client))
-        ],
+        providers: onlineMetadataProviders(credentials: HostVaultResolver(vault),
+            tmdb: _client, bangumi: _client, dandanplay: gateway),
         classic: NoClassic(),
         authorizedRoots: () => [...mediaRoots, '${root.path}/downloads']);
-    vault = HeadlessVault(Directory(p.join(root.path, 'vault')));
     final native =
         HeadlessNative(nativeLibrary ?? HeadlessNative.defaultLibrary());
     mesh = MeshRuntime(
@@ -142,7 +154,8 @@ final class HeadlessCore {
           'host': 'headless',
           'conversationHost': false,
           'mediaRoots': mediaRoots.toList(),
-          'mediaReadOnly': true,
+          'mediaReadOnlyScope': ['indexing', 'downloadDestination'],
+          'fileOperations': 'processPermissions',
           'downloadDirectory': p.join(root.path, 'downloads'),
           'storageFacts': [
             {
@@ -171,9 +184,15 @@ final class HeadlessCore {
     programRepository = ProgramRepository(programs);
     subtitles = SubtitleLibrary(media, root);
     SettingsAccess.registry = settings;
+    final danmakuHost = HttpDanmakuHost(dandanplay: DandanplayGateway(
+        client: _danmakuClient = DandanplayHttpClient(authorization: authorization)));
+    final onlineDanmaku = DandanplayDanmakuSource(danmakuHost,
+        allowedHosts: NetworkSettings.officialServers.map((s) => Uri.parse(s).host).toList());
     final danmaku = DanmakuService(
         store: DanmakuStore(media.store),
-        sources: [LocalDanmakuSource(media.authorizedPath)],
+        sources: [DandanplayDanmakuSource(
+            ScopedDanmakuHost(danmakuHost, onlineDanmaku.describe),
+            allowedHosts: onlineDanmaku.allowedHosts), LocalDanmakuSource(media.authorizedPath)],
         player: NoPlayer());
     final exportRoot =
         await Directory(p.join(root.path, 'exports')).create(recursive: true);
@@ -248,7 +267,7 @@ final class HeadlessCore {
       ActivityView(media, settings, File('${root.path}/journal.jsonl'),
           HeadlessRepository(repository.path), history).view,
     ]);
-    uiData = UiDataService(media, engine, state, sources, root, NoVault());
+    uiData = UiDataService(media, engine, state, sources, root, vault);
     libraryData = LibraryDataService(uiData);
     uiData.libraryData = libraryData;
     libraryData.register(state);
@@ -263,6 +282,10 @@ final class HeadlessCore {
     harness = Harness([
       FamilyDescriptionCapability(() => harness.catalog),
       InvocationScopeCapability(HeadlessCapabilities([
+        AppCapabilities(host: 'headless', catalog: () => harness.catalog,
+            media: media, danmaku: danmaku, settings: settings, vault: vault,
+            programEnabled: () => programs.enabled,
+            subtitleProbeReady: () => headlessFfprobe != null),
         InstanceCapability(const InstanceFacts('1.11.10-headless')),
         TaskCapability(engine),
         programs.capability,
@@ -327,6 +350,8 @@ final class HeadlessCore {
     if (!_resourcesReady) {
       await _database?.close();
       _client.close();
+      _dandanplay?.close();
+      _danmakuClient?.close();
       return;
     }
     await endpoint.stop();
@@ -351,6 +376,8 @@ final class HeadlessCore {
     await media.store.closeEvents();
     await _database!.close();
     _client.close();
+    _dandanplay?.close();
+    _danmakuClient?.close();
     final credential = endpoint.credentialFile;
     if (await credential.exists()) await credential.delete();
   }

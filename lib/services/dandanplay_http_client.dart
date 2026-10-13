@@ -1,10 +1,16 @@
 import 'dart:convert';
+import 'dart:async';
 
-import 'package:flutter/foundation.dart';
+import '../next/headless/router_notifier.dart'
+    if (dart.library.ui) 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as transport;
-import 'package:nipaplay/services/dandanplay_service.dart';
+import '../next/headless/gateway_host.dart'
+    if (dart.library.ui) 'package:nipaplay/services/dandanplay_service.dart'
+    show DandanplayService;
 import 'package:nipaplay/services/nipaplay_server_router.dart';
-import 'package:nipaplay/services/web_remote_access_service.dart';
+import '../next/headless/gateway_host.dart'
+    if (dart.library.ui) 'package:nipaplay/services/web_remote_access_service.dart'
+    show WebRemoteAccessService;
 import 'package:nipaplay/utils/http_header_utils.dart';
 import 'package:nipaplay/utils/network_settings.dart';
 
@@ -20,13 +26,13 @@ class DandanplayLoginRequired extends StateError {
 class DandanplayHttpClient extends transport.BaseClient {
   DandanplayHttpClient({
     transport.Client? inner,
-    Map<String, String> Function()? authorization,
+    FutureOr<Map<String, String>> Function()? authorization,
   })  : _inner = inner ?? transport.Client(),
         _authorization =
             authorization ?? (() => DandanplayService.authorizationHeaders);
 
   final transport.Client _inner;
-  final Map<String, String> Function() _authorization;
+  final FutureOr<Map<String, String>> Function() _authorization;
 
   static Uri targetUri(Uri uri) {
     final baseUrl = WebRemoteAccessService.cachedBaseUrl;
@@ -60,7 +66,7 @@ class DandanplayHttpClient extends transport.BaseClient {
   @override
   Future<transport.StreamedResponse> send(transport.BaseRequest request) async {
     final target = request.url;
-    final authorization = _authorization();
+    final authorization = await _authorization();
     // Relay recognition only controls the browser login gate. Credentials are
     // always scoped to the actual outbound URL below.
     final relayTarget = targetUri(target);

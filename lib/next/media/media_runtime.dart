@@ -15,7 +15,7 @@ import 'media_executors.dart';
 import 'media_probe.dart';
 import 'metadata_provider.dart';
 import 'provider_transport.dart';
-import 'providers.dart';
+import 'online_providers.dart';
 import '../network/dandanplay_gateway.dart';
 
 final class MediaRuntime {
@@ -58,32 +58,9 @@ final class MediaRuntime {
           bangumi = http.Client(),
           dandanplay = DandanplayHttpClient();
       clients.addAll([tmdb, bangumi, dandanplay]);
-      providers = [
-        TmdbMetadataProvider(HttpMetadataTransport(
-            provider: 'tmdb',
-            baseUri: Uri.parse('https://api.themoviedb.org'),
-            client: tmdb,
-            headers: (_) async {
-              final secret = await credentials
-                  .resolve(const CredentialRef('metadata', 'tmdb'));
-              return secret.contains('.')
-                  ? {'Authorization': 'Bearer $secret'}
-                  : {};
-            },
-            privateQuery: () async => {
-                  if (!(await credentials
-                          .resolve(const CredentialRef('metadata', 'tmdb')))
-                      .contains('.'))
-                    'api_key': await credentials
-                        .resolve(const CredentialRef('metadata', 'tmdb'))
-                })),
-        BangumiMetadataProvider(HttpMetadataTransport(
-            provider: 'bangumi',
-            baseUri: Uri.parse('https://api.bgm.tv'),
-            client: bangumi)),
-        DandanplayMetadataProvider(HttpMetadataTransport.dandanplay(
-            DandanplayGateway(client: dandanplay))),
-      ];
+      providers = onlineMetadataProviders(credentials: credentials,
+          tmdb: tmdb, bangumi: bangumi,
+          dandanplay: DandanplayGateway(client: dandanplay));
     }
     final store = IdentityStore(db, deviceId);
     final service = MediaService(

@@ -9,6 +9,10 @@ final class ClassicProjection {
   Future<void> drain({String? fileId}) async {
     await store.importLegacy(await port.history());
     for (final row in await store.pendingProjections(fileId: fileId)) {
+      if (port is DetachedClassicMetadataPort) {
+        await store.finishProjection(row['id'] as String, 'not_applicable');
+        continue;
+      }
       final file = await store.entity(row['file_id'] as String);
       if (file['revision'] != row['file_revision'] ||
           (file['attributes'] as JsonMap)['bindingRevision'] !=

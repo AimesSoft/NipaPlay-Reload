@@ -46,6 +46,39 @@ final class FamilyDescriptionCapability implements Capability {
   final List<Action> actions;
 }
 
+const appFamilyDescription =
+    'Live host facts: app.instance identifies the process; '
+    'app.capabilities reports supported features, provider/source readiness, '
+    'credential references and required host setup, settings keys, action effects '
+    'and remote policy. supported means an implementation exists; available means '
+    'its declared host prerequisites are met, not a successful network probe. '
+    'No secrets are accepted or returned. Remote writes follow local semantics; '
+    'disk deletion/overwrite keep their existing NeedsDecision contract. '
+    'On headless hosts indexing and download destinations treat media roots as '
+    'read-only; file-channel operations use actual process permissions. '
+    'A headless host has no Classic history/player/UI. download.import indexes verified files '
+    'without inferring identity; roots.remove unregisters the root without deleting '
+    'indexed facts or disk files. settings exposes only returned keys.';
+
+const danmakuFamilyDescription =
+    'Persistent danmaku sources, caches and tracks. '
+    'Both GUI and headless use the same NipaPlay Dandanplay gateway/client, '
+    'host vault reference preferences/dandanplay_token and local import parser. '
+    'sources reports installed adapters; app.capabilities reports credential readiness. '
+    'Headless prepares persisted tracks without mounting a player; supply entityId '
+    'or path because current playback is absent. Metadata identity, acquisition '
+    'and binding are independent facts. Empty title/hash results mean no source '
+    'candidate, not a broken host. A successful fetch task proves acquisition; '
+    'an existing track alone does not. fetch_batch, attach_batch and import_batch '
+    'accept 1–100 entries matching the single action schema, validate all schemas '
+    'first, then return input index and complete outcome for every entry. '
+    'atomic=false; failure retains earlier committed results. Credentials never '
+    'enter inputs. Task/binding IDs and per-item decisions/errors are preserved. '
+    'align/align_apply/align_keep are legacyRecovery; new analysis uses '
+    'analyze_alignment and update. Positive offsetMs advances comments: '
+    'displayTime=sourceTime-offsetMs. Headless exports are under data/exports.';
+
+
 const familyFacts = <String, String>{
   'ui':
       r'''- **两套界面**：Classic 是原来的界面；在「设置 → 实验室」开启 Next 后，主界面换成 Next。你工作的结果显示在 Next 里。两套界面共用同一个播放器。
@@ -103,7 +136,7 @@ const familyFacts = <String, String>{
   - 弹幕：`danmaku.import`。
 - **媒体身份可以来自多个来源**：弹弹play、Bangumi、TMDB 等。弹弹play 没有收录，不等于无法识别；电视剧、电影常常只有 TMDB 身份。内容哈希匹配只能给出弹弹play 的 ID。文件名需要你自己理解，NipaPlay 不会替你解析。
 - **你取得的结果都可以交给 NipaPlay 保存**（弹幕、元数据、身份），它会记录来源并检查一致性。缺少入口时，如实告诉用户。''',
-  'danmaku': r'''- **弹幕**：
+  'danmaku': danmakuFamilyDescription + r'''- **弹幕**：
   - **轨道**：一条弹幕轨道属于某个文件或某一集，有它的来源平台（弹弹play、优酷、B 站、本地文件……）和该平台上的视频；同一平台的同一个视频只保留一条，再次交入就是刷新。
   - **用在哪里**：剧集的热度线和主视觉上飘的弹幕，都来自 NipaPlay 记下的轨道。用 `danmaku.*` 修改，用 `state.query` 的 `danmaku.bindings`、`danmaku.tracks` 读取。
   - **同名弹幕文件**：NipaPlay 索引本地视频时，在后台发现并读取旁边最匹配的 XML/JSON，记录路径、平台、视频号、条数与读取时间；内容留在原文件。文件变化会重读，消失或不可读会记为不可用。热度线、主视觉弹幕、`ui_facts` 每集覆盖和轨道查询读取同一份记录，Next 播放器加载这条轨道。Next 播放时自动取得的弹弹play 弹幕也会保存为轨道，下一次仍可读取和播放。
@@ -120,7 +153,7 @@ const familyFacts = <String, String>{
       r'''`mesh.devices` 返回同账号设备、连通状态、各设备实际开放的能力和经过双向 TLS 认证的设备自我描述。自我描述包含平台、宿主角色、片库根目录、下载目录，以及宿主配置的存储路径与 Nipa 所在设备；路径属于描述它的那台设备。无界面节点提供片库、下载、任务、hooks 和定时程序，那里没有对话宿主。网络加入、签发者、监听策略和 Nipa 所在设备由宿主配置，Action 不能开放这些权限。`./nipa --device NAME list`、`describe ACTION`、`call ACTION ...` 和 `watch JOB_ID` 使用该设备的实时目录；名称也可换成设备 ID，重名不会任选一个。
 
 从 Mac 对话通过组网发起的下载，在发起时固定返回设备与线程。每个已校验、已入库的视频文件和任务终态，由下载设备的持久后续队列交回那个会话；会话忙时排队。返回事实含来源设备，文件路径、`local` 和 `playable` 是来源设备上的事实。断线后保留待交付记录，重复交付使用同一回执。工作站 hooks 或定时程序调用 `agent.wake` 时，宿主配置的 Nipa 设备接收唤醒；不指定线程时回到那里持久主会话。工作站的 `followup.list` 中 `deliveryState: forwarded` 及 `remoteReceipt` 表示目标已经持久接收，实际对话状态保存在目标设备。
-- Mesh 可调用目标设备实际注册的 `task.*`、`download.*`、`media.*`、`danmaku.*`、`playback.*`、`subtitle.*`、`history.*`、`followup.*`、`program.*`、`discover.*`、`sync.*`、`ui.*`，以及 `state.query`、`activity.report`、`agent.wake`、`app.instance`。设置可远程读取 `settings.get/describe/history`；账号可读状态、读写收藏和剧集观看状态、执行 Bangumi 同步及读取同步状态。宿主登录与退出、组网管理、信任、签发者、开关和设置修改没有远程入口。实时远端目录给出具体可用项；没有播放器或 Classic 历史的宿主不会注册这些能力。
+- 远程写与本机遵循同一契约；实时目录仅列目标宿主已注册能力，包括设置、账号、窗口、应用、诊断、备份、插件、对话、记忆与 Mesh 转发。app.capabilities 给出可用前置和远程范围。组网信任、签发者、监听策略、程序授权和秘密登记归目标宿主管理；删除和覆盖保留 NeedsDecision。没有播放器或 Classic 历史的宿主不会注册这些能力。
 - **媒体库跨设备是一份合并库**：`library.merged` 包含本机和同账号设备上的全部作品。一部作品的剧集可能分散在几台设备上；重复文件优先本机。视频留在原设备，播放时直接读取原处，不复制整部文件。
 - **设备离线时**：上次看到的作品、元数据和已缓存图片仍显示；设备 online=false，只在离线设备上的剧集 playable=false。恢复连接后目录和进度继续更新。
 - **读取别的设备上的文件**：`media.library.readable` 批量解析剧集；`media.mesh_files.readable` 批量解析绝对 path 和 deviceId，不限已入库文件。远端文件返回当前调用节点的 127.0.0.1 HTTP Range 地址，可给播放器、ffprobe、ffmpeg；回环需绕开 HTTP_PROXY。设备之间的字节经过同账号双向 TLS，协调服务不转发视频。
@@ -146,7 +179,7 @@ const familyFacts = <String, String>{
   'state':
       r'''只读视图读已有索引，不重新探测视频。查询默认每页 50 行，支持 limit、select 和 nextCursor。用 ./nipa call state.describe '{"view":"视图名"}' 读取字段、单位、关系与查询约束；不指定 view 列出全部视图。''',
   'app':
-      r'''这台机器上可能装着多个 NipaPlay（正式版、开发构建、实验副本）；按应用名或 bundle id 打开的未必是 `nipa` 连接的那个实例。`nipa status` 的实例事实和 `ui.*` 的界面操作、截图来自当前连接的实例。
+      appFamilyDescription + r'''这台机器上可能装着多个 NipaPlay（正式版、开发构建、实验副本）；按应用名或 bundle id 打开的未必是 `nipa` 连接的那个实例。`nipa status` 的实例事实和 `ui.*` 的界面操作、截图来自当前连接的实例。
 - `./nipa status` 的 `harnessSeed` 给出种子 `path`、当前 `head` 和已抓取的 `trackingHead`。`trackingBehindSeed=true` 表示应抓取更新；`missing_remote` 表示尚未配置远端，`not_fetched` 表示尚未抓取，`different_remote` 表示远端指向另一处，未知状态不等于已同步。此检查只读，不执行 fetch 或合并；`current` 只说明远端跟踪引用最新，不表示你已合并。''',
   'accounts':
       r'''- **需要登录的平台**：用户的浏览器里通常已经登录，直接使用这个登录状态；浏览器也没登录时，打开该平台的登录页，请用户自己登录，然后继续。''',
@@ -166,7 +199,7 @@ const familyFacts = <String, String>{
       r'''`mesh.devices` 返回同账号设备、连通状态、各设备实际开放的能力和经过双向 TLS 认证的设备自我描述。自我描述包含平台、宿主角色、片库根目录、下载目录，以及宿主配置的存储路径与 Nipa 所在设备；路径属于描述它的那台设备。无界面节点提供片库、下载、任务、hooks 和定时程序，那里没有对话宿主。网络加入、签发者、监听策略和 Nipa 所在设备由宿主配置，Action 不能开放这些权限。`./nipa --device NAME list`、`describe ACTION`、`call ACTION ...` 和 `watch JOB_ID` 使用该设备的实时目录；名称也可换成设备 ID，重名不会任选一个。
 
 从 Mac 对话通过组网发起的下载，在发起时固定返回设备与线程。每个已校验、已入库的视频文件和任务终态，由下载设备的持久后续队列交回那个会话；会话忙时排队。返回事实含来源设备，文件路径、`local` 和 `playable` 是来源设备上的事实。断线后保留待交付记录，重复交付使用同一回执。工作站 hooks 或定时程序调用 `agent.wake` 时，宿主配置的 Nipa 设备接收唤醒；不指定线程时回到那里持久主会话。工作站的 `followup.list` 中 `deliveryState: forwarded` 及 `remoteReceipt` 表示目标已经持久接收，实际对话状态保存在目标设备。
-- Mesh 可调用目标设备实际注册的 `task.*`、`download.*`、`media.*`、`danmaku.*`、`playback.*`、`subtitle.*`、`history.*`、`followup.*`、`program.*`、`discover.*`、`sync.*`、`ui.*`，以及 `state.query`、`activity.report`、`agent.wake`、`app.instance`。设置可远程读取 `settings.get/describe/history`；账号可读状态、读写收藏和剧集观看状态、执行 Bangumi 同步及读取同步状态。宿主登录与退出、组网管理、信任、签发者、开关和设置修改没有远程入口。实时远端目录给出具体可用项；没有播放器或 Classic 历史的宿主不会注册这些能力。
+- 远程写与本机遵循同一契约；实时目录仅列目标宿主已注册能力，包括设置、账号、窗口、应用、诊断、备份、插件、对话、记忆与 Mesh 转发。app.capabilities 给出可用前置和远程范围。组网信任、签发者、监听策略、程序授权和秘密登记归目标宿主管理；删除和覆盖保留 NeedsDecision。没有播放器或 Classic 历史的宿主不会注册这些能力。
 - **媒体库跨设备是一份合并库**：`library.merged` 包含本机和同账号设备上的全部作品。一部作品的剧集可能分散在几台设备上；重复文件优先本机。视频留在原设备，播放时直接读取原处，不复制整部文件。
 - **设备离线时**：上次看到的作品、元数据和已缓存图片仍显示；设备 online=false，只在离线设备上的剧集 playable=false。恢复连接后目录和进度继续更新。
 - **读取别的设备上的文件**：`media.library.readable` 批量解析剧集；`media.mesh_files.readable` 批量解析绝对 path 和 deviceId，不限已入库文件。远端文件返回当前调用节点的 127.0.0.1 HTTP Range 地址，可给播放器、ffprobe、ffmpeg；回环需绕开 HTTP_PROXY。设备之间的字节经过同账号双向 TLS，协调服务不转发视频。

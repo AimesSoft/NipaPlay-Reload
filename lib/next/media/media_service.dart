@@ -794,6 +794,10 @@ final class MediaService {
       if (id == null || (await store.entity(id))['kind'] != 'file') continue;
       try {
         await projection.drain(fileId: id);
+        if (classic is DetachedClassicMetadataPort) {
+          row['classicProjection'] = [{'status': 'not_applicable',
+            'reason': 'This host has no Classic history; Next identity and metadata are persisted.'}];
+        }
         if (classic case final ReversibleClassicMetadataPort reversible) {
           final projections = row['classicProjectionId'] == null
               ? <JsonMap>[]

@@ -31,15 +31,54 @@ def check_subscriptions(*, root, a, b, aid, bid, raw, invoke, call, wait, record
         'modelTurns': 0, 'workstationConnections': 0})
 
 
+def check_scope(*, a, b, aid, bid, raw, invoke, record, env, workspace):
+    tools = raw('tools/list', {})['tools']
+    ids = {t['_meta']['nipaplay/actionId'] for t in tools}
+    assert {'mesh.devices', 'mesh.invoke', 'mesh.invoke_destructive',
+            'settings.set', 'settings.reset', 'state.describe', 'app.capabilities'} <= ids
+    facts = invoke(a, bid, 'app.capabilities', {})
+    record('target-capability-facts', facts)
+    record('remote-settings-write', invoke(a, bid, 'settings.set', {
+        'key': 'next.heroOpeningSeconds', 'value': 60, 'reason': 'X53 same-contract scope observation'}))
+    assert invoke(a, bid, 'settings.get', {'key': 'next.heroOpeningSeconds'})['value'] == 60
+    record('remote-mesh-devices', invoke(a, bid, 'mesh.devices', {}))
+    selected = invoke(a, bid, 'mesh.devices', {'deviceIds': [bid], 'includeCatalog': False})
+    assert len(selected['devices']) == 1 and selected['devices'][0]['deviceId'] == bid
+    assert 'actions' not in selected['devices'][0] and selected['devices'][0]['online']
+    record('remote-mesh-devices-selected', selected)
+    cli = workspace / 'assets/next/harness/nipa'
+    for device, label in [(bid, 'program-authorized'), (aid, 'program-disabled')]:
+        target = a if device == bid else b
+        result = subprocess.run(['python3', cli, '--device', device, 'list', '--full'],
+            cwd=target/'harness', env=dict(env, NIPAPLAY_ENDPOINT_FILE=str(target/'endpoint.json')),
+            capture_output=True, text=True, timeout=65, check=True)
+        actions = json.loads(result.stdout)['actions']
+        program = next(action for action in actions if action['id'] == 'program.run')
+        assert program['available'] == (device == bid)
+        record('cli-'+label, {'program': program,
+            'legacy': next(action for action in actions if action['id'] == 'danmaku.align')})
+    for family in ['app', 'danmaku']:
+        result = subprocess.run(['python3', cli, '--device', bid, 'describe', family],
+            cwd=a/'harness', env=dict(env, NIPAPLAY_ENDPOINT_FILE=str(a/'endpoint.json')),
+            capture_output=True, text=True, timeout=65, check=True)
+        described = json.loads(result.stdout)
+        assert described['family'] == family and described['description']
+        record('remote-family-'+family, described)
+
+
 def check_programs(*, root, a, b, aid, bid, raw, invoke, call, wait, record, env, workspace):
     tools = raw('tools/list', {})['tools']
     catalog = {t['_meta']['nipaplay/actionId']: t for t in tools}
     required = {'program.run', 'program.repository.receive', 'subtitle.import',
                 'subtitle.tracks', 'subtitle.select', 'settings.describe', 'followup.register'}
     assert required <= catalog.keys()
-    assert 'settings.set' not in catalog and 'accounts.login' not in catalog
-    record('remote-scope', {'present': sorted(required), 'hostMutationAbsent': True,
+    assert 'settings.set' in catalog and 'accounts.login' not in catalog
+    record('remote-scope', {'present': sorted(required), 'localWritesRemote': True,
                            'settings': invoke(a, bid, 'settings.describe', {'limit': 2})})
+    record('remote-capabilities', invoke(a, bid, 'app.capabilities', {}))
+    record('remote-settings-write', invoke(a, bid, 'settings.set', {
+        'key': 'next.heroOpeningSeconds', 'value': 60,
+        'reason': 'X53 same-contract remote write observation'}))
     # A keeps its absent/default-off permission. The same-account peer is denied.
     cli = workspace / 'assets/next/harness/nipa'
     def nipa(data, device, *arguments, success=True):
