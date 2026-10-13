@@ -160,7 +160,11 @@ class _BackgroundPanelState extends State<BackgroundPanel>
     final callbacks = CardCallbacks(
       onPauseTask: (t) => control(t, 'pause'),
       onResumeTask: (t) => control(t, 'resume'),
-      onCancelTask: (t) => control(t, 'cancel'),
+      // A download's × takes the task away and keeps its files, as the
+      // detail page's 移除任务 does; deleting files is asked there.
+      onCancelTask: (t) => downloads.contains(t.taskId)
+          ? unawaited(services.downloads.remove(t.taskId, files: false))
+          : control(t, 'cancel'),
     );
     return Glass(
       blur: 30,
