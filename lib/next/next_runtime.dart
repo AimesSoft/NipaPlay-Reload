@@ -28,6 +28,7 @@ import 'package:provider/provider.dart';
 
 import 'agent_endpoint.dart';
 import 'capabilities/history_capability.dart';
+import 'capabilities/family_descriptions.dart';
 import 'mesh/playback.dart';
 import 'capabilities/watched_history.dart';
 import 'package:nipaplay/models/watch_history_database.dart';
@@ -358,6 +359,7 @@ final class NextRuntime extends ChangeNotifier {
         ServiceProvider.scanService, ServiceProvider.watchHistoryProvider);
     _harness = Harness(
       [
+        FamilyDescriptionCapability(() => _harness.catalog),
         InstanceCapability(instanceFacts),
         UiCaptureCapability(ClassicUiCapture(instanceFacts).capture),
         for (final capability in capabilities)

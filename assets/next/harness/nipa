@@ -20,6 +20,85 @@ import urllib.error
 import urllib.parse
 import urllib.request
 
+OUTPUT_BUDGET_BYTES = 24 * 1024
+
+
+def compact(value):
+    return json.dumps(value, ensure_ascii=False, separators=(",", ":"))
+
+
+def short_text(value, limit=160):
+    raw = value.encode("utf-8")
+    return value if len(raw) <= limit else raw[:limit].decode("utf-8", "ignore") + "…"
+
+
+def output_result(data, full=False):
+    """Budget the redacted serialization, including previews and metadata."""
+    payload = compact(data)
+    size = len(payload.encode("utf-8"))
+    if full or size <= OUTPUT_BUDGET_BYTES:
+        print(payload)
+        return
+    records = Path(__file__).resolve().parent / "records"
+    records.mkdir(exist_ok=True)
+    descriptor, name = tempfile.mkstemp(prefix="nipa-", suffix=".json", dir=records)
+    with os.fdopen(descriptor, "w", encoding="utf-8") as stream:
+        stream.write(payload)
+    remaining = [50]
+    def preview(value, depth=0):
+        if remaining[0] <= 0 or depth >= 5:
+            return "…"
+        remaining[0] -= 1
+        if isinstance(value, dict):
+            return {short_text(str(k), 80): preview(v, depth + 1)
+                    for k, v in list(value.items())[:8]}
+        if isinstance(value, list):
+            return [preview(v, depth + 1) for v in value[:3]]
+        return short_text(value) if isinstance(value, str) else value
+    def shape(value):
+        if isinstance(value, dict):
+            return {"type": "object", "fields": len(value),
+                    "keys": [short_text(str(k), 80) for k in list(value)[:8]]}
+        if isinstance(value, list):
+            return {"type": "array", "items": len(value)}
+        return {"type": type(value).__name__}
+    summary = {"outputStored": True, "bytes": size, "budgetBytes": OUTPUT_BUDGET_BYTES,
+               "file": name, "structure": shape(data), "preview": preview(data),
+               "next": "Read selected fields/items from file; --output-full forces full terminal output."}
+    if isinstance(data, dict):
+        summary["fields"] = {short_text(str(k), 80): shape(v) for k, v in list(data.items())[:8]}
+        if "status" in data:
+            summary["status"] = short_text(str(data["status"]))
+    if len(compact(summary).encode("utf-8")) > OUTPUT_BUDGET_BYTES:
+        summary["preview"] = short_text(compact(summary["preview"]), 4096)
+    print(compact(summary))
+
+
+def instruction_sizes():
+    root = Path(__file__).resolve().parent
+    agents = root / "AGENTS.md"
+    result = {"AGENTS.md": {"bytes": agents.stat().st_size if agents.is_file() else None,
+                            "limitBytes": 32768,
+                            "scope": "Codex project documents share this limit"}}
+    memory = root / "memory"
+    if memory.is_dir():
+        sizes = {name: (memory / name).stat().st_size if (memory / name).is_file() else 0
+                 for name in ("preferences.md", "MEMORY.md")}
+        result["memory"] = {"residentBytes": sum(sizes.values()), "files": sizes}
+    return result
+
+
+def repair_hint(data, action, inputs):
+    if data.get("status") == "failed":
+        data["repair"] = {"describe": "./nipa describe " + action,
+                          "parameters": "Read error.violations; correct the named fields and retry."}
+        if action in {"state.query", "state.describe"}:
+            data["repair"]["view"] = ("./nipa call state.describe " + compact({"view": inputs["view"]})
+                                      if "view" in inputs else "./nipa describe state")
+            if "unknown_view" in data.get("error", {}).get("message", ""):
+                data["repair"]["view"] = "./nipa call state.describe '{}' lists registered views; use one of those names."
+    return data
+
 
 def endpoint_file():
     override = os.environ.get("NIPAPLAY_ENDPOINT_FILE")
@@ -109,7 +188,8 @@ class Client:
             with self.opener.open(request, timeout=65) as response:
                 return json.load(response)
         except urllib.error.HTTPError as error:
-            raise RuntimeError("NipaPlay returned HTTP " + str(error.code)) from None
+            details = json.load(error)
+            raise RuntimeError("NipaPlay HTTP " + str(error.code) + ": " + compact(details)) from None
         except (urllib.error.URLError, TimeoutError):
             raise RuntimeError("Cannot connect; run NipaPlay and enable Next in Labs") from None
 
@@ -139,16 +219,18 @@ class Client:
             return self.request("describe", action=action)
         matches = [a for a in self.catalog()["actions"] if a["id"] == action]
         if not matches:
-            raise ValueError("Unknown Action: " + action)
+            return self.result(self.call("capability.describe", {"family": action}))
         return matches[0]
 
     def call(self, action, inputs, execute=False):
         if not self.device:
-            return self.request("call", action=action, input=inputs, execute=execute)
+            return repair_hint(self.request("call", action=action, input=inputs, execute=execute), action, inputs)
+        if action not in {a["id"] for a in self.catalog()["actions"]}:
+            raise ValueError("Unknown remote Action: " + action + ". Run ./nipa --device NAME list, then describe ACTION.")
         spec = self.describe(action)
         gateway = "mesh.invoke_destructive" if spec["effect"] == "destructive" else "mesh.invoke"
-        return self.request("call", action=gateway, input={
-            "deviceId": self.device["deviceId"], "action": action, "input": inputs}, execute=execute)
+        return repair_hint(self.request("call", action=gateway, input={
+            "deviceId": self.device["deviceId"], "action": action, "input": inputs}, execute=execute), action, inputs)
 
     def watch(self, task, seconds):
         end = time.monotonic() + seconds
@@ -196,7 +278,7 @@ class Client:
 
 class JsonArgumentParser(argparse.ArgumentParser):
     def error(self, message):
-        print(json.dumps({"error": "Invalid command arguments; use --help"}))
+        print(compact({"error": message, "repair": self.prog + " --help"}))
         raise SystemExit(2)
 
 
@@ -223,6 +305,7 @@ def task_summary(envelope):
 
 def main():
     parser = JsonArgumentParser(description=__doc__)
+    parser.add_argument("--output-full", action="store_true", help="Bypass the 24 KiB terminal budget")
     parser.add_argument("--device", help="Exact Mesh device name or ID")
     commands = parser.add_subparsers(dest="command", required=True)
     commands.add_parser("status").add_argument(
@@ -243,6 +326,9 @@ def main():
     sync = commands.add_parser("sync-repository", help="Transfer a committed Git revision as a bundle; no checkout/merge")
     sync.add_argument("--repository", default=".")
     sync.add_argument("--ref", default="HEAD")
+    for command_parser in commands.choices.values():
+        command_parser.add_argument("--output-full", action="store_true", default=argparse.SUPPRESS,
+                                    help="Bypass the 24 KiB terminal budget; results may be truncated by the caller")
     args = parser.parse_args()
     client = None
     try:
@@ -261,6 +347,7 @@ def main():
                 data = client.request("status", full=args.full)
                 if not args.full:
                     data["tasks"] = task_summary(data["tasks"])
+            data["instructions"] = instruction_sizes()
         elif args.command == "list":
             data = client.catalog(full=args.full)
         elif args.command == "describe":
@@ -273,11 +360,10 @@ def main():
             data = client.sync_repository(args.repository, args.ref)
         else:
             data = client.watch(args.task, args.seconds)
-        print(json.dumps(redact(data, [client.token]), ensure_ascii=False, indent=2))
+        output_result(redact(data, [client.token]), args.output_full)
         return 1 if data.get("status") == "failed" else 0
     except (OSError, ValueError, KeyError, RuntimeError) as error:
-        print(json.dumps({"error": redact(str(error), [client.token] if client else [])},
-                         ensure_ascii=False))
+        output_result({"error": redact(str(error), [client.token] if client else [])}, args.output_full)
         return 1
 
 

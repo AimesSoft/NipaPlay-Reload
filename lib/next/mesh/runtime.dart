@@ -20,7 +20,7 @@ bool meshActionAllowed(String id) =>
     ['task.', 'download.', 'media.', 'danmaku.', 'playback.', 'subtitle.',
       'history.', 'followup.', 'program.', 'discover.', 'sync.', 'ui.']
         .any(id.startsWith) ||
-    const {'agent.wake', 'activity.report', 'state.query', 'app.instance',
+    const {'agent.wake', 'activity.report', 'state.query', 'state.describe', 'capability.describe', 'app.instance',
       'settings.get', 'settings.describe', 'settings.history',
       'accounts.status', 'accounts.collections.get', 'accounts.collections.update',
       'accounts.episodes.get', 'accounts.episodes.update',

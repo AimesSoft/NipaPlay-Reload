@@ -20,6 +20,7 @@ import '../programs/runtime.dart';
 import '../programs/repository.dart';
 import '../subtitles/library_io.dart';
 import '../subtitles/capability.dart';
+import '../capabilities/family_descriptions.dart';
 import '../settings/registry.dart';
 import '../settings/capability.dart';
 import '../media/identity_store.dart';
@@ -252,7 +253,9 @@ final class HeadlessCore {
     settings.register([uiData.openingSetting]);
     final downloadSources =
         DownloadSources(Directory('${root.path}/torrent_sources'));
-    final harness = Harness([
+    late final Harness harness;
+    harness = Harness([
+      FamilyDescriptionCapability(() => harness.catalog),
       InvocationScopeCapability(HeadlessCapabilities([
         InstanceCapability(const InstanceFacts('1.11.10-headless')),
         TaskCapability(engine),
