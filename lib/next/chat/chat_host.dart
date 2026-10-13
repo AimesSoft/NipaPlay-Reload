@@ -142,11 +142,40 @@ final class ChatHost {
         [
           'app-server',
           '-c',
+          await _trustOverride(),
+          '-c',
           'shell_environment_policy.set.NIPAPLAY_CHAT="$sessionId"'
         ],
         workingDirectory: repository.path,
         environment: clean,
         includeParentEnvironment: false);
+  }
+
+  Future<String> _trustOverride() async {
+    final path = await repository.resolveSymbolicLinks();
+    // Override the table: Codex splits dotted override keys literally, including
+    // dots in a quoted path. Inline TOML keys retain the canonical path intact.
+    return 'projects={${jsonEncode(path)}={trust_level="trusted"}}';
+  }
+
+  Future<ChatMessage> _projectHookConfig() async {
+    final root = await repository.resolveSymbolicLinks();
+    final listed = await _request('hooks/list', {'cwds': [root]});
+    final states = <String, Object?>{};
+    for (final entry in listed['data'] as List) {
+      for (final hook in entry['hooks'] as List) {
+        final source = hook['sourcePath'] as String;
+        if (hook['source'] == 'project' &&
+            hook['enabled'] == true &&
+            (source.startsWith('$root/.codex/') ||
+                source.startsWith('$root${Platform.pathSeparator}.codex${Platform.pathSeparator}'))) {
+          states[hook['key'] as String] = {'trusted_hash': hook['currentHash']};
+        }
+      }
+    }
+    // Hook hashes are a separate gate from project trust. Approve only this
+    // harness's enabled declarations in memory; leave user/global hooks alone.
+    return states.isEmpty ? {} : {'hooks': {'state': states}};
   }
 
   Future<void> start() async {
@@ -213,7 +242,7 @@ final class ChatHost {
           // zsh writes here-documents under TMPPREFIX (default /tmp/zsh),
           // which a lab profile may not write; keep them in its temp.
           '${labRoot == null ? '' : 'export CODEX_HOME="\$2" TMPDIR="\$3" TMPPREFIX="\$3/zsh"; '}'
-          r'exec codex app-server -c "shell_environment_policy.set.NIPAPLAY_CHAT=\"$1\""';
+          r'exec codex app-server -c "$4" -c "shell_environment_policy.set.NIPAPLAY_CHAT=\"$1\""';
       _process = await Process.start(
           shell,
           [
@@ -223,7 +252,8 @@ final class ChatHost {
             'nipaplay-chat',
             sessionId,
             clean['CODEX_HOME'] ?? '',
-            clean['TMPDIR'] ?? ''
+            clean['TMPDIR'] ?? '',
+            await _trustOverride(),
           ],
           workingDirectory: repository.path,
           environment: inherited,
@@ -503,6 +533,7 @@ final class ChatHost {
       ..._common,
       if (resumeId != null) 'threadId': resumeId,
       'config': {
+        ...await _projectHookConfig(),
         'shell_environment_policy.set.NIPAPLAY_CHAT': 'helper-$helperId'
       },
     });
@@ -582,11 +613,12 @@ final class ChatHost {
     final origin = selectedId == null ? null : threadOrigins[selectedId];
     final response = await _request(method, {
       ...params,
-      if (origin != null)
-        'config': {
+      'config': {
+        ...await _projectHookConfig(),
+        if (origin != null)
           'shell_environment_policy.set.NIPAPLAY_CHAT':
               'helper-${origin.substring('harness_cli:helper:'.length)}'
-        }
+      }
     });
     thread = _public(Map<String, dynamic>.from(response['thread'] as Map));
     threadId = thread!['id'] as String;

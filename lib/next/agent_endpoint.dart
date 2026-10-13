@@ -14,6 +14,7 @@ import 'endpoint_file.dart';
 import 'harness_repository.dart';
 import 'harness_redaction.dart';
 import 'instance_facts.dart';
+import 'capabilities/family_descriptions.dart';
 
 sealed class AgentEndpointStatus {
   const AgentEndpointStatus();
@@ -284,8 +285,18 @@ final class AgentEndpoint {
           {'error': 'Expected status, list, describe or call with action.'},
           400);
     }
-    final action = _harness.lookup(decoded['action'] as String);
-    if (action == null) return _response({'error': 'Unknown Action.'}, 404);
+    final name = decoded['action'] as String;
+    final action = _harness.lookup(name);
+    if (operation == 'describe' && action == null) {
+      try {
+        return _response(describeFamily(name, _harness.catalog), 200, false);
+      } on Failure catch (error) {
+        return _response({'error': error.message}, 404);
+      }
+    }
+    if (action == null) {
+      return _response({'error': 'Unknown Action: $name. Run ./nipa list; then ./nipa describe ACTION.'}, 404);
+    }
     if (operation == 'describe') {
       return _response(_describe(action.spec), 200, false);
     }
