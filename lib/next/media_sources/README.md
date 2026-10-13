@@ -32,3 +32,10 @@ SMB/WebDAV parentId 为来源内目录路径。共享来源省略 parentId 列�
 Next 索引按 `sourceId` 隔离远程位置，Jellyfin/Emby 另包括实际 serverId；同类两台服务器即使返回相同 item ID，也得到不同
 `fileId`。绑定时使用此 fileId，播放时继续使用原 path。无来源归属的旧记录保留为独立证据。
 完整 schema 以实时 Harness 列表为准。实现及实验见 docs/next/X12_REPORT.md。
+
+X48 的片库入口为 `core.libraryData/libraryActions`，能力为 `ui.library.*`，见
+`../ui_data/README.md`。原样浏览复用上述客户端，Jellyfin/Emby 使用独立单页
+catalogPage，不改变 Classic 的完整 browseCatalog；库排序读取 Classic 保存的偏好。
+原样作品和剧集 ID 包含配置及实际服务器身份，图片下载仍由原认证客户端完成。
+未绑定条目和条件中的已绑定条目最终都调用同一个 `MediaSourcesService.play`
+（现有 `media.sources.play` 的实现），不靠当前激活服务器猜测来源。

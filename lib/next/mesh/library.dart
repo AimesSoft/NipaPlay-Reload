@@ -14,6 +14,7 @@ import '../danmaku/sidecar.dart';
 import '../harness_redaction.dart';
 import 'runtime.dart';
 import 'library_codec.dart';
+import '../ui_data/library_index.dart';
 import 'files.dart';
 
 String _hash(Object value) =>
@@ -58,6 +59,7 @@ final class MeshLibrary {
   JsonMap _local = {'records': <JsonMap>[]};
   Future<void>? _sync, _building;
   String? _builtStamp;
+  String? _composedStamp;
   Timer? _timer;
   HttpServer? _http;
   Future<void>? _httpBinding;
@@ -201,6 +203,12 @@ final class MeshLibrary {
         'metadata': publicHarnessFacts(await ui.media.store.mergedMetadata(id)),
         'attributes': jsonDecode(row['attributes'] as String)
       });
+      final sourceIds = <String>{};
+      for (final f in await db.rawQuery("SELECT f.attributes FROM media_entities f JOIN media_file_episodes fe ON fe.file_id=f.id JOIN media_entities e ON e.id=fe.episode_id JOIN media_entities r ON r.id=e.parent_id WHERE r.parent_id=?", [id])) {
+        final remote = (jsonDecode(f['attributes'] as String) as Map)['remoteSource'] as Map?;
+        sourceIds.add(remote?['sourceId'] as String? ?? 'local');
+      }
+      records.last['sourceIds'] = sourceIds.toList();
       for (final episode in await ui.localEpisodes(id)) {
         final value = episodeJson(episode);
         value['still'] = await _asset(episode.still);
@@ -420,10 +428,16 @@ final class MeshLibrary {
   }
 
   Future<List<UiWork>> library() async {
-    await _build();
-    await _compose();
+    await prepareIndex();
     return _works.values.toList();
   }
+
+  Future<void> prepareIndex() async {
+    await _build();
+    await _compose();
+  }
+
+  String? localEpisodeId(String id) => _localTargets[_aliases[id] ?? id];
 
   Future<UiWork?> work(String id) async {
     await library();
@@ -461,6 +475,9 @@ final class MeshLibrary {
   }
 
   Future<void> _compose() async {
+    final composition = _hash([own, _local, _peers, _online, _progress]);
+    if (_composedStamp == composition) return;
+    final indexRows = <JsonMap>[];
     final records = <JsonMap>[
       for (final r in (_local['records'] as List)
           .cast<JsonMap>()
@@ -723,6 +740,32 @@ final class MeshLibrary {
           devices[w['deviceId'] as String] =
               UiDevice(name: w['name'] as String, online: w['online'] as bool);
       _works[id] = workValue(value, episodes, devices.values.toList());
+      final types = <String>{};
+      for (final member in members) {
+        final attrs = member['attributes'] as Map;
+        final fields = (member['metadata'] as Map)['fields'] as Map;
+        final type = fields['type'] ?? attrs['type'] ?? attrs['workType'];
+        if (const {'anime', 'series', 'movie'}.contains(type)) types.add(type as String);
+        for (final key in (member['keys'] as List).cast<String>()) {
+          final identity = jsonDecode(key) as List;
+          if (identity[1] == 'movie') types.add('movie');
+          if (identity[1] == 'tv') types.add('series');
+          if (identity[0] == 'dandanplay' || identity[0] == 'bangumi') types.add('anime');
+        }
+      }
+      indexRows.add({'id': id,
+        'added': members.map((w) => w['added'] as int).reduce(math.max),
+        'payload': workJson(_works[id]!),
+        'facts': {
+          'sourceIds': members.expand((w) => (w['sourceIds'] as List? ?? []).cast<String>()).toSet().toList(),
+          'deviceIds': members.map((w) => w['deviceId']).toSet().toList(),
+          'types': types.toList(), 'identified': keys.isNotEmpty,
+          'watch': episodes.any((e) => (e.progress ?? 0) > 0 && (e.progress ?? 0) < 1) ? 'watching' :
+              episodes.isNotEmpty && episodes.every((e) => (e.progress ?? 0) >= 1) ? 'watched' : 'unwatched',
+          'year': value['year'], 'genres': value['genres'],
+          'rating': (value['ratings'] as List).isEmpty ? null : ((value['ratings'] as List).first as Map)['value'],
+          'ratingSource': (value['ratings'] as List).isEmpty ? null : ((value['ratings'] as List).first as Map)['source']
+        }});
     }
     for (final e in _historicalIds.entries) {
       final ref = e.value.where(_aliases.containsKey).firstOrNull;
@@ -731,6 +774,8 @@ final class MeshLibrary {
           !_locations.containsKey(e.key)) _aliases[e.key] = _aliases[ref]!;
     }
     if (_historicalIds.isNotEmpty) await _save('mesh:aliases', _historicalIds);
+    await replaceLibraryIndex(db, indexRows);
+    _composedStamp = composition;
   }
 
   Future<JsonMap> request(String method, JsonMap input, String peer) async {
@@ -917,10 +962,11 @@ final class MeshLibrary {
     if ((candidates == null || candidates.isEmpty) &&
         _localTargets[target] != null) {
       final rows = await db.rawQuery(
-          'SELECT l.locator FROM media_locations l JOIN media_file_episodes e ON e.file_id=l.file_id WHERE e.episode_id=? AND l.owner_device_id=? AND l.available=1 ORDER BY l.id',
+          'SELECT l.locator,l.file_id AS fileId,f.attributes FROM media_locations l JOIN media_file_episodes e ON e.file_id=l.file_id JOIN media_entities f ON f.id=l.file_id WHERE e.episode_id=? AND l.owner_device_id=? AND l.available=1 ORDER BY l.id',
           [_localTargets[target], ui.media.store.ownerDeviceId]);
       if (rows.isNotEmpty)
-        return {'episodeId': target, 'path': rows.first['locator']};
+        return {'episodeId': target, 'path': rows.first['locator'], 'fileId': rows.first['fileId'],
+          'sourceInfo': (jsonDecode(rows.first['attributes'] as String) as Map)['remoteSource']};
     }
     if (candidates == null || candidates.isEmpty)
       throw const Failure(

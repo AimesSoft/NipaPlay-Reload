@@ -183,6 +183,12 @@ Windows 上把 `./nipa` 换成 `python nipa`。连接凭据默认在 macOS/Linux
 
 ## 关于 NipaPlay 的事实
 
+- **片库按来源组织**：角落菜单先列“本地”（本机和组网设备合并的目录），再列各个 SMB、WebDAV、Jellyfin、Emby。一个来源显示一页，形式是书架或类别卡片。
+- **原始结构与整理可切换**：本地原样只有“全部”，Jellyfin/Emby 原样是已选服务器库及其层级，共享原样是文件夹。切回原样保留 Nipa 已做的整理；原样的库和文件夹属于来源，不由整理能力删除。
+- **原始类别的重排和隐藏只在本机生效**：`ui.library.move/remove` 不改服务器或共享；隐藏 ID 在 `page.hiddenCategories` 和 `library.arrangements.hiddenOriginal` 中，`ui.library.restore` 可恢复。离线来源显示上次成功读取的目录和图片，作品不可播放；从未读成功过的来源是空页。
+- **分类由用户提出，由 Nipa 做**：类别有条件、手选、来源原样三种内容。条件在本机持续计算，组网目录使用本机缓存，新作品不需要 Nipa 在线；手选是一串作品；来源原样引用某库或文件夹。已绑定身份的服务器作品可以和本地作品进入同一个条件类别，没有身份的服务器作品留在原样结构里。
+- **片库整理是身体里的持久摆放**：`ui.library.put/configure/move/remove` 与首页的 `ui.shelves.*` 同属界面能力；用户直接操作使用同一实现并记入 activity。`library.arrangements` 保存来源当前整理，`library.catalogue` 保存条件使用的作品事实，`ui.library.items` 按页返回内容与总数。服务器作品不依赖弹弹play身份即可打开和播放，封面图片是本机缓存路径。
+
 - **媒体库跨设备是一份合并库**：`library.merged` 包含本机和同账号设备上的全部作品。一部作品的剧集可能分散在几台设备上；重复文件优先本机。视频留在原设备，播放时直接读取原处，不复制整部文件。
 - **设备离线时**：上次看到的作品、元数据和已缓存图片仍显示；设备 online=false，只在离线设备上的剧集 playable=false。恢复连接后目录和进度继续更新。
 - **读取别的设备上的文件**：`media.library.readable` 批量解析剧集；`media.mesh_files.readable` 批量解析绝对 path 和 deviceId，不限已入库文件。远端文件返回当前调用节点的 127.0.0.1 HTTP Range 地址，可给播放器、ffprobe、ffmpeg；回环需绕开 HTTP_PROXY。设备之间的字节经过同账号双向 TLS，协调服务不转发视频。

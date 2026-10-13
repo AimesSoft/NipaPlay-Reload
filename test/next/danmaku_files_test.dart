@@ -143,6 +143,7 @@ void main() {
         });
     await insert('first', payload);
     await insert('second', 'interruption fixture');
+    await db.execute('DROP TABLE next_library_index');
     await db.setVersion(14);
     await db.close();
     final before = await File('${root.path}/next.db').length();

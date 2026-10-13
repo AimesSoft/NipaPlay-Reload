@@ -37,6 +37,9 @@ const _itemFields = {
   'OfficialRating',
   'Tags',
   'ImageTags',
+  'BackdropImageTags',
+  'ChildCount',
+  'EpisodeCount',
   'UserData',
 };
 

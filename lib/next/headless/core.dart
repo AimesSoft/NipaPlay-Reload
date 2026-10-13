@@ -34,6 +34,8 @@ import '../harness_hooks.dart';
 import '../followups/service.dart';
 import '../followups/capability.dart';
 import '../ui_data/service.dart';
+import '../ui_data/library_service.dart';
+import '../ui_data/library_capability.dart';
 import '../ui_data/capability.dart';
 import '../capabilities/download_capability.dart';
 import '../downloads/download_backend.dart';
@@ -78,6 +80,7 @@ final class HeadlessCore {
   late final SettingsRegistry settings;
   late final ChangeHistory history;
   late final UiDataService uiData;
+  late final LibraryDataService libraryData;
   late final SidecarIndexer sidecars;
   late final DownloadExecutor downloadExecutor;
   late final DownloadService downloads;
@@ -225,6 +228,9 @@ final class HeadlessCore {
       followups.view
     ]);
     uiData = UiDataService(media, engine, state, sources, root, NoVault());
+    libraryData = LibraryDataService(uiData);
+    uiData.libraryData = libraryData;
+    libraryData.register(state);
     uiData.subtitles = subtitleFacts(media, root);
     uiData.meshLibrary = MeshLibrary(uiData, mesh);
     registerMergedLibrary(state, uiData.meshLibrary!);
@@ -243,6 +249,7 @@ final class HeadlessCore {
         SettingsCapability(settings),
         FollowupCapability(followups),
         UiDataCapability(uiData),
+        LibraryCapability(libraryData),
         MeshLibraryCapability(uiData.meshLibrary!),
         MeshFilesCapability(uiData.meshLibrary!.files),
         state,

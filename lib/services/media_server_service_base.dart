@@ -568,7 +568,32 @@ abstract class MediaServerServiceBase {
     return response.statusCode == 200;
   }
 
-  /// Full catalog discovery, including items with no playback history.
+  Future<List<int>> catalogImage(String itemId, String kind, String tag) async {
+    final response = await makeAuthenticatedRequest('/Items/${Uri.encodeComponent(itemId)}/Images/${Uri.encodeComponent(kind)}?${Uri(queryParameters: {'tag': tag, 'maxWidth': '960'}).query}');
+    return response.bodyBytes;
+  }
+
+  Future<Map<String, dynamic>> catalogPage({String? parentId,
+      List<String>? itemIds, bool recursive = false, int offset = 0,
+      int limit = 60, String fields = '', String sortBy = 'SortName',
+      String sortOrder = 'Ascending', String? filters}) async {
+    if (!isConnected) throw StateError(notConnectedMessage);
+    final session = (serverUrl, userId, accessToken);
+    final response = await makeAuthenticatedRequest(Uri(path: '/Items', queryParameters: {
+      'userId': userId!, if (parentId != null) 'ParentId': parentId,
+      if (itemIds != null) 'Ids': itemIds.join(','),
+      'Recursive': '$recursive', 'StartIndex': '$offset', 'Limit': '$limit',
+      'Fields': fields, 'SortBy': sortBy, 'SortOrder': sortOrder,
+      if (filters != null) 'Filters': filters,
+      if (itemIds == null) 'IncludeItemTypes': recursive ? 'Episode,Movie,Video' :
+        'CollectionFolder,Folder,Series,Season,Episode,Movie,Video',
+    }).toString());
+    if (session != (serverUrl, userId, accessToken)) {
+      throw StateError('Media server session changed during page read.');
+    }
+    return jsonDecode(response.body) as Map<String, dynamic>;
+  }
+
   Future<List<Map<String, dynamic>>> browseCatalog(
       {String? parentId,
       bool recursive = false,

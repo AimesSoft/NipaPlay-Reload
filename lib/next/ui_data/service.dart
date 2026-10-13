@@ -17,6 +17,7 @@ import 'no_airing.dart' if (dart.library.ui) 'airing.dart';
 import 'heat.dart';
 import '../subtitles/facts.dart';
 import 'ui_data.dart';
+import 'library_service.dart';
 import '../mesh/library.dart';
 
 /// Application-owned projections. Stored presentations contain no task state.
@@ -34,6 +35,7 @@ final class UiDataService implements NextUiData {
   final EpisodeHeat heat;
   SubtitleFacts? subtitles;
   MeshLibrary? meshLibrary;
+  LibraryDataService? libraryData;
   void notifyLibraryChanged() => _changed();
   Future<List<JsonMap>> localFiles() => _view('library.files');
   Database get db => media.store.database;
@@ -98,7 +100,8 @@ final class UiDataService implements NextUiData {
         sources.history?.call(),
         sources.continueWatching?.call(),
         DateTime.now().toIso8601String().substring(0, 10),
-        await sources.calendar?.call()
+        await sources.calendar?.call(),
+        await libraryData?.sourceStamp()
       ]);
   void _changed() {
     if (!_closed) _changes.add(null);
@@ -122,6 +125,7 @@ final class UiDataService implements NextUiData {
 
   @override
   Future<UiWork?> work(String workId) async {
+    if (workId.startsWith('source-work:')) return libraryData!.sourceWork(workId);
     if (meshLibrary != null) return meshLibrary!.work(workId);
     return localWork(workId);
   }
@@ -172,6 +176,7 @@ final class UiDataService implements NextUiData {
 
   @override
   Future<List<UiEpisode>> episodes(String workId, {int? season}) async {
+    if (workId.startsWith('source-work:')) return libraryData!.sourceEpisodes(workId, season: season);
     if (meshLibrary != null) return meshLibrary!.episodes(workId, season: season);
     return localEpisodes(workId, season: season);
   }
@@ -307,6 +312,7 @@ final class UiDataService implements NextUiData {
   }
 
   Future<String?> _parentWork(String id) async {
+    if (id.startsWith('source-')) return libraryData!.sourceParent(id);
     if (meshLibrary != null) {
       final merged = await meshLibrary!.parent(id);
       if (merged != null) return merged;
@@ -614,6 +620,12 @@ final class UiDataService implements NextUiData {
   final Directory mediaRoot;
 
   Future<void> _requireEntity(String id, String? kind, String field) async {
+    if (id.startsWith('source-')) {
+      final parent = await libraryData!.sourceParent(id);
+      if (parent != null && (kind != 'episode' && await work(id) != null ||
+          kind != 'work' && (await episodes(parent)).any((e) => e.episodeId == id))) return;
+      throw const Failure(FailureCode.invalidInput, 'Unknown source work or episode reference.');
+    }
     if (meshLibrary != null) {
       final parent = await meshLibrary!.parent(id);
       if (parent != null) {
