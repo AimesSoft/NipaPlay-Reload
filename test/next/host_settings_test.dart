@@ -12,6 +12,7 @@ import 'package:nipaplay/next/agent_endpoint.dart';
 import 'package:nipaplay/next/chat/chat_host.dart';
 import 'package:nipaplay/next/chat/session_store.dart';
 import 'package:nipaplay/next/mesh/runtime.dart';
+import 'package:nipaplay/next/memory/recent.dart';
 import 'package:nipaplay/next/next_database.dart';
 import 'package:nipaplay/next/programs/runtime.dart';
 import 'package:nipaplay/next/repository_location.dart';
@@ -327,6 +328,35 @@ void main() {
         '[model_providers.original]\nname="Original"\nbase_url="$url"\nwire_api="responses"\n'
         '[projects.${jsonEncode(repository.path)}]\ntrust_level="trusted"\n';
     await File('${codexHome.path}/config.toml').writeAsString(original);
+    final initialized = await Process.run(
+        'git', ['init', '--quiet', '--template=', '--initial-branch=main'],
+        workingDirectory: repository.path);
+    expect(initialized.exitCode, 0);
+    await Directory('${repository.path}/.codex').create();
+    await File('${repository.path}/.codex/config.toml').writeAsString(
+        'sandbox_mode="danger-full-access"\napproval_policy="never"\n'
+        '[features]\nmemories=false\n');
+    final hookPreference = File('${repository.path}/preference.txt');
+    await hookPreference.writeAsString('initial preference');
+    await File('${repository.path}/session_start.py').writeAsString('''
+import json
+from pathlib import Path
+print(json.dumps({'hookSpecificOutput': {'hookEventName': 'SessionStart',
+    'additionalContext': Path('preference.txt').read_text()}}))
+''');
+    await File('${repository.path}/.codex/hooks.json')
+        .writeAsString(jsonEncode({
+      'hooks': {
+        'SessionStart': [
+          {
+            'matcher': 'startup|resume',
+            'hooks': [
+              {'type': 'command', 'command': 'python3 session_start.py'}
+            ]
+          }
+        ]
+      }
+    }));
     host = ChatHost(
         endpoint: endpoint,
         repository: repository,
@@ -340,11 +370,17 @@ void main() {
     final id = host!.mainThreadId, process = host!.processId;
     final originalModel = host!.model;
     Future<void> turn(String prompt) async {
+      final offset = public.length;
       final completed = host!.events.firstWhere((e) =>
           e['method'] == 'turn/completed' && e['params']['threadId'] == id);
       await host!.startTurn(prompt);
       final event = await completed.timeout(const Duration(seconds: 45));
       expect(event['params']['turn']['status'], 'completed');
+      final hook = public.skip(offset).cast<Map>().singleWhere((e) =>
+          e['method'] == 'hook/completed' && e['params']['threadId'] == id);
+      expect(hook['params']['run']['status'], 'completed');
+      expect(jsonEncode(hook['params']['run']['entries']),
+          contains(await hookPreference.readAsString()));
     }
 
     final running = turn('Reply OK.');
@@ -363,6 +399,7 @@ void main() {
     await Future<void>.delayed(const Duration(milliseconds: 80));
     expect(host!.processId, process);
     expect(host!.busyFor(helper), true);
+    await hookPreference.writeAsString('managed preference');
     releaseHelper.complete();
     await helperDone;
     await nextTurn;
@@ -371,7 +408,11 @@ void main() {
     expect(host!.processId, isNot(process));
     expect(host!.model, 'managed-model');
     expect(host!.provider, 'nipaplay');
+    final recent = await recentMemoryFacts(host!, [], [], [], id);
+    expect(recent['sourceThreadId'], id);
+    expect(recent['text'], contains('Reply OK again.'));
     await settings.setModel(const UiModelChoice(source: UiModelSource.codex));
+    await hookPreference.writeAsString('returned preference');
     await turn('Reply OK a third time.');
     expect(host!.mainThreadId, id);
     expect(host!.provider, 'original');

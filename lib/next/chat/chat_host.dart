@@ -183,15 +183,16 @@ final class ChatHost {
 
   Future<ChatMessage> _projectHookConfig() async {
     final root = await repository.resolveSymbolicLinks();
-    final listed = await _request('hooks/list', {'cwds': [root]});
+    final listed = await _request('hooks/list', {'cwds': [repository.path]});
     final states = <String, Object?>{};
     for (final entry in listed['data'] as List) {
       for (final hook in entry['hooks'] as List) {
-        final source = hook['sourcePath'] as String;
-        if (hook['source'] == 'project' &&
-            hook['enabled'] == true &&
-            (source.startsWith('$root/.codex/') ||
-                source.startsWith('$root${Platform.pathSeparator}.codex${Platform.pathSeparator}'))) {
+        if (hook['source'] != 'project' || hook['enabled'] != true) continue;
+        final source =
+            await File(hook['sourcePath'] as String).resolveSymbolicLinks();
+        if (source.startsWith('$root/.codex/') ||
+            source.startsWith(
+                '$root${Platform.pathSeparator}.codex${Platform.pathSeparator}')) {
           states[hook['key'] as String] = {'trusted_hash': hook['currentHash']};
         }
       }
@@ -353,7 +354,11 @@ final class ChatHost {
     await _startServer();
     // Resume the foreground with new defaults rather than rollout's old model.
     if (threadId case final id?) {
-      final response = await _request('thread/resume', {..._common, 'threadId': id});
+      final response = await _request('thread/resume', {
+        ..._common,
+        'threadId': id,
+        'config': await _projectHookConfig(),
+      });
       thread = _public(Map<String, dynamic>.from(response['thread'] as Map));
       model = response['model'] as String;
       provider = response['modelProvider'] as String;
@@ -683,11 +688,18 @@ final class ChatHost {
     if (busyFor(id)) throw StateError('Use steer for an active turn');
     await _applyModel();
     if (modelLaunch != null && !_loaded.contains(id)) {
-      await _request('thread/resume', {..._common, 'threadId': id,
-        if (threadOrigins[id] case final String origin)
-          'config': {'shell_environment_policy.set.NIPAPLAY_CHAT':
-            origin.startsWith('harness_cli:helper:')
-              ? 'helper-${origin.substring('harness_cli:helper:'.length)}' : sessionId}});
+      await _request('thread/resume', {
+        ..._common,
+        'threadId': id,
+        'config': {
+          ...await _projectHookConfig(),
+          if (threadOrigins[id] case final String origin)
+            'shell_environment_policy.set.NIPAPLAY_CHAT':
+                origin.startsWith('harness_cli:helper:')
+                    ? 'helper-${origin.substring('harness_cli:helper:'.length)}'
+                    : sessionId,
+        }
+      });
     }
     final live = livenessFor(id);
     live.starting(DateTime.now());
@@ -815,7 +827,11 @@ final class ChatHost {
 
   Future<ChatMessage> readThread(String id) async {
     if (modelLaunch != null && !_loaded.contains(id) && _rollouts.containsKey(id)) {
-      await _request('thread/resume', {..._common, 'threadId': id});
+      await _request('thread/resume', {
+        ..._common,
+        'threadId': id,
+        'config': await _projectHookConfig(),
+      });
     }
     // Codex cannot includeTurns until a newly started thread has its first input.
     if (_freshThreads[id] case final fresh?) return fresh;
