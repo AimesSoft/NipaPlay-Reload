@@ -131,6 +131,8 @@ pub fn torrent_init_session(
         }
     }
 
+    #[cfg(feature = "headless")]
+    let headless = headless_policy()?;
     let lab_session = cfg!(target_os = "macos")
         && std::env::var("NIPAPLAY_LAB_ROOT").is_ok_and(|root| {
             session_dir.as_ref().is_some_and(|dir| Path::new(dir).starts_with(root))
@@ -138,28 +140,43 @@ pub fn torrent_init_session(
     let session_dir = session_dir
         .map(PathBuf::from)
         .unwrap_or_else(|| default_session_dir(&normalized_dir));
+    #[cfg(feature = "headless")]
+    let session_dir = headless.root.join("torrent-session");
     torrent_log(format_args!(
         "init_session create session: download_dir={normalized_dir:?}, session_dir={session_dir:?}"
     ));
     let mut dht = DhtSessionConfig::default();
-    if lab_session {
+    if lab_session || cfg!(feature = "headless") {
         if let Some(persistence) = dht.persistence.as_mut() {
             persistence.config_filename = Some(session_dir.join("dht.json"));
         }
     }
+    #[cfg(feature = "headless")]
+    let dht_enabled = headless.dht;
+    #[cfg(not(feature = "headless"))]
+    let dht_enabled = true;
+    #[cfg(feature = "headless")]
+    let disable_lsd = !headless.local_discovery;
+    #[cfg(not(feature = "headless"))]
+    let disable_lsd = false;
+    #[cfg(feature = "headless")]
+    let disable_trackers = !headless.trackers;
+    #[cfg(not(feature = "headless"))]
+    let disable_trackers = false;
     let session = state.runtime.block_on(async {
         Session::new_with_opts(
             PathBuf::from(&normalized_dir),
             SessionOptions {
                 fastresume: true,
-                disable_local_service_discovery: lab_session,
+                disable_local_service_discovery: lab_session || disable_lsd,
+                disable_trackers,
                 persistence: Some(SessionPersistenceConfig::Json {
                     folder: Some(session_dir),
                 }),
                 // HarmonyOS uses Rust's `aarch64-unknown-linux-ohos` target,
                 // whose HOME points outside the application sandbox. Keep
                 // rqbit from writing its global DHT cache there.
-                dht: Some(DhtSessionConfig {
+                dht: if !dht_enabled { None } else { Some(DhtSessionConfig {
                     port: if lab_session { Some(0) } else { None },
                     persistence: if cfg!(any(target_os = "android", feature = "ohos")) {
                         None
@@ -167,7 +184,7 @@ pub fn torrent_init_session(
                         dht.persistence
                     },
                     ..Default::default()
-                }),
+                }) },
                 ..Default::default()
             },
         )
@@ -270,6 +287,8 @@ pub fn torrent_add_file(
     let add = AddTorrent::from_local_filename(torrent_file_path)
         .map_err(|error| format!("failed to read torrent file: {error:#}"))?;
     let mut options = add_torrent_options(normalized_dir, folder);
+    #[cfg(feature = "headless")]
+    { options.initial_peers = Some(headless_policy()?.peers.clone()); }
     options.only_files = only_files.map(|files| files.into_iter().map(normalize_torrent_id).collect::<Result<Vec<_>, _>>()).transpose()?;
     add_to_session(
         torrent_runtime(),
@@ -356,6 +375,8 @@ async fn resolve_preview(
                 AddTorrent::from_url(magnet_uri.to_string()),
                 Some(AddTorrentOptions {
                     list_only: true,
+                    #[cfg(feature = "headless")]
+                    initial_peers: Some(headless_policy()?.peers.clone()),
                     ..Default::default()
                 }),
             )
@@ -443,7 +464,7 @@ pub fn torrent_select_files(id: i32, file_indices: Vec<i32>) -> Result<(), Strin
 }
 
 #[flutter_rust_bridge::frb(ignore)]
-fn disk_space(path: &str) -> serde_json::Value {
+pub(crate) fn disk_space(path: &str) -> serde_json::Value {
     match available_disk_bytes(path) {
         Ok(bytes) => serde_json::json!({"path": path, "availableBytes": bytes}),
         Err(error) => serde_json::json!({"path": path, "availableBytes": null, "error": error}),
@@ -807,6 +828,32 @@ fn add_torrent_options(download_dir: String, folder_name: Option<String>) -> Add
         output_folder: Some(output_folder.to_string_lossy().into_owned()),
         ..Default::default()
     }
+}
+
+#[cfg(feature = "headless")]
+struct HeadlessPolicy {
+    root: PathBuf,
+    dht: bool,
+    local_discovery: bool,
+    trackers: bool,
+    peers: Vec<std::net::SocketAddr>,
+}
+#[cfg(feature = "headless")]
+static HEADLESS_POLICY: OnceLock<HeadlessPolicy> = OnceLock::new();
+#[cfg(feature = "headless")]
+fn headless_policy() -> Result<&'static HeadlessPolicy, String> {
+    HEADLESS_POLICY.get().ok_or_else(|| "headless host policy is required".into())
+}
+#[cfg(feature = "headless")]
+#[flutter_rust_bridge::frb(ignore)]
+pub fn configure_headless(root: String, configuration: String) -> Result<(), String> {
+    let root = PathBuf::from(root).canonicalize().map_err(|_| "invalid headless root")?;
+    let config: serde_json::Value = serde_json::from_str(&configuration).map_err(|_| "invalid download configuration")?;
+    let boolean = |key: &str| config.get(key).map(|v| v.as_bool().ok_or("invalid download switch")).unwrap_or(Ok(true));
+    let peers: Vec<String> = serde_json::from_value(config.get("peers").cloned().unwrap_or(serde_json::json!([]))).map_err(|_| "invalid peers")?;
+    let peers = peers.into_iter().map(|s| s.parse().map_err(|_| "invalid peer".to_owned())).collect::<Result<Vec<_>, _>>()?;
+    HEADLESS_POLICY.set(HeadlessPolicy {root, dht: boolean("dht")?, local_discovery: boolean("localDiscovery")?,
+        trackers: boolean("trackers")?, peers}).map_err(|_| "headless download host already configured".into())
 }
 
 fn file_stem_folder_name(file_path: &str) -> String {

@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 import 'package:http/http.dart' as http;
 import 'package:nipa_harness/nipa_harness.dart';
@@ -41,6 +42,14 @@ import '../downloads/download_source.dart';
 import 'ports.dart';
 import 'downloads.dart';
 import 'job_lifecycle.dart';
+import 'native.dart';
+import 'vault.dart';
+import 'library_roots.dart';
+import '../mesh/runtime.dart';
+import '../mesh/capability.dart';
+import '../mesh/delivery.dart';
+import '../mesh/native.dart';
+import '../../security/credential_vault.dart';
 
 /// Composes the same domain services without attaching Classic or a widget tree.
 final class HeadlessCore {
@@ -49,11 +58,15 @@ final class HeadlessCore {
       required this.repository,
       required this.mediaRoots,
       required this.seed,
+      this.nativeLibrary,
       this.port = 0});
   final Directory root, repository;
   final List<String> mediaRoots;
   final Map<String, List<int>> seed;
   final int port;
+  final String? nativeLibrary;
+  late final MeshRuntime mesh;
+  late final HeadlessVault vault;
   late final TaskEngine engine;
   late final MediaService media;
   late final AgentEndpoint endpoint;
@@ -99,7 +112,41 @@ final class HeadlessCore {
         ],
         classic: NoClassic(),
         authorizedRoots: () => [...mediaRoots, '${root.path}/downloads']);
-    settings = SettingsRegistry(database, []);
+    vault = HeadlessVault(Directory(p.join(root.path, 'vault')));
+    final native =
+        HeadlessNative(nativeLibrary ?? HeadlessNative.defaultLibrary());
+    mesh = MeshRuntime(
+        root: root,
+        vault: vault,
+        token: () =>
+            vault.read(const CredentialRef('preferences', 'dandanplay_token')),
+        forceLoopback: true,
+        authorize: (_, __) async => null,
+        native: MeshNative(bridge: native));
+    mesh.describeSelf = () async => {
+          'host': 'headless',
+          'conversationHost': false,
+          'mediaRoots': mediaRoots.toList(),
+          'mediaReadOnly': true,
+          'downloadDirectory': p.join(root.path, 'downloads'),
+          'storageFacts': [
+            {
+              'role': 'download',
+              'readOnly': false,
+              ...await native
+                      .call('storage', {'path': p.join(root.path, 'downloads')})
+                  as JsonMap
+            },
+            for (final path in mediaRoots)
+              {
+                'role': 'library',
+                'readOnly': true,
+                ...await native.call('storage', {'path': path}) as JsonMap
+              }
+          ],
+          'downloadEngine': 'librqbit'
+        };
+    settings = SettingsRegistry(database, [meshAddressSetting(mesh)]);
     SettingsAccess.registry = settings;
     final danmaku = DanmakuService(
         store: DanmakuStore(media.store),
@@ -117,7 +164,14 @@ final class HeadlessCore {
       return real;
     });
     sidecars = SidecarIndexer(danmaku.store, () async {});
-    backend = HeadlessDownloadBackend();
+    final downloadConfig = File(p.join(root.path, 'download.json'));
+    backend = HeadlessDownloadBackend(
+        native: native,
+        root: root,
+        readOnlyRoots: mediaRoots,
+        configuration: await downloadConfig.exists()
+            ? jsonDecode(await downloadConfig.readAsString()) as JsonMap
+            : const {});
     final library = HeadlessDownloadLibrary(media);
     final backends = DownloadBackends([backend]);
     downloadExecutor = DownloadExecutor(
@@ -146,6 +200,8 @@ final class HeadlessCore {
         library: library);
     followups =
         Followups(database, engine, HeadlessRepository(repository.path));
+    downloads.returnTarget = followups.downloadReturnTarget;
+    attachMeshDelivery(mesh, followups);
     hooks.observeEvent = followups.hookEvent;
     hooks.scheduleError = (error) async {
       await followups.discover({
@@ -160,28 +216,32 @@ final class HeadlessCore {
           media: media,
           settings: settings,
           danmaku: danmaku,
-          mesh: NoMesh(),
+          mesh: mesh,
           sources: sources),
       followups.view
     ]);
     uiData = UiDataService(media, engine, state, sources, root, NoVault());
     settings.register([uiData.openingSetting]);
+    final downloadSources =
+        DownloadSources(Directory('${root.path}/torrent_sources'));
     final harness = Harness([
       InvocationScopeCapability(HeadlessCapabilities([
         InstanceCapability(const InstanceFacts('1.11.10-headless')),
         TaskCapability(engine),
+        MeshCapability(mesh),
+        HeadlessLibraryRoots(root, mediaRoots),
         MediaCapability(media),
         DanmakuCapability(danmaku),
         SettingsCapability(settings),
         FollowupCapability(followups),
         UiDataCapability(uiData),
         state,
+        HeadlessDownloadMetadata(backend, downloadSources),
         DownloadCapability(
             downloads: downloads,
             deleteAudit:
                 JsonlJournal(File('${root.path}/download-audit.jsonl')),
-            sources:
-                DownloadSources(Directory('${root.path}/torrent_sources'))),
+            sources: downloadSources),
       ]))
     ], observers: [
       JsonlJournal(File('${root.path}/journal.jsonl'),
@@ -212,6 +272,8 @@ final class HeadlessCore {
           hooks.emit('library.file_added', file['path'] as String, file));
     });
     sidecars.start();
+    mesh.attach(harness);
+    await mesh.startConfigured();
     return status;
   }
 
@@ -224,6 +286,7 @@ final class HeadlessCore {
       return;
     }
     await endpoint.stop();
+    await mesh.close();
     await _jobs?.cancel();
     await _files?.cancel();
     await _events;

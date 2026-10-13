@@ -56,3 +56,25 @@ lost, look for the marker in Codex's existing thread history. A matching turn is
 adopted, never replayed. If no turn can be verified, retain `execution_failed`
 with the ambiguity explained. Host unavailability keeps undelivered work `ready`
 with its cause; later availability drains it. No timeout retries `turn/start`.
+
+Mesh downloads carry a host-issued return ticket and the conversation target
+resolved before submission. The receiving node binds that target to the mTLS
+caller identity. Immutable batches return over authenticated `mesh/delivery`;
+the conversation host validates its issued ticket, peer, repository and thread
+before persisting the facts. Delivery is deduplicated by source device/batch ID,
+including after restart. A lost ACK cannot mutate an already sent batch; new
+completed files form a new batch. Transport failure retries after 30 seconds.
+
+The destination stores `automatic: meshDownload`, sourceDeviceId and file event
+facts; existing explicit event subscriptions and idle-host dispatch rules still
+apply there. Source `state: completed` with `deliveryState: forwarded` records
+durable destination acknowledgement, not a completed model turn. Destination
+turnId/turnStatus remain the evidence of actual conversation execution.
+Remote paths/local/playable are facts about the source device. Remote job IDs
+are read through that device; they are not local task IDs for `when: {jobId}`.
+
+Host `mesh.json.agentDeviceId` routes headless script/schedule `agent.wake` to
+the configured Nipa device. That destination requires the host role `agent`;
+an unspecified thread uses its main conversation, a specified thread targets
+that destination's conversation. Mesh trust and Classic receiver/device approval
+still apply. No conversation starts on a transfer-only host.

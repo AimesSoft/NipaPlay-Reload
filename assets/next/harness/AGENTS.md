@@ -62,6 +62,10 @@ NipaPlay 自己会做一部分：作品有 TMDB 身份时取图，同步 Classic
 
 Windows 上把 `./nipa` 换成 `python nipa`。连接凭据默认在 macOS/Linux 的 `~/.config/nipaplay/endpoint.json`、Windows 的 `%APPDATA%\NipaPlay\endpoint.json`；`NIPAPLAY_ENDPOINT_FILE` 可指定其他位置。
 
+`mesh.devices` 返回同账号设备、连通状态、各设备实际开放的能力和经过双向 TLS 认证的设备自我描述。自我描述包含平台、宿主角色、片库根目录、下载目录，以及宿主配置的存储路径与 Nipa 所在设备；路径属于描述它的那台设备。无界面节点提供片库、下载、任务、hooks 和定时程序，那里没有对话宿主。网络加入、签发者、监听策略和 Nipa 所在设备由宿主配置，Action 不能开放这些权限。`./nipa --device NAME list`、`describe ACTION`、`call ACTION ...` 和 `watch JOB_ID` 使用该设备的实时目录；名称也可换成设备 ID，重名不会任选一个。
+
+从 Mac 对话通过组网发起的下载，在发起时固定返回设备与线程。每个已校验、已入库的视频文件和任务终态，由下载设备的持久后续队列交回那个会话；会话忙时排队。返回事实含来源设备，文件路径、`local` 和 `playable` 是来源设备上的事实。断线后保留待交付记录，重复交付使用同一回执。工作站 hooks 或定时程序调用 `agent.wake` 时，宿主配置的 Nipa 设备接收唤醒；不指定线程时回到那里持久主会话。工作站的 `followup.list` 中 `deliveryState: forwarded` 及 `remoteReceipt` 表示目标已经持久接收，实际对话状态保存在目标设备。
+
 - 能力随 NipaPlay 的版本变化，以 `./nipa list` 为准。
 - `describe ACTION` 给出输入与输出契约，`call task.list` 可筛选任务，`call task.get '{"jobId":"..."}'` 给出单个任务详情。查询默认每页 50 行，可用 `limit`、`select` 与返回的 `nextCursor` 控制读取范围。
 - 返回任务只代表已受理。只有状态为 `succeeded`、并且回执经过验证，才算完成。`watch` 是有界的等待，不是后台守护。

@@ -4,6 +4,10 @@ extension DownloadReturns on Followups {
   /// Resolve once, while the invocation still has its originating conversation.
   Future<JsonMap?> downloadReturnTarget(Invocation invocation) async {
     final origin = invocation.origin;
+    if (origin.startsWith('mesh:')) {
+      final target = Zone.current[#meshReturnTarget] as JsonMap?;
+      return target == null ? null : Map<String, Object?>.from(target);
+    }
     String? thread;
     String? repository;
     if (origin.startsWith('harness_cli:chat:')) {
@@ -105,7 +109,7 @@ extension DownloadReturns on Followups {
           }
       ];
       if (facts.isEmpty) continue;
-      final pending = automatic.where((r) => r['state'] == 'ready').lastOrNull;
+      final pending = automatic.where((r) => r['state'] == 'ready' && r['remoteSealed'] != true).lastOrNull;
       final now = DateTime.now().toUtc();
       final last = automatic.lastOrNull;
       final due = last == null
@@ -134,6 +138,8 @@ extension DownloadReturns on Followups {
             'updatedAt': now.toIso8601String(),
             'reason': null,
             'turnStatus': null,
+            if (target['deviceId'] != null) 'remoteDeviceId': target['deviceId'],
+            if (target['returnTicket'] != null) 'returnTicket': target['returnTicket'],
             'trigger': {
               'kind': 'download.facts',
               'jobId': job.jobId,
@@ -164,6 +170,47 @@ extension DownloadReturns on Followups {
       rows = await _rows();
     }
   }
+
+  /// An authenticated device delivers an immutable batch. Repeated delivery
+  /// returns the original receipt, including after the conversation completed.
+  Future<JsonMap> acceptMeshDelivery(String peer, JsonMap delivery,
+      {JsonMap? target}) => _serial(() async {
+    final remote = delivery['row'] as JsonMap;
+    final id = 'followup-mesh-$peer-${remote['id']}';
+    final existing = await database.query('followups', where: 'id=?', whereArgs: [id]);
+    if (existing.isNotEmpty) return {'id': id, 'accepted': true};
+    final wake = target == null;
+    final now = DateTime.now().toUtc().toIso8601String();
+    await location.ready;
+    final row = <String, Object?>{
+      ...remote, 'id': id, 'state': 'ready', 'turnId': null, 'turnStatus': null,
+      'repository': wake ? location.path : target['repository'],
+      'threadId': wake ? remote['threadId'] : target['threadId'],
+      'origin': 'mesh:$peer', 'createdAt': now, 'updatedAt': now,
+      'sourceDeviceId': peer, 'sourceFollowupId': remote['id'],
+      'reason': null, 'waitingFor': 'Waiting for an idle chat host.',
+    }..remove('remoteDeviceId')..remove('remoteRetryAt')..remove('remoteReceipt');
+    if (!wake) {
+      row['automatic'] = 'meshDownload';
+      row['condition'] = {'kind': 'mesh.download.facts'};
+      row['trigger'] = {...remote['trigger'] as JsonMap, 'sourceDeviceId': peer};
+    }
+    final safe = redactHarnessJson(row) as JsonMap;
+    await database.transaction((tx) async {
+      if (!wake) {
+        for (final fact in ((safe['trigger'] as Map)['facts'] as List).cast<JsonMap>()) {
+          await tx.insert('followup_hook_events', {
+            'event': fact['event'] == 'task.terminal' && (fact['data'] as Map)['state'] == 'succeeded' ? 'download.completed' : fact['event'],
+            'object_id': fact['objectId'], 'payload': jsonEncode(fact),
+          });
+        }
+      }
+      await tx.insert('followups', {'id': id, 'state': 'ready', 'snapshot': jsonEncode(safe)});
+      await _event(tx, safe, 'received', 'mesh:$peer', remote['invocationId'] as String);
+    });
+    _schedule();
+    return {'id': id, 'accepted': true};
+  });
 
   Future<void> _filterDownloadReturn(JsonMap row, List<JsonMap> rows) async {
     final trigger = row['trigger'] as Map;
