@@ -13,6 +13,7 @@ import '../pages/activity_page.dart';
 import '../pages/discover_page.dart';
 import '../pages/library_page.dart';
 import '../panel/chat_panel.dart';
+import '../search/search_overlay.dart';
 import '../theme/tokens.dart';
 import '../widgets/art_origin.dart';
 import '../widgets/grain.dart';
@@ -20,7 +21,7 @@ import 'shell_controller.dart';
 import 'top_bar.dart';
 
 /// The Next application shell: top bar, sections, pushed pages (detail,
-/// next stage), popovers, ⌘K / Esc, grain over everything.
+/// next stage), popovers, search, ⌘K / ⌘F / Esc, grain over everything.
 class NextShell extends StatefulWidget {
   const NextShell({super.key, required this.onLeave});
 
@@ -108,14 +109,7 @@ class _NextShellState extends State<NextShell> {
           child: NextShellScope(
             controller: _shell,
             child: CallbackShortcuts(
-              bindings: {
-                const SingleActivator(LogicalKeyboardKey.keyK, meta: true):
-                    _shell.ask,
-                const SingleActivator(LogicalKeyboardKey.keyK, control: true):
-                    _shell.ask,
-                const SingleActivator(LogicalKeyboardKey.escape): () =>
-                    _shell.escape(),
-              },
+              bindings: nextShellShortcuts(_shell),
               child: Focus(
                 focusNode: _focus,
                 autofocus: true,
@@ -172,6 +166,13 @@ class _NextShellState extends State<NextShell> {
                     const Positioned.fill(child: Grain()),
                     const Positioned.fill(child: NextPopovers()),
                     const Positioned.fill(child: ChatPanelLayer()),
+                    Positioned.fill(
+                      child: SearchLayer(
+                        search: _shell.search,
+                        onOpen: _shell.openSearchEntry,
+                        onClose: _shell.closeSearch,
+                      ),
+                    ),
                   ]),
                 ),
               ),
@@ -182,6 +183,20 @@ class _NextShellState extends State<NextShell> {
     );
   }
 }
+
+/// ⌘K: the conversation's input. ⌘F: search, the Mac's Find (and free in
+/// every text field, unlike `/`). Esc: what is on top closes.
+Map<ShortcutActivator, VoidCallback> nextShellShortcuts(
+        NextShellController shell) =>
+    {
+      const SingleActivator(LogicalKeyboardKey.keyK, meta: true): shell.ask,
+      const SingleActivator(LogicalKeyboardKey.keyK, control: true): shell.ask,
+      const SingleActivator(LogicalKeyboardKey.keyF, meta: true):
+          shell.openSearch,
+      const SingleActivator(LogicalKeyboardKey.keyF, control: true):
+          shell.openSearch,
+      const SingleActivator(LogicalKeyboardKey.escape): () => shell.escape(),
+    };
 
 /// Home, discover, library and activity. Visited sections stay alive (scroll position
 /// kept); the entering one fades in from 0.98.

@@ -10,9 +10,11 @@ import '../../ui_data/ui_data.dart';
 import '../conversation/chat_port.dart';
 import '../conversation/chat_context.dart';
 import '../data/discover.dart';
+import '../data/search.dart';
 import '../data/ui_actions.dart';
 
 part 'fake_library.dart';
+part 'fake_search.dart';
 
 /// Development-only data for screenshots and experiments, built from the
 /// concept's TMDB sample set. Never used by production code paths (see
@@ -53,6 +55,9 @@ final class FakeWorld implements NextUiData, NextUiActions, NextDiscoverData {
 
   /// The 片库 page's sources and categories.
   late final catalog = FakeLibrary(this);
+
+  /// The search panel's groups.
+  late final search = FakeSearch(this);
   final _taskStream = StreamController<List<UiTask>>.broadcast();
   final _tasks = <String, _FakeTask>{};
 
