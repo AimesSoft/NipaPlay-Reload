@@ -7,7 +7,7 @@ import '../capabilities/classic_action.dart';
 import '../harness_redaction.dart';
 import '../repository_location.dart';
 
-/// Read once by the host. There is no Action or setting that writes this file.
+/// Host configuration. There is no Action or registry setting that writes it.
 Future<bool> loadProgramPermission(Directory root) async {
   final file = File('${root.path}/program.json');
   if (!await file.exists()) return false;
@@ -72,7 +72,7 @@ Map<String, String> programEnvironment() => {
 
 final class ProgramRuntime implements JobExecutor {
   ProgramRuntime({required this.enabled, required this.location});
-  final bool enabled;
+  bool enabled;
   final RepositoryLocation location;
   File? credentialFile;
   late TaskEngine engine;
@@ -85,7 +85,7 @@ final class ProgramRuntime implements JobExecutor {
   void requireEnabled() {
     if (!enabled || _closed) {
       throw const Failure(FailureCode.unavailable,
-          'Program execution is disabled. Only this device host can enable program.json; restart is required.');
+          'Program execution is disabled. Only this device host can enable program.json.');
     }
   }
 

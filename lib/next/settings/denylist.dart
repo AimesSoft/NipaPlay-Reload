@@ -36,6 +36,10 @@ const settingsDenylist = <String>{
 };
 
 const settingsDeniedPrefixes = <String>[
+  'model.',
+  'model_',
+  'codex.',
+  'hostSettings.',
   'program.',
   'program_',
   'remoteRun.',

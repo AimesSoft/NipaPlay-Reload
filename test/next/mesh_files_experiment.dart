@@ -64,7 +64,8 @@ Future<void> x47ProxyReview(_Rig rig) async {
   final fixed = reservation.port;
   await reservation.close();
   mac.hostConfiguration['fileProxyPort'] = fixed;
-  await restartProxy();
+  await mac.hostConfigurationChanged!();
+  expect(a.meshLibrary!.fileProxyStatus['state'], 'not_started');
   final issued = await Future.wait([issue(), issue()]);
   final fixedUri = Uri.parse(issued.first['url'] as String);
   expect(issued.map((r) => Uri.parse(r['url'] as String).port),

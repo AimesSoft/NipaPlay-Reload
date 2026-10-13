@@ -72,7 +72,8 @@ final class NextUiServices {
     final logins = LoginRequests();
     final data = coreUiData(core);
     final library = CoreLibrary(core);
-    final settings = CoreSettingsData(core, runtime, logins);
+    final settings =
+        CoreSettingsData(core, runtime, logins, host: runtime.hostSettings);
     final detach = attachCoreLogins(core, logins);
     return NextUiServices(
       data: data,

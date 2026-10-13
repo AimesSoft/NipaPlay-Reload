@@ -41,6 +41,7 @@ final class MeshLibrary {
     files = MeshFiles(mesh, fileReadable, ui.media.store.ownerDeviceId);
     mesh.libraryRequest = request;
     ui.media.searchWorkIds = searchWorkIds;
+    mesh.hostConfigurationChanged = _hostConfigurationChanged;
   }
   late final MeshFiles files;
   final UiDataService ui;
@@ -1070,6 +1071,21 @@ final class MeshLibrary {
         _bindHttp().whenComplete(() => _httpBinding = null));
   }
 
+  Future<void> _hostConfigurationChanged() async {
+    final configured = mesh.hostConfiguration['fileProxyPort'] ?? 0;
+    if (configured == _requestedPort) return;
+    await _httpBinding;
+    await _http?.close(force: true);
+    _http = null;
+    _readers.clear();
+    playback.clear();
+    _assets.clear();
+    if (configured is int) { _requestedPort = configured; }
+    _proxyState = 'not_started';
+    _proxyReason = null;
+    ui.notifyLibraryChanged();
+  }
+
   Future<void> _bindHttp() async {
     final configured = mesh.hostConfiguration['fileProxyPort'] ?? 0;
     if (configured is! int ||
@@ -1200,5 +1216,6 @@ final class MeshLibrary {
     _proxyState = 'closed';
     await files.close();
     mesh.libraryRequest = null;
+    mesh.hostConfigurationChanged = null;
   }
 }
