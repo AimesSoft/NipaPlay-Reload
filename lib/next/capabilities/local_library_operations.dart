@@ -17,9 +17,10 @@ const _output = ObjectSchema({}, additionalProperties: true);
 const _paths = ArraySchema(StringSchema(minLength: 1));
 
 final class LocalLibraryOperations implements Capability {
-  LocalLibraryOperations(this.scan, this.history);
+  LocalLibraryOperations(this.scan, this.history, {this.engine});
   final ScanService scan;
   final WatchHistoryProvider history;
+  final TaskEngine? engine;
 
   Future<void> attachClassicHistory() async {
     await WatchHistoryManager.initialize();
@@ -160,8 +161,8 @@ final class LocalLibraryOperations implements Capability {
                     'Scan saved Classic roots sequentially with the same smart file-diff, '
                     'hash identification and history persistence as the Classic library. '
                     'Omit paths to scan all roots. paths must already be registered; SAF/Harmony roots are supported by Classic. '
-                    'skipPreviouslyMatchedUnwatched defaults to false. This waits until scanning completes; '
-                    'media.library.roots.list can read progress from another call. Failures are returned as failedFiles. '
+                    'skipPreviouslyMatchedUnwatched defaults to false. Returns a persistent jobId; '
+                    'task.control pauses/resumes at file boundaries; task.get/wait reads receipts and failures. '
                     'Login, if required for identification, is completed by the user through accounts.login.',
                 effect: Effect.write,
                 input: ObjectSchema({
@@ -169,7 +170,6 @@ final class LocalLibraryOperations implements Capability {
                   'skipPreviouslyMatchedUnwatched': BooleanSchema()
                 }),
                 output: _output), (input, _) async {
-          _idle();
           final paths =
               (input['paths'] as List?)?.cast<String>().toSet().toList() ??
                   scan.scannedFolders;
@@ -177,19 +177,13 @@ final class LocalLibraryOperations implements Capability {
             throw const Failure(FailureCode.invalidInput,
                 'Register paths with media.library.roots.add first.');
           }
-          final outcomes = <JsonMap>[];
-          for (final path in paths) {
-            await scan.startDirectoryScan(path,
-                skipPreviouslyMatchedUnwatched:
-                    input['skipPreviouslyMatchedUnwatched'] == true);
-            outcomes.add({
-              'path': path,
-              'message': scan.scanMessage,
-              'failedFiles': (_state()['failedFiles'] as List)
-            });
+          if (engine == null) {
+            throw const Failure(FailureCode.unavailable, 'Task engine is not attached.');
           }
-          await history.refresh();
-          return {'scanned': paths, 'outcomes': outcomes, ..._state()};
+          final job = await engine!.submit(type: 'media.scan_classic',
+              title: 'Classic 媒体扫描', input: {'paths': paths,
+                'skipPreviouslyMatchedUnwatched': input['skipPreviouslyMatchedUnwatched'] == true});
+          return {'jobId': job.jobId, 'job': job.toJson()};
         }),
         ClassicAction(
             const ActionSpec(

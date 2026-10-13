@@ -1,4 +1,5 @@
 import Cocoa
+import UserNotifications
 import FlutterMacOS
 import ObjectiveC.runtime
 import QuartzCore
@@ -1660,6 +1661,25 @@ class MainFlutterWindow: NSWindow {
         result(true)
         return
       }
+      if call.method.hasPrefix("notification.") {
+        NextSystemNotifications.handle(call, result: result)
+        return
+      }
+      if call.method == "storageSpace" {
+        guard let arguments = call.arguments as? [String: Any],
+              let path = arguments["path"] as? String else {
+          result(FlutterError(code: "invalid_path", message: "Storage path required", details: nil))
+          return
+        }
+        do {
+          let facts = try FileManager.default.attributesOfFileSystem(forPath: path)
+          result(["path": path, "availableBytes": facts[.systemFreeSize] as Any,
+                  "totalBytes": facts[.systemSize] as Any])
+        } catch {
+          result(FlutterError(code: "storage_stat_failed", message: "Cannot read volume capacity", details: nil))
+        }
+        return
+      }
       guard call.method == "facts" else {
         result(FlutterMethodNotImplemented)
         return
@@ -1691,6 +1711,92 @@ class MainFlutterWindow: NSWindow {
       return false
     }
     return environment["NIPAPLAY_MACOS_HDR_TRANSPARENT_FLUTTER"] != "0"
+  }
+}
+
+private enum NextSystemNotifications {
+  private static var prefix: String { "nipaplay:profile:\(LabProfile.name ?? "default"):" }
+  static func handle(_ call: FlutterMethodCall, result: @escaping FlutterResult) {
+    let center = UNUserNotificationCenter.current()
+    let args = call.arguments as? [String: Any] ?? [:]
+    switch call.method {
+    case "notification.status":
+      center.getNotificationSettings { settings in
+        DispatchQueue.main.async { result(status(settings)) }
+      }
+    case "notification.list":
+      center.getDeliveredNotifications { delivered in
+        center.getPendingNotificationRequests { pending in
+          let rows = delivered.filter { $0.request.identifier.hasPrefix(prefix) }
+                       .map { ["id": String($0.request.identifier.dropFirst(prefix.count)), "state": "delivered"] } +
+                     pending.filter { $0.identifier.hasPrefix(prefix) }
+                       .map { ["id": String($0.identifier.dropFirst(prefix.count)), "state": "pending"] }
+          DispatchQueue.main.async { result(["notifications": rows]) }
+        }
+      }
+    case "notification.cancel":
+      guard let id = args["id"] as? String else {
+        result(FlutterError(code: "invalid_id", message: "Notification id required", details: nil))
+        return
+      }
+      center.removePendingNotificationRequests(withIdentifiers: [prefix + id])
+      center.removeDeliveredNotifications(withIdentifiers: [prefix + id])
+      result(["id": id, "cancellationRequested": true])
+    case "notification.send":
+      center.getNotificationSettings { settings in
+        if settings.authorizationStatus == .notDetermined,
+           args["requestPermission"] as? Bool == true {
+          center.requestAuthorization(options: [.alert, .sound]) { _, error in
+            if error != nil {
+              DispatchQueue.main.async { result(["deliveryState": "failed", "reason": "authorization_failed"]) }
+              return
+            }
+            center.getNotificationSettings { current in send(args, settings: current, center: center, result: result) }
+          }
+        } else {
+          send(args, settings: settings, center: center, result: result)
+        }
+      }
+    default: result(FlutterMethodNotImplemented)
+    }
+  }
+
+  private static func status(_ settings: UNNotificationSettings) -> [String: Any] {
+    let authorization: String
+    switch settings.authorizationStatus {
+    case .notDetermined: authorization = "notDetermined"
+    case .denied: authorization = "denied"
+    case .authorized: authorization = "authorized"
+    case .provisional: authorization = "provisional"
+    @unknown default: authorization = "unknown"
+    }
+    return ["supported": true, "permission": authorization,
+            "alertsEnabled": settings.alertSetting == .enabled,
+            "soundsEnabled": settings.soundSetting == .enabled,
+            "deliveryObservation": "OS acceptance is not proof the user saw a banner"]
+  }
+
+  private static func send(_ args: [String: Any], settings: UNNotificationSettings,
+                           center: UNUserNotificationCenter, result: @escaping FlutterResult) {
+    guard settings.authorizationStatus == .authorized || settings.authorizationStatus == .provisional else {
+      DispatchQueue.main.async { result(["deliveryState": "blocked", "reason": "system_authorization", "settings": status(settings)]) }
+      return
+    }
+    guard let title = args["title"] as? String, let body = args["body"] as? String,
+          let id = args["id"] as? String else {
+      DispatchQueue.main.async { result(FlutterError(code: "invalid_notification", message: "id/title/body required", details: nil)) }
+      return
+    }
+    let content = UNMutableNotificationContent()
+    content.title = title
+    content.body = body
+    if args["sound"] as? Bool == true && settings.soundSetting == .enabled { content.sound = .default }
+    center.add(UNNotificationRequest(identifier: prefix + id, content: content, trigger: nil)) { error in
+      DispatchQueue.main.async {
+        result(["id": id, "deliveryState": error == nil ? "accepted" : "failed",
+                "reason": error == nil ? "system_manages_presentation" : "system_delivery_failed", "settings": status(settings)])
+      }
+    }
   }
 }
 

@@ -29,6 +29,7 @@ final class SettingEntry {
     bool Function()? visible,
     this.remote,
     this.step,
+    this.writable = true,
   })  : _schema = schema,
         _defaultValue = defaultValue,
         visible = visible ?? (() => true);
@@ -56,6 +57,7 @@ final class SettingEntry {
   final bool Function() visible;
   final JsonMap? remote;
   final num? step;
+  final bool writable;
 
   String get domain => key.split('.').first;
   JsonMap describe() => {
@@ -66,7 +68,8 @@ final class SettingEntry {
         'default': defaultValue,
         'scope': scope,
         'apply': apply,
-        'effect': 'write',
+        'effect': writable ? 'write' : 'read',
+        'readOnly': !writable,
         if (step != null || remote?['step'] != null)
           'step': step ?? remote!['step'],
         if (key == 'danmaku.supersample') 'enum': [0.0, 1.5, 2.0],
@@ -115,6 +118,7 @@ final class SettingsRegistry {
   final Database database;
   final _entries = <String, SettingEntry>{};
   final _storage = <String, List<SettingEntry>>{};
+  Future<void> Function(JsonMap)? onChanged;
   Future<void> _pending = Future.value();
   static final _operation = Object();
 
@@ -217,6 +221,9 @@ final class SettingsRegistry {
   Future<JsonMap> set(String key, Object? value, Invocation invocation,
       {String? reason, int? expectedRevision, bool reset = false}) {
     final entry = _entry(key);
+    if (!entry.writable) {
+      throw const Failure(FailureCode.invalidInput, 'This setting is a read-only fact.');
+    }
     if (reset) value = entry.defaultValue;
     final violations = entry.schema.validate(value);
     if (violations.isEmpty) {
@@ -298,6 +305,9 @@ final class SettingsRegistry {
       'invocation_id': invocation.id,
       'revision': revision,
     });
+    await onChanged?.call({'key': entry.key, 'previousValue': previous,
+      'value': value, 'revision': revision, 'changedFields': ['value'],
+      'origin': invocation.origin});
   }
 
   Future<List<JsonMap>> history(

@@ -186,7 +186,8 @@ final jobSnapshotSchema = ObjectSchema({
   'error': const ObjectSchema({
     'code': StringSchema(),
     'message': StringSchema(),
-    'retryable': BooleanSchema()
+    'retryable': BooleanSchema(),
+    'details': ObjectSchema({}, additionalProperties: true)
   }, required: [
     'code',
     'message',

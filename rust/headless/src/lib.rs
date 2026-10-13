@@ -37,6 +37,11 @@ fn dispatch(v: Value) -> Result<Value, String> {
         "mesh_send" => json!(runtime().block_on(mesh::mesh_send(id()?,string(&v,"host")?,integer(&v,"port")?.try_into().map_err(|_|"invalid port")?,string(&v,"device")?,string(&v,"body")?))?),
         "torrent_init" => { torrent::torrent_init_session(string(&v,"download_dir")?, Some(string(&v,"session_dir")?))?; Value::Null },
         "torrent_list" => json!(torrent::torrent_list(string(&v,"download_dir")?)?),
+        "torrent_limits" => match torrent::bandwidth(v["download"].as_i64().ok_or("invalid download")?, v["upload"].as_i64().ok_or("invalid upload")?)? {
+            Some((down, up)) => json!({"supported":true,"sessionInitialized":true,"applied":v["download"] != -1 || v["upload"] != -1,
+                "actual":{"downloadBytesPerSecond":down,"uploadBytesPerSecond":up}}),
+            None => json!({"supported":true,"sessionInitialized":false,"applied":false,"actual":null,"reason":"session_not_initialized"}),
+        },
         "torrent_facts" => json!(torrent::torrent_download_facts(integer(&v,"id")?)?),
         "torrent_add_file" => json!(torrent::torrent_add_file(string(&v,"path")?,string(&v,"download_dir")?,v["create_folder"].as_bool().ok_or("invalid create_folder")?,file_indices()?)?),
         "torrent_begin_preview" => json!(torrent::torrent_begin_preview()?),

@@ -59,6 +59,27 @@ void main() {
     return result;
   }
 
+  test('unsupported bandwidth control never initializes or mutates downloads',
+      () async {
+    final initializations = backend.initializations;
+    final status = await call('download.limits.get', {});
+    expect(status['supported'], false);
+    expect(status['applied'], false);
+    final changed = await call('download.limits.set', {
+      'downloadBytesPerSecond': 131072,
+      'uploadBytesPerSecond': 65536
+    });
+    expect(changed['supported'], false);
+    expect(backend.initializations, initializations);
+    final invalid = await harness.invokeJson('download.limits.set', {
+      'downloadBytesPerSecond': 131072,
+      'uploadBytesPerSecond': 10
+    }, Invocation(origin: 'test'));
+    expect(invalid, isA<Failed>());
+    expect(backend.initializations, initializations);
+    expect(backend.additions, 0);
+  });
+
   test(
       'scanner acknowledgement does not fabricate media or block download success',
       () async {

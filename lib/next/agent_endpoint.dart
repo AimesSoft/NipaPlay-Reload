@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'system/families.dart';
 import 'dart:io';
 import 'dart:math';
 import 'platform/lab_profile.dart';
@@ -285,6 +286,12 @@ final class AgentEndpoint {
           400);
     }
     final action = _harness.lookup(decoded['action'] as String);
+    final family = decoded['action'] as String;
+    if (operation == 'describe' && action == null && systemFamilyDescriptions.containsKey(family)) {
+      return _response({'family': family, 'description': systemFamilyDescriptions[family],
+        'actions': [for (final spec in _harness.catalog)
+          if (spec.id.startsWith('$family.')) _describe(spec)]}, 200, false);
+    }
     if (action == null) return _response({'error': 'Unknown Action.'}, 404);
     if (operation == 'describe') {
       return _response(_describe(action.spec), 200, false);

@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import '../state/change_history.dart';
+import '../events/signals.dart';
 
 import 'package:crypto/crypto.dart';
 import 'package:nipa_harness/nipa_harness.dart';
@@ -34,6 +35,7 @@ final class IdentityStore {
   IdentityStore(this.database, this.ownerDeviceId);
   final Database database;
   final String ownerDeviceId;
+  Future<T> _transaction<T>(Future<T> Function(Transaction) action) => BodySignals.transaction(database, action);
   final _fileChanges = StreamController<JsonMap>.broadcast();
   Stream<JsonMap> get fileChanges => _fileChanges.stream;
   Future<T> _filesChanged<T>(
@@ -52,7 +54,7 @@ final class IdentityStore {
   Future<String> ensureFile(String locator, {DatabaseExecutor? db}) =>
       db == null
           ? _filesChanged((added) =>
-              database.transaction((tx) => _ensureFile(tx, locator, added)))
+              _transaction((tx) => _ensureFile(tx, locator, added)))
           : _ensureFile(db, locator);
 
   Future<String> _ensureFile(DatabaseExecutor tx, String locator,
@@ -100,7 +102,7 @@ final class IdentityStore {
 
   Future<String> ensureRemoteFile(
           String locator, String sourceId, JsonMap metadata) =>
-      _filesChanged((added) => database.transaction((tx) async {
+      _filesChanged((added) => _transaction((tx) async {
             final serverId = metadata['serverId'] as String?;
             final sourceScope = serverId == null
                 ? sourceId
@@ -135,7 +137,7 @@ final class IdentityStore {
 
   Future<String> registerFile(String locator, JsonMap probe,
           {String source = 'local'}) =>
-      _filesChanged((added) => database.transaction((tx) async {
+      _filesChanged((added) => _transaction((tx) async {
             final locations = await tx.query('media_locations',
                 where: 'source = ? AND owner_device_id = ? AND locator = ?',
                 whereArgs: [source, ownerDeviceId, locator]);
@@ -231,7 +233,7 @@ final class IdentityStore {
   Future<int> importLegacy(List<JsonMap> history,
       {bool reconcileMissing = true}) async {
     for (final row in history) {
-      await _filesChanged((added) => database.transaction((tx) async {
+      await _filesChanged((added) => _transaction((tx) async {
             final locator = row['filePath'] as String;
             final fileId = await _ensureFile(tx, locator, added);
             final location = (await tx.query('media_locations',
@@ -568,6 +570,7 @@ final class IdentityStore {
     final invocation = BodyChanges.invocation;
     final id = stableMediaId('snapshot',
         [objectId, record.language, record.fetchedAt.toIso8601String()]);
+    final existing = await tx.query('media_snapshots', columns: ['id'], where: 'id=?', whereArgs: [id]);
     await tx.insert(
         'media_snapshots',
         {
@@ -579,14 +582,19 @@ final class IdentityStore {
             'origin': invocation?.origin, 'invocationId': invocation?.id})
         },
         conflictAlgorithm: ConflictAlgorithm.ignore);
+    if (existing.isEmpty) {
+      BodySignals.changed('media.assets.changed', objectId,
+          {'kind': 'metadata', 'snapshotId': id, 'provider': record.ref.provider,
+            'changedFields': record.toJson().keys.toList()});
+    }
     return id;
   }
 
-  Future<String> saveSnapshot(MetadataRecord record) => database.transaction(
+  Future<String> saveSnapshot(MetadataRecord record) => _transaction(
       (tx) async => _snapshot(tx, await _object(tx, record.ref), record));
 
   Future<JsonMap> importSnapshots(JsonMap input, Invocation invocation) =>
-      database.transaction((tx) async {
+      _transaction((tx) async {
         final key = stableMediaId(
             'snapshot-operation', [invocation.origin, input['requestId']]);
         final fingerprint = stableMediaId('input', input);
@@ -716,7 +724,7 @@ final class IdentityStore {
       ],
       orderBy: 'binding_revision');
   Future<void> finishProjection(String id, String state) =>
-      database.transaction((tx) async {
+      _transaction((tx) async {
         final previous = (await tx.query('media_projection_outbox',
             where: 'id=?', whereArgs: [id])).single;
         await tx.update('media_projection_outbox', {'state': state},
@@ -968,7 +976,7 @@ final class IdentityStore {
       };
       edits.add((edit, ids));
     }
-    await database.transaction((tx) async {
+    await _transaction((tx) async {
       for (final (edit, ids) in edits) {
         await tx.insert('media_metadata_edits', edit);
         if (edit['mode'] == 'clear') {
@@ -982,6 +990,11 @@ final class IdentityStore {
         }
       }
     });
+    for (final (edit, _) in edits) {
+      BodySignals.changed('media.assets.changed', edit['entity_id'] as String,
+          {'kind': 'metadata', 'field': edit['field'], 'mode': edit['mode'],
+            'changedFields': [edit['field']], 'origin': invocation.origin});
+    }
   }
 
   Future<List<JsonMap>> library({String? query}) async {
@@ -1143,7 +1156,7 @@ final class IdentityStore {
 
   Future<JsonMap> bindBatch(List<JsonMap> entries, String key,
           String fingerprint, Invocation invocation) =>
-      _filesChanged((newFiles) => database.transaction((tx) async {
+      _filesChanged((newFiles) => _transaction((tx) async {
             final saved = await operation(key, fingerprint, db: tx);
             if (saved != null) return saved;
             final results = <JsonMap>[];
@@ -1439,7 +1452,7 @@ final class IdentityStore {
 
   Future<JsonMap> unbindBatch(List<JsonMap> entries, String key,
           String fingerprint, Invocation invocation) =>
-      database.transaction((tx) async {
+      _transaction((tx) async {
         final saved = await operation(key, fingerprint, db: tx);
         if (saved != null) return saved;
         final results = <JsonMap>[];

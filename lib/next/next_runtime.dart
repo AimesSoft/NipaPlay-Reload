@@ -278,6 +278,7 @@ final class NextRuntime extends ChangeNotifier {
   StreamSubscription<Job>? _jobEvents;
   StreamSubscription<JsonMap>? _fileEvents;
   Future<void> _hookEvents = Future.value();
+  String? _lastPlaybackStatus, _lastPlaybackPath;
   Set<String> _libraryPaths = {};
   String? _startedPath;
   late Future<void> _operations;
@@ -355,7 +356,25 @@ final class NextRuntime extends ChangeNotifier {
     final localPlayback = LocalPlaybackOperations(_player, core.settings,
         () => globals.navigatorKey.currentContext!);
     final localLibrary = _localLibrary = LocalLibraryOperations(
-        ServiceProvider.scanService, ServiceProvider.watchHistoryProvider);
+        ServiceProvider.scanService, ServiceProvider.watchHistoryProvider, engine: core.engine);
+    core.classicScan.scan = ServiceProvider.scanService;
+    core.classicScan.history = ServiceProvider.watchHistoryProvider;
+    core.storage.playbackActive = () => _player.hasVideo;
+    core.storage.scanning = () => ServiceProvider.scanService.isScanning;
+    core.diagnostics.playerFacts = () async {
+      final info = _player.player.mediaInfo;
+      final details = await _player.player.getDetailedMediaInfoAsync();
+      return {'available': true, 'kernel': _player.player.getPlayerKernelName(),
+        'status': _player.status.name, 'hasVideo': _player.hasVideo,
+        'buffering': _player.isBuffering, 'bufferedPositionMs': _player.bufferedPosition,
+        'positionMs': _player.position.inMilliseconds, 'durationMs': _player.duration.inMilliseconds,
+        'video': [for (final video in info.video ?? const [])
+          {'codec': video.codecName, 'width': video.codec.width, 'height': video.codec.height}],
+        'audio': [for (final audio in info.audio ?? const [])
+          {'codec': audio.codec.name, 'sampleRate': audio.codec.sampleRate, 'channels': audio.codec.channels}],
+        'details': {for (final key in ['videoCodec', 'audioCodec', 'videoWidth', 'videoHeight', 'fps', 'hwdec', 'decoder', 'buffering'])
+          if (details.containsKey(key)) key: details[key]}};
+    };
     _harness = Harness(
       [
         InstanceCapability(instanceFacts),
@@ -473,6 +492,7 @@ final class NextRuntime extends ChangeNotifier {
             ? _player.currentVideoPath
             : null;
     _hooks.enable(repository, _endpoint.credentialFile);
+    ServiceProvider.nextCore.desktopSystem.attach();
     _jobEvents = _taskEngine.changes.listen((job) {
       _queueHook(() => _hooks.taskChanged(job));
     });
@@ -507,6 +527,17 @@ final class NextRuntime extends ChangeNotifier {
 
   void _playbackChanged() {
     final path = _player.currentVideoPath;
+    final status = _player.status.name;
+    if (status != _lastPlaybackStatus || path != _lastPlaybackPath) {
+      final previous = _lastPlaybackStatus;
+      _lastPlaybackStatus = status;
+      _lastPlaybackPath = path;
+      _queueHook(() => _hooks.emit('playback.state_changed', path ?? 'player', {
+        'status': status, 'previousStatus': previous, 'path': path,
+        'changedFields': ['status'],
+      }));
+      if (status == 'error') _queueHook(() => _hooks.emit('playback.failed', path ?? 'player', {'status': status}));
+    }
     if (!_player.hasVideo) {
       _startedPath = null;
       return;
@@ -523,6 +554,7 @@ final class NextRuntime extends ChangeNotifier {
   }
 
   Future<void> _detachHooks() async {
+    ServiceProvider.nextCore.desktopSystem.detach();
     _player.removeListener(_playbackChanged);
     ServiceProvider.watchHistoryProvider.removeListener(_libraryChanged);
     await _jobEvents?.cancel();

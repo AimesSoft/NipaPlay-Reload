@@ -30,11 +30,16 @@ final class HarnessHooks implements JobExecutor {
   final _processes = <String, Process>{};
   final _done = <String, Future<void>>{};
   Future<void> _submissions = Future.value();
+  Future<void> drain() => _submissions;
   static const events = {
     'download.completed',
     'download.file_completed',
     'library.file_added',
-    'playback.started'
+    'playback.started',
+    'playback.ended', 'playback.failed', 'playback.state_changed', 'playback.seek_requested',
+    'settings.changed', 'media.assets.changed', 'media.sources.state_changed',
+    'media.scan.completed', 'task.state_changed', 'network.state_changed',
+    'cache.pruned', 'window.bounds_changed', 'storage.space_changed'
   };
 
   void enable(Directory repository, File credentialFile) {
@@ -50,6 +55,10 @@ final class HarnessHooks implements JobExecutor {
     await fileCompletions(job);
     if (job.type == 'download' && job.state == JobState.succeeded) {
       await emit('download.completed', job.jobId, job.toJson());
+    }
+    if (const {'media.scan', 'media.scan_classic'}.contains(job.type) && job.state.isTerminal) {
+      await emit('media.scan.completed', job.jobId,
+          {'revision': job.revision, 'state': job.state.wireName, 'receipt': job.receipt?.toJson()});
     }
   }
 
@@ -122,8 +131,13 @@ final class HarnessHooks implements JobExecutor {
     await previous;
     try {
       final payload = redactHarnessJson({
+        'eventId': '${DateTime.now().microsecondsSinceEpoch}-${_generation}',
         'event': event,
         'objectId': objectId,
+        'entityId': objectId,
+        'revision': data['revision'],
+        'changedFields': data['changedFields'] ?? data.keys.toList(),
+        'facts': data,
         'occurredAt': event == 'download.file_completed'
             ? (data['file'] as Map)['completedAt']
             : DateTime.now().toUtc().toIso8601String(),
@@ -146,7 +160,9 @@ final class HarnessHooks implements JobExecutor {
       }
       if (program == null) return null;
       final eventKey =
-          sha256.convert(utf8.encode(jsonEncode([event, objectId]))).toString();
+          sha256.convert(utf8.encode(jsonEncode([event, objectId,
+            if (!const {'download.completed', 'download.file_completed', 'library.file_added', 'playback.started'}.contains(event))
+              payload['eventId']]))).toString();
       final jobs = await engine.list(type: type);
       for (final job in jobs) {
         if ((!job.state.isTerminal || event == 'download.file_completed') &&
@@ -264,7 +280,7 @@ final class HarnessHooks implements JobExecutor {
         }
         try {
           process.stdin.add(utf8.encode(jsonEncode({
-            for (final key in ['event', 'objectId', 'occurredAt', 'data'])
+            for (final key in ['eventId', 'event', 'objectId', 'entityId', 'occurredAt', 'revision', 'changedFields', 'facts', 'data'])
               key: input[key]
           })));
           // A hook is allowed to exit without consuming all of stdin.

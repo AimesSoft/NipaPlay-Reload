@@ -23,9 +23,10 @@ sealed class Schema {
       if (secret) 'writeOnly': true,
       if (secret) 'x-secret': true,
       ...switch (this) {
-        StringSchema(:final values, :final minLength) => {
+        StringSchema(:final values, :final minLength, :final maxLength) => {
             if (values != null) 'enum': values,
             if (minLength != null) 'minLength': minLength,
+            if (maxLength != null) 'maxLength': maxLength,
           },
         IntegerSchema(:final minimum, :final maximum) => {
             if (minimum != null) 'minimum': minimum,
@@ -37,7 +38,11 @@ sealed class Schema {
           },
         BooleanSchema() => <String, Object?>{},
         _TaskJsonSchema() => <String, Object?>{},
-        ArraySchema(:final items) => {'items': items.toJsonSchema()},
+        ArraySchema(:final items, :final minItems, :final maxItems) => {
+          'items': items.toJsonSchema(),
+          if (minItems != null) 'minItems': minItems,
+          if (maxItems != null) 'maxItems': maxItems,
+        },
         ObjectSchema(
           :final properties,
           :final required,
@@ -70,7 +75,7 @@ sealed class Schema {
         if (value is! JsonMap) {
           return [SchemaViolation(path, 'Expected an object.')];
         }
-      case StringSchema(:final values, :final minLength):
+      case StringSchema(:final values, :final minLength, :final maxLength):
         if (value is! String) {
           return [SchemaViolation(path, 'Expected a string.')];
         }
@@ -81,6 +86,9 @@ sealed class Schema {
           violations.add(
             SchemaViolation(path, 'Expected at least $minLength characters.'),
           );
+        }
+        if (maxLength != null && value.runes.length > maxLength) {
+          violations.add(SchemaViolation(path, 'Expected at most $maxLength characters.'));
         }
       case IntegerSchema(:final minimum, :final maximum):
         if (value is! int &&
@@ -99,9 +107,15 @@ sealed class Schema {
         if (value is! bool) {
           return [SchemaViolation(path, 'Expected a boolean.')];
         }
-      case ArraySchema(:final items):
+      case ArraySchema(:final items, :final minItems, :final maxItems):
         if (value is! List) {
           return [SchemaViolation(path, 'Expected an array.')];
+        }
+        if (minItems != null && value.length < minItems) {
+          violations.add(SchemaViolation(path, 'Expected at least $minItems items.'));
+        }
+        if (maxItems != null && value.length > maxItems) {
+          violations.add(SchemaViolation(path, 'Expected at most $maxItems items.'));
         }
         for (var i = 0; i < value.length; i++) {
           violations.addAll(items._validate(value[i], '$path/$i'));
@@ -187,10 +201,12 @@ final class StringSchema extends Schema {
     super.secret,
     this.values,
     this.minLength,
+    this.maxLength,
   });
 
   final List<String>? values;
   final int? minLength;
+  final int? maxLength;
 }
 
 final class IntegerSchema extends Schema {
@@ -225,9 +241,10 @@ final class BooleanSchema extends Schema {
 
 final class ArraySchema extends Schema {
   const ArraySchema(this.items,
-      {super.description, super.nullable, super.secret});
+      {super.description, super.nullable, super.secret, this.minItems, this.maxItems});
 
   final Schema items;
+  final int? minItems, maxItems;
 }
 
 final class ObjectSchema extends Schema {

@@ -99,18 +99,21 @@ final class Failure implements Exception, JsonEncodable {
     this.message, {
     this.retryable = false,
     this.violations = const [],
+    this.details = const {},
   });
 
   final FailureCode code;
   final String message;
   final bool retryable;
   final List<SchemaViolation> violations;
+  final JsonMap details;
 
   @override
   JsonMap toJson() => {
         'code': code.wireName,
         'message': message,
         'retryable': retryable,
+        if (details.isNotEmpty) 'details': details,
         if (violations.isNotEmpty)
           'violations': [
             for (final violation in violations) violation.toJson()

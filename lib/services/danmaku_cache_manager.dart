@@ -52,6 +52,12 @@ class DanmakuCacheManager {
   }
 
   static Future<void> clearAllCache() => _serialized(_clearAllCache);
+  static Future<T> maintainRecoverableCache<T>(Future<T> Function() operation) =>
+      _serialized(() async {
+        final result = await operation();
+        _memoryCache.clear();
+        return result;
+      });
 
   static Future<void> _writeMetadata(
       io.File file, Map<String, dynamic> data) async {

@@ -48,11 +48,18 @@ class ConcurrentVideoProcessor {
     bool skipPreviouslyMatchedUnwatched = false,
     Function(int processed, int total, String currentFile)? onProgress,
     Future<Map<String, dynamic>> Function(String)? getVideoInfo,
+    int? maxConcurrency,
+    Future<bool> Function()? continueProcessing,
   }) async {
+    if (maxConcurrency != null && maxConcurrency < 1) {
+      throw ArgumentError.value(maxConcurrency, 'maxConcurrency');
+    }
     if (videoPaths.isEmpty) return [];
 
     // 根据文件数量决定并发数
-    final int concurrency = _calculateOptimalConcurrency(videoPaths.length);
+    final int concurrency = maxConcurrency == null
+        ? _calculateOptimalConcurrency(videoPaths.length)
+        : min(videoPaths.length, maxConcurrency);
     debugPrint(
         'ConcurrentVideoProcessor: 开始处理 ${videoPaths.length} 个视频文件，并发数: $concurrency');
 
@@ -89,11 +96,12 @@ class ConcurrentVideoProcessor {
     // 第二阶段：并发处理
     int processedCount = skippedCount;
     final Semaphore semaphore = Semaphore(concurrency);
-    final List<Future<VideoProcessResult>> futures = [];
+    final List<Future<VideoProcessResult?>> futures = [];
 
     for (String videoPath in pathsToProcess) {
       final future = semaphore.acquire().then((_) async {
         try {
+          if (continueProcessing != null && !await continueProcessing()) return null;
           final result = await _processSingleVideoPath(videoPath,
               getVideoInfo: getVideoInfo);
           processedCount++;
@@ -109,7 +117,7 @@ class ConcurrentVideoProcessor {
 
     // 等待所有任务完成
     final processingResults = await Future.wait(futures);
-    results.addAll(processingResults);
+    results.addAll(processingResults.whereType<VideoProcessResult>());
 
     debugPrint(
         'ConcurrentVideoProcessor: 处理完成。成功: ${results.where((r) => r.success).length}, 失败: ${results.where((r) => !r.success).length}, 跳过: $skippedCount');

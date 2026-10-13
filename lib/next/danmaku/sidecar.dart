@@ -85,6 +85,18 @@ final class SidecarIndexer {
   Timer? _timer;
   Future<void>? _worker;
   bool _closed = false;
+  bool enabled = true;
+  String? lastRun, lastError;
+  JsonMap get status => {'kind': 'danmaku.sidecar', 'enabled': enabled,
+    'running': _worker != null, 'queue': _pending.length, 'lastRun': lastRun,
+    'nextRun': enabled ? 'within 30 seconds or on file change' : null, 'error': lastError};
+  Future<void> setEnabled(bool value) async {
+    enabled = value;
+    if (value) {
+      await reconcile();
+      if (_pending.isNotEmpty && _worker == null) _worker = _drain().whenComplete(() => _worker = null);
+    }
+  }
 
   void start() {
     _events = store.identities.fileChanges.listen(enqueue);
@@ -93,6 +105,7 @@ final class SidecarIndexer {
   }
 
   Future<void> reconcile() async {
+    if (!enabled || _closed) return;
     for (final row in await store.db.query('media_locations',
         where: 'source=? AND owner_device_id=?',
         whereArgs: ['local', store.identities.ownerDeviceId])) {
@@ -103,16 +116,20 @@ final class SidecarIndexer {
   void enqueue(JsonMap file) {
     if (_closed || (file['path'] as String).contains('://')) return;
     _pending[file['fileId'] as String] = file;
+    if (!enabled) return;
     _worker ??= _drain().whenComplete(() => _worker = null);
   }
 
   Future<void> _drain() async {
-    while (_pending.isNotEmpty && !_closed) {
+    while (_pending.isNotEmpty && !_closed && enabled) {
       final id = _pending.keys.first,
           file = _pending.remove(_pending.keys.first)!;
       try {
         await inspect(id, file['path'] as String);
+        lastRun = DateTime.now().toUtc().toIso8601String();
+        lastError = null;
       } catch (error, stack) {
+        lastError = error.runtimeType.toString();
         reportNextError(error, stack, 'Next sidecar indexing');
       }
     }

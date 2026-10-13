@@ -5,6 +5,7 @@ export 'screenshot_encoding.dart' show ScreenshotFormat;
 
 import 'package:nipaplay/services/playback_position_store.dart';
 import 'package:nipaplay/next/settings/registry.dart';
+import 'package:nipaplay/next/events/signals.dart';
 import 'package:nipaplay/next/settings/application_settings.dart';
 import 'package:nipaplay/services/plugin_playback_service.dart';
 import 'package:nipaplay/plugins/url_resolver.dart';

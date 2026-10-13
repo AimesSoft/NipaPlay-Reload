@@ -431,7 +431,8 @@ final class _ReadContext {
         rethrow;
       }
       throw Failure(failure.code, 'state_source_failed',
-          retryable: failure.retryable);
+          retryable: failure.retryable, details: {'source': view.name, 'stage': 'read',
+            'recoveryAction': 'Read state.describe for this view and diagnostics.status for host availability.'});
     }
   }
 
@@ -447,7 +448,9 @@ final class _ReadContext {
           warnings.addAll(source.warnings);
           cache[view.name] = [for (final row in source.rows) publicValue(row, view.fields) as JsonMap];
         } on Failure catch (failure) {
-          throw Failure(failure.code, 'state_source_failed', retryable: failure.retryable);
+          throw Failure(failure.code, 'state_source_failed', retryable: failure.retryable,
+            details: {'source': view.name, 'stage': 'read',
+              'recoveryAction': 'Read state.describe for this view and diagnostics.status for host availability.'});
         }
         observed[view.name] = DateTime.now().toUtc().toIso8601String();
       }
@@ -563,10 +566,13 @@ final class _StateAction extends Action<_StateJson, _StateJson> {
     if (isQuery) {
       try {
         return Completed(_StateJson(await capability.query(input.json)));
-      } on Failure {
-        rethrow;
+      } on Failure catch (failure) {
+        throw Failure(failure.code, failure.message, retryable: failure.retryable,
+          violations: failure.violations, details: {...failure.details, 'correlationId': invocation.id});
       } catch (_) {
-        throw const Failure(FailureCode.internal, 'state_read_failed');
+        throw Failure(FailureCode.internal, 'state_read_failed', details: {
+          'source': input.json['view'], 'stage': 'query', 'correlationId': invocation.id,
+          'recoveryAction': 'Read diagnostics.status and the redacted logs; retry only after the source is available.'});
       }
     }
     final views = input.json['view'] == null
