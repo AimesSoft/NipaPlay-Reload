@@ -155,16 +155,15 @@ class DevicesSectionState extends State<DevicesSection> {
             for (final d in m.devices) _DeviceCard(device: d),
           ]),
         ),
-      if (m.available)
-        SettingsCard(children: [
-          SettingsRow(
-            title: '允许别的设备在这里运行程序',
-            trailing: NextToggle(
-              value: _programs ?? false,
-              onChanged: _saving ? null : _setPrograms,
-            ),
+      SettingsCard(children: [
+        SettingsRow(
+          title: '允许别的设备在这里运行程序',
+          trailing: NextToggle(
+            value: _programs ?? false,
+            onChanged: _saving ? null : _setPrograms,
           ),
-        ]),
+        ),
+      ]),
       if (m.available) ...[
         FoldButton(
             open: _advanced,

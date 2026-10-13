@@ -9,13 +9,33 @@ import 'package:nipaplay/next/ui/data/settings_data.dart';
 import 'package:nipaplay/next/ui/dev/fake_settings.dart';
 import 'package:nipaplay/next/ui/settings/controls.dart';
 import 'package:nipaplay/next/ui/settings/registry_rows.dart';
+import 'package:nipaplay/next/ui/settings/section_host.dart';
 import 'package:nipaplay/next/ui/settings/settings_layout.dart';
+import 'package:nipaplay/next/ui_data/host_settings.dart';
 
 /// The settings page is built from the registry Nipa reads: each schema
 /// gets its control, every setting lands in a section (a new one too),
 /// a change the registry refuses is put back, and what Nipa changed shows
 /// her reason and the way back.
 void main() {
+  testWidgets('program permission stays visible and revocable without an issuer',
+      (tester) async {
+    final data = _DeviceHost();
+    await tester.pumpWidget(MaterialApp(
+      home: Material(child: DevicesSection(host: data)),
+    ));
+    await tester.pumpAndSettle();
+    expect(find.text('此版本尚未配置组网签发者'), findsOneWidget);
+    expect(find.text('允许别的设备在这里运行程序'), findsOneWidget);
+    final toggles = tester.widgetList<NextToggle>(find.byType(NextToggle));
+    expect(toggles.first.onChanged, isNull);
+    expect(toggles.last.value, true);
+    await tester.tap(find.byType(NextToggle).last);
+    await tester.pumpAndSettle();
+    expect(data.writes, [false]);
+    expect(tester.widget<NextToggle>(find.byType(NextToggle).last).value, false);
+  });
+
   group('a registry row becomes a control by its schema', () {
     UiSetting row(Map<String, Object?> extra) =>
         UiSetting.fromRow({'key': 'x.y', 'title': 'T', ...extra});
@@ -267,6 +287,25 @@ void main() {
         'Bangumi', () async => 'x', Completer<void>().future));
     expect(logins.pending, hasLength(1));
   });
+}
+
+final class _DeviceHost implements NextHostSettings {
+  bool enabled = true;
+  final writes = <bool>[];
+  @override
+  Stream<void> get changes => const Stream.empty();
+  @override
+  Future<UiMeshSetup> mesh() async => const UiMeshSetup(
+      available: false, problem: '此版本尚未配置组网签发者');
+  @override
+  Future<bool> remotePrograms() async => enabled;
+  @override
+  Future<void> setRemotePrograms(bool allowed) async {
+    writes.add(allowed);
+    enabled = allowed;
+  }
+  @override
+  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
 }
 
 /// The scripted settings (the built-in sample of the registry), recording

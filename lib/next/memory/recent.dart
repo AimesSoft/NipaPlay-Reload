@@ -10,7 +10,13 @@ Future<JsonMap> recentMemoryFacts(ChatHost host, List<JsonMap> jobs,
   String? source;
   final messages = <JsonMap>[];
   final sessions = await host.listThreads(limit: 30, sortKey: 'updated_at');
-  for (final row in sessions['data'] as List) {
+  final candidates = [
+    ...sessions['data'] as List,
+    // A newly selected provider home has no index for the resumed main rollout.
+    if (host.mainThreadId case final id?)
+      if (!(sessions['data'] as List).any((row) => row['id'] == id)) {'id': id},
+  ].take(30);
+  for (final row in candidates) {
     if (host.threadOrigins.containsKey(row['id'])) {
       continue;
     }
