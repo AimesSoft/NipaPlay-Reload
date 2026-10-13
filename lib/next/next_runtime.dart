@@ -67,6 +67,9 @@ import 'chat/debug_chat.dart';
 import 'ui_data/debug_ui_data.dart';
 import 'harness_redaction.dart';
 import 'state/change_history.dart';
+import 'settings/host_settings_service.dart';
+import 'ui_data/host_settings.dart';
+import 'settings/debug_host_settings.dart';
 
 final class NextRuntime extends ChangeNotifier {
   NextRuntime._(this._labs, this._player, List<Capability> capabilities) {
@@ -286,11 +289,16 @@ final class NextRuntime extends ChangeNotifier {
   MeshPlayback? _meshPlayback;
   ChatHost? chat;
   String? chatError;
+  final _hostReady = Completer<NextHostSettings>();
+  late final PendingHostSettings hostSettings = PendingHostSettings(_hostReady.future);
+  HostSettingsService? _hostSettings;
+  StreamSubscription<ChatMessage>? _hostEvents;
   Future<void> closeChat() async {
     await _operations;
     await ServiceProvider.nextCore.followups.attach(null, reason: 'Chat host was closed.');
     await chat?.close();
     chat = null;
+    _hostSettings?.notify();
   }
 
   void _syncPluginSettings() {
@@ -388,8 +396,27 @@ final class NextRuntime extends ChangeNotifier {
           : 47811,
     );
     core.programs.credentialFile = _endpoint.credentialFile;
+    _hostSettings = HostSettingsService(root: root,
+      vault: LabProfile.active ? LabModelVault() : core.credentialVault,
+      meshRuntime: core.mesh, programs: core.programs, history: core.changeHistory,
+      chat: () => chat, chatProblem: () => chatError,
+      repository: () => repositoryPath,
+      codexHome: Directory(LabProfile.active ? '${LabProfile.root}/codex-home'
+        : '${Platform.environment[Platform.isWindows ? 'USERPROFILE' : 'HOME']}/.codex'),
+      checkCodex: _checkCodexModel, modelSaved: () async {
+        if (chat != null || _disposed || !_labs.enableAgentEndpoint) return;
+        _operations = _operations.then((_) async {
+          if (_endpointStatus case AgentEndpointRunning(:final repository)) {
+            await _startChat(repository);
+            notifyListeners();
+          }
+        });
+        await _operations;
+      });
+    _hostReady.complete(_hostSettings);
     if (_disposed) return;
     if (kDebugMode && LabProfile.active) installDebugChat(() => chat);
+    if (kDebugMode && LabProfile.active) installDebugHostSettings(hostSettings);
     if (kDebugMode && LabProfile.active) installDebugUiData(ServiceProvider.nextCore);
     if (kDebugMode && LabProfile.active) installDebugLocalOperations(_player);
     _labs.addListener(_queueEndpointUpdate);
@@ -422,20 +449,7 @@ final class NextRuntime extends ChangeNotifier {
       status = await _endpoint.start(Directory(repositoryPath));
       if (status case AgentEndpointRunning(:final repository)) {
         await _attachHooks(repository);
-        final host = chat = ChatHost(endpoint: _endpoint, repository: repository,
-          sessions: ServiceProvider.nextCore.sessions,
-          labRoot: LabProfile.active ? Directory(LabProfile.root) : null);
-        if (kDebugMode && LabProfile.active) recordDebugChat(host);
-        try {
-          await host.start();
-          await host.getMainSession();
-          await ServiceProvider.nextCore.followups.attach(host);
-        } catch (error) {
-          chatError = redactHarnessText(error.toString());
-          await host.close();
-          chat = null;
-          await ServiceProvider.nextCore.followups.attach(null, reason: chatError);
-        }
+        await _startChat(repository);
       }
     } else {
       ServiceProvider.nextCore.subtitles.detachPlayer();
@@ -444,7 +458,52 @@ final class NextRuntime extends ChangeNotifier {
     }
     if (_disposed || _endpointStatus == status) return;
     _endpointStatus = status;
+    _hostSettings?.notify();
     notifyListeners();
+  }
+
+  Future<void> _startChat(Directory repository) async {
+    chatError = null;
+    await _hostEvents?.cancel();
+    final host = chat = ChatHost(endpoint: _endpoint, repository: repository,
+      sessions: ServiceProvider.nextCore.sessions,
+      modelLaunch: _hostSettings!.launch,
+      labRoot: LabProfile.active ? Directory(LabProfile.root) : null);
+    _hostEvents = host.events.listen((event) {
+      if (const {'host/modelChanged', 'host/error', 'turn/completed', 'error'}
+          .contains(event['method'])) {
+        _hostSettings!.notify();
+      }
+    });
+    if (kDebugMode && LabProfile.active) recordDebugChat(host);
+    try {
+      await host.start();
+      await host.getMainSession();
+      await ServiceProvider.nextCore.followups.attach(host);
+    } catch (error) {
+      chatError = redactHarnessText(error.toString());
+      await host.close();
+      chat = null;
+      await ServiceProvider.nextCore.followups.attach(null, reason: chatError);
+    }
+    _hostSettings!.notify();
+  }
+
+  Future<UiModelCheck> _checkCodexModel() async {
+    final host = ChatHost(endpoint: _endpoint, repository: Directory(repositoryPath),
+      probe: true, labRoot: LabProfile.active ? Directory(LabProfile.root) : null);
+    final watch = Stopwatch()..start();
+    try {
+      await host.start().timeout(const Duration(seconds: 15));
+      final ok = await host.checkSavedModel().timeout(const Duration(seconds: 30));
+      return UiModelCheck(ok: ok, message: ok ? '可以使用' :
+        modelFailureMessage(host.threadLiveness.values.firstOrNull?.latestError ?? ''),
+        latency: watch.elapsed);
+    } on TimeoutException {
+      return UiModelCheck(ok: false, message: '服务器响应超时', latency: watch.elapsed);
+    } catch (error) {
+      return UiModelCheck(ok: false, message: modelFailureMessage('$error'), latency: watch.elapsed);
+    } finally { await host.close(); }
   }
 
   void _queueHook(Future<void> Function() event) {
@@ -537,6 +596,9 @@ final class NextRuntime extends ChangeNotifier {
       await _detachHooks();
       await ServiceProvider.nextCore.followups.attach(null, reason: 'NipaPlay is shutting down.');
       await chat?.close();
+      await _hostEvents?.cancel();
+      await _hostSettings?.close();
+      await hostSettings.close();
       await _endpoint.stop();
     });
     super.dispose();

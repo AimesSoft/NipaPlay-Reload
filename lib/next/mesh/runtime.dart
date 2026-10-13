@@ -48,6 +48,7 @@ final class MeshRuntime implements MeshDeviceSource {
   Future<JsonMap> Function(String, JsonMap)? receiveDelivery;
   Future<JsonMap> Function()? describeSelf;
   Future<JsonMap> Function(String, JsonMap, String)? libraryRequest;
+  Future<void> Function()? hostConfigurationChanged;
   JsonMap hostConfiguration = {};
   String _bindHost = '0.0.0.0';
   bool _broadcast = true;
@@ -60,7 +61,15 @@ final class MeshRuntime implements MeshDeviceSource {
   Timer? _heartbeat, _loginWatch;
   Future<void> _operations = Future.value();
   Future<void>? _receiver;
-  String status = 'disabled';
+  String _status = 'disabled';
+  final _hostChanges = StreamController<void>.broadcast();
+  Stream<void> get hostChanges => _hostChanges.stream;
+  String get status => _status;
+  set status(String value) {
+    if (value == _status) return;
+    _status = value;
+    _hostChanges.add(null);
+  }
   String? discoveryNotice;
   String? _ca, _account;
   JsonMap? _certificate;
@@ -70,6 +79,8 @@ final class MeshRuntime implements MeshDeviceSource {
   final _routes = <String, JsonMap>{};
   final _reachability = <String, bool>{};
   final _seen = <String, int>{};
+  final _descriptions = <String, JsonMap>{};
+  bool _hostFactsLoaded = false;
   Future<void> _replayWrites = Future.value();
   bool _replayLoaded = false;
   final _random = Random.secure();
@@ -78,6 +89,51 @@ final class MeshRuntime implements MeshDeviceSource {
   DateTime _nextJoinAttempt = DateTime.fromMillisecondsSinceEpoch(0);
   int get port => _discovery?.port ?? 0;
   String? get accountId => _account;
+  bool get issuerAvailable => meshProductionIssuerPem.isNotEmpty ||
+      meshDevelopmentHost && Platform.environment['NIPAPLAY_MESH_DEV_CA'] != null;
+
+  Future<List<JsonMap>> settingsDevices() async {
+    if (!_hostFactsLoaded) {
+      final file = File('${root.path}/mesh-host-facts.json');
+      if (await file.exists()) {
+        final facts = jsonDecode(await file.readAsString()) as JsonMap;
+        for (final entry in facts.entries) {
+          _descriptions[entry.key] = Map<String, Object?>.from(entry.value as Map);
+        }
+      }
+      _hostFactsLoaded = true;
+    }
+    if (_devices.isEmpty) {
+      final file = File('${root.path}/mesh-devices.json');
+      if (await file.exists()) {
+        final saved = jsonDecode(await file.readAsString()) as JsonMap;
+        _devices = (saved['devices'] as List).cast<JsonMap>();
+      }
+    }
+    if (_node != null) await devices();
+    final selfDescription = await describeSelf?.call();
+    return [for (final device in cachedDevices) {
+      ...device,
+      'roles': _descriptions[device['deviceId']]?['roles'] ?? <String>[],
+      'remotePrograms': device['deviceId'] == identity?.deviceId
+        ? (((selfDescription?['programExecution'] as Map?)?['enabled']) == true)
+        : (((_descriptions[device['deviceId']]?['programExecution'] as Map?)?['enabled']) == true),
+    }];
+  }
+
+  Future<void> restartConfigured() async {
+    _loginWatch?.cancel();
+    _heartbeat?.cancel();
+    await _operations;
+    await _stopNode();
+    _coordinator?.close();
+    _coordinator = null;
+    _loginIdentity = null;
+    _nextJoinAttempt = DateTime.fromMillisecondsSinceEpoch(0);
+    _reachability.clear();
+    status = 'disabled';
+    await startConfigured();
+  }
   @override
   List<JsonMap> get cachedDevices => [
         for (final device in _devices)
@@ -88,6 +144,7 @@ final class MeshRuntime implements MeshDeviceSource {
             'revoked': device['revoked'],
             'online': device['revoked'] == true
                 ? false
+                : device['device_id'] == identity?.deviceId ? status == 'online'
                 : _reachability[device['device_id']],
             'lastSeenAt': device['last_seen_at'] == null
                 ? null
@@ -110,6 +167,8 @@ final class MeshRuntime implements MeshDeviceSource {
     if (!await config.exists()) return;
     final json = jsonDecode(await config.readAsString()) as JsonMap;
     hostConfiguration = json;
+    await hostConfigurationChanged?.call();
+    if (json['enabled'] == false) { status = 'disabled'; return; }
     _bindHost = forceLoopback || json['loopbackOnly'] == true ? '127.0.0.1' : '0.0.0.0';
     _broadcast = json['broadcastDiscovery'] as bool? ?? true;
     final caPath = Platform.environment['NIPAPLAY_MESH_DEV_CA'];
@@ -412,6 +471,16 @@ final class MeshRuntime implements MeshDeviceSource {
       final tools = await _catalog(id);
       _reachability[id] = true;
       final description = await rpc(id, 'mesh/describe', {});
+      _descriptions[id] = {
+        'roles': description['roles'] ?? [
+          if (description['host'] != null) description['host'],
+          if (description['conversationHost'] == true) 'conversation',
+        ],
+        'programExecution': {'enabled':
+          (description['programExecution'] as Map?)?['enabled'] == true},
+      };
+      await File('${root.path}/mesh-host-facts.json')
+          .writeAsString(jsonEncode(_descriptions), flush: true);
       return {...device, 'deviceId': id, 'online': true, 'actions': tools,
         'description': description};
     } on Failure {
@@ -786,6 +855,7 @@ final class MeshRuntime implements MeshDeviceSource {
     await _stopNode();
     await _replayWrites;
     _coordinator?.close();
+    await _hostChanges.close();
   }
 }
 

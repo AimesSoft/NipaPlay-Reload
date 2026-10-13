@@ -8,6 +8,7 @@ import '../harness_redaction.dart';
 import 'liveness.dart';
 import 'session_store.dart';
 import 'turn_process_store.dart';
+import 'model_launch.dart';
 
 typedef ChatMessage = Map<String, dynamic>;
 
@@ -25,6 +26,8 @@ final class ChatHost {
       required this.repository,
       this.labRoot,
       this.sessions,
+      this.modelLaunch,
+      this.probe = false,
       this.codexExecutable})
       : sessionId = 'nipa-${DateTime.now().microsecondsSinceEpoch}-'
             '${Random.secure().nextInt(1 << 32).toRadixString(16)}';
@@ -34,6 +37,16 @@ final class ChatHost {
   final Directory? labRoot;
   final SessionStore? sessions;
   final String? codexExecutable;
+  final Future<ModelLaunch> Function()? modelLaunch;
+  final bool probe;
+  ModelLaunch? _launch;
+  int? get activeModelRevision => _launch?.revision;
+  bool _restarting = false;
+  final _rollouts = <String, String>{};
+  final _loaded = <String>{};
+  Future<void> _rolloutWrites = Future.value();
+  ChatMessage _modelDefaults = {};
+  File get _rolloutFile => File('${endpoint.seedRepository.parent.path}/chat-rollouts.json');
   String? mainThreadId;
   final String sessionId;
   final threadLiveness = <String, ChatLiveness>{};
@@ -117,6 +130,8 @@ final class ChatHost {
       clean['TEMP'] = clean['TMP'] =
           (await Directory('${root.path}/temp').create(recursive: true)).path;
     }
+    if (_launch?.home case final home?) clean['CODEX_HOME'] = home.path;
+    clean.addAll(_launch?.environment ?? {});
     final executable = codexExecutable ??
         Platform.environment['NIPAPLAY_CODEX_EXECUTABLE'] ??
         'codex.exe';
@@ -141,6 +156,11 @@ final class ChatHost {
         executable,
         [
           'app-server',
+          if (modelLaunch != null || probe) ...['-c', 'features.shell_snapshot=false'],
+          if (_launch?.model != null) ...[
+            '-c', 'model=${jsonEncode(_launch!.model)}',
+            '-c', 'model_provider=${jsonEncode(_launch!.provider)}',
+          ],
           '-c',
           'shell_environment_policy.set.NIPAPLAY_CHAT="$sessionId"'
         ],
@@ -150,6 +170,16 @@ final class ChatHost {
   }
 
   Future<void> start() async {
+    _launch = await modelLaunch?.call();
+    await _launch?.prepare?.call();
+    if (!probe && await _rolloutFile.exists()) {
+      _rollouts.addAll(Map<String, String>.from(
+          jsonDecode(await _rolloutFile.readAsString()) as Map));
+    }
+    await _startServer();
+  }
+
+  Future<void> _startServer() async {
     if (_process != null) throw StateError('Chat server already started.');
     if (Platform.isWindows) {
       await _launchWindows();
@@ -191,6 +221,8 @@ final class ChatHost {
         clean['TMPDIR'] =
             (await Directory('${root.path}/temp').create(recursive: true)).path;
       }
+      if (_launch?.home case final home?) clean['CODEX_HOME'] = home.path;
+      clean.addAll(_launch?.environment ?? {});
       launchEnvironment = {
         for (final key in [
           'PATH',
@@ -212,21 +244,27 @@ final class ChatHost {
           'export NIPAPLAY_CHAT="\$1"; '
           // zsh writes here-documents under TMPPREFIX (default /tmp/zsh),
           // which a lab profile may not write; keep them in its temp.
-          '${labRoot == null ? '' : 'export CODEX_HOME="\$2" TMPDIR="\$3" TMPPREFIX="\$3/zsh"; '}'
-          r'exec codex app-server -c "shell_environment_policy.set.NIPAPLAY_CHAT=\"$1\""';
+          '${labRoot != null ? 'export CODEX_HOME="\$2" TMPDIR="\$3" TMPPREFIX="\$3/zsh"; ' : _launch?.home != null ? 'export CODEX_HOME="\$2"; ' : ''}'
+          r'exec "$4" app-server '
+          '${modelLaunch != null || probe ? '-c features.shell_snapshot=false ' : ''}'
+          '${_launch?.model != null ? '-c "\$5" -c "\$6" ' : ''}'
+          r'-c "shell_environment_policy.set.NIPAPLAY_CHAT=\"$1\""';
       _process = await Process.start(
           shell,
           [
-            '-l',
+            if (_launch?.home == null) '-l',
             '-c',
             script,
             'nipaplay-chat',
             sessionId,
             clean['CODEX_HOME'] ?? '',
-            clean['TMPDIR'] ?? ''
+            clean['TMPDIR'] ?? '',
+            codexExecutable ?? 'codex',
+            'model=${jsonEncode(_launch?.model)}',
+            'model_provider=${jsonEncode(_launch?.provider)}',
           ],
           workingDirectory: repository.path,
-          environment: inherited,
+          environment: _launch?.home == null ? inherited : clean,
           includeParentEnvironment: false);
     }
     _reader = _read();
@@ -244,9 +282,66 @@ final class ChatHost {
     });
     await _request('initialize', {
       'clientInfo': {'name': 'nipaplay', 'title': 'NipaPlay', 'version': '0.1'},
-      'capabilities': {'experimentalApi': false}
+      'capabilities': {'experimentalApi': modelLaunch != null}
     });
     _send({'method': 'initialized', 'params': {}});
+    if (modelLaunch != null) {
+      final configuration = await _request('config/read', {});
+      final config = configuration['config'] as Map;
+      String? defaultModel = _launch?.model ?? config['model'] as String?;
+      if (defaultModel == null) {
+        final models = await _request('model/list', {});
+        defaultModel = (models['data'] as List).cast<Map>()
+            .firstWhere((item) => item['isDefault'] == true)['model'] as String;
+      }
+      _modelDefaults = {
+        'model': defaultModel,
+        'modelProvider': _launch?.provider ?? config['model_provider'] ?? 'openai',
+      };
+    }
+  }
+
+  Future<void> _applyModel() async {
+    var next = await modelLaunch?.call();
+    if (next == null || next.revision == _launch?.revision && available) return;
+    // A helper may still be running when the foreground is idle. Preserve it.
+    while (threadLiveness.keys.any(busyFor)) {
+      if (!available) break;
+      await events.firstWhere((event) => event['method'] == 'turn/completed' ||
+          event['method'] == 'host/error');
+      if (!available) break;
+    }
+    next = await modelLaunch!();
+    await _stopTransport();
+    _launch = next;
+    await next.prepare?.call();
+    _transportClosed = false;
+    _loaded.clear();
+    await _startServer();
+    // Resume the foreground with new defaults rather than rollout's old model.
+    if (threadId case final id?) {
+      final response = await _request('thread/resume', {..._common, 'threadId': id});
+      thread = _public(Map<String, dynamic>.from(response['thread'] as Map));
+      model = response['model'] as String;
+      provider = response['modelProvider'] as String;
+    }
+    _events.add({'method': 'host/modelChanged', 'params': header});
+  }
+
+  Future<void> _stopTransport() async {
+    _restarting = true;
+    _clock?.cancel();
+    _flush?.cancel();
+    if (_process case final process?) {
+      process.kill();
+      final exited = await Future.any<Object>([process.exitCode,
+        Future.delayed(const Duration(seconds: 3), () => 'timeout')]);
+      if (exited == 'timeout') { process.kill(ProcessSignal.sigkill); await process.exitCode; }
+      await _reader;
+      await _stderr;
+    }
+    _process = null;
+    _restarting = false;
   }
 
   Future<void> _read() async {
@@ -263,13 +358,16 @@ final class ChatHost {
             Map<String, dynamic>.from(redactHarnessJson(decoded) as Map);
         final wireMethod = decoded['method'] as String? ?? '';
         final wireParams = decoded['params'] as Map?;
+        if (!probe && modelLaunch != null && wireMethod == 'thread/started') {
+          await _rememberRollout(wireParams!['thread'] as Map);
+        }
         final eventThread = wireParams?['threadId'] as String? ??
             _requestThreads[message['id']];
         if (eventThread != null) {
           livenessFor(eventThread).observe(message, DateTime.now());
-          processes.observe(message, originFor(eventThread), DateTime.now());
+          if (!probe) processes.observe(message, originFor(eventThread), DateTime.now());
         }
-        if (wireMethod == 'turn/started' || wireMethod == 'turn/completed') {
+        if (!probe && (wireMethod == 'turn/started' || wireMethod == 'turn/completed')) {
           File('${endpoint.seedRepository.parent.path}/journal.jsonl')
               .writeAsStringSync(
                   '${jsonEncode({
@@ -371,9 +469,9 @@ final class ChatHost {
           if (_knownDisplay(message)) _display.add(message);
         }
       }
-      if (!_closing) _transportError('app-server stdout closed');
+      if (!_closing && !_restarting) _transportError('app-server stdout closed');
     } catch (error) {
-      _transportError(redactHarnessText(error.toString()));
+      if (!_restarting) _transportError(redactHarnessText(error.toString()));
     } finally {
       for (final completer in _pending.values) {
         completer.completeError(StateError('app-server connection closed'));
@@ -472,6 +570,11 @@ final class ChatHost {
   void _send(ChatMessage message) =>
       _process!.stdin.writeln(jsonEncode(message));
   Future<ChatMessage> _request(String method, ChatMessage params) async {
+    if (modelLaunch != null && method == 'thread/resume') {
+      final id = params['threadId'] as String;
+      params = {...params, ..._modelDefaults,
+        if (_rollouts[id] != null) 'path': _rollouts[id]};
+    }
     await endpoint.inspectChatText(jsonEncode(params));
     if (!available) {
       throw StateError('Chat server is not running');
@@ -483,10 +586,30 @@ final class ChatHost {
       _requestThreads[id] = target;
     }
     _send({'id': id, 'method': method, 'params': params});
-    return result.future;
+    final response = await result.future;
+    if (!probe && (method == 'thread/start' || method == 'thread/resume')) {
+      await _rememberRollout(response['thread'] as Map);
+    }
+    return response;
+  }
+
+  Future<void> _rememberRollout(Map history) async {
+    final id = history['id'] as String;
+    _loaded.add(id);
+    if (history['path'] case final String path) {
+      if (_rollouts[id] == path) return;
+      _rollouts[id] = path;
+      _rolloutWrites = _rolloutWrites.then((_) async {
+        final staging = File('${_rolloutFile.path}.pending');
+        await staging.writeAsString(jsonEncode(_rollouts), flush: true);
+        await staging.rename(_rolloutFile.path);
+      });
+      await _rolloutWrites;
+    }
   }
 
   ChatMessage get _common => {
+        ..._modelDefaults,
         'cwd': repository.path,
         'sandbox': 'danger-full-access',
         'approvalPolicy': 'never'
@@ -496,7 +619,7 @@ final class ChatHost {
 
   /// Does not select the foreground conversation or change its durable pointer.
   Future<String> helperThread(String helperId, String title,
-      {String? resumeId}) async {
+      {String? resumeId}) => _control(() async {
     final origin = 'harness_cli:helper:$helperId';
     final response =
         await _request(resumeId == null ? 'thread/start' : 'thread/resume', {
@@ -510,19 +633,28 @@ final class ChatHost {
     final id = history['id'] as String;
     threadOrigins[id] = origin;
     if ((history['turns'] as List).isEmpty) _freshThreads[id] = history;
-    if (resumeId == null)
+    if (resumeId == null) {
       await _request('thread/name/set', {
         'threadId': id,
         'name': title,
       });
+    }
     return id;
-  }
+  });
 
   Future<ChatMessage> startThreadTurn(String id, String text) =>
       _control(() => _startThreadTurn(id, text));
   Future<ChatMessage> _startThreadTurn(String id, String text) async {
-    final live = livenessFor(id);
     if (busyFor(id)) throw StateError('Use steer for an active turn');
+    await _applyModel();
+    if (modelLaunch != null && !_loaded.contains(id)) {
+      await _request('thread/resume', {..._common, 'threadId': id,
+        if (threadOrigins[id] case final String origin)
+          'config': {'shell_environment_policy.set.NIPAPLAY_CHAT':
+            origin.startsWith('harness_cli:helper:')
+              ? 'helper-${origin.substring('harness_cli:helper:'.length)}' : sessionId}});
+    }
+    final live = livenessFor(id);
     live.starting(DateTime.now());
     _freshThreads.remove(id);
     try {
@@ -642,6 +774,9 @@ final class ChatHost {
       }));
 
   Future<ChatMessage> readThread(String id) async {
+    if (modelLaunch != null && !_loaded.contains(id) && _rollouts.containsKey(id)) {
+      await _request('thread/resume', {..._common, 'threadId': id});
+    }
     // Codex cannot includeTurns until a newly started thread has its first input.
     if (_freshThreads[id] case final fresh?) return fresh;
     final result =
@@ -714,6 +849,22 @@ final class ChatHost {
         'provider': provider,
         'cwd': repository.path
       };
+
+  /// An isolated, ephemeral thread for checking the computer's Codex selection.
+  /// Call only on a separate probe host; no transcript, process or journal facts.
+  Future<bool> checkSavedModel() async {
+    if (!probe) throw StateError('Model checks require an isolated probe host');
+    final response = await _request('thread/start', {..._common,
+      'ephemeral': true, 'baseInstructions': 'Reply OK. Do not use tools.',
+      'developerInstructions': ''});
+    final id = response['thread']['id'] as String;
+    final completion = events.firstWhere((event) =>
+      event['method'] == 'turn/completed' && event['params']['threadId'] == id);
+    await _request('turn/start', {'threadId': id,
+      'input': _input('Reply OK.')});
+    final event = await completion;
+    return event['params']['turn']['status'] == 'completed';
+  }
 
   Future<void> close() => _closeFuture ??= _close();
 
