@@ -878,6 +878,8 @@ class _Choice extends StatelessWidget {
       );
 }
 
+/// Filled when chosen; a faint hollow ring when “自动” picked it, so only
+/// one choice ever looks chosen.
 class _Radio extends StatelessWidget {
   const _Radio({required this.on, required this.ring});
   final bool on;
@@ -892,15 +894,20 @@ class _Radio extends StatelessWidget {
         decoration: BoxDecoration(
           shape: BoxShape.circle,
           border: Border.all(
-              color: on ? NextColors.accent : NextColors.p4, width: 1.5),
+              color: !on
+                  ? NextColors.p4
+                  : ring
+                      ? NextColors.accent.withValues(alpha: 0.55)
+                      : NextColors.accent,
+              width: 1.5),
         ),
-        child: on
+        child: on && !ring
             ? Container(
                 width: 7,
                 height: 7,
-                decoration: BoxDecoration(
+                decoration: const BoxDecoration(
                   shape: BoxShape.circle,
-                  color: ring ? NextColors.accent2 : NextColors.accent,
+                  color: NextColors.accent,
                 ),
               )
             : null,
