@@ -10,6 +10,8 @@ import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import '../agent_endpoint.dart';
 import '../instance_facts.dart';
 import '../app_capabilities.dart';
+import '../events/capability.dart';
+import '../events/signals.dart';
 import '../next_database.dart';
 import '../tasks/device_identity.dart';
 import '../tasks/sqlite_job_store.dart';
@@ -100,6 +102,7 @@ final class HeadlessCore {
   late final ProgramRuntime programs;
   late final ProgramRepository programRepository;
   late final SubtitleLibrary subtitles;
+  late final BodyEvents bodyEvents;
   final hooks = HarnessHooks();
   final _client = http.Client();
   DandanplayHttpClient? _dandanplay;
@@ -248,6 +251,11 @@ final class HeadlessCore {
     programs.returnTarget = followups.downloadReturnTarget;
     attachMeshDelivery(mesh, followups);
     hooks.observeEvent = followups.hookEvent;
+    bodyEvents = BodyEvents(database);
+    followups.eventCommitted = bodyEvents.changed;
+    BodySignals.emit = (event, id, facts) => hooks.emit(event, id, facts);
+    settings.onChanged = (facts) => hooks.emit(
+        'settings.changed', facts['key'] as String, facts);
     hooks.scheduleError = (error) async {
       await followups.discover({
         'title': '定时配置无效',
@@ -287,6 +295,7 @@ final class HeadlessCore {
             programEnabled: () => programs.enabled,
             subtitleProbeReady: () => headlessFfprobe != null),
         InstanceCapability(const InstanceFacts('1.11.10-headless')),
+        bodyEvents,
         TaskCapability(engine),
         programs.capability,
         programRepository,
@@ -365,6 +374,8 @@ final class HeadlessCore {
     await programRepository.drain();
     await programs.close();
     await followups.close();
+    await bodyEvents.committed.close();
+    BodySignals.emit = null;
     await uiData.close();
     await media.mutate(() async {});
     await settings.drain();

@@ -66,11 +66,11 @@ Classic 与 Next 是同一身体的两套界面，共用播放器。Next 有首�
 - Codex 管对话历史与压缩。
 
 细节在版本随代码更新的能力族说明中，用 `./nipa describe <族>` 按需查：
-- `media`：文件、根目录、扫描索引、身份、资料和图片；识别、图片语义与 Classic 同步也在这里。
+- `media`：文件、目录、根目录、扫描索引、身份、资料和图片；识别、图片语义与 Classic 同步也在这里。
 - `media.sources`、`sync`：SMB、WebDAV、Jellyfin、Emby 等远程来源和多端同步。
 - `download`：内置 BT 下载、逐文件完成与进度；其他下载器由你的工具驱动。
 - `danmaku`：多平台弹幕轨道、同名文件和持久导入；外部平台结果须交入身体。
-- `subtitle`：内嵌与外挂字幕事实、导入、语言和持久选择。
+- `subtitle`：内嵌与外挂字幕事实、导入、语言、台词和持久选择。
 - `mesh`、`media.mesh_files`：同账号设备、跨设备合并片库和文件读写；路径、local、playable 属于来源设备。
 - `program`：目标设备授权的后台程序与已提交 Git bundle 传输。
 - `playback`：播放器和当前播放操作。
@@ -78,12 +78,15 @@ Classic 与 Next 是同一身体的两套界面，共用播放器。Next 有首�
 - `discover`：每日放送与推荐。
 - `accounts`：弹弹play、Bangumi 账号与收藏。
 - `settings`：设置及每次修改的来源和理由。
-- `task`：后台任务、状态、回执；关对话不会中断任务。
+- `task`：后台任务、控制、状态、回执；关对话不会中断任务。
 - `followup`、`agent`、`activity`：持久后续、唤醒、后台帮手与有来源的发现。
 - `ui`：卡片、首页书架、片库的来源页和类别（按用户的要求整理）、界面操作和当前实例截图，展示给观众的文字用自然短句。
 - `state`：只读视图；`./nipa call state.describe '{"view":"VIEW"}'` 查字段与关系。
-- `app`：当前连接实例与种子更新事实；多个安装副本不能靠应用名辨认。
+- `app`：宿主能力、更新、当前连接实例与种子更新事实；多个安装副本不能靠应用名辨认。
 - `plugins`：插件。
+- `events`、`network`：身体事件与网络观察。
+- `storage`、`cache`、`diagnostics`：空间、缓存回收与诊断。
+- `notification`、`share`、`window`：系统通知、分享与窗口。
 
 你的外部工具负责从 RSS、站点、API 或文件找东西；通过对应能力交给 NipaPlay 才进入身体。没有入口时如实告诉用户。需要登录的平台优先用用户浏览器的现有登录态；没有时打开平台登录页，请用户自行登录。
 

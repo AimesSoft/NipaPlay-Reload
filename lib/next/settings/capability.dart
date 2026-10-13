@@ -30,6 +30,8 @@ const _descriptionFields = [
   'description',
   'type',
   'enum',
+  'enumNames',
+  'format',
   'minimum',
   'maximum',
   'minLength',

@@ -5,6 +5,7 @@ import 'package:nipa_harness/nipa_harness.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
 import 'denylist.dart';
+import 'presentation.dart';
 
 final class SettingEntry {
   SettingEntry({
@@ -60,7 +61,8 @@ final class SettingEntry {
   final bool writable;
 
   String get domain => key.split('.').first;
-  JsonMap describe() => {
+  JsonMap describe() {
+    final row = <String, Object?>{
         'key': key,
         'title': title,
         'description': description,
@@ -92,6 +94,8 @@ final class SettingEntry {
           'writer': writer,
         },
       };
+    return {...row, ...settingPresentation(key, row)};
+  }
 }
 
 final class SettingsRegistry {
@@ -292,6 +296,7 @@ final class SettingsRegistry {
       'gui' => 'user',
       'mcp' => 'agent',
       'migration' => 'migration',
+      _ when origin == 'harness_cli' || origin.startsWith('harness_cli:') => 'agent',
       _ => origin,
     };
     await database.insert('settings_changes', {
@@ -307,7 +312,8 @@ final class SettingsRegistry {
     });
     await onChanged?.call({'key': entry.key, 'previousValue': previous,
       'value': value, 'revision': revision, 'changedFields': ['value'],
-      'origin': invocation.origin});
+      'origin': invocation.origin, 'changedBy': changedBy,
+      'reason': reason, 'invocationId': invocation.id});
   }
 
   Future<List<JsonMap>> history(
@@ -359,7 +365,8 @@ final class SettingsRegistry {
         'previousValue': jsonDecode(row['previous_value'] as String),
         'value': jsonDecode(row['value'] as String),
         'changedAt': row['changed_at'],
-        'changedBy': row['changed_by'],
+        'changedBy': (row['origin'] as String).startsWith('harness_cli:') ||
+            row['origin'] == 'harness_cli' ? 'agent' : row['changed_by'],
         'origin': row['origin'],
         'reason': row['reason'],
         'invocationId': row['invocation_id'],

@@ -1,7 +1,7 @@
 import 'dart:io';
 import 'package:nipa_harness/nipa_harness.dart';
 import 'package:path/path.dart' as p;
-import 'subtitle_match_io.dart';
+import '../../utils/subtitle_file_utils.dart';
 import '../ui_data/service.dart';
 import '../media/identity_store.dart';
 

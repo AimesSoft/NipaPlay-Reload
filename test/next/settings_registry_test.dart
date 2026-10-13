@@ -488,6 +488,46 @@ void main() {
     expect((await registry.get('danmaku.opacity'))['value'], 0.7);
   });
 
+  test('CLI settings retain attribution and emit only committed revisions', () async {
+    final events = <Map<String, Object?>>[];
+    registry.onChanged = (facts) async {
+      expect((await registry.get(facts['key'] as String))['revision'], facts['revision']);
+      events.add(facts);
+    };
+    final origin = harness.Invocation(origin: 'harness_cli:chat:fixture');
+    await registry.set('danmaku.opacity', 0.5, origin, reason: '用户偏好', expectedRevision: 0);
+    await expectLater(registry.set('danmaku.opacity', 0.7, origin, expectedRevision: 0),
+        throwsA(isA<harness.Failure>()));
+    expect(events, hasLength(1));
+    expect(events.single['changedBy'], 'agent');
+    expect(events.single['reason'], '用户偏好');
+    await registry.set('danmaku.opacity', 0.8, harness.Invocation(origin: 'gui'));
+    expect(events.last['changedBy'], 'user');
+    expect((await registry.get('danmaku.opacity'))['value'], 0.8);
+    // Older CLI rows gain the same display attribution without rewriting history.
+    await db.update('settings_changes', {'changed_by': origin.origin},
+        where: 'origin=?', whereArgs: [origin.origin]);
+    expect((await registry.history(key: 'danmaku.opacity')).last['changedBy'], 'agent');
+    expect((await db.query('settings_changes', where: 'origin=?',
+        whereArgs: [origin.origin])).single['changed_by'], origin.origin);
+  });
+
+  test('describe exposes enum names and file/directory types for generated settings', () async {
+    final rows = await registry.describe(keys: ['player.kernel', 'player.externalPath',
+      'subtitle.fontDir', 'player.screenshotDirectory']);
+    final byKey = {for (final row in rows) row['key']: row};
+    final kernel = byKey['player.kernel']!;
+    expect(kernel['enumNames'], hasLength((kernel['enum'] as List).length));
+    final names = Map.fromIterables(kernel['enum'] as List, kernel['enumNames'] as List);
+    expect(names['mediaKit'], 'mpv');
+    expect(byKey['player.externalPath']!['format'], 'file');
+    expect(byKey['subtitle.fontDir']!['format'], 'directory');
+    expect(byKey['player.screenshotDirectory']!['format'], 'directory');
+    final result = await call('settings.describe', {'keys': ['player.externalPath'],
+      'fields': ['key', 'format']});
+    expect((result['settings'] as List).single['format'], 'file');
+  });
+
   test('invalid values and stale concurrent writers do not alter persistence',
       () async {
     for (final value in ['bad', -0.1, 1.1, double.nan, double.infinity]) {
