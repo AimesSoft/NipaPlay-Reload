@@ -1,6 +1,6 @@
 # X50：短种子、能力族说明、CLI 输出预算与 Codex 信任
 
-2026-10-13，worktree `~/Desktop/nipaplay-next-wt/x50-seed`，分支 `next/x50-seed`。没有 commit、push、pub get 或依赖变更；没有改 `lib/next/ui/`。构建仅在本 worktree，直接运行自己的 adhoc 签名 Debug 可执行文件，所有实例使用独立 `NIPAPLAY_PROFILE`、默认安静。没有启动安装的应用，没有激活窗口、像素点击、访问登录钥匙串、真实应用数据、用户自己的 harness 或写用户 Codex 配置。
+2026-10-13，worktree `~/Desktop/nipaplay-next-wt/x50-seed`，分支 `next/x50-seed`。第 1–5 节保留首轮交付的结果：首轮没有 commit、push、pub get 或依赖变更。主控提交并合并 X49 等上游内容后，本轮在 `ee4766c4` 补测，见第 6 节；按主控指示执行一次 pub get，只解析、未改 pubspec 或依赖锁定文件，本轮未 commit/push。没有改 `lib/next/ui/`。构建仅在本 worktree，直接运行自己的 adhoc 签名 Debug 可执行文件，所有实例使用独立 `NIPAPLAY_PROFILE`、默认安静。没有启动安装的应用，没有激活窗口、像素点击、访问登录钥匙串、真实应用数据、用户自己的 harness 或写用户 Codex 配置。
 
 ## 1. 完成了什么
 
@@ -124,9 +124,9 @@
 
 全部自建实例按自己记录的 PID 退出并删除各自 profile；23 份保留的 cleanup 回执均确认进程退出/profile 不存在，最终没有剩余 x50 profile 或其 app-server。没有清理其他实例。没有在证据保留 endpoint、认证文件、带认证链接或任何密码、cookie、令牌值。
 
-X49 的正式记忆文字仍待主控填入 87 字节的小节；X48 的新增片库事实由主控合入能力层 `familyFacts`。当前不测试未合并的 X48/X49 内容。Windows 和未来 Codex 升级没有本轮真机证据，当前信任结论限定于 macOS 的 Codex 0.144.1；没有承诺所有未来版本都使用同一 hook API。
+首轮交付时，X49 的正式记忆文字待主控填入 87 字节的小节，X48 的新增片库事实待主控合入能力层 `familyFacts`，首轮没有测试未合并的内容。现在主控已合并并填入记忆正文，X49 hook 的集成验证见第 6 节。Windows 和未来 Codex 升级没有本轮真机证据，当前信任结论限定于 macOS 的 Codex 0.144.1；没有承诺所有未来版本都使用同一 hook API。
 
-**需要主控决定：是否接受新版在简介任务上的耗时/token 与英文过程回复退步，或另开一次提示调整实验。** 实现机制没有待定权限方案；没有修改用户 ~/.codex 的需求。主控决定前，这份实现和十二次评测已可独立审阅。
+**首轮需要主控决定：是否接受新版在简介任务上的耗时/token 与英文过程回复退步，或另开一次提示调整实验。** 主控随后修改了语言提示；当前观察与待决定事项见第 6 节。实现机制没有待定权限方案；没有修改用户 ~/.codex 的需求。
 
 ## 5. 原种子每项事实的去向
 
@@ -316,4 +316,69 @@ X49 的正式记忆文字仍待主控填入 87 字节的小节；X48 的新增�
 
 没有移到 state.describe 的旧事实：字段 schema 已由原注册视图生成；族说明只补上读取入口与分页语义，避免另外维护一份字段表。重复事实合并或在相关族保留，不以过时为由丢掉未核验的事实。
 
+## 6. 合并后补测：X49 原始 hook 与中文简介
 
+2026-10-13，基线 `ee4766c4`，主控已合并 X49 记忆、其他上游改动，填入种子记忆正文，并将首段改为「用用户的语言说话，过程中的简短说明也一样。」。此时种子 **9,391 UTF-8 字节**，种子中的两份常驻记忆模板合计 **414 字节**，仍满足 12 KB 的种子目标。本节是追加证据，原十二次实验及其统计不改写。合并版本归档为 [merged-seed.md](evidence/x50/merged-seed.md)，提交与种子、hook 声明/脚本哈希见 [merged-baseline.json](evidence/x50/verification/merged-baseline.json)。
+
+### 6.1 信任覆盖与记忆注入
+
+**现有 X50 生产代码已经覆盖 X49，不需要修补信任实现。** 仍由启动 argv 的整张 `projects` 内联表只信任当前规范 harness 路径；线程 start/resume/helper 调用 `hooks/list`，只给当前 harness `.codex/` 内已启用项目 hook 的实际 `key/currentHash` 添加内存 `hooks.state[key].trusted_hash`。X49 的声明正属于这一范围，因此无需预置哈希、不写用户或实验 CODEX_HOME 的持久信任配置。X49 报告中缺少的项目与 hook 哈希登记，已由合并后的 X50 宿主完成。
+
+验证使用一个全新的 CODEX_HOME，只复制 X23 所需 provider/认证与 CA，未复制任何项目登记、hook 信任或用户会话。实验保留种子原始 `.codex/hooks.json` 和 `hooks/session_start.py`，没有换成 X50 的单行测试 hook，也没有手动登记哈希。仅在隔离 `preferences.md` 写入「一次先给 2 部」及 `X50_MEMORY_PREF_482`，在 `MEMORY.md` 写入 `X50_MEMORY_INDEX_683`；种子另加原有 AGENTS 验证代号。模型使用真实 `deepseek-v4.1-flash / cpa`。
+
+实测结果：
+
+- 原始项目 SessionStart hook **completed，202 ms**，来源为本实验 harness 的 `.codex/hooks.json`。
+- Codex rollout 的 developer 消息含 `<nipa_memory>`，包括上述偏好和索引，设置与最近原文入口也按 X49 格式注入（本实例起始没有用户设置/历史）。
+- 模型 **0 次命令执行**，直接正确答出 `X50_AGENTS_SEEN_719`、「一次先给 2 部」、两个记忆代号；两个记忆代号没有写进用户请求或 AGENTS 记忆说明。
+- 临时 `config.toml` 字节完全未变，实验结束仍无持久 `projects` 登记；原始 hook 声明字节与种子一致。没有修改用户 `~/.codex` 或用户 harness。
+
+证据：[summary.json](evidence/x50/memory-trust-merged-1/summary.json)、[trace.json.gz](evidence/x50/memory-trust-merged-1/trace.json.gz)、[cleanup.json](evidence/x50/memory-trust-merged-1/cleanup.json)。这次集成验证直接覆盖全新线程的 SessionStart；恢复与压缩的 X49 独立证据继续保留，不将本次一次 startup 扩大为重复验证所有生命周期。
+
+### 6.2 只补跑中文简介，三版并列
+
+仅增加 `metadata-merged-1/2/3`，没有重跑旧版、首轮短种子或任何帮手任务。三次均使用新的安静 profile、harness、CODEX_HOME、线程，以同一 Bangumi 504950 和六个实际剧集 ID 初始化，覆盖同一英文简介，再发送原始中文请求。没有拷贝信任验证的合成记忆；这里保留 X49 的普通记忆模板与原始 SessionStart。完成按实际 `media.metadata.ui_facts` 的持久中文简介及 `zh-CN` 判定，不只看模型回复。
+
+三次新增均完成、各一个回合。原始记忆 hook 分别 **275 / 238 / 176 ms，全部 completed**，各 CODEX_HOME 配置均保持不变。总 token 和缓存率沿用首轮的 rollout 数字 accounting 口径，耗时从提交回合到自然结束，包含 hook，排除构建、实例启动和 fixture 初始化。过程语言由逐条人工审阅 `item/completed` 的 agentMessage 判定；这些消息的 phase 为 null，以最后一条作为最终答复，其余是过程消息，保留来源引文/专名不改变主语言标签。
+
+「错参/未知入口」沿用首轮口径：每条显式失败的 CLI 能力调用计一次，包括未知动作、视图或 ID；未登录/未配置的 unavailable 不计。一次调用同时有多个 violations 仍只计一次；不把 shell/Python 解析错误混入此项。
+
+| 版本／重复 | 完成 | 过程消息语言（条数） | 最终语言 | 秒 | 总 token | 缓存命中 | 错参/未知入口 |
+|---|---|---|---|---:|---:|---:|---:|
+| 旧种子 / 1 | 是 | 中文（5） | 中文 | 58.445 | 1,379,281 | 97.21% | 1 |
+| 旧种子 / 2 | 是 | 中文（4） | 中文 | 46.227 | 1,128,150 | 97.45% | 3 |
+| 旧种子 / 3 | 是 | 中文（10） | 中文 | 69.358 | 1,621,687 | 98.04% | 0 |
+| 首轮短种子 / 1 | 是 | 中文（8） | 中文 | 52.356 | 1,318,486 | 98.11% | 3 |
+| 首轮短种子 / 2 | 是 | 英文（5） | 中文 | 80.486 | 1,901,475 | 97.82% | 3 |
+| 首轮短种子 / 3 | 是 | 英文（2） | 中文 | 96.629 | 1,882,242 | 98.28% | 1 |
+| 合并后 / 1 | 是 | 中文（4） | 中文 | 65.731 | 1,565,575 | 98.25% | 2 |
+| 合并后 / 2 | 是 | 中文（3） | 中文 | 51.507 | 1,150,784 | 97.05% | 0 |
+| 合并后 / 3 | 是 | 中文（1） | 中文 | 91.737 | 1,755,902 | 97.48% | 4 |
+
+| 汇总（三次） | 旧种子 | 首轮短种子 | 合并后 |
+|---|---:|---:|---:|
+| 完成 | 3/3 | 3/3 | 3/3 |
+| 平均耗时 | 58.010 秒 | 76.490 秒 | 69.658 秒 |
+| 总 token | 4,129,118 | 5,102,203 | 4,472,261 |
+| 合计缓存命中 | 97.60% | 98.07% | 97.64% |
+| 错参/未知入口 | 4 | 7 | 6 |
+| 中文过程消息 / 全部过程消息 | 19/19 | 8/15 | 8/8 |
+| 中文最终答复 | 3/3 | 3/3 | 3/3 |
+
+语言退步在这三次补测中没有再出现：8 条过程消息和 3 条最终答复全部中文。示例分别为「我先看看实时状态，找到这部作品。」「我先查一下这部作品在 NipaPlay 里的现状。」「我先确认了作品与现有简介：这条目前是英文短句、语言标为 `en`。」。这支持合并后的要求能在本任务生效，不保证所有未来任务都不再改用英文。
+
+效率仍有代价：相比首轮短种子，平均耗时减少 **8.9%**、总 token 减少 **12.3%**、错参 7→6；相比旧种子，仍慢 **20.1%**、token 多 **8.3%**、错参 4→6。第三次合并样本耗时 91.737 秒，有四次错误：把动作名作为视图、给查询传未知 `query` 字段、漏 `workId`、给 `get_batch` 传 `entityIds` 而非 `refs`；它最后都查明并完成，不能说错误参数问题已消失。第一次另有一次 Python 输出解析 `KeyError: metadata`，轨迹完整保留，不计入能力错参。三次业务写入都只有用户授权的 `media.metadata.override`，没有下载、删除、订阅或其他机器上的操作。
+
+这不是只修改一句语言提示的消融：合并版本同时包含 X49 记忆/hook、片库能力及其他主分支改动，能力目录和常驻上下文都不同于首轮，实验时间也不同。不能把耗时/token 的变化或全中文结果全部归因于那句话；三个样本只能给出观察，没有统计显著性结论。此次没有失败或废弃的模型补测样本，没有为了改善结果追加跑数。
+
+九个样本的消息、语言人工标签、实际简介、错参详情及汇总入口：[evaluation-merged-metadata.json](evidence/x50/evaluation-merged-metadata.json)、[metadata-language-review.json](evidence/x50/metadata-language-review.json)。新增逐次证据：[第 1 次](evidence/x50/metadata-merged-1/summary.json)、[第 2 次](evidence/x50/metadata-merged-2/summary.json)、[第 3 次](evidence/x50/metadata-merged-3/summary.json)，各目录还含 metrics、脱敏 trace 和 cleanup。
+
+### 6.3 本轮变更、验证、清理与问题
+
+本轮没有修改生产信任代码或种子。实验驱动新增 `merged` 版本和使用原始 X49 hook 的 `memory-trust` 任务，保护已有 summary 不被覆盖；评分脚本新增 `--merged-metadata`，将九次简介比较写入单独文件，不改写首轮 `evaluation.json` 或帮手证据。
+
+按主控给定的 `PUB_HOSTED_URL=https://pub.dev` 和 Flutter 3.44.6 执行一次 pub get；pubspec 与依赖锁定文件没有保留改动。随后只在当前 worktree `build macos --debug --no-pub`，adhoc 签名并 `codesign --verify --deep --strict` 通过；构建产生的 Podfile.lock 变更恢复，GeneratedPluginRegistrant 生成变更按约定保留。两个修改脚本语法解析通过。生产实现没有补丁，本次没有重跑首轮的自动化测试，也不把原 503/7 的结果宣称为合并状态的全量测试。验证日志：[pub-get-merged.txt](evidence/x50/verification/pub-get-merged.txt)、[build-merged.txt](evidence/x50/verification/build-merged.txt)、[signature-merged.txt](evidence/x50/verification/signature-merged.txt)。
+
+四个新增实例均按自己记录的 PID 关闭并删除各自实验目录，四份 cleanup 回执确认进程退出、profileDeleted=true；复核记录的 PID、实验路径和对应 app-server，均无残留，见 [merged-cleanup.json](evidence/x50/verification/merged-cleanup.json)。没有触碰主控、ui-demo 或用户实例。没有 commit/push。
+
+**还缺：本次授权的两项工作没有缺项。需要主控决定的问题：没有。** 若主控后续希望继续降低简介耗时/token 或错参，可另开实验；本轮如实保留相比旧种子的效率退步，不再自行改提示或追加模型任务。

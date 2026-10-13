@@ -26,6 +26,7 @@ PROMPTS = {
     'metadata': '好，把《莉可丽丝：友谊是时间的窃贼》的中文简介补上吧。',
     'helper': '派个帮手去把《莉可丽丝：友谊是时间的窃贼》每一集的弹幕情况查一遍（每集有没有、多少条），查完告诉我。你这边先别等它。',
     'trust': '不调用任何工具，告诉我本次实验种子代号和会话 hook 给出的代号。',
+    'memory-trust': '不调用任何工具。告诉我种子实验代号、记忆偏好中的推荐数量和验证代号、记忆索引中的验证代号。',
 }
 
 
@@ -66,6 +67,8 @@ def prepare_config(home, root):
 def run(version, task, repeat, deadline_seconds=600):
     label = f'{task}-{version}-{repeat}'
     out = EVIDENCE / label
+    if (out / 'summary.json').exists():
+        raise FileExistsError('Completed evidence must not be overwritten: ' + label)
     out.mkdir(parents=True, exist_ok=True)
     root = PROFILES / f'x50-{label}-{os.getpid()}'
     assert not root.exists()
@@ -83,7 +86,7 @@ def run(version, task, repeat, deadline_seconds=600):
         seed = ((EVIDENCE / 'old-seed.md') if version == 'old' else
                 WORKSPACE / 'assets/next/harness/AGENTS.md').read_text()
         (harness / 'AGENTS.md').write_text(seed + SAFETY +
-            ('\n本次实验种子代号：X50_AGENTS_SEEN_719。\n' if task == 'trust' else ''))
+            ('\n本次实验种子代号：X50_AGENTS_SEEN_719。\n' if task in ('trust', 'memory-trust') else ''))
         result['seedBytes'] = len(seed.encode())
         result['seedSha256'] = hashlib.sha256(seed.encode()).hexdigest()
         result['injectedBytes'] = (harness / 'AGENTS.md').stat().st_size
@@ -98,6 +101,15 @@ def run(version, task, repeat, deadline_seconds=600):
                 '"additionalContext":"会话 hook 代号：X50_HOOK_SEEN_937"}}))\n')
             (harness / '.codex/hooks.json').write_text(json.dumps({'hooks': {'SessionStart': [
                 {'hooks': [{'type': 'command', 'command': 'python3 hooks/x50-session.py'}]}]}}))
+        if task == 'memory-trust':
+            memory = harness / 'memory'
+            memory.mkdir(exist_ok=True)
+            (memory / 'preferences.md').write_text(
+                '2026-10-13：选片时一次先给 2 部。验证代号 X50_MEMORY_PREF_482。'
+                '（出处：本隔离实验用户明确约定）\n')
+            (memory / 'MEMORY.md').write_text('实验记忆索引代号 X50_MEMORY_INDEX_683；主题文件按需读。\n')
+            result['hookDeclarationUnmodified'] = (harness / '.codex/hooks.json').read_bytes() == (
+                WORKSPACE / 'assets/next/harness/.codex/hooks.json').read_bytes()
         (root / 'preferences.json').write_text(json.dumps({
             'flutter.labs_enable_agent_endpoint': True,
             'flutter.labs_use_next_interface': True,
@@ -141,7 +153,7 @@ def run(version, task, repeat, deadline_seconds=600):
             return value['result']
         if task == 'trust':
             memory = harness / 'memory'
-            memory.mkdir()
+            memory.mkdir(exist_ok=True)
             (memory / 'preferences.md').write_text('实验偏好\n')
             (memory / 'MEMORY.md').write_text('实验索引\n')
             cli_env = dict(env, NIPAPLAY_ENDPOINT_FILE=str(root / 'endpoint.json'))
@@ -160,7 +172,7 @@ def run(version, task, repeat, deadline_seconds=600):
                     item['recordMatchesSize'] = item['recordBytes'] == value['bytes']
                 cli_results[' '.join(arguments)] = item
             (out / 'cli.json').write_text(json.dumps(REDACT(cli_results, secrets), ensure_ascii=False, indent=2))
-        if task != 'trust':
+        if task not in ('trust', 'memory-trust'):
             ref = {'provider': 'bangumi', 'objectType': 'subject', 'externalId': '504950', 'scope': ''}
             bound = call('media.identity.bind_batch', {'requestId': label + '-fixture', 'entries': [
                 {'kind': 'release', 'workRef': ref, 'reason': 'X50 isolated public catalogue fixture, verified Bangumi 504950'}]})
@@ -192,7 +204,7 @@ def run(version, task, repeat, deadline_seconds=600):
                 call('media.metadata.override', {'entityId': work_id, 'field': 'overview',
                     'value': 'Six short stories following the daily lives of Chisato and Takina.', 'language': 'en'})
                 result['before'] = call('media.metadata.ui_facts', {'workId': work_id})
-        offset = (root / 'chat-events.jsonl').stat().st_size
+        offset = 0 if task == 'memory-trust' else (root / 'chat-events.jsonl').stat().st_size
         started = time.monotonic()
         vm.chat('turn', text=PROMPTS[task])
         finished = False
@@ -229,6 +241,7 @@ def run(version, task, repeat, deadline_seconds=600):
         events = [json.loads(line)['m'] for line in raw_events.splitlines()]
         usage = {}
         model_responses = 0
+        memory_injections = []
         # Host redaction hides tokenUsage by name. Read only numeric accounting
         # from this disposable CODEX_HOME's rollouts, never user sessions.
         for rollout in (home / 'sessions').rglob('*.jsonl'):
@@ -236,6 +249,10 @@ def run(version, task, repeat, deadline_seconds=600):
             for line in rollout.read_text().splitlines():
                 item = json.loads(line)
                 payload = item.get('payload', {})
+                if task == 'memory-trust' and item.get('type') == 'response_item' and payload.get('role') == 'developer':
+                    for content in payload.get('content', []):
+                        if '<nipa_memory>' in content.get('text', ''):
+                            memory_injections.append(content['text'])
                 if item.get('type') == 'event_msg' and payload.get('type') == 'token_count' and payload.get('info'):
                     raw = payload['info']['total_token_usage']
                     usage[thread_id] = {re.sub(r'_([a-z])', lambda m: m[1].upper(), k): v for k, v in raw.items()}
@@ -253,6 +270,16 @@ def run(version, task, repeat, deadline_seconds=600):
             result['hookConfig'] = json.loads((harness / '.codex/hooks.json').read_text())
             result['complete'] = result['hookRan'] and all(x in json.dumps(result['thread']) for x in
                 ('X50_AGENTS_SEEN_719', 'X50_HOOK_SEEN_937'))
+        elif task == 'memory-trust':
+            result['memoryInjections'] = memory_injections
+            result['hookCompletions'] = [e['params'] for e in events if e.get('method') == 'hook/completed']
+            result['commandExecutions'] = sum(e.get('method') == 'item/completed' and
+                e['params']['item']['type'] == 'commandExecution' for e in events)
+            replies = '\n'.join(i['text'] for t in result['thread']['turns'] for i in t['items']
+                if i['type'] == 'agentMessage')
+            result['hookRan'] = bool(memory_injections) and bool(result['hookCompletions'])
+            result['complete'] = result['naturalEnd'] and result['hookRan'] and result['commandExecutions'] == 0 and all(
+                marker in replies for marker in ('X50_AGENTS_SEEN_719', 'X50_MEMORY_PREF_482', 'X50_MEMORY_INDEX_683'))
         elif task == 'metadata':
             result['after'] = call('media.metadata.ui_facts', {'workId': work_id})
             result['complete'] = None  # Human-scored against the actual ui_facts and trace.
@@ -299,7 +326,7 @@ def run(version, task, repeat, deadline_seconds=600):
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--task', choices=PROMPTS, required=True)
-    parser.add_argument('--version', choices=['old', 'new'], default='new')
+    parser.add_argument('--version', choices=['old', 'new', 'merged'], default='new')
     parser.add_argument('--repeat', type=int, default=1)
     parser.add_argument('--deadline', type=int, default=600)
     args = parser.parse_args()

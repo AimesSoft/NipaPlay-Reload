@@ -3,12 +3,19 @@
 import gzip
 import json
 import re
+import argparse
 from pathlib import Path
 
+parser = argparse.ArgumentParser()
+parser.add_argument('--merged-metadata', action='store_true',
+                    help='Compare the six archived metadata runs with three merged-seed runs.')
+args = parser.parse_args()
 evidence = Path(__file__).resolve().parents[2] / 'docs/next/evidence/x50'
+language_review = (json.loads((evidence / 'metadata-language-review.json').read_text())
+                   if args.merged_metadata else {})
 rows = []
-for task in ('metadata', 'helper'):
-    for version in ('old', 'new'):
+for task in (('metadata',) if args.merged_metadata else ('metadata', 'helper')):
+    for version in (('old', 'new', 'merged') if args.merged_metadata else ('old', 'new')):
         for repeat in (1, 2, 3):
             folder = evidence / f'{task}-{version}-{repeat}'
             trace = folder / 'trace.json.gz'
@@ -51,6 +58,13 @@ for task in ('metadata', 'helper'):
             row.update(completed=completed, commandExecutions=len(commands), failedCapabilityCalls=len(errors),
                 failedCalls=errors, observed=observed, authorizationReviewCandidates=possible_writes)
             row['wrongInputOrUnknownCapability'] = sum('"unavailable"' not in e['output'] for e in errors)
+            if args.merged_metadata:
+                row['progressMessages'] = replies[:-1]
+                row['finalReply'] = replies[-1] if replies else None
+                row['languageReview'] = language_review[folder.name]
+                row['hookCompletions'] = [e['params']['run'] for e in saved['events']
+                                          if e.get('method') == 'hook/completed']
             rows.append(row)
             print(folder.name, 'completed', completed, 'commands', len(commands), 'failed calls', len(errors))
-(evidence / 'evaluation.json').write_text(json.dumps(rows, ensure_ascii=False, indent=2))
+filename = 'evaluation-merged-metadata.json' if args.merged_metadata else 'evaluation.json'
+(evidence / filename).write_text(json.dumps(rows, ensure_ascii=False, indent=2))
