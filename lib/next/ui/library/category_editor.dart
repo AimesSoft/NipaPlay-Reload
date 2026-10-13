@@ -140,7 +140,7 @@ class _CategoryEditorState extends State<CategoryEditor> {
         MenuItem(
           label: c.title,
           onTap: () => widget.onRestore?.call(c.categoryId),
-          trailing: NextIcon(NextGlyph.plus, size: 15, color: NextColors.p3),
+          trailing: const NextIcon(NextGlyph.plus, size: 15, color: NextColors.p3),
         ),
       if (widget.hidden.isNotEmpty)
         Container(

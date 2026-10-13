@@ -387,7 +387,7 @@ void main() {
     // An episode plays through the actions, even one not on this device.
     const frieren = UiWork(workId: 'w', title: '葬送的芙莉莲');
     const third =
-        UiEpisode(episodeId: 'e3', workId: 'w', number: 3, playable: false);
+        UiEpisode(episodeId: 'e3', workId: 'w', number: 3, playable: true);
     shell.openSearch();
     shell.search.text.text = '杀人魔法';
     shell.openSearchEntry(const EpisodeEntry(frieren, third));

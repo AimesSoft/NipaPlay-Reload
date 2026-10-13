@@ -256,7 +256,8 @@ class NextShellController extends ChangeNotifier {
       case WorkEntry(:final work):
         openWork(work);
       case EpisodeEntry(:final work, :final episode):
-        play(work, episode: episode);
+        // One that cannot play yet opens its work, where it can be fetched.
+        episode.playable ? play(work, episode: episode) : openWork(work);
       case NipaEntry(:final text):
         final words = '帮我找「$text」';
         askText.value = TextEditingValue(
