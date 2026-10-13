@@ -7,6 +7,7 @@ The conversation target is a synthetic fixture; no model turn is claimed.
 import argparse
 import base64
 import datetime
+import hashlib
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import json
 import os
@@ -29,9 +30,12 @@ sys.path.insert(0, str(workspace / 'docs/next/evidence/x44'))
 from local_seed import seed
 parser = argparse.ArgumentParser()
 parser.add_argument('--evidence', type=Path, required=True)
+parser.add_argument('--programs', action='store_true', help='X46 program/subtitle checks; no BT or model')
+parser.add_argument('--subscriptions', action='store_true', help='Only the X46 manual return follow-up observation')
 args = parser.parse_args()
+args.programs = args.programs or args.subscriptions
 args.evidence.mkdir(parents=True, exist_ok=True)
-root = Path(tempfile.mkdtemp(prefix='x45-local-', dir='/tmp/nipa-next')).resolve()
+root = Path(tempfile.mkdtemp(prefix='x46-local-' if args.programs else 'x45-local-', dir='/tmp/nipa-next')).resolve()
 binary = workspace / 'build/headless/nipaplay-headless'
 native = workspace / 'rust/headless/target/debug/libnipaplay_headless_native.dylib'
 coordinator = workspace / 'server/nipaplay-mesh-coordinator/target/debug/nipaplay-mesh-coordinator'
@@ -41,7 +45,17 @@ opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
 processes, servers, handles, records = [], [], [], []
 gates = [threading.Event() for _ in range(3)]
 trace = []
+def evidence_value(value):
+    if isinstance(value, dict):
+        return {key: ('redacted-fixture-ticket-' + hashlib.sha256(item.encode()).hexdigest()[:12]
+                      if key == 'returnTicket' and isinstance(item, str) else evidence_value(item))
+                for key, item in value.items()}
+    if isinstance(value, list):
+        return [evidence_value(item) for item in value]
+    return value
+
 def record(label, value):
+    value = evidence_value(value)
     records.append({'at': datetime.datetime.now(datetime.timezone.utc).isoformat(), 'label': label, 'value': value})
     (args.evidence / 'local-loopback.json').write_text(json.dumps(records, ensure_ascii=False, indent=2))
     print(label, flush=True)
@@ -71,7 +85,7 @@ def frame():
     random = lambda: base64.urlsafe_b64encode(os.urandom(24)).decode().rstrip('=')
     return {'jsonrpc': '2.0', 'id': random(), 'mesh': {'invocationId': random(), 'nonce': random(), 'deadline': int(time.time()*1000)+300000}}
 try:
-    token = '.'.join([base64.urlsafe_b64encode(v).decode().rstrip('=') for v in [b'{"alg":"EdDSA"}', b'{"userId":424242,"testOnly":true}']]) + '.synthetic-signature'
+    token = '.'.join([base64.urlsafe_b64encode(v).decode().rstrip('=') for v in [b'{"alg":"EdDSA"}', b'{"UserId":424242,"testOnly":true}']]) + '.synthetic-signature'
     class Gateway(BaseHTTPRequestHandler):
         def do_GET(self):
             assert urllib.parse.urlsplit(self.path).path == '/dandanplay/api/v2/playhistory'
@@ -85,7 +99,8 @@ try:
     cp = port()
     cenv = dict(env, MESH_CA_CERT_FILE=str(root/'ca.pem'), MESH_CA_KEY_FILE=str(root/'ca.key'),
         MESH_DATABASE_PATH=str(root/'coordinator.db'), MESH_LISTEN_ADDR=f'127.0.0.1:{cp}',
-        DANDANPLAY_GATEWAY_BASE=f'http://127.0.0.1:{gateway.server_port}/dandanplay', MESH_ACCOUNT_CLAIM_POINTER='/userId')
+        DANDANPLAY_GATEWAY_BASE=f'http://127.0.0.1:{gateway.server_port}/dandanplay')
+    cenv.pop('MESH_ACCOUNT_CLAIM_POINTER', None)
     spawn([coordinator], 'coordinator', cenv)
     def health():
         try:
@@ -101,6 +116,8 @@ try:
             'port':mp,'loopbackOnly':True,'broadcastDiscovery':False,'roles':['agent'] if directory == a else ['download','library'],
             'addresses':[{'kind':'manual','host':'127.0.0.1','port':mp}]}))
         (directory/'download.json').write_text(json.dumps({'dht':False,'localDiscovery':False,'trackers':True}))
+        if args.programs and directory == b:
+            (directory/'program.json').write_text('{"enabled":true}')
         subprocess.run([binary, '--data',directory,'--enroll-token-stdin'], input=token.encode(), env=env, check=True, capture_output=True)
     nenv = dict(env, NIPAPLAY_MESH_DEV_CA=str(root/'ca.pem'))
     spawn([binary, '--data',a,'--native-library',native], 'conversation-fixture', nenv)
@@ -142,43 +159,52 @@ try:
                 response=json.loads(read(struct.unpack('>I',read(4))[0]))
         assert 'error' not in response, response
         return response['result']
-    tools = raw('tools/list',{})['tools']; add = next(t for t in tools if t['_meta']['nipaplay/actionId']=='download.add')
-    videos=[]
-    for i in range(3):
-        video=root/f'cc0-{i}.mp4'; videos.append(video)
-        subprocess.run(['ffmpeg','-v','error','-f','lavfi','-i',f'testsrc2=size=320x180:rate=12:duration={2+i}',
-            '-c:v','libx264','-preset','fast','-crf','26',str(video)],check=True,capture_output=True)
-    torrent=root/'collection.torrent'; servers.extend(seed(videos,torrent,'X45 local CC0',gates,trace))
-    ticket='synthetic-issued-target'
-    target={'threadId':'original-synthetic-thread','repository':str(a/'harness'),
-        'origin':'harness_cli:chat:synthetic','invocationId':'fixture-download'}
-    (a/'mesh-return-targets.json').write_text(json.dumps({ticket:{'peer':bid,**target}}))
-    added=raw('tools/call',{'name':add['name'],'arguments':{'source':str(torrent)},'meshDestructive':False,
-        'returnTo':{**target,'deviceId':aid,'returnTicket':ticket}})['structuredContent']
-    assert added['status']=='completed',added
-    jid=added['result']['job']['jobId']; gates[0].set()
-    def returned():
-        rows=call(a,'followup.list',{})['followups']
-        return next((r for r in rows if r.get('automatic')=='meshDownload'),None)
-    first=wait(returned,90)
-    live=invoke(a,bid,'download.read',{'jobId':jid})
-    record('first-return-observed',{'followup':first,'download':live})
-    assert first['threadId']==target['threadId'] and first['sourceDeviceId']==bid
-    assert first['trigger']['facts'][0]['data']['file']['verification']=='verified'
-    assert live['job']['state']=='running'
-    record('first-file-returned-to-original-target',{'followup':first,'download':live})
-    gates[1].set(); gates[2].set()
-    wait(lambda:invoke(a,bid,'task.get',{'jobId':jid})['job']['state']=='succeeded',90)
-    wait(lambda:any(f['event']=='task.terminal' for row in call(a,'followup.list',{})['followups']
-        for f in (row.get('trigger') or {}).get('facts',[])),45)
-    record('verified-terminal-and-returns',{'download':invoke(a,bid,'download.read',{'jobId':jid}),
-        'destination':call(a,'followup.list',{}),'source':call(b,'followup.list',{})})
-    record('remote-hook-wake',call(b,'agent.wake',{'instruction':'夹具事件事实','facts':{'event':'fixture.tick'}}))
-    wait(lambda:any((r.get('trigger') or {}).get('kind')=='agent.wake' for r in call(a,'followup.list',{})['followups']))
-    record('wake-arrived-at-configured-agent-device',call(a,'followup.list',{}))
-    record('scope-and-isolation',{'network':'loopback only','gateway':'synthetic account','dht':False,
-        'lsd':False,'meshBroadcast':False,'torrentPrivate':True,'license':'CC0-1.0',
-        'bytes':[v.stat().st_size for v in videos],'modelTurns':0,'workstationConnections':0})
+    if args.subscriptions:
+        from program_loopback_scenario import check_subscriptions
+        check_subscriptions(root=root, a=a, b=b, aid=aid, bid=bid,
+                            raw=raw, invoke=invoke, call=call, wait=wait, record=record)
+    elif args.programs:
+        from program_loopback_scenario import check_programs
+        check_programs(root=root, a=a, b=b, aid=aid, bid=bid,
+                       raw=raw, invoke=invoke, call=call, wait=wait, record=record, env=env, workspace=workspace)
+    else:
+        tools = raw('tools/list',{})['tools']; add = next(t for t in tools if t['_meta']['nipaplay/actionId']=='download.add')
+        videos=[]
+        for i in range(3):
+            video=root/f'cc0-{i}.mp4'; videos.append(video)
+            subprocess.run(['ffmpeg','-v','error','-f','lavfi','-i',f'testsrc2=size=320x180:rate=12:duration={2+i}',
+                '-c:v','libx264','-preset','fast','-crf','26',str(video)],check=True,capture_output=True)
+        torrent=root/'collection.torrent'; servers.extend(seed(videos,torrent,'X45 local CC0',gates,trace))
+        ticket='synthetic-issued-target'
+        target={'threadId':'original-synthetic-thread','repository':str(a/'harness'),
+            'origin':'harness_cli:chat:synthetic','invocationId':'fixture-download'}
+        (a/'mesh-return-targets.json').write_text(json.dumps({ticket:{'peer':bid,**target}}))
+        added=raw('tools/call',{'name':add['name'],'arguments':{'source':str(torrent)},'meshDestructive':False,
+            'returnTo':{**target,'deviceId':aid,'returnTicket':ticket}})['structuredContent']
+        assert added['status']=='completed',added
+        jid=added['result']['job']['jobId']; gates[0].set()
+        def returned():
+            rows=call(a,'followup.list',{})['followups']
+            return next((r for r in rows if r.get('automatic')=='meshDownload'),None)
+        first=wait(returned,90)
+        live=invoke(a,bid,'download.read',{'jobId':jid})
+        record('first-return-observed',{'followup':first,'download':live})
+        assert first['threadId']==target['threadId'] and first['sourceDeviceId']==bid
+        assert first['trigger']['facts'][0]['data']['file']['verification']=='verified'
+        assert live['job']['state']=='running'
+        record('first-file-returned-to-original-target',{'followup':first,'download':live})
+        gates[1].set(); gates[2].set()
+        wait(lambda:invoke(a,bid,'task.get',{'jobId':jid})['job']['state']=='succeeded',90)
+        wait(lambda:any(f['event']=='task.terminal' for row in call(a,'followup.list',{})['followups']
+            for f in (row.get('trigger') or {}).get('facts',[])),45)
+        record('verified-terminal-and-returns',{'download':invoke(a,bid,'download.read',{'jobId':jid}),
+            'destination':call(a,'followup.list',{}),'source':call(b,'followup.list',{})})
+        record('remote-hook-wake',call(b,'agent.wake',{'instruction':'夹具事件事实','facts':{'event':'fixture.tick'}}))
+        wait(lambda:any((r.get('trigger') or {}).get('kind')=='agent.wake' for r in call(a,'followup.list',{})['followups']))
+        record('wake-arrived-at-configured-agent-device',call(a,'followup.list',{}))
+        record('scope-and-isolation',{'network':'loopback only','gateway':'synthetic account','dht':False,
+            'lsd':False,'meshBroadcast':False,'torrentPrivate':True,'license':'CC0-1.0',
+            'bytes':[v.stat().st_size for v in videos],'modelTurns':0,'workstationConnections':0})
 finally:
     for gate in gates: gate.set()
     for data in [root/'conversation-fixture',root/'transfer-fixture']:

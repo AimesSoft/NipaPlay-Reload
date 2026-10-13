@@ -1,8 +1,6 @@
 import 'dart:io';
 
-import 'package:flutter/foundation.dart';
-import 'package:nipaplay/src/rust/api/media_metadata.dart' as rust_metadata;
-import 'package:nipaplay/src/rust/frb_generated.dart';
+import 'package:nipaplay/next/subtitles/match_native.dart';
 import 'package:path/path.dart' as p;
 
 const Map<String, int> subtitleExtensionMatchScore = <String, int>{
@@ -203,7 +201,7 @@ bool isVobSubPairCompleteInNames(String fileName, Set<String> candidateNames) {
 
 String normalizeExternalSubtitleTrackUri(String path) {
   final trimmed = path.trim();
-  if (trimmed.isEmpty || kIsWeb) {
+  if (trimmed.isEmpty || subtitleIsWeb) {
     return trimmed;
   }
 
@@ -224,24 +222,14 @@ String normalizeExternalSubtitleTrackUri(String path) {
 }
 
 String normalizeSubtitleMatchName(String name) {
-  if (RustLib.instance.initialized) {
-    try {
-      return rust_metadata.subtitleNormalizeMatchName(name: name);
-    } catch (_) {
-      // 使用下方 Dart/Web fallback。
-    }
-  }
+  final native = nativeSubtitleMatchName(name);
+  if (native != null) return native;
   return extractSubtitleMatchTokens(name).join(' ');
 }
 
 Set<String> extractSubtitleMatchTokens(String name) {
-  if (RustLib.instance.initialized) {
-    try {
-      return rust_metadata.subtitleExtractMatchTokens(name: name).toSet();
-    } catch (_) {
-      // 使用下方 Dart/Web fallback。
-    }
-  }
+  final native = nativeSubtitleMatchTokens(name);
+  if (native != null) return native;
   var working = name.toLowerCase();
   working = working.replaceAll(_subtitleBracketPattern, ' ');
 
@@ -254,13 +242,8 @@ Set<String> extractSubtitleMatchTokens(String name) {
 }
 
 String? pickLikelyEpisodeNumber(List<String> numbers) {
-  if (RustLib.instance.initialized) {
-    try {
-      return rust_metadata.subtitlePickLikelyEpisodeNumber(numbers: numbers);
-    } catch (_) {
-      // 使用下方 Dart/Web fallback。
-    }
-  }
+  final native = nativeSubtitleEpisodeNumber(numbers);
+  if (native != null) return native.value;
   for (final number in numbers) {
     final parsed = int.tryParse(number);
     if (number.length == 2 && parsed != null && parsed > 0) {
@@ -277,19 +260,10 @@ int computeLocalSubtitleMatchScore({
   required List<String> videoNumbers,
   String? episodeNumber,
 }) {
-  if (RustLib.instance.initialized) {
-    try {
-      return rust_metadata.subtitleComputeMatchScore(
-        videoName: videoName,
-        subtitleName: subtitleName,
-        extension_: extension,
-        videoNumbers: videoNumbers,
-        episodeNumber: episodeNumber,
-      );
-    } catch (_) {
-      // 使用下方 Dart/Web fallback。
-    }
-  }
+  final native = nativeSubtitleMatchScore(videoName: videoName,
+      subtitleName: subtitleName, extension: extension,
+      videoNumbers: videoNumbers, episodeNumber: episodeNumber);
+  if (native != null) return native;
   final lowerVideo = videoName.toLowerCase();
   final lowerSubtitle = subtitleName.toLowerCase();
   final normalizedVideo = normalizeSubtitleMatchName(videoName);

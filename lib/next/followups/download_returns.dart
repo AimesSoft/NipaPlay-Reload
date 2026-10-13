@@ -34,7 +34,7 @@ extension DownloadReturns on Followups {
   }
 
   bool _manualCovers(JsonMap row, JsonMap fact, JsonMap target) {
-    if (row['automatic'] != null ||
+    if (row['automatic'] != null && row['automatic'] != 'subscription' ||
         row['state'] == 'cancelled' ||
         row['state'] == 'execution_failed' ||
         row['threadId'] != target['threadId'] ||
@@ -47,7 +47,8 @@ extension DownloadReturns on Followups {
       return true;
     }
     final event = fact['event'] == 'task.terminal'
-        ? (fact['data'] as Map)['state'] == 'succeeded'
+        ? (fact['data'] as Map)['state'] == 'succeeded' &&
+                (fact['data'] as Map)['type'] == 'download'
             ? 'download.completed'
             : null
         : fact['event'];
@@ -191,16 +192,20 @@ extension DownloadReturns on Followups {
       'reason': null, 'waitingFor': 'Waiting for an idle chat host.',
     }..remove('remoteDeviceId')..remove('remoteRetryAt')..remove('remoteReceipt');
     if (!wake) {
-      row['automatic'] = 'meshDownload';
-      row['condition'] = {'kind': 'mesh.download.facts'};
+      row['automatic'] = switch (remote['automatic']) {
+        'program' => 'meshProgram',
+        'subscription' => 'meshSubscription',
+        _ => 'meshDownload',
+      };
+      row['condition'] = {'kind': 'mesh.${remote['automatic']}.facts'};
       row['trigger'] = {...remote['trigger'] as JsonMap, 'sourceDeviceId': peer};
     }
     final safe = redactHarnessJson(row) as JsonMap;
     await database.transaction((tx) async {
-      if (!wake) {
+      if (!wake && remote['automatic'] != 'subscription') {
         for (final fact in ((safe['trigger'] as Map)['facts'] as List).cast<JsonMap>()) {
           await tx.insert('followup_hook_events', {
-            'event': fact['event'] == 'task.terminal' && (fact['data'] as Map)['state'] == 'succeeded' ? 'download.completed' : fact['event'],
+            'event': remote['automatic'] == 'download' && fact['event'] == 'task.terminal' && (fact['data'] as Map)['state'] == 'succeeded' ? 'download.completed' : fact['event'],
             'object_id': fact['objectId'], 'payload': jsonEncode(fact),
           });
         }

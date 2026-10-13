@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:nipa_harness/nipa_harness.dart';
@@ -27,14 +28,16 @@ void main() {
   late TaskEngine engine;
   late Followups followups;
   late FakeExecutor executor;
+  late FakeExecutor programExecutor;
   late MeshRuntime mesh;
   setUp(() async {
     sqfliteFfiInit();
     root = await Directory.systemTemp.createTemp('mesh-return-constraints-');
     store = await SqliteJobStore.open(root, factory: databaseFactoryFfi);
     executor = FakeExecutor(type: 'download');
+    programExecutor = FakeExecutor(type: 'program');
     engine = TaskEngine(
-        store: store, ownerDeviceId: 'workstation', executors: [executor]);
+        store: store, ownerDeviceId: 'workstation', executors: [executor, programExecutor]);
     await engine.start();
     followups =
         Followups(store.database, engine, HeadlessRepository(root.path));
@@ -68,6 +71,63 @@ void main() {
         'complete': true,
         'media': {'fileId': 'file-$index'}
       };
+
+  test('remote manual subscription returns through its issued target and owns the automatic fact', () async {
+    final job = await engine.submit(type: 'program', title: 'subscribed', input: {'returnTo': target()});
+    final subscription = await runZoned(() => followups.register({
+      'instruction': 'custom completion instruction', 'when': {'jobId': job.jobId}},
+      Invocation(origin: 'mesh:mac')), zoneValues: {#meshReturnTarget: target()});
+    expect(subscription['repository'], root.path);
+    expect(subscription['threadId'], 'original-thread');
+    expect(subscription['remoteDeviceId'], 'mac');
+    final delivered = <JsonMap>[];
+    followups.deliverRemote = (peer, row) async { delivered.add(row); return {'accepted': true}; };
+    await (await programExecutor.entered.future).succeed(verified(details: {'exitCode': 0}));
+    await followups.sweep();
+    expect(delivered, hasLength(1));
+    expect(delivered.single['automatic'], 'subscription');
+    expect((await followups.list()).where((r) => r['automatic'] == 'program').single['state'], 'cancelled');
+    await File('${root.path}/mesh-return-targets.json').writeAsString(jsonEncode({
+      'issued-ticket': {'peer': 'workstation-peer', ...target()}
+    }));
+    final accepted = await mesh.receiveDelivery!('workstation-peer', {'row': delivered.single});
+    expect(accepted['accepted'], true);
+    expect(await mesh.receiveDelivery!('workstation-peer', {'row': delivered.single}), accepted);
+    final received = (await followups.list()).where((r) => r['automatic'] == 'meshSubscription').single;
+    expect(received['threadId'], 'original-thread');
+    expect(received['condition'], {'kind': 'mesh.subscription.facts'});
+    expect(() => mesh.receiveDelivery!('wrong-peer', {'row': delivered.single}), throwsFormatException);
+  });
+
+  test('program completion retains the issued thread across lost ACK and reopen', () async {
+    await engine.submit(type: 'program', title: '远端抽帧',
+        input: {'returnTo': target()}, details: {'command': 'ffmpeg fixture'});
+    final context = await programExecutor.entered.future;
+    await context.succeed(verified(details: {'exitCode': 0, 'elapsedMs': 18,
+        'stdoutTail': 'finished', 'stderrTail': '', 'command': 'ffmpeg fixture'}));
+    followups.deliverRemote = (_, row) async {
+      expect(row['threadId'], 'original-thread');
+      throw const Failure(FailureCode.unavailable, 'ack lost');
+    };
+    await followups.sweep();
+    final row = (await followups.list()).single;
+    expect(row['automatic'], 'program');
+    expect(row['remoteSealed'], true);
+    final dynamic trigger = row['trigger'];
+    expect(trigger['facts'][0]['data']['receipt']['details']['stdoutTail'], 'finished');
+    await followups.sweep();
+    expect(await followups.list(), hasLength(1));
+    await followups.close();
+    await engine.close();
+    store = await SqliteJobStore.open(root, factory: databaseFactoryFfi);
+    engine = TaskEngine(store: store, ownerDeviceId: 'workstation',
+        executors: [FakeExecutor(type: 'program')]);
+    await engine.start();
+    followups = Followups(store.database, engine, HeadlessRepository(root.path));
+    await followups.sweep();
+    expect(await followups.list(), hasLength(1));
+    expect((await followups.list()).single['returnTicket'], 'issued-ticket');
+  });
 
   test(
       'mesh return target comes from authenticated transport, never current local chat',

@@ -17,8 +17,14 @@ import 'device_source.dart';
 export 'host.dart' show authorizeMeshPeer;
 
 bool meshActionAllowed(String id) =>
-    ['task.', 'download.', 'media.', 'danmaku.', 'playback.'].any(id.startsWith) ||
-    id == 'agent.wake' || id == 'state.query';
+    ['task.', 'download.', 'media.', 'danmaku.', 'playback.', 'subtitle.',
+      'history.', 'followup.', 'program.', 'discover.', 'sync.', 'ui.']
+        .any(id.startsWith) ||
+    const {'agent.wake', 'activity.report', 'state.query', 'app.instance',
+      'settings.get', 'settings.describe', 'settings.history',
+      'accounts.status', 'accounts.collections.get', 'accounts.collections.update',
+      'accounts.episodes.get', 'accounts.episodes.update',
+      'accounts.bangumi.sync', 'accounts.bangumi.sync_status'}.contains(id);
 
 /// Trust anchors are release inputs, never learned from the coordinator.
 const meshProductionIssuerPem = '';
@@ -458,7 +464,7 @@ final class MeshRuntime implements MeshDeviceSource {
               ? 'mesh.invoke_destructive only accepts destructive actions.'
               : 'Use mesh.invoke_destructive for this action.');
     }
-    final targetReturn = action == 'download.add' && invocation != null
+    final targetReturn = {'download.add', 'program.run', 'followup.register'}.contains(action) && invocation != null
         ? await returnTarget?.call(peer, invocation) : null;
     final result = await rpc(peer, 'tools/call', {
       'name': target['name'],

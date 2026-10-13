@@ -51,7 +51,7 @@ impl Config {
             .clamp(60, address_max_ttl_seconds);
 
         Ok(Self {
-            account_claim_pointer: env_value("MESH_ACCOUNT_CLAIM_POINTER", "/userId"),
+            account_claim_pointer: env_value("MESH_ACCOUNT_CLAIM_POINTER", "/UserId"),
             listen,
             database_path,
             ca_cert_file,

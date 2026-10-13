@@ -376,6 +376,7 @@ final class NextRuntime extends ChangeNotifier {
           ? int.parse(Platform.environment['NIPAPLAY_AGENT_PORT']!)
           : 47811,
     );
+    core.programs.credentialFile = _endpoint.credentialFile;
     if (_disposed) return;
     if (kDebugMode && LabProfile.active) installDebugChat(() => chat);
     if (kDebugMode && LabProfile.active) installDebugUiData(ServiceProvider.nextCore);

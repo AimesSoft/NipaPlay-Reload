@@ -36,8 +36,9 @@ void attachMeshDelivery(MeshRuntime mesh, Followups followups) {
   followups.deliverRemote =
       (peer, row) => mesh.rpc(peer, 'mesh/delivery', {'row': row});
   mesh.receiveDelivery = (peer, payload) async {
-    if (payload['row'] is! JsonMap)
+    if (payload['row'] is! JsonMap) {
       throw const FormatException('Invalid delivery.');
+    }
     final row = payload['row'] as JsonMap;
     if (row['id'] is! String ||
         row['invocationId'] is! String ||
@@ -47,12 +48,12 @@ void attachMeshDelivery(MeshRuntime mesh, Followups followups) {
         row['condition'] is! JsonMap) {
       throw const FormatException('Invalid delivery facts.');
     }
-    if (row['automatic'] == 'download') {
-      if (row['deliverAfter'] is! String ||
-          (row['trigger'] as Map)['facts'] is! List) {
+    if (const {'download', 'program', 'subscription'}.contains(row['automatic'])) {
+      if (row['automatic'] != 'subscription' && (row['deliverAfter'] is! String ||
+          (row['trigger'] as Map)['facts'] is! List)) {
         throw const FormatException('Invalid download delivery.');
       }
-      DateTime.parse(row['deliverAfter'] as String);
+      if (row['automatic'] != 'subscription') DateTime.parse(row['deliverAfter'] as String);
       await pending;
       final saved = await file.exists()
           ? jsonDecode(await file.readAsString()) as JsonMap

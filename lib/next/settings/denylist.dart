@@ -33,6 +33,15 @@ const settingsDenylist = <String>{
 };
 
 const settingsDeniedPrefixes = <String>[
+  'program.',
+  'program_',
+  'remoteRun.',
+  'remote_run_',
+  'mesh.trust',
+  'mesh.issuer',
+  'mesh.coordinator',
+  'mesh.enabled',
+  'mesh.agentDevice',
   'remote_control_',
   'web_server_',
   'remoteAccess.',

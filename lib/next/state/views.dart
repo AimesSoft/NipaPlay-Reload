@@ -86,6 +86,13 @@ final _historyFields = ObjectSchema({
   ..._progressFields.properties,
 });
 final _receiptDetails = ObjectSchema({
+  'command': _text('Executed program command, redacted.'),
+  'shell': _text('Program shell on the executing device.'),
+  'repository': _text('Working directory on the executing device.'),
+  'stdoutTail': _text('Redacted program output tail.'),
+  'stderrTail': _text('Redacted program error output tail.'),
+  'timedOut': _bool('Program exceeded its deadline.'),
+  'stopped': _bool('Program received a stop request.'),
   'source': _text('Helper source: host or codexNative.'),
   'completedAt': _int('Codex helper turn completion Unix seconds.'),
   'summary': _text('Helper final reply, redacted; not proof of domain completion.'),
@@ -152,6 +159,13 @@ final _receipt = ObjectSchema({
     description:
         'Public receipt whitelist; domain-specific storage and credentials are excluded.');
 final _taskFields = ObjectSchema({
+  'command': _text('Program command on the executing device, redacted.'),
+  'shell': _text('Program shell.'),
+  'repository': _text('Program working directory.'),
+  'stdoutTail': _text('Redacted live program output tail.'),
+  'stderrTail': _text('Redacted live program error output tail.'),
+  'elapsedMs': _int('Elapsed program milliseconds.'),
+  'exitCode': _int('Program exit code; null until observed.'),
   'source': _text('Helper source: host or codexNative.'),
   'parentThreadId': _text('Helper parent conversation.'),
   'threadId': _text('Helper Codex thread ID; null before dispatch or for other tasks.'),

@@ -11,7 +11,6 @@ import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:nipaplay/services/subtitle_service.dart';
 import 'package:nipaplay/constants/settings_keys.dart';
 import 'package:nipaplay/utils/subtitle_file_utils.dart';
-import 'package:nipaplay/utils/subtitle_language_utils.dart';
 import 'package:nipaplay/utils/subtitle_parser.dart';
 import 'package:nipaplay/utils/video_player_state.dart';
 
@@ -22,96 +21,18 @@ import '../media/file_identity_merge.dart';
 import '../state/change_history.dart';
 import '../public_url.dart';
 import 'webvtt.dart';
-import 'facts.dart';
+import 'operations.dart';
+import 'detection.dart';
 
-const subtitleFormats = {...supportedSubtitleExtensions, '.vtt'};
-String subtitleLanguage(String value) {
-  if (RegExp(r'portuguese|(?:^|[^a-z])(?:por|pt)(?:$|[^a-z])',
-          caseSensitive: false)
-      .hasMatch(value)) {
-    return 'pt';
-  }
-  return switch (getSubtitleLanguageName(value)) {
-    '简体中文' => 'zh-Hans',
-    '繁体中文' => 'zh-Hant',
-    '中文' => 'zh',
-    '英文' => 'en',
-    '日语' => 'ja',
-    '韩语' => 'ko',
-    '法语' => 'fr',
-    '德语' => 'de',
-    '西班牙语' => 'es',
-    '意大利语' => 'it',
-    '俄语' => 'ru',
-    '印尼语' => 'id',
-    _ => RegExp(r'^[a-z]{2,3}(?:-[A-Za-z]+)?$').hasMatch(value) ? value : 'und',
-  };
-}
+export 'detection.dart';
 
-/// Shared Classic matcher, canonical VobSub pairs and deterministic score order.
-Future<List<({String path, int score})>> subtitleCandidates(
-    String video) async {
-  final name = p.basenameWithoutExtension(video);
-  final numbers = RegExp(r'\d+').allMatches(name).map((m) => m[0]!).toList();
-  final candidates = <String, int>{};
-  await for (final entry in File(video).parent.list()) {
-    if (entry is! File ||
-        !subtitleFormats.contains(p.extension(entry.path).toLowerCase()) ||
-        !isVobSubPairComplete(entry.path)) {
-      continue;
-    }
-    final title = p.basenameWithoutExtension(entry.path);
-    if (!subtitleMatchesVideo(name, title)) continue;
-    final path = canonicalSubtitlePath(entry.path);
-    candidates[path] = computeLocalSubtitleMatchScore(
-        videoName: name,
-        subtitleName: p.basenameWithoutExtension(path),
-        extension: p.extension(path),
-        videoNumbers: numbers,
-        episodeNumber: pickLikelyEpisodeNumber(numbers));
-  }
-  // A language-only Subs folder belongs to the sole video beside it.
-  final siblings = await File(video).parent.list().toList();
-  final videos = siblings.whereType<File>().where((f) => {
-        '.mkv',
-        '.mp4',
-        '.avi',
-        '.mov',
-        '.m4v',
-        '.webm',
-        '.ts'
-      }.contains(p.extension(f.path).toLowerCase()));
-  if (videos.length == 1) {
-    for (final folder in siblings.whereType<Directory>().where((d) =>
-        {'subs', 'subtitles'}.contains(p.basename(d.path).toLowerCase()))) {
-      await for (final entry in folder.list()) {
-        if (entry is! File ||
-            !subtitleFormats.contains(p.extension(entry.path).toLowerCase()) ||
-            !isVobSubPairComplete(entry.path)) {
-          continue;
-        }
-        if (subtitleLanguage(p.basenameWithoutExtension(entry.path)) == 'und' &&
-            !subtitleMatchesVideo(
-                name, p.basenameWithoutExtension(entry.path))) {
-          continue;
-        }
-        candidates[canonicalSubtitlePath(entry.path)] = 100;
-      }
-    }
-  }
-  return candidates.entries.map((e) => (path: e.key, score: e.value)).toList()
-    ..sort((a, b) {
-      final score = b.score.compareTo(a.score);
-      return score == 0 ? a.path.compareTo(b.path) : score;
-    });
-}
-
-final class SubtitleLibrary implements SubtitleFacts {
+final class SubtitleLibrary implements SubtitleOperations {
   SubtitleLibrary(this.media, this.root, {this.probe = probeMediaInfo});
   final MediaService media;
   final Directory root;
   final Future<JsonMap> Function(String) probe;
   IdentityStore get identities => media.store;
+  @override
   Database get db => identities.database;
   final _pending = <String, String>{};
   final _reads = <String, Future<void>>{};
@@ -135,6 +56,7 @@ final class SubtitleLibrary implements SubtitleFacts {
     }
   }
 
+  @override
   Future<JsonMap> facts(String fileId) async {
     final id = await canonicalFileId(db, fileId);
     final rows =
@@ -396,6 +318,7 @@ final class SubtitleLibrary implements SubtitleFacts {
           };
   }
 
+  @override
   Future<JsonMap> importSubtitle(JsonMap input, Invocation invocation) async {
     final id = await canonicalFileId(db, input['fileId'] as String);
     final target =
@@ -487,6 +410,7 @@ final class SubtitleLibrary implements SubtitleFacts {
     return {'fileId': id, 'track': track, 'saved': true};
   }
 
+  @override
   Future<void> select(String fileId, String? trackId,
       {String basis = 'explicit'}) async {
     final id = await canonicalFileId(db, fileId);

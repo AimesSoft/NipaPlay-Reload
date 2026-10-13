@@ -33,7 +33,7 @@ final class _MeshAction extends Action<MeshJson, JsonEncodable> {
           : const ObjectSchema({
               'deviceId': StringSchema(minLength: 1),
               'action': StringSchema(minLength: 1),
-              'input': ObjectSchema({}, additionalProperties: true),
+              'input': ObjectSchema({}, additionalProperties: true, secret: true),
             }, required: [
               'deviceId',
               'action',
