@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'management.dart' show associationImpact, associationPlan;
 import 'dart:convert';
 import 'dart:io';
 import 'dart:math' as math;
@@ -514,7 +515,7 @@ final class MediaService {
     );
   }
 
-  Future<JsonMap> bindBatch(JsonMap input, Invocation invocation) =>
+  Future<JsonMap> bindBatch(JsonMap input, Invocation invocation, {String? expectedPlan}) =>
       mutate(() async {
         await store.importLegacy(await classic.history());
         final key = stableMediaId(
@@ -525,6 +526,10 @@ final class MediaService {
           await _deliverBindings(existing);
           await _saveProjectionReceipt(key, existing);
           return existing;
+        }
+        if (expectedPlan != null &&
+            associationPlan(input, await associationImpact(this, input)) != expectedPlan) {
+          throw const Failure(FailureCode.conflict, 'Association preview is stale; preview again.');
         }
         final records = <String, Future<MetadataRecord>>{};
         Future<MetadataRecord> get(ExternalRef ref) => records.putIfAbsent(
@@ -763,12 +768,22 @@ final class MediaService {
         return result;
       });
 
-  Future<JsonMap> unbindBatch(JsonMap input, Invocation invocation) =>
+  Future<JsonMap> unbindBatch(JsonMap input, Invocation invocation, {String? expectedPlan}) =>
       mutate(() async {
         await store.importLegacy(await classic.history());
         final key = stableMediaId(
             'unbind-operation', [invocation.origin, input['requestId']]);
         final fingerprint = stableMediaId('input', input);
+        final existing = await store.operation(key, fingerprint);
+        if (existing != null) {
+          await _deliverBindings(existing, revoked: true);
+          await _saveProjectionReceipt(key, existing);
+          return existing;
+        }
+        if (expectedPlan != null &&
+            associationPlan(input, await associationImpact(this, input)) != expectedPlan) {
+          throw const Failure(FailureCode.conflict, 'Association preview is stale; preview again.');
+        }
         final entries = (input['entries'] as List).cast<JsonMap>();
         if (entries.isEmpty) {
           throw const Failure(

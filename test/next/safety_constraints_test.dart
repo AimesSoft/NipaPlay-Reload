@@ -5,6 +5,7 @@ import 'package:nipa_harness/nipa_harness.dart';
 import 'package:nipaplay/next/mesh/runtime.dart';
 import 'package:nipaplay/next/settings/denylist.dart';
 import 'package:nipaplay/next/tasks/user_consent.dart';
+import 'package:nipaplay/next/capabilities/classic_action.dart';
 import 'package:nipaplay/security/credential_store.dart';
 import 'package:nipaplay/services/full_backup_service.dart';
 import 'package:nipaplay/services/remote_control_access_guard_service.dart';
@@ -16,8 +17,16 @@ import '../security/memory_vault.dart';
 
 final class _Delete extends Action<_Json, _Json> implements Capability {
   int effects = 0;
+  String filePath = '/fixture/a.mkv';
   @override
-  List<Action> get actions => [this];
+  List<Action> get actions => [this, ClassicAction(const ActionSpec(
+    id: 'download.read', title: 'Manifest', description: '', effect: Effect.read,
+    input: ObjectSchema({'jobId': StringSchema()}, required: ['jobId']),
+    output: ObjectSchema({}, additionalProperties: true)), (_, __) async => {
+      'job': {'jobId': 'download'}, 'task': {'infoHash': 'synthetic',
+        'outputDirectory': '/fixture', 'files': [{'path': filePath,
+          'local': true, 'expectedSize': 4, 'included': true}]}
+    })];
   @override
   ActionSpec get spec => const ActionSpec(
       id: 'download.delete',
@@ -52,6 +61,24 @@ Future<Job> _terminal(TaskEngine engine, String id) async {
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
+  test('download deletion previews bind caller, targets and one request', () async {
+    final deletion = _Delete();
+    final guard = DiskDeletion(prompt: (_, __, stopped) => stopped.then((_) => false));
+    final engine = TaskEngine(store: MemoryJobStore(), ownerDeviceId: 'local', executors: [guard]);
+    guard.engine = engine;
+    final api = Harness(guard.protect([deletion]));
+    await engine.start();
+    addTearDown(engine.close);
+    final preview = await api.invokeJson('download.delete', {'jobId': 'download'}, Invocation(origin: 'mcp'));
+    final call = (preview as NeedsDecision).decision.options.single.call;
+    expect(await api.invokeJson(call.actionId, call.input, Invocation(origin: 'other')), isA<Failed>());
+    deletion.filePath = '/fixture/replaced.mkv';
+    expect(await api.invokeJson(call.actionId, call.input, Invocation(origin: 'mcp')), isA<Failed>());
+    deletion.filePath = '/fixture/a.mkv';
+    expect(await api.invokeJson(call.actionId, call.input, Invocation(origin: 'mcp')), isA<Completed>());
+    expect(await api.invokeJson(call.actionId, call.input, Invocation(origin: 'mcp')), isA<Failed>());
+    expect(deletion.effects, 0);
+  });
   test(
       'only application consent can delete; refusal and cancellation keep files',
       () async {
@@ -70,7 +97,11 @@ void main() {
     Future<String> request() async {
       final outcome = await api.invokeJson(
           'download.delete', {'jobId': 'download'}, Invocation(origin: 'mcp'));
-      return ((outcome as Completed).value.toJson()['job'] as JsonMap)['jobId']
+      expect(outcome, isA<NeedsDecision>());
+      expect(deletion.effects, 0);
+      final option = (outcome as NeedsDecision).decision.options.single.call;
+      final requested = await api.invokeJson(option.actionId, option.input, Invocation(origin: 'mcp'));
+      return ((requested as Completed).value.toJson()['job'] as JsonMap)['jobId']
           as String;
     }
 
@@ -123,7 +154,9 @@ void main() {
     await engine.start();
     final outcome = await api.invokeJson(
         'download.delete', {'jobId': 'download'}, Invocation(origin: 'mcp'));
-    final id = ((outcome as Completed).value.toJson()['job']
+    final option = (outcome as NeedsDecision).decision.options.single.call;
+    final requested = await api.invokeJson(option.actionId, option.input, Invocation(origin: 'mcp'));
+    final id = ((requested as Completed).value.toJson()['job']
         as JsonMap)['jobId'] as String;
     await shown.future;
     await engine.close();

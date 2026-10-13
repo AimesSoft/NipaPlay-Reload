@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:nipa_harness/nipa_harness.dart';
 import 'package:nipaplay/next/capabilities/local_library_operations.dart';
+import 'package:nipaplay/next/media/identity_store.dart' show stableMediaId;
 import 'package:nipaplay/models/watch_history_database.dart';
 import 'package:nipaplay/models/watch_history_model.dart';
 import 'package:nipaplay/next/capabilities/local_playback_operations.dart';
@@ -187,6 +188,15 @@ void main() {
     final survivor = (await WatchHistoryManager.getAllHistory()).single;
     expect(survivor.filePath, paths[2]);
     expect(survivor.lastPosition, 1234);
+    final hidden = '${root.path}/unavailable.mkv';
+    await WatchHistoryDatabase.instance.insertOrUpdateWatchHistory(watchItem(hidden));
+    final forgotten = await invokeCompleted(harness, 'history.remove', {
+      'entryIds': [stableMediaId('history', hidden)]
+    });
+    expect(forgotten['removedCount'], 1);
+    expect(forgotten['removedEntryIds'], [stableMediaId('history', hidden)]);
+    expect(forgotten['removedPaths'], isEmpty);
+    expect((await WatchHistoryManager.getAllHistory()).single.filePath, paths[2]);
     await invokeCompleted(harness, 'media.library.roots.remove', {
       'paths': [two.path]
     });

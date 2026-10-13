@@ -29,6 +29,9 @@ final class MediaSourcesService {
   MediaSourcesService(this.store);
   final IdentityStore store;
   Future<String> Function(String id)? canonicalEntityId;
+  Future<String?> Function(String sourceId, JsonMap item)? cachedPoster;
+  Future<String?> Function(String sourceId, String itemId)? loadPoster;
+  Future<JsonMap> Function(String entityId)? cachedArtwork;
   Future<JsonMap> search(String query, {List<String>? sourceIds, int limit = 12}) =>
       searchSources(this, query, sourceIds: sourceIds, limit: limit);
   final profiles = MultiAddressServerService.instance;

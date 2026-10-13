@@ -80,6 +80,10 @@ const danmakuFamilyDescription =
 
 
 const familyFacts = <String, String>{
+  'media.management': r'''targets 批量将合并 workIds 分解为拥有者设备的 work/episode/file IDs；离线保留对象与 source_device_offline 原因。远程管理通过 mesh.invoke 转发拥有者的原始 ID，具体支持以目标目录为准；接收端执行与本机同样的写入和决定。bind_batch/unbind_batch 与 identity 的 entries 相同，省略 expectedPlan 返回受影响实体、剧集、来源和观看进度的预览；带 expectedPlan 执行，关系变化使预览失效，播放进度变化不失效。修改保留文件、观看进度、来源审计和 Classic 投影回执；可以用预览的原始身份重新绑定。local_catalog 移除/撤回使用 entities.remove_batch/restore。底层 identity 原语保留既有幂等契约供现有客户端与持久任务恢复。''',
+  'media.files': r'''list 返回索引文件位置；管理合并作品先用 management.targets 找拥有者原始 ID，再在目标身体调用 list。reveal 接收本机授权路径，macOS/Windows 在文件管理器定位文件，Linux 打开父目录，逐项报告受理或失败；系统窗口按用户请求打开。远程调用会在目标设备定位。磁盘删除仍走 media.mesh_files.delete 的 NeedsDecision；不能将接收端转换 URL 当源设备路径。''',
+  'accounts.collections': r'''list(provider,statuses?,limit?,cursor?) 批量列出账号动画收藏，返回 items:[{workId,status,rating}] 与 nextCursor。workId 是提供方编号，不是合并 ID；通过 media.bindings 的已接受身份映射。Bangumi 使用同一个 Classic 鉴权客户端的分页列表，弹弹play复用官方网关的收藏列表，不逐部拉详情。弹弹play列表未提供评分时 rating=null；未知不伪造 0。状态用各提供方词汇。分页观测远端实时列表，Bangumi 远端改动可能改变偏移量；界面应继续读取所有 nextCursor。get/update 保留现有批量逐项结果。''',
+  'sync': r'''status 返回 WebDAV 配置、hasPassword（是否已保存）、启用、当前阶段和最近结果，不返回密码。configure 修改地址/用户名会清除旧密码；login 由用户在 NipaPlay 输入并测试后保存。enabled/configuration 是领域设置，适合专用界面而非普通数值控件。run 返回可等待的同步任务。''',
   'media.indexers': r'''status 返回自动附件索引器的启用值、正在执行、排队、上次运行与错误。library.*Enabled 是独立策略开关；关闭排空当前文件、保留队列，显式检查保持可用。自动匹配、弹幕加载和下载完成导入沿用各领域已有设置。''',
   'window': r'''bounds.get 读取、bounds.set 设置本进程主窗准确位置与尺寸，读写 effect 分开；不激活窗口，变化发 window.bounds_changed；已有 window.control 管 fullscreen/PiP/托盘。坐标为 window_manager 逻辑像素。目标不会按应用名查找。''',
   'share': r'''prepare 预览文字、公开 URL 或授权本地文件；open 打开该计划的系统面板，由用户选目的地。会核对预览后文件变化。不以打开面板冒充已分享，也不自动上传日志。''',
@@ -158,7 +162,7 @@ NipaPlay 自己会做一部分：作品有 TMDB 身份时取图，同步 Classic
       r'''Per-file subtitle facts persist independently from playback. Imports copy content into managed storage and batch errors retain index and recovery information. update edits imported language/title/source with expectedRevision; remove releases an imported association and retains its copy. reset_selection restores automatic selection; select null explicitly disables. Current internal playback and persistent selection use the same facts. copy_delete alone deletes unreferenced managed copies and returns NeedsDecision with an exact fingerprint. cues reads active external timed text with delay-aware current/context lines; embedded or bitmap limitations are explicit.
 - **字幕**：按视频文件记录内嵌轨与匹配的外挂字幕，包含语言、标题、格式、来源、可用性和默认选择。内嵌语言来自容器声明，外挂语言来自文件名，未知记为 `und`；文件名语言不是内容核验，记录没有识别烧录在画面中的字幕。单视频目录的 `Subs/`、`Subtitles/` 下语言字幕也会记录。`media.metadata.ui_facts` 给出每集的字幕语言、内嵌或外挂轨道及覆盖。`subtitle.tracks` 读取记录；`subtitle.import` 批量交入字幕文件及语言、来源，内容复制进 NipaPlay 数据目录，交完原文件不再需要，视频目录可以只读。Next 播放时按记录恢复字幕：显式选择和已有 Classic 选择优先，之后按应用语言设置决定简中或繁中优先，再选中文、英文；文本外挂先于内嵌轨。默认选择及依据也在记录中，`subtitle.select` 可记录选择或关闭字幕。`playback.load_subtitle` 仍可为当前播放临时加载。
 - 无界面宿主支持字幕事实、同名外挂索引、导入和显式默认选择；配置 ffprobe 时记录内嵌轨道，未配置时内嵌状态为 unavailable。它不播放字幕、不读取 Classic 字幕偏好或观看历史；默认字幕由调用者显式选择。''',
-  'download':
+  'download': 'preview 接受 magnet、本地 .torrent/file URI 和 HTTP(S) 种子地址；复用 add 的有界元数据获取、hash 校验和缓存，不创建任务或下载媒体字节。GUI delete 返回文件清单 NeedsDecision；delete.request 创建持久 disk_deletion 任务，等待当地用户确认并重检清单。remove 保留文件。\n' +
       r'''- **下载器**：内置 BT 引擎支持 magnet、种子文件和 HTTP(S) 种子链接，使用 Classic 的下载目录设置；新任务可以指定目录和是否建立任务文件夹，重复添加同一哈希不会搬动已有文件。由你发起的下载，视频文件通过校验并登记入库时、任务完成或失败（含取消）时，事实都会自动作为后续回到发起它的会话；会话忙时排队。第一份文件事实立即入队，其余按一分钟合并，任务结束立即送回剩余事实；你已登记的同事件后续不会再多送一份。`download.read` 给出实际落盘路径、逐文件已校验字节、完整与可播状态、连接/已发现/待连接 peer、最近采样间的进展和所在盘可用字节。初始化时逐文件进度可能未知；公开引擎接口不提供做种数或来源持有的片段分布，返回 null。可以在添加时指定文件索引，也可以用 `download.select_files` 改变任务要下载的文件；不删除已下的数据。引擎没有普通文件优先级接口。
 - **单个下载文件完成时**：引擎确认全部片段通过校验、NipaPlay 核对路径和大小后，本地视频就登记入库，无需等整个任务结束。开启自动扫描时，Classic 扫描器识别该文件；识别不了仍登记文件，不虚构作品。`download.file_completed` 事件的对象是 `任务号:文件索引`，包含文件校验事实和当前文件/作品关联，可以触发同名 hook 或登记的后续。完整文件的持久校验记录允许访问该文件，不把下载目录或未完成的邻居当作片库根目录。整个任务完成仍有原来的回执和 `download.completed` 事件；回执保留 `fileIds` 和当时已有的 `workIds`，后来绑定的作品通过文件当前的剧集对应找到。扩展已完成的文件选择会返回新的观察任务，旧回执保留。
 - **其他下载器**：qBittorrent、Aria2、seedbox 这类下载器，NipaPlay 不内置，也不代管。你用它们自己的命令行或接口驱动，可以在本机，也可以在别的设备上运行程序。文件落进 NipaPlay 能读到的位置之后，扫描、识别、入库、播放和本机下载的文件一样。从别的机器取回文件，用文件通道或用户已有的同步方式。''',
@@ -185,8 +189,8 @@ NipaPlay 自己会做一部分：作品有 TMDB 身份时取图，同步 Classic
 - **宿主派发**：`agent.dispatch` 接收标题、说明及可选的返回线程，脚本或 hooks 在没有父 Agent 回合时也能启动独立回合，默认返回主会话。宿主派发最多同时运行两个，更多的排队；`agent.dispatch.report` 是宿主派发回合的一句话进度接口。原生子代理的并发由 Codex 管理。''',
   'settings':
       r'''- **设置的每次修改都记录来源**：谁改的、何时、为什么。用户说"以后都这样"时，就是一条持久偏好，修改时写明理由。''',
-  'history': r'''- **观看进度**：由播放器写入；`history.mark_watched_batch` 可以标记看过。''',
-  'task':
+  'history': r'''观看进度由播放器写入；mark_watched_batch 可以标记看过。state.query history.entries 提供稳定 entryId、fileId、canonical workId/libraryEpisodeId 和本机缓存 poster/still；旧 episodeId 仍是 Classic 数字编号。无绑定/无缓存返回 null，不联网取图。历史按 lastWatchedAt 降序及 entryId 排序，游标存排序值，删掉已读条目或最后锚点仍能继续；这是实时观测，条目的观看时间变化仍可能重排。remove 支持 entryIds/paths/animeIds 的并集，包括 locator=null 的条目，只删除记录，保留视频。''',
+  'task': 'UiTask.type 带 executor 类型，例如 download、media.scan_classic；kind 仍区分 background/helper。任务关联的作品不存在时仍呈现任务，不假造作品或图片。\n' +
       r'''后台任务共用持久快照、来源和回执。control 批量暂停/恢复/取消，逐项给支持与受理事实；paused 可能仍在排空当前文件。get/wait 核对完成。resources 读取实际容量；tasks.*Concurrency 设置只改变新工作派发。不能安全重放的执行器拒绝暂停。终态回执不改写，取消不删除文件。
 - `describe ACTION` 给出输入与输出契约，`call task.list` 可筛选任务，`call task.get '{"jobId":"..."}'` 给出单个任务详情。查询默认每页 50 行，可用 `limit`、`select` 与返回的 `nextCursor` 控制读取范围。
 - 返回任务只代表已受理。只有状态为 `succeeded`、并且回执经过验证，才算完成。`watch` 是有界的等待，不是后台守护。''',
@@ -202,9 +206,9 @@ NipaPlay 自己会做一部分：作品有 TMDB 身份时取图，同步 Classic
       r'''open/pause/seek/navigation accept commands; snapshots observe asynchronously. State reports sessionId, readiness, buffering, buffered position, error/recovery and actual supported controls. External unknown position/duration/pause/rate remain null. wait is bounded and detects a changed session; retry explicitly reloads the source through Classic and may preserve position. chapters exposes container markers and detected skip segments; navigate uses chapter, frame or active skip semantics. Backward frame stepping may be approximate. playlist reports the actual detail source list, without authenticated stream URLs.
 播放器共用 Classic 和 Next；播放本地或媒体服务器上的文件，叠加字幕和弹幕。临时加载字幕用 playback.load_subtitle；持久事实用 subtitle。''',
   'discover': r'''弹弹play 每日放送与推荐。''',
-  'sync': r'''远程来源与多端同步。''',
   'plugins': r'''应用插件。''',
   'media.sources': r'''SMB、WebDAV、Jellyfin、Emby 等远程来源。
+- search 结果的 poster 是已有本机缓存路径；没有缓存为 null，不逐项取图。workTitle 给已绑定作品名。artwork(sourceId,itemId) 懒加载服务器海报，复用 X48 图片供应者，只返回本机路径，不返回鉴权 URL。
 - `media.sources.search {query,sourceIds?,limit?}` 是只读搜索：Jellyfin/Emby 用服务器 SearchTerm 和有界分页，SMB/WebDAV 只查已有文件索引，不枚举目录、不登记新文件、不写发现记录。省略 sourceIds 搜所有支持的已配置来源；limit 限制每个来源（默认 12）。返回 sources[]，每个来源单独给出 entries、total 或 error。离线或登录失败如实返回，其他来源保留结果；索引来源的 unverified 是未知连通状态，不能当成在线。
 - 结果有 sourceId、itemId、标题、可播放事实；已绑定条目带 Next workId/episodeId，服务器原样条目另有 sourceWorkId/sourceEpisodeId。作品 ID 用 ui.open，来源条目用 media.sources.play {sourceId,itemId}。来源分组在界面上可逐个 sourceIds 请求，分别显示结果与错误。
 - browse/sync 是发现与写索引入口；不要用它们实现每次输入的搜索。''',

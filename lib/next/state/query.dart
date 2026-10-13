@@ -27,11 +27,16 @@ final class StateView {
       required this.fields,
       required this.read,
       this.readAll,
+      this.cursorKey,
+      this.cursorOrder = const [],
       this.relations = const {}});
   final String name, description;
   final ObjectSchema fields;
   final StateReader read;
   final Future<StateRows> Function()? readAll;
+  /// Views whose rows can be removed use a value anchor instead of an offset.
+  final String? cursorKey;
+  final List<JsonMap> cursorOrder;
   final Map<String, StateRelation> relations;
   JsonMap describe() => {
         'view': name,
@@ -41,6 +46,7 @@ final class StateView {
         'relations': {
           for (final e in relations.entries) e.key: e.value.toJson()
         },
+        'pagination': cursorKey == null ? 'live_offset' : 'live_keyset',
         'filterOperators': [
           'eq',
           'ne',
@@ -235,6 +241,13 @@ final class StateCapability implements Capability {
         .toString();
     var offset = 0;
     var sourceOffset = 0;
+    List<Object?>? anchor;
+    final order = <JsonMap>[
+      ...((input['orderBy'] as List?)?.cast<JsonMap>() ?? view.cursorOrder),
+      if (view.cursorKey != null &&
+          !((input['orderBy'] as List?) ?? []).any((o) => (o as Map)['field'] == view.cursorKey))
+        {'field': view.cursorKey, 'direction': 'asc'}
+    ];
     if (input['cursor'] case final String cursor) {
       try {
         final decoded =
@@ -248,6 +261,21 @@ final class StateCapability implements Capability {
         }
         offset = decoded['offset'] as int;
         sourceOffset = decoded['sourceOffset'] as int;
+        if (view.cursorKey != null) {
+          if (decoded['anchor'] != null && (decoded['anchor'] is! List ||
+              (decoded['anchor'] as List).length != order.length) ||
+              sourceOffset != 0) {
+            _invalid('invalid_cursor', 'Cursor needs a stable history anchor.');
+          }
+          anchor = (decoded['anchor'] as List?)?.cast<Object?>();
+          for (var i = 0; i < (anchor?.length ?? 0); i++) {
+            final value = anchor![i];
+            if (value != null && view.fields.properties[order[i]['field']]!.validate(value).isNotEmpty) {
+              _invalid('invalid_cursor', 'Invalid anchor value.');
+            }
+          }
+          offset = 0;
+        }
       } on FormatException {
         _invalid('invalid_cursor', 'Malformed continuation.');
       } on TypeError {
@@ -256,7 +284,20 @@ final class StateCapability implements Capability {
     }
     final context = _ReadContext(this, input['timeoutMs'] as int?);
     final source = await context.rows(view, startOffset: sourceOffset);
-    final matched = _match(source, input);
+    var matched = _match(source, {
+      ...input,
+      if (view.cursorKey != null) 'orderBy': order
+    });
+    if (anchor != null) {
+      matched = matched.where((row) {
+        for (var i = 0; i < order.length; i++) {
+          var comparison = _compare(row[order[i]['field']], anchor![i]);
+          if (order[i]['direction'] == 'desc') comparison = -comparison;
+          if (comparison != 0) return comparison > 0;
+        }
+        return false;
+      }).toList();
+    }
     final rows = <JsonMap>[];
     var index = offset;
     final limit = input['limit'] as int? ?? 50;
@@ -286,8 +327,12 @@ final class StateCapability implements Capability {
       'nextCursor': more || hasScanContinuation
           ? base64Url.encode(utf8.encode(jsonEncode({
               'query': fingerprint,
+              if (view.cursorKey != null) 'anchor': index > 0
+                ? [for (final key in order) matched[index - 1][key['field']]]
+                : anchor,
               'offset': more ? index : 0,
-              'sourceOffset': more ? sourceOffset : sourceOffset + source.length
+              'sourceOffset': view.cursorKey != null ? 0 :
+                more ? sourceOffset : sourceOffset + source.length
             })))
           : null,
       'truncated': more || context.warnings.isNotEmpty,
@@ -448,6 +493,9 @@ final class _ReadContext {
           warnings.addAll(source.warnings);
           cache[view.name] = [for (final row in source.rows) publicValue(row, view.fields) as JsonMap];
         } on Failure catch (failure) {
+          if (['history_unavailable', 'classic_library_unavailable'].contains(failure.message)) {
+            rethrow;
+          }
           throw Failure(failure.code, 'state_source_failed', retryable: failure.retryable,
             details: {'source': view.name, 'stage': 'read',
               'recoveryAction': 'Read state.describe for this view and diagnostics.status for host availability.'});

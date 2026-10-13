@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'collections.dart';
 import 'package:nipa_harness/nipa_harness.dart';
 import 'package:nipaplay/services/dandanplay_service.dart';
 import 'package:nipaplay/services/bangumi_api_service.dart';
@@ -201,6 +202,14 @@ final class AccountsService {
           favorites.cast<Map>().where((f) => f['animeId'] == id).firstOrNull,
       'rating': details['userRating'] ?? 0
     };
+  }
+
+  Future<JsonMap> collections(JsonMap input) async {
+    final provider = input['provider'] as String;
+    requireLogin(provider);
+    return listCollections(input,
+      bangumi: (offset, limit) async => checked(await BangumiApiService.getUserCollections(offset: offset, limit: limit))['data'] as JsonMap,
+      dandanplay: () async => (checked(await DandanplayService.getUserFavorites())['favorites'] as List).cast<JsonMap>());
   }
 
   Future<JsonMap> updateCollection(String provider, JsonMap item) async {

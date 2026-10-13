@@ -8,6 +8,9 @@
 connected/unverified/failed 表示最近连接观察，未知不是在线。来源默认每组最多 12。
 已绑定条目带 Next workId/episodeId；服务器未绑定条目给原样 sourceWorkId/
 sourceEpisodeId，共享未绑定文件用 media.sources.play {sourceId,itemId}。
+搜索条目另带本机缓存 `poster` 和已绑定作品的 `workTitle`，无缓存为 null，搜索不下载图片。
+`media.sources.artwork {sourceId,itemId}` 显式懒加载海报，经 X48 的原认证客户端落到
+本机缓存后只返回路径，不返回带认证的地址。宿主未接入图片供应者则返回 unavailable。
 能力族契约见 `nipa describe media.sources`，界面接线见 `docs/next/X56_REPORT.md`。
 `add/update` 配置地址与用户名，`login` 独立发起登录。
 
@@ -34,6 +37,7 @@ SMB/WebDAV parentId 为来源内目录路径。共享来源省略 parentId 列�
 `sync.status/configure/login/enable/test/run` 是 WebDAV 多端增量同步原语，
 与来源文件发现的 `media.sources.sync` 分开。配置采用 patch，修改地址或用户名
 会清除旧凭据。启用、停用、登录、立即同步返回任务回执，设置历史记录调用来源。
+`sync.status.hasPassword` 只说明是否有已保存密码，不读回秘密。
 
 文件定位与 Classic 一致；发现不创建观看历史或推断作品身份。
 Next 索引按 `sourceId` 隔离远程位置，Jellyfin/Emby 另包括实际 serverId；同类两台服务器即使返回相同 item ID，也得到不同

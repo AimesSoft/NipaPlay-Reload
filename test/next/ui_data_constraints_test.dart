@@ -13,6 +13,7 @@ import 'package:nipaplay/next/ui_data/capability.dart';
 import 'package:nipaplay/next/ui_data/service.dart';
 import 'package:nipaplay/next/ui_data/ui_data.dart';
 import 'package:nipaplay/next/ui_data/metadata_facts.dart';
+import 'package:nipaplay/next/ui_data/library_service.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
 import '../../packages/nipa_harness/test/task_support.dart';
@@ -79,6 +80,18 @@ void main() {
   Future<Outcome> call(String action, JsonMap input) => harness.invokeJson(
       action, input, Invocation(origin: 'harness_cli:chat:fixture'));
 
+  test('task remains readable after its source work disappears', () async {
+    service.libraryData = LibraryDataService(service);
+    final job = await engine.submit(type: 'agent.helper', title: '来源任务',
+      input: {'workId': sourceEntityId('work', 'jellyfin:missing', 'missing')});
+    final context = await helperExecutor.entered.future;
+    final task = (await service.tasks().first).single;
+    expect(task.taskId, job.jobId);
+    expect(task.type, 'agent.helper');
+    expect(task.artwork, isNull);
+    await context.succeed(JobReceipt(verification: VerificationLevel.verified, details: {}));
+  });
+
   test('helper cards and tasks retain thread, summary and unknown progress', () async {
     final job = await engine.submit(type: 'agent.helper', title: '补齐弹幕',
         input: {'parentThreadId': 'parent'}, details: {
@@ -89,6 +102,7 @@ void main() {
     final context = await helperExecutor.entered.future;
     final task = (await service.tasks().first).single;
     expect(task.kind, UiTaskKind.helper);
+    expect(task.type, 'agent.helper');
     expect(task.source, 'codexNative');
     expect(task.title, '补齐弹幕');
     expect(task.threadId, 'helper-thread');

@@ -77,6 +77,10 @@ final _historyFields = ObjectSchema({
   'entryId': _text(
       'Stable opaque Classic history identity derived from its location.'),
   'fileId': _id,
+  'workId': _text('Canonical Next work ID; null for unbound history.'),
+  'libraryEpisodeId': _text('Canonical Next episode ID; Classic episodeId remains numeric.'),
+  'poster': _text('Cached local poster path, never an authenticated image URL.'),
+  'still': _text('Cached local episode still path.'),
   'locator': _locator,
   'animeId': _int('Classic Dandanplay anime ID; null for other identities.'),
   'episodeId':
@@ -206,6 +210,8 @@ final class StateSources {
   List<JsonMap> Function()? continueWatching;
   Future<List<JsonMap>> Function()? calendar;
   List<StateView>? classicLibrary;
+  Future<String> Function(String)? canonicalEntityId;
+  Future<JsonMap> Function(String)? cachedArtwork;
 }
 
 List<StateView> publicStateViews(
@@ -264,10 +270,25 @@ List<StateView> publicStateViews(
         where: 'owner_device_id=? AND (locator=? OR locator=?)',
         whereArgs: [media.store.ownerDeviceId, row['filePath'], locator],
         limit: 1);
+    final fileId = locations.firstOrNull?['file_id'] as String?;
+    final links = fileId == null ? <JsonMap>[] : await db.rawQuery(
+      'SELECT e.id AS episodeId,r.parent_id AS workId FROM media_file_episodes fe '
+      'JOIN media_entities e ON e.id=fe.episode_id JOIN media_entities r ON r.id=e.parent_id '
+      'WHERE fe.file_id=? ORDER BY e.id', [fileId]);
+    final localWorkId = links.firstOrNull?['workId'] as String?;
+    final localEpisodeId = links.length == 1 ? links.single['episodeId'] as String : null;
+    Future<String?> canonical(String? id) async => id == null ? null :
+      sources.canonicalEntityId == null ? id : await sources.canonicalEntityId!(id);
+    final art = localWorkId == null ? null : await sources.cachedArtwork?.call(localWorkId);
+    final episodeArt = localEpisodeId == null ? null : await sources.cachedArtwork?.call(localEpisodeId);
     return {
       'entryId': stableMediaId('history', row['filePath'] as String),
       'locator': locator,
-      'fileId': locations.firstOrNull?['file_id'],
+      'fileId': fileId,
+      'workId': await canonical(localWorkId),
+      'libraryEpisodeId': await canonical(localEpisodeId),
+      'poster': art?['poster'],
+      'still': episodeArt?['still'],
       'animeId': row['animeId'],
       'episodeId': row['episodeId'],
       'title': row['animeName'],
@@ -507,6 +528,14 @@ List<StateView> publicStateViews(
           description:
               'Classic in-memory history. Returns unavailable before a history supplier is attached. No database migration or refresh.',
           fields: _historyFields,
+          cursorKey: 'entryId',
+          cursorOrder: const [{'field': 'lastWatchedAt', 'direction': 'desc'}],
+          readAll: () async {
+            final supplier = name == 'history.entries' ? sources.history : sources.continueWatching;
+            if (supplier == null) throw const Failure(FailureCode.unavailable, 'history_unavailable');
+            final snapshot = supplier().toList();
+            return StateRows([for (final row in snapshot) await history(row)]);
+          },
           read: (offset, limit) async {
             final supplier = name == 'history.entries'
                 ? sources.history

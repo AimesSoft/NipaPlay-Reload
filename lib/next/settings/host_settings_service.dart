@@ -16,7 +16,7 @@ import '../programs/runtime.dart';
 import '../state/change_history.dart';
 import '../ui_data/host_settings.dart';
 
-final class HostSettingsService implements NextHostSettings {
+final class HostSettingsService implements NextHostSettings, NextHostDeviceSettings {
   HostSettingsService(
       {required this.root,
       required this.vault,
@@ -29,6 +29,7 @@ final class HostSettingsService implements NextHostSettings {
       required this.codexHome,
       required this.checkCodex,
       required this.modelSaved,
+      this.device,
       this.httpClient = HttpClient.new}) {
     _meshEvents = meshRuntime.hostChanges.listen((_) => notify());
   }
@@ -42,6 +43,28 @@ final class HostSettingsService implements NextHostSettings {
   final String Function() repository;
   final Future<UiModelCheck> Function() checkCodex;
   final Future<void> Function() modelSaved;
+  final NextHostDeviceSettings? device;
+  NextHostDeviceSettings get _device => device ??
+      (throw UnsupportedError('此宿主未接入设备设置'));
+  @override
+  Future<UiHostKeys> keys() => _device.keys();
+  @override
+  Future<void> setKeys({String? spoilerAi, String? tmdb}) => _write(() async {
+    await _device.setKeys(spoilerAi: spoilerAi, tmdb: tmdb);
+    notify();
+  });
+  @override
+  Future<UiRemoteAccess> remoteAccess() => _device.remoteAccess();
+  @override
+  Future<void> setRemoteAccess(UiRemoteAccessChoice choice) => _write(() async {
+    await _device.setRemoteAccess(choice);
+    notify();
+  });
+  @override
+  Future<void> forgetRemoteDevice(String clientKey) => _write(() async {
+    await _device.forgetRemoteDevice(clientKey);
+    notify();
+  });
   final HttpClient Function() httpClient;
   final _changes = StreamController<void>.broadcast();
   Future<void> _writes = Future.value();
@@ -475,7 +498,7 @@ final class LabModelVault implements CredentialVault {
 }
 
 /// The settings page can subscribe before the application core is ready.
-final class PendingHostSettings implements NextHostSettings {
+final class PendingHostSettings implements NextHostSettings, NextHostDeviceSettings {
   PendingHostSettings(this.ready) {
     ready.then((value) {
       _subscription = value.changes.listen((_) => _changes.add(null));
@@ -503,6 +526,19 @@ final class PendingHostSettings implements NextHostSettings {
   @override
   Future<void> setRemotePrograms(bool allowed) async =>
       (await ready).setRemotePrograms(allowed);
+  @override
+  Future<UiHostKeys> keys() async => (await ready).deviceSettings.keys();
+  @override
+  Future<void> setKeys({String? spoilerAi, String? tmdb}) async =>
+      (await ready).deviceSettings.setKeys(spoilerAi: spoilerAi, tmdb: tmdb);
+  @override
+  Future<UiRemoteAccess> remoteAccess() async => (await ready).deviceSettings.remoteAccess();
+  @override
+  Future<void> setRemoteAccess(UiRemoteAccessChoice choice) async =>
+      (await ready).deviceSettings.setRemoteAccess(choice);
+  @override
+  Future<void> forgetRemoteDevice(String clientKey) async =>
+      (await ready).deviceSettings.forgetRemoteDevice(clientKey);
   Future<void> close() async {
     await _subscription?.cancel();
     await _changes.close();

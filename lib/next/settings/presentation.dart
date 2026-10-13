@@ -1,6 +1,7 @@
 import 'package:nipa_harness/nipa_harness.dart';
 
 JsonMap settingPresentation(String key, JsonMap schema) => {
+  if (key == 'danmaku.fontSize') 'valueNames': {'0': '设备默认'},
   if (schema['enum'] case final List values)
     'enumNames': [for (final value in values) _label(key, value)],
   if (_pathFormats[key] case final String format) 'format': format,

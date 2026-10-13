@@ -18,6 +18,10 @@ import 'package:nipaplay/next/programs/runtime.dart';
 import 'package:nipaplay/next/repository_location.dart';
 import 'package:nipaplay/next/settings/denylist.dart';
 import 'package:nipaplay/next/settings/host_settings_service.dart';
+import 'package:nipaplay/next/settings/classic_host_device_settings.dart';
+import 'package:nipaplay/security/credential_store.dart';
+import 'package:nipaplay/services/web_server_service.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:nipaplay/next/state/change_history.dart';
 import 'package:nipaplay/next/state/query.dart';
 import 'package:nipaplay/next/ui_data/host_settings.dart';
@@ -113,6 +117,29 @@ void main() {
     expect(files, greaterThan(0));
     expect(jsonEncode(public.toList()).contains(secret), false);
   }
+
+  test('host keys are write-only, retained by null and cleared without setting journal values', () async {
+    SharedPreferences.setMockInitialValues({});
+    final old = CredentialStore.instance;
+    final vault = LabModelVault();
+    CredentialStore.instance = CredentialStore(vault, desktop: true);
+    addTearDown(() => CredentialStore.instance = old);
+    final device = ClassicHostDeviceSettings(vault: vault, webServer: WebServerService(),
+      spoilerChanged: (key) async {
+        await CredentialStore.instance.write(await SharedPreferences.getInstance(), 'spoiler_ai_api_key', key);
+      });
+    await device.setKeys(spoilerAi: secret, tmdb: secret);
+    expect((await device.keys()).spoilerAi, true);
+    expect((await device.keys()).tmdb, true);
+    await device.setKeys();
+    expect((await device.keys()).tmdb, true);
+    final prefs = await SharedPreferences.getInstance();
+    expect(jsonEncode({for (final key in prefs.getKeys()) key: prefs.get(key)}).contains(secret), false);
+    await scanSecrets([{'spoilerAi': (await device.keys()).spoilerAi, 'tmdb': (await device.keys()).tmdb}]);
+    await device.setKeys(spoilerAi: '', tmdb: '');
+    expect((await device.keys()).spoilerAi, false);
+    expect((await device.keys()).tmdb, false);
+  });
 
   test('keys stay in vault; null retains only matching provider credentials',
       () async {

@@ -68,6 +68,13 @@ Future<JsonMap> searchSources(MediaSourcesService service, String query,
                   'year': item['ProductionYear'],
                   'originalTitle': item['OriginalTitle'],
                   'metadata': serverMetadata(Map<String, dynamic>.from(item)),
+                  'poster': await service.cachedPoster?.call(id, {
+                    'id': itemId, 'serverId': serverId,
+                    'metadata': serverMetadata(Map<String, dynamic>.from(item)),
+                  }) ?? (local == null ? null :
+                    (await service.cachedArtwork?.call(local['workId'] as String))?['poster']),
+                  'workTitle': local == null ? null :
+                    ((await service.store.mergedMetadata(local['workId'] as String))['fields'] as Map)['title'],
                   'fileId': directory ? null : existing.firstOrNull?['fileId'],
                   'workId': local == null
                       ? null
@@ -167,6 +174,10 @@ Future<JsonMap> _indexed(
       'kind': 'File',
       'fileId': row['id'],
       'year': null,
+      'poster': bindings.isEmpty ? null :
+        (await service.cachedArtwork?.call(bindings.first['workId'] as String))?['poster'],
+      'workTitle': bindings.isEmpty ? null :
+        ((await service.store.mergedMetadata(bindings.first['workId'] as String))['fields'] as Map)['title'],
       'workId': bindings.isEmpty
           ? null
           : await _canonical(service, bindings.first['workId'] as String),

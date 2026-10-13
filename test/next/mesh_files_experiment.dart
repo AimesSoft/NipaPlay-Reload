@@ -220,11 +220,10 @@ Future<void> x47FileToolsExperiment(_Rig rig) async {
   await Harness([MeshCapability(a)]).invokeJson(
       choice.actionId, choice.input, Invocation(origin: 'user-choice'));
   expect(await path.exists(), false);
-  await expectLater(
-      a.invoke(b.identity!.deviceId, 'download.echo', {}, destructive: false),
-      throwsA(isA<Failure>()));
+  expect(await a.invoke(b.identity!.deviceId, 'download.echo', {}, destructive: false),
+      isA<Completed>());
   print(
-      'X47c tool routing: TLS-only file tool catalogue/call works with Classic receiver denied; NeedsDecision remains local mesh.invoke_destructive option; ordinary download action still denied.');
+      'X60 tool routing: authenticated TLS file and ordinary write tools work with Classic receiver disabled; destructive calls preserve NeedsDecision.');
 }
 
 Future<void> x47FilesExperiment(_Rig rig) async {

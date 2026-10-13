@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart' hide Action;
 import 'package:flutter/services.dart';
@@ -14,6 +15,7 @@ import 'package:nipaplay/next/media_sources/capability.dart';
 import 'package:nipaplay/next/media_sources/login_dialog.dart';
 import 'package:nipaplay/next/media_sources/service.dart';
 import 'package:nipaplay/next/media_sources/sync.dart';
+import 'package:nipaplay/next/ui_data/library_sources.dart';
 import 'package:nipaplay/utils/auto_sync_settings.dart';
 import 'package:nipaplay/services/backup_category.dart';
 import 'package:nipaplay/next/tasks/sqlite_job_store.dart';
@@ -88,6 +90,67 @@ void main() {
     return result;
   }
 
+  test('source search reads cached poster; explicit artwork loads through Classic', () async {
+    final previousHttp = HttpOverrides.current;
+    HttpOverrides.global = _DirectHttp();
+    final fixture = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+    addTearDown(() async {
+      await fixture.close(force: true);
+      HttpOverrides.global = previousHttp;
+    });
+    final recorder = ui.PictureRecorder();
+    ui.Canvas(recorder).drawColor(const ui.Color(0xff335577), ui.BlendMode.src);
+    final picture = recorder.endRecording();
+    final raster = await picture.toImage(2, 2);
+    final bytes = (await raster.toByteData(format: ui.ImageByteFormat.png))!.buffer.asUint8List();
+    raster.dispose();
+    picture.dispose();
+    var images = 0;
+    fixture.listen((request) async {
+      if (request.uri.path.contains('/Images/')) {
+        images++;
+        request.response.add(bytes);
+      } else {
+        request.response.headers.contentType = ContentType.json;
+        request.response.write(jsonEncode(request.uri.path == '/Items'
+          ? {'Items': [{'Id': 'series', 'Name': '缓存海报', 'Type': 'Series', 'ImageTags': {'Primary': 'one'}}], 'TotalRecordCount': 1}
+          : {'Id': 'x60-server'}));
+      }
+      await request.response.close();
+    });
+    final id = ((await call('media.sources.add', {'type': 'jellyfin', 'name': 'X60 fixture',
+      'url': 'http://127.0.0.1:${fixture.port}'}))['source'] as Map)['sourceId'] as String;
+    final server = sources.server('jellyfin');
+    addTearDown(() {
+      server
+        ..currentProfile = null
+        ..serverUrl = null
+        ..accessToken = null
+        ..userId = null
+        ..isConnected = false;
+    });
+    server
+      ..currentProfile = sources.profiles.getProfileById(sources.key(id))
+      ..serverUrl = 'http://127.0.0.1:${fixture.port}'
+      ..accessToken = 'fixture-session'
+      ..userId = 'fixture-user'
+      ..isConnected = true;
+    final port = ClassicLibrarySources(sources, root);
+    sources.cachedPoster = (id, item) => port.cachedImage(id, item, 'Primary');
+    sources.loadPoster = (id, item) async => port.image(id, await port.item(id, item), 'Primary');
+    Future<Map> entry() async => (((await call('media.sources.search', {'query': '缓存', 'sourceIds': [id]}))['sources'] as List).single['entries'] as List).single as Map;
+    expect((await entry())['poster'], isNull);
+    expect(images, 0);
+    final poster = (await call('media.sources.artwork', {'sourceId': id, 'itemId': 'series'}))['poster'] as String;
+    expect(await File(poster).readAsBytes(), bytes);
+    expect((await entry())['poster'], poster);
+    expect(images, 1);
+    expect(await jobs.database.query('media_entities'), isEmpty);
+    expect(await jobs.database.query('media_bindings'), isEmpty);
+    expect(poster, startsWith(root.path));
+    expect(poster.contains('api_key'), false);
+  });
+
   test(
       'metadata editing and list preserve unresolved refs; removal keeps files',
       () async {
@@ -135,11 +198,13 @@ void main() {
       categories: {BackupCategory.watchHistory}, syncOnRecordChange: true);
     await sync.configure({'intervalMinutes': 20});
     expect(await AutoSyncSettings.getPassword(), 'sync-private');
+    expect((await sync.status())['hasPassword'], true);
     expect((await sync.configuration())['categories'], ['watchHistory']);
     await expectLater(sync.configure({'categories': <String>[]}), throwsA(isA<Failure>()));
     expect(await AutoSyncSettings.getPassword(), 'sync-private');
     await sync.configure({'url': 'http://other.test/dav'});
     expect(await AutoSyncSettings.getPassword(), '');
+    expect((await sync.status())['hasPassword'], false);
     expect(await AutoSyncSettings.getSyncOnRecordChange(), true);
     expect(await AutoSyncSettings.getRemotePath(), '/sync');
     expect(jsonEncode(await sync.status()), isNot(contains('sync-private')));

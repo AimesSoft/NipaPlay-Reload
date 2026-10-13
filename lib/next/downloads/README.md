@@ -1,5 +1,13 @@
 # Download completion and identification
 
+`download.preview` accepts a magnet, local .torrent path/file URI or HTTP(S)
+torrent URL. File/URL previews reuse add's prepared bytes and metadata cache,
+preserve torrent file indices and do not create a native task or download media.
+GUI `download.delete` returns NeedsDecision with the current file manifest;
+the returned `download.delete.request` option creates a persistent user-consent
+task. Caller-bound previews are single-use and target changes invalidate them.
+The application asks its existing local user dialog before deleting any files.
+
 Agent controls use the same Classic torrent session and preferences. Discover
 jobs with `task.list` (`type: download`); `download.read` accepts `jobId` or
 `jobIds` and returns live backend state, rates, output paths and indexed files.

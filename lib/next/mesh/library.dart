@@ -61,6 +61,7 @@ final class MeshLibrary {
   final _episodeKeys = <String, List<String>>{};
   final _localTargets = <String, String>{};
   final _evidence = <String, JsonMap>{};
+  final _management = <String, List<JsonMap>>{};
   JsonMap _local = {'records': <JsonMap>[]};
   Future<void>? _sync, _building;
   String? _builtStamp;
@@ -458,6 +459,14 @@ final class MeshLibrary {
     return refs.map(searchIndex.workId).toList();
   }
 
+  Future<JsonMap> managementTargets(List<String> ids) async {
+    await prepareIndex();
+    return {'entries': [for (final id in ids)
+      {'workId': id, 'targets': _management[_aliases[id] ?? id] ?? [],
+        if (!_management.containsKey(_aliases[id] ?? id))
+          'error': const Failure(FailureCode.notFound, 'Unknown merged work.').toJson()}]};
+  }
+
   String? localEpisodeId(String id) => _localTargets[_aliases[id] ?? id];
 
   Future<UiWork?> work(String id) async {
@@ -565,6 +574,7 @@ final class MeshLibrary {
     for (var i = 0; i < works.length; i++)
       (groups[root(i)] ??= []).add(works[i]);
     _works.clear();
+    _management.clear();
     _episodes.clear();
     _aliases.clear();
     _locations.clear();
@@ -737,6 +747,15 @@ final class MeshLibrary {
         'workId': id
       };
       _evidence[id] = members.first;
+      _management[id] = [for (final member in members)
+        {'deviceId': member['deviceId'], 'workId': member['id'],
+          'local': member['local'], 'online': member['online'],
+          'reason': member['online'] == true ? null : 'source_device_offline',
+          'episodes': [for (final e in sourceEpisodes.where((e) =>
+            e['deviceId'] == member['deviceId'] && e['workId'] == member['id']))
+              {'episodeId': e['id'], 'mergedEpisodeId': _aliases[_ref(e['deviceId'] as String, e['id'] as String)],
+                'fileIds': (e['files'] as List).cast<Map>().map((f) => f['fileId']).toSet().toList()}],
+        }];
       for (final w in members.skip(1)) {
         final other = w['value'] as JsonMap;
         if (value['title'] == '未命名作品') value['title'] = other['title'];

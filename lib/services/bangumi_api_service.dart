@@ -423,6 +423,13 @@ class BangumiApiService {
     }
   }
 
+  /// Paged anime collections through the same authenticated Classic client.
+  static Future<Map<String, dynamic>> getUserCollections({
+    int offset = 0, int limit = 100,
+  }) => _makeRequest('GET', '/v0/users/${Uri.encodeComponent('${_userInfo?['username'] ?? _userInfo?['id'] ?? '-'}')}/collections', queryParams: {
+    'subject_type': '2', 'offset': '$offset', 'limit': '$limit',
+  });
+
   /// 获取用户收藏状态
   ///
   /// [subjectId] 条目ID

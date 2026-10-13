@@ -114,6 +114,38 @@ final class DesktopSystem extends WindowListener implements Capability {
 
   @override
   List<Action> get actions => [
+        ClassicAction(
+          const ActionSpec(id: 'media.files.reveal', title: '在文件管理器中定位文件',
+            description: 'Reveal authorized native files in the local system file manager. '
+              'Batch results preserve each failure. macOS selects the file, Windows selects it in Explorer; '
+              'Linux opens its containing directory. This is a user-requested window operation. '
+              'Other hosts return unavailable; remote use reveals on that body, not this viewer device.',
+            effect: Effect.write,
+            input: ObjectSchema({'paths': ArraySchema(StringSchema(minLength: 1))}, required: ['paths']),
+            output: ObjectSchema({}, additionalProperties: true)),
+          (input, _) async {
+            final results = <JsonMap>[];
+            for (final path in (input['paths'] as List).cast<String>()) {
+              try {
+                if (!desktop) throw const Failure(FailureCode.unavailable, 'Host has no desktop file manager.');
+                final native = await media.authorizedPath(path);
+                final process = Platform.isMacOS
+                  ? await Process.run('/usr/bin/open', ['-R', native])
+                  : Platform.isWindows
+                    ? await Process.run('explorer.exe', ['/select,', native])
+                    : await Process.run('xdg-open', [p.dirname(native)]);
+                if (process.exitCode != 0) throw const Failure(FailureCode.unavailable, 'System file manager rejected the request.');
+                results.add({'index': results.length, 'requested': true,
+                  'mode': Platform.isLinux ? 'directory' : 'select_file'});
+              } on Failure catch (failure) {
+                results.add({'index': results.length, 'requested': false, 'error': failure.toJson()});
+              } on ProcessException {
+                results.add({'index': results.length, 'requested': false,
+                  'error': const Failure(FailureCode.unavailable, 'System file manager is not installed.').toJson()});
+              }
+            }
+            return {'results': results};
+          }),
         for (final operation in ['status', 'send', 'list', 'cancel'])
           ClassicAction(
               ActionSpec(

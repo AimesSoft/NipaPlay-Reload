@@ -49,8 +49,9 @@ Mesh 帧增加 mesh: {invocationId, nonce, deadline}；deadline 使用 Unix 毫�
 加入 Mesh 表示宿主同意同账号设备访问。目录、文件读写使用现有 TLS 1.3 双向证书、
 设备公钥身份、有效期和吊销快照；没有 `shareLibrary` 开关，也没有库内路径白名单。
 节点进程能读写的文件，同账号已认证设备就能读写。文件原语与目录协议不经过 Classic
-receiver/trusted-devices 的第二次审批；tools/list 可由已认证设备读取；其他既有工具调用和回传的审批行为保留，X46 合并时
-核对这一小处分派。协调服务只处理身份和地址，视频、字幕、弹幕、写入字节直接在设备
+receiver/trusted-devices 的第二次审批；tools/list、tools/call 和回传均使用同一 Mesh 身份。
+写入与本机遵循同一能力契约；删除和覆盖仍由目标设备返回 NeedsDecision。
+协调服务只处理身份和地址，视频、字幕、弹幕、写入字节直接在设备
 之间传输，沿用 LAN、overlay、用户自有 SSH 转发候选。
 
 `mesh/library/snapshot` 提供版本化目录页（目标约 256 KiB，单页最大 512 KiB），

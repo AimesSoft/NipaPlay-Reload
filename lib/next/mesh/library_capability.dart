@@ -8,12 +8,35 @@ final class MeshLibraryCapability implements Capability {
   MeshLibraryCapability(MeshLibrary library)
       : actions = [
           _MergedSearchAction(library),
+          _ManagementTargets(library),
           _LibraryAction(library, 'readable'),
           _LibraryAction(library, 'refresh'),
           _LibraryAction(library, 'progress')
         ];
   @override
   final List<Action> actions;
+}
+
+final class _ManagementTargets extends Action<MeshJson, MeshJson> {
+  const _ManagementTargets(this.library);
+  final MeshLibrary library;
+  @override
+  ActionSpec get spec => const ActionSpec(id: 'media.management.targets',
+    title: '读取作品管理的来源设备和实体',
+    description: 'Resolve merged workIds to each owning body\'s original work/episode/file IDs. '
+      'Offline targets remain present with source_device_offline. Local writes use these local IDs; '
+      'remote writes use mesh.invoke(deviceId, action, input) with the original IDs, so all '
+      'domain checks and decisions execute on the owner. Never send a receiving-process path to another body. '
+      'Unsupported host actions return unavailable from the target catalogue, not silent success. '
+      'Use media.files.list on the target to read all file locations; file deletion retains NeedsDecision.',
+    effect: Effect.read,
+    input: ObjectSchema({'workIds': ArraySchema(StringSchema(minLength: 1))}, required: ['workIds']),
+    output: ObjectSchema({}, additionalProperties: true));
+  @override
+  MeshJson decodeInput(JsonMap input) => MeshJson(input);
+  @override
+  Future<Outcome<MeshJson>> run(MeshJson input, Invocation invocation) async =>
+    Completed(MeshJson(await library.managementTargets((input.json['workIds'] as List).cast<String>())));
 }
 
 final class _MergedSearchAction extends Action<MeshJson, MeshJson> {

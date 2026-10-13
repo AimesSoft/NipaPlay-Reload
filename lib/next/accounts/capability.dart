@@ -66,6 +66,26 @@ const _specs = [
       input: ObjectSchema({'provider': _provider}, required: ['provider']),
       output: _output),
   ActionSpec(
+      id: 'accounts.collections.list',
+      title: '按状态列出收藏',
+      description: 'List anime collections through the Classic account client. '
+          'statuses use this provider\'s names (Dandanplay favorited/finished/abandoned; '
+          'Bangumi wish/done/doing/onHold/dropped); omitted or empty means all. '
+          'items contain provider workId, status and rating (null when the list does not supply it). '
+          'Pass nextCursor with the same provider/statuses/limit. No per-work requests. '
+          'Pages observe the live provider list; remote changes can shift Bangumi offsets.',
+      effect: Effect.read,
+      input: ObjectSchema({'provider': _provider,
+        'statuses': ArraySchema(StringSchema()),
+        'limit': IntegerSchema(minimum: 1, maximum: 100),
+        'cursor': StringSchema(minLength: 1)}, required: ['provider']),
+      output: ObjectSchema({
+        'items': ArraySchema(ObjectSchema({'workId': _id,
+          'status': StringSchema(), 'rating': IntegerSchema(nullable: true)},
+          required: ['workId', 'status', 'rating'])),
+        'nextCursor': StringSchema(nullable: true)
+      }, required: ['items', 'nextCursor'])),
+  ActionSpec(
       id: 'accounts.collections.get',
       title: 'Read favorites, ratings and work status',
       description:
@@ -161,6 +181,8 @@ final class _AccountAction extends Action<_Json, _Json> {
         case 'accounts.collections.get':
           result = await batch(input['workIds'] as List,
               (id) => service.collection(provider!, id as int));
+        case 'accounts.collections.list':
+          result = await service.collections(input);
         case 'accounts.collections.update':
           result = await batch(
               input['items'] as List,

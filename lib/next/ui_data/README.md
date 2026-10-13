@@ -1,5 +1,11 @@
 # Next 的界面数据
 
+`UiTask.type` 是持久任务类型（download、media.scan_classic 等），与 helper/background
+的 `kind` 分开。关联实体已移除时任务仍可读取，图片与作品名为空。
+宿主专用的 `core.hostSettings.deviceSettings` 提供 Classic 远程接收设置、受信任设备
+移除以及防剧透/TMDB 密钥写入；契约见 `host_settings.dart`。密钥只返回是否已设置，
+null 保留、空字符串清除。这些接口不注册 Action；宿主不支持时如实报错。
+
 界面在 `await core.ready` 后使用 `core.uiData`（实现 `NextUiData`）。订阅 `changes` 后重新读取首页、作品、剧集和卡片；`tasks()` 每个订阅先收到完整任务列表，随后在任务修改时收到新列表。界面退出时取消订阅，NextCore 负责关闭服务。
 
 ## 按来源的片库（X48）

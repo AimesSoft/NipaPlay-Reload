@@ -256,7 +256,7 @@ final class _MetadataAction extends Action<_MetadataJson, _MetadataJson> {
       id: 'download.$verb',
       title: 'Download $verb',
       description: verb == 'preview'
-          ? 'Resolve magnet metadata without adding a download task. Releases the temporary preview after reading.'
+          ? 'Preview magnet metadata, local torrent path/file URI or HTTP(S) torrent address without adding a task. Prepared torrent bytes are cached; no media bytes are downloaded.'
           : 'Read this device\'s default download directory. The headless host does not keep recent directory choices.',
       effect: Effect.read,
       input: verb == 'preview'
@@ -280,11 +280,12 @@ final class _MetadataAction extends Action<_MetadataJson, _MetadataJson> {
       }));
     }
     final source = input.json['source'] as String;
+    final prepared = await service.sources.prepare(source);
+    final directory = input.json['downloadDirectory'] as String?;
+    if (directory != null) validateDownloadDirectory(directory);
     if (Uri.tryParse(source)?.scheme != 'magnet') {
-      throw const Failure(
-          FailureCode.invalidInput, 'Preview accepts a magnet URI.');
+      return Completed(_MetadataJson(await service.sources.previewTorrent(prepared)));
     }
-    await service.sources.prepare(source);
     return Completed(_MetadataJson(await service.backend
         .preview(source, input.json['downloadDirectory'] as String?)));
   }

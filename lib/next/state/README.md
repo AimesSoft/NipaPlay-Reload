@@ -1,5 +1,12 @@
 # 只读公开状态
 
+历史视图默认按 lastWatchedAt 降序、entryId 升序，用排序值游标继续；删除已读条目
+或最后锚点不改变下一页。观看时间改变仍会使实时记录重排。
+`history.entries` 增加 workId/libraryEpisodeId 与本机缓存 poster/still；episodeId
+保持 Classic 数字编号。未绑定/未缓存返回 null，不刷新目录或联网取图。
+`history.remove` 支持 entryIds（包括 locator=null）与 paths/animeIds 的并集；回执的
+removedEntryIds 覆盖全部删除，removedPaths 仅回显调用者已提供的路径。
+
 `state.describe` 从注册的 `StateView.fields`、关系与同一查询契约生成视图说明。
 字段、类型、单位和 ID 命名空间只有这一份契约；本文不重复字段表。
 `state.query` 不接收 SQL，不调用 getter 中的索引注册、Classic 迁移、来源刷新、

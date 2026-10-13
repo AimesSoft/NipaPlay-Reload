@@ -339,7 +339,11 @@ void main() {
 
   test('two real TLS nodes invoke the same Harness and wrap decision effects',
       () async {
-    final a = await rig.node('a'), b = await rig.node('b');
+    var classicApprovals = 0;
+    final a = await rig.node('a'), b = await rig.node('b', authorize: (_, __) async {
+      classicApprovals++;
+      return const Failure(FailureCode.unavailable, 'Classic receiver is disabled.');
+    });
     await a.refreshDevices();
     final listed = await a.devices();
     final devices = (listed['devices'] as List).cast<JsonMap>();
@@ -366,6 +370,7 @@ void main() {
         destructive: false);
     expect(result.toEnvelope()['result'],
         {'value': 'hello', 'origin': 'mesh:${a.identity!.deviceId}'});
+    expect(classicApprovals, 0);
     expect(
         (await b.invoke(
             a.identity!.deviceId, 'download.echo', {'value': 'back'},

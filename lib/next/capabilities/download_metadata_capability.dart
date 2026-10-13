@@ -35,7 +35,7 @@ final class _MetadataAction extends Action<_Json, _Json> {
         title: 'Download $verb',
         description: switch (verb) {
           'preview' =>
-            'Resolve a magnet using the Classic metadata preview without adding a task. Returns name, folder suggestion and files; releases the temporary preview after reading.',
+            'Preview a magnet, local torrent path/file URI or HTTP(S) torrent address without adding a task. Torrent bytes reuse download.add preparation and cache; magnets use Classic native metadata resolution. Returns name, folder suggestion and indexed files. No media bytes are downloaded.',
           'directories' =>
             'Read the Classic default download directory and recent directory choices.',
           _ =>
@@ -94,13 +94,12 @@ final class _MetadataAction extends Action<_Json, _Json> {
         throw const Failure(FailureCode.unavailable, 'Downloader is disabled.');
       }
       final source = input.json['source'] as String;
-      if (Uri.tryParse(source)?.scheme != 'magnet') {
-        throw const Failure(
-            FailureCode.invalidInput, 'Classic preview accepts a magnet URI.');
-      }
-      await sources.prepare(source);
+      final prepared = await sources.prepare(source);
       final directory = input.json['downloadDirectory'] as String?;
       if (directory != null) validateDownloadDirectory(directory);
+      if (Uri.tryParse(source)?.scheme != 'magnet') {
+        return Completed(_Json(await sources.previewTorrent(prepared)));
+      }
       final request = TorrentPreviewRequest();
       try {
         final preview = await service.previewMagnet(source,

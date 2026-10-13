@@ -1,5 +1,15 @@
 # 媒体能力原语
 
+`media.management.bind_batch/unbind_batch` 是多作品管理预览协议：与 identity 原语
+同 entries/requestId，省略 expectedPlan 返回受影响实体、剧集、来源和进度；带回
+expectedPlan 执行。关系改变使预览失效，播放进度变化不失效。操作保留文件和进度，
+原身份及操作审计保留，可用 bind_batch 重建，不需要 NeedsDecision。底层 identity
+原语维持现有幂等契约，供扫描及持久任务使用。
+`media.management.targets {workIds}` 将合并作品映射到拥有者设备的原始 work/episode/
+file IDs；离线保留对象及原因。远程操作经 mesh.invoke 在拥有者执行，支持范围以
+目标能力目录为准。`media.files.reveal {paths}` 在本机文件管理器定位，逐项报错；
+远程调用定位的是目标设备桌面。
+
 本地自编目录不需要外部身份：`media.entities.put_batch` 原子保存 work → release →
 episode 与已有 fileIds。调用者给稳定 ID，修改要求 revision 与影响预览。
 `remove_batch` 默认只返回预览，执行保留实体前像、文件和观看进度，`restore` 按

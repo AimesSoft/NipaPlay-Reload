@@ -110,6 +110,15 @@ final class MediaSourcesCapability implements Capability {
 
 final _specs = [
   const ActionSpec(
+      id: 'media.sources.artwork',
+      title: '读取来源海报',
+      description: 'Lazily load a Jellyfin/Emby item poster using the X48 source image provider. '
+          'Returns only a cached local poster path or null. Authentication stays in the Classic client; '
+          'does not register files or identity. SMB/WebDAV have no server posters.',
+      effect: Effect.read,
+      input: ObjectSchema({'sourceId': _text, 'itemId': _text}, required: ['sourceId', 'itemId']),
+      output: ObjectSchema({'poster': StringSchema(nullable: true)}, required: ['poster'])),
+  const ActionSpec(
       id: 'media.sources.search',
       title: '只读搜索媒体来源',
       description: 'Read-only search, independently reported per source. Jellyfin/Emby use bounded server SearchTerm across all libraries (Series/Movie/Episode/Video). SMB/WebDAV search only previously discovered file names and paths in the existing unified index; never enumerate, browse, register files, create identities or write discovery journal. sourceIds selects a batch; omitted selects configured supported sources; limit bounds each source (default 12). Returns sources[] with sourceId/name/type, basis server/indexed, connectionState, entries, total (null on error), optional error. A failed source does not discard other results. Indexed connectionState is the last known observation, unverified means unknown connectivity, not proven offline. Entries expose itemId, nullable accepted workId/episodeId, fileId, playable; server sourceWorkId/sourceEpisodeId open original Next pages. Unbound shared files play with media.sources.play {sourceId,itemId}. Searches activate the requested saved server session, using existing Classic clients. Call with one sourceId per GUI group to render independently.',
@@ -398,6 +407,10 @@ final class _SourceAction extends Action<_Json, _Json> {
       await service.ensureInitialized();
       final JsonMap result;
       switch (spec.id) {
+        case 'media.sources.artwork':
+          final load = service.loadPoster;
+          if (load == null) throw const Failure(FailureCode.unavailable, 'Source image host is not attached.');
+          result = {'poster': await load(json['sourceId'] as String, json['itemId'] as String)};
         case 'media.sources.search':
           result = await service.search(json['query'] as String,
               sourceIds: (json['sourceIds'] as List?)?.cast<String>(),
