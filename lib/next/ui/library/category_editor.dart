@@ -21,6 +21,8 @@ class CategoryEditor extends StatefulWidget {
     required this.onRemove,
     required this.onAskNipa,
     this.original = false,
+    this.hidden = const [],
+    this.onRestore,
   });
 
   final List<UiCategory> categories;
@@ -28,6 +30,10 @@ class CategoryEditor extends StatefulWidget {
   /// The source's own structure: taking a category away only hides it
   /// here; nothing on the server or share changes.
   final bool original;
+
+  /// Original categories hidden on this device, to bring back.
+  final List<UiCategory> hidden;
+  final void Function(String categoryId)? onRestore;
   final void Function(String categoryId, int index) onMove;
   final void Function(String categoryId) onRemove;
   final VoidCallback onAskNipa;
@@ -130,6 +136,18 @@ class _CategoryEditorState extends State<CategoryEditor> {
         margin: const EdgeInsets.symmetric(vertical: 6, horizontal: 8),
         color: NextColors.line,
       ),
+      for (final c in widget.hidden)
+        MenuItem(
+          label: c.title,
+          onTap: () => widget.onRestore?.call(c.categoryId),
+          trailing: NextIcon(NextGlyph.plus, size: 15, color: NextColors.p3),
+        ),
+      if (widget.hidden.isNotEmpty)
+        Container(
+          height: 1,
+          margin: const EdgeInsets.symmetric(vertical: 6, horizontal: 8),
+          color: NextColors.line,
+        ),
       MenuItem(
         label: '让 Nipa 整理',
         onTap: widget.onAskNipa,

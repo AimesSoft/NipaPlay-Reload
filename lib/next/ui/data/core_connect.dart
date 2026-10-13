@@ -4,6 +4,7 @@ import 'package:nipa_harness/nipa_harness.dart';
 import '../../next_core.dart';
 import '../../next_runtime.dart';
 import '../../ui_data/library.dart';
+import '../../ui_data/library_service.dart';
 import '../../ui_data/ui_data.dart';
 import 'login_requests.dart';
 import 'ui_actions.dart';
@@ -12,63 +13,53 @@ import 'ui_actions.dart';
 /// usable once the core is ready (the shell may appear before that).
 NextUiData coreUiData(NextCore core) => _WhenReady(core);
 
-/// The 片库 page until the body arranges sources and categories (X48): this
-/// device with the mesh only, one category of everything
-/// [NextUiData.library] returns, nothing to rearrange.
-final class CoreLocalLibrary implements NextLibraryData, NextLibraryActions {
-  CoreLocalLibrary(this.data);
-  final NextUiData data;
-  UiLibraryForm _form = UiLibraryForm.shelves;
+/// The 片库 page's sources, arrangements and actions from the core
+/// (`NextCore.libraryData`), once it is ready.
+final class CoreLibrary implements NextLibraryData, NextLibraryActions {
+  CoreLibrary(this.core);
+  final NextCore core;
 
-  @override
-  Future<List<UiLibrarySource>> sources() async => const [
-        UiLibrarySource(
-            sourceId: 'local', name: '本地', kind: UiSourceKind.local),
-      ];
-
-  @override
-  Future<UiLibraryPage> page(String sourceId) async {
-    final works = await data.library();
-    return UiLibraryPage(form: _form, categories: [
-      UiCategory(
-        categoryId: 'local:all',
-        title: '全部',
-        count: works.length,
-        posters: [
-          for (final w in works)
-            if (w.artwork.poster case final poster?) poster
-        ].take(3).toList(),
-        backdrop: works.firstOrNull?.artwork.backdrop,
-        tint: works.firstOrNull?.artwork.tint,
-        sorts: const [UiSort('added', '最近添加')],
-      ),
-    ]);
+  Future<LibraryDataService> get _library async {
+    await core.ready;
+    return core.libraryData;
   }
+
+  @override
+  Future<List<UiLibrarySource>> sources() async => (await _library).sources();
+
+  @override
+  Future<UiLibraryPage> page(String sourceId) async =>
+      (await _library).page(sourceId);
 
   @override
   Future<UiSlice> items(String categoryId,
-      {int offset = 0, int limit = 60, String? sort}) async {
-    final works = await data.library();
-    return UiSlice(
-        [for (final w in works.skip(offset).take(limit)) UiWorkItem(w)],
-        total: works.length);
-  }
+          {int offset = 0, int limit = 60, String? sort}) async =>
+      (await _library)
+          .items(categoryId, offset: offset, limit: limit, sort: sort);
 
   @override
-  Stream<void> get changes => data.changes;
+  Stream<void> get changes =>
+      Stream.fromFuture(_library).asyncExpand((library) => library.changes);
 
   @override
   Future<void> setForm(String sourceId, UiLibraryForm form) async =>
-      _form = form;
+      (await _library).setForm(sourceId, form);
 
   @override
-  Future<void> useOriginal(String sourceId, bool original) async {}
+  Future<void> useOriginal(String sourceId, bool original) async =>
+      (await _library).useOriginal(sourceId, original);
 
   @override
-  Future<void> moveCategory(String categoryId, int index) async {}
+  Future<void> moveCategory(String categoryId, int index) async =>
+      (await _library).moveCategory(categoryId, index);
 
   @override
-  Future<void> removeCategory(String categoryId) async {}
+  Future<void> removeCategory(String categoryId) async =>
+      (await _library).removeCategory(categoryId);
+
+  @override
+  Future<void> restoreCategory(String categoryId) async =>
+      (await _library).restoreCategory(categoryId);
 }
 
 /// Real actions: task controls on the core's engine, playback through the

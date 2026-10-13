@@ -400,17 +400,8 @@ final class _SourceAction extends Action<_Json, _Json> {
               type: 'media.sources.scrape', title: '识别远程媒体', input: json);
           result = {'jobId': job.jobId};
         case 'media.sources.play':
-          result = await service.serial(() async {
-            final source = await service.source(json['sourceId'] as String);
-            await service.activate(source);
-            final play = service.playItem;
-            if (play == null) {
-              throw const Failure(FailureCode.unavailable,
-                  'The NipaPlay player is not attached.');
-            }
-            return play(source, json['itemId'] as String,
-                json['startPositionMs'] as int?);
-          });
+          result = await service.play(json['sourceId'] as String, json['itemId'] as String,
+            startPositionMs: json['startPositionMs'] as int?);
         case 'media.sources.check':
           result = json['sourceId'] == null
               ? await service.testConfiguration(json)

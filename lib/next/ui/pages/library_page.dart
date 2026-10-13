@@ -449,6 +449,8 @@ class _LibraryPageState extends State<LibraryPage>
             onRemove: _actions.removeCategory,
             onAskNipa: _askNipa,
             original: !page.arranged,
+            hidden: page.hiddenCategories,
+            onRestore: _actions.restoreCategory,
           ),
         ),
     };

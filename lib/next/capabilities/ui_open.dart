@@ -223,6 +223,9 @@ final class UiOpenAction extends Action<UiOpenValue, UiOpenValue> {
     final id = (target['entityId'] ?? target['workId']) as String;
     final merged = await resolveEntity?.call(id);
     if (merged != null) {
+      if (merged['sourcePlayback'] case final Map result) {
+        return _opened(target, {'kind': 'playback', ...Map<String, Object?>.from(result)});
+      }
       if (merged['workId'] case final String workId) {
         final opened = await openWork?.call(workId);
         return opened == true ? _opened(target, {'kind': 'work_detail', 'workId': workId, 'interface': 'next'})

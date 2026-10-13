@@ -60,7 +60,7 @@ final class NextUiServices {
     final runtime = context.read<NextRuntime>();
     final logins = LoginRequests();
     final data = coreUiData(core);
-    final library = CoreLocalLibrary(data);
+    final library = CoreLibrary(core);
     return NextUiServices(
       data: data,
       actions: coreUiActions(core, runtime),

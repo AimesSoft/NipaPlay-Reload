@@ -47,6 +47,9 @@ import 'harness_location.dart';
 import 'followups/service.dart';
 import 'followups/capability.dart';
 import 'ui_data/service.dart';
+import 'ui_data/library_service.dart';
+import 'ui_data/library_sources.dart';
+import 'ui_data/library_capability.dart';
 import 'ui/shell/next_ui_preference.dart';
 import 'ui_data/capability.dart';
 import 'chat/session_store.dart';
@@ -111,6 +114,8 @@ final class NextCore {
   late final SessionStore sessions;
   late final HarnessMemory memory;
   late final UiDataService uiData;
+  late final LibraryDataService libraryData;
+  LibraryDataService get libraryActions => libraryData;
 
   Future<void> _initialize(
       Directory? suppliedRoot,
@@ -224,6 +229,9 @@ final class NextCore {
             changeHistory).view, followups.view]);
     uiData = UiDataService(media.service, engine, state, stateSources, root, credentialVault);
     uiData.subtitles = subtitles;
+    libraryData = LibraryDataService(uiData, port: ClassicLibrarySources(mediaSources, root));
+    uiData.libraryData = libraryData;
+    libraryData.register(state);
     uiData.meshLibrary = MeshLibrary(uiData, mesh);
     registerMergedLibrary(state, uiData.meshLibrary!);
     await uiData.meshLibrary!.start();
@@ -235,6 +243,7 @@ final class NextCore {
       programRepository,
       FollowupCapability(followups),
       UiDataCapability(uiData),
+      LibraryCapability(libraryData),
       MeshLibraryCapability(uiData.meshLibrary!),
         MeshFilesCapability(uiData.meshLibrary!.files),
       downloads.capability,

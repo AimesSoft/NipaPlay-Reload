@@ -13,6 +13,7 @@ import 'settings/migration.dart';
 import 'state/change_history.dart';
 import 'followups/migration.dart';
 import 'ui_data/migration.dart';
+import 'ui_data/library_index.dart';
 import 'chat/session_store.dart';
 import 'media/file_identity_merge.dart';
 import 'subtitles/migration.dart';
@@ -35,6 +36,7 @@ const _migrations = [
   migrateDanmakuSidecars,
   migrateDanmakuFiles,
   migrateSubtitles,
+  migrateLibraryIndex,
 ];
 
 Future<void> _migrate(Database db, int oldVersion, int newVersion) async {

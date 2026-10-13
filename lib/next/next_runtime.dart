@@ -67,6 +67,7 @@ import 'memory/recent.dart';
 import 'work_detail_bridge.dart';
 import 'chat/debug_chat.dart';
 import 'ui_data/debug_ui_data.dart';
+import 'ui_data/library_service.dart';
 import 'harness_redaction.dart';
 import 'state/change_history.dart';
 
@@ -255,7 +256,16 @@ final class NextRuntime extends ChangeNotifier {
       DiscoverCapability(),
       UiCapability(
         media: () => core.media.service,
-        resolveEntity: (id) async => id.startsWith('mesh-') ? core.uiData.meshLibrary!.open(id) : null,
+        resolveEntity: (id) async {
+          if (sourceEntityRef(id, 'work') != null) return {'workId': (await core.uiData.work(id))!.workId};
+          final episode = await core.libraryData.validatedSourceRef(id, 'episode');
+          if (episode != null) return {'sourcePlayback': await core.mediaSources.play(episode[0], episode[1], expectedServerId: episode.length == 3 ? episode[2] : null)};
+          final merged = id.startsWith('mesh-') ? await core.uiData.meshLibrary!.open(id) : null;
+          final source = merged?['sourceInfo'] as Map?;
+          if (source != null) return {'sourcePlayback': await core.mediaSources.play(source['sourceId'] as String, source['itemId'] as String,
+            expectedServerId: source['serverId'] as String?, startPositionMs: merged!['resumeMs'] as int?)};
+          return merged;
+        },
         openPage: ClassicUiOpen().page,
         openDetail: ClassicUiOpen().detail,
         openWork: WorkDetailBridge.open,

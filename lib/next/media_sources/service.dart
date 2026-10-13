@@ -456,6 +456,18 @@ final class MediaSourcesService {
     }
   }
 
+  Future<JsonMap> play(String sourceId, String itemId,
+      {int? startPositionMs, String? expectedServerId}) => serial(() async {
+    final row = await source(sourceId);
+    if (expectedServerId != null && profiles.getProfileById(key(sourceId))!.serverId != expectedServerId) {
+      throw const Failure(FailureCode.conflict, 'Source now points to a different server.');
+    }
+    await activate(row);
+    final play = playItem;
+    if (play == null) throw const Failure(FailureCode.unavailable, 'The NipaPlay player is not attached.');
+    return play(row,itemId,startPositionMs);
+  });
+
   Future<JsonMap> libraries(String id) => serial(() async {
         final row = await source(id);
         await activate(row);

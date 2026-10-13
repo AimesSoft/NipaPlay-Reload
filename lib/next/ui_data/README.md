@@ -2,6 +2,106 @@
 
 界面在 `await core.ready` 后使用 `core.uiData`（实现 `NextUiData`）。订阅 `changes` 后重新读取首页、作品、剧集和卡片；`tasks()` 每个订阅先收到完整任务列表，随后在任务修改时收到新列表。界面退出时取消订阅，NextCore 负责关闭服务。
 
+## 按来源的片库（X48）
+
+入口是 `core.libraryData`（实现 `NextLibraryData`）和 `core.libraryActions`
+（实现 `NextLibraryActions`），后端为 `LibraryDataService`。不需要界面解析 Action
+回执。`sources/page/items` 分别读取来源菜单、当前类别和分页；`items` 默认 60、
+上限 500，offset 从 0 开始，返回 `total`。订阅同一个 `changes`。合并时将 Y7
+的临时数据供应者接到这两个入口；本实现没有修改 `lib/next/ui/`。
+
+本地仍是 X47 的整个合并目录，只有“全部”。其他来源使用 Classic 已有配置、
+登录态和客户端：Jellyfin/Emby 只显示已选库，文件夹保留为可继续打开的
+`UiFolderItem`，Series 打开作品详情及季/集；SMB/WebDAV 从共享根路径逐层浏览。
+服务器原样排序读取 Classic 每库偏好，发现的父关系持久缓存以便子目录继承；
+请求中的 sort 不改变 Classic 偏好。SMB/WebDAV 排序为名称或修改时间。
+
+Nipa 的能力与首页摆放同属 `ui.*`：
+
+| 能力 | 输入 |
+|---|---|
+| `ui.library.sources/page/items` | 与数据接口相同的 sourceId/categoryId 和分页参数 |
+| `ui.library.put` | `entries:[{sourceId,categoryId,title,content,coverWorkIds?,sort?}]` |
+| `ui.library.configure` | `entries:[{sourceId,form?:shelves或cards,original?:bool}]` |
+| `ui.library.move` | `entries:[{categoryId,index}]`，下标从零开始 |
+| `ui.library.remove` | `entries:[{categoryId}]`，原始类别在本机隐藏，整理类别从整理中移除 |
+| `ui.library.restore` | `entries:[{categoryId}]`，恢复隐藏的原始类别 |
+
+`put` 是完整替换一个类别，保留已有位置；新 ID 追加，ID 全局唯一。整批先验证，
+再以一个事务写入布局及 activity。封面由最多三部 `coverWorkIds` 提供，缺少时取
+预览作品的已缓存海报/背景。GUI 的四个直接操作调用同一实现，来源 `gui`、actor
+`user`，Nipa 保留实际调用来源。切回原始结构保留所有整理；最后一个类别移除后
+显示原始结构。布局保存在 `ui_cache` 的 `library:layout:*`，不是可自动清理的图片缓存。
+
+原始结构同样支持直接重排与隐藏：`move` 的下标是当前可见类别中的下标，
+`originalOrder` 和 `hiddenOriginal` 独立于整理类别持久保存在本机。它们不修改
+服务器排序、服务器库或共享目录。隐藏后可从 `page.hiddenCategories` 的
+categoryId/title 或 `state.query library.arrangements` 的 hiddenOriginal 取 ID，
+用 `ui.library.restore` 批量恢复；恢复保留已保存的位置。切换形式、原样和整理
+不会清掉顺序或隐藏记录。activity 分别使用“隐藏原始类别”“恢复原始类别”
+和“移除整理类别”。接口只新增 `UiLibraryPage.hiddenCategories`，已有字段和
+方法保持兼容；`NextLibraryActions` 的 move/remove 语义与主分支 c1b179e9 一致。
+
+`content` 恰好一种：
+
+```json
+{"kind":"condition","filter":{"sourceIds":["local","jellyfin:服务器配置ID"],"types":["anime"],"watch":"unwatched"}}
+```
+
+```json
+{"kind":"manual","workIds":["作品ID","另一部作品ID"]}
+```
+
+```json
+{"kind":"original","sourceId":"jellyfin:服务器配置ID","parentId":"服务器库或文件夹ID"}
+```
+
+条件还支持 `deviceIds`、`genres`、`yearMin/yearMax`、`ratingMin/ratingMax`、
+`addedAfter/addedBefore`（ISO-8601）。数组内任一值匹配，维度之间都须匹配，
+维度作用于合并作品整体；所在页面不会暗加来源条件。watch 为
+unwatched/watching/watched；年份、标签和评分未知时不满足相应条件。评分采用
+作品界面第一项评分，`ratingSource` 保留它的来源；加入时间继承 X47 合并组的
+排序事实。作品类型取明确的 anime/series/movie 属性及已接受的弹弹play、Bangumi、
+TMDB 身份，不按标题猜测。Jellyfin/Emby 必须有 X47 接受的作品身份才进入条件，
+原样浏览不自动接受 ProviderIds；本地/共享的已登记 work 实体也可参加条件。
+手选只提供“手选顺序”。本地来源原样引用为 `sourceId:local,parentId:all`。
+
+`state.query library.arrangements` 展示已加载的来源配置和全部持久整理（含已移除
+来源的保留布局）；`library.catalogue` 提供本机条件投影中的 sourceIds/deviceIds/
+types/watch/genres/year/rating/ratingSource/addedAt。两者不联网、不建立身份或分类。
+条件投影是 SQLite v17 新增的 `next_library_index`，由 X47 本机/认证 Mesh 快照及
+进度重建。初次条件读取建立投影，随后每五秒/显式刷新更新，新作品不需要 Nipa
+在线。分页读取只返回当前页作品，SQL 同时计算总数。X47 快照同步仍有全目录
+重建成本；这次没有把其底层同步改为增量。
+
+Jellyfin/Emby 原样内容使用 StartIndex/Limit/TotalRecordCount，一次只读服务器的一页。
+SMB/WebDAV 协议没有相同的分页：首屏枚举一层目录，把视频与目录条目缓存到
+本机，后续滚动用 SQLite LIMIT/OFFSET，不递归枚举整棵共享。详情 episodes 的
+既有接口返回一部作品全部剧集，因此通过服务器分批读取后合成列表。
+
+离线时，`LibrarySourceCache` 返回最近成功读取的库、目录条目、总数和本机图片
+路径；从未成功读取的来源返回空页，不添加错误文字。缓存按来源配置与实际
+服务器身份隔离。目录观察按排序、过滤、递归方式及条目位置存储，离线仍用
+SQL 读取请求范围，limit 改变也能复用已读条目；尚未读过的位置不编造内容。
+page 的根目录读取会重新尝试来源，恢复连接后更新缓存。已绑定的条件/手选
+作品也检查 next 剧集的本机来源定位；离线来源的 next.playable=false，仍可读
+其资料。缓存失败不覆盖上次成功观察，JSON、引用、数据库及程序错误照常报错。
+
+未绑定作品使用 `source-work:` ID，剧集使用 `source-episode:`，文件夹使用
+`source-folder:`；内容为来源配置 ID、原始条目 ID 和实际服务器 ID 的不透明编码。
+不同服务器互不碰撞，来源改指另一实际服务器后旧引用报 conflict。原样详情保持
+服务器作品 ID，已绑定条件内容使用 X47 合并 ID，因此部分绑定不会藏掉原样中
+尚未绑定的剧集。`core.uiData.work/episodes` 接受这些作品 ID，`ui.open` 对剧集
+激活正确来源后调用现有 `media.sources.play`；条件中的已绑定服务器剧集也保留
+sourceInfo 并走同一个播放入口和续播位置。来源原样引用自动保存实际服务器 ID。
+服务器剧集作品的 `next` 按续看、未看、第一集的顺序查询，每次最多一条，
+按服务器季/集号排序；书架不会为每部剧读取全部集。服务器的 ChildCount 对剧
+可能是季数，因此不充当 episodeCount；缺少观看位置时进度保持未知。
+
+服务器图片经原客户端的认证请求取回，解码后原子发布到 `source-artwork`，
+缓存键包含来源、实际服务器、条目、图片种类和 tag。海报、背景和 still 都为本机
+路径；缓存及回执不保存认证图片/播放 URL。证据和限制见 X48_REPORT.md。
+
 `workId / episodeId / taskId` 和书架 `id` 用于点击、定位和调用能力，不是显示文字。其余文字为作品元数据、简短的观看提示或 Agent 的短句。普通任务标题由任务类型与关联作品生成；帮手使用 Agent 给的简短标题。
 
 ## 一个媒体库（X47c）

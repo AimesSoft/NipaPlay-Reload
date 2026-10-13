@@ -39,6 +39,9 @@ abstract interface class NextLibraryActions {
   /// Takes a category off the page. In a source's own structure this only
   /// hides it in NipaPlay; nothing on the server or share changes.
   Future<void> removeCategory(String categoryId);
+
+  /// Shows a hidden original category again ([UiLibraryPage.hiddenCategories]).
+  Future<void> restoreCategory(String categoryId);
 }
 
 enum UiSourceKind { local, smb, webdav, jellyfin, emby, other }
@@ -67,6 +70,7 @@ final class UiLibraryPage {
     this.categories = const [],
     this.arranged = false,
     this.hasArrangement = false,
+    this.hiddenCategories = const [],
   });
   final UiLibraryForm form;
 
@@ -79,6 +83,10 @@ final class UiLibraryPage {
 
   /// In order. A page with a single category shows its items directly.
   final List<UiCategory> categories;
+
+  /// Hidden original categories, with IDs accepted by ui.library.restore.
+  /// Restoring them changes only this device's NipaPlay layout.
+  final List<UiCategory> hiddenCategories;
 }
 
 final class UiCategory {

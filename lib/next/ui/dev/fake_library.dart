@@ -290,6 +290,9 @@ final class FakeLibrary implements NextLibraryData, NextLibraryActions {
         for (final c in s.shown)
           _view(c, preview: s.form == UiLibraryForm.shelves)
       ],
+      hiddenCategories: [
+        if (!s.arranged) for (final c in s.hidden) _view(c, preview: false)
+      ],
     );
   }
 
@@ -329,10 +332,23 @@ final class FakeLibrary implements NextLibraryData, NextLibraryActions {
     world._changes.add(null);
   }
 
+  /// Original categories only hide; arranged ones go.
   @override
   Future<void> removeCategory(String categoryId) async {
     for (final s in _sources) {
-      s.shown.removeWhere((c) => c.id == categoryId);
+      final i = s.shown.indexWhere((c) => c.id == categoryId);
+      if (i < 0) continue;
+      final c = s.shown.removeAt(i);
+      if (!s.arranged) s.hidden.add(c);
+    }
+    world._changes.add(null);
+  }
+
+  @override
+  Future<void> restoreCategory(String categoryId) async {
+    for (final s in _sources) {
+      final i = s.hidden.indexWhere((c) => c.id == categoryId);
+      if (i >= 0) s.original.add(s.hidden.removeAt(i));
     }
     world._changes.add(null);
   }
@@ -354,6 +370,7 @@ final class _Source {
   final List<_Category>? arrangement;
   UiLibraryForm form;
   bool arranged = false;
+  final hidden = <_Category>[];
 
   List<_Category> get shown => arranged ? arrangement! : original;
   Iterable<String> get shownIds => shown.map((c) => c.id);
