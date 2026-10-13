@@ -491,9 +491,53 @@ final _specs = [
 
 final class DanmakuCapability implements Capability {
   DanmakuCapability(DanmakuService service)
-      : actions = [for (final spec in _specs) _Action(service, spec)];
+      : actions = [for (final spec in _specs) _Action(service, spec),
+          for (final spec in _specs)
+            if (const {'danmaku.fetch', 'danmaku.attach', 'danmaku.import'}.contains(spec.id))
+              _BatchAction(service, spec)];
   @override
   final List<Action> actions;
+}
+
+final class _BatchAction extends Action<_Data, _Data> {
+  const _BatchAction(this.service, this.single);
+  final DanmakuService service;
+  final ActionSpec single;
+  @override
+  ActionSpec get spec => ActionSpec(id: '${single.id}_batch',
+      title: '${single.title} batch',
+      description: 'Independent entries in input order using ${single.id}. '
+          'All schemas are validated before execution. atomic=false; each index '
+          'returns its complete outcome (including binding/job IDs, decisions or failure). '
+          'Successful entries are retained when another fails. Each requestId is '
+          'scoped exactly as in the single action; credentials remain host references.',
+      effect: single.effect,
+      input: ObjectSchema({'entries': ArraySchema(single.input,
+          description: '1–100 independent entries.')}, required: ['entries']),
+      output: const ObjectSchema({'atomic': BooleanSchema(),
+          'entries': ArraySchema(ObjectSchema({}, additionalProperties: true))}, required: ['atomic', 'entries']));
+  @override
+  _Data decodeInput(JsonMap json) => _Data(json);
+  @override
+  Future<Outcome<_Data>> run(_Data input, Invocation invocation) async {
+    final harness = Harness([_SingleCapability(_Action(service, single))]);
+    final entries = (input.value['entries'] as List).cast<JsonMap>();
+    if (entries.isEmpty || entries.length > 100) {
+      throw const Failure(FailureCode.invalidInput, 'Batch requires 1–100 entries.');
+    }
+    return Completed(_Data({'atomic': false, 'entries': [
+      for (var i = 0; i < entries.length; i++) {
+        'index': i,
+        ...(await harness.invokeJson(single.id, entries[i], invocation)).toEnvelope(),
+      }
+    ]}));
+  }
+}
+final class _SingleCapability implements Capability {
+  const _SingleCapability(this.action);
+  final Action action;
+  @override
+  List<Action> get actions => [action];
 }
 
 final class _Data implements JsonEncodable {

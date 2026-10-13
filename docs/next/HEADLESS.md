@@ -48,9 +48,22 @@ X45 增加 Rust Mesh 与 librqbit：独立设备身份、同账号加入、心�
 Windows/Linux x64 原生库及 AOT 已编译，X45 运行检查只在 Mac 本机回环进行；
 工作站真机运行待主控执行，见 [X45_RUNBOOK.md](X45_RUNBOOK.md)。
 
-当前缺口：播放器、Classic 账号与历史、TMDB 凭据配置、完整弹弹play账号宿主、
+当前缺口：播放器、Classic 账号与历史、完整弹弹play账号宿主、
 Classic 更新日历、内嵌 Agent 对话。无界面只接受宿主从 stdin 登记的组网测试 token，
 没有登录密码 Action；未配置 Agent 目的设备的后续仍可到达 ready，不运行模型决定。
+
+X53 接入同一 `NipaplayServerRouter`、`DandanplayHttpClient` 和 provider/弹幕来源。
+弹弹play token 读取宿主保险库 `preferences/dandanplay_token`，TMDB 读取
+`metadata/tmdb`；后者由宿主使用 `--enroll-credential-stdin` 与非秘密的
+`--credential-namespace metadata --credential-key tmdb` 登记，没有新的秘密 Action
+参数或 settings 键。读取保险库后也支持 TMDB 图片准备。`network.json` 只保存
+既有路由器使用的非秘密网络设置及主备缓存；可省略，默认自动选择官方网关。
+合法模式为 auto/hongkong/china/custom，键为 dandanplay_server_mode；显式选择
+custom 的 dandanplay_server_url 是信任决定，不能含凭据、query 或 fragment。
+`app.capabilities` / `nipa describe app` 说明支持、可用前置、来源与 settingsKeys；
+目录同时标出缺凭据、未授权程序和 legacyRecovery。无 Classic 的绑定回执明确
+投影 not_applicable，Next 身份和资料照常保存。批量弹幕 fetch/attach/import 沿用
+单项语义，每项返回完整 outcome；一项失败不会隐藏前项已提交事实。
 
 X46 补充 `subtitle.tracks/import/select`、旁路字幕索引和 activity 视图；可选 ffprobe
 记录内嵌轨道，不读取 Classic 偏好或自动决定默认语言。导入的文本字幕检查时序语法，

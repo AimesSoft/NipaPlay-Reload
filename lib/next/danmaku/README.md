@@ -1,5 +1,11 @@
 # MB 弹幕来源与轨道
 
+`nipa describe danmaku` 返回族说明；单项 schema 仍以实时目录为准。
+`fetch_batch`、`attach_batch`、`import_batch` 接收单项 schema 的 `entries`（1–100），
+全量 schema 验证后逐项执行，返回 index 与完整 outcome。非原子，后项失败不会
+隐藏前项的绑定/任务/回执。无界面来源与 GUI 同用 NipaPlay 网关客户端；凭据是
+宿主 `preferences/dandanplay_token` 引用，无播放器时显式指定 entityId/path。
+
 `DanmakuRuntime.create` 接收 NextCore 提供的 MA 身份存储，提供 `executors` 与
 `capability`。NextCore 在 `engine.start()` 前调用 `attach` 注入唯一引擎，启动后由
 `NextRuntime` 调用 `startRestoring(harness, player)` 绑定宿主播放器；监听播放状态

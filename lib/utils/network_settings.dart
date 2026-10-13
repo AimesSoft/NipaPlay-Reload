@@ -1,4 +1,5 @@
-import 'package:shared_preferences/shared_preferences.dart';
+import '../next/headless/routing_preferences.dart'
+    if (dart.library.ui) 'package:shared_preferences/shared_preferences.dart';
 
 /// 弹弹play 网关服务器选择模式。
 ///

@@ -37,7 +37,9 @@ final class HeadlessLibraryRoots implements Capability {
       _tail = operationFuture.then<void>((_) {}, onError: (Object e, StackTrace s) {});
       await operationFuture;
     }
-    return {'roots': paths.toList(), 'readOnly': true};
+    return {'roots': paths.toList(), 'readOnly': true,
+      'readOnlyScope': ['indexing', 'downloadDestination'],
+      'fileOperations': 'processPermissions'};
   }
   @override
   List<Action> get actions => [for (final operation in ['list', 'add', 'remove']) _RootsAction(this, operation)];

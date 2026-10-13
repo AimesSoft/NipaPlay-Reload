@@ -129,7 +129,12 @@ class Client:
 
     def catalog(self, full=True):
         if self.device:
-            catalog = {"actions": self.device["actions"]}
+            facts = self.device.get("description", {}).get("capabilities", {})
+            readiness = {a["id"]: a for a in facts.get("result", {}).get("actions", [])}
+            keys = ("available", "availabilityScope", "availabilityReason", "requiredHostSetup",
+                    "remoteCallable", "requiredUserPresence", "lifecycle", "replacement")
+            catalog = {"actions": [{**a, **{k: readiness[a["id"]][k] for k in keys
+                if k in readiness.get(a["id"], {})}} for a in self.device["actions"]]}
             return catalog if full else catalog_summary(catalog)
         catalog = self.request("list", full=full)
         return catalog if full else catalog_summary(catalog)
@@ -137,6 +142,10 @@ class Client:
     def describe(self, action):
         if not self.device:
             return self.request("describe", action=action)
+        if action in {"app", "danmaku"}:
+            facts = self.result(self.call("app.capabilities", {}))
+            return {"family": action, "description": facts["families"][action],
+                    "actions": [a for a in self.catalog()["actions"] if a["id"].startswith(action + ".")]}
         matches = [a for a in self.catalog()["actions"] if a["id"] == action]
         if not matches:
             raise ValueError("Unknown Action: " + action)
@@ -201,7 +210,8 @@ class JsonArgumentParser(argparse.ArgumentParser):
 
 
 def catalog_summary(catalog):
-    return {"actions": [{k: a[k] for k in ("id", "effect", "title")}
+    return {"actions": [{k: a[k] for k in ("id", "effect", "title", "available", "availabilityReason",
+                        "requiredHostSetup", "lifecycle", "replacement") if k in a}
                         for a in catalog["actions"]]}
 
 

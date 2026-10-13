@@ -32,8 +32,9 @@ parser = argparse.ArgumentParser()
 parser.add_argument('--evidence', type=Path, required=True)
 parser.add_argument('--programs', action='store_true', help='X46 program/subtitle checks; no BT or model')
 parser.add_argument('--subscriptions', action='store_true', help='Only the X46 manual return follow-up observation')
+parser.add_argument('--scope-only', action='store_true', help='Only X53 remote facts, families and write scope')
 args = parser.parse_args()
-args.programs = args.programs or args.subscriptions
+args.programs = args.programs or args.subscriptions or args.scope_only
 args.evidence.mkdir(parents=True, exist_ok=True)
 root = Path(tempfile.mkdtemp(prefix='x46-local-' if args.programs else 'x45-local-', dir='/tmp/nipa-next')).resolve()
 binary = workspace / 'build/headless/nipaplay-headless'
@@ -159,7 +160,11 @@ try:
                 response=json.loads(read(struct.unpack('>I',read(4))[0]))
         assert 'error' not in response, response
         return response['result']
-    if args.subscriptions:
+    if args.scope_only:
+        from program_loopback_scenario import check_scope
+        check_scope(a=a, b=b, aid=aid, bid=bid, raw=raw,
+                    invoke=invoke, record=record, env=env, workspace=workspace)
+    elif args.subscriptions:
         from program_loopback_scenario import check_subscriptions
         check_subscriptions(root=root, a=a, b=b, aid=aid, bid=bid,
                             raw=raw, invoke=invoke, call=call, wait=wait, record=record)

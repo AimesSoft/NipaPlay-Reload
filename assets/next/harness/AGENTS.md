@@ -178,7 +178,7 @@ Windows 上把 `./nipa` 换成 `python nipa`。连接凭据默认在 macOS/Linux
 
 ### 在其他设备上的能力与程序
 
-- Mesh 可调用目标设备实际注册的 `task.*`、`download.*`、`media.*`、`danmaku.*`、`playback.*`、`subtitle.*`、`history.*`、`followup.*`、`program.*`、`discover.*`、`sync.*`、`ui.*`，以及 `state.query`、`activity.report`、`agent.wake`、`app.instance`。设置可远程读取 `settings.get/describe/history`；账号可读状态、读写收藏和剧集观看状态、执行 Bangumi 同步及读取同步状态。宿主登录与退出、组网管理、信任、签发者、开关和设置修改没有远程入口。实时远端目录给出具体可用项；没有播放器或 Classic 历史的宿主不会注册这些能力。
+- 远程写操作与本机遵循同一契约，删除和覆盖照旧先预览。实时远端目录给出具体可用项；`app.capabilities` 给出宿主支持、前置准备和远程范围，能力细节见 `nipa describe app`。组网信任配置与秘密登记仍归目标宿主管理；没有播放器或 Classic 历史的宿主不会注册这些能力。
 - `program.run` 是目标设备的后台命令或脚本任务，按普通用户权限在那台设备的 harness 工作目录运行。每台设备独立授权，默认关闭；只能由那台设备宿主在 `program.json` 打开并重启，Agent 的设置能力不能打开它。已认证的设备描述包含开关事实和工作目录。Windows 默认用 cmd，也支持 PowerShell；WSL、Linux、macOS 用 POSIX sh。
 - 程序任务有标题、经脱敏的输出末尾、退出码和耗时，有超时，`task.cancel` 停止它的进程树。命令不在重启后自动重放。由会话发起的程序，终态回执会作为后续回到原设备、原仓库、原线程；忙时排队，`followup:false` 不自动回传。每次执行都进入目标设备的 activity，记录来源、设备和命令。输出文件属于目标设备，不自动复制回来。
 - 通过 Mesh 在会话中登记的 `followup.register` 也固定回到发起设备、仓库和线程，沿用持久票据与去重交付；显式线程与发起线程不一致会被拒绝。程序自动回传和同一事件的手动订阅共享事实去重。

@@ -47,7 +47,7 @@ void main() {
     }
   });
   test(
-      'remote catalog includes useful target families and excludes host mutation',
+      'remote catalog shares local writes and keeps trust/enrollment on the host',
       () {
     for (final id in [
       'subtitle.import',
@@ -57,20 +57,16 @@ void main() {
       'program.run',
       'ui.capture',
       'sync.run',
-      'activity.report'
+      'activity.report',
+      'settings.set', 'settings.reset', 'accounts.login', 'accounts.logout',
+      'agent.dispatch', 'app.quit', 'app.capabilities', 'state.describe',
+      'window.hide', 'diagnostics.logs', 'backup.restore', 'plugins.install',
+      'mesh.devices', 'mesh.invoke', 'mesh.invoke_destructive'
     ]) {
       expect(meshActionAllowed(id), true, reason: id);
     }
     for (final id in [
-      'settings.set',
-      'settings.reset',
-      'accounts.login',
-      'accounts.logout',
-      'mesh.invoke',
-      'mesh.devices',
-      'credentials.set',
-      'agent.dispatch',
-      'app.quit'
+      'credentials.set'
     ]) {
       expect(meshActionAllowed(id), false, reason: id);
     }

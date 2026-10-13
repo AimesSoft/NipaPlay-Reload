@@ -48,11 +48,12 @@ final class HttpDanmakuHost implements DanmakuHost {
     Uri? target;
     int? statusCode;
     String? contentType;
-    SourceFailure failure(SourceStatus status, {DateTime? retryAt}) =>
+    SourceFailure failure(SourceStatus status, {DateTime? retryAt, String? reasonCode}) =>
         SourceFailure(status,
             retryAt: retryAt,
-            diagnostics: httpDiagnostics(target,
-                statusCode: statusCode, contentType: contentType));
+            diagnostics: '${httpDiagnostics(target,
+                statusCode: statusCode, contentType: contentType)}'
+                '${reasonCode == null ? "" : "; reason=$reasonCode"}');
     try {
       cancel.check();
       final wait = (_next[source] ?? DateTime.now()).difference(DateTime.now());
@@ -122,7 +123,7 @@ final class HttpDanmakuHost implements DanmakuHost {
       })()
           .timeout(timeout, onTimeout: () {
         requestCancellation.cancel();
-        throw failure(SourceStatus.transportFailed);
+        throw failure(SourceStatus.transportFailed, reasonCode: 'timeout');
       });
       cancel.check();
       return bytes;
@@ -130,11 +131,12 @@ final class HttpDanmakuHost implements DanmakuHost {
       throw failure(SourceStatus.authenticationRequired);
     } on http.RequestAbortedException {
       cancel.check();
-      throw failure(SourceStatus.transportFailed);
-    } on http.ClientException {
-      throw failure(SourceStatus.transportFailed);
+      throw failure(SourceStatus.transportFailed, reasonCode: 'request_aborted');
+    } on http.ClientException catch (error) {
+      throw failure(SourceStatus.transportFailed, reasonCode: error is SocketException
+          ? 'socket_${(error as SocketException).osError?.errorCode ?? "unavailable"}' : 'http_client');
     } on SocketException {
-      throw failure(SourceStatus.transportFailed);
+      throw failure(SourceStatus.transportFailed, reasonCode: 'network_unavailable');
     } finally {
       requestCancellation.cancel();
       _next[source] = DateTime.now().add(interval);

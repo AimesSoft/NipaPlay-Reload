@@ -14,7 +14,7 @@ final class HeadlessRepository implements RepositoryLocation {
   Future<void> get ready => Future.value();
 }
 
-final class NoClassic implements ClassicMetadataPort {
+final class NoClassic implements DetachedClassicMetadataPort {
   @override
   Future<List<JsonMap>> history() async => [];
   @override
