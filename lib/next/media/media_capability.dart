@@ -5,6 +5,7 @@ import 'media_service.dart';
 import 'metadata_provider.dart';
 import 'metadata_snapshot.dart';
 import 'catalog_capability.dart';
+import 'management.dart';
 
 const _text = StringSchema(minLength: 1);
 const _refSchema = ObjectSchema({
@@ -266,6 +267,8 @@ final class MediaCapability implements Capability {
   MediaCapability(MediaService service)
       : actions = [for (final spec in _specs) _MediaAction(service, spec),
           ...CatalogCapability(service).actions,
+          ...MediaManagementCapability(service,
+            [for (final spec in _specs) _MediaAction(service, spec)]).actions,
           _RefreshBatchAction(service)];
   @override
   final List<Action> actions;

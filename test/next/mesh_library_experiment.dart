@@ -125,6 +125,13 @@ Future<void> x47LibraryExperiment(_Rig rig) async {
   await changed;
   final works = await a.library();
   expect(works, hasLength(1));
+  final targets = ((await a.meshLibrary!.managementTargets([works.single.workId]))['entries'] as List).single as Map;
+  final owners = (targets['targets'] as List).cast<Map>();
+  expect(owners.map((o) => o['workId']).toSet(), {'mac-work', 'source-work'});
+  final remoteOwner = owners.singleWhere((o) => o['workId'] == 'source-work');
+  expect(remoteOwner['deviceId'], source.identity!.deviceId);
+  expect((remoteOwner['episodes'] as List).map((e) => e['episodeId']), contains('source-work-episode-4'));
+  expect(remoteOwner['online'], true);
   for (final query in ['Open Video', '开放别名', '2026']) {
     final result = await a.meshLibrary!.search(query);
     expect(((result['works'] as List).single as Map)['workId'], works.single.workId);
@@ -244,6 +251,10 @@ Future<void> x47LibraryExperiment(_Rig rig) async {
   await source.close();
   rig.nodes.remove(source);
   await a.meshLibrary!.refresh();
+  final offlineTargets = ((await a.meshLibrary!.managementTargets([works.single.workId]))['entries'] as List).single as Map;
+  final offlineOwner = (offlineTargets['targets'] as List).cast<Map>().singleWhere((o) => o['workId'] == 'source-work');
+  expect(offlineOwner['reason'], 'source_device_offline');
+  expect(offlineOwner['online'], false);
   final offline = await a.library();
   expect(offline.single.devices.single.online, false);
   expect(

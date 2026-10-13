@@ -159,6 +159,7 @@ Map<String, Object?> _episode(UiEpisode e) => {
     };
 Map<String, Object?> _task(UiTask t) => {
       'taskId': t.taskId,
+      'type': t.type,
       'title': t.title,
       'state': t.state.name,
       'artwork': t.artwork == null ? null : _art(t.artwork!),

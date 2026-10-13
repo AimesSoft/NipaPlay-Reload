@@ -16,6 +16,11 @@ final class DownloadSources {
   final HttpClient Function() _clientFactory;
   static const maxTorrentBytes = 16 * 1024 * 1024;
 
+  /// Prepared torrent bytes are already local and hash-validated. Preview never
+  /// creates a native task or needs a writable media/download directory.
+  Future<Map<String, Object?>> previewTorrent(DownloadRequest request) async =>
+      torrentManifest(await File(request.source).readAsBytes());
+
   Future<DownloadRequest> prepare(String source) async {
     try {
       return await _prepare(source);
@@ -217,5 +222,82 @@ final class _Bencode {
     } else {
       string();
     }
+  }
+
+  Object value(int depth) {
+    if (depth > 64) invalid();
+    if (peek == 100) {
+      offset++;
+      final result = <String, Object>{};
+      while (peek != 101) {
+        final key = latin1.decode(string());
+        if (result.containsKey(key)) invalid();
+        result[key] = value(depth + 1);
+      }
+      offset++;
+      return result;
+    }
+    if (peek == 108) {
+      offset++;
+      final result = <Object>[];
+      while (peek != 101) { result.add(value(depth + 1)); }
+      offset++;
+      return result;
+    }
+    if (peek == 105) {
+      final start = ++offset;
+      while (peek != 101) { offset++; }
+      final result = int.tryParse(ascii.decode(bytes.sublist(start, offset)));
+      expect(101);
+      return result ?? invalid();
+    }
+    return string();
+  }
+}
+
+/// BT v1 manifest using the same bencoded bytes used for add's info hash.
+JsonMap torrentManifest(Uint8List bytes) {
+  torrentInfoHash(bytes);
+  try {
+    final info = (_Bencode(bytes).value(0) as Map)['info'] as Map;
+    String component(Object? value) {
+      final text = utf8.decode(value as Uint8List);
+      if (text.isEmpty || text == '.' || text == '..' ||
+          text.contains(RegExp(r'[/\\\x00-\x1f]')) || p.windows.isAbsolute(text) ||
+          text.contains(':')) {
+        throw const FormatException('Invalid torrent path component.');
+      }
+      return text;
+    }
+    final name = component(info['name.utf-8'] ?? info['name']);
+    final files = <JsonMap>[];
+    void file(String path, Object? size) {
+      if (size is! int || size < 0) throw const FormatException();
+      files.add({'index': files.length, 'path': path, 'length': size});
+    }
+    if (info['files'] case final List entries) {
+      if (entries.isEmpty || info.containsKey('length')) throw const FormatException();
+      for (final entry in entries.cast<Map>()) {
+        final path = (entry['path.utf-8'] ?? entry['path']) as List;
+        if (path.isEmpty) throw const FormatException();
+        file([name, ...path.map(component)].join('/'), entry['length']);
+      }
+    } else {
+      file(name, info['length']);
+    }
+    if ((info['piece length'] as int) <= 0 || (info['pieces'] as Uint8List).length % 20 != 0) {
+      throw const FormatException();
+    }
+    final total = files.fold<int>(0, (sum, f) => sum + (f['length'] as int));
+    if ((info['pieces'] as Uint8List).length ~/ 20 !=
+        (total / (info['piece length'] as int)).ceil()) throw const FormatException();
+    return {'name': name,
+      'suggestedFolderName': p.posix.basenameWithoutExtension(name)
+        .replaceAll(RegExp(r'[\\/:*?"<>|\x00-\x1f]'), '_').trim().replaceAll(RegExp(r'^\.+|\.+$'), '').trim(),
+      'totalSize': total, 'files': files};
+  } on FormatException {
+    throw const Failure(FailureCode.invalidInput, 'Malformed torrent manifest.');
+  } on TypeError {
+    throw const Failure(FailureCode.invalidInput, 'Malformed torrent manifest.');
   }
 }

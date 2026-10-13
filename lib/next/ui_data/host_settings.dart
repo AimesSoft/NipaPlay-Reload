@@ -5,6 +5,54 @@
 /// settings registry and the same Actions Nipa uses.
 library;
 
+/// Optional host port, kept separate so existing UI/fake adapters remain valid.
+/// These methods are in-process only and must never be registered as Actions.
+abstract interface class NextHostDeviceSettings {
+  Future<UiHostKeys> keys();
+
+  /// Null retains a key; empty clears it. Secrets are write-only and never
+  /// appear in changes, settings history, task receipts or returned models.
+  Future<void> setKeys({String? spoilerAi, String? tmdb});
+  Future<UiRemoteAccess> remoteAccess();
+  Future<void> setRemoteAccess(UiRemoteAccessChoice choice);
+  Future<void> forgetRemoteDevice(String clientKey);
+}
+
+extension NextHostDeviceAccess on NextHostSettings {
+  NextHostDeviceSettings get deviceSettings {
+    final host = this;
+    if (host is NextHostDeviceSettings) return host as NextHostDeviceSettings;
+    throw UnsupportedError('此宿主不支持设备设置');
+  }
+}
+
+final class UiHostKeys {
+  const UiHostKeys({required this.spoilerAi, required this.tmdb});
+  final bool spoilerAi, tmdb;
+}
+
+final class UiRemoteAccess {
+  const UiRemoteAccess({required this.running, required this.autoStart,
+    required this.port, required this.ipv6, required this.receiverEnabled,
+    this.devices = const [], this.problem});
+  final bool running, autoStart, ipv6, receiverEnabled;
+  final int port;
+  final List<UiRemoteDevice> devices;
+  final String? problem;
+}
+
+final class UiRemoteDevice {
+  const UiRemoteDevice({required this.clientKey, required this.name});
+  final String clientKey, name;
+}
+
+final class UiRemoteAccessChoice {
+  const UiRemoteAccessChoice({required this.running, required this.autoStart,
+    required this.port, required this.ipv6, required this.receiverEnabled});
+  final bool running, autoStart, ipv6, receiverEnabled;
+  final int port;
+}
+
 abstract interface class NextHostSettings {
   Future<UiModelSetup> model();
 

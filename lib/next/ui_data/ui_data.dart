@@ -198,6 +198,7 @@ final class UiTask {
     this.parentThreadId,
     this.cancelled = false,
     this.source,
+    this.type,
   });
   final String taskId;
   final String title;
@@ -213,6 +214,9 @@ final class UiTask {
   final String? parentThreadId;
   final bool cancelled;
   final String? source;
+
+  /// TaskEngine executor type, e.g. download or media.scan_classic.
+  final String? type;
 }
 
 enum UiStepState { done, running, waiting, failed }

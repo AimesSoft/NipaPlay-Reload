@@ -287,12 +287,22 @@ final class NextCore {
     uiData = UiDataService(media.service, engine, state, stateSources, root, credentialVault);
     uiData.subtitles = subtitles;
     libraryData = LibraryDataService(uiData, port: ClassicLibrarySources(mediaSources, root));
+    final sourceImages = libraryData.port! as ClassicLibrarySources;
+    mediaSources.cachedPoster = (id, item) => sourceImages.cachedImage(id, item, 'Primary');
+    mediaSources.loadPoster = (id, itemId) async =>
+      sourceImages.image(id, await sourceImages.item(id, itemId), 'Primary');
+    mediaSources.cachedArtwork = uiData.artwork.cached;
     uiData.libraryData = libraryData;
     libraryData.register(state);
     storage.libraryRoots = media.service.authorizedRoots;
     storage.artworkBusy = () => uiData.artwork.busy;
     uiData.meshLibrary = MeshLibrary(uiData, mesh);
-    mediaSources.canonicalEntityId = uiData.meshLibrary!.canonical;
+    mediaSources.canonicalEntityId = (id) async {
+      await uiData.meshLibrary!.prepareIndex();
+      return uiData.meshLibrary!.resolvedId(id);
+    };
+    stateSources.canonicalEntityId = (id) async => uiData.meshLibrary!.resolvedId(id);
+    stateSources.cachedArtwork = uiData.artwork.cached;
     registerMergedLibrary(state, uiData.meshLibrary!);
     await uiData.meshLibrary!.start();
     settings.register([uiData.openingSetting]);

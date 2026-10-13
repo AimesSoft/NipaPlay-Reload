@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:io';
+import 'settings/classic_host_device_settings.dart';
 import 'package:nipaplay/utils/lab_profile.dart';
 import 'package:nipaplay/utils/media_source_utils.dart';
 
@@ -434,6 +435,9 @@ final class NextRuntime extends ChangeNotifier {
     );
     core.programs.credentialFile = _endpoint.credentialFile;
     _hostSettings = HostSettingsService(root: root,
+      device: ClassicHostDeviceSettings(vault: core.credentialVault,
+        webServer: ServiceProvider.webServer,
+        spoilerChanged: (key) => _player.updateSpoilerAiSettings(apiKey: key)),
       vault: LabProfile.active ? LabModelVault() : core.credentialVault,
       meshRuntime: core.mesh, programs: core.programs, history: core.changeHistory,
       chat: () => chat, chatProblem: () => chatError,

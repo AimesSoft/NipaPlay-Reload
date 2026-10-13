@@ -244,6 +244,14 @@ final class ClassicLibrarySources implements LibrarySourcePort {
 
   @override
   Future<String?> image(String sourceId, JsonMap item, String kind) async {
+    return _image(sourceId, item, kind, cachedOnly: false);
+  }
+
+  Future<String?> cachedImage(String sourceId, JsonMap item, String kind) =>
+      _image(sourceId, item, kind, cachedOnly: true);
+
+  Future<String?> _image(String sourceId, JsonMap item, String kind,
+      {required bool cachedOnly}) async {
     final type = sourceId.split(':').first;
     if (type != 'jellyfin' && type != 'emby') return null;
     final m = item['metadata'] as Map;
@@ -255,6 +263,7 @@ final class ClassicLibrarySources implements LibrarySourcePort {
         jsonEncode([sourceId, item['serverId'], item['id'], kind, tag])));
     final file = File('${root.path}/source-artwork/$key');
     if (await file.exists()) return file.path;
+    if (cachedOnly) return null;
     return service.serial(() async {
       final row = await service.source(sourceId);
       await service.activate(row);

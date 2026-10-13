@@ -256,14 +256,21 @@ final class UiDataService implements NextUiData {
   Future<List<UiTask>> _taskList() async =>
       [for (final job in await engine.list()) await _task(job)];
   Future<UiTask> _task(Job job) async {
-    final workId = await _jobWork(job);
-    final title = workId == null
-        ? null
-        : (await media.store.mergedMetadata(workId))['fields'] as Map;
-    final art = workId == null ? null : await artwork.cached(workId);
+    Map? title;
+    JsonMap? art;
+    try {
+      final workId = await _jobWork(job);
+      if (workId != null) {
+        title = (await media.store.mergedMetadata(workId))['fields'] as Map;
+        art = await artwork.cached(workId);
+      }
+    } on Failure catch (failure) {
+      if (failure.code != FailureCode.notFound) rethrow;
+    }
     final name = _display(title?['title']);
     return UiTask(
         taskId: job.jobId,
+        type: job.type,
         title: job.type == 'agent.helper' ? job.title :
             job.state == JobState.waitingUser ? '等待你确认删除' :
             '${_taskVerb(job.type)}${name == null ? '' : '《$name》'}',
@@ -836,6 +843,7 @@ String _taskVerb(String type) => switch (type) {
       'danmaku.fetch' => '准备弹幕',
       'danmaku.align' => '对齐弹幕',
       'media.scan' => '整理片库',
+      'media.scan_classic' => '扫描片库',
       'media.metadata.refresh' => '更新作品资料',
       'harness.hook' => '处理后续',
       _ => '准备作品'

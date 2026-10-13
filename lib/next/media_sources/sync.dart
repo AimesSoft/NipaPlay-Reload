@@ -40,6 +40,7 @@ final class SyncService {
   Future<JsonMap> status() async => {
         'configuration': await configuration(),
         'enabled': await AutoSyncSettings.isEnabled(),
+        'hasPassword': (await AutoSyncSettings.getPassword()).isNotEmpty,
         'syncing': classic.isSyncing,
         'phase': classic.phase.name,
         'completedRunCount': classic.completedRunCount,
@@ -268,7 +269,7 @@ final class _SyncAction extends Action<_Json, _Json> {
       },
       description: switch (op) {
         'status' =>
-          'Read Classic incremental WebDAV configuration, enabled state, phase, run count and last success/error without reading secrets.',
+          'Read Classic incremental WebDAV configuration, hasPassword (presence only), enabled state, phase, run count and last success/error without returning secrets.',
         'configure' =>
           'Patch Classic incremental sync configuration. url is HTTP(S), remotePath is a directory on that server, intervalMinutes >= 5, categories is nonempty. Omitted fields stay unchanged. Changing url or username clears the old password; use sync.login. Does not enable synchronization.',
         'login' =>

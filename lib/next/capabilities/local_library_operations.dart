@@ -12,6 +12,7 @@ import 'package:nipaplay/utils/platform_identity.dart' as platform;
 import 'package:path/path.dart' as p;
 
 import 'classic_action.dart';
+import '../media/identity_store.dart' show stableMediaId;
 
 const _output = ObjectSchema({}, additionalProperties: true);
 const _paths = ArraySchema(StringSchema(minLength: 1));
@@ -190,28 +191,34 @@ final class LocalLibraryOperations implements Capability {
                 id: 'history.remove',
                 title: 'Remove watch history',
                 description:
-                    'Delete Classic watch records in a batch by paths and/or animeIds (union). '
+                    'Delete Classic watch records in a batch by entryIds, paths and/or animeIds (union). '
+                    'entryIds come from history.entries and work even when locator is null. '
                     'animeIds are Classic anime IDs, including negative custom IDs. Series deletion uses Classic '
                     'deletion tombstones; path deletion uses Classic single-record removal. '
-                    'Missing records are skipped. Video files stay on disk; no confirmation is needed.',
+                    'Missing records are skipped. removedEntryIds covers all removals; removedPaths only echoes supplied paths. '
+                    'Video files stay on disk; no confirmation is needed.',
                 effect: Effect.write,
                 input: ObjectSchema({
                   'paths': _paths,
+                  'entryIds': _paths,
                   'animeIds': ArraySchema(IntegerSchema())
                 }),
                 output: _output), (input, _) async {
-          if (!input.containsKey('paths') && !input.containsKey('animeIds')) {
+          if (!input.containsKey('paths') && !input.containsKey('animeIds') &&
+              !input.containsKey('entryIds')) {
             throw const Failure(
-                FailureCode.invalidInput, 'Supply paths and/or animeIds.');
+                FailureCode.invalidInput, 'Supply entryIds, paths or animeIds.');
           }
           final before = await WatchHistoryManager.getAllHistory();
           final paths = (input['paths'] as List? ?? []).cast<String>().toSet();
+          final entryIds = (input['entryIds'] as List? ?? []).cast<String>().toSet();
           final ids = (input['animeIds'] as List? ?? [])
               .map((id) => (id as num).toInt())
               .toSet();
           final selected = before
               .where((item) =>
-                  paths.contains(item.filePath) || ids.contains(item.animeId))
+                  paths.contains(item.filePath) || ids.contains(item.animeId) ||
+                  entryIds.contains(stableMediaId('history', item.filePath)))
               .toList();
           for (final id in ids) {
             await WatchHistoryManager.removeHistoryByAnimeId(id);
@@ -229,7 +236,10 @@ final class LocalLibraryOperations implements Capability {
                 'Classic could not delete all selected history.');
           }
           return {
-            'removedPaths': selected.map((item) => item.filePath).toList(),
+            'removedPaths': [for (final item in selected)
+              if (paths.contains(item.filePath)) item.filePath],
+            'removedEntryIds': [for (final item in selected)
+              stableMediaId('history', item.filePath)],
             'removedCount': selected.length
           };
         }),

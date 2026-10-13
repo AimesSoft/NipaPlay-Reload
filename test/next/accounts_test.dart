@@ -106,12 +106,22 @@ void main() {
     HttpOverrides.global = _Direct();
     final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
     final collection = <String, dynamic>{};
+    final listRequests = <Uri>[];
     final episodeStates = <String, int>{};
     server.listen((request) async {
       final path = request.uri.path;
       Object? data;
       if (path == '/v0/me') {
         data = {'id': 14, 'username': 'x14-fixture'};
+      } else if (path == '/v0/users/x14-fixture/collections') {
+        listRequests.add(request.uri);
+        final offset = int.parse(request.uri.queryParameters['offset']!);
+        final limit = int.parse(request.uri.queryParameters['limit']!);
+        data = {'total': 3, 'data': [
+          {'subject_id': 10, 'type': 3, 'rate': 8},
+          {'subject_id': 20, 'type': 2, 'rate': 0},
+          {'subject_id': 30, 'type': 3, 'rate': 9},
+        ].skip(offset).take(limit).toList()};
       } else if (path.endsWith('/999')) {
         request.response.statusCode = 503;
         data = {'description': 'fixture unavailable'};
@@ -156,6 +166,15 @@ void main() {
     final logged = await terminal(login['jobId'] as String);
     expect(logged.state, JobState.succeeded,
         reason: jsonEncode(logged.toJson()));
+    final page = await call('accounts.collections.list',
+      {'provider': 'bangumi', 'statuses': ['doing'], 'limit': 2});
+    expect(page['items'], [{'workId': 10, 'status': 'doing', 'rating': 8}]);
+    final next = await call('accounts.collections.list',
+      {'provider': 'bangumi', 'statuses': ['doing'], 'limit': 2, 'cursor': page['nextCursor']});
+    expect(next['items'], [{'workId': 30, 'status': 'doing', 'rating': 9}]);
+    expect(next['nextCursor'], isNull);
+    expect(listRequests.length, 2);
+    expect(listRequests.every((uri) => uri.queryParameters['subject_type'] == '2'), true);
     await call('accounts.collections.update', {
       'provider': 'bangumi',
       'items': [

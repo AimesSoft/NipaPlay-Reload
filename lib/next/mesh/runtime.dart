@@ -733,20 +733,8 @@ final class MeshRuntime implements MeshDeviceSource {
         throw const Failure(
             FailureCode.unavailable, 'Mesh peer was revoked or disconnected.');
       }
-      final peer = _devices.singleWhere((d) => d['device_id'] == event.deviceId);
-      final fileTool = frame['method'] == 'tools/call' &&
-          ['readable', 'begin', 'chunk', 'finish', 'delete', 'confirm', 'cancel']
-              .any((op) => (frame['params'] as JsonMap?)?['name'] == mcpToolName('media.mesh_files.$op'));
-      final libraryRead = fileTool || frame['method'] == 'tools/list' ||
-          (frame['method'] is String && (frame['method'] as String).startsWith('mesh/library/'));
-      final denied = event.deviceId == identity!.deviceId || libraryRead ? null : await authorize(event.deviceId,
-          peer['device_name'] as String? ?? '另一台设备');
-      if (denied != null) {
-        response = McpRpc.error(_rpcId(event.body), -32001, denied.message);
-        (response['error'] as JsonMap)['data'] = denied.toJson();
-        await native.respond(node, event.requestId, jsonEncode(response));
-        return;
-      }
+      // Enrollment and the authenticated active peer set above authorize this
+      // body. Domain decisions still run on the receiving host's Harness.
       if (frame['method'] == 'mesh/describe') {
         response = {'jsonrpc': '2.0', 'id': frame['id'], 'result': {
           'deviceId': identity!.deviceId,
