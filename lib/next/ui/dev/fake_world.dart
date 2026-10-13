@@ -5,11 +5,14 @@ import 'dart:math' as math;
 
 import 'package:flutter/foundation.dart';
 
+import '../../ui_data/library.dart';
 import '../../ui_data/ui_data.dart';
 import '../conversation/chat_port.dart';
 import '../conversation/chat_context.dart';
 import '../data/discover.dart';
 import '../data/ui_actions.dart';
+
+part 'fake_library.dart';
 
 /// Development-only data for screenshots and experiments, built from the
 /// concept's TMDB sample set. Never used by production code paths (see
@@ -47,6 +50,9 @@ final class FakeWorld implements NextUiData, NextUiActions, NextDiscoverData {
   final Map<String, dynamic> _meta;
   final Map<String, dynamic> _found;
   final _changes = StreamController<void>.broadcast();
+
+  /// The 片库 page's sources and categories.
+  late final catalog = FakeLibrary(this);
   final _taskStream = StreamController<List<UiTask>>.broadcast();
   final _tasks = <String, _FakeTask>{};
 
@@ -57,6 +63,7 @@ final class FakeWorld implements NextUiData, NextUiActions, NextDiscoverData {
 
   static const _continueAt = <String, (int, double?)>{
     'kusuriya': (31, 0.62),
+    'lycoris': (5, 0.33),
     'oshinoko': (14, 0.28),
     'dungeon': (13, null),
     'bocchi': (9, 0.8),
@@ -129,9 +136,75 @@ final class FakeWorld implements NextUiData, NextUiActions, NextDiscoverData {
     'changan': 0xFF4E3A2A,
     'edgerunners': 0xFF2A5A6E,
     'sintel': 0xFF3A4A3A,
+    'kaiju8': 0xFF3A4E3A,
+    'yurucamp': 0xFF5A4A6E,
   };
 
+  // —— The mesh ——
+
+  /// The user's other devices, by the names their hosts gave them, and
+  /// whether they answer now (`device` in `ext.nipaplay.nextui` flips one).
+  final _online = <String, bool>{'工作站': true, '旧笔记本': false};
+
+  /// Where a work's episodes are when not here: from episode n on, on that
+  /// device. 莉可丽丝 starts here and goes on on the workstation.
+  static const _elsewhere = <String, (int, String)>{
+    'lycoris': (5, '工作站'),
+    'kaiju8': (1, '工作站'),
+    'spyfamily': (1, '工作站'),
+    'yurucamp': (1, '工作站'),
+    'changan': (1, '工作站'),
+    'violet': (1, '旧笔记本'),
+  };
+
+  /// Works the workstation brought that this device never had (posters
+  /// from the 发现 samples), with their episode counts.
+  static const _brought = {'kaiju8': 12, 'yurucamp': 12};
+
+  /// The library, most recently added first.
+  static const _added = [
+    'kaiju8',
+    'frieren',
+    'violet',
+    'lycoris',
+    'spyfamily',
+    'sintel',
+    'yurucamp',
+    'changan',
+    'kusuriya',
+    'oshinoko',
+    'dungeon',
+    'bocchi',
+    'edgerunners'
+  ];
+
+  /// In the library: here, or brought by another device.
+  bool _has(String key) =>
+      _meta.containsKey(key) ||
+      (_brought.containsKey(key) && _found.containsKey(key));
+
+  UiDevice? _device(String key, int n) {
+    final (from, name) = _elsewhere[key] ?? (1 << 30, '');
+    return n < from ? null : UiDevice(name: name, online: _online[name]!);
+  }
+
+  List<UiDevice> _devices(String key) => [
+        if (_elsewhere[key] case (_, final name))
+          UiDevice(name: name, online: _online[name]!)
+      ];
+
+  /// A device leaves or comes back (flips it when [online] is null).
+  Map<String, bool> setOnline(String name, bool? online) {
+    if (!_online.containsKey(name)) {
+      throw ArgumentError('No device “$name”: ${_online.keys.join(', ')}');
+    }
+    _online[name] = online ?? !_online[name]!;
+    _changes.add(null);
+    return Map.of(_online);
+  }
+
   UiWork sample(String key, {UiEpisode? next}) {
+    if (_brought.containsKey(key) && _has(key)) return _broughtWork(key, next);
     // A work only found on 发现: what discovery knows of it.
     if (!_meta.containsKey(key)) return _discovered(key)!.work;
     final m = _meta[key] as Map<String, dynamic>;
@@ -164,13 +237,37 @@ final class FakeWorld implements NextUiData, NextUiActions, NextDiscoverData {
       ),
       next: next ?? _episode(key, 1),
       danmaku: _danmaku[key] ?? const [],
+      devices: _devices(key),
+    );
+  }
+
+  /// A work only on another device: what its host knows (a poster).
+  UiWork _broughtWork(String key, UiEpisode? next) {
+    final m = _found[key] as Map<String, dynamic>;
+    return UiWork(
+      workId: 'fake:$key',
+      title: m['title'] as String,
+      originalTitle: m['original'] as String?,
+      year: int.tryParse('${m['year'] ?? ''}'),
+      genres: const ['动画'],
+      episodeCount: _brought[key],
+      overview: m['overview'] as String?,
+      ratings: [
+        if (m['rating'] case final num r) UiRating('TMDB', r.toDouble())
+      ],
+      artwork: UiArtwork(poster: '$dir/${m['poster']}', tint: _tints[key]),
+      next: next ?? _episode(key, 1),
+      devices: _devices(key),
     );
   }
 
   UiEpisode _episode(String key, int n,
       {double? progress, int season = 1, int? number}) {
-    final eps = (_meta[key]['eps'] as List?)?.cast<Map<String, dynamic>>();
+    final eps = (_meta[key]?['eps'] as List?)?.cast<Map<String, dynamic>>();
     final e = eps?.where((e) => e['n'] == n).firstOrNull;
+    // Episodes with a still stand for the ones on disk, here or elsewhere.
+    final onDisk = eps == null || e != null;
+    final device = onDisk ? _device(key, n) : null;
     return UiEpisode(
       episodeId: 'fake:$key:$n',
       workId: 'fake:$key',
@@ -181,8 +278,8 @@ final class FakeWorld implements NextUiData, NextUiActions, NextDiscoverData {
       still: e?['still'] == null ? null : '$dir/${e!['still']}',
       progress: progress,
       heat: _heat(key, n),
-      // Episodes with a still stand for the ones on disk.
-      playable: eps == null || e != null,
+      playable: onDisk && (device?.online ?? true),
+      device: device,
     );
   }
 
@@ -213,8 +310,9 @@ final class FakeWorld implements NextUiData, NextUiActions, NextDiscoverData {
 
   /// All episodes, seasons split evenly where the sample has several.
   List<UiEpisode> _episodesOf(String key) {
-    final m = _meta[key] as Map<String, dynamic>;
-    final total = (_overrides[key]?['episodes'] as int?) ??
+    final m = _meta[key] as Map<String, dynamic>? ?? const {};
+    final total = _brought[key] ??
+        (_overrides[key]?['episodes'] as int?) ??
         (m['episodes'] as int?) ??
         (m['eps'] as List?)?.length ??
         1;
@@ -279,6 +377,7 @@ final class FakeWorld implements NextUiData, NextUiActions, NextDiscoverData {
           kind: UiShelfKind.continueWatching,
           items: [
             _continue('kusuriya', 31, 0.62, '第 31 集 · 剩 9 分钟'),
+            _continue('lycoris', 5, 0.33, '第 5 集 · 剩 16 分钟'),
             _continue('oshinoko', 14, 0.28, '第 14 集 · 剩 17 分钟'),
             _continue('dungeon', 13, null, '第 13 集', badge: '新'),
             _continue('bocchi', 9, 0.8, '第 9 集 · 剩 4 分钟'),
@@ -312,6 +411,7 @@ final class FakeWorld implements NextUiData, NextUiActions, NextDiscoverData {
           title: '最近添加',
           kind: UiShelfKind.recent,
           items: [
+            if (_has('kaiju8')) UiShelfItem(sample('kaiju8')),
             UiShelfItem(sample('frieren'), caption: '第 1 集可以看了'),
             UiShelfItem(sample('sintel'), caption: '电影'),
             UiShelfItem(sample('changan')),
@@ -324,19 +424,31 @@ final class FakeWorld implements NextUiData, NextUiActions, NextDiscoverData {
   }
 
   @override
-  Future<List<UiWork>> library() async =>
-      [for (final key in _meta.keys) sample(key)];
+  Future<List<UiWork>> library() async {
+    await Future<void>.delayed(const Duration(milliseconds: 120));
+    return [
+      for (final key in _added)
+        if (_has(key)) _detailed(key)
+    ];
+  }
 
   @override
   Future<UiWork?> work(String workId) async {
     final key = workId.startsWith('fake:') ? workId.substring(5) : workId;
-    return _meta.containsKey(key) ? _detailed(key) : null;
+    if (catalog.owns(key)) return catalog.work(key);
+    return _has(key) ? _detailed(key) : null;
   }
 
   @override
   Future<List<UiEpisode>> episodes(String workId, {int? season}) async {
     final key = workId.startsWith('fake:') ? workId.substring(5) : workId;
-    if (!_meta.containsKey(key)) return const [];
+    if (catalog.owns(key)) {
+      return [
+        for (final e in catalog.episodes(key))
+          if (season == null || e.season == season) e
+      ];
+    }
+    if (!_has(key)) return const [];
     return [
       for (final e in _episodesOf(key))
         if (season == null || e.season == season) e
@@ -526,7 +638,7 @@ final class FakeWorld implements NextUiData, NextUiActions, NextDiscoverData {
     'edgerunners', 'frieren'};
 
   UiFound? _discovered(String key) {
-    if (_meta.containsKey(key)) {
+    if (_has(key)) {
       return UiFound(sample(key), followed: _followed.contains(key));
     }
     final m = _found[key] as Map<String, dynamic>?;

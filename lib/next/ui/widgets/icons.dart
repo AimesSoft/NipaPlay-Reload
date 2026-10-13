@@ -17,7 +17,17 @@ enum NextGlyph {
   /// A file, a video, a torrent: what was dropped into the conversation.
   file,
   video,
-  torrent
+  torrent,
+
+  /// Another computer of the user's, as Finder draws one on the network.
+  device,
+
+  /// The library's forms: rows of previews, a grid of cards.
+  rows,
+  grid,
+
+  /// What a row is dragged by.
+  grip
 }
 
 class NextIcon extends StatelessWidget {
@@ -148,6 +158,34 @@ class _GlyphPainter extends CustomPainter {
               ..lineTo(19, 19)
               ..lineTo(19, 15),
             line);
+      case NextGlyph.device:
+        canvas.drawRRect(
+            RRect.fromRectAndRadius(
+                const Rect.fromLTWH(3, 4, 18, 12.5), const Radius.circular(2)),
+            line);
+        canvas.drawLine(const Offset(8.5, 20), const Offset(15.5, 20), line);
+      case NextGlyph.rows:
+        for (final y in [6.0, 12.0, 18.0]) {
+          canvas.drawLine(Offset(4, y), Offset(20, y), line);
+        }
+      case NextGlyph.grid:
+        for (final o in const [
+          Offset(4, 4),
+          Offset(13.5, 4),
+          Offset(4, 13.5),
+          Offset(13.5, 13.5)
+        ]) {
+          canvas.drawRRect(
+              RRect.fromRectAndRadius(o & const Size(6.5, 6.5),
+                  const Radius.circular(1.6)),
+              line);
+        }
+      case NextGlyph.grip:
+        for (final x in [9.0, 15.0]) {
+          for (final y in [6.0, 12.0, 18.0]) {
+            canvas.drawCircle(Offset(x, y), 1.5, fill);
+          }
+        }
     }
   }
 

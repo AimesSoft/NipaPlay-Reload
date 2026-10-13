@@ -4,6 +4,7 @@ import 'package:nipaplay/providers/service_provider.dart';
 import 'package:provider/provider.dart';
 
 import '../../next_runtime.dart';
+import '../../ui_data/library.dart';
 import '../../ui_data/ui_data.dart';
 import '../conversation/chat_port.dart';
 import '../dev/dev_services.dart';
@@ -19,6 +20,8 @@ final class NextUiServices {
     required this.actions,
     required this.chat,
     required this.discover,
+    required this.library,
+    required this.libraryActions,
     LoginRequests? logins,
     this.onDispose,
   }) : logins = logins ?? LoginRequests();
@@ -29,6 +32,11 @@ final class NextUiServices {
 
   /// The 发现 page's calendar and rankings.
   final NextDiscoverData discover;
+
+  /// The 片库 page's sources and categories, and what the viewer changes
+  /// in them directly.
+  final NextLibraryData library;
+  final NextLibraryActions libraryActions;
 
   /// Logins the agent asked for, waiting for the user's window.
   final LoginRequests logins;
@@ -51,11 +59,15 @@ final class NextUiServices {
     final core = ServiceProvider.nextCore;
     final runtime = context.read<NextRuntime>();
     final logins = LoginRequests();
+    final data = coreUiData(core);
+    final library = CoreLocalLibrary(data);
     return NextUiServices(
-      data: coreUiData(core),
+      data: data,
       actions: coreUiActions(core, runtime),
       chat: ChatHostPort(runtime),
       discover: CoreDiscover(runtime),
+      library: library,
+      libraryActions: library,
       logins: logins,
       onDispose: attachCoreLogins(core, logins),
     );

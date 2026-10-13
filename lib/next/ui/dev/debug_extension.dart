@@ -24,6 +24,8 @@ import '../pages/discover_page.dart';
 import '../panel/chat_panel.dart';
 import '../widgets/drop_zone.dart';
 import '../shell/next_ui_preference.dart';
+import '../library/category_page.dart';
+import '../library/fan_cover.dart';
 import '../pages/library_page.dart';
 import '../shell/shell_controller.dart';
 import '../shell/window_chrome.dart';
@@ -33,6 +35,7 @@ import '../widgets/cards.dart';
 import '../widgets/menu.dart';
 import '../widgets/nipa_avatar.dart';
 import '../widgets/shelf.dart';
+import '../widgets/words.dart';
 import 'dev_services.dart';
 import 'fake_world.dart';
 
@@ -79,9 +82,9 @@ import 'fake_world.dart';
 ///   the first card's button, or cancel the scripted one.
 /// - `reduce` `on=true|false|system`.
 /// - `interface` `next=true|false`: “使用 Next 界面” on or off.
-/// - `window` [`size=WxH` | `width=` `height=`] [`maximize=true|false`]
-///   [`fullscreen=true|false`]:
-///   resize, zoom, or enter / leave full screen without activating it.
+/// - `window` [`size=WxH` | `width=` `height=`] [`at=X,Y`]
+///   [`maximize=true|false`] [`fullscreen=true|false`]: resize, move, zoom,
+///   or enter / leave full screen without activating it.
 /// - `chrome`: where the top bar's items are and where the traffic lights
 ///   end.
 /// - `scroll` `to=px`: the page showing scrolls (its outermost scroller).
@@ -93,6 +96,19 @@ import 'fake_world.dart';
 ///   `paths=a|b`: a file drag from Finder as the native drop plugin reports
 ///   it (entered → updated → performOperation), over the middle of the
 ///   panel or the home's input bar; nothing moves the OS pointer.
+/// - `device` `name=` [`online=true|false`]: one of the scripted world's
+///   other devices leaves or comes back (flips without `online`); the
+///   interface hears it as a change.
+/// - `library` [`workId=`]: the library as the interface reads it, where
+///   each work is and whether its next episode plays; with `workId`, that
+///   work's episodes.
+/// - `lib` [`source=<id>`] [`form=shelves|cards`] [`arranged=true|false`]
+///   [`menu=sources|sort|edit|none`] [`open=<categoryId>`] [`sort=<id>`]
+///   [`move=<categoryId>,<index>`] [`remove=<categoryId>`]: the 片库 page,
+///   as its controls would; returns what it shows.
+/// - `cat` [`sort=<id>`] [`scroll=top|end|<px>` [`ms=`]]: the category
+///   page on top; a timed scroll also reports how long its frames took.
+///   `scroll` takes `ms=` too, for the page showing.
 abstract final class NextUiDebug {
   static NextShellController? _shell;
   static BuildContext? _context;
@@ -141,6 +157,10 @@ abstract final class NextUiDebug {
           await windowManager.setSize(Size(double.parse(p['width'] ?? '1440'),
               double.parse(p['height'] ?? '900')));
         }
+        if (p['at'] case final at?) {
+          final [x, y] = at.split(',').map(double.parse).toList();
+          await windowManager.setPosition(Offset(x, y));
+        }
         if (p['maximize'] case final on?) {
           await (on == 'true'
               ? windowManager.maximize()
@@ -150,7 +170,10 @@ abstract final class NextUiDebug {
           await windowManager.setFullScreen(on == 'true');
         }
         await _settle();
-        return {'size': (await windowManager.getSize()).toString()};
+        return {
+          'size': (await windowManager.getSize()).toString(),
+          'at': (await windowManager.getPosition()).toString(),
+        };
       case 'chrome':
         await _settle();
         return _chrome();
@@ -367,12 +390,14 @@ abstract final class NextUiDebug {
       case 'scroll':
         final position = _find<ScrollableState>()?.position;
         if (position == null) throw StateError('Nothing scrolls here');
-        await position.animateTo(
-            double.parse(p['to'] ?? '0').clamp(0, position.maxScrollExtent),
-            duration: const Duration(milliseconds: 400),
-            curve: NextMotion.ease);
+        final frames = await _scrollTimed(
+            position, p['to'] ?? '0', int.tryParse(p['ms'] ?? ''));
         await _settle();
-        return {'scroll': position.pixels, ..._status(shell)};
+        return {
+          'scroll': position.pixels,
+          if (p['ms'] != null) 'frames': frames,
+          ..._status(shell)
+        };
       case 'discover':
         final page = _find<DiscoverDebug>();
         if (page == null) throw StateError('The 发现 page is not showing');
@@ -421,6 +446,56 @@ abstract final class NextUiDebug {
           'claimed': claimed,
           ..._status(shell)
         };
+      case 'device':
+        final world = shell.services.data;
+        if (world is! FakeWorld) {
+          throw StateError('device needs the scripted world');
+        }
+        final devices = world.setOnline(p['name'] ?? '',
+            switch (p['online']) { null => null, final on => on == 'true' });
+        // Long enough for the pages to re-read.
+        await Future<void>.delayed(const Duration(milliseconds: 400));
+        return {'devices': devices, ..._status(shell)};
+      case 'lib':
+        final page = _find<LibraryDebug>();
+        if (page == null) throw StateError('The 片库 page is not showing');
+        await page.debug(p);
+        await Future<void>.delayed(const Duration(milliseconds: 600));
+        await _settle();
+        return {...page.debugStatus(), ..._status(shell)};
+      case 'cat':
+        final page = _find<CategoryDebug>();
+        if (page == null) throw StateError('No category page is showing');
+        if (p['sort'] case final id?) page.debugSort(id);
+        Map<String, Object?>? frames;
+        if (p['scroll'] case final to?) {
+          frames = await _scrollTimed(
+              page.debugScroll.position, to, int.tryParse(p['ms'] ?? ''));
+        }
+        await Future<void>.delayed(const Duration(milliseconds: 600));
+        await _settle();
+        return {...page.debugStatus(), if (frames != null) 'frames': frames};
+      case 'library':
+        final data = shell.services.data;
+        String where(UiDevice? d) =>
+            d == null ? 'here' : '${d.name}${d.online ? '' : ' (offline)'}';
+        if (p['workId'] case final id?) {
+          return {
+            'episodes': [
+              for (final e in await data.episodes(id))
+                '${e.season ?? '-'}/${e.number} ${where(e.device)}'
+                    '${e.playable ? ' playable' : ''}'
+            ],
+          };
+        }
+        return {
+          'works': [
+            for (final w in await data.library())
+              '${w.title} [${w.devices.map(where).join(', ')}] next '
+                  '${w.next?.number} ${where(w.next?.device)}'
+                  '${Words.canPlay(w) ? ' playable' : ''}'
+          ],
+        };
       case 'reduce':
         NextMotion.forceReduced = switch (p['on']) {
           'true' => true,
@@ -436,6 +511,41 @@ abstract final class NextUiDebug {
   }
 
   static Future<void> _settle() => WidgetsBinding.instance.endOfFrame;
+
+  /// Scrolls [position] to `top`, `end` or a pixel offset over [ms]
+  /// (400 by default) and sums up the frames drawn meanwhile.
+  static Future<Map<String, Object?>> _scrollTimed(
+      ScrollPosition position, String to, int? ms) async {
+    final target = switch (to) {
+      'top' => 0.0,
+      'end' => position.maxScrollExtent,
+      final px => double.parse(px),
+    }
+        .clamp(0.0, position.maxScrollExtent);
+    final frames = <ui.FrameTiming>[];
+    void collect(List<ui.FrameTiming> t) => frames.addAll(t);
+    SchedulerBinding.instance.addTimingsCallback(collect);
+    await position.animateTo(target,
+        duration: Duration(milliseconds: ms ?? 400), curve: Curves.easeInOut);
+    await Future<void>.delayed(const Duration(milliseconds: 300));
+    SchedulerBinding.instance.removeTimingsCallback(collect);
+    double milli(Duration d) => d.inMicroseconds / 1000;
+    final build = [for (final f in frames) milli(f.buildDuration)];
+    final raster = [for (final f in frames) milli(f.rasterDuration)];
+    double avg(List<double> v) =>
+        v.isEmpty ? 0 : v.reduce((a, b) => a + b) / v.length;
+    double most(List<double> v) =>
+        v.isEmpty ? 0 : v.reduce((a, b) => a > b ? a : b);
+    String r(double v) => v.toStringAsFixed(1);
+    return {
+      'count': frames.length,
+      'buildAvgMs': r(avg(build)),
+      'buildMaxMs': r(most(build)),
+      'rasterAvgMs': r(avg(raster)),
+      'rasterMaxMs': r(most(raster)),
+      'over16ms': frames.where((f) => milli(f.totalSpan) > 16.7).length,
+    };
+  }
   static Completer<void>? _fakeLoginStop;
 
   static Map<String, Object?> _status(NextShellController shell) {
@@ -631,6 +741,7 @@ abstract final class NextUiDebug {
       'shelf' => Shelf,
       'episodes' => EpisodeRow,
       'library' => LibraryPage,
+      'category' => CategoryPage,
       'discover' => DiscoverPage,
       'panel' => ChatPanelLayer,
       _ => null,
@@ -643,8 +754,11 @@ abstract final class NextUiDebug {
         'avatar' => widget is NipaAvatar,
         'hero' => widget is NextButton && widget.label == '详情',
         'menu' => widget is MenuItem,
-        _ =>
-          widget is WideCard || widget is PosterCard || widget is WorkRowCard,
+        _ => widget is WideCard ||
+            widget is PosterCard ||
+            widget is WorkRowCard ||
+            widget is CategoryCard ||
+            widget is FolderTile,
       };
       if (wanted) {
         final box = element.findRenderObject();
