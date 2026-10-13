@@ -240,7 +240,10 @@ flutter:
     - assets/next/harness/nipa
     - assets/next/harness/.gitignore
     - assets/next/harness/.codex/config.toml
+    - assets/next/harness/.codex/hooks.json
     - assets/next/harness/hooks/README.md
+    - assets/next/harness/hooks/session_start.py
+    - assets/next/harness/memory/
     - assets/next/harness/tools/
     - packages/adaptive_platform_ui/pubspec.yaml
     - packages/danmaku_canvas/pubspec.yaml

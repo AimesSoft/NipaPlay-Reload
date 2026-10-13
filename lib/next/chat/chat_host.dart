@@ -8,6 +8,7 @@ import '../harness_redaction.dart';
 import 'liveness.dart';
 import 'session_store.dart';
 import 'turn_process_store.dart';
+import '../memory/service.dart';
 
 typedef ChatMessage = Map<String, dynamic>;
 
@@ -25,6 +26,7 @@ final class ChatHost {
       required this.repository,
       this.labRoot,
       this.sessions,
+      this.memory,
       this.codexExecutable})
       : sessionId = 'nipa-${DateTime.now().microsecondsSinceEpoch}-'
             '${Random.secure().nextInt(1 << 32).toRadixString(16)}';
@@ -33,6 +35,7 @@ final class ChatHost {
   final Directory repository;
   final Directory? labRoot;
   final SessionStore? sessions;
+  final HarnessMemory? memory;
   final String? codexExecutable;
   String? mainThreadId;
   final String sessionId;
@@ -508,6 +511,7 @@ final class ChatHost {
     });
     final history = Map<String, dynamic>.from(response['thread'] as Map);
     final id = history['id'] as String;
+    await memory?.rememberThread(id);
     threadOrigins[id] = origin;
     if ((history['turns'] as List).isEmpty) _freshThreads[id] = history;
     if (resumeId == null)
@@ -526,8 +530,10 @@ final class ChatHost {
     live.starting(DateTime.now());
     _freshThreads.remove(id);
     try {
+      final change = await memory?.changesFor(id);
       return _public(await _request(
-          'turn/start', {'threadId': id, 'input': _input(text)}));
+          'turn/start', {'threadId': id, 'input': _input(
+            change == null ? text : '$change\n\n$text')}));
     } catch (error) {
       live.status = 'startFailed';
       live.endedAt = DateTime.now();
@@ -590,6 +596,7 @@ final class ChatHost {
     });
     thread = _public(Map<String, dynamic>.from(response['thread'] as Map));
     threadId = thread!['id'] as String;
+    await memory?.rememberThread(threadId!);
     if (method == 'thread/start') {
       // Codex lazily writes an empty rollout. Naming materializes it without
       // inventing a user message or opening a model turn.
@@ -611,11 +618,12 @@ final class ChatHost {
   }
 
   Future<ChatMessage> listThreads({String? cursor, int limit = 30,
-      List<String>? sourceKinds}) async =>
+      List<String>? sourceKinds, String? sortKey}) async =>
       _public(await _request('thread/list', {
         'cwd': repository.path,
         'modelProviders': [],
         'limit': limit,
+        if (sortKey != null) 'sortKey': sortKey,
         if (sourceKinds != null) 'sourceKinds': sourceKinds,
         if (cursor != null) 'cursor': cursor
       }));
@@ -652,6 +660,12 @@ final class ChatHost {
     }
     return history;
   }
+
+  Future<ChatMessage> compactThread(String id) =>
+      _request('thread/compact/start', {'threadId': id});
+
+  Future<ChatMessage> listHooks() =>
+      _request('hooks/list', {'cwds': [repository.path]});
 
   /// Serialize with UI selection/start. Wait while the host has an active turn.
   Future<String?> prepareFollowup(String? id) => _control(() async {
