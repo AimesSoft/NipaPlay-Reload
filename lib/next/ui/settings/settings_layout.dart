@@ -11,9 +11,11 @@ enum SettingsSection {
   network('网络'),
   storage('存储'),
   devices('设备'),
+  sync('同步'),
   nipa('Nipa'),
   general('通用'),
   shortcuts('快捷键'),
+  plugins('插件'),
   about('关于'),
   classic('经典界面');
 
@@ -23,8 +25,8 @@ enum SettingsSection {
   static const rail = [
     [accounts, sources],
     [playback, danmaku, downloads, network, storage],
-    [devices, nipa],
-    [general, shortcuts, about],
+    [devices, sync, nipa],
+    [general, shortcuts, plugins, about],
     [classic],
   ];
 }
@@ -70,8 +72,9 @@ final class SettingsGroup {
 /// this only arranges it. A setting no rule names lands in 通用 › 其他, so
 /// a new one appears here as soon as Nipa can see it.
 abstract final class SettingsLayout {
-  /// Shown elsewhere on the page in its own form (the 经典界面 button).
-  static const hidden = {'labs_use_next_interface'};
+  /// Shown elsewhere on the page in its own form (the 经典界面 button;
+  /// each plugin's switch, on its row in 插件).
+  static const hidden = {'labs_use_next_interface', 'plugins.enabled.*'};
 
   static const _sections = <(String, SettingsSection)>[
     ('player.screenshot*', SettingsSection.storage),
@@ -82,7 +85,8 @@ abstract final class SettingsLayout {
     ('subtitle.', SettingsSection.danmaku),
     ('next.heroOpeningSeconds', SettingsSection.danmaku),
     ('plugins.githubProxyUrl', SettingsSection.network),
-    ('plugins.', SettingsSection.danmaku),
+    ('plugins.', SettingsSection.plugins),
+    ('sync.', SettingsSection.sync),
     ('download.', SettingsSection.downloads),
     ('network.', SettingsSection.network),
     ('shortcuts.', SettingsSection.shortcuts),
@@ -187,7 +191,6 @@ abstract final class SettingsLayout {
           ],
           folded: true),
       SettingsGroup('防剧透', ['danmaku.spoiler*'], folded: true),
-      SettingsGroup('过滤', ['plugins.'], folded: true),
       SettingsGroup('字幕样式', ['subtitle.'], folded: true),
       SettingsGroup('其他', ['danmaku.'], folded: true),
     ],
@@ -224,6 +227,9 @@ abstract final class SettingsLayout {
     SettingsSection.shortcuts: [
       SettingsGroup('播放', ['shortcuts.']),
     ],
+    SettingsSection.plugins: [
+      SettingsGroup('设置', ['plugins.settings.', 'plugins.']),
+    ],
     SettingsSection.about: [
       SettingsGroup('', ['general.autoCheckUpdates']),
     ],
@@ -259,7 +265,9 @@ abstract final class SettingsLayout {
   /// Settings shown on the page: not the player's live state, and only
   /// those a control exists for.
   static bool shown(UiSetting s) =>
-      !s.runtime && s.kind != UiSettingKind.other && !hidden.contains(s.key);
+      !s.runtime &&
+      s.kind != UiSettingKind.other &&
+      !hidden.any((h) => SettingsGroup._matches(h, s.key));
 
   /// [settings] of [section], grouped as above (the registry's order where
   /// no rule orders them). Empty groups are left out.

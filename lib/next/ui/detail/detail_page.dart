@@ -20,6 +20,7 @@ import '../widgets/menu.dart';
 import '../widgets/nipa_avatar.dart';
 import '../widgets/words.dart';
 import '../widgets/work_title.dart';
+import 'collection.dart';
 import 'detail_backdrop.dart';
 import 'docking_title.dart';
 import 'episodes.dart';
@@ -773,6 +774,7 @@ class _WorkDetailPageState extends State<WorkDetailPage>
         leading: const NipaAvatar(size: 20),
         onTap: () => shell.openChat(about: work),
       ),
+      CollectionButton(work: work),
       if (menu.isNotEmpty) ...[
         const SizedBox(width: 12),
         CompositedTransformTarget(

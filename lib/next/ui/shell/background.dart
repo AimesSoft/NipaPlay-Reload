@@ -7,6 +7,7 @@ import '../../ui_data/ui_data.dart';
 import '../cards/card_views.dart';
 import '../chat/transcript.dart' show Shimmer;
 import '../conversation/chat_turn.dart';
+import '../downloads/task_open.dart';
 import '../theme/tokens.dart';
 import '../widgets/buttons.dart';
 import '../widgets/glass.dart';
@@ -135,17 +136,31 @@ class _ArcPainter extends CustomPainter {
 /// are doing and for how long, and open to their own conversation; tasks
 /// show their progress. Each can be stopped. Helpers that finished
 /// recently stay a while with what they came back with.
-class BackgroundPanel extends StatelessWidget {
+class BackgroundPanel extends StatefulWidget {
   const BackgroundPanel({super.key});
+
+  @override
+  State<BackgroundPanel> createState() => _BackgroundPanelState();
+}
+
+class _BackgroundPanelState extends State<BackgroundPanel>
+    with DownloadTasks<BackgroundPanel> {
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    watchDownloads(NextShellScope.of(context));
+  }
 
   @override
   Widget build(BuildContext context) {
     final shell = NextShellScope.of(context);
-    final actions = shell.services.actions;
+    final services = shell.services;
+    void control(UiTask t, String command) =>
+        unawaited(controlTasks(services, [t.taskId], command, downloads));
     final callbacks = CardCallbacks(
-      onPauseTask: (t) => actions.pauseTask(t.taskId),
-      onResumeTask: (t) => actions.resumeTask(t.taskId),
-      onCancelTask: (t) => actions.cancelTask(t.taskId),
+      onPauseTask: (t) => control(t, 'pause'),
+      onResumeTask: (t) => control(t, 'resume'),
+      onCancelTask: (t) => control(t, 'cancel'),
     );
     return Glass(
       blur: 30,
@@ -156,45 +171,114 @@ class BackgroundPanel extends StatelessWidget {
         BoxShadow(
             color: Color(0x80000000), blurRadius: 50, offset: Offset(0, 20))
       ],
-      padding: const EdgeInsets.fromLTRB(14, 12, 12, 12),
+      padding: const EdgeInsets.fromLTRB(14, 12, 12, 10),
       child: SizedBox(
         width: 360,
         child: ValueListenableBuilder(
           valueListenable: shell.tasks,
           builder: (context, _, __) {
             final items = shell.backgroundItems;
-            return ConstrainedBox(
-              constraints: const BoxConstraints(maxHeight: 460),
-              child: SingleChildScrollView(
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    for (final (i, task) in items.indexed) ...[
-                      if (i > 0)
-                        Container(
-                            height: 1,
-                            margin: const EdgeInsets.symmetric(vertical: 10),
-                            color: NextColors.line),
-                      if (task.kind == UiTaskKind.helper)
-                        _HelperRow(
-                          task: task,
-                          onOpen: task.threadId == null
-                              ? null
-                              : () => shell.openConversation(task.threadId!),
-                          onStop: () => actions.cancelTask(task.taskId),
-                        )
-                      else
-                        TaskRow(task: task, callbacks: callbacks),
+            final tasks = [
+              for (final t in shell.activeTasks)
+                if (t.kind == UiTaskKind.background) t
+            ];
+            final running =
+                tasks.where((t) => t.state == UiTaskState.running).toList();
+            final paused =
+                tasks.where((t) => t.state == UiTaskState.paused).toList();
+            return Column(mainAxisSize: MainAxisSize.min, children: [
+              ConstrainedBox(
+                constraints: const BoxConstraints(maxHeight: 420),
+                child: SingleChildScrollView(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      for (final (i, task) in items.indexed) ...[
+                        if (i > 0)
+                          Container(
+                              height: 1,
+                              margin: const EdgeInsets.symmetric(vertical: 10),
+                              color: NextColors.line),
+                        if (task.kind == UiTaskKind.helper)
+                          _HelperRow(
+                            task: task,
+                            onOpen: task.threadId == null
+                                ? null
+                                : () => shell.openConversation(task.threadId!),
+                            onStop: () => control(task, 'cancel'),
+                          )
+                        else
+                          Pressable(
+                            onTap: () {
+                              shell.closePopover();
+                              unawaited(openTask(services, task,
+                                  download: downloads.contains(task.taskId)));
+                            },
+                            semanticLabel: task.title,
+                            pressScale: 0.99,
+                            builder: (context, hovered) =>
+                                TaskRow(task: task, callbacks: callbacks),
+                          ),
+                      ],
                     ],
-                  ],
+                  ),
                 ),
               ),
-            );
+              Container(
+                  height: 1,
+                  margin: const EdgeInsets.only(top: 12, bottom: 8),
+                  color: NextColors.line),
+              Row(children: [
+                if (running.isNotEmpty)
+                  _FootButton(
+                      label: '全部暂停',
+                      onTap: () => unawaited(controlTasks(services,
+                          running.map((t) => t.taskId), 'pause', downloads)))
+                else if (paused.isNotEmpty)
+                  _FootButton(
+                      label: '全部继续',
+                      onTap: () => unawaited(controlTasks(services,
+                          paused.map((t) => t.taskId), 'resume', downloads))),
+                const Spacer(),
+                _FootButton(
+                    label: '动态',
+                    arrow: true,
+                    onTap: () => shell.go(NextSection.activity)),
+              ]),
+            ]);
           },
         ),
       ),
     );
   }
+}
+
+/// A quiet word at the panel's foot.
+class _FootButton extends StatelessWidget {
+  const _FootButton(
+      {required this.label, required this.onTap, this.arrow = false});
+  final String label;
+  final VoidCallback onTap;
+  final bool arrow;
+
+  @override
+  Widget build(BuildContext context) => Pressable(
+        onTap: onTap,
+        semanticLabel: label,
+        builder: (context, hovered) => Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
+          child: Row(mainAxisSize: MainAxisSize.min, children: [
+            Text(label,
+                style: NextText.sans(12.5,
+                    color: hovered ? NextColors.paper : NextColors.p3)),
+            if (arrow) ...[
+              const SizedBox(width: 4),
+              NextIcon(NextGlyph.chevronRight,
+                  size: 11, color: hovered ? NextColors.paper : NextColors.p3),
+            ],
+          ]),
+        ),
+      );
 }
 
 /// A helper: what it was sent to do, what it is doing now and for how

@@ -665,7 +665,7 @@ class PillButton extends StatelessWidget {
             border: primary ? null : Border.all(color: NextColors.line2),
           ),
           child: busy
-              ? const _Dots()
+              ? const BusyDots()
               : Text(label,
                   style: NextText.sans(12.5,
                       weight: FontWeight.w500,
@@ -681,14 +681,15 @@ class PillButton extends StatelessWidget {
 }
 
 /// Waiting: three dots breathing.
-class _Dots extends StatefulWidget {
-  const _Dots();
+class BusyDots extends StatefulWidget {
+  const BusyDots({super.key});
 
   @override
-  State<_Dots> createState() => _DotsState();
+  State<BusyDots> createState() => _BusyDotsState();
 }
 
-class _DotsState extends State<_Dots> with SingleTickerProviderStateMixin {
+class _BusyDotsState extends State<BusyDots>
+    with SingleTickerProviderStateMixin {
   late final _c = AnimationController(
       vsync: this, duration: const Duration(milliseconds: 1200))
     ..repeat();
@@ -1063,6 +1064,46 @@ class _KeyRecorderState extends State<KeyRecorder> {
                     ? NextText.sans(12.5, color: NextColors.accent2)
                     : NextText.num(13, color: NextColors.paper)),
           ),
+        ),
+      );
+}
+
+/// A word that is on or off: a library shown, a kind of record synced.
+class ChipToggle extends StatelessWidget {
+  const ChipToggle(
+      {super.key, required this.name, required this.on, required this.onTap});
+  final String name;
+  final bool on;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) => Pressable(
+        onTap: onTap,
+        semanticLabel: name,
+        builder: (context, hovered) => AnimatedContainer(
+          duration: const Duration(milliseconds: 160),
+          height: 30,
+          padding: const EdgeInsets.symmetric(horizontal: 12),
+          decoration: BoxDecoration(
+            color: on
+                ? NextColors.accentSoft
+                : hovered
+                    ? const Color(0x14FFFFFF)
+                    : const Color(0x08FFFFFF),
+            borderRadius: BorderRadius.circular(15),
+            border: Border.all(
+                color: on ? const Color(0x80FF2E55) : NextColors.line),
+          ),
+          child: Row(mainAxisSize: MainAxisSize.min, children: [
+            if (on) ...[
+              const NextIcon(NextGlyph.check,
+                  size: 12, color: NextColors.accent2),
+              const SizedBox(width: 6),
+            ],
+            Text(name,
+                style: NextText.sans(12.5,
+                    color: on ? NextColors.paper : NextColors.p2)),
+          ]),
         ),
       );
 }

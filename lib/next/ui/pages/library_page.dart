@@ -3,11 +3,15 @@ import 'dart:async';
 import 'package:flutter/widgets.dart';
 
 import '../../ui_data/library.dart';
+import '../data/collections.dart';
 import '../library/category_editor.dart';
 import '../library/category_grid.dart';
 import '../library/category_page.dart';
 import '../library/fan_cover.dart';
 import '../library/library_controls.dart';
+import '../library/status_view.dart';
+import '../settings/section_accounts.dart';
+import '../settings/settings_layout.dart';
 import '../shell/shell_controller.dart';
 import '../theme/tokens.dart';
 import '../widgets/buttons.dart';
@@ -20,6 +24,8 @@ import '../widgets/segmented.dart';
 /// categories show as shelves of previews or as cards with a fan of
 /// posters; a source with a single category shows that category's grid
 /// directly. Its own structure or Nipa's arrangement, when Nipa made one.
+/// When the accounts can list them, the same menu shows the works by
+/// standing (在看、想看…) instead of a source.
 class LibraryPage extends StatefulWidget {
   const LibraryPage({super.key});
 
@@ -30,7 +36,8 @@ class LibraryPage extends StatefulWidget {
 /// Handles for `ext.nipaplay.nextui` in lab profiles.
 abstract interface class LibraryDebug {
   /// Applies `source=`, `form=`, `arranged=`, `menu=`, `open=`, `sort=`,
-  /// `move=<categoryId>,<index>` and `remove=<categoryId>`.
+  /// `move=<categoryId>,<index>`, `remove=<categoryId>` and
+  /// `status=<doing|wish|done|onHold|dropped|none>`.
   Future<void> debug(Map<String, String> p);
   Map<String, Object?> debugStatus();
 }
@@ -50,6 +57,12 @@ class _LibraryPageState extends State<LibraryPage>
   CategoryItems? _single;
   _Menu _menu = _Menu.none;
   int _reads = 0;
+
+  /// The works of a standing, shown instead of the source.
+  UiWatchStatus? _status;
+
+  /// Whether the accounts can list works by standing.
+  bool _lists = false;
   final _scroll = ScrollController();
   final _sourceLink = LayerLink();
   final _sortLink = LayerLink();
@@ -77,6 +90,9 @@ class _LibraryPageState extends State<LibraryPage>
     _changes?.cancel();
     _changes = _data.changes.listen((_) => _load());
     _load();
+    shell.services.collections.lists().then((lists) {
+      if (mounted) setState(() => _lists = lists);
+    });
   }
 
   @override
@@ -125,6 +141,7 @@ class _LibraryPageState extends State<LibraryPage>
   void _choose(String sourceId) {
     setState(() {
       _menu = _Menu.none;
+      _status = null;
       if (sourceId == _sourceId) return;
       _sourceId = sourceId;
       _page = null;
@@ -132,6 +149,17 @@ class _LibraryPageState extends State<LibraryPage>
       _single = null;
     });
     _load();
+  }
+
+  void _chooseStatus(UiWatchStatus? status) => setState(() {
+        _menu = _Menu.none;
+        _status = status;
+      });
+
+  void _addSource() {
+    setState(() => _menu = _Menu.none);
+    _shell!.openSettings(
+        section: SettingsSection.sources, key: SourcesSection.addKey);
   }
 
   void _toggle(_Menu menu) =>
@@ -190,6 +218,10 @@ class _LibraryPageState extends State<LibraryPage>
       await _actions.moveCategory(id, int.parse(index));
     }
     if (p['remove'] case final id?) await _actions.removeCategory(id);
+    if (p['status'] case final status?) {
+      _chooseStatus(
+          status == 'none' ? null : UiWatchStatus.values.byName(status));
+    }
     if (p['open'] case final id?) {
       _openCategory(_page!.categories.firstWhere((c) => c.categoryId == id));
     }
@@ -211,6 +243,8 @@ class _LibraryPageState extends State<LibraryPage>
             ? null
             : {'count': _single!.count, 'loadedSlices': _single!.loaded},
         'menu': _menu.name,
+        'status': _status?.name,
+        'statuses': _lists,
       };
 
   // —— Building ——
@@ -220,7 +254,7 @@ class _LibraryPageState extends State<LibraryPage>
     final page = _page;
     return Stack(children: [
       CustomScrollView(
-        key: PageStorageKey('library/$_sourceId'),
+        key: PageStorageKey('library/${_status?.name ?? _sourceId}'),
         controller: _scroll,
         slivers: [
           SliverPadding(
@@ -228,7 +262,9 @@ class _LibraryPageState extends State<LibraryPage>
                 NextMetrics.gutter, NextMetrics.topBar + 40, 56, 28),
             sliver: SliverToBoxAdapter(child: _header()),
           ),
-          if (page != null)
+          if (_status case final status?)
+            StatusView(status: status, on: _on)
+          else if (page != null)
             for (final sliver in _body(page))
               SliverFadeTransition(
                 opacity: CurvedAnimation(parent: _fade, curve: Curves.easeOut),
@@ -241,7 +277,8 @@ class _LibraryPageState extends State<LibraryPage>
   }
 
   Widget _header() {
-    final page = _page;
+    // A standing has none of a source's forms, orders or adjustments.
+    final page = _status == null ? _page : null;
     final only = page != null && page.categories.length == 1
         ? page.categories.single
         : null;
@@ -251,7 +288,7 @@ class _LibraryPageState extends State<LibraryPage>
         CompositedTransformTarget(
           link: _sourceLink,
           child: SourceTitle(
-            name: _source?.name ?? '片库',
+            name: _status?.label ?? _source?.name ?? '片库',
             open: _menu == _Menu.sources,
             onTap: () => _toggle(_Menu.sources),
           ),
@@ -416,11 +453,27 @@ class _LibraryPageState extends State<LibraryPage>
                 opacity: s.online ? 1 : 0.5,
                 child: MenuItem(
                   label: s.name,
-                  selected: s.sourceId == _sourceId,
+                  selected: _status == null && s.sourceId == _sourceId,
                   onTap: () => _choose(s.sourceId),
                   trailing: _kind(s),
                 ),
               ),
+            const _Rule(),
+            MenuItem(
+              label: '添加来源',
+              onTap: _addSource,
+              trailing: const NextIcon(NextGlyph.plus,
+                  size: 14, color: NextColors.p3),
+            ),
+            if (_lists) ...[
+              const _Rule(),
+              for (final s in UiWatchStatus.values)
+                MenuItem(
+                  label: s.label,
+                  selected: s == _status,
+                  onTap: () => _chooseStatus(s),
+                ),
+            ],
           ]),
         ),
       _Menu.sort => anchoredMenu(
@@ -470,6 +523,18 @@ class _LibraryPageState extends State<LibraryPage>
     }
     return Text(kind, style: NextText.sans(12, color: NextColors.p3));
   }
+}
+
+/// A thin line between groups of a menu.
+class _Rule extends StatelessWidget {
+  const _Rule();
+
+  @override
+  Widget build(BuildContext context) => Container(
+        height: 1,
+        margin: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+        color: NextColors.line,
+      );
 }
 
 /// A category in the shelves form: its name and count (opening it), then

@@ -6,6 +6,7 @@ import '../../ui_data/ui_data.dart';
 import '../cards/card_views.dart';
 import '../chat/chat_frame.dart';
 import '../conversation/nipa_chat.dart';
+import '../shell/nipa_setup.dart';
 import '../shell/shell_controller.dart';
 import '../theme/tokens.dart';
 import '../widgets/attachments.dart';
@@ -376,21 +377,25 @@ class _NextHomePageState extends State<NextHomePage> {
         const SizedBox(height: 32),
         Padding(
           padding: const EdgeInsets.only(left: NextMetrics.gutter),
-          child: AskBar(
-            focusNode: shell.askFocus,
-            controller: shell.askText,
-            onSay: _say,
-            mood: c.mood,
-            moodSentence: c.moodSentence,
-            hint: c.running ? '补充，或者改主意' : '今天想看什么？',
-            suggestions: _suggestions(),
-            maxWidth: size.width - NextMetrics.gutter - 32,
-            attachments: c.attachments,
-            onAttach: c.attach,
-            onDetach: c.detach,
-            running: c.running,
-            onStop: c.stop,
-            onExpand: c.turns.isEmpty && !c.loading ? null : shell.openChat,
+          child: ListenableBuilder(
+            listenable: shell.nipaSetup,
+            builder: (context, _) => AskBar(
+                focusNode: shell.askFocus,
+                controller: shell.askText,
+                onSay: _say,
+                mood: c.mood,
+                moodSentence: c.moodSentence,
+                hint: c.running ? '补充，或者改主意' : '今天想看什么？',
+                suggestions: _suggestions(),
+                aside: shell.nipaSetup.needsModel ? const NipaSetupChip() : null,
+                maxWidth: size.width - NextMetrics.gutter - 32,
+                attachments: c.attachments,
+                onAttach: c.attach,
+                onDetach: c.detach,
+                running: c.running,
+                onStop: c.stop,
+                onExpand: c.turns.isEmpty && !c.loading ? null : shell.openChat,
+              ),
           ),
         ),
         const SizedBox(height: 34),

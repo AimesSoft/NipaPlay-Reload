@@ -1,10 +1,12 @@
 import 'dart:async';
 
 import 'package:flutter/widgets.dart';
+import 'package:nipa_harness/nipa_harness.dart' show Failure, FailureCode;
 
+import '../data/gui_calls.dart';
 import '../data/settings_data.dart';
+import '../data/upkeep.dart';
 import '../theme/tokens.dart';
-import '../widgets/buttons.dart';
 import '../widgets/icons.dart';
 import 'controls.dart';
 import 'registry_rows.dart';
@@ -288,12 +290,19 @@ class _AccountTile extends StatelessWidget {
 }
 
 /// Media servers and shares: each one's place and state, opened to change,
-/// log in, check, choose its libraries or remove; and adding one.
+/// log in, check, choose its libraries or remove; adding one, NipaPlay
+/// shares nearby among them; and the folders on this computer.
 class SourcesSection extends StatefulWidget {
-  const SourcesSection({super.key, required this.data, this.open});
+  const SourcesSection(
+      {super.key, required this.data, required this.folders, this.open});
   final NextSettingsData data;
+  final NextFolders folders;
 
-  /// A source to show opened (debug).
+  /// `openSettings(section: sources, key: addKey)`: the page opens with a
+  /// new source being added (the 片库's “添加来源”).
+  static const addKey = '+source';
+
+  /// A source to show opened, or `new` for one being added.
   final String? open;
 
   @override
@@ -303,13 +312,16 @@ class SourcesSection extends StatefulWidget {
 class SourcesSectionState extends State<SourcesSection> {
   List<UiMediaSource>? _sources;
   String? _open;
-  bool _adding = false;
+  late bool _adding = widget.open == 'new';
+  String _newType = 'jellyfin';
+  final _addRow = GlobalKey();
+  final _folders = GlobalKey<_FoldersState>();
   StreamSubscription<void>? _changes;
 
   @override
   void initState() {
     super.initState();
-    _open = widget.open;
+    _open = _adding ? null : widget.open;
     _load();
     _changes = widget.data.changes.listen((_) => _load());
   }
@@ -322,65 +334,461 @@ class SourcesSectionState extends State<SourcesSection> {
 
   Future<void> _load() async {
     final sources = await widget.data.sources();
-    if (mounted) setState(() => _sources = sources);
+    if (!mounted) return;
+    final first = _sources == null;
+    setState(() => _sources = sources);
+    if (first && _adding) _reveal();
   }
 
-  /// Opens one source, or the new one (`new`), or none (debug).
-  void debugOpen(String? which) => setState(() {
-        _adding = which == 'new';
-        _open = which == 'new' ? null : which;
+  /// Opens one source, or a new one (`new`, of [type] when given), or
+  /// none.
+  void show(String? which, {String? type}) {
+    setState(() {
+      _adding = which == 'new';
+      _open = _adding ? null : which;
+      if (type != null) _newType = type;
+    });
+    if (_adding) _reveal();
+  }
+
+  /// Scans every folder, as 全部扫描 does (debug).
+  Future<void> debugScan() async => _folders.currentState?._scan(null);
+
+  void _reveal() => WidgetsBinding.instance.addPostFrameCallback((_) {
+        final row = _addRow.currentContext;
+        if (row != null && row.mounted) {
+          Scrollable.ensureVisible(row,
+              alignment: 0.2,
+              duration: const Duration(milliseconds: 420),
+              curve: NextMotion.ease);
+        }
       });
+
+  /// A new source; it opens, its login a tap away.
+  Future<void> _add(UiSourceDraft draft) async {
+    final added = await widget.data.addSource(draft);
+    if (!mounted) return;
+    setState(() {
+      _adding = false;
+      _open = added.sourceId;
+    });
+    await _load();
+  }
 
   @override
   Widget build(BuildContext context) {
     final sources = _sources;
     if (sources == null) return const SizedBox(height: 120);
-    return SettingsCard(children: [
-      for (final s in sources)
-        _SourceRow(
-          key: ValueKey(s.sourceId),
-          source: s,
-          data: widget.data,
-          open: _open == s.sourceId,
-          onTap: () => setState(() {
-            _open = _open == s.sourceId ? null : s.sourceId;
-            _adding = false;
-          }),
-          onChanged: _load,
-        ),
-      SettingsRow(
-        leading: Container(
-          width: 32,
-          height: 32,
-          alignment: Alignment.center,
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(9),
-            border: Border.all(color: NextColors.line2),
+    return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+      SettingsCard(children: [
+        for (final s in sources)
+          _SourceRow(
+            key: ValueKey(s.sourceId),
+            source: s,
+            data: widget.data,
+            open: _open == s.sourceId,
+            onTap: () => setState(() {
+              _open = _open == s.sourceId ? null : s.sourceId;
+              _adding = false;
+            }),
+            onChanged: _load,
           ),
-          child: const NextIcon(NextGlyph.plus, size: 14, color: NextColors.p2),
+        SettingsRow(
+          key: _addRow,
+          leading: const _PlusMark(),
+          title: '添加',
+          dim: !_adding,
+          onTap: () => setState(() {
+            _adding = !_adding;
+            _open = null;
+          }),
+          below: _adding
+              ? _SourceEditor(
+                  key: ValueKey(_newType),
+                  type: _newType,
+                  nearby: () => _Nearby(
+                    folders: widget.folders,
+                    known: {
+                      for (final s in sources) Uri.tryParse(s.url)?.authority
+                    },
+                    onAdd: (share) => _add(UiSourceDraft(
+                        type: 'nipaplay',
+                        name: share.name,
+                        url: share.address)),
+                  ),
+                  onSave: _add,
+                )
+              : null,
         ),
-        title: '添加',
-        dim: !_adding,
-        onTap: () => setState(() {
-          _adding = !_adding;
-          _open = null;
-        }),
-        below: _adding
-            ? _SourceEditor(
-                onSave: (draft) async {
-                  final added = await widget.data.addSource(draft);
-                  if (!mounted) return;
-                  setState(() {
-                    _adding = false;
-                    _open = added.sourceId;
-                  });
-                  await _load();
-                },
-              )
-            : null,
+      ]),
+      _Folders(key: _folders, folders: widget.folders),
+    ]);
+  }
+}
+
+class _PlusMark extends StatelessWidget {
+  const _PlusMark();
+
+  @override
+  Widget build(BuildContext context) => Container(
+        width: 32,
+        height: 32,
+        alignment: Alignment.center,
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(9),
+          border: Border.all(color: NextColors.line2),
+        ),
+        child: const NextIcon(NextGlyph.plus, size: 14, color: NextColors.p2),
+      );
+}
+
+/// NipaPlay shares answering on this network, each a tap from added.
+class _Nearby extends StatefulWidget {
+  const _Nearby(
+      {required this.folders, required this.known, required this.onAdd});
+  final NextFolders folders;
+
+  /// Where the sources already added are (host and port).
+  final Set<String?> known;
+  final Future<void> Function(UiShare share) onAdd;
+
+  @override
+  State<_Nearby> createState() => _NearbyState();
+}
+
+class _NearbyState extends State<_Nearby> {
+  List<UiShare>? _found;
+  String? _failed;
+  String? _adding;
+
+  @override
+  void initState() {
+    super.initState();
+    _look();
+  }
+
+  Future<void> _look() async {
+    setState(() {
+      _found = null;
+      _failed = null;
+    });
+    try {
+      final found = await widget.folders.nearby();
+      if (mounted) setState(() => _found = found);
+    } catch (e) {
+      if (mounted) setState(() => _failed = callFailure(e));
+    }
+  }
+
+  Future<void> _add(UiShare share) async {
+    setState(() {
+      _adding = share.address;
+      _failed = null;
+    });
+    try {
+      await widget.onAdd(share);
+    } catch (e) {
+      if (mounted) setState(() => _failed = callFailure(e));
+    }
+    if (mounted) setState(() => _adding = null);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final found = [
+      for (final s in _found ?? const <UiShare>[])
+        if (!widget.known.contains(Uri.tryParse(s.address)?.authority)) s
+    ];
+    final quiet = NextText.sans(12.5, color: NextColors.p3);
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        SizedBox(
+          width: 64,
+          height: 30,
+          child: Align(
+              alignment: Alignment.centerLeft,
+              child: Text('附近', style: quiet)),
+        ),
+        Expanded(
+          child: _found == null && _failed == null
+              ? const SizedBox(
+                  height: 30,
+                  child: Align(
+                      alignment: Alignment.centerLeft, child: BusyDots()))
+              : Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    for (final s in found)
+                      SizedBox(
+                        height: 38,
+                        child: Row(children: [
+                          Flexible(
+                            child: Text(s.name,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: NextText.sans(13.5)),
+                          ),
+                          const SizedBox(width: 10),
+                          Text(Uri.tryParse(s.address)?.authority ?? s.address,
+                              style: NextText.num(12, color: NextColors.p3)),
+                          const SizedBox(width: 14),
+                          PillButton(
+                              label: '添加',
+                              busy: _adding == s.address,
+                              onTap: _adding == null ? () => _add(s) : null),
+                        ]),
+                      ),
+                    if (found.isEmpty || _failed != null)
+                      SizedBox(
+                        height: 30,
+                        child: Row(children: [
+                          Text(_failed ?? '没有发现',
+                              style: NextText.sans(12.5,
+                                  color: _failed == null
+                                      ? NextColors.p4
+                                      : NextColors.accent2)),
+                          const SizedBox(width: 12),
+                          PillButton(label: '再找', onTap: _look),
+                        ]),
+                      ),
+                  ],
+                ),
+        ),
+      ]),
+    );
+  }
+}
+
+/// The folders on this computer NipaPlay looks through: each one scanned
+/// or removed; a new one, scanned as soon as it is added.
+class _Folders extends StatefulWidget {
+  const _Folders({super.key, required this.folders});
+  final NextFolders folders;
+
+  @override
+  State<_Folders> createState() => _FoldersState();
+}
+
+class _FoldersState extends State<_Folders> {
+  UiFolders? _list;
+  String? _failed;
+
+  /// What the last change could not do.
+  String? _note;
+
+  /// Folders (`*` all of them, `+` a new one) being handed over, and
+  /// those whose scan just began.
+  final _busy = <String>{};
+  final _started = <String>{};
+  final _timers = <Timer>[];
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  @override
+  void dispose() {
+    for (final t in _timers) {
+      t.cancel();
+    }
+    super.dispose();
+  }
+
+  Future<void> _load() async {
+    try {
+      final list = await widget.folders.list();
+      if (mounted) {
+        setState(() {
+          _list = list;
+          _failed = null;
+        });
+      }
+    } catch (_) {
+      if (mounted) setState(() => _failed = '没能读取');
+    }
+  }
+
+  /// A scan holds the folders: changing them waits for it.
+  String _failure(Object e) => e is Failure && e.code == FailureCode.conflict
+      ? '正在扫描'
+      : callFailure(e);
+
+  Future<void> _run(String key, Future<void> Function() action) async {
+    setState(() {
+      _busy.add(key);
+      _note = null;
+    });
+    try {
+      await action();
+    } catch (e) {
+      if (mounted) setState(() => _note = _failure(e));
+    }
+    if (mounted) setState(() => _busy.remove(key));
+    await _load();
+  }
+
+  /// The scan is under way (its progress is in the background panel):
+  /// the button says so for a moment.
+  void _began(Iterable<String> keys) {
+    setState(() => _started.addAll(keys));
+    _timers.add(Timer(const Duration(milliseconds: 2400), () {
+      if (!mounted) return;
+      setState(() => _started.removeAll(keys));
+      _load();
+    }));
+  }
+
+  Future<void> _scan(String? path) => _run(path ?? '*', () async {
+        await widget.folders.scan(path == null ? null : [path]);
+        _began([path ?? '*']);
+      });
+
+  Future<void> _add() => _run('+', () async {
+        final added = await widget.folders.add();
+        if (added.isEmpty) return;
+        await widget.folders.scan(added);
+        await _load();
+        _began(added);
+      });
+
+  /// “番剧”, and where it is, home as ~.
+  static (String, String) _place(String path) {
+    final parts = path
+        .replaceFirst(
+            RegExp(r'^(/Users/[^/]+|/home/[^/]+|[A-Za-z]:\\Users\\[^\\]+)'),
+            '~')
+        .split(RegExp(r'[\\/]'));
+    final name = parts.lastWhere((p) => p.isNotEmpty, orElse: () => path);
+    final parent = parts.sublist(0, parts.lastIndexOf(name));
+    final shown = parent.length > 4
+        ? ['…', ...parent.sublist(parent.length - 2)]
+        : parent;
+    return (name, shown.join('/'));
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final list = _list;
+    if (list == null) {
+      return _failed == null
+          ? const SizedBox.shrink()
+          : SettingsCard(
+              title: '本机文件夹',
+              children: [SettingsRow(title: _failed!, dim: true)]);
+    }
+    return SettingsCard(title: '本机文件夹', children: [
+      for (final path in list.paths)
+        () {
+          final (name, parent) = _place(path);
+          final failed = list.failedIn(path);
+          final started = _started.contains(path);
+          return SettingsRow(
+            key: ValueKey(path),
+            leading: const _FolderMark(),
+            title: name,
+            subtitle: parent,
+            mark: failed == 0
+                ? null
+                : Row(mainAxisSize: MainAxisSize.min, children: [
+                    const StateDot(NextColors.accent2, glow: false),
+                    const SizedBox(width: 6),
+                    Text('$failed',
+                        style: NextText.num(11.5, color: NextColors.accent2)),
+                  ]),
+            trailing: Row(mainAxisSize: MainAxisSize.min, children: [
+              PillButton(
+                label: started ? '已开始' : '扫描',
+                busy: _busy.contains(path),
+                onTap: started ? null : () => _scan(path),
+              ),
+              const SizedBox(width: 8),
+              ConfirmPill(
+                label: '移除',
+                confirm: '确定移除',
+                onConfirm: () =>
+                    _run(path, () => widget.folders.remove(path)),
+              ),
+            ]),
+          );
+        }(),
+      SettingsRow(
+        leading: const _PlusMark(),
+        title: '添加文件夹',
+        dim: true,
+        onTap: _busy.contains('+') ? null : _add,
+        trailing: Row(mainAxisSize: MainAxisSize.min, children: [
+          if (_note != null) ...[
+            Text(_note!,
+                style: NextText.sans(12.5, color: NextColors.accent2)),
+            const SizedBox(width: 12),
+          ],
+          if (_busy.contains('+')) ...[
+            const BusyDots(),
+            const SizedBox(width: 12),
+          ],
+          if (list.paths.isNotEmpty)
+            PillButton(
+              label: _started.contains('*') ? '已开始' : '全部扫描',
+              busy: _busy.contains('*'),
+              onTap: _started.contains('*') ? null : () => _scan(null),
+            ),
+        ]),
       ),
     ]);
   }
+}
+
+/// A folder, drawn small in a quiet square.
+class _FolderMark extends StatelessWidget {
+  const _FolderMark();
+
+  @override
+  Widget build(BuildContext context) => Container(
+        width: 32,
+        height: 32,
+        alignment: Alignment.center,
+        decoration: BoxDecoration(
+          color: const Color(0x0AFFFFFF),
+          borderRadius: BorderRadius.circular(9),
+          border: Border.all(color: NextColors.line),
+        ),
+        child: const CustomPaint(
+            size: Size(14, 11), painter: _FolderPainter()),
+      );
+}
+
+class _FolderPainter extends CustomPainter {
+  const _FolderPainter();
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final (w, h) = (size.width, size.height);
+    final path = Path()
+      ..moveTo(0, 1.5)
+      ..quadraticBezierTo(0, 0, 1.5, 0)
+      ..lineTo(w * 0.36, 0)
+      ..lineTo(w * 0.47, h * 0.17)
+      ..lineTo(w - 1.5, h * 0.17)
+      ..quadraticBezierTo(w, h * 0.17, w, h * 0.17 + 1.5)
+      ..lineTo(w, h - 1.5)
+      ..quadraticBezierTo(w, h, w - 1.5, h)
+      ..lineTo(1.5, h)
+      ..quadraticBezierTo(0, h, 0, h - 1.5)
+      ..close();
+    canvas.drawPath(
+        path,
+        Paint()
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 1.2
+          ..strokeJoin = StrokeJoin.round
+          ..color = NextColors.p2);
+  }
+
+  @override
+  bool shouldRepaint(_FolderPainter old) => false;
 }
 
 class _SourceRow extends StatefulWidget {
@@ -542,7 +950,7 @@ class _SourceRowState extends State<_SourceRow> {
                           Expanded(
                             child: Wrap(spacing: 8, runSpacing: 8, children: [
                               for (final l in libraries)
-                                _LibraryChip(
+                                ChipToggle(
                                   name: l.name,
                                   on: _selected.contains(l.id),
                                   onTap: () => _toggle(l.id),
@@ -586,45 +994,6 @@ class _SourceRowState extends State<_SourceRow> {
   }
 }
 
-class _LibraryChip extends StatelessWidget {
-  const _LibraryChip(
-      {required this.name, required this.on, required this.onTap});
-  final String name;
-  final bool on;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) => Pressable(
-        onTap: onTap,
-        semanticLabel: name,
-        builder: (context, hovered) => AnimatedContainer(
-          duration: const Duration(milliseconds: 160),
-          height: 30,
-          padding: const EdgeInsets.symmetric(horizontal: 12),
-          decoration: BoxDecoration(
-            color: on
-                ? NextColors.accentSoft
-                : hovered
-                    ? const Color(0x14FFFFFF)
-                    : const Color(0x08FFFFFF),
-            borderRadius: BorderRadius.circular(15),
-            border: Border.all(
-                color: on ? const Color(0x80FF2E55) : NextColors.line),
-          ),
-          child: Row(mainAxisSize: MainAxisSize.min, children: [
-            if (on) ...[
-              const NextIcon(NextGlyph.check,
-                  size: 12, color: NextColors.accent2),
-              const SizedBox(width: 6),
-            ],
-            Text(name,
-                style: NextText.sans(12.5,
-                    color: on ? NextColors.paper : NextColors.p2)),
-          ]),
-        ),
-      );
-}
-
 class _QuickConnect extends StatelessWidget {
   const _QuickConnect({required this.code});
   final String code;
@@ -651,8 +1020,15 @@ class _QuickConnect extends StatelessWidget {
 
 /// A source's place and account; a new one starts with its kind.
 class _SourceEditor extends StatefulWidget {
-  const _SourceEditor({this.source, required this.onSave});
+  const _SourceEditor(
+      {super.key, this.source, this.type, this.nearby, required this.onSave});
   final UiMediaSource? source;
+
+  /// A new one's kind to begin with.
+  final String? type;
+
+  /// NipaPlay shares nearby, when a new one is NipaPlay.
+  final Widget Function()? nearby;
   final Future<void> Function(UiSourceDraft draft) onSave;
 
   @override
@@ -660,7 +1036,7 @@ class _SourceEditor extends StatefulWidget {
 }
 
 class _SourceEditorState extends State<_SourceEditor> {
-  late String _type = widget.source?.type ?? 'jellyfin';
+  late String _type = widget.source?.type ?? widget.type ?? 'jellyfin';
   late String _name = widget.source?.name ?? '';
   late String _url = widget.source?.url ?? '';
   late String _user = widget.source?.username ?? '';
@@ -743,6 +1119,8 @@ class _SourceEditorState extends State<_SourceEditor> {
               onChanged: (t) => setState(() => _type = t),
             ),
           ),
+        if (fresh && _type == 'nipaplay' && widget.nearby != null)
+          widget.nearby!(),
         _field('名称', _name, (v) => _name = v),
         if (byHost) ...[
           _field('主机', _host, (v) => _host = v, hint: '192.168.1.2'),

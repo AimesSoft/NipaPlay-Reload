@@ -11,12 +11,18 @@ import '../dev/dev_services.dart';
 import 'core_connect.dart';
 import 'core_manage.dart';
 import 'core_settings.dart';
+import 'background.dart';
+import 'collections.dart';
 import 'discover.dart';
+import 'downloads.dart';
+import 'gui_calls.dart';
+import 'history.dart';
 import 'login_requests.dart';
 import 'search.dart';
 import 'settings_data.dart';
 import 'ui_actions.dart';
 import 'work_manage.dart';
+import 'upkeep.dart';
 
 /// Everything the Next shell talks to.
 final class NextUiServices {
@@ -31,8 +37,10 @@ final class NextUiServices {
     required this.settings,
     LoginRequests? logins,
     this.manage,
+    GuiCalls? calls,
     this.onDispose,
-  }) : logins = logins ?? LoginRequests();
+  })  : logins = logins ?? LoginRequests(),
+        calls = calls ?? GuiCalls.none();
 
   final NextUiData data;
   final NextUiActions actions;
@@ -58,6 +66,16 @@ final class NextUiServices {
   /// Managing a work and its episodes from the detail page; none where
   /// the shell is shown without it (tests).
   final NextWorkManage? manage;
+  /// Actions the pages call as the person, and what reads them.
+  final GuiCalls calls;
+  late final downloads = NextDownloads(calls);
+  late final background = NextBackground(calls);
+  late final history = NextHistory(calls);
+  late final collections = NextCollections(calls);
+  late final upkeep = NextUpkeep(calls);
+  late final plugins = NextPlugins(calls);
+  late final sync = NextSync(calls);
+  late final folders = NextFolders(calls);
   final VoidCallback? onDispose;
 
   void dispose() {
@@ -93,6 +111,10 @@ final class NextUiServices {
       settings: settings,
       logins: logins,
       manage: CoreWorkManage(() => runtime.harness, data),
+      calls: GuiCalls(() async {
+        await core.ready;
+        return runtime.harness;
+      }),
       onDispose: () {
         detach();
         settings.dispose();

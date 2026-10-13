@@ -4,6 +4,7 @@ import 'dart:io';
 import 'dart:math' as math;
 
 import 'package:flutter/foundation.dart';
+import 'package:nipa_harness/nipa_harness.dart';
 
 import '../../ui_data/library.dart';
 import '../../ui_data/ui_data.dart';
@@ -14,6 +15,7 @@ import '../data/search.dart';
 import '../data/ui_actions.dart';
 import '../data/work_manage.dart';
 
+part 'fake_calls.dart';
 part 'fake_library.dart';
 part 'fake_search.dart';
 part 'fake_manage.dart';
