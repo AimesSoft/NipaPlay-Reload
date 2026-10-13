@@ -1,5 +1,30 @@
 # X45 主控运行说明
 
+## X47c 后的媒体库验收
+
+本节是 X45 之后的能力增量，须先重编译并替换三端自己的构建；X45 已留存二进制
+没有 X47 文件协议。实现者不启动工作站节点，以下跨设备验收仍由主控运行监督。
+主控先前账号 Pointer 和端口拓扑的观察已用于修正下文，不要重复旧实验。
+
+下载回传的路径仍属于下载节点，但现在 Mac 的 library()/library.merged 会周期读取
+节点目录，按已接受身份合并显示；来源标出设备，离线保留上次事实。未知作品身份仍
+需使用现有工具登记/绑定，下载的独立文件不自动猜作品。另一设备上的剧集通过
+ui.open {entityId:合并剧集ID} 使用现有 Classic 播放器，视频直接从源处读取。
+
+可观察 Mac 的 `library.merged`、`media.metadata.ui_facts`、`media.library.readable`；
+播放应能定位进度并保留同名/导入弹幕、字幕和绑定。图像在 Mac 变为缓存文件路径。
+HTTP 转换口只有 Mac 127.0.0.1，默认随机端口，对外不开放明文 HTTP；设备间使用已有
+TLS 1.3 双向认证和 SSH 候选，视频不经协调服务。
+如需固定端口，宿主在 Mac mesh.json 写 fileProxyPort（1024–65535，修改后重启）；
+占用时回退随机，state.query mesh.file_proxy 报告实际端口。发放的 URL 带安全随机
+令牌，关闭/重启失效，不打印完整地址到验收证据；未发放令牌的请求应为 404。
+
+文件通道与进程权限相同，可用 media.mesh_files.readable 读取任意节点可读路径，
+begin/chunk/finish 写入字幕或传输文件；覆盖和批量删除返回 NeedsDecision，先问
+用户再执行确认。没有 shareLibrary 开关，加入 Mesh 就是宿主同意。`/Volumes/Media`
+仍遵守本实验的只读约束；写入验收只使用各端 nipaplay-next 工作目录里的测试文件。
+离线状态和进度回退可从同一视图观察，设备恢复后同步；具体策略见 X47_REPORT。
+
 本说明供主控亲自运行和监督联网验收。实现者只做了本机回环自动检查与工作站编译，
 未启动工作站节点、下载或真实模型对话。证据边界见 [X45_REPORT.md](X45_REPORT.md)。
 全部命令使用本 worktree 构建、独立实验目录；不启动安装版，不激活窗口，不操作
@@ -10,7 +35,7 @@
 | 身体 | 程序 | 数据目录示例 | Mesh 端口 |
 |---|---|---|---|
 | Mac | 本 worktree 的 `build/macos/Build/Products/Debug/NipaPlay.app/Contents/MacOS/NipaPlay` | `~/Library/Application Support/NipaPlay/LabProfiles/x45-controller/data/next` | 47821 |
-| Windows | `D:\nipaplay-next\x45-headless\build\headless\nipaplay-headless.exe` | `D:\nipaplay-next\x45-lab-data` | 47822 |
+| Windows | `D:\nipaplay-next\x45-headless\build\headless\nipaplay-headless.exe` | `D:\nipaplay-next\x45-lab-data` | 监听 47832；候选 47822 |
 | WSL | `/home/labuser/nipaplay-next/x45-headless/build/headless/nipaplay-headless` | `/home/labuser/nipaplay-next/x45-lab-data` | 47823 |
 
 Windows 同目录已有 `nipaplay_headless_native.dll`，WSL 已有
@@ -46,15 +71,15 @@ env -u DANDANPLAY_APP_SECRET -u DANDANPLAY_APP_SECRET_URLS \
   MESH_DATABASE_PATH=/tmp/nipa-next/x45-controller-ca/mesh.db \
   MESH_LISTEN_ADDR=127.0.0.1:18082 \
   DANDANPLAY_GATEWAY_BASE=https://nipaplay.aimes-soft.com/dandanplay \
-  MESH_ACCOUNT_CLAIM_POINTER=/userId \
+  MESH_ACCOUNT_CLAIM_POINTER=/UserId \
   HTTP_PROXY=http://127.0.0.1:7897 HTTPS_PROXY=http://127.0.0.1:7897 \
   NO_PROXY=127.0.0.1,localhost \
   server/nipaplay-mesh-coordinator/target/debug/nipaplay-mesh-coordinator \
   > /tmp/nipa-next/x45-controller-ca/coordinator.log 2>&1
 ```
 
-网关访问走 Clash 系统代理，回环直连。`/userId` 是既有默认值，**真实测试账号的声明
-仍须确认**。可用 [Mesh README 的声明名诊断](../../lib/next/mesh/README.md#主控本机端到端验收)
+网关访问走 Clash 系统代理，回环直连。主控 X45 实测测试账号使用 `/UserId`，
+既有默认 `/userId` 会产生 invalid_identity；此处显式配置已验证的 Pointer。可用 [Mesh README 的声明名诊断](../../lib/next/mesh/README.md#主控本机端到端验收)
 重启自己的 Mac profile，只输出名称和类型；或协调程序
 `--inspect-account-claim-names` 从私有流程的 stdin 取 token，先验证再输出名称。
 不要在终端复制令牌、解码打印 payload。没有稳定 ID 声明时停止，交主控裁定；不改限流或账号约束。
@@ -74,7 +99,7 @@ Mac 开一个前台终端：
 
 ```sh
 ssh -N -o BatchMode=yes -o ConnectTimeout=15 -o ExitOnForwardFailure=yes \
-  -L 127.0.0.1:47822:127.0.0.1:47822 \
+  -L 127.0.0.1:47822:127.0.0.1:47832 \
   -L 127.0.0.1:47823:127.0.0.1:47823 \
   -R 127.0.0.1:18082:127.0.0.1:18082 \
   -R 127.0.0.1:47821:127.0.0.1:47821 \
@@ -95,9 +120,12 @@ python3 tool/next/ssh_stdio_forward.py --listen-port 47822 --target-port 47822
 回环对应端口；47822 再经上面的 `-L` 到 Windows。远端脚本已在
 `/home/labuser/nipaplay-next/x45-headless/ssh_stdio_forward.py`。不依赖 WSL 网络改造，
 不做地址探测。mTLS 在节点之间结束，转发者不解密 Mesh 内容。
-脚本已通过本机两条 TCP 通道检查，**真实 WSL 转发尚未验收**。
+脚本已通过本机两条 TCP 通道检查。主控 X45 记录：Windows 改监听 47832、候选 47822
+后，三节点全部在线；Mac 对两端片库和下载目录调用成功。
 端口绑定失败时停止该实验并检查上述固定路径，不扫描其他地址。
 
+WSL 的 47822 listener 会映射到 Windows 回环 47822，Windows 节点不能也监听 47822；
+原说明的同端口配置曾形成转发环。现在 Mac 的 -L 47822 指向 Windows 47832。
 三机于是都可使用候选 `127.0.0.1:47821/47822/47823`；协调服务也都在各自回环 18082。
 
 ## 4. 隔离配置与登录
@@ -130,7 +158,7 @@ Mac 使用新且唯一的 profile（下文 `x45-controller`）。先创建该 pr
 在 Windows 与 WSL 分别建立上表独立数据目录，初始化 `headless.json`：
 `{"format":1,"host":"nipaplay-headless","mediaRoots":[],"port":0}`。
 **仅写标记不会启动节点。** 再写各自 `mesh.json`（Windows 把名称、port、候选 port
-改为 `Windows workstation`、47822；WSL 如下）：
+改为 `Windows workstation`，监听 port=47832、候选 addresses.port=47822；WSL 如下）：
 
 ```json
 {"coordinator":"http://127.0.0.1:18082","name":"WSL workstation","port":47823,

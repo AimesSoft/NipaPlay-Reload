@@ -14,7 +14,8 @@ final class UiOpenValue implements JsonEncodable {
 
 final class UiOpenAction extends Action<UiOpenValue, UiOpenValue> {
   const UiOpenAction(
-      {this.media, this.openPage, this.openDetail, this.openWork, this.openTarget, this.play});
+      {this.media, this.openPage, this.openDetail, this.openWork, this.openTarget, this.play, this.resolveEntity});
+  final Future<JsonMap?> Function(String)? resolveEntity;
   final MediaService Function()? media;
   final Future<bool> Function(String page)? openPage;
   final Future<bool> Function(int animeId)? openDetail;
@@ -122,9 +123,9 @@ final class UiOpenAction extends Action<UiOpenValue, UiOpenValue> {
       }));
 
   Future<Outcome<UiOpenValue>> _play(
-      JsonMap target, String path, Invocation invocation) async {
+      JsonMap target, String path, Invocation invocation, {int? startPositionMs}) async {
     if (play == null) return _unavailable(target, 'Classic 播放界面尚未连接。');
-    final outcome = await play!({'path': path}, invocation);
+    final outcome = await play!({'path': path, if (startPositionMs != null) 'startPositionMs': startPositionMs}, invocation);
     if (outcome is Failed) return Failed(outcome.failure);
     if (outcome is NeedsDecision) return NeedsDecision(outcome.decision);
     final result = (outcome as Completed).value.toJson();
@@ -220,6 +221,16 @@ final class UiOpenAction extends Action<UiOpenValue, UiOpenValue> {
           invocation);
     }
     final id = (target['entityId'] ?? target['workId']) as String;
+    final merged = await resolveEntity?.call(id);
+    if (merged != null) {
+      if (merged['workId'] case final String workId) {
+        final opened = await openWork?.call(workId);
+        return opened == true ? _opened(target, {'kind': 'work_detail', 'workId': workId, 'interface': 'next'})
+            : _unavailable(target, '作品详情尚未就绪。');
+      }
+      final path = (merged['url'] ?? merged['path']) as String;
+      return _play(target, path, invocation, startPositionMs: merged['resumeMs'] as int?);
+    }
     final entity = await service.store.entity(id);
     if (target.containsKey('workId') && entity['kind'] != 'work') {
       throw const Failure(FailureCode.invalidInput, '请选择一部作品。');

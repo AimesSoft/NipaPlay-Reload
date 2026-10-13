@@ -28,6 +28,7 @@ import 'package:provider/provider.dart';
 
 import 'agent_endpoint.dart';
 import 'capabilities/history_capability.dart';
+import 'mesh/playback.dart';
 import 'capabilities/watched_history.dart';
 import 'package:nipaplay/models/watch_history_database.dart';
 import 'capabilities/library_capability.dart';
@@ -130,9 +131,15 @@ final class NextRuntime extends ChangeNotifier {
     final player = context.read<VideoPlayerState>();
     final history = ServiceProvider.watchHistoryProvider;
     final seriesDetail = BangumiService.instance.getAnimeDetailsFromMemory;
+    var meshProxy = false;
     final playback = PlaybackCapability(
       player: VideoPlayerStatePort(player),
-      start: (item) => PlaybackService().play(item, episodeFileSelectionHandled: true),
+      start: (item) {
+        final remote = core.uiData.meshLibrary?.playback.containsKey(item.videoPath) == true;
+        if (remote || meshProxy) MeshPlayback.directLoopback(player, remote);
+        meshProxy = remote;
+        return PlaybackService().play(item, episodeFileSelectionHandled: true);
+      },
       usesExternalPlayer: () => settings.useExternalPlayer,
       historyItem: WatchHistoryManager.getHistoryItem,
       episodeItem: WatchHistoryManager.getHistoryItemByEpisode,
@@ -232,7 +239,8 @@ final class NextRuntime extends ChangeNotifier {
     };
     return NextRuntime._(labs, player, [
       WatchedHistoryCapability(WatchedHistory(() => core.media.service,
-          () => WatchHistoryDatabase.instance.database, history.refresh)),
+          () => WatchHistoryDatabase.instance.database, history.refresh),
+          mergedLibrary: () => core.uiData.meshLibrary!),
       LibraryCapability(
         history: () => history.history,
         seriesDetail: seriesDetail,
@@ -245,6 +253,7 @@ final class NextRuntime extends ChangeNotifier {
       DiscoverCapability(),
       UiCapability(
         media: () => core.media.service,
+        resolveEntity: (id) async => id.startsWith('mesh-') ? core.uiData.meshLibrary!.open(id) : null,
         openPage: ClassicUiOpen().page,
         openDetail: ClassicUiOpen().detail,
         openWork: WorkDetailBridge.open,
@@ -274,6 +283,7 @@ final class NextRuntime extends ChangeNotifier {
   AgentEndpointStatus _endpointStatus = const AgentEndpointStopped();
   bool _disposed = false;
   ClassicSettings? _classicSettings;
+  MeshPlayback? _meshPlayback;
   ChatHost? chat;
   String? chatError;
   Future<void> closeChat() async {
@@ -365,6 +375,7 @@ final class NextRuntime extends ChangeNotifier {
     );
     core.attachHarness(_harness);
     core.danmaku.startRestoring(_harness, _player);
+    _meshPlayback = MeshPlayback(core, _player)..attach();
     core.media.service.currentPath = () => _player.currentVideoPath;
     _endpoint = AgentEndpoint(
       harness: _harness,
@@ -521,6 +532,7 @@ final class NextRuntime extends ChangeNotifier {
     _labs.removeListener(_queueEndpointUpdate);
     _location?.removeListener(_queueEndpointUpdate);
     _operations = _operations.then((_) async {
+      await _meshPlayback?.close();
       await _detachHooks();
       await ServiceProvider.nextCore.followups.attach(null, reason: 'NipaPlay is shutting down.');
       await chat?.close();

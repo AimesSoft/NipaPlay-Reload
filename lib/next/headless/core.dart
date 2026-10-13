@@ -1,3 +1,4 @@
+import '../mesh/files.dart';
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
@@ -46,6 +47,9 @@ import 'native.dart';
 import 'vault.dart';
 import 'library_roots.dart';
 import '../mesh/runtime.dart';
+import '../mesh/library.dart';
+import '../mesh/library_capability.dart';
+import '../subtitles/facts.dart';
 import '../mesh/capability.dart';
 import '../mesh/delivery.dart';
 import '../mesh/native.dart';
@@ -221,6 +225,10 @@ final class HeadlessCore {
       followups.view
     ]);
     uiData = UiDataService(media, engine, state, sources, root, NoVault());
+    uiData.subtitles = subtitleFacts(media, root);
+    uiData.meshLibrary = MeshLibrary(uiData, mesh);
+    registerMergedLibrary(state, uiData.meshLibrary!);
+    await uiData.meshLibrary!.start();
     settings.register([uiData.openingSetting]);
     final downloadSources =
         DownloadSources(Directory('${root.path}/torrent_sources'));
@@ -235,6 +243,8 @@ final class HeadlessCore {
         SettingsCapability(settings),
         FollowupCapability(followups),
         UiDataCapability(uiData),
+        MeshLibraryCapability(uiData.meshLibrary!),
+        MeshFilesCapability(uiData.meshLibrary!.files),
         state,
         HeadlessDownloadMetadata(backend, downloadSources),
         DownloadCapability(

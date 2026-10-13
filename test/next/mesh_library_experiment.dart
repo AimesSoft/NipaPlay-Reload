@@ -1,0 +1,282 @@
+part of 'mesh_integration_test.dart';
+
+Future<void> x47LibraryExperiment(_Rig rig) async {
+  final mac = await rig.node('Mac'), source = await rig.node('workstation');
+  await mac.refreshDevices();
+  await source.refreshDevices();
+  sqfliteFfiInit();
+  final a = await x47Data(rig, mac), b = await x47Data(rig, source);
+  final video = File('${source.root.path}/X47 CC0 S01E04.mp4');
+  final encoded = await Process.run('/opt/homebrew/bin/ffmpeg', [
+    '-v',
+    'error',
+    '-f',
+    'lavfi',
+    '-i',
+    'testsrc2=size=640x360:rate=24',
+    '-t',
+    '12',
+    '-c:v',
+    'libx264',
+    '-crf',
+    '8',
+    '-g',
+    '24',
+    '-pix_fmt',
+    'yuv420p',
+    video.path
+  ]);
+  expect(encoded.exitCode, 0, reason: encoded.stderr.toString());
+  expect(await video.length(), greaterThan(1048576));
+  final first = File('${mac.root.path}/E01.mp4');
+  await first.writeAsBytes([1, 2, 3, 4]);
+  Future<void> work(UiDataService ui, String id, List<int> numbers,
+      {String? duplicate}) async {
+    await ui.db.insert('media_entities', {
+      'id': id,
+      'kind': 'work',
+      'attributes': jsonEncode({'title': 'X47 开放视频'})
+    });
+    await ui.db.insert('media_entities', {
+      'id': '$id-release',
+      'kind': 'release',
+      'parent_id': id,
+      'attributes': '{"season":1}'
+    });
+    await ui.db.insert('media_external_objects', {
+      'id': '$id-object',
+      'provider': 'dandanplay',
+      'object_type': 'work',
+      'external_id': '4700',
+      'scope': ''
+    });
+    await ui.db.insert('media_bindings', {
+      'id': '$id-binding',
+      'entity_id': id,
+      'object_id': '$id-object',
+      'relation': 'exact',
+      'scope': '{}',
+      'status': 'accepted',
+      'source': 'fixture',
+      'revision': 0,
+      'created_at': '2026-10-13T00:00:00Z'
+    });
+    for (final number in numbers) {
+      final path = number == 1
+          ? duplicate ?? first.path
+          : number <= 3
+              ? '${mac.root.path}/E0$number.mp4'
+              : video.path;
+      if (number > 1 && number <= 3) await File(path).writeAsBytes([number]);
+      final fileId = await ui.media.store.ensureFile(path);
+      final eid = '$id-episode-$number';
+      await ui.db.insert('media_entities', {
+        'id': eid,
+        'kind': 'episode',
+        'parent_id': '$id-release',
+        'attributes': jsonEncode({'number': '$number', 'title': '第 $number 集'})
+      });
+      await ui.db.insert('media_file_episodes', {
+        'file_id': fileId,
+        'episode_id': eid,
+        'relation': 'exact',
+        'ordinal': number,
+        'start_ms': number >= 4 ? (number - 4) * 1000 : 0,
+        'end_ms': number >= 4 ? (number - 3) * 1000 : null
+      });
+    }
+  }
+
+  await work(a, 'mac-work', [1, 2, 3]);
+  await work(b, 'source-work', [1, 4, 5, 6, 7, 8, 9, 10, 11, 12],
+      duplicate: first.path);
+  final recorder = ui.PictureRecorder();
+  final canvas = ui.Canvas(recorder);
+  canvas.drawColor(const ui.Color(0xff4422aa), ui.BlendMode.src);
+  final picture = recorder.endRecording(),
+      artworkImage = await picture.toImage(32, 48);
+  final png = (await artworkImage.toByteData(format: ui.ImageByteFormat.png))!;
+  final poster = File('${source.root.path}/poster.png');
+  await poster.writeAsBytes(png.buffer.asUint8List());
+  await b.setArtwork({
+    'entries': [
+      {
+        'entityId': 'source-work',
+        'kind': 'poster',
+        'file': poster.path,
+        'source': {'label': 'CC0 fixture'}
+      }
+    ]
+  }, Invocation(origin: 'fixture'));
+  artworkImage.dispose();
+  picture.dispose();
+  await File(video.path.replaceFirst('.mp4', '.srt'))
+      .writeAsString('1\n00:00:00,000 --> 00:00:02,000\nX47 CC0 subtitle\n');
+  await File(video.path.replaceFirst('.mp4', '.xml')).writeAsString(
+      '<i><d p="0.5,1,25,16777215,0,0,fixture,1">X47 同名弹幕</d></i>');
+  final changed = a.changes.first;
+  await a.meshLibrary!.refresh();
+  await changed;
+  final works = await a.library();
+  expect(works, hasLength(1));
+  final eps = await a.episodes(works.single.workId);
+  expect(eps.map((e) => e.number).toList(), List.generate(12, (i) => i + 1));
+  expect(eps.take(3).every((e) => e.device == null), true);
+  expect(
+      eps.skip(3).every((e) => e.device?.name == 'workstation' && e.playable),
+      true);
+  expect(await File(works.single.artwork.poster!).exists(), true);
+  expect(works.single.artwork.poster, startsWith(a.mediaRoot.path));
+  final opened = (await a.meshLibrary!.open(eps[3].episodeId))!;
+  final url = Uri.parse(opened['url'] as String);
+  expect((opened['bundle'] as Map)['tracks'], hasLength(1));
+  expect(
+      ((opened['bundle'] as Map)['subtitles'] as List)
+          .any((t) => (t as Map)['origin'] != 'embedded'),
+      true);
+  final client = HttpClient()..findProxy = (_) => 'DIRECT';
+  try {
+    final request = await client.getUrl(url);
+    request.headers.set('Range', 'bytes=1048576-1048703');
+    final response = await request.close();
+    final bytes = await response.fold<List<int>>([], (a, b) => a..addAll(b));
+    expect(response.statusCode, 206);
+    final file = await video.open();
+    await file.setPosition(1048576);
+    expect(bytes, await file.read(128));
+    await file.close();
+    final suffix = await client.getUrl(url);
+    suffix.headers.set('Range', 'bytes=-37');
+    final suffixResponse = await suffix.close();
+    expect(await suffixResponse.fold<List<int>>([], (a, b) => a..addAll(b)),
+        (await video.readAsBytes()).sublist(await video.length() - 37));
+    final head = await client.openUrl('HEAD', url);
+    expect((await head.close()).contentLength, await video.length());
+    final invalid = await client.getUrl(url);
+    invalid.headers.set('Range', 'bytes=99999999-');
+    final rejected = await invalid.close();
+    expect(rejected.statusCode, 416);
+    await rejected.drain<void>();
+  } finally {
+    client.close(force: true);
+  }
+  final probed = await Process.run('/opt/homebrew/bin/ffprobe', [
+    '-v',
+    'error',
+    '-show_entries',
+    'format=duration:stream=width,height',
+    '-of',
+    'json',
+    url.toString()
+  ], environment: {
+    'HTTP_PROXY': 'http://127.0.0.1:1',
+    'http_proxy': 'http://127.0.0.1:1',
+    'NO_PROXY': '127.0.0.1,localhost',
+    'no_proxy': '127.0.0.1,localhost'
+  });
+  expect(probed.exitCode, 0, reason: probed.stderr.toString());
+  final sought = await Process.run('/opt/homebrew/bin/ffmpeg', [
+    '-v',
+    'error',
+    '-ss',
+    '8',
+    '-i',
+    url.toString(),
+    '-frames:v',
+    '1',
+    '-f',
+    'md5',
+    '-'
+  ], environment: {
+    'HTTP_PROXY': 'http://127.0.0.1:1',
+    'http_proxy': 'http://127.0.0.1:1',
+    'NO_PROXY': '127.0.0.1,localhost',
+    'no_proxy': '127.0.0.1,localhost'
+  });
+  expect(sought.exitCode, 0, reason: sought.stderr.toString());
+  final local = await Process.run('/opt/homebrew/bin/ffmpeg', [
+    '-v',
+    'error',
+    '-ss',
+    '8',
+    '-i',
+    video.path,
+    '-frames:v',
+    '1',
+    '-f',
+    'md5',
+    '-'
+  ]);
+  expect(sought.stdout, local.stdout);
+  await a.meshLibrary!.recordProgress(eps[3].episodeId, .75);
+  await b.meshLibrary!.refresh();
+  expect(
+      (await b.episodes((await b.library()).single.workId))
+          .singleWhere((e) => e.number == 4)
+          .progress,
+      .75);
+  await b.meshLibrary!.recordProgress(
+      (await b.episodes((await b.library()).single.workId))[3].episodeId, .25);
+  await a.meshLibrary!.refresh();
+  expect((await a.episodes(works.single.workId))[3].progress, .25);
+  final before =
+      await a.db.query('ui_cache', where: 'id=?', whereArgs: ['mesh:progress']);
+  await expectLater(
+      a.meshLibrary!.recordProgressBatch([
+        {'episodeId': eps[3].episodeId, 'progress': 1.0},
+        {'episodeId': 'missing', 'progress': 0.0}
+      ]),
+      throwsA(isA<Failure>()));
+  expect(
+      await a.db.query('ui_cache', where: 'id=?', whereArgs: ['mesh:progress']),
+      before);
+  await b.meshLibrary!.close();
+  await source.close();
+  rig.nodes.remove(source);
+  await a.meshLibrary!.refresh();
+  final offline = await a.library();
+  expect(offline.single.devices.single.online, false);
+  expect(
+      (await a.episodes(offline.single.workId))
+          .skip(3)
+          .every((e) => !e.playable && e.device?.online == false),
+      true);
+  expect(await File(offline.single.artwork.poster!).exists(), true);
+  print(
+      'X47 evidence: 1 merged work; 12 episodes; local duplicate preferred; ${await video.length()} real video bytes; Range 206 / suffix / HEAD / 416; ffprobe ${probed.stdout}; seek 8s decoded MD5 ${sought.stdout}; LWW .75 -> .25; rejected batch unchanged; offline retained artwork/catalogue.');
+}
+
+Future<UiDataService> x47Data(_Rig rig, MeshRuntime node) async {
+  final jobs =
+      await SqliteJobStore.open(node.root, factory: databaseFactoryFfi);
+  final identities = IdentityStore(jobs.database, node.identity!.deviceId);
+  final media = MediaService(
+      store: identities,
+      providers: [],
+      classic: MemoryClassic(),
+      authorizedRoots: () => [rig.directory.path]);
+  final engine = TaskEngine(
+      store: jobs, ownerDeviceId: identities.ownerDeviceId, executors: []);
+  await engine.start();
+  final sources = StateSources();
+  final danmaku = DanmakuService(
+      store: DanmakuStore(identities), sources: [], player: NoPlayer());
+  final state = StateCapability(publicStateViews(
+      media: media,
+      settings: SettingsRegistry(jobs.database, []),
+      danmaku: danmaku,
+      mesh: node,
+      sources: sources));
+  final ui = UiDataService(media, engine, state, sources, node.root, rig.vault);
+  ui.subtitles = SubtitleLibrary(media, node.root,
+      probe: (_) async => {'subtitles': <JsonMap>[]});
+  ui.meshLibrary = MeshLibrary(ui, node);
+  registerMergedLibrary(state, ui.meshLibrary!);
+  await ui.meshLibrary!.start();
+  await ui.start();
+  addTearDown(() async {
+    await ui.close();
+    await engine.close();
+  });
+  return ui;
+}

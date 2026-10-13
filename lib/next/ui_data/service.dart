@@ -17,6 +17,7 @@ import 'no_airing.dart' if (dart.library.ui) 'airing.dart';
 import 'heat.dart';
 import '../subtitles/facts.dart';
 import 'ui_data.dart';
+import '../mesh/library.dart';
 
 /// Application-owned projections. Stored presentations contain no task state.
 final class UiDataService implements NextUiData {
@@ -32,6 +33,9 @@ final class UiDataService implements NextUiData {
   final ArtworkCache artwork;
   final EpisodeHeat heat;
   SubtitleFacts? subtitles;
+  MeshLibrary? meshLibrary;
+  void notifyLibraryChanged() => _changed();
+  Future<List<JsonMap>> localFiles() => _view('library.files');
   Database get db => media.store.database;
   static const _openingKey = 'preference:hero-opening-seconds';
   Future<int> _openingSeconds() async {
@@ -118,6 +122,11 @@ final class UiDataService implements NextUiData {
 
   @override
   Future<UiWork?> work(String workId) async {
+    if (meshLibrary != null) return meshLibrary!.work(workId);
+    return localWork(workId);
+  }
+
+  Future<UiWork?> localWork(String workId) async {
     final rows = await db.query('media_entities',
         where: "id=? AND kind='work'", whereArgs: [workId]);
     if (rows.isEmpty) return null;
@@ -125,7 +134,7 @@ final class UiDataService implements NextUiData {
     final metadata = await media.store.mergedMetadata(workId);
     final fields = metadata['fields'] as JsonMap;
     final attrs = decodeMediaJson(rows.single['attributes']);
-    final episodes = await this.episodes(workId);
+    final episodes = await localEpisodes(workId);
     final next = episodes
             .where((e) =>
                 e.playable &&
@@ -163,6 +172,11 @@ final class UiDataService implements NextUiData {
 
   @override
   Future<List<UiEpisode>> episodes(String workId, {int? season}) async {
+    if (meshLibrary != null) return meshLibrary!.episodes(workId, season: season);
+    return localEpisodes(workId, season: season);
+  }
+
+  Future<List<UiEpisode>> localEpisodes(String workId, {int? season}) async {
     final rows = await db.rawQuery(
         "SELECT e.*,r.attributes AS release_attributes FROM media_entities e JOIN media_entities r ON r.id=e.parent_id WHERE e.kind='episode' AND r.parent_id=?",
         [workId]);
@@ -293,6 +307,10 @@ final class UiDataService implements NextUiData {
   }
 
   Future<String?> _parentWork(String id) async {
+    if (meshLibrary != null) {
+      final merged = await meshLibrary!.parent(id);
+      if (merged != null) return merged;
+    }
     final rows = await db.rawQuery(
         'WITH RECURSIVE parents AS (SELECT * FROM media_entities WHERE id=? UNION ALL SELECT e.* FROM media_entities e JOIN parents p ON e.id=p.parent_id) SELECT id FROM parents WHERE kind=\'work\'',
         [id]);
@@ -305,13 +323,22 @@ final class UiDataService implements NextUiData {
   }
 
   @override
-  Future<List<UiWork>> library() => throw UnimplementedError('X47');
+  Future<List<UiWork>> library() async {
+    if (meshLibrary != null) return meshLibrary!.library();
+    return [for (final row in await db.query('media_entities', where: "kind='work'", orderBy: 'rowid DESC')) (await localWork(row['id'] as String))!];
+  }
 
   @override
   Future<UiHome> home() async {
     final shelves = <UiShelf>[];
     final continuing = <UiShelfItem>[];
     final seen = <String>{};
+    if (meshLibrary != null) {
+      for (final work in await library()) {
+        final ep = (await episodes(work.workId)).where((e) => (e.progress ?? 0) > 0 && (e.progress ?? 0) < 1).firstOrNull;
+        if (ep != null && seen.add(work.workId)) continuing.add(UiShelfItem(work, episode: ep, caption: _caption(ep)));
+      }
+    }
     if (sources.continueWatching != null) {
       for (final row in await _view('history.continue_watching')) {
         if (row['fileId'] is! String) continue;
@@ -320,10 +347,12 @@ final class UiDataService implements NextUiData {
         final work = (await this.work(workId))!;
         final links = await db.query('media_file_episodes',
             where: 'file_id=?', whereArgs: [row['fileId']]);
+        final linkedIds = <String>{for (final link in links)
+          await meshLibrary?.canonical(link['episode_id'] as String) ?? link['episode_id'] as String};
         final eps = await episodes(workId);
         final ep = eps
             .where((e) =>
-                links.any((l) => l['episode_id'] == e.episodeId) &&
+                linkedIds.contains(e.episodeId) &&
                 (e.progress ?? 0) < 1)
             .firstOrNull;
         continuing.add(UiShelfItem(work, episode: ep, caption: _caption(ep)));
@@ -351,7 +380,9 @@ final class UiDataService implements NextUiData {
       final matches = await db.rawQuery(
         "SELECT b.entity_id FROM media_bindings b JOIN media_external_objects o ON o.id=b.object_id WHERE b.status='accepted' AND o.provider='dandanplay' AND o.object_type='episode' AND o.external_id=?",
         [update['externalEpisodeId']]);
-      final ep = (await episodes(work.workId)).where((e) => matches.any((m) => m['entity_id']==e.episodeId)).firstOrNull;
+      final matchingIds = <String>{for (final match in matches)
+        await meshLibrary?.canonical(match['entity_id'] as String) ?? match['entity_id'] as String};
+      final ep = (await episodes(work.workId)).where((e) => matchingIds.contains(e.episodeId)).firstOrNull;
       airing.add(UiShelfItem(work, episode: ep, caption: update['caption'] as String));
     }
     if (airing.isNotEmpty) shelves.add(UiShelf(id: 'airing', title: '今天更新', kind: UiShelfKind.airing, items: airing));
@@ -379,9 +410,7 @@ final class UiDataService implements NextUiData {
       }
     }
     final recent = <UiShelfItem>[];
-    for (final row in await db.query('media_entities',
-        where: "kind='work'", orderBy: 'rowid DESC', limit: 20)) {
-      final work = (await this.work(row['id'] as String))!;
+    for (final work in (await library()).take(20)) {
       recent.add(
           UiShelfItem(work, episode: work.next, caption: _caption(work.next)));
     }
@@ -585,6 +614,13 @@ final class UiDataService implements NextUiData {
   final Directory mediaRoot;
 
   Future<void> _requireEntity(String id, String? kind, String field) async {
+    if (meshLibrary != null) {
+      final parent = await meshLibrary!.parent(id);
+      if (parent != null) {
+        if (kind != 'episode' && await work(id) != null) return;
+        if (kind != 'work' && (await episodes(parent)).any((e) => e.episodeId == id)) return;
+      }
+    }
     final rows =
         await db.query('media_entities', where: 'id=?', whereArgs: [id]);
     if (rows.isEmpty || kind != null && rows.single['kind'] != kind) {
@@ -715,7 +751,7 @@ final class UiDataService implements NextUiData {
             result.add(UiEpisodeCard(
                 (await work(workId))!,
                 (await episodes(workId))
-                    .singleWhere((e) => e.episodeId == card['episodeId'])));
+                    .singleWhere((e) => e.episodeId == (meshLibrary == null ? card['episodeId'] : meshLibrary!.resolvedId(card['episodeId'] as String)))));
           case 'task':
             result.add(UiTaskCard(
                 await _task(await engine.get(card['taskId'] as String))));
@@ -768,6 +804,7 @@ final class UiDataService implements NextUiData {
     await _jobs?.cancel();
     await _polling;
     await _publishing;
+    await meshLibrary?.close();
     artwork.close();
     await _changes.close();
     await _tasks.close();

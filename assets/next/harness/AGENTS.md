@@ -183,6 +183,12 @@ Windows 上把 `./nipa` 换成 `python nipa`。连接凭据默认在 macOS/Linux
 
 ## 关于 NipaPlay 的事实
 
+- **媒体库跨设备是一份合并库**：`library.merged` 包含本机和同账号设备上的全部作品。一部作品的剧集可能分散在几台设备上；重复文件优先本机。视频留在原设备，播放时直接读取原处，不复制整部文件。
+- **设备离线时**：上次看到的作品、元数据和已缓存图片仍显示；设备 online=false，只在离线设备上的剧集 playable=false。恢复连接后目录和进度继续更新。
+- **读取别的设备上的文件**：`media.library.readable` 批量解析剧集；`media.mesh_files.readable` 批量解析绝对 path 和 deviceId，不限已入库文件。远端文件返回当前调用节点的 127.0.0.1 HTTP Range 地址，可给播放器、ffprobe、ffmpeg；回环需绕开 HTTP_PROXY。设备之间的字节经过同账号双向 TLS，协调服务不转发视频。
+- **写入别的设备上的文件**：`media.mesh_files.begin/chunk/finish` 提供文件暂存、分段写入和完成校验，cancel 丢弃未完成传输；省略 deviceId 操作本机。文件权限是目标节点进程的实际权限，父目录须存在。传输 ID 目前不跨节点进程重启。
+- **删除和覆盖先问用户**：`media.mesh_files.delete` 批量预览，finish 遇到已有目标返回 NeedsDecision；用户决定后才执行 confirm 的 destructive ActionCall。目标自预览后变化会拒绝。加入 Mesh 是宿主同意同账号设备访问，没有额外共享开关。
+
 - **媒体身份可以来自多个来源**：弹弹play、Bangumi、TMDB 等。弹弹play 没有收录，不等于无法识别；电视剧、电影常常只有 TMDB 身份。内容哈希匹配只能给出弹弹play 的 ID。文件名需要你自己理解，NipaPlay 不会替你解析。
 - **弹幕可以同时来自多个平台**：Next 内置的来源是经过 NipaPlay 网关的弹弹play；本地弹幕文件可以用 `danmaku.import` 交入（来源记为本地文件）；交入的弹幕可来自任意平台。同一平台的同一个视频只保留一条轨道，再次交入就是刷新。Next 没有内置优酷、B 站来源或应用内平台登录；已有的平台绑定、轨道与缓存仍可读取和播放。
 - **你取得的结果都可以交给 NipaPlay 保存**（弹幕、元数据、身份），它会记录来源并检查一致性。缺少入口时，如实告诉用户。

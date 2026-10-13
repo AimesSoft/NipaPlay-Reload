@@ -1,4 +1,38 @@
-# NipaPlay 无界面宿主（X43 / X45）
+# NipaPlay 无界面宿主（X43 / X45 / X47c）
+
+## X47c 媒体库与文件
+
+无界面节点是媒体来源，与 GUI 使用同一 `MeshLibrary`、状态视图和文件原语。
+`state.query {view:"library.merged"}` 返回本机及 Mesh 全部作品的合并投影；源节点
+提供版本化目录、元数据、图像、小型弹幕/字幕附件和文件字节，无须实现 Classic
+HTTP 共享库或启动播放器。数据库仍各自保存，不向别的节点复制 `next.db`。
+
+加入 Mesh 是宿主同意同账号有效双向证书设备访问。没有 `shareLibrary` 开关。
+`media.mesh_files.*` 可以读写进程能访问的任意绝对文件路径，与媒体扫描根无关。
+readable 批量返回本机路径或调用端的回环可读地址；begin/chunk/finish 提供分段写入，
+delete 批量预览删除。finish 覆盖已有文件、delete 都返回 NeedsDecision；选择
+confirm 的 destructive ActionCall 前目标不变，确认时再次检查预览签名。
+可推送字幕或复制下载文件；源数据是否删除由用户决定，没有预编排移动流程。
+
+视频与文件直接经过 Mesh TLS 1.3 双向认证，使用现有 LAN/overlay/SSH 候选；
+协调服务不转发字节。HTTP 转换口只在调用/播放端 127.0.0.1 监听，默认随机端口，
+不对外开放明文 HTTP；支持 HEAD、Range 和进度定位，回环必须绕开 HTTP_PROXY。
+宿主 mesh.json 的 fileProxyPort 可指定 1024–65535 固定端口，0/省略为随机；第一次
+发放地址时绑定，占用则退回随机，mesh.file_proxy 状态视图报告请求/实际端口和原因。
+该配置不开放 Agent 修改，配置变化需重启。URL 令牌每次使用 256 位安全随机值，
+关闭 MeshLibrary/退出即失效；固定端口重启后旧令牌和猜测的地址返回 404。
+传输暂存与确认票据目前随进程退出失效，正常停止清除未发布暂存；异常退出的
+`.nipa-transfer-*` 可由宿主检查，原目标不会在传输开始时被截断。
+
+目录投影、进度、历史合并 ID 写在自己的 ui_cache；远端图片/播放附件缓存在
+mesh-artwork，源端弹幕导出在 mesh-assets。离线仍显示上次目录和缓存图片，
+来源 online=false、只能从该源播放的剧集 playable=false。每 5 秒刷新并触发本机
+changes；显式刷新和可读地址、进度原语见 [Mesh README](../../lib/next/mesh/README.md)。
+合并身份、时间和观看进度策略见 [ui_data README](../../lib/next/ui_data/README.md)。
+
+X47c 在 macOS 回环上实测独立 Dart AOT + Rust C ABI 源进程，能响应目录、
+提供真实 TLS 文件范围并接收字幕。Windows/WSL 的 X45 二进制须重新构建才能具有
+这些能力；X47c 没有启动工作站节点，跨设备与实际 GUI 播放验收仍由主控监督。
 
 这是纯 Dart 的 Next 领域服务宿主，入口为 `bin/nipaplay_headless.dart`。
 不启动 Flutter 引擎或窗口。已在 macOS、Ubuntu 24.04 WSL x86_64、Windows x64

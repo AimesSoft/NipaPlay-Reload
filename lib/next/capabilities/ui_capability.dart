@@ -12,6 +12,7 @@ final class UiCapability implements Capability {
     Future<JsonMap?> Function(JsonMap)? openTarget,
     Future<JsonMap> Function()? close,
     Future<Outcome<JsonEncodable>> Function(JsonMap, Invocation)? play,
+    Future<JsonMap?> Function(String)? resolveEntity,
   }) : actions = [
           UiOpenAction(
               media: media,
@@ -19,6 +20,7 @@ final class UiCapability implements Capability {
               openDetail: openDetail,
               openWork: openWork,
               openTarget: openTarget,
+              resolveEntity: resolveEntity,
               play: play),
           if (close != null) UiCloseAction(close),
         ];

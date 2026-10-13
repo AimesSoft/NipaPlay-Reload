@@ -5,6 +5,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:ffi' show DynamicLibrary;
 import 'dart:io';
+import 'dart:ui' as ui;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart'
     show ExternalLibrary;
@@ -18,6 +19,28 @@ import 'package:nipaplay/security/credential_vault.dart';
 import 'package:nipaplay/src/rust/frb_generated.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:nipaplay/services/remote_control_settings.dart';
+import 'package:nipaplay/next/mesh/library.dart';
+import 'package:nipaplay/next/mesh/files.dart';
+import 'package:crypto/crypto.dart';
+import 'package:nipaplay/next/mesh/library_capability.dart';
+import 'package:nipaplay/next/ui_data/service.dart';
+import 'package:nipaplay/next/ui_data/metadata_facts.dart';
+import 'package:nipaplay/next/media/identity_store.dart';
+import 'package:nipaplay/next/media/media_service.dart';
+import 'package:nipaplay/next/headless/ports.dart';
+import 'package:nipaplay/next/state/query.dart';
+import 'package:nipaplay/next/state/views.dart';
+import 'package:nipaplay/next/settings/registry.dart';
+import 'package:nipaplay/next/danmaku/service.dart';
+import 'package:nipaplay/next/danmaku/store.dart';
+import 'package:nipaplay/next/subtitles/library.dart';
+import 'package:nipaplay/next/tasks/sqlite_job_store.dart';
+import 'package:sqflite_common_ffi/sqflite_ffi.dart';
+import 'media_test_support.dart';
+
+part 'mesh_library_experiment.dart';
+part 'mesh_files_experiment.dart';
+part 'mesh_headless_experiment.dart';
 
 final class _Vault implements CredentialVault {
   final values = <CredentialRef, String>{};
@@ -173,12 +196,13 @@ final class _Rig {
     client.close(force: true);
   }
 
-  Future<MeshRuntime> node(String name, {int account = 424242}) async {
+  Future<MeshRuntime> node(String name, {int account = 424242, Future<Failure?> Function(String, String)? authorize}) async {
     final root = await Directory('${directory.path}/$name').create();
     final mesh = MeshRuntime(
         root: root,
         vault: vault,
         native: native,
+        authorize: authorize ?? authorizeMeshPeer,
         token: () async => _jwt(account));
     final harness = Harness(
         [_Actions(waitStarted, waitRelease), MeshCapability(mesh)],
@@ -240,6 +264,7 @@ final class _Rig {
 }
 
 void main() {
+  final reuseX47Evidence = Platform.environment['NIPAPLAY_X47_REUSE_EVIDENCE'] == '1' ? '按任务要求沿用已记录的 X47 实验，不重复运行' : false;
   late Directory caDirectory;
   late MeshNative native;
   late _Rig rig;
@@ -296,6 +321,20 @@ void main() {
     await rig.start();
   });
   tearDown(() => rig.close());
+
+  test('X47c separate headless process serves catalogue and files', () => x47HeadlessExperiment(rig), skip: Platform.environment['NIPAPLAY_X47_HEADLESS_BINARY'] == null ? '独立 AOT 实验需显式提供构建路径；见 X47_REPORT' : reuseX47Evidence);
+
+  test('X47c catalogue evolution preserves IDs and metadata', () => x47CatalogueEvolution(rig), skip: reuseX47Evidence);
+
+  test('X47c file tools need only Mesh identity and preserve decision effects', () => x47FileToolsExperiment(rig), skip: reuseX47Evidence);
+
+  test('X47c local file primitives work before joining and redact payload journal', () => x47LocalFilesConstraint(rig));
+
+  test('X47c proxy random tokens fixed port and occupied fallback', () => x47ProxyReview(rig));
+
+  test('X47c files outside library and destructive decisions', () => x47FilesExperiment(rig), skip: reuseX47Evidence);
+
+  test('X47 merged library and real TLS video Range and seeking', () => x47LibraryExperiment(rig), timeout: const Timeout(Duration(minutes: 5)), skip: reuseX47Evidence);
 
   test('two real TLS nodes invoke the same Harness and wrap decision effects',
       () async {
