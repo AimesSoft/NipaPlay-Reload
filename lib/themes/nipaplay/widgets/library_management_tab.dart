@@ -57,6 +57,26 @@ enum LibraryManagementSection { local, webdav, smb }
 
 enum _MountedLibraryType { local, webdav, smb }
 
+String _webdavAddressLabel(WebDAVConnection connection) {
+  final lan = connection.url.trim();
+  final wan = connection.wanUrl.trim();
+  if (lan.isEmpty) return wan;
+  if (wan.isEmpty) return lan;
+  return '$lan / $wan';
+}
+
+String _smbAddressLabel(SMBConnection connection) {
+  String format(String host, int port) => port == 445 ? host : '$host:$port';
+  final lanLabel =
+      connection.host.trim().isEmpty ? '' : format(connection.host, connection.port);
+  final wanLabel = connection.wanHost.trim().isEmpty
+      ? ''
+      : format(connection.wanHost, connection.wanPort);
+  if (lanLabel.isEmpty) return wanLabel;
+  if (wanLabel.isEmpty) return lanLabel;
+  return '$lanLabel / $wanLabel';
+}
+
 class _MountedLibraryLocation {
   const _MountedLibraryLocation.local(this.localPath)
       : type = _MountedLibraryType.local,
@@ -1700,7 +1720,8 @@ class _LibraryManagementTabState extends State<LibraryManagementTab> {
     if (query.isEmpty) return connections;
     return connections.where((connection) {
       return connection.name.toLowerCase().contains(query) ||
-          connection.url.toLowerCase().contains(query);
+          connection.url.toLowerCase().contains(query) ||
+          connection.wanUrl.toLowerCase().contains(query);
     }).toList();
   }
 
@@ -1709,7 +1730,8 @@ class _LibraryManagementTabState extends State<LibraryManagementTab> {
     if (query.isEmpty) return connections;
     return connections.where((connection) {
       return connection.name.toLowerCase().contains(query) ||
-          connection.host.toLowerCase().contains(query);
+          connection.host.toLowerCase().contains(query) ||
+          connection.wanHost.toLowerCase().contains(query);
     }).toList();
   }
 
@@ -2602,7 +2624,7 @@ class _LibraryManagementTabState extends State<LibraryManagementTab> {
             UnifiedLibraryManagementItem(
               id: connection.name,
               title: connection.name,
-              subtitle: connection.url,
+              subtitle: _webdavAddressLabel(connection),
               status: connection.isConnected ? '已连接' : '未连接',
               icon: LibraryManagementIcon.cloud,
               onOpen: !isRemoteMode && connection.isConnected
@@ -2652,9 +2674,7 @@ class _LibraryManagementTabState extends State<LibraryManagementTab> {
             UnifiedLibraryManagementItem(
               id: connection.name,
               title: connection.name,
-              subtitle: connection.port == 445
-                  ? connection.host
-                  : '${connection.host}:${connection.port}',
+              subtitle: _smbAddressLabel(connection),
               status: connection.isConnected ? '已连接' : '未连接',
               icon: LibraryManagementIcon.server,
               onOpen: !isRemoteMode && connection.isConnected
@@ -3890,7 +3910,7 @@ class _LibraryManagementTabState extends State<LibraryManagementTab> {
     return _buildLargeScreenRemoteConnectionCard(
       icon: Icons.cloud_outlined,
       title: connection.name,
-      subtitle: connection.url,
+      subtitle: _webdavAddressLabel(connection),
       connected: connection.isConnected,
       selected: selected,
       autofocus: autofocus,
@@ -3930,7 +3950,7 @@ class _LibraryManagementTabState extends State<LibraryManagementTab> {
         children: [
           NipaplayLargeScreenSectionHeader(
             title: connection.name,
-            subtitle: connection.url,
+            subtitle: _webdavAddressLabel(connection),
             trailing: NipaplayLargeScreenActionButton(
               icon: Icons.refresh_rounded,
               label: '测试',
@@ -4021,9 +4041,7 @@ class _LibraryManagementTabState extends State<LibraryManagementTab> {
     required bool selected,
     required bool autofocus,
   }) {
-    final hostLabel = connection.port != 445
-        ? '${connection.host}:${connection.port}'
-        : connection.host;
+    final hostLabel = _smbAddressLabel(connection);
     return _buildLargeScreenRemoteConnectionCard(
       icon: Icons.lan_outlined,
       title: connection.name,
@@ -4057,9 +4075,7 @@ class _LibraryManagementTabState extends State<LibraryManagementTab> {
   Widget _buildLargeScreenSMBConnectionDetail(SMBConnection connection) {
     final key = '${connection.name}:/';
     final isLoading = _loadingSMBFolders.contains(key);
-    final hostLabel = connection.port != 445
-        ? '${connection.host}:${connection.port}'
-        : connection.host;
+    final hostLabel = _smbAddressLabel(connection);
     if (!isLoading && !_smbFolderContents.containsKey(connection.name)) {
       Future.microtask(() => _loadSMBFolderChildren(connection, '/'));
     }
@@ -5203,7 +5219,7 @@ class _LibraryManagementTabState extends State<LibraryManagementTab> {
           ],
         ),
         subtitle: Text(
-          connection.url,
+          _webdavAddressLabel(connection),
           style: TextStyle(color: secondaryTextColor, fontSize: 11),
           overflow: TextOverflow.ellipsis,
         ),
@@ -5263,9 +5279,7 @@ class _LibraryManagementTabState extends State<LibraryManagementTab> {
     final Color textColor = isDark ? Colors.white : Colors.black87;
     final Color secondaryTextColor = isDark ? Colors.white70 : Colors.black54;
     final Color iconColor = isDark ? Colors.white70 : Colors.black54;
-    final hostLabel = connection.port != 445
-        ? '${connection.host}:${connection.port}'
-        : connection.host;
+    final hostLabel = _smbAddressLabel(connection);
     final rootKey = '${connection.name}:/';
     final expanded = _expandedSMBFolders.contains(rootKey);
 
