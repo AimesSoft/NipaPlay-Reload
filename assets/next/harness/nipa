@@ -6,11 +6,15 @@ Connection data belongs outside this repository; NIPAPLAY_ENDPOINT_FILE can
 select another credential file. No persistent client session or background work.
 """
 import argparse
+import base64
+import hashlib
 import json
 import os
 from pathlib import Path
 import re
 import sys
+import subprocess
+import tempfile
 import time
 import urllib.error
 import urllib.parse
@@ -158,6 +162,37 @@ class Client:
                                                 "timeoutMs": max(0, int(remaining * 1000))})
         return snapshot
 
+    def sync_repository(self, repository, ref):
+        if not self.device:
+            raise ValueError("sync-repository requires --device")
+        if not re.fullmatch(r"[A-Za-z0-9_][A-Za-z0-9_./-]*", ref):
+            raise ValueError("Expected a named Git revision, such as HEAD or refs/heads/main")
+        # Git bundle carries objects and a selected ref, never .git/config,
+        # local credential files, untracked files or this process environment.
+        repository = str(Path(repository).expanduser().resolve())
+        def git(*arguments):
+            result = subprocess.run(["git", "-C", repository, *arguments],
+                                    stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+            if result.returncode:
+                raise ValueError("Git bundle preparation failed: " + redact(result.stderr.decode("utf-8", "replace")))
+            return result.stdout.decode("utf-8").strip()
+        revision = git("rev-parse", "--verify", ref + "^{commit}")
+        if not re.fullmatch(r"[a-f0-9]{40,64}", revision):
+            raise ValueError("Invalid Git commit")
+        with tempfile.TemporaryDirectory(prefix="nipa-bundle-") as temporary:
+            bundle = Path(temporary) / "repository.bundle"
+            git("bundle", "create", str(bundle), ref)
+            if bundle.stat().st_size > 67108864:
+                raise ValueError("Git bundle exceeds 64 MiB")
+            payload = bundle.read_bytes()
+        digest = hashlib.sha256(payload).hexdigest()
+        receipt = None
+        for offset in range(0, len(payload), 393216):
+            receipt = self.result(self.call("program.repository.receive", {
+                "sha256": digest, "offset": offset, "totalBytes": len(payload),
+                "data": base64.b64encode(payload[offset:offset + 393216]).decode("ascii")}))
+        return {"revision": revision, "ref": ref, "bundle": receipt}
+
 
 class JsonArgumentParser(argparse.ArgumentParser):
     def error(self, message):
@@ -205,6 +240,9 @@ def main():
     watch = commands.add_parser("watch")
     watch.add_argument("task")
     watch.add_argument("--seconds", type=int, default=40, choices=range(0, 61), metavar="0..60")
+    sync = commands.add_parser("sync-repository", help="Transfer a committed Git revision as a bundle; no checkout/merge")
+    sync.add_argument("--repository", default=".")
+    sync.add_argument("--ref", default="HEAD")
     args = parser.parse_args()
     client = None
     try:
@@ -231,6 +269,8 @@ def main():
             data = client.call(args.action, json_input(args.input), args.execute)
         elif args.command == "query":
             data = client.call("state.query", dict(json_input(args.input), view=args.view))
+        elif args.command == "sync-repository":
+            data = client.sync_repository(args.repository, args.ref)
         else:
             data = client.watch(args.task, args.seconds)
         print(json.dumps(redact(data, [client.token]), ensure_ascii=False, indent=2))

@@ -16,6 +16,7 @@ import '../state/views.dart' show publicTaskFacts;
 import '../state/query.dart';
 
 part 'download_returns.dart';
+part 'program_returns.dart';
 
 const followupFields = ObjectSchema({
   'id': StringSchema(),
@@ -173,7 +174,16 @@ final class Followups {
         }
         if (task != null) await engine.get(task);
         await location.ready;
+        final returnTo = !immediate && invocation.origin.startsWith('mesh:')
+            ? await downloadReturnTarget(invocation) : null;
         String? threadId = input['threadId'] as String?;
+        if (returnTo != null) {
+          if (threadId != null && threadId != returnTo['threadId']) {
+            throw const Failure(FailureCode.invalidInput,
+                'Remote subscription thread must match the originating conversation.');
+          }
+          threadId = returnTo['threadId'] as String;
+        }
         if (!immediate &&
             threadId == null &&
             (invocation.origin.startsWith('harness_cli:chat:') ||
@@ -201,7 +211,7 @@ final class Followups {
               : task != null
                   ? 'task $task enters succeeded/failed/cancelled'
                   : '$event${condition['objectId'] == null ? '' : ' for ${condition['objectId']}'}',
-          'repository': location.path,
+          'repository': returnTo?['repository'] ?? location.path,
           'threadId': threadId,
           'turnId': null,
           'origin': invocation.origin,
@@ -219,6 +229,11 @@ final class Followups {
           'turnStatus': null,
           if (immediate && agentDevice?.call() != null)
             'remoteDeviceId': agentDevice!.call(),
+          if (returnTo != null) ...{
+            'automatic': 'subscription',
+            'remoteDeviceId': returnTo['deviceId'],
+            'returnTicket': returnTo['returnTicket'],
+          },
         };
         final safe = SecretRedactor.json(row) as JsonMap;
         await database.transaction((tx) async {
@@ -317,6 +332,7 @@ final class Followups {
 
   Future<void> sweep() => _serial(() async {
         await _collectDownloadReturns();
+        await _collectProgramReturns();
         final rows = await _rows();
         // Resolve one-shot subscriptions before deciding which facts they own.
         for (final row in [
@@ -401,7 +417,7 @@ final class Followups {
           }
           final host = _host;
           if (row['state'] == 'ready') {
-            if (row['automatic'] == 'download' || row['automatic'] == 'meshDownload') {
+            if (_taskReturn(row)) {
               await _filterDownloadReturn(row, await _rows());
               if (row['state'] == 'cancelled') continue;
               if (DateTime.now().toUtc().isBefore(
@@ -460,7 +476,7 @@ final class Followups {
                 }
               }
               row['threadId'] = target;
-              if (row['automatic'] == 'download' || row['automatic'] == 'meshDownload') {
+              if (_taskReturn(row)) {
                 row['dispatchedAt'] = DateTime.now().toUtc().toIso8601String();
               }
               await _save(row, 'dispatching', 'dispatching');

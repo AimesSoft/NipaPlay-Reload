@@ -4,8 +4,8 @@ import 'dart:io';
 import 'package:nipa_harness/nipa_harness.dart';
 import 'package:nipaplay/security/secret_redactor.dart';
 
-import '../harness_location.dart';
-import '../capabilities/local_playback_operations.dart' show localOperationTitles;
+import '../repository_location.dart';
+import '../capabilities/local_operation_titles.dart';
 import '../media/identity_store.dart';
 import '../media/media_service.dart';
 import '../settings/denylist.dart';
@@ -51,7 +51,7 @@ final class ActivityView {
   final MediaService media;
   final SettingsRegistry settings;
   final File journal;
-  final HarnessLocation location;
+  final RepositoryLocation location;
   final ChangeHistory history;
 
   StateView get view => StateView(

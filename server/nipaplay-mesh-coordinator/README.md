@@ -48,7 +48,7 @@ cargo run --manifest-path server/nipaplay-mesh-coordinator/Cargo.toml
 | `MESH_TRUST_PROXY_HEADERS` | `true` | 仅当 socket 对端为回环代理时信任 `X-Real-IP` / `X-Forwarded-For` |
 | `DANDANPLAY_GATEWAY_BASE` | `https://nipaplay.aimes-soft.com/dandanplay` | NipaPlay 网关；同机生产部署可用 `http://127.0.0.1:18081`。保留配置中的路径前缀 |
 | `DANDANPLAY_USER_AGENT` | `NipaPlay-Mesh/1.0` | 网关请求的 User-Agent |
-| `MESH_ACCOUNT_CLAIM_POINTER` | `/userId` | 已验证 JWT 中稳定用户标识的 JSON Pointer；默认声明名尚待真实令牌验收确认 |
+| `MESH_ACCOUNT_CLAIM_POINTER` | `/UserId` | 已验证 JWT 中稳定用户标识的 JSON Pointer；X45 主控已确认弹弹play 测试令牌声明名，大小写敏感 |
 
 协调服务只支持经网关验证，不持有 AppSecret，也不加载旧密钥端点。
 旧配置中的 `DANDANPLAY_UPSTREAM_BASE`、`DANDANPLAY_APP_ID`、`DANDANPLAY_APP_SECRET`

@@ -3,8 +3,19 @@
 NextCore 创建 MeshRuntime、三个 Mesh Action 和 mesh.addressCandidates 设置项，
 并管理 transport 生命周期。NextRuntime 将包含播放能力和 journal 的同一个 Harness
 交回 Core；回环 MCP 和 Mesh 复用 nipa_harness/mcp.dart 的 JSON-RPC 分派器。
-Mesh 不依赖 Labs 端点开关。可远程调用范围为 task.*、download.*、
-media.*、danmaku.*、playback.*、state.query 和 agent.wake。
+Mesh 不依赖 Labs 端点开关。可远程调用范围为 task.*、download.*、media.*、
+danmaku.*、playback.*、subtitle.*、history.*、followup.*、program.*、discover.*、
+sync.*、ui.*、state.query、agent.wake、activity.report、app.instance；另有设置读取
+settings.get/describe/history，以及 accounts.status、collections.get/update、
+episodes.get/update、bangumi.sync/sync_status。具体以目标宿主已注册目录为准。
+没有远程 settings.set/reset、accounts.login/logout、credentials 或 Mesh 管理入口。
+逐族理由与缺口见 [X46_REPORT](../../../docs/next/X46_REPORT.md)。
+
+`program.run` 由目标宿主 `<next-data>/program.json` 的 `enabled:true` 独立授权，
+默认 false、重启生效；不注册为 Agent 设置。普通用户进程在目标 harness 执行，
+不继承发起设备环境。`program.repository.receive` 同一开关控制；`nipa sync-repository`
+通过 Mesh 分块送 Git bundle 到目标 harness，不携带 Git 配置/未提交文件或自动合并。
+运行事实、回执与原会话后续复用任务/activity/X45 交付基础设施。
 
 ## 身份、信任与调用
 
@@ -200,12 +211,13 @@ stdout 只输出 `[DandanplayClaimNames]` 加声明 JSON Pointer 与 JSON 类型
 该诊断不验证令牌有效性、不判断字段是否稳定，不执行网络请求；
 Release/Profile 忽略开关，不读取保险库，不注册 Harness Action，不进入 Agent 或 journal。
 
-例如输出包含 `{"pointer":"/userId","type":"number"}`，且主控确认它是稳定用户 ID，
-则设置 `export MESH_ACCOUNT_CLAIM_POINTER=/userId`；嵌套声明 `/identity/uid` 可直接设置
+例如输出包含 `{"pointer":"/UserId","type":"number"}`，且主控确认它是稳定用户 ID，
+则设置 `export MESH_ACCOUNT_CLAIM_POINTER=/UserId`；嵌套声明 `/identity/uid` 可直接设置
 为 `export MESH_ACCOUNT_CLAIM_POINTER=/identity/uid`。Pointer 中名称的 `~` 与 `/` 分别
 转义为 `~0` 与 `~1`，直接复制诊断的 pointer 即可。协调服务接受正整数或 1–128 字节的
 字母、数字、`-._` 标识字符串；字段名称和类型只能帮助找候选，不能证明其稳定性。
-默认 `/userId` 尚未用真实令牌确认。若不存在稳定 ID，停止并交主控裁定。
+X45 主控已确认测试账号令牌的声明为 `/UserId`；X46 将它设为默认值。其他
+签发格式可由宿主显式设置 pointer；不存在稳定 ID 时交主控裁定。
 配置确认后启动（每次修改声明 Pointer 都重启协调服务）：
 
 ~~~sh

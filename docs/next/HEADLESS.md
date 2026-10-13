@@ -1,4 +1,4 @@
-# NipaPlay 无界面宿主（X43 / X45 / X47c）
+# NipaPlay 无界面宿主（X43 / X45 / X46 / X47c）
 
 ## X47c 媒体库与文件
 
@@ -52,13 +52,21 @@ Windows/Linux x64 原生库及 AOT 已编译，X45 运行检查只在 Mac 本机
 Classic 更新日历、内嵌 Agent 对话。无界面只接受宿主从 stdin 登记的组网测试 token，
 没有登录密码 Action；未配置 Agent 目的设备的后续仍可到达 ready，不运行模型决定。
 
+X46 补充 `subtitle.tracks/import/select`、旁路字幕索引和 activity 视图；可选 ffprobe
+记录内嵌轨道，不读取 Classic 偏好或自动决定默认语言。导入的文本字幕检查时序语法，
+不是完整的原生解析/可播放核验；idx/sub 与 sup 保留声明事实。UTF-16 等不兼容文本
+可由已授权的本地程序转换后交入；此宿主没有 Classic 原生字幕解析器。
+新增宿主可授权的 `program.run` 与 Git bundle 接收，详见 [X46_RUNBOOK.md](X46_RUNBOOK.md)。
+观看记录能力没有注册：这个独立数据库没有 Classic 历史，也没有播放器产生进度，
+不会将空的 Next 记录冒充用户历史。
+
 ## 准备程序
 
 在依赖已经解析的本 worktree 操作；不要在主仓库构建，不运行 `pub get`。
 开发使用 Flutter 3.44.6 随带的 Dart 3.12.2。运行时不需要 Flutter。
 
 ```sh
-cd ~/Desktop/nipaplay-next-wt/x45-mesh-three
+cd ~/Desktop/nipaplay-next-wt/x46-remote-run
 ~/development/flutter-3.44.6/bin/dart compile exe \
   --packages=.dart_tool/package_config.json \
   bin/nipaplay_headless.dart -o build/headless/nipaplay-headless
@@ -202,6 +210,7 @@ peer 地址数组 `peers`。配置在引擎首次初始化时固定，修改须�
 | `headless.json` | 格式标记；持久 mediaRoots、port、ffprobe，CLI 指定值覆盖后保存 |
 | `device.json`、`next.db` | 设备身份、任务、片库、绑定、元数据、弹幕、设置、后续 |
 | `mesh.json`、`download.json` | 独立宿主的组网/下载配置 |
+| `program.json` | 宿主的普通用户程序授权，默认关闭，`{"enabled":true}` 后须重启；没有 Agent 设置入口 |
 | `vault/`、`mesh-identity.json`、`mesh-certificate.json` | 私有凭据、Mesh 公钥身份和设备证书；不复制为第二个身份 |
 | `mesh-return-targets.json`、`mesh-replay.jsonl` | 已签发原会话回传票据与防重放记录 |
 | `torrent-session/` | librqbit 会话、续传及 DHT 持久状态 |

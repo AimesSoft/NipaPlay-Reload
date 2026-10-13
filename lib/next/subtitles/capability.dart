@@ -1,12 +1,12 @@
 import 'dart:io';
 import 'package:nipa_harness/nipa_harness.dart';
 import '../capabilities/classic_action.dart';
-import 'library.dart';
+import 'operations.dart';
 
 const _text = StringSchema(minLength: 1);
 
 final class SubtitleCapability implements Capability {
-  SubtitleCapability(SubtitleLibrary library)
+  SubtitleCapability(SubtitleOperations library)
       : actions = [
           ClassicAction(
               const ActionSpec(

@@ -1,4 +1,4 @@
-# X45 主控运行说明
+# X45 / X46 主控三机运行说明
 
 ## X47c 后的媒体库验收
 
@@ -34,14 +34,18 @@ begin/chunk/finish 写入字幕或传输文件；覆盖和批量删除返回 Nee
 
 | 身体 | 程序 | 数据目录示例 | Mesh 端口 |
 |---|---|---|---|
-| Mac | 本 worktree 的 `build/macos/Build/Products/Debug/NipaPlay.app/Contents/MacOS/NipaPlay` | `~/Library/Application Support/NipaPlay/LabProfiles/x45-controller/data/next` | 47821 |
-| Windows | `D:\nipaplay-next\x45-headless\build\headless\nipaplay-headless.exe` | `D:\nipaplay-next\x45-lab-data` | 监听 47832；候选 47822 |
-| WSL | `/home/labuser/nipaplay-next/x45-headless/build/headless/nipaplay-headless` | `/home/labuser/nipaplay-next/x45-lab-data` | 47823 |
+| Mac | 本 worktree 的 `build/macos/Build/Products/Debug/NipaPlay.app/Contents/MacOS/NipaPlay` | `~/Library/Application Support/NipaPlay/LabProfiles/x46-controller/data/next` | 47821 |
+| Windows | `D:\nipaplay-next\x46-headless\build\headless\nipaplay-headless.exe` | `D:\nipaplay-next\x46-lab-data` | 监听 47832，候选 47822 |
+| WSL | `/home/labuser/nipaplay-next/x46-headless/build/headless/nipaplay-headless` | `/home/labuser/nipaplay-next/x46-lab-data` | 47823 |
 
 Windows 同目录已有 `nipaplay_headless_native.dll`，WSL 已有
 `libnipaplay_headless_native.so`；二者同时包含 Mesh 与 librqbit。源码和离线 Cargo
-缓存已准备。重编译只运行各自的 `headless_workstation_build.py`，该程序不启动节点。
+缓存已准备。X46 AOT 已在上述新目录编译，原生库复用 X45；准备脚本
+`tool/next/x46_workstation_compile.py` 只解包与编译，不启动节点。第一次准备要求新目录，
+再次更新须先保留旧源码与构建，显式选择更新目录。
 Mac 的 GUI 仍使用现有 FRB Rust framework；无界面使用独立 C ABI，二者复用 Rust 实现。
+远程程序授权、仓库同步和观察项见 [X46_RUNBOOK.md](X46_RUNBOOK.md)；先确认各节点
+用的是 X46 程序，X45 二进制不含 `program.run`。
 
 所有 MCP 和 Mesh 节点监听回环。协调服务监听 Mac `127.0.0.1:18082`。
 这些是示例固定端口；若已被其他实验使用，整套配置和转发一起换端口，不结束其他进程。
@@ -53,12 +57,12 @@ BT 引擎保持正常行为，自己的 TCP/UDP 网络由 librqbit 管理；不�
 在本 worktree，使用现有依赖离线构建，临时 CA 私钥仅留在 Mac：
 
 ```sh
-cd ~/Desktop/nipaplay-next-wt/x45-mesh-three
+cd ~/Desktop/nipaplay-next-wt/x46-remote-run
 cargo build --offline --locked --manifest-path server/nipaplay-mesh-coordinator/Cargo.toml
-mkdir -m 700 /tmp/nipa-next/x45-controller-ca
+mkdir -m 700 /tmp/nipa-next/x46-controller-ca
 server/nipaplay-mesh-coordinator/target/debug/nipaplay-mesh-coordinator \
-  --generate-dev-ca /tmp/nipa-next/x45-controller-ca/ca.pem \
-  /tmp/nipa-next/x45-controller-ca/ca.key
+  --generate-dev-ca /tmp/nipa-next/x46-controller-ca/ca.pem \
+  /tmp/nipa-next/x46-controller-ca/ca.key
 ```
 
 另一个终端以前台方式运行，记录自己的 PID；不要把密钥内容写入日志：
@@ -66,27 +70,27 @@ server/nipaplay-mesh-coordinator/target/debug/nipaplay-mesh-coordinator \
 ```sh
 env -u DANDANPLAY_APP_SECRET -u DANDANPLAY_APP_SECRET_URLS \
   -u DANDANPLAY_UPSTREAM_BASE -u DANDANPLAY_APP_ID \
-  MESH_CA_CERT_FILE=/tmp/nipa-next/x45-controller-ca/ca.pem \
-  MESH_CA_KEY_FILE=/tmp/nipa-next/x45-controller-ca/ca.key \
-  MESH_DATABASE_PATH=/tmp/nipa-next/x45-controller-ca/mesh.db \
+  MESH_CA_CERT_FILE=/tmp/nipa-next/x46-controller-ca/ca.pem \
+  MESH_CA_KEY_FILE=/tmp/nipa-next/x46-controller-ca/ca.key \
+  MESH_DATABASE_PATH=/tmp/nipa-next/x46-controller-ca/mesh.db \
   MESH_LISTEN_ADDR=127.0.0.1:18082 \
   DANDANPLAY_GATEWAY_BASE=https://nipaplay.aimes-soft.com/dandanplay \
   MESH_ACCOUNT_CLAIM_POINTER=/UserId \
   HTTP_PROXY=http://127.0.0.1:7897 HTTPS_PROXY=http://127.0.0.1:7897 \
   NO_PROXY=127.0.0.1,localhost \
   server/nipaplay-mesh-coordinator/target/debug/nipaplay-mesh-coordinator \
-  > /tmp/nipa-next/x45-controller-ca/coordinator.log 2>&1
+  > /tmp/nipa-next/x46-controller-ca/coordinator.log 2>&1
 ```
 
-网关访问走 Clash 系统代理，回环直连。主控 X45 实测测试账号使用 `/UserId`，
-既有默认 `/userId` 会产生 invalid_identity；此处显式配置已验证的 Pointer。可用 [Mesh README 的声明名诊断](../../lib/next/mesh/README.md#主控本机端到端验收)
+网关访问走 Clash 系统代理，回环直连。X45 主控已确认弹弹play 测试令牌字段是
+`/UserId`（大小写敏感）；X46 已把协调服务默认值改为它。可用 [Mesh README 的声明名诊断](../../lib/next/mesh/README.md#主控本机端到端验收)
 重启自己的 Mac profile，只输出名称和类型；或协调程序
 `--inspect-account-claim-names` 从私有流程的 stdin 取 token，先验证再输出名称。
 不要在终端复制令牌、解码打印 payload。没有稳定 ID 声明时停止，交主控裁定；不改限流或账号约束。
 
 健康查询只有回环：`curl --noproxy '*' http://127.0.0.1:18082/healthz`。
-将**公开** `ca.pem` 用 `scp ... workstation-wsl:D:/nipaplay-next/x45-headless/ca.pem`
-复制，WSL 再从 `/mnt/d/nipaplay-next/x45-headless/ca.pem` 复制到自己的源码目录。
+将**公开** `ca.pem` 用 `scp ... workstation-wsl:D:/nipaplay-next/x46-headless/ca.pem`
+复制，WSL 再从 `/mnt/d/nipaplay-next/x46-headless/ca.pem` 复制到自己的源码目录。
 不要复制 `ca.key`、协调数据库或 Mac 模型配置。
 
 ## 3. 用户自有 SSH 转发
@@ -106,7 +110,12 @@ ssh -N -o BatchMode=yes -o ConnectTimeout=15 -o ExitOnForwardFailure=yes \
   workstation-wsl
 ```
 
-Windows→WSL 的 47823 使用 WSL 默认 localhost 转发。WSL 默认 NAT 不能假定
+Windows→WSL 的 47823 使用 WSL 默认 localhost 转发。
+**Windows 节点监听 47832，对外报 47822。** WSL 的 stdio relay 监听 47822 会自动
+映射到 Windows 本机 47822；Windows 节点不能再占用它，Mac 的 `-L 47822` 也不能
+指向 Windows 47822，否则会绕回 WSL→Mac。47832 是 Windows 节点的终点，不是
+转发监听端口。每条转发的终点必须是节点，逐段核对所有 localhost 自动映射；仅凭
+`ExitOnForwardFailure` 不能发现成功绑定后的自环。不要同时使用旧拓扑。WSL 默认 NAT 不能假定
 `127.0.0.1` 能连接 Windows 的反向 SSH listener，因此另准备了仅转发字节的
 [ssh_stdio_forward.py](../../tool/next/ssh_stdio_forward.py)。Mac 分别开三个前台终端：
 
@@ -120,8 +129,7 @@ python3 tool/next/ssh_stdio_forward.py --listen-port 47822 --target-port 47822
 回环对应端口；47822 再经上面的 `-L` 到 Windows。远端脚本已在
 `/home/labuser/nipaplay-next/x45-headless/ssh_stdio_forward.py`。不依赖 WSL 网络改造，
 不做地址探测。mTLS 在节点之间结束，转发者不解密 Mesh 内容。
-脚本已通过本机两条 TCP 通道检查。主控 X45 记录：Windows 改监听 47832、候选 47822
-后，三节点全部在线；Mac 对两端片库和下载目录调用成功。
+X45 主控已用此修正拓扑完成三机互见；X46 没有再启动工作站节点。
 端口绑定失败时停止该实验并检查上述固定路径，不扫描其他地址。
 
 WSL 的 47822 listener 会映射到 Windows 回环 47822，Windows 节点不能也监听 47822；
@@ -130,7 +138,7 @@ WSL 的 47822 listener 会映射到 Windows 回环 47822，Windows 节点不能�
 
 ## 4. 隔离配置与登录
 
-Mac 使用新且唯一的 profile（下文 `x45-controller`）。先创建该 profile 的
+Mac 使用新且唯一的 profile（下文 `x46-controller`）。先创建该 profile 的
 `data/next`、`harness`、`codex-home`、`temp`，不要覆盖已经存在的实例目录。
 `preferences.json` 只在这个 profile 写入：
 
@@ -158,7 +166,7 @@ Mac 使用新且唯一的 profile（下文 `x45-controller`）。先创建该 pr
 在 Windows 与 WSL 分别建立上表独立数据目录，初始化 `headless.json`：
 `{"format":1,"host":"nipaplay-headless","mediaRoots":[],"port":0}`。
 **仅写标记不会启动节点。** 再写各自 `mesh.json`（Windows 把名称、port、候选 port
-改为 `Windows workstation`，监听 port=47832、候选 addresses.port=47822；WSL 如下）：
+改为 `Windows workstation`，监听 `port:47832`，addresses 候选仍为 `port:47822`；WSL 如下）：
 
 ```json
 {"coordinator":"http://127.0.0.1:18082","name":"WSL workstation","port":47823,
@@ -176,7 +184,7 @@ Mac ID 在 Mac 加入后从 `data/next/mesh-identity.json` 的 `deviceId` 读取
 测试账号只由脚本读取 `/tmp/nipa-next/testservers.json`（0600）。Mac 启动后运行：
 
 ```sh
-python3 tool/next/x45_enroll_test_account.py --profile x45-controller \
+python3 tool/next/x45_enroll_test_account.py --profile x46-controller \
   --worktree ~/Desktop/nipaplay-next-wt/x45-mesh-three
 ```
 
@@ -207,15 +215,15 @@ codesign --force --deep --sign - --options runtime \
 然后直接运行**本 worktree 可执行文件**（替换绝对 profile 路径与 provider host）：
 
 ```sh
-env NIPAPLAY_PROFILE=x45-controller \
-  NIPAPLAY_MESH_DEV_CA=/tmp/nipa-next/x45-controller-ca/ca.pem \
+env NIPAPLAY_PROFILE=x46-controller \
+  NIPAPLAY_MESH_DEV_CA=/tmp/nipa-next/x46-controller-ca/ca.pem \
   CODEX_HOME='<MAC-PROFILE-ABSOLUTE>/codex-home' \
   CODEX_CA_CERTIFICATE='<MAC-PROFILE-ABSOLUTE>/system-ca.pem' \
   SSL_CERT_FILE='<MAC-PROFILE-ABSOLUTE>/system-ca.pem' \
   HTTP_PROXY=http://127.0.0.1:7897 HTTPS_PROXY=http://127.0.0.1:7897 \
   NO_PROXY='127.0.0.1,localhost,<PROVIDER-HOST>' \
   build/macos/Build/Products/Debug/NipaPlay.app/Contents/MacOS/NipaPlay \
-  > /tmp/nipa-next/x45-controller-ca/mac.log 2>&1
+  > /tmp/nipa-next/x46-controller-ca/mac.log 2>&1
 ```
 
 保留默认安静行为，不设 `NIPAPLAY_LAB_QUIET=0`，不激活或像素点击。用该实例自己的
@@ -225,17 +233,17 @@ Debug VM extension 连接对话，接口见 [chat README](../../lib/next/chat/RE
 Windows cmd（可由 Mac 的单次 SSH 前台会话执行，以下是远端命令）：
 
 ```bat
-cd /d D:\nipaplay-next\x45-headless
-set NIPAPLAY_MESH_DEV_CA=D:\nipaplay-next\x45-headless\ca.pem
-build\headless\nipaplay-headless.exe --data D:\nipaplay-next\x45-lab-data
+cd /d D:\nipaplay-next\x46-headless
+set NIPAPLAY_MESH_DEV_CA=D:\nipaplay-next\x46-headless\ca.pem
+build\headless\nipaplay-headless.exe --data D:\nipaplay-next\x46-lab-data
 ```
 
 WSL（Mac SSH 命令前面加 `wsl.exe --`，或 WSL 前台终端）：
 
 ```sh
-cd /home/labuser/nipaplay-next/x45-headless
+cd /home/labuser/nipaplay-next/x46-headless
 NIPAPLAY_MESH_DEV_CA="$PWD/ca.pem" ./build/headless/nipaplay-headless \
-  --data /home/labuser/nipaplay-next/x45-lab-data
+  --data /home/labuser/nipaplay-next/x46-lab-data
 ```
 
 默认 seed 从当前目录读取；其他目录启动要传 `--seed <源码>/assets/next/harness`。
@@ -315,17 +323,17 @@ mediaRoots、downloadDirectory 和 headless storageFacts，路径属于被调用
 先停止各自 headless，等待启动终端 `stopped`：
 
 ```bat
-D:\nipaplay-next\x45-headless\build\headless\nipaplay-headless.exe --stop --data D:\nipaplay-next\x45-lab-data
+D:\nipaplay-next\x46-headless\build\headless\nipaplay-headless.exe --stop --data D:\nipaplay-next\x46-lab-data
 ```
 
 ```sh
-/home/labuser/nipaplay-next/x45-headless/build/headless/nipaplay-headless \
-  --stop --data /home/labuser/nipaplay-next/x45-lab-data
+/home/labuser/nipaplay-next/x46-headless/build/headless/nipaplay-headless \
+  --stop --data /home/labuser/nipaplay-next/x46-lab-data
 ```
 
 Mac 先通过自己的 Debug 宿主 close 入口关闭 app-server，再结束启动时记下并核对过的
 Mac PID；不要按应用名找进程。协调服务、三个 stdio relay、主 SSH 转发各自 Ctrl+C
 或按各自 PID 退出；relay 会结束自己的 SSH child，远端 stdio EOF 关闭 WSL listener。
-确认自己所有进程退出后，只删除两个 `x45-lab-data`、自己的 Mac profile、临时 CA
-目录和其下载测试数据/日志。保留 `x45-headless` 源码、构建、离线工具；公开 CA 副本
+确认自己所有进程退出后，只删除两个 `x46-lab-data`、自己的 Mac profile、临时 CA
+目录和其下载测试数据/日志。保留 `x46-headless` 源码、构建、离线工具；公开 CA 副本
 可以随实验清除。不操作任何系统服务、计划任务、用户媒体、download-harness 或用户 Codex。

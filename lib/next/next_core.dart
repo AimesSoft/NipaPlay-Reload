@@ -53,6 +53,8 @@ import 'chat/session_store.dart';
 import 'chat/helpers.dart';
 import 'subtitles/library.dart';
 import 'subtitles/capability.dart';
+import 'programs/runtime.dart';
+import 'programs/repository.dart';
 
 /// Application-owned task and capability composition, independent of Labs.
 final class NextCore {
@@ -95,6 +97,8 @@ final class NextCore {
   final accounts = AccountsService();
   late final DanmakuRuntime danmaku;
   late final SubtitleLibrary subtitles;
+  late final ProgramRuntime programs;
+  late final ProgramRepository programRepository;
   late final SettingsRegistry settings;
   late final MeshRuntime mesh;
   late final List<Capability> capabilities;
@@ -156,6 +160,9 @@ final class NextCore {
     danmaku.service.exporter = DanmakuExporter(danmaku.service.store,
         (path) => media.service.authorizedPath(path, directory: true));
     subtitles = SubtitleLibrary(media.service, root, probe: mediaSubtitleProbe);
+    programs = ProgramRuntime(enabled: await loadProgramPermission(root),
+        location: harnessLocation);
+    programRepository = ProgramRepository(programs);
     final helpers = Helpers();
     final executors = [
       helpers,
@@ -167,17 +174,26 @@ final class NextCore {
       ...accountExecutors(accounts),
       ...danmaku.executors,
       hooks,
+      programs,
       diskDeletion,
     ];
     engine = TaskEngine(store: jobs, ownerDeviceId: deviceId, executors: [
       for (final executor in executors) OriginExecutor(executor, database)
     ]);
     hooks.engine = engine;
+    programs.engine = engine;
     diskDeletion.engine = engine;
     followups = Followups(database, engine, harnessLocation);
+    programs.returnTarget = followups.downloadReturnTarget;
     attachMeshDelivery(mesh, followups);
-    mesh.describeSelf = () async => {'host': 'gui', 'conversationHost': true,
-      'mediaRoots': media.service.authorizedRoots().toList()};
+    mesh.describeSelf = () async {
+      await harnessLocation.ready;
+      return {'host': 'gui', 'conversationHost': true,
+        'mediaRoots': media.service.authorizedRoots().toList(),
+        'programExecution': {'enabled': programs.enabled,
+          'workingDirectory': harnessLocation.path,
+          'defaultShell': Platform.isWindows ? 'cmd' : 'sh'}};
+    };
     helpers.engine = engine;
     helpers.followups = followups;
     followups.helpers = helpers;
@@ -211,6 +227,8 @@ final class NextCore {
     capabilities = List.unmodifiable(diskDeletion.protect([
       CredentialCapability(credentials),
       TaskCapability(engine),
+      programs.capability,
+      programRepository,
       FollowupCapability(followups),
       UiDataCapability(uiData),
       MeshLibraryCapability(uiData.meshLibrary!),
@@ -261,6 +279,8 @@ final class NextCore {
     await danmaku.stopRestoring();
     await danmaku.stopIndexing();
     await subtitles.close();
+    await programRepository.drain();
+    await programs.close();
     final jobs = await engine.list(type: 'download');
     await media.quiesce();
     await engine.close();

@@ -160,6 +160,8 @@ Windows 上把 `./nipa` 换成 `python nipa`。连接凭据默认在 macOS/Linux
   - `media.sources.*`、`sync.*`：SMB、WebDAV、Jellyfin、Emby 等远程来源，以及多端同步；
   - `download.*`：内置的 BT 下载；
   - `danmaku.*`：弹幕；
+  - `subtitle.*`：按文件保存、读取和选择字幕；
+  - `program.*`：目标设备上的程序任务与 Git bundle 接收；
   - `playback.*`：播放器；
   - `history.*`：观看记录；
   - `discover.*`：发现；
@@ -172,6 +174,15 @@ Windows 上把 `./nipa` 换成 `python nipa`。连接凭据默认在 macOS/Linux
   - `mesh.*`：其他设备；
   - `plugins.*`：插件。
 - **普通公开链接**会原样返回；带登录凭据、令牌、签名或访问密钥的链接会被脱敏。`ui.capture` 默认返回长边不超过 1280 像素的截图，传 `originalSize:true` 返回原尺寸。
+
+### 在其他设备上的能力与程序
+
+- Mesh 可调用目标设备实际注册的 `task.*`、`download.*`、`media.*`、`danmaku.*`、`playback.*`、`subtitle.*`、`history.*`、`followup.*`、`program.*`、`discover.*`、`sync.*`、`ui.*`，以及 `state.query`、`activity.report`、`agent.wake`、`app.instance`。设置可远程读取 `settings.get/describe/history`；账号可读状态、读写收藏和剧集观看状态、执行 Bangumi 同步及读取同步状态。宿主登录与退出、组网管理、信任、签发者、开关和设置修改没有远程入口。实时远端目录给出具体可用项；没有播放器或 Classic 历史的宿主不会注册这些能力。
+- `program.run` 是目标设备的后台命令或脚本任务，按普通用户权限在那台设备的 harness 工作目录运行。每台设备独立授权，默认关闭；只能由那台设备宿主在 `program.json` 打开并重启，Agent 的设置能力不能打开它。已认证的设备描述包含开关事实和工作目录。Windows 默认用 cmd，也支持 PowerShell；WSL、Linux、macOS 用 POSIX sh。
+- 程序任务有标题、经脱敏的输出末尾、退出码和耗时，有超时，`task.cancel` 停止它的进程树。命令不在重启后自动重放。由会话发起的程序，终态回执会作为后续回到原设备、原仓库、原线程；忙时排队，`followup:false` 不自动回传。每次执行都进入目标设备的 activity，记录来源、设备和命令。输出文件属于目标设备，不自动复制回来。
+- 通过 Mesh 在会话中登记的 `followup.register` 也固定回到发起设备、仓库和线程，沿用持久票据与去重交付；显式线程与发起线程不一致会被拒绝。程序自动回传和同一事件的手动订阅共享事实去重。
+- `nipa sync-repository` 把调用者选定的已提交 Git 引用及其可达历史作为 bundle 分块送到目标 harness 的 `records/mesh-bundles/`，校验 SHA-256，不自动 checkout、合并或覆盖目标仓库。未提交文件、Git 配置、连接凭据和进程环境不随 bundle 传输。仓库与历史里的秘密不属于可同步内容；Mac 模型配置与凭据留在 Mac。收到的 bundle 可由目标程序使用当地 Git 读取，仓库工具因而可在目标设备运行。
+- 无界面宿主支持字幕事实、同名外挂索引、导入和显式默认选择；配置 ffprobe 时记录内嵌轨道，未配置时内嵌状态为 unavailable。它不播放字幕、不读取 Classic 字幕偏好或观看历史；默认字幕由调用者显式选择。
 
 ## 预制的外部工具
 
@@ -203,7 +214,7 @@ Windows 上把 `./nipa` 换成 `python nipa`。连接凭据默认在 macOS/Linux
 
 - **推荐不等于执行。** 用户说"找一下""推荐几个"时，只给比较和建议，附上来源；用户说"你来选并下载""帮我下"时，才代为选择并执行。订阅、追番需要用户明确提出。
 - **用户已经明确要求的，直接做，不要再问一遍。** 确实有歧义、而且选错会有代价时，才把选项告诉用户。
-- **删除数据等破坏性操作**只在用户明确要求时执行。"删掉这个任务"默认保留文件。
+- **删除数据等破坏性操作**只在用户明确要求时执行。"删掉这个任务"默认保留文件。远端程序也遵守相同授权；删除和覆盖先向用户说明对象并取得同意，用户已经明确要求的范围不重复确认。
 - **其他机器上的操作**（通过 SSH 登录用户的工作站、NAS 或服务器）不经过 NipaPlay，NipaPlay 的确认拦不住：
   - 只读查看可以直接做；
   - 写入、移动、改名，只在用户明确要求时做；

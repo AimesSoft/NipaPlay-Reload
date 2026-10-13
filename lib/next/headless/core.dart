@@ -15,6 +15,11 @@ import '../tasks/sqlite_job_store.dart';
 import '../state/change_history.dart';
 import '../state/query.dart';
 import '../state/views.dart';
+import '../state/activity.dart';
+import '../programs/runtime.dart';
+import '../programs/repository.dart';
+import '../subtitles/library_io.dart';
+import '../subtitles/capability.dart';
 import '../settings/registry.dart';
 import '../settings/capability.dart';
 import '../media/identity_store.dart';
@@ -49,7 +54,6 @@ import 'library_roots.dart';
 import '../mesh/runtime.dart';
 import '../mesh/library.dart';
 import '../mesh/library_capability.dart';
-import '../subtitles/facts.dart';
 import '../mesh/capability.dart';
 import '../mesh/delivery.dart';
 import '../mesh/native.dart';
@@ -82,6 +86,9 @@ final class HeadlessCore {
   late final DownloadExecutor downloadExecutor;
   late final DownloadService downloads;
   late final HeadlessDownloadBackend backend;
+  late final ProgramRuntime programs;
+  late final ProgramRepository programRepository;
+  late final SubtitleLibrary subtitles;
   final hooks = HarnessHooks();
   final _client = http.Client();
   StreamSubscription<Job>? _jobs;
@@ -149,8 +156,16 @@ final class HeadlessCore {
               }
           ],
           'downloadEngine': 'librqbit'
+          ,'programExecution': {'enabled': programs.enabled,
+            'workingDirectory': repository.path,
+            'defaultShell': Platform.isWindows ? 'cmd' : 'sh'}
         };
     settings = SettingsRegistry(database, [meshAddressSetting(mesh)]);
+    programs = ProgramRuntime(enabled: await loadProgramPermission(root),
+        location: HeadlessRepository(repository.path))
+      ..credentialFile = File('${root.path}/endpoint.json');
+    programRepository = ProgramRepository(programs);
+    subtitles = SubtitleLibrary(media, root);
     SettingsAccess.registry = settings;
     final danmaku = DanmakuService(
         store: DanmakuStore(media.store),
@@ -185,6 +200,7 @@ final class HeadlessCore {
         ...mediaExecutors(media),
         ...danmakuExecutors(danmaku),
         hooks,
+        programs,
         downloadExecutor
       ])
         HeadlessExecutor(OriginExecutor(e, database))
@@ -196,6 +212,7 @@ final class HeadlessCore {
     media.engine = engine;
     danmaku.engine = engine;
     hooks.engine = engine;
+    programs.engine = engine;
     downloadExecutor.engine = engine;
     downloads = DownloadService(
         engine: engine,
@@ -205,6 +222,7 @@ final class HeadlessCore {
     followups =
         Followups(database, engine, HeadlessRepository(repository.path));
     downloads.returnTarget = followups.downloadReturnTarget;
+    programs.returnTarget = followups.downloadReturnTarget;
     attachMeshDelivery(mesh, followups);
     hooks.observeEvent = followups.hookEvent;
     hooks.scheduleError = (error) async {
@@ -222,10 +240,12 @@ final class HeadlessCore {
           danmaku: danmaku,
           mesh: mesh,
           sources: sources),
-      followups.view
+      followups.view,
+      ActivityView(media, settings, File('${root.path}/journal.jsonl'),
+          HeadlessRepository(repository.path), history).view,
     ]);
     uiData = UiDataService(media, engine, state, sources, root, NoVault());
-    uiData.subtitles = subtitleFacts(media, root);
+    uiData.subtitles = subtitles;
     uiData.meshLibrary = MeshLibrary(uiData, mesh);
     registerMergedLibrary(state, uiData.meshLibrary!);
     await uiData.meshLibrary!.start();
@@ -236,6 +256,9 @@ final class HeadlessCore {
       InvocationScopeCapability(HeadlessCapabilities([
         InstanceCapability(const InstanceFacts('1.11.10-headless')),
         TaskCapability(engine),
+        programs.capability,
+        programRepository,
+        SubtitleCapability(subtitles),
         MeshCapability(mesh),
         HeadlessLibraryRoots(root, mediaRoots),
         MediaCapability(media),
@@ -282,6 +305,7 @@ final class HeadlessCore {
           hooks.emit('library.file_added', file['path'] as String, file));
     });
     sidecars.start();
+    subtitles.start();
     mesh.attach(harness);
     await mesh.startConfigured();
     return status;
@@ -302,6 +326,9 @@ final class HeadlessCore {
     await _events;
     await hooks.disable();
     await sidecars.close();
+    await subtitles.close();
+    await programRepository.drain();
+    await programs.close();
     await followups.close();
     await uiData.close();
     await media.mutate(() async {});
