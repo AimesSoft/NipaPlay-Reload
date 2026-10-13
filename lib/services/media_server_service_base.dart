@@ -576,7 +576,8 @@ abstract class MediaServerServiceBase {
   Future<Map<String, dynamic>> catalogPage({String? parentId,
       List<String>? itemIds, bool recursive = false, int offset = 0,
       int limit = 60, String fields = '', String sortBy = 'SortName',
-      String sortOrder = 'Ascending', String? filters}) async {
+      String sortOrder = 'Ascending', String? filters, String? searchTerm,
+      String? includeItemTypes}) async {
     if (!isConnected) throw StateError(notConnectedMessage);
     final session = (serverUrl, userId, accessToken);
     final response = await makeAuthenticatedRequest(Uri(path: '/Items', queryParameters: {
@@ -585,8 +586,9 @@ abstract class MediaServerServiceBase {
       'Recursive': '$recursive', 'StartIndex': '$offset', 'Limit': '$limit',
       'Fields': fields, 'SortBy': sortBy, 'SortOrder': sortOrder,
       if (filters != null) 'Filters': filters,
-      if (itemIds == null) 'IncludeItemTypes': recursive ? 'Episode,Movie,Video' :
-        'CollectionFolder,Folder,Series,Season,Episode,Movie,Video',
+      if (searchTerm != null) 'SearchTerm': searchTerm,
+      if (itemIds == null) 'IncludeItemTypes': includeItemTypes ?? (recursive ? 'Episode,Movie,Video' :
+        'CollectionFolder,Folder,Series,Season,Episode,Movie,Video'),
     }).toString());
     if (session != (serverUrl, userId, accessToken)) {
       throw StateError('Media server session changed during page read.');

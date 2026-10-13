@@ -39,6 +39,7 @@ const _scopeSchema = ObjectSchema({
 ]);
 ObjectSchema _recordSchema(int depth) => ObjectSchema({
       'ref': _refSchema,
+      'workId': const StringSchema(nullable: true, description: 'Search results only: accepted identity in the viewer library, canonical Next work ID; null when absent. No title-based inference.'),
       'title': const StringSchema(),
       'kind': const StringSchema(),
       'originalTitle': const StringSchema(nullable: true),
@@ -279,7 +280,7 @@ ActionSpec _spec(String id, String description, Effect effect,
 final _specs = [
   _spec(
       'media.metadata.search',
-      'Search a metadata source. Results are transient candidates; no cache or binding is written.',
+      'Search a metadata source. Results are transient candidates; no binding is written. Each result includes nullable workId from accepted exact/contains work or release identities in the local + Mesh catalogue (Next page ID). Title similarity and proposed/rejected/revoked bindings never count. Search may prepare the disposable catalogue/artwork projection on first read.',
       Effect.read,
       const ObjectSchema({
         'provider': _text,
@@ -555,7 +556,7 @@ final _specs = [
       ])),
   _spec(
       'media.metadata.search_batch',
-      'Search multiple metadata sources or queries in one call. Returns per-query results or explicit errors without cache, tasks or bindings.',
+      'Search multiple metadata sources or queries in one call. Returns per-query results or explicit errors without tasks or bindings. Each record includes nullable workId from accepted work/release identity in the local + Mesh catalogue; no title inference. First read may prepare the disposable catalogue/artwork projection.',
       Effect.read,
       const ObjectSchema({
         'queries': ArraySchema(ObjectSchema({
@@ -689,7 +690,7 @@ final class _MediaAction extends Action<_JsonValue, _JsonValue> {
                 kind: json['kind'] as String? ?? 'tv',
                 year: (json['year'] as num?)?.toInt());
         result = {
-          'results': [for (final record in records) record.toJson()]
+          'results': await service.searchResults(records)
         };
       case 'media.metadata.get':
         final ref =
@@ -766,14 +767,11 @@ final class _MediaAction extends Action<_JsonValue, _JsonValue> {
                 };
               }
               return {
-                'records': [
-                  for (final record in await service
+                'records': await service.searchResults(await service
                       .provider(item['provider'] as String)
                       .search(item['query'] as String,
                           kind: item['kind'] as String? ?? 'tv',
                           year: (item['year'] as num?)?.toInt()))
-                    record.toJson()
-                ]
               };
             });
             results.add({'index': index, ...value});

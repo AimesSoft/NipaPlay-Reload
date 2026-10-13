@@ -1,4 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:http/http.dart' as http;
 import 'package:nipaplay/models/server_profile_model.dart';
 import 'package:nipaplay/services/media_server_service_base.dart';
 
@@ -84,6 +85,24 @@ class _TestMediaServerService extends MediaServerServiceBase {
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
+  test('catalogPage keeps Classic default filters and adds opt-in search only', () async {
+    final service = _PageService()..isConnected = true..userId = 'fixture-user';
+    await service.catalogPage();
+    expect(service.request.queryParameters['IncludeItemTypes'],
+        'CollectionFolder,Folder,Series,Season,Episode,Movie,Video');
+    expect(service.request.queryParameters.containsKey('SearchTerm'), false);
+    await service.catalogPage(recursive: true);
+    expect(service.request.queryParameters['IncludeItemTypes'], 'Episode,Movie,Video');
+    await service.catalogPage(recursive: true, searchTerm: '奇幻', limit: 12,
+        includeItemTypes: 'Series,Movie,Episode,Video');
+    expect(service.request.queryParameters['SearchTerm'], '奇幻');
+    expect(service.request.queryParameters['IncludeItemTypes'], 'Series,Movie,Episode,Video');
+    expect(service.request.queryParameters['Limit'], '12');
+    await service.catalogPage(itemIds: ['one', 'two']);
+    expect(service.request.queryParameters['Ids'], 'one,two');
+    expect(service.request.queryParameters.containsKey('IncludeItemTypes'), false);
+  });
+
   group('resolveServerRelativeUrl', () {
     final service = _TestMediaServerService();
 
@@ -155,4 +174,14 @@ void main() {
       expect(allowed, isFalse);
     });
   });
+}
+
+class _PageService extends _TestMediaServerService {
+  late Uri request;
+  @override
+  Future<http.Response> makeAuthenticatedRequest(String path,
+      {String method = 'GET', Map<String, dynamic>? body, Duration? timeout}) async {
+    request = Uri.parse(path);
+    return http.Response('{"Items":[],"TotalRecordCount":0}', 200);
+  }
 }

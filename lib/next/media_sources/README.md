@@ -2,6 +2,13 @@
 
 来源能力复用 Classic 的配置、保险库与客户端，注册在 NextCore。
 `media.sources.list` 不联网、不读取凭据；`check` 显式验证一个来源。
+`media.sources.search {query,sourceIds?,limit?}` 只读搜索；Jellyfin/Emby 经原客户端
+的有界服务器 SearchTerm，SMB/WebDAV 仅查已有文件索引，不枚举或登记新文件。
+每个来源独立返回 entries/total 或 error，错误时 total=null；共享保留索引结果，
+connected/unverified/failed 表示最近连接观察，未知不是在线。来源默认每组最多 12。
+已绑定条目带 Next workId/episodeId；服务器未绑定条目给原样 sourceWorkId/
+sourceEpisodeId，共享未绑定文件用 media.sources.play {sourceId,itemId}。
+能力族契约见 `nipa describe media.sources`，界面接线见 `docs/next/X56_REPORT.md`。
 `add/update` 配置地址与用户名，`login` 独立发起登录。
 
 登录默认选择 Jellyfin Quick Connect（启用时），否则打开应用内密码窗口。

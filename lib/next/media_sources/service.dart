@@ -22,11 +22,15 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../media/identity_store.dart';
 import 'metadata.dart';
+import 'search.dart';
 
 /// Source configuration and discovery use the same Classic instances and locators.
 final class MediaSourcesService {
   MediaSourcesService(this.store);
   final IdentityStore store;
+  Future<String> Function(String id)? canonicalEntityId;
+  Future<JsonMap> search(String query, {List<String>? sourceIds, int limit = 12}) =>
+      searchSources(this, query, sourceIds: sourceIds, limit: limit);
   final profiles = MultiAddressServerService.instance;
   final smb = SMBService.instance;
   final webdav = WebDAVService.instance;
