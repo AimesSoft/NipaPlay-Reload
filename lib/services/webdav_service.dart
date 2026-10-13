@@ -233,6 +233,9 @@ class WebDAVService {
   /// 每个连接当前优先使用的地址。true 表示优先公网，false/缺省表示优先内网。
   /// 由启动阶段的后台可达性检测（或保存连接时的校验）写入。
   final Map<String, bool> _preferWanById = {};
+
+  /// 每个连接最近一次内网/公网地址的连通性检测结果，供库管理界面展示。
+  final Map<String, ({bool lan, bool wan})> _addressReachabilityById = {};
   final WebDAVConnectionValidator? _connectionValidator;
   final ProcessMemoryListCache<_WebDAVDirectoryCacheKey, WebDAVFile>
       _directoryCache =
@@ -246,6 +249,15 @@ class WebDAVService {
   void setPreferredAddress(String connectionId, {required bool useWan}) {
     if (connectionId.trim().isEmpty) return;
     _preferWanById[connectionId] = useWan;
+  }
+
+  /// 某连接最近一次内网/公网地址的连通性检测结果。
+  ///
+  /// 返回 `null` 表示尚未检测过；`lan`/`wan` 分别表示对应地址是否可达。
+  ({bool lan, bool wan})? lastAddressReachability(String connectionId) {
+    final id = connectionId.trim();
+    if (id.isEmpty) return null;
+    return _addressReachabilityById[id];
   }
 
   /// 返回该连接当前应使用的地址（内网/公网）。
@@ -443,6 +455,9 @@ class WebDAVService {
         wanSuccess = true;
       }
     }
+
+    _addressReachabilityById[normalized.id] =
+        (lan: lanSuccess, wan: wanSuccess);
 
     return (
       connection: normalized.copyWith(url: url, wanUrl: wanUrl),

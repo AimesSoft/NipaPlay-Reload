@@ -243,6 +243,9 @@ class SMBService {
 
   /// 每个连接当前优先使用的地址。true 表示优先公网，false/缺省表示优先内网。
   final Map<String, bool> _preferWanById = {};
+
+  /// 每个连接最近一次内网/公网地址的连通性检测结果，供库管理界面展示。
+  final Map<String, ({bool lan, bool wan})> _addressReachabilityById = {};
   final ProcessMemoryListCache<_SMBDirectoryCacheKey, SMBFileEntry>
       _directoryCache =
       ProcessMemoryListCache<_SMBDirectoryCacheKey, SMBFileEntry>();
@@ -253,6 +256,15 @@ class SMBService {
   void setPreferredAddress(String connectionId, {required bool useWan}) {
     if (connectionId.trim().isEmpty) return;
     _preferWanById[connectionId] = useWan;
+  }
+
+  /// 某连接最近一次内网/公网地址的连通性检测结果。
+  ///
+  /// 返回 `null` 表示尚未检测过；`lan`/`wan` 分别表示对应地址是否可达。
+  ({bool lan, bool wan})? lastAddressReachability(String connectionId) {
+    final id = connectionId.trim();
+    if (id.isEmpty) return null;
+    return _addressReachabilityById[id];
   }
 
   /// 返回一个已将 `host`/`port` 替换为当前优选地址的连接副本。
@@ -395,6 +407,8 @@ class SMBService {
     }
 
     _preferWanById[normalized.id] = !lanSuccess && wanSuccess;
+    _addressReachabilityById[normalized.id] =
+        (lan: lanSuccess, wan: wanSuccess);
     return lanSuccess || wanSuccess;
   }
 

@@ -140,12 +140,19 @@ class _ManagementGridItem extends StatelessWidget {
                 ).copyWith(color: label),
               ),
               const SizedBox(height: 3),
-              Text(
-                item.status ?? item.subtitle,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: TextStyle(fontSize: 11, color: secondary),
-              ),
+              if (item.addressLines?.isNotEmpty ?? false)
+                ..._buildPhoneAddressLines(
+                  context,
+                  item.addressLines!,
+                  secondary,
+                )
+              else
+                Text(
+                  item.status ?? item.subtitle,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(fontSize: 11, color: secondary),
+                ),
               if (item.matchSubtitle != null) ...[
                 const SizedBox(height: 2),
                 Text(
@@ -222,12 +229,19 @@ class _ManagementListItem extends StatelessWidget {
                           ).copyWith(color: label),
                         ),
                         const SizedBox(height: 3),
-                        Text(
-                          item.subtitle,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: TextStyle(fontSize: 12, color: secondary),
-                        ),
+                        if (item.addressLines?.isNotEmpty ?? false)
+                          ..._buildPhoneAddressLines(
+                            context,
+                            item.addressLines!,
+                            secondary,
+                          )
+                        else
+                          Text(
+                            item.subtitle,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(fontSize: 12, color: secondary),
+                          ),
                         if (item.matchSubtitle != null) ...[
                           const SizedBox(height: 2),
                           Text(
@@ -290,6 +304,56 @@ Future<void> _showActions(
     ],
   );
   selected?.onPressed?.call();
+}
+
+/// 将多地址明细渲染为「每行一个地址 + 最近一次连通性」。
+List<Widget> _buildPhoneAddressLines(
+  BuildContext context,
+  List<LibraryManagementAddressLine> lines,
+  Color secondary,
+) {
+  return [
+    for (final line in lines)
+      Padding(
+        padding: const EdgeInsets.only(top: 2),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              '${line.label} ',
+              style: TextStyle(
+                fontSize: 11,
+                fontWeight: FontWeight.w600,
+                color: secondary,
+              ),
+            ),
+            Expanded(
+              child: Text(
+                line.address,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(fontSize: 11, color: secondary),
+              ),
+            ),
+            if (libraryManagementAddressStatusText(line.status).isNotEmpty) ...[
+              const SizedBox(width: 6),
+              Text(
+                libraryManagementAddressStatusText(line.status),
+                style: TextStyle(
+                  fontSize: 10,
+                  color: CupertinoDynamicColor.resolve(
+                    line.status == LibraryManagementAddressStatus.reachable
+                        ? CupertinoColors.systemGreen
+                        : CupertinoColors.systemRed,
+                    context,
+                  ),
+                ),
+              ),
+            ],
+          ],
+        ),
+      ),
+  ];
 }
 
 IconData _phoneIcon(LibraryManagementIcon icon) {

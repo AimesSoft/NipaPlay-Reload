@@ -57,25 +57,76 @@ enum LibraryManagementSection { local, webdav, smb }
 
 enum _MountedLibraryType { local, webdav, smb }
 
-String _webdavAddressLabel(WebDAVConnection connection) {
-  final lan = connection.url.trim();
-  final wan = connection.wanUrl.trim();
-  if (lan.isEmpty) return wan;
-  if (wan.isEmpty) return lan;
-  return '$lan / $wan';
+/// 地址是否可达；`null` 表示尚未检测过。
+LibraryManagementAddressStatus _addressStatus(bool? reachable) {
+  if (reachable == null) return LibraryManagementAddressStatus.unknown;
+  return reachable
+      ? LibraryManagementAddressStatus.reachable
+      : LibraryManagementAddressStatus.unreachable;
 }
 
-String _smbAddressLabel(SMBConnection connection) {
-  String format(String host, int port) => port == 445 ? host : '$host:$port';
-  final lanLabel =
-      connection.host.trim().isEmpty ? '' : format(connection.host, connection.port);
-  final wanLabel = connection.wanHost.trim().isEmpty
-      ? ''
-      : format(connection.wanHost, connection.wanPort);
-  if (lanLabel.isEmpty) return wanLabel;
-  if (wanLabel.isEmpty) return lanLabel;
-  return '$lanLabel / $wanLabel';
+/// 组装 WebDAV 连接地址明细：内网/公网各占一行，并带上最近一次连通性。
+List<LibraryManagementAddressLine> _webdavAddressLines(
+  WebDAVConnection connection,
+) {
+  final reachability =
+      WebDAVService.instance.lastAddressReachability(connection.id);
+  return [
+    if (connection.url.trim().isNotEmpty)
+      LibraryManagementAddressLine(
+        label: '内网',
+        address: connection.url.trim(),
+        status: _addressStatus(reachability?.lan),
+      ),
+    if (connection.wanUrl.trim().isNotEmpty)
+      LibraryManagementAddressLine(
+        label: '公网',
+        address: connection.wanUrl.trim(),
+        status: _addressStatus(reachability?.wan),
+      ),
+  ];
 }
+
+/// 组装 SMB 连接地址明细：内网/公网各占一行，并带上最近一次连通性。
+List<LibraryManagementAddressLine> _smbAddressLines(
+  SMBConnection connection,
+) {
+  String format(String host, int port) => port == 445 ? host : '$host:$port';
+  final reachability =
+      SMBService.instance.lastAddressReachability(connection.id);
+  return [
+    if (connection.host.trim().isNotEmpty)
+      LibraryManagementAddressLine(
+        label: '内网',
+        address: format(connection.host.trim(), connection.port),
+        status: _addressStatus(reachability?.lan),
+      ),
+    if (connection.wanHost.trim().isNotEmpty)
+      LibraryManagementAddressLine(
+        label: '公网',
+        address: format(connection.wanHost.trim(), connection.wanPort),
+        status: _addressStatus(reachability?.wan),
+      ),
+  ];
+}
+
+/// 供仅支持单行文本的旧渲染路径使用的兜底文本（各地址换行、附连通性）。
+String _addressLinesFallback(List<LibraryManagementAddressLine> lines) {
+  return lines
+      .map((line) {
+        final status = libraryManagementAddressStatusText(line.status);
+        return status.isEmpty
+            ? '${line.label} ${line.address}'
+            : '${line.label} ${line.address}（$status）';
+      })
+      .join('\n');
+}
+
+String _webdavAddressLabel(WebDAVConnection connection) =>
+    _addressLinesFallback(_webdavAddressLines(connection));
+
+String _smbAddressLabel(SMBConnection connection) =>
+    _addressLinesFallback(_smbAddressLines(connection));
 
 class _MountedLibraryLocation {
   const _MountedLibraryLocation.local(this.localPath)
@@ -2625,6 +2676,7 @@ class _LibraryManagementTabState extends State<LibraryManagementTab> {
               id: connection.name,
               title: connection.name,
               subtitle: _webdavAddressLabel(connection),
+              addressLines: _webdavAddressLines(connection),
               status: connection.isConnected ? '已连接' : '未连接',
               icon: LibraryManagementIcon.cloud,
               onOpen: !isRemoteMode && connection.isConnected
@@ -2675,6 +2727,7 @@ class _LibraryManagementTabState extends State<LibraryManagementTab> {
               id: connection.name,
               title: connection.name,
               subtitle: _smbAddressLabel(connection),
+              addressLines: _smbAddressLines(connection),
               status: connection.isConnected ? '已连接' : '未连接',
               icon: LibraryManagementIcon.server,
               onOpen: !isRemoteMode && connection.isConnected
