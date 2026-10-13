@@ -49,12 +49,22 @@ class EpisodeRow extends StatefulWidget {
     required this.episodes,
     required this.currentId,
     required this.onPlay,
+    this.moreLink,
+    this.onMore,
+    this.menuFor,
   });
 
   final UiWork work;
   final List<UiEpisode> episodes;
   final String? currentId;
   final void Function(UiEpisode episode) onPlay;
+
+  /// Where each episode's ⋯ menu hangs, and opening it; none without one.
+  final LayerLink Function(UiEpisode episode)? moreLink;
+  final void Function(UiEpisode episode)? onMore;
+
+  /// The episode whose menu is open: its ⋯ stays shown.
+  final String? menuFor;
 
   static const tileWidth = 256.0, gap = 16.0;
 
@@ -103,6 +113,11 @@ class _EpisodeRowState extends State<EpisodeRow> {
               episode: episode,
               current: episode.episodeId == widget.currentId,
               onPlay: episode.playable ? () => widget.onPlay(episode) : null,
+              moreLink: widget.moreLink?.call(episode),
+              onMore: widget.onMore == null
+                  ? null
+                  : () => widget.onMore!(episode),
+              menuOpen: widget.menuFor == episode.episodeId,
             );
           },
         ),
@@ -112,14 +127,19 @@ class _EpisodeRowState extends State<EpisodeRow> {
 /// `.ep`: 16:9 still with the big number, title and runtime, the danmaku
 /// heat line. Watched episodes have a full bar; the current one a white
 /// outline. Hover scales 1.03 and shows play; a click plays. One that
-/// plays from another device names it before the runtime.
-class EpisodeTile extends StatelessWidget {
+/// plays from another device names it before the runtime. Hovered, a
+/// quiet ⋯ in the still's corner opens the episode's menu (a right click
+/// too).
+class EpisodeTile extends StatefulWidget {
   const EpisodeTile({
     super.key,
     required this.work,
     required this.episode,
     required this.current,
     required this.onPlay,
+    this.moreLink,
+    this.onMore,
+    this.menuOpen = false,
   });
 
   final UiWork work;
@@ -128,33 +148,68 @@ class EpisodeTile extends StatelessWidget {
 
   /// Null when NipaPlay has nothing to play it from yet.
   final VoidCallback? onPlay;
+  final LayerLink? moreLink;
+  final VoidCallback? onMore;
+  final bool menuOpen;
+
+  @override
+  State<EpisodeTile> createState() => _EpisodeTileState();
+}
+
+class _EpisodeTileState extends State<EpisodeTile> {
+  bool _hovered = false;
 
   @override
   Widget build(BuildContext context) {
+    final EpisodeTile(:work, :episode, :current, :onPlay, :onMore) = widget;
     final title = episode.title;
-    return SizedBox(
+    final card = Opacity(
+      opacity: onPlay == null ? 0.55 : 1,
+      child: WideCard(
+        image: episode.still,
+        tint: work.artwork.tint,
+        width: EpisodeRow.tileWidth,
+        height: 144,
+        progress: episode.progress,
+        selected: current,
+        label: Text(episode.number.toString().padLeft(2, '0'),
+            style: NextText.num(28,
+                weight: FontWeight.w700,
+                letterSpacing: -0.56,
+                color: const Color(0xEBFFFFFF))),
+        onOpen: onPlay,
+        onPlay: onPlay,
+      ),
+    );
+    return MouseRegion(
+      onEnter: (_) => setState(() => _hovered = true),
+      onExit: (_) => setState(() => _hovered = false),
+      child: SizedBox(
       width: EpisodeRow.tileWidth,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Opacity(
-            opacity: onPlay == null ? 0.55 : 1,
-            child: WideCard(
-              image: episode.still,
-              tint: work.artwork.tint,
-              width: EpisodeRow.tileWidth,
-              height: 144,
-              progress: episode.progress,
-              selected: current,
-              label: Text(episode.number.toString().padLeft(2, '0'),
-                  style: NextText.num(28,
-                      weight: FontWeight.w700,
-                      letterSpacing: -0.56,
-                      color: const Color(0xEBFFFFFF))),
-              onOpen: onPlay,
-              onPlay: onPlay,
+          if (onMore == null)
+            card
+          else
+            GestureDetector(
+              onSecondaryTap: onMore,
+              child: Stack(clipBehavior: Clip.none, children: [
+                card,
+                Positioned(
+                  top: 8,
+                  right: 8,
+                  child: AnimatedOpacity(
+                    opacity: _hovered || widget.menuOpen ? 1 : 0,
+                    duration: const Duration(milliseconds: 160),
+                    child: CompositedTransformTarget(
+                      link: widget.moreLink ?? LayerLink(),
+                      child: _MoreButton(onTap: onMore),
+                    ),
+                  ),
+                ),
+              ]),
             ),
-          ),
           const SizedBox(height: 10),
           SizedBox(
             height: 19,
@@ -187,8 +242,35 @@ class EpisodeTile extends StatelessWidget {
           ),
         ],
       ),
+      ),
     );
   }
+}
+
+/// The still's ⋯: a small dark glass circle.
+class _MoreButton extends StatelessWidget {
+  const _MoreButton({required this.onTap});
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) => Pressable(
+        onTap: onTap,
+        semanticLabel: '更多',
+        builder: (context, hovered) => AnimatedContainer(
+          duration: const Duration(milliseconds: 140),
+          width: 30,
+          height: 30,
+          alignment: Alignment.center,
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            color: hovered ? const Color(0xCC1A1A22) : const Color(0x99121218),
+            border: Border.all(color: const Color(0x2EFFFFFF)),
+          ),
+          child: Text('⋯',
+              style: NextText.sans(13,
+                  weight: FontWeight.w700, color: NextColors.paper)),
+        ),
+      );
 }
 
 /// `.spark`: where the danmaku gather over the episode, a smooth crimson

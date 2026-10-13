@@ -12,9 +12,11 @@ import '../conversation/chat_context.dart';
 import '../data/discover.dart';
 import '../data/search.dart';
 import '../data/ui_actions.dart';
+import '../data/work_manage.dart';
 
 part 'fake_library.dart';
 part 'fake_search.dart';
+part 'fake_manage.dart';
 
 /// Development-only data for screenshots and experiments, built from the
 /// concept's TMDB sample set. Never used by production code paths (see
@@ -58,6 +60,9 @@ final class FakeWorld implements NextUiData, NextUiActions, NextDiscoverData {
 
   /// The search panel's groups.
   late final search = FakeSearch(this);
+
+  /// Managing works and episodes from the detail page.
+  late final manage = FakeManage(this);
   final _taskStream = StreamController<List<UiTask>>.broadcast();
   final _tasks = <String, _FakeTask>{};
 
@@ -222,22 +227,25 @@ final class FakeWorld implements NextUiData, NextUiActions, NextDiscoverData {
         ];
     return UiWork(
       workId: 'fake:$key',
-      title: m['title'] as String,
-      originalTitle: m['original'] as String?,
+      title: manage.textOf(key, UiTextField.title, m['title'] as String) ??
+          '未命名作品',
+      originalTitle: manage.textOf(
+          key, UiTextField.originalTitle, m['original'] as String?),
       year: int.tryParse('${m['year'] ?? ''}'),
       genres: genres,
       episodeCount: (o['episodes'] as int?) ?? m['episodes'] as int?,
       studio: m['studio'] as String?,
-      overview: (o['overview'] as String?) ?? m['overview'] as String?,
+      overview: manage.textOf(key, UiTextField.overview,
+          (o['overview'] as String?) ?? m['overview'] as String?),
       ratings: [
         if (m['rating'] != null)
           UiRating('TMDB', (m['rating'] as num).toDouble()),
         if (_douban[key] case final douban?) UiRating('豆瓣', douban),
       ],
       artwork: UiArtwork(
-        backdrop: file('backdrop'),
-        poster: file('poster'),
-        logo: file('logo'),
+        backdrop: manage.artOf(key, UiArtKind.backdrop, file('backdrop')),
+        poster: manage.artOf(key, UiArtKind.poster, file('poster')),
+        logo: manage.artOf(key, UiArtKind.logo, file('logo')),
         tint: _tints[key],
       ),
       next: next ?? _episode(key, 1),
@@ -278,12 +286,14 @@ final class FakeWorld implements NextUiData, NextUiActions, NextDiscoverData {
       workId: 'fake:$key',
       number: number ?? n,
       season: season,
-      title: e?['name'] as String?,
+      title: manage.episodeTitle('fake:$key:$n', e?['name'] as String?),
       runtime: Duration(minutes: (e?['runtime'] as int?) ?? 24),
       still: e?['still'] == null ? null : '$dir/${e!['still']}',
       progress: progress,
       heat: _heat(key, n),
-      playable: onDisk && (device?.online ?? true),
+      playable: onDisk &&
+          (device?.online ?? true) &&
+          !manage.fileDeleted('fake:$key:$n'),
       device: device,
     );
   }
@@ -432,6 +442,7 @@ final class FakeWorld implements NextUiData, NextUiActions, NextDiscoverData {
   Future<List<UiWork>> library() async {
     await Future<void>.delayed(const Duration(milliseconds: 120));
     return [
+      for (final key in manage.localKeys) manage.localWork(key),
       for (final key in _added)
         if (_has(key)) _detailed(key)
     ];
@@ -440,6 +451,8 @@ final class FakeWorld implements NextUiData, NextUiActions, NextDiscoverData {
   @override
   Future<UiWork?> work(String workId) async {
     final key = workId.startsWith('fake:') ? workId.substring(5) : workId;
+    if (manage.gone(key)) return null;
+    if (manage.owns(key)) return manage.localWork(key);
     if (catalog.owns(key)) return catalog.work(key);
     return _has(key) ? _detailed(key) : null;
   }
@@ -447,6 +460,12 @@ final class FakeWorld implements NextUiData, NextUiActions, NextDiscoverData {
   @override
   Future<List<UiEpisode>> episodes(String workId, {int? season}) async {
     final key = workId.startsWith('fake:') ? workId.substring(5) : workId;
+    if (manage.owns(key)) {
+      return [
+        for (final e in manage.localEpisodes(key))
+          if (season == null || e.season == season) e
+      ];
+    }
     if (catalog.owns(key)) {
       return [
         for (final e in catalog.episodes(key))
