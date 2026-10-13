@@ -9,12 +9,14 @@ import '../../ui_data/ui_data.dart';
 import '../conversation/chat_port.dart';
 import '../dev/dev_services.dart';
 import 'core_connect.dart';
+import 'core_manage.dart';
 import 'core_settings.dart';
 import 'discover.dart';
 import 'login_requests.dart';
 import 'search.dart';
 import 'settings_data.dart';
 import 'ui_actions.dart';
+import 'work_manage.dart';
 
 /// Everything the Next shell talks to.
 final class NextUiServices {
@@ -28,6 +30,7 @@ final class NextUiServices {
     required this.search,
     required this.settings,
     LoginRequests? logins,
+    this.manage,
     this.onDispose,
   }) : logins = logins ?? LoginRequests();
 
@@ -51,6 +54,10 @@ final class NextUiServices {
 
   /// Logins the agent asked for, waiting for the user's window.
   final LoginRequests logins;
+
+  /// Managing a work and its episodes from the detail page; none where
+  /// the shell is shown without it (tests).
+  final NextWorkManage? manage;
   final VoidCallback? onDispose;
 
   void dispose() {
@@ -85,6 +92,7 @@ final class NextUiServices {
       search: CoreSearch(() => runtime.harness),
       settings: settings,
       logins: logins,
+      manage: CoreWorkManage(() => runtime.harness, data),
       onDispose: () {
         detach();
         settings.dispose();

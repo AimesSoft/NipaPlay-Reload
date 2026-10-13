@@ -7,11 +7,14 @@ import 'package:flutter/widgets.dart';
 
 import '../../ui_data/ui_data.dart';
 import '../data/discover.dart';
+import '../data/work_manage.dart';
+import '../settings/settings_layout.dart' show SettingsSection;
 import '../shell/shell_controller.dart';
 import '../theme/tokens.dart';
 import '../widgets/art_origin.dart';
 import '../widgets/artwork.dart';
 import '../widgets/buttons.dart';
+import '../widgets/glass.dart';
 import '../widgets/icons.dart';
 import '../widgets/menu.dart';
 import '../widgets/nipa_avatar.dart';
@@ -20,6 +23,9 @@ import '../widgets/work_title.dart';
 import 'detail_backdrop.dart';
 import 'docking_title.dart';
 import 'episodes.dart';
+import 'manage_episode.dart';
+import 'manage_sheet.dart';
+import 'manage_work.dart';
 
 /// A work's page (INTERACTION.md「详情」): full-bleed backdrop, the work on
 /// the left (original title, logo or Songti title, one meta line, two lines
@@ -46,17 +52,43 @@ abstract interface class WorkDetailDebug {
   void debugOverview(bool open);
   void debugSeasons(bool open);
   Map<String, Object?> debugStatus();
+
+  /// The management sheets: `open=work|episode|none`, `section=`,
+  /// `episode=<index in the season>`, `tileMenu=<index>|none`,
+  /// `restore=true` (the removed work back); the rest goes to the open
+  /// sheet.
+  Future<Map<String, Object?>> debugManage(Map<String, String> p);
 }
 
 class _WorkDetailPageState extends State<WorkDetailPage>
     with SingleTickerProviderStateMixin
     implements WorkDetailDebug {
   late UiWork _work = widget.work;
+
+  /// The work shown: another one once a work of its own is made of it.
+  late String _workId = widget.work.workId;
   List<UiEpisode>? _episodes;
   int? _season;
   bool _overviewOpen = false;
   bool _menuOpen = false;
   bool _seasonsOpen = false;
+
+  /// The open management sheet: the work's at a section, or an
+  /// episode's.
+  WorkSection? _workSheet;
+  (UiEpisode, EpisodeSection)? _episodeSheet;
+  final _sheetKey = GlobalKey();
+
+  /// The episode whose ⋯ menu is open, and where each one hangs.
+  String? _tileMenu;
+  final _tileLinks = <String, LayerLink>{};
+
+  /// Taken out of the library from its sheet: the page stays, with the
+  /// way back.
+  UiUndo? _removed;
+
+  /// Counts the page's reads: an open sheet reads again with it.
+  int _revision = 0;
 
   /// A short word after the ⋯ menu did something, gone after a moment.
   String? _said;
@@ -135,10 +167,15 @@ class _WorkDetailPageState extends State<WorkDetailPage>
   Future<void> _load() async {
     if (_found) return _loadFound();
     final data = _shell!.services.data;
-    final id = widget.work.workId;
+    final id = _workId;
     final work = await data.work(id);
-    if (!mounted) return;
+    if (!mounted || id != _workId) return;
     if (work == null) {
+      // Removed with the way back, or a sheet still open on it: the page
+      // stays until that is done.
+      if (_removed != null || _workSheet != null || _episodeSheet != null) {
+        return;
+      }
       // Gone from the library: nothing to show any more.
       if (ModalRoute.of(context)?.isCurrent ?? false) {
         Navigator.of(context).pop();
@@ -150,6 +187,7 @@ class _WorkDetailPageState extends State<WorkDetailPage>
     setState(() {
       _work = work;
       _episodes = episodes;
+      _revision++;
     });
   }
 
@@ -255,6 +293,91 @@ class _WorkDetailPageState extends State<WorkDetailPage>
           if (e.season == _currentSeason && e.playable) e
       ];
 
+  NextWorkManage? get _manage => _found ? null : _shell!.services.manage;
+
+  /// Managing the work, in the ⋯ menu's second part.
+  List<(String, VoidCallback)> get _manageItems => _manage == null
+      ? const []
+      : [
+          ('匹配作品…', () => _openWork(WorkSection.match)),
+          ('编辑资料…', () => _openWork(WorkSection.info)),
+          ('剧集与文件…', () => _openWork(WorkSection.episodes)),
+        ];
+
+  void _openWork(WorkSection section) => setState(() {
+        _menuOpen = false;
+        _tileMenu = null;
+        _episodeSheet = null;
+        _workSheet = section;
+      });
+
+  void _openEpisode(UiEpisode episode, EpisodeSection section) =>
+      setState(() {
+        _tileMenu = null;
+        _workSheet = null;
+        _episodeSheet = (episode, section);
+      });
+
+  void _closeSheets() {
+    setState(() {
+      _workSheet = null;
+      _episodeSheet = null;
+    });
+    _load();
+  }
+
+  /// A work of its own was made of this one: the page shows it instead.
+  void _replaced(String workId) {
+    setState(() => _workId = workId);
+    _load();
+  }
+
+  void _removedWork(UiUndo undo) {
+    setState(() {
+      _workSheet = null;
+      _removed = undo;
+    });
+    _load();
+  }
+
+  Future<void> _undoRemove() async {
+    final undo = _removed;
+    if (undo == null) return;
+    try {
+      await _manage!.restore(undo);
+      if (!mounted) return;
+      setState(() => _removed = null);
+      _load();
+    } on UiManageError {
+      _note('没能撤回。');
+    }
+  }
+
+  void _note(String text) {
+    _saidTimer?.cancel();
+    setState(() => _said = text);
+    _saidTimer = Timer(const Duration(seconds: 3), () {
+      if (mounted) setState(() => _said = null);
+    });
+  }
+
+  /// An episode's ⋯: its danmaku, subtitles and files; watched or not.
+  List<(String, VoidCallback)> _episodeItems(UiEpisode e) => [
+        ('弹幕…', () => _openEpisode(e, EpisodeSection.danmaku)),
+        ('字幕…', () => _openEpisode(e, EpisodeSection.subtitles)),
+        ('文件…', () => _openEpisode(e, EpisodeSection.files)),
+        if (e.playable && (e.progress ?? 0) < 1)
+          ('看过了', () {
+            setState(() => _tileMenu = null);
+            _mark([e], true);
+          })
+        else if ((e.progress ?? 0) >= 1)
+          ('标成没看过', () {
+            setState(() => _tileMenu = null);
+            _mark([e], false);
+          }),
+      ];
+
   /// The ⋯ menu: download the rest, mark the current episode or the season
   /// watched (or the season not watched, once it all is).
   List<(String, VoidCallback)> get _menuItems {
@@ -311,6 +434,46 @@ class _WorkDetailPageState extends State<WorkDetailPage>
   void debugSeasons(bool open) => setState(() => _seasonsOpen = open);
 
   @override
+  Future<Map<String, Object?>> debugManage(Map<String, String> p) async {
+    final shown = [
+      for (final e in _episodes ?? const <UiEpisode>[])
+        if (e.season == _currentSeason) e
+    ];
+    if (p['tileMenu'] case final i?) {
+      setState(() => _tileMenu =
+          i == 'none' ? null : shown[int.parse(i)].episodeId);
+    }
+    switch (p['open']) {
+      case 'work':
+        _openWork(WorkSection.values.byName(p['section'] ?? 'match'));
+      case 'episode':
+        _openEpisode(shown[int.parse(p['episode'] ?? '0')],
+            EpisodeSection.values.byName(p['section'] ?? 'danmaku'));
+      case 'none':
+        _closeSheets();
+    }
+    if (p['restore'] == 'true') await _undoRemove();
+    await Future<void>.delayed(const Duration(milliseconds: 500));
+    final sheet = _sheetKey.currentState;
+    final rest = {
+      for (final e in p.entries)
+        if (!const {'op', 'open', 'episode', 'tileMenu', 'restore'}
+                .contains(e.key) &&
+            !(e.key == 'section' && p['open'] != null))
+          e.key: e.value
+    };
+    if (sheet is ManageSheetDebug && rest.isNotEmpty) {
+      await (sheet as ManageSheetDebug).debugDo(rest);
+      await Future<void>.delayed(const Duration(milliseconds: 300));
+    }
+    return {
+      ...debugStatus(),
+      if (_sheetKey.currentState case final ManageSheetDebug s)
+        'sheet': s.debugStatus(),
+    };
+  }
+
+  @override
   Map<String, Object?> debugStatus() => {
         'work': _work.title,
         'episodes': _episodes?.length,
@@ -322,7 +485,11 @@ class _WorkDetailPageState extends State<WorkDetailPage>
         'docked': _dock.value,
         'flies': _flies,
         'menu': _menuOpen,
-        'menuItems': [for (final (label, _) in _menuItems) label],
+        'menuItems': [
+          for (final (label, _) in [..._menuItems, ..._manageItems]) label
+        ],
+        'tileMenu': _tileMenu,
+        'removed': _removed != null,
         'found': _found,
         'note': _said,
       };
@@ -359,8 +526,12 @@ class _WorkDetailPageState extends State<WorkDetailPage>
             ),
           ),
           FadeTransition(
-            opacity: content,
-            child: NotificationListener<ScrollNotification>(
+            opacity: _removed != null
+                ? const AlwaysStoppedAnimation(0.35)
+                : content,
+            child: IgnorePointer(
+              ignoring: _removed != null,
+              child: NotificationListener<ScrollNotification>(
               onNotification: _onScroll,
               child: CustomScrollView(
                 controller: _scroll,
@@ -385,10 +556,13 @@ class _WorkDetailPageState extends State<WorkDetailPage>
                 ],
               ),
             ),
+            ),
           ),
           if (_standingPoster(size) case final poster?) poster,
           FadeTransition(
-            opacity: content,
+            opacity: _removed != null
+                ? const AlwaysStoppedAnimation(0.35)
+                : content,
             child: IgnorePointer(child: _bar(size, titleTop, reduced)),
           ),
           Positioned(
@@ -407,6 +581,14 @@ class _WorkDetailPageState extends State<WorkDetailPage>
             ..._popover(_menuLink, _menu(), () => _menuOpen = false),
           if (_seasonsOpen)
             ..._popover(_seasonLink, _seasonMenu(), () => _seasonsOpen = false),
+          if (_tileMenu case final id?)
+            if (_episodes?.where((e) => e.episodeId == id).firstOrNull
+                case final e?)
+              ..._popover(_tileLinks[id]!, _episodeMenu(e),
+                  () => _tileMenu = null,
+                  up: true),
+          if (_removed != null) _removedBar(),
+          if (_sheet() case final sheet?) Positioned.fill(child: sheet),
         ]);
       }),
     );
@@ -574,7 +756,7 @@ class _WorkDetailPageState extends State<WorkDetailPage>
     final started = episodes != null
         ? episodes.any((e) => (e.progress ?? 0) > 0)
         : (next?.progress ?? 0) > 0;
-    final menu = _menuItems;
+    final menu = [..._menuItems, ..._manageItems];
     final row = Row(children: [
       if (_found) ...[
         NextButton(label: '让 Nipa 准备', onTap: _prepare),
@@ -625,10 +807,90 @@ class _WorkDetailPageState extends State<WorkDetailPage>
     );
   }
 
-  Widget _menu() => MenuPanel(width: 188, children: [
-        for (final (label, onTap) in _menuItems)
-          MenuItem(label: label, onTap: onTap),
-      ]);
+  Widget _menu() {
+    final watch = _menuItems, manage = _manageItems;
+    return MenuPanel(width: 188, children: [
+      for (final (label, onTap) in watch) MenuItem(label: label, onTap: onTap),
+      if (watch.isNotEmpty && manage.isNotEmpty) const _MenuLine(),
+      for (final (label, onTap) in manage) MenuItem(label: label, onTap: onTap),
+    ]);
+  }
+
+  Widget _episodeMenu(UiEpisode e) {
+    final items = _episodeItems(e);
+    return MenuPanel(width: 168, children: [
+      for (final (i, (label, onTap)) in items.indexed) ...[
+        if (i == 3) const _MenuLine(),
+        MenuItem(label: label, onTap: onTap),
+      ],
+    ]);
+  }
+
+  /// The open sheet, over the page.
+  Widget? _sheet() {
+    final manage = _manage;
+    if (manage == null) return null;
+    if (_workSheet case final section?) {
+      return ManageLayer(
+        key: const ValueKey('work-sheet'),
+        onClose: _closeSheets,
+        child: WorkManageSheet(
+          key: _sheetKey,
+          work: _work,
+          manage: manage,
+          section: section,
+          revision: _revision,
+          onClose: _closeSheets,
+          onChanged: _load,
+          onReplaced: _replaced,
+          onRemoved: _removedWork,
+        ),
+      );
+    }
+    if (_episodeSheet case (final episode, final section)) {
+      final shell = _shell!;
+      return ManageLayer(
+        key: const ValueKey('episode-sheet'),
+        onClose: _closeSheets,
+        child: EpisodeManageSheet(
+          key: _sheetKey,
+          work: _work,
+          episode: episode,
+          manage: manage,
+          section: section,
+          revision: _revision,
+          onClose: _closeSheets,
+          onChanged: _load,
+          onBlockWords: () {
+            _closeSheets();
+            shell.openSettings(
+                section: SettingsSection.danmaku, key: 'danmaku.blockWords');
+          },
+          onEpisodes: () => _openWork(WorkSection.episodes),
+        ),
+      );
+    }
+    return null;
+  }
+
+  /// Taken out of the library: a quiet bar with the way back.
+  Widget _removedBar() => Positioned(
+        left: 0,
+        right: 0,
+        bottom: 36,
+        child: Center(
+          child: Glass(
+            radius: BorderRadius.circular(24),
+            padding: const EdgeInsets.fromLTRB(22, 8, 8, 8),
+            child: Row(mainAxisSize: MainAxisSize.min, children: [
+              Text('已从片库移除',
+                  style: NextText.sans(13.5, color: NextColors.p2)),
+              const SizedBox(width: 16),
+              NextButton(label: '撤回', onTap: _undoRemove),
+            ]),
+          ),
+        ),
+      );
 
   Widget _seasonMenu() {
     final current = _currentSeason;
@@ -646,7 +908,9 @@ class _WorkDetailPageState extends State<WorkDetailPage>
   }
 
   /// A menu under [link]'s target; a click outside or Esc closes it.
-  List<Widget> _popover(LayerLink link, Widget menu, VoidCallback close) => [
+  List<Widget> _popover(LayerLink link, Widget menu, VoidCallback close,
+          {bool up = false}) =>
+      [
         Positioned.fill(
           child: GestureDetector(
             behavior: HitTestBehavior.opaque,
@@ -658,8 +922,9 @@ class _WorkDetailPageState extends State<WorkDetailPage>
           top: 0,
           child: CompositedTransformFollower(
             link: link,
-            targetAnchor: Alignment.bottomLeft,
-            offset: const Offset(0, 10),
+            targetAnchor: up ? Alignment.topRight : Alignment.bottomLeft,
+            followerAnchor: up ? Alignment.bottomRight : Alignment.topLeft,
+            offset: Offset(0, up ? -10 : 10),
             child: Focus(
               autofocus: true,
               onKeyEvent: (node, event) {
@@ -709,6 +974,14 @@ class _WorkDetailPageState extends State<WorkDetailPage>
           episodes: shown,
           currentId: _work.next?.episodeId,
           onPlay: (episode) => shell.play(_work, episode: episode),
+          moreLink: _manage == null
+              ? null
+              : (e) => _tileLinks[e.episodeId] ??= LayerLink(),
+          onMore: _manage == null
+              ? null
+              : (e) => setState(() => _tileMenu =
+                  _tileMenu == e.episodeId ? null : e.episodeId),
+          menuFor: _tileMenu,
         ),
       ],
     );
@@ -818,4 +1091,16 @@ class _OverviewState extends State<Overview> {
           child: SizedBox(width: width, child: body),
         );
       });
+}
+
+/// A hairline between a menu's parts.
+class _MenuLine extends StatelessWidget {
+  const _MenuLine();
+
+  @override
+  Widget build(BuildContext context) => Container(
+        height: 1,
+        margin: const EdgeInsets.symmetric(vertical: 6, horizontal: 8),
+        color: NextColors.line,
+      );
 }

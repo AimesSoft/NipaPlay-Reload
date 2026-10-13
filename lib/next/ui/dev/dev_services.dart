@@ -61,6 +61,7 @@ abstract final class NextUiDev {
       libraryActions: world.catalog,
       search: world.search,
       settings: settings,
+      manage: world.manage,
       onDispose: () {
         world.dispose();
         settings.dispose();

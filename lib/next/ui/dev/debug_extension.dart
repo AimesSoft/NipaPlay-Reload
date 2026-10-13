@@ -128,6 +128,11 @@ import '../settings/settings_page.dart';
 ///   groups answer before the keys), its keys, the scripted groups or
 ///   sources that fail (`sources`: their list; by default the unreachable
 ///   Emby), its recent terms cleared; returns what it shows.
+/// - `manage` [`open=work|episode|none`] [`section=`] [`episode=N`]
+///   [`tileMenu=N|none`] [`fail=read,search,…|none`] [`conflict=true`]
+///   …: the detail page's management sheets (see
+///   `WorkDetailDebug.debugManage`); `fail` makes the scripted world
+///   refuse those operations.
 abstract final class NextUiDebug {
   static NextShellController? _shell;
   static BuildContext? _context;
@@ -288,6 +293,21 @@ abstract final class NextUiDebug {
         final result = _hover(int.parse(p['index'] ?? '0'), p['area']);
         _click(result['at'] as List<int>,
             secondary: p['button'] == 'secondary');
+        await _settle();
+        return {...result, ..._status(shell)};
+      case 'manage':
+        final page = _detail();
+        if (page == null) throw StateError('No detail page is showing');
+        if (shell.services.manage case final FakeManage fake) {
+          if (p['fail'] case final f?) {
+            fake.fail
+              ..clear()
+              ..addAll(f == 'none' ? const [] : f.split(','));
+          }
+          if (p['conflict'] case final c?) fake.conflict = c == 'true';
+        }
+        final result = await page.debugManage(
+            {...p}..removeWhere((k, _) => k == 'fail' || k == 'conflict'));
         await _settle();
         return {...result, ..._status(shell)};
       case 'detail':
