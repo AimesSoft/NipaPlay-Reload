@@ -22,6 +22,7 @@ Action id 是 Harness 名称；MCP 名称把点替换为下划线。输入输出
 | `media.identity.get` | read | 读取身份、位置、来源审计、合成元数据，以及 Classic 历次观察和当前冲突。 |
 | `media.library.works` | read | 读取共享作品及季、集、文件结构，包含 Classic 弹弹play匹配，支持非弹弹play身份。 |
 | `media.library.work` | read | 读取一部 Next 作品的结构与元数据。 |
+| `media.library.search_merged` | read | 有索引的本机 + Mesh 搜索；标题、原名、已有别名、年份与剧集标题；返回 Next workId/episodeId。 |
 | `media.library.import_history` | write | 重入同步 Classic 文件与有效匹配，保留来源事实与冲突，不推断绑定者。 |
 | `media.library.scan` | write | 提交枚举、探测、哈希和文件索引任务，不请求元数据来源。 |
 | `media.metadata.override` | write | GUI 与 Agent 均可编辑；宿主记录 actor/origin。mode=persistent 刷新保留，correction 被新快照替代，clear 清除编辑。省略 mode 保持持久覆盖兼容语义。 |
@@ -29,7 +30,13 @@ Action id 是 Harness 名称；MCP 名称把点替换为下划线。输入输出
 | `media.metadata.import_batch` | write | 追加任意来源的结构化快照，宿主记录来源、交入时间、actor/origin/invocationId；保留其他 JSON 字段。原子且 requestId 幂等。 |
 | `media.metadata.snapshots` | read | 读取实体对应的全部来源快照、原始字段和历史，包括已撤销身份的快照。 |
 
-目录列表、批量哈希和元数据查询不写数据库，不创建绑定、缓存或任务。
+目录列表、批量哈希和元数据查询不创建绑定或任务；详情候选不保存来源快照。
+在线 `media.metadata.search/search_batch` 的每个候选带 nullable `workId`，按已接受
+exact/contains 的作品或发行身份读取本机 + Mesh 合并目录，不按同名推断。
+首次搜索可能准备可重建的目录/图片投影；不登记来源文件或接受身份。
+`media.library.search_merged` 与原 `media.library.search` 分开：后者仍返回 Classic
+观看记录的弹弹play animeId，调用者语义和结果不变。能力族事实以
+`nipa describe media.library` 与 `nipa describe media.metadata` 为准。
 目录列表没有分页，未索引文件的 `fileId` 为 null；绑定可直接使用它的 `path`。
 作品列表返回全部已关联文件位置及存储的探测值，远端或尚缺探测值的字段为 null。
 大小单位是字节，时长单位是毫秒，`headMd5` 是文件前 16 MiB 的 MD5。

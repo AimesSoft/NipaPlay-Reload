@@ -30,6 +30,25 @@ final class MediaService {
   final Iterable<String> Function() authorizedRoots;
   final Future<int?> Function(String path) durationProbe;
   String? Function()? currentPath;
+  Future<List<String?>> Function(List<ExternalRef>)? searchWorkIds;
+
+  Future<List<JsonMap>> searchResults(List<MetadataRecord> records) async {
+    final refs = records.map((r) => r.ref).toList();
+    final resolver = searchWorkIds;
+    final ids = resolver == null ? [
+      for (final ref in refs) await _acceptedWorkId(ref)
+    ] : await resolver(refs);
+    return [for (var i = 0; i < records.length; i++) {
+      ...records[i].toJson(), 'workId': ids[i],
+    }];
+  }
+
+  Future<String?> _acceptedWorkId(ExternalRef ref) async {
+    final rows = await store.database.rawQuery(
+        "SELECT DISTINCT CASE WHEN e.kind='work' THEN e.id ELSE e.parent_id END AS workId FROM media_bindings b JOIN media_external_objects o ON o.id=b.object_id JOIN media_entities e ON e.id=b.entity_id WHERE b.status='accepted' AND b.relation IN ('exact','contains') AND e.kind IN ('work','release') AND o.provider=? AND o.object_type=? AND o.scope=? AND o.external_id=?",
+        [ref.provider, ref.objectType, ref.scope, ref.externalId]);
+    return rows.isEmpty ? null : rows.first['workId'] as String;
+  }
   Future<String> resolveEntity(JsonMap input,
       {String idField = 'entityId'}) async {
     final id = input[idField] as String?;

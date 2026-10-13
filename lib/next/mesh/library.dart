@@ -15,6 +15,8 @@ import '../harness_redaction.dart';
 import 'runtime.dart';
 import 'library_codec.dart';
 import '../ui_data/library_index.dart';
+import '../ui_data/library_search.dart';
+import '../media/metadata_provider.dart';
 import 'files.dart';
 
 String _hash(Object value) =>
@@ -38,6 +40,7 @@ final class MeshLibrary {
   MeshLibrary(this.ui, this.mesh) {
     files = MeshFiles(mesh, fileReadable, ui.media.store.ownerDeviceId);
     mesh.libraryRequest = request;
+    ui.media.searchWorkIds = searchWorkIds;
   }
   late final MeshFiles files;
   final UiDataService ui;
@@ -49,6 +52,7 @@ final class MeshLibrary {
   final _added = <String, int>{};
   final _progress = <String, JsonMap>{};
   final _works = <String, UiWork>{};
+  final searchIndex = LibrarySearchIndex();
   final _episodes = <String, List<UiEpisode>>{};
   final _aliases = <String, String>{};
   final _historicalIds = <String, List<String>>{};
@@ -203,6 +207,12 @@ final class MeshLibrary {
         'metadata': publicHarnessFacts(await ui.media.store.mergedMetadata(id)),
         'attributes': jsonDecode(row['attributes'] as String)
       });
+      records.last['searchTitles'] = [
+        for (final snapshot in await db.rawQuery(
+            "SELECT s.fields FROM media_snapshots s JOIN media_bindings b ON b.object_id=s.object_id JOIN media_entities e ON e.id=b.entity_id WHERE b.status='accepted' AND b.relation IN ('exact','contains') AND (e.id=? OR (e.kind='release' AND e.parent_id=?))",
+            [id, id]))
+          ...librarySearchTitles((jsonDecode(snapshot['fields'] as String) as Map)['metadata'] as Map? ?? jsonDecode(snapshot['fields'] as String) as Map)
+      ];
       final sourceIds = <String>{};
       for (final f in await db.rawQuery("SELECT f.attributes FROM media_entities f JOIN media_file_episodes fe ON fe.file_id=f.id JOIN media_entities e ON e.id=fe.episode_id JOIN media_entities r ON r.id=e.parent_id WHERE r.parent_id=?", [id])) {
         final remote = (jsonDecode(f['attributes'] as String) as Map)['remoteSource'] as Map?;
@@ -435,6 +445,16 @@ final class MeshLibrary {
   Future<void> prepareIndex() async {
     await _build();
     await _compose();
+  }
+
+  Future<JsonMap> search(String query, {int limit = 12, int? episodeLimit}) async {
+    if (!searchIndex.ready) await prepareIndex();
+    return searchIndex.search(query, limit: limit, episodeLimit: episodeLimit);
+  }
+
+  Future<List<String?>> searchWorkIds(List<ExternalRef> refs) async {
+    await prepareIndex();
+    return refs.map(searchIndex.workId).toList();
   }
 
   String? localEpisodeId(String id) => _localTargets[_aliases[id] ?? id];
@@ -760,6 +780,29 @@ final class MeshLibrary {
           'sourceIds': members.expand((w) => (w['sourceIds'] as List? ?? []).cast<String>()).toSet().toList(),
           'deviceIds': members.map((w) => w['deviceId']).toSet().toList(),
           'types': types.toList(), 'identified': keys.isNotEmpty,
+          'identityKeys': keys,
+          'searchTitles': <String>{
+            for (final member in members) ...[
+              ...librarySearchTitles(member['value'] as Map),
+              ...librarySearchTitles(member['attributes'] as Map),
+              ...librarySearchTitles((member['metadata'] as Map)['fields'] as Map),
+              ...(member['searchTitles'] as List? ?? []).cast<String>(),
+            ]
+          }.toList(),
+          'searchYears': <int>{
+            for (final member in members)
+              if ((member['value'] as Map)['year'] case final int year) year
+          }.toList(),
+          'searchEpisodes': [
+            for (final episode in episodes) {
+              'episode': episodeJson(episode),
+              'titles': <String>{
+                for (final e in sourceEpisodes)
+                  if (_aliases[_ref(e['deviceId'] as String, e['id'] as String)] == episode.episodeId)
+                    ...librarySearchTitles(e['value'] as Map)
+              }.toList(),
+            }
+          ],
           'watch': episodes.any((e) => (e.progress ?? 0) > 0 && (e.progress ?? 0) < 1) ? 'watching' :
               episodes.isNotEmpty && episodes.every((e) => (e.progress ?? 0) >= 1) ? 'watched' : 'unwatched',
           'year': value['year'], 'genres': value['genres'],
@@ -775,6 +818,7 @@ final class MeshLibrary {
     }
     if (_historicalIds.isNotEmpty) await _save('mesh:aliases', _historicalIds);
     await replaceLibraryIndex(db, indexRows);
+    searchIndex.replace(indexRows);
     _composedStamp = composition;
   }
 

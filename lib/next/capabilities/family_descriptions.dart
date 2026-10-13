@@ -94,6 +94,7 @@ const familyFacts = <String, String>{
 - **Classic 同步**：保留识别标题与已有的详情缓存，包括标题语言、简介、海报、背景、类型和集数。未缓存的资料不会自动补抓；没有声明语言的识别标题仍是 `und`。Next 的显式覆盖优先，不修改 Classic 的详情缓存。
 - **扫描**：`media.library.scan` 只建立索引，不做识别；支持指向授权根目录内视频文件的符号链接，不递归跟随目录链接。新增文件在下一次扫描时进入索引；身份、资料、图片、弹幕是独立的事实。
 - **本地文件读取**：扫描和按根目录调用 `media.files.list` 会逐个读取视频、计算头部哈希并探测时长，并非只枚举文件名。`state.query` 的文件视图读取已有索引与对应关系，不重新探测视频。
+- **搜索**：`media.library.search_merged` 只读搜索本机与组网设备合并片库的中文名、原名、已有别名、年份和剧集标题；返回能打开 Next 的 workId/episodeId、年份、本机图片路径、设备和可播放事实，按 limit/episodeLimit 分别限制作品和剧集。索引随目录刷新，首次建立后逐字查询不扫全库。原 `media.library.search` 仍是 Classic 观看记录系列，返回弹弹play animeId，不能当 Next workId。`media.metadata.search/search_batch` 的候选带 nullable workId：只有已接受的 exact/contains 作品或发行身份算已入库，包括组网设备；同名不算身份。
 - **你的工具**：这个仓库里的脚本，或别人的开源工具，负责在外面找东西：RSS、站点、API、文件。找到的结果交给 NipaPlay，才算进入了这个系统：
   - 下载：`download.add`；
   - 身份：`bind_batch`；
@@ -154,7 +155,13 @@ const familyFacts = <String, String>{
   'discover': r'''弹弹play 每日放送与推荐。''',
   'sync': r'''远程来源与多端同步。''',
   'plugins': r'''应用插件。''',
-  'media.sources': r'''SMB、WebDAV、Jellyfin、Emby 等远程来源。''',
+  'media.sources': r'''SMB、WebDAV、Jellyfin、Emby 等远程来源。
+- `media.sources.search {query,sourceIds?,limit?}` 是只读搜索：Jellyfin/Emby 用服务器 SearchTerm 和有界分页，SMB/WebDAV 只查已有文件索引，不枚举目录、不登记新文件、不写发现记录。省略 sourceIds 搜所有支持的已配置来源；limit 限制每个来源（默认 12）。返回 sources[]，每个来源单独给出 entries、total 或 error。离线或登录失败如实返回，其他来源保留结果；索引来源的 unverified 是未知连通状态，不能当成在线。
+- 结果有 sourceId、itemId、标题、可播放事实；已绑定条目带 Next workId/episodeId，服务器原样条目另有 sourceWorkId/sourceEpisodeId。作品 ID 用 ui.open，来源条目用 media.sources.play {sourceId,itemId}。来源分组在界面上可逐个 sourceIds 请求，分别显示结果与错误。
+- browse/sync 是发现与写索引入口；不要用它们实现每次输入的搜索。''',
+  'media.library': r'''`media.library.search_merged {query,limit?,episodeLimit?}` 只读搜索 X48 本机与认证 Mesh 合并目录的标题、原名、已有别名、年份及剧集标题；空白分词为 AND，忽略大小写，按字面子串匹配。返回 works[]、episodes[{work,episode}]、workTotal/episodeTotal，默认每组最多 12。返回 workId/episodeId 可以直接用于 Next 作品页和 ui.open；海报是本机路径，设备与 playable 是目录最近观察。索引每 5 秒随目录更新，media.library.refresh 可立即刷新；首次搜索建立索引，其后不逐次读全库。离线 Mesh 保留事实并标为不可播放。
+原 media.library.search 保留 Classic 观看记录语义与 animeId。不要将这个 animeId 当成合并 workId。''',
+  'media.metadata': r'''`media.metadata.search/search_batch` 读取在线候选，每个结果另带 workId。它是本机与认证 Mesh 合并片库已接受 exact/contains 作品或发行身份的 Next workId；没有对应身份就是 null，不按同名推断。首次读取可能准备可重建的目录与图片缓存，不接受候选或写绑定。资料、身份与图片能力的其余约定见 nipa describe media。''',
   'media.mesh_files':
       r'''`mesh.devices` 返回同账号设备、连通状态、各设备实际开放的能力和经过双向 TLS 认证的设备自我描述。自我描述包含平台、宿主角色、片库根目录、下载目录，以及宿主配置的存储路径与 Nipa 所在设备；路径属于描述它的那台设备。无界面节点提供片库、下载、任务、hooks 和定时程序，那里没有对话宿主。网络加入、签发者、监听策略和 Nipa 所在设备由宿主配置，Action 不能开放这些权限。`./nipa --device NAME list`、`describe ACTION`、`call ACTION ...` 和 `watch JOB_ID` 使用该设备的实时目录；名称也可换成设备 ID，重名不会任选一个。
 

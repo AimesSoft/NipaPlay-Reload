@@ -110,6 +110,17 @@ final class MediaSourcesCapability implements Capability {
 
 final _specs = [
   const ActionSpec(
+      id: 'media.sources.search',
+      title: '只读搜索媒体来源',
+      description: 'Read-only search, independently reported per source. Jellyfin/Emby use bounded server SearchTerm across all libraries (Series/Movie/Episode/Video). SMB/WebDAV search only previously discovered file names and paths in the existing unified index; never enumerate, browse, register files, create identities or write discovery journal. sourceIds selects a batch; omitted selects configured supported sources; limit bounds each source (default 12). Returns sources[] with sourceId/name/type, basis server/indexed, connectionState, entries, total (null on error), optional error. A failed source does not discard other results. Indexed connectionState is the last known observation, unverified means unknown connectivity, not proven offline. Entries expose itemId, nullable accepted workId/episodeId, fileId, playable; server sourceWorkId/sourceEpisodeId open original Next pages. Unbound shared files play with media.sources.play {sourceId,itemId}. Searches activate the requested saved server session, using existing Classic clients. Call with one sourceId per GUI group to render independently.',
+      effect: Effect.read,
+      input: ObjectSchema({
+        'query': _text,
+        'sourceIds': ArraySchema(_text),
+        'limit': IntegerSchema(minimum: 1, maximum: 100),
+      }, required: ['query']),
+      output: ObjectSchema({'sources': ArraySchema(ObjectSchema({}, additionalProperties: true))}, required: ['sources'])),
+  const ActionSpec(
       id: 'media.sources.sort',
       title: '设置媒体库排序',
       description:
@@ -387,6 +398,10 @@ final class _SourceAction extends Action<_Json, _Json> {
       await service.ensureInitialized();
       final JsonMap result;
       switch (spec.id) {
+        case 'media.sources.search':
+          result = await service.search(json['query'] as String,
+              sourceIds: (json['sourceIds'] as List?)?.cast<String>(),
+              limit: json['limit'] as int? ?? 12);
         case 'media.sources.sort':
           result = await service.sort(json);
         case 'media.sources.scrape':

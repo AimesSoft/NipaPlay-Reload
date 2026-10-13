@@ -233,6 +233,7 @@ final class NextCore {
     uiData.libraryData = libraryData;
     libraryData.register(state);
     uiData.meshLibrary = MeshLibrary(uiData, mesh);
+    mediaSources.canonicalEntityId = uiData.meshLibrary!.canonical;
     registerMergedLibrary(state, uiData.meshLibrary!);
     await uiData.meshLibrary!.start();
     settings.register([uiData.openingSetting]);

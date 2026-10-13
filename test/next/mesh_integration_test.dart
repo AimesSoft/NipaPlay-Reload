@@ -27,6 +27,7 @@ import 'package:nipaplay/next/ui_data/service.dart';
 import 'package:nipaplay/next/ui_data/metadata_facts.dart';
 import 'package:nipaplay/next/media/identity_store.dart';
 import 'package:nipaplay/next/media/media_service.dart';
+import 'package:nipaplay/next/media/metadata_provider.dart' show ExternalRef;
 import 'package:nipaplay/next/headless/ports.dart';
 import 'package:nipaplay/next/state/query.dart';
 import 'package:nipaplay/next/state/views.dart';

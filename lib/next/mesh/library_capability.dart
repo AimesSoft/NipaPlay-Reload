@@ -7,12 +7,42 @@ import 'runtime.dart';
 final class MeshLibraryCapability implements Capability {
   MeshLibraryCapability(MeshLibrary library)
       : actions = [
+          _MergedSearchAction(library),
           _LibraryAction(library, 'readable'),
           _LibraryAction(library, 'refresh'),
           _LibraryAction(library, 'progress')
         ];
   @override
   final List<Action> actions;
+}
+
+final class _MergedSearchAction extends Action<MeshJson, MeshJson> {
+  const _MergedSearchAction(this.library);
+  final MeshLibrary library;
+  @override
+  ActionSpec get spec => const ActionSpec(
+      id: 'media.library.search_merged',
+      title: '搜索合并片库',
+      description: 'Read the indexed local + authenticated Mesh catalogue. Matches display/original/alternate titles, years and episode titles; whitespace terms are AND, case-insensitive literal substrings. Returns works and episode hits with their work, canonical Next workId/episodeId, year, local artwork paths, devices and playable facts. limit and episodeLimit bound each group (default 12). Exact titles precede prefixes and substrings, then recent additions. Cold first read prepares the index; background catalogue refresh updates it every 5 seconds, media.library.refresh updates immediately. Offline peers retain facts with playable=false. Does not call Classic recorded-library search or browse/register source files.',
+      effect: Effect.read,
+      input: ObjectSchema({
+        'query': StringSchema(minLength: 1),
+        'limit': IntegerSchema(minimum: 1, maximum: 100),
+        'episodeLimit': IntegerSchema(minimum: 1, maximum: 100),
+      }, required: ['query']),
+      output: ObjectSchema({
+        'works': ArraySchema(ObjectSchema({}, additionalProperties: true)),
+        'episodes': ArraySchema(ObjectSchema({}, additionalProperties: true)),
+        'workTotal': IntegerSchema(minimum: 0),
+        'episodeTotal': IntegerSchema(minimum: 0),
+      }, required: ['works', 'episodes', 'workTotal', 'episodeTotal']));
+  @override
+  MeshJson decodeInput(JsonMap input) => MeshJson(input);
+  @override
+  Future<Outcome<MeshJson>> run(MeshJson input, Invocation invocation) async =>
+      Completed(MeshJson(await library.search(input.json['query'] as String,
+          limit: input.json['limit'] as int? ?? 12,
+          episodeLimit: input.json['episodeLimit'] as int?)));
 }
 
 final class _LibraryAction extends Action<MeshJson, MeshJson> {

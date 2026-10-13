@@ -61,6 +61,12 @@ Future<void> x47LibraryExperiment(_Rig rig) async {
       'revision': 0,
       'created_at': '2026-10-13T00:00:00Z'
     });
+    await ui.db.insert('media_snapshots', {
+      'id': '$id-snapshot', 'object_id': '$id-object', 'language': 'zh-CN',
+      'fetched_at': '2026-10-13T00:00:00Z',
+      'fields': jsonEncode({'metadata': {'title': 'X47 开放视频',
+        'originalTitle': 'Open Video', 'aliases': ['开放别名'], 'year': 2026}}),
+    });
     for (final number in numbers) {
       final path = number == 1
           ? duplicate ?? first.path
@@ -119,6 +125,10 @@ Future<void> x47LibraryExperiment(_Rig rig) async {
   await changed;
   final works = await a.library();
   expect(works, hasLength(1));
+  for (final query in ['Open Video', '开放别名', '2026']) {
+    final result = await a.meshLibrary!.search(query);
+    expect(((result['works'] as List).single as Map)['workId'], works.single.workId);
+  }
   final eps = await a.episodes(works.single.workId);
   expect(eps.map((e) => e.number).toList(), List.generate(12, (i) => i + 1));
   expect(eps.take(3).every((e) => e.device == null), true);
@@ -242,6 +252,19 @@ Future<void> x47LibraryExperiment(_Rig rig) async {
           .every((e) => !e.playable && e.device?.online == false),
       true);
   expect(await File(offline.single.artwork.poster!).exists(), true);
+  final search = await a.meshLibrary!.search('第 4 集');
+  final hit = (search['episodes'] as List).single as Map;
+  expect((hit['work'] as Map)['workId'], offline.single.workId);
+  expect((hit['episode'] as Map)['episodeId'], eps[3].episodeId);
+  expect((hit['episode'] as Map)['playable'], false);
+  expect(((hit['episode'] as Map)['device'] as Map)['online'], false);
+  final acceptedIds = await a.meshLibrary!.searchWorkIds([
+    const ExternalRef('dandanplay', 'work', '4700'),
+    const ExternalRef('dandanplay', 'anime', '4700'),
+    const ExternalRef('dandanplay', 'anime', 'unknown'),
+  ]);
+  expect(acceptedIds, [offline.single.workId, offline.single.workId, null]);
+  print('X56 evidence: real authenticated Mesh search resolves canonical work/episode IDs; offline episode retains device and playable=false; accepted online identity resolves merged work, absent identity is null.');
   print(
       'X47 evidence: 1 merged work; 12 episodes; local duplicate preferred; ${await video.length()} real video bytes; Range 206 / suffix / HEAD / 416; ffprobe ${probed.stdout}; seek 8s decoded MD5 ${sought.stdout}; LWW .75 -> .25; rejected batch unchanged; offline retained artwork/catalogue.');
 }

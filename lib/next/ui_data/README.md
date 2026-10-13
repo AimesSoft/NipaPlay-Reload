@@ -4,6 +4,15 @@
 
 ## 按来源的片库（X48）
 
+X56 搜索经 `media.library.search_merged` 读取同一合并目录投影，返回作品摘要和
+命中的 `{work,episode}`。作品 ID/剧集 ID 与 `work()/episodes()/ui.open` 一致；
+摘要增加 `aliases` 和作品级 `playable`，其他字段沿用 `workJson/episodeJson`。
+标题、原名、各设备已有别名/替代标题与年份写在 `next_library_index.facts`，
+剧集标题与身份键也随 compose 维护。内存 Unicode 1–3 字符倒排索引只对文字变化
+更新 posting，进度/在线事实更新不重建文字 posting；搜索仅交集候选并返回有界结果。
+首次读会准备目录，后续随五秒目录刷新；不从 UI 的 library.merged 全量视图筛选。
+详细接线说明在 `docs/next/X56_REPORT.md`。
+
 入口是 `core.libraryData`（实现 `NextLibraryData`）和 `core.libraryActions`
 （实现 `NextLibraryActions`），后端为 `LibraryDataService`。不需要界面解析 Action
 回执。`sources/page/items` 分别读取来源菜单、当前类别和分页；`items` 默认 60、
