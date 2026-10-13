@@ -5,18 +5,25 @@ import '../../ui_data/ui_data.dart';
 import 'discover.dart';
 
 /// What the search box asks, one group at a time; each group answers on its
-/// own and may fail on its own. Read only.
+/// own and may fail on its own, the sources each on their own too. Read
+/// only.
 abstract interface class NextSearchData {
   /// Works (and episodes) the viewer has, on this device and the others in
   /// the mesh, matching [query].
   Future<UiLibraryHits> library(String query);
 
-  /// Works found online, for their page with “让 Nipa 准备” ([Found]).
+  /// Works found online. One the library has carries its library workId
+  /// (its page opens); the others are found works ([Found]), for their page
+  /// with “让 Nipa 准备”.
   Future<List<UiWork>> online(String query);
 
-  /// What the media sources (Jellyfin, Emby, SMB…) hold matching [query].
-  /// Null: sources cannot be searched; the group is not shown.
-  Future<List<UiSourceHit>>? sources(String query);
+  /// The media sources the box looks in (Jellyfin, Emby, SMB, WebDAV), read
+  /// when the panel opens. None: there is no 来源 group.
+  Future<List<UiSearchSource>> sources();
+
+  /// What [source] holds matching [query], at most [limit].
+  Future<UiSourceAnswer> searchSource(UiSearchSource source, String query,
+      {int limit});
 }
 
 final class UiLibraryHits {
@@ -29,34 +36,104 @@ final class UiLibraryHits {
   bool get isEmpty => works.isEmpty && episodes.isEmpty;
 }
 
-/// A work in one of the media sources.
-final class UiSourceHit {
-  const UiSourceHit(this.work, {required this.source, required this.kind});
+/// A media source the search box looks in.
+final class UiSearchSource {
+  const UiSearchSource(
+      {required this.sourceId, required this.name, required this.kind});
 
-  /// What opens: its page.
-  final UiWork work;
+  /// What it is asked by; never shown.
+  final String sourceId;
 
-  /// The source as the viewer named it: “客厅 Jellyfin”.
-  final String source;
+  /// As the viewer named it: “客厅 Jellyfin”.
+  final String name;
   final UiSourceKind kind;
+}
+
+/// One source's answer.
+final class UiSourceAnswer {
+  const UiSourceAnswer(this.hits, {this.failed = false});
+  final List<UiSourceHit> hits;
+
+  /// It could not be searched now: what it holds is unknown, not nothing.
+  /// [hits], if any, are what it held when last seen.
+  final bool failed;
+}
+
+enum UiSourceHitKind {
+  /// A series or a film: its page opens.
+  work,
+
+  /// An episode or a video: it plays.
+  episode,
+
+  /// A file of a share.
+  file,
+}
+
+/// Something a media source holds that matches.
+///
+/// What it opens: an [episode] plays (or, when it cannot, its [work]'s page
+/// opens); otherwise the [work]'s page; a file no work holds plays from the
+/// source itself, by [itemId].
+final class UiSourceHit {
+  const UiSourceHit({
+    required this.source,
+    required this.itemId,
+    required this.kind,
+    required this.title,
+    this.work,
+    this.episode,
+    this.playable = false,
+    this.reachable = true,
+  });
+
+  final UiSearchSource source;
+
+  /// What the source calls it; never shown, and never a work's ID.
+  final String itemId;
+  final UiSourceHitKind kind;
+
+  /// Its name there: the series', the episode's, the file's.
+  final String title;
+
+  /// The work it is, or the one it belongs to; null for a file no work
+  /// holds yet.
+  final UiWork? work;
+
+  /// What plays, for an episode or a file of one.
+  final UiEpisode? episode;
+
+  /// It plays from here now. False is not “offline”: a share's state may be
+  /// unknown ([reachable] still true), and a series is not played itself.
+  final bool playable;
+
+  /// False when the source could not be reached: what it held when last
+  /// seen.
+  final bool reachable;
 }
 
 /// The real searches, invoked as the interface (`origin: gui`):
 ///
-/// - 片库: `state.query` over `library.merged`, the viewer's library across
-///   the mesh, whose IDs `work()` and `ui.open` accept. Its title only (the
-///   view declares no original title); no episodes (nothing searches
-///   episode titles yet).
-/// - 在线: `media.metadata.search` on 弹弹play, whose works the found page
-///   ([CoreDiscover.details]) can read.
-/// - 来源: none. Sources are only searched by `media.sources.browse`, which
-///   writes what it finds into the file index: not for every keystroke.
+/// - 片库: `media.library.search_merged`, the viewer's library across the
+///   mesh by title, original title, other titles, year and episode titles;
+///   its IDs open the work page and play.
+/// - 在线: `media.metadata.search` on 弹弹play. A result the library has
+///   names its library work.
+/// - 来源: `media.sources.list` for the sources, then
+///   `media.sources.search` for each one on its own.
 final class CoreSearch implements NextSearchData {
   /// [harness]: the runtime's, read at each call (it may come later).
   CoreSearch(this.harness);
   final Harness Function() harness;
 
   static const _limit = 12;
+  static const _episodeLimit = 4;
+  static const _searchable = {
+    'jellyfin': UiSourceKind.jellyfin,
+    'emby': UiSourceKind.emby,
+    'smb': UiSourceKind.smb,
+    'webdav': UiSourceKind.webdav,
+  };
 
   Future<JsonMap> _call(String action, JsonMap input) async {
     final outcome =
@@ -71,42 +148,94 @@ final class CoreSearch implements NextSearchData {
   static String? _text(Object? v) =>
       v is String && v.trim().isNotEmpty ? v.trim() : null;
 
+  static int? _int(Object? v) => v is int ? v : null;
+
+  static List<Map> _maps(Object? v) =>
+      v is List ? v.whereType<Map>().toList() : const [];
+
   @override
   Future<UiLibraryHits> library(String query) async {
-    final result = await _call('state.query', {
-      'view': 'library.merged',
-      'filter': {
-        'title': {'contains': query}
-      },
+    final result = await _call('media.library.search_merged', {
+      'query': query,
       'limit': _limit,
+      'episodeLimit': _episodeLimit,
     });
     return UiLibraryHits(works: [
-      for (final row in (result['rows'] as List).cast<Map>())
-        if (_text(row['workId']) case final id?) _work(id, row),
+      for (final w in _maps(result['works']))
+        if (_work(w) case final work?) work,
+    ], episodes: [
+      for (final hit in _maps(result['episodes']))
+        if (hit['work'] case final Map w)
+          if (_work(w) case final work?)
+            if (hit['episode'] case final Map e)
+              if (_episode(e) case final episode?) (work, episode),
     ]);
   }
 
-  /// The view's public fields only: no year or original title (they are
-  /// not declared), the count from its episodes as the library's codec does.
-  static UiWork _work(String id, Map row) {
-    final art = row['artwork'] is Map ? row['artwork'] as Map : const {};
-    final devices = row['devices'] is List ? row['devices'] as List : const [];
-    final episodes =
-        row['episodes'] is List ? row['episodes'] as List : const [];
+  /// A work of the merged catalogue as the library writes it (`workJson`):
+  /// its counts, year and devices are the catalogue's own.
+  static UiWork? _work(Map w) {
+    final id = _text(w['workId']);
+    if (id == null) return null;
+    final art = w['artwork'] is Map ? w['artwork'] as Map : const {};
     return UiWork(
       workId: id,
-      title: _text(row['title']) ?? '',
-      episodeCount: episodes.isEmpty ? null : episodes.length,
+      title: _text(w['title']) ?? '',
+      originalTitle: _text(w['originalTitle']),
+      year: _int(w['year']),
+      genres: [
+        for (final g in w['genres'] is List ? w['genres'] as List : const [])
+          if (_text(g) case final genre?) genre
+      ],
+      episodeCount: _int(w['episodeCount']),
+      studio: _text(w['studio']),
+      overview: _text(w['overview']),
+      ratings: [
+        for (final r in _maps(w['ratings']))
+          if ((_text(r['source']), r['value']) case (final s?, final num v))
+            UiRating(s, v.toDouble())
+      ],
       artwork: UiArtwork(
         backdrop: _text(art['backdrop']),
         poster: _text(art['poster']),
-        tint: art['tint'] is int ? art['tint'] as int : null,
+        logo: _text(art['logo']),
+        tint: _int(art['tint']),
       ),
+      next: w['next'] is Map ? _episode(w['next'] as Map) : null,
       devices: [
-        for (final d in devices.whereType<Map>())
-          if (_text(d['name']) case final name?)
-            UiDevice(name: name, online: d['online'] != false)
+        for (final d in _maps(w['devices']))
+          if (_device(d) case final device?) device
       ],
+    );
+  }
+
+  static UiDevice? _device(Map d) => switch (_text(d['name'])) {
+        final name? => UiDevice(name: name, online: d['online'] != false),
+        null => null,
+      };
+
+  /// An episode as the library writes it (`episodeJson`); [playable]
+  /// already says whether its device answers.
+  static UiEpisode? _episode(Map e) {
+    final id = _text(e['episodeId']), workId = _text(e['workId']);
+    final number = _int(e['number']);
+    if (id == null || workId == null || number == null) return null;
+    final heat = e['heat'] is List ? e['heat'] as List : null;
+    return UiEpisode(
+      episodeId: id,
+      workId: workId,
+      number: number,
+      season: _int(e['season']),
+      title: _text(e['title']),
+      runtime: switch (e['runtimeMs']) {
+        final int ms => Duration(milliseconds: ms),
+        _ => null,
+      },
+      still: _text(e['still']),
+      progress: (e['progress'] as num?)?.toDouble(),
+      heat: heat?.whereType<num>().map((n) => n.toDouble()).toList(),
+      playable: e['playable'] == true,
+      device: e['device'] is Map ? _device(e['device'] as Map) : null,
     );
   }
 
@@ -115,13 +244,14 @@ final class CoreSearch implements NextSearchData {
     final result = await _call(
         'media.metadata.search', {'provider': 'dandanplay', 'query': query});
     return [
-      for (final r in (result['results'] as List).cast<Map>().take(_limit))
+      for (final r in _maps(result['results']).take(_limit))
         if ((r['ref'] as Map?)?['externalId'] case final String external)
           UiWork(
-            workId: Found.id('dandanplay', external),
+            // In the library: its page there, not the found one.
+            workId: _text(r['workId']) ?? Found.id('dandanplay', external),
             title: _text(r['title']) ?? '',
             originalTitle: _text(r['originalTitle']),
-            year: r['year'] as int?,
+            year: _int(r['year']),
             overview: _text(r['overview']),
             artwork: UiArtwork(poster: _text(r['imageUrl'])),
           ),
@@ -129,5 +259,97 @@ final class CoreSearch implements NextSearchData {
   }
 
   @override
-  Future<List<UiSourceHit>>? sources(String query) => null;
+  Future<List<UiSearchSource>> sources() async {
+    final result = await _call('media.sources.list', {});
+    return [
+      for (final s in _maps(result['sources']))
+        if ((_text(s['sourceId']), _searchable[s['type']])
+            case (final id?, final kind?))
+          UiSearchSource(sourceId: id, name: _text(s['name']) ?? '', kind: kind)
+    ];
+  }
+
+  @override
+  Future<UiSourceAnswer> searchSource(UiSearchSource source, String query,
+      {int limit = 6}) async {
+    final result = await _call('media.sources.search', {
+      'query': query,
+      'sourceIds': [source.sourceId],
+      'limit': limit,
+    });
+    final answer = _maps(result['sources'])
+        .where((s) => s['sourceId'] == source.sourceId)
+        .firstOrNull;
+    if (answer == null) return const UiSourceAnswer([], failed: true);
+    // A source that failed has no total: not “nothing there”. A share that
+    // could not be reached still tells what it held; `unverified` is
+    // unknown, not offline.
+    final reachable = answer['connectionState'] != 'failed';
+    return UiSourceAnswer([
+      for (final e in _maps(answer['entries']))
+        if (_hit(source, e, reachable: reachable) case final hit?) hit
+    ], failed: answer['error'] != null || answer['total'] == null);
+  }
+
+  /// A source's entry: a series or a film opens its page (the library's
+  /// when bound, else the source's own); an episode, a video or a file of
+  /// one plays; a file no work holds plays from the source by its item.
+  static UiSourceHit? _hit(UiSearchSource source, Map e,
+      {required bool reachable}) {
+    final itemId = _text(e['itemId']);
+    if (itemId == null) return null;
+    final meta = e['metadata'] is Map ? e['metadata'] as Map : const {};
+    final title = _text(e['title']) ?? '';
+    final workId = _text(e['workId']) ?? _text(e['sourceWorkId']);
+    final episodeId = _text(e['episodeId']) ?? _text(e['sourceEpisodeId']);
+    final playable = e['playable'] == true && reachable;
+    final kind = switch (e['kind']) {
+      'Series' || 'Movie' => UiSourceHitKind.work,
+      'File' => UiSourceHitKind.file,
+      _ => UiSourceHitKind.episode,
+    };
+    if (kind == UiSourceHitKind.work) {
+      if (workId == null) return null;
+      return UiSourceHit(
+        source: source,
+        itemId: itemId,
+        kind: kind,
+        title: title,
+        work: UiWork(
+          workId: workId,
+          title: title,
+          originalTitle: _text(e['originalTitle']),
+          year: _int(e['year']),
+        ),
+        reachable: reachable,
+      );
+    }
+    // A file's work is only known by its ID here; its page reads the rest.
+    final series = _text(meta['SeriesName']) ??
+        (kind == UiSourceHitKind.file ? null : title);
+    final work = workId == null
+        ? null
+        : UiWork(workId: workId, title: series ?? '', year: _int(e['year']));
+    return UiSourceHit(
+      source: source,
+      itemId: itemId,
+      kind: kind,
+      title: title,
+      work: work,
+      episode: work == null || episodeId == null
+          ? null
+          : UiEpisode(
+              episodeId: episodeId,
+              workId: work.workId,
+              number: kind == UiSourceHitKind.episode
+                  ? _int(meta['IndexNumber']) ?? 0
+                  : 0,
+              season: _int(meta['ParentIndexNumber']),
+              title: title,
+              playable: playable,
+            ),
+      playable: playable,
+      reachable: reachable,
+    );
+  }
 }

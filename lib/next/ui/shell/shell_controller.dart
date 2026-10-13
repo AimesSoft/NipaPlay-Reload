@@ -4,6 +4,7 @@ import 'package:flutter/widgets.dart';
 
 import '../../ui_data/ui_data.dart';
 import '../conversation/nipa_chat.dart';
+import '../data/search.dart';
 import '../data/services.dart';
 import '../detail/work_route.dart';
 import '../search/recent_searches.dart';
@@ -287,8 +288,8 @@ class NextShellController extends ChangeNotifier {
       search.hide(restoreFocus: restoreFocus);
 
   /// A row of the search panel: a work opens its page; an episode plays;
-  /// Nipa gets the words to look for, in the conversation's input, not yet
-  /// said.
+  /// a file of a source no work holds plays from the source; Nipa gets the
+  /// words to look for, in the conversation's input, not yet said.
   void openSearchEntry(SearchEntry entry) {
     if (entry case RecentEntry(:final text)) return search.searchNow(text);
     search.remember();
@@ -299,6 +300,21 @@ class NextShellController extends ChangeNotifier {
       case EpisodeEntry(:final work, :final episode):
         // One that cannot play yet opens its work, where it can be fetched.
         episode.playable ? play(work, episode: episode) : openWork(work);
+      case SourceEntry(:final hit):
+        switch ((hit.kind, hit.work, hit.episode)) {
+          case (UiSourceHitKind.work, final work?, _):
+            openWork(work);
+          case (_, final work?, final episode?):
+            episode.playable ? play(work, episode: episode) : openWork(work);
+          case (_, final work?, null):
+            openWork(work);
+          case (_, null, _):
+            unawaited(services.actions
+                .playFromSource(
+                    sourceId: hit.source.sourceId, itemId: hit.itemId)
+                .catchError(
+                    (Object e) => debugPrint('[NextUi] play failed: $e')));
+        }
       case NipaEntry(:final text):
         final words = '帮我找「$text」';
         askText.value = TextEditingValue(

@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/widgets.dart';
 
 import '../../ui_data/ui_data.dart';
+import '../data/discover.dart' show Found;
 import '../data/search.dart';
 import 'recent_searches.dart';
 
@@ -15,9 +16,15 @@ enum SearchGroupState { idle, loading, done, failed }
 /// (dimmed) when the new query refines the old one.
 final class SearchGroup {
   const SearchGroup(
-      [this.entries = const [], this.state = SearchGroupState.idle]);
+      [this.entries = const [],
+      this.state = SearchGroupState.idle,
+      this.unanswered = const []]);
   final List<SearchEntry> entries;
   final SearchGroupState state;
+
+  /// The sources that could not be searched and have nothing to show, by
+  /// name: what they hold is unknown.
+  final List<String> unanswered;
 
   bool get loading => state == SearchGroupState.loading;
   bool get failed => state == SearchGroupState.failed;
@@ -37,14 +44,15 @@ final class RecentEntry extends SearchEntry {
   String get key => 'recent:$text';
 }
 
-/// A work: in the library, online (its found page) or in a source.
+/// A work: in the library, or online (its found page, or its page in the
+/// library when the library has it).
 final class WorkEntry extends SearchEntry {
-  const WorkEntry(this.group, this.work, {this.source});
+  const WorkEntry(this.group, this.work);
   final SearchGroupKind group;
   final UiWork work;
 
-  /// For a source's work: “客厅 Jellyfin”.
-  final String? source;
+  /// Found online, and the library has it.
+  bool get inLibrary => group == SearchGroupKind.online && !Found.isFound(work);
   @override
   String get key => '${group.name}:${work.workId}';
 }
@@ -55,6 +63,15 @@ final class EpisodeEntry extends SearchEntry {
   final UiEpisode episode;
   @override
   String get key => 'episode:${episode.episodeId}';
+}
+
+/// Something a media source holds: a work, an episode, or a file of a
+/// share.
+final class SourceEntry extends SearchEntry {
+  const SourceEntry(this.hit);
+  final UiSourceHit hit;
+  @override
+  String get key => 'source:${hit.source.sourceId}:${hit.itemId}';
 }
 
 /// The last row: the text, for Nipa to look for.
@@ -88,9 +105,11 @@ class NextSearch extends ChangeNotifier {
   static const _limits = {
     SearchGroupKind.library: 6,
     SearchGroupKind.online: 6,
-    SearchGroupKind.sources: 6,
   };
   static const _episodeLimit = 4;
+
+  /// Rows from each source.
+  static const perSource = 3;
 
   bool _open = false;
   bool get isOpen => _open;
@@ -139,28 +158,29 @@ class NextSearch extends ChangeNotifier {
     ];
   }
 
-  /// A group's rows. Works the library has are not repeated as found
-  /// online.
+  /// A group's rows. A work the library shows is not shown again as found
+  /// online: the same work by its library ID, whatever it is called there.
   List<SearchEntry> shown(SearchGroupKind kind) {
     final group = _groups[kind];
     if (group == null) return const [];
     if (kind != SearchGroupKind.online) return group.entries;
     final have = {
       for (final e in _groups[SearchGroupKind.library]!.entries)
-        if (e is WorkEntry) e.work.title,
+        if (e is WorkEntry) e.work.workId,
     };
     return [
       for (final e in group.entries)
-        if (e is! WorkEntry || !have.contains(e.work.title)) e,
+        if (e is! WorkEntry || !have.contains(e.work.workId)) e,
     ];
   }
 
-  /// Every group has answered the query typed, with nothing.
+  /// Every group, every source, has answered the query typed, with nothing.
   bool get nothingFound =>
       typed.isNotEmpty &&
       typed == _query &&
       _timer == null &&
-      _groups.values.every((g) => g.state == SearchGroupState.done) &&
+      _groups.values.every(
+          (g) => g.state == SearchGroupState.done && g.unanswered.isEmpty) &&
       entries.length == 1;
 
   bool get loading => _timer != null || _groups.values.any((g) => g.loading);
@@ -193,6 +213,8 @@ class NextSearch extends ChangeNotifier {
         TextSelection(baseOffset: 0, extentOffset: text.text.length);
     if (_open) return;
     _open = true;
+    // The sources there are now, read as the panel opens.
+    _sourceList = _readSources();
     _changed();
   }
 
@@ -249,9 +271,7 @@ class NextSearch extends ChangeNotifier {
           refines ? before.entries : const [], SearchGroupState.loading);
       answer.then((entries) {
         if (generation != _generation) return;
-        _groups[kind] = SearchGroup(
-            entries.take(_limits[kind]! + _episodeLimit).toList(),
-            SearchGroupState.done);
+        _groups[kind] = SearchGroup(entries, SearchGroupState.done);
         _changed();
       }, onError: (Object error) {
         if (generation != _generation) return;
@@ -276,23 +296,82 @@ class NextSearch extends ChangeNotifier {
             ]));
     ask(
         SearchGroupKind.online,
-        Future.sync(() => data.online(q)).then((works) => [
-              for (final w in works.take(_limits[SearchGroupKind.online]!))
-                WorkEntry(SearchGroupKind.online, w),
-            ]));
-    final sources = data.sources(q);
-    if (sources == null) {
-      _groups.remove(SearchGroupKind.sources);
-    } else {
-      _groups[SearchGroupKind.sources] ??= const SearchGroup();
-      ask(
-          SearchGroupKind.sources,
-          sources.then((hits) => [
-                for (final h in hits.take(_limits[SearchGroupKind.sources]!))
-                  WorkEntry(SearchGroupKind.sources, h.work, source: h.source),
-              ]));
-    }
+        Future.sync(() => data.online(q)).then((works) {
+          // Two results may be one work of the library.
+          final seen = <String>{};
+          return [
+            for (final w in works)
+              if (seen.add(w.workId)) WorkEntry(SearchGroupKind.online, w),
+          ].take(_limits[SearchGroupKind.online]!).toList();
+        }));
+    _askSources(q, generation, refines);
     _changed();
+  }
+
+  // —— Sources ——
+
+  /// The sources, read when the panel opens; read again after a failure.
+  Future<List<UiSearchSource>>? _sourceList;
+
+  Future<List<UiSearchSource>> _readSources() {
+    final list = Future.sync(data.sources);
+    list.then((_) {}, onError: (Object error) {
+      if (identical(_sourceList, list)) _sourceList = null;
+    });
+    return list;
+  }
+
+  /// Every source on its own: its rows land as it answers, in the sources'
+  /// order; one that cannot answer says so alone. No sources, no group.
+  void _askSources(String q, int generation, bool refines) {
+    const kind = SearchGroupKind.sources;
+    final kept = refines
+        ? _groups[kind]?.entries ?? const <SearchEntry>[]
+        : const <SearchEntry>[];
+    _groups[kind] = SearchGroup(kept, SearchGroupState.loading);
+    (_sourceList ??= _readSources()).then((sources) {
+      if (generation != _generation) return;
+      if (sources.isEmpty) {
+        _groups.remove(kind);
+        _changed();
+        return;
+      }
+      final answers = List<UiSourceAnswer?>.filled(sources.length, null);
+      void land(int i, UiSourceAnswer answer) {
+        if (generation != _generation) return;
+        answers[i] = answer;
+        final seen = <String>{};
+        _groups[kind] = SearchGroup(
+          [
+            for (final a in answers.nonNulls)
+              for (final hit in a.hits.take(perSource))
+                if (SourceEntry(hit) case final e when seen.add(e.key)) e,
+          ],
+          answers.contains(null)
+              ? SearchGroupState.loading
+              : SearchGroupState.done,
+          [
+            for (final (i, a) in answers.indexed)
+              if (a != null && a.failed && a.hits.isEmpty) sources[i].name,
+          ],
+        );
+        _changed();
+      }
+
+      for (final (i, source) in sources.indexed) {
+        Future.sync(() => data.searchSource(source, q, limit: perSource))
+            .then((answer) => land(i, answer), onError: (Object error) {
+          debugPrint('[NextUi] search ${source.kind.name} source failed: '
+              '$error');
+          land(i, const UiSourceAnswer([], failed: true));
+        });
+      }
+    }, onError: (Object error) {
+      if (generation != _generation) return;
+      debugPrint('[NextUi] search sources failed: $error');
+      _groups[kind] = const SearchGroup([], SearchGroupState.failed);
+      _changed();
+    });
   }
 
   /// Puts [term] in the box and searches it at once (a recent term).

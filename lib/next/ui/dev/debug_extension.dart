@@ -122,11 +122,12 @@ import '../settings/settings_page.dart';
 ///   page on top; a timed scroll also reports how long its frames took.
 ///   `scroll` takes `ms=` too, for the page showing.
 /// - `search` [`open=true|false`] [`text=`] [`key=down|up|enter|escape,…`]
-///   [`fail=library,online,sources|none`] [`clear=true`] [`wait=ms`]: the
-///   search panel (what ⌘F opens), typed into as the keyboard would (the
-///   debounce applies; `wait`, 300 by default, lets groups answer before
-///   the keys), its keys, the scripted
-///   groups that fail, its recent terms cleared; returns what it shows.
+///   [`fail=library,online,sources,<source id>…|none`] [`clear=true`]
+///   [`wait=ms`]: the search panel (what ⌘F opens), typed into as the
+///   keyboard would (the debounce applies; `wait`, 300 by default, lets
+///   groups answer before the keys), its keys, the scripted groups or
+///   sources that fail (`sources`: their list; by default the unreachable
+///   Emby), its recent terms cleared; returns what it shows.
 abstract final class NextUiDebug {
   static NextShellController? _shell;
   static BuildContext? _context;
@@ -645,8 +646,12 @@ abstract final class NextUiDebug {
     final s = shell.search;
     String row(SearchEntry e) => switch (e) {
           RecentEntry(:final text) => text,
-          WorkEntry(:final work, :final source) =>
-            source == null ? work.title : '${work.title} ($source)',
+          WorkEntry(:final work, :final inLibrary) =>
+            inLibrary ? '${work.title} (in library)' : work.title,
+          SourceEntry(:final hit) => '${hit.kind.name} ${hit.title} '
+              '(${hit.source.name}'
+              '${hit.playable ? ', plays' : ''}'
+              '${hit.reachable ? '' : ', unreachable'})',
           EpisodeEntry(:final work, :final episode) =>
             '${work.title} ${episode.number} ${episode.title ?? ''}',
           NipaEntry(:final text) => 'nipa: $text',
@@ -664,6 +669,7 @@ abstract final class NextUiDebug {
           kind.name: {
             'state': g.state.name,
             'rows': [for (final e in s.shown(kind)) row(e)],
+            if (g.unanswered.isNotEmpty) 'unanswered': g.unanswered,
           }
       },
     };

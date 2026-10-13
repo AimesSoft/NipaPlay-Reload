@@ -5,6 +5,11 @@ import '../../ui_data/ui_data.dart';
 abstract interface class NextUiActions {
   /// Plays [episode], or the work's next episode.
   Future<void> play(UiWork work, {UiEpisode? episode});
+
+  /// Plays an item of a media source that no work holds yet, such as a
+  /// file on a share (`media.sources.play`).
+  Future<void> playFromSource(
+      {required String sourceId, required String itemId});
   Future<void> pauseTask(String taskId);
   Future<void> resumeTask(String taskId);
   Future<void> cancelTask(String taskId);
