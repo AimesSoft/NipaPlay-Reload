@@ -14,6 +14,7 @@ import 'registry_rows.dart';
 import 'section_accounts.dart';
 import 'section_host.dart';
 import 'section_misc.dart';
+import 'section_more.dart';
 import 'settings_layout.dart';
 
 /// Where `/settings` opens: a section, and a setting in it to show.
@@ -67,16 +68,24 @@ class _SettingsPageState extends State<SettingsPage> implements SettingsDebug {
   final _sources = GlobalKey<SourcesSectionState>();
   final _devices = GlobalKey<DevicesSectionState>();
   final _nipa = GlobalKey<NipaSectionState>();
+  final _storage = GlobalKey<StorageSectionState>();
+  final _about = GlobalKey<AboutSectionState>();
+  final _sync = GlobalKey<SyncSectionState>();
+
+  /// A source to show opened, or `new` for one being added.
   String? _openSource;
 
   static const _words = <SettingsSection, String>{
     SettingsSection.accounts: '账号 登录 退出 弹弹play bangumi 同步 观看记录',
-    SettingsSection.sources: '媒体来源 服务器 jellyfin emby smb webdav nas 网盘 库 共享',
+    SettingsSection.sources: '媒体来源 服务器 jellyfin emby smb webdav nas 网盘 库 共享 '
+        '本机 文件夹 扫描 附近 nipaplay',
     SettingsSection.devices: '设备 组网 本机名 运行程序 远程 局域网',
+    SettingsSection.sync: '同步 多端 webdav 坚果云 nextcloud 服务器 备份 记录',
     SettingsSection.nipa: 'nipa 模型 codex api key 密钥 记忆 记得 提供方',
-    SettingsSection.storage: '存储 缓存 清理 截图 空间',
+    SettingsSection.storage: '存储 缓存 清理 截图 空间 磁盘 缩略图',
     SettingsSection.shortcuts: '快捷键 按键 键盘',
-    SettingsSection.about: '关于 版本 更新',
+    SettingsSection.plugins: '插件 扩展 市场 安装 脚本 js 弹幕源',
+    SettingsSection.about: '关于 版本 更新 检查更新 新版本',
     SettingsSection.classic: '经典 classic 旧界面',
   };
 
@@ -132,12 +141,22 @@ class _SettingsPageState extends State<SettingsPage> implements SettingsDebug {
       _section = section;
       _search.clear();
       _highlight = null;
+      _openSource = null;
     });
     if (_scroll.hasClients) _scroll.jumpTo(0);
   }
 
+  /// 媒体来源, a new source being added (the 片库's “添加来源”).
+  void _addSource({String? type}) {
+    _go(SettingsSection.sources);
+    setState(() => _openSource = 'new');
+    WidgetsBinding.instance.addPostFrameCallback(
+        (_) => _sources.currentState?.show('new', type: type));
+  }
+
   /// A setting where it lives, lit for a moment.
   void _show(String key) {
+    if (key == SourcesSection.addKey) return _addSource();
     _fade?.cancel();
     setState(() {
       _section = SettingsLayout.sectionOf(key);
@@ -185,8 +204,11 @@ class _SettingsPageState extends State<SettingsPage> implements SettingsDebug {
     final shell = _shell!;
     return switch (section) {
       SettingsSection.accounts => AccountsSection(data: data),
-      SettingsSection.sources =>
-        SourcesSection(key: _sources, data: data, open: _openSource),
+      SettingsSection.sources => SourcesSection(
+          key: _sources,
+          data: data,
+          folders: shell.services.folders,
+          open: _openSource),
       SettingsSection.devices => DevicesSection(key: _devices, host: data.host),
       SettingsSection.nipa => NipaSection(
           key: _nipa,
@@ -196,16 +218,35 @@ class _SettingsPageState extends State<SettingsPage> implements SettingsDebug {
           more: _isMore(section),
           onMore: () => _toggleMore(section),
           highlight: _highlight),
+      SettingsSection.sync => SyncSection(
+          key: _sync,
+          sync: shell.services.sync,
+          model: model,
+          more: _isMore(section),
+          onMore: () => _toggleMore(section),
+          highlight: _highlight),
       SettingsSection.storage => StorageSection(
-          data: data,
+          key: _storage,
+          upkeep: shell.services.upkeep,
           model: model,
           more: _isMore(section),
           onMore: () => _toggleMore(section),
           highlight: _highlight),
       SettingsSection.shortcuts =>
         ShortcutsSection(model: model, highlight: _highlight),
-      SettingsSection.about =>
-        AboutSection(data: data, model: model, highlight: _highlight),
+      SettingsSection.plugins => PluginsSection(
+          plugins: shell.services.plugins,
+          data: data,
+          model: model,
+          more: _isMore(section),
+          onMore: () => _toggleMore(section),
+          highlight: _highlight),
+      SettingsSection.about => AboutSection(
+          key: _about,
+          data: data,
+          upkeep: shell.services.upkeep,
+          model: model,
+          highlight: _highlight),
       SettingsSection.classic => ClassicSection(
           model: model,
           onLeave: shell.onLeave,
@@ -375,7 +416,41 @@ class _SettingsPageState extends State<SettingsPage> implements SettingsDebug {
     }
     if (p['source'] case final which?) {
       _openSource = which == 'none' ? null : which;
-      _sources.currentState?.debugOpen(_openSource);
+      _sources.currentState?.show(_openSource);
+    }
+    if (p['adding'] == 'true') _addSource();
+    switch (p['folders']) {
+      case 'scan':
+        _go(SettingsSection.sources);
+        await Future<void>.delayed(const Duration(milliseconds: 400));
+        await _sources.currentState?.debugScan();
+      case 'nearby':
+        _addSource(type: 'nipaplay');
+    }
+    if (p['plugins'] == 'market') {
+      _go(SettingsSection.plugins);
+      setState(() => _more.add(SettingsSection.plugins));
+    }
+    if (p['sync'] case final what?) {
+      _go(SettingsSection.sync);
+      await Future<void>.delayed(const Duration(milliseconds: 400));
+      final sync = _sync.currentState;
+      switch (what) {
+        case 'test':
+          await sync?.test();
+        case 'run':
+          await sync?.run();
+      }
+    }
+    if (p['clear'] case final kind?) {
+      _go(SettingsSection.storage);
+      await Future<void>.delayed(const Duration(milliseconds: 400));
+      await _storage.currentState?.clear(kind);
+    }
+    if (p['update'] == 'check') {
+      _go(SettingsSection.about);
+      await Future<void>.delayed(const Duration(milliseconds: 400));
+      await _about.currentState?.check();
     }
     if (p['memory'] case final path?) {
       _nipa.currentState?.debugOpenMemory(path == 'none' ? null : path);

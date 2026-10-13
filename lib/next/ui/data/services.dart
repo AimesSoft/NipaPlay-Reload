@@ -10,11 +10,17 @@ import '../conversation/chat_port.dart';
 import '../dev/dev_services.dart';
 import 'core_connect.dart';
 import 'core_settings.dart';
+import 'background.dart';
+import 'collections.dart';
 import 'discover.dart';
+import 'downloads.dart';
+import 'gui_calls.dart';
+import 'history.dart';
 import 'login_requests.dart';
 import 'search.dart';
 import 'settings_data.dart';
 import 'ui_actions.dart';
+import 'upkeep.dart';
 
 /// Everything the Next shell talks to.
 final class NextUiServices {
@@ -28,8 +34,10 @@ final class NextUiServices {
     required this.search,
     required this.settings,
     LoginRequests? logins,
+    GuiCalls? calls,
     this.onDispose,
-  }) : logins = logins ?? LoginRequests();
+  })  : logins = logins ?? LoginRequests(),
+        calls = calls ?? GuiCalls.none();
 
   final NextUiData data;
   final NextUiActions actions;
@@ -51,6 +59,17 @@ final class NextUiServices {
 
   /// Logins the agent asked for, waiting for the user's window.
   final LoginRequests logins;
+
+  /// Actions the pages call as the person, and what reads them.
+  final GuiCalls calls;
+  late final downloads = NextDownloads(calls);
+  late final background = NextBackground(calls);
+  late final history = NextHistory(calls);
+  late final collections = NextCollections(calls);
+  late final upkeep = NextUpkeep(calls);
+  late final plugins = NextPlugins(calls);
+  late final sync = NextSync(calls);
+  late final folders = NextFolders(calls);
   final VoidCallback? onDispose;
 
   void dispose() {
@@ -85,6 +104,10 @@ final class NextUiServices {
       search: CoreSearch(() => runtime.harness),
       settings: settings,
       logins: logins,
+      calls: GuiCalls(() async {
+        await core.ready;
+        return runtime.harness;
+      }),
       onDispose: () {
         detach();
         settings.dispose();

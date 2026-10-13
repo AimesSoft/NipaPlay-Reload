@@ -32,6 +32,7 @@ class AskBar extends StatefulWidget {
     this.onAttach,
     this.onDetach,
     this.running = false,
+    this.aside,
     this.onStop,
     this.onExpand,
   });
@@ -52,6 +53,10 @@ class AskBar extends StatefulWidget {
 
   /// A turn runs: with nothing typed, the send button stops it.
   final bool running;
+
+  /// In the suggestions' place, when there is something else to show
+  /// there (the way to set Nipa up).
+  final Widget? aside;
   final VoidCallback? onStop;
 
   /// Expands the conversation; null while there is none yet.
@@ -214,7 +219,9 @@ class _AskBarState extends State<AskBar> {
             mainAxisSize: MainAxisSize.min,
             children: [
               field,
-              if (chips.isNotEmpty && empty)
+              if (widget.aside case final aside?)
+                Padding(padding: const EdgeInsets.only(left: 14), child: aside)
+              else if (chips.isNotEmpty && empty)
                 Flexible(
                   child: Padding(
                     padding: const EdgeInsets.only(left: 14),

@@ -9,8 +9,8 @@ import '../data/settings_data.dart';
 
 /// The scripted settings world: the registry's real contracts when the
 /// core can describe them (values start at their defaults, nothing is
-/// written back), otherwise a sample of them; accounts, sources, memory,
-/// caches and the host's own settings in memory. Debug lab profiles only.
+/// written back), otherwise a sample of them; accounts, sources, memory
+/// and the host's own settings in memory. Debug lab profiles only.
 final class FakeSettings implements NextSettingsData {
   FakeSettings({this.describe});
 
@@ -381,34 +381,10 @@ final class FakeSettings implements NextSettingsData {
     _changed();
   }
 
-  // —— 存储、关于 ——
-
-  final _caches = <String, (String, int)>{
-    'images': ('图片缓存', 1395864371),
-    'danmaku': ('弹幕缓存', 299892736),
-  };
+  // —— 关于 ——
 
   @override
-  Future<UiStorage> storage() async => UiStorage(caches: [
-        for (final e in _caches.entries)
-          UiCache(id: e.key, title: e.value.$1, bytes: e.value.$2)
-      ]);
-
-  @override
-  Future<void> clearCache(String id) async {
-    await Future<void>.delayed(const Duration(milliseconds: 900));
-    _caches[id] = (_caches[id]!.$1, 0);
-  }
-
-  @override
-  Future<UiAbout> about() async =>
-      const UiAbout(version: '1.9.3', updates: true);
-
-  @override
-  Future<UiUpdate> checkUpdate() async {
-    await Future<void>.delayed(const Duration(milliseconds: 800));
-    return const UiUpdate(latest: '1.9.4', newer: true);
-  }
+  Future<UiAbout> about() async => const UiAbout(version: '1.9.3');
 
   /// Debug: `model=key|nokey|codex|nocodex`, `mesh=online|offline|unavailable`.
   Map<String, Object?> scenario(Map<String, String> p) {

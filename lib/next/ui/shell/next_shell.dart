@@ -18,6 +18,7 @@ import '../settings/settings_page.dart';
 import '../theme/tokens.dart';
 import '../widgets/art_origin.dart';
 import '../widgets/grain.dart';
+import '../widgets/sheet.dart';
 import 'shell_controller.dart';
 import 'top_bar.dart';
 
@@ -190,6 +191,7 @@ class _NextShellState extends State<NextShell> {
                         onClose: _shell.closeSearch,
                       ),
                     ),
+                    const Positioned.fill(child: NextSheetLayer()),
                   ]),
                 ),
               ),

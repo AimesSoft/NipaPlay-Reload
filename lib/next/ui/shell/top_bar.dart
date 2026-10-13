@@ -8,7 +8,9 @@ import '../widgets/buttons.dart';
 import '../widgets/icons.dart';
 import '../widgets/menu.dart';
 import '../widgets/nipa_avatar.dart';
+import '../settings/settings_layout.dart';
 import 'background.dart';
+import 'nipa_setup.dart';
 import 'shell_controller.dart';
 import 'window_chrome.dart';
 
@@ -112,9 +114,10 @@ class NextTopBar extends StatelessWidget {
                     onTap: shell.openSearch),
                 const SizedBox(width: _gap),
                 ListenableBuilder(
-                  listenable: shell.chat,
+                  listenable: Listenable.merge([shell.chat, shell.nipaSetup]),
                   builder: (context, _) {
                     final c = shell.chat;
+                    final unset = shell.nipaSetup.needsModel;
                     // Click: the conversation; right click or long press:
                     // the menu (settings, back to Classic).
                     return GestureDetector(
@@ -125,11 +128,20 @@ class NextTopBar extends StatelessWidget {
                         onTap: shell.toggleChat,
                         semanticLabel: 'Nipa',
                         pressScale: 0.94,
-                        builder: (context, hovered) => NipaAvatar(
-                          size: _avatar,
-                          mood: c.mood,
-                          hasNews: c.unseen,
-                          sentence: c.moodSentence,
+                        builder: (context, hovered) => Stack(
+                          clipBehavior: Clip.none,
+                          children: [
+                            NipaAvatar(
+                              size: _avatar,
+                              mood: c.mood,
+                              hasNews: c.unseen,
+                              sentence: c.moodSentence ??
+                                  (unset ? '还没有模型' : null),
+                            ),
+                            if (unset)
+                              const Positioned(
+                                  right: -1, bottom: -1, child: NipaSetupDot()),
+                          ],
                         ),
                       ),
                     );
@@ -256,6 +268,12 @@ class _NipaMenu extends StatelessWidget {
   Widget build(BuildContext context) {
     final shell = NextShellScope.of(context);
     return MenuPanel(children: [
+      if (shell.nipaSetup.needsModel)
+        MenuItem(
+          label: '设置 Nipa',
+          trailing: const NipaSetupDot(),
+          onTap: () => shell.openSettings(section: SettingsSection.nipa),
+        ),
       MenuItem(
         label: '问 Nipa',
         trailing: const KeyHint('⌘ K'),

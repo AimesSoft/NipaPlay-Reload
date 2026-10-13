@@ -51,13 +51,8 @@ abstract interface class NextSettingsData {
   Future<void> editMemory(UiMemoryDoc doc, String content);
   Future<void> forgetMemory(UiMemoryDoc doc);
 
-  /// Caches that can be cleared; [UiStorage.available] false when NipaPlay
-  /// cannot do it from here yet.
-  Future<UiStorage> storage();
-  Future<void> clearCache(String cacheId);
-
+  /// The version running (`app.instance`).
   Future<UiAbout> about();
-  Future<UiUpdate> checkUpdate();
 
   NextHostSettings get host;
 
@@ -409,37 +404,10 @@ final class UiMemoryDoc {
   final String revision;
 }
 
-final class UiCache {
-  const UiCache({required this.id, required this.title, this.bytes});
-  final String id;
-  final String title;
-  final int? bytes;
-}
-
-final class UiStorage {
-  const UiStorage({this.available = true, this.caches = const []});
-  final bool available;
-  final List<UiCache> caches;
-}
-
 final class UiAbout {
-  const UiAbout({this.version, this.build, this.updates = false});
+  const UiAbout({this.version, this.build});
   final String? version;
   final String? build;
-
-  /// NipaPlay can check for a newer version from here.
-  final bool updates;
-}
-
-final class UiUpdate {
-  const UiUpdate(
-      {this.available = true, this.latest, this.newer = false, this.url});
-
-  /// NipaPlay can check from here.
-  final bool available;
-  final String? latest;
-  final bool newer;
-  final String? url;
 }
 
 /// The settings registry's failure, in a few plain words.

@@ -283,15 +283,7 @@ final class CoreSettingsData implements NextSettingsData {
     _changes.add(null);
   }
 
-  // —— 存储、关于 ——
-
-  /// No Action clears caches yet (Y8_REPORT): the page shows none.
-  @override
-  Future<UiStorage> storage() async => const UiStorage(available: false);
-
-  @override
-  Future<void> clearCache(String cacheId) async =>
-      throw const Failure(FailureCode.unavailable, 'No cache action yet.');
+  // —— 关于 ——
 
   @override
   Future<UiAbout> about() async {
@@ -302,10 +294,6 @@ final class CoreSettingsData implements NextSettingsData {
       return const UiAbout();
     }
   }
-
-  /// No Action checks for updates yet (Y8_REPORT).
-  @override
-  Future<UiUpdate> checkUpdate() async => const UiUpdate(available: false);
 
   void dispose() => _changes.close();
 }

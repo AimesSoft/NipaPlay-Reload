@@ -8,6 +8,7 @@ import 'package:provider/provider.dart';
 
 import '../../next_runtime.dart';
 import '../conversation/chat_port.dart';
+import '../data/gui_calls.dart';
 import '../data/services.dart';
 import '../theme/tokens.dart';
 import 'fake_settings.dart';
@@ -52,6 +53,8 @@ abstract final class NextUiDev {
       }
       throw StateError('settings.describe');
     });
+    world.calls.accounts = () async =>
+        {for (final a in await settings.accounts()) a.provider: a.loggedIn};
     return NextUiServices(
       data: world,
       actions: world,
@@ -61,6 +64,7 @@ abstract final class NextUiDev {
       libraryActions: world.catalog,
       search: world.search,
       settings: settings,
+      calls: GuiCalls(() async => world.calls.harness),
       onDispose: () {
         world.dispose();
         settings.dispose();

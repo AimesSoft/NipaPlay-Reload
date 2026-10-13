@@ -13,6 +13,8 @@ import '../settings/settings_layout.dart';
 import '../settings/settings_page.dart';
 import '../theme/tokens.dart';
 import '../widgets/art_origin.dart';
+import '../widgets/sheet.dart';
+import 'nipa_setup.dart';
 
 enum NextSection { home, discover, library, activity }
 
@@ -68,6 +70,9 @@ class NextShellController extends ChangeNotifier {
 
   /// Content scrolled under the top bar: show its scrim.
   final scrolled = ValueNotifier<bool>(false);
+
+  /// Whether Nipa has a model yet (the rest of Next works either way).
+  late final nipaSetup = NipaSetup(services.settings.host);
 
   /// The search panel (⌘F, the top bar's search).
   late final search =
@@ -340,6 +345,7 @@ class NextShellController extends ChangeNotifier {
 
   /// Esc: closes what is on top, one layer at a time.
   bool escape() {
+    if (NextSheetLayer.closeTop()) return true;
     if (search.isOpen) {
       closeSearch();
       return true;
@@ -380,6 +386,7 @@ class NextShellController extends ChangeNotifier {
     chat.dispose();
     search.dispose();
     settingsTarget.dispose();
+    nipaSetup.dispose();
     tasks.dispose();
     scrolled.dispose();
     askFocus.dispose();

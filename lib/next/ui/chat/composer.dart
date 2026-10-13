@@ -5,6 +5,7 @@ import 'package:flutter/widgets.dart';
 import '../../ui_data/ui_data.dart';
 import '../conversation/next_sayings.dart';
 import '../conversation/nipa_chat.dart';
+import '../shell/nipa_setup.dart';
 import '../theme/tokens.dart';
 import '../widgets/artwork.dart';
 import '../widgets/attachments.dart';
@@ -120,6 +121,7 @@ class _ChatComposerState extends State<ChatComposer> {
                         paths: chat.attachments, onRemove: chat.detach),
                 ]),
               ),
+            const NipaSetupChip(padding: EdgeInsets.only(bottom: 8)),
             Row(crossAxisAlignment: CrossAxisAlignment.end, children: [
               Expanded(
                 child: Padding(

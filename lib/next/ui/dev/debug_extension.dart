@@ -17,9 +17,16 @@ import '../cards/card_views.dart';
 import '../chat/chat_frame.dart';
 import '../chat/transcript.dart';
 import '../conversation/nipa_chat.dart';
+import '../detail/collection.dart';
 import '../detail/detail_page.dart';
 import '../detail/episodes.dart';
 import '../home/ask_bar.dart';
+import '../downloads/download_list.dart';
+import '../downloads/download_sheet.dart';
+import '../downloads/limits_sheet.dart';
+import '../downloads/new_download.dart';
+import '../pages/activity_page.dart';
+import '../pages/history_view.dart';
 import '../pages/discover_page.dart';
 import '../panel/chat_panel.dart';
 import '../widgets/drop_zone.dart';
@@ -36,6 +43,7 @@ import '../widgets/buttons.dart';
 import '../widgets/cards.dart';
 import '../widgets/menu.dart';
 import '../widgets/nipa_avatar.dart';
+import '../widgets/sheet.dart';
 import '../widgets/shelf.dart';
 import '../widgets/words.dart';
 import 'dev_services.dart';
@@ -590,6 +598,92 @@ abstract final class NextUiDebug {
         await Future<void>.delayed(const Duration(milliseconds: 600));
         await _settle();
         return {...page.debugStatus(), ...?world, ..._status(shell)};
+      // Y12: sheets, 动态, downloads, the scripted Actions.
+      case 'sheet':
+        if (p['close'] == 'true') NextSheetLayer.closeTop();
+        await Future<void>.delayed(const Duration(milliseconds: 300));
+      case 'activity':
+        if (shell.section != NextSection.activity) {
+          shell.go(NextSection.activity);
+          await Future<void>.delayed(const Duration(milliseconds: 400));
+        }
+        final page = _find<ActivityDebug>();
+        if (page == null) throw StateError('动态 is not showing');
+        await page.debug(p);
+        await Future<void>.delayed(const Duration(milliseconds: 700));
+        await _settle();
+        return {...page.debugStatus(), ..._status(shell)};
+      case 'downloads':
+        final list = _find<DownloadListDebug>();
+        if (list == null) throw StateError('The downloads are not showing');
+        await list.debug(p);
+        await Future<void>.delayed(const Duration(milliseconds: 900));
+        await _settle();
+        return {...list.debugStatus(), ..._status(shell)};
+      case 'download':
+        if (p['jobId'] case final id?) {
+          unawaited(openDownload(shell.services, id));
+          await Future<void>.delayed(const Duration(milliseconds: 900));
+        }
+        final sheet = _find<DownloadSheetDebug>();
+        if (sheet == null) throw StateError('No download sheet is showing');
+        await sheet.debug(p);
+        await Future<void>.delayed(const Duration(milliseconds: 900));
+        await _settle();
+        return {...sheet.debugStatus(), ..._status(shell)};
+      case 'newdl':
+        if (_find<NewDownloadDebug>() == null) {
+          unawaited(newDownload(shell.services,
+              onSettings: () =>
+                  shell.openSettings(section: SettingsSection.downloads)));
+          await Future<void>.delayed(const Duration(milliseconds: 500));
+        }
+        final sheet = _find<NewDownloadDebug>()!;
+        await sheet.debug(p);
+        await Future<void>.delayed(
+            Duration(milliseconds: int.tryParse(p['wait'] ?? '') ?? 1400));
+        await _settle();
+        return {...sheet.debugStatus(), ..._status(shell)};
+      case 'history':
+        if (shell.section != NextSection.activity) {
+          shell.go(NextSection.activity);
+          await Future<void>.delayed(const Duration(milliseconds: 400));
+        }
+        await _find<ActivityDebug>()?.debug(const {'tab': 'history'});
+        await Future<void>.delayed(const Duration(milliseconds: 600));
+        final view = _find<HistoryDebug>();
+        if (view == null) throw StateError('观看记录 is not showing');
+        await view.debug(p);
+        await Future<void>.delayed(const Duration(milliseconds: 900));
+        await _settle();
+        return {...view.debugStatus(), ..._status(shell)};
+      case 'collection':
+        final button = _find<CollectionDebug>();
+        if (button == null) throw StateError('No collection button is showing');
+        await button.debug(p);
+        await Future<void>.delayed(const Duration(milliseconds: 900));
+        await _settle();
+        return {...button.debugStatus(), ..._status(shell)};
+      case 'limits':
+        unawaited(openLimits(shell.services));
+        await Future<void>.delayed(const Duration(milliseconds: 700));
+      case 'fake':
+        final world = shell.services.data;
+        if (world is! FakeWorld) throw StateError('Needs the scripted world');
+        final calls = world.calls;
+        if (p['fail'] case final fail?) {
+          calls.failing
+            ..clear()
+            ..addAll(fail.split(',').where((a) => a.isNotEmpty));
+        }
+        if (p['limits'] case final mode?) calls.limitsMode = mode;
+        if (p['ask'] == 'delete') calls.askToDelete();
+        await Future<void>.delayed(const Duration(milliseconds: 300));
+        return {
+          'failing': calls.failing.toList(),
+          'limits': calls.limitsMode,
+          ..._status(shell)
+        };
       case 'reduce':
         NextMotion.forceReduced = switch (p['on']) {
           'true' => true,
@@ -689,6 +783,8 @@ abstract final class NextUiDebug {
     return {
       'section': shell.section.name,
       'popover': shell.popover.name,
+      'sheets': NextSheetLayer.open,
+      'nipaNeedsModel': shell.nipaSetup.needsModel,
       'panelOpen': shell.panelOpen.value,
       'homeChatOpen': shell.homeChatOpen.value,
       'visible': c.visible,
@@ -766,6 +862,7 @@ abstract final class NextUiDebug {
       'panel' || 'chat' => ChatFrame,
       'discover' => DiscoverPage,
       'search' => SearchLayer,
+      'sheet' => NextSheetLayer,
       _ => null,
     };
     void visit(Element element, bool inArea) {
