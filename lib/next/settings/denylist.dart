@@ -30,6 +30,9 @@ const settingsDenylist = <String>{
   'remoteAccess.ipv6Enabled',
   'remoteControl.receiverEnabled',
   'remoteControl.trustedDevices',
+  'fileProxyPort',
+  'mesh.fileProxyPort',
+  'mesh/fileProxyPort',
 };
 
 const settingsDeniedPrefixes = <String>[

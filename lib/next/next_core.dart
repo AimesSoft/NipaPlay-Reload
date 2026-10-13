@@ -1,3 +1,4 @@
+import 'mesh/files.dart';
 import 'dart:io';
 
 import 'package:nipa_harness/nipa_harness.dart';
@@ -32,6 +33,8 @@ import 'settings/capability.dart';
 import 'settings/classic_settings.dart';
 import 'settings/operations.dart';
 import 'mesh/runtime.dart';
+import 'mesh/library.dart';
+import 'mesh/library_capability.dart';
 import 'mesh/delivery.dart';
 import 'mesh/capability.dart';
 import 'mesh/debug_claim_names.dart';
@@ -201,12 +204,17 @@ final class NextCore {
             changeHistory).view, followups.view]);
     uiData = UiDataService(media.service, engine, state, stateSources, root, credentialVault);
     uiData.subtitles = subtitles;
+    uiData.meshLibrary = MeshLibrary(uiData, mesh);
+    registerMergedLibrary(state, uiData.meshLibrary!);
+    await uiData.meshLibrary!.start();
     settings.register([uiData.openingSetting]);
     capabilities = List.unmodifiable(diskDeletion.protect([
       CredentialCapability(credentials),
       TaskCapability(engine),
       FollowupCapability(followups),
       UiDataCapability(uiData),
+      MeshLibraryCapability(uiData.meshLibrary!),
+        MeshFilesCapability(uiData.meshLibrary!.files),
       downloads.capability,
       downloads.metadataCapability,
       media.capability,

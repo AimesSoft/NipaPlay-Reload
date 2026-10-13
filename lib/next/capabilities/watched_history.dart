@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'package:nipa_harness/nipa_harness.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import '../media/media_service.dart';
+import '../mesh/library.dart';
 
 final class WatchedHistory {
   WatchedHistory(this._media, this.historyDatabase, this.changed);
@@ -102,8 +103,8 @@ final class WatchedHistory {
 }
 
 final class WatchedHistoryCapability implements Capability {
-  WatchedHistoryCapability(WatchedHistory service)
-      : actions = [_MarkWatched(service)];
+  WatchedHistoryCapability(WatchedHistory service, {MeshLibrary Function()? mergedLibrary})
+      : actions = [_MarkWatched(service, mergedLibrary)];
   @override
   final List<Action> actions;
 }
@@ -116,14 +117,15 @@ final class _Value implements JsonEncodable {
 }
 
 final class _MarkWatched extends Action<_Value, _Value> {
-  const _MarkWatched(this.service);
+  const _MarkWatched(this.service, this.mergedLibrary);
   final WatchedHistory service;
+  final MeshLibrary Function()? mergedLibrary;
   @override
   ActionSpec get spec => const ActionSpec(
       id: 'history.mark_watched_batch',
       title: '标记本地观看状态',
       description:
-          'Atomically mark recorded Classic files/episodes watched or unwatched. entries:[{episodeId OR fileId,watched}]. IDs come from library.episodes/library.files. Existing matching, duration and other history fields are preserved. Does not update remote account collections. Multi-episode files are rejected because Classic progress is whole-file.',
+          'Atomically mark recorded Classic files/episodes watched or unwatched. entries:[{episodeId OR fileId,watched}]. IDs come from library.episodes/library.files. Merged episode IDs from library.merged update shared Mesh progress; use a separate batch for Classic file IDs. Existing matching, duration and other history fields are preserved. Does not update remote account collections. Multi-episode Classic files are rejected because Classic progress is whole-file.',
       effect: Effect.write,
       input: ObjectSchema({
         'entries': ArraySchema(ObjectSchema({
@@ -140,7 +142,15 @@ final class _MarkWatched extends Action<_Value, _Value> {
   @override
   _Value decodeInput(JsonMap json) => _Value(json);
   @override
-  Future<Outcome<_Value>> run(_Value input, Invocation invocation) async =>
-      Completed(_Value(await service.set(
-          (input.value['entries'] as List).cast<JsonMap>(), invocation)));
+  Future<Outcome<_Value>> run(_Value input, Invocation invocation) async {
+    final entries = (input.value['entries'] as List).cast<JsonMap>();
+    if (mergedLibrary != null && entries.any((e) => (e['episodeId'] as String? ?? '').startsWith('mesh-'))) {
+      if (entries.any((e) => e['fileId'] != null || !(e['episodeId'] as String? ?? '').startsWith('mesh-'))) {
+        throw const Failure(FailureCode.invalidInput, 'Use separate batches for merged episodes and Classic files.');
+      }
+      await mergedLibrary!().recordProgressBatch([for (final e in entries) {'episodeId': e['episodeId'], 'progress': e['watched'] == true ? 1.0 : 0.0}]);
+      return Completed(_Value({'changed': entries.length, 'episodes': entries.length}));
+    }
+    return Completed(_Value(await service.set(entries, invocation)));
+  }
 }

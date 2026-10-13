@@ -23,11 +23,78 @@ DNS 标签使用公钥 SHA-256 摘要的十六进制，格式为 d-前32字符.�
 私有证书扩展 OID 不参与身份验证。
 
 每个 TLS 连接传输一个 JSON-RPC 请求和响应：4 字节网络字节序长度，随后 UTF-8 JSON，
-上限 1 MiB。initialize、ping、tools/list、tools/call 与回环 MCP 使用相同分派逻辑。
+上限 1 MiB。文件读取响应另有下述二进制格式。initialize、ping、tools/list、tools/call 与回环 MCP 使用相同分派逻辑。
 Mesh 帧增加 mesh: {invocationId, nonce, deadline}；deadline 使用 Unix 毫秒，必须在
 当前时间到 1 小时内。ID/nonce 均至少 22 个 base64url 字符。按来源设备分别去重，
 先持久化无秘密的去重记录，再进入 Harness；重启不会重置仍有效的窗口。
 没有 TLS 0-RTT。并发会话/待分派队列均有上限。
+
+## 跨设备媒体库与文件（X47c）
+
+加入 Mesh 表示宿主同意同账号设备访问。目录、文件读写使用现有 TLS 1.3 双向证书、
+设备公钥身份、有效期和吊销快照；没有 `shareLibrary` 开关，也没有库内路径白名单。
+节点进程能读写的文件，同账号已认证设备就能读写。文件原语与目录协议不经过 Classic
+receiver/trusted-devices 的第二次审批；tools/list 可由已认证设备读取；其他既有工具调用和回传的审批行为保留，X46 合并时
+核对这一小处分派。协调服务只处理身份和地址，视频、字幕、弹幕、写入字节直接在设备
+之间传输，沿用 LAN、overlay、用户自有 SSH 转发候选。
+
+`mesh/library/snapshot` 提供版本化目录页（目标约 256 KiB，单页最大 512 KiB），
+包含来源身份、元数据、剧集、文件摘要及进度观察。接收端每 5 秒拉取，设备名单最多
+每 30 秒刷新；失联不删除上次目录和图片缓存。分页中版本改变则整批拒绝，下次刷新
+重读。每个设备保留自己的数据库，只交换目录事实和小型附件。
+
+`mesh/library/file` 接受 `path`（源设备绝对路径）、`fileId` 或 `assetId`，返回大小与
+mtime 标记；`mesh/library/read` 携带标记和 offset/length，每次最多 1 MiB。
+Rust 在同一 mTLS 连接返回：高位为 1 的 u32 JSON 头长度、JSON 头、u32 字节数、原始
+字节。普通 JSON 响应长度高位为 0。Dart/Rust adapter 内部的 base64 不经过网络 JSON
+帧；视频不会装进 1 MiB JSON。每段重检文件标记，源文件改变时拒绝后续段。
+
+播放端只监听 **127.0.0.1**，默认随机端口，提供进程生命周期内 HTTP GET/HEAD/Range
+转换地址（206、suffix range、416）。不对外开放明文 HTTP。每段数据直接从源节点
+的 mTLS 通道读取，不复制整部视频。播放器打开这种地址时临时清除 HTTP 代理，
+下一次普通播放恢复原代理；ffprobe/ffmpeg 使用地址时回环也应直连。
+
+每次发放 URL 的路径令牌用 `Random.secure()` 生成 **256 位**随机值，不从设备 ID、
+路径或文件 tag 推导。同文件再次发放也生成新令牌；已发放令牌在当前 MeshLibrary
+实例关闭/进程退出前保留，关闭清空令牌。重启即使使用同一固定端口，旧令牌也返回
+404；未发放/猜测的令牌始终返回 404。源文件变化时旧 tag 的字节读取会失败，须重新
+取得地址；源设备离线、证书到期或吊销也仍受原 Mesh 校验约束。URL 是本机可读凭据，
+不要打印或记录其完整值。
+
+宿主可在调用/播放端 `mesh.json` 添加 `"fileProxyPort":54321`，允许整数 **1024–65535**。
+省略或 0 使用随机端口。它是宿主启动配置，不注册 Agent 设置/修改 Action，设置
+注册表拒绝 `fileProxyPort`、`mesh.fileProxyPort`、`mesh/fileProxyPort`；修改配置后重启
+本实例生效。监听在第一次发放远端 URL 时启动；并发发放共用一个监听器。
+固定端口被本进程或其他进程占用时退回随机端口，仍只绑定回环；其它绑定错误不冒充
+端口占用。`state.query {view:"mesh.file_proxy"}` 显示 host、requestedPort、实际 port、
+state（not_started/random/fixed/random_fallback/invalid_configuration/closed）、fallback
+和 reason；占用原因是 requested_port_in_use。该状态视图不包含访问令牌。
+
+Agent 能力（实际 schema 以 `nipa describe` 为准）：
+
+| 能力 | 输入与结果 |
+|---|---|
+| `media.library.readable` | 批量 episodeIds；本机 path，远端为接收端回环 URL |
+| `media.library.refresh` | 显式刷新合并库 |
+| `media.library.progress` | 批量进度观察，允许回退和重置 |
+| `media.mesh_files.readable` | entries:[{path,deviceId?}]；任意可读文件的本机 path 或接收端回环 URL |
+| `media.mesh_files.begin` | path、size、deviceId?；目标父目录暂存，返回 transferId |
+| `media.mesh_files.chunk` | transferId、offset、base64 data、deviceId?；最大 512 KiB 解码字节，相同重试可接受 |
+| `media.mesh_files.finish` | transferId、可选 sha256、deviceId?；校验完成后发布，覆盖返回 NeedsDecision |
+| `media.mesh_files.delete` | paths 批量、deviceId?；只预览，返回 NeedsDecision |
+| `media.mesh_files.confirm` | 决定中的 destructive ActionCall；核对目标未变后执行 |
+| `media.mesh_files.cancel` | 丢弃本原语建立的暂存文件 |
+
+省略 deviceId 操作本机。删除和覆盖都先问用户；新建文件可直接执行。确认票据绑定
+认证调用设备，只能使用一次；预览后目标变化会拒绝。chunk 的原始内容在 schema 中
+标为 secret，不写入调用 journal。大文件写入使用有界 base64 JSON 分段（约 699 KiB
+加协议头），读取使用原始二进制帧。传输、确认票据目前不跨进程重启；正常关闭
+清除未完成暂存，异常退出留下 `.nipa-transfer-*`，目标文件不提前截断。父目录须已存在。
+`--device NAME` 也可调用这些原语；在 Mac 取得本机可读 URL 用本机 Action 的 deviceId。
+
+远端剧集仍通过 `ui.open {entityId}` 播放。绑定弹幕、导入弹幕和同名弹幕以小附件交付，
+保留开关、偏移及时间段；同名字幕和字幕选择复用本机事实，图片与附件可缓存。
+查询使用 `state.query` 的 `library.merged`；合并和进度策略见 ui_data README。
 
 mesh.invoke 拒绝 destructive，mesh.invoke_destructive 只接受 destructive；
 接收端再次核对 effect。NeedsDecision 按每个选项的目标 effect 包装为本机 ActionCall。

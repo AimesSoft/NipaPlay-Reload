@@ -4,6 +4,49 @@
 
 `workId / episodeId / taskId` 和书架 `id` 用于点击、定位和调用能力，不是显示文字。其余文字为作品元数据、简短的观看提示或 Agent 的短句。普通任务标题由任务类型与关联作品生成；帮手使用 Agent 给的简短标题。
 
+## 一个媒体库（X47c）
+
+`library()` 是本机和同账号 Mesh 设备的全部作品，合并后的一份，最近添加在前。
+不从首页书架反推全部作品，不增加分类、筛选或分区。`work()`、`episodes()`、
+首页最近添加/继续观看及卡片引用均接受合并 ID；界面沿用原 `ui.open {entityId:剧集ID}`。
+`UiWork.devices` 标注作品所在的其他设备，`UiEpisode.device` 是当前优先播放来源；
+本机来源为 null。`playable` 表示现在能播，包括在线远端。离线作品保留上次事实、
+`UiDevice.online=false`，仅远端来源的剧集 `playable=false`。
+
+作品按已接受 exact/contains 的弹弹play、TMDB 或 Bangumi 外部身份合并，候选和标题
+相似度不算身份。已接受 release 上的作品身份也参与；无共同身份时，相同文件摘要可
+连接两份目录。剧集在同一作品内按已接受单集身份、明确季/集号，或相同文件摘要加
+时间段做传递合并，未知集号不猜。同一文件在本机与远端重复时优先可播放本机，
+其后在线远端，最后上次记录。文件摘要为大小及首尾各 64 KiB 的 SHA-256；按大小/mtime
+缓存，避免每次扫描 SMB 整部视频。它是去重观察，不是完整内容校验；极端的相同首尾
+不同中段文件可能误判。文件传输的最终校验另使用完整 SHA-256。
+
+外部身份与来源引用生成 `mesh-work:` / `mesh-episode:` / `mesh-ref:` ID。本机原始 ID
+仍接受；历史合并 ID 的来源引用保存在 `ui_cache`，接受新身份或重启后继续解析。
+作品添加时间取已有最早绑定时间，无该事实时用首次观察时间，并持久保留。
+没有原始入库时间的旧目录只能按首次观察排序。
+
+每 5 秒刷新经过认证的目录并检查本机文件，显式 `media.library.refresh` 可立即刷新；
+新版本、进度、连通状态改变会触发本机 `changes`。每个节点只存自己的 `next.db`；
+其他节点的目录投影（不是数据库）、ID 别名、进度存在 `ui_cache`，图片和小型播放
+附件存在 `mesh-artwork` / `mesh-assets`。远端 `UiArtwork` 和 still 均转换成本机文件路径。
+`media.metadata.ui_facts` 也读合并投影的资料/来源及弹幕字幕事实。
+
+进度是观察事实：Classic 本机历史和 Mesh 播放观察合并，最近 UTC 时间戳优先，同时间
+按 writer 设备 ID 排序。允许回退/未看，不取历史最大值。Mesh 播放每 3 秒记录并在
+结束宿主时补一次观察；批量写入先全部验证，不部分提交。按单集来源引用和文件摘要+
+时间段传播到各节点缓存，断网保留并在恢复后交换。`media.library.progress` 和
+已有 watched-history Action 都接受合并 ID。依赖设备时钟，不能替代精确跨节点时间同步。
+
+Agent 从 `state.query {view:"library.merged"}` 读取同一库；本机事实视图
+`library.works/episodes/files` 保留原语义。`media.library.readable` 批量给出剧集可读地址，
+任意路径读写能力、仅回环 HTTP 与双向 TLS 字节通道见 [Mesh README](../mesh/README.md)。
+
+回环 URL 每次带 256 位安全随机令牌，MeshLibrary 关闭或进程退出即失效，未发放的
+地址返回 404。默认随机端口，宿主可在 mesh.json 设置 fileProxyPort（1024–65535）；
+固定端口占用时回退随机端口，`state.query mesh.file_proxy` 如实展示请求/实际端口、
+状态与原因，不暴露令牌。该配置没有 Agent 设置/修改入口，配置变化需重启宿主。
+
 ## 首页与移除
 
 `ui.shelves.put` 替换一处摆放：
@@ -16,7 +59,7 @@
 {"placement":"shelf","id":"tonight","title":"适合今晚","items":[{"workId":"本地作品 ID","note":"听一场热闹的演出。"}]}
 ```
 
-`items:[]` 移除。书架保留稳定的 Agent 自定 ID；`hero / continue / recent` 为保留 ID。书架项的 note 映射为 caption，缺省时按下一集及观看进度生成。继续观看读取现有 `history.continue_watching`；尚未接入历史供应者时不制造观看记录。最近添加以作品首次入库顺序倒序，最多二十部。
+`items:[]` 移除。书架保留稳定的 Agent 自定 ID；`hero / continue / recent` 为保留 ID。书架项的 note 映射为 caption，缺省时按下一集及观看进度生成。继续观看读取合并进度与现有 `history.continue_watching`；尚未接入历史供应者时不制造观看记录。最近添加读取上述合并库，最多二十部。
 
 GUI 可用 `core.uiData.removeShelf(id, workId: ...)` 移除一项，省略 workId 移除整处摆放。能力入口为 `ui.shelves.remove`，保留调用者来源。用户移除写入 `body_changes`，activity 中有自然标题、用户来源及关联作品。
 

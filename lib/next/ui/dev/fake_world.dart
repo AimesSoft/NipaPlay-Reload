@@ -324,6 +324,10 @@ final class FakeWorld implements NextUiData, NextUiActions, NextDiscoverData {
   }
 
   @override
+  Future<List<UiWork>> library() async =>
+      [for (final key in _meta.keys) sample(key)];
+
+  @override
   Future<UiWork?> work(String workId) async {
     final key = workId.startsWith('fake:') ? workId.substring(5) : workId;
     return _meta.containsKey(key) ? _detailed(key) : null;

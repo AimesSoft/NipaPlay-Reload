@@ -10,10 +10,11 @@ extension UiMetadataFacts on UiDataService {
       throw const Failure(
           FailureCode.notFound, 'workId must identify a library work.');
     }
-    final metadata = await media.store.mergedMetadata(workId);
+    final evidence = await meshLibrary?.evidence(workId);
+    final metadata = evidence == null ? await media.store.mergedMetadata(workId) : evidence['metadata'] as JsonMap;
     final fields = metadata['fields'] as JsonMap;
     final provenance = metadata['provenance'] as JsonMap;
-    final attrs = (await media.store.entity(workId))['attributes'] as JsonMap;
+    final attrs = evidence == null ? (await media.store.entity(workId))['attributes'] as JsonMap : evidence['attributes'] as JsonMap;
     JsonMap text(String field, Object? value) {
       final source = provenance[field] as Map?;
       final declared = source?.containsKey('mode') == true
@@ -63,12 +64,12 @@ extension UiMetadataFacts on UiDataService {
     final episodes = await this.episodes(workId);
     final episodeFacts = <JsonMap>[];
     for (final e in episodes) {
-      final m = await media.store.mergedMetadata(e.episodeId);
-      final tracks = await heat.tracks(e.episodeId);
+      final episodeEvidence = await meshLibrary?.evidence(e.episodeId);
+      final m = episodeEvidence == null ? await media.store.mergedMetadata(e.episodeId) : episodeEvidence['metadata'] as JsonMap;
+      final tracks = episodeEvidence == null ? await heat.tracks(e.episodeId) : <JsonMap>[];
       final danmaku = <JsonMap>[];
-      final subtitleTracks =
-          await (subtitles ?? subtitleFacts(media, mediaRoot))
-              .episodeTracks(e.episodeId);
+      if (episodeEvidence != null) danmaku.addAll((episodeEvidence['danmaku'] as List).cast<JsonMap>());
+      final subtitleTracks = episodeEvidence == null ? await (subtitles ?? subtitleFacts(media, mediaRoot)).episodeTracks(e.episodeId) : (episodeEvidence['subtitles'] as List).cast<JsonMap>();
       for (final track in tracks) {
         final local = track['local_file'] as JsonMap?;
         final video = track['video'] as JsonMap;
@@ -91,7 +92,7 @@ extension UiMetadataFacts on UiDataService {
       }
       episodeFacts.add({
         'subtitles': {
-          'files': await (subtitles ?? subtitleFacts(media, mediaRoot)).episodeFiles(e.episodeId),
+          'files': episodeEvidence == null ? await (subtitles ?? subtitleFacts(media, mediaRoot)).episodeFiles(e.episodeId) : episodeEvidence['subtitleFiles'],
           'available': subtitleTracks.any((t) => t['available'] == true),
           'languages': subtitleTracks
               .where((t) => t['available'] == true)
@@ -106,6 +107,7 @@ extension UiMetadataFacts on UiDataService {
           'count': danmaku.fold<int>(0, (n, t) => n + (t['count'] as int))
         },
         'episodeId': e.episodeId,
+        if (episodeEvidence != null) 'deviceId': episodeEvidence['deviceId'],
         'number': e.number,
         'season': e.season,
         'title': {

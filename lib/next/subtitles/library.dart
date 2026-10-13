@@ -119,6 +119,7 @@ final class SubtitleLibrary implements SubtitleFacts {
   Timer? _timer;
   Future<void>? _worker;
   VideoPlayerState? _player;
+  Future<bool> Function(VideoPlayerState, String)? remoteLoader;
   bool _closed = false;
   final _mutations = <String, Future<void>>{};
 
@@ -557,6 +558,7 @@ final class SubtitleLibrary implements SubtitleFacts {
   }
 
   Future<bool> loadForPlayback(VideoPlayerState player, String path) async {
+    if (await remoteLoader?.call(player, path) == true) return true;
     if (path.contains('://')) return false;
     final id = await identities.ensureFile(path);
     await inspect(id, path);

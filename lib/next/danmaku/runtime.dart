@@ -71,6 +71,7 @@ final class DanmakuRuntime {
   bool _busy = false, _stopped = false, _dirty = false;
   Harness? _harness;
   VideoPlayerState? _player;
+  Future<bool> Function(String, String, Object?)? remoteControl;
   Future<void> _controls = Future.value();
   late final sidecars = SidecarIndexer(service.store, () async {
     _changed();
@@ -95,6 +96,7 @@ final class DanmakuRuntime {
   void attach(TaskEngine engine) => service.engine = engine;
 
   Future<void> _control(String id, String operation, Object? value) async {
+    if (await remoteControl?.call(id, operation, value) == true) return;
     final previous = _controls;
     final done = Completer<void>();
     _controls = done.future;

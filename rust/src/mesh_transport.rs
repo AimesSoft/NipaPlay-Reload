@@ -352,7 +352,29 @@ impl Node {
                 tx.send(Request { incoming: Incoming { request_id: id, device_id: peer.clone(), body }, response: send }).await.map_err(|_| "node stopped")?;
                 let response = receive.await.map_err(|_| "response cancelled")?;
                 self.check_device(&peer)?;
-                write_frame(&mut tls, &response).await?;
+                if let Some(spec) = response.strip_prefix("\0mesh-file\n") {
+                    let parts: Vec<_> = spec.splitn(4, '\n').collect();
+                    if parts.len() != 4 { return Err("invalid file response".into()); }
+                    let path = String::from_utf8(B64.decode(parts[0]).map_err(|e| e.to_string())?).map_err(|e| e.to_string())?;
+                    let offset = parts[1].parse::<u64>().map_err(|e| e.to_string())?;
+                    let count = parts[2].parse::<usize>().map_err(|e| e.to_string())?;
+                    let header = parts[3].as_bytes();
+                    if count > MAX_FRAME || header.len() > MAX_FRAME { return Err("byte response too large".into()); }
+                    let bytes = tokio::task::spawn_blocking(move || -> Result<Vec<u8>, String> {
+                        use std::io::{Read, Seek};
+                        let mut file = std::fs::File::open(path).map_err(|e| e.to_string())?;
+                        file.seek(std::io::SeekFrom::Start(offset)).map_err(|e| e.to_string())?;
+                        let mut bytes = vec![0; count];
+                        file.read_exact(&mut bytes).map_err(|e| e.to_string())?;
+                        Ok(bytes)
+                    }).await.map_err(|e| e.to_string())??;
+                    tls.write_u32(0x80000000 | header.len() as u32).await.map_err(|e| e.to_string())?;
+                    tls.write_all(header).await.map_err(|e| e.to_string())?;
+                    tls.write_u32(bytes.len() as u32).await.map_err(|e| e.to_string())?;
+                    tls.write_all(&bytes).await.map_err(|e| e.to_string())?;
+                } else {
+                    write_frame(&mut tls, &response).await?;
+                }
                 tls.shutdown().await.map_err(|e| e.to_string())
             }) => result.map_err(|_| "call timeout".to_owned())?,
         }
@@ -398,7 +420,20 @@ impl Node {
                 write_frame(&mut tls, body).await?;
                 tokio::select! {
                     _ = tokio::time::sleep(peer_expiry) => Err("peer certificate expired".into()),
-                    response = read_frame(&mut tls) => response,
+                    response = async {
+                        let size = tls.read_u32().await.map_err(|e| e.to_string())?;
+                        let binary = size & 0x80000000 != 0;
+                        let size = (size & 0x7fffffff) as usize;
+                        if size == 0 || size > MAX_FRAME { return Err("invalid response frame".into()); }
+                        let mut header = vec![0; size];
+                        tls.read_exact(&mut header).await.map_err(|e| e.to_string())?;
+                        if !binary { return String::from_utf8(header).map_err(|e| e.to_string()); }
+                        let count = tls.read_u32().await.map_err(|e| e.to_string())? as usize;
+                        if count > MAX_FRAME { return Err("invalid byte response length".into()); }
+                        let mut bytes = vec![0; count];
+                        tls.read_exact(&mut bytes).await.map_err(|e| e.to_string())?;
+                        Ok(format!("\0mesh-bytes\n{}\n{}", B64.encode(header), base64::engine::general_purpose::STANDARD.encode(bytes)))
+                    } => response,
                 }
             }) => result.map_err(|_| "call timeout".to_owned())?,
         }

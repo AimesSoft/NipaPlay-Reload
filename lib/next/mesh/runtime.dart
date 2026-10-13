@@ -41,6 +41,7 @@ final class MeshRuntime implements MeshDeviceSource {
   Future<JsonMap?> Function(String, Invocation)? returnTarget;
   Future<JsonMap> Function(String, JsonMap)? receiveDelivery;
   Future<JsonMap> Function()? describeSelf;
+  Future<JsonMap> Function(String, JsonMap, String)? libraryRequest;
   JsonMap hostConfiguration = {};
   String _bindHost = '0.0.0.0';
   bool _broadcast = true;
@@ -651,7 +652,12 @@ final class MeshRuntime implements MeshDeviceSource {
             FailureCode.unavailable, 'Mesh peer was revoked or disconnected.');
       }
       final peer = _devices.singleWhere((d) => d['device_id'] == event.deviceId);
-      final denied = event.deviceId == identity!.deviceId ? null : await authorize(event.deviceId,
+      final fileTool = frame['method'] == 'tools/call' &&
+          ['readable', 'begin', 'chunk', 'finish', 'delete', 'confirm', 'cancel']
+              .any((op) => (frame['params'] as JsonMap?)?['name'] == mcpToolName('media.mesh_files.$op'));
+      final libraryRead = fileTool || frame['method'] == 'tools/list' ||
+          (frame['method'] is String && (frame['method'] as String).startsWith('mesh/library/'));
+      final denied = event.deviceId == identity!.deviceId || libraryRead ? null : await authorize(event.deviceId,
           peer['device_name'] as String? ?? '另一台设备');
       if (denied != null) {
         response = McpRpc.error(_rpcId(event.body), -32001, denied.message);
@@ -675,6 +681,14 @@ final class MeshRuntime implements MeshDeviceSource {
       if (frame['method'] == 'mesh/delivery') {
         if (receiveDelivery == null) throw const FormatException('No delivery host.');
         final result = await receiveDelivery!(event.deviceId, frame['params'] as JsonMap);
+        response = {'jsonrpc': '2.0', 'id': frame['id'], 'result': result};
+        await native.respond(node, event.requestId, jsonEncode(response));
+        return;
+      }
+      if ((frame['method'] as String).startsWith('mesh/library/')) {
+        if (libraryRequest == null) throw const FormatException('No library host.');
+        final result = await libraryRequest!(frame['method'] as String,
+            frame['params'] as JsonMap, event.deviceId);
         response = {'jsonrpc': '2.0', 'id': frame['id'], 'result': result};
         await native.respond(node, event.requestId, jsonEncode(response));
         return;

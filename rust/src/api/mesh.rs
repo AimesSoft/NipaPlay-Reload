@@ -99,6 +99,14 @@ pub async fn mesh_next(id: u32) -> Result<MeshIncoming, String> {
     })
 }
 pub fn mesh_respond(id: u32, request_id: u64, body: String) -> Result<(), String> {
+    let mut envelope: serde_json::Value = serde_json::from_str(&body).map_err(|e| e.to_string())?;
+    let body = if let Some(file) = envelope["result"].get("_meshFile").cloned() {
+        let path = file["path"].as_str().ok_or("missing library file")?;
+        let offset = file["offset"].as_u64().ok_or("invalid offset")?;
+        let length = file["length"].as_u64().filter(|n| *n <= nipaplay_mesh::MAX_FRAME as u64).ok_or("invalid length")?;
+        envelope["result"].as_object_mut().unwrap().remove("_meshFile");
+        format!("\0mesh-file\n{}\n{}\n{}\n{}", B64.encode(path), offset, length, envelope)
+    } else { body };
     node(id)?.respond(request_id, body)
 }
 pub async fn mesh_send(
@@ -108,5 +116,11 @@ pub async fn mesh_send(
     device: String,
     body: String,
 ) -> Result<String, String> {
-    node(id)?.send(&host, port, &device, &body).await
+    let response = node(id)?.send(&host, port, &device, &body).await?;
+    if let Some(bytes) = response.strip_prefix("\0mesh-bytes\n") {
+        let (header, data) = bytes.split_once('\n').ok_or("invalid byte response")?;
+        let mut envelope: serde_json::Value = serde_json::from_slice(&B64.decode(header).map_err(|e| e.to_string())?).map_err(|e| e.to_string())?;
+        envelope["result"]["data"] = data.into();
+        Ok(envelope.to_string())
+    } else { Ok(response) }
 }

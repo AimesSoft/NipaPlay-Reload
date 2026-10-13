@@ -49,6 +49,7 @@ final class DanmakuService {
   final DanmakuStore store;
   final Map<String, DanmakuSource> sources;
   final DanmakuPlayerPort player;
+  Future<List<JsonMap>?> Function(String path)? remoteTracks;
   final Map<String, JsonMap> _localCacheProvenance = {};
   Future<JsonMap> _provenance(JsonMap binding) async {
     if (binding['local_file'] case final JsonMap facts) {
@@ -473,6 +474,20 @@ final class DanmakuService {
   Future<void> _refreshCurrent({String? replaceBindingId}) async {
     final target = player.target;
     if (target == null) return;
+    final remote = await remoteTracks?.call(target.path);
+    if (remote != null) {
+      if (player.target?.generation != target.generation) return;
+      final ids = remote.map((t) => (t['binding'] as JsonMap)['id'] as String).toSet();
+      for (final id in player.managedTracks.difference(ids)) player.remove(id);
+      for (final track in remote) {
+        final binding = track['binding'] as JsonMap;
+        final loaded = player.loaded(binding['id'] as String);
+        if (loaded?['revision'] == binding['revision'] && loaded?['cacheRevision'] == binding['cache_revision']) continue;
+        player.install(target, binding, [for (final e in (track['entries'] as List).cast<JsonMap>()) DanmakuEntry.fromJson(e)],
+          startMs: track['startMs'] as int, endMs: track['endMs'] as int?);
+      }
+      return;
+    }
     await store.identities.ensureFile(target.path);
     final locations = await store.db.query('media_locations',
         where: 'locator = ? AND owner_device_id = ? AND available = ?',
