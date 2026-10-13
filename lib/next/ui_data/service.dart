@@ -15,7 +15,7 @@ import '../settings/registry.dart';
 import 'artwork.dart';
 import 'no_airing.dart' if (dart.library.ui) 'airing.dart';
 import 'heat.dart';
-import '../subtitles/library.dart';
+import '../subtitles/facts.dart';
 import 'ui_data.dart';
 
 /// Application-owned projections. Stored presentations contain no task state.
@@ -31,7 +31,7 @@ final class UiDataService implements NextUiData {
   final StateSources sources;
   final ArtworkCache artwork;
   final EpisodeHeat heat;
-  SubtitleLibrary? subtitles;
+  SubtitleFacts? subtitles;
   Database get db => media.store.database;
   static const _openingKey = 'preference:hero-opening-seconds';
   Future<int> _openingSeconds() async {

@@ -9,6 +9,7 @@ crate-type = ["cdylib", "staticlib"]
 [features]
 default = []
 ohos = []
+headless = []
 
 [patch.crates-io]
 # 0.7.0 otherwise calls the Linux-only bind_device API when targeting iOS.

@@ -125,3 +125,17 @@ Download controls are serialized: repeated pause/resume and removal are harmless
 missing resume sessions return `not_found`, and resume during active cancellation
 returns `conflict`. Native error-channel failures and source I/O errors are
 translated to domain failures rather than `internal`.
+
+The headless host uses the same Rust librqbit implementation via a portable C
+ABI and its own vault/session directory. It exposes metadata preview and the
+default directory, verified per-file progress, selection and task controls;
+library registration uses Next's identity store without a Classic scanner.
+Unidentified files retain that fact. Headless has no player, recent-directory
+history or destructive disk-delete Action. Its health includes native peer
+facts and selection support; Classic's in-process observation timing fields
+are not synthesized. DHT/tracker/local discovery/public peers remain normal
+defaults; host-only switches are documented in `docs/next/HEADLESS.md`.
+
+Cross-device conversation returns use authenticated host-issued tickets and
+durable batches; see `../followups/README.md`. Files remain on the downloading
+body. Delivery never copies media or treats a remote playable path as local.

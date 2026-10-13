@@ -144,7 +144,7 @@ final class _FollowupAction extends Action<_Json, _Json> {
           'cancel' =>
             'Cancel waiting, ready or failed delivery; does not interrupt an already started turn.',
           'wake' =>
-            'Queue a new Agent turn with instruction and trigger facts. Defaults to the main thread even when called from another conversation; optional threadId targets that conversation. Busy turns are never interrupted. Uses the durable followup dispatcher.',
+            'Queue a new Agent turn with instruction and trigger facts. The host-configured agent device receives wakes from headless hooks and schedules; no conversation runs on the transfer device. Defaults to that Agent host’s main thread; optional threadId targets a conversation there. Busy turns are never interrupted. Uses the durable followup dispatcher.',
           'discover' =>
             'Record a discovery with a source and arbitrary facts in activity. Does not wake the Agent. Source is supplied evidence; origin records the actual caller.',
           _ =>

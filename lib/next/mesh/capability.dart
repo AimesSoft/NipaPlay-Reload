@@ -23,10 +23,10 @@ final class _MeshAction extends Action<MeshJson, JsonEncodable> {
       id: 'mesh.$operation',
       title: 'Mesh $operation',
       description: operation == 'devices'
-          ? 'List same-account devices, reachability, and their authenticated Action catalogs. Remote requests obey the peer’s Classic receiver switch and device authorization; unknown peers need user approval in that peer’s NipaPlay UI.'
+          ? 'List same-account devices, authenticated self-descriptions, reachability, and Action catalogs. Self-descriptions include host roles, storage paths, read-only media roots and the device hosting Nipa. Remote access is authorized by each host.'
           : effect == Effect.destructive
               ? 'Invoke a destructive Action on an authorized device. Only disk-file deletion waits for the user in that device’s NipaPlay UI; other operations execute directly and are audited.'
-              : 'Invoke a non-destructive Action directly on a same-account device authorized by Classic remote control.',
+              : 'Invoke a non-destructive Action on a same-account device authorized by its host. A download started from a conversation returns completion facts to that originating device and thread.',
       effect: effect,
       input: operation == 'devices'
           ? const ObjectSchema({})
@@ -50,7 +50,7 @@ final class _MeshAction extends Action<MeshJson, JsonEncodable> {
     }
     return runtime.invoke(input.json['deviceId'] as String,
         input.json['action'] as String, input.json['input'] as JsonMap,
-        destructive: effect == Effect.destructive);
+        destructive: effect == Effect.destructive, invocation: invocation);
   }
 }
 

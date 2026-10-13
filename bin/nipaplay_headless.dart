@@ -5,6 +5,8 @@ import 'package:path/path.dart' as p;
 import 'package:nipaplay/next/headless/core.dart';
 import 'package:nipaplay/next/media/media_probe_io.dart';
 import 'package:nipaplay/next/harness_redaction.dart';
+import 'package:nipaplay/next/headless/vault.dart';
+import 'package:nipaplay/security/credential_vault.dart';
 
 Future<String> _canonicalDirectory(String path) async {
   if (await Directory(path).exists()) {
@@ -20,6 +22,7 @@ Future<String> _canonicalDirectory(String path) async {
 Future<void> main(List<String> arguments) async {
   final options = <String, String>{};
   var stop = false;
+  var enroll = false;
   for (var i = 0; i < arguments.length; i++) {
     final key = arguments[i];
     if (key == '--help') {
@@ -29,14 +32,18 @@ Future<void> main(List<String> arguments) async {
           '  --port NUMBER (default 0; IPv4 loopback only)\n'
           '  --seed ABSOLUTE_DIR (default assets/next/harness)\n'
           '  --ffprobe ABSOLUTE_EXECUTABLE (optional duration probe)\n'
+          '  --native-library ABSOLUTE_LIBRARY (default beside executable)\n'
+          '  --enroll-token-stdin --data DIR (host-only account enrollment)\n'
+          '  Host files in data: mesh.json (trust/join), download.json (network configuration)\n'
           '  --stop --data ABSOLUTE_DIR (stop that instance)');
       return;
     }
+    if (key == '--enroll-token-stdin') { enroll = true; continue; }
     if (key == '--stop') {
       stop = true;
       continue;
     }
-    if (!{'--data', '--media-root', '--port', '--seed', '--ffprobe'}
+    if (!{'--data', '--media-root', '--port', '--seed', '--ffprobe', '--native-library'}
             .contains(key) ||
         i + 1 == arguments.length) {
       stderr.writeln('Invalid option: $key');
@@ -57,6 +64,16 @@ Future<void> main(List<String> arguments) async {
     return;
   }
   final root = Directory(await _canonicalDirectory(p.normalize(data)));
+  if (enroll) {
+    if (!await File(p.join(root.path, 'headless.json')).exists()) {
+      throw StateError('Initialize the isolated headless data directory before enrollment.');
+    }
+    final value = (await stdin.transform(utf8.decoder).join()).trim();
+    if (value.isEmpty || value.length > 4096 || RegExp(r'\s').hasMatch(value)) throw StateError('invalid_token_input');
+    await HeadlessVault(Directory(p.join(root.path, 'vault'))).write(const CredentialRef('preferences', 'dandanplay_token'), value);
+    stdout.writeln('Test account token enrolled.');
+    return;
+  }
   final running = File(p.join(root.path, 'running.json'));
   final stopRequest = File(p.join(root.path, 'stop.request'));
   if (stop) {
@@ -142,6 +159,7 @@ Future<void> main(List<String> arguments) async {
         repository: Directory(p.join(root.path, 'harness')),
         mediaRoots: roots,
         seed: seed,
+        nativeLibrary: options['--native-library'],
         port: port);
     final status = await core.start();
     await running.writeAsString(jsonEncode({
@@ -149,7 +167,7 @@ Future<void> main(List<String> arguments) async {
       'url': status.url.toString(),
       'data': root.path,
       'mediaRoots': roots,
-      'downloaderEnabled': false
+      'downloaderEnabled': true
     }));
     stdout.writeln(jsonEncode({
       'status': 'running',

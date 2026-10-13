@@ -1,5 +1,5 @@
 import 'dart:async';
-import 'package:nipaplay/utils/lab_profile.dart';
+import '../platform/lab_profile.dart';
 import 'dart:convert';
 import 'dart:io';
 import 'package:nipa_harness/nipa_harness.dart';

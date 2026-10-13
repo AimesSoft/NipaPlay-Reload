@@ -1,4 +1,4 @@
-# NipaPlay 无界面宿主（X43）
+# NipaPlay 无界面宿主（X43 / X45）
 
 这是纯 Dart 的 Next 领域服务宿主，入口为 `bin/nipaplay_headless.dart`。
 不启动 Flutter 引擎或窗口。已在 macOS、Ubuntu 24.04 WSL x86_64、Windows x64
@@ -8,11 +8,15 @@
 公开资料和提供的元数据、图片缓存与色调、同名 XML/JSON 弹幕索引、数据卡片、hooks、
 定时脚本和持久后续事项。片库归属、资料绑定等判断仍由调用者作出。
 
-当前缺口：Rust 下载传输、Mesh、播放器、Classic 账号与历史、TMDB 凭据配置、
-弹弹play网关账号宿主、Classic 更新日历、内嵌 Agent 对话。下载 Action 保留现有任务
-契约，但实际任务以 `unavailable` 失败，回执说明需要隔离的 Rust 初始化器；不会加载
-Rust 下载库。后续条件可以到达 `ready`，没有对话宿主时不会执行模型决定。
-GUI/Nipa 可以通过 MCP 客户端接入；现有 GUI 多设备列表还不能发现这个宿主。
+X45 增加 Rust Mesh 与 librqbit：独立设备身份、同账号加入、心跳、认证远程调用，
+磁链/种子下载、预览、文件选择、逐文件校验/登记与事件。Mac 对话发起的远端下载会
+持久回传原会话；无界面脚本的 `agent.wake` 可按宿主配置路由到 Mac。
+Windows/Linux x64 原生库及 AOT 已编译，X45 运行检查只在 Mac 本机回环进行；
+工作站真机运行待主控执行，见 [X45_RUNBOOK.md](X45_RUNBOOK.md)。
+
+当前缺口：播放器、Classic 账号与历史、TMDB 凭据配置、完整弹弹play账号宿主、
+Classic 更新日历、内嵌 Agent 对话。无界面只接受宿主从 stdin 登记的组网测试 token，
+没有登录密码 Action；未配置 Agent 目的设备的后续仍可到达 ready，不运行模型决定。
 
 ## 准备程序
 
@@ -20,13 +24,23 @@ GUI/Nipa 可以通过 MCP 客户端接入；现有 GUI 多设备列表还不能�
 开发使用 Flutter 3.44.6 随带的 Dart 3.12.2。运行时不需要 Flutter。
 
 ```sh
-cd ~/Desktop/nipaplay-next-wt/x43-headless
+cd ~/Desktop/nipaplay-next-wt/x45-mesh-three
 ~/development/flutter-3.44.6/bin/dart compile exe \
   --packages=.dart_tool/package_config.json \
   bin/nipaplay_headless.dart -o build/headless/nipaplay-headless
 ```
 
-`build/headless` 必须先存在。可执行文件按目标机器的系统与架构编译，不能把 macOS
+`build/headless` 必须先存在。Mesh/下载还需要构建原生库：
+
+```sh
+cargo build --offline --locked --manifest-path rust/headless/Cargo.toml
+cp rust/headless/target/debug/libnipaplay_headless_native.dylib build/headless/
+```
+
+Linux 库名为 `libnipaplay_headless_native.so`，Windows 为
+`nipaplay_headless_native.dll`；默认从可执行文件旁加载，`--native-library` 可覆盖。
+Portable C ABI 复用现有 Rust 实现与依赖，不需要 Flutter 引擎或 FRB 初始化。
+可执行文件按目标机器的系统与架构编译，不能把 macOS
 二进制拿到 Windows/WSL 使用。SQLite FFI 仍需要系统 SQLite 动态库；这次三个平台
 都直接可用。其他 Linux 服务器若缺少它，需在自己的工作目录准备库及进程级加载路径。
 
@@ -66,7 +80,9 @@ cd "$HOME/nipaplay-next/x43-headless"
 ```
 
 服务器/macOS 同样执行本机二进制，替换 `--data` 与 `--media-root`。可以重复指定
-`--media-root`。没有媒体根也能启动，随后重启时指定根目录。
+`--media-root`。没有媒体根也能启动，随后重启时指定根目录，或调用
+`media.library.roots.add/list/remove` 动态登记现有绝对路径。根目录始终只读，登记
+不扫描、绑定、移动或重命名媒体。
 源码运行方式为 `dart --packages=.dart_tool/package_config.json bin/nipaplay_headless.dart ...`。
 默认 seed 是当前目录的 `assets/next/harness`；从其他目录启动时，显式指定
 `--seed /absolute/path/to/assets/next/harness`。
@@ -116,7 +132,32 @@ python D:\nipaplay-next\headless-data\harness\nipa list
 
 远程操作优先通过 SSH 在目标机器上执行 Python nipa，这样连接文件和令牌始终留在
 目标机器。需要 MCP 客户端跨机接入时，由用户在目标机器配置客户端认证及 SSH 隧道，
-不要把连接文件纳入源码包或日志。X43 没有实现 GUI Mesh 接入与账号注册。
+不要把连接文件纳入源码包或日志。X45 接入 Mesh 后，Mac 可以直接通过自己的
+`nipa --device <唯一设备名或ID> list/describe/call/watch` 使用目标节点，
+无需复制目标 endpoint 凭据；各设备加入与转发步骤见运行说明。
+
+## Mesh 与下载宿主配置
+
+`<data>/mesh.json` 的存在启用同账号 Mesh；coordinator、roles、storage、Agent
+目的设备、广播和签发者由宿主配置，不向 Agent 开放网络授权。
+`broadcastDiscovery` 默认 true，可设 false；无界面 Mesh 始终强制回环。
+当前无界面开发构建显式接受 `NIPAPLAY_MESH_DEV_CA` 的公开证书，GUI Release
+仍仅接受内置正式 CA。不能从协调服务响应自动信任新 CA。
+
+宿主可在启动前初始化 headless.json 标记，用
+`--enroll-token-stdin --data <独立目录>` 从 stdin 登记已登录测试账号 token。
+该命令只登记并退出；没有账号密码、命令行 token 或 Agent 凭据输入能力。
+私钥和 token 留在本目录的 vault，POSIX 目录 0700、文件 0600，Windows 限当前用户 ACL。
+
+`<data>/download.json` 为宿主配置，默认 DHT、tracker、本地发现开启，公网 peers 和
+PEX 按 librqbit 正常工作。可选布尔键 `dht`、`localDiscovery`、`trackers` 及初始
+peer 地址数组 `peers`。配置在引擎首次初始化时固定，修改须重启。
+空任务启动不初始化 BT；下载 Action 或恢复未完成任务时初始化。
+下载会话及 DHT 状态在 `<data>/torrent-session`，默认下载目录在 `<data>/downloads`。
+自选目录不能与只读媒体根相交，包括符号链接祖先。
+`download.preview` 返回磁链元数据并释放临时预览；`download.directories` 返回默认
+目录与空的 recentDirectories（本宿主不维护 Classic 最近目录）。
+无界面不提供播放器和磁盘删除 Action；保留任务取消、会话移除与已下载文件。
 
 ## 数据、hooks 与停止
 
@@ -126,6 +167,10 @@ python D:\nipaplay-next\headless-data\harness\nipa list
 |---|---|
 | `headless.json` | 格式标记；持久 mediaRoots、port、ffprobe，CLI 指定值覆盖后保存 |
 | `device.json`、`next.db` | 设备身份、任务、片库、绑定、元数据、弹幕、设置、后续 |
+| `mesh.json`、`download.json` | 独立宿主的组网/下载配置 |
+| `vault/`、`mesh-identity.json`、`mesh-certificate.json` | 私有凭据、Mesh 公钥身份和设备证书；不复制为第二个身份 |
+| `mesh-return-targets.json`、`mesh-replay.jsonl` | 已签发原会话回传票据与防重放记录 |
+| `torrent-session/` | librqbit 会话、续传及 DHT 持久状态 |
 | `harness/`、`harness-seed/` | 用户脚本与公共上游 seed；升级遵循已有 seed 合并契约 |
 | `artwork/`、`downloads/`、`exports/`、`torrent_sources/` | 本宿主缓存、下载目标、弹幕导出与种子缓存 |
 | `journal.jsonl`、`download-audit.jsonl` | 现有调用记录与审计文件 |

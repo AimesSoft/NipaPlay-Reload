@@ -4,7 +4,7 @@ NextCore 创建 MeshRuntime、三个 Mesh Action 和 mesh.addressCandidates 设�
 并管理 transport 生命周期。NextRuntime 将包含播放能力和 journal 的同一个 Harness
 交回 Core；回环 MCP 和 Mesh 复用 nipa_harness/mcp.dart 的 JSON-RPC 分派器。
 Mesh 不依赖 Labs 端点开关。可远程调用范围为 task.*、download.*、
-media.library.*、playback.*。
+media.*、danmaku.*、playback.*、state.query 和 agent.wake。
 
 ## 身份、信任与调用
 
@@ -66,6 +66,11 @@ UDP 32124 每 30 秒广播 deviceId 和监听端口，仅作为地址线索。
 ~~~
 
 启用和信任配置由宿主管理，Agent 不能通过 Action 给自己开放网络权限或更换签发者。
+`broadcastDiscovery` 是宿主 JSON 中的布尔开关，默认 `true`；设为 `false` 不启动 UDP
+32124 的广播发现，续证重启监听时仍保留这个选择。`loopbackOnly:true` 使 Mesh 只监听
+`127.0.0.1`，也不上报网卡 LAN 地址。无界面宿主强制回环 Mesh 监听；候选可以是用户
+自有 SSH 转发端口，同样执行双向 TLS。加入本身不依赖广播。设备自我描述来自已认证
+的 `mesh/describe`，不是协调服务代报的磁盘信息；角色与存储标签由宿主配置。
 地址可通过 settings.set {key:"mesh.addressCandidates", value:[...]} 修改，下个心跳上报。
 登录和退出由现有账号宿主处理；账号凭据仍只在保险库中。Mesh 每 30 秒在本地检查凭据变化，
 变化时关闭旧会话；失败的加入尝试至少隔 15 分钟再试。

@@ -32,6 +32,7 @@ import 'settings/capability.dart';
 import 'settings/classic_settings.dart';
 import 'settings/operations.dart';
 import 'mesh/runtime.dart';
+import 'mesh/delivery.dart';
 import 'mesh/capability.dart';
 import 'mesh/debug_claim_names.dart';
 import 'state/query.dart';
@@ -171,6 +172,9 @@ final class NextCore {
     hooks.engine = engine;
     diskDeletion.engine = engine;
     followups = Followups(database, engine, harnessLocation);
+    attachMeshDelivery(mesh, followups);
+    mesh.describeSelf = () async => {'host': 'gui', 'conversationHost': true,
+      'mediaRoots': media.service.authorizedRoots().toList()};
     helpers.engine = engine;
     helpers.followups = followups;
     followups.helpers = helpers;

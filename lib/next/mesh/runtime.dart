@@ -1,53 +1,49 @@
 import 'dart:async';
-import 'package:nipaplay/utils/lab_profile.dart';
+import '../platform/lab_profile.dart';
 import 'dart:convert';
 import 'dart:io';
 import 'dart:math';
 import 'package:crypto/crypto.dart';
-import 'package:flutter/foundation.dart';
 import 'package:nipa_harness/mcp.dart';
 import 'package:nipa_harness/nipa_harness.dart';
 import 'package:nipaplay/security/credential_vault.dart';
-import 'package:nipaplay/src/rust/api/mesh.dart' show MeshIncoming;
-import 'package:nipaplay/services/remote_control_settings.dart';
-import 'package:nipaplay/services/remote_control_access_guard_service.dart';
-import 'package:shelf/shelf.dart';
+import 'host.dart';
+import 'message.dart';
 import 'coordinator.dart';
 import 'discovery.dart';
 import 'identity.dart';
 import 'native.dart';
 import 'device_source.dart';
+export 'host.dart' show authorizeMeshPeer;
 
 bool meshActionAllowed(String id) =>
-    ['task.', 'download.', 'media.library.', 'playback.'].any(id.startsWith);
+    ['task.', 'download.', 'media.', 'danmaku.', 'playback.'].any(id.startsWith) ||
+    id == 'agent.wake' || id == 'state.query';
 
 /// Trust anchors are release inputs, never learned from the coordinator.
 const meshProductionIssuerPem = '';
-
-Future<Failure?> authorizeMeshPeer(String deviceId, String name) async {
-  if (!await RemoteControlSettings.isReceiverEnabled()) {
-    return const Failure(FailureCode.unavailable, 'Classic remote control receiver is disabled.');
-  }
-  final guard = RemoteControlAccessGuardService.instance;
-  await guard.loadTrustedDevices();
-  final result = await guard.evaluate(Request('POST', Uri.parse('http://localhost/mesh'),
-      headers: {'x-nipaplay-remote-client-id': deviceId,
-        'x-nipaplay-remote-client-name': name}), requestAccess: true);
-  return result.isAuthorized ? null : Failure(FailureCode.conflict,
-      'Classic remote control access is ${result.status.name}; the user must allow this device in NipaPlay.');
-}
 
 final class MeshRuntime implements MeshDeviceSource {
   MeshRuntime(
       {required this.root,
       required this.vault,
       required this.token,
+      this.authorize = authorizeMeshPeer,
+      this.forceLoopback = false,
       MeshNative? native})
       : native = native ?? MeshNative();
   final Directory root;
   final CredentialVault vault;
   final Future<String?> Function() token;
   final MeshNative native;
+  final Future<Failure?> Function(String, String) authorize;
+  final bool forceLoopback;
+  Future<JsonMap?> Function(String, Invocation)? returnTarget;
+  Future<JsonMap> Function(String, JsonMap)? receiveDelivery;
+  Future<JsonMap> Function()? describeSelf;
+  JsonMap hostConfiguration = {};
+  String _bindHost = '0.0.0.0';
+  bool _broadcast = true;
   Harness? _harness;
   MeshCoordinator? _coordinator;
   MeshIdentity? identity;
@@ -75,6 +71,7 @@ final class MeshRuntime implements MeshDeviceSource {
   DateTime _nextJoinAttempt = DateTime.fromMillisecondsSinceEpoch(0);
   int get port => _discovery?.port ?? 0;
   String? get accountId => _account;
+  @override
   List<JsonMap> get cachedDevices => [
         for (final device in _devices)
           {
@@ -105,8 +102,11 @@ final class MeshRuntime implements MeshDeviceSource {
     final config = File('${root.path}/mesh.json');
     if (!await config.exists()) return;
     final json = jsonDecode(await config.readAsString()) as JsonMap;
+    hostConfiguration = json;
+    _bindHost = forceLoopback || json['loopbackOnly'] == true ? '127.0.0.1' : '0.0.0.0';
+    _broadcast = json['broadcastDiscovery'] as bool? ?? true;
     final caPath = Platform.environment['NIPAPLAY_MESH_DEV_CA'];
-    final ca = kDebugMode && caPath != null
+    final ca = meshDevelopmentHost && caPath != null
         ? await File(caPath).readAsString()
         : meshProductionIssuerPem;
     if (ca.isEmpty) {
@@ -137,7 +137,8 @@ final class MeshRuntime implements MeshDeviceSource {
           ca: ca,
           coordinator: _coordinator!,
           name: json['name'] as String? ?? Platform.localHostname,
-          listenPort: LabProfile.active ? 0 : json['port'] as int? ?? 47812);
+          listenPort: json['port'] as int? ?? (LabProfile.active ? 0 : 47812),
+          broadcast: _broadcast);
     }
 
     await _queue(checkLogin);
@@ -175,6 +176,8 @@ final class MeshRuntime implements MeshDeviceSource {
       throw StateError('Attach the Core Harness before joining Mesh.');
     }
     _ca = ca;
+    if (forceLoopback) _bindHost = '127.0.0.1';
+    _broadcast = broadcast;
     _coordinator = coordinator;
     identity ??= await MeshIdentity.load(root, vault, native);
     final own = identity!;
@@ -239,7 +242,7 @@ final class MeshRuntime implements MeshDeviceSource {
         key: await own.privateKey(),
         account: _account!,
         allowed: _active,
-        bind: '0.0.0.0:${LabProfile.active ? 0 : listenPort}');
+        bind: '$_bindHost:$listenPort');
     final node = _node!;
     final generation = ++_generation;
     _receiver = _receive(node, generation);
@@ -294,7 +297,7 @@ final class MeshRuntime implements MeshDeviceSource {
     try {
       response = await _coordinator!.request('POST', '/mesh/v1/addresses', {
         'device_id': own.deviceId,
-        'candidates': [...await _discovery!.localCandidates(), ..._manual]
+        'candidates': [if (_bindHost != '127.0.0.1') ...await _discovery!.localCandidates(), ..._manual]
             .take(32)
             .toList(),
       });
@@ -332,10 +335,10 @@ final class MeshRuntime implements MeshDeviceSource {
           key: await own.privateKey(),
           account: _account!,
           allowed: _active,
-          bind: '0.0.0.0:$bindPort');
+          bind: '$_bindHost:$bindPort');
       _receiver = _receive(_node!, ++_generation);
       _discovery = MeshDiscovery(own.deviceId, bindPort);
-      await _discovery!.start();
+      if (_broadcast) await _discovery!.start();
     }
   }
 
@@ -401,7 +404,9 @@ final class MeshRuntime implements MeshDeviceSource {
     try {
       final tools = await _catalog(id);
       _reachability[id] = true;
-      return {...device, 'deviceId': id, 'online': true, 'actions': tools};
+      final description = await rpc(id, 'mesh/describe', {});
+      return {...device, 'deviceId': id, 'online': true, 'actions': tools,
+        'description': description};
     } on Failure {
       _reachability[id] = false;
       return {
@@ -434,7 +439,7 @@ final class MeshRuntime implements MeshDeviceSource {
 
   Future<Outcome<JsonEncodable>> invoke(
       String peer, String action, JsonMap input,
-      {required bool destructive}) async {
+      {required bool destructive, Invocation? invocation}) async {
     if (!meshActionAllowed(action)) {
       throw const Failure(
           FailureCode.invalidInput, 'Action is outside the Mesh scope.');
@@ -453,10 +458,14 @@ final class MeshRuntime implements MeshDeviceSource {
               ? 'mesh.invoke_destructive only accepts destructive actions.'
               : 'Use mesh.invoke_destructive for this action.');
     }
+    final targetReturn = action == 'download.add' && invocation != null
+        ? await returnTarget?.call(peer, invocation) : null;
     final result = await rpc(peer, 'tools/call', {
       'name': target['name'],
       'arguments': input,
       'meshDestructive': destructive,
+      if (targetReturn != null) 'returnTo': {...targetReturn,
+        'deviceId': identity!.deviceId},
     });
     final envelope = result['structuredContent'] as JsonMap;
     switch (envelope['status']) {
@@ -583,7 +592,7 @@ final class MeshRuntime implements MeshDeviceSource {
 
   Future<void> _receive(int node, int generation) async {
     while (_node == node && _generation == generation) {
-      final MeshIncoming event;
+      final MeshMessage event;
       try {
         event = await native.next(node);
       } catch (_) {
@@ -594,7 +603,7 @@ final class MeshRuntime implements MeshDeviceSource {
     }
   }
 
-  Future<void> _dispatch(int node, MeshIncoming event) async {
+  Future<void> _dispatch(int node, MeshMessage event) async {
     JsonMap response;
     try {
       final frame = jsonDecode(event.body);
@@ -642,13 +651,40 @@ final class MeshRuntime implements MeshDeviceSource {
             FailureCode.unavailable, 'Mesh peer was revoked or disconnected.');
       }
       final peer = _devices.singleWhere((d) => d['device_id'] == event.deviceId);
-      final denied = await authorizeMeshPeer(event.deviceId,
+      final denied = event.deviceId == identity!.deviceId ? null : await authorize(event.deviceId,
           peer['device_name'] as String? ?? '另一台设备');
       if (denied != null) {
         response = McpRpc.error(_rpcId(event.body), -32001, denied.message);
         (response['error'] as JsonMap)['data'] = denied.toJson();
         await native.respond(node, event.requestId, jsonEncode(response));
         return;
+      }
+      if (frame['method'] == 'mesh/describe') {
+        response = {'jsonrpc': '2.0', 'id': frame['id'], 'result': {
+          'deviceId': identity!.deviceId,
+          'name': hostConfiguration['name'] ?? Platform.localHostname,
+          'platform': Platform.operatingSystem,
+          'agentDeviceId': hostConfiguration['agentDeviceId'],
+          'roles': hostConfiguration['roles'] ?? <String>[],
+          'storage': hostConfiguration['storage'] ?? <Object?>[],
+          if (describeSelf != null) ...await describeSelf!(),
+        }};
+        await native.respond(node, event.requestId, jsonEncode(response));
+        return;
+      }
+      if (frame['method'] == 'mesh/delivery') {
+        if (receiveDelivery == null) throw const FormatException('No delivery host.');
+        final result = await receiveDelivery!(event.deviceId, frame['params'] as JsonMap);
+        response = {'jsonrpc': '2.0', 'id': frame['id'], 'result': result};
+        await native.respond(node, event.requestId, jsonEncode(response));
+        return;
+      }
+      final params = frame['params'] as JsonMap?;
+      final returnTo = params?['returnTo'];
+      if (returnTo != null && (returnTo is! JsonMap ||
+          returnTo['deviceId'] != event.deviceId ||
+          returnTo['threadId'] is! String || returnTo['repository'] is! String)) {
+        throw const FormatException('Invalid return target.');
       }
       final rpc = McpRpc(_harness!,
           serverInfo: const McpServerInfo(
@@ -660,8 +696,9 @@ final class MeshRuntime implements MeshDeviceSource {
               ? const Failure(FailureCode.invalidInput,
                   'Mesh effect authorization mismatch.')
               : null);
-      response = await rpc.handle(
-              frame, Invocation(origin: 'mesh:${event.deviceId}', id: id)) ??
+      response = await runZoned(() => rpc.handle(
+              frame, Invocation(origin: 'mesh:${event.deviceId}', id: id)),
+          zoneValues: {#meshReturnTarget: returnTo}) ??
           {'jsonrpc': '2.0', 'id': null, 'result': <String, Object?>{}};
     } on FormatException {
       response = McpRpc.error(

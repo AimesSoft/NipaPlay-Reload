@@ -22,6 +22,7 @@ import '../media/file_identity_merge.dart';
 import '../state/change_history.dart';
 import '../public_url.dart';
 import 'webvtt.dart';
+import 'facts.dart';
 
 const subtitleFormats = {...supportedSubtitleExtensions, '.vtt'};
 String subtitleLanguage(String value) {
@@ -105,7 +106,7 @@ Future<List<({String path, int score})>> subtitleCandidates(
     });
 }
 
-final class SubtitleLibrary {
+final class SubtitleLibrary implements SubtitleFacts {
   SubtitleLibrary(this.media, this.root, {this.probe = probeMediaInfo});
   final MediaService media;
   final Directory root;
@@ -507,6 +508,7 @@ final class SubtitleLibrary {
     });
   }
 
+  @override
   Future<List<JsonMap>> episodeTracks(String id) async {
     final tracks = <JsonMap>[];
     for (final file in await db
@@ -522,6 +524,7 @@ final class SubtitleLibrary {
     return tracks;
   }
 
+  @override
   Future<List<JsonMap>> episodeFiles(String id) async => [
         for (final file in await db.query('media_file_episodes',
             where: 'episode_id=?', whereArgs: [id]))

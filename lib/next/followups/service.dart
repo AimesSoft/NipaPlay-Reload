@@ -34,6 +34,11 @@ const followupFields = ObjectSchema({
   'trigger': ObjectSchema({}, additionalProperties: true, nullable: true),
   'reason': StringSchema(nullable: true),
   'turnStatus': StringSchema(nullable: true),
+  'remoteDeviceId': StringSchema(nullable: true),
+  'sourceDeviceId': StringSchema(nullable: true),
+  'sourceFollowupId': StringSchema(nullable: true),
+  'deliveryState': StringSchema(nullable: true),
+  'remoteReceipt': ObjectSchema({}, additionalProperties: true, nullable: true),
 });
 
 /// Durable conditions and one delivery. Agent instructions remain opaque text.
@@ -44,6 +49,8 @@ final class Followups {
   final RepositoryLocation location;
   ChatHost? _host;
   Helpers? helpers;
+  String? Function()? agentDevice;
+  Future<JsonMap> Function(String, JsonMap)? deliverRemote;
   Future<JsonMap> turnProcess(String threadId, String turnId) async {
     await location.ready;
     final host = _host;
@@ -210,6 +217,8 @@ final class Followups {
               : null,
           'reason': null,
           'turnStatus': null,
+          if (immediate && agentDevice?.call() != null)
+            'remoteDeviceId': agentDevice!.call(),
         };
         final safe = SecretRedactor.json(row) as JsonMap;
         await database.transaction((tx) async {
@@ -392,7 +401,7 @@ final class Followups {
           }
           final host = _host;
           if (row['state'] == 'ready') {
-            if (row['automatic'] == 'download') {
+            if (row['automatic'] == 'download' || row['automatic'] == 'meshDownload') {
               await _filterDownloadReturn(row, await _rows());
               if (row['state'] == 'cancelled') continue;
               if (DateTime.now().toUtc().isBefore(
@@ -403,6 +412,25 @@ final class Followups {
                 }
                 continue;
               }
+            }
+            if (row['remoteDeviceId'] case final String peer) {
+              final retryAt = row['remoteRetryAt'] as String?;
+              if (retryAt != null && DateTime.now().toUtc().isBefore(DateTime.parse(retryAt))) continue;
+              if (deliverRemote == null) continue;
+              try {
+                if (row['remoteSealed'] != true) {
+                  row['remoteSealed'] = true;
+                  await _save(row, 'ready', 'sealed');
+                }
+                row['remoteReceipt'] = await deliverRemote!(peer, row);
+                row['dispatchedAt'] = DateTime.now().toUtc().toIso8601String();
+                row['deliveryState'] = 'forwarded';
+                await _save(row, 'completed', 'forwarded', reason: 'Destination durably accepted this delivery; its conversation state is owned there.');
+              } on Failure catch (error) {
+                row['remoteRetryAt'] = DateTime.now().toUtc().add(const Duration(seconds: 30)).toIso8601String();
+                await _save(row, 'ready', 'pending', reason: error.message);
+              }
+              continue;
             }
             final reason = host == null || !host.available
                 ? host?.liveness.latestError ?? _unavailable
@@ -432,7 +460,7 @@ final class Followups {
                 }
               }
               row['threadId'] = target;
-              if (row['automatic'] == 'download') {
+              if (row['automatic'] == 'download' || row['automatic'] == 'meshDownload') {
                 row['dispatchedAt'] = DateTime.now().toUtc().toIso8601String();
               }
               await _save(row, 'dispatching', 'dispatching');

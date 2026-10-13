@@ -1,7 +1,7 @@
 import 'package:nipa_harness/nipa_harness.dart';
 
 import 'service.dart';
-import '../subtitles/library.dart';
+import '../subtitles/facts.dart';
 
 extension UiMetadataFacts on UiDataService {
   Future<JsonMap> metadataFacts(String workId) async {
@@ -67,7 +67,7 @@ extension UiMetadataFacts on UiDataService {
       final tracks = await heat.tracks(e.episodeId);
       final danmaku = <JsonMap>[];
       final subtitleTracks =
-          await (subtitles ?? SubtitleLibrary(media, mediaRoot))
+          await (subtitles ?? subtitleFacts(media, mediaRoot))
               .episodeTracks(e.episodeId);
       for (final track in tracks) {
         final local = track['local_file'] as JsonMap?;
@@ -91,7 +91,7 @@ extension UiMetadataFacts on UiDataService {
       }
       episodeFacts.add({
         'subtitles': {
-          'files': await (subtitles ?? SubtitleLibrary(media, mediaRoot)).episodeFiles(e.episodeId),
+          'files': await (subtitles ?? subtitleFacts(media, mediaRoot)).episodeFiles(e.episodeId),
           'available': subtitleTracks.any((t) => t['available'] == true),
           'languages': subtitleTracks
               .where((t) => t['available'] == true)
