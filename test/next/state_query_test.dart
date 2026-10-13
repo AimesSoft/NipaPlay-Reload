@@ -161,6 +161,7 @@ void main() {
           {'requestId': 'state-work', 'entries': entries});
       final workId = ((binding['entries'] as List).first as Map)['workId'];
       final db = core.media.service.store.database;
+      await core.hooks.drain();
       final before = await db.rawQuery('SELECT total_changes() AS changes');
       final requests = tmdb.requests.length;
       final response = await call(api, 'state.query', {

@@ -119,6 +119,7 @@ class _FolderFileDiff {
 }
 
 class ScanService with ChangeNotifier {
+  static Future<bool> Function()? startupRefreshAllowed;
   static const String _scannedFoldersPrefsKey = 'nipaplay_scanned_folders';
   static const String _subFolderHashCachePrefsKey =
       'nipaplay_subfolder_hash_cache';
@@ -236,6 +237,7 @@ class ScanService with ChangeNotifier {
       debugPrint('启动扫描等待播放就绪结束: $error');
     }
     if (_disposed) return;
+    if (startupRefreshAllowed != null && !await startupRefreshAllowed!()) return;
     if (_startupAction != null) {
       await _startupAction();
       return;
@@ -778,7 +780,11 @@ class ScanService with ChangeNotifier {
 
   Future<void> startDirectoryScan(String directoryPath,
       {bool isPartOfBatch = false,
-      bool skipPreviouslyMatchedUnwatched = false}) async {
+      bool skipPreviouslyMatchedUnwatched = false,
+      int? matchingConcurrency,
+      Future<bool> Function()? continueProcessing,
+      void Function(List<VideoProcessResult>)? onResults,
+      void Function(Object)? onFailure}) async {
     if (kIsWeb) {
       _updateScanMessage("Web版不支持扫描本地媒体库。");
       if (!isPartOfBatch) {
@@ -834,6 +840,11 @@ class ScanService with ChangeNotifier {
       } else {
         _updateScanMessage("${p.basename(directoryPath)} $message");
       }
+      onFailure?.call(e);
+      return;
+    }
+    if (continueProcessing != null && !await continueProcessing()) {
+      _updateScanState(scanning: false, message: '扫描已停止', completed: true);
       return;
     }
     if (diff.currentCount == 0 && diff.cachedCount == 0) {
@@ -917,6 +928,8 @@ class ScanService with ChangeNotifier {
     // 第二阶段：并发处理视频文件
     final generation = _scanGeneration;
     final results = await ConcurrentVideoProcessor.processVideoPaths(videoPaths,
+        maxConcurrency: matchingConcurrency,
+        continueProcessing: continueProcessing,
         skipPreviouslyMatchedUnwatched: skipPreviouslyMatchedUnwatched,
         onProgress: (processed, total, currentFile) {
       if (_disposed || !_isScanning || generation != _scanGeneration) return;
@@ -925,6 +938,11 @@ class ScanService with ChangeNotifier {
           message: "正在处理: $currentFile ($processed/$total)");
     });
 
+    onResults?.call(results);
+    if (continueProcessing != null && !await continueProcessing()) {
+      _updateScanState(scanning: false, message: '扫描已停止', completed: true);
+      return;
+    }
     if (!_isScanning && !isPartOfBatch) {
       _updateScanState(
           scanning: false, message: "扫描已取消: $directoryPath", completed: true);

@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:async';
+import 'package:nipaplay/next/network/observations.dart';
 
 import '../next/headless/router_notifier.dart'
     if (dart.library.ui) 'package:flutter/foundation.dart';
@@ -77,6 +78,8 @@ class DandanplayHttpClient extends transport.BaseClient {
       throw DandanplayLoginRequired();
     }
     final isGatewayTarget = NetworkSettings.isDandanplayServiceUri(target);
+    final observationSource = isGatewayTarget || NetworkSettings.isDandanplayServiceUri(relayTarget)
+        ? 'dandanplay' : target.host == 'api.bgm.tv' ? 'bangumi' : 'http';
     if (isGatewayTarget) {
       if (!isAccountEntry(request.method, target)) {
         if (authorization.isEmpty) throw DandanplayLoginRequired();
@@ -102,6 +105,7 @@ class DandanplayHttpClient extends transport.BaseClient {
     }
     try {
       final response = await _inner.send(request);
+      NetworkObservations.record(observationSource, uri: target, status: response.statusCode);
       if (isGatewayTarget) {
         // 网关自身故障（nginx 502/504、网关 5xx）也计入失败，
         // 以便连续失败后由备用服务器接管。
@@ -113,6 +117,7 @@ class DandanplayHttpClient extends transport.BaseClient {
       }
       return response;
     } catch (error) {
+      NetworkObservations.record(observationSource, uri: target, error: NetworkObservations.code(error));
       if (isGatewayTarget) {
         NipaplayServerRouter.instance.reportFailure(target);
       }

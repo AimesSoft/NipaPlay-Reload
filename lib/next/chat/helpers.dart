@@ -13,6 +13,8 @@ part 'native_helpers.dart';
 /// Capacity and receipts, with no policy about which work to delegate.
 final class Helpers implements JobExecutor {
   static const limit = 2;
+  int capacity = limit;
+  int get activeCount => _slots.length;
   @override
   String get type => 'agent.helper';
   late TaskEngine engine;
@@ -58,7 +60,7 @@ final class Helpers implements JobExecutor {
       'currentActivity': '等待帮手接手'
     });
     await _returnFor(job);
-    return {'jobId': job.jobId, 'parentThreadId': parent, 'helperLimit': limit};
+    return {'jobId': job.jobId, 'parentThreadId': parent, 'helperLimit': capacity};
   }
 
   Future<void> _returns = Future.value();
@@ -133,7 +135,7 @@ final class Helpers implements JobExecutor {
     if (chat == null ||
         !chat.available ||
         chat.repository.path != job.input['repository'] ||
-        _slots.length >= limit ||
+        _slots.length >= capacity ||
         pending.firstOrNull?.jobId != job.jobId) {
       await context.retryAt(
           DateTime.now().toUtc().add(const Duration(seconds: 2)),
@@ -185,6 +187,22 @@ final class Helpers implements JobExecutor {
               StateError(message['params']['message'] as String));
         }
       });
+      final resumeToken = job.checkpoint['resumeToken'] as String?;
+      if (resumeToken != null && turn != null) {
+        final marker = '[NipaPlay helper resume $resumeToken]';
+        final resumed = ((await chat.readThread(id))['turns'] as List).cast<ChatMessage>()
+            .where((t) => (t['items'] as List).cast<Map>().any((item) =>
+                item['type'] == 'userMessage' && jsonEncode(item['content']).contains(marker))).lastOrNull;
+        if (resumed != null) {
+          turn = resumed;
+        } else if (job.checkpoint['resumeDispatched'] == resumeToken) {
+          throw StateError('Helper resume acknowledgement lost; no matching turn in history.');
+        } else if (turn['status'] == 'interrupted') {
+          await context.report(checkpoint: {...context.job.checkpoint, 'resumeDispatched': resumeToken});
+          turn = Map<String, dynamic>.from((await chat.startThreadTurn(id,
+            '[NipaPlay helper ${job.jobId}]\n$marker\n用户恢复了这个任务。沿用这个线程中已有的工作与事实，继续完成原任务：\n${job.input['instruction']}'))['turn'] as Map);
+        }
+      }
       if (turn == null) {
         // Record the dispatch intent before RPC. On recovery, history supplies
         // the acknowledgement; a missing acknowledgement is never replayed.
@@ -222,8 +240,8 @@ final class Helpers implements JobExecutor {
         if (event == 'stop') {
           if (chat.busyFor(id)) await chat.interrupt(onThread: id);
           final current = await context.snapshot();
-          if (current.state == JobState.paused) return;
           turn = await ended.future;
+          if (current.state == JobState.paused || current.state == JobState.interrupted) return;
         } else {
           turn = event as ChatMessage;
         }

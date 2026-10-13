@@ -10,7 +10,7 @@ import '../media/media_service.dart';
 import 'native.dart';
 
 final class HeadlessDownloadBackend
-    implements DownloadBackend, SelectableDownloadBackend {
+    implements DownloadBackend, SelectableDownloadBackend, BandwidthDownloadBackend {
   HeadlessDownloadBackend(
       {this.native,
       this.root,
@@ -21,6 +21,11 @@ final class HeadlessDownloadBackend
   final JsonMap configuration;
   final List<String> readOnlyRoots;
   static const reason = 'Headless native download library is not configured.';
+  @override
+  Future<JsonMap> bandwidth(JsonMap input) async => native == null
+    ? {'supported': false, 'applied': false, 'reason': 'native_backend_not_configured'}
+    : Map<String, Object?>.from(await native!.call('torrent_limits', {
+      'download': input['downloadBytesPerSecond'] ?? -1, 'upload': input['uploadBytesPerSecond'] ?? -1}) as Map);
   Future<void>? _ready;
   @override
   DownloadBackendRef get reference => const DownloadBackendRef.builtin();

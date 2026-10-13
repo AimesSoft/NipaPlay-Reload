@@ -114,7 +114,7 @@ final class DanmakuFiles {
 
   /// Imported content never participates in the cache budget. Acquisition jobs
   /// retain their checkpoints and receipts until they finish.
-  Future<Map<String, Object?>> prune({int maxBytes = cacheBudget}) =>
+  Future<Map<String, Object?>> prune({int maxBytes = cacheBudget, Set<String>? cacheKeys}) =>
       db.transaction((tx) async {
         final active = await tx.query('jobs',
             columns: ['job_id'],
@@ -147,6 +147,7 @@ final class DanmakuFiles {
         for (final pool in pools) {
           if (remaining <= maxBytes) break;
           final key = pool['cache_key'];
+          if (cacheKeys != null && !cacheKeys.contains(key)) continue;
           await tx.delete('danmaku_cache_chunks',
               where: 'cache_key=?', whereArgs: [key]);
           await tx.update('danmaku_bindings', {'cache_key': null},

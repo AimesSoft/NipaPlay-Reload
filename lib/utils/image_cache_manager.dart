@@ -102,6 +102,14 @@ class ImageCacheManager {
 
   /// 当前缓存的图片张数（测试与调试用）。
   int get currentCacheCount => _cache.length;
+  bool get hasDiskActivity => _diskWrites.isNotEmpty || _byteLoads.isNotEmpty || _loading.isNotEmpty;
+  bool diskFileReferenced(String path) {
+    final name = path.split(Platform.pathSeparator).last;
+    return _refCount.entries.where((e) => e.value > 0).any((entry) {
+      final url = entry.key.replaceFirst(RegExp(r'_w\d+_h\d+$'), '');
+      return name == '${_getCacheKey(url)}.jpg';
+    });
+  }
 
   /// 估算一张解码后位图的字节数，向上取整到 4 字节像素对齐。
   static int _estimateImageBytes(ui.Image image) {

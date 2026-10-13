@@ -436,6 +436,8 @@ extension VideoPlayerStatePlaybackControls on VideoPlayerState {
     if (_currentVideoPath == null) {
       return;
     }
+    BodySignals.changed('playback.ended', _currentVideoPath!,
+        {'path': _currentVideoPath, 'endAction': _playbackEndAction.name});
 
     switch (_playbackEndAction) {
       case PlaybackEndAction.autoNext:
@@ -934,6 +936,9 @@ extension VideoPlayerStatePlaybackControls on VideoPlayerState {
       debugPrint('[自动连播] seekTo时取消自动播放失败: $e');
     }
     if (!hasVideo) return;
+    BodySignals.changed('playback.seek_requested', _currentVideoPath ?? 'player',
+        {'path': _currentVideoPath, 'targetMs': position.inMilliseconds,
+          'observation': 'requested; backend settlement is separate'});
 
     try {
       _isSeeking = true;

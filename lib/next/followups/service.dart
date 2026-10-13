@@ -50,6 +50,7 @@ final class Followups {
   final RepositoryLocation location;
   ChatHost? _host;
   Helpers? helpers;
+  void Function()? eventCommitted;
   String? Function()? agentDevice;
   Future<JsonMap> Function(String, JsonMap)? deliverRemote;
   Future<JsonMap> turnProcess(String threadId, String turnId) async {
@@ -296,6 +297,7 @@ final class Followups {
           'object_id': objectId,
           'payload': jsonEncode(redactHarnessJson(payload)),
         });
+        eventCommitted?.call();
         _schedule();
       });
 

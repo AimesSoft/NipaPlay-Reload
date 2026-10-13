@@ -60,6 +60,18 @@ import 'subtitles/library.dart';
 import 'subtitles/capability.dart';
 import 'programs/runtime.dart';
 import 'programs/repository.dart';
+import 'tasks/resources.dart';
+import 'tasks/classic_scan.dart';
+import 'events/capability.dart';
+import 'events/signals.dart';
+import 'network/capability.dart';
+import 'network/observations.dart';
+import 'settings/system_settings.dart';
+import 'system/storage.dart';
+import 'system/diagnostics.dart';
+import 'system/desktop.dart';
+import 'package:nipaplay/services/scan_service.dart';
+import 'dart:async';
 
 /// Application-owned task and capability composition, independent of Labs.
 final class NextCore {
@@ -116,6 +128,16 @@ final class NextCore {
   late final UiDataService uiData;
   late final LibraryDataService libraryData;
   LibraryDataService get libraryActions => libraryData;
+  final classicScan = ClassicScanExecutor();
+  late final TaskResources resources;
+  late final BodyEvents events;
+  late final SystemSettings automatic;
+  late final SystemStorage storage;
+  late final DesktopSystem desktopSystem;
+  late final SystemDiagnostics diagnostics;
+  StreamSubscription<JsonMap>? _networkEvents;
+  StreamSubscription<Job>? _bodyTasks;
+  final _taskStates = <String, String>{};
 
   Future<void> _initialize(
       Directory? suppliedRoot,
@@ -184,6 +206,7 @@ final class NextCore {
       hooks,
       programs,
       diskDeletion,
+      classicScan,
     ];
     engine = TaskEngine(store: jobs, ownerDeviceId: deviceId, executors: [
       for (final executor in executors) OriginExecutor(executor, database)
@@ -213,7 +236,41 @@ final class NextCore {
         Invocation(origin: 'application'));
     };
     hooks.observeEvent = followups.hookEvent;
+    BodySignals.emit = (event, id, facts) async { await hooks.emit(event, id, facts); };
     downloads.attach(engine, root);
+    resources = TaskResources(engine, downloads.downloads, helpers);
+    await resources.load();
+    classicScan.matchingConcurrency = () => resources.metadataConcurrency;
+    automatic = SystemSettings(danmaku.sidecars, subtitles);
+    settings.register([...resources.settings(), ...automatic.entries()]);
+    await automatic.load();
+    ScanService.startupRefreshAllowed = () async {
+      final prefs = await SharedPreferences.getInstance();
+      return prefs.getBool('labs_use_next_interface') != true || automatic.startupScanEnabled;
+    };
+    events = BodyEvents(database);
+    followups.eventCommitted = events.changed;
+    settings.onChanged = (facts) async {
+      await hooks.emit('settings.changed', facts['key'] as String, facts);
+    };
+    changeHistory.onChanged = (collection, id, facts) async {
+      final domain = collection.split(':').first;
+      if (domain == 'subtitle') await hooks.emit('media.assets.changed', id, {'kind': 'subtitle', ...facts});
+      if (domain == 'source' || domain == 'source_sort') await hooks.emit('media.sources.state_changed', id, facts);
+    };
+    _networkEvents = NetworkObservations.changes.stream.listen((facts) {
+      unawaited(hooks.emit('network.state_changed', facts['id'] as String, facts));
+    });
+    _bodyTasks = engine.changes.listen((job) {
+      if (job.type == 'harness.hook') return;
+      final state = '${job.state.wireName}:${job.phase}';
+      if (_taskStates[job.jobId] == state) return;
+      _taskStates[job.jobId] = state;
+      unawaited(hooks.emit('task.state_changed', job.jobId, job.toJson()));
+    });
+    storage = SystemStorage(root, database, hooks);
+    desktopSystem = DesktopSystem(media.service, root, hooks);
+    diagnostics = SystemDiagnostics(database, media.service, storage, automatic, settings);
     downloads.downloads.returnTarget = followups.downloadReturnTarget;
     media.attach(engine);
     mediaSources.engine = engine;
@@ -232,6 +289,8 @@ final class NextCore {
     libraryData = LibraryDataService(uiData, port: ClassicLibrarySources(mediaSources, root));
     uiData.libraryData = libraryData;
     libraryData.register(state);
+    storage.libraryRoots = media.service.authorizedRoots;
+    storage.artworkBusy = () => uiData.artwork.busy;
     uiData.meshLibrary = MeshLibrary(uiData, mesh);
     mediaSources.canonicalEntityId = uiData.meshLibrary!.canonical;
     registerMergedLibrary(state, uiData.meshLibrary!);
@@ -240,6 +299,12 @@ final class NextCore {
     capabilities = List.unmodifiable(diskDeletion.protect([
       CredentialCapability(credentials),
       TaskCapability(engine),
+      resources,
+      events,
+      NetworkCapability(mediaSources),
+      storage,
+      diagnostics,
+      desktopSystem,
       programs.capability,
       programRepository,
       FollowupCapability(followups),
@@ -282,9 +347,18 @@ final class NextCore {
       ApplicationSettings.authorizePath = null;
     }
     await settings.drain();
+    await storage.close();
+    settings.onChanged = null;
+    BodySignals.emit = null;
+    ScanService.startupRefreshAllowed = null;
+    await _networkEvents?.cancel();
+    await _bodyTasks?.cancel();
+    changeHistory.onChanged = null;
     if (identical(BodyChanges.attached, changeHistory)) BodyChanges.attached = null;
     await changeHistory.drain();
     await followups.close();
+    followups.eventCommitted = null;
+    await events.committed.close();
     await uiData.close();
     hooks.observeEvent = null;
     await hooks.disable();

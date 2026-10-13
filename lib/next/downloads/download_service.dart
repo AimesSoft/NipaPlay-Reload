@@ -19,6 +19,19 @@ final class DownloadService {
   final DownloadBackends backends;
   final DownloadLibrary library;
   Future<JsonMap?> Function(Invocation)? returnTarget;
+  Future<JsonMap> bandwidth(JsonMap input) => _serial(() async {
+    for (final value in input.values.cast<int>()) {
+      if (value != 0 && (value < 16384 || value > 4294967295)) {
+        throw const Failure(FailureCode.invalidInput, 'Use 0 for unlimited, or 16384..4294967295 bytes/second.');
+      }
+    }
+    final backend = backends.resolve(const DownloadBackendRef.builtin());
+    final facts = backend is BandwidthDownloadBackend ? await (backend as BandwidthDownloadBackend).bandwidth(input)
+      : <String, Object?>{'supported': false, 'applied': false, 'reason': 'backend_has_no_bandwidth_control'};
+    return {...facts, 'scope': 'builtinSession', 'appliesTo': 'all builtin torrents',
+      'lifetime': 'current native session; new sessions default to unlimited',
+      'unit': 'bytes/second; 0 means unlimited', 'minimumPositive': 16384};
+  });
   Future<void> _tail = Future.value();
 
   Future<T> _serial<T>(Future<T> Function() operation) async {

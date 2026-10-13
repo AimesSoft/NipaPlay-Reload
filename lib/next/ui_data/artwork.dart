@@ -8,6 +8,7 @@ import 'package:nipa_harness/nipa_harness.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
 import '../media/identity_store.dart';
+import '../events/signals.dart';
 import '../media/media_service.dart';
 import '../media/metadata_provider.dart';
 import '../media/providers.dart';
@@ -21,6 +22,7 @@ final class ArtworkCache {
   final CredentialVault vault;
   final _client = http.Client();
   final _pending = <String, Future<JsonMap>>{};
+  bool get busy => _pending.isNotEmpty;
 
   Future<JsonMap> cached(String entityId) async {
     final identities = await _identities(entityId);
@@ -75,6 +77,8 @@ final class ArtworkCache {
         'url': url,
       })
     });
+    BodySignals.changed('media.assets.changed', object['id'] as String,
+        {'kind': 'artwork', 'changedFields': fields.keys.toList(), 'source': object['provider']});
   }
 
   Future<JsonMap> _load(String id) async {

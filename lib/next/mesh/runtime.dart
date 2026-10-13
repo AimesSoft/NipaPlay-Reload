@@ -20,6 +20,7 @@ bool meshActionAllowed(String id) =>
     ['task.', 'download.', 'media.', 'danmaku.', 'playback.', 'subtitle.',
       'history.', 'followup.', 'program.', 'discover.', 'sync.', 'ui.',
       'settings.', 'accounts.', 'state.', 'window.', 'app.', 'diagnostics.',
+      'events.', 'network.', 'storage.', 'cache.', 'notification.', 'share.',
       'backup.', 'plugins.', 'chat.', 'memory.', 'appearance.', 'shortcuts.',
       'webdav_quick.'].any(id.startsWith) ||
     const {'agent.wake', 'agent.dispatch', 'agent.dispatch.report',

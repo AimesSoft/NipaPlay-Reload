@@ -80,9 +80,9 @@ struct HttpRange {
     end: Option<u64>,
 }
 
+static TORRENT_RUNTIME: OnceLock<TorrentRuntime> = OnceLock::new();
 fn torrent_runtime() -> &'static TorrentRuntime {
-    static INSTANCE: OnceLock<TorrentRuntime> = OnceLock::new();
-    INSTANCE.get_or_init(|| TorrentRuntime {
+    TORRENT_RUNTIME.get_or_init(|| TorrentRuntime {
         runtime: Builder::new_multi_thread()
             .worker_threads(4)
             .enable_all()
@@ -96,6 +96,62 @@ fn torrent_runtime() -> &'static TorrentRuntime {
         download_dir: Mutex::new(None),
         stream_server: Mutex::new(None),
     })
+}
+
+#[flutter_rust_bridge::frb(ignore)]
+fn validate_bandwidth(value: i64) -> Result<(), String> {
+    if value == -1 || value == 0 || (16384..=u32::MAX as i64).contains(&value) {
+        Ok(())
+    } else {
+        Err("bandwidth must be 0 (unlimited), or 16384..4294967295 bytes/second".into())
+    }
+}
+
+#[flutter_rust_bridge::frb(ignore)]
+fn apply_bandwidth(limits: &librqbit::limits::Limits, download: i64, upload: i64) -> Result<(u32, u32), String> {
+    validate_bandwidth(download)?;
+    validate_bandwidth(upload)?;
+    if download >= 0 { limits.set_download_bps(std::num::NonZeroU32::new(download as u32)); }
+    if upload >= 0 { limits.set_upload_bps(std::num::NonZeroU32::new(upload as u32)); }
+    Ok((limits.get_download_bps().map(|v| v.get()).unwrap_or(0),
+        limits.get_upload_bps().map(|v| v.get()).unwrap_or(0)))
+}
+
+#[flutter_rust_bridge::frb(ignore)]
+pub(crate) fn bandwidth(download: i64, upload: i64) -> Result<Option<(u32, u32)>, String> {
+    validate_bandwidth(download)?;
+    validate_bandwidth(upload)?;
+    static SERIAL: Mutex<()> = Mutex::new(());
+    let _guard = SERIAL.lock().map_err(|_| "bandwidth_lock_failed")?;
+    let Some(runtime) = TORRENT_RUNTIME.get() else { return Ok(None); };
+    let session = runtime.session.lock().map_err(|_| "session_lock_failed")?.clone();
+    let Some(session) = session else { return Ok(None); };
+    apply_bandwidth(&session.ratelimits, download, upload).map(Some)
+}
+
+/// Read/set the existing session only. -1 preserves a direction; 0 removes its limit.
+/// Caller supplies space for two u32 values; no ownership crosses the ABI.
+#[flutter_rust_bridge::frb(ignore)]
+#[no_mangle]
+pub unsafe extern "C" fn nipaplay_download_limits(download: i64, upload: i64, actual: *mut u32) -> i32 {
+    if actual.is_null() { return -1; }
+    match std::panic::catch_unwind(|| bandwidth(download, upload)) {
+        Ok(Ok(Some((down, up)))) => { *actual = down; *actual.add(1) = up; 1 }
+        Ok(Ok(None)) => 0,
+        Ok(Err(_)) | Err(_) => -1,
+    }
+}
+
+#[cfg(test)]
+mod bandwidth_constraints {
+    #[test]
+    fn rejects_a_partial_change_and_preserves_omitted_direction() {
+        let limits = librqbit::limits::Limits::new(Default::default());
+        assert_eq!(super::apply_bandwidth(&limits, 131072, 65536).unwrap(), (131072, 65536));
+        assert!(super::apply_bandwidth(&limits, 262144, 10).is_err());
+        assert_eq!(super::apply_bandwidth(&limits, -1, -1).unwrap(), (131072, 65536));
+        assert_eq!(super::apply_bandwidth(&limits, -1, 0).unwrap(), (131072, 0));
+    }
 }
 
 pub fn torrent_init_session(

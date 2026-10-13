@@ -65,6 +65,7 @@ final class ChangeHistory {
   final Database database;
   final _previous = <String, Map<String, JsonMap>>{};
   Future<void> _writes = Future.value();
+  Future<void> Function(String collection, String id, JsonMap facts)? onChanged;
 
   void seed(String collection, List<JsonMap> rows) {
     _previous[collection] = {for (final row in rows) row['id'] as String: row};
@@ -74,7 +75,13 @@ final class ChangeHistory {
     final next = {for (final row in rows) row['id'] as String: row};
     final before = _previous[collection];
     _previous[collection] = next;
-    if (before == null) return;
+    if (before == null) {
+      for (final row in rows) {
+        _writes = _writes.then((_) async => onChanged?.call(collection,
+            row['id'] as String, {'before': null, 'after': row}));
+      }
+      return;
+    }
     final at = DateTime.now().toUtc().toIso8601String();
     for (final id in {...before.keys, ...next.keys}) {
       final old = before[id], value = next[id];
@@ -105,6 +112,7 @@ final class ChangeHistory {
       };
       _writes = _writes.then((_) async {
         await database.insert('body_changes', record);
+        await onChanged?.call(collection, id, {'before': old, 'after': value});
       });
       // Report storage failures without changing Classic's successful write.
       unawaited(

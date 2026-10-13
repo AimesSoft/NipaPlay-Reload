@@ -6,6 +6,7 @@ import '../media/metadata_provider.dart';
 import 'source.dart';
 import 'sidecar.dart';
 import 'files.dart';
+import '../events/signals.dart';
 
 final class DanmakuStore {
   const DanmakuStore(this.identities);
@@ -13,6 +14,7 @@ final class DanmakuStore {
   Database get db => identities.database;
   DanmakuFiles get files => DanmakuFiles(db);
   String get now => DateTime.now().toUtc().toIso8601String();
+  Future<T> _transaction<T>(Future<T> Function(Transaction) action) => BodySignals.transaction(db, action);
   JsonMap decodeBinding(JsonMap b) => {
         ...b,
         'local_file':
@@ -25,7 +27,7 @@ final class DanmakuStore {
       };
 
   Future<void> recordSidecar(String entityId, JsonMap facts) =>
-      db.transaction((tx) async {
+      _transaction((tx) async {
         final entity = await identities.entity(entityId, db: tx);
         final imported = await tx.query('danmaku_bindings', columns: ['id'],
             where: "entity_id=? AND entity_revision=? AND status='accepted' AND local_file IS NULL AND json_extract(provenance, '\$.filePath')=?",
@@ -98,7 +100,7 @@ final class DanmakuStore {
           String filePath,
           String? note,
           Invocation invocation) =>
-      db.transaction((tx) async {
+      _transaction((tx) async {
         final entity = await identities.entity(entityId, db: tx);
         entityId = entity['id'] as String;
         if (!['file', 'episode'].contains(entity['kind'])) {
@@ -242,7 +244,7 @@ final class DanmakuStore {
 
   Future<String> attach(String entityId, DanmakuVideo video, String reason,
           String? url, Invocation invocation) =>
-      db.transaction((tx) async {
+      _transaction((tx) async {
         final entity = await identities.entity(entityId, db: tx);
         entityId = entity['id'] as String;
         if (!['file', 'episode'].contains(entity['kind'])) {
@@ -322,12 +324,15 @@ final class DanmakuStore {
       'payload': jsonEncode(payload),
       'created_at': now
     });
+    BodySignals.changed('media.assets.changed', id,
+        {'kind': 'danmaku', 'bindingId': id, 'revision': rev,
+          'changedFields': payload.keys.toList(), 'facts': payload});
   }
 
   Future<JsonMap> change(
           String id, int revision, JsonMap values, Invocation invocation,
           {JsonMap? alignment, String? reason}) =>
-      db.transaction((tx) async {
+      _transaction((tx) async {
         final b = await binding(id, tx: tx);
         if (b['revision'] != revision) {
           throw const Failure(
@@ -360,7 +365,7 @@ final class DanmakuStore {
       });
   Future<void> assignCache(String id, String key, String jobId,
           {int? expectedCacheRevision}) =>
-      db.transaction((tx) async {
+      _transaction((tx) async {
         final b = await binding(id, tx: tx);
         if (expectedCacheRevision != null &&
             b['cache_revision'] != expectedCacheRevision) {

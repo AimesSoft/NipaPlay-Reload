@@ -166,6 +166,10 @@ abstract interface class SelectableDownloadBackend {
   Future<void> selectFiles(String handle, List<int> indices);
 }
 
+abstract interface class BandwidthDownloadBackend {
+  Future<JsonMap> bandwidth(JsonMap input);
+}
+
 final class DownloadBackends {
   DownloadBackends(Iterable<DownloadBackend> backends)
       : _backends = {

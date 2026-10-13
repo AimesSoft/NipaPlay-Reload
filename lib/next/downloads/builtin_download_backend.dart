@@ -11,11 +11,14 @@ import 'package:path/path.dart' as p;
 
 import 'download_backend.dart';
 import 'download_paths.dart';
+import 'bandwidth_native.dart';
 
 final class BuiltinDownloadBackend
-    implements DownloadBackend, SelectableDownloadBackend {
+    implements DownloadBackend, SelectableDownloadBackend, BandwidthDownloadBackend {
   BuiltinDownloadBackend(this.service);
   final TorrentDownloadService service;
+  @override
+  Future<JsonMap> bandwidth(JsonMap input) async => NativeBandwidth.call(input);
   final _observations = <String,
       ({
     DateTime since,

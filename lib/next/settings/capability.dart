@@ -43,6 +43,7 @@ const _descriptionFields = [
   'scope',
   'apply',
   'effect',
+  'readOnly',
   'step',
   'storage',
   'value',

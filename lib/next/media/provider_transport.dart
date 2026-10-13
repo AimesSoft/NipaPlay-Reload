@@ -10,6 +10,7 @@ import '../../services/dandanplay_http_client.dart'
 import '../network/api_uri.dart';
 import '../network/metadata_gateway.dart';
 import '../network/http_diagnostics.dart';
+import '../network/observations.dart';
 
 import 'metadata_provider.dart';
 export 'no_vault_credential_resolver.dart'
@@ -88,25 +89,34 @@ final class HttpMetadataTransport implements MetadataTransport {
                 : _client.post(uri, headers: headers, body: jsonEncode(body)))
             .timeout(const Duration(seconds: 15));
       } on DandanplayLoginRequired {
+        NetworkObservations.record(provider, uri: uri, error: 'login_required');
         throw Failure(
             FailureCode.unavailable, 'Dandanplay login is required. $target');
       } on TimeoutException {
+        NetworkObservations.record(provider, uri: uri, error: 'timeout');
         throw ProviderRetry(
             provider,
             DateTime.now().toUtc().add(const Duration(seconds: 30)),
             'Request timed out. $target');
+      } on HandshakeException {
+        NetworkObservations.record(provider, uri: uri, error: 'tls_failed');
+        throw ProviderRetry(provider, DateTime.now().toUtc().add(const Duration(seconds: 30)),
+            'TLS negotiation failed. $target');
       } on SocketException {
+        NetworkObservations.record(provider, uri: uri, error: 'connection_failed');
         throw ProviderRetry(
             provider,
             DateTime.now().toUtc().add(const Duration(seconds: 30)),
             'Network unavailable. $target');
       } on http.ClientException {
+        NetworkObservations.record(provider, uri: uri, error: 'transport_failed');
         throw ProviderRetry(
             provider,
             DateTime.now().toUtc().add(const Duration(seconds: 30)),
             'Transport unavailable. $target');
       }
       _next = DateTime.now().add(interval);
+      NetworkObservations.record(provider, uri: uri, status: response.statusCode);
       final diagnostics = httpDiagnostics(uri,
           statusCode: response.statusCode,
           contentType: response.headers['content-type']);

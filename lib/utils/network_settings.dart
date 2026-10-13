@@ -1,5 +1,6 @@
 import '../next/headless/routing_preferences.dart'
     if (dart.library.ui) 'package:shared_preferences/shared_preferences.dart';
+import 'package:nipaplay/next/settings/registry.dart';
 
 /// 弹弹play 网关服务器选择模式。
 ///
@@ -104,7 +105,7 @@ class NetworkSettings {
     DandanplayServerMode mode,
   ) async {
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(_dandanplayModeKey, _modeToken(mode));
+    await SettingsAccess.persist(_dandanplayModeKey, () => prefs.setString(_dandanplayModeKey, _modeToken(mode)));
     // 注意：切换模式时保留用户填过的自定义地址，方便切回自定义时自动回填。
     // 非自定义模式下该地址不参与解析。
     // 手动切换模式会重置自动判定与故障转移的临时状态。

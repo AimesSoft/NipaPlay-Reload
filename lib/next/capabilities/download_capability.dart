@@ -4,6 +4,7 @@ import '../downloads/download_backend.dart';
 import '../downloads/download_service.dart';
 import '../downloads/download_source.dart';
 import '../downloads/download_paths.dart';
+import 'classic_action.dart';
 
 final _downloadJobSchema = ObjectSchema({
   ...jobSnapshotSchema.properties,
@@ -86,6 +87,19 @@ final class DownloadCapability implements Capability {
       required DownloadSources sources,
       InvocationObserver? deleteAudit})
       : actions = [
+          for (final operation in ['get', 'set'])
+            ClassicAction(ActionSpec(id: 'download.limits.$operation', title: '下载会话限速 $operation',
+              description: '真实原生内置会话的上传/下载字节预算。0 移除限制，正值至少 16384 字节/秒；省略方向保持现值。返回原生读回值。尚未初始化会话时 applied=false；不自动启动下载器，不改变网关限流。会话重建恢复无限制。',
+              effect: operation == 'get' ? Effect.read : Effect.write,
+              input: operation == 'get' ? const ObjectSchema({}) : const ObjectSchema({
+                'downloadBytesPerSecond': IntegerSchema(minimum: 0, maximum: 4294967295),
+                'uploadBytesPerSecond': IntegerSchema(minimum: 0, maximum: 4294967295)}),
+              output: const ObjectSchema({}, additionalProperties: true)), (input, _) async {
+                if (operation == 'set' && input.isEmpty) {
+                  throw const Failure(FailureCode.invalidInput, 'Provide at least one bandwidth direction.');
+                }
+                return downloads.bandwidth(input);
+              }),
           for (final operation in [
             'add',
             'set_paused',

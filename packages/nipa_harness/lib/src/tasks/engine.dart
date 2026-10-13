@@ -125,6 +125,23 @@ final class TaskEngine {
   final Map<String, JobExecutor> _executors = {};
   final Map<String, JobContext> _active = {};
   final Map<String, Timer> _retries = {};
+  final Map<String, int> _capacities = {};
+
+  /// Limits newly admitted workers; changing a limit never interrupts work.
+  void setCapacity(String type, int capacity) {
+    if (capacity < 1) throw ArgumentError.value(capacity, 'capacity');
+    _capacities[type] = capacity;
+    unawaited(list(type: type).then((jobs) {
+      for (final job in jobs) {
+        _schedule(job);
+      }
+    }));
+  }
+
+  int activeCount(String type) =>
+      _active.values.where((c) => c.job.type == type).length;
+  bool isActive(String jobId) => _active.containsKey(jobId);
+  int? capacity(String type) => _capacities[type];
   final _changes = StreamController<Job>.broadcast(sync: true);
 
   /// Persisted changes, emitted only after snapshot and event commit.
@@ -270,19 +287,27 @@ final class TaskEngine {
 
   Future<Job> pause(String jobId) async {
     final job = await _edit(
-        jobId, 'paused', (job) => _change(job, state: JobState.paused));
+        jobId, 'paused', (job) {
+      if (job.state == JobState.paused) return job;
+      if (job.state.isTerminal || job.cancelRequestedAt != null ||
+          job.state == JobState.needsDecision || job.state == JobState.waitingUser) {
+        throw const Failure(FailureCode.conflict,
+            'Only pending execution can be paused; receipts and decisions are retained.');
+      }
+      return _change(job, state: JobState.paused);
+    });
     _active[jobId]?._signal(retire: true);
     _retries.remove(jobId)?.cancel();
     return job;
   }
 
   /// A paused execution is reconciled rather than blindly repeated.
-  Future<Job> resume(String jobId) async {
+  Future<Job> resume(String jobId, {JsonMap? checkpoint}) async {
     final job = await _edit(jobId, 'resumed', (job) {
       if (job.state != JobState.paused) {
         throw const Failure(FailureCode.conflict, 'Job is not paused.');
       }
-      return _change(job, state: JobState.interrupted);
+      return _change(job, state: JobState.interrupted, checkpoint: checkpoint);
     });
     _schedule(job);
     return job;
@@ -391,6 +416,8 @@ final class TaskEngine {
         _closed ||
         job.ownerDeviceId != ownerDeviceId ||
         _active.containsKey(job.jobId) ||
+        (_capacities.containsKey(job.type) &&
+            activeCount(job.type) >= _capacities[job.type]!) ||
         !_executors.containsKey(job.type)) {
       return;
     }
@@ -407,6 +434,10 @@ final class TaskEngine {
 
   void _launch(Job job, {bool retry = false}) {
     if (_closed || _active.containsKey(job.jobId)) return;
+    if (_capacities.containsKey(job.type) &&
+        activeCount(job.type) >= _capacities[job.type]!) {
+      return;
+    }
     final context = JobContext._(this, job);
     if (job.cancelRequestedAt != null) context._signal();
     _active[job.jobId] = context;
@@ -460,6 +491,9 @@ final class TaskEngine {
         }
         _active.remove(context.job.jobId);
         _schedule(await _get(context.job.jobId));
+        for (final pending in await store.list()) {
+          _schedule(pending);
+        }
       } else {
         _active.remove(context.job.jobId);
       }

@@ -45,6 +45,18 @@ final class SubtitleLibrary implements SubtitleOperations {
   VideoPlayerState? _player;
   Future<bool> Function(VideoPlayerState, String)? remoteLoader;
   bool _closed = false;
+  bool enabled = true;
+  String? lastRun, lastError;
+  JsonMap get status => {'kind': 'subtitle.probe', 'enabled': enabled,
+    'running': _worker != null, 'queue': _pending.length, 'lastRun': lastRun,
+    'nextRun': enabled ? 'within 30 seconds or on file change' : null, 'error': lastError};
+  Future<void> setEnabled(bool value) async {
+    enabled = value;
+    if (value) {
+      await reconcile();
+      if (_pending.isNotEmpty && _worker == null) _worker = _drain().whenComplete(() => _worker = null);
+    }
+  }
   final _mutations = <String, Future<void>>{};
 
   Future<T> _serial<T>(String id, Future<T> Function() operation) async {
@@ -96,6 +108,7 @@ final class SubtitleLibrary implements SubtitleOperations {
   }
 
   Future<void> reconcile() async {
+    if (!enabled || _closed) return;
     for (final row in await db.query('media_locations',
         where: 'source=? AND owner_device_id=?',
         whereArgs: ['local', identities.ownerDeviceId])) {
@@ -106,18 +119,22 @@ final class SubtitleLibrary implements SubtitleOperations {
   void enqueue(String id, String path) {
     if (_closed || path.contains('://')) return;
     _pending[id] = path;
+    if (!enabled) return;
     _worker ??= _drain().whenComplete(() {
       _worker = null;
     });
   }
 
   Future<void> _drain() async {
-    while (!_closed && _pending.isNotEmpty) {
+    while (!_closed && enabled && _pending.isNotEmpty) {
       final id = _pending.keys.first,
           path = _pending.remove(_pending.keys.first)!;
       try {
         await inspect(id, path);
+        lastRun = DateTime.now().toUtc().toIso8601String();
+        lastError = null;
       } catch (error, stack) {
+        lastError = error.runtimeType.toString();
         FlutterError.reportError(FlutterErrorDetails(
             exception: error, stack: stack, library: 'Next subtitle indexing'));
       }

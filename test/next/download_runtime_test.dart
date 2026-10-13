@@ -5,6 +5,8 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:nipa_harness/nipa_harness.dart';
 import 'package:nipaplay/next/next_core.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:nipaplay/services/scan_service.dart';
 
 import '../../packages/nipa_harness/test/task_support.dart';
 import 'download_test_support.dart';
@@ -30,7 +32,44 @@ NextCore createCore({
     );
 
 void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
+  setUp(() => SharedPreferences.setMockInitialValues({}));
   setUpAll(sqfliteFfiInit);
+  test('Next startup policy preserves Classic when the endpoint stays enabled',
+      () async {
+    SharedPreferences.setMockInitialValues({
+      'labs_enable_agent_endpoint': true,
+      'labs_use_next_interface': false,
+      'next_startup_scan_enabled': false,
+    });
+    final root = await Directory.systemTemp.createTemp('x55-classic-startup-');
+    final runtime = createCore(
+        root: root,
+        backend: FakeDownloadBackend(root),
+        library: FakeDownloadLibrary(),
+        isEnabled: () async => false,
+        loadImportedKeys: () async => {});
+    addTearDown(() async {
+      await runtime.close();
+      await root.delete(recursive: true);
+    });
+    await runtime.ready;
+    var calls = 0;
+    final classic = ScanService.forTesting(
+        completedFilesProcessor: (_) async => [],
+        startupAction: () async { calls++; });
+    addTearDown(classic.dispose);
+    await classic.startStartupRefresh();
+    expect(calls, 1);
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool('labs_use_next_interface', true);
+    final next = ScanService.forTesting(
+        completedFilesProcessor: (_) async => [],
+        startupAction: () async { calls++; });
+    addTearDown(next.dispose);
+    await next.startStartupRefresh();
+    expect(calls, 1);
+  });
   test('unidentified downloads stay complete across observation and restart',
       () async {
     final root =

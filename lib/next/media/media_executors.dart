@@ -91,7 +91,8 @@ final class _ScanExecutor implements JobExecutor {
     final root = await service
         .authorizedPath(context.job.input['root'] as String, directory: true);
     final db = service.store.database;
-    var discovered = 0;
+    var discovered = (await db.query('media_scan_items',
+        where: 'job_id = ?', whereArgs: [context.job.jobId])).length;
     if (context.job.checkpoint['enumerated'] != true) {
       await for (final entry
           in Directory(root).list(recursive: true, followLinks: false)) {
@@ -103,6 +104,10 @@ final class _ScanExecutor implements JobExecutor {
             !_videoExtensions.contains(p.extension(entry.path).toLowerCase())) {
           continue;
         }
+        final recorded = await db.rawQuery('''SELECT 1 FROM media_scan_items i
+          JOIN media_locations l ON l.file_id=i.file_id
+          WHERE i.job_id=? AND l.locator=? LIMIT 1''', [context.job.jobId, entry.path]);
+        if (recorded.isNotEmpty) continue;
         final fileId = await service.index(entry.path);
         if (await control
             .stop({'discovered': discovered, 'indexed': discovered})) {

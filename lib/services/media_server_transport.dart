@@ -1,4 +1,6 @@
 import 'dart:async';
+import 'package:nipaplay/next/network/observations.dart';
+import 'package:nipaplay/next/settings/registry.dart';
 
 import 'package:http/http.dart' as http;
 import 'package:nipaplay/constants/settings_keys.dart';
@@ -31,14 +33,15 @@ class MediaServerTransport {
   /// An empty value restores [defaultConnectionUserAgent].
   static Future<String> saveConnectionUserAgent(String userAgent) async {
     final sanitized = sanitizeHttpUserAgent(userAgent);
-    _connectionUserAgentCache = sanitized;
     try {
       final preferences = await SharedPreferences.getInstance();
-      await preferences.setString(
-        SettingsKeys.mediaServerConnectionUserAgent,
-        sanitized,
-      );
-    } catch (_) {}
+      await SettingsAccess.persist(SettingsKeys.mediaServerConnectionUserAgent, () {
+        _connectionUserAgentCache = sanitized;
+        return preferences.setString(SettingsKeys.mediaServerConnectionUserAgent, sanitized);
+      });
+    } catch (_) {
+      _connectionUserAgentCache = sanitized;
+    }
     return sanitized;
   }
 
@@ -91,13 +94,19 @@ class MediaServerTransport {
       request.headers['User-Agent'] = _userAgent;
     }
     try {
-      return await (() async {
+      final response = await (() async {
         final streamedResponse = await _client.send(request);
         return http.Response.fromStream(streamedResponse);
       })()
           .timeout(timeout);
+      NetworkObservations.record('media_server', uri: request.url, status: response.statusCode);
+      return response;
     } on TimeoutException {
+      NetworkObservations.record('media_server', uri: request.url, error: 'timeout');
       _client.close();
+      rethrow;
+    } catch (error) {
+      NetworkObservations.record('media_server', uri: request.url, error: NetworkObservations.code(error));
       rethrow;
     }
   }
