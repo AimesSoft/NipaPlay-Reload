@@ -63,6 +63,7 @@ import 'harness_location.dart';
 import 'harness_hooks.dart';
 import 'harness_repository.dart';
 import 'chat/chat_host.dart';
+import 'memory/recent.dart';
 import 'work_detail_bridge.dart';
 import 'chat/debug_chat.dart';
 import 'ui_data/debug_ui_data.dart';
@@ -425,8 +426,16 @@ final class NextRuntime extends ChangeNotifier {
       if (status case AgentEndpointRunning(:final repository)) {
         await _attachHooks(repository);
         final host = chat = ChatHost(endpoint: _endpoint, repository: repository,
+          memory: ServiceProvider.nextCore.memory,
           sessions: ServiceProvider.nextCore.sessions,
           labRoot: LabProfile.active ? Directory(LabProfile.root) : null);
+        final core = ServiceProvider.nextCore;
+        core.memory.recent = (current) async => recentMemoryFacts(host,
+          [for (final job in await core.engine.list())
+            if (!job.state.isTerminal) job.toJson()],
+          (await core.followups.list()).where((r) =>
+            !const {'completed', 'cancelled'}.contains(r['state'])).toList(),
+          (await core.state.views['activity']!.readAll!()).rows, current);
         if (kDebugMode && LabProfile.active) recordDebugChat(host);
         try {
           await host.start();

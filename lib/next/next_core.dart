@@ -50,6 +50,8 @@ import 'ui_data/service.dart';
 import 'ui/shell/next_ui_preference.dart';
 import 'ui_data/capability.dart';
 import 'chat/session_store.dart';
+import 'memory/service.dart';
+import 'memory/capability.dart';
 import 'chat/helpers.dart';
 import 'subtitles/library.dart';
 import 'subtitles/capability.dart';
@@ -107,6 +109,7 @@ final class NextCore {
   late final ChangeHistory changeHistory;
   late final Followups followups;
   late final SessionStore sessions;
+  late final HarnessMemory memory;
   late final UiDataService uiData;
 
   Future<void> _initialize(
@@ -184,6 +187,7 @@ final class NextCore {
     programs.engine = engine;
     diskDeletion.engine = engine;
     followups = Followups(database, engine, harnessLocation);
+    memory = HarnessMemory(harnessLocation, settings, followups.discover);
     programs.returnTarget = followups.downloadReturnTarget;
     attachMeshDelivery(mesh, followups);
     mesh.describeSelf = () async {
@@ -243,6 +247,7 @@ final class NextCore {
       danmaku.capability,
       SubtitleCapability(subtitles),
       SettingsCapability(settings),
+      MemoryCapability(memory),
       ClassicOperations(settings),
       MeshCapability(mesh),
       state,

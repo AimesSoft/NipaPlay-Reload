@@ -13,7 +13,8 @@ abstract interface class NextLibraryData {
   /// connected SMB, WebDAV, Jellyfin and Emby source.
   Future<List<UiLibrarySource>> sources();
 
-  /// One source's page as it is arranged now.
+  /// One source's page as it is arranged now. An offline source shows what
+  /// was last seen of it; its works are not playable.
   Future<UiLibraryPage> page(String sourceId);
 
   /// Part of a category, for a grid that loads as it scrolls. [sort] is one
@@ -32,7 +33,11 @@ abstract interface class NextLibraryActions {
 
   /// Shows the source's own structure, or Nipa's arrangement of it.
   Future<void> useOriginal(String sourceId, bool original);
+  /// Moves a category to [index] among the page's categories.
   Future<void> moveCategory(String categoryId, int index);
+
+  /// Takes a category off the page. In a source's own structure this only
+  /// hides it in NipaPlay; nothing on the server or share changes.
   Future<void> removeCategory(String categoryId);
 }
 

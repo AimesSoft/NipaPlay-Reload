@@ -1,5 +1,64 @@
 # Embedded Codex host
 
+X49 keeps memory in the harness Git repository. `memory/preferences.md` is the
+resident preference file (8192 UTF-8 bytes); `memory/MEMORY.md` is a resident
+one-line-per-topic index with the same injection limit. Other Markdown files
+are read on demand. Preferences carry dates and sources and changes replace
+the original entry. Settings-backed preferences use `settings.set` and its
+reason; `SettingsRegistry.preferences()` supplies changed user settings and
+their latest provenance, rather than copying them into memory.
+Preferences are authoritative in this file and live settings; topic notes
+must not revive a preference removed from them.
+
+The seed `.codex/hooks.json` runs `python3 hooks/session_start.py` on Codex
+SessionStart startup/resume/clear/compact. It reads files afresh and adds
+preferences, settings, index and up to 3000 Unicode characters of verbatim
+recent facts. `memory.context {threadId?}` exposes the same resident files,
+settings and recent text, sourceThreadId, truncation and omitted counts. Recent
+facts come from the newest nonempty Codex session (last six user/assistant
+messages), unfinished tasks/followups and recent activity; they are projections
+of existing fields, with no generated handoff or second transcript store.
+Per-section limits and omission messages disclose clipped tails. More history
+is available through session selection and the existing task/followup/activity
+interfaces. No memories feature is enabled in Codex.
+
+Project trust and hook hash trust are separate in Codex 0.144.1. Both must be
+registered by the launcher (X50); untrusted hooks are listed but do not execute.
+SessionStart(compact) runs at the following turn, including after a local
+compaction. Resuming after restarting the app-server runs SessionStart(resume);
+switching to an already loaded thread in the same app-server does not run it
+again in 0.144.1, so pending memory changes survive thread selection.
+The seed script uses Python 3 and the existing `nipa` client; it
+does not alter the client's output budget.
+
+`NextCore.memory` implements `MemoryData` for the settings page “Nipa 记得的事”.
+Equivalent Actions:
+
+- `memory.list {}` returns `files` with relative path, bytes and revision.
+- `memory.read {path}` returns content, bytes and a SHA-256 revision.
+- `memory.edit {path, content, revision}` replaces an existing file; remove one
+  preference by submitting the remaining text. Resident writes over 8192 bytes
+  are rejected; direct Agent file edits are bounded and reported on injection.
+- `memory.delete {path, revision}` deletes a file. The index is user/Agent owned;
+  after deleting a topic, remove its index line with `memory.edit`.
+
+The UI passes `Invocation(origin: 'gui')` to edit/delete: Git author is
+`NipaPlay User <user@localhost>` and activity records the user operation, path
+and commit. Agent Actions retain their actual caller. Only the target file is
+committed; unrelated staged changes are preserved. A stale revision or a
+staged target file prevents replacement. Paths stay under `memory/`, with no
+symbolic links. Recognizable secrets (including private keys) are rejected on
+API writes and redacted on reads/injection; the Agent must not store secrets
+through direct file writes either. Git deletion retains earlier versions,
+and forgetting a preference does not delete Codex's conversation history.
+
+Before each new turn the host compares memory file revisions per thread. If
+they changed, it prepends one short change notice to that turn's input, asking
+the Agent to reread changed files and stop using removed or superseded entries.
+It never replaces previous context. This also covers files edited directly in
+the harness and background threads; helper conversation selection is unchanged.
+This infrastructure is inactive when Next chat is disabled.
+
 `NextRuntime.chat` owns one login-shell `codex app-server` while Next's local
 endpoint is enabled. Changing harness or disabling Next closes it. Initialization
 errors are in `NextRuntime.chatError`; desktop exit calls `closeChat()`.

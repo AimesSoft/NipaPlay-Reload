@@ -159,12 +159,15 @@ class _LibraryPageState extends State<LibraryPage>
             categoryId: f.categoryId, title: f.title, count: f.count)),
       );
 
-  /// Nipa arranges what the viewer cannot do in a few drags.
+  /// Nipa arranges what the viewer cannot do in a few drags. The viewer
+  /// finishes the sentence: how they want it arranged is theirs to say.
   void _askNipa() {
     final shell = _shell!;
     setState(() => _menu = _Menu.none);
+    final text = '帮我整理片库里的「${_source!.name}」：';
+    shell.askText.value = TextEditingValue(
+        text: text, selection: TextSelection.collapsed(offset: text.length));
     shell.openChat();
-    unawaited(shell.chat.say('帮我整理一下片库里的「${_source!.name}」'));
   }
 
   // —— Debug ——
@@ -445,6 +448,7 @@ class _LibraryPageState extends State<LibraryPage>
             onMove: _actions.moveCategory,
             onRemove: _actions.removeCategory,
             onAskNipa: _askNipa,
+            original: !page.arranged,
           ),
         ),
     };

@@ -20,9 +20,14 @@ class CategoryEditor extends StatefulWidget {
     required this.onMove,
     required this.onRemove,
     required this.onAskNipa,
+    this.original = false,
   });
 
   final List<UiCategory> categories;
+
+  /// The source's own structure: taking a category away only hides it
+  /// here; nothing on the server or share changes.
+  final bool original;
   final void Function(String categoryId, int index) onMove;
   final void Function(String categoryId) onRemove;
   final VoidCallback onAskNipa;
@@ -111,7 +116,7 @@ class _CategoryEditorState extends State<CategoryEditor> {
                   NextIconButton(
                     glyph: NextGlyph.close,
                     size: 30,
-                    label: '移除',
+                    label: widget.original ? '隐藏' : '移除',
                     onTap: () => _remove(c),
                   ),
                 const SizedBox(width: 4),
