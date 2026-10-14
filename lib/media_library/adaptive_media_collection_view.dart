@@ -416,6 +416,9 @@ class _AdaptiveMediaCollectionViewState
   final Map<int, BangumiAnime> _details = <int, BangumiAnime>{};
   final Map<int, Future<BangumiAnime>> _detailRequests =
       <int, Future<BangumiAnime>>{};
+  // 详情请求失败后的冷却记录，防止 build 里逐帧重试（见 _ensureDetail）。
+  final Map<int, DateTime> _detailFailures = <int, DateTime>{};
+  static const Duration _detailRetryCooldown = Duration(seconds: 30);
   String _query = '';
   MediaCollectionSort _sort = MediaCollectionSort.comprehensive;
   int _sortChangeRevision = 0;
@@ -712,6 +715,14 @@ class _AdaptiveMediaCollectionViewState
     if (_details.containsKey(animeId) || _detailRequests.containsKey(animeId)) {
       return;
     }
+    // 失败冷却：catchError 里移除 in-flight 标记后，下一次 build 会立刻再发
+    // 一发请求；网络不好时每个 build 帧都重试，形成重试风暴。冷却期内直接
+    // 跳过，到期后由下一次 build 自然重试。
+    final failedAt = _detailFailures[animeId];
+    if (failedAt != null &&
+        DateTime.now().difference(failedAt) < _detailRetryCooldown) {
+      return;
+    }
     final cached = BangumiService.instance.getAnimeDetailsFromMemory(animeId);
     if (cached != null) {
       _details[animeId] = cached;
@@ -720,12 +731,14 @@ class _AdaptiveMediaCollectionViewState
     final request = BangumiService.instance.getAnimeDetails(animeId);
     _detailRequests[animeId] = request;
     request.then((detail) {
+      _detailFailures.remove(animeId);
       if (!mounted) return;
       setState(() {
         _details[animeId] = detail;
         _detailRequests.remove(animeId);
       });
     }).catchError((_) {
+      _detailFailures[animeId] = DateTime.now();
       _detailRequests.remove(animeId);
     });
   }

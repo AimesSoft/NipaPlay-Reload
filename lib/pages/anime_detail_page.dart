@@ -672,6 +672,20 @@ class _AnimeDetailPageState extends State<AnimeDetailPage>
       return;
     }
 
+    // 温启动快路径：媒体库卡片 build 时已预取详情（简介与剧集在同一响应
+    // 里），内存里往往已有完整数据。先把旧数据渲染出来、立刻撤掉整页
+    // spinner；随后的 await 走 stale-while-revalidate 快速返回同一份数据，
+    // 真正的网络回源由服务层在后台完成。只有冷缓存（首次打开）才需要等网络。
+    if (animeId > 0) {
+      final warm = _bangumiService.getAnimeDetailsFromMemory(animeId);
+      if (warm != null) {
+        setState(() {
+          _detailedAnime = _mergePlaybackDetail(warm);
+          _isLoading = false;
+        });
+      }
+    }
+
     try {
       BangumiAnime anime;
 
@@ -2557,10 +2571,10 @@ class _AnimeDetailPageState extends State<AnimeDetailPage>
     final Color textColor = isDark ? Colors.white : Colors.black87;
     final Color secondaryTextColor = isDark ? Colors.white70 : Colors.black54;
 
-    if (_isLoading) {
+    if (_isLoading && _detailedAnime == null) {
       return Center(child: AdaptiveMediaActivityIndicator(color: textColor));
     }
-    if (_error != null || _detailedAnime == null) {
+    if (_detailedAnime == null) {
       return Center(
         child: Padding(
           padding: const EdgeInsets.all(16.0),
@@ -3410,14 +3424,14 @@ class _AnimeDetailPageState extends State<AnimeDetailPage>
   }
 
   Widget _buildImmersiveContent() {
-    if (_isLoading) {
+    if (_isLoading && _detailedAnime == null) {
       return const ColoredBox(
         color: Color(0xFF080B12),
         child: Center(child: CircularProgressIndicator()),
       );
     }
     final anime = _detailedAnime;
-    if (_error != null || anime == null) {
+    if (anime == null) {
       return ColoredBox(
         color: const Color(0xFF080B12),
         child: Center(

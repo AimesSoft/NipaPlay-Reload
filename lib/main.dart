@@ -544,9 +544,10 @@ void main(List<String> args) async {
       if (!kIsWeb) SMBProxyService.instance.initialize();
       BangumiService.instance.initialize().then((_) {
         try {
-          BangumiService.instance.checkAndRefreshCacheWithoutTags();
+          // 启动期有预算的过期缓存回源清扫（不删旧数据，后台静默执行）
+          BangumiService.instance.revalidateExpiredCacheOnStartup();
         } catch (e) {
-          debugPrint('检查缓存标签失败: $e');
+          debugPrint('启动期缓存回源清扫失败: $e');
         }
       });
       ServerConnectivityService.instance.checkConnectivity();
