@@ -12,7 +12,9 @@ import 'package:nipaplay/services/webdav_service.dart';
 /// - 都不可达则保留内网为默认。
 ///
 /// 具体的双地址探测与优选结果记录由各服务的 `testConnection` 完成。
-class MediaLibraryReachabilityService {
+/// 每个连接探测结束后会 [notifyListeners]，库管理界面据此刷新地址行
+/// 的连通性状态，避免页面在检测完成前打开时一直停留在「未知」。
+class MediaLibraryReachabilityService extends ChangeNotifier {
   MediaLibraryReachabilityService._();
 
   static final MediaLibraryReachabilityService instance =
@@ -43,6 +45,7 @@ class MediaLibraryReachabilityService {
       debugPrint('媒体库可达性检测失败: $e');
     } finally {
       _isChecking = false;
+      notifyListeners();
     }
   }
 
@@ -51,6 +54,8 @@ class MediaLibraryReachabilityService {
       await WebDAVService.instance.testConnection(connection);
     } catch (e) {
       debugPrint('WebDAV 可达性检测失败 (${connection.name}): $e');
+    } finally {
+      notifyListeners();
     }
   }
 
@@ -59,6 +64,8 @@ class MediaLibraryReachabilityService {
       await SMBService.instance.testConnection(connection);
     } catch (e) {
       debugPrint('SMB 可达性检测失败 (${connection.name}): $e');
+    } finally {
+      notifyListeners();
     }
   }
 }

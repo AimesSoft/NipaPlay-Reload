@@ -27,6 +27,7 @@ import 'package:nipaplay/services/manual_danmaku_matcher.dart'; // 导入手动�
 import 'package:nipaplay/services/danmaku_matching_service.dart';
 import 'package:nipaplay/services/webdav_service.dart'; // 导入WebDAV服务
 import 'package:nipaplay/services/smb_service.dart';
+import 'package:nipaplay/services/media_library_reachability_service.dart';
 import 'package:nipaplay/services/smb_proxy_service.dart';
 import 'package:nipaplay/utils/media_source_utils.dart';
 import 'package:nipaplay/providers/watch_history_provider.dart';
@@ -310,6 +311,9 @@ class _LibraryManagementTabState extends State<LibraryManagementTab> {
   void initState() {
     super.initState();
 
+    // 启动阶段的可达性检测完成后刷新地址行的连通性状态。
+    MediaLibraryReachabilityService.instance.addListener(_onReachabilityUpdated);
+
     // 延迟初始化，确保挂载完成
     if (widget.section == LibraryManagementSection.local) {
       _initScanServiceListener();
@@ -333,6 +337,11 @@ class _LibraryManagementTabState extends State<LibraryManagementTab> {
         _initSMBService();
       }
     }
+  }
+
+  /// 启动阶段的可达性检测有新结果时刷新页面，更新地址行的「可达/不可用」。
+  void _onReachabilityUpdated() {
+    if (mounted) setState(() {});
   }
 
   // 提取为单独的方法，方便管理生命周期
@@ -583,6 +592,8 @@ class _LibraryManagementTabState extends State<LibraryManagementTab> {
     if (_hasScanServiceListener && _scanService != null) {
       _scanService!.removeListener(_checkScanResults);
     }
+    MediaLibraryReachabilityService.instance
+        .removeListener(_onReachabilityUpdated);
     _searchController.dispose();
     _listScrollController.dispose();
     _webdavScrollController.dispose();

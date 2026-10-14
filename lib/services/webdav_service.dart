@@ -70,12 +70,19 @@ class WebDAVConnection {
       }
     }
 
+    // 纯公网连接（url 为空）把公网地址纳入 id 种子，避免同用户名的不同
+    // 公网连接派生出相同 id，导致按 id 解析媒体路径时错配到另一个连接。
+    // 旧数据 url 恒非空，沿用原种子保证升级后 id 不变。
+    final idSeed = rawUrl.trim().isNotEmpty
+        ? 'nipaplay:webdav:$rawUrl|${json['username'] ?? ''}'
+        : 'nipaplay:webdav:wan:$wanUrl|${json['username'] ?? ''}';
+
     return WebDAVConnection(
       id: savedId?.isNotEmpty == true
           ? savedId
           : const Uuid().v5(
               '6ba7b811-9dad-11d1-80b4-00c04fd430c8',
-              'nipaplay:webdav:$rawUrl|${json['username'] ?? ''}',
+              idSeed,
             ),
       name: json['name'] ?? '',
       url: url,
@@ -427,34 +434,32 @@ class WebDAVService {
 
   /// 分别校验内网地址与公网地址，返回各自可达情况与经修正后的地址。
   ///
-  /// 只配置一个地址时只校验该地址；两个都配置时都校验。地址的常见子路径
+  /// 只配置一个地址时只校验该地址；两个都配置时并行校验，避免一侧
+  /// 不可达时还要等完它的超时与重试链才轮到另一侧。地址的常见子路径
   /// 与 HTTPS→HTTP 降级修正会各自写回对应的字段。
   Future<({WebDAVConnection connection, bool lanSuccess, bool wanSuccess})>
       _validateAddresses(WebDAVConnection connection) async {
     final normalized = _normalizeConnection(connection);
+    final hasLan = normalized.url.trim().isNotEmpty;
+    final hasWan = normalized.wanUrl.trim().isNotEmpty;
+
+    final results = await Future.wait([
+      hasLan
+          ? _validateConnection(normalized.copyWith(wanUrl: ''))
+          : Future<WebDAVConnection?>.value(null),
+      hasWan
+          ? _validateConnection(
+              normalized.copyWith(url: normalized.wanUrl, wanUrl: ''),
+            )
+          : Future<WebDAVConnection?>.value(null),
+    ]);
+
     var url = normalized.url;
     var wanUrl = normalized.wanUrl;
-    var lanSuccess = false;
-    var wanSuccess = false;
-
-    if (url.trim().isNotEmpty) {
-      final validated =
-          await _validateConnection(normalized.copyWith(url: url, wanUrl: ''));
-      if (validated != null) {
-        url = validated.url;
-        lanSuccess = true;
-      }
-    }
-
-    if (wanUrl.trim().isNotEmpty) {
-      final validated = await _validateConnection(
-        normalized.copyWith(url: wanUrl, wanUrl: ''),
-      );
-      if (validated != null) {
-        wanUrl = validated.url;
-        wanSuccess = true;
-      }
-    }
+    final lanSuccess = results[0] != null;
+    final wanSuccess = results[1] != null;
+    if (lanSuccess) url = results[0]!.url;
+    if (wanSuccess) wanUrl = results[1]!.url;
 
     _addressReachabilityById[normalized.id] =
         (lan: lanSuccess, wan: wanSuccess);
@@ -1966,7 +1971,7 @@ class WebDAVService {
     bool Function()? onStopRequested,
   }) async {
     final targets = searchTargets ?? const {'folder', 'video'};
-    final normalizedConnection = _normalizeConnection(connection);
+    final normalizedConnection = effectiveConnection(connection);
     final normalizedKeyword = keyword.trim().toLowerCase();
 
     if (normalizedKeyword.isEmpty) {

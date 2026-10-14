@@ -110,13 +110,21 @@ class SMBConnection {
       }
     }
 
+    // 纯公网连接（host 为空）把公网地址纳入 id 种子，避免同用户名的不同
+    // 公网连接派生出相同 id，导致按 id 解析媒体路径时错配到另一个连接。
+    // 旧数据 host 恒非空，沿用原种子保证升级后 id 不变。
+    final idSeed = rawHost.trim().isNotEmpty
+        ? 'nipaplay:smb:$rawHost|$rawPort|'
+              '${json['domain'] ?? ''}|${json['username'] ?? ''}'
+        : 'nipaplay:smb:wan:$wanHost|$wanPort|'
+              '${json['domain'] ?? ''}|${json['username'] ?? ''}';
+
     return SMBConnection(
       id: savedId?.isNotEmpty == true
           ? savedId
           : const Uuid().v5(
               '6ba7b811-9dad-11d1-80b4-00c04fd430c8',
-              'nipaplay:smb:$rawHost|$rawPort|'
-                  '${json['domain'] ?? ''}|${json['username'] ?? ''}',
+              idSeed,
             ),
       name: json['name'] ?? '',
       host: host,
@@ -381,30 +389,31 @@ class SMBService {
     await _saveConnections();
   }
 
-  /// 分别探测内网与公网地址；只配置一个时只探测该地址。
+  /// 分别探测内网与公网地址；只配置一个时只探测该地址，两个都配置时
+  /// 并行探测，避免一侧不可达时还要等完它的超时才轮到另一侧。
   ///
   /// 内网可用则优先内网；仅公网可用时才优先公网；都失败则保留内网为默认。
   Future<bool> _testAddresses(SMBConnection connection) async {
     final normalized = _normalizeConnection(connection);
-    var lanSuccess = false;
-    var wanSuccess = false;
+    final hasLan = normalized.host.trim().isNotEmpty;
+    final hasWan = normalized.wanHost.trim().isNotEmpty;
 
-    if (normalized.host.trim().isNotEmpty) {
-      lanSuccess = await _testConnection(
-        normalized.copyWith(wanHost: '', wanPort: 445),
-      );
-    }
+    final results = await Future.wait([
+      hasLan
+          ? _testConnection(normalized.copyWith(wanHost: '', wanPort: 445))
+          : Future<bool>.value(false),
+      hasWan
+          ? _testConnection(normalized.copyWith(
+              host: normalized.wanHost,
+              port: normalized.wanPort,
+              wanHost: '',
+              wanPort: 445,
+            ))
+          : Future<bool>.value(false),
+    ]);
 
-    if (normalized.wanHost.trim().isNotEmpty) {
-      wanSuccess = await _testConnection(
-        normalized.copyWith(
-          host: normalized.wanHost,
-          port: normalized.wanPort,
-          wanHost: '',
-          wanPort: 445,
-        ),
-      );
-    }
+    final lanSuccess = results[0];
+    final wanSuccess = results[1];
 
     _preferWanById[normalized.id] = !lanSuccess && wanSuccess;
     _addressReachabilityById[normalized.id] =
