@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:flutter/widgets.dart';
 
@@ -7,6 +8,7 @@ import '../data/settings_data.dart';
 import '../theme/tokens.dart';
 import '../widgets/icons.dart';
 import '../widgets/nipa_avatar.dart';
+import '../widgets/progress.dart';
 import '../widgets/segmented.dart';
 import 'controls.dart';
 import 'registry_rows.dart';
@@ -336,7 +338,29 @@ class NipaSectionState extends State<NipaSection> {
   String? _error;
   StreamSubscription<void>? _changes, _hostChanges;
 
+  // The Codex Nipa runs in: fetched by NipaPlay, or one already here.
+  UiCodexRuntime? _runtime;
+  bool _runtimeMore = false, _runtimeDirty = false;
+  UiCodexSource _runtimeSource = UiCodexSource.managed;
+  String _mirror = '', _executable = '';
+  String? _runtimeError;
+
   NextHostSettings get _host => widget.data.host;
+
+  /// Only hosts that fetch Codex themselves have these.
+  NextHostRuntimeSettings? get _runtimeHost {
+    final host = _host;
+    return host is NextHostRuntimeSettings
+        ? host as NextHostRuntimeSettings
+        : null;
+  }
+
+  /// Official addresses and model names, filled in for the viewer; any
+  /// address and model can be typed instead.
+  static const _templates = [
+    ('DeepSeek', 'https://api.deepseek.com/', 'deepseek-flash'),
+    ('智谱', 'https://open.bigmodel.cn/api/v1', 'glm-5.3-flash'),
+  ];
 
   @override
   void initState() {
@@ -359,6 +383,7 @@ class NipaSectionState extends State<NipaSection> {
   }
 
   Future<void> _loadModel() async {
+    unawaited(_loadRuntime());
     final setup = await _host.model();
     if (!mounted) return;
     setState(() {
@@ -371,6 +396,62 @@ class NipaSectionState extends State<NipaSection> {
       }
     });
   }
+
+  /// Separate from the model: the runtime may answer late, or not at all on
+  /// a host that does not fetch Codex.
+  Future<void> _loadRuntime() async {
+    final host = _runtimeHost;
+    if (host == null) return;
+    UiCodexRuntime runtime;
+    try {
+      runtime = await host.codexRuntime();
+    } catch (_) {
+      return;
+    }
+    if (!mounted) return;
+    setState(() {
+      _runtime = runtime;
+      if (!_runtimeDirty) {
+        _runtimeSource = runtime.source;
+        _mirror = runtime.mirror ?? '';
+        _executable = runtime.executable ?? '';
+      }
+    });
+  }
+
+  /// Runs a runtime operation; progress arrives through the host's changes.
+  void _runtimeDo(Future<void> Function(NextHostRuntimeSettings) op) {
+    final host = _runtimeHost;
+    if (host == null) return;
+    setState(() => _runtimeError = null);
+    unawaited(op(host).catchError((Object _) {
+      if (mounted) setState(() => _runtimeError = '没能完成');
+    }).whenComplete(_loadModel));
+  }
+
+  Future<void> _saveRuntime() async {
+    final host = _runtimeHost;
+    if (host == null) return;
+    try {
+      await host.setCodexRuntime(UiCodexRuntimeChoice(
+        source: _runtimeSource,
+        executable: _runtimeSource == UiCodexSource.specified
+            ? _executable.trim()
+            : null,
+        mirror: _mirror.trim(),
+      ));
+      _runtimeDirty = false;
+      if (mounted) setState(() => _runtimeError = null);
+    } catch (_) {
+      if (mounted) setState(() => _runtimeError = '没能保存');
+    }
+    await _loadModel();
+  }
+
+  void _runtimeEdit(void Function() change) => setState(() {
+        change();
+        _runtimeDirty = true;
+      });
 
   Future<void> _loadMemory() async {
     try {
@@ -462,20 +543,20 @@ class NipaSectionState extends State<NipaSection> {
     return SettingsCard(title: '模型', children: [
       SettingsRow(
         leading: const NipaAvatar(size: 32),
-        title: here ? (s.provider ?? '在这里设置') : 'Codex',
+        title: here ? (s.provider ?? '在这里设置') : '已有配置',
         subtitle: status,
         trailing: Segmented<UiModelSource>(
           value: s.source,
           options: [
             (
-              UiModelSource.codex,
-              '这台电脑的 Codex',
-              (c) => Text('这台电脑的 Codex', style: NextText.sans(12.5, color: c))
-            ),
-            (
               UiModelSource.nipaplay,
               '在这里设置',
               (c) => Text('在这里设置', style: NextText.sans(12.5, color: c))
+            ),
+            (
+              UiModelSource.codex,
+              '已有配置',
+              (c) => Text('已有配置', style: NextText.sans(12.5, color: c))
             ),
           ],
           onChanged: _setSource,
@@ -485,7 +566,7 @@ class NipaSectionState extends State<NipaSection> {
           if (!here && !s.codexAvailable && s.problem == null)
             Padding(
               padding: const EdgeInsets.fromLTRB(64, 0, 18, 6),
-              child: Text('这台电脑上没有 Codex',
+              child: Text('这台电脑上没有 Codex 配置',
                   style: NextText.sans(12.5, color: NextColors.p3)),
             ),
           if (here)
@@ -495,10 +576,22 @@ class NipaSectionState extends State<NipaSection> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     field(
+                        '',
+                        Wrap(spacing: 6, children: [
+                          for (final t in _templates)
+                            PillButton(
+                                label: t.$1,
+                                onTap: () => _edit(() {
+                                      _provider = t.$1;
+                                      _url = t.$2;
+                                      _modelName = t.$3;
+                                    })),
+                        ])),
+                    field(
                         '提供方',
                         LiveTextField(
                             value: _provider,
-                            hint: 'OpenAI、DeepSeek…',
+                            hint: 'DeepSeek、智谱、中转…',
                             width: 300,
                             onChanged: (v) => _edit(() => _provider = v))),
                     field(
@@ -554,13 +647,165 @@ class NipaSectionState extends State<NipaSection> {
     ]);
   }
 
+  static String _size(int bytes) => bytes >= 1 << 30
+      ? '${(bytes / (1 << 30)).toStringAsFixed(1)} GB'
+      : '${(bytes / (1 << 20)).toStringAsFixed(bytes >= 100 << 20 ? 0 : 1)} MB';
+
+  Widget _runtimeCard(UiCodexRuntime r) {
+    final managed = r.source == UiCodexSource.managed;
+    final total = r.totalBytes;
+    final String? subtitle = !managed
+        ? (r.executable ?? '系统里的 Codex')
+        : switch (r.status) {
+            UiCodexStatus.notInstalled => total == null ? null : _size(total),
+            UiCodexStatus.downloading => total == null
+                ? _size(r.receivedBytes)
+                : '${_size(r.receivedBytes)} / ${_size(total)}',
+            UiCodexStatus.verifying => null,
+            UiCodexStatus.ready => r.version,
+            UiCodexStatus.failed => r.problem,
+          };
+    final title = !managed
+        ? '系统里的 Codex'
+        : switch (r.status) {
+            UiCodexStatus.notInstalled => '未下载',
+            UiCodexStatus.downloading => '下载中',
+            UiCodexStatus.verifying => '校验中',
+            UiCodexStatus.ready => '已就绪',
+            UiCodexStatus.failed => '没能下载',
+          };
+    final Widget? action = !managed
+        ? null
+        : switch (r.status) {
+            UiCodexStatus.notInstalled => PillButton(
+                label: '下载',
+                primary: true,
+                onTap: () => _runtimeDo((h) => h.installCodex())),
+            UiCodexStatus.downloading => PillButton(
+                label: '取消',
+                onTap: () => _runtimeDo((h) => h.cancelCodexInstall())),
+            UiCodexStatus.failed => PillButton(
+                label: '重试',
+                primary: true,
+                onTap: () => _runtimeDo((h) => h.installCodex())),
+            _ => null,
+          };
+    Widget field(String label, Widget child) => Padding(
+          padding: const EdgeInsets.only(bottom: 8),
+          child: Row(children: [
+            SizedBox(
+                width: 64,
+                child: Text(label,
+                    style: NextText.sans(12.5, color: NextColors.p3))),
+            child,
+          ]),
+        );
+    return SettingsCard(title: 'Codex', children: [
+      SettingsRow(
+        title: title,
+        subtitle: _runtimeError ?? subtitle,
+        mark: managed && r.status == UiCodexStatus.ready
+            ? const StateDot(NextColors.mint)
+            : null,
+        trailing: action,
+        below: r.status == UiCodexStatus.downloading && total != null
+            ? Padding(
+                padding: const EdgeInsets.fromLTRB(18, 0, 18, 14),
+                child: ThinBar(
+                    progress: r.receivedBytes / total, live: true, height: 3),
+              )
+            : null,
+      ),
+      SettingsRow(
+        title: '更多',
+        dim: true,
+        trailing: AnimatedRotation(
+          turns: _runtimeMore ? 0.25 : 0,
+          duration: const Duration(milliseconds: 200),
+          curve: NextMotion.ease,
+          child: const NextIcon(NextGlyph.chevronRight,
+              size: 14, color: NextColors.p3),
+        ),
+        onTap: () => setState(() => _runtimeMore = !_runtimeMore),
+        below: !_runtimeMore
+            ? null
+            : Padding(
+                padding: const EdgeInsets.fromLTRB(18, 2, 18, 14),
+                child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      field(
+                          '使用',
+                          Segmented<UiCodexSource>(
+                            value: _runtimeSource,
+                            options: [
+                              for (final (v, t) in const [
+                                (UiCodexSource.managed, '自动下载'),
+                                (UiCodexSource.path, '系统里的'),
+                                (UiCodexSource.specified, '指定路径'),
+                              ])
+                                (
+                                  v,
+                                  t,
+                                  (c) => Text(t,
+                                      style: NextText.sans(12.5, color: c))
+                                ),
+                            ],
+                            onChanged: (v) =>
+                                _runtimeEdit(() => _runtimeSource = v),
+                          )),
+                      if (_runtimeSource == UiCodexSource.specified)
+                        field(
+                            '路径',
+                            LiveTextField(
+                                value: _executable,
+                                hint: '/usr/local/bin/codex',
+                                width: 300,
+                                mono: true,
+                                onChanged: (v) =>
+                                    _runtimeEdit(() => _executable = v))),
+                      if (_runtimeSource == UiCodexSource.managed)
+                        field(
+                            '镜像',
+                            LiveTextField(
+                                value: _mirror,
+                                hint: 'GitHub',
+                                width: 300,
+                                onChanged: (v) =>
+                                    _runtimeEdit(() => _mirror = v))),
+                      const SizedBox(height: 4),
+                      Wrap(spacing: 8, runSpacing: 8, children: [
+                        if (_runtimeDirty)
+                          PillButton(
+                              label: '保存', primary: true, onTap: _saveRuntime),
+                        if (r.licensesDirectory case final dir?)
+                          if (Platform.isMacOS)
+                            PillButton(
+                                label: '开源许可',
+                                onTap: () => unawaited(
+                                    Process.run('open', [dir]))),
+                        if (managed && r.status == UiCodexStatus.ready)
+                          PillButton(
+                              label: '移除',
+                              danger: true,
+                              onTap: () =>
+                                  _runtimeDo((h) => h.removeCodex())),
+                      ]),
+                    ]),
+              ),
+      ),
+    ]);
+  }
+
   @override
   Widget build(BuildContext context) {
     final setup = _setup;
     final files = _files;
     final changed = widget.model.byNipa;
+    final runtime = _runtime;
     return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
       if (setup != null) _modelCard(setup),
+      if (runtime != null) _runtimeCard(runtime),
       if (files != null)
         SettingsCard(title: 'Nipa 记得的事', children: [
           if (files.isEmpty) const SettingsRow(title: '还没有记下什么', dim: true),

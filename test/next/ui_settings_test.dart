@@ -11,6 +11,7 @@ import 'package:nipaplay/next/ui/settings/controls.dart';
 import 'package:nipaplay/next/ui/settings/registry_rows.dart';
 import 'package:nipaplay/next/ui/settings/section_host.dart';
 import 'package:nipaplay/next/ui/settings/settings_layout.dart';
+import 'package:nipaplay/next/ui/widgets/progress.dart';
 import 'package:nipaplay/next/ui_data/host_settings.dart';
 
 /// The settings page is built from the registry Nipa reads: each schema
@@ -34,6 +35,61 @@ void main() {
     await tester.pumpAndSettle();
     expect(data.writes, [false]);
     expect(tester.widget<NextToggle>(find.byType(NextToggle).last).value, false);
+  });
+
+  testWidgets('Codex is fetched from the Nipa section; templates only fill in',
+      (tester) async {
+    final data = FakeSettings();
+    data.host.codexState = 'none';
+    final model = SettingsModel(data);
+    await tester.runAsync(model.load);
+    await tester.pumpWidget(MaterialApp(
+      home: Material(
+        child: SingleChildScrollView(
+          child: SizedBox(
+            width: 900,
+            child: NipaSection(
+                data: data,
+                model: model,
+                onShow: (_) {},
+                more: false,
+                onMore: () {}),
+          ),
+        ),
+      ),
+    ));
+    await tester.pump(const Duration(milliseconds: 100));
+    expect(find.text('115 MB'), findsOneWidget);
+    await tester.tap(find.text('下载'));
+    await tester.pump(const Duration(milliseconds: 600));
+    expect(find.text('取消'), findsOneWidget);
+    expect(find.byType(ThinBar), findsOneWidget);
+    await tester.pump(const Duration(seconds: 7));
+    await tester.pump(const Duration(seconds: 1));
+    await tester.pump(const Duration(milliseconds: 100));
+    expect(find.text('0.144.1'), findsOneWidget);
+    expect(find.text('已就绪'), findsOneWidget);
+    expect(find.text('下载'), findsNothing);
+
+    await tester.ensureVisible(find.text('更多'));
+    await tester.tap(find.text('更多'));
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(find.text('移除'));
+    await tester.tap(find.text('移除'));
+    await tester.pump(const Duration(milliseconds: 100));
+    expect(find.text('下载'), findsOneWidget);
+
+    // A template fills the address and model; they stay editable.
+    await tester.ensureVisible(find.text('智谱'));
+    await tester.tap(find.text('智谱'));
+    await tester.pump();
+    expect(
+        tester
+            .widgetList<EditableText>(find.byType(EditableText))
+            .map((e) => e.controller.text),
+        containsAll(['https://open.bigmodel.cn/api/v1', 'glm-5.3-flash']));
+    expect(find.text('保存'), findsOneWidget);
+    model.dispose();
   });
 
   group('a registry row becomes a control by its schema', () {
