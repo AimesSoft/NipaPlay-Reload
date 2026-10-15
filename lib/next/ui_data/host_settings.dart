@@ -5,6 +5,58 @@
 /// settings registry and the same Actions Nipa uses.
 library;
 
+/// Desktop runtime controls are host-only, never Actions or mesh settings.
+/// A mirror is a directory containing the exact manifest asset filenames;
+/// changing it never changes the pinned version or SHA-256 checks.
+abstract interface class NextHostRuntimeSettings {
+  Future<UiCodexRuntime> codexRuntime();
+  /// Completes when installation ends. Subscribe to changes for byte progress.
+  /// Repeating after cancellation resumes the retained partial download.
+  Future<void> installCodex();
+  Future<void> cancelCodexInstall();
+  /// Refuses while a chat process is using the runtime.
+  Future<void> removeCodex();
+  Future<void> setCodexRuntime(UiCodexRuntimeChoice choice);
+}
+
+extension NextHostRuntimeAccess on NextHostSettings {
+  NextHostRuntimeSettings get runtimeSettings {
+    final host = this;
+    if (host is NextHostRuntimeSettings) return host as NextHostRuntimeSettings;
+    throw UnsupportedError('此宿主不支持运行包设置');
+  }
+}
+
+enum UiCodexStatus { notInstalled, downloading, verifying, ready, failed }
+enum UiCodexSource { managed, path, specified }
+
+final class UiCodexRuntimeChoice {
+  const UiCodexRuntimeChoice({this.source = UiCodexSource.managed,
+    this.executable, this.mirror});
+  final UiCodexSource source;
+  /// Absolute native executable, required only for specified.
+  final String? executable;
+  /// Null/empty uses official GitHub Release assets. No credentials allowed.
+  final String? mirror;
+}
+
+final class UiCodexRuntime {
+  const UiCodexRuntime({required this.status, required this.version,
+    required this.source, this.receivedBytes = 0, this.totalBytes,
+    this.problem, this.executable, this.mirror, this.licensesDirectory});
+  /// Managed package installation state, including when an advanced source is
+  /// selected. [source] and [executable] describe the actual launch selection.
+  final UiCodexStatus status;
+  /// Manifest version for managed; null for an externally maintained Codex.
+  final String? version;
+  final UiCodexSource source;
+  final int receivedBytes;
+  final int? totalBytes;
+  final String? problem, executable, mirror;
+  /// Offline license files, including LICENSE/NOTICE and component notices.
+  final String? licensesDirectory;
+}
+
 /// Optional host port, kept separate so existing UI/fake adapters remain valid.
 /// These methods are in-process only and must never be registered as Actions.
 abstract interface class NextHostDeviceSettings {
@@ -60,7 +112,9 @@ abstract interface class NextHostSettings {
   /// Takes effect for the next conversation turn.
   Future<void> setModel(UiModelChoice choice);
 
-  /// Sends one small request with the saved choice.
+  /// For an endpoint set up here, sends one small Responses request requiring
+  /// a harmless function call. Existing Codex configurations use a probe thread.
+  /// Success verifies that call only, not every Codex tool or streaming feature.
   Future<UiModelCheck> checkModel();
 
   Future<UiMeshSetup> mesh();
@@ -101,6 +155,8 @@ final class UiModelSetup {
   /// For [UiModelSource.nipaplay]: e.g. “OpenAI”, “DeepSeek”, or a name the
   /// user gave an OpenAI-compatible endpoint.
   final String? provider;
+  /// Editable Responses base URL; a pasted /responses suffix is accepted.
+  /// No provider allowlist or automatic official endpoint selection.
   final String? baseUrl;
   final String? model;
 

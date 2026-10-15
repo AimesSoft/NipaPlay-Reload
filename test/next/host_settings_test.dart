@@ -164,6 +164,23 @@ void main() {
     await scanSecrets([rows, config]);
   });
 
+  test('custom endpoint needs only address/key/model; launch preserves saved vault identity', () async {
+    await settings.setModel(UiModelChoice(source: UiModelSource.nipaplay,
+      provider: '', baseUrl: 'https://custom.example/prefix/responses',
+      model: 'arbitrary-model', apiKey: secret));
+    final file = File('${root.path}/model.json');
+    final saved = await file.readAsString();
+    final launch = await settings.launch();
+    await launch.prepare!();
+    expect((await settings.model()).provider, '自定义');
+    expect((await settings.model()).hasKey, true);
+    expect(await file.readAsString(), saved);
+    expect(await File('${launch.home!.path}/config.toml').readAsString(),
+      contains('base_url = "https://custom.example/prefix"'));
+    expect(launch.environment.values.single, secret);
+    await scanSecrets([saved]);
+  });
+
   test(
       'host authorization takes effect immediately, remains absent from Actions',
       () async {
@@ -252,7 +269,9 @@ void main() {
       request.response.headers.contentType = ContentType.json;
       request.response.statusCode = valid ? 200 : 401;
       request.response.write(jsonEncode(valid
-          ? {'object': 'response', 'status': 'completed', 'output': []}
+          ? {'object': 'response', 'status': 'completed', 'output': [
+              {'type': 'function_call', 'name': 'nipaplay_connection_check',
+                'call_id': 'check', 'arguments': '{}'}]}
           : {
               'error': {'message': 'echo $secret'}
             }));
