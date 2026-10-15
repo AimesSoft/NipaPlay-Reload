@@ -606,7 +606,7 @@ abstract final class NextUiDebug {
         final settings = shell.services.settings;
         Map<String, Object?>? world;
         if (const ['model', 'mesh', 'account', 'keys', 'remote', 'trusted',
-          'remember'].any(p.containsKey)) {
+          'remember', 'codex'].any(p.containsKey)) {
           if (settings is! FakeSettings) {
             throw StateError('model, mesh and account need the scripted world');
           }

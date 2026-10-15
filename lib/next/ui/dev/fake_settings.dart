@@ -394,9 +394,14 @@ final class FakeSettings implements NextSettingsData {
 
   /// Debug: `model=key|nokey|codex|nocodex`, `mesh=online|offline|unavailable`,
   /// `keys=both|spoiler|tmdb|none`, `remote=on|off|problem|unsupported`,
-  /// `trusted=0..3`; `remember=<topic>` is Nipa writing a note.
+  /// `trusted=0..3`; `remember=<topic>` is Nipa writing a note;
+  /// `codex=none|downloading|verifying|ready|failed|path`.
   Map<String, Object?> scenario(Map<String, String> p) {
     if (p['model'] case final m?) host.modelState = m;
+    if (p['codex'] case final c?) {
+      host.codexState = c;
+      if (c == 'downloading') host._received = 46137344;
+    }
     if (p['mesh'] case final m?) host.meshState = m;
     if (p['keys'] case final k?) {
       host.spoilerKey = k == 'both' || k == 'spoiler';
@@ -425,6 +430,7 @@ final class FakeSettings implements NextSettingsData {
       'keys': {'spoiler': host.spoilerKey, 'tmdb': host.tmdbKey},
       'remote': host.remoteState,
       'trusted': host.trusted.length,
+      'codex': host.codexState
     };
   }
 
@@ -969,8 +975,16 @@ final class FakeSettings implements NextSettingsData {
 }
 
 /// The host's own settings, scripted.
-final class FakeHostSettings implements NextHostSettings, NextHostDeviceSettings {
+final class FakeHostSettings
+    implements NextHostSettings, NextHostDeviceSettings, NextHostRuntimeSettings {
   String modelState = 'key';
+
+  /// `none`, `downloading`, `verifying`, `ready`, `failed`, `path`.
+  String codexState = 'ready';
+  int _received = 0;
+  static const _total = 120299266;
+  String? _mirror;
+  Timer? _download;
   String meshState = 'online';
   bool spoilerKey = true, tmdbKey = false;
 
@@ -1011,18 +1025,109 @@ final class FakeHostSettings implements NextHostSettings, NextHostDeviceSettings
             source: UiModelSource.nipaplay,
             codexAvailable: true,
             provider: 'DeepSeek',
-            baseUrl: 'https://api.deepseek.com',
-            model: 'deepseek-v4.1-flash',
+            baseUrl: 'https://api.deepseek.com/',
+            model: 'deepseek-flash',
             problem: '还没有 API key'),
         _ => const UiModelSetup(
             source: UiModelSource.nipaplay,
             codexAvailable: true,
             provider: 'DeepSeek',
-            baseUrl: 'https://api.deepseek.com',
-            model: 'deepseek-v4.1-flash',
+            baseUrl: 'https://api.deepseek.com/',
+            model: 'deepseek-flash',
             hasKey: true,
-            inUse: 'deepseek-v4.1-flash'),
+            inUse: 'deepseek-flash'),
       };
+
+  @override
+  Future<UiCodexRuntime> codexRuntime() async => switch (codexState) {
+        'none' => const UiCodexRuntime(
+            status: UiCodexStatus.notInstalled,
+            version: '0.144.1',
+            source: UiCodexSource.managed,
+            totalBytes: _total),
+        'downloading' => UiCodexRuntime(
+            status: UiCodexStatus.downloading,
+            version: '0.144.1',
+            source: UiCodexSource.managed,
+            receivedBytes: _received,
+            totalBytes: _total,
+            mirror: _mirror),
+        'verifying' => const UiCodexRuntime(
+            status: UiCodexStatus.verifying,
+            version: '0.144.1',
+            source: UiCodexSource.managed,
+            receivedBytes: _total,
+            totalBytes: _total),
+        'failed' => const UiCodexRuntime(
+            status: UiCodexStatus.failed,
+            version: '0.144.1',
+            source: UiCodexSource.managed,
+            receivedBytes: 48201728,
+            totalBytes: _total,
+            problem: '下载中断，网络连不上'),
+        'path' => const UiCodexRuntime(
+            status: UiCodexStatus.notInstalled,
+            version: null,
+            source: UiCodexSource.path,
+            executable: '/opt/homebrew/bin/codex'),
+        _ => UiCodexRuntime(
+            status: UiCodexStatus.ready,
+            version: '0.144.1',
+            source: UiCodexSource.managed,
+            receivedBytes: _total,
+            totalBytes: _total,
+            mirror: _mirror,
+            licensesDirectory: '/tmp/nipa-next/codex-licenses'),
+      };
+
+  /// A download that moves on its own, a little at a time.
+  @override
+  Future<void> installCodex() async {
+    _download?.cancel();
+    codexState = 'downloading';
+    changed();
+    final done = Completer<void>();
+    _download = Timer.periodic(const Duration(milliseconds: 250), (t) {
+      _received = (_received + _total ~/ 24).clamp(0, _total);
+      if (_received >= _total) {
+        t.cancel();
+        codexState = 'verifying';
+        changed();
+        Timer(const Duration(milliseconds: 900), () {
+          codexState = 'ready';
+          changed();
+          done.complete();
+        });
+      } else {
+        changed();
+      }
+    });
+    return done.future;
+  }
+
+  @override
+  Future<void> cancelCodexInstall() async {
+    _download?.cancel();
+    codexState = 'none';
+    changed();
+  }
+
+  @override
+  Future<void> removeCodex() async {
+    _received = 0;
+    codexState = 'none';
+    changed();
+  }
+
+  @override
+  Future<void> setCodexRuntime(UiCodexRuntimeChoice choice) async {
+    _mirror = (choice.mirror?.isEmpty ?? true) ? null : choice.mirror;
+    codexState = switch (choice.source) {
+      UiCodexSource.managed => _received >= _total ? 'ready' : 'none',
+      _ => 'path',
+    };
+    changed();
+  }
 
   @override
   Future<void> setModel(UiModelChoice choice) async {
