@@ -135,7 +135,7 @@ final class ChatHost {
     }
     if (_launch?.home case final home?) clean['CODEX_HOME'] = home.path;
     clean.addAll(_launch?.environment ?? {});
-    final executable = codexExecutable ??
+    final executable = codexExecutable ?? _launch?.executable ??
         Platform.environment['NIPAPLAY_CODEX_EXECUTABLE'] ??
         'codex.exe';
     if (!executable.toLowerCase().endsWith('.exe')) {
@@ -292,7 +292,8 @@ final class ChatHost {
             sessionId,
             clean['CODEX_HOME'] ?? '',
             clean['TMPDIR'] ?? '',
-            codexExecutable ?? 'codex',
+            codexExecutable ?? _launch?.executable ??
+                (labRoot != null ? Platform.environment['NIPAPLAY_CODEX_EXECUTABLE'] : null) ?? 'codex',
             await _trustOverride(),
             'model=${jsonEncode(_launch?.model)}',
             'model_provider=${jsonEncode(_launch?.provider)}',
@@ -337,7 +338,10 @@ final class ChatHost {
 
   Future<void> _applyModel() async {
     var next = await modelLaunch?.call();
-    if (next == null || next.revision == _launch?.revision && available) return;
+    if (next == null || next.revision == _launch?.revision &&
+        next.executable == _launch?.executable && available) {
+      return;
+    }
     // A helper may still be running when the foreground is idle. Preserve it.
     while (threadLiveness.keys.any(busyFor)) {
       if (!available) break;

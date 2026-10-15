@@ -13,10 +13,12 @@ import '../chat/chat_host.dart';
 import '../chat/model_launch.dart';
 import '../mesh/runtime.dart';
 import '../programs/runtime.dart';
+import '../runtime/codex_runtime.dart';
 import '../state/change_history.dart';
 import '../ui_data/host_settings.dart';
+import 'responses_probe.dart';
 
-final class HostSettingsService implements NextHostSettings, NextHostDeviceSettings {
+final class HostSettingsService implements NextHostSettings, NextHostDeviceSettings, NextHostRuntimeSettings {
   HostSettingsService(
       {required this.root,
       required this.vault,
@@ -30,10 +32,27 @@ final class HostSettingsService implements NextHostSettings, NextHostDeviceSetti
       required this.checkCodex,
       required this.modelSaved,
       this.device,
+      this.codex,
       this.httpClient = HttpClient.new}) {
     _meshEvents = meshRuntime.hostChanges.listen((_) => notify());
   }
   final Directory root, codexHome;
+  final CodexRuntime? codex;
+  CodexRuntime get _codex => codex ?? (throw UnsupportedError('实验配置沿用外部 Codex'));
+  @override
+  Future<UiCodexRuntime> codexRuntime() => _codex.state();
+  @override
+  Future<void> installCodex() async {
+    await _codex.install();
+    if ((await _codex.state()).status == UiCodexStatus.ready) await modelSaved();
+  }
+  @override
+  Future<void> cancelCodexInstall() => _codex.cancel();
+  @override
+  Future<void> removeCodex() => _codex.remove();
+  @override
+  Future<void> setCodexRuntime(UiCodexRuntimeChoice choice) =>
+      _write(() => _codex.configure(choice)).then((_) => modelSaved());
   final CredentialVault vault;
   final MeshRuntime meshRuntime;
   final ProgramRuntime programs;
@@ -103,7 +122,8 @@ final class HostSettingsService implements NextHostSettings, NextHostDeviceSetti
           .convert(utf8.encode(jsonEncode(
               [root.absolute.path, value['provider'], value['baseUrl']])))
           .toString());
-  UiModelSource _source(JsonMap value) => value['source'] == 'nipaplay'
+  UiModelSource _source(JsonMap value) => value['source'] == 'nipaplay' ||
+      (value['source'] == null && codex != null)
       ? UiModelSource.nipaplay
       : UiModelSource.codex;
   Future<String?> _secret(JsonMap value) async {
@@ -149,7 +169,7 @@ final class HostSettingsService implements NextHostSettings, NextHostDeviceSetti
             ? null
             : '这台电脑还没有 Codex 配置'
         : value['model'] == null || value['baseUrl'] == null
-            ? '请先填写提供方、地址和模型'
+            ? '请先填写地址和模型名'
             : key == null || key.isEmpty
                 ? '请先填写密钥'
                 : null;
@@ -193,7 +213,8 @@ final class HostSettingsService implements NextHostSettings, NextHostDeviceSetti
           'revision': (before['revision'] as int? ?? 0) + 1
         };
         if (choice.source == UiModelSource.nipaplay) {
-          value['provider'] = _text(choice.provider, '提供方');
+          value['provider'] = _text(choice.provider?.trim().isNotEmpty == true
+              ? choice.provider : '自定义', '提供方');
           value['baseUrl'] =
               _url(choice.baseUrl).toString().replaceFirst(RegExp(r'/$'), '');
           value['model'] = _text(choice.model, '模型');
@@ -220,20 +241,24 @@ final class HostSettingsService implements NextHostSettings, NextHostDeviceSetti
       }).then((_) => modelSaved());
 
   Future<ModelLaunch> launch() async {
+    // Installation can outlast a settings edit. Read the selected model only
+    // after it completes so first-use input takes effect on this launch.
+    final executable = await codex?.executable();
     await _writes;
     final value = await _read('model.json');
     final revision = value['revision'] as int? ?? 0;
     if (_source(value) == UiModelSource.codex) {
-      return ModelLaunch(revision: revision);
+      return ModelLaunch(revision: revision, executable: executable);
     }
     final key = await _secret(value);
     if (key == null || key.isEmpty) throw StateError('请先填写密钥');
     final provider = _text(value['provider'] as String?, '提供方');
-    final url = _url(value['baseUrl'] as String?);
+    final url = responsesBase(_url(value['baseUrl'] as String?));
     final model = _text(value['model'] as String?, '模型');
     final home = Directory('${root.path}/codex-home');
     return ModelLaunch(
         revision: revision,
+        executable: executable,
         home: home,
         model: model,
         provider: 'nipaplay',
@@ -273,10 +298,12 @@ final class HostSettingsService implements NextHostSettings, NextHostDeviceSetti
         final client = httpClient();
         try {
           await SystemProxyService.instance.initialize();
-          client.findProxy = (uri) => AppHttpProxy.findProxy(
-              uri, SystemProxyService.instance.findProxy);
+          client.findProxy = (uri) => uri.host == 'localhost' ||
+              InternetAddress.tryParse(uri.host)?.isLoopback == true ? 'DIRECT' :
+              AppHttpProxy.findProxy(uri, SystemProxyService.instance.findProxy);
           client.connectionTimeout = const Duration(seconds: 15);
-          result = await _probe(client, value, key)
+          result = await probeResponses(client, _url(value['baseUrl'] as String?),
+              _text(value['model'] as String?, '模型'), key)
               .timeout(const Duration(seconds: 30));
         } on TimeoutException {
           result = const UiModelCheck(ok: false, message: '服务器响应超时');
@@ -300,41 +327,6 @@ final class HostSettingsService implements NextHostSettings, NextHostDeviceSetti
         ok: result.ok,
         message: result.message,
         latency: result.latency ?? watch.elapsed);
-  }
-
-  Future<UiModelCheck> _probe(
-      HttpClient client, JsonMap value, String key) async {
-    final base = _url(value['baseUrl'] as String?);
-    final uri = base.replace(
-        path: '${base.path.replaceFirst(RegExp(r'/$'), '')}/responses');
-    final request = await client.postUrl(uri);
-    request.followRedirects = false;
-    request.headers.contentType = ContentType.json;
-    request.headers.set(HttpHeaders.authorizationHeader, 'Bearer $key');
-    request.write(jsonEncode({
-      'model': value['model'],
-      'input': 'Reply OK.',
-      'max_output_tokens': 16,
-      'store': false
-    }));
-    final response = await request.close();
-    if (response.statusCode < 200 || response.statusCode >= 300) {
-      return UiModelCheck(
-          ok: false,
-          message: switch (response.statusCode) {
-            401 || 403 => '密钥无效或没有权限',
-            404 || 405 => '地址或模型不存在，需支持 Responses API',
-            429 => '额度不足或请求过多',
-            400 => '模型或接口不接受这个请求',
-            _ => '服务器暂时无法处理请求',
-          });
-    }
-    final body = jsonDecode(await response.transform(utf8.decoder).join());
-    return body is Map &&
-            body['object'] == 'response' &&
-            const {'completed', 'incomplete'}.contains(body['status'])
-        ? const UiModelCheck(ok: true, message: '可以使用')
-        : const UiModelCheck(ok: false, message: '服务未返回 Responses API 结果');
   }
 
   @override
@@ -460,6 +452,7 @@ final class HostSettingsService implements NextHostSettings, NextHostDeviceSetti
   }
 
   Future<void> close() async {
+    await codex?.cancel();
     await _writes;
     await _meshEvents?.cancel();
     await _changes.close();
@@ -498,13 +491,24 @@ final class LabModelVault implements CredentialVault {
 }
 
 /// The settings page can subscribe before the application core is ready.
-final class PendingHostSettings implements NextHostSettings, NextHostDeviceSettings {
+final class PendingHostSettings implements NextHostSettings, NextHostDeviceSettings, NextHostRuntimeSettings {
   PendingHostSettings(this.ready) {
     ready.then((value) {
       _subscription = value.changes.listen((_) => _changes.add(null));
     });
   }
   final Future<NextHostSettings> ready;
+  @override
+  Future<UiCodexRuntime> codexRuntime() async => (await ready).runtimeSettings.codexRuntime();
+  @override
+  Future<void> installCodex() async => (await ready).runtimeSettings.installCodex();
+  @override
+  Future<void> cancelCodexInstall() async => (await ready).runtimeSettings.cancelCodexInstall();
+  @override
+  Future<void> removeCodex() async => (await ready).runtimeSettings.removeCodex();
+  @override
+  Future<void> setCodexRuntime(UiCodexRuntimeChoice choice) async =>
+      (await ready).runtimeSettings.setCodexRuntime(choice);
   final _changes = StreamController<void>.broadcast();
   StreamSubscription<void>? _subscription;
   @override

@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:io';
+import 'runtime/codex_runtime.dart';
 import 'settings/classic_host_device_settings.dart';
 import 'package:nipaplay/utils/lab_profile.dart';
 import 'package:nipaplay/utils/media_source_utils.dart';
@@ -309,6 +310,7 @@ final class NextRuntime extends ChangeNotifier {
   HostSettingsService? _hostSettings;
   StreamSubscription<ChatMessage>? _hostEvents;
   Future<void> closeChat() async {
+    await _hostSettings?.codex?.cancel();
     await _operations;
     await ServiceProvider.nextCore.followups.attach(null, reason: 'Chat host was closed.');
     await chat?.close();
@@ -435,6 +437,11 @@ final class NextRuntime extends ChangeNotifier {
     );
     core.programs.credentialFile = _endpoint.credentialFile;
     _hostSettings = HostSettingsService(root: root,
+      codex: LabProfile.active || !(Platform.isMacOS || Platform.isWindows || Platform.isLinux)
+        ? null : CodexRuntime.desktop(
+        root: Directory('${root.path}/codex-runtime'),
+        notify: () => _hostSettings?.notify(),
+        inUse: () => chat?.available == true),
       device: ClassicHostDeviceSettings(vault: core.credentialVault,
         webServer: ServiceProvider.webServer,
         spoilerChanged: (key) => _player.updateSpoilerAiSettings(apiKey: key)),
@@ -469,6 +476,9 @@ final class NextRuntime extends ChangeNotifier {
   void _queueEndpointUpdate() {
     notifyListeners();
     final enabled = _labs.enableAgentEndpoint;
+    if (!enabled) {
+      unawaited(_hostSettings?.codex?.cancel());
+    }
     _operations = _operations.then((_) => _updateEndpoint(enabled));
   }
 
@@ -540,6 +550,7 @@ final class NextRuntime extends ChangeNotifier {
 
   Future<UiModelCheck> _checkCodexModel() async {
     final host = ChatHost(endpoint: _endpoint, repository: Directory(repositoryPath),
+      codexExecutable: await _hostSettings!.codex?.executable(),
       probe: true, labRoot: LabProfile.active ? Directory(LabProfile.root) : null);
     final watch = Stopwatch()..start();
     try {
@@ -648,6 +659,7 @@ final class NextRuntime extends ChangeNotifier {
   @override
   void dispose() {
     _disposed = true;
+    unawaited(_hostSettings?.codex?.cancel());
     ServiceProvider.nextCore.subtitles.detachPlayer();
     _classicSettings?.plugins.removeListener(_syncPluginSettings);
     if (identical(ClassicSettings.attached, _classicSettings)) ClassicSettings.attached = null;
