@@ -152,6 +152,12 @@ extension VideoPlayerStateInitialization on VideoPlayerState {
             '[VideoPlayerState] Player hot swap failed '
             'generation=$targetGeneration: $error\n$stackTrace',
           );
+          // 切换失败绝不能停在「无限加载」（用户只能杀进程）：有视频在播时
+          // 把失败显式化为错误状态，让用户能从错误界面重试或退出。
+          if (!_isDisposed && currentVideoPath != null) {
+            _error = '播放器内核切换失败: $error';
+            _setStatus(PlayerStatus.error, message: _error);
+          }
         } finally {
           _playerKernelSwapApplied = targetGeneration;
         }

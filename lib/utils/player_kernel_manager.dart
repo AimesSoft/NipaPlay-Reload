@@ -103,6 +103,10 @@ class PlayerKernelManager {
       currentPath,
       historyItem: historyItem,
       resetManualDanmakuOffset: false,
+      // 热切换不要把弹幕识别（WebDAV 等无 ID 来源会同步 HEAD+MD5+匹配
+      // API，最长 20s+）串在切换链上——那会让切内核看起来像卡死。首帧
+      // 出来后在后台识别/加载。
+      deferDanmakuUntilPlayback: true,
     );
     if (videoPlayerState.isDisposed) return;
 

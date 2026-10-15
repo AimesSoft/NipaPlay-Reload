@@ -28,6 +28,7 @@ extension VideoPlayerStatePlayerSetup on VideoPlayerState {
     bool resetManualDanmakuOffset = true,
     bool preserveEmbyAccountKey = false,
     bool manualMatchHandled = false,
+    bool deferDanmakuUntilPlayback = false,
   }) async {
     final resolutionGeneration = ++_sourceResolutionGeneration;
     final previousPlaybackGeneration = _playbackGeneration;
@@ -1087,7 +1088,14 @@ extension VideoPlayerStatePlayerSetup on VideoPlayerState {
         _updateMergedDanmakuList();
       }
 
-      if (!fastPlaybackStartup || forceDfmDanmakuBeforePlayback) {
+      // 内核热切换路径（deferDanmakuUntilPlayback）与 fastPlaybackStartup
+      // 同款处理：WebDAV 这类无 animeId/episodeId 的来源在这里会同步走
+      // _recognizeVideo（HEAD + 16MB MD5 + 匹配 API，最长 20s+），串在
+      // 热切换链上会让「切内核」看起来像卡死。挪到首帧后后台执行。
+      final deferDanmaku =
+          deferDanmakuUntilPlayback && !forceDfmDanmakuBeforePlayback;
+      if ((!fastPlaybackStartup && !deferDanmaku) ||
+          forceDfmDanmakuBeforePlayback) {
         await loadInitialDanmaku();
       }
 
@@ -1188,7 +1196,8 @@ extension VideoPlayerStatePlayerSetup on VideoPlayerState {
         }
       }
 
-      if (fastPlaybackStartup && !forceDfmDanmakuBeforePlayback) {
+      if ((fastPlaybackStartup || deferDanmaku) &&
+          !forceDfmDanmakuBeforePlayback) {
         _startBackgroundDanmakuLoading(videoPath, loadInitialDanmaku);
       }
 

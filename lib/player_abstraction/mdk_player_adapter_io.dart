@@ -199,6 +199,12 @@ class MdkPlayerAdapter implements AbstractPlayer {
   int _internalAudioTrackCount = 0; // 内部音频轨道数，用于区分外挂MKA轨道
   final String _httpProxy;
 
+  // 内嵌字幕轨切换后的停滞看门狗（见 _armSubtitleStallWatchdog）。
+  Timer? _subtitleStallWatchTimer;
+  int _subtitleStallWatchToken = 0;
+  // 最近一次请求的内嵌字幕轨选择：停滞恢复重建原生 player 后需要重放。
+  List<int> _lastRequestedSubtitleTracks = const [];
+
   MdkPlayerAdapter({String? httpProxy})
       : _httpProxy = (httpProxy ?? '').trim() {
     _mdkPlayer = mdk.Player();
@@ -345,6 +351,8 @@ class MdkPlayerAdapter implements AbstractPlayer {
   String get media => _mdkPlayer.media;
   @override
   set media(String value) {
+    // 换主媒体后旧的字幕停滞观察作废
+    _subtitleStallWatchTimer?.cancel();
     if (value.isNotEmpty && _mdkPlayer.media != value) {
       _activeVideoDecoder = null;
       _activeAudioDecoder = null;
@@ -388,8 +396,182 @@ class MdkPlayerAdapter implements AbstractPlayer {
   @override
   List<int> get activeSubtitleTracks => _mdkPlayer.activeSubtitleTracks;
   @override
-  set activeSubtitleTracks(List<int> value) =>
-      _mdkPlayer.activeSubtitleTracks = value;
+  set activeSubtitleTracks(List<int> value) {
+    if (value.isEmpty) {
+      _subtitleStallWatchTimer?.cancel();
+      _lastRequestedSubtitleTracks = const [];
+      try {
+        _mdkPlayer.activeSubtitleTracks = const [];
+      } catch (e) {
+        debugPrint('MDK: 关闭字幕轨失败: $e');
+      }
+      return;
+    }
+
+    // 与 MediaKit 适配器的 CRITICAL CHECK 对齐：没有任何字幕轨时不要把
+    // 切换请求透传给 native（错误/越界索引属未定义行为，实测可让原生
+    // 管线停死在 iOS 上）。
+    int trackCount = 0;
+    try {
+      trackCount = _mdkPlayer.mediaInfo.subtitle?.length ?? 0;
+    } catch (_) {}
+    if (trackCount <= 0) {
+      debugPrint('MDK: 忽略字幕轨切换，当前媒体没有可用字幕轨: $value');
+      return;
+    }
+    final filtered = value.where((i) => i >= 0 && i < trackCount).toList();
+    if (filtered.isEmpty) {
+      debugPrint('MDK: 字幕轨索引全部越界，忽略切换: $value (共$trackCount轨)');
+      return;
+    }
+    if (filtered.length != value.length) {
+      debugPrint('MDK: 字幕轨索引越界已裁剪: $value -> $filtered (共$trackCount轨)');
+    }
+
+    final previous = List<int>.of(_mdkPlayer.activeSubtitleTracks);
+    try {
+      _mdkPlayer.activeSubtitleTracks = filtered;
+    } catch (e) {
+      debugPrint('MDK: 设置字幕轨失败: $e');
+      return;
+    }
+    _lastRequestedSubtitleTracks = filtered;
+    final actuallyChanged = filtered.length != previous.length ||
+        filtered.asMap().entries.any((entry) => entry.value != previous[entry.key]);
+    if (actuallyChanged) {
+      _armSubtitleStallWatchdog();
+    }
+  }
+
+  /// 内嵌字幕轨切换后的停滞看门狗。
+  ///
+  /// iOS 实测（WebDAV + MDK 内核）：在没有字幕事件的时间段切换内嵌字幕轨
+  /// 后，原生管线会在几秒内停住——state 仍是 playing 但 position 不再前进，
+  /// seek 无法恢复，只能重播（即重建原生 player）。这里在切换后采样两次
+  /// position；确认停滞后用一个全新的原生 player 重建同一媒体并恢复
+  /// 位置/倍速/音量/字幕选择。
+  ///
+  /// 卡住的旧实例**不调用 dispose**：其原生层可能正持有阻塞中的 demuxer
+  /// 锁，同步 dispose 有把主 isolate 一并冻住的风险（比视频停死更糟），
+  /// 交给进程退出回收。
+  void _armSubtitleStallWatchdog() {
+    _subtitleStallWatchTimer?.cancel();
+    final token = ++_subtitleStallWatchToken;
+    var firstSample = -1;
+
+    void sample() {
+      if (token != _subtitleStallWatchToken) return;
+      int positionMs;
+      try {
+        positionMs = _mdkPlayer.position;
+      } catch (_) {
+        return;
+      }
+      final playing = _mdkPlayer.state == mdk.PlaybackState.playing;
+      // 暂停中或尚未起播都不构成停滞证据；给观察窗口重置一次机会。
+      if (!playing || positionMs <= 0) {
+        firstSample = -1;
+        return;
+      }
+      if (firstSample < 0) {
+        firstSample = positionMs;
+        return;
+      }
+      if (positionMs == firstSample) {
+        _subtitleStallWatchTimer?.cancel();
+        debugPrint(
+            'MDK: 字幕轨切换后播放停滞(position=$positionMs)，重建原生播放器恢复');
+        _recoverFromSubtitleStall(token);
+      }
+    }
+
+    _subtitleStallWatchTimer =
+        Timer(const Duration(milliseconds: 1200), () {
+      sample();
+      _subtitleStallWatchTimer?.cancel();
+      _subtitleStallWatchTimer =
+          Timer(const Duration(milliseconds: 1800), sample);
+    });
+  }
+
+  void _recoverFromSubtitleStall(int token) {
+    if (token != _subtitleStallWatchToken) return;
+    final String mediaUrl;
+    final int positionMs;
+    final bool wasPlaying;
+    final double volumeBefore;
+    try {
+      mediaUrl = _mdkPlayer.media;
+      positionMs = _mdkPlayer.position;
+      wasPlaying = _mdkPlayer.state == mdk.PlaybackState.playing;
+      volumeBefore = _mdkPlayer.volume;
+    } catch (e) {
+      debugPrint('MDK: 停滞恢复失败（读取旧实例状态）: $e');
+      return;
+    }
+    if (mediaUrl.isEmpty) return;
+
+    final videoDecoders = _videoDecoders.isNotEmpty
+        ? List<String>.from(_videoDecoders)
+        : List<String>.from(_mdkPlayer.videoDecoders);
+    final audioDecoders = _audioDecoders.isNotEmpty
+        ? List<String>.from(_audioDecoders)
+        : List<String>.from(_mdkPlayer.audioDecoders);
+    final subtitleSelection = List<int>.of(_lastRequestedSubtitleTracks);
+
+    // 有意不 dispose 卡住的旧实例：见 _armSubtitleStallWatchdog 注释。
+    _mdkPlayer = mdk.Player();
+    _internalAudioTrackCount = 0; // 重建后外挂音轨状态清零（主媒体之外的
+    // setMedia(audio) 附加轨会丢失，属本恢复路径的已知限制）
+    _attachMdkEventListeners();
+    _applyInitialSettings();
+    try {
+      _reapplyStickyProperties();
+      if (videoDecoders.isNotEmpty) {
+        setDecoders(PlayerMediaType.video, videoDecoders);
+      }
+      if (audioDecoders.isNotEmpty) {
+        setDecoders(PlayerMediaType.audio, audioDecoders);
+      }
+      _mdkPlayer.volume = volumeBefore;
+      _mdkPlayer.media = mediaUrl;
+      if (positionMs > 0) {
+        _mdkPlayer.seek(position: positionMs);
+      }
+      _mdkPlayer.playbackRate = _playbackRate;
+      if (wasPlaying) {
+        _mdkPlayer.state = mdk.PlaybackState.playing;
+      }
+    } catch (e) {
+      debugPrint('MDK: 停滞恢复重建失败: $e');
+      return;
+    }
+
+    // 字幕轨要等新媒体加载出轨道列表后再重放（现在设置会因无轨被守卫拦截）。
+    if (subtitleSelection.isNotEmpty) {
+      unawaited(() async {
+        for (var attempt = 0; attempt < 10; attempt++) {
+          await Future<void>.delayed(const Duration(milliseconds: 300));
+          int count = 0;
+          try {
+            count = _mdkPlayer.mediaInfo.subtitle?.length ?? 0;
+          } catch (_) {}
+          if (count <= 0) continue;
+          final applied = subtitleSelection
+              .where((index) => index >= 0 && index < count)
+              .toList();
+          if (applied.isEmpty) return;
+          try {
+            _mdkPlayer.activeSubtitleTracks = applied;
+            debugPrint('MDK: 停滞恢复后已重放字幕轨选择: $applied');
+          } catch (e) {
+            debugPrint('MDK: 停滞恢复后重放字幕轨失败: $e');
+          }
+          return;
+        }
+      }());
+    }
+  }
 
   @override
   List<int> get activeAudioTracks => _mdkPlayer.activeAudioTracks;
@@ -480,7 +662,22 @@ class MdkPlayerAdapter implements AbstractPlayer {
   }
 
   @override
-  void dispose() => _mdkPlayer.dispose();
+  void dispose() {
+    _subtitleStallWatchTimer?.cancel();
+    // MDK 的原生 dispose 是同步 FFI 调用，网络流（WebDAV/http）关闭时
+    // 可能会在原生层等网络读取数秒——内核热切换链直接 await 这一下会把
+    // 整个主 isolate 冻住（iOS「从 WebDAV 播放切内核导致 app 卡死」的
+    // 主要嫌疑）。与 MediaKit 适配器同款处理：先让出事件循环让热切换继续
+    // 创建新播放器，原生释放在下一拍执行并吞掉异常。
+    final mdkPlayer = _mdkPlayer;
+    unawaited(Future<void>.delayed(const Duration(milliseconds: 16), () {
+      try {
+        mdkPlayer.dispose();
+      } catch (e) {
+        debugPrint('MDK: 释放原生播放器失败: $e');
+      }
+    }));
+  }
 
   @override
   Future<PlayerFrame?> snapshot({int width = 0, int height = 0}) async {
