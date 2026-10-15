@@ -3,16 +3,21 @@ part of 'fake_world.dart';
 /// The scripted world's work management: matches, words and pictures,
 /// works of their own, and each episode's danmaku, subtitles and files,
 /// all kept in memory. `ext.nipaplay.nextui` `manage fail=` makes chosen
-/// operations refuse (`conflict=true`: as if something changed between),
-/// to show how the sheets say so.
+/// operations refuse (`conflict=true`: as if something changed between;
+/// `stale=true`: the next match applied after its preview), to show how
+/// the sheets say so. Previews, file places and file-manager answers are
+/// made in the Actions' shapes and read by the same code as the real ones.
 final class FakeManage implements NextWorkManage {
   FakeManage(this.world);
   final FakeWorld world;
 
   /// Operations that refuse: read, search, match, save, art, refresh,
-  /// local, danmaku, subtitle, delete, confirm.
+  /// local, danmaku, subtitle, delete, confirm, reveal.
   final fail = <String>{};
   bool conflict = false;
+
+  /// The next match or unmatch finds things changed since its preview.
+  bool stale = false;
 
   /// What the last confirmed deletion removed, for the record.
   final deleted = <String>{};
@@ -26,11 +31,17 @@ final class FakeManage implements NextWorkManage {
 
   void _changed() => world._changes.add(null);
 
+  void _stale() {
+    if (!stale) return;
+    stale = false;
+    throw const UiManageError(conflict: true);
+  }
+
   // —— State ——
 
   final _text = <String, Map<UiTextField, String?>>{};
   final _art = <String, Map<UiArtKind, String?>>{};
-  final _episodeTitles = <String, String?>{};
+  final _episodeTitles = <String, String?>{'fake:frieren:2': '启程之日'};
   final _unmatched = <String>{};
   final _matchedAs = <String, UiMatchCandidate>{};
 
@@ -48,6 +59,31 @@ final class FakeManage implements NextWorkManage {
   final _subtitles = <String, _FakeSubs>{};
 
   static String _home(String name) => '/Users/nipa/Movies/家庭录像/$name';
+
+  /// The other devices' systems, for how they show a file.
+  static const _platforms = {'工作站': 'windows', '旧笔记本': 'macos'};
+
+  /// Places the library does not show: the first episode of 葬送的芙莉莲
+  /// also kept in a backup folder here and on the workstation.
+  static const _copies = <String, List<(String?, String)>>{
+    'frieren:1': [
+      (null, '/Users/nipa/Movies/备份'),
+      ('工作站', r'D:\备份\动画'),
+    ],
+  };
+
+  /// The copies of episode [n] of [key]: the same file in other folders.
+  List<(String?, String)> _copiesOf(String key, int n) {
+    final main = _allFiles(key, n).firstOrNull;
+    if (main == null) return const [];
+    return [
+      for (final (device, folder) in _copies['$key:$n'] ?? const <(String?, String)>[])
+        (
+          device,
+          '$folder${_platforms[device] == 'windows' ? '\\' : '/'}${main.name}'
+        )
+    ];
+  }
 
   // —— What FakeWorld asks ——
 
@@ -78,8 +114,12 @@ final class FakeManage implements NextWorkManage {
 
   bool fileDeleted(String episodeId) {
     final (key, n) = _split(episodeId);
-    final all = _filesOf(key, n, all: true);
-    return all.isNotEmpty && all.every((f) => deleted.contains(f.path));
+    final paths = [
+      for (final f in _allFiles(key, n)) f.path,
+      for (final (device, path) in _copiesOf(key, n))
+        if (device == null) path
+    ];
+    return paths.isNotEmpty && paths.every(deleted.contains);
   }
 
   UiWork localWork(String key) {
@@ -132,12 +172,6 @@ final class FakeManage implements NextWorkManage {
     return (parts.sublist(0, parts.length - 1).join(':'), int.parse(parts.last));
   }
 
-  List<UiFile> _filesOf(String key, int n, {bool all = false}) =>
-      [
-        for (final f in _allFiles(key, n))
-          if (all || !deleted.contains(f.path)) f
-      ];
-
   List<UiFile> _allFiles(String key, int n) {
     if (_locals[key] case final local?) {
       if (n < 1 || n > local.episodes.length) return const [];
@@ -166,7 +200,7 @@ final class FakeManage implements NextWorkManage {
               handle: path)
       ];
     }
-    final m = world._meta[key] as Map<String, dynamic>?;
+    final m = (world._meta[key] ?? world._found[key]) as Map<String, dynamic>?;
     if (m == null) return const [];
     final name = (m['original'] as String?) ?? (m['title'] as String);
     final path = m['kind'] == 'movie'
@@ -199,11 +233,7 @@ final class FakeManage implements NextWorkManage {
       title: (m?['title'] as String?) ?? key,
       originalTitle: m?['original'] as String?,
       year: int.tryParse('${m?['year'] ?? ''}'),
-      image: m?['poster'] == null
-          ? null
-          : world._meta.containsKey(key)
-              ? '${world.dir}/${m!['poster']}'
-              : '${world.dir}/discover/${m!['poster']}',
+      image: m?['poster'] == null ? null : '${world.dir}/${m!['poster']}',
       movie: m?['kind'] == 'movie',
       current: current,
       elsewhere: world._has(key),
@@ -216,18 +246,80 @@ final class FakeManage implements NextWorkManage {
     );
   }
 
-  UiManagedEpisode _managed(String key, UiEpisode e, {String? number}) {
-    final files = e.device == null ? _filesOf(key, _split(e.episodeId).$2) : const <UiFile>[];
-    return UiManagedEpisode(
-      episode: e,
-      number: number ?? '${e.number}',
-      season: e.season,
-      title: e.title,
-      titleEdited: _episodeTitles.containsKey(e.episodeId),
-      files: files,
-      handle: e.episodeId,
-    );
+  /// The devices with episode [n] of [key] (null: this one), and whether
+  /// they answer now.
+  Map<String?, bool> _holders(String key, int n) {
+    final device = world._device(key, n);
+    return {
+      if (device == null) null: true else device.name: device.online,
+      for (final (d, _) in _copiesOf(key, n)) d: d == null || world._online[d]!,
+    };
   }
+
+  /// Where on another device a file of the library is kept.
+  static String _remotePath(String device, UiFile f) {
+    final folder = f.folder.split('/').last;
+    return _platforms[device] == 'windows'
+        ? 'D:\\动画\\$folder\\${f.name}'
+        : '/Users/nipa/Movies/$folder/${f.name}';
+  }
+
+  /// Every place of episode [n] of [key] on a device that answers, as
+  /// `media.files.list` lists them.
+  List<UiFile> _placesOf(String key, int n) {
+    final files = _allFiles(key, n);
+    final device = world._device(key, n)?.name;
+    final places = <(String?, String, UiFile)>[
+      for (final f in files)
+        (device, device == null ? f.path : _remotePath(device, f), f),
+      for (final (d, path) in _copiesOf(key, n)) (d, path, files.first),
+    ];
+    return [
+      for (final (d, path, like) in places)
+        if ((d == null || world._online[d]!) && !deleted.contains(path))
+          UiFile.listed({
+            'fileId': 'fake-file:$d:${like.path}',
+            'path': path,
+            'size': like.size,
+            'durationMs': like.duration?.inMilliseconds,
+            'modifiedAt': like.modified?.toIso8601String(),
+            'bindings': const [],
+            'episodes': const [],
+          },
+              device: d,
+              manager:
+                  UiFileManager.of(d == null ? 'macos' : _platforms[d]),
+              handle: path)
+    ];
+  }
+
+  /// Each file once per device: a second place of the same file is not
+  /// another file.
+  static List<UiFile> _distinct(Iterable<UiFile> places) {
+    final seen = <String>{};
+    return [
+      for (final p in places)
+        if (seen.add('${p.device}/${p.name}')) p
+    ];
+  }
+
+  static List<String> _away(Map<String?, bool> holders) => [
+        for (final h in holders.entries)
+          if (!h.value)
+            uiAway(const {'online': false, 'reason': 'source_device_offline'},
+                h.key)!
+      ];
+
+  UiManagedEpisode _managed(String key, UiEpisode e, {String? number}) =>
+      UiManagedEpisode(
+        episode: e,
+        number: number ?? '${e.number}',
+        season: e.season,
+        title: e.title,
+        titleEdited: _episodeTitles.containsKey(e.episodeId),
+        files: _distinct(_placesOf(key, _split(e.episodeId).$2)),
+        handle: e.episodeId,
+      );
 
   @override
   Future<UiManagedWork> work(UiWork work) async {
@@ -256,10 +348,29 @@ final class FakeManage implements NextWorkManage {
         handle: key,
       );
     }
-    final episodes = await world.episodes(work.workId);
-    final here = [
-      for (final e in episodes)
-        if (e.device == null && e.playable) _managed(key, e)
+    final present = [
+      for (final e in await world.episodes(work.workId))
+        if (e.device != null || e.playable) e
+    ];
+    final holders = <String?, bool>{
+      for (final e in present) ..._holders(key, _split(e.episodeId).$2)
+    };
+    final away = _away(holders);
+    final reachable = [
+      for (final h in holders.entries)
+        if (h.value) h.key
+    ];
+    if (reachable.isEmpty) {
+      return UiManagedWork(
+          work: work,
+          kind: UiWorkKind.loose,
+          away: away,
+          unavailable: away.first,
+          handle: key);
+    }
+    final managed = [
+      for (final e in present)
+        if (_managed(key, e) case final m when m.files.isNotEmpty) m
     ];
     final matched = !_unmatched.contains(key);
     final candidate = _matchedAs[key] ?? _candidate(key, UiProvider.tmdb, current: true);
@@ -277,9 +388,9 @@ final class FakeManage implements NextWorkManage {
           : null,
       text: _textFacts(key, work),
       art: _artFacts(key, work),
-      episodes: here,
-      editable: here.isNotEmpty,
-      elsewhere: here.isEmpty ? work.devices.firstOrNull?.name : null,
+      episodes: managed,
+      device: reachable.contains(null) ? null : reachable.first,
+      away: away,
       handle: key,
     );
   }
@@ -367,10 +478,73 @@ final class FakeManage implements NextWorkManage {
     ];
   }
 
+  /// What `media.management.*_batch` would preview for [files] of [work]:
+  /// the work, their episodes, the files with their progress, and the
+  /// matches on them.
+  Map<String, Object?> _impact(UiManagedWork work, Iterable<UiFile> files) {
+    final key = work.handle as String;
+    final watched = world._watched[key] ?? const <int, double>{};
+    final sources = [
+      if (work.match case final m?)
+        {'provider': m.provider.name, 'status': 'accepted'}
+    ];
+    JsonMap entity(String id, String kind, {String? title}) =>
+        {'id': id, 'kind': kind, 'attributes': {if (title != null) 'title': title}};
+    return {
+      'entities': [
+        {
+          'entity': entity('work:$key', 'work', title: work.work.title),
+          'associations': const [],
+          'sources': sources,
+          'locations': const [],
+          'progress': const [],
+        },
+        for (final e in work.episodes)
+          if (e.files.any(files.contains)) ...[
+            {
+              'entity': entity('episode:${e.handle}', 'episode', title: e.title),
+              'associations': const [],
+              'sources': sources,
+              'locations': const [],
+              'progress': const [],
+            },
+            for (final f in e.files)
+              if (files.contains(f))
+                {
+                  'entity': entity('file:${f.device}:${f.path}', 'file'),
+                  'associations': const [],
+                  'sources': const [],
+                  'locations': [
+                    {'locator': f.path}
+                  ],
+                  'progress': [
+                    {
+                      'watchProgress':
+                          watched[_split(e.handle as String).$2],
+                      'lastPosition': null,
+                    }
+                  ],
+                }
+          ],
+      ],
+      'diskFilesDeleted': false,
+      'progressChanged': false,
+    };
+  }
+
   @override
-  Future<void> match(UiManagedWork work, UiMatchCandidate candidate,
-      Map<UiFile, UiCandidateEpisode> files) async {
+  Future<UiAssociation> previewMatch(UiManagedWork work,
+      UiMatchCandidate candidate, Map<UiFile, UiCandidateEpisode> files) async {
+    await _wait(420);
+    _check('match');
+    return UiAssociation.fromPreviews([_impact(work, files.keys)],
+        devices: {for (final f in files.keys) f.device}.toList(),
+        apply: () => _match(work, candidate));
+  }
+
+  Future<void> _match(UiManagedWork work, UiMatchCandidate candidate) async {
     await _wait(500);
+    _stale();
     _check('match');
     final key = work.handle as String;
     if (key.startsWith('raw:')) {
@@ -391,12 +565,19 @@ final class FakeManage implements NextWorkManage {
   }
 
   @override
-  Future<void> unmatch(UiManagedWork work) async {
-    await _wait();
+  Future<UiAssociation> previewUnmatch(UiManagedWork work) async {
+    await _wait(360);
     _check('match');
-    _unmatched.add(work.handle as String);
-    _matchedAs.remove(work.handle);
-    _changed();
+    return UiAssociation.fromPreviews([_impact(work, work.files)],
+        devices: {for (final f in work.files) f.device}.toList(),
+        apply: () async {
+      await _wait();
+      _stale();
+      _check('match');
+      _unmatched.add(work.handle as String);
+      _matchedAs.remove(work.handle);
+      _changed();
+    });
   }
 
   // —— 本地作品 ——
@@ -495,6 +676,14 @@ final class FakeManage implements NextWorkManage {
   }
 
   @override
+  Future<void> clearEpisodeTitle(UiManagedEpisode episode) async {
+    await _wait();
+    _check('save');
+    _episodeTitles.remove(episode.handle);
+    _changed();
+  }
+
+  @override
   Future<void> clearText(UiManagedWork work, UiTextField field) async {
     await _wait();
     _check('save');
@@ -574,9 +763,15 @@ final class FakeManage implements NextWorkManage {
     await _wait();
     _check('read');
     final (key, n) = _split(episode.episodeId);
-    final files = episode.device == null && episode.playable
-        ? _filesOf(key, n)
-        : const <UiFile>[];
+    final holders = _holders(key, n);
+    final reachable = [
+      for (final h in holders.entries)
+        if (h.value) h.key
+    ];
+    final device = reachable.contains(null) ? null : reachable.firstOrNull;
+    final locations = _placesOf(key, n);
+    final files =
+        _distinct([for (final p in locations) if (p.device == device) p]);
     final subs = _subsOf(episode.episodeId);
     return UiManagedEpisode(
       episode: episode,
@@ -584,18 +779,23 @@ final class FakeManage implements NextWorkManage {
       season: episode.season,
       title: episode.title,
       files: files,
+      locations: locations,
+      device: device,
+      away: _away(holders),
+      unavailable: reachable.isEmpty ? _away(holders).first : null,
       danmaku: [
-        for (final t in _tracksOf(episode.episodeId))
-          UiDanmakuTrack(
-            source: t.source,
-            name: t.name,
-            count: t.loading ? null : t.count,
-            enabled: t.enabled,
-            offset: t.offset,
-            loading: t.loading,
-            removable: t.removable,
-            handle: t,
-          )
+        if (reachable.isNotEmpty)
+          for (final t in _tracksOf(episode.episodeId))
+            UiDanmakuTrack(
+              source: t.source,
+              name: t.name,
+              count: t.loading ? null : t.count,
+              enabled: t.enabled,
+              offset: t.offset,
+              loading: t.loading,
+              removable: t.removable,
+              handle: t,
+            )
       ],
       subtitles: [
         for (final f in files)
@@ -749,8 +949,24 @@ final class FakeManage implements NextWorkManage {
   }
 
   @override
-  Future<void> reveal(UiFile file) async =>
-      debugPrint('[NextUi dev] reveal ${file.path}');
+  Future<void> reveal(UiFile file) async {
+    await _wait(120);
+    debugPrint('[NextUi dev] reveal ${file.device ?? 'here'} ${file.path}');
+    uiRevealed({
+      'results': [
+        fail.contains('reveal')
+            ? {
+                'index': 0,
+                'requested': false,
+                'error': {
+                  'code': 'unavailable',
+                  'message': 'System file manager rejected the request.'
+                }
+              }
+            : {'index': 0, 'requested': true, 'mode': 'select_file'}
+      ]
+    });
+  }
 
   @override
   Future<UiConfirm> deleteFile(UiFile file) async {

@@ -187,12 +187,23 @@ class EpisodeManageSheetState extends State<EpisodeManageSheet>
 
   // —— 文件 ——
 
+  Future<void> _reveal(UiFile f) async {
+    try {
+      await widget.manage.reveal(f);
+    } on UiManageError {
+      if (mounted) say('没能打开', error: true);
+    }
+  }
+
   Future<void> _askDelete(UiFile f) async {
     await run(() async {
       final confirm = await widget.manage.deleteFile(f);
       if (mounted) {
         setState(() => _ask = (
-              title: '从磁盘删除？',
+              title: switch (f.device) {
+                null => '从磁盘删除？',
+                final device => '从${uiSpaced(device, before: true)}删除？',
+              },
               items: confirm.items,
               action: '删除',
               run: confirm.run
@@ -228,6 +239,13 @@ class EpisodeManageSheetState extends State<EpisodeManageSheet>
             }
         ],
         'files': [for (final f in _data?.files ?? const <UiFile>[]) f.name],
+        'locations': [
+          for (final f in _data?.locations ?? const <UiFile>[])
+            '${f.device ?? '本机'}  ${f.path}'
+        ],
+        'device': _data?.device,
+        'away': _data?.away,
+        'unavailable': _data?.unavailable,
         'found': _found?.length,
         'note': note?.text,
         'asking': _ask?.title,
@@ -291,7 +309,10 @@ class EpisodeManageSheetState extends State<EpisodeManageSheet>
           .detachSubtitle(s, s.tracks.firstWhere((t) => t.id == id)));
     }
     if (p['copies'] == 'true') await _askCopies(data!.subtitles.first);
-    if (p['deleteFile'] == 'true') await _askDelete(data!.files.first);
+    if (p['reveal'] case final i?) await _reveal(data!.locations[int.parse(i)]);
+    if (p['deleteFile'] case final i?) {
+      await _askDelete(data!.locations[i == 'true' ? 0 : int.parse(i)]);
+    }
     if (p['confirm'] case final c?) {
       final ask = _ask;
       if (ask != null && c == 'yes') await run(ask.run, done: '已删除');
@@ -318,6 +339,7 @@ class EpisodeManageSheetState extends State<EpisodeManageSheet>
       ),
       caption: widget.work.title,
       title: title,
+      device: _data?.device,
       section: _section,
       sections: const [
         (EpisodeSection.danmaku, '弹幕'),
@@ -349,9 +371,13 @@ class EpisodeManageSheetState extends State<EpisodeManageSheet>
           : ListView(
               padding: const EdgeInsets.fromLTRB(22, 4, 22, 22),
               children: switch (_section) {
+                EpisodeSection.files => _fileSection(),
+                _ when _data!.unavailable != null => [
+                    const SizedBox(height: 18),
+                    AwayNote(_data!.unavailable!),
+                  ],
                 EpisodeSection.danmaku => _danmakuSection(),
                 EpisodeSection.subtitles => _subtitleSection(),
-                EpisodeSection.files => _fileSection(),
               },
             ),
     );
@@ -392,7 +418,8 @@ class EpisodeManageSheetState extends State<EpisodeManageSheet>
             label: '添加弹幕',
             onTap: () => setState(() => _adding = !_adding)),
         const SizedBox(width: 8),
-        PillButton(label: '导入文件', onTap: busy ? null : _importDanmaku),
+        if (data.device == null)
+          PillButton(label: '导入文件', onTap: busy ? null : _importDanmaku),
         const Spacer(),
         LinkText('屏蔽词', onTap: widget.onBlockWords),
       ]),
@@ -510,12 +537,14 @@ class EpisodeManageSheetState extends State<EpisodeManageSheet>
             ),
           ]),
         ],
-        const SizedBox(height: 14),
-        Row(children: [
-          PillButton(
-              label: '导入字幕',
-              onTap: busy ? null : () => _importSubtitle(s)),
-        ]),
+        if (data.device == null) ...[
+          const SizedBox(height: 14),
+          Row(children: [
+            PillButton(
+                label: '导入字幕',
+                onTap: busy ? null : () => _importSubtitle(s)),
+          ]),
+        ],
       ],
     ];
   }
@@ -558,57 +587,70 @@ class EpisodeManageSheetState extends State<EpisodeManageSheet>
         ]),
       );
 
+  /// Every place a file of the episode is, by device: this one first.
   List<Widget> _fileSection() {
     final data = _data!;
-    if (data.files.isEmpty) return [_quiet('这台设备上没有文件')];
+    if (data.locations.isEmpty && data.away.isEmpty) {
+      return [_quiet('这台设备上没有文件')];
+    }
+    final groups = <String?, List<UiFile>>{};
+    for (final f in data.locations) {
+      (groups[f.device] ??= []).add(f);
+    }
+    final named = data.away.isNotEmpty || groups.keys.any((d) => d != null);
     return [
-      for (final f in data.files) ...[
-        const SizedBox(height: 10),
-        ManageGroup(children: [
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 14, 14, 14),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Text(f.name,
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                    style: NextText.sans(13.5,
-                        weight: FontWeight.w600, height: 1.4)),
-                const SizedBox(height: 4),
-                Text(f.folder,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: NextText.sans(12, color: NextColors.p3)),
-                const SizedBox(height: 10),
-                Text(
-                    [
-                      if (f.size != null) fileSize(f.size!),
-                      if (f.duration != null) Words.duration(f.duration!),
-                      if (f.modified != null)
-                        '${f.modified!.year}-${f.modified!.month.toString().padLeft(2, '0')}-${f.modified!.day.toString().padLeft(2, '0')}',
-                    ].join('  ·  '),
-                    style: NextText.num(12.5, color: NextColors.p2)),
-                const SizedBox(height: 14),
-                Row(children: [
-                  PillButton(
-                      label: '在 Finder 中显示',
-                      onTap: () => widget.manage.reveal(f)),
-                  const Spacer(),
-                  PillButton(
-                      label: '删除文件',
-                      danger: true,
-                      onTap: busy ? null : () => _askDelete(f)),
-                ]),
-              ],
-            ),
-          ),
-        ]),
+      for (final MapEntry(key: device, value: files) in groups.entries) ...[
+        if (named)
+          ManageHeading(device ?? '本机', glyph: NextGlyph.device)
+        else
+          const SizedBox(height: 10),
+        ManageGroup(children: [for (final f in files) _location(f)]),
       ],
-      const SizedBox(height: 14),
+      for (final reason in data.away) ...[
+        const SizedBox(height: 16),
+        AwayNote(reason),
+      ],
+      const SizedBox(height: 16),
       Row(children: [LinkText('剧集与文件', onTap: widget.onEpisodes)]),
     ];
   }
+
+  Widget _location(UiFile f) => Padding(
+        padding: const EdgeInsets.fromLTRB(16, 14, 14, 14),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Text(f.name,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: NextText.sans(13.5, weight: FontWeight.w600, height: 1.4)),
+            const SizedBox(height: 4),
+            Text(f.folder,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: NextText.sans(12, color: NextColors.p3)),
+            const SizedBox(height: 10),
+            Text(
+                [
+                  if (f.size != null) fileSize(f.size!),
+                  if (f.duration != null) Words.duration(f.duration!),
+                  if (f.modified != null)
+                    '${f.modified!.year}-${f.modified!.month.toString().padLeft(2, '0')}-${f.modified!.day.toString().padLeft(2, '0')}',
+                ].join('  ·  '),
+                style: NextText.num(12.5, color: NextColors.p2)),
+            const SizedBox(height: 14),
+            Row(children: [
+              if (f.manager case final manager?)
+                PillButton(label: manager.label, onTap: () => _reveal(f)),
+              const Spacer(),
+              PillButton(
+                  label: '删除文件',
+                  danger: true,
+                  onTap: busy ? null : () => _askDelete(f)),
+            ]),
+          ],
+        ),
+      );
 }
 
 class _QueryField extends StatelessWidget {

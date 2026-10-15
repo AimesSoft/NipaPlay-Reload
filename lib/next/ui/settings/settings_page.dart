@@ -10,6 +10,7 @@ import '../widgets/buttons.dart';
 import '../widgets/icons.dart';
 import '../widgets/nipa_avatar.dart';
 import 'controls.dart';
+import 'host_keys.dart';
 import 'registry_rows.dart';
 import 'section_accounts.dart';
 import 'section_host.dart';
@@ -61,6 +62,7 @@ class _SettingsPageState extends State<SettingsPage> implements SettingsDebug {
   Timer? _fade;
   NextShellController? _shell;
   SettingsModel? _model;
+  HostKeys? _keys;
   final _scroll = ScrollController();
   final _more = <SettingsSection>{};
   final _search = TextEditingController();
@@ -71,6 +73,7 @@ class _SettingsPageState extends State<SettingsPage> implements SettingsDebug {
   final _storage = GlobalKey<StorageSectionState>();
   final _about = GlobalKey<AboutSectionState>();
   final _sync = GlobalKey<SyncSectionState>();
+  final _plugins = GlobalKey<PluginsSectionState>();
 
   /// A source to show opened, or `new` for one being added.
   String? _openSource;
@@ -79,7 +82,7 @@ class _SettingsPageState extends State<SettingsPage> implements SettingsDebug {
     SettingsSection.accounts: '账号 登录 退出 弹弹play bangumi 同步 观看记录',
     SettingsSection.sources: '媒体来源 服务器 jellyfin emby smb webdav nas 网盘 库 共享 '
         '本机 文件夹 扫描 附近 nipaplay',
-    SettingsSection.devices: '设备 组网 本机名 运行程序 远程 局域网',
+    SettingsSection.devices: '设备 组网 本机名 运行程序 远程 局域网 远程访问 信任 遥控 ipv6',
     SettingsSection.sync: '同步 多端 webdav 坚果云 nextcloud 服务器 备份 记录',
     SettingsSection.nipa: 'nipa 模型 codex api key 密钥 记忆 记得 提供方',
     SettingsSection.storage: '存储 缓存 清理 截图 空间 磁盘 缩略图',
@@ -100,6 +103,7 @@ class _SettingsPageState extends State<SettingsPage> implements SettingsDebug {
     shell.chat.addListener(_chatChanged);
     _mood = shell.chat.mood;
     _model ??= SettingsModel(shell.services.settings)..load();
+    _keys ??= HostKeys(shell.services.settings.host)..load();
     if (widget.target?.key case final key?) _show(key);
   }
 
@@ -119,6 +123,7 @@ class _SettingsPageState extends State<SettingsPage> implements SettingsDebug {
     _shell?.chat.removeListener(_chatChanged);
     _shell?.settingsTarget.removeListener(_target);
     _model?.dispose();
+    _keys?.dispose();
     _fade?.cancel();
     _scroll.dispose();
     _search.dispose();
@@ -162,6 +167,8 @@ class _SettingsPageState extends State<SettingsPage> implements SettingsDebug {
       _section = SettingsLayout.sectionOf(key);
       _search.clear();
       _highlight = key;
+      // Arriving at a folded setting leaves its fold open.
+      if (SettingsLayout.folded(key)) _more.add(_section);
     });
     WidgetsBinding.instance.addPostFrameCallback((_) {
       final row = _rowContext(key);
@@ -202,8 +209,26 @@ class _SettingsPageState extends State<SettingsPage> implements SettingsDebug {
     final model = _model!;
     final data = model.data;
     final shell = _shell!;
+    final keys = _keys!;
     return switch (section) {
-      SettingsSection.accounts => AccountsSection(data: data),
+      SettingsSection.accounts =>
+        Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+          AccountsSection(data: data),
+          if (keys.value != null)
+            SettingsCard(children: [
+              HostKeyRow(keys: keys, which: HostKey.tmdb),
+            ]),
+        ]),
+      SettingsSection.danmaku => RegistryGroups(
+          section: section,
+          model: model,
+          more: _isMore(section),
+          onMore: () => _toggleMore(section),
+          highlight: _highlight,
+          extra: {
+            if (keys.value != null)
+              '防剧透': [HostKeyRow(keys: keys, which: HostKey.spoilerAi)],
+          }),
       SettingsSection.sources => SourcesSection(
           key: _sources,
           data: data,
@@ -235,6 +260,7 @@ class _SettingsPageState extends State<SettingsPage> implements SettingsDebug {
       SettingsSection.shortcuts =>
         ShortcutsSection(model: model, highlight: _highlight),
       SettingsSection.plugins => PluginsSection(
+          key: _plugins,
           plugins: shell.services.plugins,
           data: data,
           model: model,
@@ -279,7 +305,12 @@ class _SettingsPageState extends State<SettingsPage> implements SettingsDebug {
       if (!words.contains(q)) continue;
       found.putIfAbsent(SettingsLayout.sectionOf(s.key), () => []).add(s);
     }
-    if (places.isEmpty && found.isEmpty) {
+    final keys = [
+      if (_keys!.value != null)
+        for (final k in HostKey.values)
+          if (k.words.contains(q) || k.title.toLowerCase().contains(q)) k
+    ];
+    if (places.isEmpty && found.isEmpty && keys.isEmpty) {
       return Padding(
         padding: const EdgeInsets.only(top: 8),
         child: Text('没有找到', style: NextText.sans(14, color: NextColors.p3)),
@@ -297,10 +328,12 @@ class _SettingsPageState extends State<SettingsPage> implements SettingsDebug {
             ),
         ]),
       for (final section in SettingsSection.values)
-        if (found[section] case final rows?)
+        if (found.containsKey(section) || keys.any((k) => k.section == section))
           SettingsCard(title: section.title, children: [
-            for (final s in rows)
+            for (final s in found[section] ?? const <UiSetting>[])
               RegistryRow(key: ValueKey(s.key), setting: s, model: model),
+            for (final k in keys)
+              if (k.section == section) HostKeyRow(keys: _keys!, which: k),
           ]),
     ]);
   }
@@ -352,7 +385,7 @@ class _SettingsPageState extends State<SettingsPage> implements SettingsDebug {
             const SizedBox(width: 56),
             Expanded(
               child: ListenableBuilder(
-                listenable: model,
+                listenable: Listenable.merge([model, _keys]),
                 builder: (context, _) => SingleChildScrollView(
                   controller: _scroll,
                   padding:
@@ -431,6 +464,12 @@ class _SettingsPageState extends State<SettingsPage> implements SettingsDebug {
       _go(SettingsSection.plugins);
       setState(() => _more.add(SettingsSection.plugins));
     }
+    if (p['plugin'] case final id?) {
+      _go(SettingsSection.plugins);
+      await Future<void>.delayed(const Duration(milliseconds: 400));
+      // Not awaited: an action may be asking in a sheet.
+      unawaited(_plugins.currentState?.debugInvoke(id, p['invoke']));
+    }
     if (p['sync'] case final what?) {
       _go(SettingsSection.sync);
       await Future<void>.delayed(const Duration(milliseconds: 400));
@@ -482,6 +521,7 @@ class _SettingsPageState extends State<SettingsPage> implements SettingsDebug {
             if (s.changedBy != null) s.key: s.changedBy
         },
         'scroll': _scroll.hasClients ? _scroll.offset : null,
+        'memory': _nipa.currentState?.debugMemory,
       };
 }
 

@@ -27,29 +27,27 @@ final class NextHistory {
 
   /// Forgets [entries]; the videos stay where they are.
   Future<void> remove(List<UiHistoryEntry> entries) async {
-    final paths = [
-      for (final e in entries)
-        if (e.locator != null) e.locator!
-    ];
-    if (paths.isEmpty) return;
-    await calls.call('history.remove', {'paths': paths});
+    if (entries.isEmpty) return;
+    await calls.call('history.remove', {
+      'entryIds': [for (final e in entries) e.entryId]
+    });
   }
 
   /// Forgets everything recorded.
   Future<void> clear() async {
-    final paths = <String>{}, works = <int>{};
+    final ids = <String>{}, works = <int>{};
     String? cursor;
     do {
       final page = await this.page(cursor: cursor);
       for (final e in page.entries) {
-        if (e.locator != null) paths.add(e.locator!);
+        ids.add(e.entryId);
         if (e.animeId != null) works.add(e.animeId!);
       }
       cursor = page.cursor;
     } while (cursor != null);
-    if (paths.isEmpty && works.isEmpty) return;
+    if (ids.isEmpty) return;
     await calls.call('history.remove', {
-      if (paths.isNotEmpty) 'paths': paths.toList(),
+      'entryIds': ids.toList(),
       if (works.isNotEmpty) 'animeIds': works.toList(),
     });
   }
@@ -72,6 +70,10 @@ final class UiHistoryEntry {
     required this.title,
     this.episode,
     this.locator,
+    this.workId,
+    this.libraryEpisodeId,
+    this.poster,
+    this.still,
     this.animeId,
     this.progress,
     this.position,
@@ -86,13 +88,25 @@ final class UiHistoryEntry {
   /// Where the video is (a path or a source's address); null when this
   /// device may not see it.
   final String? locator;
+
+  /// The library's work and episode it was; null when it is not in the
+  /// library (an episode also when the file holds several).
+  final String? workId;
+  final String? libraryEpisodeId;
+
+  /// Local pictures of the work and of the episode, when there are some.
+  final String? poster;
+  final String? still;
   final int? animeId;
   final double? progress;
   final Duration? position;
   final Duration? duration;
   final DateTime? at;
 
-  bool get playable => locator != null;
+  /// It can be gone on with: from its own file, or else from wherever the
+  /// library has the episode.
+  bool get playable =>
+      locator != null || (workId != null && libraryEpisodeId != null);
 
   factory UiHistoryEntry.from(Map row) {
     final title = (row['title'] as String?)?.trim();
@@ -106,6 +120,10 @@ final class UiHistoryEntry {
           : _fileName(locator) ?? '',
       episode: (row['episodeTitle'] as String?)?.trim(),
       locator: locator,
+      workId: row['workId'] as String?,
+      libraryEpisodeId: row['libraryEpisodeId'] as String?,
+      poster: row['poster'] as String?,
+      still: row['still'] as String?,
       animeId: (row['animeId'] as num?)?.toInt(),
       progress: (row['progress'] as num?)?.toDouble(),
       position: position == null ? null : Duration(milliseconds: position),

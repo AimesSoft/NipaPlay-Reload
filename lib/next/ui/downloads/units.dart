@@ -186,32 +186,33 @@ class DownloadFileRow extends StatelessWidget {
                 style: NextText.num(12,
                     color: included ? NextColors.p2 : NextColors.p4)),
           ),
-          SizedBox(
-            width: 34,
-            child: onPlay == null
-                ? null
-                : Align(
-                    alignment: Alignment.centerRight,
-                    child: Pressable(
-                      onTap: onPlay,
-                      semanticLabel: '播放 ${file.name}',
-                      builder: (context, hovered) => AnimatedContainer(
-                        duration: const Duration(milliseconds: 120),
-                        width: 26,
-                        height: 26,
-                        alignment: Alignment.center,
-                        decoration: BoxDecoration(
-                          shape: BoxShape.circle,
-                          color: hovered
-                              ? NextColors.accent
-                              : const Color(0x14FFFFFF),
+          if (progress)
+            SizedBox(
+              width: 34,
+              child: onPlay == null
+                  ? null
+                  : Align(
+                      alignment: Alignment.centerRight,
+                      child: Pressable(
+                        onTap: onPlay,
+                        semanticLabel: '播放 ${file.name}',
+                        builder: (context, hovered) => AnimatedContainer(
+                          duration: const Duration(milliseconds: 120),
+                          width: 26,
+                          height: 26,
+                          alignment: Alignment.center,
+                          decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            color: hovered
+                                ? NextColors.accent
+                                : const Color(0x14FFFFFF),
+                          ),
+                          child: CustomPaint(
+                              size: const Size(8, 9), painter: _PlayGlyph()),
                         ),
-                        child: CustomPaint(
-                            size: const Size(8, 9), painter: _PlayGlyph()),
                       ),
                     ),
-                  ),
-          ),
+            ),
         ]),
       ),
     );

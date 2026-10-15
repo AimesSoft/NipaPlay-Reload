@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/widgets.dart';
 
 import '../../ui_data/host_settings.dart';
+import '../data/gui_calls.dart' show callFailure;
 import '../data/settings_data.dart';
 import '../theme/tokens.dart';
 import '../widgets/icons.dart';
@@ -14,8 +15,9 @@ import 'section_accounts.dart';
 import 'settings_layout.dart';
 
 /// This device in the mesh: whether it is in, what it is called, the other
-/// devices, and whether they may run programs here. Only the person at
-/// this device changes these.
+/// devices, and whether they may run programs here; Classic's remote
+/// access and the devices it trusts. Only the person at this device
+/// changes these.
 class DevicesSection extends StatefulWidget {
   const DevicesSection({super.key, required this.host});
   final NextHostSettings host;
@@ -31,6 +33,11 @@ class DevicesSectionState extends State<DevicesSection> {
   bool _saving = false;
   String? _error;
   StreamSubscription<void>? _changes;
+
+  /// Null on a host without Classic's remote access.
+  UiRemoteAccess? _remote;
+  bool _remoteSaving = false;
+  String? _remoteError;
 
   @override
   void initState() {
@@ -52,15 +59,143 @@ class DevicesSectionState extends State<DevicesSection> {
   }
 
   Future<void> _load() async {
-    final (mesh, programs) =
-        await (widget.host.mesh(), widget.host.remotePrograms()).wait;
+    final (mesh, programs, remote) = await (
+      widget.host.mesh(),
+      widget.host.remotePrograms(),
+      _remoteAccess()
+    ).wait;
     if (mounted) {
       setState(() {
         _mesh = mesh;
         _programs = programs;
+        _remote = remote;
       });
     }
   }
+
+  Future<UiRemoteAccess?> _remoteAccess() async {
+    try {
+      return await widget.host.deviceSettings.remoteAccess();
+    } on UnsupportedError {
+      return null;
+    }
+  }
+
+  /// Remote access as chosen here, shown at once; the host's answer
+  /// replaces it.
+  Future<void> _setRemote(UiRemoteAccess r,
+      {bool? running,
+      bool? autoStart,
+      int? port,
+      bool? ipv6,
+      bool? receiverEnabled}) async {
+    final choice = UiRemoteAccessChoice(
+      running: running ?? r.running,
+      autoStart: autoStart ?? r.autoStart,
+      port: port ?? r.port,
+      ipv6: ipv6 ?? r.ipv6,
+      receiverEnabled: receiverEnabled ?? r.receiverEnabled,
+    );
+    setState(() {
+      _remoteSaving = true;
+      _remoteError = null;
+      _remote = UiRemoteAccess(
+          running: choice.running,
+          autoStart: choice.autoStart,
+          port: choice.port,
+          ipv6: choice.ipv6,
+          receiverEnabled: choice.receiverEnabled,
+          devices: r.devices);
+    });
+    try {
+      await widget.host.deviceSettings.setRemoteAccess(choice);
+    } catch (e) {
+      if (mounted) setState(() => _remoteError = callFailure(e));
+    }
+    if (mounted) setState(() => _remoteSaving = false);
+    await _load();
+  }
+
+  Future<void> _forget(UiRemoteDevice d) async {
+    setState(() => _remoteError = null);
+    try {
+      await widget.host.deviceSettings.forgetRemoteDevice(d.clientKey);
+    } catch (e) {
+      if (mounted) setState(() => _remoteError = callFailure(e));
+    }
+    await _load();
+  }
+
+  List<Widget> _remoteCards(UiRemoteAccess r) => [
+        SettingsCard(children: [
+          SettingsRow(
+            title: '远程访问',
+            mark: r.problem == null && _remoteError == null
+                ? null
+                : const StateDot(NextColors.accent2),
+            subtitle: r.problem ?? _remoteError,
+            trailing: NextToggle(
+              value: r.running,
+              label: '远程访问',
+              onChanged: _remoteSaving
+                  ? null
+                  : (on) => _setRemote(r, running: on),
+            ),
+          ),
+        ]),
+        if (r.devices.isNotEmpty)
+          SettingsCard(title: '信任的设备', children: [
+            for (final d in r.devices)
+              SettingsRow(
+                key: ValueKey(d.clientKey),
+                title: d.name,
+                trailing: ConfirmPill(
+                    label: '移除', confirm: '确定移除', onConfirm: () => _forget(d)),
+              ),
+          ]),
+      ];
+
+  Widget _remoteMore(UiRemoteAccess r) =>
+      SettingsCard(title: '远程访问', children: [
+        SettingsRow(
+          title: '随 NipaPlay 启动',
+          trailing: NextToggle(
+            value: r.autoStart,
+            onChanged:
+                _remoteSaving ? null : (on) => _setRemote(r, autoStart: on),
+          ),
+        ),
+        SettingsRow(
+          title: '端口',
+          trailing: FieldControl(
+            value: '${r.port}',
+            width: 96,
+            numeric: true,
+            align: TextAlign.right,
+            onCommit: (v) {
+              final port = int.tryParse(v.trim());
+              if (port == null) return setState(() {});
+              _setRemote(r, port: port);
+            },
+          ),
+        ),
+        SettingsRow(
+          title: 'IPv6',
+          trailing: NextToggle(
+            value: r.ipv6,
+            onChanged: _remoteSaving ? null : (on) => _setRemote(r, ipv6: on),
+          ),
+        ),
+        SettingsRow(
+          title: '接受遥控',
+          trailing: NextToggle(
+            value: r.receiverEnabled,
+            onChanged: _remoteSaving
+                ? null
+                : (on) => _setRemote(r, receiverEnabled: on),
+          ),
+        ),
+      ]);
 
   void debugAdvanced(bool open) => setState(() => _advanced = open);
 
@@ -114,6 +249,7 @@ class DevicesSectionState extends State<DevicesSection> {
   Widget build(BuildContext context) {
     final m = _mesh;
     if (m == null) return const SizedBox(height: 120);
+    final remote = _remote;
     final usable = m.available && !_saving;
     final others = [
       for (final d in m.devices)
@@ -164,12 +300,13 @@ class DevicesSectionState extends State<DevicesSection> {
           ),
         ),
       ]),
-      if (m.available) ...[
+      if (remote != null) ..._remoteCards(remote),
+      if (m.available || remote != null) ...[
         FoldButton(
             open: _advanced,
             label: '高级',
             onTap: () => setState(() => _advanced = !_advanced)),
-        if (_advanced)
+        if (_advanced && m.available)
           SettingsCard(children: [
             SettingsRow(
               title: '协调地址',
@@ -230,6 +367,7 @@ class DevicesSectionState extends State<DevicesSection> {
               ),
             ),
           ]),
+        if (_advanced && remote != null) _remoteMore(remote),
       ],
     ]);
   }
@@ -334,7 +472,11 @@ class NipaSectionState extends State<NipaSection> {
   bool _dirty = false, _saving = false, _checking = false;
   UiModelCheck? _check;
   String? _error;
-  StreamSubscription<void>? _changes, _hostChanges;
+  StreamSubscription<void>? _changes, _hostChanges, _memoryChanges;
+
+  /// Reading what Nipa remembers, and whether to read it once more after.
+  Future<void>? _reading;
+  bool _again = false;
 
   NextHostSettings get _host => widget.data.host;
 
@@ -344,12 +486,14 @@ class NipaSectionState extends State<NipaSection> {
     _load();
     _changes = widget.data.changes.listen((_) => _loadMemory());
     _hostChanges = _host.changes.listen((_) => _loadModel());
+    _memoryChanges = widget.data.memoryChanges.listen((_) => _loadMemory());
   }
 
   @override
   void dispose() {
     _changes?.cancel();
     _hostChanges?.cancel();
+    _memoryChanges?.cancel();
     super.dispose();
   }
 
@@ -373,6 +517,20 @@ class NipaSectionState extends State<NipaSection> {
   }
 
   Future<void> _loadMemory() async {
+    if (_reading != null) {
+      _again = true;
+      return;
+    }
+    _reading = _readMemory();
+    await _reading;
+    _reading = null;
+    if (_again) {
+      _again = false;
+      await _loadMemory();
+    }
+  }
+
+  Future<void> _readMemory() async {
     try {
       final files = await widget.data.memories();
       if (mounted) setState(() => _files = files);
@@ -383,6 +541,9 @@ class NipaSectionState extends State<NipaSection> {
 
   /// Opens a memory note (debug and Nipa's links).
   void debugOpenMemory(String? path) => setState(() => _open = path);
+
+  /// The notes as listed (debug).
+  List<String> get debugMemory => [for (final f in _files ?? []) f.path];
   Future<void> debugCheck() => _test();
 
   Future<void> _setSource(UiModelSource source) async {

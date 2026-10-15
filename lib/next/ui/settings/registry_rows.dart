@@ -171,7 +171,7 @@ class _RegistryRowState extends State<RegistryRow> {
           value: s.choices
               .firstWhere((c) => '$c' == '${s.value}', orElse: () => s.value),
           options: [
-            for (final c in s.choices) (c, SettingWords.choice(s.key, c))
+            for (final c in s.choices) (c, s.nameOf(c))
           ],
           onChanged: _set,
         );
@@ -186,6 +186,7 @@ class _RegistryRowState extends State<RegistryRow> {
             max: s.max!,
             step: s.step,
             integer: s.integer,
+            names: s.names,
             onChanged: _set,
           );
         }
@@ -356,6 +357,7 @@ class RegistryGroups extends StatelessWidget {
     required this.onMore,
     this.highlight,
     this.skipFolded = false,
+    this.extra = const {},
   });
   final SettingsSection section;
   final SettingsModel model;
@@ -363,6 +365,9 @@ class RegistryGroups extends StatelessWidget {
   final VoidCallback onMore;
   final String? highlight;
   final bool skipFolded;
+
+  /// The page's own rows after a group's settings, by the group's title.
+  final Map<String, List<Widget>> extra;
 
   @override
   Widget build(BuildContext context) {
@@ -389,6 +394,7 @@ class RegistryGroups extends StatelessWidget {
                   setting: s,
                   model: model,
                   highlight: s.key == highlight),
+            ...?extra[g.$1.title],
           ],
         );
     return Column(

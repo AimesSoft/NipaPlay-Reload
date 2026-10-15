@@ -24,6 +24,10 @@ abstract interface class NextSearchData {
   /// What [source] holds matching [query], at most [limit].
   Future<UiSourceAnswer> searchSource(UiSearchSource source, String query,
       {int limit});
+
+  /// The picture of [hit] the search came without, fetched from its source
+  /// now: a path on this device, or null when there is none.
+  Future<String?> sourceArtwork(UiSourceHit hit);
 }
 
 final class UiLibraryHits {
@@ -83,11 +87,20 @@ final class UiSourceHit {
     required this.title,
     this.work,
     this.episode,
+    this.poster,
+    this.workTitle,
     this.playable = false,
     this.reachable = true,
   });
 
   final UiSearchSource source;
+
+  /// Its picture on this device, when the search had one: a work's
+  /// poster; for an episode or a file, its own or its work's.
+  final String? poster;
+
+  /// The name of the library's work it is bound to.
+  final String? workTitle;
 
   /// What the source calls it; never shown, and never a work's ID.
   final String itemId;
@@ -110,6 +123,11 @@ final class UiSourceHit {
   /// False when the source could not be reached: what it held when last
   /// seen.
   final bool reachable;
+
+  /// A server's item may have a picture to fetch; a share's file has none
+  /// of its own.
+  bool get hasArtwork =>
+      source.kind == UiSourceKind.jellyfin || source.kind == UiSourceKind.emby;
 }
 
 /// The real searches, invoked as the interface (`origin: gui`):
@@ -120,7 +138,8 @@ final class UiSourceHit {
 /// - 在线: `media.metadata.search` on 弹弹play. A result the library has
 ///   names its library work.
 /// - 来源: `media.sources.list` for the sources, then
-///   `media.sources.search` for each one on its own.
+///   `media.sources.search` for each one on its own; a picture it had not
+///   cached, `media.sources.artwork`.
 final class CoreSearch implements NextSearchData {
   /// [harness]: the runtime's, read at each call (it may come later).
   CoreSearch(this.harness);
@@ -291,6 +310,11 @@ final class CoreSearch implements NextSearchData {
     ], failed: answer['error'] != null || answer['total'] == null);
   }
 
+  @override
+  Future<String?> sourceArtwork(UiSourceHit hit) async => _text((await _call(
+      'media.sources.artwork',
+      {'sourceId': hit.source.sourceId, 'itemId': hit.itemId}))['poster']);
+
   /// A source's entry: a series or a film opens its page (the library's
   /// when bound, else the source's own); an episode, a video or a file of
   /// one plays; a file no work holds plays from the source by its item.
@@ -303,6 +327,8 @@ final class CoreSearch implements NextSearchData {
     final workId = _text(e['workId']) ?? _text(e['sourceWorkId']);
     final episodeId = _text(e['episodeId']) ?? _text(e['sourceEpisodeId']);
     final playable = e['playable'] == true && reachable;
+    final poster = _text(e['poster']);
+    final workTitle = _text(e['workTitle']);
     final kind = switch (e['kind']) {
       'Series' || 'Movie' => UiSourceHitKind.work,
       'File' => UiSourceHitKind.file,
@@ -321,11 +347,15 @@ final class CoreSearch implements NextSearchData {
           originalTitle: _text(e['originalTitle']),
           year: _int(e['year']),
         ),
+        poster: poster,
+        workTitle: workTitle,
         reachable: reachable,
       );
     }
-    // A file's work is only known by its ID here; its page reads the rest.
-    final series = _text(meta['SeriesName']) ??
+    // A file's work is known by its name when bound; its page reads the
+    // rest.
+    final series = workTitle ??
+        _text(meta['SeriesName']) ??
         (kind == UiSourceHitKind.file ? null : title);
     final work = workId == null
         ? null
@@ -348,6 +378,8 @@ final class CoreSearch implements NextSearchData {
               title: title,
               playable: playable,
             ),
+      poster: poster,
+      workTitle: workTitle,
       playable: playable,
       reachable: reachable,
     );

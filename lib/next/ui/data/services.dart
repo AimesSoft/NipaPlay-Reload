@@ -12,6 +12,7 @@ import 'core_connect.dart';
 import 'core_manage.dart';
 import 'core_settings.dart';
 import 'background.dart';
+import 'batch_manage.dart';
 import 'collections.dart';
 import 'discover.dart';
 import 'downloads.dart';
@@ -76,6 +77,7 @@ final class NextUiServices {
   late final plugins = NextPlugins(calls);
   late final sync = NextSync(calls);
   late final folders = NextFolders(calls);
+  late final batch = NextBatch(calls, data);
   final VoidCallback? onDispose;
 
   void dispose() {

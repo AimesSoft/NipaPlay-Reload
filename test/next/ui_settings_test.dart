@@ -8,6 +8,7 @@ import 'package:nipaplay/next/ui/data/login_requests.dart';
 import 'package:nipaplay/next/ui/data/settings_data.dart';
 import 'package:nipaplay/next/ui/dev/fake_settings.dart';
 import 'package:nipaplay/next/ui/settings/controls.dart';
+import 'package:nipaplay/next/ui/settings/host_keys.dart';
 import 'package:nipaplay/next/ui/settings/registry_rows.dart';
 import 'package:nipaplay/next/ui/settings/section_host.dart';
 import 'package:nipaplay/next/ui/settings/settings_layout.dart';
@@ -34,6 +35,50 @@ void main() {
     await tester.pumpAndSettle();
     expect(data.writes, [false]);
     expect(tester.widget<NextToggle>(find.byType(NextToggle).last).value, false);
+    // A host without Classic's remote access shows none of it.
+    expect(find.text('远程访问'), findsNothing);
+  });
+
+  testWidgets('remote access is chosen whole; a device is forgotten by its key',
+      (tester) async {
+    final host = _RemoteHost();
+    await tester.pumpWidget(MaterialApp(
+      home: Material(
+          child: SingleChildScrollView(child: DevicesSection(host: host))),
+    ));
+    await tester.pumpAndSettle();
+    expect(find.text('远程访问服务未能启动'), findsOneWidget);
+    await tester.tap(find.byWidgetPredicate(
+        (w) => w is NextToggle && w.label == '远程访问'));
+    await tester.pumpAndSettle();
+    final c = host.choices.single;
+    expect((c.running, c.autoStart, c.port, c.ipv6, c.receiverEnabled),
+        (false, true, 1180, false, true));
+    await tester.tap(find.text('移除'));
+    await tester.pump();
+    await tester.tap(find.text('确定移除'));
+    await tester.pumpAndSettle();
+    expect(host.forgotten, ['tv']);
+  });
+
+  testWidgets('a host key: null keeps the other, empty clears it',
+      (tester) async {
+    final host = _RemoteHost();
+    final keys = HostKeys(host);
+    await tester.runAsync(keys.load);
+    await tester.pumpWidget(MaterialApp(
+      home: Material(child: HostKeyRow(keys: keys, which: HostKey.tmdb)),
+    ));
+    expect(find.text('已设置'), findsOneWidget);
+    await tester.enterText(find.byType(EditableText), ' tmdb-key ');
+    await tester.testTextInput.receiveAction(TextInputAction.done);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('清除'));
+    await tester.pump();
+    await tester.tap(find.text('确定清除'));
+    await tester.pumpAndSettle();
+    expect(host.keyWrites, [(null, 'tmdb-key'), (null, '')]);
+    keys.dispose();
   });
 
   group('a registry row becomes a control by its schema', () {
@@ -185,12 +230,32 @@ void main() {
           isNot(contains('labs_use_next_interface')));
     });
 
-    test('values are called by name; unknown ones show as they are', () {
-      expect(
-          SettingWords.choice('player.playbackEndAction', 'autoNext'), '下一集');
-      expect(SettingWords.choice('danmaku.outlineWidth', 2.0), '粗');
-      expect(SettingWords.choice('anything', 'system'), '跟随系统');
-      expect(SettingWords.choice('anything', 'zzz'), 'zzz');
+    test('values are called by the registry’s names; others as they are',
+        () {
+      final end = UiSetting.fromRow({
+        'key': 'player.playbackEndAction',
+        'type': 'string',
+        'enum': ['autoNext', 'loop'],
+        'enumNames': ['下一集', '重播'],
+      });
+      expect(end.nameOf('autoNext'), '下一集');
+      expect(end.nameOf('zzz'), 'zzz');
+      final width = UiSetting.fromRow({
+        'key': 'danmaku.outlineWidth',
+        'type': 'number',
+        'enum': [0.0, 1.0, 2.0],
+        'enumNames': ['无', '细', '粗'],
+      });
+      expect(width.nameOf(2.0), '粗');
+      final size = UiSetting.fromRow({
+        'key': 'danmaku.fontSize',
+        'type': 'number',
+        'minimum': 0,
+        'maximum': 60,
+        'valueNames': {'0': '设备默认'},
+      });
+      expect(size.nameOf(0.0), '设备默认');
+      expect(size.nameOf(24.0), '24');
     });
   });
 
@@ -306,6 +371,36 @@ final class _DeviceHost implements NextHostSettings {
   }
   @override
   dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
+}
+
+/// A host with Classic's remote access (stopped: it would not start) and
+/// both keys set, recording what the page hands it.
+final class _RemoteHost extends _DeviceHost implements NextHostDeviceSettings {
+  final choices = <UiRemoteAccessChoice>[];
+  final forgotten = <String>[];
+  final keyWrites = <(String?, String?)>[];
+
+  @override
+  Future<UiRemoteAccess> remoteAccess() async => const UiRemoteAccess(
+      running: true,
+      autoStart: true,
+      port: 1180,
+      ipv6: false,
+      receiverEnabled: true,
+      devices: [UiRemoteDevice(clientKey: 'tv', name: '客厅的电视')],
+      problem: '远程访问服务未能启动');
+  @override
+  Future<void> setRemoteAccess(UiRemoteAccessChoice choice) async =>
+      choices.add(choice);
+  @override
+  Future<void> forgetRemoteDevice(String clientKey) async =>
+      forgotten.add(clientKey);
+  @override
+  Future<UiHostKeys> keys() async =>
+      const UiHostKeys(spoilerAi: true, tmdb: true);
+  @override
+  Future<void> setKeys({String? spoilerAi, String? tmdb}) async =>
+      keyWrites.add((spoilerAi, tmdb));
 }
 
 /// The scripted settings (the built-in sample of the registry), recording

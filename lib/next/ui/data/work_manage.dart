@@ -4,7 +4,9 @@ import '../../ui_data/ui_data.dart';
 /// (its match, or a catalogue of its own), its words and pictures, which
 /// file is which episode, and each episode's danmaku, subtitles and files.
 /// Every change goes through the same Actions the agent uses
-/// (`Invocation(origin: 'gui')`); nothing here decides for NipaPlay.
+/// (`Invocation(origin: 'gui')`), on the device that has it
+/// (`media.management.targets`, then `mesh.invoke` for another one);
+/// nothing here decides for NipaPlay.
 ///
 /// Methods throw when NipaPlay refuses; the sheet says so in a word.
 abstract interface class NextWorkManage {
@@ -21,14 +23,17 @@ abstract interface class NextWorkManage {
   Future<List<UiCandidateEpisode>> candidateEpisodes(
       UiMatchCandidate candidate);
 
-  /// Matches [work] to [candidate]: each file in [files] to its episode
-  /// (`media.identity.unbind_batch` where a file was another episode, then
-  /// `media.identity.bind_batch`).
-  Future<void> match(UiManagedWork work, UiMatchCandidate candidate,
-      Map<UiFile, UiCandidateEpisode> files);
+  /// What matching [work] to [candidate] would touch, each file in
+  /// [files] to its episode, on every device that has one; applying it
+  /// lets go of what a file was first (`media.management.unbind_batch`,
+  /// then `media.management.bind_batch`, previewed, then with the plan).
+  Future<UiAssociation> previewMatch(UiManagedWork work,
+      UiMatchCandidate candidate, Map<UiFile, UiCandidateEpisode> files);
 
-  /// Lets go of the work's match (`media.identity.unbind_batch`).
-  Future<void> unmatch(UiManagedWork work);
+  /// What letting go of the work's match would touch, on every device
+  /// that has it (`media.management.unbind_batch`, previewed, then with
+  /// the plan).
+  Future<UiAssociation> previewUnmatch(UiManagedWork work);
 
   // —— 本地作品 ——
 
@@ -60,6 +65,10 @@ abstract interface class NextWorkManage {
 
   /// Titles of several episodes in one go (`media.metadata.override_batch`).
   Future<void> editEpisodeTitles(Map<UiManagedEpisode, String?> titles);
+
+  /// An episode's title back to what the sources say
+  /// (`media.metadata.override_batch`, `clear`).
+  Future<void> clearEpisodeTitle(UiManagedEpisode episode);
 
   /// Back to what the sources say (`media.metadata.override`, `clear`).
   Future<void> clearText(UiManagedWork work, UiTextField field);
@@ -117,10 +126,11 @@ abstract interface class NextWorkManage {
   /// (`subtitle.copy_delete`).
   Future<UiConfirm> deleteSubtitleCopies(UiSubtitles file);
 
-  /// Shows the file in Finder.
+  /// Shows the file in the file manager of the device it is on
+  /// (`media.files.reveal`).
   Future<void> reveal(UiFile file);
 
-  /// Deleting a file from disk: NipaPlay asks first
+  /// Deleting a file from the disk it is on: NipaPlay asks first
   /// (`media.mesh_files.delete`).
   Future<UiConfirm> deleteFile(UiFile file);
 
@@ -154,8 +164,9 @@ final class UiManagedWork {
     this.text = const {},
     this.art = const {},
     this.episodes = const [],
-    this.editable = true,
-    this.elsewhere,
+    this.device,
+    this.away = const [],
+    this.unavailable,
     this.handle,
   });
 
@@ -165,16 +176,27 @@ final class UiManagedWork {
   final Map<UiTextField, UiText> text;
   final Map<UiArtKind, UiArt> art;
 
-  /// The episodes NipaPlay has a file for on this device, in order.
+  /// The episodes with a file on a device that answers now, in order.
   final List<UiManagedEpisode> episodes;
 
-  /// False when nothing of it is on this device: it is changed where it
-  /// is ([elsewhere]).
-  final bool editable;
-  final String? elsewhere;
+  /// The device it is changed on when it is not on this one.
+  final String? device;
+
+  /// Devices with part of it that cannot be asked now, as said:
+  /// “旧笔记本不在线”.
+  final List<String> away;
+
+  /// Why nothing of it can be changed now, as said; null when it can.
+  final String? unavailable;
 
   /// What the data layer needs to find it again; never shown.
   final Object? handle;
+
+  bool get editable => unavailable == null;
+
+  /// On this device: files picked here (pictures, a work's own files)
+  /// can be given to it.
+  bool get here => device == null;
 
   List<UiFile> get files => [for (final e in episodes) ...e.files];
 }
@@ -261,6 +283,10 @@ final class UiManagedEpisode {
     this.title,
     this.titleEdited = false,
     this.files = const [],
+    this.locations = const [],
+    this.device,
+    this.away = const [],
+    this.unavailable,
     this.danmaku = const [],
     this.subtitles = const [],
     this.handle,
@@ -272,7 +298,22 @@ final class UiManagedEpisode {
   final int? season;
   final String? title;
   final bool titleEdited;
+
+  /// Its files, each once: what is matched, and whose subtitles are kept.
   final List<UiFile> files;
+
+  /// Every place a file of it is, on every device that answers now.
+  final List<UiFile> locations;
+
+  /// The device its danmaku and subtitles are changed on when it is not
+  /// on this one.
+  final String? device;
+
+  /// Devices with a file of it that cannot be asked now, as said.
+  final List<String> away;
+
+  /// Why nothing of it can be changed now, as said; null when it can.
+  final String? unavailable;
   final List<UiDanmakuTrack> danmaku;
 
   /// Per file.
@@ -305,12 +346,38 @@ final class UiFile {
     this.size,
     this.duration,
     this.modified,
+    this.device,
+    this.manager,
     this.handle,
   });
+
+  /// A place as `media.files.list` lists it.
+  factory UiFile.listed(Map<String, Object?> row,
+      {String? device, UiFileManager? manager, Object? handle}) {
+    final ms = row['durationMs'] as int?;
+    final modified = row['modifiedAt'] as String?;
+    return UiFile(
+      path: row['path'] as String,
+      size: row['size'] as int?,
+      duration: ms == null ? null : Duration(milliseconds: ms),
+      modified: modified == null ? null : DateTime.tryParse(modified),
+      device: device,
+      manager: manager,
+      handle: handle,
+    );
+  }
+
+  /// As its device knows it.
   final String path;
   final int? size;
   final Duration? duration;
   final DateTime? modified;
+
+  /// The device it is on, by the name its host gave it; null for this one.
+  final String? device;
+
+  /// How that device shows a file; null when it has no file manager.
+  final UiFileManager? manager;
   final Object? handle;
 
   String get name => path.split(RegExp(r'[\\/]')).last;
@@ -320,10 +387,56 @@ final class UiFile {
   }
 
   @override
-  bool operator ==(Object other) => other is UiFile && other.path == path;
+  bool operator ==(Object other) =>
+      other is UiFile && other.path == path && other.device == device;
 
   @override
-  int get hashCode => path.hashCode;
+  int get hashCode => Object.hash(path, device);
+}
+
+/// A device's file manager, as its own words for showing a file.
+enum UiFileManager {
+  finder('在 Finder 中显示'),
+  explorer('在资源管理器中显示'),
+  folder('打开所在文件夹');
+
+  const UiFileManager(this.label);
+  final String label;
+
+  /// By the device's operating system (`Platform.operatingSystem`).
+  static UiFileManager? of(Object? platform) => switch (platform) {
+        'macos' => finder,
+        'windows' => explorer,
+        'linux' => folder,
+        _ => null,
+      };
+}
+
+/// `media.files.reveal`'s answer: refused unless every path was taken.
+void uiRevealed(Map<String, Object?> result) {
+  for (final r in (result['results'] as List).cast<Map>()) {
+    if (r['requested'] != true) {
+      throw UiManageError(message: '${(r['error'] as Map?)?['message']}');
+    }
+  }
+}
+
+/// Why a device that has a work cannot be asked now
+/// (`media.management.targets`), in a phrase; null when it can.
+String? uiAway(Map<String, Object?> target, String? name) {
+  if (target['online'] == true) return null;
+  final device = uiSpaced(name ?? '另一台设备');
+  return target['reason'] == 'source_device_offline'
+      ? '$device不在线'
+      : '$device现在连不上';
+}
+
+/// A device's name as it runs into Chinese: a space after (and with
+/// [before], before) Latin letters or digits — “书房的 Mac 不在线”.
+String uiSpaced(String name, {bool before = false}) {
+  final latin = RegExp(r'[A-Za-z0-9]');
+  return '${before && latin.hasMatch(name[0]) ? ' ' : ''}$name'
+      '${latin.hasMatch(name[name.length - 1]) ? ' ' : ''}';
 }
 
 final class UiDanmakuTrack {
@@ -415,6 +528,85 @@ final class UiConfirm {
   /// As the viewer knows them: file names.
   final List<String> items;
   final Future<void> Function() run;
+}
+
+/// A change of matches as NipaPlay previews it: what it touches, and
+/// doing it as previewed. Files, progress and sources' records stay.
+final class UiAssociation {
+  const UiAssociation({
+    this.works = const [],
+    this.episodes = 0,
+    this.files = 0,
+    this.watched = 0,
+    this.sources = const [],
+    this.devices = const [],
+    required this.apply,
+  });
+
+  /// What `media.management.bind_batch`/`unbind_batch` previews say,
+  /// together (each preview's `preview`).
+  factory UiAssociation.fromPreviews(Iterable<Map<String, Object?>> previews,
+      {List<String?> devices = const [],
+      required Future<void> Function() apply}) {
+    final seen = <String>{};
+    final works = <String>[];
+    final sources = <String>{};
+    var episodes = 0, files = 0, watched = 0;
+    for (final preview in previews) {
+      for (final e in (preview['entities'] as List).cast<Map>()) {
+        final entity = e['entity'] as Map;
+        if (!seen.add(entity['id'] as String)) continue;
+        switch (entity['kind']) {
+          case 'work':
+            if ((entity['attributes'] as Map)['title'] case final String t) {
+              works.add(t);
+            }
+          case 'episode':
+            episodes++;
+          case 'file':
+            files++;
+            if ((e['progress'] as List).cast<Map>().any((p) =>
+                (p['watchProgress'] as num? ?? 0) > 0 ||
+                (p['lastPosition'] as num? ?? 0) > 0)) {
+              watched++;
+            }
+        }
+        for (final s in (e['sources'] as List).cast<Map>()) {
+          if (s['status'] != 'accepted') continue;
+          for (final p in UiProvider.values) {
+            if (p.name == s['provider']) sources.add(p.label);
+          }
+        }
+      }
+    }
+    return UiAssociation(
+      works: works,
+      episodes: episodes,
+      files: files,
+      watched: watched,
+      sources: sources.toList(),
+      devices: devices,
+      apply: apply,
+    );
+  }
+
+  /// The works it touches, by title.
+  final List<String> works;
+  final int episodes;
+  final int files;
+
+  /// Files with progress; it stays.
+  final int watched;
+
+  /// The matches now on what it touches: 弹弹play, TMDB.
+  final List<String> sources;
+
+  /// Where it happens: device names, null for this one.
+  final List<String?> devices;
+
+  /// Throws [UiManageError] with `conflict` when something changed since
+  /// the preview: preview again.
+  final Future<void> Function() apply;
 }
 
 /// The way back from a removal.

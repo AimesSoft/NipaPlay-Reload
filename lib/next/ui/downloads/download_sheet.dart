@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/widgets.dart';
+import 'package:nipa_harness/nipa_harness.dart' show JsonMap;
 
 import '../data/downloads.dart';
 import '../data/gui_calls.dart';
@@ -142,8 +143,36 @@ class _DownloadSheetState extends State<DownloadSheet>
       ],
     );
     if (choice == null) return;
-    await _run(() => _downloads.remove(widget.jobId, files: choice == 1));
-    if (_said == null) widget.onClose();
+    await _remove(files: choice == 1);
+  }
+
+  /// With [files], the capability's own question (the files) comes up;
+  /// what its option starts is a deletion task, not this download.
+  Future<void> _remove({required bool files}) async {
+    final calls = widget.services.calls;
+    JsonMap? done;
+    await _run(() async {
+      try {
+        done = await withDecisions(
+            calls, () => _downloads.remove(widget.jobId, files: files));
+      } on DeletionNeeded catch (asked) {
+        final items = asked.items;
+        final i = await chooseSheet(
+          title: asked.prompt,
+          detail: items.isEmpty
+              ? null
+              : (items.length > 4 ? [...items.take(3), '…'] : items)
+                  .join('\n'),
+          choices: [
+            for (final o in asked.options)
+              SheetChoice(o.label, detail: o.detail, danger: true)
+          ],
+        );
+        if (i == null) return;
+        done = await withDecisions(calls, () => calls.choose(asked.options[i]));
+      }
+    });
+    if (done != null && _said == null) widget.onClose();
   }
 
   Future<void> _play(UiDownloadFile f) =>
@@ -173,7 +202,25 @@ class _DownloadSheetState extends State<DownloadSheet>
       _choose(next);
     }
     if (p['pause'] case final v?) unawaited(_pause(v == 'true'));
-    if (p['delete'] == 'ask') unawaited(_delete());
+    switch (p['delete']) {
+      case 'ask':
+        unawaited(_delete());
+      case 'task':
+        unawaited(_remove(files: false));
+      case 'files':
+        unawaited(_remove(files: true));
+      // As if its option were chosen at once.
+      case 'request':
+        unawaited(_run(() async {
+          try {
+            await _downloads.remove(widget.jobId, files: true);
+          } on DeletionNeeded catch (asked) {
+            await widget.services.calls.choose(asked.options.first);
+          }
+        }).then((_) {
+          if (mounted && _said == null) widget.onClose();
+        }));
+    }
   }
 
   @override

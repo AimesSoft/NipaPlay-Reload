@@ -6,13 +6,16 @@ import '../../ui_data/library.dart';
 import '../../ui_data/ui_data.dart';
 import '../data/collections.dart';
 import '../data/gui_calls.dart';
+import '../settings/controls.dart' show PillButton;
 import '../shell/shell_controller.dart';
 import '../theme/tokens.dart';
+import 'batch_bar.dart' show batchBarRoom;
 import 'category_grid.dart';
 
 /// The library's works the person marked [status] on their accounts, as
-/// the library's grid of posters (a sliver). Read again when the library
-/// or a standing changes.
+/// the library's grid of posters (a sliver), or the accounts to sign in to
+/// when none is. Read again when the library, a standing or the accounts
+/// change.
 class StatusView extends StatefulWidget {
   const StatusView({super.key, required this.status, required this.on});
   final UiWatchStatus status;
@@ -29,6 +32,10 @@ class _StatusViewState extends State<StatusView> {
   String? _said;
   int _reads = 0;
 
+  /// No account is signed in to list by.
+  bool _signedOut = false;
+  String? _signing;
+
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
@@ -41,7 +48,9 @@ class _StatusViewState extends State<StatusView> {
     _changes
       ..clear()
       ..add(shell.services.data.changes.listen((_) => _load()))
-      ..add(shell.services.collections.changes.listen((_) => _load()));
+      ..add(shell.services.collections.changes.listen((_) => _load()))
+      // Signing in or out changes which account lists.
+      ..add(shell.services.settings.changes.listen((_) => _load()));
     _load();
   }
 
@@ -66,11 +75,17 @@ class _StatusViewState extends State<StatusView> {
     final read = ++_reads;
     final services = _shell!.services;
     try {
-      final ids = await services.collections.works(widget.status) ?? const [];
-      final works = await Future.wait(ids.map(services.data.work));
+      final ids = await services.collections.works(widget.status);
+      final works = await Future.wait((ids ?? const []).map(services.data.work));
       if (!mounted || read != _reads) return;
+      // Bindings of one work on several devices are one work here.
+      final seen = <String>{};
       setState(() {
-        _works = works.whereType<UiWork>().toList();
+        _signedOut = ids == null;
+        _works = [
+          for (final w in works.whereType<UiWork>())
+            if (seen.add(w.workId)) w
+        ];
         _said = null;
       });
     } catch (error) {
@@ -79,8 +94,43 @@ class _StatusViewState extends State<StatusView> {
     }
   }
 
+  Future<void> _login(String provider) async {
+    setState(() {
+      _signing = provider;
+      _said = null;
+    });
+    try {
+      await _shell!.services.settings.login(provider);
+    } catch (error) {
+      if (mounted) setState(() => _said = callFailure(error));
+    }
+    if (mounted) setState(() => _signing = null);
+  }
+
   @override
   Widget build(BuildContext context) {
+    if (_signedOut) {
+      return SliverPadding(
+        padding: const EdgeInsets.only(left: NextMetrics.gutter),
+        sliver: SliverToBoxAdapter(
+          child: Row(children: [
+            for (final (provider, name) in const [
+              ('bangumi', 'Bangumi'),
+              ('dandanplay', '弹弹play'),
+            ]) ...[
+              PillButton(
+                label: '登录 $name',
+                busy: _signing == provider,
+                onTap: _signing == null ? () => _login(provider) : null,
+              ),
+              const SizedBox(width: 10),
+            ],
+            if (_said != null)
+              Text(_said!, style: NextText.sans(12, color: NextColors.amber)),
+          ]),
+        ),
+      );
+    }
     final works = _works;
     final said = _said ?? (works != null && works.isEmpty ? '这里还空着。' : null);
     return SliverAnimatedOpacity(
@@ -103,7 +153,8 @@ class _StatusViewState extends State<StatusView> {
   Widget _grid(List<UiWork> works) {
     final deviceLine = works.any((w) => w.devices.isNotEmpty);
     return SliverPadding(
-      padding: const EdgeInsets.fromLTRB(NextMetrics.gutter, 0, 56, 64),
+      padding: const EdgeInsets.fromLTRB(
+          NextMetrics.gutter, 0, 56, batchBarRoom),
       sliver: SliverLayoutBuilder(builder: (context, constraints) {
         const gap = CategoryGrid.gap;
         final width = constraints.crossAxisExtent;

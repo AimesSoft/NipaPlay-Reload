@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:core' as core;
 import 'dart:core';
 
@@ -19,7 +20,8 @@ import 'package:nipaplay/next/ui/downloads/download_sheet.dart';
 import 'package:nipaplay/next/ui/widgets/buttons.dart';
 import 'package:nipaplay/next/ui/widgets/sheet.dart';
 
-/// Scripted Actions: each answers from [answers]; every call is kept.
+/// Scripted Actions: each answers from [answers] (a [Decision] asks);
+/// every call is kept.
 final class _Script {
   _Script(this.answers);
   final Map<String, Object Function(JsonMap input)> answers;
@@ -60,8 +62,9 @@ final class _Action extends Action<_Json, _Json> {
   @override
   Future<Outcome<_Json>> run(_Json input, Invocation invocation) async {
     try {
-      return Completed(
-          _Json(Map<String, Object?>.from(answer(input.value) as Map)));
+      final out = answer(input.value);
+      if (out is Decision) return NeedsDecision(out);
+      return Completed(_Json(Map<String, Object?>.from(out as Map)));
     } on Failure catch (f) {
       return Failed(f);
     }
@@ -118,6 +121,38 @@ JsonMap _task({bool paused = false, bool finished = false, String? error}) => {
         },
       ],
     };
+
+/// `download.delete` as the GUI gets it: the manifest, and one option.
+final _deleteQuestion = Decision(
+  prompt: '删除这些下载文件：${jsonEncode({
+        'downloads': [
+          {
+            'jobId': 'a',
+            'infoHash': 'abc',
+            'outputDirectory': '/m/NipaPlay',
+            'files': [
+              {
+                'path': '/m/NipaPlay/Frieren/01.mkv',
+                'local': true,
+                'expectedSize': 600,
+                'included': true
+              },
+              {
+                'path': '/m/NipaPlay/Frieren/Fonts.7z',
+                'local': true,
+                'expectedSize': 400,
+                'included': false
+              },
+            ],
+          }
+        ]
+      })}',
+  options: const [
+    DecisionOption(
+        label: '请求删除',
+        call: ActionCall('download.delete.request', {'previewId': 'p1'})),
+  ],
+);
 
 void main() {
   group('downloads, as the pages read them', () {
@@ -222,6 +257,57 @@ void main() {
       expect(set.down, 1 << 20);
       expect(script.calls.last.$2, {'downloadBytesPerSecond': 1 << 20});
     });
+
+    test('a torrent file or address is previewed as a magnet is', () async {
+      final script = _Script({
+        'download.preview': (input) => {
+              'name': 'Frieren',
+              'suggestedFolderName': 'Frieren',
+              'totalSize': 1000,
+              'files': [
+                {'index': 0, 'path': 'Frieren/01.mkv', 'length': 600},
+                {'index': 1, 'path': 'Frieren/Fonts.7z', 'length': 400},
+              ],
+            },
+      });
+      final downloads = NextDownloads(script.gui);
+      for (final source in [
+        '/Users/h/Frieren.torrent',
+        'file:///Users/h/Frieren.torrent',
+        'https://example.org/Frieren.torrent',
+      ]) {
+        final preview = await downloads.preview(source);
+        expect([script.calls.last.$1, script.calls.last.$2],
+            ['download.preview', {'source': source}]);
+        expect(preview.size, 1000);
+        expect([for (final f in preview.files) (f.name, f.size, f.video)],
+            [('01.mkv', 600, true), ('Fonts.7z', 400, false)]);
+      }
+    });
+
+    test('removing keeps the files; deleting them asks first, its option '
+        'as it is', () async {
+      final script = _Script({
+        'download.remove': (_) => {'job': _job('a', 'cancelled')},
+        'download.delete': (_) => _deleteQuestion,
+      });
+      final downloads = NextDownloads(script.gui);
+      await downloads.remove('a', files: false);
+      expect([script.calls.single.$1, script.calls.single.$2],
+          ['download.remove', {'jobId': 'a'}]);
+
+      await expectLater(
+          downloads.remove('a', files: true),
+          throwsA(isA<DeletionNeeded>()
+              .having((d) => d.prompt, 'prompt', '删除 2 个文件')
+              .having((d) => d.items, 'items', ['Frieren'])
+              .having((d) => d.options.single.call.toJson(), 'call', {
+            'action': 'download.delete.request',
+            'input': {'previewId': 'p1'}
+          })));
+      expect([script.calls.last.$1, script.calls.last.$2],
+          ['download.delete', {'jobId': 'a'}]);
+    });
   });
 
   group('background work', () {
@@ -297,8 +383,9 @@ void main() {
     });
   });
 
-  testWidgets('the sheet: choosing files, then deleting with the files',
-      (tester) async {
+  testWidgets(
+      'the sheet: choosing files, then deleting with the files through '
+      'the capability\'s question', (tester) async {
     var task = _task();
     final script = _Script({
       'download.read': (_) => {'job': _job('a', 'running'), 'task': task},
@@ -316,7 +403,14 @@ void main() {
         };
         return {'job': _job('a', 'running'), 'task': task};
       },
-      'download.delete': (_) => {'job': _job('a', 'cancelled')},
+      'download.delete': (_) => _deleteQuestion,
+      'download.delete.request': (_) => {
+            'job': {
+              'jobId': 'deletion-1',
+              'type': 'disk_deletion',
+              'state': 'queued'
+            }
+          },
     });
     final services = NextUiServices(
       data: _Stub(),
@@ -354,8 +448,20 @@ void main() {
     expect(find.text('连同文件删除'), findsOneWidget);
     await tester.tap(find.text('连同文件删除'));
     await tester.pump(const Duration(milliseconds: 400));
-    expect(script.calls.map((c) => c.$1), contains('download.delete'));
+    expect(find.text('删除 2 个文件'), findsOneWidget);
+    expect(find.text('Frieren'), findsOneWidget);
+    await tester.tap(find.text('请求删除'));
+    await tester.pump(const Duration(milliseconds: 400));
+    expect([
+      for (final c in script.calls)
+        if (c.$1.startsWith('download.delete')) [c.$1, c.$2]
+    ], [
+      ['download.delete', {'jobId': 'a'}],
+      ['download.delete.request', {'previewId': 'p1'}],
+    ]);
     expect(script.calls.map((c) => c.$1), isNot(contains('download.remove')));
+    // The deletion is a task of its own, never read as a download.
+    expect(script.calls.where((c) => c.$2['jobId'] == 'deletion-1'), isEmpty);
     await shown;
     expect(NextSheetLayer.open, 0);
     await tester.pumpWidget(const SizedBox());

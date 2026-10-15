@@ -6,15 +6,25 @@ part of 'fake_world.dart';
 /// open their library page); and every source on its own: the Jellyfin's
 /// series and episodes, the shares' files (some in no work), and the Emby
 /// that cannot be reached. Each answers after its own delay; [failing] ones
-/// fail on demand.
+/// fail on demand. What the library has comes with its picture and its
+/// work's name; a server's other items have theirs fetched on request.
 final class FakeSearch implements NextSearchData {
   FakeSearch(this.world);
   final FakeWorld world;
 
   /// What fails (`search fail=`): `library`, `online`, `sources` (their
-  /// list) or a source by its ID. At first the Emby, which the library
-  /// shows as out of reach.
+  /// list), `artwork` (fetching a source's picture) or a source by its ID.
+  /// At first the Emby, which the library shows as out of reach.
   final failing = <String>{'emby'};
+
+  /// The pictures a server holds that its search did not bring, by item.
+  final _pictures = <String, String?>{};
+
+  @override
+  Future<String?> sourceArtwork(UiSourceHit hit) async {
+    await _answer('artwork', 450);
+    return _pictures[hit.itemId];
+  }
 
   static bool _matches(UiWork w, String q) =>
       w.title.toLowerCase().contains(q) ||
@@ -150,9 +160,12 @@ final class FakeSearch implements NextSearchData {
     for (final key in keys) {
       final w = world.catalog.work(key);
       if (!_matches(w, q)) continue;
+      final itemId = '${source.sourceId}:$key';
+      final bound = world.catalog.owns(key);
+      if (!bound) _pictures[itemId] = w.artwork.poster;
       yield UiSourceHit(
         source: source,
-        itemId: '${source.sourceId}:$key',
+        itemId: itemId,
         kind: UiSourceHitKind.work,
         title: w.title,
         work: UiWork(
@@ -160,6 +173,8 @@ final class FakeSearch implements NextSearchData {
             title: w.title,
             originalTitle: w.originalTitle,
             year: w.year),
+        poster: bound ? w.artwork.poster : null,
+        workTitle: bound ? w.title : null,
       );
     }
     for (final key in keys) {
@@ -167,12 +182,17 @@ final class FakeSearch implements NextSearchData {
       for (final e in world._episodesOf(key)) {
         if (!(e.title?.toLowerCase().contains(q) ?? false)) continue;
         final w = world.catalog.work(key);
+        final itemId = '${source.sourceId}:${e.episodeId}';
+        final bound = world.catalog.owns(key);
+        if (!bound) _pictures[itemId] = e.still;
         yield UiSourceHit(
           source: source,
-          itemId: '${source.sourceId}:${e.episodeId}',
+          itemId: itemId,
           kind: UiSourceHitKind.episode,
           title: e.title!,
           work: UiWork(workId: w.workId, title: w.title),
+          poster: bound ? e.still : null,
+          workTitle: bound ? w.title : null,
           episode: UiEpisode(
               episodeId: e.episodeId,
               workId: w.workId,
@@ -186,9 +206,9 @@ final class FakeSearch implements NextSearchData {
   }
 
   /// A share's files by name: the recognised ones are an episode of their
-  /// work (known by its ID only); the others are in no work and play from
-  /// the share. The WebDAV share was never checked: whether it plays is
-  /// unknown.
+  /// work (with its name, and its poster when the library has it); the
+  /// others are in no work and play from the share. The WebDAV share was
+  /// never checked: whether it plays is unknown.
   Iterable<UiSourceHit> _files(UiSearchSource source, String q,
       {required bool reachable}) sync* {
     final playable = reachable &&
@@ -221,13 +241,15 @@ final class FakeSearch implements NextSearchData {
         itemId: '/动画/$name',
         kind: UiSourceHitKind.file,
         title: name,
-        work: UiWork(workId: w.workId, title: ''),
+        work: UiWork(workId: w.workId, title: w.title),
         episode: UiEpisode(
             episodeId: first.episodeId,
             workId: w.workId,
             number: 0,
             title: name,
             playable: playable),
+        poster: world.catalog.owns(key) ? w.artwork.poster : null,
+        workTitle: w.title,
         playable: playable,
         reachable: reachable,
       );

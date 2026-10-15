@@ -31,6 +31,8 @@ import '../pages/discover_page.dart';
 import '../panel/chat_panel.dart';
 import '../widgets/drop_zone.dart';
 import '../shell/next_ui_preference.dart';
+import '../library/batch_bar.dart';
+import '../library/batch_sheet.dart';
 import '../library/category_page.dart';
 import '../library/fan_cover.dart';
 import '../pages/library_page.dart';
@@ -138,9 +140,17 @@ import '../settings/settings_page.dart';
 ///   Emby), its recent terms cleared; returns what it shows.
 /// - `manage` [`open=work|episode|none`] [`section=`] [`episode=N`]
 ///   [`tileMenu=N|none`] [`fail=read,search,…|none`] [`conflict=true`]
-///   …: the detail page's management sheets (see
+///   [`stale=true`] …: the detail page's management sheets (see
 ///   `WorkDetailDebug.debugManage`); `fail` makes the scripted world
-///   refuse those operations.
+///   refuse those operations, `stale` the next previewed match find
+///   things changed.
+/// - `batch` [`select=N|all`] [`menu=N`] [`open=refresh|match|unmatch`]
+///   [`end=true`], then for the sheet up [`confirm=true`] [`provider=`]
+///   [`expand=N|none`] [`pick=N:K|N:skip`] [`query=N:text`] [`back=true`]
+///   [`wait=ms`], and for the scripted world
+///   [`fault=refresh,conflict,bind,unbind|none`]: picking works on the
+///   片库 page (or the category on top) and the batch sheets (see
+///   `BatchDebug`, `BatchSheetDebug`).
 abstract final class NextUiDebug {
   static NextShellController? _shell;
   static BuildContext? _context;
@@ -313,9 +323,11 @@ abstract final class NextUiDebug {
               ..addAll(f == 'none' ? const [] : f.split(','));
           }
           if (p['conflict'] case final c?) fake.conflict = c == 'true';
+          if (p['stale'] case final c?) fake.stale = c == 'true';
         }
-        final result = await page.debugManage(
-            {...p}..removeWhere((k, _) => k == 'fail' || k == 'conflict'));
+        final result = await page.debugManage({...p}
+          ..removeWhere(
+              (k, _) => k == 'fail' || k == 'conflict' || k == 'stale'));
         await _settle();
         return {...result, ..._status(shell)};
       case 'detail':
@@ -593,11 +605,17 @@ abstract final class NextUiDebug {
       case 'settings':
         final settings = shell.services.settings;
         Map<String, Object?>? world;
-        if (const ['model', 'mesh', 'account'].any(p.containsKey)) {
+        if (const ['model', 'mesh', 'account', 'keys', 'remote', 'trusted',
+          'remember'].any(p.containsKey)) {
           if (settings is! FakeSettings) {
             throw StateError('model, mesh and account need the scripted world');
           }
           world = settings.scenario(p);
+        }
+        if (p['syncpass'] case final saved?) {
+          final data = shell.services.data;
+          if (data is! FakeWorld) throw StateError('Needs the scripted world');
+          data.calls.syncPassword = saved == 'true';
         }
         if (p['open'] == 'false') {
           if (shell.settingsOpen) shell.navigatorKey.currentState?.pop();
@@ -704,6 +722,37 @@ abstract final class NextUiDebug {
           'limits': calls.limitsMode,
           ..._status(shell)
         };
+      // Y13: picking works in the library, doing things to them together.
+      case 'batch':
+        final world = shell.services.data;
+        if (p['fault'] case final fault?) {
+          if (world is! FakeWorld) throw StateError('Needs the scripted world');
+          world.calls.batchFaults
+            ..clear()
+            ..addAll(
+                fault.split(',').where((f) => f.isNotEmpty && f != 'none'));
+        }
+        final host = _find<BatchDebug>();
+        if (host == null && _find<BatchSheetDebug>() == null) {
+          throw StateError('No library grid is showing');
+        }
+        await host?.debug(p);
+        await Future<void>.delayed(const Duration(milliseconds: 500));
+        if (p['open'] == null) {
+          if (_find<BatchSheetDebug>() case final sheet?) {
+            await sheet.debug(p);
+            await Future<void>.delayed(Duration(
+                milliseconds: int.tryParse(p['wait'] ?? '') ?? 900));
+          }
+        }
+        await _settle();
+        return {
+          ...?host?.debugStatus(),
+          if (_find<BatchSheetDebug>() case final sheet?)
+            'sheet': sheet.debugStatus(),
+          if (world is FakeWorld) 'faults': world.calls.batchFaults.toList(),
+          ..._status(shell),
+        };
       case 'reduce':
         NextMotion.forceReduced = switch (p['on']) {
           'true' => true,
@@ -762,10 +811,12 @@ abstract final class NextUiDebug {
           RecentEntry(:final text) => text,
           WorkEntry(:final work, :final inLibrary) =>
             inLibrary ? '${work.title} (in library)' : work.title,
-          SourceEntry(:final hit) => '${hit.kind.name} ${hit.title} '
-              '(${hit.source.name}'
-              '${hit.playable ? ', plays' : ''}'
-              '${hit.reachable ? '' : ', unreachable'})',
+          final SourceEntry e => '${e.hit.kind.name} ${e.hit.title} '
+              '(${e.hit.source.name}'
+              '${e.hit.workTitle == null ? '' : ', ${e.hit.workTitle}'}'
+              '${s.artworkOf(e) == null ? '' : ', pictured'}'
+              '${e.hit.playable ? ', plays' : ''}'
+              '${e.hit.reachable ? '' : ', unreachable'})',
           EpisodeEntry(:final work, :final episode) =>
             '${work.title} ${episode.number} ${episode.title ?? ''}',
           NipaEntry(:final text) => 'nipa: $text',

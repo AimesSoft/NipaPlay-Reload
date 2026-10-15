@@ -105,6 +105,7 @@ void main() {
       'syncing': false,
       'lastSyncAt': at.toIso8601String(),
       'lastError': '',
+      'hasPassword': true,
     });
     expect(s.url, 'https://dav.example.net/dav');
     expect(s.username, 'hikari');
@@ -116,6 +117,7 @@ void main() {
     expect(s.configured, isTrue);
     expect(s.last, at.toLocal());
     expect(s.error, isNull);
+    expect(s.hasPassword, isTrue);
 
     final fresh = UiSync.from({
       'configuration': {'url': '', 'categories': []},
@@ -126,9 +128,33 @@ void main() {
     expect(fresh.minutes, 30);
     expect(fresh.last, isNull);
     expect(fresh.error, 'Unauthorized');
+    expect(fresh.hasPassword, isFalse);
 
     final world = _World()..syncAnswers = false;
     expect(await NextSync(world.calls).test(), isFalse);
+  });
+
+  test('a plugin’s own actions: listed, invoked as the person by id',
+      () async {
+    final p = UiPlugin.from({
+      'id': 'bilibili-danmaku',
+      'name': 'B 站弹幕',
+      'actions': [
+        {'id': 'login', 'title': '登录哔哩哔哩', 'description': '扫码登录'},
+      ],
+    }, installed: true);
+    expect([for (final a in p.actions) (a.id, a.title)],
+        [('login', '登录哔哩哔哩')]);
+    expect(UiPlugin.from({'id': 'x'}, installed: true).actions, isEmpty);
+
+    final world = _World();
+    final plugins = NextPlugins(world.calls);
+    final r = UiPluginResult.from(await plugins.invoke('bilibili-danmaku', 'login'));
+    expect(world.invoked.single, {'id': 'bilibili-danmaku', 'actionId': 'login'});
+    expect(world.origins.single, 'gui');
+    expect((r!.title, r.content), ('已登录', 'hikari'));
+    expect(UiPluginResult.from({'id': 'x', 'actionId': 'y', 'result': null}),
+        isNull);
   });
 
   test('folders: roots, the files a scan could not take, where each is',
@@ -209,6 +235,8 @@ final class _World {
   JsonMap? checked;
   bool downloadsElsewhere = false;
   bool syncAnswers = true;
+  final invoked = <JsonMap>[];
+  final origins = <String?>[];
 
   late final harness = Harness([
     _Capability([
@@ -253,6 +281,13 @@ final class _World {
       }),
       _Action('app.update.status',
           (_) => {'checking': false, 'result': checked}),
+      _Action('plugins.invoke', (input) {
+        invoked.add(input);
+        return {
+          ...input,
+          'result': {'type': 'text', 'title': '已登录', 'content': 'hikari'}
+        };
+      }, origins: origins),
       _Action('sync.test', (_) {
         if (!syncAnswers) {
           throw const Failure(FailureCode.unavailable, 'No server.');
@@ -288,9 +323,10 @@ final class _Json implements JsonEncodable {
 }
 
 final class _Action extends Action<_Json, _Json> {
-  _Action(this.id, this.answer);
+  _Action(this.id, this.answer, {this.origins});
   final String id;
   final JsonMap Function(JsonMap input) answer;
+  final List<String?>? origins;
 
   @override
   ActionSpec get spec => ActionSpec(
@@ -307,6 +343,7 @@ final class _Action extends Action<_Json, _Json> {
 
   @override
   Future<Outcome<_Json>> run(_Json input, h.Invocation invocation) async {
+    origins?.add(invocation.origin);
     try {
       return Completed(_Json(answer(input.value)));
     } on Failure catch (f) {

@@ -283,6 +283,12 @@ final class CoreSettingsData implements NextSettingsData {
     _changes.add(null);
   }
 
+  /// Nipa's memory writes are recorded in the same database the UI data
+  /// watches.
+  @override
+  Stream<void> get memoryChanges => Stream.fromFuture(core.ready)
+      .asyncExpand((_) => core.uiData.changes);
+
   // —— 关于 ——
 
   @override

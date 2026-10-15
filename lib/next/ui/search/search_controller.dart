@@ -381,6 +381,33 @@ class NextSearch extends ChangeNotifier {
     });
   }
 
+  /// The pictures fetched for source rows that came without one, by row;
+  /// null when the source has none or could not give it. Each is asked
+  /// for once.
+  final _artwork = <String, String?>{};
+
+  /// [entry]'s picture: the search's, or the one fetched for it.
+  String? artworkOf(SourceEntry entry) =>
+      entry.hit.poster ?? _artwork[entry.key];
+
+  /// A source row is showing: the picture it came without is fetched.
+  void wantArtwork(SourceEntry entry) {
+    final hit = entry.hit;
+    if (hit.poster != null ||
+        !hit.hasArtwork ||
+        _artwork.containsKey(entry.key)) {
+      return;
+    }
+    _artwork[entry.key] = null;
+    Future.sync(() => data.sourceArtwork(hit)).then((path) {
+      if (path == null) return;
+      _artwork[entry.key] = path;
+      _changed();
+    }, onError: (Object error) {
+      debugPrint('[NextUi] search artwork failed: $error');
+    });
+  }
+
   /// Puts [term] in the box and searches it at once (a recent term).
   void searchNow(String term) {
     text.value = TextEditingValue(

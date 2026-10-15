@@ -186,26 +186,29 @@ class DownloadListState extends State<DownloadList>
         list?.where((d) => d.state == UiDownloadState.downloading).toList() ??
             const [];
     final rate = running.fold<int>(0, (n, d) => n + d.down);
-    return ConstrainedBox(
-      constraints: const BoxConstraints(maxWidth: 760),
-      child: Row(children: [
-        if (running.isNotEmpty) ...[
-          Text('↓', style: NextText.sans(13, color: NextColors.accent2)),
-          const SizedBox(width: 5),
-          Text(rateText(rate), style: NextText.num(14)),
-          const SizedBox(width: 10),
-          Text('${running.length} 个在下载',
-              style: NextText.sans(13, color: NextColors.p3)),
-        ],
-        const Spacer(),
-        if (_said != null) ...[
-          Text(_said!, style: NextText.sans(12.5, color: NextColors.accent2)),
-          const SizedBox(width: 12),
-        ],
-        PillButton(label: '限速', onTap: () => openLimits(_shell!.services)),
-        const SizedBox(width: 8),
-        PillButton(label: '新建下载', primary: true, onTap: _new),
-      ]),
+    return Align(
+      alignment: Alignment.centerLeft,
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 760),
+        child: Row(children: [
+          if (running.isNotEmpty) ...[
+            Text('↓', style: NextText.sans(13, color: NextColors.accent2)),
+            const SizedBox(width: 5),
+            Text(rateText(rate), style: NextText.num(14)),
+            const SizedBox(width: 10),
+            Text('${running.length} 个在下载',
+                style: NextText.sans(13, color: NextColors.p3)),
+          ],
+          const Spacer(),
+          if (_said != null) ...[
+            Text(_said!, style: NextText.sans(12.5, color: NextColors.accent2)),
+            const SizedBox(width: 12),
+          ],
+          PillButton(label: '限速', onTap: () => openLimits(_shell!.services)),
+          const SizedBox(width: 8),
+          PillButton(label: '新建下载', primary: true, onTap: _new),
+        ]),
+      ),
     );
   }
 }

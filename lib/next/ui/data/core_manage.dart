@@ -1,4 +1,3 @@
-import 'dart:io';
 import 'dart:math' as math;
 
 import 'package:file_selector/file_selector.dart' show XTypeGroup, openFile;
@@ -6,14 +5,18 @@ import 'package:nipa_harness/nipa_harness.dart';
 
 import '../../ui_data/ui_data.dart';
 import 'work_manage.dart';
+import 'work_owners.dart';
+
+typedef _Owner = WorkOwner;
 
 /// [NextWorkManage] through the harness, as the person (`origin: gui`).
 ///
 /// The interface knows works and episodes by their merged library IDs;
-/// most media Actions take the local catalogue's. A work's local IDs are
-/// read the way the agent would: `media.library.readable` names each
-/// episode's local episode and file, `media.identity.get` walks up to the
-/// release and the work. Nothing is inferred from names.
+/// media Actions take each device's own. `media.management.targets` names
+/// the devices that have a work and their own work, episode and file IDs:
+/// this device's are asked directly, another's through `mesh.invoke`, so
+/// every check and question happens where the work is. Nothing is
+/// inferred from names.
 final class CoreWorkManage implements NextWorkManage {
   CoreWorkManage(this.harness, this.data);
 
@@ -26,15 +29,29 @@ final class CoreWorkManage implements NextWorkManage {
   Future<Outcome<JsonEncodable>> _invoke(String action, JsonMap input) =>
       harness().invokeJson(action, input, _gui);
 
-  Future<JsonMap> _call(String action, JsonMap input) async {
-    final outcome = await _invoke(action, input);
-    return switch (outcome) {
-      Completed(:final value) => value.toJson(),
-      Failed(:final failure) => throw _error(failure),
-      NeedsDecision() =>
-        throw const UiManageError(message: 'asked for a decision'),
-    };
-  }
+  /// [action] where [owner] is: here directly (also when null), on
+  /// another device through `mesh.invoke` with its own IDs.
+  Future<Outcome<JsonEncodable>> _on(
+          _Owner? owner, String action, JsonMap input,
+          {bool destructive = false}) =>
+      owner == null || owner.local
+          ? _invoke(action, input)
+          : _invoke(destructive ? 'mesh.invoke_destructive' : 'mesh.invoke', {
+              'deviceId': owner.deviceId,
+              'action': action,
+              'input': input,
+            });
+
+  Future<JsonMap> _call(String action, JsonMap input) =>
+      _callOn(null, action, input);
+
+  Future<JsonMap> _callOn(_Owner? owner, String action, JsonMap input) async =>
+      switch (await _on(owner, action, input)) {
+        Completed(:final value) => value.toJson(),
+        Failed(:final failure) => throw _error(failure),
+        NeedsDecision() =>
+          throw const UiManageError(message: 'asked for a decision'),
+      };
 
   static UiManageError _error(Failure failure) => UiManageError(
       conflict: failure.code == FailureCode.conflict,
@@ -69,10 +86,45 @@ final class CoreWorkManage implements NextWorkManage {
     'bangumi': UiProvider.bangumi,
   };
 
+  // —— Where a work is ——
+
+  /// The devices that have [workId], each with its own IDs for it
+  /// (`media.management.targets`) and the name its host gave it
+  /// (`state.query` `mesh.devices`).
+  Future<List<_Owner>> _owners(String workId) async {
+    final found = (await readWorkOwners(_call, [workId]))[workId]!;
+    if (found.error case final Map error) {
+      throw UiManageError(message: '${error['message']}');
+    }
+    return found.owners;
+  }
+
+  /// Every place a file of [owner]'s work is (`media.files.list`).
+  Future<List<Map>> _listed(_Owner owner) async => _maps((await _callOn(
+      owner, 'media.files.list', {'workId': owner.workId}))['files']);
+
+  /// The owner's own episodes a listed file is.
+  static Iterable<String> _episodesOf(Map row) =>
+      [for (final e in _maps(row['episodes'])) e['episodeId'] as String];
+
+  static UiFile _file(_Owner owner, Map row) => UiFile.listed(
+        Map<String, Object?>.from(row),
+        device: owner.name,
+        manager: owner.manager,
+        handle: _FileRef(owner, row['fileId'] as String),
+      );
+
+  /// What another device changed reaches the merged library now, not at
+  /// its next look (`media.library.refresh`).
+  Future<void> _settle(Iterable<_Owner> owners) async {
+    if (owners.any((o) => !o.local)) await _call('media.library.refresh', {});
+  }
+
   // —— Reading a work ——
 
-  Future<JsonMap?> _identity(String entityId) async {
-    final outcome = await _invoke('media.identity.get', {'entityId': entityId});
+  Future<JsonMap?> _identity(_Owner? owner, String entityId) async {
+    final outcome =
+        await _on(owner, 'media.identity.get', {'entityId': entityId});
     return switch (outcome) {
       Completed(:final value) => value.toJson()['identity'] as JsonMap,
       Failed(failure: Failure(code: FailureCode.notFound)) => null,
@@ -81,38 +133,15 @@ final class CoreWorkManage implements NextWorkManage {
     };
   }
 
-  /// Each episode's local file on this device (`media.library.readable`).
-  Future<Map<String, Map>> _readable(List<String> episodeIds) async {
-    if (episodeIds.isEmpty) return const {};
-    final result =
-        await _call('media.library.readable', {'episodeIds': episodeIds});
-    return {
-      for (final e in _maps(result['entries']))
-        if (e['error'] == null && e['local'] != false && e['path'] is String)
-          e['episodeId'] as String: e
-    };
-  }
-
-  /// The work entity above a local episode: episode → release → work.
-  Future<JsonMap?> _workAbove(String localEpisodeId) async {
-    var node = await _identity(localEpisodeId);
-    for (var i = 0; i < 2 && node != null; i++) {
-      if (node['kind'] == 'work') return node;
-      final parent = node['parentId'] as String?;
-      node = parent == null ? null : await _identity(parent);
-    }
-    return node?['kind'] == 'work' ? node : null;
-  }
-
   static List<Map> _accepted(JsonMap identity) => [
         for (final b in _maps(identity['bindings']))
           if (b['status'] == 'accepted') b
       ];
 
   /// Whether the catalogue would remove it as its own: a local work.
-  Future<bool> _isLocal(String workId) async {
-    final outcome = await _invoke('media.entities.remove_batch', {
-      'entityIds': [workId],
+  Future<bool> _isLocal(_Owner owner) async {
+    final outcome = await _on(owner, 'media.entities.remove_batch', {
+      'entityIds': [owner.workId],
       'requestId': _id('gui-preview'),
       'reason': 'Viewer opened the work sheet.',
       'preview': true,
@@ -145,49 +174,59 @@ final class CoreWorkManage implements NextWorkManage {
     final shown = {
       for (final e in await data.episodes(work.workId)) e.episodeId: e
     };
-    final files =
-        await _readable([for (final e in items) e['episodeId'] as String]);
-
-    var entity = await _identity(work.workId);
-    if (entity != null && entity['kind'] != 'work') entity = null;
-    for (final f in files.values) {
-      if (entity != null) break;
-      if (f['sourceEpisodeId'] case final String id) {
-        entity = await _workAbove(id);
-      }
+    final owners = await _owners(work.workId);
+    final away = [
+      for (final o in owners)
+        if (o.away case final reason?) reason
+    ];
+    final reachable = [
+      for (final o in owners)
+        if (o.away == null) o
+    ];
+    final primary =
+        reachable.where((o) => o.local).firstOrNull ?? reachable.firstOrNull;
+    if (primary == null) {
+      if (away.isEmpty) throw const UiManageError(message: 'no device has it');
+      return UiManagedWork(
+          work: work,
+          kind: UiWorkKind.loose,
+          away: away,
+          unavailable: away.first);
     }
-    final workId = entity?['id'] as String?;
-    final bindings = entity == null ? const <Map>[] : _accepted(entity);
+
+    final bindings = <_Owner, List<Map>>{};
+    final listed = <_Owner, List<Map>>{};
+    for (final o in [primary, ...reachable.where((o) => o != primary)]) {
+      final identity = await _identity(o, o.workId);
+      bindings[o] = identity == null ? const [] : _accepted(identity);
+      listed[o] = await _listed(o);
+    }
     final provider = [
-      for (final b in bindings)
+      for (final b in bindings[primary]!)
         if (_providers[(b['ref'] as Map)['provider']] case final p?) (p, b)
     ].firstOrNull;
-    final kind = workId == null
-        ? UiWorkKind.files
-        : provider != null
-            ? UiWorkKind.matched
-            : await _isLocal(workId)
-                ? UiWorkKind.local
-                : UiWorkKind.loose;
-
-    final sizes = <String, Map>{};
-    if (workId != null) {
-      final listed = await _invoke('media.files.list', {'workId': workId});
-      if (listed case Completed(:final value)) {
-        for (final f in _maps(value.toJson()['files'])) {
-          sizes[f['path'] as String] = f;
-        }
-      }
-    }
+    final kind = provider != null
+        ? UiWorkKind.matched
+        : await _isLocal(primary)
+            ? UiWorkKind.local
+            : UiWorkKind.loose;
 
     final episodes = <UiManagedEpisode>[];
     for (final item in items) {
       final id = item['episodeId'] as String;
-      final file = files[id];
-      if (file == null) continue;
-      final local = file['sourceEpisodeId'] as String?;
-      final path = file['path'] as String;
-      final listed = sizes[path];
+      final own = <_Owner, String>{};
+      final files = <UiFile>[];
+      for (final MapEntry(key: o, value: rows) in listed.entries) {
+        final seen = <String>{};
+        for (final row in rows) {
+          final local =
+              _episodesOf(row).where((e) => o.episodes[e] == id).firstOrNull;
+          if (local == null || !seen.add(row['fileId'] as String)) continue;
+          own[o] = local;
+          files.add(_file(o, row));
+        }
+      }
+      if (files.isEmpty) continue;
       final title = item['title'] as Map?;
       episodes.add(UiManagedEpisode(
         episode: shown[id],
@@ -196,22 +235,11 @@ final class CoreWorkManage implements NextWorkManage {
         title: title?['value'] as String?,
         titleEdited:
             title?['source'] is Map && (title!['source'] as Map).containsKey('mode'),
-        files: [
-          UiFile(
-            path: path,
-            size: _int(listed?['size']),
-            duration: _int(listed?['durationMs']) == null
-                ? null
-                : Duration(milliseconds: _int(listed!['durationMs'])!),
-            modified: DateTime.tryParse('${listed?['modifiedAt']}'),
-            handle: _FileRef(file['fileId'] as String?, local),
-          )
-        ],
-        handle: _EpisodeRef(id, local),
+        files: files,
+        handle: _EpisodeRef(id, own),
       ));
     }
 
-    final devices = work.devices.where((d) => d.name.isNotEmpty);
     return UiManagedWork(
       work: work,
       kind: kind,
@@ -240,18 +268,19 @@ final class CoreWorkManage implements NextWorkManage {
         UiArtKind.logo: _artFact(fields['logo']),
       },
       episodes: episodes,
-      editable: workId != null || episodes.isNotEmpty,
-      elsewhere: workId == null && episodes.isEmpty
-          ? devices.firstOrNull?.name
-          : null,
-      handle: _WorkRef(workId, [for (final b in bindings) b]),
+      device: primary.name,
+      away: away,
+      handle: _WorkRef(primary, bindings),
     );
   }
 
-  _WorkRef _work(UiManagedWork work) {
-    final ref = work.handle as _WorkRef;
-    if (ref.workId == null) throw const UiManageError(message: 'no local work');
-    return ref;
+  /// Where files picked on this device can go: the work's part here.
+  static _Owner _here(UiManagedWork work) {
+    final primary = (work.handle as _WorkRef).primary;
+    if (!primary.local) {
+      throw const UiManageError(message: 'not on this device');
+    }
+    return primary;
   }
 
   // —— 匹配 ——
@@ -279,41 +308,18 @@ final class CoreWorkManage implements NextWorkManage {
 
   @override
   Future<List<UiCandidateEpisode>> candidateEpisodes(
-      UiMatchCandidate candidate) async {
-    final record = (await _call('media.metadata.get', {'ref': candidate.ref}))[
-        'record'] as Map;
-    final out = <UiCandidateEpisode>[];
-    void add(Map e, Map? release, int? season) {
-      out.add(UiCandidateEpisode(
-        number: '${e['number'] ?? e['order'] ?? ''}',
-        season: _int(e['season']) ?? season,
-        title: _text(e['title']),
-        ref: Map<String, Object?>.from(e['ref'] as Map),
-        release: release == null ? null : Map<String, Object?>.from(release),
-      ));
-    }
+          UiMatchCandidate candidate) async =>
+      candidateEpisodesOf((await _call(
+          'media.metadata.get', {'ref': candidate.ref}))['record'] as Map);
 
-    for (final e in _maps(record['episodes'])) {
-      final ref = e['ref'] as Map;
-      if (ref['objectType'] == 'season') {
-        for (final inner in _maps(e['episodes'])) {
-          add(inner, ref, _int(e['number']) ?? _int(e['season']));
-        }
-      } else {
-        add(e, null, null);
-      }
-    }
-    return out;
-  }
-
-  /// Files linked to episodes of another identity are let go first; the
-  /// catalogue refuses to relink them silently.
-  Future<void> _releaseFiles(Iterable<UiFile> files, String reason) async {
+  /// [owner]'s files linked to episodes of another identity, to be let go
+  /// of first: the catalogue refuses to relink them silently.
+  Future<JsonMap?> _letGo(
+      _Owner owner, Iterable<UiFile> files, String reason) async {
     final entries = <JsonMap>[];
     for (final file in files) {
       final id = (file.handle as _FileRef).fileId;
-      if (id == null) continue;
-      final identity = await _identity(id);
+      final identity = await _identity(owner, id);
       if (identity == null) continue;
       final accepted = _accepted(identity);
       if (accepted.isEmpty) continue;
@@ -323,46 +329,107 @@ final class CoreWorkManage implements NextWorkManage {
         'bindingIds': [for (final b in accepted) b['bindingId']],
       });
     }
-    if (entries.isEmpty) return;
-    await _call('media.identity.unbind_batch',
-        {'requestId': _id('gui-unbind'), 'entries': entries});
+    return entries.isEmpty
+        ? null
+        : {'requestId': _id('gui-unbind'), 'entries': entries};
   }
 
+  /// One device's part, previewed without a plan.
+  Future<_Plan> _plan(_Owner owner, {JsonMap? unbind, JsonMap? bind}) async =>
+      _Plan(
+        owner,
+        unbind: unbind,
+        bind: bind,
+        unbound: unbind == null
+            ? null
+            : await _callOn(owner, 'media.management.unbind_batch', unbind),
+        bound: bind == null
+            ? null
+            : await _callOn(owner, 'media.management.bind_batch', bind),
+      );
+
+  /// Does [plan] as previewed. A binding after a release is previewed
+  /// again: the release is what it waited for.
+  Future<void> _apply(_Plan plan) async {
+    if (plan.unbind case final input?) {
+      await _callOn(plan.owner, 'media.management.unbind_batch',
+          {...input, 'expectedPlan': plan.unbound!['expectedPlan']});
+    }
+    if (plan.bind case final input?) {
+      final preview = plan.unbind == null
+          ? plan.bound!
+          : await _callOn(plan.owner, 'media.management.bind_batch', input);
+      await _callOn(plan.owner, 'media.management.bind_batch',
+          {...input, 'expectedPlan': preview['expectedPlan']});
+    }
+  }
+
+  UiAssociation _association(List<_Plan> plans) => UiAssociation.fromPreviews(
+        [
+          for (final p in plans)
+            for (final preview in [p.unbound, p.bound])
+              if (preview != null)
+                Map<String, Object?>.from(preview['preview'] as Map)
+        ],
+        devices: [for (final p in plans) p.owner.name],
+        apply: () async {
+          for (final p in plans) {
+            await _apply(p);
+          }
+          await _settle([for (final p in plans) p.owner]);
+        },
+      );
+
   @override
-  Future<void> match(UiManagedWork work, UiMatchCandidate candidate,
-      Map<UiFile, UiCandidateEpisode> files) async {
+  Future<UiAssociation> previewMatch(UiManagedWork work,
+      UiMatchCandidate candidate, Map<UiFile, UiCandidateEpisode> files) async {
     if (files.isEmpty) throw const UiManageError(message: 'no files');
     const reason = 'Viewer matched the work in its sheet.';
-    await _releaseFiles(files.keys, reason);
-    await _call('media.identity.bind_batch', {
-      'requestId': _id('gui-bind'),
-      'entries': [
-        for (final MapEntry(key: file, value: episode) in files.entries)
-          {
-            'kind': 'file',
-            'reason': reason,
-            'entityId': (file.handle as _FileRef).fileId,
-            'workRef': candidate.ref,
-            if (episode.release != null) 'releaseRef': episode.release,
-            'episodeRefs': [episode.ref],
-          }
-      ],
-    });
+    final byOwner = <_Owner, Map<UiFile, UiCandidateEpisode>>{};
+    for (final MapEntry(key: file, value: episode) in files.entries) {
+      (byOwner[(file.handle as _FileRef).owner] ??= {})[file] = episode;
+    }
+    return _association([
+      for (final MapEntry(key: owner, value: chosen) in byOwner.entries)
+        await _plan(owner,
+            unbind: await _letGo(owner, chosen.keys, reason),
+            bind: {
+              'requestId': _id('gui-bind'),
+              'entries': [
+                for (final MapEntry(key: file, value: episode)
+                    in chosen.entries)
+                  {
+                    'kind': 'file',
+                    'reason': reason,
+                    'entityId': (file.handle as _FileRef).fileId,
+                    'workRef': candidate.ref,
+                    if (episode.release != null) 'releaseRef': episode.release,
+                    'episodeRefs': [episode.ref],
+                  }
+              ],
+            })
+    ]);
   }
 
   @override
-  Future<void> unmatch(UiManagedWork work) async {
-    final ref = _work(work);
-    await _call('media.identity.unbind_batch', {
-      'requestId': _id('gui-unbind'),
-      'entries': [
-        {
-          'entityId': ref.workId,
-          'reason': 'Viewer let go of the match in the work sheet.',
-          'bindingIds': [for (final b in ref.bindings) b['bindingId']],
-        }
-      ],
-    });
+  Future<UiAssociation> previewUnmatch(UiManagedWork work) async {
+    final ref = work.handle as _WorkRef;
+    final plans = [
+      for (final MapEntry(key: owner, value: bindings) in ref.bindings.entries)
+        if (bindings.isNotEmpty)
+          await _plan(owner, unbind: {
+            'requestId': _id('gui-unbind'),
+            'entries': [
+              {
+                'entityId': owner.workId,
+                'reason': 'Viewer let go of the match in the work sheet.',
+                'bindingIds': [for (final b in bindings) b['bindingId']],
+              }
+            ],
+          })
+    ];
+    if (plans.isEmpty) throw const UiManageError(message: 'no match');
+    return _association(plans);
   }
 
   // —— 本地作品 ——
@@ -370,8 +437,14 @@ final class CoreWorkManage implements NextWorkManage {
   @override
   Future<String> createLocal(UiManagedWork from, String title) async {
     const reason = 'Viewer made a work of its own.';
-    final files = from.files;
-    await _releaseFiles(files, reason);
+    final owner = _here(from);
+    final files = [
+      for (final f in from.files)
+        if ((f.handle as _FileRef).owner == owner) f
+    ];
+    if (await _letGo(owner, files, reason) case final release?) {
+      await _call('media.identity.unbind_batch', release);
+    }
     final work = _id('local-work'), release = _id('local-release');
     await _call('media.entities.put_batch', {
       'requestId': _id('gui-put'),
@@ -399,36 +472,40 @@ final class CoreWorkManage implements NextWorkManage {
   }
 
   /// Puts entries in two steps: the preview's plan, then the change.
-  Future<JsonMap> _put(List<JsonMap> entries, String reason) async {
+  Future<JsonMap> _put(
+      _Owner owner, List<JsonMap> entries, String reason) async {
     final requestId = _id('gui-put');
-    final preview = await _call('media.entities.put_batch', {
+    final preview = await _callOn(owner, 'media.entities.put_batch', {
       'requestId': requestId,
       'reason': reason,
       'entries': entries,
       'preview': true,
     });
-    return _call('media.entities.put_batch', {
+    final result = await _callOn(owner, 'media.entities.put_batch', {
       'requestId': requestId,
       'reason': reason,
       'entries': entries,
       if (preview['expectedPlan'] != null)
         'expectedPlan': preview['expectedPlan'],
     });
+    await _settle([owner]);
+    return result;
   }
 
   /// The release local episodes hang from, made when the work has none.
-  Future<String> _release(UiManagedWork work, List<JsonMap> entries) async {
+  Future<String> _release(
+      _Owner owner, UiManagedWork work, List<JsonMap> entries) async {
     for (final e in work.episodes) {
-      final local = (e.handle as _EpisodeRef).localId;
+      final local = (e.handle as _EpisodeRef).own[owner];
       if (local == null) continue;
-      final parent = (await _identity(local))?['parentId'] as String?;
+      final parent = (await _identity(owner, local))?['parentId'] as String?;
       if (parent != null) return parent;
     }
     final release = _id('local-release');
     entries.add({
       'entityId': release,
       'kind': 'release',
-      'parentId': _work(work).workId,
+      'parentId': owner.workId,
       'title': work.work.title,
     });
     return release;
@@ -437,11 +514,12 @@ final class CoreWorkManage implements NextWorkManage {
   @override
   Future<void> saveLocal(
       UiManagedWork work, List<UiLocalEpisodeEdit> edits) async {
+    final owner = (work.handle as _WorkRef).primary;
     final entries = <JsonMap>[];
-    final release = await _release(work, entries);
+    final release = await _release(owner, work, entries);
     for (final edit in edits) {
-      final local = (edit.handle as _EpisodeRef?)?.localId;
-      final identity = local == null ? null : await _identity(local);
+      final local = (edit.handle as _EpisodeRef?)?.own[owner];
+      final identity = local == null ? null : await _identity(owner, local);
       entries.add({
         'entityId': local ?? _id('local-episode'),
         'kind': 'episode',
@@ -451,16 +529,19 @@ final class CoreWorkManage implements NextWorkManage {
         if (edit.season != null) 'season': edit.season,
         'fileIds': [
           for (final f in edit.files)
-            if ((f.handle as _FileRef).fileId case final id?) id
+            if ((f.handle as _FileRef) case final ref when ref.owner == owner)
+              ref.fileId
         ],
         if (identity != null) 'expectedRevision': identity['revision'],
       });
     }
-    await _put(entries, 'Viewer edited the episodes of a work of its own.');
+    await _put(
+        owner, entries, 'Viewer edited the episodes of a work of its own.');
   }
 
   @override
   Future<void> addFile(UiManagedWork work, String path) async {
+    final owner = _here(work);
     final outcome = await _invoke('media.identity.get', {'path': path});
     final file = switch (outcome) {
       Completed(:final value) => value.toJson()['identity'] as JsonMap,
@@ -468,7 +549,7 @@ final class CoreWorkManage implements NextWorkManage {
       NeedsDecision() => throw const UiManageError(),
     };
     final entries = <JsonMap>[];
-    final release = await _release(work, entries);
+    final release = await _release(owner, work, entries);
     final numbers = [for (final e in work.episodes) int.tryParse(e.number) ?? 0];
     final next = numbers.isEmpty ? 1 : numbers.reduce(math.max) + 1;
     entries.add({
@@ -482,78 +563,112 @@ final class CoreWorkManage implements NextWorkManage {
       'number': '$next',
       'fileIds': [file['id']],
     });
-    await _put(entries, 'Viewer added a file to a work of its own.');
+    await _put(owner, entries, 'Viewer added a file to a work of its own.');
   }
 
   @override
   Future<UiUndo> removeLocal(UiManagedWork work,
       {UiManagedEpisode? episode}) async {
+    final owner = (work.handle as _WorkRef).primary;
     final id = episode == null
-        ? _work(work).workId!
-        : (episode.handle as _EpisodeRef).localId!;
+        ? owner.workId
+        : (episode.handle as _EpisodeRef).own[owner]!;
     const reason = 'Viewer removed it from the catalogue.';
     final requestId = _id('gui-remove');
-    final preview = await _call('media.entities.remove_batch', {
+    final preview = await _callOn(owner, 'media.entities.remove_batch', {
       'entityIds': [id],
       'requestId': requestId,
       'reason': reason,
       'preview': true,
     });
-    final result = await _call('media.entities.remove_batch', {
+    final result = await _callOn(owner, 'media.entities.remove_batch', {
       'entityIds': [id],
       'requestId': requestId,
       'reason': reason,
       'preview': false,
       'expectedPlan': preview['expectedPlan'],
     });
-    return UiUndo(result['undoId'] as String);
+    await _settle([owner]);
+    return UiUndo((owner, result['undoId'] as String));
   }
 
   @override
-  Future<void> restore(UiUndo undo) =>
-      _call('media.entities.restore', {'undoId': undo.handle});
+  Future<void> restore(UiUndo undo) async {
+    final (owner, undoId) = undo.handle as (_Owner, String);
+    await _callOn(owner, 'media.entities.restore', {'undoId': undoId});
+    await _settle([owner]);
+  }
 
   // —— 资料与图片 ——
+  //
+  // Words and matches are the work's wherever it is: every device that
+  // answers gets the same change. Pictures picked here stay here.
 
   @override
   Future<void> editText(
       UiManagedWork work, Map<UiTextField, String?> values) async {
     if (values.isEmpty) return;
-    final id = _work(work).workId;
-    await _call('media.metadata.override_batch', {
-      'entries': [
-        for (final MapEntry(key: field, value: value) in values.entries)
-          {'entityId': id, 'field': field.name, 'value': value}
-      ]
-    });
+    final owners = (work.handle as _WorkRef).owners;
+    for (final o in owners) {
+      await _callOn(o, 'media.metadata.override_batch', {
+        'entries': [
+          for (final MapEntry(key: field, value: value) in values.entries)
+            {'entityId': o.workId, 'field': field.name, 'value': value}
+        ]
+      });
+    }
+    await _settle(owners);
   }
 
   @override
-  Future<void> editEpisodeTitles(Map<UiManagedEpisode, String?> titles) async {
-    final entries = [
-      for (final MapEntry(key: e, value: title) in titles.entries)
-        if ((e.handle as _EpisodeRef).localId case final id?)
-          {'entityId': id, 'field': 'title', 'value': title}
-    ];
-    if (entries.isEmpty) return;
-    await _call('media.metadata.override_batch', {'entries': entries});
+  Future<void> editEpisodeTitles(Map<UiManagedEpisode, String?> titles) =>
+      _titles({
+        for (final MapEntry(key: e, value: title) in titles.entries)
+          e: {'value': title}
+      });
+
+  @override
+  Future<void> clearEpisodeTitle(UiManagedEpisode episode) =>
+      _titles({
+        episode: {'value': null, 'mode': 'clear'}
+      });
+
+  /// Episode titles on every device that has the episode, a batch each.
+  Future<void> _titles(Map<UiManagedEpisode, JsonMap> changes) async {
+    final entries = <_Owner, List<JsonMap>>{};
+    for (final MapEntry(key: e, value: change) in changes.entries) {
+      for (final MapEntry(key: owner, value: id)
+          in (e.handle as _EpisodeRef).own.entries) {
+        (entries[owner] ??= [])
+            .add({'entityId': id, 'field': 'title', ...change});
+      }
+    }
+    for (final MapEntry(key: owner, value: list) in entries.entries) {
+      await _callOn(owner, 'media.metadata.override_batch', {'entries': list});
+    }
+    await _settle(entries.keys);
   }
 
   @override
-  Future<void> clearText(UiManagedWork work, UiTextField field) =>
-      _call('media.metadata.override', {
-        'entityId': _work(work).workId,
+  Future<void> clearText(UiManagedWork work, UiTextField field) async {
+    final owners = (work.handle as _WorkRef).owners;
+    for (final o in owners) {
+      await _callOn(o, 'media.metadata.override', {
+        'entityId': o.workId,
         'field': field.name,
         'value': null,
         'mode': 'clear',
       });
+    }
+    await _settle(owners);
+  }
 
   @override
   Future<void> setArt(UiManagedWork work, UiArtKind kind, String file) async {
     final result = await _call('media.artwork.set', {
       'entries': [
         {
-          'entityId': _work(work).workId,
+          'entityId': _here(work).workId,
           'kind': kind.name,
           'file': file,
           'source': {'label': '本地文件'},
@@ -564,77 +679,93 @@ final class CoreWorkManage implements NextWorkManage {
   }
 
   @override
-  Future<void> clearArt(UiManagedWork work, UiArtKind kind) =>
-      _call('media.artwork.clear', {
+  Future<void> clearArt(UiManagedWork work, UiArtKind kind) async {
+    final owners = (work.handle as _WorkRef).owners;
+    for (final o in owners) {
+      await _callOn(o, 'media.artwork.clear', {
         'entries': [
-          {'entityId': _work(work).workId, 'kind': kind.name}
+          {'entityId': o.workId, 'kind': kind.name}
         ]
       });
+    }
+    await _settle(owners);
+  }
 
   @override
   Future<void> refresh(UiManagedWork work) async {
-    final refs = [for (final b in _work(work).bindings) b['ref']];
-    if (refs.isEmpty) throw const UiManageError(message: 'no match');
-    final result = await _call('media.metadata.refresh_batch', {
-      'entries': [
-        for (final ref in refs) {'ref': ref, 'requestId': _id('gui-refresh')}
-      ]
-    });
-    _entries(result, 'entries');
+    final matched = {
+      for (final MapEntry(key: owner, value: bindings)
+          in (work.handle as _WorkRef).bindings.entries)
+        if (bindings.isNotEmpty) owner: bindings
+    };
+    if (matched.isEmpty) throw const UiManageError(message: 'no match');
+    for (final MapEntry(key: owner, value: bindings) in matched.entries) {
+      final result = await _callOn(owner, 'media.metadata.refresh_batch', {
+        'entries': [
+          for (final b in bindings)
+            {'ref': b['ref'], 'requestId': _id('gui-refresh')}
+        ]
+      });
+      _entries(result, 'entries');
+    }
   }
 
   // —— 剧集 ——
 
   @override
   Future<UiManagedEpisode> episode(UiWork work, UiEpisode episode) async {
-    final file = (await _readable([episode.episodeId]))[episode.episodeId];
-    final local = file?['sourceEpisodeId'] as String?;
-    final fileId = file?['fileId'] as String?;
-    final path = file?['path'] as String?;
+    final holders = [
+      for (final o in await _owners(work.workId))
+        if (o.episode(episode.episodeId) != null) o
+    ];
+    final away = [
+      for (final o in holders)
+        if (o.away case final reason?) reason
+    ];
+    final reachable = [
+      for (final o in holders)
+        if (o.away == null) o
+    ];
+    final primary =
+        reachable.where((o) => o.local).firstOrNull ?? reachable.firstOrNull;
+    final own = {for (final o in reachable) o: o.episode(episode.episodeId)!};
 
-    Map? listed;
-    if (local != null && path != null) {
-      final owner = await _workAbove(local);
-      if (owner != null) {
-        final outcome =
-            await _invoke('media.files.list', {'workId': owner['id']});
-        if (outcome case Completed(:final value)) {
-          listed = _maps(value.toJson()['files'])
-              .where((f) => f['path'] == path)
-              .firstOrNull;
-        }
+    final locations = <UiFile>[];
+    for (final o in [
+      if (primary != null) primary,
+      ...reachable.where((o) => o != primary)
+    ]) {
+      for (final row in await _listed(o)) {
+        if (_episodesOf(row).contains(own[o])) locations.add(_file(o, row));
       }
     }
-    final uiFile = path == null
-        ? null
-        : UiFile(
-            path: path,
-            size: _int(listed?['size']),
-            duration: _int(listed?['durationMs']) == null
-                ? null
-                : Duration(milliseconds: _int(listed!['durationMs'])!),
-            modified: DateTime.tryParse('${listed?['modifiedAt']}'),
-            handle: _FileRef(fileId, local),
-          );
+    final files = <String, UiFile>{};
+    for (final f in locations) {
+      final ref = f.handle as _FileRef;
+      if (ref.owner == primary) files.putIfAbsent(ref.fileId, () => f);
+    }
 
     final tracks = <UiDanmakuTrack>[];
-    final seen = <Object>{};
-    for (final entity in [local, fileId].whereType<String>()) {
-      final result = await _call('danmaku.tracks', {'entityId': entity});
-      for (final t in _maps(result['tracks'])) {
-        final key = t['bindingId'] ?? t['trackId'];
-        if (key == null || !seen.add(key)) continue;
-        tracks.add(_track(t));
-      }
-    }
-
     final subtitles = <UiSubtitles>[];
-    if (fileId != null && uiFile != null) {
-      final result = await _call('subtitle.tracks', {
-        'fileIds': [fileId]
-      });
-      for (final facts in _maps(result['files'])) {
-        subtitles.add(_subtitles(facts, uiFile));
+    if (primary != null) {
+      final seen = <Object>{};
+      for (final entity in [own[primary]!, ...files.keys]) {
+        final result =
+            await _callOn(primary, 'danmaku.tracks', {'entityId': entity});
+        for (final t in _maps(result['tracks'])) {
+          final key = t['bindingId'] ?? t['trackId'];
+          if (key == null || !seen.add(key)) continue;
+          tracks.add(_track(primary, t));
+        }
+      }
+      if (files.isNotEmpty) {
+        final result = await _callOn(
+            primary, 'subtitle.tracks', {'fileIds': files.keys.toList()});
+        for (final facts in _maps(result['files'])) {
+          if (files[facts['fileId']] case final file?) {
+            subtitles.add(_subtitles(primary, facts, file));
+          }
+        }
       }
     }
 
@@ -643,11 +774,25 @@ final class CoreWorkManage implements NextWorkManage {
       number: '${episode.number}',
       season: episode.season,
       title: episode.title,
-      files: [if (uiFile != null) uiFile],
+      files: files.values.toList(),
+      locations: locations,
+      device: primary?.name,
+      away: away,
+      unavailable: primary == null ? away.firstOrNull : null,
       danmaku: tracks,
       subtitles: subtitles,
-      handle: _EpisodeRef(episode.episodeId, local),
+      handle: _EpisodeRef(episode.episodeId, own, primary),
     );
+  }
+
+  /// Where an episode's comments and subtitles are changed, when files
+  /// picked on this device may go there.
+  static _Owner _episodeHere(UiManagedEpisode episode) {
+    final primary = (episode.handle as _EpisodeRef).primary!;
+    if (!primary.local) {
+      throw const UiManageError(message: 'not on this device');
+    }
+    return primary;
   }
 
   static const _platforms = {
@@ -662,7 +807,7 @@ final class CoreWorkManage implements NextWorkManage {
   static String _platform(Object? p) =>
       _platforms['$p'] ?? (p is String && p.isNotEmpty ? p : '弹幕');
 
-  UiDanmakuTrack _track(Map t) {
+  UiDanmakuTrack _track(_Owner owner, Map t) {
     var count = _int(t['count']);
     if (count == null) {
       final chunks = _maps(t['coverage']);
@@ -683,12 +828,12 @@ final class CoreWorkManage implements NextWorkManage {
       offset: Duration(milliseconds: _int(t['offsetMs']) ?? 0),
       loading: t['status'] == 'pending' || t['stale'] == true && count == null,
       removable: t['bindingId'] != null,
-      handle: _TrackRef(t['bindingId'] as String?, t['trackId'] as String?,
-          _int(t['revision'])),
+      handle: _TrackRef(owner, t['bindingId'] as String?,
+          t['trackId'] as String?, _int(t['revision'])),
     );
   }
 
-  static UiSubtitles _subtitles(Map facts, UiFile file) {
+  static UiSubtitles _subtitles(_Owner owner, Map facts, UiFile file) {
     final selection = facts['selection'] as Map?;
     return UiSubtitles(
       file: file,
@@ -715,7 +860,8 @@ final class CoreWorkManage implements NextWorkManage {
             : const [])
           if (p is String) p
       ],
-      handle: _SubtitleRef(facts['fileId'] as String, _int(facts['revision']) ?? 0),
+      handle: _SubtitleRef(
+          owner, facts['fileId'] as String, _int(facts['revision']) ?? 0),
     );
   }
 
@@ -723,7 +869,7 @@ final class CoreWorkManage implements NextWorkManage {
   Future<void> setDanmaku(UiDanmakuTrack track,
       {bool? enabled, Duration? offset}) async {
     final ref = track.handle as _TrackRef;
-    final result = await _call('danmaku.update', {
+    final result = await _callOn(ref.owner, 'danmaku.update', {
       'changes': [
         {
           if (ref.bindingId != null) ...{
@@ -762,54 +908,54 @@ final class CoreWorkManage implements NextWorkManage {
   Future<void> addDanmaku(
       UiManagedEpisode episode, UiDanmakuCandidate found) async {
     final ref = episode.handle as _EpisodeRef;
+    final owner = ref.primary!;
     final duration = episode.files.firstOrNull?.duration ??
         episode.episode?.runtime;
     final video = Map<String, Object?>.from(found.handle as Map);
     if (duration != null && (video['durationMs'] as num? ?? 0) <= 0) {
       video['durationMs'] = duration.inMilliseconds;
     }
-    final entity = ref.localId ??
-        (episode.files.firstOrNull?.handle as _FileRef?)?.fileId;
-    await _call('danmaku.attach', {
+    await _callOn(owner, 'danmaku.attach', {
       'video': video,
       'reason': 'Viewer added comments in the episode sheet.',
       'requestId': _id('gui-attach'),
-      if (entity != null) 'entityId': entity,
+      'entityId': ref.own[owner],
     });
   }
 
   @override
   Future<void> importDanmaku(UiManagedEpisode episode, String path) async {
-    final ref = episode.handle as _EpisodeRef;
-    final entity = ref.localId ??
-        (episode.files.firstOrNull?.handle as _FileRef?)?.fileId;
+    final owner = _episodeHere(episode);
     await _call('danmaku.import', {
       'filePath': path,
       'platform': 'local',
       'platformVideoId': path.split(RegExp(r'[\\/]')).last,
-      if (entity != null) 'entityId': entity,
+      'entityId': (episode.handle as _EpisodeRef).own[owner],
     });
   }
 
   @override
   Future<void> removeDanmaku(UiDanmakuTrack track) async {
     final ref = track.handle as _TrackRef;
-    await _call('danmaku.detach',
+    await _callOn(ref.owner, 'danmaku.detach',
         {'bindingId': ref.bindingId, 'revision': ref.revision});
   }
 
   @override
-  Future<void> selectSubtitle(UiSubtitles file, String? trackId) =>
-      _call('subtitle.select', {
-        'fileId': (file.handle as _SubtitleRef).fileId,
-        'trackId': trackId,
-      });
+  Future<void> selectSubtitle(UiSubtitles file, String? trackId) {
+    final ref = file.handle as _SubtitleRef;
+    return _callOn(ref.owner, 'subtitle.select', {
+      'fileId': ref.fileId,
+      'trackId': trackId,
+    });
+  }
 
   @override
   Future<void> automaticSubtitle(UiSubtitles file) async {
-    final result = await _call('subtitle.reset_selection', {
+    final ref = file.handle as _SubtitleRef;
+    final result = await _callOn(ref.owner, 'subtitle.reset_selection', {
       'entries': [
-        {'fileId': (file.handle as _SubtitleRef).fileId}
+        {'fileId': ref.fileId}
       ]
     });
     _entries(result, 'entries');
@@ -817,10 +963,14 @@ final class CoreWorkManage implements NextWorkManage {
 
   @override
   Future<void> importSubtitle(UiSubtitles file, String path) async {
+    final ref = file.handle as _SubtitleRef;
+    if (!ref.owner.local) {
+      throw const UiManageError(message: 'not on this device');
+    }
     final result = await _call('subtitle.import', {
       'entries': [
         {
-          'fileId': (file.handle as _SubtitleRef).fileId,
+          'fileId': ref.fileId,
           'filePath': path,
           'language': 'und',
           'source': {'label': '本地文件'},
@@ -834,7 +984,7 @@ final class CoreWorkManage implements NextWorkManage {
   Future<void> editSubtitle(UiSubtitles file, UiSubtitleTrack track,
       {String? language, String? title}) async {
     final ref = file.handle as _SubtitleRef;
-    final result = await _call('subtitle.update', {
+    final result = await _callOn(ref.owner, 'subtitle.update', {
       'entries': [
         {
           'fileId': ref.fileId,
@@ -853,7 +1003,7 @@ final class CoreWorkManage implements NextWorkManage {
   @override
   Future<void> detachSubtitle(UiSubtitles file, UiSubtitleTrack track) async {
     final ref = file.handle as _SubtitleRef;
-    final result = await _call('subtitle.remove', {
+    final result = await _callOn(ref.owner, 'subtitle.remove', {
       'entries': [
         {
           'fileId': ref.fileId,
@@ -866,10 +1016,13 @@ final class CoreWorkManage implements NextWorkManage {
   }
 
   /// A destructive Action's question as the sheet asks it: [items], and
-  /// running the option NipaPlay offered.
+  /// running the option NipaPlay offered (another device's options come
+  /// back as its own `mesh.invoke` calls).
   Future<UiConfirm> _decision(
-      String action, JsonMap input, List<String> items) async {
-    final outcome = await _invoke(action, input);
+      _Owner? owner, String action, JsonMap input, List<String> items,
+      {bool destructive = false}) async {
+    final outcome =
+        await _on(owner, action, input, destructive: destructive);
     return switch (outcome) {
       NeedsDecision(:final decision) when decision.options.isNotEmpty =>
         UiConfirm(
@@ -887,23 +1040,30 @@ final class CoreWorkManage implements NextWorkManage {
 
   @override
   Future<UiConfirm> deleteSubtitleCopies(UiSubtitles file) => _decision(
+      (file.handle as _SubtitleRef).owner,
       'subtitle.copy_delete',
       {'paths': file.detached},
-      [for (final p in file.detached) p.split(RegExp(r'[\\/]')).last]);
+      [for (final p in file.detached) p.split(RegExp(r'[\\/]')).last],
+      destructive: true);
 
   @override
-  Future<void> reveal(UiFile file) async {
-    if (!Platform.isMacOS) return;
-    await Process.run('open', ['-R', file.path]);
+  Future<void> reveal(UiFile file) async => uiRevealed(await _callOn(
+      (file.handle as _FileRef).owner, 'media.files.reveal', {
+    'paths': [file.path]
+  }));
+
+  @override
+  Future<UiConfirm> deleteFile(UiFile file) {
+    final owner = (file.handle as _FileRef).owner;
+    return _decision(
+        null,
+        'media.mesh_files.delete',
+        {
+          'paths': [file.path],
+          if (!owner.local) 'deviceId': owner.deviceId,
+        },
+        [file.name]);
   }
-
-  @override
-  Future<UiConfirm> deleteFile(UiFile file) => _decision(
-      'media.mesh_files.delete',
-      {
-        'paths': [file.path]
-      },
-      [file.name]);
 
   @override
   Future<String?> pickFile(List<String> kinds) async =>
@@ -911,36 +1071,84 @@ final class CoreWorkManage implements NextWorkManage {
           ?.path;
 }
 
-final class _WorkRef {
-  const _WorkRef(this.workId, this.bindings);
+/// A provider work's episodes as `media.metadata.get` records them; a
+/// TV season's within it, with the season as their release.
+List<UiCandidateEpisode> candidateEpisodesOf(Map record) {
+  final out = <UiCandidateEpisode>[];
+  void add(Map e, Map? release, int? season) {
+    out.add(UiCandidateEpisode(
+      number: '${e['number'] ?? e['order'] ?? ''}',
+      season: CoreWorkManage._int(e['season']) ?? season,
+      title: CoreWorkManage._text(e['title']),
+      ref: Map<String, Object?>.from(e['ref'] as Map),
+      release: release == null ? null : Map<String, Object?>.from(release),
+    ));
+  }
 
-  /// The local work entity; null when there is none on this device.
-  final String? workId;
-  final List<Map> bindings;
+  for (final e in CoreWorkManage._maps(record['episodes'])) {
+    final ref = e['ref'] as Map;
+    if (ref['objectType'] == 'season') {
+      for (final inner in CoreWorkManage._maps(e['episodes'])) {
+        add(inner, ref,
+            CoreWorkManage._int(e['number']) ?? CoreWorkManage._int(e['season']));
+      }
+    } else {
+      add(e, null, null);
+    }
+  }
+  return out;
+}
+
+final class _WorkRef {
+  const _WorkRef(this.primary, this.bindings);
+
+  /// Where it is changed: this device when it has it.
+  final _Owner primary;
+
+  /// Each device that answers, with the accepted matches of its own work.
+  final Map<_Owner, List<Map>> bindings;
+
+  Iterable<_Owner> get owners => bindings.keys;
 }
 
 final class _EpisodeRef {
-  const _EpisodeRef(this.episodeId, this.localId);
+  const _EpisodeRef(this.episodeId, this.own, [this.primary]);
   final String episodeId;
-  final String? localId;
+
+  /// Each device's own episode.
+  final Map<_Owner, String> own;
+
+  /// Where its comments and subtitles are changed.
+  final _Owner? primary;
 }
 
-/// A file on this device (other devices' files are changed there).
+/// A place of a file, on the device that has it.
 final class _FileRef {
-  const _FileRef(this.fileId, this.localEpisodeId);
-  final String? fileId;
-  final String? localEpisodeId;
+  const _FileRef(this.owner, this.fileId);
+  final _Owner owner;
+  final String fileId;
+}
+
+/// One device's part of a change of matches: what it lets go of and what
+/// it binds, each with its preview.
+final class _Plan {
+  const _Plan(this.owner, {this.unbind, this.bind, this.unbound, this.bound});
+  final _Owner owner;
+  final JsonMap? unbind, bind;
+  final JsonMap? unbound, bound;
 }
 
 final class _TrackRef {
-  const _TrackRef(this.bindingId, this.trackId, this.revision);
+  const _TrackRef(this.owner, this.bindingId, this.trackId, this.revision);
+  final _Owner owner;
   final String? bindingId;
   final String? trackId;
   final int? revision;
 }
 
 final class _SubtitleRef {
-  const _SubtitleRef(this.fileId, this.revision);
+  const _SubtitleRef(this.owner, this.fileId, this.revision);
+  final _Owner owner;
   final String fileId;
   final int revision;
 }

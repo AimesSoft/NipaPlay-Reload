@@ -19,12 +19,19 @@ import 'package:nipaplay/next/ui_data/ui_data.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {
-  test('an entry reads its row: names, progress, time and where it is', () {
+  test('an entry reads its row: names, progress, time, pictures and where it is',
+      () {
     final at = DateTime.utc(2026, 10, 12, 13, 40);
     final e = UiHistoryEntry.from({
       'entryId': 'h1',
+      'fileId': 'f1',
+      'workId': 'w1',
+      'libraryEpisodeId': 'e3',
+      'poster': '/cache/w1/poster.jpg',
+      'still': null,
       'locator': '/v/Frieren/Frieren - 03.mkv',
       'animeId': 17003,
+      'episodeId': 170030003,
       'title': '  葬送的芙莉莲 ',
       'episodeTitle': ' 第3话 ',
       'positionMs': 600000,
@@ -33,6 +40,10 @@ void main() {
       'lastWatchedAt': at.toIso8601String(),
     });
     expect(e.entryId, 'h1');
+    expect(e.workId, 'w1');
+    expect(e.libraryEpisodeId, 'e3');
+    expect(e.poster, '/cache/w1/poster.jpg');
+    expect(e.still, isNull);
     expect(e.title, '葬送的芙莉莲');
     expect(e.episode, '第3话');
     expect(e.animeId, 17003);
@@ -58,6 +69,15 @@ void main() {
     final unseen = UiHistoryEntry.from({'entryId': 'h2', 'title': '别处'});
     expect(unseen.playable, isFalse);
     expect(unseen.title, '别处');
+
+    final elsewhere = UiHistoryEntry.from({
+      'entryId': 'h3',
+      'title': '别处',
+      'workId': 'w1',
+      'libraryEpisodeId': 'e3',
+    });
+    expect(elsewhere.playable, isTrue,
+        reason: 'the library may have the episode on another device');
   });
 
   test('pages follow the cursor; clearing gathers every page in one call',
@@ -73,18 +93,21 @@ void main() {
 
     final first = await history.page();
     expect(first.entries, hasLength(80));
-    expect(first.cursor, '80');
+    expect(first.cursor, 'h79');
     expect(world.queries.single, {'view': 'history.entries', 'limit': 80});
-    final last = await history.page(cursor: '160');
+    final second = await history.page(cursor: first.cursor);
+    expect(world.queries.last,
+        {'view': 'history.entries', 'limit': 80, 'cursor': 'h79'});
+    final last = await history.page(cursor: second.cursor);
     expect(last.entries, hasLength(10));
     expect(last.cursor, isNull);
 
     await history.clear();
     final removed = world.removed.single;
-    expect((removed['paths'] as List).toSet(), {
-      for (var i = 0; i < 170; i++)
-        if (i % 50 != 1) '/v/$i.mkv'
-    });
+    expect(removed.keys.toSet(), {'entryIds', 'animeIds'});
+    expect((removed['entryIds'] as List).toSet(),
+        {for (var i = 0; i < 170; i++) 'h$i'},
+        reason: 'entries with no place too');
     expect((removed['animeIds'] as List).toSet(), {100, 101, 102});
     expect(world.rows, isEmpty);
 
@@ -92,7 +115,7 @@ void main() {
     expect(world.removed, hasLength(1), reason: 'nothing left to forget');
   });
 
-  test('removing forgets only what has a place', () async {
+  test('removing names the entries, with a place or not', () async {
     final world = _World([
       _row(0, locator: '/v/a.mkv'),
       _row(1, locator: null),
@@ -100,12 +123,18 @@ void main() {
     final history = NextHistory(world.calls);
     final entries = (await history.page()).entries;
 
-    await history.remove([entries[1]]);
+    await history.remove(const []);
     expect(world.removed, isEmpty);
+    await history.remove([entries[1]]);
     await history.remove(entries);
-    expect(world.removed.single, {
-      'paths': ['/v/a.mkv']
-    });
+    expect(world.removed, [
+      {
+        'entryIds': ['h1']
+      },
+      {
+        'entryIds': ['h0', 'h1']
+      },
+    ]);
   });
 
   test('days: today, yesterday, weekdays within the week, then dates', () {
@@ -164,10 +193,11 @@ void main() {
     expect(view.debugStatus()['more'], isTrue);
     expect(find.text('作品 0'), findsOneWidget);
 
-    // The entry with no place offers nothing.
+    // The entry with no place cannot go on, but can be forgotten.
     await view.debug({'hover': '1'});
     await tester.pumpAndSettle();
     expect(_button('继续'), findsNothing);
+    expect(_button('删除'), findsOneWidget);
 
     // Forgotten: the row fades, and reading on still misses nothing.
     await view.debug({'hover': '2'});
@@ -175,7 +205,7 @@ void main() {
     await tester.tap(_button('删除'));
     await tester.pumpAndSettle();
     expect(world.removed.single, {
-      'paths': ['/v/2.mkv']
+      'entryIds': ['h2']
     });
     expect(find.text('作品 2'), findsNothing);
     expect(view.debugStatus()['entries'], 79);
@@ -186,6 +216,7 @@ void main() {
       await tester.pumpAndSettle();
     }
     expect(view.debugStatus()['entries'], 99);
+    expect(view.debugStatus()['distinct'], 99);
     expect(view.debugStatus()['more'], isFalse);
 
     // Two copies: the question is put, and the one chosen plays.
@@ -239,8 +270,8 @@ JsonMap _row(int i, {DateTime? at, String? locator, int? animeId}) => {
       'lastWatchedAt': (at ?? DateTime(2026, 10, 13)).toUtc().toIso8601String(),
     };
 
-/// A record read with offset cursors, as `state.query` does, and what was
-/// asked of it.
+/// A record read latest first, its cursor the last row read (as
+/// `state.query` keeps the last row's place), and what was asked of it.
 final class _World {
   _World(this.rows);
   final List<JsonMap> rows;
@@ -256,21 +287,25 @@ final class _World {
     _Capability([
       _Action('state.query', (input) async {
         queries.add(input);
-        final offset = int.parse('${input['cursor'] ?? 0}');
-        final limit = input['limit'] as int;
-        final page = rows.skip(offset).take(limit).toList();
-        final next = offset + page.length;
+        final after = input['cursor'] == null
+            ? 0
+            : int.parse('${input['cursor']}'.substring(1)) + 1;
+        final rest = [
+          for (final r in rows)
+            if (int.parse('${r['entryId']}'.substring(1)) >= after) r
+        ];
+        final page = rest.take(input['limit'] as int).toList();
         return Completed(_Json({
           'rows': page,
-          'nextCursor': next < rows.length ? '$next' : null,
+          'nextCursor': rest.length > page.length ? page.last['entryId'] : null,
         }));
       }),
       _Action('history.remove', (input) async {
         removed.add(input);
-        final paths = ((input['paths'] as List?) ?? const []).toSet();
+        final ids = ((input['entryIds'] as List?) ?? const []).toSet();
         final works = ((input['animeIds'] as List?) ?? const []).toSet();
-        rows.removeWhere((r) =>
-            paths.contains(r['locator']) || works.contains(r['animeId']));
+        rows.removeWhere(
+            (r) => ids.contains(r['entryId']) || works.contains(r['animeId']));
         return const Completed(_Json({}));
       }),
       _Action('playback.open', (input) async {
