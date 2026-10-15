@@ -10,9 +10,11 @@ import '../widgets/buttons.dart';
 import '../widgets/cards.dart';
 import '../widgets/icons.dart';
 import '../widgets/menu.dart';
+import 'batch_bar.dart';
 import 'category_grid.dart';
 import 'fan_cover.dart';
 import 'library_controls.dart';
+import 'selection.dart';
 
 /// What a category's page opens with: what its card, shelf or folder knew.
 class CategoryRef {
@@ -63,6 +65,7 @@ class _CategoryPageState extends State<CategoryPage>
   CategoryItems? _items;
   StreamSubscription<void>? _changes;
   final _scroll = ScrollController();
+  final _selection = LibrarySelection();
   final _sortLink = LayerLink();
   bool _sortsOpen = false;
 
@@ -93,6 +96,7 @@ class _CategoryPageState extends State<CategoryPage>
     _changes?.cancel();
     _items?.dispose();
     _scroll.dispose();
+    _selection.dispose();
     _docked.dispose();
     super.dispose();
   }
@@ -189,89 +193,95 @@ class _CategoryPageState extends State<CategoryPage>
       },
       child: ColoredBox(
         color: NextColors.ink,
-        child: Stack(children: [
-          CustomScrollView(
-            controller: _scroll,
-            slivers: [
-              SliverPadding(
-                padding: const EdgeInsets.fromLTRB(
-                    NextMetrics.gutter, NextMetrics.topBar + 56, 56, 28),
-                sliver: SliverToBoxAdapter(
-                  child: Row(
-                    crossAxisAlignment: CrossAxisAlignment.center,
-                    children: [
-                      Expanded(
-                        child: Row(children: [
-                          Flexible(
-                            child: Text(widget.ref.title,
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                                style: NextText.sans(28,
-                                    weight: FontWeight.w600)),
-                          ),
-                          if (count != null) ...[
-                            const SizedBox(width: 14),
-                            Text('$count',
-                                style:
-                                    NextText.num(18, color: NextColors.p3)),
-                          ],
-                        ]),
-                      ),
-                      if (_sorts.length > 1)
-                        CompositedTransformTarget(
-                          link: _sortLink,
-                          child: MenuPill(
-                            label: _sortLabel!,
-                            onTap: () =>
-                                setState(() => _sortsOpen = !_sortsOpen),
-                          ),
+        child: SelectionHost(
+          selection: _selection,
+          everything: () => allWorks(
+              _shell!.services.library, widget.ref.categoryId,
+              sort: _items!.sort),
+          child: Stack(children: [
+            CustomScrollView(
+              controller: _scroll,
+              slivers: [
+                SliverPadding(
+                  padding: const EdgeInsets.fromLTRB(
+                      NextMetrics.gutter, NextMetrics.topBar + 56, 56, 28),
+                  sliver: SliverToBoxAdapter(
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.center,
+                      children: [
+                        Expanded(
+                          child: Row(children: [
+                            Flexible(
+                              child: Text(widget.ref.title,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: NextText.sans(28,
+                                      weight: FontWeight.w600)),
+                            ),
+                            if (count != null) ...[
+                              const SizedBox(width: 14),
+                              Text('$count',
+                                  style:
+                                      NextText.num(18, color: NextColors.p3)),
+                            ],
+                          ]),
                         ),
-                    ],
+                        if (_sorts.length > 1)
+                          CompositedTransformTarget(
+                            link: _sortLink,
+                            child: MenuPill(
+                              label: _sortLabel!,
+                              onTap: () =>
+                                  setState(() => _sortsOpen = !_sortsOpen),
+                            ),
+                          ),
+                      ],
+                    ),
                   ),
                 ),
-              ),
-              SliverPadding(
-                padding:
-                    const EdgeInsets.fromLTRB(NextMetrics.gutter, 0, 56, 64),
-                sliver: CategoryGrid(
-                    items: _items!, on: _on, deviceLine: widget.deviceLine),
-              ),
-            ],
-          ),
-          Positioned(
-            left: 0,
-            right: 0,
-            top: 0,
-            height: NextMetrics.topBar + 76,
-            child: IgnorePointer(child: _bar(count)),
-          ),
-          Positioned(
-            left: NextMetrics.gutter - 9,
-            top: NextMetrics.topBar + 8,
-            child: NextIconButton(
-              glyph: NextGlyph.chevronLeft,
-              label: '返回',
-              onTap: () => Navigator.of(context).maybePop(),
+                SliverPadding(
+                  padding: const EdgeInsets.fromLTRB(
+                      NextMetrics.gutter, 0, 56, batchBarRoom),
+                  sliver: CategoryGrid(
+                      items: _items!, on: _on, deviceLine: widget.deviceLine),
+                ),
+              ],
             ),
-          ),
-          if (_sortsOpen)
-            ...anchoredMenu(
-              link: _sortLink,
-              right: true,
-              close: () => setState(() => _sortsOpen = false),
-              menu: MenuPanel(width: 160, children: [
-                for (final s in _sorts)
-                  MenuItem(
-                    label: s.label,
-                    selected: s.label == _sortLabel,
-                    onTap: () => setState(() {
-                      _sortsOpen = false;
-                      _items!.reorder(s.id);
-                    }),
-                  ),
-              ]),
+            Positioned(
+              left: 0,
+              right: 0,
+              top: 0,
+              height: NextMetrics.topBar + 76,
+              child: IgnorePointer(child: _bar(count)),
             ),
-        ]),
+            Positioned(
+              left: NextMetrics.gutter - 9,
+              top: NextMetrics.topBar + 8,
+              child: NextIconButton(
+                glyph: NextGlyph.chevronLeft,
+                label: '返回',
+                onTap: () => Navigator.of(context).maybePop(),
+              ),
+            ),
+            if (_sortsOpen)
+              ...anchoredMenu(
+                link: _sortLink,
+                right: true,
+                close: () => setState(() => _sortsOpen = false),
+                menu: MenuPanel(width: 160, children: [
+                  for (final s in _sorts)
+                    MenuItem(
+                      label: s.label,
+                      selected: s.label == _sortLabel,
+                      onTap: () => setState(() {
+                        _sortsOpen = false;
+                        _items!.reorder(s.id);
+                      }),
+                    ),
+                ]),
+              ),
+          ]),
+        ),
       ),
     );
   }

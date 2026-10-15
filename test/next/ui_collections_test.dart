@@ -77,10 +77,12 @@ final class _World {
   final calls = <(String, JsonMap)>[];
 
   void bind(String entityId, String provider, Object externalId,
-          {String status = 'accepted'}) =>
+          {String status = 'accepted', String? objectType}) =>
       bindings.add({
         'entityId': entityId,
         'provider': provider,
+        'objectType':
+            objectType ?? (provider == 'bangumi' ? 'subject' : 'anime'),
         'externalId': '$externalId',
         'status': status,
       });
@@ -156,11 +158,16 @@ final class _World {
               calls.add(('accounts.collections.list', input));
               final provider = input['provider'] as String;
               final wanted = (input['statuses'] as List).cast<String>();
+              // Pages of two, filtered after (a page may come back empty).
+              final all = listed[provider] ?? const <JsonMap>[];
+              final at = int.parse(input['cursor'] as String? ?? '0');
+              final next = at + 2;
               return {
                 'items': [
-                  for (final item in listed[provider] ?? const <JsonMap>[])
+                  for (final item in all.skip(at).take(2))
                     if (wanted.contains(item['status'])) item
-                ]
+                ],
+                'nextCursor': next < all.length ? '$next' : null,
               };
             }),
         ])
@@ -372,12 +379,16 @@ void main() {
   });
 
   group('NextCollections.works', () {
-    test('is null where the accounts cannot list', () async {
-      final w = _World()..bind('w', 'bangumi', 400);
+    test('the host may not list at all; signed out, there is nothing to list',
+        () async {
+      expect(await NextCollections(_World().gui).lists(), isFalse);
+      final w = _World()
+        ..signedIn.updateAll((_, __) => false)
+        ..listed = {};
       final collections = NextCollections(w.gui);
-      expect(await collections.lists(), isFalse);
+      expect(await collections.lists(), isTrue);
       expect(await collections.works(UiWatchStatus.doing), isNull);
-      expect(w.calls, isEmpty);
+      expect(w.calls.map((c) => c.$1), ['accounts.status']);
     });
 
     test('lists the library’s works of a standing, in the accounts’ order',
@@ -387,12 +398,20 @@ void main() {
         ..bind('b', 'bangumi', 401)
         ..bind('b', 'dandanplay', 17)
         ..bind('c', 'dandanplay', 18)
+        ..bind('d', 'bangumi', 403)
+        // Not the subject itself: an episode with the same number, a
+        // binding turned down.
+        ..bind('a:3', 'bangumi', 403, objectType: 'episode')
+        ..bind('x', 'bangumi', 403, status: 'rejected')
         ..listed = {
           'bangumi': [
             {'workId': 401, 'status': 'doing'},
             {'workId': 400, 'status': 'doing'},
             {'workId': 999, 'status': 'doing'},
             {'workId': 402, 'status': 'wish'},
+            {'workId': 404, 'status': 'done'},
+            {'workId': 405, 'status': 'done'},
+            {'workId': 403, 'status': 'doing'},
           ],
           'dandanplay': [
             {'workId': 17, 'status': 'favorited'},
@@ -402,16 +421,27 @@ void main() {
       final collections = NextCollections(w.gui);
       expect(await collections.lists(), isTrue);
       // Bangumi, signed in, decides alone: 弹弹play's “following” would
-      // bring 想看 and 搁置 into 在看.
-      expect(await collections.works(UiWatchStatus.doing), ['b', 'a']);
-      w.calls.clear();
-      expect(await collections.works(UiWatchStatus.wish), isEmpty);
+      // bring 想看 and 搁置 into 在看. Every page is read, the empty one too.
+      expect(await collections.works(UiWatchStatus.doing), ['b', 'a', 'd']);
       expect([
         for (final (action, input) in w.calls)
-          if (action == 'accounts.collections.list') input['provider']
+          if (action == 'accounts.collections.list') input
       ], [
-        'bangumi'
+        for (final cursor in [null, '2', '4', '6'])
+          {
+            'provider': 'bangumi',
+            'statuses': ['doing'],
+            if (cursor != null) 'cursor': cursor,
+          }
       ]);
+      w.calls.clear();
+      expect(await collections.works(UiWatchStatus.wish), isEmpty);
+      expect({
+        for (final (action, input) in w.calls)
+          if (action == 'accounts.collections.list') input['provider']
+      }, {
+        'bangumi'
+      });
       // Without Bangumi, 弹弹play's list is the one.
       w.signedIn['bangumi'] = false;
       expect(await collections.works(UiWatchStatus.doing), ['b', 'c']);

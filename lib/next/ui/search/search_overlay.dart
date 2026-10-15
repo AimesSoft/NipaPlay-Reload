@@ -481,8 +481,19 @@ class _Row extends StatefulWidget {
 
 class _RowState extends State<_Row> {
   @override
+  void initState() {
+    super.initState();
+    _wantArtwork();
+  }
+
+  void _wantArtwork() {
+    if (widget.entry case final SourceEntry e) widget.search.wantArtwork(e);
+  }
+
+  @override
   void didUpdateWidget(_Row old) {
     super.didUpdateWidget(old);
+    _wantArtwork();
     if (widget.selected && !old.selected && widget.search.movedByKeyboard) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (!mounted) return;
@@ -528,7 +539,7 @@ class _RowState extends State<_Row> {
             final WorkEntry e => _work(e.work, on, inLibrary: e.inLibrary),
             EpisodeEntry(:final work, :final episode) =>
               _episode(work, episode, on),
-            SourceEntry(:final hit) => _source(hit, on),
+            final SourceEntry e => _source(e, on),
             NipaEntry(:final text) => _nipa(text, on),
           },
         ),
@@ -556,9 +567,15 @@ class _RowState extends State<_Row> {
         ]),
       );
 
-  /// [inLibrary]: found online, and the library has it.
-  Widget _work(UiWork work, bool on, {String? source, bool inLibrary = false}) {
+  /// [inLibrary]: found online, and the library has it. [workTitle]: a
+  /// source's work, by the library's name for it.
+  Widget _work(UiWork work, bool on,
+      {String? source,
+      String? poster,
+      String? workTitle,
+      bool inLibrary = false}) {
     final meta = <String>[
+      if (workTitle != null && workTitle != work.title) workTitle,
       if (source != null) source,
       if (work.year case final year?) '$year',
       if (work.episodeCount case final n? when n > 1) '$n 集',
@@ -571,7 +588,7 @@ class _RowState extends State<_Row> {
           child: SizedBox(
             width: 36,
             height: 54,
-            child: NextImage(work.artwork.poster,
+            child: NextImage(poster ?? work.artwork.poster,
                 shape: ArtShape.poster, tint: work.artwork.tint),
           ),
         ),
@@ -605,7 +622,7 @@ class _RowState extends State<_Row> {
 
   /// [file]: a share's file of it, marked as one.
   Widget _episode(UiWork work, UiEpisode episode, bool on,
-      {String? source, bool file = false}) {
+      {String? source, String? image, bool file = false}) {
     final title = episode.title;
     // A source's episode may come without its number: its name alone.
     final name = episode.number <= 0
@@ -621,7 +638,7 @@ class _RowState extends State<_Row> {
       name,
       meta,
       on,
-      image: episode.still ?? work.artwork.backdrop,
+      image: image ?? episode.still ?? work.artwork.backdrop,
       tint: work.artwork.tint,
       file: file,
       playable: episode.playable,
@@ -629,20 +646,30 @@ class _RowState extends State<_Row> {
   }
 
   /// A row of a source: its works as the library's; an episode, a video or
-  /// a file under a still. Out of reach, what it held, dimmed.
-  Widget _source(UiSourceHit hit, bool on) {
+  /// a file under a still, with the work it is bound to. Out of reach,
+  /// what it held, dimmed.
+  Widget _source(SourceEntry entry, bool on) {
+    final hit = entry.hit;
     final source = hit.source.name;
+    final image = widget.search.artworkOf(entry);
     final row = switch ((hit.kind, hit.work, hit.episode)) {
-      (UiSourceHitKind.work, final work?, _) => _work(work, on, source: source),
+      (UiSourceHitKind.work, final work?, _) => _work(work, on,
+          source: source, poster: image, workTitle: hit.workTitle),
       (final kind, final work?, final episode?) => _episode(work, episode, on,
-          source: source, file: kind == UiSourceHitKind.file),
-      _ => _still(hit.title, source, on, file: true, playable: hit.playable),
+          source: source, image: image, file: kind == UiSourceHitKind.file),
+      _ => _still(
+          hit.title,
+          [if (hit.workTitle case final title?) title, source].join(' · '),
+          on,
+          image: image,
+          file: true,
+          playable: hit.playable),
     };
     return hit.reachable ? row : Opacity(opacity: 0.5, child: row);
   }
 
-  /// A 16:9 picture (or, for a file, its mark), a name and a line under
-  /// it; the play mark when it plays.
+  /// A 16:9 picture (or, for a file without one, its mark), a name and a
+  /// line under it; the play mark when it plays.
   Widget _still(String name, String meta, bool on,
       {String? image, int? tint, bool file = false, bool playable = false}) {
     return SizedBox(
@@ -655,7 +682,7 @@ class _RowState extends State<_Row> {
             height: 40.5,
             child: Stack(fit: StackFit.expand, children: [
               NextImage(image, tint: tint),
-              if (file)
+              if (file && image == null)
                 const Center(
                     child: NextIcon(NextGlyph.video,
                         size: 16, color: NextColors.p3)),

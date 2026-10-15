@@ -171,6 +171,10 @@ final class NextPlugins {
       });
 
   Future<void> delete(String id) => calls.call('plugins.delete', {'id': id});
+
+  /// One of the plugin's own actions (`plugins.invoke`); what it answered.
+  Future<JsonMap> invoke(String id, String actionId) =>
+      calls.call('plugins.invoke', {'id': id, 'actionId': actionId});
 }
 
 final class UiPlugin {
@@ -184,6 +188,7 @@ final class UiPlugin {
     this.loaded = false,
     this.error,
     this.installed = false,
+    this.actions = const [],
   });
   final String id;
   final String name;
@@ -195,6 +200,9 @@ final class UiPlugin {
   final String? error;
   final bool installed;
 
+  /// What the plugin itself offers to do.
+  final List<UiPluginAction> actions;
+
   factory UiPlugin.from(Map p, {required bool installed}) => UiPlugin(
         id: '${p['id']}',
         name: '${p['name'] ?? p['id']}',
@@ -205,7 +213,31 @@ final class UiPlugin {
         loaded: p['loaded'] == true,
         error: p['error'] as String?,
         installed: installed,
+        actions: [
+          for (final a in ((p['actions'] as List?) ?? const []).cast<Map>())
+            UiPluginAction(id: a['id'] as String, title: a['title'] as String)
+        ],
       );
+}
+
+final class UiPluginAction {
+  const UiPluginAction({required this.id, required this.title});
+  final String id;
+  final String title;
+}
+
+/// What a plugin's action answered: a title and its text, or nothing.
+final class UiPluginResult {
+  const UiPluginResult({required this.title, this.content = ''});
+  final String title;
+  final String content;
+
+  static UiPluginResult? from(JsonMap r) => switch (r['result']) {
+        {'title': final String title, 'content': final String content} =>
+          UiPluginResult(title: title, content: content),
+        null => null,
+        final other => throw FormatException('plugins.invoke result: $other'),
+      };
 }
 
 final class UiMarket {
@@ -272,6 +304,7 @@ final class UiSync {
     this.syncing = false,
     this.last,
     this.error,
+    this.hasPassword = false,
   });
   final String url;
   final String username;
@@ -283,6 +316,9 @@ final class UiSync {
   final bool syncing;
   final DateTime? last;
   final String? error;
+
+  /// A password is saved for this address and user.
+  final bool hasPassword;
 
   static const allKinds = [
     ('watchHistory', '观看记录'),
@@ -308,6 +344,7 @@ final class UiSync {
       syncing: r['syncing'] == true,
       last: DateTime.tryParse('${r['lastSyncAt']}')?.toLocal(),
       error: error is String && error.isNotEmpty ? error : null,
+      hasPassword: r['hasPassword'] == true,
     );
   }
 }

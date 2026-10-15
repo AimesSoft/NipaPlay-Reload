@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:nipa_harness/nipa_harness.dart';
 
 import 'gui_calls.dart';
@@ -38,22 +40,11 @@ final class NextDownloads {
     return UiDownload.from(r['job'] as Map, r['task'] as Map?);
   }
 
-  /// The task IDs that are downloads, of [taskIds].
-  Future<Set<String>> which(Iterable<String> taskIds) async {
-    final wanted = taskIds.toSet();
-    if (wanted.isEmpty) return const {};
-    final jobs = (await calls.call('task.list', {'type': 'download'}))['jobs']
-        as List;
-    return {
-      for (final job in jobs.cast<Map>())
-        if (wanted.contains(job['jobId'])) job['jobId'] as String
-    };
-  }
-
-  /// A magnet's name and files, without adding it.
-  Future<UiTorrentPreview> preview(String magnet) async =>
+  /// A magnet's, a torrent address's or a .torrent file's name and files,
+  /// without adding it.
+  Future<UiTorrentPreview> preview(String source) async =>
       UiTorrentPreview.from(
-          await calls.call('download.preview', {'source': magnet}));
+          await calls.call('download.preview', {'source': source}));
 
   /// Where downloads go, and the folders chosen lately.
   Future<UiDownloadPlaces> places() async {
@@ -86,9 +77,21 @@ final class NextDownloads {
   Future<void> select(String jobId, List<int> files) =>
       calls.call('download.select_files', {'jobId': jobId, 'fileIndices': files});
 
-  /// Takes the download off the list; with [files], what it downloaded too.
-  Future<void> remove(String jobId, {required bool files}) =>
-      calls.call(files ? 'download.delete' : 'download.remove', {'jobId': jobId});
+  /// Takes the download off the list, its files left where they are.
+  ///
+  /// With [files], what it downloaded goes too: `download.delete` first
+  /// asks with the files it would delete, here said as a
+  /// [DeletionNeeded], its options as they are. The option starts a
+  /// deletion of its own, a task that is not this download, which NipaPlay
+  /// itself asks the person to approve.
+  Future<JsonMap> remove(String jobId, {required bool files}) async {
+    if (!files) return calls.call('download.remove', {'jobId': jobId});
+    try {
+      return await calls.call('download.delete', {'jobId': jobId});
+    } on DecisionNeeded catch (asked) {
+      throw DeletionNeeded.of(asked.decision);
+    }
+  }
 
   /// Plays a file, finished or while it downloads.
   Future<void> play(String jobId, int file) =>
@@ -374,4 +377,50 @@ final class UiDownloadLimits {
       up: (actual?['uploadBytesPerSecond'] as num?)?.toInt() ?? 0,
     );
   }
+}
+
+/// `download.delete`'s question, “删除这些下载文件：” and the manifest
+/// (`{downloads: [{outputDirectory, files: [{path}]}]}`), in words: how
+/// many files, and what they are in each download's folder (its own
+/// folder, or the files themselves); its options as they are.
+final class DeletionNeeded implements Exception {
+  const DeletionNeeded(
+      {required this.prompt, required this.items, required this.options});
+
+  factory DeletionNeeded.of(Decision decision) {
+    final at = decision.prompt.indexOf('{');
+    if (at < 0) {
+      return DeletionNeeded(
+          prompt: decision.prompt, items: const [], options: decision.options);
+    }
+    final manifest = jsonDecode(decision.prompt.substring(at)) as Map;
+    var count = 0;
+    final items = <String>{};
+    for (final d in (manifest['downloads'] as List).cast<Map>()) {
+      final folder = d['outputDirectory'] as String?;
+      for (final f in (d['files'] as List).cast<Map>()) {
+        count++;
+        final path = _parts(f['path'] as String);
+        final base = folder == null ? null : _parts(folder);
+        final inside = base != null &&
+            path.length > base.length &&
+            path.take(base.length).join('/') == base.join('/');
+        items.add(inside ? path[base.length] : path.last);
+      }
+    }
+    return DeletionNeeded(
+        prompt: '删除 $count 个文件',
+        items: items.toList(),
+        options: decision.options);
+  }
+
+  final String prompt;
+  final List<String> items;
+  final List<DecisionOption> options;
+
+  static List<String> _parts(String path) =>
+      path.split(RegExp(r'[/\\]')).where((p) => p.isNotEmpty).toList();
+
+  @override
+  String toString() => 'DeletionNeeded($prompt)';
 }

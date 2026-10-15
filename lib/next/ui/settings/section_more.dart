@@ -6,6 +6,7 @@ import '../data/gui_calls.dart';
 import '../data/settings_data.dart';
 import '../data/upkeep.dart';
 import '../theme/tokens.dart';
+import '../widgets/sheet.dart' show withDecisions;
 import 'controls.dart';
 import 'registry_rows.dart';
 import 'section_accounts.dart' show ConfirmPill;
@@ -52,6 +53,11 @@ class PluginsSectionState extends State<PluginsSection> {
 
   /// Switched, until NipaPlay answers.
   final _switched = <String, bool>{};
+
+  /// A plugin's own actions running (`id/actionId`), and what each plugin
+  /// last answered.
+  final _doing = <String>{};
+  final _answers = <String, UiPluginResult>{};
 
   @override
   void initState() {
@@ -119,6 +125,53 @@ class PluginsSectionState extends State<PluginsSection> {
     if (mounted) setState(() => _busy.remove(id));
   }
 
+  Future<void> _invoke(UiPlugin p, UiPluginAction a) async {
+    final key = '${p.id}/${a.id}';
+    setState(() {
+      _doing.add(key);
+      _errors.remove(p.id);
+      _answers.remove(p.id);
+    });
+    try {
+      final r = await withDecisions(
+          widget.plugins.calls, () => widget.plugins.invoke(p.id, a.id));
+      if (r != null && mounted) {
+        setState(() => _answers[p.id] =
+            UiPluginResult.from(r) ?? const UiPluginResult(title: '完成'));
+      }
+    } catch (e) {
+      if (mounted) setState(() => _errors[p.id] = callFailure(e));
+    }
+    if (mounted) setState(() => _doing.remove(key));
+  }
+
+  /// Opens a plugin, and runs one of its actions (debug).
+  Future<void> debugInvoke(String id, String? actionId) async {
+    setState(() => _open = id);
+    if (actionId == null) return;
+    final p = _installed!.firstWhere((p) => p.id == id);
+    await _invoke(p, p.actions.firstWhere((a) => a.id == actionId));
+  }
+
+  Widget _answer(UiPluginResult r) => Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(children: [
+            const StateDot(NextColors.mint),
+            const SizedBox(width: 8),
+            Text(r.title,
+                style: NextText.sans(12.5,
+                    weight: FontWeight.w600, color: NextColors.p2)),
+          ]),
+          if (r.content.isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.only(left: 16, top: 6),
+              child: Text(r.content,
+                  style: NextText.sans(12.5, color: NextColors.p3, height: 1.5)),
+            ),
+        ],
+      );
+
   Future<void> _fromFile() async {
     final path = await widget.data.pickPath(directory: false);
     if (path == null) return;
@@ -133,13 +186,14 @@ class PluginsSectionState extends State<PluginsSection> {
     final update = _market?.updates[p.id];
     final busy = _busy.contains(p.id);
     final open = _open == p.id;
-    final details = (p.description ?? '').isNotEmpty || !p.builtin;
+    final about = (p.description ?? '').isNotEmpty || !p.builtin;
+    final details = about || p.actions.isNotEmpty;
     return SettingsRow(
       key: ValueKey(p.id),
       title: p.name,
       mark: Row(mainAxisSize: MainAxisSize.min, children: [
         _version(p.version),
-        if (p.error != null) ...[
+        if (p.error != null || _errors.containsKey(p.id)) ...[
           const SizedBox(width: 8),
           const StateDot(NextColors.accent2),
         ],
@@ -177,22 +231,44 @@ class PluginsSectionState extends State<PluginsSection> {
             ? const SizedBox(width: double.infinity)
             : Padding(
                 padding: const EdgeInsets.fromLTRB(18, 0, 18, 14),
-                child: Row(children: [
-                  Expanded(
-                    child: Text(p.description ?? '',
-                        style: NextText.sans(12.5,
-                            color: NextColors.p3, height: 1.5)),
-                  ),
-                  if (!p.builtin) ...[
-                    const SizedBox(width: 16),
-                    ConfirmPill(
-                      label: '删除',
-                      confirm: '确定删除',
-                      onConfirm: () =>
-                          _run(p.id, () => widget.plugins.delete(p.id)),
-                    ),
-                  ],
-                ]),
+                child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      if (about)
+                        Row(children: [
+                          Expanded(
+                            child: Text(p.description ?? '',
+                                style: NextText.sans(12.5,
+                                    color: NextColors.p3, height: 1.5)),
+                          ),
+                          if (!p.builtin) ...[
+                            const SizedBox(width: 16),
+                            ConfirmPill(
+                              label: '删除',
+                              confirm: '确定删除',
+                              onConfirm: () => _run(
+                                  p.id, () => widget.plugins.delete(p.id)),
+                            ),
+                          ],
+                        ]),
+                      if (p.actions.isNotEmpty)
+                        Padding(
+                          padding: EdgeInsets.only(top: about ? 12 : 0),
+                          child: Wrap(spacing: 8, runSpacing: 8, children: [
+                            for (final a in p.actions)
+                              PillButton(
+                                label: a.title,
+                                busy: _doing.contains('${p.id}/${a.id}'),
+                                onTap: p.enabled ? () => _invoke(p, a) : null,
+                              ),
+                          ]),
+                        ),
+                      if (_answers[p.id] case final r?)
+                        Padding(
+                          padding: const EdgeInsets.only(top: 12),
+                          child: _answer(r),
+                        ),
+                    ]),
               ),
       ),
     );
@@ -291,9 +367,6 @@ class SyncSectionState extends State<SyncSection> {
   bool _logging = false;
   bool _running = false;
   bool? _enabling;
-
-  /// The address or user changed here: the saved password went with it.
-  bool _relogin = false;
   Timer? _follow;
 
   @override
@@ -357,6 +430,7 @@ class SyncSectionState extends State<SyncSection> {
     bool? onChange,
   }) async {
     final s = _s!;
+    // A new address or user takes the saved password with it.
     final account = url != null && url != s.url ||
         username != null && username != s.username;
     final done = await _do(() => widget.sync.configure(
@@ -366,12 +440,7 @@ class SyncSectionState extends State<SyncSection> {
         minutes: minutes,
         kinds: kinds,
         onChange: onChange));
-    if (done && account && mounted) {
-      setState(() {
-        _relogin = true;
-        _tested = null;
-      });
-    }
+    if (done && account && mounted) setState(() => _tested = null);
     await _load();
   }
 
@@ -381,10 +450,7 @@ class SyncSectionState extends State<SyncSection> {
     if (!mounted) return;
     setState(() {
       _logging = false;
-      if (done) {
-        _relogin = false;
-        _tested = null;
-      }
+      if (done) _tested = null;
     });
     _watch();
   }
@@ -440,14 +506,15 @@ class SyncSectionState extends State<SyncSection> {
     }
     final enabled = _enabling ?? s.enabled;
     final problem = _note ?? (s.error != null ? '没同步上' : null);
-    final connection = _relogin
-        ? _state(NextColors.amber, '需要重新登录')
-        : switch (_tested) {
-            true => _state(NextColors.mint, '连接正常'),
-            false => _state(NextColors.accent, '连不上',
-                textColor: NextColors.accent2),
-            null => null,
-          };
+    final relogin = s.configured && !s.hasPassword;
+    final connection = switch (_tested) {
+      true => _state(NextColors.mint, '连接正常'),
+      false =>
+        _state(NextColors.accent, '连不上', textColor: NextColors.accent2),
+      null when relogin => _state(NextColors.amber, '需要登录'),
+      null when s.hasPassword => _state(NextColors.p4, '已登录'),
+      null => null,
+    };
     return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
       SettingsCard(children: [
         SettingsRow(
@@ -504,8 +571,8 @@ class SyncSectionState extends State<SyncSection> {
                 onTap: s.configured ? test : null),
             const SizedBox(width: 8),
             PillButton(
-                label: '登录',
-                primary: _relogin,
+                label: s.hasPassword ? '重新登录' : '登录',
+                primary: relogin,
                 busy: _logging,
                 onTap: s.configured ? _login : null),
           ]),

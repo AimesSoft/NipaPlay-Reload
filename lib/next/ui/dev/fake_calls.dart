@@ -64,6 +64,9 @@ final class FakeCalls {
       'enabled': true,
       'loaded': true,
       'description': '按词语和用户屏蔽弹幕',
+      'actions': [
+        {'id': 'export', 'title': '导出屏蔽词', 'description': '列出当前的屏蔽词'},
+      ],
     },
     'bilibili-danmaku': {
       'id': 'bilibili-danmaku',
@@ -73,6 +76,11 @@ final class FakeCalls {
       'enabled': true,
       'loaded': true,
       'description': '从哔哩哔哩取弹幕',
+      'actions': [
+        {'id': 'login', 'title': '登录哔哩哔哩', 'description': '扫码登录'},
+        {'id': 'clear', 'title': '清空缓存', 'description': '删除已取的弹幕'},
+        {'id': 'refresh', 'title': '刷新 Cookie', 'description': '重新取 Cookie'},
+      ],
     },
     'spoiler-guard': {
       'id': 'spoiler-guard',
@@ -123,6 +131,9 @@ final class FakeCalls {
     'syncOnRecordChange': true,
   };
   bool _syncEnabled = true, _syncing = false, _syncKey = true;
+
+  /// Debug: whether a sync password is saved.
+  set syncPassword(bool saved) => _syncKey = saved;
   DateTime? _synced = DateTime.now().subtract(const Duration(minutes: 42));
   final _roots = ['$_home/Movies/番剧', '/Volumes/NAS/动画'];
   int _scans = 0;
@@ -162,15 +173,25 @@ final class FakeCalls {
       final number = 1 + (i * 3 + 2) % (work.episodeCount ?? 12);
       final progress = i % 4 == 0 ? 1.0 : 0.15 + random.nextDouble() * 0.8;
       const duration = 24 * 60 * 1000;
+      // One file the library never took in: no work, no pictures.
+      final loose = i == 3;
       _history.add({
         'entryId': 'history-$i',
+        'fileId': loose ? null : 'fake-file-$key-$number',
+        'workId': loose ? null : work.workId,
+        'libraryEpisodeId': loose ? null : 'fake:$key:$number',
+        'poster': loose ? null : work.artwork.poster,
+        'still': loose ? null : world._episode(key, number).still,
         'locator': i == 1
             ? null
-            : '$_home/Movies/番剧/${work.originalTitle ?? work.title}/'
-                '${work.title} - ${number.toString().padLeft(2, '0')}.mkv',
-        'animeId': 17000 + samples.indexOf(key),
-        'title': work.title,
-        'episodeTitle': '第$number话',
+            : loose
+                ? '$_home/Downloads/[SweetSub] Hibike - 05 [1080p].mkv'
+                : '$_home/Movies/番剧/${work.originalTitle ?? work.title}/'
+                    '${work.title} - ${number.toString().padLeft(2, '0')}.mkv',
+        'animeId': loose ? null : 17000 + samples.indexOf(key),
+        'episodeId': null,
+        'title': loose ? null : work.title,
+        'episodeTitle': loose ? null : '第$number话',
         'positionMs': (progress * duration).round(),
         'durationMs': duration,
         'progress': progress,
@@ -203,21 +224,13 @@ final class FakeCalls {
       };
 
   JsonMap _job(String id) {
+    if (_refreshes.containsKey(id)) return _refreshJob(id);
     final t = world._tasks[id];
     final d = _download(id);
     final helper = world._helpers.where((h) => h.id == id).firstOrNull;
-    final scan = id.startsWith('fake-scan-');
     return {
       'jobId': id,
-      'type': d != null
-          ? 'download'
-          : scan
-              ? 'media.scan_classic'
-              : helper != null
-                  ? 'agent.helper'
-                  : _decisions.containsKey(id)
-                      ? 'disk_deletion'
-                      : 'danmaku.fetch',
+      'type': t?.type ?? 'agent.helper',
       'title': t?.title ?? helper?.title ?? '',
       'state': _decisions.containsKey(id)
           ? 'waiting_user'
@@ -315,20 +328,104 @@ final class FakeCalls {
     12
   );
 
+  /// A magnet is the one sample; a torrent's address or file is named by
+  /// its file.
+  static String _torrentName(String source) => source.startsWith('magnet:')
+      ? _preview.$1
+      : Uri.decodeComponent(source.split('/').last)
+          .replaceAll(RegExp(r'\.torrent$'), '');
+
   JsonMap _previewOf(String source) {
     if (source.contains('bad')) {
-      throw const Failure(FailureCode.invalidInput, 'Invalid magnet URI.');
+      throw Failure(
+          FailureCode.invalidInput,
+          source.startsWith('magnet:')
+              ? 'Invalid magnet URI.'
+              : 'Invalid torrent.');
     }
+    final name = _torrentName(source);
     final files = _FakeDownload.manifest(_preview.$2, 1180 << 20);
     return {
-      'name': _preview.$1,
-      'suggestedFolderName': _preview.$1,
+      'name': name,
+      'suggestedFolderName': name,
       'totalSize': files.fold<int>(0, (n, f) => n + f.$2),
       'files': [
-        for (final (i, (name, size, _)) in files.indexed)
-          {'index': i, 'path': '${_preview.$1}/$name', 'length': size}
+        for (final (i, (file, size, _)) in files.indexed)
+          {'index': i, 'path': '$name/$file', 'length': size}
       ],
     };
+  }
+
+  /// The download each `download.delete` preview showed, until it is
+  /// requested (once).
+  final _deletePreviews = <String, String>{};
+  int _deletions = 0;
+
+  /// `download.delete` as the interface gets it: the files, and the one
+  /// option that asks for their deletion.
+  Outcome<_FakeJson> _askDelete(JsonMap input) {
+    final id = input['jobId'] as String;
+    final d = _download(id);
+    if (d == null) {
+      throw const Failure(FailureCode.notFound, 'No such download.');
+    }
+    final preview = 'fake-delete-preview-${++_deletions}';
+    _deletePreviews[preview] = id;
+    final manifest = {
+      'downloads': [
+        {
+          'jobId': id,
+          'infoHash': null,
+          'outputDirectory': d.folder,
+          'files': [
+            for (final (i, (name, size, _)) in d.files.indexed)
+              {
+                'path': '${d.folder}/${d.name}/$name',
+                'local': true,
+                'expectedSize': size,
+                'included': d.selected.contains(i),
+              }
+          ],
+        }
+      ]
+    };
+    return NeedsDecision(Decision(
+        prompt: '删除这些下载文件：${jsonEncode(manifest)}',
+        options: [
+          DecisionOption(
+              label: '请求删除',
+              call: ActionCall(
+                  'download.delete.request', {'previewId': preview})),
+        ]));
+  }
+
+  /// `download.delete.request`: a deletion task of its own, waiting for
+  /// the person; here its question stands for NipaPlay's own window.
+  JsonMap _requestDelete(JsonMap input) {
+    final download = _deletePreviews.remove(input['previewId']);
+    if (download == null || _download(download) == null) {
+      throw const Failure(FailureCode.conflict,
+          'Deletion preview is missing or belongs to another caller.');
+    }
+    final id = 'fake-delete-dl-$_deletions';
+    _decisions[id] = Decision(
+      prompt: '将删除下载的文件，无法恢复。要删除吗？',
+      options: [
+        DecisionOption(
+            label: '删除',
+            call: ActionCall('fake.consent',
+                {'jobId': id, 'download': download, 'approve': true})),
+        DecisionOption(
+            label: '保留',
+            call: ActionCall('fake.consent',
+                {'jobId': id, 'download': download, 'approve': false})),
+      ],
+    );
+    world._tasks[id] = _FakeTask(id, '等待你确认删除', const UiArtwork(), 0,
+        type: 'disk_deletion')
+      ..state = UiTaskState.paused;
+    world._taskStream.add(world._taskList());
+    return {'job': _job(id)};
   }
 
   String _addDownload(JsonMap input) {
@@ -339,10 +436,7 @@ final class FakeCalls {
     if (source.contains('bad')) {
       throw const Failure(FailureCode.invalidInput, 'Invalid torrent.');
     }
-    final name = source.startsWith('magnet:')
-        ? _preview.$1
-        : Uri.decodeComponent(source.split('/').last)
-            .replaceAll(RegExp(r'\.torrent$'), '');
+    final name = _torrentName(source);
     final id = 'fake-dl-new-${++_added}';
     world._tasks[id] = _FakeTask(id, name, const UiArtwork(), 0.01);
     final d = _FakeDownload(
@@ -410,7 +504,8 @@ final class FakeCalls {
             call: ActionCall('fake.decide', {'jobId': id, 'choice': 'keep'})),
       ],
     );
-    world._tasks[id] = _FakeTask(id, '等待你确认删除', const UiArtwork(), 0)
+    world._tasks[id] = _FakeTask(id, '等待你确认删除', const UiArtwork(), 0,
+        type: 'disk_deletion')
       ..state = UiTaskState.paused;
     world._taskStream.add(world._taskList());
   }
@@ -448,6 +543,17 @@ final class FakeCalls {
               'status': 'accepted'
             },
         ]
+      ].where(matches).toList();
+    }
+    if (view == 'mesh.devices') {
+      return [
+        for (final MapEntry(key: name, value: online) in world._online.entries)
+          {
+            'deviceId': 'device:$name',
+            'name': name,
+            'platform': 'macos',
+            'online': online
+          }
       ].where(matches).toList();
     }
     throw const Failure(FailureCode.notFound, 'Unknown view.');
@@ -547,6 +653,7 @@ final class FakeCalls {
         'completedRunCount': 12,
         'lastSyncAt': _synced?.toIso8601String(),
         'lastError': _syncKey ? null : 'Unauthorized',
+        'hasPassword': _syncKey,
       };
 
   Future<JsonMap> _runSync() async {
@@ -574,6 +681,431 @@ final class FakeCalls {
           {'path': '/Volumes/NAS/动画/broken.mkv', 'reason': 'unreadable'}
         ],
       };
+
+  // —— 片库多选 ——
+
+  /// Debug: what the library's batch sheets meet. `refresh`: some
+  /// refreshes cannot start, some fail later; `conflict`: the next change
+  /// finds the matches changed (once); `bind` / `unbind`: changing fails.
+  final batchFaults = <String>{};
+
+  /// Works' matches as the batch sheets left them (null: let go of).
+  /// Untouched, the unrecognised files have none and every other work one.
+  final _matches = <String, JsonMap?>{};
+  /// Each device's revision of its matches ('' here): a change on one
+  /// device leaves the plans for another as they were.
+  final _matchRevisions = <String, int>{};
+  int _matchRevision(String? device) => _matchRevisions[device ?? ''] ?? 0;
+  void _matchChanged(String? device) =>
+      _matchRevisions[device ?? ''] = _matchRevision(device) + 1;
+  final _refreshes = <String, (DateTime, bool)>{};
+
+  /// Each device's own work IDs: the merged ID here, `<merged>@<device>`
+  /// on another device.
+  static String _merged(String ownId) => ownId.split('@').first;
+  static String? _deviceOf(String ownId) =>
+      ownId.contains('@') ? ownId.split('@').last : null;
+
+  /// A file's own ID, `file:<own work>#<episode>`, and the work it is of.
+  static String _fileOf(String ownWork, UiEpisode e) =>
+      'file:$ownWork#${e.episodeId}';
+  static String _ownWork(String id) =>
+      id.startsWith('file:') ? id.substring(5).split('#').first : id;
+
+  List<UiEpisode> _episodesOfKey(String key) => world.catalog.owns(key)
+      ? world.catalog.episodes(key)
+      : world._episodesOf(key);
+
+  /// [workId]'s own ID on [device] (null: here), when that device has it.
+  String? _ownOn(String workId, String? device) {
+    final (from, name) =
+        FakeWorld._elsewhere[workId.substring(5)] ?? (1 << 30, '');
+    if (device == null) return from > 1 ? workId : null;
+    return name == device ? '$workId@$device' : null;
+  }
+
+  /// Where a merged work is, as `media.management.targets` reports it.
+  JsonMap _targets(String workId) {
+    if (!workId.startsWith('fake:')) {
+      return {
+        'workId': workId,
+        'targets': const [],
+        'error':
+            const Failure(FailureCode.notFound, 'Unknown merged work.').toJson(),
+      };
+    }
+    final key = workId.substring(5);
+    final episodes = _episodesOfKey(key);
+    final (_, elsewhere) = FakeWorld._elsewhere[key] ?? (0, '');
+    JsonMap target(String? device) {
+      final online = device == null || world._online[device]!;
+      return {
+        'deviceId': device == null ? 'this-mac' : 'device:$device',
+        'workId': device == null ? workId : '$workId@$device',
+        'local': device == null,
+        'online': online,
+        'reason': online ? null : 'source_device_offline',
+        'episodes': [
+          for (final e in episodes)
+            if (e.device?.name == device)
+              {
+                'episodeId':
+                    device == null ? e.episodeId : '${e.episodeId}@$device',
+                'mergedEpisodeId': e.episodeId,
+                'fileIds': [
+                  _fileOf(device == null ? workId : '$workId@$device', e)
+                ],
+              }
+        ],
+      };
+    }
+
+    return {
+      'workId': workId,
+      'targets': [
+        if (_ownOn(workId, null) != null) target(null),
+        if (elsewhere.isNotEmpty) target(elsewhere),
+      ],
+    };
+  }
+
+  JsonMap _animeRef(String workId) => {
+        'provider': 'dandanplay',
+        'objectType': 'anime',
+        'externalId': '${17000 + _merged(workId).hashCode.abs() % 9000}',
+        'scope': '',
+      };
+
+  JsonMap? _matchOf(String ownId) => _matches.containsKey(ownId)
+      ? _matches[ownId]
+      : ownId.startsWith('fake:raw:')
+          ? null
+          : _animeRef(ownId);
+
+  /// The works matched to [ref] on every device (own IDs): the samples,
+  /// and any the sheets changed.
+  Iterable<String> _matchedTo(Map ref) => {
+        for (final k in world._meta.keys) ...[
+          if (_ownOn('fake:$k', null) case final id?) id,
+          if (FakeWorld._elsewhere[k] case (_, final device))
+            'fake:$k@$device',
+        ],
+        ..._matches.keys,
+      }.where((id) => switch (_matchOf(id)) {
+            final m? => m['provider'] == ref['provider'] &&
+                m['objectType'] == ref['objectType'] &&
+                m['externalId'] == ref['externalId'],
+            null => false,
+          });
+
+  JsonMap _binding(String workId, JsonMap ref) => {
+        'bindingId': 'fake-binding-${ref['externalId']}-$workId',
+        'ref': ref,
+        'relation': 'contains',
+        'scope': {
+          'order': 'provider',
+          'season': null,
+          'cour': null,
+          'numbers': const [],
+          'startMs': null,
+          'endMs': null
+        },
+        'status': 'accepted',
+        'source': 'explicit_binding',
+        'boundBy': 'user',
+        'revision': 1,
+        'invocationId': null,
+        'jobId': null,
+        'createdAt': '2026-09-30T12:00:00.000Z',
+      };
+
+  /// A search's record of the sample [key] at [provider].
+  JsonMap _refOf(String provider, String key) => switch (provider) {
+        'dandanplay' => _animeRef('fake:$key'),
+        'bangumi' => {
+            'provider': 'bangumi',
+            'objectType': 'subject',
+            'externalId': '${400000 + key.hashCode.abs() % 90000}',
+            'scope': ''
+          },
+        _ => {
+            'provider': 'tmdb',
+            'objectType': 'tv',
+            'externalId': '${200000 + key.hashCode.abs() % 90000}',
+            'scope': ''
+          },
+      };
+
+  /// A provider's record of the sample [ref] is of, with its episodes
+  /// (`media.metadata.get`). Bangumi knows only the first eight.
+  JsonMap _catalogue(Map ref) {
+    final provider = ref['provider'] as String;
+    final key = world._meta.keys
+        .where((k) => _refOf(provider, k)['externalId'] == ref['externalId'])
+        .firstOrNull;
+    if (key == null) {
+      throw const Failure(FailureCode.notFound, 'Unknown external object.');
+    }
+    final count = math.min(world.sample(key).episodeCount ?? 12,
+        provider == 'bangumi' ? 8 : 1 << 30);
+    final id = ref['externalId'];
+    final episodes = [
+        for (var n = 1; n <= count; n++)
+          {
+            'ref': {
+              'provider': provider,
+              'objectType': 'episode',
+              'externalId': '$id${'$n'.padLeft(4, '0')}',
+              'scope': switch (provider) {
+                'dandanplay' => 'anime/$id',
+                'bangumi' => 'subject/$id',
+                _ => 'tv/$id/season/1/episode/$n',
+              },
+            },
+            'title': '第 $n 集',
+            'kind': 'episode',
+            'number': '$n',
+            'season': 1,
+            'episodeType': 'regular',
+            'order': 'provider',
+            'language': 'zh-CN',
+            'fetchedAt': DateTime.now().toUtc().toIso8601String(),
+            'episodes': const [],
+          }
+      ];
+    return {
+      ..._record(provider, key)..remove('workId'),
+      // TMDB's episodes are within their seasons.
+      'episodes': provider == 'tmdb'
+          ? [
+              {
+                'ref': {
+                  'provider': 'tmdb',
+                  'objectType': 'season',
+                  'externalId': '${id}01',
+                  'scope': 'tv/$id/season/1',
+                },
+                'title': '第 1 季',
+                'kind': 'season',
+                'number': '1',
+                'season': 1,
+                'episodeType': 'regular',
+                'order': 'provider',
+                'language': 'zh-CN',
+                'fetchedAt': DateTime.now().toUtc().toIso8601String(),
+                'episodes': episodes,
+              }
+            ]
+          : episodes,
+    };
+  }
+
+  JsonMap _record(String provider, String key) {
+    final work = world.sample(key);
+    final ref = _refOf(provider, key);
+    return {
+      'ref': ref,
+      'workId': switch (_matchedTo(ref).firstOrNull) {
+        final id? => _merged(id),
+        null => null,
+      },
+      'title': work.title,
+      'kind': 'tv',
+      'originalTitle': work.originalTitle,
+      'overview': work.overview,
+      'imageUrl': work.artwork.poster,
+      'year': work.year,
+      'number': null,
+      'season': null,
+      'episodeType': 'regular',
+      'order': 'provider',
+      'language': 'zh-CN',
+      'fetchedAt': DateTime.now().toUtc().toIso8601String(),
+      'episodes': const [],
+    };
+  }
+
+  /// What binding or letting go of [request]'s entries touches, as
+  /// `media.management.*_batch` previews it: each work with its release,
+  /// episodes and files, and the works already matched to the refs.
+  JsonMap _impact(JsonMap request) {
+    final entries = (request['entries'] as List).cast<Map>();
+    final device = _deviceOf(_ownWork(entries.first['entityId'] as String));
+    final ids = <String>{
+      for (final e in entries) ...[
+        _ownWork(e['entityId'] as String),
+        if (e['workRef'] case final Map ref)
+          ..._matchedTo(ref).where((id) => _deviceOf(id) == device),
+      ]
+    };
+    return {
+      'entities': [for (final id in ids.toList()..sort()) ..._subtree(id)],
+      'diskFilesDeleted': false,
+      'progressChanged': false,
+    };
+  }
+
+  List<JsonMap> _subtree(String workId) {
+    final device = _deviceOf(workId);
+    final key = _merged(workId).substring(5);
+    final work = world.catalog.work(key);
+    final episodes = _episodesOfKey(key);
+    final release = '$workId:release';
+    JsonMap row(String id, String kind, String? parent,
+            {List<JsonMap> associations = const [],
+            List<JsonMap> sources = const [],
+            List<JsonMap> locations = const [],
+            List<JsonMap> progress = const [],
+            JsonMap attributes = const {}}) =>
+        {
+          'entity': {
+            'id': id,
+            'kind': kind,
+            'parent_id': parent,
+            'revision': _matchRevision(device),
+            'attributes': attributes,
+          },
+          'associations': associations,
+          'sources': sources,
+          'locations': locations,
+          'progress': progress,
+        };
+    final ref = _matchOf(workId);
+    final rows = [
+      row(workId, 'work', null, attributes: {
+        'title': work.title
+      }, sources: [
+        if (ref != null)
+          {
+            'id': 'fake-binding-${ref['externalId']}-$workId',
+            'entity_id': workId,
+            'object_id': 'object:${ref['provider']}:${ref['externalId']}',
+            'relation': 'contains',
+            'scope': '{"order":"provider"}',
+            'status': 'accepted',
+            'source': 'explicit_binding',
+            'bound_by': 'user',
+            'revision': 1,
+            'supersedes': null,
+            'invocation_id': null,
+            'job_id': null,
+            'created_at': '2026-09-30T12:00:00.000Z',
+            'provider': ref['provider'],
+            'object_type': ref['objectType'],
+            'external_id': ref['externalId'],
+            'object_scope': ref['scope'],
+          }
+      ]),
+      row(release, 'release', workId, attributes: {'title': work.title}),
+    ];
+    for (final e in episodes) {
+      if (e.device?.name != device) continue;
+      final episode = device == null ? e.episodeId : '${e.episodeId}@$device';
+      final file = _fileOf(workId, e);
+      final link = {
+        'file_id': file,
+        'episode_id': episode,
+        'relation': 'primary',
+        'ordinal': 0,
+        'start_ms': null,
+        'end_ms': null
+      };
+      rows.add(row(episode, 'episode', release,
+          attributes: {'title': e.title, 'number': '${e.number}'},
+          associations: [link]));
+      final watched = e.progress ?? 0;
+      rows.add(row(file, 'file', null, associations: [
+        link
+      ], locations: [
+        {
+          'id': 'location:$episode',
+          'file_id': file,
+          'source': 'local',
+          'owner_device_id': device == null ? 'this-mac' : 'device:$device',
+          'locator': '$_home/Movies/${work.title}/'
+              '${'${e.number}'.padLeft(2, '0')}.mkv',
+          'available': 1,
+        }
+      ], progress: [
+        {
+          'lastPosition': watched > 0 ? (watched * 1440000).round() : null,
+          'duration': 1440000,
+          'watchProgress': watched > 0 ? watched : null,
+          'lastWatchTime': watched > 0 ? '2026-10-12T21:30:00.000Z' : null,
+        }
+      ]));
+    }
+    return rows;
+  }
+
+  /// Carries out a bind or unbind entry of a batch, as the identity
+  /// primitives report it.
+  JsonMap _associate(String op, int index, Map entry) {
+    final id = entry['entityId'] as String;
+    final work = _ownWork(id);
+    final before = _matchOf(work);
+    if (op == 'bind') {
+      final ref = Map<String, Object?>.from(entry['workRef'] as Map);
+      _matches[work] = ref;
+      return {
+        'index': index,
+        'workId': work,
+        'releaseId': '$work:release',
+        'episodeIds': [
+          if (id.startsWith('file:')) id.split('#').last,
+        ],
+        'fileId': id.startsWith('file:') ? id : null,
+        'classicProjectionId': null,
+        'bindingIds': [_binding(id, ref)['bindingId']],
+        'classicProjection': const [],
+      };
+    }
+    // Letting go of a file's match leaves the work's.
+    if (id == work) _matches[id] = null;
+    return {
+      'index': index,
+      'entityId': id,
+      'bindingIds': (entry['bindingIds'] as List?) ??
+          [if (before != null) _binding(id, before)['bindingId']],
+      'classicProjectionId': null,
+      'classicProjection': const [],
+    };
+  }
+
+  String _startRefresh({required bool fails}) {
+    final id = 'fake-refresh-${_refreshes.length + 1}';
+    _refreshes[id] = (DateTime.now(), fails);
+    return id;
+  }
+
+  /// A refresh's job: queued a moment, running a few seconds, then done
+  /// (or failed, when the debug asks).
+  JsonMap _refreshJob(String id) {
+    final (at, fails) = _refreshes[id]!;
+    final ms = DateTime.now().difference(at).inMilliseconds;
+    final state = ms < 1200
+        ? 'queued'
+        : ms < 3500 + id.hashCode.abs() % 3000
+            ? 'running'
+            : fails
+                ? 'failed'
+                : 'succeeded';
+    return {
+      'jobId': id,
+      'type': 'media.metadata.refresh',
+      'title': '更新作品资料',
+      'state': state,
+      'progress': {'completed': state == 'succeeded' ? 1 : 0, 'total': 1},
+      'createdAt': at.toUtc().toIso8601String(),
+      'updatedAt': DateTime.now().toUtc().toIso8601String(),
+      'revision': 1,
+      if (state == 'failed')
+        'error': const Failure(
+                FailureCode.unavailable, 'Provider did not answer.',
+                retryable: true)
+            .toJson(),
+    };
+  }
 
   // —— the Actions ——
 
@@ -711,15 +1243,37 @@ final class FakeCalls {
               ..addAll((input['fileIndices'] as List).cast<int>());
             return _read(id);
           })),
-      for (final verb in ['remove', 'delete'])
-        a('download.$verb', (input) => slow(400, () {
-              final id = input['jobId'] as String;
-              final job = _job(id);
-              world._tasks.remove(id);
-              _downloads.remove(id);
-              world._taskStream.add(world._taskList());
-              return {'job': job};
-            })),
+      a('download.remove', (input) => slow(400, () {
+            final id = input['jobId'] as String;
+            final job = _job(id);
+            world._tasks.remove(id);
+            _downloads.remove(id);
+            world._taskStream.add(world._taskList());
+            return {'job': job};
+          })),
+      _FakeAction.outcome('download.delete', (input) async {
+        await slow(400, () {});
+        if (failing.contains('download.delete')) {
+          throw const Failure(FailureCode.unavailable, 'Scripted failure.');
+        }
+        return _askDelete(input);
+      }),
+      a('download.delete.request',
+          (input) => slow(400, () => _requestDelete(input))),
+      // NipaPlay's own window, answered: the download and its files go, or
+      // stay.
+      a('fake.consent', (input) {
+        final id = input['jobId'] as String;
+        _decisions.remove(id);
+        world._tasks.remove(id);
+        if (input['approve'] == true) {
+          final download = input['download'] as String;
+          world._tasks.remove(download);
+          _downloads.remove(download);
+        }
+        world._taskStream.add(world._taskList());
+        return {'jobId': id};
+      }),
       a('download.play', (input) {
         debugPrint('[NextUi dev] play ${input['jobId']} #${input['fileIndex']}');
         return {'opened': true};
@@ -740,11 +1294,44 @@ final class FakeCalls {
       }),
       // History.
       a('state.query', (input) {
-        final rows = _rows(input);
-        final offset = int.tryParse('${input['cursor'] ?? 0}') ?? 0;
+        var rows = _rows(input);
         final limit = (input['limit'] as int?) ?? 50;
-        final page = rows.skip(offset).take(limit).toList();
-        final next = offset + page.length;
+        final cursor = input['cursor'] as String?;
+        final List<JsonMap> page;
+        final String? next;
+        if (input['view'] == 'history.entries') {
+          // As the real view: latest first, and the cursor keeps the last
+          // row's place in that order, so forgotten rows shift nothing.
+          int order(Map a, Map b) {
+            final when =
+                '${b['lastWatchedAt']}'.compareTo('${a['lastWatchedAt']}');
+            return when != 0
+                ? when
+                : '${a['entryId']}'.compareTo('${b['entryId']}');
+          }
+
+          rows = [...rows]..sort(order);
+          if (cursor != null) {
+            final anchor =
+                jsonDecode(utf8.decode(base64Url.decode(cursor))) as List;
+            final last = {'lastWatchedAt': anchor[0], 'entryId': anchor[1]};
+            rows = [
+              for (final r in rows)
+                if (order(last, r) < 0) r
+            ];
+          }
+          page = rows.take(limit).toList();
+          next = rows.length > page.length
+              ? base64Url.encode(utf8.encode(jsonEncode(
+                  [page.last['lastWatchedAt'], page.last['entryId']])))
+              : null;
+        } else {
+          final offset = int.tryParse('${cursor ?? 0}') ?? 0;
+          page = rows.skip(offset).take(limit).toList();
+          next = offset + page.length < rows.length
+              ? '${offset + page.length}'
+              : null;
+        }
         return {
           'schemaVersion': 1,
           'snapshotId': null,
@@ -752,18 +1339,35 @@ final class FakeCalls {
           'consistency': 'live',
           'sources': {},
           'rows': page,
-          'nextCursor': next < rows.length ? '$next' : null,
-          'truncated': next < rows.length,
+          'nextCursor': next,
+          'truncated': next != null,
           'warnings': [],
         };
       }),
       a('history.remove', (input) {
+        if (!['paths', 'entryIds', 'animeIds'].any(input.containsKey)) {
+          throw const Failure(
+              FailureCode.invalidInput, 'Supply entryIds, paths or animeIds.');
+        }
         final paths = ((input['paths'] as List?) ?? const []).toSet();
+        final entryIds = ((input['entryIds'] as List?) ?? const []).toSet();
         final ids = ((input['animeIds'] as List?) ?? const []).toSet();
-        final before = _history.length;
-        _history.removeWhere(
-            (e) => paths.contains(e['locator']) || ids.contains(e['animeId']));
-        return {'removedCount': before - _history.length};
+        final removed = [
+          for (final e in _history)
+            if (paths.contains(e['locator']) ||
+                entryIds.contains(e['entryId']) ||
+                ids.contains(e['animeId']))
+              e
+        ];
+        _history.removeWhere(removed.contains);
+        return {
+          'removedPaths': [
+            for (final e in removed)
+              if (paths.contains(e['locator'])) e['locator']
+          ],
+          'removedEntryIds': [for (final e in removed) e['entryId']],
+          'removedCount': removed.length,
+        };
       }),
       _FakeAction.outcome('playback.open', (input) async {
         final path = input['path'] as String;
@@ -822,28 +1426,60 @@ final class FakeCalls {
               ]
             };
           })),
-      // Not in the capability layer yet: the shape the pages would read.
-      a('accounts.collections.list', (input) {
+      a('accounts.collections.list', (input) async {
         final provider = input['provider'] as String;
-        final wanted = (input['statuses'] as List).cast<String>();
+        if ((await accounts())[provider] != true) {
+          throw const Failure(
+              FailureCode.unavailable, 'Log in to this account first.');
+        }
+        final bangumi = provider == 'bangumi';
+        final statuses =
+            ((input['statuses'] as List?) ?? const []).cast<String>();
+        final valid = bangumi
+            ? const ['wish', 'done', 'doing', 'onHold', 'dropped']
+            : const ['favorited', 'finished', 'abandoned'];
+        if (statuses.any((s) => !valid.contains(s))) {
+          throw const Failure(FailureCode.invalidInput,
+              'Use statuses belonging to this provider.');
+        }
+        final limit = input['limit'] as int? ?? 100;
+        var position = int.parse(input['cursor'] as String? ?? '0');
         final keys = world._meta.keys.toList();
-        return {
-          'items': [
-            for (final e in _collections.entries)
-              if (wanted.contains(provider == 'bangumi'
+        final all = [
+          for (final e in _collections.entries)
+            {
+              'workId': (bangumi ? 400000 : 17000) + keys.indexOf(e.key),
+              'status': bangumi
                   ? e.value.$1
                   : switch (e.value.$1) {
                       'done' => 'finished',
                       'dropped' => 'abandoned',
                       _ => 'favorited',
-                    }))
-                {
-                  'workId': (provider == 'bangumi' ? 400000 : 17000) +
-                      keys.indexOf(e.key),
-                  'rating': e.value.$2,
-                }
-          ]
-        };
+                    },
+              'rating': bangumi ? e.value.$2 ?? 0 : e.value.$2,
+            }
+        ];
+        bool accepts(Map item) =>
+            statuses.isEmpty || statuses.contains(item['status']);
+        final List<JsonMap> items;
+        final bool more;
+        if (bangumi) {
+          // The account's own pages, filtered after: short here, so a
+          // page left empty by the filter still goes on.
+          final rows = all.skip(position).take(math.min(limit, 3)).toList();
+          items = rows.where(accepts).toList();
+          position += rows.length;
+          more = position < all.length;
+        } else {
+          final rows = [
+            for (final item in all)
+              if ((item['workId'] as int) > position && accepts(item)) item
+          ]..sort((a, b) => (a['workId'] as int).compareTo(b['workId'] as int));
+          items = rows.take(limit).toList();
+          if (items.isNotEmpty) position = items.last['workId'] as int;
+          more = rows.length > items.length;
+        }
+        return {'items': items, 'nextCursor': more ? '$position' : null};
       }),
       // Space, caches, updates.
       a('storage.status', (_) => {
@@ -931,6 +1567,38 @@ final class FakeCalls {
         _plugins.remove(id);
         return {'id': id, 'deleted': true};
       }),
+      // A plugin's own actions: one answers with text, one asks first, one
+      // fails.
+      _FakeAction.outcome('plugins.invoke', (input) async {
+        final id = input['id'] as String;
+        final actionId = input['actionId'] as String;
+        if (failing.contains('plugins.invoke')) {
+          throw const Failure(FailureCode.unavailable, 'Scripted failure.');
+        }
+        await Future<void>.delayed(const Duration(milliseconds: 400));
+        Completed<_FakeJson> answer(JsonMap? result) => Completed(_FakeJson(
+            {'id': id, 'actionId': actionId, 'result': result}));
+        return switch (actionId) {
+          'export' => answer({
+              'type': 'text',
+              'title': '屏蔽词',
+              'content': '剧透\n前方高能\n空降指挥部',
+            }),
+          'login' => answer({'type': 'text', 'title': '已登录', 'content': ''}),
+          'clear' => NeedsDecision(Decision(prompt: '清空 B 站弹幕缓存？', options: [
+              DecisionOption(
+                  label: '清空',
+                  detail: '86 MB',
+                  call: ActionCall('plugins.invoke',
+                      {'id': id, 'actionId': 'clear-confirmed'})),
+            ])),
+          'clear-confirmed' => answer(null),
+          'refresh' =>
+            throw const Failure(FailureCode.unavailable, 'Cookie expired.'),
+          _ => throw const Failure(
+              FailureCode.notFound, 'Plugin action not found.'),
+        };
+      }),
       // Sync.
       a('sync.status', (_) => _syncStatus()),
       a('sync.configure', (input) {
@@ -970,7 +1638,8 @@ final class FakeCalls {
       }),
       a('media.library.scan_classic', (input) {
         final id = 'fake-scan-${++_scans}';
-        world._tasks[id] = _FakeTask(id, '整理片库', const UiArtwork(), 0.05);
+        world._tasks[id] = _FakeTask(id, '整理片库', const UiArtwork(), 0.05,
+            type: 'media.scan_classic');
         world._ticker ??=
             Timer.periodic(const Duration(seconds: 1), (_) => world._tick());
         world._taskStream.add(world._taskList());
@@ -987,6 +1656,193 @@ final class FakeCalls {
             ],
             'observedAt': DateTime.now().toUtc().toIso8601String(),
           })),
+      // The library's batches: where a work is and what it is on each
+      // device, searching a provider, refreshing and changing matches
+      // (preview, then the plan); another device's part through
+      // mesh.invoke, against the same world.
+      a('media.management.targets', (input) => {
+            'entries': [
+              for (final id in (input['workIds'] as List).cast<String>())
+                _targets(id)
+            ]
+          }),
+      a('media.files.list', (input) {
+        final own = input['workId'] as String;
+        final device = _deviceOf(own);
+        final key = _merged(own).substring(5);
+        final work = world.catalog.work(key);
+        final ref = _matchOf(own);
+        final files = [
+          for (final e in _episodesOfKey(key))
+            if (e.device?.name == device)
+              {
+                'fileId': _fileOf(own, e),
+                'path': '$_home/Movies/${work.title}/'
+                    '${'${e.number}'.padLeft(2, '0')}.mkv',
+                'size': 1400000000 + e.number * 7340032,
+                'durationMs': 1440000,
+                'headMd5': '${e.episodeId.hashCode.abs()}'.padLeft(32, '0'),
+                'modifiedAt': '2026-09-30T12:00:00.000Z',
+                'bindings': [
+                  if (ref != null)
+                    {
+                      'bindingId': 'fake-file-binding-${e.episodeId}@$own',
+                      'ref': {
+                        'provider': ref['provider'],
+                        'objectType': 'episode',
+                        'externalId':
+                            '${ref['externalId']}${'${e.number}'.padLeft(4, '0')}',
+                        'scope': 'anime/${ref['externalId']}',
+                      },
+                      'relation': 'exact',
+                      'scope': '{"order":"provider"}',
+                      'boundBy': 'user',
+                      'source': 'explicit_binding',
+                    }
+                ],
+                'episodes': [
+                  {
+                    'episodeId':
+                        device == null ? e.episodeId : '${e.episodeId}@$device',
+                    'relation': 'primary',
+                    'ordinal': 0,
+                    'startMs': null,
+                    'endMs': null,
+                  }
+                ],
+              }
+        ];
+        return {'files': files, 'total': files.length};
+      }),
+      a('media.metadata.get',
+          (input) => slow(400, () => {'record': _catalogue(input['ref'] as Map)})),
+      _FakeAction.outcome('mesh.invoke', (input) async {
+        final device = (input['deviceId'] as String).substring(7);
+        if (world._online[device] != true) {
+          return const Failed(
+              Failure(FailureCode.unavailable, 'Mesh device is unreachable.'));
+        }
+        return switch (await harness.invokeJson(
+            input['action'] as String,
+            Map<String, Object?>.from(input['input'] as Map),
+            Invocation(origin: 'mesh'))) {
+          Completed(:final value) => Completed(_FakeJson(value.toJson())),
+          Failed(:final failure) => Failed(failure),
+          NeedsDecision(:final decision) => NeedsDecision(decision),
+        };
+      }),
+      a('media.library.refresh', (_) {
+        world._changes.add(null);
+        return {'works': world._meta.length};
+      }),
+      a('media.identity.get', (input) {
+        final id = input['entityId'] as String;
+        if (!id.startsWith('fake:')) {
+          throw Failure(FailureCode.notFound, 'Media entity $id not found.');
+        }
+        return {
+          'identity': {
+            'id': id,
+            'kind': 'work',
+            'parentId': null,
+            'revision': _matchRevision(_deviceOf(id)),
+            'bindingRevision': _matchRevision(_deviceOf(id)),
+            'metadata': const [],
+            'bindings': [
+              if (_matchOf(id) case final ref?) _binding(id, ref)
+            ],
+            'locations': const [],
+            'episodes': const [],
+            'evidence': const [],
+            'classicObservations': const [],
+            'conflicts': const [],
+            'legacyEvidence': const [],
+          }
+        };
+      }),
+      a('media.metadata.search', (input) => slow(450, () {
+            final provider = input['provider'] as String;
+            final query = (input['query'] as String).replaceAll(' ', '');
+            if (RegExp(r'^(VID_|录屏)').hasMatch(query)) {
+              return {'results': const []};
+            }
+            final keys = world._meta.keys.toList();
+            final like = [
+              for (final k in keys)
+                if (query.contains(world.sample(k).title.replaceAll(' ', '')) ||
+                    world.sample(k).title.contains(query))
+                  k
+            ];
+            final near = [
+              for (var i = 0; i < 3; i++)
+                keys[(query.hashCode.abs() + i * 5) % keys.length]
+            ];
+            return {
+              'results': [
+                for (final k in {...like, ...near}.take(5))
+                  _record(provider, k)
+              ]
+            };
+          })),
+      a('media.metadata.refresh_batch', (input) {
+        final entries = (input['entries'] as List).cast<Map>();
+        if (entries.isEmpty || entries.length > 100) {
+          throw const Failure(
+              FailureCode.invalidInput, 'Batch must contain 1 to 100 entries.');
+        }
+        final faulty = batchFaults.contains('refresh');
+        return {
+          'atomic': false,
+          'entries': [
+            for (var i = 0; i < entries.length; i++)
+              if (faulty && i % 3 == 1)
+                {
+                  'index': i,
+                  'status': 'failed',
+                  'error': const Failure(
+                          FailureCode.unavailable, 'dandanplay: rate limited.',
+                          retryable: true)
+                      .toJson(),
+                }
+              else
+                {
+                  'index': i,
+                  'status': 'completed',
+                  'result': {
+                    'job': _refreshJob(
+                        _startRefresh(fails: faulty && i % 3 == 2))
+                  },
+                }
+          ],
+        };
+      }),
+      for (final op in ['bind', 'unbind'])
+        a('media.management.${op}_batch', (input) => slow(700, () {
+              final request = {...input}..remove('expectedPlan');
+              final entries = (request['entries'] as List).cast<Map>();
+              final device =
+                  _deviceOf(_ownWork(entries.first['entityId'] as String));
+              String plan() => 'association-plan-${_matchRevision(device)}-'
+                  '${jsonEncode(request).hashCode}';
+              if (input['expectedPlan'] == null) {
+                return {'preview': _impact(request), 'expectedPlan': plan()};
+              }
+              if (batchFaults.remove('conflict')) _matchChanged(device);
+              if (input['expectedPlan'] != plan()) {
+                throw const Failure(FailureCode.conflict,
+                    'Association preview is stale; preview again.');
+              }
+              if (batchFaults.contains(op)) {
+                throw const Failure(
+                    FailureCode.unavailable, 'Scripted failure.');
+              }
+              _matchChanged(device);
+              return {
+                'entries': [
+                  for (final (i, e) in entries.indexed) _associate(op, i, e)
+                ]
+              };
+            })),
     ];
   }
 

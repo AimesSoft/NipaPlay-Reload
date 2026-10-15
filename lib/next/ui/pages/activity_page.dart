@@ -38,7 +38,6 @@ class ActivityPage extends StatefulWidget {
 }
 
 class _ActivityPageState extends State<ActivityPage>
-    with DownloadTasks<ActivityPage>
     implements ActivityDebug {
   ActivityTab _tab = ActivityTab.now;
   bool _capacity = false;
@@ -49,12 +48,6 @@ class _ActivityPageState extends State<ActivityPage>
     ActivityTab.downloads: '下载',
     ActivityTab.history: '观看记录',
   };
-
-  @override
-  void didChangeDependencies() {
-    super.didChangeDependencies();
-    watchDownloads(NextShellScope.of(context));
-  }
 
   Future<void> _all(List<UiTask> tasks, String command) async {
     final shell = NextShellScope.of(context);
@@ -67,8 +60,7 @@ class _ActivityPageState extends State<ActivityPage>
     }
     setState(() => _said = null);
     try {
-      final refused = await controlTasks(shell.services,
-          tasks.map((t) => t.taskId), command, downloads);
+      final refused = await controlTasks(shell.services, tasks, command);
       if (mounted && refused.isNotEmpty) {
         setState(() => _said = '${refused.length} 个不能${switch (command) {
               'pause' => '暂停',
@@ -97,14 +89,19 @@ class _ActivityPageState extends State<ActivityPage>
     if (p['open'] case final i?) {
       final shell = NextShellScope.of(context);
       final task = shell.activeTasks[int.parse(i)];
-      unawaited(openTask(shell.services, task,
-          download: downloads.contains(task.taskId)));
+      unawaited(openTask(shell.services, task));
     }
   }
 
   @override
-  Map<String, Object?> debugStatus() =>
-      {'tab': _tab.name, 'capacity': _capacity, 'said': _said};
+  Map<String, Object?> debugStatus() => {
+        'tab': _tab.name,
+        'capacity': _capacity,
+        'said': _said,
+        'types': [
+          for (final t in NextShellScope.of(context).activeTasks) t.type
+        ],
+      };
 
   @override
   Widget build(BuildContext context) {
@@ -157,7 +154,7 @@ class _ActivityPageState extends State<ActivityPage>
           final c = shell.chat;
           final line = c.doing ?? c.latestLine;
           void control(UiTask t, String command) => unawaited(
-              controlTasks(shell.services, [t.taskId], command, downloads));
+              controlTasks(shell.services, [t], command));
           final callbacks = CardCallbacks(
             onPauseTask: (t) => control(t, 'pause'),
             onResumeTask: (t) => control(t, 'resume'),
@@ -229,8 +226,7 @@ class _ActivityPageState extends State<ActivityPage>
                           for (final (i, task) in background.indexed) ...[
                             if (i > 0) const SizedBox(height: 10),
                             Pressable(
-                              onTap: () => openTask(shell.services, task,
-                                  download: downloads.contains(task.taskId)),
+                              onTap: () => openTask(shell.services, task),
                               semanticLabel: task.title,
                               pressScale: 0.995,
                               builder: (context, hovered) => CardSurface(

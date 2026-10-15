@@ -18,8 +18,8 @@ final class NextCollections {
   /// Fires after a standing or score was set from here.
   Stream<void> get changes => _changes.stream;
 
-  /// Whether the accounts can list works by standing
-  /// (`accounts.collections.list`).
+  /// Whether the host can list works by standing
+  /// (`accounts.collections.list`), signed in or not.
   Future<bool> lists() => calls.has('accounts.collections.list');
 
   /// The work's standing on each account it is known to.
@@ -89,55 +89,71 @@ final class NextCollections {
     return failed;
   }
 
-  /// Works of the library the person marked [status], when the accounts
-  /// can list them (`accounts.collections.list`); null when they cannot.
+  /// Works of the library the person marked [status], in the account's
+  /// order; null when no account is signed in. One account decides, as on
+  /// the work's page: Bangumi keeps all five; 弹弹play's “following” would
+  /// put 想看 and 搁置 under 在看.
   Future<List<String>?> works(UiWatchStatus status) async {
-    if (!await lists()) return null;
-    final found = <String>{};
-    // One account decides, as on the work's page: Bangumi keeps all five;
-    // 弹弹play's “following” would put 想看 and 搁置 under 在看.
     final signedIn = {
       for (final a in ((await calls.call('accounts.status', {}))['accounts']
               as List)
           .cast<Map>())
         if (a['loggedIn'] == true) '${a['provider']}'
     };
-    for (final provider in [
-      signedIn.contains('bangumi') ? 'bangumi' : 'dandanplay'
-    ]) {
-      final values = status.all(provider);
-      if (values.isEmpty) continue;
-      final JsonMap r;
-      try {
-        r = await calls.call('accounts.collections.list',
-            {'provider': provider, 'statuses': values});
-      } on Failure catch (f) {
-        if (f.code == FailureCode.unavailable) continue;
-        rethrow;
-      }
-      final ids = [
+    final provider = providers.where(signedIn.contains).firstOrNull;
+    if (provider == null) return null;
+    final values = status.all(provider);
+    if (values.isEmpty) return const [];
+    final found = <String>{};
+    String? cursor;
+    // A page the account filtered empty may still go on.
+    do {
+      final r = await calls.call('accounts.collections.list', {
+        'provider': provider,
+        'statuses': values,
+        if (cursor != null) 'cursor': cursor,
+      });
+      found.addAll(await _entities(provider, [
         for (final item in (r['items'] as List).cast<Map>()) '${item['workId']}'
-      ];
-      if (ids.isEmpty) continue;
-      final rows = await calls.call('state.query', {
+      ]));
+      cursor = r['nextCursor'] as String?;
+    } while (cursor != null);
+    return found.toList();
+  }
+
+  /// The library's works bound to [ids] of [provider]'s works, in their
+  /// order.
+  Future<List<String>> _entities(String provider, List<String> ids) async {
+    if (ids.isEmpty) return const [];
+    final rows = <Map>[];
+    String? cursor;
+    do {
+      final r = await calls.call('state.query', {
         'view': 'media.bindings',
         'filter': {
           'provider': {'eq': provider},
+          'objectType': {'in': _workTypes[provider]},
           'externalId': {'in': ids},
+          'status': {'eq': 'accepted'},
         },
         'select': ['entityId', 'externalId'],
         'limit': 500,
+        if (cursor != null) 'cursor': cursor,
       });
-      final order = {for (final (i, id) in ids.indexed) id: i};
-      final entities = (rows['rows'] as List).cast<Map>().toList()
-        ..sort((a, b) => (order['${a['externalId']}'] ?? 0)
-            .compareTo(order['${b['externalId']}'] ?? 0));
-      for (final row in entities) {
-        found.add('${row['entityId']}');
-      }
-    }
-    return found.toList();
+      rows.addAll((r['rows'] as List).cast<Map>());
+      cursor = r['nextCursor'] as String?;
+    } while (cursor != null);
+    final order = {for (final (i, id) in ids.indexed) id: i};
+    rows.sort((a, b) =>
+        order['${a['externalId']}']!.compareTo(order['${b['externalId']}']!));
+    return [for (final row in rows) '${row['entityId']}'];
   }
+
+  /// What each account's work (not its episodes) is called in bindings.
+  static const _workTypes = {
+    'bangumi': ['subject'],
+    'dandanplay': ['anime', 'work'],
+  };
 
   Future<Map<String, int>> _ids(String workId) async {
     final r = await calls.call('state.query', {

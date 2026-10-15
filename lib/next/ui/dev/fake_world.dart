@@ -734,15 +734,20 @@ final class FakeWorld implements NextUiData, NextUiActions, NextDiscoverData {
 }
 
 class _FakeTask {
-  _FakeTask(this.id, this.title, this.artwork, this.progress);
+  _FakeTask(this.id, this.title, this.artwork, this.progress,
+      {this.type = 'download'});
   final String id;
   final String title;
   final UiArtwork artwork;
   double progress;
   UiTaskState state = UiTaskState.running;
 
+  /// Its executor's type, as a real job's.
+  final String type;
+
   UiTask get view => UiTask(
         taskId: id,
+        type: type,
         title: title,
         state: state,
         artwork: artwork,
@@ -1716,6 +1721,7 @@ class _FakeHelper {
 
   UiTask get view => UiTask(
         taskId: id,
+        type: 'agent.helper',
         title: title,
         state: state,
         kind: UiTaskKind.helper,

@@ -19,7 +19,7 @@ import 'download_sheet.dart';
 import 'units.dart';
 
 /// A new download from a magnet, a torrent's address or a .torrent file:
-/// its files to choose (for a magnet), where it goes, then its own sheet.
+/// its files to choose, where it goes, then its own sheet.
 /// [onSettings] opens the 下载 settings when the downloader is off.
 Future<void> newDownload(NextUiServices services,
     {String? source, VoidCallback? onSettings}) async {
@@ -81,6 +81,9 @@ class _NewDownloadSheetState extends State<NewDownloadSheet>
   bool _off = false;
   bool _over = false;
 
+  /// The source was read and is not something to download.
+  bool _invalid = false;
+
   @override
   void initState() {
     super.initState();
@@ -109,11 +112,17 @@ class _NewDownloadSheetState extends State<NewDownloadSheet>
     if (uri != null && (uri.scheme == 'http' || uri.scheme == 'https')) {
       return _Kind.link;
     }
-    if (s.startsWith('/') && s.toLowerCase().endsWith('.torrent')) {
+    final path = uri?.scheme == 'file' ? uri!.path : s;
+    if (path.startsWith('/') && path.toLowerCase().endsWith('.torrent')) {
       return _Kind.file;
     }
     return _Kind.unknown;
   }
+
+  bool get _known => switch (_kind) {
+        _Kind.magnet || _Kind.link || _Kind.file => true,
+        _Kind.none || _Kind.unknown => false,
+      };
 
   String? _lastPreviewed;
 
@@ -123,12 +132,11 @@ class _NewDownloadSheetState extends State<NewDownloadSheet>
     setState(() {
       _said = null;
       _off = false;
-      if (_kind != _Kind.magnet) {
-        _preview = null;
-        _previewing = false;
-      }
+      _invalid = false;
+      _preview = null;
+      _previewing = false;
     });
-    if (_kind != _Kind.magnet) return;
+    if (!_known) return;
     _wait = Timer(const Duration(milliseconds: 500), _loadPreview);
   }
 
@@ -152,8 +160,11 @@ class _NewDownloadSheetState extends State<NewDownloadSheet>
 
   void _fail(Object e) => setState(() {
         _off = e is Failure && e.code == FailureCode.unavailable;
-        _said = e is Failure && e.code == FailureCode.invalidInput
-            ? '认不出这个链接'
+        _invalid = e is Failure && e.code == FailureCode.invalidInput;
+        _said = _invalid
+            ? _kind == _Kind.file
+                ? '认不出这个文件'
+                : '认不出这个链接'
             : _off
                 ? '下载已关闭'
                 : callFailure(e);
@@ -178,7 +189,8 @@ class _NewDownloadSheetState extends State<NewDownloadSheet>
 
   bool get _ready =>
       !_adding &&
-      (_kind == _Kind.magnet || _kind == _Kind.link || _kind == _Kind.file) &&
+      _known &&
+      !_invalid &&
       (_preview == null || _chosen.isNotEmpty);
 
   Future<void> _add() async {
@@ -383,7 +395,7 @@ class _NewDownloadSheetState extends State<NewDownloadSheet>
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         Padding(
-          padding: const EdgeInsets.fromLTRB(10, 0, 6, 6),
+          padding: const EdgeInsets.fromLTRB(10, 0, 16, 6),
           child: Row(children: [
             NextCheck(
               on: all,

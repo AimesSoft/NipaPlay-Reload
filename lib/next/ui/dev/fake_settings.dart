@@ -3,6 +3,7 @@ import 'dart:convert';
 
 import 'package:nipa_harness/nipa_harness.dart';
 
+import '../../settings/presentation.dart';
 import '../../ui_data/host_settings.dart';
 import '../data/core_settings.dart' show memoryHeading;
 import '../data/settings_data.dart';
@@ -20,10 +21,14 @@ final class FakeSettings implements NextSettingsData {
   @override
   final FakeHostSettings host = FakeHostSettings();
   final _changes = StreamController<void>.broadcast();
+  final _memoryChanges = StreamController<void>.broadcast();
   List<Map<String, Object?>>? _rows;
 
   @override
   Stream<void> get changes => _changes.stream;
+
+  @override
+  Stream<void> get memoryChanges => _memoryChanges.stream;
 
   void _changed() => _changes.add(null);
 
@@ -73,6 +78,7 @@ final class FakeSettings implements NextSettingsData {
             '${e.key}': e.value,
       };
       final key = row['key'] as String;
+      if (real == null) row.addAll(settingPresentation(key, row));
       if (row['default'] is String) row['default'] = _anonymous(row['default']);
       row['value'] = _values.containsKey(key) ? _values[key] : row['default'];
       row['revision'] = 0;
@@ -386,10 +392,23 @@ final class FakeSettings implements NextSettingsData {
   @override
   Future<UiAbout> about() async => const UiAbout(version: '1.9.3');
 
-  /// Debug: `model=key|nokey|codex|nocodex`, `mesh=online|offline|unavailable`.
+  /// Debug: `model=key|nokey|codex|nocodex`, `mesh=online|offline|unavailable`,
+  /// `keys=both|spoiler|tmdb|none`, `remote=on|off|problem|unsupported`,
+  /// `trusted=0..3`; `remember=<topic>` is Nipa writing a note.
   Map<String, Object?> scenario(Map<String, String> p) {
     if (p['model'] case final m?) host.modelState = m;
     if (p['mesh'] case final m?) host.meshState = m;
+    if (p['keys'] case final k?) {
+      host.spoilerKey = k == 'both' || k == 'spoiler';
+      host.tmdbKey = k == 'both' || k == 'tmdb';
+    }
+    if (p['remote'] case final r?) host.remoteState = r;
+    if (p['trusted'] case final n?) host.trust(int.parse(n));
+    if (p['remember'] case final topic?) {
+      _memory['topics/$topic.md'] =
+          '# $topic\n\n${DateTime.now().toIso8601String().substring(0, 16)}\n';
+      _memoryChanges.add(null);
+    }
     if (p['account'] case final a?) {
       final [provider, state] = a.split(':');
       _accounts[provider] = state == 'out'
@@ -400,11 +419,18 @@ final class FakeSettings implements NextSettingsData {
       _changed();
     }
     host.changed();
-    return {'model': host.modelState, 'mesh': host.meshState};
+    return {
+      'model': host.modelState,
+      'mesh': host.meshState,
+      'keys': {'spoiler': host.spoilerKey, 'tmdb': host.tmdbKey},
+      'remote': host.remoteState,
+      'trusted': host.trusted.length,
+    };
   }
 
   void dispose() {
     _changes.close();
+    _memoryChanges.close();
     host.dispose();
   }
 
@@ -943,9 +969,25 @@ final class FakeSettings implements NextSettingsData {
 }
 
 /// The host's own settings, scripted.
-final class FakeHostSettings implements NextHostSettings {
+final class FakeHostSettings implements NextHostSettings, NextHostDeviceSettings {
   String modelState = 'key';
   String meshState = 'online';
+  bool spoilerKey = true, tmdbKey = false;
+
+  /// `on`, `off`, `problem` (it would not start) or `unsupported`.
+  String remoteState = 'on';
+  bool _remoteAuto = true, _remoteIpv6 = false, _receiver = true;
+  int _remotePort = 1180;
+  static const _devices = [
+    UiRemoteDevice(clientKey: 'ipad', name: 'iPad'),
+    UiRemoteDevice(clientKey: 'tv', name: '客厅的电视'),
+    UiRemoteDevice(clientKey: 'phone', name: 'Pixel 9'),
+  ];
+  final trusted = [..._devices.take(2)];
+
+  void trust(int count) => trusted
+    ..clear()
+    ..addAll(_devices.take(count));
   bool _programs = true;
   String _name = '这台 Mac';
   bool _loopback = false, _broadcast = true;
@@ -1054,6 +1096,68 @@ final class FakeHostSettings implements NextHostSettings {
   @override
   Future<void> setRemotePrograms(bool allowed) async {
     _programs = allowed;
+    changed();
+  }
+
+  void _device() {
+    if (remoteState == 'unsupported') {
+      throw UnsupportedError('此宿主不支持设备设置');
+    }
+  }
+
+  @override
+  Future<UiHostKeys> keys() async {
+    _device();
+    return UiHostKeys(spoilerAi: spoilerKey, tmdb: tmdbKey);
+  }
+
+  @override
+  Future<void> setKeys({String? spoilerAi, String? tmdb}) async {
+    _device();
+    await Future<void>.delayed(const Duration(milliseconds: 200));
+    if (spoilerAi != null) spoilerKey = spoilerAi.isNotEmpty;
+    if (tmdb != null) tmdbKey = tmdb.isNotEmpty;
+    changed();
+  }
+
+  @override
+  Future<UiRemoteAccess> remoteAccess() async {
+    _device();
+    return UiRemoteAccess(
+      running: remoteState == 'on',
+      autoStart: _remoteAuto,
+      port: _remotePort,
+      ipv6: _remoteIpv6,
+      receiverEnabled: _receiver,
+      devices: [...trusted],
+      problem: remoteState == 'problem' ? '远程访问服务未能启动' : null,
+    );
+  }
+
+  @override
+  Future<void> setRemoteAccess(UiRemoteAccessChoice choice) async {
+    _device();
+    await Future<void>.delayed(const Duration(milliseconds: 400));
+    if (choice.port < 1 || choice.port > 65535) {
+      throw const Failure(FailureCode.invalidInput, 'Port must be 1–65535.');
+    }
+    _remoteAuto = choice.autoStart;
+    _remoteIpv6 = choice.ipv6;
+    _receiver = choice.receiverEnabled;
+    _remotePort = choice.port;
+    // A listener that would not start keeps failing until it is stopped.
+    if (remoteState == 'problem' && choice.running) {
+      changed();
+      throw const Failure(FailureCode.unavailable, '远程访问服务未能启动');
+    }
+    remoteState = choice.running ? 'on' : 'off';
+    changed();
+  }
+
+  @override
+  Future<void> forgetRemoteDevice(String clientKey) async {
+    _device();
+    trusted.removeWhere((d) => d.clientKey == clientKey);
     changed();
   }
 

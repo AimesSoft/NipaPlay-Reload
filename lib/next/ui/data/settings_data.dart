@@ -51,6 +51,10 @@ abstract interface class NextSettingsData {
   Future<void> editMemory(UiMemoryDoc doc, String content);
   Future<void> forgetMemory(UiMemoryDoc doc);
 
+  /// Fires when what Nipa remembers may have changed elsewhere (her own
+  /// notes included).
+  Stream<void> get memoryChanges;
+
   /// The version running (`app.instance`).
   Future<UiAbout> about();
 
@@ -85,6 +89,7 @@ final class UiSetting {
     this.value,
     this.defaultValue,
     this.choices = const [],
+    this.names = const {},
     this.min,
     this.max,
     this.step,
@@ -107,6 +112,10 @@ final class UiSetting {
 
   /// For [UiSettingKind.choice] (and colour swatches): the allowed values.
   final List<Object?> choices;
+
+  /// What values are called, by their text (the registry's `enumNames`
+  /// and `valueNames`).
+  final Map<String, String> names;
   final num? min;
   final num? max;
   final num? step;
@@ -140,6 +149,14 @@ final class UiSetting {
 
   bool get isDefault => '$value' == '$defaultValue';
 
+  /// What [value] is called; the value itself when it has no name.
+  String nameOf(Object? value) {
+    final text = value is double && value == value.roundToDouble()
+        ? '${value.toInt()}'
+        : '$value';
+    return names['$value'] ?? names[text] ?? text;
+  }
+
   UiSetting copyWith({Object? value}) => UiSetting(
         key: key,
         title: title,
@@ -147,6 +164,7 @@ final class UiSetting {
         value: value,
         defaultValue: defaultValue,
         choices: choices,
+        names: names,
         min: min,
         max: max,
         step: step,
@@ -214,6 +232,12 @@ final class UiSetting {
       value: row['value'],
       defaultValue: row['default'],
       choices: choices ?? const [],
+      names: {
+        if ((choices, row['enumNames']) case (final List c, final List names))
+          for (final (i, name) in names.indexed) '${c[i]}': name as String,
+        if (row['valueNames'] case final Map names)
+          for (final e in names.entries) '${e.key}': e.value as String,
+      },
       min: row['minimum'] as num?,
       max: row['maximum'] as num?,
       step: row['step'] as num?,

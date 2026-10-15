@@ -3,12 +3,15 @@ import 'dart:async';
 import 'package:flutter/widgets.dart';
 
 import '../../ui_data/library.dart';
+import '../../ui_data/ui_data.dart';
 import '../data/collections.dart';
+import '../library/batch_bar.dart';
 import '../library/category_editor.dart';
 import '../library/category_grid.dart';
 import '../library/category_page.dart';
 import '../library/fan_cover.dart';
 import '../library/library_controls.dart';
+import '../library/selection.dart';
 import '../library/status_view.dart';
 import '../settings/section_accounts.dart';
 import '../settings/settings_layout.dart';
@@ -64,6 +67,7 @@ class _LibraryPageState extends State<LibraryPage>
   /// Whether the accounts can list works by standing.
   bool _lists = false;
   final _scroll = ScrollController();
+  final _selection = LibrarySelection();
   final _sourceLink = LayerLink();
   final _sortLink = LayerLink();
   final _editLink = LayerLink();
@@ -101,6 +105,7 @@ class _LibraryPageState extends State<LibraryPage>
     _single?.dispose();
     _fade.dispose();
     _scroll.dispose();
+    _selection.dispose();
     super.dispose();
   }
 
@@ -139,6 +144,7 @@ class _LibraryPageState extends State<LibraryPage>
   }
 
   void _choose(String sourceId) {
+    _selection.end();
     setState(() {
       _menu = _Menu.none;
       _status = null;
@@ -152,6 +158,7 @@ class _LibraryPageState extends State<LibraryPage>
   }
 
   void _chooseStatus(UiWatchStatus? status) => setState(() {
+        _selection.end();
         _menu = _Menu.none;
         _status = status;
       });
@@ -179,6 +186,21 @@ class _LibraryPageState extends State<LibraryPage>
       title: c.title,
       count: c.count,
       sorts: c.sorts));
+
+  /// Every work of the source shown, for 全选: its single category's, or
+  /// each category's once in the shelves.
+  Future<List<UiWork>> Function()? get _everything {
+    if (_status != null) return null;
+    if (_single case final items?) {
+      return () => allWorks(_data, items.categoryId, sort: items.sort);
+    }
+    final page = _page;
+    if (page == null || page.form != UiLibraryForm.shelves) return null;
+    return () async => [
+          for (final c in page.categories)
+            ...await allWorks(_data, c.categoryId),
+        ];
+  }
 
   LibraryCallbacks get _on => LibraryCallbacks(
         openWork: _shell!.openWork,
@@ -252,28 +274,33 @@ class _LibraryPageState extends State<LibraryPage>
   @override
   Widget build(BuildContext context) {
     final page = _page;
-    return Stack(children: [
-      CustomScrollView(
-        key: PageStorageKey('library/${_status?.name ?? _sourceId}'),
-        controller: _scroll,
-        slivers: [
-          SliverPadding(
-            padding: const EdgeInsets.fromLTRB(
-                NextMetrics.gutter, NextMetrics.topBar + 40, 56, 28),
-            sliver: SliverToBoxAdapter(child: _header()),
-          ),
-          if (_status case final status?)
-            StatusView(status: status, on: _on)
-          else if (page != null)
-            for (final sliver in _body(page))
-              SliverFadeTransition(
-                opacity: CurvedAnimation(parent: _fade, curve: Curves.easeOut),
-                sliver: sliver,
-              ),
-        ],
-      ),
-      ..._menus(),
-    ]);
+    return SelectionHost(
+      selection: _selection,
+      everything: _everything,
+      child: Stack(children: [
+        CustomScrollView(
+          key: PageStorageKey('library/${_status?.name ?? _sourceId}'),
+          controller: _scroll,
+          slivers: [
+            SliverPadding(
+              padding: const EdgeInsets.fromLTRB(
+                  NextMetrics.gutter, NextMetrics.topBar + 40, 56, 28),
+              sliver: SliverToBoxAdapter(child: _header()),
+            ),
+            if (_status case final status?)
+              StatusView(status: status, on: _on)
+            else if (page != null)
+              for (final sliver in _body(page))
+                SliverFadeTransition(
+                  opacity:
+                      CurvedAnimation(parent: _fade, curve: Curves.easeOut),
+                  sliver: sliver,
+                ),
+          ],
+        ),
+        ..._menus(),
+      ]),
+    );
   }
 
   Widget _header() {
@@ -379,7 +406,8 @@ class _LibraryPageState extends State<LibraryPage>
     if (_single case final items?) {
       return [
         SliverPadding(
-          padding: const EdgeInsets.fromLTRB(NextMetrics.gutter, 0, 56, 64),
+          padding: const EdgeInsets.fromLTRB(
+              NextMetrics.gutter, 0, 56, batchBarRoom),
           sliver: CategoryGrid(items: items, on: _on, deviceLine: _deviceLine),
         ),
       ];
@@ -387,7 +415,7 @@ class _LibraryPageState extends State<LibraryPage>
     return switch (page.form) {
       UiLibraryForm.shelves => [
           SliverPadding(
-            padding: const EdgeInsets.only(bottom: 64),
+            padding: const EdgeInsets.only(bottom: batchBarRoom),
             sliver: SliverList.separated(
               itemCount: page.categories.length,
               separatorBuilder: (_, __) => const SizedBox(height: 40),
@@ -598,7 +626,8 @@ class _CategoryShelf extends StatelessWidget {
             padding: const EdgeInsets.only(left: NextMetrics.gutter, right: 56),
             itemCount: preview.length,
             separatorBuilder: (_, __) => const SizedBox(width: 18),
-            itemBuilder: (context, i) => libraryTile(preview[i], _tile, on),
+            itemBuilder: (context, i) => libraryTile(preview[i], _tile, on,
+                range: (anchor) => worksBetween(preview, anchor, i)),
           ),
         ),
       ],

@@ -136,33 +136,21 @@ class _ArcPainter extends CustomPainter {
 /// are doing and for how long, and open to their own conversation; tasks
 /// show their progress. Each can be stopped. Helpers that finished
 /// recently stay a while with what they came back with.
-class BackgroundPanel extends StatefulWidget {
+class BackgroundPanel extends StatelessWidget {
   const BackgroundPanel({super.key});
-
-  @override
-  State<BackgroundPanel> createState() => _BackgroundPanelState();
-}
-
-class _BackgroundPanelState extends State<BackgroundPanel>
-    with DownloadTasks<BackgroundPanel> {
-  @override
-  void didChangeDependencies() {
-    super.didChangeDependencies();
-    watchDownloads(NextShellScope.of(context));
-  }
 
   @override
   Widget build(BuildContext context) {
     final shell = NextShellScope.of(context);
     final services = shell.services;
     void control(UiTask t, String command) =>
-        unawaited(controlTasks(services, [t.taskId], command, downloads));
+        unawaited(controlTasks(services, [t], command));
     final callbacks = CardCallbacks(
       onPauseTask: (t) => control(t, 'pause'),
       onResumeTask: (t) => control(t, 'resume'),
       // A download's × takes the task away and keeps its files, as the
       // detail page's 移除任务 does; deleting files is asked there.
-      onCancelTask: (t) => downloads.contains(t.taskId)
+      onCancelTask: (t) => isDownload(t)
           ? unawaited(services.downloads.remove(t.taskId, files: false))
           : control(t, 'cancel'),
     );
@@ -215,8 +203,7 @@ class _BackgroundPanelState extends State<BackgroundPanel>
                           Pressable(
                             onTap: () {
                               shell.closePopover();
-                              unawaited(openTask(services, task,
-                                  download: downloads.contains(task.taskId)));
+                              unawaited(openTask(services, task));
                             },
                             semanticLabel: task.title,
                             pressScale: 0.99,
@@ -236,13 +223,13 @@ class _BackgroundPanelState extends State<BackgroundPanel>
                 if (running.isNotEmpty)
                   _FootButton(
                       label: '全部暂停',
-                      onTap: () => unawaited(controlTasks(services,
-                          running.map((t) => t.taskId), 'pause', downloads)))
+                      onTap: () => unawaited(
+                          controlTasks(services, running, 'pause')))
                 else if (paused.isNotEmpty)
                   _FootButton(
                       label: '全部继续',
-                      onTap: () => unawaited(controlTasks(services,
-                          paused.map((t) => t.taskId), 'resume', downloads))),
+                      onTap: () => unawaited(
+                          controlTasks(services, paused, 'resume'))),
                 const Spacer(),
                 _FootButton(
                     label: '动态',

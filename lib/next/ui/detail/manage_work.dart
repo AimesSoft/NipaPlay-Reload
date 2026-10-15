@@ -8,6 +8,7 @@ import '../settings/section_accounts.dart' show ConfirmPill;
 import '../theme/tokens.dart';
 import '../widgets/artwork.dart';
 import '../widgets/buttons.dart';
+import '../widgets/devices.dart';
 import '../widgets/icons.dart';
 import '../widgets/segmented.dart';
 import 'manage_sheet.dart';
@@ -62,6 +63,44 @@ typedef _Ask = ({
   Future<void> Function() run
 });
 
+/// A change of matches put up to confirm: as NipaPlay previewed it, and
+/// how to preview it again.
+final class _Impact {
+  const _Impact({
+    required this.title,
+    this.image,
+    required this.action,
+    this.danger = false,
+    required this.done,
+    required this.plan,
+    required this.preview,
+    this.after,
+    this.notice,
+  });
+  final String title;
+  final String? image;
+  final String action;
+  final bool danger;
+  final String done;
+  final UiAssociation plan;
+  final Future<UiAssociation> Function() preview;
+  final VoidCallback? after;
+  final String? notice;
+
+  /// Previewed again after something changed in between.
+  _Impact again(UiAssociation plan) => _Impact(
+        title: title,
+        image: image,
+        action: action,
+        danger: danger,
+        done: done,
+        plan: plan,
+        preview: preview,
+        after: after,
+        notice: '刚刚有了变化，再试一次',
+      );
+}
+
 class WorkManageSheetState extends State<WorkManageSheet>
     with ManageRunner<WorkManageSheet>
     implements ManageSheetDebug {
@@ -89,6 +128,7 @@ class WorkManageSheetState extends State<WorkManageSheet>
   String? _matchEpisodesFor;
 
   _Ask? _ask;
+  _Impact? _impact;
 
   /// Debug: a picture shown as when hovered.
   UiArtKind? _hoverArt;
@@ -215,17 +255,90 @@ class WorkManageSheetState extends State<WorkManageSheet>
     }
   }
 
-  Future<void> _match() async {
-    final picked = _picked!;
-    final ok = await run(
-        () => widget.manage.match(_data!, picked, Map.of(_assign)),
-        done: '已匹配');
-    if (ok && mounted) {
-      setState(() {
-        _picked = null;
-        _results = null;
-      });
+  /// NipaPlay's preview of a change of matches, put up to confirm.
+  Future<void> _preview(Future<UiAssociation> Function() preview,
+      {required String title,
+      String? image,
+      required String action,
+      bool danger = false,
+      required String done,
+      VoidCallback? after}) async {
+    if (busy) return;
+    setState(() => busy = true);
+    try {
+      final plan = await preview();
+      if (!mounted) return;
+      setState(() => _impact = _Impact(
+          title: title,
+          image: image,
+          action: action,
+          danger: danger,
+          done: done,
+          plan: plan,
+          preview: preview,
+          after: after));
+    } on UiManageError {
+      if (mounted) say('没能完成', error: true);
+    } finally {
+      if (mounted) setState(() => busy = false);
     }
+  }
+
+  /// Does what was previewed; when something changed since, reads the
+  /// work again and previews it again.
+  Future<void> _apply() async {
+    final impact = _impact!;
+    setState(() => busy = true);
+    try {
+      await impact.plan.apply();
+      if (!mounted) return;
+      setState(() => _impact = null);
+      say(impact.done);
+      impact.after?.call();
+    } on UiManageError catch (e) {
+      if (!mounted) return;
+      if (!e.conflict) {
+        setState(() => _impact = null);
+        say('没能完成', error: true);
+        return;
+      }
+      await _read();
+      try {
+        final plan = await impact.preview();
+        if (mounted) setState(() => _impact = impact.again(plan));
+      } on UiManageError {
+        if (!mounted) return;
+        setState(() => _impact = null);
+        say('刚刚有了变化，再试一次', error: true);
+      }
+    } finally {
+      if (mounted) setState(() => busy = false);
+      await reload();
+    }
+  }
+
+  void _match() {
+    final picked = _picked!;
+    final files = Map.of(_assign);
+    _preview(() => widget.manage.previewMatch(_data!, picked, files),
+        title: picked.title,
+        image: picked.image,
+        action: '匹配',
+        done: '已匹配',
+        after: () => setState(() {
+              _picked = null;
+              _results = null;
+            }));
+  }
+
+  void _unmatch() {
+    final match = _data!.match!;
+    _preview(() => widget.manage.previewUnmatch(_data!),
+        title: match.title,
+        image: match.image,
+        action: '解除匹配',
+        danger: true,
+        done: '已解除匹配');
   }
 
   Future<void> _makeLocal() async {
@@ -324,11 +437,14 @@ class WorkManageSheetState extends State<WorkManageSheet>
     }
   }
 
-  Future<void> _relink(UiManagedEpisode e, UiCandidateEpisode to) async {
+  void _relink(UiManagedEpisode e, UiCandidateEpisode to) {
     final match = _data!.match!;
-    await run(
-        () => widget.manage.match(
+    _preview(
+        () => widget.manage.previewMatch(
             _data!, match.candidate, {for (final f in e.files) f: to}),
+        title: '${match.title}  ${to.label}',
+        image: match.image,
+        action: '更改',
         done: '已更改');
   }
 
@@ -367,6 +483,27 @@ class WorkManageSheetState extends State<WorkManageSheet>
         'drafts': {for (final e in _drafts.entries) e.key.name: e.value},
         'note': note?.text,
         'asking': _ask?.title,
+        'impact': switch (_impact) {
+          final i? => {
+              'title': i.title,
+              'works': i.plan.works,
+              'episodes': i.plan.episodes,
+              'files': i.plan.files,
+              'watched': i.plan.watched,
+              'sources': i.plan.sources,
+              'devices': i.plan.devices,
+              'notice': i.notice,
+            },
+          null => null,
+        },
+        'device': _data?.device,
+        'away': _data?.away,
+        'unavailable': _data?.unavailable,
+        'titlesEdited': [
+          for (final (i, e)
+              in (_data?.episodes ?? const <UiManagedEpisode>[]).indexed)
+            if (e.titleEdited) i
+        ],
         'busy': busy,
       };
 
@@ -384,7 +521,7 @@ class WorkManageSheetState extends State<WorkManageSheet>
     }
     if (p['pick'] case final i?) await _pick(_results![int.parse(i)]);
     if (p['back'] == 'true') setState(() => _picked = null);
-    if (p['match'] == 'true') await _match();
+    if (p['match'] == 'true') _match();
     if (p['local'] == 'true') await _makeLocal();
     if (p['draft'] case final d?) {
       final at = d.indexOf(':');
@@ -404,8 +541,11 @@ class WorkManageSheetState extends State<WorkManageSheet>
     if (p['save'] == 'true') {
       await (_section == WorkSection.info ? _saveText() : _saveEpisodes());
     }
-    if (p['unmatch'] == 'true') {
-      await run(() => widget.manage.unmatch(_data!), done: '已解除匹配');
+    if (p['unmatch'] == 'true') _unmatch();
+    if (p['restoreTitle'] case final i?) {
+      await run(
+          () => widget.manage.clearEpisodeTitle(_data!.episodes[int.parse(i)]),
+          done: '已恢复');
     }
     if (p['clear'] case final f?) {
       await run(() => widget.manage.clearText(_data!, UiTextField.values.byName(f)),
@@ -428,8 +568,19 @@ class WorkManageSheetState extends State<WorkManageSheet>
     }
     if (p['relink'] case final d?) {
       final at = d.indexOf(':');
-      await _relink(_data!.episodes[int.parse(d.substring(0, at))],
+      _relink(_data!.episodes[int.parse(d.substring(0, at))],
           _matchEpisodes![int.parse(d.substring(at + 1))]);
+    }
+    if (p['apply'] case final a?) {
+      // The preview arrives a moment after it was asked for.
+      for (var i = 0; i < 20 && _impact == null; i++) {
+        await Future<void>.delayed(const Duration(milliseconds: 100));
+      }
+      if (a == 'yes') {
+        await _apply();
+      } else {
+        setState(() => _impact = null);
+      }
     }
     if (p['undo'] == 'true') note?.action?.$2();
     if (p['removeWork'] == 'true') await _removeWork();
@@ -456,14 +607,14 @@ class WorkManageSheetState extends State<WorkManageSheet>
       ),
       caption: work.originalTitle,
       title: work.title,
+      device: _data?.device,
       section: section,
       sections: sections,
       onSection: (s) => setState(() => _section = s),
       onClose: widget.onClose,
       note: note,
-      confirm: _ask == null
-          ? null
-          : ConfirmCard(
+      confirm: _ask != null
+          ? ConfirmCard(
               title: _ask!.title,
               items: _ask!.items,
               action: _ask!.action,
@@ -473,7 +624,20 @@ class WorkManageSheetState extends State<WorkManageSheet>
                 await run(ask.run);
                 if (mounted) setState(() => _ask = null);
               },
-            ),
+            )
+          : _impact != null
+              ? ImpactCard(
+                  key: ValueKey(_impact),
+                  title: _impact!.title,
+                  image: _impact!.image,
+                  plan: _impact!.plan,
+                  action: _impact!.action,
+                  danger: _impact!.danger,
+                  notice: _impact!.notice,
+                  onCancel: () => setState(() => _impact = null),
+                  onConfirm: _apply,
+                )
+              : null,
       body: _data == null
           ? Center(
               child: _readFailed
@@ -481,8 +645,14 @@ class WorkManageSheetState extends State<WorkManageSheet>
                   : const SizedBox.shrink())
           : !_data!.editable
               ? Center(
-                  child: Text('在${_data!.elsewhere ?? '其他设备'}上',
-                      style: NextText.sans(13, color: NextColors.p3)))
+                  child: Row(mainAxisSize: MainAxisSize.min, children: [
+                    const NextIcon(NextGlyph.device,
+                        size: 15, color: NextColors.p3, stroke: 1.9),
+                    const SizedBox(width: 8),
+                    Text(_data!.unavailable!,
+                        style: NextText.sans(13, color: NextColors.p3)),
+                  ]),
+                )
               : ListView(
                   padding: const EdgeInsets.fromLTRB(22, 4, 22, 22),
                   children: switch (section) {
@@ -511,12 +681,8 @@ class WorkManageSheetState extends State<WorkManageSheet>
               if (match.year != null) '${match.year}',
             ].join(' · '),
             image: match.image,
-            trailing: ConfirmPill(
-              label: '解除匹配',
-              confirm: '确认解除',
-              onConfirm: () =>
-                  run(() => widget.manage.unmatch(data), done: '已解除匹配'),
-            ),
+            trailing: PillButton(
+                label: '解除匹配', onTap: busy ? null : _unmatch),
           ),
         ]),
       ] else if (data.kind == UiWorkKind.local) ...[
@@ -530,11 +696,15 @@ class WorkManageSheetState extends State<WorkManageSheet>
                 label: '移除作品', confirm: '确认移除', onConfirm: _removeWork),
           ),
         ]),
-      ] else ...[
+      ] else if (data.here) ...[
         const SizedBox(height: 12),
         Row(children: [
           PillButton(label: '作为本地作品', busy: busy, onTap: _makeLocal),
         ]),
+      ],
+      for (final reason in data.away) ...[
+        const SizedBox(height: 12),
+        AwayNote(reason),
       ],
       ManageHeading('搜索',
           trailing: Segmented<UiProvider>(
@@ -621,6 +791,7 @@ class WorkManageSheetState extends State<WorkManageSheet>
           for (final f in files)
             _FileChoiceRow(
               file: f,
+              device: _data!.device,
               value: _assign[f],
               options: episodes,
               onChanged: (e) => setState(() => _assign[f] = e),
@@ -700,7 +871,7 @@ class WorkManageSheetState extends State<WorkManageSheet>
           shape: shape,
           tint: tint,
           hovered: _hoverArt == kind,
-          onReplace: () => _replaceArt(kind),
+          onReplace: data.here ? () => _replaceArt(kind) : null,
           onRestore: () =>
               run(() => widget.manage.clearArt(data, kind), done: '已恢复'),
         );
@@ -737,6 +908,10 @@ class WorkManageSheetState extends State<WorkManageSheet>
     final relink = data.kind == UiWorkKind.matched ? _matchEpisodes : null;
     return [
       const SizedBox(height: 10),
+      for (final reason in data.away) ...[
+        AwayNote(reason),
+        const SizedBox(height: 12),
+      ],
       if (data.episodes.isEmpty)
         _quiet('这台设备上没有文件')
       else
@@ -746,6 +921,7 @@ class WorkManageSheetState extends State<WorkManageSheet>
               key: ValueKey(_key(e)),
               episode: e,
               index: i,
+              device: data.device,
               local: local,
               titled: titled,
               title: _titles[_key(e)] ?? e.title ?? '',
@@ -754,6 +930,13 @@ class WorkManageSheetState extends State<WorkManageSheet>
               onNumber: (v) => setState(() => _numbers[_key(e)] = v),
               relink: relink,
               onRelink: (to) => _relink(e, to),
+              onRestore: titled && e.titleEdited
+                  ? () {
+                      setState(() => _titles.remove(_key(e)));
+                      run(() => widget.manage.clearEpisodeTitle(e),
+                          done: '已恢复');
+                    }
+                  : null,
               onRemove: local && data.episodes.length > 1
                   ? () => _removeEpisode(e)
                   : null,
@@ -761,7 +944,8 @@ class WorkManageSheetState extends State<WorkManageSheet>
         ]),
       const SizedBox(height: 16),
       Row(children: [
-        if (local) PillButton(label: '添加文件', onTap: busy ? null : _addFile),
+        if (local && data.here)
+          PillButton(label: '添加文件', onTap: busy ? null : _addFile),
         const Spacer(),
         if (titled)
           PillButton(
@@ -915,11 +1099,15 @@ String _short(String text, [int max = 18]) =>
 class _FileChoiceRow extends StatelessWidget {
   const _FileChoiceRow({
     required this.file,
+    required this.device,
     required this.value,
     required this.options,
     required this.onChanged,
   });
   final UiFile file;
+
+  /// Where the work is (null: here).
+  final String? device;
   final UiCandidateEpisode? value;
   final List<UiCandidateEpisode> options;
   final ValueChanged<UiCandidateEpisode> onChanged;
@@ -929,10 +1117,20 @@ class _FileChoiceRow extends StatelessWidget {
         padding: const EdgeInsets.fromLTRB(16, 10, 12, 10),
         child: Row(children: [
           Expanded(
-            child: Text(file.name,
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
-                style: NextText.sans(12.5, color: NextColors.p2, height: 1.4)),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(file.name,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: NextText.sans(12.5,
+                        color: NextColors.p2, height: 1.4)),
+                if (file.device != device) ...[
+                  const SizedBox(height: 3),
+                  DeviceMark([UiDevice(name: file.device ?? '本机')], size: 11),
+                ],
+              ],
+            ),
           ),
           const SizedBox(width: 12),
           if (value != null)
@@ -952,6 +1150,7 @@ class _EpisodeEditRow extends StatelessWidget {
     super.key,
     required this.episode,
     required this.index,
+    required this.device,
     required this.local,
     required this.titled,
     required this.title,
@@ -960,10 +1159,14 @@ class _EpisodeEditRow extends StatelessWidget {
     required this.onNumber,
     required this.relink,
     required this.onRelink,
+    required this.onRestore,
     required this.onRemove,
   });
   final UiManagedEpisode episode;
   final int index;
+
+  /// Where the work is (null: here); files elsewhere say where they are.
+  final String? device;
   final bool local;
   final bool titled;
   final String title;
@@ -972,6 +1175,9 @@ class _EpisodeEditRow extends StatelessWidget {
   final ValueChanged<String> onNumber;
   final List<UiCandidateEpisode>? relink;
   final ValueChanged<UiCandidateEpisode> onRelink;
+
+  /// Back to the sources' title, once it is the viewer's own.
+  final VoidCallback? onRestore;
   final VoidCallback? onRemove;
 
   @override
@@ -1005,12 +1211,17 @@ class _EpisodeEditRow extends StatelessWidget {
           const SizedBox(width: 10),
           Expanded(
             child: titled
-                ? LiveTextField(value: title, width: null, onChanged: onTitle)
+                ? LiveTextField(
+                    value: title, width: null, hint: '标题', onChanged: onTitle)
                 : Text(e.title ?? e.label,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: NextText.sans(13.5)),
           ),
+          if (onRestore != null) ...[
+            const SizedBox(width: 8),
+            _SmallLink('恢复', onTap: onRestore!),
+          ],
           if (relink != null && current != null) ...[
             const SizedBox(width: 8),
             MenuChoice<UiCandidateEpisode>(
@@ -1032,10 +1243,18 @@ class _EpisodeEditRow extends StatelessWidget {
         for (final f in e.files)
           Padding(
             padding: const EdgeInsets.only(left: 62, top: 6, right: 8),
-            child: Text(f.name,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: NextText.sans(11.5, color: NextColors.p3)),
+            child: Row(children: [
+              Flexible(
+                child: Text(f.name,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: NextText.sans(11.5, color: NextColors.p3)),
+              ),
+              if (f.device != device) ...[
+                const SizedBox(width: 8),
+                DeviceMark([UiDevice(name: f.device ?? '本机')], size: 11),
+              ],
+            ]),
           ),
       ]),
     );
@@ -1061,7 +1280,8 @@ class _ArtTile extends StatefulWidget {
   final double width, height;
   final ArtShape shape;
   final int? tint;
-  final VoidCallback onReplace;
+  /// Null when pictures picked here cannot go where the work is.
+  final VoidCallback? onReplace;
   final VoidCallback onRestore;
   final bool hovered;
 
@@ -1117,11 +1337,11 @@ class _ArtTileState extends State<_ArtTile> {
               color: path == null ? null : const Color(0x8C08080B),
               alignment: Alignment.center,
               child: Row(mainAxisSize: MainAxisSize.min, children: [
-                PillButton(
-                    label: path == null ? '选择图片' : '更换',
-                    onTap: widget.onReplace),
+                if (widget.onReplace case final replace?)
+                  PillButton(
+                      label: path == null ? '选择图片' : '更换', onTap: replace),
                 if (edited) ...[
-                  const SizedBox(width: 8),
+                  if (widget.onReplace != null) const SizedBox(width: 8),
                   PillButton(label: '恢复', onTap: widget.onRestore),
                 ],
               ]),

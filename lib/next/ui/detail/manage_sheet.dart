@@ -4,10 +4,13 @@ import 'dart:ui' as ui;
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 
+import '../../ui_data/ui_data.dart';
 import '../data/work_manage.dart';
 import '../settings/controls.dart';
 import '../theme/tokens.dart';
+import '../widgets/artwork.dart';
 import '../widgets/buttons.dart';
+import '../widgets/devices.dart';
 import '../widgets/glass.dart';
 import '../widgets/icons.dart';
 import '../widgets/segmented.dart';
@@ -97,15 +100,16 @@ class _ManageLayerState extends State<ManageLayer>
   }
 }
 
-/// The sheet's frame: a picture and a title, the sections, the body, a
-/// word after something was done, and a question over all of it when
-/// NipaPlay asks one.
+/// The sheet's frame: a picture and a title (and the device it is changed
+/// on, when not this one), the sections, the body, a word after something
+/// was done, and a question over all of it when NipaPlay asks one.
 class ManageFrame<T> extends StatelessWidget {
   const ManageFrame({
     super.key,
     required this.leading,
     required this.title,
     this.caption,
+    this.device,
     required this.section,
     required this.sections,
     required this.onSection,
@@ -117,6 +121,7 @@ class ManageFrame<T> extends StatelessWidget {
   final Widget leading;
   final String title;
   final String? caption;
+  final String? device;
   final T section;
   final List<(T, String)> sections;
   final ValueChanged<T> onSection;
@@ -149,6 +154,10 @@ class ManageFrame<T> extends StatelessWidget {
                         overflow: TextOverflow.ellipsis,
                         style: NextText.serif(19,
                             weight: FontWeight.w700, height: 1.3)),
+                    if (device != null) ...[
+                      const SizedBox(height: 4),
+                      DeviceMark([UiDevice(name: device!)]),
+                    ],
                   ],
                 ),
               ),
@@ -403,16 +412,21 @@ class DangerButton extends StatelessWidget {
       );
 }
 
-/// A small heading inside a section.
+/// A small heading inside a section; [glyph] before it (a device).
 class ManageHeading extends StatelessWidget {
-  const ManageHeading(this.text, {super.key, this.trailing});
+  const ManageHeading(this.text, {super.key, this.trailing, this.glyph});
   final String text;
   final Widget? trailing;
+  final NextGlyph? glyph;
 
   @override
   Widget build(BuildContext context) => Padding(
         padding: const EdgeInsets.only(top: 18, bottom: 10, left: 2),
         child: Row(children: [
+          if (glyph != null) ...[
+            NextIcon(glyph!, size: 13, color: NextColors.p3, stroke: 1.9),
+            const SizedBox(width: 6),
+          ],
           Expanded(
             child: Text(text,
                 style: NextText.sans(12.5,
@@ -423,6 +437,188 @@ class ManageHeading extends StatelessWidget {
           if (trailing != null) trailing!,
         ]),
       );
+}
+
+/// A device that cannot be asked now, in its phrase: “旧笔记本不在线”.
+class AwayNote extends StatelessWidget {
+  const AwayNote(this.text, {super.key});
+  final String text;
+
+  @override
+  Widget build(BuildContext context) => Padding(
+        padding: const EdgeInsets.only(left: 2),
+        child: Row(children: [
+          const NextIcon(NextGlyph.device,
+              size: 13, color: NextColors.p4, stroke: 1.9),
+          const SizedBox(width: 7),
+          Expanded(
+            child: Text(text,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: NextText.sans(12.5, color: NextColors.p3)),
+          ),
+        ]),
+      );
+}
+
+/// A change of matches as NipaPlay previewed it — the work, how many
+/// episodes and files, those with progress, the matches now on them, the
+/// devices — and the way on or back. [notice] says why it is shown again.
+class ImpactCard extends StatefulWidget {
+  const ImpactCard({
+    super.key,
+    required this.title,
+    this.image,
+    required this.plan,
+    required this.action,
+    this.danger = false,
+    this.notice,
+    required this.onConfirm,
+    required this.onCancel,
+  });
+  final String title;
+  final String? image;
+  final UiAssociation plan;
+  final String action;
+  final bool danger;
+  final String? notice;
+  final Future<void> Function() onConfirm;
+  final VoidCallback onCancel;
+
+  @override
+  State<ImpactCard> createState() => _ImpactCardState();
+}
+
+class _ImpactCardState extends State<ImpactCard> {
+  bool _busy = false;
+
+  Future<void> _confirm() async {
+    setState(() => _busy = true);
+    await widget.onConfirm();
+    if (mounted) setState(() => _busy = false);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final plan = widget.plan;
+    final others = [
+      for (final w in plan.works)
+        if (w != widget.title) w
+    ];
+    Widget stat(int n, String label) => Expanded(
+          child: Column(children: [
+            Text('$n',
+                style: NextText.num(24,
+                    weight: FontWeight.w700,
+                    color: n == 0 ? NextColors.p4 : NextColors.paper)),
+            const SizedBox(height: 2),
+            Text(label, style: NextText.sans(11.5, color: NextColors.p3)),
+          ]),
+        );
+    return TweenAnimationBuilder<double>(
+      tween: Tween(begin: 0.96, end: 1),
+      duration: const Duration(milliseconds: 220),
+      curve: NextMotion.ease,
+      builder: (context, s, child) => Transform.scale(scale: s, child: child),
+      child: Container(
+        width: 360,
+        padding: const EdgeInsets.fromLTRB(22, 22, 22, 18),
+        decoration: BoxDecoration(
+          color: const Color(0xF216161D),
+          borderRadius: BorderRadius.circular(18),
+          border: Border.all(color: const Color(0x1FFFFFFF)),
+          boxShadow: const [
+            BoxShadow(
+                color: Color(0x99000000), blurRadius: 40, offset: Offset(0, 16))
+          ],
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Row(children: [
+              if (widget.image != null) ...[
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(6),
+                  child: SizedBox(
+                      width: 34,
+                      height: 51,
+                      child: NextImage(widget.image, shape: ArtShape.poster)),
+                ),
+                const SizedBox(width: 12),
+              ],
+              Expanded(
+                child: Text(widget.title,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: NextText.sans(16, weight: FontWeight.w600)),
+              ),
+            ]),
+            for (final w in others)
+              Padding(
+                padding: const EdgeInsets.only(top: 8),
+                child: Row(children: [
+                  const SizedBox(width: 2),
+                  const NextIcon(NextGlyph.plus, size: 12, color: NextColors.p3),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(w,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: NextText.sans(13, color: NextColors.p2)),
+                  ),
+                ]),
+              ),
+            const SizedBox(height: 18),
+            Row(children: [
+              stat(plan.episodes, '剧集'),
+              stat(plan.files, '文件'),
+              stat(plan.watched, '有进度'),
+            ]),
+            if (plan.sources.isNotEmpty ||
+                plan.devices.any((d) => d != null)) ...[
+              const SizedBox(height: 16),
+              Row(children: [
+                for (final s in plan.sources) ...[
+                  TagChip(s),
+                  const SizedBox(width: 6),
+                ],
+                if (plan.devices.any((d) => d != null))
+                  Expanded(
+                    child: Align(
+                      alignment: Alignment.centerRight,
+                      child: DeviceMark([
+                        for (final d in {...plan.devices})
+                          UiDevice(name: d ?? '本机')
+                      ]),
+                    ),
+                  ),
+              ]),
+            ],
+            if (widget.notice != null) ...[
+              const SizedBox(height: 14),
+              Text(widget.notice!,
+                  style: NextText.sans(12.5, color: NextColors.accent2)),
+            ],
+            const SizedBox(height: 18),
+            Row(mainAxisAlignment: MainAxisAlignment.end, children: [
+              PillButton(label: '取消', onTap: _busy ? null : widget.onCancel),
+              const SizedBox(width: 10),
+              if (widget.danger)
+                DangerButton(
+                    label: widget.action, busy: _busy, onTap: _confirm)
+              else
+                PillButton(
+                    label: widget.action,
+                    primary: true,
+                    busy: _busy,
+                    onTap: _confirm),
+            ]),
+          ],
+        ),
+      ),
+    );
+  }
 }
 
 /// A quiet rounded group of rows.

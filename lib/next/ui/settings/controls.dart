@@ -311,6 +311,7 @@ class SliderControl extends StatefulWidget {
     required this.max,
     this.step,
     this.integer = false,
+    this.names = const {},
     required this.onChanged,
   });
   final num value;
@@ -318,6 +319,9 @@ class SliderControl extends StatefulWidget {
   final num max;
   final num? step;
   final bool integer;
+
+  /// What values are called (“设备默认” for 0), by their text.
+  final Map<String, String> names;
   final ValueChanged<num> onChanged;
 
   @override
@@ -348,9 +352,11 @@ class _SliderControlState extends State<SliderControl> {
   String _text(num v) {
     // 0–1 reads better as a percentage.
     if (widget.min == 0 && widget.max == 1) return '${(v * 100).round()}%';
-    if (widget.integer || v == v.roundToDouble()) return '${v.round()}';
     final digits = (widget.step ?? 0.01) < 0.1 ? 2 : 1;
-    return v.toStringAsFixed(digits);
+    final text = widget.integer || v == v.roundToDouble()
+        ? '${v.round()}'
+        : v.toStringAsFixed(digits);
+    return widget.names[text] ?? text;
   }
 
   double _fraction(num v) => widget.max == widget.min
@@ -375,8 +381,8 @@ class _SliderControlState extends State<SliderControl> {
     final shown = _dragging == null ? widget.value : _snap(_dragging!);
     final t = _fraction(shown);
     return Row(mainAxisSize: MainAxisSize.min, children: [
-      SizedBox(
-        width: 52,
+      ConstrainedBox(
+        constraints: const BoxConstraints(minWidth: 52),
         child: Text(_text(shown),
             textAlign: TextAlign.right,
             style: NextText.num(12.5, color: NextColors.p2)),
@@ -645,44 +651,54 @@ class PillButton extends StatelessWidget {
   final bool busy;
 
   @override
-  Widget build(BuildContext context) => Pressable(
-        onTap: busy ? null : onTap,
-        semanticLabel: label,
-        builder: (context, hovered) => AnimatedContainer(
-          duration: const Duration(milliseconds: 160),
-          height: 30,
-          padding: const EdgeInsets.symmetric(horizontal: 14),
-          alignment: Alignment.center,
-          decoration: BoxDecoration(
-            color: primary
-                ? (hovered ? const Color(0xFFFFFFFF) : NextColors.paper)
-                : danger && hovered
-                    ? const Color(0x24FF2E55)
-                    : hovered
-                        ? const Color(0x1FFFFFFF)
-                        : const Color(0x0FFFFFFF),
-            borderRadius: BorderRadius.circular(15),
-            border: primary ? null : Border.all(color: NextColors.line2),
-          ),
-          child: busy
-              ? const BusyDots()
-              : Text(label,
-                  style: NextText.sans(12.5,
-                      weight: FontWeight.w500,
+  Widget build(BuildContext context) => AnimatedOpacity(
+        // Unavailable: dimmed whole, as a switch is.
+        opacity: onTap == null && !busy ? 0.4 : 1,
+        duration: const Duration(milliseconds: 160),
+        child: Pressable(
+          onTap: busy ? null : onTap,
+          semanticLabel: label,
+          builder: (context, hovered) => AnimatedContainer(
+            duration: const Duration(milliseconds: 160),
+            height: 30,
+            padding: const EdgeInsets.symmetric(horizontal: 14),
+            decoration: BoxDecoration(
+              color: primary
+                  ? (hovered ? const Color(0xFFFFFFFF) : NextColors.paper)
+                  : danger && hovered
+                      ? const Color(0x24FF2E55)
+                      : hovered
+                          ? const Color(0x1FFFFFFF)
+                          : const Color(0x0FFFFFFF),
+              borderRadius: BorderRadius.circular(15),
+              border: primary ? null : Border.all(color: NextColors.line2),
+            ),
+            // As wide as its label, unless its place sets the width.
+            child: Center(
+              widthFactor: 1,
+              child: busy
+                  ? BusyDots(
                       color: primary
                           ? const Color(0xFF111111)
-                          : danger
-                              ? NextColors.accent2
-                              : onTap == null
-                                  ? NextColors.p4
+                          : NextColors.paper)
+                  : Text(label,
+                      style: NextText.sans(12.5,
+                          weight: FontWeight.w500,
+                          color: primary
+                              ? const Color(0xFF111111)
+                              : danger
+                                  ? NextColors.accent2
                                   : NextColors.paper)),
+            ),
+          ),
         ),
       );
 }
 
 /// Waiting: three dots breathing.
 class BusyDots extends StatefulWidget {
-  const BusyDots({super.key});
+  const BusyDots({super.key, this.color = NextColors.paper});
+  final Color color;
 
   @override
   State<BusyDots> createState() => _BusyDotsState();
@@ -711,7 +727,7 @@ class _BusyDotsState extends State<BusyDots>
               margin: const EdgeInsets.symmetric(horizontal: 2),
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
-                color: NextColors.paper.withValues(
+                color: widget.color.withValues(
                     alpha: 0.3 +
                         0.7 *
                             (0.5 +

@@ -8,16 +8,17 @@ import '../settings/controls.dart' show PillButton;
 import '../shell/shell_controller.dart';
 import '../theme/tokens.dart';
 import '../widgets/buttons.dart';
+import '../widgets/cards.dart';
 import '../widgets/icons.dart';
 import '../widgets/progress.dart';
 import '../widgets/sheet.dart';
 
 /// Debug hooks of the 观看记录 list.
 abstract interface class HistoryDebug {
-  /// Applies `reload=true`, `hover=<i>` (`none` to stop), `resume=<i>`
-  /// (not waiting for a question it may ask), `remove=<i>` and `clear=ask`
-  /// (not waiting for the answer); `i` counts the entries shown from 0,
-  /// latest first.
+  /// Applies `reload=true`, `more=true` (reads the next page),
+  /// `hover=<i>` (`none` to stop), `open=<i>`, `resume=<i>` (not waiting
+  /// for a question it may ask), `remove=<i>` and `clear=ask` (not waiting
+  /// for the answer); `i` counts the entries shown from 0, latest first.
   Future<void> debug(Map<String, String> p);
   Map<String, Object?> debugStatus();
 }
@@ -66,11 +67,15 @@ String _clock(DateTime at) =>
 /// Watched to here counts as seen through (the credits).
 const _seen = 0.95;
 
+/// An entry whose work or episode the library no longer has.
+const _missing = '已经不在了';
+
 const _width = 760.0;
 
 /// 观看记录: what was watched, by day, latest first. Scrolls itself and
 /// reads on near the end; [top] leaves room for what the page draws above
-/// it. Hovering an entry offers to go on with it or forget it.
+/// it. An entry opens its work (goes on with it when it has none);
+/// hovering it offers to go on with it or forget it.
 class HistoryView extends StatefulWidget {
   const HistoryView({super.key, this.top = 0});
   final double top;
@@ -98,10 +103,6 @@ class _HistoryViewState extends State<HistoryView> implements HistoryDebug {
 
   /// Reading on failed.
   Object? _moreError;
-
-  /// Entries were forgotten since the cursor was given; it counts past
-  /// them, so the next read starts over.
-  bool _shifted = false;
 
   bool _clearing = false;
   String? _clearNote;
@@ -140,28 +141,20 @@ class _HistoryViewState extends State<HistoryView> implements HistoryDebug {
     super.dispose();
   }
 
-  /// Reads from the start again, as far as [through] entries (at least a
-  /// page).
-  Future<void> _reload({int through = 0}) async {
+  /// Reads from the start again.
+  Future<void> _reload() async {
     final read = ++_reads;
     _reading = true;
     try {
-      final entries = <UiHistoryEntry>[];
-      String? cursor;
-      do {
-        final page = await _history.page(cursor: cursor);
-        entries.addAll(page.entries);
-        cursor = page.cursor;
-      } while (cursor != null && entries.length < through);
+      final page = await _history.page();
       if (!mounted || read != _reads) return;
       setState(() {
-        _entries = entries;
-        _cursor = cursor;
+        _entries = page.entries;
+        _cursor = page.cursor;
         _read = true;
         _reading = false;
         _error = null;
         _moreError = null;
-        _shifted = false;
         _gone.clear();
         _notes.clear();
       });
@@ -178,7 +171,6 @@ class _HistoryViewState extends State<HistoryView> implements HistoryDebug {
 
   Future<void> _more() async {
     if (_reading || _cursor == null || _moreError != null) return;
-    if (_shifted) return _reload(through: _entries.length + 1);
     final read = ++_reads;
     _reading = true;
     try {
@@ -210,7 +202,23 @@ class _HistoryViewState extends State<HistoryView> implements HistoryDebug {
 
   void _retry() {
     setState(() => _moreError = null);
-    unawaited(_error == null ? _more() : _reload(through: _entries.length));
+    unawaited(_error == null ? _more() : _reload());
+  }
+
+  Future<void> _open(UiHistoryEntry e) async {
+    final shell = _shell!;
+    setState(() => _notes.remove(e.entryId));
+    try {
+      final work = await shell.services.data.work(e.workId!);
+      if (!mounted) return;
+      if (work == null) {
+        setState(() => _notes[e.entryId] = _missing);
+      } else {
+        shell.openWork(work);
+      }
+    } catch (error) {
+      if (mounted) setState(() => _notes[e.entryId] = callFailure(error));
+    }
   }
 
   Future<void> _resume(UiHistoryEntry e) async {
@@ -219,11 +227,29 @@ class _HistoryViewState extends State<HistoryView> implements HistoryDebug {
       _notes.remove(e.entryId);
     });
     try {
-      await withDecisions(_shell!.services.calls, () => _history.resume(e));
+      if (e.locator != null) {
+        await withDecisions(_shell!.services.calls, () => _history.resume(e));
+      } else if (!await _playFromLibrary(e) && mounted) {
+        setState(() => _notes[e.entryId] = _missing);
+      }
     } catch (error) {
       if (mounted) setState(() => _notes[e.entryId] = callFailure(error));
     }
     if (mounted) setState(() => _working.remove(e.entryId));
+  }
+
+  /// Plays the entry's episode from wherever the library has it; false
+  /// when the library no longer has it.
+  Future<bool> _playFromLibrary(UiHistoryEntry e) async {
+    final services = _shell!.services;
+    final work = await services.data.work(e.workId!);
+    if (work == null) return false;
+    final episode = (await services.data.episodes(work.workId))
+        .where((x) => x.episodeId == e.libraryEpisodeId)
+        .firstOrNull;
+    if (episode == null) return false;
+    await services.actions.play(work, episode: episode);
+    return true;
   }
 
   Future<void> _remove(UiHistoryEntry e) async {
@@ -233,11 +259,7 @@ class _HistoryViewState extends State<HistoryView> implements HistoryDebug {
     });
     try {
       await _history.remove([e]);
-      if (!mounted) return;
-      setState(() {
-        _gone.add(e.entryId);
-        _shifted = true;
-      });
+      if (mounted) setState(() => _gone.add(e.entryId));
     } catch (error) {
       if (mounted) setState(() => _notes[e.entryId] = callFailure(error));
     }
@@ -276,10 +298,12 @@ class _HistoryViewState extends State<HistoryView> implements HistoryDebug {
   @override
   Future<void> debug(Map<String, String> p) async {
     UiHistoryEntry at(String i) => _shown[int.parse(i)];
-    if (p['reload'] == 'true') await _reload(through: _entries.length);
+    if (p['reload'] == 'true') await _reload();
+    if (p['more'] == 'true') await _more();
     if (p['hover'] case final i?) {
       setState(() => _hover = i == 'none' ? null : at(i).entryId);
     }
+    if (p['open'] case final i?) await _open(at(i));
     if (p['resume'] case final i?) unawaited(_resume(at(i)));
     if (p['remove'] case final i?) await _remove(at(i));
     if (p['clear'] == 'ask') unawaited(_clear());
@@ -291,6 +315,7 @@ class _HistoryViewState extends State<HistoryView> implements HistoryDebug {
     final error = _error ?? _moreError;
     return {
       'entries': shown.length,
+      'distinct': {for (final e in shown) e.entryId}.length,
       'groups': groupHistory(shown).length,
       'more': _cursor != null,
       'error': error == null ? null : '$error',
@@ -338,8 +363,9 @@ class _HistoryViewState extends State<HistoryView> implements HistoryDebug {
               entry: e,
               hover: _hover == id,
               note: _notes[id],
+              onOpen: e.workId != null ? () => _open(e) : null,
               onResume: e.playable && !working ? () => _resume(e) : null,
-              onRemove: e.playable && !working ? () => _remove(e) : null,
+              onRemove: working ? null : () => _remove(e),
             ),
           ));
         }
@@ -405,13 +431,14 @@ class _DayHead extends StatelessWidget {
       );
 }
 
-/// One entry: how far it went, the work and episode, when. Hovered, the
-/// time gives way to going on with it and forgetting it.
+/// One entry: its picture with how far it went, the work and episode,
+/// when. Hovered, the time gives way to going on with it and forgetting it.
 class _EntryRow extends StatelessWidget {
   const _EntryRow({
     required this.entry,
     required this.hover,
     this.note,
+    this.onOpen,
     this.onResume,
     this.onRemove,
   });
@@ -422,6 +449,7 @@ class _EntryRow extends StatelessWidget {
 
   /// What went wrong with it last.
   final String? note;
+  final VoidCallback? onOpen;
   final VoidCallback? onResume;
   final VoidCallback? onRemove;
 
@@ -430,23 +458,39 @@ class _EntryRow extends StatelessWidget {
     final playable = entry.playable;
     final episode = entry.episode;
     final at = entry.at;
+    final progress = entry.progress ?? 0;
+    final seen = progress >= _seen;
     return Pressable(
-      onTap: onResume,
+      onTap: onOpen ?? onResume,
       pressScale: 0.99,
       semanticLabel: entry.title,
       builder: (context, hovered) {
-        final active = playable && (hovered || hover);
+        final active = hovered || hover;
         return AnimatedContainer(
           duration: const Duration(milliseconds: 160),
-          height: 62,
-          padding: const EdgeInsets.symmetric(horizontal: 14),
+          height: 88,
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
           decoration: BoxDecoration(
             color: active ? const Color(0x0DFFFFFF) : const Color(0x00FFFFFF),
             borderRadius: BorderRadius.circular(14),
           ),
           child: Row(children: [
-            Opacity(opacity: playable ? 1 : 0.45, child: _Mark(entry.progress)),
-            const SizedBox(width: 16),
+            Opacity(
+              opacity: playable ? 1 : 0.45,
+              child: WideCard(
+                image: entry.still,
+                poster: entry.poster,
+                workId: entry.workId,
+                width: 128,
+                height: 72,
+                progress: seen || progress == 0 ? null : progress,
+                label: seen
+                    ? const NextIcon(NextGlyph.check,
+                        size: 13, color: NextColors.paper, stroke: 2.6)
+                    : null,
+              ),
+            ),
+            const SizedBox(width: 18),
             Expanded(
               child: Column(
                 mainAxisSize: MainAxisSize.min,
@@ -459,7 +503,7 @@ class _EntryRow extends StatelessWidget {
                           weight: FontWeight.w500,
                           color: playable ? NextColors.paper : NextColors.p2)),
                   if (episode != null && episode.isNotEmpty) ...[
-                    const SizedBox(height: 3),
+                    const SizedBox(height: 4),
                     Text(episode,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
@@ -484,56 +528,32 @@ class _EntryRow extends StatelessWidget {
                           style: NextText.num(12.5,
                               weight: FontWeight.w400, color: NextColors.p3)),
                 ),
-                if (playable)
-                  IgnorePointer(
-                    ignoring: !active,
-                    child: AnimatedOpacity(
-                      opacity: active ? 1 : 0,
-                      duration: const Duration(milliseconds: 160),
-                      child: Row(mainAxisSize: MainAxisSize.min, children: [
+                IgnorePointer(
+                  ignoring: !active,
+                  child: AnimatedOpacity(
+                    opacity: active ? 1 : 0,
+                    duration: const Duration(milliseconds: 160),
+                    child: Row(mainAxisSize: MainAxisSize.min, children: [
+                      if (playable) ...[
                         NextIconButton(
                             glyph: NextGlyph.play,
                             label: '继续',
                             onTap: onResume),
                         const SizedBox(width: 6),
-                        NextIconButton(
-                            glyph: NextGlyph.close,
-                            label: '删除',
-                            onTap: onRemove),
-                      ]),
-                    ),
+                      ],
+                      NextIconButton(
+                          glyph: NextGlyph.close,
+                          label: '删除',
+                          onTap: onRemove),
+                    ]),
                   ),
+                ),
               ]),
             ),
           ]),
         );
       },
     );
-  }
-}
-
-/// How far it was watched: a ring, or a check once seen through.
-class _Mark extends StatelessWidget {
-  const _Mark(this.progress);
-  final double? progress;
-
-  @override
-  Widget build(BuildContext context) {
-    final p = progress ?? 0;
-    if (p >= _seen) {
-      return Container(
-        width: 22,
-        height: 22,
-        alignment: Alignment.center,
-        decoration: BoxDecoration(
-          shape: BoxShape.circle,
-          border: Border.all(color: NextColors.line2, width: 1.5),
-        ),
-        child: const NextIcon(NextGlyph.check,
-            size: 12, color: NextColors.p2, stroke: 2.6),
-      );
-    }
-    return ProgressRing(progress: p, size: 22, thickness: 2.5);
   }
 }
 

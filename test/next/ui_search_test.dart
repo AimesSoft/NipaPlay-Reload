@@ -196,6 +196,38 @@ void main() {
     none.dispose();
   });
 
+  test('a source row\'s missing picture is asked for once, a share\'s never',
+      () async {
+    final asked = <String>[];
+    final data = _Search(artwork: (hit) async {
+      asked.add(hit.itemId);
+      if (hit.title == 'broken') throw StateError('no picture');
+      return '/cache/${hit.title}.jpg';
+    });
+    final search = NextSearch(data);
+    final served = SourceEntry(file('e3', source: jellyfin));
+    final broken = SourceEntry(file('broken', source: emby));
+    const pictured = SourceEntry(UiSourceHit(
+        source: jellyfin,
+        itemId: 'series',
+        kind: UiSourceHitKind.work,
+        title: '葬送的芙莉莲',
+        poster: '/cache/series.jpg'));
+    final shared = SourceEntry(file('芙莉莲 OVA.mkv'));
+    for (var i = 0; i < 3; i++) {
+      for (final e in [served, broken, pictured, shared]) {
+        search.wantArtwork(e);
+      }
+      await Future<void>.delayed(Duration.zero);
+    }
+    expect(asked, ['/下载/e3', '/下载/broken']);
+    expect(search.artworkOf(served), '/cache/e3.jpg');
+    expect(search.artworkOf(broken), isNull);
+    expect(search.artworkOf(pictured), '/cache/series.jpg');
+    expect(search.artworkOf(shared), isNull);
+    search.dispose();
+  });
+
   test('online, a work the library shows is not repeated, by its ID', () async {
     final data = _Search(
       library: (q) async =>
@@ -317,12 +349,16 @@ void main() {
     expect(series.kind, UiSourceHitKind.work);
     expect(series.work?.workId, 'mesh-work:1', reason: 'bound: the library');
     expect(series.work?.year, 2023);
+    expect(series.poster, '/cache/series.jpg');
+    expect(series.workTitle, '葬送的芙莉莲');
     expect(ep.kind, UiSourceHitKind.episode);
     expect(ep.work?.workId, 'source-work:series');
     expect(ep.work?.title, '葬送的芙莉莲');
     expect(ep.episode?.episodeId, 'source-episode:e3');
     expect(ep.episode?.number, 3);
     expect(ep.playable, isTrue);
+    expect(ep.poster, isNull);
+    expect(await search.sourceArtwork(ep), '/cache/e3.jpg');
 
     final share = await search.searchSource(sources[1], '芙莉莲', limit: 3);
     expect(share.failed, isFalse);
@@ -333,7 +369,10 @@ void main() {
     expect(loose.itemId, '/下载/芙莉莲 OVA.mkv');
     expect(loose.playable, isFalse);
     expect(loose.reachable, isTrue, reason: 'unverified is unknown');
+    expect((loose.poster, loose.workTitle), (null, null));
     expect(bound.work?.workId, 'mesh-work:1');
+    expect(bound.work?.title, '葬送的芙莉莲', reason: 'its work, by name');
+    expect(bound.poster, '/library/frieren.jpg');
     expect(bound.episode?.episodeId, 'mesh-episode:1:3');
     expect(bound.title, '葬送的芙莉莲 03.mkv');
 
@@ -353,6 +392,7 @@ void main() {
       ('media.metadata.search', 'gui', h.Effect.read),
       ('media.sources.list', 'gui', h.Effect.read),
       ('media.sources.search', 'gui', h.Effect.read),
+      ('media.sources.artwork', 'gui', h.Effect.read),
       ('media.sources.search', 'gui', h.Effect.read),
       ('media.sources.search', 'gui', h.Effect.read),
     ]);
@@ -361,6 +401,7 @@ void main() {
       'sourceIds': ['jf-1'],
       'limit': 3
     });
+    expect(calls[5].input, {'sourceId': 'jf-1', 'itemId': 'e3'});
   });
 
   test('recent terms: latest first, ten at most, kept, cleared for good',
@@ -674,7 +715,9 @@ final class _Search implements NextSearchData {
     Future<List<UiWork>> Function(String)? online,
     Future<List<UiSearchSource>> Function()? sources,
     Future<UiSourceAnswer> Function(UiSearchSource, String)? searchSource,
-  })  : libraryFor = library ?? ((_) async => const UiLibraryHits()),
+    Future<String?> Function(UiSourceHit)? artwork,
+  })  : artworkFor = artwork ?? ((_) async => null),
+        libraryFor = library ?? ((_) async => const UiLibraryHits()),
         onlineFor = online ?? ((_) async => const []),
         sourcesFor = sources ?? (() async => const []),
         sourceFor = searchSource ?? ((_, __) async => const UiSourceAnswer([]));
@@ -683,6 +726,10 @@ final class _Search implements NextSearchData {
   final Future<List<UiWork>> Function(String) onlineFor;
   final Future<List<UiSearchSource>> Function() sourcesFor;
   final Future<UiSourceAnswer> Function(UiSearchSource, String) sourceFor;
+  final Future<String?> Function(UiSourceHit) artworkFor;
+
+  @override
+  Future<String?> sourceArtwork(UiSourceHit hit) => artworkFor(hit);
 
   @override
   Future<UiLibraryHits> library(String query) => libraryFor(query);
@@ -888,6 +935,8 @@ final class _Sources implements h.Capability {
                     'kind': 'Series',
                     'year': 2023,
                     'metadata': {'Name': '葬送的芙莉莲'},
+                    'poster': '/cache/series.jpg',
+                    'workTitle': '葬送的芙莉莲',
                     'workId': 'mesh-work:1',
                     'episodeId': null,
                     'sourceWorkId': 'source-work:series',
@@ -905,6 +954,8 @@ final class _Sources implements h.Capability {
                       'IndexNumber': 3,
                       'ParentIndexNumber': 1,
                     },
+                    'poster': null,
+                    'workTitle': null,
                     'workId': null,
                     'episodeId': null,
                     'sourceWorkId': 'source-work:series',
@@ -927,6 +978,8 @@ final class _Sources implements h.Capability {
                     'kind': 'File',
                     'fileId': 'file-1',
                     'year': null,
+                    'poster': null,
+                    'workTitle': null,
                     'workId': null,
                     'episodeId': null,
                     'playable': false,
@@ -937,6 +990,8 @@ final class _Sources implements h.Capability {
                     'kind': 'File',
                     'fileId': 'file-2',
                     'year': null,
+                    'poster': '/library/frieren.jpg',
+                    'workTitle': '葬送的芙莉莲',
                     'workId': 'mesh-work:1',
                     'episodeId': 'mesh-episode:1:3',
                     'playable': false,
@@ -960,6 +1015,11 @@ final class _Sources implements h.Capability {
         ]
       };
     }),
+    _SourceAction(
+        'media.sources.artwork',
+        (input) => {
+              'poster': input['itemId'] == 'e3' ? '/cache/e3.jpg' : null
+            }),
   ];
 }
 
@@ -976,6 +1036,14 @@ final class _SourceAction extends h.Action<_Json, _Json> {
         effect: h.Effect.read,
         input: id == 'media.sources.list'
             ? const h.ObjectSchema({})
+            : id == 'media.sources.artwork'
+            ? const h.ObjectSchema({
+                'sourceId': h.StringSchema(minLength: 1),
+                'itemId': h.StringSchema(minLength: 1),
+              }, required: [
+                'sourceId',
+                'itemId'
+              ])
             : const h.ObjectSchema({
                 'query': h.StringSchema(minLength: 1),
                 'sourceIds': h.ArraySchema(h.StringSchema(minLength: 1)),
