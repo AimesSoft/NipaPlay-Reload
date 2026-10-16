@@ -605,18 +605,14 @@ extension VideoPlayerStatePlayerSetup on VideoPlayerState {
         );
       } else {
         // 其他内核保持原有最多10秒的兼容轮询，不改变其启动体验。
-        for (var waitCount = 0; waitCount < 100; waitCount++) {
-          await Future.delayed(const Duration(milliseconds: 100));
-          if (player.state == PlaybackState.playing) {
-            break;
-          }
-          if (player.state == PlaybackState.paused ||
-              (player.mediaInfo.duration > 0 &&
-                  (player.prefersPlatformVideoSurface ||
-                      player.textureId.value != null))) {
-            break;
-          }
-        }
+        // 就绪判定必须等到 paused/playing（MDK prepare 契约），否则打开失败
+        // 的媒体会带着 duration>0 蒙混过关，最终在 updateTexture 上超时并
+        // 触发静默的错误恢复级联（issue #1010）。详见 waitForPlaybackReady。
+        await waitForPlaybackReady(
+          player,
+          cancelled: () =>
+              _isDisposed || initializationGeneration != _playbackGeneration,
+        );
       }
       debugPrint('[PlayerSetup] 媒体就绪检查完成 state=${player.state} '
           '进入纹理阶段');
