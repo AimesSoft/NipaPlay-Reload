@@ -31,6 +31,37 @@ class UnifiedLibraryManagementAction {
   final bool destructive;
 }
 
+/// 连接地址最近一次连通性检测的结果。
+enum LibraryManagementAddressStatus { unknown, reachable, unreachable }
+
+/// 库管理卡片中的一行连接地址（内网/公网各占一行）。
+class LibraryManagementAddressLine {
+  const LibraryManagementAddressLine({
+    required this.label,
+    required this.address,
+    required this.status,
+  });
+
+  /// 地址角色，如「内网」「公网」。
+  final String label;
+
+  /// 地址文本。
+  final String address;
+
+  /// 该地址最近一次连通性检测结果。
+  final LibraryManagementAddressStatus status;
+}
+
+/// 连通性检测结果对应的短文本；[LibraryManagementAddressStatus.unknown] 返回空串。
+String libraryManagementAddressStatusText(
+  LibraryManagementAddressStatus status,
+) =>
+    switch (status) {
+      LibraryManagementAddressStatus.unknown => '',
+      LibraryManagementAddressStatus.reachable => '可达',
+      LibraryManagementAddressStatus.unreachable => '不可用',
+    };
+
 class UnifiedLibraryManagementItem {
   const UnifiedLibraryManagementItem({
     required this.id,
@@ -40,6 +71,7 @@ class UnifiedLibraryManagementItem {
     required this.onOpen,
     this.status,
     this.matchSubtitle,
+    this.addressLines,
     this.actions = const [],
   });
 
@@ -47,6 +79,9 @@ class UnifiedLibraryManagementItem {
   final String title;
   final String subtitle;
   final String? status;
+  /// 多地址连接的内网/公网明细（各占一行并附带最近一次连通性）。
+  /// 非空时优先于 [subtitle] 渲染。
+  final List<LibraryManagementAddressLine>? addressLines;
   /// 匹配信息，如 "CLANNAD AFTER STORY - 第5话"，仅在视频文件已匹配时显示
   final String? matchSubtitle;
   final LibraryManagementIcon icon;
