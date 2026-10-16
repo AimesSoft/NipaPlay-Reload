@@ -9,7 +9,10 @@ import '../conversation/nipa_chat.dart';
 import '../shell/nipa_setup.dart';
 import '../shell/shell_controller.dart';
 import '../theme/tokens.dart';
+import '../settings/section_accounts.dart' show SourcesSection;
+import '../settings/settings_layout.dart' show SettingsSection;
 import '../widgets/attachments.dart';
+import '../widgets/buttons.dart';
 import '../widgets/cards.dart';
 import '../widgets/drop_zone.dart';
 import '../widgets/icons.dart';
@@ -299,6 +302,12 @@ class _NextHomePageState extends State<NextHomePage> {
     );
   }
 
+  /// Nothing in the library yet: no hero and no shelves to show.
+  bool get _isEmpty {
+    final home = _home;
+    return home != null && home.hero == null && home.shelves.isEmpty;
+  }
+
   Widget _shelvesWidget() {
     if (_shelves == null || !identical(_shelvesFor, _home)) {
       _shelvesFor = _home;
@@ -332,7 +341,7 @@ class _NextHomePageState extends State<NextHomePage> {
           padding: const EdgeInsets.only(
               left: NextMetrics.gutter, top: NextMetrics.topBar + 40),
           child: hero == null
-              ? const SizedBox.shrink()
+              ? (_isEmpty ? _EmptyStart(shell: shell) : const SizedBox.shrink())
               : ValueListenableBuilder(
                   valueListenable: shell.tasks,
                   builder: (context, _, __) {
@@ -567,4 +576,44 @@ class _Shelves extends StatelessWidget {
       ],
     );
   }
+}
+
+
+/// The home before there is anything to watch: two ways in besides asking
+/// Nipa below.
+class _EmptyStart extends StatelessWidget {
+  const _EmptyStart({required this.shell});
+  final NextShellController shell;
+
+  Future<void> _addFolder() async {
+    final folders = shell.services.folders;
+    try {
+      final added = await folders.add();
+      if (added.isNotEmpty) await folders.scan(added);
+    } catch (_) {}
+  }
+
+  @override
+  Widget build(BuildContext context) => Padding(
+        padding: const EdgeInsets.only(bottom: 40),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('片库还是空的',
+                style: NextText.sans(34, weight: FontWeight.w700)),
+            const SizedBox(height: 22),
+            Row(mainAxisSize: MainAxisSize.min, children: [
+              NextButton(label: '添加文件夹', onTap: _addFolder),
+              const SizedBox(width: 12),
+              NextButton.ghost(
+                label: '添加来源',
+                onTap: () => shell.openSettings(
+                    section: SettingsSection.sources,
+                    key: SourcesSection.addKey),
+              ),
+            ]),
+          ],
+        ),
+      );
 }
