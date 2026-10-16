@@ -1,0 +1,10 @@
+NipaPlay 局域网发现验证  2026-10-11 23:44:17
+
+===== Local 自检（服务端本机）=====
+[PASS] L1 UDP 32123 本机可绑定
+[PASS] L2 UDP 32123 不在系统保留段内
+[WARN] L3 防火墙中未找到 UDP 32123 / NipaPlay 放行规则——若 L4 失败，先以管理员运行 scripts\grant_nipaplay_firewall.ps1
+[PASS] L4 发现应答 1292 ms（阈值 5s）：{"type":"nipaplay_discover_response","v":1,"app":"NipaPlay","hostname":"verify-script","os":"windows","port":1180}
+[WARN] L5 TCP 1180 /api/info 无应答（远程访问未开启或端口不同）——不影响 UDP 发现断言
+
+RESULT: PASS（0 项失败，2 项警告）
