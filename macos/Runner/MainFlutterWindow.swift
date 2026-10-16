@@ -1564,6 +1564,9 @@ private final class DesktopMultiWindowHostPlugin: NSObject, FlutterPlugin {
 class MainFlutterWindow: NSWindow {
   private var nipaplayFlutterEngine: FlutterEngine?
   private var nextChrome: NextWindowChrome?
+  /// Held while Next may be working for the user in the background, so
+  /// macOS does not nap NipaPlay; system sleep stays allowed.
+  private var nextActivity: NSObjectProtocol?
 
   override func awakeFromNib() {
     do {
@@ -1659,6 +1662,19 @@ class MainFlutterWindow: NSWindow {
         window.setIsVisible(true)
         window.orderBack(nil)
         result(true)
+        return
+      }
+      if call.method == "backgroundActivity" {
+        let active = (call.arguments as? [String: Any])?["active"] as? Bool ?? false
+        if active, window.nextActivity == nil {
+          window.nextActivity = ProcessInfo.processInfo.beginActivity(
+            options: [.userInitiatedAllowingIdleSystemSleep],
+            reason: "NipaPlay Next is working for the user")
+        } else if !active, let activity = window.nextActivity {
+          ProcessInfo.processInfo.endActivity(activity)
+          window.nextActivity = nil
+        }
+        result(window.nextActivity != nil)
         return
       }
       if call.method.hasPrefix("notification.") {

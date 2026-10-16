@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:io';
+import 'platform/background_activity.dart';
 import 'runtime/codex_runtime.dart';
 import 'settings/classic_host_device_settings.dart';
 import 'package:nipaplay/utils/lab_profile.dart';
@@ -509,6 +510,7 @@ final class NextRuntime extends ChangeNotifier {
     }
     if (_disposed || _endpointStatus == status) return;
     _endpointStatus = status;
+    unawaited(BackgroundActivity.set(status is AgentEndpointRunning));
     _hostSettings?.notify();
     notifyListeners();
   }
@@ -659,6 +661,7 @@ final class NextRuntime extends ChangeNotifier {
   @override
   void dispose() {
     _disposed = true;
+    unawaited(BackgroundActivity.set(false));
     unawaited(_hostSettings?.codex?.cancel());
     ServiceProvider.nextCore.subtitles.detachPlayer();
     _classicSettings?.plugins.removeListener(_syncPluginSettings);
