@@ -622,6 +622,14 @@ class _MediaServerDetailPageState extends State<MediaServerDetailPage>
     }
   }
 
+  WatchHistoryItem _movieHistoryItem() => switch (_mediaDetail) {
+        JellyfinMediaItemDetail detail =>
+          JellyfinMovieInfo.fromDetail(detail).toWatchHistoryItem(),
+        EmbyMediaItemDetail detail =>
+          EmbyMovieInfo.fromDetail(detail).toWatchHistoryItem(),
+        _ => throw StateError('无法获取电影详情'),
+      };
+
   Future<void> _playMovie() async {
     if (_mediaDetail == null || !_isMovie) return;
     if (_isDetailAutoMatching) {
@@ -630,7 +638,7 @@ class _MediaServerDetailPageState extends State<MediaServerDetailPage>
     }
 
     if (context.read<SettingsProvider>().skipDanmakuMatching) {
-      Navigator.of(context).pop(_mediaDetail!.toWatchHistoryItem());
+      Navigator.of(context).pop(_movieHistoryItem());
       return;
     }
 
@@ -638,45 +646,15 @@ class _MediaServerDetailPageState extends State<MediaServerDetailPage>
       final playableItem =
           await _runDetailAutoMatchTask<WatchHistoryItem?>(() async {
         if (widget.serverType == MediaServerType.jellyfin) {
-          final movieInfo = JellyfinMovieInfo(
-            id: _mediaDetail!.id,
-            name: _mediaDetail!.name,
-            overview: _mediaDetail!.overview,
-            originalTitle: _mediaDetail!.originalTitle,
-            imagePrimaryTag: _mediaDetail!.imagePrimaryTag,
-            imageBackdropTag: _mediaDetail!.imageBackdropTag,
-            productionYear: _mediaDetail!.productionYear,
-            dateAdded: _mediaDetail!.dateAdded,
-            premiereDate: _mediaDetail!.premiereDate,
-            communityRating: _mediaDetail!.communityRating,
-            genres: _mediaDetail!.genres,
-            officialRating: _mediaDetail!.officialRating,
-            cast: _mediaDetail!.cast,
-            directors: _mediaDetail!.directors,
-            runTimeTicks: _mediaDetail!.runTimeTicks,
-            studio: _mediaDetail!.seriesStudio,
+          final movieInfo = JellyfinMovieInfo.fromDetail(
+            _mediaDetail as JellyfinMediaItemDetail,
           );
           return JellyfinDandanplayMatcher.instance
               .createPlayableHistoryItemFromMovie(context, movieInfo);
         }
 
-        final movieInfo = EmbyMovieInfo(
-          id: _mediaDetail!.id,
-          name: _mediaDetail!.name,
-          overview: _mediaDetail!.overview,
-          originalTitle: _mediaDetail!.originalTitle,
-          imagePrimaryTag: _mediaDetail!.imagePrimaryTag,
-          imageBackdropTag: _mediaDetail!.imageBackdropTag,
-          productionYear: _mediaDetail!.productionYear,
-          dateAdded: _mediaDetail!.dateAdded,
-          premiereDate: _mediaDetail!.premiereDate,
-          communityRating: _mediaDetail!.communityRating,
-          genres: _mediaDetail!.genres,
-          officialRating: _mediaDetail!.officialRating,
-          cast: _mediaDetail!.cast,
-          directors: _mediaDetail!.directors,
-          runTimeTicks: _mediaDetail!.runTimeTicks,
-          studio: _mediaDetail!.seriesStudio,
+        final movieInfo = EmbyMovieInfo.fromDetail(
+          _mediaDetail as EmbyMediaItemDetail,
         );
         return EmbyDandanplayMatcher.instance
             .createPlayableHistoryItemFromMovie(context, movieInfo);
@@ -685,7 +663,7 @@ class _MediaServerDetailPageState extends State<MediaServerDetailPage>
       if (playableItem == null) {
         if (!_detailAutoMatchCancelled && mounted) {
           BlurSnackBar.show(context, '未能找到匹配的弹幕信息，但仍可播放。');
-          final basicItem = _mediaDetail!.toWatchHistoryItem();
+          final basicItem = _movieHistoryItem();
           Navigator.of(context).pop(basicItem);
         }
         return;
