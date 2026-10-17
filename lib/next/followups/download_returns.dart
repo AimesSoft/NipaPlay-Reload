@@ -101,7 +101,11 @@ extension DownloadReturns on Followups {
                 }
               }
             },
-        if (job.state.isTerminal && !covered.contains('terminal:${job.jobId}'))
+        // A download someone cancelled is news to no one: whoever cancelled
+        // it knows. Files that finished before still arrive above.
+        if (job.state.isTerminal &&
+            job.state != JobState.cancelled &&
+            !covered.contains('terminal:${job.jobId}'))
           {
             'event': 'task.terminal',
             'objectId': job.jobId,

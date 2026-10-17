@@ -130,7 +130,7 @@ final class DiskDeletion implements JobExecutor {
     final approved = await prompt(
         '删除文件',
         action == 'download.delete'
-            ? '将删除下载的文件，无法恢复。${context.job.input['preview'] == null ? '' : '\n${jsonEncode(context.job.input['preview'])}'}\n要删除吗？'
+            ? downloadDeletionWords(context.job.input['preview'])
             : '将删除插件文件，无法恢复。要删除吗？',
         context.stopRequested);
     final current = await context.snapshot();
@@ -286,4 +286,45 @@ final class _RequestDownloadDeletion extends Action<_Json, _Json> {
     });
     return Completed(_Json({'job': job.toJson()}));
   }
+}
+
+/// What a download deletion removes, in words a person reads: a few file
+/// names, how many more, and roughly how much space.
+String downloadDeletionWords(Object? preview) {
+  final downloads =
+      ((preview is Map ? preview['downloads'] : null) as List? ?? const [])
+          .cast<Map>();
+  final files = [
+    for (final d in downloads)
+      for (final f in (d['files'] as List? ?? const []).cast<Map>())
+        if (f['included'] != false) f
+  ];
+  String name(Map f) {
+    final path = '${f['path'] ?? ''}';
+    return path.split(RegExp(r'[\\/]')).last;
+  }
+
+  final names = [
+    for (final f in files)
+      if (name(f).isNotEmpty) name(f)
+  ];
+  final bytes = files.fold<num>(
+      0, (sum, f) => sum + ((f['expectedSize'] as num?) ?? 0));
+  String size(num b) => b >= 1 << 30
+      ? '${(b / (1 << 30)).toStringAsFixed(1)} GB'
+      : '${(b / (1 << 20)).toStringAsFixed(0)} MB';
+  final lines = StringBuffer();
+  if (names.isEmpty) {
+    lines.write(downloads.length <= 1
+        ? '将删除这个下载留下的数据，无法恢复。'
+        : '将删除 ${downloads.length} 个下载留下的数据，无法恢复。');
+  } else {
+    lines.writeln('将删除这些下载的文件，无法恢复：');
+    for (final n in names.take(3)) {
+      lines.writeln('· $n');
+    }
+    if (names.length > 3) lines.writeln('· 还有 ${names.length - 3} 个文件');
+    if (bytes > 0) lines.write('共约 ${size(bytes)}。');
+  }
+  return lines.toString().trimRight();
 }
