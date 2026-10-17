@@ -257,6 +257,25 @@ final class UiCandidatesCard extends UiCard {
   final List<UiCandidate> items;
 }
 
+/// A question with a few answers to pick; picking one says it in the
+/// conversation, as if the viewer had typed the label.
+final class UiChoicesCard extends UiCard {
+  const UiChoicesCard(this.options, {this.question});
+  final String? question;
+  final List<UiChoice> options;
+}
+
+final class UiChoice {
+  const UiChoice(this.label, {this.detail, this.recommended = false});
+  final String label;
+
+  /// One short line on what sets it apart.
+  final String? detail;
+
+  /// The one Nipa would pick.
+  final bool recommended;
+}
+
 final class UiPreparationCard extends UiCard {
   const UiPreparationCard(this.title, this.steps, {this.work});
   final String title;

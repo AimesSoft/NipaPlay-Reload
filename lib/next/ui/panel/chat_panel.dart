@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:math' as math;
 import 'dart:ui' as ui;
 
@@ -176,6 +177,7 @@ class _Sheet extends StatelessWidget {
                 onPauseTask: (t) => actions.pauseTask(t.taskId),
                 onResumeTask: (t) => actions.resumeTask(t.taskId),
                 onCancelTask: (t) => actions.cancelTask(t.taskId),
+                onChoose: (answer) => unawaited(shell.chat.say(answer)),
               ),
               trailing: FrameButton(
                   glyph: NextGlyph.close,

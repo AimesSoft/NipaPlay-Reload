@@ -20,6 +20,7 @@ class CardCallbacks {
     this.onPauseTask,
     this.onResumeTask,
     this.onCancelTask,
+    this.onChoose,
   });
   final void Function(UiWork work)? onOpen;
   final void Function(UiWork work, UiEpisode? episode)? onPlay;
@@ -29,6 +30,9 @@ class CardCallbacks {
   final void Function(UiTask task)? onPauseTask;
   final void Function(UiTask task)? onResumeTask;
   final void Function(UiTask task)? onCancelTask;
+
+  /// An answer picked on a choices card: said in the conversation.
+  final void Function(String answer)? onChoose;
 }
 
 /// Agent-presented cards, appearing one by one (12 px rise and fade, 60 ms
@@ -130,6 +134,8 @@ class CardStack extends StatelessWidget {
                 UiTaskCard(:final task) => CardSurface(
                     padding: const EdgeInsets.all(12),
                     child: TaskRow(task: task, callbacks: callbacks)),
+                UiChoicesCard() =>
+                  ChoicesCardView(card: card, callbacks: callbacks),
                 UiCandidatesCard() => const SizedBox.shrink(),
               },
             ),
@@ -388,6 +394,146 @@ class EpisodeCardView extends StatelessWidget {
 }
 
 /// `.prep`: steps with marks, a connecting line, live progress.
+/// A question with a few answers. Picking one says it in the conversation;
+/// the card then shows that answer and the others step back.
+class ChoicesCardView extends StatefulWidget {
+  const ChoicesCardView(
+      {super.key, required this.card, required this.callbacks});
+  final UiChoicesCard card;
+  final CardCallbacks callbacks;
+
+  @override
+  State<ChoicesCardView> createState() => _ChoicesCardViewState();
+}
+
+class _ChoicesCardViewState extends State<ChoicesCardView> {
+  String? _chosen;
+
+  void _choose(UiChoice option) {
+    final choose = widget.callbacks.onChoose;
+    if (_chosen != null || choose == null) return;
+    setState(() => _chosen = option.label);
+    choose(option.label);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final card = widget.card;
+    return CardSurface(
+      padding: const EdgeInsets.symmetric(vertical: 6),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          if (card.question case final question?)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 8, 16, 6),
+              child: Text(question,
+                  style: NextText.sans(13, weight: FontWeight.w600)),
+            ),
+          for (final option in card.options)
+            _ChoiceRow(
+              option: option,
+              chosen: _chosen == option.label,
+              settled: _chosen != null,
+              onTap: widget.callbacks.onChoose == null
+                  ? null
+                  : () => _choose(option),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ChoiceRow extends StatelessWidget {
+  const _ChoiceRow(
+      {required this.option,
+      required this.chosen,
+      required this.settled,
+      this.onTap});
+  final UiChoice option;
+  final bool chosen;
+  final bool settled;
+  final VoidCallback? onTap;
+
+  @override
+  Widget build(BuildContext context) => Pressable(
+        onTap: settled ? null : onTap,
+        pressScale: 0.99,
+        cursor: settled || onTap == null
+            ? SystemMouseCursors.basic
+            : SystemMouseCursors.click,
+        builder: (context, hovered) => AnimatedOpacity(
+          duration: const Duration(milliseconds: 200),
+          opacity: settled && !chosen ? 0.4 : 1,
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 160),
+            margin: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+            padding: const EdgeInsets.fromLTRB(10, 9, 12, 9),
+            decoration: BoxDecoration(
+              color: chosen
+                  ? NextColors.accent.withValues(alpha: 0.14)
+                  : hovered && !settled
+                      ? const Color(0x10FFFFFF)
+                      : const Color(0x00000000),
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: Row(children: [
+              AnimatedContainer(
+                duration: const Duration(milliseconds: 160),
+                width: 14,
+                height: 14,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: chosen ? NextColors.accent : null,
+                  border: Border.all(
+                      color: chosen ? NextColors.accent : NextColors.p4,
+                      width: 1.5),
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(children: [
+                      Flexible(
+                        child: Text(option.label,
+                            style: NextText.sans(13.5,
+                                weight: FontWeight.w600)),
+                      ),
+                      if (option.recommended) ...[
+                        const SizedBox(width: 8),
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 6, vertical: 1),
+                          decoration: BoxDecoration(
+                            color: NextColors.accent.withValues(alpha: 0.18),
+                            borderRadius: BorderRadius.circular(6),
+                          ),
+                          child: Text('推荐',
+                              style: NextText.sans(11,
+                                  color: NextColors.accent2)),
+                        ),
+                      ],
+                    ]),
+                    if (option.detail case final detail?)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 2),
+                        child: Text(detail,
+                            style:
+                                NextText.sans(12, color: NextColors.p3)),
+                      ),
+                  ],
+                ),
+              ),
+            ]),
+          ),
+        ),
+      );
+}
+
 class PreparationCardView extends StatelessWidget {
   const PreparationCardView(
       {super.key, required this.card, this.surface = true});

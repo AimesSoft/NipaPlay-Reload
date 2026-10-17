@@ -193,6 +193,7 @@ GUI 可用 `core.uiData.removeShelf(id, workId: ...)` 移除一项，省略 work
 | candidates | items: [{workId, reason?}] |
 | task | taskId，使用任务的 jobId |
 | preparation | title、可选 workId、steps: [{label, detail?, 三选一 taskId / entityId / followupId}] |
+| choices | question?、options: [{label, detail?, recommended?}]，2–6 项，label 不重复；用户点一项，界面在对话里说出这项的 label |
 
 引用在整个批次写入前验证；缺失引用的错误说明应查询的视图及 ID 语义。步骤不可提交 state/progress，实时读取任务或后续；实体步骤表示已经找到该作品/剧集。没有额外的状态常量或第二份任务状态。接口的 failed 合并失败和取消，paused 合并暂停、等待决定及中断；等待重试映射为 queued。remaining 无可靠估计时为 null。
 

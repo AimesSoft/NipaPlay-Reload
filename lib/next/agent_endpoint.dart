@@ -184,7 +184,7 @@ final class AgentEndpoint {
         serverInfo: McpServerInfo(
             name: 'nipaplay', title: 'NipaPlay', version: _appVersion),
         token: _newToken(),
-        jsonHandler: _json,
+        jsonHandler: _timed,
         instructions:
             'NipaPlay exposes media, playback, download, danmaku, settings, '
             'state and task capabilities. A returned task is accepted work; its '
@@ -211,6 +211,58 @@ final class AgentEndpoint {
     return _running = AgentEndpointRunning(url: url, repository: repository);
   }
 
+  /// What is worth knowing before the first step: how big the library is,
+  /// which accounts are signed in, where downloads go and how much room is
+  /// left. Each part is read on its own; one failing does not hide the rest.
+  Future<JsonMap> _bodyOverview(String origin) async {
+    Future<Object?> read(String action, JsonMap input,
+        Object? Function(JsonMap result) pick) async {
+      try {
+        final envelope = (await _harness.invokeJson(
+                action, input, Invocation(origin: origin)))
+            .toEnvelope();
+        if (envelope['status'] == 'completed' && envelope['result'] is Map) {
+          return pick((envelope['result'] as Map).cast<String, Object?>());
+        }
+        return {'unavailable': action};
+      } catch (_) {
+        return {'unavailable': action};
+      }
+    }
+
+    const sample = 500;
+    return {
+      'library': await read(
+          'state.query', {'view': 'library.merged', 'limit': sample}, (r) {
+        final rows = (r['rows'] as List? ?? const []).cast<Map>();
+        final episodes = [
+          for (final row in rows) ...(row['episodes'] as List? ?? const [])
+        ].cast<Map>();
+        return {
+          'works': rows.length,
+          if (r['nextCursor'] != null) 'more': true,
+          'episodes': episodes.length,
+          'playableEpisodes': episodes.where((e) => e['playable'] == true).length,
+        };
+      }),
+      'accounts': await read('accounts.status', {}, (r) => {
+            for (final a in (r['accounts'] as List? ?? const []).cast<Map>())
+              '${a['provider']}': a['loggedIn'] == true,
+          }),
+      'downloads': await read('download.directories', {},
+          (r) => {'directory': r['defaultDirectory']}),
+      'space': await read('storage.status', {}, (r) {
+        final volumes = (r['volumes'] as List? ?? const []).cast<Map>();
+        return volumes.isEmpty
+            ? null
+            : {
+                'availableBytes': volumes.first['availableBytes'],
+                'totalBytes': volumes.first['totalBytes'],
+              };
+      }),
+    };
+  }
+
   JsonMap _describe(ActionSpec spec) => {
         'id': spec.id,
         'title': spec.title,
@@ -224,6 +276,31 @@ final class AgentEndpoint {
       Response(status,
           body: jsonEncode(redact ? redactHarnessJson(value) : value),
           headers: {'content-type': 'application/json'});
+
+  /// Answers like [_json], noting requests that took long: a slow answer
+  /// is what Nipa sees as NipaPlay being away.
+  Future<Response> _timed(Request request) async {
+    final body = await request.readAsString();
+    final clock = Stopwatch()..start();
+    final response = await _json(request.change(body: body));
+    if (clock.elapsed > const Duration(seconds: 5)) {
+      String what = '?';
+      try {
+        final decoded = jsonDecode(body);
+        if (decoded is Map) {
+          what = [decoded['operation'], decoded['action'] ?? decoded['view']]
+              .whereType<String>()
+              .join(' ');
+        }
+      } on FormatException {
+        // The answer already says so.
+      }
+      // ignore: avoid_print
+      print('[Next] slow request ($what): '
+          '${clock.elapsed.inMilliseconds} ms');
+    }
+    return response;
+  }
 
   Future<Response> _json(Request request) async {
     final Object? decoded;
@@ -265,7 +342,8 @@ final class AgentEndpoint {
         'harnessSeed':
             await harnessSeedStatus(_running!.repository, seedRepository),
         'actions': _harness.catalog.length,
-        'tasks': full ? tasks : _taskSummary(tasks)
+        'tasks': full ? tasks : _taskSummary(tasks),
+        'body': await _bodyOverview(origin),
       });
     }
     if (operation == 'list') {

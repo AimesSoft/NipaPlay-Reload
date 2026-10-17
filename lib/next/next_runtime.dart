@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:io';
 import 'platform/background_activity.dart';
+import 'platform/loop_lag.dart';
 import 'runtime/codex_runtime.dart';
 import 'settings/classic_host_device_settings.dart';
 import 'package:nipaplay/utils/lab_profile.dart';
@@ -301,6 +302,7 @@ final class NextRuntime extends ChangeNotifier {
   String? _startedPath;
   late Future<void> _operations;
   AgentEndpointStatus _endpointStatus = const AgentEndpointStopped();
+  final _loopLag = LoopLag();
   bool _disposed = false;
   ClassicSettings? _classicSettings;
   MeshPlayback? _meshPlayback;
@@ -511,6 +513,7 @@ final class NextRuntime extends ChangeNotifier {
     if (_disposed || _endpointStatus == status) return;
     _endpointStatus = status;
     unawaited(BackgroundActivity.set(status is AgentEndpointRunning));
+    status is AgentEndpointRunning ? _loopLag.start() : _loopLag.stop();
     _hostSettings?.notify();
     notifyListeners();
   }
@@ -662,6 +665,7 @@ final class NextRuntime extends ChangeNotifier {
   void dispose() {
     _disposed = true;
     unawaited(BackgroundActivity.set(false));
+    _loopLag.stop();
     unawaited(_hostSettings?.codex?.cancel());
     ServiceProvider.nextCore.subtitles.detachPlayer();
     _classicSettings?.plugins.removeListener(_syncPluginSettings);

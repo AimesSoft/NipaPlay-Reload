@@ -180,6 +180,14 @@ Map<String, Object?> _card(UiCard c) => switch (c) {
             for (final i in c.items) {'work': _work(i.work), 'reason': i.reason}
           ]
         },
+      UiChoicesCard() => {
+          'kind': 'choices',
+          'question': c.question,
+          'options': [
+            for (final o in c.options)
+              {'label': o.label, 'detail': o.detail, 'recommended': o.recommended}
+          ]
+        },
       UiPreparationCard() => {
           'kind': 'preparation',
           'title': c.title,

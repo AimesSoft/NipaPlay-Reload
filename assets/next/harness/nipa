@@ -8,6 +8,7 @@ select another credential file. No persistent client session or background work.
 import argparse
 import base64
 import hashlib
+import http.client
 import json
 import os
 from pathlib import Path
@@ -164,6 +165,13 @@ def json_input(text):
     return value
 
 
+
+def busy(reason):
+    """NipaPlay is running but this request got no answer."""
+    return ("NipaPlay is running but did not answer this request (" + reason + "); "
+            "it may be busy. Reads can be retried; after a write, check the task or "
+            "state before repeating it.")
+
 class Client:
     def __init__(self):
         connection = json.loads(endpoint_file().read_text(encoding="utf-8"))
@@ -190,8 +198,12 @@ class Client:
         except urllib.error.HTTPError as error:
             details = json.load(error)
             raise RuntimeError("NipaPlay HTTP " + str(error.code) + ": " + compact(details)) from None
-        except (urllib.error.URLError, TimeoutError):
-            raise RuntimeError("Cannot connect; run NipaPlay and enable Next in Labs") from None
+        except urllib.error.URLError as error:
+            if isinstance(error.reason, ConnectionRefusedError):
+                raise RuntimeError("Cannot connect; run NipaPlay and enable Next in Labs") from None
+            raise RuntimeError(busy(str(error.reason))) from None
+        except (TimeoutError, ConnectionError, http.client.HTTPException) as error:
+            raise RuntimeError(busy(type(error).__name__)) from None
 
     def result(self, value):
         if value.get("status") != "completed":

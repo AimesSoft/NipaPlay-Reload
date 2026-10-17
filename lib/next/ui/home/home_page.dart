@@ -224,6 +224,7 @@ class _NextHomePageState extends State<NextHomePage> {
         onPauseTask: (t) => _shell!.services.actions.pauseTask(t.taskId),
         onResumeTask: (t) => _shell!.services.actions.resumeTask(t.taskId),
         onCancelTask: (t) => _shell!.services.actions.cancelTask(t.taskId),
+        onChoose: (answer) => unawaited(_shell!.chat.say(answer)),
       );
 
   // —— Building ——

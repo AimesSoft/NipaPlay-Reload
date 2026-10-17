@@ -283,6 +283,47 @@ void main() {
         isA<Failed>());
   });
 
+  test('choices offer distinct answers and read back as a choices card',
+      () async {
+    Future<Outcome> present(Map<String, Object?> card) =>
+        call('ui.present', {
+          'cards': [card]
+        });
+    expect(
+        await present({
+          'kind': 'choices',
+          'options': [
+            {'label': '只有一个'}
+          ]
+        }),
+        isA<Failed>());
+    expect(
+        await present({
+          'kind': 'choices',
+          'options': [
+            {'label': '同名'},
+            {'label': '同名'}
+          ]
+        }),
+        isA<Failed>());
+    expect(
+        await present({
+          'kind': 'choices',
+          'question': '要哪个版本？',
+          'options': [
+            {'label': 'BD 合集', 'detail': '1080p · 8 GB', 'recommended': true},
+            {'label': '先来一集'}
+          ]
+        }),
+        isA<Completed>());
+    final card = (await service.cards(threadId: 'thread', turnId: 'turn'))
+        .single as UiChoicesCard;
+    expect(card.question, '要哪个版本？');
+    expect(card.options.map((o) => o.label), ['BD 合集', '先来一集']);
+    expect(card.options.first.recommended, isTrue);
+    expect(card.options.last.detail, isNull);
+  });
+
   test('presentation stores references, preserves task receipts, and reopens',
       () async {
     final job = await engine.submit(type: 'test', title: 'private job-id');

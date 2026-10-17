@@ -8,13 +8,18 @@ const _text = StringSchema(minLength: 1);
 const _ref = StringSchema(minLength: 1);
 const _card = ObjectSchema({
   'kind': StringSchema(
-      values: ['work', 'episode', 'candidates', 'preparation', 'task']),
+      values: ['work', 'episode', 'candidates', 'preparation', 'task', 'choices']),
   'workId': _ref,
   'episodeId': _ref,
   'taskId': _ref,
   'title': _text,
   'items': ArraySchema(
     ObjectSchema({'workId': _ref, 'reason': _text}, required: ['workId']),
+  ),
+  'question': _text,
+  'options': ArraySchema(
+    ObjectSchema({'label': _text, 'detail': _text, 'recommended': BooleanSchema()},
+        required: ['label']),
   ),
   'steps': ArraySchema(
     ObjectSchema({

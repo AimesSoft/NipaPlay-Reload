@@ -737,9 +737,31 @@ final class UiDataService implements NextUiData {
                 'followupId must be an existing followup.register result id; use followup.list.');
           }
         }
+      case 'choices':
+        shape({'kind', 'question', 'options'}, {'kind', 'options'});
+        final options = (card['options'] as List).cast<Map>();
+        if (options.length < 2 || options.length > 6) {
+          throw const Failure(FailureCode.invalidInput,
+              'choices offers 2 to 6 options; each has a label, an optional detail and recommended.');
+        }
+        if (card['question'] != null) {
+          validateViewerText(card['question'] as String);
+        }
+        final labels = <String>{};
+        for (final option in options) {
+          final label = option['label'] as String;
+          validateViewerText(label);
+          if (option['detail'] != null) {
+            validateViewerText(option['detail'] as String);
+          }
+          if (!labels.add(label)) {
+            throw const Failure(FailureCode.invalidInput,
+                'choices options need distinct labels: the chosen label is what the viewer says.');
+          }
+        }
       default:
         throw const Failure(FailureCode.invalidInput,
-            'kind must be work, episode, candidates, preparation or task.');
+            'kind must be work, episode, candidates, preparation, task or choices.');
     }
   }
 
@@ -774,6 +796,13 @@ final class UiDataService implements NextUiData {
           case 'task':
             result.add(UiTaskCard(
                 await _task(await engine.get(card['taskId'] as String))));
+          case 'choices':
+            result.add(UiChoicesCard([
+              for (final option in (card['options'] as List).cast<Map>())
+                UiChoice(option['label'] as String,
+                    detail: option['detail'] as String?,
+                    recommended: option['recommended'] == true)
+            ], question: card['question'] as String?));
           case 'candidates':
             result.add(UiCandidatesCard([
               for (final item in (card['items'] as List).cast<Map>())
