@@ -1,6 +1,7 @@
 import 'package:flutter/cupertino.dart' as cupertino;
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:kmbal_ionicons/kmbal_ionicons.dart';
 import 'package:nipaplay_ui_common/app/app_display_surface.dart';
 import 'package:nipaplay_ui_common/app/app_display_surface_scope.dart';
@@ -387,9 +388,15 @@ class _NetworkSettingsContentState extends State<NetworkSettingsContent> {
       _isSavingBangumiCustom = true;
     });
     try {
+      final previousServer = await NetworkSettings.getBangumiServer();
       await NetworkSettings.setBangumiServer(input);
       final server = await NetworkSettings.getBangumiServer();
       if (!mounted) return;
+      // Bangumi 服务器变了（尤其是填镜像或改回官方），已持久化的封面 URL
+      // 仍指向旧域，旧域不可达就会一直裂图；这里让它们失效以重新解析。
+      if (server != previousServer) {
+        await _invalidateBangumiCoverCaches();
+      }
       setState(() {
         _currentBangumiServer = server;
       });
@@ -440,6 +447,29 @@ class _NetworkSettingsContentState extends State<NetworkSettingsContent> {
     }
   }
 
+  /// Bangumi 服务器变更后清掉指向旧域的封面缓存。
+  ///
+  /// 首页/媒体库把解析出的高清封面 URL 持久化在
+  /// `media_library_image_url_<animeId>`；这些 URL 带的是当时生效的域名。
+  /// 换服务器（填镜像或改回官方）后旧域名可能不可达，缓存不失效就会一直
+  /// 用裂掉的旧地址，看起来像"镜像没生效"。
+  Future<void> _invalidateBangumiCoverCaches() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      const coverPrefix = 'media_library_image_url_';
+      final staleKeys = prefs
+          .getKeys()
+          .where((key) => key.startsWith(coverPrefix))
+          .toList(growable: false);
+      for (final key in staleKeys) {
+        await prefs.remove(key);
+      }
+      debugPrint('[网络设置] 已清除 ${staleKeys.length} 条旧域名封面缓存');
+    } catch (e) {
+      debugPrint('[网络设置] 清除旧域名封面缓存失败: $e');
+    }
+  }
+
   Future<void> _resetBangumiServer() async {
     final message = _text(
       context,
@@ -454,6 +484,7 @@ class _NetworkSettingsContentState extends State<NetworkSettingsContent> {
       await NetworkSettings.resetBangumiServer();
       final server = await NetworkSettings.getBangumiServer();
       if (!mounted) return;
+      await _invalidateBangumiCoverCaches();
       setState(() {
         _currentBangumiServer = server;
       });

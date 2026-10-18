@@ -1,9 +1,10 @@
 import 'dart:async';
-import 'dart:typed_data';
 
+import 'package:flutter/foundation.dart';
 import 'package:nipaplay/services/dandanplay_http_client.dart' as http;
 import 'package:nipaplay_core/services/media_server_transport.dart';
 import 'package:nipaplay_core/services/web_remote_access_service.dart';
+import 'package:nipaplay_core/utils/network_settings.dart';
 
 final Map<String, Uri> _mediaServerBaseUris = {};
 
@@ -93,32 +94,93 @@ Future<Uint8List> loadNetworkImageBytes(Uri originalUri) {
   return _runWithImageFetchSlot(() => _loadNetworkImageBytesUncapped(originalUri));
 }
 
+/// 判断封面 URL 是否落在 Bangumi 官方图床/API 域上。
+///
+/// 用户填了 Bangumi 镜像后，API 请求会走镜像，但封面字节此前始终直连官方
+/// 域——国内/受限网络下官方域不可达就是整片封面裂图（镜像白填）。这里把
+/// 官方域识别出来，好让下载时优先改走镜像。
+bool _isBangumiOfficialImageUri(Uri uri) {
+  final host = uri.host.toLowerCase();
+  if (host.isEmpty) return false;
+  if (host == 'api.bgm.tv' || host == 'bgm.tv' || host == 'next.bgm.tv') {
+    return true;
+  }
+  // 静态图床：lain.bgm.tv / *.bgm.tv（如 lain.bgm-proxy-*.pages.dev 不适用，
+  // 那是镜像自己的域，本来就能直连）。
+  return host.endsWith('.bgm.tv');
+}
+
+/// 把 Bangumi 官方域的封面 URL 重写到用户配置的镜像域。
+///
+/// 镜像（如 bgm-proxy-*.pages.dev）同时代理 API 与 /pic/ 静态图床，所以
+/// 只需换 host（保留端口与 path+query）即可；官方域直连失败时正是靠这一
+/// 步把图片请求救回来。
+Future<Uri> _bangumiMirrorUri(Uri original) async {
+  try {
+    final server = await NetworkSettings.getBangumiServer();
+    if (server.isEmpty) return original;
+    final mirror = Uri.tryParse(server);
+    if (mirror == null || mirror.host.isEmpty) return original;
+    if (mirror.host.toLowerCase() == original.host.toLowerCase()) {
+      return original;
+    }
+    return original.replace(
+      scheme: mirror.scheme,
+      host: mirror.host,
+      port: mirror.hasPort ? mirror.port : null,
+    );
+  } catch (_) {
+    return original;
+  }
+}
+
 Future<Uint8List> _loadNetworkImageBytesUncapped(Uri originalUri) async {
   final requestUri = WebRemoteAccessService.proxyUri(originalUri);
   if (isMediaServerImageUri(originalUri)) {
     return loadMediaServerImage(requestUri);
   }
 
+  // Bangumi 官方域的封面优先走用户配置的镜像，失败再回落原地址。
+  // 顺序很重要：官方域在受限网络下往往是"连不上"而不是"慢"，若先试官方
+  // 域会白白吃掉一个 20s 超时和一个并发槽。
+  final bool canUseMirror =
+      _isBangumiOfficialImageUri(originalUri) && !kIsWeb;
+  if (canUseMirror) {
+    final mirrorUri = await _bangumiMirrorUri(originalUri);
+    if (mirrorUri != originalUri) {
+      try {
+        return await _fetchImageBytes(mirrorUri);
+      } catch (e) {
+        debugPrint(
+            '[ImageLoader] 镜像取图失败，回退原地址: $mirrorUri -> $originalUri ($e)');
+      }
+    }
+  }
+
+  return _fetchImageBytes(requestUri);
+}
+
+Future<Uint8List> _fetchImageBytes(Uri uri) async {
   // 带超时的一次性客户端：超时后 close() 会强制断开底层连接并释放套接字，
   // 保证并发槽位总能被归还。
   final client = http.DandanplayHttpClient();
   try {
     final response = await http.Response.fromStream(
       await client
-          .send(http.Request('GET', requestUri))
+          .send(http.Request('GET', uri))
           .timeout(_imageFetchTimeout),
     ).timeout(_imageFetchTimeout);
     if (response.statusCode != 200) {
       throw http.ClientException(
         'Image request failed: HTTP ${response.statusCode}',
-        requestUri,
+        uri,
       );
     }
     return response.bodyBytes;
   } on TimeoutException {
     throw http.ClientException(
       'Image request timed out after ${_imageFetchTimeout.inSeconds}s',
-      requestUri,
+      uri,
     );
   } finally {
     client.close();
