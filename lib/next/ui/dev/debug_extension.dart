@@ -472,17 +472,22 @@ abstract final class NextUiDebug {
         // Text into the [index]th field of the frontmost page (a login
         // window), as typing would; the text is never echoed back.
         await _settle();
-        final fields = <EditableTextState>[];
+        final all = <EditableTextState>[];
         void visit(Element e) {
           if (e is StatefulElement && e.state is EditableTextState) {
-            final state = e.state as EditableTextState;
-            if (ModalRoute.of(state.context)?.isCurrent ?? true) {
-              fields.add(state);
-            }
+            all.add(e.state as EditableTextState);
           }
           e.visitChildren(visit);
         }
         WidgetsBinding.instance.rootElement?.visitChildren(visit);
+        // With a window open over the page (a dialog), only its fields: the
+        // conversation's own field sits under it.
+        bool inDialog(EditableTextState s) {
+          final route = ModalRoute.of(s.context);
+          return route is PopupRoute && route.isCurrent;
+        }
+        final fields =
+            all.any(inDialog) ? all.where(inDialog).toList() : all;
         final index = int.parse(p['index'] ?? '0');
         if (index >= fields.length) {
           throw StateError('${fields.length} fields on the front page');
