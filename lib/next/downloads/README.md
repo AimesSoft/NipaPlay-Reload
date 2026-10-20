@@ -86,9 +86,11 @@ video passes verification, the executor saves its `completedFiles` row with
 the row, the row's `media` is read again, and `download.file_completed` carries it
 as `file.binding`; the fact is not published while the row is pending. A pending
 row found after a restart is bound again under the same requestId, which returns
-the saved result. Statuses: `bound` (`workId`, `releaseId`, `episodeIds`),
-`already_identified` (the file already had episodes, e.g. from Classic;
-`existingEpisodeIds`; nothing is changed), `not_applied` (`file_not_registered`),
+the saved result. Statuses: `bound` (`workId`, `releaseId`, `episodeIds`, and
+`supersededClassic` when the declaration took the place of Classic's automatic
+match, see below), `already_identified` (the file already had episodes from a user
+or agent binding, or a `local_catalog` link; `existingEpisodeIds`; nothing is
+changed), `not_applied` (`file_not_registered`),
 `failed` (`error`). One attempt per file; a failure never fails or retries the
 download. Receipts list declared indices that never reached a binding attempt in
 `details.unboundDeclarations` (`no_such_file`, `not_selected`, `not_video`,
@@ -124,8 +126,27 @@ The requestId of a declaration made with `declare_files` is
 content: the same declaration replays the saved `bind_batch` result (and a file
 whose row says it was bound by that request keeps `bound`), a changed one is a new
 request, so the earlier result cannot reject it. Declarations from `add` keep
-`download:JOB_ID:file:INDEX`. A file that already has episodes is never
-overwritten (`already_identified`).
+`download:JOB_ID:file:INDEX`. A file whose episodes come from a user's or an
+agent's binding is never overwritten (`already_identified`).
+
+A declaration takes precedence over NipaPlay's own automatic match of the same
+file, that is the Classic scanner's filename/hash match of dandanplay, which the
+Next identity store holds as `source=classic_match`. When every episode a file has
+comes from such a match (`DownloadLibrary.lookup` reports
+`classicMatchOnly: true`), the declaration is bound and the outcome is `bound` with
+`supersededClassic: {source: "classic_match", workIds, episodeIds, emptiedWorkIds}`:
+the work(s) and episode(s) the file was under, and the works that held nothing but
+automatic matches and were taken out of the library (`library.merged`,
+`library.works`; their records stay stored and show again when something is bound to
+them). The file is then only under the declared episodes. Only declarations do this
+(`bindDownloadedFile` passes `supersedeClassicMatch: true` to
+`MediaService.bindBatch`); a plain `media.identity.bind_batch` leaves the match
+beside the binding. Classic's own watch-history row (animeId, episodeId)
+is not changed, and a later `syncClassicHistory` records the observation as
+`classic_superseded` without attaching the file or recreating the work, for as long
+as the declaration's binding is accepted. The Classic projection outbox only
+carries explicit dandanplay bindings, so a declared Bangumi or TMDB identity writes
+nothing to Classic.
 
 Everything that rewrites a job's `completedFiles` rows takes the job's turn
 (`DownloadExecutor.exclusive`): the executor's per-file stage and
