@@ -1657,8 +1657,15 @@ class MainFlutterWindow: NSWindow {
         return
       }
       if call.method == "showBehind" {
-        // Lab instances run beside the user: visible, behind everything,
-        // never key and never activating the app.
+        // Lab instances run beside the user: behind everything, never key
+        // and never activating the app. Unless NIPAPLAY_LAB_VISIBLE=1 they
+        // are not seen at all: transparent and click-through, taking no part
+        // of any screen, while Flutter keeps drawing for in-app captures.
+        if ProcessInfo.processInfo.environment["NIPAPLAY_LAB_VISIBLE"] != "1" {
+          window.alphaValue = 0
+          window.ignoresMouseEvents = true
+          window.hasShadow = false
+        }
         window.setIsVisible(true)
         window.orderBack(nil)
         result(true)
