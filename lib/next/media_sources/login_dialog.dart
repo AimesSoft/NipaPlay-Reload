@@ -5,6 +5,10 @@ import 'package:nipaplay/utils/globals.dart' as globals;
 import 'package:window_manager/window_manager.dart';
 import 'package:nipaplay/utils/lab_profile.dart';
 
+import '../ui/widgets/dialog.dart';
+
+/// NipaPlay's own window over whatever shows: in Next's look while Next is
+/// the interface ([NextDialogRoute]), Classic's dialog otherwise.
 Future<T?> showNextLogin<T>(Widget Function(BuildContext) builder) async {
   final navigator = globals.navigatorKey.currentState;
   final context = navigator?.overlay?.context;
@@ -27,8 +31,10 @@ Future<T?> showNextLogin<T>(Widget Function(BuildContext) builder) async {
   }
   // Flutter 3.44 showDialog chooses an experimental native dialog under
   // windowing. Its new FlutterView stays at zero metrics. Use the main view.
-  return navigator.push<T>(DialogRoute<T>(
-      context: context, barrierDismissible: false, builder: builder));
+  return navigator.push<T>(globals.nextShellHostsPlayer
+      ? NextDialogRoute<T>(builder: builder)
+      : DialogRoute<T>(
+          context: context, barrierDismissible: false, builder: builder));
 }
 
 Future<String?> showMediaSourceLogin(
@@ -63,8 +69,44 @@ class _PasswordDialogState extends State<_PasswordDialog> {
     Navigator.of(context).pop(password.text);
   }
 
+  void cancel() {
+    submitted = true;
+    Navigator.of(context).pop();
+  }
+
+  String get secretLabel =>
+      widget.source['type'] == 'dandanplay_remote' ? 'API 密钥' : '密码';
+
   @override
-  Widget build(BuildContext context) => AlertDialog(
+  Widget build(BuildContext context) =>
+      NextDialogRoute.of(context) ? next() : classic();
+
+  /// The source's name, its address under it, who logs in, the secret.
+  Widget next() {
+    final username = widget.source['username'] as String? ?? '';
+    return NextDialog(
+      title: '登录 ${widget.source['name']}',
+      subtitle: widget.source['url'] as String?,
+      onCancel: cancel,
+      body: [
+        if (username.isNotEmpty)
+          NextDialogField(label: '用户名', value: username),
+        NextDialogField(
+            label: secretLabel,
+            controller: password,
+            obscure: true,
+            autofocus: true,
+            onSubmitted: (_) => login()),
+      ],
+      actions: [
+        NextDialogButton(label: '取消', onTap: cancel),
+        NextDialogButton(
+            label: '登录', kind: NextDialogButtonKind.primary, onTap: login),
+      ],
+    );
+  }
+
+  Widget classic() => AlertDialog(
         title: Text('登录 ${widget.source['name']}'),
         content: SizedBox(
             width: 400,
@@ -83,19 +125,11 @@ class _PasswordDialogState extends State<_PasswordDialog> {
                   obscureText: true,
                   enableSuggestions: false,
                   autocorrect: false,
-                  decoration: InputDecoration(
-                      labelText: widget.source['type'] == 'dandanplay_remote'
-                          ? 'API 密钥'
-                          : '密码'),
+                  decoration: InputDecoration(labelText: secretLabel),
                   onSubmitted: (_) => login()),
             ])),
         actions: [
-          TextButton(
-              onPressed: () {
-                submitted = true;
-                Navigator.of(context).pop();
-              },
-              child: const Text('取消')),
+          TextButton(onPressed: cancel, child: const Text('取消')),
           FilledButton(onPressed: login, child: const Text('登录')),
         ],
       );
