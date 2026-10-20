@@ -46,7 +46,7 @@ const _specs = [
       id: 'accounts.login',
       title: 'Initiate account login',
       description:
-          'Log in through the Classic account service. Without a user-provided secret, opens NipaPlay’s own login dialog for the user. Dandanplay uses username/password; Bangumi uses a personal access token. A secret voluntarily supplied by the user in conversation may be passed here; never search for secrets. Returns a jobId for task.wait. Secrets stay in memory until authentication and never enter job inputs or receipts.',
+          'Log in through the Classic account service. Without a user-provided secret, the user logs in in NipaPlay’s own window: while the Next interface shows, a 需要登录 card under your reply opens it when they press it; otherwise the window opens at once. Dandanplay uses username/password; Bangumi uses a personal access token. A secret voluntarily supplied by the user in conversation may be passed here; never search for secrets. Returns a jobId; it ends when they log in or close the window, so task.wait or a followup on it tells you. Secrets stay in memory until authentication and never enter job inputs or receipts.',
       effect: Effect.write,
       input: ObjectSchema({
         'provider': _provider,

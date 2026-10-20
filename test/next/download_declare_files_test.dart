@@ -196,6 +196,24 @@ void main() {
     expect(library.bindCalls, hasLength(1));
   });
 
+  test('download.read shows which files are declared and how they were bound',
+      () async {
+    setFiles([true, false]);
+    final job = await running();
+    await until(job.jobId, (j) => rows(j).length == 1);
+    await declareFiles(job.jobId, [declare(0, '101'), declare(1, '102')]);
+    final outcome = await harness.invokeJson(
+        'download.read', {'jobId': job.jobId}, Invocation(origin: 'mcp'));
+    final read = (outcome as Completed).value.toJson();
+    expect(harness.lookup('download.read')!.spec.output.validate(read), isEmpty);
+    final files = ((read['task'] as Map)['files'] as List).cast<Map>();
+    expect(files[0]['declared'], true);
+    expect((files[0]['binding'] as Map)['status'], 'bound');
+    expect(((files[0]['media'] as Map)['episodes'] as List), hasLength(1));
+    expect(files[1]['declared'], true);
+    expect(files[1].containsKey('binding'), isFalse);
+  });
+
   test('a file already completed is bound at once and the outcome is returned',
       () async {
     setFiles([true, true]);

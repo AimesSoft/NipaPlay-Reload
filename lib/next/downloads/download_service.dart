@@ -166,6 +166,26 @@ final class DownloadService {
     final task = await _task(backend, job);
     final facts = task?.toJson();
     if (task != null) {
+      // What the worker saved per completed file: library entry and the
+      // declared binding's outcome.
+      final completed = {
+        for (final row in job.checkpoint['completedFiles'] as List? ?? [])
+          (row as Map)['index']: row
+      };
+      for (final entry in task.files.indexed) {
+        final row = (facts!['files'] as List)[entry.$1] as JsonMap;
+        if (fileBindingFor(job, entry.$1) != null) row['declared'] = true;
+        if (completed[entry.$1] case final Map saved) {
+          for (final key in const [
+            'imported',
+            'identificationPending',
+            'media',
+            'binding'
+          ]) {
+            if (saved[key] != null) row[key] = saved[key];
+          }
+        }
+      }
       for (final entry in task.files.indexed) {
         if (entry.$2.complete && entry.$2.location.isLocal) {
           final row = (facts!['files'] as List)[entry.$1] as JsonMap;

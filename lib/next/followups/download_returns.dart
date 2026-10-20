@@ -150,7 +150,7 @@ extension DownloadReturns on Followups {
             'state': 'ready',
             'title': '下载事实：${job.title}',
             'instruction':
-                '由此会话发起的下载有新事实：完成时的校验、入库与播放，或很久没有进展。作品和剧集未知时保留未知。下一步由你决定。',
+                '由此会话发起的下载有新事实：完成时的校验、入库与播放，或很久没有进展。作品和剧集未知时保留未知。之后完成的文件、下载结束或停滞，NipaPlay 都会再送回这里。下一步由你决定。',
             'condition': {'downloadJobId': job.jobId},
             'downloadObjects': <Object?>[],
             'deliverAfter': due.toIso8601String(),

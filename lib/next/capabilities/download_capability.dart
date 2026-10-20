@@ -84,6 +84,8 @@ const _downloadTaskSchema = ObjectSchema({
     'imported': BooleanSchema(),
     'identificationPending': BooleanSchema(),
     'media': ObjectSchema({}, additionalProperties: true),
+    'declared': BooleanSchema(),
+    'binding': ObjectSchema({}, additionalProperties: true),
   }, required: [
     'index',
     'path',
@@ -176,7 +178,7 @@ final class _DownloadAction extends Action<_DownloadJson, _DownloadJson> {
           'resume' =>
             'Compatibility alias for download.set_paused with paused=false.',
           'read' =>
-            'Read checked bytes, completeness and playback facts per file, live peer counts, progress observation times and available disk bytes for jobId or jobIds. Unknown seed/piece availability is null. Completed seeding tasks remain readable. File events use objectId JOB_ID:FILE_INDEX.',
+            'Read checked bytes, completeness and playback facts per file, live peer counts, progress observation times and available disk bytes for jobId or jobIds. A file declared with fileBindings or declare_files has declared=true; once completed and registered it carries its library entry (media) and binding outcome as in download.file_completed. Unknown seed/piece availability is null. Completed seeding tasks remain readable. File events use objectId JOB_ID:FILE_INDEX.',
           'select_files' =>
             'Replace the included file indices for jobId or jobIds without deleting data or changing paths. Empty selects none. The builtin engine supports inclusion changes, not file priority. Readback verifies the selection. Expanding a finished selection returns a new observation job; the previous receipt is preserved.',
           'import' =>
