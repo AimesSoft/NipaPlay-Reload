@@ -54,9 +54,12 @@ abstract base class _Source implements DanmakuSource {
       throw const Failure(FailureCode.invalidInput,
           'video must be a Dandanplay episode with a numeric videoId.');
     }
-    // Search results do not know an episode's length; say so, rather than
-    // calling a zero length a range problem.
+    final size = describe.segmentMs;
+    // Search results do not know an episode's length. A source that returns
+    // a whole pool at once does not need it: the pool is one chunk, so an
+    // episode can get its comments before its file exists.
     if (video.durationMs <= 0) {
+      if (size == 0) return const [DanmakuChunk(0, 0, 7200000)];
       throw const Failure(FailureCode.invalidInput,
           'video.durationMs is unknown (0) and the entity has no local file NipaPlay could measure; give the video\'s duration.');
     }
@@ -67,7 +70,6 @@ abstract base class _Source implements DanmakuSource {
       throw const Failure(FailureCode.invalidInput,
           'Fetch range must be inside a video of at most two hours.');
     }
-    final size = describe.segmentMs;
     if (size == 0) return [DanmakuChunk(0, startMs, endMs)];
     final first = startMs ~/ size, last = (endMs - 1) ~/ size;
     if (last - first + 1 > 120) {

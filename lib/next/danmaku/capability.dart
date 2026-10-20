@@ -320,7 +320,7 @@ final _specs = [
         'bindingId',
         'jobId'
       ]),
-      'Bind a platform video to entityId, path or the current file (default). Existing platform/video tracks are reused; Classic dandanplay reuse records a binding, with jobId=null. Local pools prevent online acquisition. refresh=true fetches and replaces. When video.durationMs is 0 (search results do not know it), NipaPlay measures the entity's file on this device. Invalid required local ranges fail without mounting; outside-range errors are reported separately. Credentials are opaque host references.'),
+      'Bind a platform video to entityId, path or the current file (default). Existing platform/video tracks are reused; Classic dandanplay reuse records a binding, with jobId=null. Local pools prevent online acquisition. refresh=true fetches and replaces. When video.durationMs is 0 (search results do not know it), NipaPlay measures the entity\'s file on this device; an episode with no file yet is attached all the same (dandanplay returns its whole pool at once), so its comments are there when the file arrives. Invalid required local ranges fail without mounting; outside-range errors are reported separately. Credentials are opaque host references.'),
   _spec(
       'danmaku.tracks',
       Effect.read,

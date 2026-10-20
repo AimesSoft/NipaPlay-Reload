@@ -52,21 +52,23 @@ void main() {
     expect(result.coverage, 'relatedPool');
     expect(result.entries.last.toPlayer()['source'], 'unknown');
   });
-  test('an unknown episode length is named, not called a range problem', () {
+  test('an unknown episode length plans the whole pool as one chunk', () {
+    // Search results do not know the length; dandanplay returns a pool at
+    // once, so an episode can get its comments before its file exists.
     final source =
         DandanplayDanmakuSource(host, allowedHosts: const ['fixture.invalid']);
-    expect(
-        () => source.planFetch(
-            const DanmakuVideo(
-                sourceId: 'dandanplay',
-                videoId: '7101',
-                title: 'fixture',
-                durationMs: 0,
-                objectType: 'episode'),
-            0,
-            1000),
-        throwsA(isA<Failure>()
-            .having((f) => f.message, 'message', contains('durationMs'))));
+    final plan = source.planFetch(
+        const DanmakuVideo(
+            sourceId: 'dandanplay',
+            videoId: '7101',
+            title: 'fixture',
+            durationMs: 0,
+            objectType: 'episode'),
+        0,
+        0);
+    expect(plan.map((c) => c.toJson()), [
+      {'index': 0, 'startMs': 0, 'endMs': 7200000}
+    ]);
   });
 
   test('one odd comment does not cost the pool', () async {
