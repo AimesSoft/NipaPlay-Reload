@@ -215,11 +215,46 @@ void main() {
     automatic = (await followups.list())
         .where((r) => r['automatic'] == 'download')
         .single;
-    expect(((automatic['trigger'] as Map)['facts'] as List), hasLength(1));
+    // The end's followup looks at the whole download, so file 1, still
+    // waiting in the batch, goes with it.
+    expect(automatic['state'], 'cancelled');
+    expect(((automatic['trigger'] as Map)['facts'] as List), isEmpty);
     expect(automatic['downloadObjects'], contains('terminal:${job.jobId}'));
     await followups.sweep();
     expect((await followups.list()).where((r) => r['automatic'] == 'download'),
         hasLength(1));
+  });
+
+  test('files batched when the end arrives go with the end\'s own followup',
+      () async {
+    final job = await submit();
+    final context = await executor.entered.future;
+    await followups.register({
+      'when': {'jobId': job.jobId},
+      'threadId': 'original',
+      'instruction': '下完检查每集'
+    }, Invocation(origin: 'harness_cli'));
+    await context.report(checkpoint: {
+      'completedFiles': [file(job, 0)]
+    });
+    await followups.sweep();
+    final rows = await followups.list();
+    final first = rows.where((r) => r['automatic'] == 'download').single;
+    // The first file is news of its own while the download runs.
+    expect(first['state'], 'ready');
+    expect((first['trigger'] as Map)['facts'], hasLength(1));
+    await context.report(checkpoint: {
+      'completedFiles': [file(job, 0), file(job, 1), file(job, 2)]
+    });
+    await context.succeed(verified(details: {
+      'fileIds': ['file-0', 'file-1', 'file-2']
+    }));
+    await followups.sweep();
+    final after = await followups.list();
+    expect(after.where((r) => r['automatic'] == null).single['state'],
+        isNot('cancelled'));
+    final automatic = after.where((r) => r['automatic'] == 'download');
+    expect(automatic.every((r) => r['state'] == 'cancelled'), isTrue);
   });
 
   test('scripts and nonvideo or unregistered files produce no automatic return',

@@ -250,7 +250,8 @@ extension DownloadReturns on Followups {
     final facts = (trigger['facts'] as List).cast<JsonMap>();
     // Resolve waiting broad subscriptions in occurrence order, just like sweep.
     final claimed = <String>{};
-    final remaining = <JsonMap>[];
+    var remaining = <JsonMap>[];
+    var endOwned = false;
     for (final fact in facts) {
       final manual = rows
           .where(
@@ -260,8 +261,12 @@ extension DownloadReturns on Followups {
         remaining.add(fact);
       } else {
         claimed.add(manual['id'] as String);
+        endOwned = endOwned || fact['event'] == 'task.terminal';
       }
     }
+    // The followup that takes the download's end looks at the whole
+    // download; files still waiting in this batch are no news after it.
+    if (endOwned) remaining = [];
     if (remaining.length == facts.length) return;
     trigger['facts'] = remaining;
     await _save(row, remaining.isEmpty ? 'cancelled' : 'ready', 'deduplicated',
