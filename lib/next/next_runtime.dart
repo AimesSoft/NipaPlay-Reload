@@ -521,11 +521,18 @@ final class NextRuntime extends ChangeNotifier {
   Future<void> _startChat(Directory repository) async {
     chatError = null;
     await _hostEvents?.cancel();
+    // NipaPlay's, not the harness's: written from the build on every start.
+    final base = File('${ServiceProvider.nextCore.root.path}/agent/nipa-base.md');
+    await base.parent.create(recursive: true);
+    await base.writeAsString(
+        await rootBundle.loadString('assets/next/agent/nipa-base.md'),
+        flush: true);
     final host = chat = ChatHost(endpoint: _endpoint, repository: repository,
       memory: ServiceProvider.nextCore.memory,
       sessions: ServiceProvider.nextCore.sessions,
       modelLaunch: _hostSettings!.launch,
-      labRoot: LabProfile.active ? Directory(LabProfile.root) : null);
+      labRoot: LabProfile.active ? Directory(LabProfile.root) : null,
+      baseInstructions: base);
     final core = ServiceProvider.nextCore;
     core.memory.recent = (current) async => recentMemoryFacts(host,
       [for (final job in await core.engine.list())

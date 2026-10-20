@@ -30,7 +30,8 @@ final class ChatHost {
       this.memory,
       this.modelLaunch,
       this.probe = false,
-      this.codexExecutable})
+      this.codexExecutable,
+      this.baseInstructions})
       : sessionId = 'nipa-${DateTime.now().microsecondsSinceEpoch}-'
             '${Random.secure().nextInt(1 << 32).toRadixString(16)}';
 
@@ -42,6 +43,10 @@ final class ChatHost {
   final String? codexExecutable;
   final Future<ModelLaunch> Function()? modelLaunch;
   final bool probe;
+
+  /// Replaces Codex's own base instructions, which are written for a coding
+  /// agent, with NipaPlay's description of Nipa's place and her turns.
+  final File? baseInstructions;
   ModelLaunch? _launch;
   int? get activeModelRevision => _launch?.revision;
   bool _restarting = false;
@@ -166,6 +171,10 @@ final class ChatHost {
           ],
           '-c',
           await _trustOverride(),
+          if (baseInstructions case final file?) ...[
+            '-c',
+            'model_instructions_file=${jsonEncode(file.path)}'
+          ],
           '-c',
           'shell_environment_policy.set.NIPAPLAY_CHAT="$sessionId"'
         ],
@@ -281,6 +290,7 @@ final class ChatHost {
           r'exec "$4" app-server -c "$5" '
           '${modelLaunch != null || probe ? '-c features.shell_snapshot=false ' : ''}'
           '${_launch?.model != null ? '-c "\$6" -c "\$7" ' : ''}'
+          '${baseInstructions != null ? '-c "\$8" ' : ''}'
           r'-c "shell_environment_policy.set.NIPAPLAY_CHAT=\"$1\""';
       _process = await Process.start(
           shell,
@@ -297,6 +307,7 @@ final class ChatHost {
             await _trustOverride(),
             'model=${jsonEncode(_launch?.model)}',
             'model_provider=${jsonEncode(_launch?.provider)}',
+            'model_instructions_file=${jsonEncode(baseInstructions?.path)}',
           ],
           workingDirectory: repository.path,
           environment: _launch?.home == null ? inherited : clean,

@@ -245,6 +245,7 @@ flutter:
     - assets/next/harness/hooks/session_start.py
     - assets/next/harness/memory/
     - assets/next/harness/tools/
+    - assets/next/agent/nipa-base.md
     - packages/adaptive_platform_ui/pubspec.yaml
     - packages/danmaku_canvas/pubspec.yaml
     - packages/nipaplay_smb2/pubspec.yaml

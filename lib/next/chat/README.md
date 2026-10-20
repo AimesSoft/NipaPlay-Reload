@@ -63,6 +63,16 @@ This infrastructure is inactive when Next chat is disabled.
 endpoint is enabled. Changing harness or disabling Next closes it. Initialization
 errors are in `NextRuntime.chatError`; desktop exit calls `closeChat()`.
 
+The app-server starts with `-c model_instructions_file=<Next root>/agent/nipa-base.md`,
+written from `assets/next/agent/nipa-base.md` on every start. It replaces Codex's
+base instructions, which describe a coding agent that keeps going until a task
+is resolved, with Nipa's place in NipaPlay: who is watching, when a turn should
+end, and that a refusal from NipaPlay is a fact to report. It belongs to the
+build, not the harness; AGENTS.md files still arrive as before. In the eleventh
+end-to-end run (against the ninth, Codex's base) followup turns took 6–12 s
+instead of 16–17 s and answering an interjection stayed at 10 s. The probe host
+used by the model check does not set it.
+
 The host exposes `startThread`, `resumeThread`, `listThreads` (cwd and cursor),
 `startTurn`, `interrupt`, `steer`, and `answerUserInput`. Thread selection returns
 Codex's history; it creates no second transcript store. `header` contains the
