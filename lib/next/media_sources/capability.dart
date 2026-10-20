@@ -9,7 +9,17 @@ const _source = ObjectSchema({
   'sourceId': _text,
   'type': _text,
   'name': _text,
-  'url': _text,
+  'url': StringSchema(
+      description:
+          'LAN address (WebDAV url, SMB smb://host:port); empty when only a WAN address is configured. Jellyfin, Emby, NipaPlay and Dandanplay have this single address.'),
+  'wanUrl': StringSchema(
+      description:
+          'WebDAV/SMB WAN address; empty when none is configured. Absent on other types.'),
+  'address': _text,
+  'host': StringSchema(),
+  'port': IntegerSchema(minimum: 1, maximum: 65535),
+  'wanHost': StringSchema(),
+  'wanPort': IntegerSchema(minimum: 1, maximum: 65535),
   'username': StringSchema(),
   'connected': BooleanSchema(),
   'connectionState':
@@ -20,6 +30,7 @@ const _source = ObjectSchema({
   'type',
   'name',
   'url',
+  'address',
   'username',
   'connected',
   'connectionState',
@@ -27,10 +38,13 @@ const _source = ObjectSchema({
 ], additionalProperties: true);
 const _configuration = {
   'name': _text,
-  'url': _text,
+  'url': StringSchema(),
+  'wanUrl': StringSchema(),
   'username': StringSchema(),
-  'host': _text,
+  'host': StringSchema(),
   'port': IntegerSchema(minimum: 1, maximum: 65535),
+  'wanHost': StringSchema(),
+  'wanPort': IntegerSchema(minimum: 1, maximum: 65535),
   'domain': StringSchema(),
 };
 const _provenance = ObjectSchema({
@@ -179,7 +193,7 @@ final _specs = [
       id: 'media.sources.check',
       title: 'Check a media source connection',
       description:
-          'With sourceId, perform an authenticated live catalog request through Classic and persist success/failure status. With type plus url (or SMB host/port/domain), test temporary configuration without saving it or requesting credentials. Temporary Jellyfin/Emby/Dandanplay tests probe public identity/welcome, WebDAV/SMB use anonymous credentials, NipaPlay uses existing same-origin host credentials if available. No passwords are accepted. Failure to authenticate temporary settings means use add then login. Listing sources itself never probes the network.',
+          'With sourceId, perform an authenticated live catalog request through Classic and persist success/failure status. With type plus url (or SMB host or wanHost, port, domain), test temporary configuration without saving it or requesting credentials. Temporary Jellyfin/Emby/Dandanplay tests probe public identity/welcome, WebDAV/SMB use anonymous credentials, NipaPlay uses existing same-origin host credentials if available. No passwords are accepted. Failure to authenticate temporary settings means use add then login. Listing sources itself never probes the network.',
       effect: Effect.write,
       input: ObjectSchema({
         'sourceId': _text,
@@ -209,7 +223,7 @@ final _specs = [
       id: 'media.sources.list',
       title: 'List media sources',
       description:
-          'List Classic sources and last observed connection status without reading credentials or contacting servers. Unverified does not mean offline.',
+          'List Classic sources and last observed connection status without reading credentials or contacting servers. Unverified does not mean offline. address is the address in use now. WebDAV and SMB can have a LAN and a WAN address: WebDAV url (LAN) and wanUrl (WAN); SMB host/port and wanHost/wanPort, also given as smb:// url and wanUrl. At least one is non-empty; an empty one is not configured. Classic prefers LAN when both are set, so address can change between LAN and WAN without any edit.',
       effect: Effect.read,
       input: ObjectSchema({}),
       output: ObjectSchema({'sources': ArraySchema(_source)},
@@ -218,7 +232,7 @@ final _specs = [
       id: 'media.sources.add',
       title: 'Configure a media source',
       description:
-          'Add a Classic Jellyfin, Emby, SMB, WebDAV, NipaPlay shared or dandanplay_remote source. HTTP sources require url; SMB requires host and optionally port/domain. Saves address and username; use login separately. Classic has one dandanplay_remote source, use update to replace its address. NipaPlay sharing uses the existing paired-host client.',
+          'Add a Classic Jellyfin, Emby, SMB, WebDAV, NipaPlay shared or dandanplay_remote source. HTTP sources require url; WebDAV may instead give wanUrl (or both). SMB requires host or wanHost (or both) and optionally port/wanPort/domain. Addresses are validated like Classic: HTTP(S) only, no credentials, query or fragment; SMB hosts have no credentials or path. Saves addresses and username; use login separately. Classic has one dandanplay_remote source, use update to replace its address. NipaPlay sharing uses the existing paired-host client.',
       effect: Effect.write,
       input: ObjectSchema({
         'type': StringSchema(values: [
@@ -239,7 +253,7 @@ final _specs = [
       id: 'media.sources.update',
       title: 'Update a media source',
       description:
-          'Update the named source using Classic configuration. Omitted fields and saved password references are retained. Changed server/account requires login. Does not delete indexed files.',
+          'Update the named source using Classic configuration. Omitted fields, including the other of the LAN/WAN addresses, and saved password references are retained; an empty string clears the WebDAV url/wanUrl or SMB host/wanHost, and at least one address must remain. A saved password is bound to the addresses it was saved for: removing an address or switching between them keeps it, while a new or different address, or another account, requires login. Does not delete indexed files.',
       effect: Effect.write,
       input: ObjectSchema({'sourceId': _text, ..._configuration},
           required: ['sourceId']),
@@ -475,8 +489,7 @@ final class _SourceAction extends Action<_Json, _Json> {
               input: {
                 'sourceId': id,
                 'libraries': selected,
-                'url': source['url'],
-                'username': source['username']
+                ...service.endpointOf(source)
               });
           result = {'sourceId': id, 'jobId': job.jobId};
         default:

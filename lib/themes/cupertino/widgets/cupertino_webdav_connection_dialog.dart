@@ -48,6 +48,7 @@ class _CupertinoWebDAVConnectionSheetState
     extends State<_CupertinoWebDAVConnectionSheet> {
   final TextEditingController _nameController = TextEditingController();
   final TextEditingController _urlController = TextEditingController();
+  final TextEditingController _wanUrlController = TextEditingController();
   final TextEditingController _usernameController = TextEditingController();
   final TextEditingController _passwordController = TextEditingController();
   late final String _originalPassword;
@@ -64,6 +65,7 @@ class _CupertinoWebDAVConnectionSheetState
     if (edit != null) {
       _nameController.text = edit.name;
       _urlController.text = edit.url;
+      _wanUrlController.text = edit.wanUrl;
       _usernameController.text = edit.username;
       _passwordController.text = edit.password;
     } else {
@@ -75,18 +77,24 @@ class _CupertinoWebDAVConnectionSheetState
   void dispose() {
     _nameController.dispose();
     _urlController.dispose();
+    _wanUrlController.dispose();
     _usernameController.dispose();
     _passwordController.dispose();
     super.dispose();
   }
 
   String? _validateInputs() {
-    final url = _urlController.text.trim();
-    if (url.isEmpty) {
-      return context.l10n.webdavEnterAddress;
+    final lanUrl = _urlController.text.trim();
+    final wanUrl = _wanUrlController.text.trim();
+    if (lanUrl.isEmpty && wanUrl.isEmpty) {
+      return context.l10n.addressAtLeastOne;
     }
-    if (!url.startsWith('http://') && !url.startsWith('https://')) {
-      return context.l10n.webdavInvalidUrl;
+    for (final url in [lanUrl, wanUrl]) {
+      if (url.isNotEmpty &&
+          !url.startsWith('http://') &&
+          !url.startsWith('https://')) {
+        return context.l10n.webdavInvalidUrl;
+      }
     }
     return null;
   }
@@ -95,7 +103,10 @@ class _CupertinoWebDAVConnectionSheetState
     final input = _nameController.text.trim();
     if (input.isNotEmpty) return input;
     try {
-      final uri = Uri.parse(_urlController.text.trim());
+      final lanUrl = _urlController.text.trim();
+      final primaryAddress =
+          lanUrl.isNotEmpty ? lanUrl : _wanUrlController.text.trim();
+      final uri = Uri.parse(primaryAddress);
       final username = _usernameController.text.trim();
       if (uri.host.isNotEmpty) {
         return username.isNotEmpty ? '${uri.host}@$username' : uri.host;
@@ -109,6 +120,7 @@ class _CupertinoWebDAVConnectionSheetState
       id: widget.editConnection?.id,
       name: _resolveConnectionName(),
       url: _urlController.text.trim(),
+      wanUrl: _wanUrlController.text.trim(),
       username: _usernameController.text.trim(),
       password: _passwordController.text.trim(),
       storedPassword: widget.editConnection?.retainPassword(
@@ -306,9 +318,17 @@ class _CupertinoWebDAVConnectionSheetState
                   const SizedBox(height: 12),
                   _buildField(
                     context,
-                    label: context.l10n.webdavAddress,
+                    label: context.l10n.webdavLanAddress,
                     controller: _urlController,
-                    placeholder: 'https://your-server.com/webdav',
+                    placeholder: 'http://192.168.1.1:5244/dav',
+                    keyboardType: TextInputType.url,
+                  ),
+                  const SizedBox(height: 12),
+                  _buildField(
+                    context,
+                    label: context.l10n.webdavWanAddress,
+                    controller: _wanUrlController,
+                    placeholder: 'https://your-server.com/dav',
                     keyboardType: TextInputType.url,
                   ),
                   const SizedBox(height: 12),

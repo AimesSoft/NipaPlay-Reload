@@ -114,6 +114,40 @@ final class MediaSourcesService {
     return url.replaceFirst(RegExp(r'/+$'), '');
   }
 
+  /// The addresses a listed source has configured (LAN and WAN), without
+  /// the one currently in use, which Classic may switch on its own.
+  Set<String> addressesOf(JsonMap row) => {
+        for (final field in ['url', 'wanUrl'])
+          if (row[field] is String && (row[field] as String).isNotEmpty)
+            row[field] as String
+      };
+
+  /// The endpoint facts a background job keeps, to detect later edits.
+  JsonMap endpointOf(JsonMap row) => {
+        'url': row['address'],
+        'addresses': addressesOf(row).toList()..sort(),
+        'username': row['username'],
+      };
+
+  /// Whether two listings describe the same configured endpoints and account.
+  bool sameEndpoint(JsonMap a, JsonMap b) =>
+      a['url'] == b['url'] &&
+      (a['wanUrl'] ?? '') == (b['wanUrl'] ?? '') &&
+      a['username'] == b['username'];
+
+  /// Whether the source still has the addresses and account a job saved.
+  /// Jobs saved before dual addresses only have `url`, the single address.
+  bool holdsEndpoint(JsonMap row, JsonMap saved) {
+    final addresses = saved['addresses'];
+    final expected = addresses is List
+        ? addresses.cast<String>().toSet()
+        : {if (saved['url'] is String) saved['url'] as String};
+    final current = addressesOf(row);
+    return current.length == expected.length &&
+        current.containsAll(expected) &&
+        row['username'] == saved['username'];
+  }
+
   Future<List<String>> selection(String sourceId) async {
     final prefs = await SharedPreferences.getInstance();
     final type = sourceId.split(':').first;
@@ -147,11 +181,18 @@ final class MediaSourcesService {
       });
     }
     for (final c in smb.connections) {
+      final effective = smb.effectiveConnection(c);
       result.add({
         'sourceId': 'smb:${c.id}',
         'type': 'smb',
         'name': c.name,
-        'url': 'smb://${c.host}:${c.port}',
+        'url': c.hasLan ? 'smb://${c.host}:${c.port}' : '',
+        'wanUrl': c.hasWan ? 'smb://${c.wanHost}:${c.wanPort}' : '',
+        'address': 'smb://${effective.host}:${effective.port}',
+        'host': c.host,
+        'port': c.port,
+        'wanHost': c.wanHost,
+        'wanPort': c.wanPort,
         'username': c.username,
         'connected': c.isConnected,
         'domain': c.domain
@@ -163,6 +204,8 @@ final class MediaSourcesService {
         'type': 'webdav',
         'name': c.name,
         'url': c.url,
+        'wanUrl': c.wanUrl,
+        'address': webdav.effectiveUrl(c),
         'username': c.username,
         'connected': c.isConnected
       });
@@ -197,6 +240,7 @@ final class MediaSourcesService {
       });
     }
     for (final source in result) {
+      source.putIfAbsent('address', () => source['url']);
       source['selectedLibraries'] =
           await selection(source['sourceId'] as String);
       source['connectionState'] =
@@ -249,13 +293,22 @@ final class MediaSourcesService {
           final previous = old == null
               ? null
               : smb.getConnectionByIdOrName(key(old['sourceId'] as String))!;
-          final host = input['host'] as String? ?? previous?.host;
-          if (host == null ||
-              host.trim().isEmpty ||
-              host.contains('/') ||
-              host.contains('@')) {
+          String address(String field, String? saved) {
+            final value =
+                input.containsKey(field) ? input[field] as String : saved ?? '';
+            final host = value.trim();
+            if (host.contains('/') || host.contains('@')) {
+              throw const Failure(FailureCode.invalidInput,
+                  'SMB requires a host without credentials or path.');
+            }
+            return host;
+          }
+
+          final host = address('host', previous?.host);
+          final wanHost = address('wanHost', previous?.wanHost);
+          if (host.isEmpty && wanHost.isEmpty) {
             throw const Failure(FailureCode.invalidInput,
-                'SMB requires a host without credentials or path.');
+                'SMB requires a host or wanHost without credentials or path.');
           }
           if (smb.connections
               .any((c) => c.name == name && c.id != previous?.id)) {
@@ -267,6 +320,8 @@ final class MediaSourcesService {
                   host: host,
                   username: username,
                   port: input['port'] as int?,
+                  wanHost: wanHost,
+                  wanPort: input['wanPort'] as int?,
                   domain: input['domain'] as String?,
                   credentialOrigin:
                       previous.credentialOrigin ?? previous.credentialAuthority,
@@ -275,6 +330,8 @@ final class MediaSourcesService {
                   name: name,
                   host: host,
                   port: input['port'] as int? ?? 445,
+                  wanHost: wanHost,
+                  wanPort: input['wanPort'] as int? ?? 445,
                   username: username,
                   password: '',
                   domain: input['domain'] as String? ?? '');
@@ -284,8 +341,18 @@ final class MediaSourcesService {
           final previous = old == null
               ? null
               : webdav.getConnectionByIdOrName(key(old['sourceId'] as String))!;
-          final url =
-              validateUrl(input['url'] as String? ?? previous?.url ?? '');
+          String address(String field, String? saved) {
+            final value =
+                input.containsKey(field) ? input[field] as String : saved ?? '';
+            return value.trim().isEmpty ? '' : validateUrl(value);
+          }
+
+          final url = address('url', previous?.url);
+          final wanUrl = address('wanUrl', previous?.wanUrl);
+          if (url.isEmpty && wanUrl.isEmpty) {
+            throw const Failure(FailureCode.invalidInput,
+                'WebDAV requires a url (LAN) or wanUrl (WAN).');
+          }
           if (webdav.connections
               .any((c) => c.name == name && c.id != previous?.id)) {
             throw const Failure(
@@ -294,12 +361,17 @@ final class MediaSourcesService {
           final c = previous?.copyWith(
                   name: name,
                   url: url,
+                  wanUrl: wanUrl,
                   username: username,
                   credentialOrigin:
                       previous.credentialOrigin ?? previous.credentialAuthority,
                   isConnected: false) ??
               WebDAVConnection(
-                  name: name, url: url, username: username, password: '');
+                  name: name,
+                  url: url,
+                  wanUrl: wanUrl,
+                  username: username,
+                  password: '');
           await webdav.configureConnection(c);
           id = 'webdav:${c.id}';
         } else if (type == 'nipaplay') {
@@ -543,8 +615,7 @@ final class MediaSourcesService {
     }
     return serial(() async {
       final row = await source(id);
-      if (row['url'] != target['url'] ||
-          row['username'] != target['username']) {
+      if (!sameEndpoint(row, target)) {
         throw const Failure(FailureCode.conflict,
             'Source changed while selecting libraries; select again.');
       }
@@ -565,8 +636,7 @@ final class MediaSourcesService {
     } catch (error) {
       await serial(() async {
         final row = await source(id);
-        if (row['url'] != target['url'] ||
-            row['username'] != target['username']) {
+        if (!sameEndpoint(row, target)) {
           throw const Failure(FailureCode.conflict,
               'Source changed while checking its connection; check again.');
         }
@@ -584,8 +654,7 @@ final class MediaSourcesService {
     }
     return serial(() async {
       final row = await source(id);
-      if (row['url'] != target['url'] ||
-          row['username'] != target['username']) {
+      if (!sameEndpoint(row, target)) {
         throw const Failure(FailureCode.conflict,
             'Source changed while checking its connection; check again.');
       }
@@ -607,33 +676,46 @@ final class MediaSourcesService {
     final type = input['type'] as String;
     final username = input['username'] as String? ?? '';
     if (type == 'smb') {
-      final host = input['host'] as String?;
-      if (host == null ||
-          host.isEmpty ||
-          host.contains('/') ||
-          host.contains('@')) {
+      final host = (input['host'] as String? ?? '').trim();
+      final wanHost = (input['wanHost'] as String? ?? '').trim();
+      if ((host.isEmpty && wanHost.isEmpty) ||
+          [host, wanHost].any((h) => h.contains('/') || h.contains('@'))) {
         throw const Failure(FailureCode.invalidInput,
-            'SMB requires a host without credentials or a path.');
+            'SMB requires a host or wanHost without credentials or a path.');
       }
       final c = SMBConnection(
           name: input['name'] as String? ?? 'Test',
           host: host,
           port: input['port'] as int? ?? 445,
+          wanHost: wanHost,
+          wanPort: input['wanPort'] as int? ?? 445,
           domain: input['domain'] as String? ?? '',
           username: username,
           password: '');
       await smb.listDirectory(c, '/', forceRefresh: true);
       return {'connected': true, 'authenticated': false};
     }
-    final url = validateUrl(input['url'] as String? ?? '');
     if (type == 'webdav') {
+      String optional(String field) {
+        final value = (input[field] as String? ?? '').trim();
+        return value.isEmpty ? '' : validateUrl(value);
+      }
+
+      final url = optional('url');
+      final wanUrl = optional('wanUrl');
+      if (url.isEmpty && wanUrl.isEmpty) {
+        throw const Failure(FailureCode.invalidInput,
+            'WebDAV requires a url (LAN) or wanUrl (WAN).');
+      }
       final connected = await webdav.testConnection(WebDAVConnection(
           name: input['name'] as String? ?? 'Test',
           url: url,
+          wanUrl: wanUrl,
           username: username,
           password: ''));
       return {'connected': connected, 'authenticated': false};
     }
+    final url = validateUrl(input['url'] as String? ?? '');
     if (type == 'dandanplay_remote') {
       return dandanRemote.probeUrl(url);
     }
@@ -973,8 +1055,7 @@ final class MediaSourcesService {
       serial(() async {
         final row = await source(id);
         if (expected != null &&
-            (row['url'] != expected['url'] ||
-                row['username'] != expected['username'])) {
+            !holdsEndpoint(row, expected)) {
           throw const Failure(FailureCode.conflict,
               'Source changed during synchronization; submit a new sync.');
         }
@@ -1127,8 +1208,7 @@ final class MediaSourcesService {
           input: {
             'sourceId': row['sourceId'],
             'method': method,
-            'url': row['url'],
-            'username': row['username'],
+            ...endpointOf(row),
             'expiresAt': DateTime.now()
                 .toUtc()
                 .add(const Duration(minutes: 10))
@@ -1191,7 +1271,7 @@ final class MediaSourcesService {
     }
     Future<JsonMap> unchanged() async {
       final row = await source(id);
-      if (row['url'] != input['url'] || row['username'] != input['username']) {
+      if (!holdsEndpoint(row, input)) {
         throw const Failure(FailureCode.conflict,
             'Source changed during login; start a new login.');
       }

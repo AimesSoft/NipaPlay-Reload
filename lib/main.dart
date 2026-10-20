@@ -119,6 +119,7 @@ import 'package:nipaplay/models/watch_history_database.dart';
 import 'package:nipaplay/services/http_client_initializer.dart';
 import 'package:nipaplay/services/large_screen_ui_sfx_service.dart';
 import 'package:nipaplay/services/server_connectivity_service.dart';
+import 'package:nipaplay/services/media_library_reachability_service.dart';
 import 'package:nipaplay/providers/bottom_bar_provider.dart';
 import 'package:nipaplay/models/anime_detail_display_mode.dart';
 import 'package:nipaplay/models/background_image_render_mode.dart';
@@ -571,6 +572,9 @@ Future<void> _main(List<String> args) async {
         await ServerConnectivityService.instance.checkConnectivity();
       }));
       if (!kIsWeb) {
+        unawaited(_runDeferredStartupTask(
+            'media-library-reachability',
+            MediaLibraryReachabilityService.instance.checkAll));
         unawaited(_runDeferredStartupTask(
             'sync', AutoSyncService.instance.initialize));
         unawaited(_runDeferredStartupTask(

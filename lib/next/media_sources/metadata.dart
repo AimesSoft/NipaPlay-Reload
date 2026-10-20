@@ -98,7 +98,7 @@ JsonMap sourceProvenance(JsonMap source, String itemId, String observedAt) => {
       'sourceId': source['sourceId'],
       'type': source['type'],
       'name': source['name'],
-      'url': source['url'],
+      'url': source['address'],
       'itemId': itemId,
       'observedAt': observedAt,
     };

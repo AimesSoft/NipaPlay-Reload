@@ -64,7 +64,7 @@ void main() {
             FullBackupService(webDavService: WebDAVService.forTesting());
         plugins = PluginService();
         await plugins.ready;
-        const id = 'builtin.cn_danmaku_regex_filter';
+        const id = 'builtin.danmaku_regex_filter';
         await plugins.setPluginEnabled(id, true);
         expect(plugins.isPluginEnabled(id), true);
         expect(
