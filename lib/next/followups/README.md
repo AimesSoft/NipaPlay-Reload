@@ -14,11 +14,12 @@ Conversation-originated `download.add` stores `returnTo` in the new task input.
 Chat CLI sources return to the selected thread at submission; host/native helper
 sources return to their recorded parent. Scripts, hooks and GUI submissions have
 no implicit conversation. Repeated add does not take ownership of an existing task.
-The observer publishes verified, registered video files and every terminal outcome
-as factual automatic followups, without prescribing Agent actions. The first batch
-is immediately eligible; later batches wait until one minute after the preceding
-dispatch, accumulating all file facts. Terminal outcomes flush the pending batch
-immediately. Busy/unavailable hosts keep accumulating in one pending batch.
+The observer publishes verified, registered video files, open stalls and every
+non-cancelled terminal outcome as factual automatic followups, without prescribing
+Agent actions. The first batch is immediately eligible; later batches wait until
+ten minutes after the preceding dispatch, accumulating all file facts, since the
+download page already shows progress. Stalls and terminal outcomes flush the
+pending batch immediately. Busy/unavailable hosts keep accumulating in one pending batch.
 Coverage and due times live in existing followup snapshots, survive restart, and
 include file object IDs inherited by expanded selections. Before dispatch, matching
 Agent registrations in the same repository/thread own their occurrences instead;

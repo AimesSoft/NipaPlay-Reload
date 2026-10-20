@@ -1011,7 +1011,12 @@ class _PlayVideoPageState extends State<PlayVideoPage> {
           },
         ),
         Positioned(
-          top: 10.0,
+          // Without Classic's tabs (under Next) the window's buttons sit here.
+          top: defaultTargetPlatform == TargetPlatform.macOS &&
+                  globals.nextShellHostsPlayer &&
+                  !videoState.isFullscreen
+              ? 36.0
+              : 10.0,
           left: 16.0,
           child: AnimatedOpacity(
             opacity: videoState.showControls ? 1.0 : 0.0,
@@ -1146,7 +1151,11 @@ class _PlayVideoPageState extends State<PlayVideoPage> {
           ),
         ),
         Positioned(
-          top: 10.0,
+          top: defaultTargetPlatform == TargetPlatform.macOS &&
+                  globals.nextShellHostsPlayer &&
+                  !videoState.isFullscreen
+              ? 36.0
+              : 10.0,
           right: 16.0,
           child: AnimatedOpacity(
             opacity: videoState.showControls ? 1.0 : 0.0,

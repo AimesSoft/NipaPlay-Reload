@@ -43,6 +43,7 @@ class _NextUiGateState extends State<NextUiGate> {
     final preference = context.watch<NextUiPreference>();
     final on =
         globals.isDesktop && labs.enableAgentEndpoint && preference.enabled;
+    globals.nextShellHostsPlayer = on;
     if (!on) return _classic(false);
     return Selector<VideoPlayerState, bool>(
       selector: (_, player) => _playing(player.status),

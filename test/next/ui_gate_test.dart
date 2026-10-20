@@ -7,6 +7,7 @@ import 'package:nipaplay/next/ui/shell/next_ui_gate.dart';
 import 'package:nipaplay/next/ui/shell/next_ui_preference.dart';
 import 'package:nipaplay/next/ui/shell/window_chrome.dart';
 import 'package:nipaplay/providers/labs_settings_provider.dart';
+import 'package:nipaplay/utils/globals.dart' as globals;
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -27,6 +28,7 @@ void main() {
 
   Future<void> pumpGate(WidgetTester tester, Map<String, Object> prefs) async {
     SharedPreferences.setMockInitialValues(prefs);
+    globals.nextShellHostsPlayer = true;
     final labs = LabsSettingsProvider(sandboxStatus: () async => false);
     final preference = NextUiPreference();
     await tester.runAsync(() async {
@@ -51,6 +53,8 @@ void main() {
     expect(find.byType(NextShell), findsNothing);
     expect(NextWindowChrome.showing.value, isFalse);
     expect(chromeCalls, isEmpty);
+    // Classic's player keeps its tabs: only Next hides them while playing.
+    expect(globals.nextShellHostsPlayer, isFalse);
     final offstage = tester.widget<Offstage>(find.ancestor(
         of: find.text('classic'), matching: find.byType(Offstage)));
     expect(offstage.offstage, isFalse);

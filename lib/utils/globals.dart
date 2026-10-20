@@ -17,6 +17,9 @@ double mobileThreshold = 550;
 String Appversion = "1.0.0";
 String backgroundImageMode = "关闭"; // 添加背景图像模式变量
 String customBackgroundPath = 'assets/images/main_image.png'; // 添加自定义背景图片路径变量
+
+/// NipaPlay Next 开启时，Classic 只在播放时露出：播放器铺满窗口，不带 Classic 的标签栏。
+bool nextShellHostsPlayer = false;
 //////全局变量/////
 ///
 //////设备类型判断/////

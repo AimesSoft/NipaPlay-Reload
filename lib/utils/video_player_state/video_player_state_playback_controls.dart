@@ -1205,7 +1205,7 @@ extension VideoPlayerStatePlaybackControls on VideoPlayerState {
         return !hasVideo || !_isFullscreen;
       }
     }
-    return !_isFullscreen;
+    return !_isFullscreen && !(globals.nextShellHostsPlayer && hasVideo);
   }
 
   // 手机上在横屏全屏和竖屏窗口布局之间切换；桌面端切换系统全屏。

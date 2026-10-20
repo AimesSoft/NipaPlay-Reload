@@ -135,11 +135,13 @@ extension DownloadReturns on Followups {
       final pending = automatic.where((r) => r['state'] == 'ready' && r['remoteSealed'] != true).lastOrNull;
       final now = DateTime.now().toUtc();
       final last = automatic.lastOrNull;
+      // The first file is news: it can be watched. Later ones are progress
+      // the download page already shows, so they wait and come together.
       final due = last == null
           ? now
           : DateTime.parse(
                   (last['dispatchedAt'] ?? last['createdAt']) as String)
-              .add(const Duration(minutes: 1));
+              .add(const Duration(minutes: 10));
       final row = pending ??
           <String, Object?>{
             'id': 'followup-download-${job.jobId}-${automatic.length}',
