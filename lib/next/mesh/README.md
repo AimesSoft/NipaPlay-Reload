@@ -97,7 +97,7 @@ Agent 能力（实际 schema 以 `nipa describe` 为准）：
 | `media.mesh_files.begin` | path、size、deviceId?；目标父目录暂存，返回 transferId |
 | `media.mesh_files.chunk` | transferId、offset、base64 data、deviceId?；最大 512 KiB 解码字节，相同重试可接受 |
 | `media.mesh_files.finish` | transferId、可选 sha256、deviceId?；校验完成后发布，覆盖返回 NeedsDecision |
-| `media.mesh_files.delete` | paths 批量、deviceId?；只预览，返回 NeedsDecision |
+| `media.mesh_files.delete` | paths 批量、deviceId?；只预览，返回 NeedsDecision，由调用者自己 confirm，NipaPlay 不向用户确认（下载里的文件用 download.delete） |
 | `media.mesh_files.confirm` | 决定中的 destructive ActionCall；核对目标未变后执行 |
 | `media.mesh_files.cancel` | 丢弃本原语建立的暂存文件 |
 

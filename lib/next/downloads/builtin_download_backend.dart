@@ -14,7 +14,11 @@ import 'download_paths.dart';
 import 'bandwidth_native.dart';
 
 final class BuiltinDownloadBackend
-    implements DownloadBackend, SelectableDownloadBackend, BandwidthDownloadBackend {
+    implements
+        DownloadBackend,
+        SelectableDownloadBackend,
+        FileDeletingDownloadBackend,
+        BandwidthDownloadBackend {
   BuiltinDownloadBackend(this.service);
   final TorrentDownloadService service;
   @override
@@ -144,6 +148,34 @@ final class BuiltinDownloadBackend
       await checkedDownloadPath(task.output.path, file.location.path);
     }
     await _nativeCall(() => service.delete(int.parse(handle)));
+  }
+
+  @override
+  Future<void> deleteFiles(String handle, List<int> indices) async {
+    final task = await read(handle);
+    final targets = <File>[];
+    for (final index in indices) {
+      if (index < 0 || index >= task.files.length) {
+        throw const Failure(FailureCode.invalidInput,
+            'File indices must be manifest indices.');
+      }
+      final file = task.files[index];
+      if (!file.location.isLocal) {
+        throw const Failure(
+            FailureCode.invalidInput, 'Only local files can be deleted.');
+      }
+      final path =
+          await checkedDownloadPath(task.output.path, file.location.path);
+      if (await FileSystemEntity.type(path, followLinks: false) ==
+          FileSystemEntityType.directory) {
+        throw const Failure(
+            FailureCode.invalidInput, 'A directory is not a download file.');
+      }
+      targets.add(File(path));
+    }
+    for (final file in targets) {
+      if (await file.exists()) await file.delete();
+    }
   }
 
   @override

@@ -12,7 +12,10 @@ const testRequest = DownloadRequest(
     title: 'Episode');
 
 final class FakeDownloadBackend
-    implements DownloadBackend, SelectableDownloadBackend {
+    implements
+        DownloadBackend,
+        SelectableDownloadBackend,
+        FileDeletingDownloadBackend {
   FakeDownloadBackend(this.root,
       {this.reference = const DownloadBackendRef.builtin()});
   final Directory root;
@@ -117,6 +120,18 @@ final class FakeDownloadBackend
             completedBytes: entry.$2.completedBytes,
             included: indices.contains(entry.$1))
     ];
+  }
+
+  /// Index lists of every [deleteFiles] call, in order.
+  final fileDeletions = <List<int>>[];
+  @override
+  Future<void> deleteFiles(String handle, List<int> indices) async {
+    _online();
+    fileDeletions.add(List.of(indices));
+    for (final index in indices) {
+      final localFile = File(snapshot.files[index].location.path);
+      if (await localFile.exists()) await localFile.delete();
+    }
   }
 
   @override

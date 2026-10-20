@@ -3,6 +3,7 @@ import 'dart:convert';
 import '../media/identity_store.dart' show stableMediaId, newMediaId;
 import 'package:nipa_harness/nipa_harness.dart';
 
+import '../downloads/download_paths.dart';
 import '../media_sources/login_dialog.dart';
 import '../ui/theme/tokens.dart';
 import '../ui/widgets/dialog.dart';
@@ -184,6 +185,8 @@ final class DiskDeletion implements JobExecutor {
   }
 
   Future<JsonMap> downloadPreview(JsonMap arguments) async {
+    final wanted = (arguments['fileIndices'] as List?)?.cast<int>();
+    if (wanted != null) return _filesPreview(arguments, wanted);
     final read = await _execution.invokeJson('download.read', arguments,
       Invocation(origin: 'application:delete_preview'));
     if (read case Failed(:final failure)) throw failure;
@@ -203,6 +206,57 @@ final class DiskDeletion implements JobExecutor {
       return {'downloads': [for (final item in items.cast<JsonMap>()) manifest(item)]};
     }
     return {'downloads': [manifest(result)]};
+  }
+
+  /// Only the chosen files of one download: what the person is asked about,
+  /// and what must still be true when they answer.
+  Future<JsonMap> _filesPreview(JsonMap arguments, List<int> wanted) async {
+    final jobId = arguments['jobId'];
+    if (jobId is! String || arguments.containsKey('jobIds')) {
+      throw const Failure(FailureCode.invalidInput,
+          'fileIndices apply to one download: pass jobId only.');
+    }
+    if (wanted.isEmpty || wanted.toSet().length != wanted.length) {
+      throw const Failure(FailureCode.invalidInput,
+          'fileIndices must be unique and not empty.');
+    }
+    final read = await _execution.invokeJson('download.read', {'jobId': jobId},
+        Invocation(origin: 'application:delete_preview'));
+    if (read case Failed(:final failure)) throw failure;
+    if (read is! Completed) throw StateError('Download read needs a completed manifest.');
+    final result = read.value.toJson();
+    final task = result['task'] as JsonMap?;
+    final all = (task?['files'] as List? ?? []).cast<Map>();
+    if (task == null || wanted.any((i) => i < 0 || i >= all.length)) {
+      throw const Failure(FailureCode.invalidInput,
+          'fileIndices must be manifest indices of the download.');
+    }
+    final output = task['outputDirectory'] as String;
+    final files = <JsonMap>[];
+    for (final index in wanted) {
+      final file = all[index];
+      if (file['local'] != true) {
+        throw const Failure(
+            FailureCode.invalidInput, 'Only local files can be deleted.');
+      }
+      await checkedDownloadPath(output, file['path'] as String);
+      files.add({
+        'index': index,
+        for (final key in ['path', 'local', 'expectedSize', 'included'])
+          key: file[key]
+      });
+    }
+    return {
+      'downloads': [
+        {
+          'jobId': (result['job'] as Map?)?['jobId'],
+          'infoHash': task['infoHash'],
+          'outputDirectory': output,
+          'partial': true,
+          'files': files
+        }
+      ]
+    };
   }
 
   @override
@@ -324,6 +378,7 @@ final class _DeletionAction extends Action<_Json, _Json> {
           '${original.description} download.delete returns NeedsDecision with the current file manifest. '
           'Its option download.delete.request creates a disk_deletion task; only the local user can approve it. '
           'For download.delete, input jobId/jobIds identify downloads; the returned job.jobId identifies a separate deletion task. One user prompt covers the entire requested batch. '
+          'With fileIndices (one jobId), only those files of the download are previewed, asked about and deleted; the rest of the download stays. '
           'Only a person clicking Delete in NipaPlay can authorize disk deletion. '
           'waiting_user means no deletion has run; task.wait and followup.register '
           'can observe it. A refusal fails with 用户没有同意删除. No confirmation or execute argument bypasses this gate.',
@@ -339,7 +394,9 @@ final class _DeletionAction extends Action<_Json, _Json> {
       final id = newMediaId('delete-preview');
       deletion._previews[id] = {'arguments': input.value, 'preview': preview,
         'origin': invocation.origin, 'invocationId': invocation.id};
-      return NeedsDecision(Decision(prompt: '删除这些下载文件：${jsonEncode(preview)}',
+      final partial = input.value['fileIndices'] != null;
+      return NeedsDecision(Decision(
+        prompt: '${partial ? '删除这个下载里的这些文件' : '删除这些下载文件'}：${jsonEncode(preview)}',
         options: [DecisionOption(label: '请求删除', call: ActionCall('download.delete.request', {'previewId': id}))]));
     }
     final job = await deletion.engine
@@ -395,10 +452,13 @@ String downloadDeletionWords(Object? preview) {
   final downloads =
       ((preview is Map ? preview['downloads'] : null) as List? ?? const [])
           .cast<Map>();
+  // Some files of one download: every file listed is deleted, whether or not
+  // it is still selected.
+  final partial = downloads.length == 1 && downloads.single['partial'] == true;
   final files = [
     for (final d in downloads)
       for (final f in (d['files'] as List? ?? const []).cast<Map>())
-        if (f['included'] != false) f
+        if (partial || f['included'] != false) f
   ];
   String name(Map f) {
     final path = '${f['path'] ?? ''}';
@@ -420,12 +480,17 @@ String downloadDeletionWords(Object? preview) {
         ? '将删除这个下载留下的数据，无法恢复。'
         : '将删除 ${downloads.length} 个下载留下的数据，无法恢复。');
   } else {
-    lines.writeln('将删除这些下载的文件，无法恢复：');
+    lines.writeln(partial
+        ? (names.length == 1
+            ? '将删除这个下载里的这个文件，无法恢复：'
+            : '将删除这个下载里的这几个文件，无法恢复：')
+        : '将删除这些下载的文件，无法恢复：');
     for (final n in names.take(3)) {
       lines.writeln('· $n');
     }
     if (names.length > 3) lines.writeln('· 还有 ${names.length - 3} 个文件');
     if (bytes > 0) lines.write('共约 ${size(bytes)}。');
+    if (partial) lines.write('下载里的其他文件不动。');
   }
   return lines.toString().trimRight();
 }
