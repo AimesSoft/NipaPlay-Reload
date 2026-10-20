@@ -12,6 +12,10 @@ final class AccountsService {
   late TaskEngine engine;
   StreamSubscription<Job>? _events;
   Future<JsonMap?> Function(JsonMap, Future<void>)? requestLogin;
+
+  /// The conversation behind an invocation, so the end of a login only the
+  /// user can finish comes back to it.
+  Future<JsonMap?> Function(Invocation)? returnTarget;
   final Map<String, JsonMap> _credentials = {};
 
   void attach(TaskEngine value) {
@@ -55,7 +59,7 @@ final class AccountsService {
     return Map<String, Object?>.from(result);
   }
 
-  Future<JsonMap> login(JsonMap input) async {
+  Future<JsonMap> login(JsonMap input, [Invocation? invocation]) async {
     final provider = input['provider'] as String;
     final secretKey = provider == 'dandanplay' ? 'password' : 'accessToken';
     if (input
@@ -87,6 +91,10 @@ final class AccountsService {
         secretKey: input[secretKey]
       };
     }
+    // Only a login the user completes in NipaPlay's window is theirs to finish.
+    final target = supplied || invocation == null
+        ? null
+        : await returnTarget?.call(invocation);
     try {
       final job = await engine.submit(
           type: 'accounts.login',
@@ -95,7 +103,8 @@ final class AccountsService {
           input: {
             'provider': provider,
             'method': supplied ? 'provided' : 'window',
-            if (input['username'] != null) 'username': input['username']
+            if (input['username'] != null) 'username': input['username'],
+            if (target != null) 'returnTo': target
           });
       return {'provider': provider, 'method': job.input['method'], 'jobId': id};
     } catch (_) {

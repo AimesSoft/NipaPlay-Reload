@@ -48,7 +48,7 @@ void attachMeshDelivery(MeshRuntime mesh, Followups followups) {
         row['condition'] is! JsonMap) {
       throw const FormatException('Invalid delivery facts.');
     }
-    if (const {'download', 'program', 'subscription'}.contains(row['automatic'])) {
+    if (const {'download', 'program', 'userTask', 'subscription'}.contains(row['automatic'])) {
       if (row['automatic'] != 'subscription' && (row['deliverAfter'] is! String ||
           (row['trigger'] as Map)['facts'] is! List)) {
         throw const FormatException('Invalid download delivery.');
