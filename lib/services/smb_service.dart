@@ -1,6 +1,7 @@
 import 'package:nipaplay/security/credential_store.dart';
 import 'package:nipaplay/security/stored_credential.dart';
 import 'package:nipaplay/security/credential_vault.dart';
+import 'package:nipaplay/security/credential_authority.dart';
 import 'dart:convert';
 import '../next/state/change_history.dart';
 
@@ -26,14 +27,17 @@ class SMBConnection {
   final int wanPort;
   final String username;
   final String? credentialOrigin;
-  String get credentialAuthority => 'smb://${host.toLowerCase()}:$port';
+  String get credentialAuthority => credentialAuthorityOf([
+        if (host.trim().isNotEmpty) 'smb://${host.toLowerCase()}:$port',
+        if (wanHost.trim().isNotEmpty) 'smb://${wanHost.toLowerCase()}:$wanPort',
+      ]);
   final StoredCredential _password;
   String get password => _password.value ?? '';
   bool get passwordIsResolved => _password.ref == null || _password.value != null;
   StoredCredential? retainPassword(String edited, {required String original}) =>
       edited == original ? _password : null;
   Future<void> resolvePassword() async {
-    if (credentialOrigin != null && credentialOrigin != credentialAuthority) {
+    if (!credentialAuthorityCovers(credentialOrigin, credentialAuthority)) {
       throw StateError('credential_origin_changed');
     }
     await _password.resolve();

@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'package:nipaplay/services/webdav_service.dart';
 import 'dart:io';
 import 'dart:ui' as ui;
 
@@ -313,6 +314,94 @@ void main() {
     expect(done.error!.message, contains('Source changed'));
     expect(vault.reads, isEmpty);
     expect(await jobs.database.query('media_locations'), isEmpty);
+  });
+
+  test('WebDAV and SMB keep LAN and WAN addresses apart through list and put',
+      () async {
+    final dav = ((await call('media.sources.add', {
+      'type': 'webdav',
+      'name': 'Both',
+      'url': 'http://192.168.1.2/dav/',
+      'wanUrl': 'https://nas.example.com/dav'
+    }))['source'] as Map)['sourceId'] as String;
+    final smb = ((await call('media.sources.add', {
+      'type': 'smb',
+      'name': 'Remote only',
+      'wanHost': 'nas.example.com',
+      'wanPort': 4445
+    }))['source'] as Map)['sourceId'] as String;
+    String bare(Object? url) => '$url'.replaceFirst(RegExp(r'/+$'), '');
+    Future<Map<String, Map>> listed() async => {
+          for (final row in (await call('media.sources.list', {}))['sources'] as List)
+            (row as Map)['sourceId'] as String: row
+        };
+    var rows = await listed();
+    expect(bare(rows[dav]!['url']), 'http://192.168.1.2/dav');
+    expect(bare(rows[dav]!['wanUrl']), 'https://nas.example.com/dav');
+    expect(bare(rows[dav]!['address']), 'http://192.168.1.2/dav');
+    expect(rows[smb]!['url'], '');
+    expect(rows[smb]!['host'], '');
+    expect(rows[smb]!['wanHost'], 'nas.example.com');
+    expect(rows[smb]!['wanPort'], 4445);
+    expect(rows[smb]!['wanUrl'], 'smb://nas.example.com:4445');
+    expect(rows[smb]!['address'], 'smb://nas.example.com:4445');
+
+    // Updating one address keeps the other; an empty string clears.
+    await call('media.sources.update',
+        {'sourceId': dav, 'wanUrl': 'https://other.example.com'});
+    await call('media.sources.update', {'sourceId': smb, 'host': '192.168.1.9'});
+    rows = await listed();
+    expect(bare(rows[dav]!['url']), 'http://192.168.1.2/dav');
+    expect(bare(rows[dav]!['wanUrl']), 'https://other.example.com');
+    expect(rows[smb]!['host'], '192.168.1.9');
+    expect(rows[smb]!['wanHost'], 'nas.example.com');
+    await call('media.sources.update', {'sourceId': dav, 'url': ''});
+    expect(bare((await listed())[dav]!['address']), 'https://other.example.com');
+    for (final bad in [
+      {'sourceId': dav, 'wanUrl': ''},
+      {'sourceId': dav, 'url': 'http://user:pw@192.168.1.2'},
+      {'sourceId': dav, 'wanUrl': 'ftp://nas.example.com'},
+      {'sourceId': smb, 'host': '', 'wanHost': ''},
+    ]) {
+      final outcome = await harness.invokeJson(
+          'media.sources.update', bad, Invocation(origin: 'test'));
+      expect(outcome, isA<Failed>(), reason: '$bad');
+    }
+  });
+
+  test('saved credentials follow the set of addresses, not the one in use',
+      () async {
+    const ref = CredentialRef('webdav_connections', 'dav-dual');
+    vault.values[ref] = 'dual-secret';
+    final prefs = await SharedPreferences.getInstance();
+    // A legacy public address migrates to WAN; its saved origin still covers it.
+    await prefs.setString(
+        'webdav_connections',
+        jsonEncode([
+          {
+            'id': 'dav-dual',
+            'name': 'Dual',
+            'url': 'https://nas.example.com/dav',
+            'username': 'viewer',
+            'password': ref.placeholder,
+            'credentialOrigin': 'https://nas.example.com'
+          }
+        ]));
+    await sources.initialize();
+    WebDAVConnection current() => sources.webdav.getConnectionByIdOrName('dav-dual')!;
+    expect(current().url, '');
+    await current().resolvePassword();
+    await call('media.sources.update',
+        {'sourceId': 'webdav:dav-dual', 'name': 'Dual renamed'});
+    await current().resolvePassword();
+    // An address of another authority cannot receive the password.
+    await call('media.sources.update',
+        {'sourceId': 'webdav:dav-dual', 'url': 'http://192.168.1.2'});
+    await expectLater(current().resolvePassword(), throwsStateError);
+    // Removing it again restores the original set.
+    await call('media.sources.update', {'sourceId': 'webdav:dav-dual', 'url': ''});
+    await current().resolvePassword();
+    expect(vault.values[ref], 'dual-secret');
   });
 
   test(

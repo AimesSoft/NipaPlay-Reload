@@ -70,7 +70,7 @@ class _PasswordDialogState extends State<_PasswordDialog> {
             width: 400,
             child: Column(mainAxisSize: MainAxisSize.min, children: [
               TextFormField(
-                  initialValue: widget.source['url'] as String,
+                  initialValue: '${widget.source['address'] ?? widget.source['url']}',
                   readOnly: true,
                   decoration: const InputDecoration(labelText: '服务器地址')),
               TextFormField(

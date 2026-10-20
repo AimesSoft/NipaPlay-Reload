@@ -212,7 +212,10 @@ NipaPlay 自己会做一部分：作品有 TMDB 身份时取图，同步 Classic
 - search 结果的 poster 是已有本机缓存路径；没有缓存为 null，不逐项取图。workTitle 给已绑定作品名。artwork(sourceId,itemId) 懒加载服务器海报，复用 X48 图片供应者，只返回本机路径，不返回鉴权 URL。
 - `media.sources.search {query,sourceIds?,limit?}` 是只读搜索：Jellyfin/Emby 用服务器 SearchTerm 和有界分页，SMB/WebDAV 只查已有文件索引，不枚举目录、不登记新文件、不写发现记录。省略 sourceIds 搜所有支持的已配置来源；limit 限制每个来源（默认 12）。返回 sources[]，每个来源单独给出 entries、total 或 error。离线或登录失败如实返回，其他来源保留结果；索引来源的 unverified 是未知连通状态，不能当成在线。
 - 结果有 sourceId、itemId、标题、可播放事实；已绑定条目带 Next workId/episodeId，服务器原样条目另有 sourceWorkId/sourceEpisodeId。作品 ID 用 ui.open，来源条目用 media.sources.play {sourceId,itemId}。来源分组在界面上可逐个 sourceIds 请求，分别显示结果与错误。
-- browse/sync 是发现与写索引入口；不要用它们实现每次输入的搜索。''',
+- browse/sync 是发现与写索引入口；不要用它们实现每次输入的搜索。
+- WebDAV、SMB 各有内网和公网两个地址，至少一个非空，空表示未配置。WebDAV 是 url（内网）和 wanUrl（公网）；SMB 是 host/port 和 wanHost/wanPort（同时以 smb:// 的 url、wanUrl 给出）。两个都有时 Classic 优先内网，address 是当前正在使用的那个，可能无需编辑就在内网与公网间变化；Jellyfin、Emby、NipaPlay、Dandanplay 只有 url，address 与它相同。
+- put/update 接受这些字段；省略的字段（包括另一套地址）保持不变，空字符串清除该地址，但至少保留一个。地址规则不变：WebDAV 只允许 HTTP(S)，不带凭据、query、fragment；SMB 主机不带凭据或路径。
+- 已保存的密码属于保存时的那组地址：删除某个地址或在内网与公网间切换仍可使用，新增或更换为不同的地址、或换账号，需要重新 login。''',
   'media.library': r'''`media.library.search_merged {query,limit?,episodeLimit?}` 只读搜索 X48 本机与认证 Mesh 合并目录的标题、原名、已有别名、年份及剧集标题；空白分词为 AND，忽略大小写，按字面子串匹配。返回 works[]、episodes[{work,episode}]、workTotal/episodeTotal，默认每组最多 12。返回 workId/episodeId 可以直接用于 Next 作品页和 ui.open；海报是本机路径，设备与 playable 是目录最近观察。索引每 5 秒随目录更新，media.library.refresh 可立即刷新；首次搜索建立索引，其后不逐次读全库。离线 Mesh 保留事实并标为不可播放。
 原 media.library.search 保留 Classic 观看记录语义与 animeId。不要将这个 animeId 当成合并 workId。''',
   'media.metadata': r'''`media.metadata.search/search_batch` 读取在线候选，每个结果另带 workId。它是本机与认证 Mesh 合并片库已接受 exact/contains 作品或发行身份的 Next workId；没有对应身份就是 null，不按同名推断。首次读取可能准备可重建的目录与图片缓存，不接受候选或写绑定。资料、身份与图片能力的其余约定见 nipa describe media。''',

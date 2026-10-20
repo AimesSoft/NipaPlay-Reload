@@ -526,7 +526,7 @@ function pluginHandleUIAction(actionId) { return {type:'text',title:'Fixture',co
           (await registry.get('webdavQuick.searchMaxResults'))['value'], 500);
       // Verify the repaired Classic backup treatment of plugin enable lists.
       final builtin = classic.plugins.plugins.firstWhere(
-          (p) => p.manifest.id == 'builtin.cn_danmaku_regex_filter');
+          (p) => p.manifest.id == 'builtin.danmaku_regex_filter');
       final enableKey = 'plugins.enabled.${builtin.manifest.id}';
       await call('settings.set', {
         'key': enableKey,

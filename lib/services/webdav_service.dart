@@ -1,6 +1,7 @@
 import 'package:nipaplay/security/credential_store.dart';
 import 'package:nipaplay/security/stored_credential.dart';
 import 'package:nipaplay/security/credential_vault.dart';
+import 'package:nipaplay/security/credential_authority.dart';
 import 'dart:convert';
 import '../next/state/change_history.dart';
 import 'dart:io';
@@ -31,14 +32,15 @@ class WebDAVConnection {
   final String wanUrl;
   final String username;
   final String? credentialOrigin;
-  String get credentialAuthority => Uri.parse(url).origin;
+  String get credentialAuthority =>
+      credentialAuthorityOf([originOf(url), originOf(wanUrl)]);
   final StoredCredential _password;
   String get password => _password.value ?? '';
   bool get passwordIsResolved => _password.ref == null || _password.value != null;
   StoredCredential? retainPassword(String edited, {required String original}) =>
       edited == original ? _password : null;
   Future<void> resolvePassword() async {
-    if (credentialOrigin != null && credentialOrigin != credentialAuthority) {
+    if (!credentialAuthorityCovers(credentialOrigin, credentialAuthority)) {
       throw StateError('credential_origin_changed');
     }
     await _password.resolve();

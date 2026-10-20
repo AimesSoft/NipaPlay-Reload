@@ -16,9 +16,12 @@ const _folder = ObjectSchema({
 const _remoteConnection = ObjectSchema({
   'type': StringSchema(values: ['webdav', 'smb']),
   'name': _text,
-  'url': _text,
-  'host': _text,
+  'url': StringSchema(),
+  'wanUrl': StringSchema(),
+  'host': StringSchema(),
   'port': IntegerSchema(minimum: 1, maximum: 65535),
+  'wanHost': StringSchema(),
+  'wanPort': IntegerSchema(minimum: 1, maximum: 65535),
   'username': StringSchema(),
   'domain': StringSchema()
 }, required: [
@@ -50,7 +53,7 @@ final class RemoteAdminCapability implements Capability {
               service),
           _Operation(
               'media.sources.remote_admin.status',
-              'Refresh the selected NipaPlay peer management state through the Classic provider: folders, saved WebDAV/SMB configurations without passwords, scan phase and errors.',
+              'Refresh the selected NipaPlay peer management state through the Classic provider: folders, saved WebDAV/SMB configurations (LAN url/host/port and WAN wanUrl/wanHost/wanPort, empty when not set) without passwords, scan phase and errors.',
               const ObjectSchema({'sourceId': _text}, required: ['sourceId']),
               service),
           _Operation(
@@ -70,7 +73,7 @@ final class RemoteAdminCapability implements Capability {
               service),
           _Operation(
               'media.sources.remote_admin.connections',
-              'Manage peer WebDAV/SMB connections. operation configure takes connections[{type,name,url for WebDAV or host for SMB,username,port,domain}]; a nonempty username opens NipaPlay for user credentials; an empty username configures anonymous access directly. Returns jobId (task.wait/cancel). Existing same-name connections are replaced like Classic after successful testing. Other operations take type and names[]: remove/test. browse/scan take type, name and paths[] (remote directories). browse forces fresh listing; scan uses Classic recognition. Passwords are never accepted or returned.',
+              'Manage peer WebDAV/SMB connections. operation configure takes connections[{type,name,username,domain; WebDAV url and/or wanUrl; SMB host/port and/or wanHost/wanPort}] with at least one address per connection; a nonempty username opens NipaPlay for user credentials; an empty username configures anonymous access directly. Returns jobId (task.wait/cancel). Existing same-name connections are replaced like Classic after successful testing. Other operations take type and names[]: remove/test. browse/scan take type, name and paths[] (remote directories). browse forces fresh listing; scan uses Classic recognition. Passwords are never accepted or returned.',
               const ObjectSchema({
                 'sourceId': _text,
                 'operation': StringSchema(
@@ -293,6 +296,7 @@ Future<JsonMap> remoteStatus(MediaSourcesService s) async {
         {
           'name': c.name,
           'url': c.url,
+          'wanUrl': c.wanUrl,
           'username': c.username,
           'connected': c.isConnected
         }
@@ -303,6 +307,8 @@ Future<JsonMap> remoteStatus(MediaSourcesService s) async {
           'name': c.name,
           'host': c.host,
           'port': c.port,
+          'wanHost': c.wanHost,
+          'wanPort': c.wanPort,
           'username': c.username,
           'domain': c.domain,
           'connected': c.isConnected
@@ -365,10 +371,25 @@ Future<JsonMap> connections(
     for (final raw in configs) {
       final c = Map<String, Object?>.from(raw as Map);
       if (c['type'] == 'webdav') {
-        s.validateUrl(requiredText(c, 'url'));
+        final urls = [
+          for (final field in ['url', 'wanUrl'])
+            if ('${c[field] ?? ''}'.trim().isNotEmpty) '${c[field]}'
+        ];
+        if (urls.isEmpty) {
+          throw const Failure(FailureCode.invalidInput,
+              'WebDAV requires a url (LAN) or wanUrl (WAN).');
+        }
+        urls.forEach(s.validateUrl);
       } else {
-        final host = requiredText(c, 'host');
-        if (host.contains('/') || host.contains('@')) {
+        final hosts = [
+          for (final field in ['host', 'wanHost'])
+            if ('${c[field] ?? ''}'.trim().isNotEmpty) '${c[field]}'.trim()
+        ];
+        if (hosts.isEmpty) {
+          throw const Failure(FailureCode.invalidInput,
+              'SMB requires a host (LAN) or wanHost (WAN).');
+        }
+        if (hosts.any((host) => host.contains('/') || host.contains('@'))) {
           throw const Failure(FailureCode.invalidInput,
               'Use an SMB host without credentials or a path.');
         }
@@ -449,6 +470,19 @@ Future<JsonMap> connections(
   return {'results': results};
 }
 
+String _optionalUrl(MediaSourcesService s, Object? value) =>
+    '${value ?? ''}'.trim().isEmpty ? '' : s.validateUrl('$value');
+
+String _promptAddress(Map<String, Object?> c) {
+  for (final field in ['url', 'wanUrl']) {
+    if ('${c[field] ?? ''}'.trim().isNotEmpty) return '${c[field]}';
+  }
+  final wan = '${c['host'] ?? ''}'.trim().isEmpty;
+  return wan
+      ? 'smb://${c['wanHost']}:${c['wanPort'] ?? 445}'
+      : 'smb://${c['host']}:${c['port'] ?? 445}';
+}
+
 final class RemoteConnectionExecutor implements JobExecutor {
   const RemoteConnectionExecutor(this.s);
   final MediaSourcesService s;
@@ -473,7 +507,7 @@ final class RemoteConnectionExecutor implements JobExecutor {
             : await prompt({
                 'name': c['name'],
                 'type': c['type'],
-                'url': c['url'] ?? 'smb://${c['host']}:${c['port'] ?? 445}',
+                'url': _promptAddress(c),
                 'username': c['username'] ?? ''
               }, context.stopRequested);
         if (password == null ||
@@ -494,14 +528,17 @@ final class RemoteConnectionExecutor implements JobExecutor {
           if (c['type'] == 'webdav') {
             await s.sharing.addWebDAVConnection(WebDAVConnection(
                 name: c['name'] as String,
-                url: s.validateUrl(c['url'] as String),
+                url: _optionalUrl(s, c['url']),
+                wanUrl: _optionalUrl(s, c['wanUrl']),
                 username: c['username'] as String? ?? '',
                 password: password));
           } else {
             await s.sharing.addSMBConnection(SMBConnection(
                 name: c['name'] as String,
-                host: c['host'] as String,
+                host: (c['host'] as String? ?? '').trim(),
                 port: c['port'] as int? ?? 445,
+                wanHost: (c['wanHost'] as String? ?? '').trim(),
+                wanPort: c['wanPort'] as int? ?? 445,
                 username: c['username'] as String? ?? '',
                 domain: c['domain'] as String? ?? '',
                 password: password));
