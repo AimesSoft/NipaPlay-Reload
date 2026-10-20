@@ -219,6 +219,7 @@ final class NextCore {
     programs.returnTarget = followups.downloadReturnTarget;
     accounts.returnTarget = followups.downloadReturnTarget;
     diskDeletion.returnTarget = followups.downloadReturnTarget;
+    mediaSources.returnTarget = followups.downloadReturnTarget;
     attachMeshDelivery(mesh, followups);
     mesh.describeSelf = () async {
       await harnessLocation.ready;

@@ -1142,7 +1142,11 @@ final class MediaSourcesService {
         };
       });
 
-  Future<JsonMap> login(JsonMap input) async {
+  /// Where a login the person completes is reported: the asking
+  /// conversation (`returnTo` in the job input).
+  Future<JsonMap?> Function(Invocation)? returnTarget;
+
+  Future<JsonMap> login(JsonMap input, {Invocation? invocation}) async {
     final row = await source(input['sourceId'] as String);
     var method = input['method'] as String? ?? 'auto';
     final password = input['password'] as String?;
@@ -1200,6 +1204,9 @@ final class MediaSourcesService {
           CredentialRef('media_source_login', jobId), password);
       _passwords[jobId] = password;
     }
+    final target = invocation == null || password != null
+        ? null
+        : await returnTarget?.call(invocation);
     try {
       final job = await engine.submit(
           type: 'media.sources.login',
@@ -1212,7 +1219,8 @@ final class MediaSourcesService {
             'expiresAt': DateTime.now()
                 .toUtc()
                 .add(const Duration(minutes: 10))
-                .toIso8601String()
+                .toIso8601String(),
+            if (target != null) 'returnTo': target
           },
           details: {
             if (code != null) 'code': code

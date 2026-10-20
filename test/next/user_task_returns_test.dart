@@ -112,11 +112,12 @@ void main() {
   dynamic dataOf(JsonMap fact) => fact['data'];
 
   group('task states', () {
-    late FakeExecutor login, deletion;
+    late FakeExecutor login, deletion, sourceLogin;
     setUp(() async {
       login = FakeExecutor(type: 'accounts.login');
       deletion = FakeExecutor(type: 'disk_deletion');
-      await open([login, deletion]);
+      sourceLogin = FakeExecutor(type: 'media.sources.login');
+      await open([login, deletion, sourceLogin]);
     });
     Future<Job> submit(String type, {bool conversation = true}) =>
         engine.submit(type: type, title: type, input: {
@@ -163,6 +164,26 @@ void main() {
       expect(data['receipt']['details']['loggedIn'], true);
       expect(data['receipt']['details']['method'], 'window');
       expect(data['receipt']['details'].containsKey('username'), isFalse);
+      expect(jsonEncode(rows), isNot(contains(_account)));
+    });
+
+    test('a media source login the user finished comes back once', () async {
+      final job = await submit('media.sources.login');
+      final context = await sourceLogin.entered.future;
+      await context.succeed(verified(details: {
+        'sourceId': 'smb:nas',
+        'connected': true,
+        'username': _account
+      }));
+      await followups.sweep();
+      await followups.sweep();
+      final rows = userRows(await followups.list());
+      expect(rows, hasLength(1));
+      expect(rows.single['instruction'], contains('媒体来源'));
+      final data = factOf(rows.single)['data'] as Map;
+      expect(factOf(rows.single)['objectId'], job.jobId);
+      expect(data['type'], 'media.sources.login');
+      expect(data['state'], 'succeeded');
       expect(jsonEncode(rows), isNot(contains(_account)));
     });
 

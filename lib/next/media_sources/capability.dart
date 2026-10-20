@@ -280,7 +280,7 @@ final _specs = [
       id: 'media.sources.login',
       title: 'Initiate media source login',
       description:
-          'Auto uses Jellyfin Quick Connect when enabled, otherwise opens NipaPlay with address and username prefilled. Only the user enters the password or dandanplay_remote API token in that window. A quickConnect result contains a code to give the user and jobId for task.wait. Approval expires after ten minutes. No secrets are accepted as tool inputs. An unauthenticated NipaPlay shared source can connect directly.',
+          'Auto uses Jellyfin Quick Connect when enabled, otherwise opens NipaPlay with address and username prefilled. Only the user enters the password or dandanplay_remote API token in that window. A quickConnect result contains a code to give the user and jobId for task.wait. When the person finishes in NipaPlay (logged in, closed the window or the code expired), the outcome comes back to the asking conversation. Approval expires after ten minutes. No secrets are accepted as tool inputs. An unauthenticated NipaPlay shared source can connect directly.',
       effect: Effect.write,
       input: ObjectSchema({
         'sourceId': _text,
@@ -457,7 +457,7 @@ final class _SourceAction extends Action<_Json, _Json> {
         case 'media.sources.remove':
           result = await service.remove(json['sourceId'] as String);
         case 'media.sources.login':
-          result = await service.login(json);
+          result = await service.login(json, invocation: invocation);
         case 'media.sources.libraries':
           result = await service.libraries(json['sourceId'] as String);
         case 'media.sources.select':

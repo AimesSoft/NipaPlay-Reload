@@ -2,7 +2,7 @@ part of 'service.dart';
 
 /// Tasks that wait for the person at NipaPlay, not for the machine: their
 /// end is news to the conversation that asked, whichever way it ended.
-const userTaskTypes = {'accounts.login', 'disk_deletion'};
+const userTaskTypes = {'accounts.login', 'media.sources.login', 'disk_deletion'};
 
 extension UserTaskReturns on Followups {
   /// What the conversation is told about [job]: the public task facts, and for
@@ -60,7 +60,7 @@ extension UserTaskReturns on Followups {
           'state': 'ready',
           'title': '用户操作的结果：${job.title}',
           'instruction':
-              '由此会话发起、需要用户本人完成的事有了结果：账号登录，或磁盘文件删除的确认。任务终态不等于成功，以状态与回执为准。下一步由你决定。',
+              '由此会话发起、需要用户本人完成的事有了结果：账号或媒体来源的登录，或磁盘文件删除的确认。任务终态不等于成功，以状态与回执为准。下一步由你决定。',
           'condition': {'userTaskJobId': job.jobId},
           'deliverAfter': now,
           'repository': target['repository'],
