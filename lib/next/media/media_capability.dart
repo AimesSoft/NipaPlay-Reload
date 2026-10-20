@@ -428,6 +428,8 @@ final _specs = [
       '{"kind":"release","workRef":{"provider":"dandanplay","objectType":"anime","externalId":"ANIME_ID","scope":""},"reason":"This anime is its episode catalogue"},'
       '{"kind":"episode","workRef":{"provider":"dandanplay","objectType":"anime","externalId":"ANIME_ID","scope":""},"episodeRefs":[{"provider":"dandanplay","objectType":"episode","externalId":"EPISODE_ID","scope":"anime/ANIME_ID"}],"reason":"Verified episode identity"}]}. '
       '(2) Direct mode: ref + existing entityId + kind binds an external work/release/episode without fetching metadata, creating parents or cascading. '
+      'To give an existing work, release or episode another provider\'s identity (TMDB on a work made from Bangumi, say), use direct mode with its entityId: '
+      'catalogue mode with a ref no local entity has accepted creates a separate work. '
       'Direct file bindings also require exactly one localEpisodeIds target where this ref is already accepted (including an earlier entry). '
       'New direct provider namespaces must be HTTPS origins; host canonicalizes them. '
       'Indexed remote files use source browse fileId as entityId and need no local byte probing. '

@@ -21,7 +21,7 @@ import 'library_service.dart';
 import '../mesh/library.dart';
 
 /// Application-owned projections. Stored presentations contain no task state.
-final class UiDataService implements NextUiData {
+final class UiDataService implements NextUiData, NextNowPlaying {
   UiDataService(this.media, this.engine, this.state, this.sources,
       Directory root, CredentialVault vault)
       : mediaRoot = root,
@@ -305,6 +305,32 @@ final class UiDataService implements NextUiData {
       : job.progress.total != null && job.progress.total! > 0
           ? (job.progress.completed / job.progress.total!).clamp(0.0, 1.0)
           : null;
+  @override
+  Future<({String work, String? episode})?> nowPlaying(String path) async {
+    final rows = await media.store.database.rawQuery(
+        "SELECT fe.episode_id AS episode, r.parent_id AS work FROM media_locations l "
+        'JOIN media_file_episodes fe ON fe.file_id=l.file_id '
+        'JOIN media_entities e ON e.id=fe.episode_id '
+        'JOIN media_entities r ON r.id=e.parent_id '
+        "WHERE l.locator=? AND l.source='local' ORDER BY fe.ordinal LIMIT 1",
+        [path]);
+    if (rows.isEmpty) return null;
+    final work = _display(
+        ((await media.store.mergedMetadata(rows.single['work'] as String))['fields']
+            as Map)['title']);
+    if (work == null) return null;
+    final episodeId = rows.single['episode'] as String;
+    final fields = (await media.store.mergedMetadata(episodeId))['fields'] as Map;
+    final attrs = (await media.store.entity(episodeId))['attributes'] as Map;
+    final number = num.tryParse(attrs['number'] as String? ?? '');
+    final title = _display(fields['title'] ?? attrs['title']);
+    final label = [
+      if (number != null) '第 ${number % 1 == 0 ? number.toInt() : number} 集',
+      if (title != null && title != work) title,
+    ].join(' ');
+    return (work: work, episode: label.isEmpty ? null : label);
+  }
+
   Future<String?> _jobWork(Job job) async {
     final ids = [
       job.input['workId'],

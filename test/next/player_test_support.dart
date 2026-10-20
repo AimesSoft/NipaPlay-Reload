@@ -98,6 +98,8 @@ class FakePlayerState extends ChangeNotifier implements VideoPlayerState {
   @override
   Duration duration = const Duration(minutes: 24);
   @override
+  String? currentVideoPath;
+  @override
   final String animeTitle = '葬送的芙莉莲';
   @override
   final String episodeTitle = '第5话 死者的幻影';
@@ -255,7 +257,14 @@ NextUiServices playerTestServices() {
   );
 }
 
-final class _Data implements NextUiData {
+/// What the library knows of a playing file, by path.
+final playerTestLibrary = <String, ({String work, String? episode})>{};
+
+final class _Data implements NextUiData, NextNowPlaying {
+  @override
+  Future<({String work, String? episode})?> nowPlaying(String path) async =>
+      playerTestLibrary[path];
+
   @override
   Future<UiHome> home() async => const UiHome();
   @override

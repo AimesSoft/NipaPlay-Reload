@@ -8,6 +8,7 @@ import 'package:nipaplay/utils/video_player_state.dart';
 import 'package:provider/provider.dart';
 import 'package:window_manager/window_manager.dart';
 
+import '../../ui_data/ui_data.dart' show NextNowPlaying;
 import '../shell/nipa_setup.dart';
 import '../shell/shell_controller.dart';
 import '../shell/window_chrome.dart';
@@ -361,17 +362,61 @@ class _TopBar extends StatelessWidget {
       );
 }
 
+/// The names of what plays: the library's work and episode when it knows the
+/// file, Classic's otherwise (a file Next never matched).
+class _Titles extends StatefulWidget {
+  const _Titles({required this.builder});
+  final Widget Function(BuildContext context, String work, String episode)
+      builder;
+
+  @override
+  State<_Titles> createState() => _TitlesState();
+}
+
+class _TitlesState extends State<_Titles> {
+  String? _path;
+  Future<({String work, String? episode})?>? _known;
+
+  @override
+  Widget build(BuildContext context) =>
+      Selector<VideoPlayerState, (String?, String?, String?)>(
+        selector: (_, s) => (s.currentVideoPath, s.animeTitle, s.episodeTitle),
+        builder: (context, v, _) {
+          if (v.$1 != _path) {
+            _path = v.$1;
+            _known = null;
+            if (_path case final path?) {
+              if (NextShellScope.of(context).services.data
+                  case final NextNowPlaying data) {
+                _known = data.nowPlaying(path);
+              }
+            }
+          }
+          return FutureBuilder(
+            future: _known,
+            builder: (context, known) {
+              if (_known != null &&
+                  known.connectionState != ConnectionState.done) {
+                return widget.builder(context, '', '');
+              }
+              final k = known.data;
+              return widget.builder(
+                  context,
+                  k?.work ?? v.$2?.trim() ?? '',
+                  k == null ? v.$3?.trim() ?? '' : k.episode ?? '');
+            },
+          );
+        },
+      );
+}
+
 /// 葬送的芙莉莲 · 第5话 死者的幻影
 class _Title extends StatelessWidget {
   const _Title();
 
   @override
-  Widget build(BuildContext context) =>
-      Selector<VideoPlayerState, (String?, String?)>(
-        selector: (_, s) => (s.animeTitle, s.episodeTitle),
-        builder: (context, titles, _) {
-          final work = titles.$1?.trim() ?? '';
-          final episode = titles.$2?.trim() ?? '';
+  Widget build(BuildContext context) => _Titles(
+        builder: (context, work, episode) {
           return Text.rich(
             TextSpan(children: [
               if (work.isNotEmpty)
@@ -806,11 +851,8 @@ class _Loading extends StatelessWidget {
   @override
   Widget build(BuildContext context) => ColoredBox(
         color: NextColors.ink,
-        child: Selector<VideoPlayerState, (String?, String?)>(
-          selector: (_, s) => (s.animeTitle, s.episodeTitle),
-          builder: (context, titles, _) {
-            final work = titles.$1?.trim() ?? '';
-            final episode = titles.$2?.trim() ?? '';
+        child: _Titles(
+          builder: (context, work, episode) {
             return Center(
               child: Column(mainAxisSize: MainAxisSize.min, children: [
                 if (work.isNotEmpty)

@@ -5,6 +5,11 @@
 /// as is: natural, short, no IDs or process details.
 library;
 
+/// What a playing file is in the library: the work and the episode's name.
+abstract interface class NextNowPlaying {
+  Future<({String work, String? episode})?> nowPlaying(String path);
+}
+
 abstract interface class NextUiData {
   Future<UiHome> home();
   Future<UiWork?> work(String workId);

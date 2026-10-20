@@ -108,6 +108,24 @@ void main() {
     expect(p.state.seeks.single.inSeconds, closeTo(12 * 60, 2));
   });
 
+  testWidgets('a file the library knows shows its work and episode',
+      (tester) async {
+    playerTestLibrary['/v/[Group] Show [01][1080p].mkv'] =
+        (work: '躲在超市后门抽烟的两人', episode: '第 1 集 在超市后门吸烟的二人');
+    addTearDown(playerTestLibrary.clear);
+    final p = await pumpPlayer(tester, status: PlayerStatus.playing);
+    p.state.currentVideoPath = '/v/[Group] Show [01][1080p].mkv';
+    p.state.notifyListeners();
+    await tester.pump();
+    await tester.pump();
+    expect(find.textContaining('躲在超市后门抽烟的两人', findRichText: true),
+        findsOneWidget);
+    expect(find.textContaining('第 1 集 在超市后门吸烟的二人', findRichText: true),
+        findsOneWidget);
+    expect(find.textContaining('葬送的芙莉莲', findRichText: true), findsNothing,
+        reason: "Classic's names give way to the library's");
+  });
+
   testWidgets('the controls go when the pointer rests, stay while on them',
       (tester) async {
     final p = await pumpPlayer(tester, status: PlayerStatus.playing);

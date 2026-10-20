@@ -179,6 +179,18 @@ final class MeshLibrary {
     for (final row in await db.query('media_entities',
         where: "kind='work'", orderBy: 'rowid')) {
       final id = row['id'] as String;
+      // A work made from identities alone, left with none and with no file,
+      // is nothing the viewer has. It stays stored (progress, provenance)
+      // and shows again when it is bound again.
+      if ((jsonDecode(row['attributes'] as String) as Map)['localOnly'] != true &&
+          (await db.rawQuery(
+                  'WITH RECURSIVE t(id) AS (SELECT ? UNION ALL SELECT e.id FROM media_entities e JOIN t ON e.parent_id=t.id) '
+                  "SELECT EXISTS(SELECT 1 FROM media_bindings WHERE entity_id IN (SELECT id FROM t) AND status='accepted') "
+                  'OR EXISTS(SELECT 1 FROM media_file_episodes WHERE episode_id IN (SELECT id FROM t)) AS kept',
+                  [id]))
+              .single['kept'] == 0) {
+        continue;
+      }
       final work = workJson((await ui.localWork(id))!);
       work.remove('next');
       final art = work['artwork'] as JsonMap;
