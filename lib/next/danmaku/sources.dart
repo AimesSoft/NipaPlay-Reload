@@ -58,7 +58,7 @@ abstract base class _Source implements DanmakuSource {
     // calling a zero length a range problem.
     if (video.durationMs <= 0) {
       throw const Failure(FailureCode.invalidInput,
-          'video.durationMs is unknown (0); give the local file\'s duration.');
+          'video.durationMs is unknown (0) and the entity has no local file NipaPlay could measure; give the video\'s duration.');
     }
     if (startMs < 0 ||
         endMs <= startMs ||

@@ -228,6 +228,27 @@ void main() {
     expect(job.receipt!.details['rawCount'], 0);
     expect(f.player.data[result['bindingId']], isEmpty);
   });
+  test('an attach whose source does not know the length measures the file',
+      () async {
+    final entity = await f.file();
+    final measured = <String>[];
+    f.service.durationProbe = (path) async {
+      measured.add(path);
+      return 1430069;
+    };
+    f.host.responses['dandanplay.comments'] = jsonBytes({'comments': []});
+    final result = await attach(
+        entity,
+        DanmakuVideo(
+            sourceId: ddpVideo.sourceId,
+            videoId: ddpVideo.videoId,
+            title: ddpVideo.title,
+            durationMs: 0,
+            objectType: ddpVideo.objectType));
+    final job = await f.wait(result['jobId'] as String, JobState.succeeded);
+    expect(job.receipt!.details['status'], 'validEmpty');
+    expect(measured, ['/fixture/video.mkv']);
+  });
   test('cancellation aborts a pending chunk and stops subsequent requests',
       () async {
     await f.file();

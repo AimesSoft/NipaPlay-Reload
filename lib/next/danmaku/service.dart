@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'package:nipa_harness/nipa_harness.dart';
 import '../media/identity_store.dart';
+import '../media/media_probe.dart';
 import 'source.dart';
 import 'store.dart';
 import 'export.dart';
@@ -50,6 +51,9 @@ final class DanmakuService {
   final Map<String, DanmakuSource> sources;
   final DanmakuPlayerPort player;
   Future<List<JsonMap>?> Function(String path)? remoteTracks;
+
+  /// Measures a local video when a source does not know its length.
+  Future<int?> Function(String path) durationProbe = probeMediaDuration;
   final Map<String, JsonMap> _localCacheProvenance = {};
   Future<JsonMap> _provenance(JsonMap binding) async {
     if (binding['local_file'] case final JsonMap facts) {
@@ -147,6 +151,26 @@ final class DanmakuService {
       throw const Failure(FailureCode.notFound, 'No current video.');
     }
     return store.identities.ensureFile(locator);
+  }
+
+  /// Search results do not know an episode's length; the entity's own file
+  /// on this device does.
+  Future<DanmakuVideo> _measured(String entityId, DanmakuVideo video) async {
+    final rows = await store.db.rawQuery(
+        'SELECT DISTINCT l.locator FROM media_locations l LEFT JOIN media_file_episodes e ON e.file_id=l.file_id WHERE l.owner_device_id=? AND (l.file_id=? OR e.episode_id=?)',
+        [store.identities.ownerDeviceId, entityId, entityId]);
+    for (final row in rows) {
+      final ms = await durationProbe(row['locator'] as String);
+      if (ms != null && ms > 0) {
+        return DanmakuVideo(
+            sourceId: video.sourceId,
+            videoId: video.videoId,
+            title: video.title,
+            durationMs: ms,
+            objectType: video.objectType);
+      }
+    }
+    return video;
   }
 
   Future<bool> _isCurrentEntity(String id) async {
@@ -254,6 +278,7 @@ final class DanmakuService {
         };
       }
     }
+    if (video.durationMs <= 0) video = await _measured(entityId, video);
     source(video.sourceId).planFetch(video, 0, video.durationMs);
     final id = await store.attach(entityId, video, reason, url, invocation);
     final job = await fetch(video,
