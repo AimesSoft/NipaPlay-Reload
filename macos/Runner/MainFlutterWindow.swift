@@ -1562,6 +1562,23 @@ private final class DesktopMultiWindowHostPlugin: NSObject, FlutterPlugin {
 }
 
 class MainFlutterWindow: NSWindow {
+  /// A quiet lab instance (debug builds only) lives outside every screen.
+  private static let labQuiet: Bool = {
+    #if DEBUG
+      let env = ProcessInfo.processInfo.environment
+      return env["NIPAPLAY_PROFILE"] != nil && env["NIPAPLAY_LAB_QUIET"] != "0"
+        && env["NIPAPLAY_LAB_VISIBLE"] != "1"
+    #else
+      return false
+    #endif
+  }()
+
+  /// macOS keeps windows partly on a screen; a quiet lab window is meant
+  /// to be on none.
+  override func constrainFrameRect(_ frameRect: NSRect, to screen: NSScreen?) -> NSRect {
+    MainFlutterWindow.labQuiet ? frameRect : super.constrainFrameRect(frameRect, to: screen)
+  }
+
   private var nipaplayFlutterEngine: FlutterEngine?
   private var nextChrome: NextWindowChrome?
   /// Held while Next may be working for the user in the background, so
@@ -1659,12 +1676,12 @@ class MainFlutterWindow: NSWindow {
       if call.method == "showBehind" {
         // Lab instances run beside the user: behind everything, never key
         // and never activating the app. Unless NIPAPLAY_LAB_VISIBLE=1 they
-        // are not seen at all: transparent and click-through, taking no part
-        // of any screen, while Flutter keeps drawing for in-app captures.
-        if ProcessInfo.processInfo.environment["NIPAPLAY_LAB_VISIBLE"] != "1" {
-          window.alphaValue = 0
-          window.ignoresMouseEvents = true
-          window.hasShadow = false
+        // sit left of every screen, taking no part of any, still drawn and
+        // still operable by tools that capture and drive a window directly.
+        if MainFlutterWindow.labQuiet {
+          let screens = NSScreen.screens.map(\.frame).reduce(NSRect.null) { $0.union($1) }
+          window.setFrameOrigin(NSPoint(
+            x: screens.minX - window.frame.width - 200, y: screens.minY))
         }
         window.setIsVisible(true)
         window.orderBack(nil)

@@ -1,8 +1,11 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter/foundation.dart';
+import 'package:flutter/scheduler.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter/widgets.dart' show WidgetsBinding, WidgetsBindingObserver;
 import 'package:path/path.dart' as p;
 // Use the installed plugin interfaces; lab profiles add no dependencies.
 // ignore: depend_on_referenced_packages
@@ -28,6 +31,13 @@ abstract final class LabProfile {
   /// instance shows its window natively, behind everything.
   static Future<void> showBehind() =>
       const MethodChannel('nipaplay/instance').invokeMethod('showBehind');
+
+  /// A quiet instance's window is on no screen, so macOS reports the app
+  /// hidden and Flutter would stop drawing; it keeps drawing, for the tools
+  /// that look at and operate it.
+  static void keepDrawing() {
+    if (quiet) WidgetsBinding.instance.addObserver(_KeepDrawing());
+  }
   static String get root => _root!;
   static String location(String child) => p.join(root, child);
   static String title(String title) => active ? '$title · LAB [$name]' : title;
@@ -133,5 +143,18 @@ final class LabPreferences extends SharedPreferencesStorePlatform {
           !key.startsWith(parameters.filter.prefix) ||
           (parameters.filter.allowList != null &&
               !parameters.filter.allowList!.contains(key)));
+  }
+}
+
+class _KeepDrawing with WidgetsBindingObserver {
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.hidden || state == AppLifecycleState.paused) {
+      // Lab-only (debug builds): stand in for the engine's lifecycle report.
+      final binding = SchedulerBinding.instance;
+      scheduleMicrotask(() =>
+          // ignore: invalid_use_of_protected_member
+          binding.handleAppLifecycleStateChanged(AppLifecycleState.inactive));
+    }
   }
 }
