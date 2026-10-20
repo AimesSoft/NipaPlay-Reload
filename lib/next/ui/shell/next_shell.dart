@@ -13,6 +13,7 @@ import '../pages/activity_page.dart';
 import '../pages/discover_page.dart';
 import '../pages/library_page.dart';
 import '../panel/chat_panel.dart';
+import '../player/player_layer.dart';
 import '../search/search_overlay.dart';
 import '../settings/settings_page.dart';
 import '../theme/tokens.dart';
@@ -24,11 +25,22 @@ import 'top_bar.dart';
 
 /// The Next application shell: top bar, sections, pushed pages (detail,
 /// next stage), popovers, search, ⌘K / ⌘F / Esc, grain over everything.
+///
+/// While a video is open ([playing]) the pages stay as they were, hidden
+/// and still; the player's own controls ([NextPlayerLayer]) lie over
+/// Classic's video, with the conversation panel and sheets above them.
 class NextShell extends StatefulWidget {
-  const NextShell({super.key, required this.onLeave});
+  const NextShell({super.key, required this.onLeave, this.playing = false});
 
   /// Back to Classic.
   final VoidCallback onLeave;
+
+  /// A video is open in Classic's player, under the shell.
+  final bool playing;
+
+  /// Tests: the services the shell talks to instead of NextCore's.
+  @visibleForTesting
+  static NextUiServices Function(BuildContext context)? debugServices;
 
   /// The app menu's “偏好设置…” (⌘,): Next's settings while the shell is
   /// on screen; false when it is not and Classic should open its own.
@@ -44,9 +56,11 @@ class NextShell extends StatefulWidget {
 }
 
 class _NextShellState extends State<NextShell> {
-  late final NextUiServices _services = NextUiServices.resolve(context);
+  late final NextUiServices _services =
+      (NextShell.debugServices ?? NextUiServices.resolve)(context);
   late final NextShellController _shell =
-      NextShellController(_services, onLeave: widget.onLeave);
+      NextShellController(_services, onLeave: widget.onLeave)
+        ..setPlaying(widget.playing);
   final _focus = FocusNode(debugLabel: 'next.shell');
 
   static _NextShellState? _shown;
@@ -57,6 +71,12 @@ class _NextShellState extends State<NextShell> {
     super.initState();
     _shown = this;
     if (kDebugMode) NextUiDebug.attach(_shell, context);
+  }
+
+  @override
+  void didUpdateWidget(NextShell old) {
+    super.didUpdateWidget(old);
+    if (old.playing != widget.playing) _shell.setPlaying(widget.playing);
   }
 
   @override
@@ -93,8 +113,10 @@ class _NextShellState extends State<NextShell> {
 
   @override
   Widget build(BuildContext context) {
-    // Hidden while Classic's player shows a video: logins open at once then.
-    final showing = TickerMode.valuesOf(context).enabled;
+    // Pages hidden while Classic's player shows a video: logins open at
+    // once then.
+    final playing = widget.playing;
+    final showing = !playing && TickerMode.valuesOf(context).enabled;
     _onScreen = showing;
     _services.logins.showing = () => showing && mounted;
     WorkDetailBridge.attach(this, (id) async {
@@ -131,69 +153,87 @@ class _NextShellState extends State<NextShell> {
               child: Focus(
                 focusNode: _focus,
                 autofocus: true,
-                child: ColoredBox(
-                  color: NextColors.ink,
-                  child: Stack(children: [
-                    Positioned.fill(
-                      child: NotificationListener<ScrollNotification>(
-                        onNotification: _onScroll,
-                        child: ArtOriginScope(
-                          origins: _shell.origins,
-                          child: Listener(
-                            behavior: HitTestBehavior.translucent,
-                            onPointerDown: (e) =>
-                                _shell.origins.press(e.localPosition),
-                            child: Navigator(
-                              key: _shell.navigatorKey,
-                              onGenerateRoute: _route,
-                            ),
-                          ),
-                        ),
-                      ),
-                    ),
-                    // Scrim under the bar once content scrolls beneath it.
-                    Positioned(
-                      left: 0,
-                      right: 0,
-                      top: 0,
-                      height: 96,
-                      child: IgnorePointer(
-                        child: ValueListenableBuilder(
-                          valueListenable: _shell.scrolled,
-                          builder: (context, scrolled, _) => AnimatedOpacity(
-                            opacity: scrolled ? 1 : 0,
-                            duration: const Duration(milliseconds: 240),
-                            child: const DecoratedBox(
-                              decoration: BoxDecoration(
-                                gradient: LinearGradient(
-                                  begin: Alignment.topCenter,
-                                  end: Alignment.bottomCenter,
-                                  colors: [
-                                    Color(0xE608080B),
-                                    Color(0x0008080B)
-                                  ],
+                child: Stack(children: [
+                  Positioned.fill(
+                    child: _Pages(
+                      hidden: playing,
+                      child: ColoredBox(
+                        color: NextColors.ink,
+                        child: Stack(children: [
+                          Positioned.fill(
+                            child: NotificationListener<ScrollNotification>(
+                              onNotification: _onScroll,
+                              child: ArtOriginScope(
+                                origins: _shell.origins,
+                                child: Listener(
+                                  behavior: HitTestBehavior.translucent,
+                                  onPointerDown: (e) =>
+                                      _shell.origins.press(e.localPosition),
+                                  child: Navigator(
+                                    key: _shell.navigatorKey,
+                                    onGenerateRoute: _route,
+                                  ),
                                 ),
                               ),
                             ),
                           ),
-                        ),
+                          // Scrim under the bar once content scrolls beneath
+                          // it.
+                          Positioned(
+                            left: 0,
+                            right: 0,
+                            top: 0,
+                            height: 96,
+                            child: IgnorePointer(
+                              child: ValueListenableBuilder(
+                                valueListenable: _shell.scrolled,
+                                builder: (context, scrolled, _) =>
+                                    AnimatedOpacity(
+                                  opacity: scrolled ? 1 : 0,
+                                  duration: const Duration(milliseconds: 240),
+                                  child: const DecoratedBox(
+                                    decoration: BoxDecoration(
+                                      gradient: LinearGradient(
+                                        begin: Alignment.topCenter,
+                                        end: Alignment.bottomCenter,
+                                        colors: [
+                                          Color(0xE608080B),
+                                          Color(0x0008080B)
+                                        ],
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ),
+                          const Positioned(
+                              left: 0, right: 0, top: 0, child: NextTopBar()),
+                          const Positioned.fill(child: Grain()),
+                          const Positioned.fill(child: NextPopovers()),
+                        ]),
                       ),
                     ),
-                    const Positioned(
-                        left: 0, right: 0, top: 0, child: NextTopBar()),
-                    const Positioned.fill(child: Grain()),
-                    const Positioned.fill(child: NextPopovers()),
-                    const Positioned.fill(child: ChatPanelLayer()),
-                    Positioned.fill(
+                  ),
+                  // Always a slot here, so the layers above keep their state.
+                  Positioned.fill(
+                    child: playing
+                        ? const NextPlayerLayer()
+                        : const SizedBox.shrink(),
+                  ),
+                  const Positioned.fill(child: ChatPanelLayer()),
+                  Positioned.fill(
+                    child: _Pages(
+                      hidden: playing,
                       child: SearchLayer(
                         search: _shell.search,
                         onOpen: _shell.openSearchEntry,
                         onClose: _shell.closeSearch,
                       ),
                     ),
-                    const Positioned.fill(child: NextSheetLayer()),
-                  ]),
-                ),
+                  ),
+                  const Positioned.fill(child: NextSheetLayer()),
+                ]),
               ),
             ),
           ),
@@ -201,6 +241,24 @@ class _NextShellState extends State<NextShell> {
       ),
     );
   }
+}
+
+/// The pages while a video is open: kept as they were (state, scroll),
+/// but off screen, still and out of focus. One structure either way, so
+/// nothing under it is remounted.
+class _Pages extends StatelessWidget {
+  const _Pages({required this.hidden, required this.child});
+  final bool hidden;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) => ExcludeFocus(
+        excluding: hidden,
+        child: Offstage(
+          offstage: hidden,
+          child: TickerMode(enabled: !hidden, child: child),
+        ),
+      );
 }
 
 /// ⌘K: the conversation's input. ⌘F: search, the Mac's Find (and free in

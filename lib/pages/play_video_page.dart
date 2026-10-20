@@ -59,6 +59,17 @@ bool shouldConsumeLargeScreenPlaybackPop({
   return isLargeScreen && hasVideo;
 }
 
+/// Under the Next shell the main window's player controls are Next's own
+/// (lib/next/ui/player); a detached or picture-in-picture window, and
+/// every window without Next, keeps these.
+@visibleForTesting
+bool shouldBuildClassicPlayerControls({
+  required bool nextHostsPlayer,
+  required bool secondaryWindow,
+}) {
+  return !nextHostsPlayer || secondaryWindow;
+}
+
 class PlayVideoPage extends StatefulWidget {
   final String? videoPath;
 
@@ -540,7 +551,11 @@ class _PlayVideoPageState extends State<PlayVideoPage> {
         Positioned.fill(
           child: VideoPlayerWidget(danmakuScale: portraitUiScale),
         ),
-        if (videoState.hasVideo)
+        if (videoState.hasVideo &&
+            shouldBuildClassicPlayerControls(
+              nextHostsPlayer: globals.nextShellHostsPlayer,
+              secondaryWindow: DesktopMultiWindow.isSecondaryWindow(context),
+            ))
           NipaplayLargeScreenModeScope.isActiveOf(context) &&
                   !isPictureInPicture
               ? _buildLargeScreenMaterialControls(videoState)

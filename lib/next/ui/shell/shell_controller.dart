@@ -135,8 +135,31 @@ class NextShellController extends ChangeNotifier {
     _syncVisible();
   }
 
+  /// A video is open: the player is over every page, the conversation is
+  /// the side panel over it.
+  bool get playing => _playing;
+  bool _playing = false;
+
+  /// The player opens or closes over the pages. Whatever floated over the
+  /// page goes; a conversation open over the video stays, and on the home
+  /// becomes the home's own again.
+  void setPlaying(bool value) {
+    if (_playing == value) return;
+    _playing = value;
+    if (value) {
+      popover = NextPopover.none;
+      closeSearch(restoreFocus: false);
+    } else if (panelOpen.value && onHome) {
+      _closePanel();
+      homeChatOpen.value = true;
+    }
+    notifyListeners();
+    _syncVisible();
+  }
+
   /// On the home itself, not a page pushed over it.
   bool get onHome =>
+      !_playing &&
       section == NextSection.home &&
       !(navigatorKey.currentState?.canPop() ?? false);
 
@@ -242,7 +265,7 @@ class NextShellController extends ChangeNotifier {
   /// setting [key]. Again while open: it goes there.
   void openSettings({SettingsSection? section, String? key}) {
     final nav = navigatorKey.currentState;
-    if (nav == null) return;
+    if (nav == null || _playing) return;
     if (popover != NextPopover.none) {
       popover = NextPopover.none;
       notifyListeners();
@@ -275,8 +298,9 @@ class NextShellController extends ChangeNotifier {
         .catchError((Object e) => debugPrint('[NextUi] play failed: $e')));
   }
 
-  /// ⌘F: the search panel, over whatever shows.
+  /// ⌘F: the search panel, over whatever shows (not over a video).
   void openSearch() {
+    if (_playing) return;
     closePopover();
     search.show();
   }
@@ -354,6 +378,8 @@ class NextShellController extends ChangeNotifier {
       closePopover();
       return true;
     }
+    // The pages under the video stay as they were left.
+    if (_playing) return false;
     final nav = navigatorKey.currentState;
     if (nav != null && nav.canPop()) {
       nav.pop();

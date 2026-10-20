@@ -1,5 +1,6 @@
 import 'package:flutter/widgets.dart';
 import 'package:nipaplay/providers/labs_settings_provider.dart';
+import 'package:nipaplay/services/desktop_player_window_service.dart';
 import 'package:nipaplay/utils/globals.dart' as globals;
 import 'package:nipaplay/utils/video_player_state.dart';
 import 'package:provider/provider.dart';
@@ -14,7 +15,9 @@ import 'window_chrome.dart';
 /// widget, visible, focusable and animating. With it on, Classic stays
 /// mounted underneath (its services, hotkeys and player keep working) and
 /// is revealed while a video is open, since playback still uses Classic's
-/// player page.
+/// player: its video, danmaku and subtitles show through, and the shell
+/// draws the controls over them ([NextShell.playing]). A video moved out
+/// to its own window leaves this one to the shell's pages.
 class NextUiGate extends StatefulWidget {
   const NextUiGate({super.key, required this.classic});
   final Widget classic;
@@ -45,26 +48,27 @@ class _NextUiGateState extends State<NextUiGate> {
         globals.isDesktop && labs.enableAgentEndpoint && preference.enabled;
     globals.nextShellHostsPlayer = on;
     if (!on) return _classic(false);
-    return Selector<VideoPlayerState, bool>(
-      selector: (_, player) => _playing(player.status),
-      builder: (context, playing, _) => Stack(
-        fit: StackFit.expand,
-        children: [
-          _classic(!playing),
-          NextWindowChromeScope(
-            active: !playing,
-            child: Offstage(
-              offstage: playing,
-              child: TickerMode(
-                enabled: !playing,
-                child: ExcludeFocus(
-                  excluding: playing,
-                  child: NextShell(onLeave: () => preference.setEnabled(false)),
-                ),
+    final window = DesktopPlayerWindowService.instance;
+    return ListenableBuilder(
+      listenable: window,
+      builder: (context, _) => Selector<VideoPlayerState, bool>(
+        selector: (_, player) =>
+            _playing(player.status) && !window.isPlayerDetached,
+        builder: (context, playing, _) => Stack(
+          fit: StackFit.expand,
+          children: [
+            _classic(!playing),
+            // Next's window chrome stays while the video is on, so the
+            // traffic lights keep their place on the player's bar too.
+            NextWindowChromeScope(
+              active: true,
+              child: NextShell(
+                onLeave: () => preference.setEnabled(false),
+                playing: playing,
               ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }

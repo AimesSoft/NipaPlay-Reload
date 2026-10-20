@@ -27,7 +27,18 @@ enum NextGlyph {
   grid,
 
   /// What a row is dragged by.
-  grip
+  grip,
+
+  /// The player's controls.
+  volume,
+  muted,
+  danmaku,
+  danmakuOff,
+  subtitles,
+  episodes,
+  nextEpisode,
+  fullscreen,
+  exitFullscreen
 }
 
 class NextIcon extends StatelessWidget {
@@ -186,6 +197,109 @@ class _GlyphPainter extends CustomPainter {
             canvas.drawCircle(Offset(x, y), 1.5, fill);
           }
         }
+      case NextGlyph.volume || NextGlyph.muted:
+        canvas.drawPath(
+            Path()
+              ..moveTo(4, 9.5)
+              ..lineTo(7.5, 9.5)
+              ..lineTo(12, 5.5)
+              ..lineTo(12, 18.5)
+              ..lineTo(7.5, 14.5)
+              ..lineTo(4, 14.5)
+              ..close(),
+            line);
+        if (glyph == NextGlyph.volume) {
+          canvas.drawPath(
+              Path()
+                ..moveTo(15.5, 9)
+                ..quadraticBezierTo(17.5, 12, 15.5, 15)
+                ..moveTo(18.2, 6.5)
+                ..quadraticBezierTo(22, 12, 18.2, 17.5),
+              line);
+        } else {
+          canvas.drawLine(const Offset(16, 9.5), const Offset(21, 14.5), line);
+          canvas.drawLine(const Offset(21, 9.5), const Offset(16, 14.5), line);
+        }
+      case NextGlyph.danmaku || NextGlyph.danmakuOff:
+        // A speech bubble: what viewers say over the picture.
+        canvas.drawPath(
+            Path()
+              ..moveTo(7.5, 4)
+              ..lineTo(16.5, 4)
+              ..quadraticBezierTo(21, 4, 21, 8.5)
+              ..lineTo(21, 12.5)
+              ..quadraticBezierTo(21, 17, 16.5, 17)
+              ..lineTo(11, 17)
+              ..lineTo(6.5, 20.5)
+              ..lineTo(7, 17)
+              ..quadraticBezierTo(3, 16.6, 3, 12.5)
+              ..lineTo(3, 8.5)
+              ..quadraticBezierTo(3, 4, 7.5, 4)
+              ..close(),
+            line);
+        for (final x in const [8.0, 12.0, 16.0]) {
+          canvas.drawCircle(Offset(x, 10.5), 1.25, fill);
+        }
+        if (glyph == NextGlyph.danmakuOff) {
+          canvas.drawLine(const Offset(3.5, 3), const Offset(20.5, 21), line);
+        }
+      case NextGlyph.subtitles:
+        canvas.drawRRect(
+            RRect.fromRectAndRadius(
+                const Rect.fromLTWH(3, 5, 18, 14), const Radius.circular(3.5)),
+            line);
+        canvas.drawLine(const Offset(7, 12), const Offset(10.5, 12), line);
+        canvas.drawLine(const Offset(13.5, 12), const Offset(17, 12), line);
+        canvas.drawLine(const Offset(7, 15.5), const Offset(14, 15.5), line);
+      case NextGlyph.episodes:
+        // Cards stacked: one season's episodes.
+        canvas.drawRRect(
+            RRect.fromRectAndRadius(
+                const Rect.fromLTWH(3, 9, 18, 11), const Radius.circular(2.5)),
+            line);
+        canvas.drawLine(const Offset(5.5, 5.8), const Offset(18.5, 5.8), line);
+        canvas.drawLine(const Offset(8, 2.8), const Offset(16, 2.8), line);
+      case NextGlyph.nextEpisode:
+        canvas.drawPath(
+            Path()
+              ..moveTo(5, 5)
+              ..lineTo(15, 12)
+              ..lineTo(5, 19)
+              ..close(),
+            fill);
+        canvas.drawLine(const Offset(18.5, 5.5), const Offset(18.5, 18.5), line);
+      case NextGlyph.fullscreen:
+        canvas.drawPath(
+            Path()
+              ..moveTo(4, 9)
+              ..lineTo(4, 4)
+              ..lineTo(9, 4)
+              ..moveTo(15, 4)
+              ..lineTo(20, 4)
+              ..lineTo(20, 9)
+              ..moveTo(20, 15)
+              ..lineTo(20, 20)
+              ..lineTo(15, 20)
+              ..moveTo(9, 20)
+              ..lineTo(4, 20)
+              ..lineTo(4, 15),
+            line);
+      case NextGlyph.exitFullscreen:
+        canvas.drawPath(
+            Path()
+              ..moveTo(9, 4)
+              ..lineTo(9, 9)
+              ..lineTo(4, 9)
+              ..moveTo(20, 9)
+              ..lineTo(15, 9)
+              ..lineTo(15, 4)
+              ..moveTo(15, 20)
+              ..lineTo(15, 15)
+              ..lineTo(20, 15)
+              ..moveTo(4, 15)
+              ..lineTo(9, 15)
+              ..lineTo(9, 20),
+            line);
     }
   }
 
