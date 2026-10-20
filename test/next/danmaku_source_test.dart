@@ -52,6 +52,23 @@ void main() {
     expect(result.coverage, 'relatedPool');
     expect(result.entries.last.toPlayer()['source'], 'unknown');
   });
+  test('an unknown episode length is named, not called a range problem', () {
+    final source =
+        DandanplayDanmakuSource(host, allowedHosts: const ['fixture.invalid']);
+    expect(
+        () => source.planFetch(
+            const DanmakuVideo(
+                sourceId: 'dandanplay',
+                videoId: '7101',
+                title: 'fixture',
+                durationMs: 0,
+                objectType: 'episode'),
+            0,
+            1000),
+        throwsA(isA<Failure>()
+            .having((f) => f.message, 'message', contains('durationMs'))));
+  });
+
   test('one odd comment does not cost the pool', () async {
     // Seen in a real pool: 4 of 4705 comments carried color 255255255.
     host.responses['dandanplay.comments'] = jsonBytes({

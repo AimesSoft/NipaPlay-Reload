@@ -50,8 +50,17 @@ abstract base class _Source implements DanmakuSource {
     if (video.sourceId != describe.id ||
         video.objectType != objectType ||
         !validId ||
-        video.videoId.length > 128 ||
-        startMs < 0 ||
+        video.videoId.length > 128) {
+      throw const Failure(FailureCode.invalidInput,
+          'video must be a Dandanplay episode with a numeric videoId.');
+    }
+    // Search results do not know an episode's length; say so, rather than
+    // calling a zero length a range problem.
+    if (video.durationMs <= 0) {
+      throw const Failure(FailureCode.invalidInput,
+          'video.durationMs is unknown (0); give the local file\'s duration.');
+    }
+    if (startMs < 0 ||
         endMs <= startMs ||
         endMs > video.durationMs ||
         video.durationMs > 7200000) {
