@@ -300,7 +300,9 @@ class _UnderwayBarState extends State<UnderwayBar> {
               TextSpan(children: [
                 if (!_open)
                   TextSpan(
-                      text: '《${first.title}》 ',
+                      text: first.isWork
+                          ? '《${first.title}》 '
+                          : '${first.title} ',
                       style: NextText.sans(12.5,
                           weight: FontWeight.w600, color: NextColors.paper)),
                 TextSpan(

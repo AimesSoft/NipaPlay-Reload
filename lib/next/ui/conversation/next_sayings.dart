@@ -47,10 +47,13 @@ abstract final class NextSayings {
 /// short line: “下载 47% · 然后补上弹幕”.
 final class Underway {
   const Underway(this.title, this.now,
-      {this.then, this.progress, this.artwork});
+      {this.then, this.progress, this.artwork, this.isWork = true});
 
-  /// The work it is for.
+  /// The work it is for, or what it does when the work is not known.
   final String title;
+
+  /// [title] names a work.
+  final bool isWork;
 
   /// What happens now: “下载 47%”.
   final String now;
@@ -91,8 +94,15 @@ final class Underway {
           when task.state == UiTaskState.queued ||
               task.state == UiTaskState.running ||
               task.state == UiTaskState.paused:
-        return Underway(task.title, Words.task(task),
-            progress: task.progress, artwork: task.artwork);
+        final action = task.action ?? task.title;
+        return Underway(
+            task.workTitle ?? action,
+            task.workTitle == null
+                ? Words.task(task)
+                : '$action ${Words.task(task)}',
+            isWork: task.workTitle != null,
+            progress: task.progress,
+            artwork: task.artwork);
       default:
         return null;
     }

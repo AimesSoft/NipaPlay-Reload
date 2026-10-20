@@ -199,9 +199,17 @@ final class UiTask {
     this.cancelled = false,
     this.source,
     this.type,
+    this.workTitle,
+    this.action,
   });
   final String taskId;
   final String title;
+
+  /// The work it is for, when known: “迷宫饭”.
+  final String? workTitle;
+
+  /// What it does, in a word: “下载”.
+  final String? action;
   final UiTaskState state;
   final UiArtwork? artwork;
   final double? progress;

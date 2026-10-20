@@ -274,6 +274,8 @@ final class UiDataService implements NextUiData {
         title: job.type == 'agent.helper' ? job.title :
             job.state == JobState.waitingUser ? '等待你确认删除' :
             '${_taskVerb(job.type)}${name == null ? '' : '《$name》'}',
+        workTitle: job.type == 'agent.helper' ? null : name,
+        action: job.type == 'agent.helper' ? null : _taskVerb(job.type),
         state: switch (job.state) {
           JobState.queued || JobState.waitingRetry => UiTaskState.queued,
           JobState.paused ||
@@ -309,7 +311,10 @@ final class UiDataService implements NextUiData {
       job.input['entityId'],
       job.input['fileId'],
       ...?job.receipt?.details['workIds'] as List?,
-      ...?job.receipt?.details['fileIds'] as List?
+      ...?job.receipt?.details['fileIds'] as List?,
+      // A download under way knows its work by the files already in.
+      for (final f in job.checkpoint['completedFiles'] as List? ?? [])
+        if (f is Map && f['media'] is Map) (f['media'] as Map)['fileId'],
     ];
     for (final id in ids.whereType<String>()) {
       final work = await _parentWork(id);
