@@ -213,6 +213,13 @@ final class ArtworkCache {
     return result;
   }
 
+  /// A picture by URL into the same disposable cache, with its tint: for
+  /// works outside the library. A URL already on disk is not fetched again.
+  Future<({String path, int tint})> picture(String url) async {
+    final path = await _download(url);
+    return (path: path, tint: await _tint(path));
+  }
+
   Future<bool> _filesExist(JsonMap result) async {
     for (final kind in ['backdrop', 'poster', 'logo', 'still']) {
       if (result[kind] case final String path) {

@@ -34,14 +34,20 @@ final class MediaService {
   Future<List<String?>> Function(List<ExternalRef>)? searchWorkIds;
 
   Future<List<JsonMap>> searchResults(List<MetadataRecord> records) async {
-    final refs = records.map((r) => r.ref).toList();
-    final resolver = searchWorkIds;
-    final ids = resolver == null ? [
-      for (final ref in refs) await _acceptedWorkId(ref)
-    ] : await resolver(refs);
+    final ids = await acceptedWorkIds([for (final r in records) r.ref]);
     return [for (var i = 0; i < records.length; i++) {
       ...records[i].toJson(), 'workId': ids[i],
     }];
+  }
+
+  /// The library work holding each ref as an accepted exact/contains work or
+  /// release identity (local, or the merged Mesh catalogue when installed);
+  /// null when the library has none. Never inferred from titles.
+  Future<List<String?>> acceptedWorkIds(List<ExternalRef> refs) async {
+    final resolver = searchWorkIds;
+    return resolver == null
+        ? [for (final ref in refs) await _acceptedWorkId(ref)]
+        : await resolver(refs);
   }
 
   Future<String?> _acceptedWorkId(ExternalRef ref) async {

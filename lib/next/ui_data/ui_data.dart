@@ -20,6 +20,8 @@ abstract interface class NextUiData {
   Future<List<UiWork>> library();
 
   /// Cards the agent presented in a chat turn, with live state resolved.
+  /// A card's work may be one outside the library (`Found.isFound`), known
+  /// from its provider; its page offers to prepare it.
   Future<List<UiCard>> cards({required String threadId, String? turnId});
 
   /// Background tasks, emitted again whenever one changes.

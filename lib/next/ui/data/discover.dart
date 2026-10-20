@@ -3,11 +3,15 @@ import 'dart:async';
 import 'package:nipa_harness/nipa_harness.dart';
 
 import '../../next_runtime.dart';
+import '../../ui_data/found.dart';
 import '../../ui_data/ui_data.dart';
+
+export '../../ui_data/found.dart' show Found, FoundRef;
 
 /// What the 发现 page reads: the new-series calendar and the rankings, from
 /// the same `discover.*` Actions the agent uses. Read only; kept apart from
-/// [NextUiData], whose works are all in the library.
+/// [NextUiData]. [details] also fills the page of a found work an agent's
+/// card opened.
 abstract interface class NextDiscoverData {
   Future<UiDiscover> discover();
 
@@ -57,29 +61,6 @@ final class UiDiscover {
 
   /// The calendar and rankings need a 弹弹play account.
   final bool signedOut;
-}
-
-/// Works known only from discovery. Their ID says where they were found, so
-/// the agent can look them up; it is never shown.
-abstract final class Found {
-  static const _prefix = 'found:';
-
-  static String id(String provider, Object externalId) =>
-      '$_prefix$provider:$externalId';
-
-  static bool isFound(UiWork work) => work.workId.startsWith(_prefix);
-
-  /// “弹弹play 作品 123”, for the agent.
-  static String describe(UiWork work) {
-    final [provider, external] =
-        work.workId.substring(_prefix.length).split(':');
-    final name = switch (provider) {
-      'dandanplay' => '弹弹play',
-      'bangumi' => 'Bangumi',
-      _ => provider,
-    };
-    return '$name 作品 $external';
-  }
 }
 
 /// The real data: `discover.calendar` and `discover.trending_batch` (X29),
@@ -169,29 +150,16 @@ final class CoreDiscover implements NextDiscoverData {
 
   @override
   Future<UiWork> details(UiWork work) async {
-    final external = work.workId.split(':').last;
+    final ref = Found.ref(work.workId);
+    if (ref == null) return work;
     final record = (await _call('media.metadata.get', {
       'ref': {
-        'provider': 'dandanplay',
-        'objectType': 'anime',
-        'externalId': external,
+        'provider': ref.provider,
+        'objectType': ref.objectType,
+        'externalId': ref.externalId,
         'scope': '',
       }
     }))['record'] as Map;
-    final episodes = record['episodes'];
-    return UiWork(
-      workId: work.workId,
-      title: work.title,
-      originalTitle: record['originalTitle'] as String? ?? work.originalTitle,
-      year: record['year'] as int? ?? work.year,
-      genres: work.genres,
-      episodeCount: episodes is List && episodes.isNotEmpty
-          ? episodes.length
-          : work.episodeCount,
-      overview: record['overview'] as String? ?? work.overview,
-      ratings: work.ratings,
-      artwork: UiArtwork(
-          poster: work.artwork.poster ?? record['imageUrl'] as String?),
-    );
+    return Found.withRecord(work, record);
   }
 }

@@ -54,6 +54,16 @@ ObjectSchema _recordSchema(int depth) => ObjectSchema({
       'order': const StringSchema(),
       'language': const StringSchema(),
       'fetchedAt': const StringSchema(),
+      'rating': const ObjectSchema({
+        'value': NumberSchema(),
+        'max': NumberSchema(),
+        'count': NumberSchema()
+      }, required: [
+        'value',
+        'max'
+      ], description: 'Work score as the provider reports it; absent when unrated.'),
+      'episodeCount': const IntegerSchema(
+          description: 'Work episode count as the provider reports it; absent when unknown.'),
       'episodes': ArraySchema(
           depth == 0 ? const ObjectSchema({}) : _recordSchema(depth - 1))
     }, required: [
@@ -301,7 +311,7 @@ final _specs = [
           required: const ['results'])),
   _spec(
       'media.metadata.get',
-      'Fetch an external object without persisting it. TMDB refs use stable IDs and a route scope including season/episode numbers.',
+      'Fetch an external object without persisting it. TMDB refs use stable IDs and a route scope including season/episode numbers. Work records carry rating {value,max,count?} and episodeCount when the provider reports them.',
       Effect.read,
       const ObjectSchema({'ref': _refSchema, 'language': _text},
           required: ['ref']),

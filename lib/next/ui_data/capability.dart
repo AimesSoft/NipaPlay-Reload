@@ -6,15 +6,33 @@ import '../capabilities/classic_action.dart';
 
 const _text = StringSchema(minLength: 1);
 const _ref = StringSchema(minLength: 1);
+
+/// A work outside the library, as media.metadata.search/get return it.
+const _workRef = ObjectSchema({
+  'provider': StringSchema(values: ['tmdb', 'bangumi', 'dandanplay']),
+  'objectType': StringSchema(values: ['tv', 'movie', 'subject', 'anime']),
+  'externalId': _ref,
+  'scope': StringSchema(
+      values: [''], description: 'A work has no scope: "" or omitted.'),
+}, required: [
+  'provider',
+  'objectType',
+  'externalId'
+], description: 'tmdb tv/movie, bangumi subject or dandanplay anime.');
 const _card = ObjectSchema({
   'kind': StringSchema(
       values: ['work', 'episode', 'candidates', 'preparation', 'task', 'choices']),
   'workId': _ref,
+  'ref': _workRef,
   'episodeId': _ref,
   'taskId': _ref,
   'title': _text,
   'items': ArraySchema(
-    ObjectSchema({'workId': _ref, 'reason': _text}, required: ['workId']),
+    ObjectSchema({'workId': _ref, 'ref': _workRef, 'reason': _text},
+        oneOfRequired: [
+          ['workId'],
+          ['ref']
+        ]),
   ),
   'question': _text,
   'options': ArraySchema(
@@ -141,7 +159,7 @@ final class _UiAction extends Action<_Json, _Json> {
       },
       description: switch (operation) {
         'present' =>
-          'Append cards to your current NIPAPLAY_CHAT turn. kind=work uses workId; episode uses episodeId; task uses taskId (jobId); candidates uses items:[{workId,reason?}]; preparation uses title, optional workId and steps:[{label,detail?, exactly one entityId/taskId/followupId}]. All references must exist. States/progress are resolved live; do not supply them. Viewer text is a natural short sentence without IDs or process details.',
+          'Append cards to your current NIPAPLAY_CHAT turn. kind=work uses workId or ref; episode uses episodeId; task uses taskId (jobId); candidates uses items:[{workId or ref, reason?}]; preparation uses title, optional workId and steps:[{label,detail?, exactly one entityId/taskId/followupId}]. ref is a work outside the library, {provider, objectType, externalId, scope:""} as media.metadata.search/get return it: tmdb tv/movie, bangumi subject, dandanplay anime. Its title, poster, year, episode count and rating are read from the provider when presented and kept for the card; its page offers to prepare it. A ref the library already holds as an accepted identity shows and opens the library work. All references must exist: an unknown workId, or a ref its provider does not return, rejects the whole batch. The result lists each ref with its library workId (null when outside) and title. States/progress are resolved live; do not supply them. Viewer text is a natural short sentence without IDs or process details.',
         'shelves.put' =>
           'Replace hero (zero or one item, optional note) or an Agent shelf (stable id, title, items). items:[{workId,note?}]. Empty items removes the placement. Shelf item note becomes its caption. Reference existing library.works IDs; viewer text contains no IDs, paths, source chains or debugging details.',
         _ =>

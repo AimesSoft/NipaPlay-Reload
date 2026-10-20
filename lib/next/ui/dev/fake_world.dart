@@ -1349,6 +1349,54 @@ final class FakeChatPort implements ChatPort {
             world.sample(key,
                 next: ep == null ? null : world._episode(key, ep, progress: p)),
             reason: reason);
+    // Works the library does not have: cards by provider identity (found
+    // works, their page offers to prepare them). 摇曳露营 is on the
+    // workstation already, so its card is the library's.
+    if (_any(said, ['没看过', '片库里没有', '片库外', '没有的'])) {
+      return _Script([
+        '要片库外的，找轻松、一集二十分钟左右的',
+        _Run(
+            _call('media.metadata.search',
+                {'provider': 'bangumi', 'query': '日常 喜剧'}),
+            _ok({'results': 20}),
+            ms: 900),
+        '去掉片库里有的，留三部',
+        _Run(
+            _call('ui.present', {
+              'cards': [
+                {
+                  'kind': 'candidates',
+                  'items': [
+                    {
+                      'ref': {
+                        'provider': 'bangumi',
+                        'objectType': 'subject',
+                        'externalId': '464376'
+                      }
+                    },
+                    {'ref': '…'},
+                    {'ref': '…'},
+                  ]
+                }
+              ]
+            }),
+            _ok({'count': 1})),
+      ],
+          '片库外挑了三部：《败犬女主太多了！》吵吵闹闹，很下饭；'
+          '《我心里危险的东西》很甜，不用动脑；《摇曳露营△》工作站上已经有了，现在就能看。'
+          '前两部想看哪部，我去准备。',
+          cards: () => [
+                UiCandidatesCard([
+                  // Posters only where the 发现 samples are.
+                  for (final (key, reason) in const [
+                    ('makeine', '吵吵闹闹，很下饭'),
+                    ('bokuyaba', '甜，不用动脑'),
+                    ('yurucamp', '现在就能看'),
+                  ])
+                    if (world._found.containsKey(key)) pick(key, reason),
+                ])
+              ]);
+    }
     if (_any(said, ['周末', '一口气', '追完'])) {
       return _Script([
         '想一口气看完，找集数少、一个周末能看完的',
