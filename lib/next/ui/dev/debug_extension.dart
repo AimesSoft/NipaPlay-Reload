@@ -92,6 +92,7 @@ import '../settings/settings_page.dart';
 /// - `transcript` `to=top|bottom|<px>`: scroll the conversation.
 /// - `stall`: the running scripted turn has been silent for three minutes;
 ///   `quiet` `do=wait|resend` presses “再等等” / “重新发”.
+/// - `new`: starts a new conversation, as “新的对话” in the sessions menu
 /// - `type` `index=` `text=` [`submit=1`]: fills a field of the frontmost
 ///   page, then presses Return in it
 /// - `login` `do=fake|open|cancel` [`platform=`]: a scripted login card
@@ -407,6 +408,10 @@ abstract final class NextUiDebug {
         final q = c.questionItems.firstOrNull;
         if (q == null || label == null) throw StateError('No question');
         unawaited(c.choose(q['id'] as String, label));
+      case 'new':
+        // “新的对话” from the sessions menu.
+        c.startNew();
+        await _settle();
       case 'sessions':
         if ((p['open'] != 'false') != c.menuOpen) c.toggleMenu();
         await Future<void>.delayed(const Duration(milliseconds: 300));
