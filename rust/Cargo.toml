@@ -90,6 +90,13 @@ unexpected_cfgs = { level = "warn", check-cfg = ['cfg(frb_expand)'] }
 # - strip = "symbols"：剥离符号减体积（cdylib/staticlib 全平台安全，dSYM 在编译时
 #   独立生成不受影响；iOS staticlib 的符号在 app 链接时由 Xcode 统一处理）。
 # - debug = false：不生成调试信息（release 默认已 false，显式声明减体积）。
+# Debug builds draw danmaku glyphs (MSDF, in fdsm/nalgebra) on the render
+# thread. Unoptimized, a pool of a few thousand CJK comments took minutes,
+# and no danmaku appeared meanwhile. Optimize dependencies; NipaPlay's own
+# crate stays debuggable.
+[profile.dev.package."*"]
+opt-level = 3
+
 [profile.release]
 opt-level = 3
 lto = "thin"
