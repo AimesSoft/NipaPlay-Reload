@@ -64,6 +64,10 @@ final class Followups {
   String _unavailable = 'Embedded chat host is not running.';
   StreamSubscription<Job>? _jobs;
   StreamSubscription<ChatMessage>? _chatEvents;
+
+  /// How turns actually ended, as the host reported them live: a thread
+  /// read back from history can show a turn the provider failed as completed.
+  final _ended = <String, Map>{};
   Timer? _timer;
   Future<void> _operations = Future.value();
 
@@ -95,6 +99,16 @@ final class Followups {
     helpers?.attach(host);
     _unavailable = reason ?? 'Embedded chat host is not running.';
     _chatEvents = host?.events.listen((message) {
+      if (message['method'] == 'turn/completed') {
+        final turn = (message['params'] as Map?)?['turn'];
+        if (turn is Map && turn['id'] is String) {
+          _ended[turn['id'] as String] = {
+            'status': turn['status'],
+            'error': turn['error']
+          };
+          if (_ended.length > 64) _ended.remove(_ended.keys.first);
+        }
+      }
       if (message['method'] == 'turn/completed' ||
           message['method'] == 'host/error') {
         _schedule();
@@ -450,6 +464,10 @@ final class Followups {
               }
               continue;
             }
+            if (row['retryAt'] case final String retryAt
+                when DateTime.now().toUtc().isBefore(DateTime.parse(retryAt))) {
+              continue;
+            }
             final reason = host == null || !host.available
                 ? host?.liveness.latestError ?? _unavailable
                 : host.repository.path != row['repository']
@@ -519,12 +537,16 @@ final class Followups {
             try {
               final thread = await host.readThread(row['threadId'] as String);
               final turns = thread['turns'] as List;
+              final failed = [
+                for (final id in row['failedTurns'] as List? ?? []) id
+              ];
               final matches = turns.cast<Map>().where((turn) =>
-                  row['turnId'] != null
+                  !failed.contains(turn['id']) &&
+                  (row['turnId'] != null
                       ? turn['id'] == row['turnId']
                       : (turn['items'] as List).cast<Map>().any((item) =>
                           item['type'] == 'userMessage' &&
-                          jsonEncode(item['content']).contains(_marker(row))));
+                          jsonEncode(item['content']).contains(_marker(row)))));
               if (matches.isEmpty) {
                 if (row['state'] == 'dispatching') {
                   await _save(row, 'execution_failed', 'execution_failed',
@@ -534,8 +556,11 @@ final class Followups {
                 continue;
               }
               final turn = matches.first;
+              final ended = _ended[turn['id']];
+              final status = ended?['status'] ?? turn['status'];
+              final error = ended == null ? turn['error'] : ended['error'];
               row['turnId'] = turn['id'];
-              row['turnStatus'] = turn['status'];
+              row['turnStatus'] = status;
               if ((row['condition'] as Map)['jobId'] case final String jobId) {
                 final job = await engine.get(jobId);
                 if (job.type == 'agent.helper') {
@@ -543,22 +568,35 @@ final class Followups {
                       job, row['threadId'] as String, turn['id'] as String);
                 }
               }
-              if (turn['status'] == 'inProgress') {
+              final attempts = row['attempts'] as int? ?? 0;
+              if (status == 'inProgress') {
                 if (row['state'] == 'dispatching') {
                   await _save(row, 'started', 'started');
                 }
+              } else if (status == 'failed' &&
+                  _providerHiccup(error) &&
+                  attempts < 5) {
+                // The model never answered these facts; they still matter.
+                final retryAt = DateTime.now()
+                    .toUtc()
+                    .add(Duration(minutes: 2 * (attempts + 1)));
+                row['attempts'] = attempts + 1;
+                row['failedTurns'] = [...failed, turn['id']];
+                row['turnId'] = null;
+                row['retryAt'] = retryAt.toIso8601String();
+                await _save(row, 'ready', 'retrying',
+                    reason:
+                        'The model provider failed this turn; delivering again at ${row['retryAt']}.');
               } else {
                 await _save(
                     row,
-                    turn['status'] == 'completed'
-                        ? 'completed'
-                        : 'execution_failed',
+                    status == 'completed' ? 'completed' : 'execution_failed',
                     'finished',
-                    reason: turn['error'] == null
-                        ? turn['status'] == 'completed'
+                    reason: error == null
+                        ? status == 'completed'
                             ? null
-                            : 'Agent turn ended with status ${turn['status']}.'
-                        : redactHarnessText(jsonEncode(turn['error'])));
+                            : 'Agent turn ended with status $status.'
+                        : redactHarnessText(jsonEncode(error)));
               }
             } catch (error) {
               final reason = redactHarnessText(error.toString());
@@ -575,6 +613,16 @@ final class Followups {
           }
         }
       });
+
+  /// Errors that say the model provider was briefly unavailable (rate limits,
+  /// server errors, a dropped stream), not that the turn itself went wrong.
+  static bool _providerHiccup(Object? error) {
+    if (error is! Map) return false;
+    return RegExp(r'\b(429|5\d\d)\b|responseTooManyFailedAttempts|'
+            r'httpConnectionFailed|responseStream|serverOverloaded|'
+            r'internalServerError')
+        .hasMatch(jsonEncode(error['codexErrorInfo'] ?? error['message']));
+  }
 
   String _marker(JsonMap row) => '[NipaPlay followup ${row['id']}]';
   String _prompt(JsonMap row) => '${_marker(row)}\n'

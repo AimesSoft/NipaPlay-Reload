@@ -2,6 +2,7 @@ import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:nipa_harness/nipa_harness.dart';
 import 'package:nipaplay/next/memory/service.dart';
+import 'package:nipaplay/next/ui/conversation/chat_context.dart';
 import 'package:nipaplay/next/next_database.dart';
 import 'package:nipaplay/next/repository_location.dart';
 import 'package:nipaplay/next/settings/registry.dart';
@@ -96,6 +97,27 @@ void main() {
     expect(await memory.changesFor('a'), isNull);
     expect(await memory.changesFor('b'), contains('preferences.md'));
     expect((await memory.read('preferences.md'))['content'], contains('温暖结局'));
+  });
+
+  test('her own edits are no news next turn; the user’s, made meanwhile, are',
+      () async {
+    final file = File('${repo.path}/memory/preferences.md');
+    await memory.rememberThread('a');
+    var since = DateTime.now();
+    // Nipa edits the file herself during a turn; it ends.
+    await file.writeAsString('${await file.readAsString()}- 她自己记下的。\n');
+    await memory.settle('a', since);
+    expect(await memory.changesFor('a'), isNull);
+    // During the next turn the user edits it from the interface.
+    since = DateTime.now();
+    final read = await memory.read('preferences.md');
+    await memory.edit('preferences.md', '- 用户改过。\n',
+        read['revision'] as String, Invocation(origin: 'gui'));
+    await memory.settle('a', since);
+    final notice = await memory.changesFor('a');
+    expect(notice, contains('preferences.md'));
+    // The conversation shows what was said, not the notice after it.
+    expect(ChatContext.strip('怎么样了？\n\n$notice'), '怎么样了？');
   });
 
   test('a staged target stays intact when the user tries to delete it',

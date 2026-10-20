@@ -406,6 +406,11 @@ final class ChatHost {
         final eventThread = wireParams?['threadId'] as String? ??
             _requestThreads[message['id']];
         if (eventThread != null) {
+          if (wireMethod == 'turn/completed') {
+            unawaited(memory
+                ?.settle(eventThread, livenessFor(eventThread).startedAt)
+                .catchError((Object _) {}));
+          }
           livenessFor(eventThread).observe(message, DateTime.now());
           if (!probe) processes.observe(message, originFor(eventThread), DateTime.now());
         }
@@ -712,7 +717,7 @@ final class ChatHost {
       final change = await memory?.changesFor(id);
       return _public(await _request(
           'turn/start', {'threadId': id, 'input': _input(
-            change == null ? text : '$change\n\n$text')}));
+            change == null ? text : '$text\n\n$change')}));
     } catch (error) {
       live.status = 'startFailed';
       live.endedAt = DateTime.now();

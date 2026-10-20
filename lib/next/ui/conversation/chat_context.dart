@@ -8,6 +8,7 @@ abstract final class ChatContext {
   static const _mark = '[NipaPlay 界面]';
   static const _files = '[NipaPlay 附件]';
   static const _followup = '[NipaPlay followup';
+  static const _memory = '[NipaPlay 记忆]';
 
   /// [text] asked from [work]'s page: the agent gets the work along.
   static String about(String text, UiWork work) => Found.isFound(work)
@@ -43,7 +44,7 @@ abstract final class ChatContext {
 
   /// What you said, without what the interface added.
   static String strip(String text) {
-    final marks = [text.indexOf(_mark), text.indexOf(_files)]
+    final marks = [text.indexOf(_mark), text.indexOf(_files), text.indexOf(_memory)]
         .where((i) => i >= 0);
     final at = marks.isEmpty ? -1 : marks.reduce((a, b) => a < b ? a : b);
     return (at < 0 ? text : text.substring(0, at)).trim();

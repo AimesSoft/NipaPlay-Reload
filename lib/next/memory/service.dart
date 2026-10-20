@@ -104,7 +104,21 @@ final class HarnessMemory implements MemoryData {
     }
   }
 
+  /// When the user last changed memory from the interface.
+  DateTime? _userChangedAt;
+
+  /// A turn of thread [id] that began at [since] ended. What it changed
+  /// itself is no news to it next time; a change the user made meanwhile
+  /// still is, so then nothing is settled.
+  Future<void> settle(String id, DateTime? since) async {
+    final key = '${location.path}:$id';
+    if (since == null || !_seen.containsKey(key)) return;
+    if (_userChangedAt != null && !_userChangedAt!.isBefore(since)) return;
+    _seen[key] = await snapshot();
+  }
+
   /// Append once to each thread; existing model context is never rewritten.
+  /// It follows what the user said, marked so the conversation hides it.
   Future<String?> changesFor(String id) async {
     final key = '${location.path}:$id';
     final now = await snapshot();
@@ -114,7 +128,7 @@ final class HarnessMemory implements MemoryData {
     final removed = before.keys.where((p) => !now.containsKey(p)).toList();
     final changed = now.keys.where((p) => before[p] != now[p]).toList();
     if (removed.isEmpty && changed.isEmpty) return null;
-    return 'NipaPlay 记忆变化：${removed.isEmpty ? '' : '已删除 ${removed.join('、')}；'}'
+    return '[NipaPlay 记忆] 记忆有变化：${removed.isEmpty ? '' : '已删除 ${removed.join('、')}；'}'
         '${changed.isEmpty ? '' : '已更新 ${changed.join('、')}，使用前请重读；'}'
         '已删除的条目和修改前的偏好不再作为依据，勿从旧对话或摘要恢复。';
   }
@@ -132,6 +146,7 @@ final class HarnessMemory implements MemoryData {
 
   Future<JsonMap> _change(
       String path, String? content, String revision, Invocation invocation) {
+    if (invocation.origin == 'gui') _userChangedAt = DateTime.now();
     final result = _pending.then((_) async {
       final file = await _file(path);
       final old = await file.readAsString();
