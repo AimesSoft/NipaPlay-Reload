@@ -52,6 +52,37 @@ void main() {
     expect(result.coverage, 'relatedPool');
     expect(result.entries.last.toPlayer()['source'], 'unknown');
   });
+  test('one odd comment does not cost the pool', () async {
+    // Seen in a real pool: 4 of 4705 comments carried color 255255255.
+    host.responses['dandanplay.comments'] = jsonBytes({
+      'count': 4,
+      'comments': [
+        {'cid': 1, 'p': '1.00,1,16777215,a', 'm': 'ok'},
+        {'cid': 2, 'p': '2.00,1,255255255,b', 'm': 'white'},
+        {'cid': 3, 'p': '-1.00,1,16777215,c', 'm': 'before the start'},
+        {'cid': 4, 'p': '3.00,1,255,d', 'm': 'x' * 16385},
+      ]
+    });
+    final result = await DandanplayDanmakuSource(host,
+            allowedHosts: const ['fixture.invalid'])
+        .fetchChunk(
+            ddpVideo, const DanmakuChunk(0, 0, 720000), DanmakuCancellation());
+    expect(result.entries.map((e) => e.text), ['ok', 'white']);
+    expect(result.entries.last.colorRgb, 0xFFFFFF);
+    // A pool none of whose comments can be read is a changed format.
+    host.responses['dandanplay.comments'] = jsonBytes({
+      'comments': [
+        {'cid': 1, 'p': 'new-format', 'm': 'a'},
+        {'cid': 2, 'p': 'new-format', 'm': 'b'},
+      ]
+    });
+    await expectLater(
+        DandanplayDanmakuSource(host, allowedHosts: const ['fixture.invalid'])
+            .fetchChunk(ddpVideo, const DanmakuChunk(0, 0, 720000),
+                DanmakuCancellation()),
+        throwsA(status(SourceStatus.schemaChanged)));
+  });
+
   test('missing comments are a schema failure, not a valid empty pool',
       () async {
     host.responses['dandanplay.comments'] = jsonBytes({'success': true});

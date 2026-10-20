@@ -158,28 +158,40 @@ final class DandanplayDanmakuSource extends _Source {
       throw const SourceFailure(SourceStatus.accessDenied);
     }
     final result = <DanmakuEntry>[];
-    for (final raw in array(data['comments'])) {
+    final comments = array(data['comments']);
+    var unreadable = 0;
+    for (final raw in comments) {
       final row = object(raw);
+      // A pool holds thousands of comments from many platforms; one odd
+      // comment is that comment's problem, not the pool's. Only a pool none
+      // of whose comments can be read says the format changed. Colors like
+      // 255255255 mean white.
       Map<String, dynamic> parsed;
       try {
         parsed = parseDandanplayComment(row);
       } on FormatException {
-        schemaChanged();
+        unreadable++;
+        continue;
       }
+      final time = parsed['sourceTimeMs'] as int;
+      final text = parsed['content'] as String;
+      if (time < 0 || text.length > 16384) continue;
+      final color = parsed['colorRgb'] as int;
       result.add(DanmakuEntry(
           sourceId: 'dandanplay',
           videoId: video.videoId,
           platform: parsed['source'] as String,
           originSource: parsed['originSource'] as String?,
           sourceEntryId: parsed['sourceEntryId'] as String?,
-          sourceTimeMs: parsed['sourceTimeMs'] as int,
-          text: parsed['content'] as String,
+          sourceTimeMs: time,
+          text: text,
           mode: parsed['originalMode'] as int,
-          colorRgb: parsed['colorRgb'] as int,
+          colorRgb: color < 0 || color > 0xFFFFFF ? 0xFFFFFF : color,
           sender: parsed['senderId'] as String?,
           platformId: parsed['platformDanmakuId'] as String?,
           originVideoId: parsed['platformVideoId'] as String?));
     }
+    if (comments.isNotEmpty && unreadable == comments.length) schemaChanged();
     return DanmakuChunkResult(result, coverage: 'relatedPool');
   }
 }
