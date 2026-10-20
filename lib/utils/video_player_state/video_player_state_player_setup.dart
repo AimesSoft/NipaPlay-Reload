@@ -1286,7 +1286,9 @@ extension VideoPlayerStatePlayerSetup on VideoPlayerState {
       if (_isDisposed || initializationGeneration != _playbackGeneration) {
         return;
       }
-      //debugPrint('初始化视频播放器时出错: $e');
+      // Without this a failure after the media is ready leaves only
+      // "_status=PlayerStatus.error" in the log.
+      debugPrint('[VideoPlayerState] 初始化视频播放器时出错 ($videoPath): $e');
       if (kIsWeb) {
         final errorText = e.toString();
         final bool isUnsupportedFormat = e is PlatformException &&
