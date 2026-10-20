@@ -95,6 +95,29 @@ void main() {
         episodes.where((e) => e.episodeId == now.episodeId).single.number, 5);
   });
 
+  test('an item of a media source is named too, a path elsewhere is not',
+      () async {
+    final db = service.media.store.database;
+    await db.insert('media_entities',
+        {'id': 'f4', 'kind': 'file', 'parent_id': null, 'attributes': '{}'});
+    await db.insert('media_locations', {
+      'id': 'l4',
+      'file_id': 'f4',
+      'source': 'smb:nas',
+      'owner_device_id': 'fixture',
+      'locator': 'smb://nas/anime/Frieren - 04.mkv',
+      'available': 1
+    });
+    await db.insert('media_file_episodes',
+        {'file_id': 'f4', 'episode_id': 'e4', 'relation': 'exact', 'ordinal': 0});
+    expect((await service.nowPlaying('smb://nas/anime/Frieren - 04.mkv'))!.episode,
+        '第 4 集 灵魂安眠之地');
+    // Another device's local path names a file there, not here.
+    await db.update('media_locations', {'owner_device_id': 'other'},
+        where: 'id=?', whereArgs: ['l5']);
+    expect(await service.nowPlaying('/v/Frieren - 05.mkv'), isNull);
+  });
+
   test('a file the library does not hold is not known', () async {
     expect(await service.nowPlaying('/v/elsewhere.mkv'), isNull);
   });

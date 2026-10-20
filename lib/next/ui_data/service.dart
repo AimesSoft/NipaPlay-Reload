@@ -313,8 +313,11 @@ final class UiDataService implements NextUiData, NextNowPlaying {
         'JOIN media_file_episodes fe ON fe.file_id=l.file_id '
         'JOIN media_entities e ON e.id=fe.episode_id '
         'JOIN media_entities r ON r.id=e.parent_id '
-        "WHERE l.locator=? AND l.source='local' ORDER BY fe.ordinal LIMIT 1",
-        [path]);
+        // This device's files, or a media source's item (smb://, webdav…),
+        // which the player opens by the same locator.
+        "WHERE l.locator=? AND (l.source<>'local' OR l.owner_device_id=?) "
+        'ORDER BY fe.ordinal LIMIT 1',
+        [path, media.store.ownerDeviceId]);
     if (rows.isEmpty) return null;
     final workId = rows.single['work'] as String;
     final work = _display(
