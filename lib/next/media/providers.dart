@@ -24,6 +24,13 @@ int? _year(Object? date) => date is String && date.length >= 4
     ? int.tryParse(date.substring(0, 4))
     : null;
 
+/// A score out of ten, when the provider has one (zero means unrated).
+JsonMap? _score(Object? value, Object? count) => value is num && value > 0
+    ? {'value': value, 'max': 10, if (count is num && count > 0) 'count': count}
+    : null;
+
+int? _count(Object? value) => value is num && value > 0 ? value.toInt() : null;
+
 MetadataRecord _verifyRef(MetadataRecord record, ExternalRef ref) {
   if (record.ref.provider != ref.provider ||
       record.ref.objectType != ref.objectType ||
@@ -76,6 +83,10 @@ final class TmdbMetadataProvider implements MetadataProvider {
           episodeType: row['season_number'] == 0 ? 'special' : 'regular',
           episodes: episodes,
           language: language,
+          rating: type == 'tv' || type == 'movie'
+              ? _score(row['vote_average'], row['vote_count'])
+              : null,
+          episodeCount: type == 'tv' ? _count(row['number_of_episodes']) : null,
           fetchedAt: DateTime.now().toUtc());
 
   @override
@@ -157,6 +168,9 @@ final class BangumiMetadataProvider implements MetadataProvider {
       {String scope = '', List<MetadataRecord> episodes = const []}) {
     final images = row['images'] as Map?;
     final localized = row['name_cn'] as String?;
+    final rating = row['rating'];
+    final regular =
+        episodes.where((episode) => episode.episodeType == 'regular').length;
     return MetadataRecord(
         ref: ExternalRef(id, type, _id(row, 'id'), scope: scope),
         title: localized != null && localized.isNotEmpty
@@ -173,6 +187,14 @@ final class BangumiMetadataProvider implements MetadataProvider {
         order: 'subject',
         episodes: episodes,
         language: 'zh-CN',
+        rating: type == 'subject' && rating is Map
+            ? _score(rating['score'], rating['total'])
+            : null,
+        episodeCount: type == 'subject'
+            ? _count(row['eps']) ??
+                _count(row['total_episodes']) ??
+                _count(regular)
+            : null,
         fetchedAt: DateTime.now().toUtc());
   }
 
@@ -234,7 +256,7 @@ final class DandanplayMetadataProvider implements HashMetadataProvider {
   }
 
   MetadataRecord _series(JsonMap row,
-          {List<MetadataRecord> episodes = const []}) =>
+          {List<MetadataRecord> episodes = const [], int? episodeCount}) =>
       MetadataRecord(
           ref: ExternalRef(id, 'anime', _id(row, 'animeId')),
           title: row['animeTitle'] as String,
@@ -243,6 +265,8 @@ final class DandanplayMetadataProvider implements HashMetadataProvider {
           imageUrl: row['imageUrl'] as String?,
           episodes: episodes,
           order: 'provider',
+          rating: _score(row['rating'], null),
+          episodeCount: episodeCount ?? _count(row['episodeCount']),
           fetchedAt: DateTime.now().toUtc());
   MetadataRecord _episode(JsonMap row, String animeId) => MetadataRecord(
       ref: ExternalRef(id, 'episode', _id(row, 'episodeId'),
@@ -280,7 +304,9 @@ final class DandanplayMetadataProvider implements HashMetadataProvider {
       }
       return matches.single;
     }
-    return _verifyRef(_series(row, episodes: episodes), ref);
+    return _verifyRef(
+        _series(row, episodes: episodes, episodeCount: _count(episodes.length)),
+        ref);
   }
 
   @override

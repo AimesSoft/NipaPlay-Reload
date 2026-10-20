@@ -13,6 +13,7 @@ import '../state/query.dart';
 import '../state/views.dart';
 import '../settings/registry.dart';
 import 'artwork.dart';
+import 'found.dart';
 import 'no_airing.dart' if (dart.library.ui) 'airing.dart';
 import 'heat.dart';
 import '../subtitles/facts.dart';
@@ -630,34 +631,185 @@ final class UiDataService implements NextUiData, NextNowPlaying {
       throw const Failure(FailureCode.invalidInput,
           'NIPAPLAY_CHAT has no active turn; call ui.present inside that chat turn.');
     }
-    final cards = (input['cards'] as List).cast<Map>();
+    final cards = [
+      for (final card in input['cards'] as List)
+        Map<String, Object?>.from(jsonDecode(jsonEncode(card)) as Map)
+    ];
     if (cards.isEmpty) {
       throw const Failure(
           FailureCode.invalidInput, 'Supply at least one card in cards.');
     }
+    final refs = <String, Future<_RefWork>>{};
     for (final card in cards) {
-      await _validateCard(Map<String, Object?>.from(card));
+      await _validateCard(card, refs);
     }
-    final id = await db.insert('ui_presentations', {
-      'thread_id': boundary['threadId'],
-      'turn_id': boundary['turnId'],
-      'cards': jsonEncode(cards),
-      'origin': invocation.origin,
-      'invocation_id': invocation.id,
-      'created_at': DateTime.now().toUtc().toIso8601String()
+    final resolved = [for (final r in refs.values) await r];
+    final turn = boundary;
+    final id = await db.transaction((tx) async {
+      for (final r in resolved) {
+        if (r.facts case final facts?) {
+          await tx.insert('ui_cache',
+              {'id': r.key, 'fingerprint': 'found', 'payload': jsonEncode(facts)},
+              conflictAlgorithm: ConflictAlgorithm.replace);
+        }
+      }
+      return tx.insert('ui_presentations', {
+        'thread_id': turn['threadId'],
+        'turn_id': turn['turnId'],
+        'cards': jsonEncode(cards),
+        'origin': invocation.origin,
+        'invocation_id': invocation.id,
+        'created_at': DateTime.now().toUtc().toIso8601String()
+      });
     });
     _changed();
     return {
       'presentationId': id,
       'threadId': boundary['threadId'],
       'turnId': boundary['turnId'],
-      'count': cards.length
+      'count': cards.length,
+      if (resolved.isNotEmpty)
+        'refs': [
+          for (final r in resolved)
+            {
+              'ref': r.ref.toJson(),
+              'workId': r.workId,
+              if (r.facts case final facts?) ...{
+                'title': facts['title'],
+                'year': facts['year'],
+              },
+            }
+        ],
     };
+  }
+
+  // —— Works outside the library ——
+
+  /// A card's `ref`: a work-level provider object, canonical.
+  static ExternalRef _workRef(Object? input, String field) {
+    final json = input is Map ? Map<String, Object?>.from(input) : null;
+    final provider = (json?['provider'] as String?)?.trim().toLowerCase();
+    final type = (json?['objectType'] as String?)?.trim();
+    final external = (json?['externalId'] as String?)?.trim();
+    if (json == null ||
+        json.keys.any((k) => !const {
+              'provider',
+              'objectType',
+              'externalId',
+              'scope'
+            }.contains(k)) ||
+        !(Found.kinds[provider]?.contains(type) ?? false) ||
+        external == null ||
+        external.isEmpty ||
+        (json['scope'] ?? '') != '') {
+      throw Failure(FailureCode.invalidInput,
+          '$field is a work-level provider object {provider, objectType, externalId, scope:""}: tmdb tv or movie, bangumi subject, or dandanplay anime, as media.metadata.search/get return it.');
+    }
+    return ExternalRef(provider!, type!, external);
+  }
+
+  /// One ref of a batch: the library work holding it, or what its provider
+  /// says of it. Each ref is read once per batch.
+  Future<void> _resolveRef(Map<String, Object?> holder, String field,
+      Map<String, Future<_RefWork>> refs) async {
+    final ref = _workRef(holder['ref'], field);
+    holder['ref'] = ref.toJson();
+    final key =
+        Found.id(ref.provider, ref.externalId, objectType: ref.objectType);
+    await refs.putIfAbsent(key, () async {
+      final held = (await media.acceptedWorkIds([ref])).single;
+      return held != null
+          ? _RefWork(key, ref, workId: held)
+          : _RefWork(key, ref, facts: await _fetchFound(ref, field));
+    });
+  }
+
+  /// What a found work's card shows, read from its provider; its poster
+  /// goes to the artwork cache.
+  Future<JsonMap> _fetchFound(ExternalRef ref, String field) async {
+    final name = '${ref.provider} ${ref.objectType} ${ref.externalId}';
+    final MetadataRecord record;
+    try {
+      record = await media.provider(ref.provider).get(ref);
+    } on ProviderRetry catch (e) {
+      throw Failure(FailureCode.unavailable,
+          '$field: $name cannot be read now (${e.reason}); retry after ${e.at.toUtc().toIso8601String()}.',
+          retryable: true);
+    } on Failure catch (e) {
+      throw e.code == FailureCode.unavailable
+          ? Failure(FailureCode.unavailable,
+              '$field: $name cannot be read now (${e.message}).',
+              retryable: e.retryable)
+          : Failure(FailureCode.invalidInput,
+              '$field must reference an existing work: ${ref.provider} did not return $name (${e.message}).');
+    } catch (_) {
+      throw Failure(FailureCode.unavailable,
+          '$field: ${ref.provider} returned no usable record for $name.');
+    }
+    final title = record.title.trim();
+    if (title.isEmpty) {
+      throw Failure(FailureCode.invalidInput,
+          '$field must reference an existing work: $name has no title.');
+    }
+    ({String path, int tint})? picture;
+    if (record.imageUrl case final url?) {
+      try {
+        picture = await artwork.picture(url);
+      } catch (_) {
+        // Without a cached copy the card loads the picture itself.
+      }
+    }
+    return {
+      'title': title,
+      'originalTitle': _display(record.originalTitle),
+      'year': record.year,
+      'overview': _display(record.overview),
+      'episodeCount': Found.episodeCount(record.toJson()),
+      'rating': record.rating,
+      'imageUrl': record.imageUrl,
+      'poster': picture?.path,
+      'tint': picture?.tint,
+      'fetchedAt': record.fetchedAt.toUtc().toIso8601String(),
+    };
+  }
+
+  /// A ref card's work as it is now: the library's when the library holds
+  /// that identity, otherwise the found work from its cached facts.
+  Future<UiWork?> _refWork(Map json) async {
+    final ref = ExternalRef.fromJson(Map<String, Object?>.from(json));
+    if ((await media.acceptedWorkIds([ref])).single case final id?) {
+      if (await work(id) case final held?) return held;
+    }
+    final key =
+        Found.id(ref.provider, ref.externalId, objectType: ref.objectType);
+    final rows = await db.query('ui_cache', where: 'id=?', whereArgs: [key]);
+    JsonMap facts;
+    if (rows.isNotEmpty) {
+      facts = decodeMediaJson(rows.single['payload']);
+    } else {
+      // The disposable cache was cleared: read the provider once more.
+      try {
+        facts = await _fetchFound(ref, 'ref');
+      } on Failure {
+        return null;
+      }
+      await db.insert('ui_cache',
+          {'id': key, 'fingerprint': 'found', 'payload': jsonEncode(facts)},
+          conflictAlgorithm: ConflictAlgorithm.replace);
+    }
+    final poster = facts['poster'];
+    return Found.fromRecord(key, facts,
+        artwork: UiArtwork(
+            poster: poster is String && await File(poster).exists()
+                ? poster
+                : facts['imageUrl'] as String?,
+            tint: facts['tint'] as int?));
   }
 
   final Directory mediaRoot;
 
-  Future<void> _requireEntity(String id, String? kind, String field) async {
+  Future<void> _requireEntity(String id, String? kind, String field,
+      {String hint = ''}) async {
     if (id.startsWith('source-')) {
       final parent = await libraryData!.sourceParent(id);
       if (parent != null && (kind != 'episode' && await work(id) != null ||
@@ -675,7 +827,7 @@ final class UiDataService implements NextUiData, NextNowPlaying {
         await db.query('media_entities', where: 'id=?', whereArgs: [id]);
     if (rows.isEmpty || kind != null && rows.single['kind'] != kind) {
       throw Failure(FailureCode.invalidInput,
-          '$field must reference an existing ${kind ?? 'work or episode'}. Use state.query library.${kind == 'episode' ? 'episodes' : 'works'} and copy the row id; an external provider ID or episode number is not a local ID.');
+          '$field must reference an existing ${kind ?? 'work or episode'}. Use state.query library.${kind == 'episode' ? 'episodes' : 'works'} and copy the row id; an external provider ID or episode number is not a local ID.$hint');
     }
     if (kind == null && !{'work', 'episode'}.contains(rows.single['kind'])) {
       throw const Failure(FailureCode.invalidInput,
@@ -683,7 +835,9 @@ final class UiDataService implements NextUiData, NextNowPlaying {
     }
   }
 
-  Future<void> _validateCard(JsonMap card) async {
+  Future<void> _validateCard(
+      JsonMap card, Map<String, Future<_RefWork>> refs) async {
+    const outside = ' A work outside the library uses ref instead.';
     void shape(Set<String> allowed, Set<String> required) {
       if (card.keys.any((k) => !allowed.contains(k)) ||
           required.any((k) => !card.containsKey(k))) {
@@ -694,8 +848,17 @@ final class UiDataService implements NextUiData, NextNowPlaying {
 
     switch (card['kind']) {
       case 'work':
-        shape({'kind', 'workId'}, {'kind', 'workId'});
-        await _requireEntity(card['workId'] as String, 'work', 'workId');
+        shape({'kind', 'workId', 'ref'}, {'kind'});
+        if (card.containsKey('workId') == card.containsKey('ref')) {
+          throw const Failure(FailureCode.invalidInput,
+              'work card takes exactly one of workId (a library work) or ref (a provider work).');
+        }
+        if (card.containsKey('ref')) {
+          await _resolveRef(card, 'ref', refs);
+        } else {
+          await _requireEntity(card['workId'] as String, 'work', 'workId',
+              hint: outside);
+        }
       case 'episode':
         shape({'kind', 'episodeId'}, {'kind', 'episodeId'});
         await _requireEntity(
@@ -707,19 +870,31 @@ final class UiDataService implements NextUiData, NextNowPlaying {
         shape({'kind', 'items'}, {'kind', 'items'});
         if ((card['items'] as List).isEmpty) {
           throw const Failure(FailureCode.invalidInput,
-              'candidates requires at least one item with workId.');
+              'candidates requires at least one item with workId or ref.');
         }
-        for (final item in (card['items'] as List).cast<Map>()) {
-          if (item.keys.any((k) => !{'workId', 'reason'}.contains(k))) {
+        final items = [
+          for (final item in card['items'] as List)
+            Map<String, Object?>.from(item as Map)
+        ];
+        card['items'] = items;
+        for (final item in items) {
+          if (item.keys.any((k) => !{'workId', 'ref', 'reason'}.contains(k)) ||
+              item.containsKey('workId') == item.containsKey('ref')) {
             throw const Failure(FailureCode.invalidInput,
-                'candidates.items accept workId and optional reason.');
+                'candidates.items take exactly one of workId (a library work) or ref (a provider work), and optional reason.');
           }
-          await _requireEntity(
-              item['workId'] as String, 'work', 'items[].workId');
           if (item['reason'] != null) {
             validateViewerText(item['reason'] as String);
           }
         }
+        await Future.wait([
+          for (final item in items)
+            item.containsKey('ref')
+                ? _resolveRef(item, 'items[].ref', refs)
+                : _requireEntity(
+                    item['workId'] as String, 'work', 'items[].workId',
+                    hint: outside),
+        ]);
       case 'preparation':
         shape({'kind', 'title', 'workId', 'steps'}, {'kind', 'title', 'steps'});
         validateViewerText(card['title'] as String);
@@ -817,7 +992,10 @@ final class UiDataService implements NextUiData, NextNowPlaying {
           in (jsonDecode(row['cards'] as String) as List).cast<Map>()) {
         switch (card['kind']) {
           case 'work':
-            result.add(UiWorkCard((await work(card['workId'] as String))!));
+            final shown = card['ref'] is Map
+                ? await _refWork(card['ref'] as Map)
+                : await work(card['workId'] as String);
+            if (shown != null) result.add(UiWorkCard(shown));
           case 'episode':
             final workId = (await _parentWork(card['episodeId'] as String))!;
             result.add(UiEpisodeCard(
@@ -835,11 +1013,17 @@ final class UiDataService implements NextUiData, NextNowPlaying {
                     recommended: option['recommended'] == true)
             ], question: card['question'] as String?));
           case 'candidates':
-            result.add(UiCandidatesCard([
-              for (final item in (card['items'] as List).cast<Map>())
-                UiCandidate((await work(item['workId'] as String))!,
-                    reason: item['reason'] as String?)
-            ]));
+            final items = <UiCandidate>[];
+            for (final item in (card['items'] as List).cast<Map>()) {
+              final shown = item['ref'] is Map
+                  ? await _refWork(item['ref'] as Map)
+                  : await work(item['workId'] as String);
+              if (shown != null) {
+                items.add(
+                    UiCandidate(shown, reason: item['reason'] as String?));
+              }
+            }
+            if (items.isNotEmpty) result.add(UiCandidatesCard(items));
           case 'preparation':
             final steps = <UiStep>[];
             for (final step in (card['steps'] as List).cast<Map>()) {
@@ -888,6 +1072,21 @@ final class UiDataService implements NextUiData, NextNowPlaying {
     await _changes.close();
     await _tasks.close();
   }
+}
+
+/// A ref met in one ui.present batch.
+final class _RefWork {
+  const _RefWork(this.key, this.ref, {this.workId, this.facts});
+
+  /// The found work's ID, also its ui_cache row.
+  final String key;
+  final ExternalRef ref;
+
+  /// The library work holding this identity.
+  final String? workId;
+
+  /// What its provider says of it, when the library has none.
+  final JsonMap? facts;
 }
 
 String _ratingSource(String source) => switch (source) {

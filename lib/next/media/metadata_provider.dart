@@ -71,6 +71,8 @@ final class MetadataRecord implements JsonEncodable {
       this.order = 'aired',
       this.episodes = const [],
       this.language = 'zh-CN',
+      this.rating,
+      this.episodeCount,
       required this.fetchedAt});
   final ExternalRef ref;
   final String title, kind, episodeType, order, language;
@@ -78,6 +80,12 @@ final class MetadataRecord implements JsonEncodable {
   final int? year, season;
   final List<MetadataRecord> episodes;
   final DateTime fetchedAt;
+
+  /// A work's score as the provider reports it: {value, max, count?}.
+  final JsonMap? rating;
+
+  /// A work's episode count as the provider reports it.
+  final int? episodeCount;
   factory MetadataRecord.fromJson(JsonMap json) => MetadataRecord(
           ref: ExternalRef.fromJson(
               Map<String, Object?>.from(json['ref'] as Map)),
@@ -93,6 +101,10 @@ final class MetadataRecord implements JsonEncodable {
           order: json['order'] as String,
           language: json['language'] as String,
           fetchedAt: DateTime.parse(json['fetchedAt'] as String),
+          rating: json['rating'] is Map
+              ? Map<String, Object?>.from(json['rating'] as Map)
+              : null,
+          episodeCount: (json['episodeCount'] as num?)?.toInt(),
           episodes: [
             for (final item in json['episodes'] as List)
               MetadataRecord.fromJson(Map<String, Object?>.from(item as Map))
@@ -112,6 +124,8 @@ final class MetadataRecord implements JsonEncodable {
         'order': order,
         'language': language,
         'fetchedAt': fetchedAt.toUtc().toIso8601String(),
+        if (rating != null) 'rating': rating,
+        if (episodeCount != null) 'episodeCount': episodeCount,
         'episodes': [for (final episode in episodes) episode.toJson()]
       };
 }

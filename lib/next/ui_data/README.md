@@ -188,9 +188,9 @@ GUI 可用 `core.uiData.removeShelf(id, workId: ...)` 移除一项，省略 work
 
 | kind | 引用与短句 |
 |---|---|
-| work | workId |
+| work | workId，或片库外作品的 ref（二选一） |
 | episode | episodeId，作品从父关系解析 |
-| candidates | items: [{workId, reason?}] |
+| candidates | items: [{workId 或 ref, reason?}] |
 | task | taskId，使用任务的 jobId |
 | preparation | title、可选 workId、steps: [{label, detail?, 三选一 taskId / entityId / followupId}] |
 | choices | question?、options: [{label, detail?, recommended?}]，2–6 项，label 不重复；用户点一项，界面在对话里说出这项的 label |
@@ -200,6 +200,31 @@ GUI 可用 `core.uiData.removeShelf(id, workId: ...)` 移除一项，省略 work
 X37 的帮手同样使用 `ui.present`，其活动来源为 `harness_cli:helper:<jobId>`。
 原卡片位于帮手线程的实际回合；帮手结果的后续派发时，引用也追加到发起线程的实际后续回合。
 重复对账不会重复复制。卡片中的任务仍实时解析，不保存第二份任务状态。
+
+### 片库外作品（ref）
+
+`ref` 是作品级的来源对象 `{provider, objectType, externalId, scope}`，与
+`media.metadata.search/get` 返回的 ref 相同；支持 tmdb 的 tv/movie、bangumi 的 subject、
+dandanplay 的 anime，scope 只能是空字符串（可省略）。存进 `ui_presentations` 的是规范化后的
+ref，不存资料。
+
+- 提交时先查片库：`MediaService.acceptedWorkIds` 按已接受的 exact/contains 作品或 release
+  绑定查本机与 Mesh 合并目录（与 `media.metadata.search` 的 workId 相同，不按标题推断）。
+  有则这一项就是片库作品，不访问来源。
+- 否则调用该来源的 `get`（即 `media.metadata.get` 的服务层），标题、原名、年份、简介、集数、
+  评分、海报地址写入 `ui_cache`，行 ID 是片库外作品 ID；海报经 `ArtworkCache.picture`
+  下载到同一图片缓存并取 tint，同一地址只下载一次。读不到（不存在、类型不符、无标题）报
+  invalidInput，来源暂不可用报 unavailable（限流/网络为 retryable），整批不写入。资料只在整批
+  验证通过后与 presentation 同一事务写入。
+- 返回值增加 `refs:[{ref, workId, title?, year?}]`，workId 为 null 表示片库外。
+- 读取 `cards()` 时每次先查片库，有同一身份就给片库作品（之后入库也随之变化）；否则从
+  `ui_cache` 组出 `UiWork`，不访问网络。缓存被清掉时才向来源再读一次；海报文件不在时用原始
+  地址，由界面自己加载。读不到的项不显示。
+
+片库外作品 ID 定义在 `found.dart`：`found:dandanplay:<id>`、`found:bangumi:<id>`、
+`found:tmdb:tv|movie:<id>`；界面据此打开发现页同款的作品页（“让 Nipa 准备”），页面打开时经
+`media.metadata.get` 补简介。`MetadataRecord` 的作品记录在来源提供时带 `rating`
+（value/max/count）和 `episodeCount`，`media.metadata.get/search` 同样返回。
 
 ## 后台任务契约（X37）
 
