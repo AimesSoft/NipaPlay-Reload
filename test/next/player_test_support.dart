@@ -247,7 +247,7 @@ NextUiServices playerTestServices() {
   final unused = _Unused();
   return NextUiServices(
     data: _Data(),
-    actions: unused,
+    actions: _Actions(),
     chat: _Port(),
     discover: unused,
     library: unused,
@@ -258,12 +258,34 @@ NextUiServices playerTestServices() {
 }
 
 /// What the library knows of a playing file, by path.
-final playerTestLibrary = <String, ({String work, String? episode})>{};
+final playerTestLibrary = <String, UiNowPlaying>{};
+
+/// The library's works and their episodes, by work.
+final playerTestWorks = <String, (UiWork, List<UiEpisode>)>{};
+
+/// What the shell was asked to play, in order.
+final playerTestPlays = <(UiWork, UiEpisode?)>[];
+
+/// Clears what a test put in the library, and what it played.
+void resetPlayerTestLibrary() {
+  playerTestLibrary.clear();
+  playerTestWorks.clear();
+  playerTestPlays.clear();
+}
 
 final class _Data implements NextUiData, NextNowPlaying {
   @override
-  Future<({String work, String? episode})?> nowPlaying(String path) async =>
+  Future<UiNowPlaying?> nowPlaying(String path) async =>
       playerTestLibrary[path];
+
+  @override
+  Future<UiWork?> work(String workId) async => playerTestWorks[workId]?.$1;
+
+  @override
+  Future<List<UiEpisode>> episodes(String workId, {int? season}) async => [
+        for (final e in playerTestWorks[workId]?.$2 ?? const <UiEpisode>[])
+          if (season == null || e.season == season) e
+      ];
 
   @override
   Future<UiHome> home() async => const UiHome();
@@ -288,6 +310,14 @@ final class _Port implements ChatPort {
   Stream<ChatEvent> get questions => const Stream.empty();
   @override
   void dispose() {}
+  @override
+  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
+}
+
+final class _Actions implements NextUiActions {
+  @override
+  Future<void> play(UiWork work, {UiEpisode? episode}) async =>
+      playerTestPlays.add((work, episode));
   @override
   dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
 }

@@ -5,9 +5,31 @@
 /// as is: natural, short, no IDs or process details.
 library;
 
-/// What a playing file is in the library: the work and the episode's name.
+/// What a playing file is in the library: the work and the episode.
 abstract interface class NextNowPlaying {
-  Future<({String work, String? episode})?> nowPlaying(String path);
+  Future<UiNowPlaying?> nowPlaying(String path);
+}
+
+/// A playing file as the library knows it.
+final class UiNowPlaying {
+  const UiNowPlaying({
+    required this.workId,
+    required this.work,
+    this.episodeId,
+    this.episode,
+  });
+
+  /// The work, as [NextUiData.work] and [NextUiData.episodes] take it.
+  final String workId;
+
+  /// The work's name.
+  final String work;
+
+  /// The episode playing, as [NextUiData.episodes] lists it.
+  final String? episodeId;
+
+  /// The episode's name: “第 5 集 死者的幻影”.
+  final String? episode;
 }
 
 abstract interface class NextUiData {

@@ -306,7 +306,7 @@ final class UiDataService implements NextUiData, NextNowPlaying {
           ? (job.progress.completed / job.progress.total!).clamp(0.0, 1.0)
           : null;
   @override
-  Future<({String work, String? episode})?> nowPlaying(String path) async {
+  Future<UiNowPlaying?> nowPlaying(String path) async {
     final rows = await media.store.database.rawQuery(
         "SELECT fe.episode_id AS episode, r.parent_id AS work FROM media_locations l "
         'JOIN media_file_episodes fe ON fe.file_id=l.file_id '
@@ -315,9 +315,9 @@ final class UiDataService implements NextUiData, NextNowPlaying {
         "WHERE l.locator=? AND l.source='local' ORDER BY fe.ordinal LIMIT 1",
         [path]);
     if (rows.isEmpty) return null;
+    final workId = rows.single['work'] as String;
     final work = _display(
-        ((await media.store.mergedMetadata(rows.single['work'] as String))['fields']
-            as Map)['title']);
+        ((await media.store.mergedMetadata(workId))['fields'] as Map)['title']);
     if (work == null) return null;
     final episodeId = rows.single['episode'] as String;
     final fields = (await media.store.mergedMetadata(episodeId))['fields'] as Map;
@@ -328,7 +328,13 @@ final class UiDataService implements NextUiData, NextNowPlaying {
       if (number != null) '第 ${number % 1 == 0 ? number.toInt() : number} 集',
       if (title != null && title != work) title,
     ].join(' ');
-    return (work: work, episode: label.isEmpty ? null : label);
+    // With the mesh, works and episodes go by their merged names.
+    final mesh = meshLibrary;
+    return UiNowPlaying(
+        workId: mesh == null ? workId : await mesh.canonical(workId),
+        work: work,
+        episodeId: mesh == null ? episodeId : await mesh.canonical(episodeId),
+        episode: label.isEmpty ? null : label);
   }
 
   Future<String?> _jobWork(Job job) async {

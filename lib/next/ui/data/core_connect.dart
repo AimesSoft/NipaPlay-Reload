@@ -118,7 +118,7 @@ final class _WhenReady implements NextUiData, NextNowPlaying {
   Future<UiHome> home() async => (await _data).home();
 
   @override
-  Future<({String work, String? episode})?> nowPlaying(String path) async {
+  Future<UiNowPlaying?> nowPlaying(String path) async {
     if (await _data case final NextNowPlaying data) {
       return data.nowPlaying(path);
     }
