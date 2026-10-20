@@ -83,8 +83,46 @@ the saved result. Statuses: `bound` (`workId`, `releaseId`, `episodeIds`),
 download. Receipts list declared indices that never reached a binding attempt in
 `details.unboundDeclarations` (`no_such_file`, `not_selected`, `not_video`,
 `not_completed`). A duplicate add returns the existing job and keeps its
-original declarations. Both the application and the headless host implement
-`bindFile` through the same `bindDownloadedFile`.
+original declarations; `download.declare_files` changes them. Both the application
+and the headless host implement `bindFile` through the same `bindDownloadedFile`,
+and both register `download.declare_files` with the rest of the download family.
+
+`download.declare_files {jobId, fileBindings}` declares or replaces declarations
+of an existing download, with the entries and checks of `download.add` (for a
+known manifest, indices must exist and be among the currently selected files).
+Declarations merge by `fileIndex`: listed indices replace their earlier
+declaration, others stay. They are stored in `checkpoint.fileBindings` (over
+those of the job input) with the invocation's origin, so they survive restarts
+and are carried into the observation job that expanding a selection creates.
+The write goes through `TaskEngine.amendCheckpoint`: it changes neither job state,
+phase, retry time nor the torrent, so it works while the download is running,
+paused, queued, waiting to retry or waiting for a decision. A file that is not
+completed yet is bound by the executor when it completes, as with `add`. A file
+whose `completedFiles` row exists is bound at once, with the same logic, and the
+outcome replaces `binding` on its row (also when it was `failed`, or when there
+was no declaration). The response is `{job, declarationsSaved, bindings}`, one
+`bindings` entry per declared index: the statuses above plus `declared` (saved,
+the file is not completed yet; `reason`) and `not_applied` with `reason`
+`not_video`, `requires_transfer`, `not_selected`, or `not_completed` for a
+finished job. No `download.file_completed` event is published for a row that was
+already complete. A cancelling download returns `conflict`. A finished download's
+receipt is immutable: completed files are still bound and reported, but
+`declarationsSaved` is false and nothing is written.
+
+The requestId of a declaration made with `declare_files` is
+`download:JOB_ID:file:INDEX:DIGEST`, where `DIGEST` derives from the declaration's
+content: the same declaration replays the saved `bind_batch` result (and a file
+whose row says it was bound by that request keeps `bound`), a changed one is a new
+request, so the earlier result cannot reject it. Declarations from `add` keep
+`download:JOB_ID:file:INDEX`. A file that already has episodes is never
+overwritten (`already_identified`).
+
+Everything that rewrites a job's `completedFiles` rows takes the job's turn
+(`DownloadExecutor.exclusive`): the executor's per-file stage and
+`declare_files`. A `declare_files` that arrives while the worker is registering a
+file waits for it, then reads the rows. The worker's other checkpoint writes
+(`stalls`, `files`, the session facts) use `checkpointPatch`, which sets only
+their keys on the checkpoint as stored when the write is applied.
 
 `download.import` scans completed local videos, including when automatic scan is
 off. It checks containment and actual sizes, reuses the Classic scanner and

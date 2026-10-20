@@ -5,6 +5,7 @@ import 'package:nipa_harness/nipa_harness.dart';
 import 'download_backend.dart';
 import 'download_executor.dart';
 import 'download_paths.dart';
+import 'file_bindings.dart';
 
 /// Coordinates identity and controls for GUI and Actions. The backend remains
 /// the source of live torrent/seeding state; the engine owns durable stages.
@@ -240,6 +241,8 @@ final class DownloadService {
               input: {
                 ...job.input,
                 'adopted': true,
+                if (effectiveFileBindings(job).isNotEmpty)
+                  'fileBindings': effectiveFileBindings(job),
                 'completedFiles': job.checkpoint['completedFiles'] ?? []
               },
               details: job.details,
@@ -251,6 +254,121 @@ final class DownloadService {
           'task': changed.toJson()
         };
       });
+
+  /// Declares which episodes files of an existing download are, merging by
+  /// file index, and binds the files that are already registered. Not
+  /// serialized with the other controls: it never pauses the torrent, and
+  /// only the job's own turn (see [DownloadExecutor.exclusive]) is waited for.
+  Future<JsonMap> declareFiles(String jobId, Object? raw,
+      {required String origin}) async {
+    var job = await _downloadJob(jobId);
+    _requireOpen(job);
+    final task = await _task(backends.resolve(_ref(job)), job);
+    final manifest = task != null && task.files.isNotEmpty ? task : null;
+    final entries = parseFileBindings(raw,
+        fileCount: manifest?.files.length,
+        fileIndices: manifest == null
+            ? null
+            : [
+                for (final entry in manifest.files.indexed)
+                  if (entry.$2.included) entry.$1
+              ],
+        selection: 'the selected files of the download');
+    final declared = [for (final e in entries) declaredByAction(e, origin)];
+    return executor.exclusive(jobId, () async {
+      job = await engine.get(jobId);
+      _requireOpen(job);
+      var saved = !job.state.isTerminal;
+      if (saved) {
+        try {
+          job = await engine.amendCheckpoint(jobId, (checkpoint) {
+            final byIndex = {
+              for (final e in checkpoint['fileBindings'] as List? ?? [])
+                (e as Map)['fileIndex'] as int: e,
+              for (final e in declared) e['fileIndex'] as int: e,
+            };
+            return {
+              ...checkpoint,
+              'fileBindings': [
+                for (final index in byIndex.keys.toList()..sort())
+                  byIndex[index]
+              ]
+            };
+          });
+        } on Failure {
+          // The job finished between the read and the write.
+          job = await engine.get(jobId);
+          if (!job.state.isTerminal) rethrow;
+          saved = false;
+        }
+      }
+      final rows = [
+        for (final row in job.checkpoint['completedFiles'] as List? ??
+            job.input['completedFiles'] as List? ??
+            [])
+          Map<String, Object?>.from(row as Map)
+      ];
+      final results = <JsonMap>[];
+      final bound = <int, JsonMap>{};
+      for (final declaration in declared) {
+        final index = declaration['fileIndex'] as int;
+        final fileResult = {'fileIndex': index};
+        final row = rows.where((r) => r['index'] == index).firstOrNull;
+        final file = manifest != null && index < manifest.files.length
+            ? manifest.files[index]
+            : null;
+        if (row == null) {
+          final reason = file == null
+              ? 'not_completed'
+              : !file.included
+                  ? 'not_selected'
+                  : !file.isVideo
+                      ? 'not_video'
+                      : 'not_completed';
+          results.add({
+            ...fileResult,
+            'status': saved && reason != 'not_video' ? 'declared' : 'not_applied',
+            'reason': reason
+          });
+        } else if (row['isVideo'] != true || row['local'] != true) {
+          results.add({
+            ...fileResult,
+            'status': 'not_applied',
+            'reason': row['isVideo'] != true ? 'not_video' : 'requires_transfer'
+          });
+        } else {
+          final outcome =
+              await executor.bindRow(job, row, declaration: declaration);
+          bound[index] = row;
+          results.add({...fileResult, ...outcome});
+        }
+      }
+      if (saved && bound.isNotEmpty) {
+        job = await engine.amendCheckpoint(jobId, (checkpoint) {
+          final current = [
+            for (final row in checkpoint['completedFiles'] as List? ??
+                job.input['completedFiles'] as List? ??
+                [])
+              bound[(row as Map)['index']] ?? row
+          ];
+          return {...checkpoint, 'completedFiles': current};
+        });
+      }
+      return {
+        'job': job.toJson(),
+        'declarationsSaved': saved,
+        'bindings': results
+      };
+    });
+  }
+
+  void _requireOpen(Job job) {
+    if (job.state == JobState.cancelling ||
+        job.cancelRequestedAt != null && !job.state.isTerminal) {
+      throw const Failure(FailureCode.conflict,
+          'Download cancellation is in progress; its receipt will keep the files as they are.');
+    }
+  }
 
   Future<JsonMap> importCompleted(String jobId) => _serial(() async {
         final job = await _downloadJob(jobId);

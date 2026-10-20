@@ -21,19 +21,29 @@ final class JobContext {
   Future<void> get stopRequested => _stop.future;
   Future<Job> snapshot() => _engine.get(job.jobId);
 
+  /// [checkpoint] replaces the whole checkpoint with a map the executor built
+  /// earlier. [checkpointPatch] sets only its keys on the checkpoint as it is
+  /// when the write is applied, so keys changed meanwhile through
+  /// [TaskEngine.amendCheckpoint] survive.
   Future<Job> report(
           {String? phase,
           JobProgress? progress,
           JsonMap? checkpoint,
+          JsonMap? checkpointPatch,
           JsonMap? details}) =>
       _update('progress',
           phase: phase,
           progress: progress,
           checkpoint: checkpoint,
+          checkpointPatch: checkpointPatch,
           details: details);
 
-  Future<Job> markSideEffectCommitted({JsonMap? checkpoint}) =>
-      _update('effect_committed', checkpoint: checkpoint, committed: true);
+  Future<Job> markSideEffectCommitted(
+          {JsonMap? checkpoint, JsonMap? checkpointPatch}) =>
+      _update('effect_committed',
+          checkpoint: checkpoint,
+          checkpointPatch: checkpointPatch,
+          committed: true);
 
   Future<Job> running({String? phase}) =>
       _update('running', state: JobState.running, phase: phase);
@@ -51,12 +61,14 @@ final class JobContext {
         checkpoint: checkpoint);
   }
 
-  Future<Job> retryAt(DateTime at, Failure error, {JsonMap? checkpoint}) =>
+  Future<Job> retryAt(DateTime at, Failure error,
+          {JsonMap? checkpoint, JsonMap? checkpointPatch}) =>
       _update('waiting_retry',
           state: JobState.waitingRetry,
           retryAt: at.toUtc(),
           error: error,
-          checkpoint: checkpoint);
+          checkpoint: checkpoint,
+          checkpointPatch: checkpointPatch);
 
   Future<Job> succeed(JobReceipt receipt, {String? phase}) =>
       _update('succeeded', state: JobState.succeeded, phase: phase, receipt: receipt);
@@ -73,6 +85,7 @@ final class JobContext {
     String? phase,
     JobProgress? progress,
     JsonMap? checkpoint,
+    JsonMap? checkpointPatch,
     JsonMap? details,
     bool? committed,
     Decision? decision,
@@ -89,7 +102,9 @@ final class JobContext {
           state: state,
           phase: phase,
           progress: progress,
-          checkpoint: checkpoint,
+          checkpoint: checkpointPatch == null
+              ? checkpoint
+              : {...(checkpoint ?? current.checkpoint), ...checkpointPatch},
           details: details,
           committed: committed,
           decision: decision,
@@ -237,6 +252,20 @@ final class TaskEngine {
         if (identical(updated, current)) return current;
         await _commit(updated, current, kind);
         return updated;
+      });
+
+  /// Rewrites the checkpoint of a job that has not finished, from the
+  /// checkpoint as it is when the edit runs, without touching its state,
+  /// phase or worker. Edits are serialized with the executor's own writes.
+  /// A finished job's receipt is immutable and the call is a conflict.
+  Future<Job> amendCheckpoint(
+          String jobId, JsonMap Function(JsonMap current) edit) =>
+      _edit(jobId, 'checkpoint_amended', (job) {
+        if (job.state.isTerminal) {
+          throw const Failure(FailureCode.conflict,
+              'A finished job is not amended; its receipt is immutable.');
+        }
+        return _change(job, checkpoint: edit(job.checkpoint));
       });
 
   Future<void> _commit(Job job, Job? previous, String kind) async {

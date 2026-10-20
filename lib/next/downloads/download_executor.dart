@@ -32,6 +32,24 @@ final class DownloadExecutor implements JobExecutor {
     await _workers[jobId]?.future;
   }
 
+  final Map<String, Future<void>> _locks = {};
+
+  /// Runs [operation] alone among everything that rewrites this job's
+  /// `completedFiles` rows: the worker's per-file stage and the declarations
+  /// of `download.declare_files`. Each reads the rows when it gets the turn.
+  Future<T> exclusive<T>(String jobId, Future<T> Function() operation) async {
+    final previous = _locks[jobId] ?? Future<void>.value();
+    final done = Completer<void>();
+    final tail = _locks[jobId] = done.future;
+    await previous;
+    try {
+      return await operation();
+    } finally {
+      done.complete();
+      if (identical(_locks[jobId], tail)) _locks.remove(jobId);
+    }
+  }
+
   @override
   Future<void> execute(JobContext context) => _run(context);
   @override
@@ -91,24 +109,26 @@ final class DownloadExecutor implements JobExecutor {
       }
       // A crash between native add and this checkpoint is reconciled by hash.
       if (!stopped || context.job.cancelRequestedAt != null) {
-        await context.markSideEffectCommitted(checkpoint: {
-          ...context.job.checkpoint,
-          'completedFiles': context.job.checkpoint['completedFiles'] ??
-              context.job.input['completedFiles'] ??
-              [],
-          'infoHash': task.infoHash,
-          'handle': task.handle,
-          'output': task.output.path,
-          'files': [
-            for (final file in task.files)
-              {
-                'path': file.location.path,
-                'expectedSize': file.expectedSize,
-                'local': file.location.isLocal,
-                'included': file.included,
-              }
-          ],
-        });
+        final snapshot = task;
+        await exclusive(
+            context.job.jobId,
+            () => context.markSideEffectCommitted(checkpointPatch: {
+                  'completedFiles': context.job.checkpoint['completedFiles'] ??
+                      context.job.input['completedFiles'] ??
+                      [],
+                  'infoHash': snapshot.infoHash,
+                  'handle': snapshot.handle,
+                  'output': snapshot.output.path,
+                  'files': [
+                    for (final file in snapshot.files)
+                      {
+                        'path': file.location.path,
+                        'expectedSize': file.expectedSize,
+                        'local': file.location.isLocal,
+                        'included': file.included,
+                      }
+                  ],
+                }));
       }
       while (true) {
         if (stopped) {
@@ -172,7 +192,7 @@ final class DownloadExecutor implements JobExecutor {
             retryable: true);
         await context.retryAt(
             DateTime.now().toUtc().add(importRetryDelay), error,
-            checkpoint: {...context.job.checkpoint, 'files': files});
+            checkpointPatch: {'files': files});
         return;
       }
       final key = task.importKey;
@@ -303,7 +323,7 @@ final class DownloadExecutor implements JobExecutor {
       } else {
         await context.retryAt(
             DateTime.now().toUtc().add(importRetryDelay), failure,
-            checkpoint: {...context.job.checkpoint, 'files': files});
+            checkpointPatch: {'files': files});
       }
     } on DownloadAddStopped {
       if (context.job.cancelRequestedAt != null) {
@@ -332,7 +352,12 @@ final class DownloadExecutor implements JobExecutor {
   }
 
   Future<void> _completedFiles(JobContext context, DownloadBackend backend,
-      DownloadSnapshot task) async {
+          DownloadSnapshot task) =>
+      exclusive(
+          context.job.jobId, () => _completedFilesLocked(context, backend, task));
+
+  Future<void> _completedFilesLocked(JobContext context,
+      DownloadBackend backend, DownloadSnapshot task) async {
     final completed = [
       for (final row in context.job.checkpoint['completedFiles'] as List? ??
           [])
@@ -392,28 +417,20 @@ final class DownloadExecutor implements JobExecutor {
           'identificationPending': true,
         'completedAt': DateTime.now().toUtc().toIso8601String(),
       });
-      final declared = _declaration(context, index) != null &&
+      // The declaration is read here, under the lock: one made by
+      // download.declare_files before this point is honoured now, one made
+      // later finds this row and binds it itself.
+      final declared = fileBindingFor(context.job, index) != null &&
           file.isVideo &&
           file.location.isLocal;
       // Pending keeps the file event back until the binding outcome is on
       // the row; the media access check needs this row saved first.
       if (declared) completed.last['binding'] = {'status': 'pending'};
       // Persist before task observers publish the file event. Recovery reads this fact.
-      await context.report(checkpoint: {
-        ...context.job.checkpoint,
-        'completedFiles': completed.toList(),
-      });
+      await context.report(
+          checkpointPatch: {'completedFiles': completed.toList()});
       if (declared) await _bindCompleted(context, completed, completed.last);
     }
-  }
-
-  JsonMap? _declaration(JobContext context, int index) {
-    for (final entry in context.job.input['fileBindings'] as List? ?? []) {
-      if ((entry as Map)['fileIndex'] == index) {
-        return Map<String, Object?>.from(entry);
-      }
-    }
-    return null;
   }
 
   /// Applies the file's declared episode identity and saves the outcome on
@@ -421,22 +438,41 @@ final class DownloadExecutor implements JobExecutor {
   /// a fact for whoever ordered it, and nothing retries it.
   Future<void> _bindCompleted(
       JobContext context, List<JsonMap> completed, JsonMap row) async {
+    await bindRow(context.job, row);
+    await context.report(
+        checkpointPatch: {'completedFiles': completed.toList()});
+  }
+
+  /// Binds the file of one `completedFiles` [row] as [job] declares it and
+  /// writes the outcome (and the re-read library entry) into [row]; the
+  /// caller saves the row. [declaration] stands in for the stored one. Never
+  /// throws: a failure is the outcome.
+  Future<JsonMap> bindRow(Job job, JsonMap row, {JsonMap? declaration}) async {
     final index = row['index'] as int;
-    final declaration = _declaration(context, index);
+    declaration ??= fileBindingFor(job, index);
     JsonMap outcome;
     try {
       if (declaration == null) {
         outcome = {'status': 'not_applied', 'reason': 'no_declaration'};
       } else {
         final path = row['path'] as String;
+        final requestId = fileBindingRequestId(job.jobId, index,
+            declarationId: declaration['declarationId'] as String?);
         var media = await library.lookup(path);
         final fileId = media?['fileId'] as String?;
         final existing = [
           for (final e in media?['episodes'] as List? ?? [])
             (e as Map)['episodeId']
         ];
+        final previous = row['binding'];
         if (fileId == null) {
           outcome = {'status': 'not_applied', 'reason': 'file_not_registered'};
+        } else if (existing.isNotEmpty &&
+            previous is Map &&
+            previous['status'] == 'bound' &&
+            row['bindingRequestId'] == requestId) {
+          // This very declaration is what bound the file.
+          outcome = Map<String, Object?>.from(previous);
         } else if (existing.isNotEmpty) {
           // Another identification came first; the declaration does not
           // overwrite it.
@@ -448,8 +484,9 @@ final class DownloadExecutor implements JobExecutor {
           final bound = await library.bindFile(
               fileId: fileId,
               declaration: declaration,
-              requestId: fileBindingRequestId(context.job.jobId, index),
-              origin: context.job.input['bindingOrigin'] as String? ??
+              requestId: requestId,
+              origin: declaration['origin'] as String? ??
+                  job.input['bindingOrigin'] as String? ??
                   'download');
           outcome = {
             'status': 'bound',
@@ -457,6 +494,7 @@ final class DownloadExecutor implements JobExecutor {
             'releaseId': bound['releaseId'],
             'episodeIds': bound['episodeIds'],
           };
+          row['bindingRequestId'] = requestId;
           media = await library.lookup(path) ?? media;
         }
         if (media != null) {
@@ -479,10 +517,7 @@ final class DownloadExecutor implements JobExecutor {
       };
     }
     row['binding'] = outcome;
-    await context.report(checkpoint: {
-      ...context.job.checkpoint,
-      'completedFiles': completed.toList(),
-    });
+    return outcome;
   }
 
   /// Declared files that did not get a binding attempt, and why.
@@ -492,8 +527,8 @@ final class DownloadExecutor implements JobExecutor {
         if ((row as Map)['binding'] != null) row['index']
     };
     return [
-      for (final entry in context.job.input['fileBindings'] as List? ?? [])
-        if (!done.contains((entry as Map)['fileIndex']))
+      for (final entry in effectiveFileBindings(context.job))
+        if (!done.contains(entry['fileIndex']))
           {
             'fileIndex': entry['fileIndex'],
             'reason': (entry['fileIndex'] as int) >= task.files.length
@@ -540,7 +575,7 @@ final class DownloadExecutor implements JobExecutor {
         'deadPeers': health['deadPeers'],
       });
     }
-    await context.report(checkpoint: {...context.job.checkpoint, 'stalls': stalls});
+    await context.report(checkpointPatch: {'stalls': stalls});
   }
 
   Future<void> _finishCancelled(JobContext context, DownloadBackend backend,
