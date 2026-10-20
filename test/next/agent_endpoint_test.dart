@@ -144,7 +144,13 @@ void main() {
           'NIPAPLAY_AGENT_TOKEN': 'synthetic',
           'OTHER': before['token'] as String
         }),
-        {'PATH': '/bin'});
+        {
+          'PATH': '/bin',
+          'NO_PROXY': '127.0.0.1,localhost,::1',
+          'no_proxy': '127.0.0.1,localhost,::1'
+        });
+    expect(endpoint.chatEnvironment({'no_proxy': '.corp, localhost'})['NO_PROXY'],
+        '.corp,localhost,127.0.0.1,::1');
     await endpoint.inspectChatText('output: ${before['token']}');
     final after = jsonDecode(await credentials.readAsString()) as Map;
     expect(after['token'], isNot(before['token']));

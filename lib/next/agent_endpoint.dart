@@ -129,13 +129,25 @@ final class AgentEndpoint {
 
   Map<String, String> chatEnvironment(Map<String, String> environment) {
     final token = _mcp?.token;
-    return {
+    final clean = {
       for (final entry in environment.entries)
         if (!(token != null && entry.value.contains(token)) &&
             !RegExp(r'^NIPAPLAY_.*TOKEN$', caseSensitive: false)
                 .hasMatch(entry.key))
           entry.key: entry.value
     };
+    // Codex follows the system proxy but not its exceptions: loopback (a
+    // local model gateway, NipaPlay itself) stays direct.
+    final direct = [
+      for (final host
+          in (clean['NO_PROXY'] ?? clean['no_proxy'] ?? '').split(','))
+        if (host.trim().isNotEmpty) host.trim()
+    ];
+    for (final host in const ['127.0.0.1', 'localhost', '::1']) {
+      if (!direct.contains(host)) direct.add(host);
+    }
+    clean['NO_PROXY'] = clean['no_proxy'] = direct.join(',');
+    return clean;
   }
 
   Future<AgentEndpointStatus> start(Directory repository) async {
