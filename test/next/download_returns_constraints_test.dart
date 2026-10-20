@@ -111,6 +111,44 @@ void main() {
     expect(await store.database.rawQuery('PRAGMA foreign_key_check'), isEmpty);
   });
 
+  test('an unresolved stall goes back at once, a passed one never', () async {
+    final job = await submit();
+    final context = await executor.entered.future;
+    final at = DateTime.now().toUtc().toIso8601String();
+    await context.report(checkpoint: {
+      'stalls': [
+        {'index': 0, 'at': at, 'resumedAt': at, 'secondsWithoutProgress': 320},
+        {
+          'index': 1,
+          'at': at,
+          'secondsWithoutProgress': 300,
+          'connectedPeers': 0,
+          'seenPeers': 9,
+          'deadPeers': 9,
+          'completedBytes': 0,
+          'totalBytes': 4
+        }
+      ]
+    });
+    await followups.sweep();
+    final row = (await followups.list()).single;
+    expect(row['threadId'], 'original');
+    final fact = ((row['trigger'] as Map)['facts'] as List).single as Map;
+    expect(fact['event'], 'download.stalled');
+    expect(fact['objectId'], 'stalled:${job.jobId}:1');
+    expect((fact['data'] as Map)['seenPeers'], 9);
+    expect((fact['data'] as Map)['title'], 'CC0 合集');
+    expect((fact['data'] as Map).containsKey('index'), false);
+    expect(
+        DateTime.parse(row['deliverAfter'] as String)
+            .isAfter(DateTime.now().toUtc()),
+        false);
+    await followups.sweep();
+    expect(
+        (((await followups.list()).single['trigger'] as Map)['facts'] as List),
+        hasLength(1));
+  });
+
   test(
       'manual file and terminal returns own facts, including late registration',
       () async {

@@ -1,5 +1,6 @@
 import 'package:http/http.dart' as http;
 import 'package:nipa_harness/nipa_harness.dart';
+import 'package:nipaplay/security/built_in_credentials.dart';
 import '../network/dandanplay_gateway.dart';
 import 'metadata_provider.dart';
 import 'provider_transport.dart';
@@ -41,7 +42,8 @@ final class HostVaultResolver implements CredentialResolver {
   final CredentialVault vault;
   @override
   Future<String> resolve(CredentialRef ref) async {
-    final secret = await vault.read(ref);
+    var secret = await vault.read(ref);
+    if (secret == null || secret.isEmpty) secret = BuiltInCredentials.of(ref);
     if (secret == null || secret.isEmpty) {
       throw Failure(
           FailureCode.unavailable, '$ref is not configured in the host vault.');

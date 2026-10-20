@@ -34,6 +34,7 @@ final class FakeDownloadBackend
   String handle = '1';
   String? error;
   List<DownloadFile>? overrideFiles;
+  JsonMap? health;
   final addEntered = Completer<void>();
   Future<void>? addGate;
   bool stopAddBeforeCommit = false;
@@ -59,6 +60,7 @@ final class FakeDownloadBackend
       finished: finished,
       paused: paused,
       error: error,
+      health: health,
       files: overrideFiles ?? [video]);
   Future<void> finish({int size = 4}) async {
     await File(video.location.path).writeAsBytes(List.filled(size, 1));

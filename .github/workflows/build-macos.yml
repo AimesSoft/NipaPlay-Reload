@@ -27,6 +27,9 @@ on:
       APPLE_APP_PASSWORD:
         description: 'Apple App-specific Password'
         required: false
+      NIPAPLAY_TMDB_TOKEN:
+        description: 'TMDB credential NipaPlay ships with'
+        required: false
     outputs:
       version:
         description: '应用版本号'
@@ -379,6 +382,8 @@ jobs:
 
       - name: Build macOS Packages
         uses: ./.github/actions/build-macos
+        env:
+          NIPAPLAY_TMDB_TOKEN: ${{ secrets.NIPAPLAY_TMDB_TOKEN }}
         with:
           app-version: ${{ needs.prepare.outputs.version }}
           build-architectures: ${{ matrix.architecture }}

@@ -13,12 +13,12 @@ import '../widgets/buttons.dart';
 import '../widgets/glass.dart';
 import '../widgets/icons.dart';
 import '../widgets/nipa_avatar.dart';
-import '../widgets/progress.dart';
 import 'shell_controller.dart';
 
 /// The top bar's way into what goes on in the background: NipaPlay's tasks
-/// and the helpers Nipa sent off. A ring with the overall progress of what
-/// has progress; when nothing running has any, the ring turns and counts.
+/// and the helpers Nipa sent off. Background work is of many kinds and most
+/// has no single progress worth summing, so it shows that things are going
+/// on and how many.
 class BackgroundEntry extends StatelessWidget {
   const BackgroundEntry({super.key, required this.onTap});
   final VoidCallback onTap;
@@ -27,14 +27,6 @@ class BackgroundEntry extends StatelessWidget {
   Widget build(BuildContext context) {
     final shell = NextShellScope.of(context);
     final active = shell.activeTasks;
-    final measured = [
-      for (final t in active)
-        if (t.progress != null) t
-    ];
-    final progress = measured.isEmpty
-        ? null
-        : measured.fold<double>(0, (a, t) => a + t.progress!) /
-            measured.length;
     return Pressable(
       onTap: onTap,
       semanticLabel: '后台',
@@ -50,15 +42,9 @@ class BackgroundEntry extends StatelessWidget {
           child: Padding(
             padding: const EdgeInsets.only(left: 10, right: 14),
             child: Row(mainAxisSize: MainAxisSize.min, children: [
-              if (progress != null)
-                ProgressRing(progress: progress)
-              else
-                const _TurningRing(),
-              const SizedBox(width: 10),
-              Text(
-                  progress != null
-                      ? '${(progress * 100).round()}%'
-                      : '${active.length}',
+              const _WorkGlyph(),
+              const SizedBox(width: 8),
+              Text('${active.length}',
                   style: NextText.num(12, color: NextColors.p2)),
             ]),
           ),
@@ -68,18 +54,18 @@ class BackgroundEntry extends StatelessWidget {
   }
 }
 
-/// A ring for work without progress: a short arc going round.
-class _TurningRing extends StatefulWidget {
-  const _TurningRing();
+/// A short list whose points light up one after another: work going on.
+class _WorkGlyph extends StatefulWidget {
+  const _WorkGlyph();
 
   @override
-  State<_TurningRing> createState() => _TurningRingState();
+  State<_WorkGlyph> createState() => _WorkGlyphState();
 }
 
-class _TurningRingState extends State<_TurningRing>
+class _WorkGlyphState extends State<_WorkGlyph>
     with SingleTickerProviderStateMixin {
   late final AnimationController _c = AnimationController(
-      vsync: this, duration: const Duration(milliseconds: 1400))
+      vsync: this, duration: const Duration(milliseconds: 1800))
     ..repeat();
 
   @override
@@ -93,43 +79,42 @@ class _TurningRingState extends State<_TurningRing>
         animation: _c,
         builder: (context, _) => CustomPaint(
           size: const Size.square(16),
-          painter: _ArcPainter(
-              NextMotion.reduced(context) ? 0 : _c.value * 2 * math.pi),
+          painter: _WorkPainter(NextMotion.reduced(context) ? null : _c.value),
         ),
       );
 }
 
-class _ArcPainter extends CustomPainter {
-  _ArcPainter(this.angle);
-  final double angle;
+class _WorkPainter extends CustomPainter {
+  _WorkPainter(this.phase);
+
+  /// Where the light is, 0..1 over the three rows; null keeps all lit.
+  final double? phase;
 
   @override
   void paint(Canvas canvas, Size size) {
-    final rect = Rect.fromCircle(
-        center: size.center(Offset.zero), radius: size.width / 2 - 1.5);
-    canvas.drawArc(
-        rect,
-        0,
-        2 * math.pi,
-        false,
-        Paint()
-          ..style = PaintingStyle.stroke
-          ..strokeWidth = 3
-          ..color = const Color(0x24FFFFFF));
-    canvas.drawArc(
-        rect,
-        angle,
-        math.pi * 0.6,
-        false,
-        Paint()
-          ..style = PaintingStyle.stroke
-          ..strokeWidth = 3
-          ..strokeCap = StrokeCap.round
-          ..color = NextColors.accent);
+    final unit = size.width / 16;
+    final line = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1.6 * unit
+      ..strokeCap = StrokeCap.round
+      ..color = NextColors.p3;
+    for (var row = 0; row < 3; row++) {
+      final y = (3.5 + row * 4.5) * unit;
+      final lit = phase == null
+          ? 1.0
+          : math.max(0.0, 1 - (phase! * 3 - row) % 3 * 1.2);
+      canvas.drawCircle(
+          Offset(3 * unit, y),
+          1.7 * unit,
+          Paint()
+            ..color = Color.lerp(NextColors.p3, NextColors.accent, lit)!);
+      canvas.drawLine(
+          Offset(7 * unit, y), Offset((row == 1 ? 11.5 : 14) * unit, y), line);
+    }
   }
 
   @override
-  bool shouldRepaint(_ArcPainter old) => old.angle != angle;
+  bool shouldRepaint(_WorkPainter old) => old.phase != phase;
 }
 
 /// What goes on in the background, latest first: helpers say what they

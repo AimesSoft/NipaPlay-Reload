@@ -22,6 +22,12 @@ null. `health.sources` includes the live per-peer counters and counts peers that
 have supplied bytes / checked pieces on their current retained peer record. That
 is evidence of data supplied, not a promise of future availability or a seeder
 classification. `lastProgressAt` is null until an increase is actually observed.
+When an unfinished download goes `stallAfter` (5 minutes) without progress, the
+worker appends one entry to `checkpoint.stalls` with the bytes and peer counts it
+saw. The entry closes (`resumedAt`) only on an observed increase after it began,
+since the counter restarts with the process. An open stall of a download started
+from a conversation returns there at once as a `download.stalled` fact; passed
+stalls and stalls of finished tasks are not sent.
 `disk.availableBytes` uses statvfs (Unix) or GetDiskFreeSpaceExW (Windows)
 for the actual task output directory; failures carry an error and a null value.
 The job receipt remains a historical completion observation; live seeding pause

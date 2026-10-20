@@ -92,18 +92,23 @@ jobs:
       APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
       APPLE_ID: ${{ secrets.APPLE_ID }}
       APPLE_APP_PASSWORD: ${{ secrets.APPLE_APP_PASSWORD }}
+      NIPAPLAY_TMDB_TOKEN: ${{ secrets.NIPAPLAY_TMDB_TOKEN }}
 
   Build-Windows:
     name: Build Windows
     needs: Gatekeeper
     if: needs.Gatekeeper.outputs.triggered == 'true'
     uses: ./.github/workflows/build-windows.yml
+    secrets:
+      NIPAPLAY_TMDB_TOKEN: ${{ secrets.NIPAPLAY_TMDB_TOKEN }}
 
   Build-Linux:
     name: Build Linux
     needs: Gatekeeper
     if: needs.Gatekeeper.outputs.triggered == 'true'
     uses: ./.github/workflows/build-linux.yml
+    secrets:
+      NIPAPLAY_TMDB_TOKEN: ${{ secrets.NIPAPLAY_TMDB_TOKEN }}
 
   Build-HarmonyOS:
     name: Build HarmonyOS sideload package

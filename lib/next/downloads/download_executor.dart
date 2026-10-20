@@ -12,11 +12,16 @@ final class DownloadExecutor implements JobExecutor {
       required this.library,
       required this.isEnabled,
       this.pollInterval = const Duration(seconds: 5),
-      this.importRetryDelay = const Duration(minutes: 1)});
+      this.importRetryDelay = const Duration(minutes: 1),
+      this.stallAfter = const Duration(minutes: 5)});
   final DownloadBackends backends;
   final DownloadLibrary library;
   final Future<bool> Function() isEnabled;
   final Duration pollInterval, importRetryDelay;
+
+  /// How long a download goes without a new byte before that is a fact
+  /// worth telling whoever started it.
+  final Duration stallAfter;
   late TaskEngine engine;
   final Map<String, Completer<void>> _workers = {};
   @override
@@ -136,6 +141,7 @@ final class DownloadExecutor implements JobExecutor {
         await _completedFiles(context, backend, task);
         if (stopped) continue;
         if (task.finished) break;
+        await _noteStall(context, task);
         await context.report(
             phase: 'downloading',
             progress: JobProgress(
@@ -382,6 +388,42 @@ final class DownloadExecutor implements JobExecutor {
         'completedFiles': completed.toList(),
       });
     }
+  }
+
+  /// Each stretch without progress is recorded once, with what the engine
+  /// saw; it closes when a byte is seen after it began. Time without
+  /// progress restarts with the process, so only an observed byte closes it.
+  Future<void> _noteStall(JobContext context, DownloadSnapshot task) async {
+    final health = task.health;
+    final seconds = health?['secondsWithoutProgress'];
+    if (seconds is! int) return;
+    final stalls = [
+      for (final s in context.job.checkpoint['stalls'] as List? ?? [])
+        Map<String, Object?>.from(s as Map)
+    ];
+    final open = stalls.lastOrNull?['resumedAt'] == null ? stalls.lastOrNull : null;
+    final now = DateTime.now().toUtc();
+    if (open != null) {
+      final progressAt = health!['lastProgressAt'] as String?;
+      if (progressAt == null ||
+          !DateTime.parse(progressAt).isAfter(DateTime.parse(open['at'] as String))) {
+        return;
+      }
+      open['resumedAt'] = progressAt;
+    } else {
+      if (seconds < stallAfter.inSeconds) return;
+      stalls.add({
+        'index': stalls.length,
+        'at': now.toIso8601String(),
+        'secondsWithoutProgress': seconds,
+        'completedBytes': task.completed,
+        'totalBytes': task.total > 0 ? task.total : null,
+        'connectedPeers': health!['connectedPeers'],
+        'seenPeers': health['seenPeers'],
+        'deadPeers': health['deadPeers'],
+      });
+    }
+    await context.report(checkpoint: {...context.job.checkpoint, 'stalls': stalls});
   }
 
   Future<void> _finishCancelled(JobContext context, DownloadBackend backend,

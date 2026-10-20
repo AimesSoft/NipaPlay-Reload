@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart' show Material, MaterialApp;
-import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:nipaplay/next/ui/cards/card_views.dart';
 import 'package:nipaplay/next/ui_data/ui_data.dart';

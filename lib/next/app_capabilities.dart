@@ -4,6 +4,7 @@ import 'media/media_service.dart';
 import 'danmaku/service.dart';
 import 'settings/registry.dart';
 import 'mesh/runtime.dart';
+import '../security/built_in_credentials.dart';
 import '../security/credential_vault.dart';
 import 'capabilities/family_descriptions.dart';
 
@@ -27,7 +28,7 @@ final class AppCapabilities implements Capability {
   final bool Function()? subtitleProbeReady;
   Future<(bool, String?)> _credentialState(CredentialRef ref) async {
     try {
-      final secret = await vault.read(ref);
+      final secret = await vault.read(ref) ?? BuiltInCredentials.of(ref);
       return secret != null && secret.isNotEmpty
           ? (true, null)
           : (false, 'Host vault credential is missing.');

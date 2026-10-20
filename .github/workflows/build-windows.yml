@@ -2,6 +2,10 @@ name: Build Windows
 
 on:
   workflow_call:
+    secrets:
+      NIPAPLAY_TMDB_TOKEN:
+        description: 'TMDB credential NipaPlay ships with'
+        required: false
     outputs:
       version:
         description: '应用版本号'
@@ -46,6 +50,8 @@ jobs:
       
       - name: Build Windows Package
         uses: ./.github/actions/build-windows
+        env:
+          NIPAPLAY_TMDB_TOKEN: ${{ secrets.NIPAPLAY_TMDB_TOKEN }}
         with:
           app-version: ${{ steps.setup.outputs.version }}
       

@@ -7,6 +7,7 @@ import 'package:http/http.dart' as http;
 import 'package:nipa_harness/nipa_harness.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
+import '../../security/built_in_credentials.dart';
 import '../media/identity_store.dart';
 import '../events/signals.dart';
 import '../media/media_service.dart';
@@ -104,7 +105,8 @@ final class ArtworkCache {
         ? Map<String, Object?>.from(fields['artworkUrls'] as Map)
         : <String, Object?>{};
     if (tmdb != null &&
-        await vault.read(const CredentialRef('metadata', 'tmdb')) != null) {
+        (await vault.read(const CredentialRef('metadata', 'tmdb')) != null ||
+            BuiltInCredentials.hasTmdb)) {
       final provider = media.providers['tmdb']! as TmdbMetadataProvider;
       final type = tmdb['object_type'] as String;
       final path = type == 'episode' || type == 'season'

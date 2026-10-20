@@ -101,6 +101,24 @@ extension DownloadReturns on Followups {
                 }
               }
             },
+        // A stall that already passed, or a download that ended, has
+        // nothing left to say about it.
+        if (!job.state.isTerminal)
+          for (final stall
+              in (job.checkpoint['stalls'] as List? ?? []).cast<Map>())
+            if (stall['resumedAt'] == null &&
+                !covered.contains('stalled:${job.jobId}:${stall['index']}'))
+              {
+                'event': 'download.stalled',
+                'objectId': 'stalled:${job.jobId}:${stall['index']}',
+                'occurredAt': stall['at'],
+                'data': {
+                  'jobId': job.jobId,
+                  'infoHash': job.input['infoHash'],
+                  'title': job.title,
+                  ...Map<String, Object?>.from(stall)..remove('index'),
+                }
+              },
         // A download someone cancelled is news to no one: whoever cancelled
         // it knows. Files that finished before still arrive above.
         if (job.state.isTerminal &&
@@ -129,7 +147,7 @@ extension DownloadReturns on Followups {
             'state': 'ready',
             'title': '下载事实：${job.title}',
             'instruction':
-                '由此会话发起的下载有新事实。以下是完成时的校验、入库与播放事实；作品和剧集未知时保留未知。下一步由你决定。',
+                '由此会话发起的下载有新事实：完成时的校验、入库与播放，或很久没有进展。作品和剧集未知时保留未知。下一步由你决定。',
             'condition': {'downloadJobId': job.jobId},
             'downloadObjects': <Object?>[],
             'deliverAfter': due.toIso8601String(),
@@ -157,7 +175,10 @@ extension DownloadReturns on Followups {
               ? 'terminal:${fact['objectId']}'
               : fact['objectId']));
       ((row['trigger'] as Map)['facts'] as List).addAll(facts);
-      if (job.state.isTerminal) row['deliverAfter'] = now.toIso8601String();
+      if (job.state.isTerminal ||
+          facts.any((fact) => fact['event'] == 'download.stalled')) {
+        row['deliverAfter'] = now.toIso8601String();
+      }
       final safe = redactHarnessJson(row) as JsonMap;
       if (pending == null) {
         await database.transaction((tx) async {

@@ -173,6 +173,62 @@ void main() {
     await engine.cancel(job.jobId);
   });
 
+  test('a stretch without progress is recorded once and closes on a new byte',
+      () async {
+    Future<List<Map>> stallsOnce(String jobId, bool Function(List<Map>) done) async {
+      final deadline = DateTime.now().add(const Duration(seconds: 3));
+      while (true) {
+        final job = await engine.get(jobId);
+        final stalls = (job.checkpoint['stalls'] as List? ?? []).cast<Map>();
+        if (done(stalls)) return stalls;
+        expect(DateTime.now().isBefore(deadline), true,
+            reason: jsonEncode(job.toJson()));
+        await Future<void>.delayed(const Duration(milliseconds: 10));
+      }
+    }
+
+    backend.present = true;
+    final before = DateTime.now().toUtc().subtract(const Duration(hours: 1));
+    backend.health = {
+      'secondsWithoutProgress': 120,
+      'lastProgressAt': null,
+      'connectedPeers': 0,
+      'seenPeers': 12,
+      'deadPeers': 12
+    };
+    final job = await downloads.add(testRequest);
+    await Future<void>.delayed(const Duration(milliseconds: 60));
+    expect((await engine.get(job.jobId)).checkpoint['stalls'], isNull);
+    backend.health = {...backend.health!, 'secondsWithoutProgress': 360};
+    var stalls = await stallsOnce(job.jobId, (s) => s.isNotEmpty);
+    await Future<void>.delayed(const Duration(milliseconds: 60));
+    stalls = await stallsOnce(job.jobId, (s) => true);
+    expect(stalls, hasLength(1));
+    expect(stalls.single['index'], 0);
+    expect(stalls.single['seenPeers'], 12);
+    expect(stalls.single['connectedPeers'], 0);
+    expect(stalls.single['resumedAt'], isNull);
+    // A restart resets the counter without a byte: still the same stall.
+    backend.health = {...backend.health!, 'secondsWithoutProgress': 5};
+    await Future<void>.delayed(const Duration(milliseconds: 60));
+    expect((await stallsOnce(job.jobId, (s) => true)).single['resumedAt'],
+        isNull);
+    final moved = DateTime.now().toUtc().add(const Duration(seconds: 1));
+    backend.health = {
+      ...backend.health!,
+      'secondsWithoutProgress': 0,
+      'lastProgressAt': moved.toIso8601String()
+    };
+    stalls = await stallsOnce(
+        job.jobId, (s) => s.isNotEmpty && s.last['resumedAt'] != null);
+    expect(stalls.single['resumedAt'], moved.toIso8601String());
+    backend.health = {...backend.health!, 'secondsWithoutProgress': 400};
+    stalls = await stallsOnce(job.jobId, (s) => s.length == 2);
+    expect(stalls.last['index'], 1);
+    expect(before.isBefore(DateTime.parse(stalls.last['at'] as String)), true);
+    await engine.cancel(job.jobId);
+  });
+
   test('readding a removed success creates a new job and preserves its receipt',
       () async {
     backend.present = true;

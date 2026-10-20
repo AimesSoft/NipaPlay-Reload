@@ -430,6 +430,13 @@ runs:
         if ($env:NIPAPLAY_VERBOSE_WINDOWS_BUILD -ne "0") {
           $flutterArgs += "--verbose"
         }
+        # Built-in credentials go through a file so no log line carries them.
+        if ($env:NIPAPLAY_TMDB_TOKEN) {
+          $definesPath = Join-Path $env:RUNNER_TEMP "nipaplay-defines.json"
+          @{ NIPAPLAY_TMDB_TOKEN = $env:NIPAPLAY_TMDB_TOKEN } | ConvertTo-Json -Compress |
+            Set-Content -Path $definesPath -Encoding utf8NoBOM
+          $flutterArgs += "--dart-define-from-file=$definesPath"
+        }
         Write-Host "Running: flutter $($flutterArgs -join ' ')"
         & flutter @flutterArgs
         $flutterExitCode = $LASTEXITCODE

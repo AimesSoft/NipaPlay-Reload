@@ -119,14 +119,6 @@ class NextShellController extends ChangeNotifier {
     openChat();
   }
 
-  /// Overall progress of background work, 0..1.
-  double get totalProgress {
-    final active = activeTasks;
-    if (active.isEmpty) return 0;
-    final sum = active.fold<double>(0, (a, t) => a + (t.progress ?? 0));
-    return sum / active.length;
-  }
-
   void go(NextSection target) {
     navigatorKey.currentState?.popUntil((route) => route.isFirst);
     popover = NextPopover.none;

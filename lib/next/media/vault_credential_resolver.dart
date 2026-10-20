@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 import 'metadata_provider.dart';
 import 'package:nipa_harness/nipa_harness.dart';
+import 'package:nipaplay/security/built_in_credentials.dart';
 import 'package:nipaplay/security/credential_store.dart';
 import 'package:nipaplay/security/credential_file_migration.dart';
 import 'package:nipaplay/security/secret_redactor.dart';
@@ -25,6 +26,7 @@ final class VaultCredentialResolver implements CredentialResolver {
       if (values[ref.key] is String) secret = values[ref.key] as String;
     }
     secret ??= await store.vault.read(ref);
+    if (secret == null || secret.isEmpty) secret = BuiltInCredentials.of(ref);
     if (secret == null || secret.isEmpty) {
       throw Failure(FailureCode.unavailable, '$ref is not configured.');
     }

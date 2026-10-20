@@ -3,6 +3,10 @@ name: Build Linux
 on:
   workflow_dispatch:
   workflow_call:
+    secrets:
+      NIPAPLAY_TMDB_TOKEN:
+        description: 'TMDB credential NipaPlay ships with'
+        required: false
     outputs:
       version:
         description: '应用版本号'
@@ -48,6 +52,8 @@ jobs:
       
       - name: Build Linux Packages
         uses: ./.github/actions/build-linux
+        env:
+          NIPAPLAY_TMDB_TOKEN: ${{ secrets.NIPAPLAY_TMDB_TOKEN }}
         with:
           app-version: ${{ steps.setup.outputs.version }}
           arch: amd64
@@ -102,6 +108,8 @@ jobs:
       
       - name: Build Linux Packages
         uses: ./.github/actions/build-linux
+        env:
+          NIPAPLAY_TMDB_TOKEN: ${{ secrets.NIPAPLAY_TMDB_TOKEN }}
         with:
           app-version: ${{ steps.setup.outputs.version }}
           arch: arm64

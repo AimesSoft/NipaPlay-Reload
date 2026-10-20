@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/widgets.dart';
 
+import '../../../security/built_in_credentials.dart';
 import '../../ui_data/host_settings.dart';
 import '../data/gui_calls.dart' show callFailure;
 import 'controls.dart';
@@ -100,7 +101,11 @@ class _HostKeyRowState extends State<HostKeyRow> {
                 value: '',
                 obscure: true,
                 width: 220,
-                hint: set ? '已设置' : null,
+                hint: set
+                    ? '已设置'
+                    : widget.which == HostKey.tmdb && BuiltInCredentials.hasTmdb
+                        ? '使用自带的'
+                        : null,
                 onCommit: (v) {
                   if (v.trim().isNotEmpty) _set(v.trim());
                 },

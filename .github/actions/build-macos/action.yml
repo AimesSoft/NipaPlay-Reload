@@ -201,6 +201,11 @@ runs:
           if [ "$ENABLE_CODE_SIGNING" = "true" ]; then
             flutter_args+=(--dart-define=APPLE_TEAM_ID=$APPLE_TEAM_ID)
           fi
+          # Built-in credentials go through a file so no log line carries them.
+          if [ -n "${NIPAPLAY_TMDB_TOKEN:-}" ]; then
+            python3 -c 'import json, os, sys; json.dump({"NIPAPLAY_TMDB_TOKEN": os.environ["NIPAPLAY_TMDB_TOKEN"]}, open(sys.argv[1], "w"))' "$RUNNER_TEMP/nipaplay-defines.json"
+            flutter_args+=("--dart-define-from-file=$RUNNER_TEMP/nipaplay-defines.json")
+          fi
 
           "${flutter_args[@]}"
 

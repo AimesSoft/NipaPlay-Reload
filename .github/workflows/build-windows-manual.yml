@@ -30,6 +30,8 @@ jobs:
       - name: Build Windows Package
         id: build
         uses: ./.github/actions/build-windows
+        env:
+          NIPAPLAY_TMDB_TOKEN: ${{ secrets.NIPAPLAY_TMDB_TOKEN }}
         with:
           app-version: ${{ steps.setup.outputs.version }}
 
