@@ -19,7 +19,9 @@ final class NextHistory {
     });
     return UiHistoryPage(
       entries: [
-        for (final row in (r['rows'] as List).cast<Map>()) UiHistoryEntry.from(row)
+        // Classic records a file when it scans it; that is not watching.
+        for (final row in (r['rows'] as List).cast<Map>())
+          if (row['played'] != false) UiHistoryEntry.from(row)
       ],
       cursor: r['nextCursor'] as String?,
     );

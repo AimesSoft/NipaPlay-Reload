@@ -88,6 +88,8 @@ final _historyFields = ObjectSchema({
   'title': _text('Recorded Classic series title.'),
   'episodeTitle': _text('Recorded episode title.'),
   ..._progressFields.properties,
+  'played': _bool('false: recorded when the file was scanned or added and '
+      'never played; its lastWatchedAt is when that happened.'),
 });
 final _receiptDetails = ObjectSchema({
   'command': _text('Executed program command, redacted.'),
@@ -293,7 +295,9 @@ List<StateView> publicStateViews(
       'episodeId': row['episodeId'],
       'title': row['animeName'],
       'episodeTitle': row['episodeTitle'],
-      ...progress(row)
+      ...progress(row),
+      'played': ((row['lastPosition'] as num?) ?? 0) > 0 ||
+          ((row['duration'] as num?) ?? 0) > 0
     };
   }
 
@@ -526,7 +530,7 @@ List<StateView> publicStateViews(
       StateView(
           name: name,
           description:
-              'Classic in-memory history. Returns unavailable before a history supplier is attached. No database migration or refresh.',
+              'Classic in-memory history. Classic records a file when it scans or adds it, so a row with played=false is a file nobody has played yet. Returns unavailable before a history supplier is attached. No database migration or refresh.',
           fields: _historyFields,
           cursorKey: 'entryId',
           cursorOrder: const [{'field': 'lastWatchedAt', 'direction': 'desc'}],

@@ -207,6 +207,19 @@ void main() {
       expect(
           (await call(api, 'state.query', {'view': 'history.entries'}))['rows'],
           hasLength(2));
+      // A file Classic only scanned is recorded too, as never played.
+      history.add({
+        'filePath': '${root.path}/episode3.mkv',
+        'animeName': '长安十二时辰',
+        'lastPosition': 0,
+        'duration': 0,
+        'watchProgress': 0.0,
+        'lastWatchTime': '2026-10-11T02:00:00Z'
+      });
+      final rows = ((await call(api, 'state.query',
+              {'view': 'history.entries'}))['rows'] as List)
+          .cast<Map>();
+      expect(rows.map((r) => r['played']), unorderedEquals([true, true, false]));
     });
 
     test(
