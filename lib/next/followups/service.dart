@@ -68,6 +68,10 @@ final class Followups {
   /// How turns actually ended, as the host reported them live: a thread
   /// read back from history can show a turn the provider failed as completed.
   final _ended = <String, Map>{};
+
+  /// When each conversation last read a download (`jobId|threadId`): what
+  /// happened before that it already knows.
+  final _downloadReads = <String, DateTime>{};
   Timer? _timer;
   Future<void> _operations = Future.value();
 

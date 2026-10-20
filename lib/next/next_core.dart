@@ -272,6 +272,7 @@ final class NextCore {
     desktopSystem = DesktopSystem(media.service, root, hooks);
     diagnostics = SystemDiagnostics(database, media.service, storage, automatic, settings);
     downloads.downloads.returnTarget = followups.downloadReturnTarget;
+    downloads.downloads.onRead = followups.noteDownloadRead;
     media.attach(engine);
     mediaSources.engine = engine;
     accounts.attach(engine);

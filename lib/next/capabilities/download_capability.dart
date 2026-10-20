@@ -341,7 +341,9 @@ final class _DownloadAction extends Action<_DownloadJson, _DownloadJson> {
       return downloads.declareFiles(target, json['fileBindings'],
           origin: invocation.origin);
     } else if (operation == 'read') {
-      return downloads.read(target);
+      final read = await downloads.read(target);
+      await downloads.onRead?.call(target, invocation);
+      return read;
     } else if (operation == 'import') {
       return downloads.importCompleted(target);
     } else if (operation == 'select_files') {

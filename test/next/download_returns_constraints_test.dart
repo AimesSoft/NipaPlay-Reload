@@ -304,6 +304,44 @@ void main() {
     expect(facts.single['data']['receipt']['verification'], 'unverified');
   });
 
+  test('what the conversation read for itself is not sent back to it',
+      () async {
+    final helper = await engine.submit(
+        type: 'agent.helper',
+        title: '下载帮手',
+        input: {
+          'parentThreadId': 'original',
+          'threadId': 'native-child',
+          'repository': root.path
+        });
+    final job = await submit();
+    final context = await executor.entered.future;
+    await context.report(checkpoint: {
+      'completedFiles': [file(job, 0)]
+    });
+    await followups.sweep();
+    // The conversation was busy; meanwhile it read the download itself.
+    await Future<void>.delayed(const Duration(milliseconds: 5));
+    await followups.noteDownloadRead(job.jobId,
+        Invocation(origin: 'harness_cli:helper:${helper.jobId}'));
+    await followups.sweep();
+    var automatic = (await followups.list())
+        .where((r) => r['automatic'] == 'download')
+        .single;
+    expect(automatic['state'], 'cancelled');
+    // A file that finishes after the read is news again.
+    await Future<void>.delayed(const Duration(milliseconds: 5));
+    await context.report(checkpoint: {
+      'completedFiles': [file(job, 0), file(job, 1)]
+    });
+    await followups.sweep();
+    automatic = (await followups.list())
+        .where((r) => r['automatic'] == 'download' && r['state'] != 'cancelled')
+        .single;
+    expect(((automatic['trigger'] as Map)['facts'] as List)
+        .map((f) => (f as Map)['objectId']), ['${job.jobId}:1']);
+  });
+
   test('helper provenance returns to its recorded parent', () async {
     final helper = await engine.submit(
         type: 'agent.helper',

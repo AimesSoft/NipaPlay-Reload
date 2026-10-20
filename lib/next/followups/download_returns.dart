@@ -33,6 +33,14 @@ extension DownloadReturns on Followups {
     };
   }
 
+  /// The conversation behind [invocation] read [jobId]: facts that came
+  /// before are not news to it.
+  Future<void> noteDownloadRead(String jobId, Invocation invocation) async {
+    final target = await downloadReturnTarget(invocation);
+    if (target == null) return;
+    _downloadReads['$jobId|${target['threadId']}'] = DateTime.now().toUtc();
+  }
+
   bool _manualCovers(JsonMap row, JsonMap fact, JsonMap target) {
     if (row['automatic'] != null && row['automatic'] != 'subscription' ||
         row['state'] == 'cancelled' ||
@@ -267,6 +275,14 @@ extension DownloadReturns on Followups {
     // The followup that takes the download's end looks at the whole
     // download; files still waiting in this batch are no news after it.
     if (endOwned) remaining = [];
+    // Neither is what the conversation read for itself after it happened.
+    final read = _downloadReads['${trigger['jobId']}|${row['threadId']}'];
+    if (read != null) {
+      remaining = [
+        for (final fact in remaining)
+          if (DateTime.parse(fact['occurredAt'] as String).isAfter(read)) fact
+      ];
+    }
     if (remaining.length == facts.length) return;
     trigger['facts'] = remaining;
     await _save(row, remaining.isEmpty ? 'cancelled' : 'ready', 'deduplicated',
