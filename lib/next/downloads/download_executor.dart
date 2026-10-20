@@ -436,13 +436,23 @@ final class DownloadExecutor implements JobExecutor {
           FailureCode.conflict, 'Download backend did not stop the torrent.');
     }
     await _verify(backend, task, files, requireComplete: false);
+    // A file's size says nothing here: the engine allocates every file at
+    // full size up front. Only files it verified are looked up, since a
+    // lookup registers the path.
+    final verified = {
+      for (final f in context.job.checkpoint['completedFiles'] as List? ?? [])
+        (f as Map)['path']
+    };
     for (final row in files) {
       row['retained'] = row['actualSize'] != null;
       final file =
           task.files.singleWhere((f) => f.location.path == row['path']);
-      final media = file.included && file.isVideo && file.location.isLocal
-          ? await library.lookup(file.location.path)
-          : null;
+      final complete = task.finished || verified.contains(file.location.path);
+      row['complete'] = complete;
+      final media =
+          complete && file.included && file.isVideo && file.location.isLocal
+              ? await library.lookup(file.location.path)
+              : null;
       row['imported'] = media != null;
       if (media != null) {
         row['media'] = media;

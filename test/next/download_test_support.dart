@@ -179,8 +179,12 @@ final class FakeDownloadLibrary implements DownloadLibrary {
   bool get isBusy => busy;
   @override
   Future<bool> wasImported(String key) async => importedKeys.contains(key);
+  final lookups = <String>[];
   @override
-  Future<JsonMap?> lookup(String path) async => media[path];
+  Future<JsonMap?> lookup(String path) async {
+    lookups.add(path);
+    return media[path];
+  }
   @override
   Future<bool> importFiles(List<String> paths, String outputDirectory) async {
     scans.add(List.of(paths));

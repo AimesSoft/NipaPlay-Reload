@@ -1047,6 +1047,24 @@ void main() {
         containsPair('reason', 'previous_import_record_missing'));
   });
 
+  test('cancelling leaves files the engine never verified out of the library',
+      () async {
+    final job = await add();
+    await phase(job.jobId, 'downloading');
+    // The engine allocates every file at full size before any byte arrives.
+    await File(backend.video.location.path)
+        .writeAsBytes(List.filled(backend.total, 0));
+    library.media[backend.video.location.path] = {'fileId': 'would-register'};
+    await downloads.remove(job.jobId);
+    final removed = await untilState(engine, job.jobId, JobState.cancelled);
+    final file = (removed.receipt!.details['files'] as List).single as Map;
+    expect(file['actualSize'], backend.total);
+    expect(file['complete'], isFalse);
+    expect(file['imported'], isFalse);
+    expect(file['reason'], 'cancelled_incomplete');
+    expect(library.lookups, isNot(contains(backend.video.location.path)));
+  });
+
   test('remove keeps downloaded files while delete removes only its own files',
       () async {
     final job = await add();
