@@ -39,13 +39,13 @@ void main() {
   late List<String> paths;
   var calls = 0;
 
-  void connect() {
+  void connect({Duration poll = const Duration(milliseconds: 10)}) {
     final backends = DownloadBackends([backend]);
     executor = DownloadExecutor(
         backends: backends,
         library: library,
         isEnabled: () async => true,
-        pollInterval: const Duration(milliseconds: 10));
+        pollInterval: poll);
     engine = TaskEngine(
         store: store, ownerDeviceId: 'device-test', executors: [executor]);
     executor.engine = engine;
@@ -176,6 +176,24 @@ void main() {
     expect(library.bindCalls.single['requestId'],
         matches(RegExp('^download:${job.jobId}:file:0:[0-9a-f]{24}\$')));
     expect(row(bound, 1), isNull);
+  });
+
+  test('a file that completes right after a declaration is bound by it',
+      () async {
+    // Long polls: the declaration and the completion both land while the
+    // worker waits, so its next pass is the first to see either.
+    await engine.close();
+    connect(poll: const Duration(milliseconds: 400));
+    await engine.start();
+    setFiles([false, false]);
+    final job = await running();
+    await Future<void>.delayed(const Duration(milliseconds: 50));
+    setFiles([true, false]);
+    final result = await declareFiles(job.jobId, [declare(0, '101')]);
+    expect(results(result).single['status'], 'declared');
+    final bound = await until(job.jobId, (j) => status(j, 0) != null);
+    expect(status(bound, 0), 'bound');
+    expect(library.bindCalls, hasLength(1));
   });
 
   test('a file already completed is bound at once and the outcome is returned',
