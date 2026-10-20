@@ -92,6 +92,8 @@ import '../settings/settings_page.dart';
 /// - `transcript` `to=top|bottom|<px>`: scroll the conversation.
 /// - `stall`: the running scripted turn has been silent for three minutes;
 ///   `quiet` `do=wait|resend` presses “再等等” / “重新发”.
+/// - `type` `index=` `text=` [`submit=1`]: fills a field of the frontmost
+///   page, then presses Return in it
 /// - `login` `do=fake|open|cancel` [`platform=`]: a scripted login card
 ///   (fake opens NipaPlay's real login window on demand, no account), press
 ///   the first card's button, or cancel the scripted one.
@@ -466,6 +468,32 @@ abstract final class NextUiDebug {
             list: int.tryParse(p['list'] ?? ''));
         await Future<void>.delayed(const Duration(milliseconds: 400));
         return {...page.debugStatus(), ..._status(shell)};
+      case 'type':
+        // Text into the [index]th field of the frontmost page (a login
+        // window), as typing would; the text is never echoed back.
+        await _settle();
+        final fields = <EditableTextState>[];
+        void visit(Element e) {
+          if (e is StatefulElement && e.state is EditableTextState) {
+            final state = e.state as EditableTextState;
+            if (ModalRoute.of(state.context)?.isCurrent ?? true) {
+              fields.add(state);
+            }
+          }
+          e.visitChildren(visit);
+        }
+        WidgetsBinding.instance.rootElement?.visitChildren(visit);
+        final index = int.parse(p['index'] ?? '0');
+        if (index >= fields.length) {
+          throw StateError('${fields.length} fields on the front page');
+        }
+        final text = p['text'] ?? '';
+        fields[index].widget.controller.value = TextEditingValue(
+            text: text, selection: TextSelection.collapsed(offset: text.length));
+        // Return, as the field handles it.
+        if (p['submit'] == '1') fields[index].widget.onSubmitted?.call(text);
+        await _settle();
+        return {'fields': fields.length, ..._status(shell)};
       case 'press':
         await _settle();
         final label = p['label'] ?? '';
