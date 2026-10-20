@@ -4,11 +4,20 @@ import '../media/identity_store.dart' show stableMediaId, newMediaId;
 import 'package:nipa_harness/nipa_harness.dart';
 
 import '../media_sources/login_dialog.dart';
+import '../ui/theme/tokens.dart';
+import '../ui/widgets/dialog.dart';
 
+/// Asks the person at NipaPlay; true only when they press [accept]. Closing
+/// the window, or [stopped], is a no. [destructive] answers cannot be
+/// undone: under Next their button is crimson rather than plain.
 Future<bool> showUserConsent(String title, String message, String accept,
-        {Future<void>? stopped}) async =>
+        {Future<void>? stopped, bool destructive = false}) async =>
     await showNextLogin<bool>((_) => _ConsentDialog(
-        title: title, message: message, accept: accept, stopped: stopped)) ??
+        title: title,
+        message: message,
+        accept: accept,
+        stopped: stopped,
+        destructive: destructive)) ??
     false;
 
 class _ConsentDialog extends StatefulWidget {
@@ -16,9 +25,11 @@ class _ConsentDialog extends StatefulWidget {
       {required this.title,
       required this.message,
       required this.accept,
-      this.stopped});
+      this.stopped,
+      this.destructive = false});
   final String title, message, accept;
   final Future<void>? stopped;
+  final bool destructive;
   @override
   State<_ConsentDialog> createState() => _ConsentDialogState();
 }
@@ -41,15 +52,104 @@ class _ConsentDialogState extends State<_ConsentDialog> {
   }
 
   @override
-  Widget build(BuildContext context) => AlertDialog(
-        title: Text(widget.title),
-        content: Text(widget.message),
-        actions: [
-          TextButton(onPressed: () => answer(false), child: const Text('取消')),
-          FilledButton(
-              onPressed: () => answer(true), child: Text(widget.accept)),
+  Widget build(BuildContext context) => NextDialogRoute.of(context)
+      ? NextDialog(
+          title: widget.title,
+          width: 440,
+          autofocus: true,
+          onCancel: () => answer(false),
+          body: [_ConsentWords(widget.message)],
+          actions: [
+            NextDialogButton(label: '取消', onTap: () => answer(false)),
+            NextDialogButton(
+                label: widget.accept,
+                kind: widget.destructive
+                    ? NextDialogButtonKind.danger
+                    : NextDialogButtonKind.plain,
+                onTap: () => answer(true)),
+          ],
+        )
+      : AlertDialog(
+          title: Text(widget.title),
+          content: Text(widget.message),
+          actions: [
+            TextButton(
+                onPressed: () => answer(false), child: const Text('取消')),
+            FilledButton(
+                onPressed: () => answer(true), child: Text(widget.accept)),
+          ],
+        );
+}
+
+/// A question's words under Next: its sentences, and the lines that list
+/// things (“· name”) set apart in a quiet well, one per row. What follows
+/// the list (how much in all) reads quieter.
+class _ConsentWords extends StatelessWidget {
+  const _ConsentWords(this.message);
+  final String message;
+
+  static final _more = RegExp(r'^还有 \d+ 个');
+
+  @override
+  Widget build(BuildContext context) {
+    final blocks = <Widget>[];
+    final items = <String>[];
+    var listed = false;
+    void flush() {
+      if (items.isEmpty) return;
+      blocks.add(Container(
+        padding: const EdgeInsets.fromLTRB(14, 10, 14, 10),
+        decoration: BoxDecoration(
+          color: const Color(0x0AFFFFFF),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: NextColors.line),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            for (final item in items)
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 3),
+                child: Text(item,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: _more.hasMatch(item)
+                        ? NextText.sans(12.5,
+                            color: NextColors.p3, height: 1.45)
+                        : NextText.sans(13,
+                            color: NextColors.paper, height: 1.45)),
+              ),
+          ],
+        ),
+      ));
+      items.clear();
+      listed = true;
+    }
+
+    for (final line in message.split('\n')) {
+      final text = line.trim();
+      if (text.isEmpty) continue;
+      if (text.startsWith('·')) {
+        items.add(text.substring(1).trim());
+        continue;
+      }
+      flush();
+      blocks.add(Text(text,
+          style: listed
+              ? NextText.sans(12.5, color: NextColors.p3, height: 1.5)
+              : NextText.sans(14, color: NextColors.p2, height: 1.6)));
+    }
+    flush();
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        for (final (i, b) in blocks.indexed) ...[
+          if (i > 0) const SizedBox(height: 10),
+          b,
         ],
-      );
+      ],
+    );
+  }
 }
 
 /// Only this application-owned executor holds the underlying deletion actions.
@@ -57,8 +157,9 @@ class _ConsentDialogState extends State<_ConsentDialog> {
 final class DiskDeletion implements JobExecutor {
   DiskDeletion({Future<bool> Function(String, String, Future<void>)? prompt})
       : prompt = prompt ??
-            ((title, message, stopped) =>
-                showUserConsent(title, message, '删除', stopped: stopped));
+            ((title, message, stopped) => showUserConsent(
+                title, message, '删除',
+                stopped: stopped, destructive: true));
   final Future<bool> Function(String, String, Future<void>) prompt;
   late TaskEngine engine;
   late Harness _execution;

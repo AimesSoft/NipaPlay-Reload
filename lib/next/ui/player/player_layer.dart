@@ -8,7 +8,7 @@ import 'package:nipaplay/utils/video_player_state.dart';
 import 'package:provider/provider.dart';
 import 'package:window_manager/window_manager.dart';
 
-import '../../ui_data/ui_data.dart' show NextNowPlaying;
+import '../../ui_data/ui_data.dart' show NextNowPlaying, UiNowPlaying;
 import '../shell/nipa_setup.dart';
 import '../shell/shell_controller.dart';
 import '../shell/window_chrome.dart';
@@ -247,7 +247,9 @@ class _NextPlayerLayerState extends State<NextPlayerLayer> {
                         _Menu.subtitles => SubtitleMenu(
                             playback: playback, onDone: _closeMenu),
                         _Menu.episodes => EpisodeMenu(
-                            playback: playback, onDone: _closeMenu),
+                            playback: playback,
+                            shell: shell,
+                            onDone: _closeMenu),
                       },
                     ),
                   ),
@@ -375,7 +377,7 @@ class _Titles extends StatefulWidget {
 
 class _TitlesState extends State<_Titles> {
   String? _path;
-  Future<({String work, String? episode})?>? _known;
+  Future<UiNowPlaying?>? _known;
 
   @override
   Widget build(BuildContext context) =>

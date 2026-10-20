@@ -24,6 +24,7 @@ import 'package:nipaplay/next/ui/shell/next_shell.dart';
 import 'package:nipaplay/next/ui/shell/shell_controller.dart';
 import 'package:nipaplay/next/ui/widgets/buttons.dart';
 import 'package:nipaplay/next/ui/widgets/nipa_avatar.dart';
+import 'package:nipaplay/next/ui_data/ui_data.dart';
 import 'package:nipaplay/services/intro_skip/skip_segment.dart';
 import 'package:nipaplay/utils/video_player_state.dart';
 
@@ -70,10 +71,45 @@ List<Map<String, dynamic>> _danmaku() {
   ];
 }
 
+/// The fake world, knowing a playing file as Frieren's fifth episode.
+final class _Knows implements NextUiData, NextNowPlaying {
+  _Knows(this.world);
+  final FakeWorld world;
+
+  @override
+  Future<UiNowPlaying?> nowPlaying(String path) async {
+    final fifth = (await world.episodes('frieren'))
+        .where((e) => e.number == 5)
+        .firstOrNull;
+    return UiNowPlaying(
+        workId: 'frieren',
+        work: '葬送的芙莉莲',
+        episodeId: fifth?.episodeId,
+        episode: '第 5 集 ${fifth?.title ?? ''}'.trim());
+  }
+
+  @override
+  Future<UiHome> home() => world.home();
+  @override
+  Future<UiWork?> work(String workId) => world.work(workId);
+  @override
+  Future<List<UiEpisode>> episodes(String workId, {int? season}) =>
+      world.episodes(workId, season: season);
+  @override
+  Future<List<UiWork>> library() => world.library();
+  @override
+  Future<List<UiCard>> cards({required String threadId, String? turnId}) =>
+      world.cards(threadId: threadId, turnId: turnId);
+  @override
+  Stream<List<UiTask>> tasks() => world.tasks();
+  @override
+  Stream<void> get changes => world.changes;
+}
+
 NextUiServices _world() {
   final world = FakeWorld.load(_samples, tasks: false)!;
   return NextUiServices(
-    data: world,
+    data: _Knows(world),
     actions: world,
     chat: FakeChatPort(world),
     discover: world,
@@ -208,6 +244,28 @@ void main() {
     await open(tester);
     await tester.tap(button('剧集'));
     await shot(tester, '3-episodes');
+    await close(tester);
+  }, skip: !shoot);
+
+  testWidgets('episodes of a work the library knows', (tester) async {
+    final rig = await open(tester);
+    rig.state.currentVideoPath = '/v/Frieren - 05.mkv';
+    rig.state.notify();
+    await tester.pump();
+    // The stills, read and decoded for real, at the size the menu decodes
+    // them (112 wide at 2x, rounded up to 128 pixels).
+    final context = tester.element(find.byType(PlayerTimeline));
+    await tester.runAsync(() async {
+      for (var n = 1; n <= 12; n++) {
+        final file = File('$_samples/frieren-ep$n.jpg');
+        if (!file.existsSync()) continue;
+        await precacheImage(
+            ResizeImage(FileImage(file), width: 256), context);
+      }
+    });
+    await tester.tap(button('剧集'));
+    await tester.pump();
+    await shot(tester, '3b-episodes-library');
     await close(tester);
   }, skip: !shoot);
 

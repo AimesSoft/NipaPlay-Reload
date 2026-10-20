@@ -4,13 +4,18 @@ import 'package:flutter/gestures.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:nipaplay/next/ui/detail/episodes.dart' show HeatPainter;
 import 'package:nipaplay/next/ui/panel/chat_panel.dart';
 import 'package:nipaplay/next/ui/player/player_layer.dart';
+import 'package:nipaplay/next/ui/player/player_menus.dart';
 import 'package:nipaplay/next/ui/player/timeline.dart';
 import 'package:nipaplay/next/ui/shell/next_shell.dart';
 import 'package:nipaplay/next/ui/shell/shell_controller.dart';
 import 'package:nipaplay/next/ui/shell/top_bar.dart';
+import 'package:nipaplay/next/ui/widgets/artwork.dart';
 import 'package:nipaplay/next/ui/widgets/buttons.dart';
+import 'package:nipaplay/next/ui/widgets/progress.dart';
+import 'package:nipaplay/next/ui_data/ui_data.dart';
 import 'package:nipaplay/pages/play_video_page.dart';
 import 'package:nipaplay/services/intro_skip/skip_segment.dart';
 import 'package:nipaplay/utils/globals.dart' as globals;
@@ -110,9 +115,12 @@ void main() {
 
   testWidgets('a file the library knows shows its work and episode',
       (tester) async {
-    playerTestLibrary['/v/[Group] Show [01][1080p].mkv'] =
-        (work: '躲在超市后门抽烟的两人', episode: '第 1 集 在超市后门吸烟的二人');
-    addTearDown(playerTestLibrary.clear);
+    playerTestLibrary['/v/[Group] Show [01][1080p].mkv'] = const UiNowPlaying(
+        workId: 'smoke',
+        work: '躲在超市后门抽烟的两人',
+        episodeId: 'smoke-1',
+        episode: '第 1 集 在超市后门吸烟的二人');
+    addTearDown(resetPlayerTestLibrary);
     final p = await pumpPlayer(tester, status: PlayerStatus.playing);
     p.state.currentVideoPath = '/v/[Group] Show [01][1080p].mkv';
     p.state.notifyListeners();
@@ -247,6 +255,119 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('简体中文'), findsNothing);
     expect(find.byType(NextPlayerLayer), findsOneWidget);
+  });
+
+  testWidgets(
+      'a work the library knows: its episodes as the detail page has them, '
+      'played as the shell plays', (tester) async {
+    addTearDown(resetPlayerTestLibrary);
+    const path = '/v/Frieren - 05.mkv';
+    const work = UiWork(workId: 'frieren', title: '葬送的芙莉莲');
+    final episodes = [
+      for (final (i, t) in const [
+        '冒险的结束',
+        '也不一定要是魔法…',
+        '杀人魔法',
+        '灵魂安眠之地',
+        '死者的幻影',
+        '村子的英雄',
+        '就像是在讲童话故事',
+      ].indexed)
+        UiEpisode(
+          episodeId: 'f${i + 1}',
+          workId: 'frieren',
+          number: i + 1,
+          season: 1,
+          title: t,
+          runtime: const Duration(minutes: 24),
+          progress: i < 4 ? 1 : (i == 5 ? 0.3 : null),
+          heat: [for (var k = 0; k < 40; k++) ((k * (i + 3)) % 11) / 10],
+          playable: i < 6,
+        ),
+      const UiEpisode(
+          episodeId: 's2e1',
+          workId: 'frieren',
+          number: 1,
+          season: 2,
+          title: '第二季的第一集',
+          playable: true),
+    ];
+    playerTestWorks['frieren'] = (work, episodes);
+    playerTestLibrary[path] = const UiNowPlaying(
+        workId: 'frieren',
+        work: '葬送的芙莉莲',
+        episodeId: 'f5',
+        episode: '第 5 集 死者的幻影');
+    final p = await pumpPlayer(tester, status: PlayerStatus.playing);
+    p.state.currentVideoPath = path;
+    p.state.notify();
+    await tester.pump();
+
+    await tester.tap(button('剧集'));
+    await tester.pumpAndSettle();
+    expect(find.text('第一季'), findsOneWidget,
+        reason: 'the season of the one playing, by name');
+    expect(find.text('第二季的第一集', skipOffstage: false), findsNothing);
+    for (final t in ['灵魂安眠之地', '死者的幻影', '村子的英雄', '就像是在讲童话故事']) {
+      expect(find.text(t), findsOneWidget, reason: t);
+    }
+    expect(find.text('冒险的结束', skipOffstage: false), findsOneWidget);
+    expect(
+        tester
+            .widget<ListView>(find.descendant(
+                of: find.byType(EpisodeMenu), matching: find.byType(ListView)))
+            .controller!
+            .offset,
+        greaterThan(0),
+        reason: 'opened at the one playing');
+    expect(find.text('第4话 灵魂安眠之地'), findsNothing,
+        reason: "not Classic's playlist");
+    expect(find.text('24 分'), findsWidgets);
+    // Stills, how far each was watched, where the danmaku gather.
+    expect(find.byType(NextImage), findsWidgets);
+    expect(find.byType(ThinBar), findsWidgets);
+    expect(
+        find.descendant(
+            of: find.byType(EpisodeMenu),
+            matching: find.byWidgetPredicate(
+                (w) => w is CustomPaint && w.painter is HeatPainter)),
+        findsWidgets);
+
+    // The one playing and one with nothing to play from take no click.
+    await tester.tap(find.text('死者的幻影'));
+    await tester.tap(find.text('就像是在讲童话故事'));
+    await tester.pump();
+    expect(playerTestPlays, isEmpty);
+
+    await tester.tap(find.text('村子的英雄'));
+    await tester.pumpAndSettle();
+    expect(playerTestPlays.single.$1.workId, 'frieren');
+    expect(playerTestPlays.single.$2!.episodeId, 'f6');
+    expect(p.playback.played, isEmpty, reason: 'not through Classic');
+    expect(find.byType(EpisodeMenu), findsNothing, reason: 'the menu closed');
+  });
+
+  testWidgets('a file only Classic knows: Classic\'s playlist',
+      (tester) async {
+    addTearDown(resetPlayerTestLibrary);
+    final p = await pumpPlayer(tester, status: PlayerStatus.playing);
+    p.state.currentVideoPath = '/v/unknown.mkv';
+    p.state.notify();
+    await tester.pump();
+    await tester.tap(button('剧集'));
+    await tester.pumpAndSettle();
+    expect(find.text('剧集'), findsOneWidget);
+    expect(find.text('第4话 灵魂安眠之地'), findsOneWidget);
+    expect(
+        find.descendant(
+            of: find.byType(EpisodeMenu),
+            matching: find.byWidgetPredicate(
+                (w) => w is CustomPaint && w.painter is HeatPainter)),
+        findsNothing);
+    await tester.tap(find.text('第6话 村子的英雄'));
+    await tester.pumpAndSettle();
+    expect(p.playback.played.single.title, '第6话 村子的英雄');
+    expect(playerTestPlays, isEmpty);
   });
 
   testWidgets('clicks on the picture are still Classic\'s video\'s',
