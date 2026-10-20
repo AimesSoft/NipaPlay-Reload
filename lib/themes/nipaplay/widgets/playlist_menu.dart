@@ -295,6 +295,12 @@ class _PlaylistMenuState extends State<PlaylistMenu> {
       if ('${connection.host}:${connection.port}' == connName) {
         return true;
       }
+      if (connection.wanHost == connName) {
+        return true;
+      }
+      if ('${connection.wanHost}:${connection.wanPort}' == connName) {
+        return true;
+      }
       return false;
     }).toList();
 

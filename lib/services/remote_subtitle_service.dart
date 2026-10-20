@@ -1544,6 +1544,9 @@ class RemoteSubtitleService {
             .getConnectionByIdOrName(stablePath.connectionName);
     if (connection == null) return const [];
 
+    final effectiveConnection = SMBService.instance.effectiveConnection(
+      connection,
+    );
     final smbPath =
         stablePath?.relativePath ?? _normalizeSmbPathFromUri(smbUri);
     if (smbPath.isEmpty || smbPath == '/') return const [];
@@ -1565,7 +1568,7 @@ class RemoteSubtitleService {
       if (!isVobSubPairCompleteInNames(entry.name, smbNames)) continue;
       candidates.add(
         SmbRemoteSubtitleCandidate(
-          connection: connection,
+          connection: effectiveConnection,
           smbPath: entry.path,
           name: entry.name,
           extension: ext,
@@ -1590,15 +1593,20 @@ class RemoteSubtitleService {
 
     WebDAVConnection? matched;
     for (final conn in WebDAVService.instance.connections) {
-      final baseUri = Uri.tryParse(conn.url.trim());
-      if (baseUri == null || baseUri.scheme.isEmpty || baseUri.host.isEmpty) {
-        continue;
+      // 内网与公网地址都参与匹配。
+      for (final base in [conn.url, conn.wanUrl]) {
+        if (base.trim().isEmpty) continue;
+        final baseUri = Uri.tryParse(base.trim());
+        if (baseUri == null || baseUri.scheme.isEmpty || baseUri.host.isEmpty) {
+          continue;
+        }
+        if (baseUri.scheme != uri.scheme) continue;
+        if (baseUri.host != uri.host) continue;
+        if (_effectivePort(baseUri) != _effectivePort(uri)) continue;
+        matched = conn;
+        break;
       }
-      if (baseUri.scheme != uri.scheme) continue;
-      if (baseUri.host != uri.host) continue;
-      if (_effectivePort(baseUri) != _effectivePort(uri)) continue;
-      matched = conn;
-      break;
+      if (matched != null) break;
     }
 
     String username = '';
@@ -1717,10 +1725,13 @@ class RemoteSubtitleService {
 
     SMBConnection? matched;
     for (final conn in SMBService.instance.connections) {
-      if (conn.host.trim().toLowerCase() != host.toLowerCase()) {
-        continue;
-      }
-      if (conn.port != port) continue;
+      final matchesLan =
+          conn.host.trim().toLowerCase() == host.toLowerCase() &&
+              conn.port == port;
+      final matchesWan =
+          conn.wanHost.trim().toLowerCase() == host.toLowerCase() &&
+              conn.wanPort == port;
+      if (!matchesLan && !matchesWan) continue;
       if (username.isNotEmpty && conn.username != username) continue;
       matched = conn;
       break;
@@ -1764,6 +1775,9 @@ class RemoteSubtitleService {
     final connection = SMBService.instance.getConnection(parsed.connName);
     if (connection == null) return const [];
 
+    final effectiveConnection = SMBService.instance.effectiveConnection(
+      connection,
+    );
     final directory = _posixDirname(parsed.smbPath);
     final entries =
         await SMBService.instance.listDirectoryAll(connection, directory);
@@ -1781,7 +1795,7 @@ class RemoteSubtitleService {
       if (!isVobSubPairCompleteInNames(entry.name, smbNames)) continue;
       candidates.add(
         SmbRemoteSubtitleCandidate(
-          connection: connection,
+          connection: effectiveConnection,
           smbPath: entry.path,
           name: entry.name,
           extension: ext,

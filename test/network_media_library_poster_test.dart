@@ -278,9 +278,19 @@ class _PosterFixture {
         ? '/Users/user/Items'
         : '/Items';
     if (path == itemsPath) {
-      expect(request.url.queryParameters['ParentId'], 'library');
-      expect(request.url.queryParameters['IncludeItemTypes'], 'Series');
-      return http.Response(jsonEncode({'Items': items}), 200);
+      final query = request.url.queryParameters;
+      expect(query['ParentId'], 'library');
+      expect(query['IncludeItemTypes'], 'Series');
+      // Page like a real Jellyfin/Emby server: honour StartIndex/Limit and
+      // report the total, so the client's paginated loader can finish.
+      final start = int.parse(query['StartIndex'] ?? '0');
+      final limit = int.parse(query['Limit'] ?? '${items.length}');
+      return http.Response(
+          jsonEncode({
+            'Items': items.skip(start).take(limit).toList(),
+            'TotalRecordCount': items.length,
+          }),
+          200);
     }
     throw StateError('Unexpected request: ${request.url}');
   }

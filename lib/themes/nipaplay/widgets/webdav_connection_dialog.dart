@@ -47,6 +47,7 @@ class _WebDAVFormState extends State<_WebDAVForm> {
   final _formKey = GlobalKey<FormState>();
   final _nameController = TextEditingController();
   final _urlController = TextEditingController();
+  final _wanUrlController = TextEditingController();
   final _usernameController = TextEditingController();
   final _passwordController = TextEditingController();
   late final String _originalPassword;
@@ -61,6 +62,7 @@ class _WebDAVFormState extends State<_WebDAVForm> {
     if (widget.editConnection != null) {
       _nameController.text = widget.editConnection!.name;
       _urlController.text = widget.editConnection!.url;
+      _wanUrlController.text = widget.editConnection!.wanUrl;
       _usernameController.text = widget.editConnection!.username;
       _passwordController.text = widget.editConnection!.password;
     } else {
@@ -73,6 +75,7 @@ class _WebDAVFormState extends State<_WebDAVForm> {
   void dispose() {
     _nameController.dispose();
     _urlController.dispose();
+    _wanUrlController.dispose();
     _usernameController.dispose();
     _passwordController.dispose();
     super.dispose();
@@ -189,26 +192,55 @@ class _WebDAVFormState extends State<_WebDAVForm> {
 
               SizedBox(height: 16),
 
-              // WebDAV URL
+              // 内网地址
               TvOSRemoteTextInputControl(
-                title: 'WebDAV地址',
+                title: '内网地址',
                 fieldId: 'url',
-                required: true,
                 child: TextFormField(
                   controller: _urlController,
                   keyboardType: TextInputType.url,
                   cursorColor: accentColor,
                   style: TextStyle(color: textColor),
                   decoration: buildDecoration(
-                    label: 'WebDAV地址',
-                    hint: 'https://your-server.com/webdav',
+                    label: '内网地址',
+                    hint: 'http://192.168.1.1:5244/dav',
                   ),
                   validator: (value) {
-                    if (value == null || value.trim().isEmpty) {
-                      return '请输入WebDAV地址';
+                    final trimmed = (value ?? '').trim();
+                    if (trimmed.isNotEmpty &&
+                        !trimmed.startsWith('http://') &&
+                        !trimmed.startsWith('https://')) {
+                      return '请输入有效的URL地址';
                     }
-                    if (!value.startsWith('http://') &&
-                        !value.startsWith('https://')) {
+                    if (_urlController.text.trim().isEmpty &&
+                        _wanUrlController.text.trim().isEmpty) {
+                      return '请至少填写内网地址或公网地址其中之一';
+                    }
+                    return null;
+                  },
+                ),
+              ),
+
+              SizedBox(height: 16),
+
+              // 公网地址
+              TvOSRemoteTextInputControl(
+                title: '公网地址',
+                fieldId: 'wanUrl',
+                child: TextFormField(
+                  controller: _wanUrlController,
+                  keyboardType: TextInputType.url,
+                  cursorColor: accentColor,
+                  style: TextStyle(color: textColor),
+                  decoration: buildDecoration(
+                    label: '公网地址',
+                    hint: 'https://your-server.com/dav',
+                  ),
+                  validator: (value) {
+                    final trimmed = (value ?? '').trim();
+                    if (trimmed.isNotEmpty &&
+                        !trimmed.startsWith('http://') &&
+                        !trimmed.startsWith('https://')) {
                       return '请输入有效的URL地址';
                     }
                     return null;
@@ -334,7 +366,10 @@ class _WebDAVFormState extends State<_WebDAVForm> {
       // 如果没有提供连接名称，自动生成用于测试
       if (connectionName.isEmpty) {
         try {
-          final uri = Uri.parse(_urlController.text.trim());
+          final lanUrl = _urlController.text.trim();
+          final primaryAddress =
+              lanUrl.isNotEmpty ? lanUrl : _wanUrlController.text.trim();
+          final uri = Uri.parse(primaryAddress);
           final username = _usernameController.text.trim();
 
           if (username.isNotEmpty) {
@@ -351,6 +386,7 @@ class _WebDAVFormState extends State<_WebDAVForm> {
         id: widget.editConnection?.id,
         name: connectionName,
         url: _urlController.text.trim(),
+        wanUrl: _wanUrlController.text.trim(),
         username: _usernameController.text.trim(),
         password: _passwordController.text.trim(),
         storedPassword: widget.editConnection?.retainPassword(
@@ -401,7 +437,10 @@ class _WebDAVFormState extends State<_WebDAVForm> {
 
       // 如果没有提供连接名称，自动生成
       if (connectionName.isEmpty) {
-        final uri = Uri.parse(_urlController.text.trim());
+        final lanUrl = _urlController.text.trim();
+        final primaryAddress =
+            lanUrl.isNotEmpty ? lanUrl : _wanUrlController.text.trim();
+        final uri = Uri.parse(primaryAddress);
         final username = _usernameController.text.trim();
 
         if (username.isNotEmpty) {
@@ -415,6 +454,7 @@ class _WebDAVFormState extends State<_WebDAVForm> {
         id: widget.editConnection?.id,
         name: connectionName,
         url: _urlController.text.trim(),
+        wanUrl: _wanUrlController.text.trim(),
         username: _usernameController.text.trim(),
         password: _passwordController.text.trim(),
         storedPassword: widget.editConnection?.retainPassword(

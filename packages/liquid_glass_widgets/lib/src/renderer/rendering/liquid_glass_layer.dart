@@ -7,6 +7,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter_shaders/flutter_shaders.dart';
 import '../liquid_glass_renderer.dart';
+import '../internal/glass_shadow_paints.dart';
 import '../internal/render_liquid_glass_geometry.dart';
 import '../internal/transform_tracking_repaint_boundary_mixin.dart';
 import '../liquid_glass_render_scope.dart';
@@ -258,6 +259,9 @@ class RenderLiquidGlassLayer extends LiquidGlassRenderObject
   ImageFilter? _cachedBlur;
   double _cachedBlurSigma = -1;
 
+  // Shadow-pass paints, rebuilt only when the shadow values change.
+  final _shadowPaints = GlassShadowPaints();
+
   final _shaderHandle = LayerHandle<BackdropFilterLayer>();
   final _blurLayerHandle = LayerHandle<BackdropFilterLayer>();
   final _clipRectLayerHandle = LayerHandle<ClipRectLayer>();
@@ -303,8 +307,10 @@ class RenderLiquidGlassLayer extends LiquidGlassRenderObject
     // ── Pass 0: SDF Shadows ──────────────────────────────────────────────────
     if (shadows.isNotEmpty && geometryImage != null) {
       final localBounds = geometryLocalBounds.shift(offset);
+      final shadowPaints = _shadowPaints.resolve(shadows);
 
-      for (final shadow in shadows) {
+      for (var i = 0; i < shadows.length; i++) {
+        final shadow = shadows[i];
         if (shadow.color.a == 0) continue;
 
         // Inflate clip rect to ensure large blurs aren't cut off
@@ -315,14 +321,6 @@ class RenderLiquidGlassLayer extends LiquidGlassRenderObject
         context.canvas.saveLayer(shadowClip, Paint());
 
         // 1. Draw the geometry matte as a blurred, tinted shadow
-        final shadowPaint = Paint()
-          ..colorFilter = ColorFilter.mode(shadow.color, BlendMode.srcIn)
-          ..imageFilter = ImageFilter.blur(
-            sigmaX: shadow.blurSigma,
-            sigmaY: shadow.blurSigma,
-            tileMode: TileMode.decal,
-          );
-
         context.canvas.drawImageRect(
           geometryImage!,
           Rect.fromLTWH(
@@ -332,7 +330,7 @@ class RenderLiquidGlassLayer extends LiquidGlassRenderObject
             geometryImage!.height.toDouble(),
           ),
           localBounds.shift(shadow.offset),
-          shadowPaint,
+          shadowPaints[i],
         );
 
         // 2. GPU Cutout (dstOut): punch out the interior using the same geometry
@@ -346,7 +344,7 @@ class RenderLiquidGlassLayer extends LiquidGlassRenderObject
             geometryImage!.height.toDouble(),
           ),
           localBounds,
-          Paint()..blendMode = BlendMode.dstOut,
+          _shadowPaints.cutoutPaint,
         );
 
         context.canvas.restore();

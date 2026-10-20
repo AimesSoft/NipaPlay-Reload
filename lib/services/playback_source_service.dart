@@ -850,7 +850,9 @@ class PlaybackSourceService {
     if (direct != null) return direct;
     final matches = SMBService.instance.connections.where((connection) {
       return connection.host == name ||
-          '${connection.host}:${connection.port}' == name;
+          '${connection.host}:${connection.port}' == name ||
+          connection.wanHost == name ||
+          '${connection.wanHost}:${connection.wanPort}' == name;
     }).toList();
     return matches.length == 1 ? matches.first : null;
   }

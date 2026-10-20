@@ -11,12 +11,19 @@ import 'package:uuid/uuid.dart';
 
 import 'package:nipaplay/services/process_memory_cache.dart';
 import 'package:nipaplay/services/smb2_native_service.dart';
+import 'package:nipaplay/utils/network_address_utils.dart';
 
 class SMBConnection {
   final String id;
   final String name;
+
+  /// 内网主机（原 `host` 字段）。可为空——内网与公网至少填一个。
   final String host;
   final int port;
+
+  /// 公网主机。可为空——内网与公网至少填一个。
+  final String wanHost;
+  final int wanPort;
   final String username;
   final String? credentialOrigin;
   String get credentialAuthority => 'smb://${host.toLowerCase()}:$port';
@@ -39,6 +46,8 @@ class SMBConnection {
     required this.name,
     required this.host,
     this.port = 445,
+    this.wanHost = '',
+    this.wanPort = 445,
     required this.username,
     required String password,
     StoredCredential? storedPassword,
@@ -53,6 +62,8 @@ class SMBConnection {
     String? name,
     String? host,
     int? port,
+    String? wanHost,
+    int? wanPort,
     String? username,
     String? password,
     String? domain,
@@ -64,6 +75,8 @@ class SMBConnection {
       name: name ?? this.name,
       host: host ?? this.host,
       port: port ?? this.port,
+      wanHost: wanHost ?? this.wanHost,
+      wanPort: wanPort ?? this.wanPort,
       username: username ?? this.username,
       password: password ?? this.password,
       storedPassword: password == null ? _password : null,
@@ -79,6 +92,8 @@ class SMBConnection {
       'name': name,
       'host': host,
       'port': port,
+      'wanHost': wanHost,
+      'wanPort': wanPort,
       'username': username,
       'password': _password.toJson(),
       'domain': domain,
@@ -89,20 +104,57 @@ class SMBConnection {
 
   factory SMBConnection.fromJson(Map<String, dynamic> json) {
     final savedId = json['id']?.toString().trim();
+    final rawHost = (json['host'] ?? '').toString();
+    final rawPort = json['port'] is int
+        ? json['port'] as int
+        : int.tryParse(json['port']?.toString() ?? '') ?? 445;
+    final hasWanKey = json.containsKey('wanHost');
+
+    var host = rawHost;
+    var port = rawPort;
+    var wanHost = (json['wanHost'] ?? '').toString();
+    var wanPort = json['wanPort'] is int
+        ? json['wanPort'] as int
+        : int.tryParse(json['wanPort']?.toString() ?? '') ?? 445;
+
+    // 旧数据迁移：原本只有单一 `host`/`port`，未记录 `wanHost`。
+    // 按私有 IP 自动归类：私有地址保留为内网，其余迁移为公网。
+    if (!hasWanKey && rawHost.trim().isNotEmpty) {
+      if (NetworkAddressUtils.isPrivateHost(rawHost)) {
+        host = rawHost;
+        port = rawPort;
+        wanHost = '';
+        wanPort = 445;
+      } else {
+        host = '';
+        port = 445;
+        wanHost = rawHost;
+        wanPort = rawPort;
+      }
+    }
+
+    // 纯公网连接（host 为空）把公网地址纳入 id 种子，避免同用户名的不同
+    // 公网连接派生出相同 id，导致按 id 解析媒体路径时错配到另一个连接。
+    // 旧数据 host 恒非空，沿用原种子保证升级后 id 不变。
+    final idSeed = rawHost.trim().isNotEmpty
+        ? 'nipaplay:smb:$rawHost|$rawPort|'
+              '${json['domain'] ?? ''}|${json['username'] ?? ''}'
+        : 'nipaplay:smb:wan:$wanHost|$wanPort|'
+              '${json['domain'] ?? ''}|${json['username'] ?? ''}';
+
     return SMBConnection(
       id: savedId?.isNotEmpty == true
           ? savedId
           : credentialReference(json['password'])?.key ??
           const Uuid().v5(
               '6ba7b811-9dad-11d1-80b4-00c04fd430c8',
-              'nipaplay:smb:${json['host'] ?? ''}|${json['port'] ?? 445}|'
-                  '${json['domain'] ?? ''}|${json['username'] ?? ''}',
+              idSeed,
             ),
       name: json['name'] ?? '',
-      host: json['host'] ?? '',
-      port: json['port'] is int
-          ? json['port'] as int
-          : int.tryParse(json['port']?.toString() ?? '') ?? 445,
+      host: host,
+      port: port <= 0 ? 445 : port,
+      wanHost: wanHost,
+      wanPort: wanPort <= 0 ? 445 : wanPort,
       username: json['username'] ?? '',
       password: '',
       storedPassword: StoredCredential.fromJson(json['password'],
@@ -112,6 +164,12 @@ class SMBConnection {
       credentialOrigin: json['credentialOrigin'] as String?,
     );
   }
+
+  /// 是否配置了内网地址。
+  bool get hasLan => host.trim().isNotEmpty;
+
+  /// 是否配置了公网地址。
+  bool get hasWan => wanHost.trim().isNotEmpty;
 }
 
 class SMBFileEntry {
@@ -219,11 +277,52 @@ class SMBService {
   static final SMBService instance = SMBService._();
 
   final List<SMBConnection> _connections = [];
+
+  /// 每个连接当前优先使用的地址。true 表示优先公网，false/缺省表示优先内网。
+  final Map<String, bool> _preferWanById = {};
+
+  /// 每个连接最近一次内网/公网地址的连通性检测结果，供库管理界面展示。
+  final Map<String, ({bool lan, bool wan})> _addressReachabilityById = {};
   final ProcessMemoryListCache<_SMBDirectoryCacheKey, SMBFileEntry>
       _directoryCache =
       ProcessMemoryListCache<_SMBDirectoryCacheKey, SMBFileEntry>();
 
   List<SMBConnection> get connections => List.unmodifiable(_connections);
+
+  /// 记录（并供后续读取）某连接优先使用的地址；true 表示优先公网。
+  void setPreferredAddress(String connectionId, {required bool useWan}) {
+    if (connectionId.trim().isEmpty) return;
+    _preferWanById[connectionId] = useWan;
+  }
+
+  /// 某连接最近一次内网/公网地址的连通性检测结果。
+  ///
+  /// 返回 `null` 表示尚未检测过；`lan`/`wan` 分别表示对应地址是否可达。
+  ({bool lan, bool wan})? lastAddressReachability(String connectionId) {
+    final id = connectionId.trim();
+    if (id.isEmpty) return null;
+    return _addressReachabilityById[id];
+  }
+
+  /// 返回一个已将 `host`/`port` 替换为当前优选地址的连接副本。
+  ///
+  /// 规则：两个地址都配置时按优选结果选择（缺省优先内网）；只配置一个时
+  /// 直接使用该地址；都没有则原样返回。
+  SMBConnection effectiveConnection(SMBConnection connection) {
+    final normalized = _normalizeConnection(connection);
+    final hasLan = normalized.host.trim().isNotEmpty;
+    final hasWan = normalized.wanHost.trim().isNotEmpty;
+    if (hasLan && hasWan) {
+      return (_preferWanById[normalized.id] ?? false)
+          ? normalized.copyWith(host: normalized.wanHost, port: normalized.wanPort)
+          : normalized;
+    }
+    if (hasLan) return normalized;
+    if (hasWan) {
+      return normalized.copyWith(host: normalized.wanHost, port: normalized.wanPort);
+    }
+    return normalized;
+  }
 
   Future<void> initialize() async {
     await _loadConnections();
@@ -271,7 +370,7 @@ class SMBService {
 
   Future<bool> addConnection(SMBConnection connection) async {
     final normalized = _normalizeConnection(connection);
-    final success = await _testConnection(normalized);
+    final success = await _testAddresses(normalized);
     if (success) {
       _connections.add(normalized.copyWith(isConnected: true));
       clearDirectoryCache(connectionName: normalized.name);
@@ -314,7 +413,7 @@ class SMBService {
     SMBConnection updatedConnection,
   ) async {
     final normalized = _normalizeConnection(updatedConnection);
-    final success = await _testConnection(normalized);
+    final success = await _testAddresses(normalized);
     if (!success) {
       return false;
     }
@@ -339,14 +438,53 @@ class SMBService {
     await _saveConnections();
   }
 
+  /// 校验连接的内网/公网地址可达性，并更新优选地址。
+  ///
+  /// 供启动阶段的后台可达性检测与连接保存流程复用。
+  Future<bool> testConnection(SMBConnection connection) {
+    return _testAddresses(connection);
+  }
+
   Future<void> updateConnectionStatus(String name) async {
     final index = _connections.indexWhere((conn) => conn.name == name);
     if (index == -1) return;
     final normalized = _connections[index];
-    final success = await _testConnection(normalized);
+    final success = await _testAddresses(normalized);
     _connections[index] = normalized.copyWith(isConnected: success);
     clearDirectoryCache(connectionName: name);
     await _saveConnections();
+  }
+
+  /// 分别探测内网与公网地址；只配置一个时只探测该地址，两个都配置时
+  /// 并行探测，避免一侧不可达时还要等完它的超时才轮到另一侧。
+  ///
+  /// 内网可用则优先内网；仅公网可用时才优先公网；都失败则保留内网为默认。
+  Future<bool> _testAddresses(SMBConnection connection) async {
+    final normalized = _normalizeConnection(connection);
+    final hasLan = normalized.host.trim().isNotEmpty;
+    final hasWan = normalized.wanHost.trim().isNotEmpty;
+
+    final results = await Future.wait([
+      hasLan
+          ? _testConnection(normalized.copyWith(wanHost: '', wanPort: 445))
+          : Future<bool>.value(false),
+      hasWan
+          ? _testConnection(normalized.copyWith(
+              host: normalized.wanHost,
+              port: normalized.wanPort,
+              wanHost: '',
+              wanPort: 445,
+            ))
+          : Future<bool>.value(false),
+    ]);
+
+    final lanSuccess = results[0];
+    final wanSuccess = results[1];
+
+    _preferWanById[normalized.id] = !lanSuccess && wanSuccess;
+    _addressReachabilityById[normalized.id] =
+        (lan: lanSuccess, wan: wanSuccess);
+    return lanSuccess || wanSuccess;
   }
 
   SMBConnection? getConnection(String name) {
@@ -401,7 +539,7 @@ class SMBService {
     bool forceRefresh = false,
   }) async {
     await connection.resolvePassword();
-    final normalizedConnection = _normalizeConnection(connection);
+    final normalizedConnection = effectiveConnection(connection);
     final normalizedPath = _normalizePath(path);
     final key = (
       name: normalizedConnection.name,
@@ -530,12 +668,27 @@ class SMBService {
     if (port <= 0 || port > 65535) {
       port = 445;
     }
+
+    var trimmedWanHost = connection.wanHost.trim();
+    var wanPort = connection.wanPort;
+    final parsedWanHostPort = _tryParseHostPort(trimmedWanHost);
+    if (parsedWanHostPort != null) {
+      trimmedWanHost = parsedWanHostPort.$1;
+      wanPort = parsedWanHostPort.$2;
+    }
+    if (wanPort <= 0 || wanPort > 65535) {
+      wanPort = 445;
+    }
+
+    final fallbackName = trimmedHost.isNotEmpty ? trimmedHost : trimmedWanHost;
     final normalizedName =
-        connection.name.trim().isEmpty ? trimmedHost : connection.name.trim();
+        connection.name.trim().isEmpty ? fallbackName : connection.name.trim();
     return connection.copyWith(
       name: normalizedName,
       host: trimmedHost,
       port: port,
+      wanHost: trimmedWanHost,
+      wanPort: wanPort,
       username: connection.username.trim(),
       domain: connection.domain.trim(),
     );
@@ -574,7 +727,7 @@ class SMBService {
 
   String buildFileUrl(SMBConnection connection, String smbPath) {
     if (!connection.passwordIsResolved) throw StateError('credential_not_loaded');
-    final normalized = _normalizeConnection(connection);
+    final normalized = effectiveConnection(connection);
     final normalizedPath = _normalizePath(smbPath);
     final encodedSegments = normalizedPath
         .split('/')
