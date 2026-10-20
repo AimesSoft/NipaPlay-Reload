@@ -108,8 +108,9 @@ import '../settings/settings_page.dart';
 /// - `scroll` `to=px`: the page showing scrolls (its outermost scroller).
 /// - `discover` [`day=0..6`] [`source=`] [`list=N`]: the 发现 page's tabs
 ///   (0 = Sunday), as tapping them would.
-/// - `press` `label=` [`area=panel|discover|hero|…`]: the synthetic mouse
-///   clicks the first visible button or menu item with that label.
+/// - `press` `label=` [`area=panel|discover|hero|dialog|…`]: the synthetic
+///   mouse clicks the first visible button or menu item with that label;
+///   `dialog` looks only in the window open over the page (a question).
 /// - `drag` `target=panel|ask` [`do=enter|exit`] and `drop` `target=panel|ask`
 ///   `paths=a|b`: a file drag from Finder as the native drop plugin reports
 ///   it (entered → updated → performOperation), over the middle of the
@@ -967,6 +968,28 @@ abstract final class NextUiDebug {
   /// side panel or the 发现 page only.
   static List<RenderBox> _pressables(String label, String? area) {
     final found = <RenderBox>[];
+    if (area == 'dialog') {
+      // Questions open on the root navigator, outside the shell.
+      void visit(Element element) {
+        final widget = element.widget;
+        if (widget is Pressable && widget.semanticLabel == label) {
+          final route = ModalRoute.of(element);
+          final box = element.findRenderObject();
+          if (route is PopupRoute &&
+              route.isCurrent &&
+              box is RenderBox &&
+              box.attached &&
+              box.hasSize) {
+            found.add(box);
+          }
+          return;
+        }
+        element.visitChildren(visit);
+      }
+
+      WidgetsBinding.instance.rootElement?.visitChildren(visit);
+      return found;
+    }
     final scope = switch (area) {
       'panel' || 'chat' => ChatFrame,
       'discover' => DiscoverPage,
