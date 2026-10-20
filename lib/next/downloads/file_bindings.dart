@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import 'package:nipa_harness/nipa_harness.dart';
 
+import '../media/identity_store.dart' show stableMediaId;
 import '../media/media_service.dart';
 
 const _refKeys = {'provider', 'objectType', 'externalId', 'scope'};
@@ -9,9 +10,12 @@ const _refKeys = {'provider', 'objectType', 'externalId', 'scope'};
 /// Validates the `fileBindings` declared by `download.add` and returns them
 /// normalized. [fileCount] is known for torrent files and null for magnets,
 /// whose manifest only exists after the engine fetched the metadata.
-/// [fileIndices] is the initial selection, when one was given.
+/// [fileIndices] is the selection the files must lie in, when it is known;
+/// [selection] names it in the message.
 List<JsonMap> parseFileBindings(Object? raw,
-    {int? fileCount, List<int>? fileIndices}) {
+    {int? fileCount,
+    List<int>? fileIndices,
+    String selection = 'fileIndices'}) {
   if (raw is! List || raw.isEmpty) {
     throw const Failure(
         FailureCode.invalidInput, 'fileBindings must be a non-empty array.');
@@ -33,7 +37,7 @@ List<JsonMap> parseFileBindings(Object? raw,
           '$fileCount files.');
     }
     if (fileIndices != null && !fileIndices.contains(index)) {
-      throw bad('fileIndex $index is not in fileIndices, so it is not downloaded.');
+      throw bad('fileIndex $index is not in $selection, so it is not downloaded.');
     }
     final unknown = entry.keys
         .where((k) => !const {
@@ -86,9 +90,45 @@ List<JsonMap> parseFileBindings(Object? raw,
 }
 
 /// The stable id of one file's binding request: replays return the saved
-/// result instead of binding again.
-String fileBindingRequestId(String jobId, int fileIndex) =>
-    'download:$jobId:file:$fileIndex';
+/// result instead of binding again. A declaration made with
+/// `download.declare_files` carries a [declarationId] derived from its
+/// content, so a changed declaration is a new request while the same one
+/// stays a replay.
+String fileBindingRequestId(String jobId, int fileIndex,
+        {String? declarationId}) =>
+    'download:$jobId:file:$fileIndex${declarationId == null ? '' : ':$declarationId'}';
+
+/// What `download.declare_files` stores for one validated entry: the
+/// normalized entry plus who declared it and a digest of its content.
+JsonMap declaredByAction(JsonMap entry, String origin) => {
+      ...entry,
+      'declarationId': stableMediaId('declaration', entry).substring(12, 36),
+      'declaredWith': 'download.declare_files',
+      'origin': origin,
+    };
+
+/// The declarations in force for [job]: those given with `download.add`,
+/// replaced per file index by those of `download.declare_files`.
+List<JsonMap> effectiveFileBindings(Job job) {
+  final byIndex = <int, JsonMap>{};
+  for (final source in [
+    job.input['fileBindings'],
+    job.checkpoint['fileBindings']
+  ]) {
+    for (final entry in source as List? ?? []) {
+      byIndex[(entry as Map)['fileIndex'] as int] =
+          Map<String, Object?>.from(entry);
+    }
+  }
+  return [for (final index in byIndex.keys.toList()..sort()) byIndex[index]!];
+}
+
+JsonMap? fileBindingFor(Job job, int index) {
+  for (final entry in effectiveFileBindings(job)) {
+    if (entry['fileIndex'] == index) return entry;
+  }
+  return null;
+}
 
 /// Binds one downloaded file with the logic of `media.identity.bind_batch`
 /// (catalogue mode, kind=file) and returns that batch's single entry.
@@ -98,6 +138,7 @@ Future<JsonMap> bindDownloadedFile(MediaService media,
     required String requestId,
     required String origin}) async {
   final index = declaration['fileIndex'];
+  final declaredWith = declaration['declaredWith'] ?? 'download.add';
   final result = await media.bindBatch({
     'requestId': requestId,
     'entries': [
@@ -109,12 +150,12 @@ Future<JsonMap> bindDownloadedFile(MediaService media,
           'releaseRef': declaration['releaseRef'],
         'episodeRefs': declaration['episodeRefs'],
         'reason': declaration['reason'] ??
-            'Declared with download.add for file index $index.',
+            'Declared with $declaredWith for file index $index.',
         'evidence': [
           {
-            'source': 'download.add',
+            'source': declaredWith,
             'detail': 'File index $index of the download was declared as these '
-                'episodes when the download was ordered.'
+                '${declaredWith == 'download.add' ? 'episodes when the download was ordered.' : 'episodes with $declaredWith.'}'
           }
         ],
       }

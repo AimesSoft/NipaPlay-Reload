@@ -127,6 +127,7 @@ final class DownloadCapability implements Capability {
               }),
           for (final operation in [
             'add',
+            'declare_files',
             'set_paused',
             'pause',
             'resume',
@@ -165,7 +166,9 @@ final class _DownloadAction extends Action<_DownloadJson, _DownloadJson> {
         title: '$operation download',
         description: switch (operation) {
           'add' =>
-            'Accept source or sources: magnet URIs, HTTP(S) torrent URLs or local .torrent paths. Optional downloadDirectory and createFolderForTask override defaults for these new tasks without changing settings. Optional fileBindings (single source only) declares file index -> episode identity: entries are {fileIndex, workRef, releaseRef?, episodeRefs, reason?} with the catalogue-mode refs of media.identity.bind_batch. Indices must be unique and exist (checked at add for torrent files; a magnet has no manifest yet, so its out-of-range indices only appear in the receipt as unboundDeclarations), and lie within fileIndices when given; invalid input rejects the whole add. When a declared file passes verification and is registered, NipaPlay binds it with bind_batch (requestId derived from job and file index, so replays do not duplicate) and records the outcome on that file as binding: bound (workId, releaseId, episodeIds), already_identified (the file already had episodes, left untouched), not_applied or failed (error); binding failure never fails the download. An existing task for the same hash keeps its original declarations. Returns queued jobs after metadata validation, deduplicated by backend and infoHash; an existing task keeps its original directory. Batch results preserve input order and individual failures.',
+            'Accept source or sources: magnet URIs, HTTP(S) torrent URLs or local .torrent paths. Optional downloadDirectory and createFolderForTask override defaults for these new tasks without changing settings. Optional fileBindings (single source only) declares file index -> episode identity: entries are {fileIndex, workRef, releaseRef?, episodeRefs, reason?} with the catalogue-mode refs of media.identity.bind_batch. Indices must be unique and exist (checked at add for torrent files; a magnet has no manifest yet, so its out-of-range indices only appear in the receipt as unboundDeclarations), and lie within fileIndices when given; invalid input rejects the whole add. When a declared file passes verification and is registered, NipaPlay binds it with bind_batch (requestId derived from job and file index, so replays do not duplicate) and records the outcome on that file as binding: bound (workId, releaseId, episodeIds), already_identified (the file already had episodes, left untouched), not_applied or failed (error); binding failure never fails the download. An existing task for the same hash keeps its original declarations; change them with download.declare_files. Returns queued jobs after metadata validation, deduplicated by backend and infoHash; an existing task keeps its original directory. Batch results preserve input order and individual failures.',
+          'declare_files' =>
+            'Declare or replace, on an existing download jobId, which episodes its files are: fileBindings has the entries and validation of download.add (unique indices; checked against the manifest when it is known, and each index must be among the currently selected files). Declarations merge by fileIndex: the listed indices replace their earlier declaration, the others stay. A file that is not yet completed is bound by the download itself when it completes, as with add; this works in every non-final state and changes neither the torrent nor the job state, so a paused, queued or waiting-retry download keeps its state and binds after it resumes. A file already completed, verified and registered is bound immediately with the logic of bind_batch (requestId derived from job, file index and the declaration content: the same declaration replays the saved result, a changed one binds anew), its binding replaced on the completedFiles row, and the outcome is returned per fileIndex in bindings: bound (workId, releaseId, episodeIds), already_identified (the file already has episodes; left untouched, existingEpisodeIds), not_applied (reason), failed (error; calling again retries it), or declared (saved, waiting for the file to complete). A file without a prior declaration is bound the same way. No new download.file_completed event is published for an already completed file. A finished download (succeeded, failed, cancelled) keeps its immutable receipt: completed files are still bound and reported, declarationsSaved is false, nothing is written. A download being cancelled returns conflict. Returns job, declarationsSaved and bindings.',
           'set_paused' =>
             'Set paused for jobId or jobIds, including downloading and seeding. Returns persisted jobs and individual batch failures.',
           'pause' =>
@@ -188,7 +191,15 @@ final class _DownloadAction extends Action<_DownloadJson, _DownloadJson> {
             : operation == 'read'
                 ? Effect.read
                 : Effect.write,
-        input: operation == 'add'
+        input: operation == 'declare_files'
+            ? const ObjectSchema({
+                'jobId': _idSchema,
+                'fileBindings': _fileBindingsSchema,
+              }, required: [
+                'jobId',
+                'fileBindings'
+              ])
+            : operation == 'add'
             ? const ObjectSchema({
                 'source': _idSchema,
                 'sources': _idsSchema,
@@ -217,6 +228,20 @@ final class _DownloadAction extends Action<_DownloadJson, _DownloadJson> {
         output: ObjectSchema({
           'job': _downloadJobSchema,
           'task': _downloadTaskSchema,
+          'declarationsSaved': const BooleanSchema(),
+          'bindings': const ArraySchema(ObjectSchema({
+            'fileIndex': IntegerSchema(minimum: 0),
+            'status': StringSchema(values: [
+              'bound',
+              'already_identified',
+              'not_applied',
+              'failed',
+              'declared'
+            ]),
+          }, required: [
+            'fileIndex',
+            'status'
+          ], additionalProperties: true)),
           'results': ArraySchema(ObjectSchema({
             'index': const IntegerSchema(minimum: 0),
             'source': _idSchema,
@@ -295,6 +320,9 @@ final class _DownloadAction extends Action<_DownloadJson, _DownloadJson> {
           ),
           backend: ref,
           invocation: invocation);
+    } else if (operation == 'declare_files') {
+      return downloads.declareFiles(target, json['fileBindings'],
+          origin: invocation.origin);
     } else if (operation == 'read') {
       return downloads.read(target);
     } else if (operation == 'import') {

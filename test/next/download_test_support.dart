@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:nipa_harness/nipa_harness.dart';
@@ -202,10 +203,13 @@ final class FakeDownloadLibrary implements DownloadLibrary {
     importedKeys.add(key);
   }
 
-  /// Every bindFile call, in order; a repeated requestId returns the saved
-  /// result the way the media store does and is not counted in [bound].
+  /// Every bindFile call, in order. Like the media store, a repeated
+  /// requestId returns the saved result (and is not counted in [bound]) and
+  /// the same requestId with another declaration is a conflict; a successful
+  /// bind leaves the file with its episode.
   final bindCalls = <JsonMap>[];
   final bound = <String, JsonMap>{};
+  final _boundDeclarations = <String, String>{};
   Object? bindFailure;
   Future<void>? bindGate;
   @override
@@ -222,11 +226,27 @@ final class FakeDownloadLibrary implements DownloadLibrary {
     });
     await bindGate;
     if (bindFailure != null) throw bindFailure!;
-    return bound.putIfAbsent(requestId, () => {
+    final fingerprint = jsonEncode(declaration);
+    final saved = _boundDeclarations.putIfAbsent(requestId, () => fingerprint);
+    if (saved != fingerprint) {
+      throw const Failure(FailureCode.conflict,
+          'requestId was already used with different input.');
+    }
+    final result = bound.putIfAbsent(requestId, () => {
           'workId': 'work-1',
           'releaseId': 'release-1',
           'episodeIds': ['episode-${bound.length + 1}'],
           'fileId': fileId
         });
+    for (final entry in media.values) {
+      if (entry['fileId'] == fileId) {
+        entry['episodes'] = [
+          for (final id in result['episodeIds'] as List)
+            {'episodeId': id, 'workId': 'work-1'}
+        ];
+        entry['identificationPending'] = false;
+      }
+    }
+    return result;
   }
 }
