@@ -7,6 +7,16 @@ GUI `download.delete` returns NeedsDecision with the current file manifest;
 the returned `download.delete.request` option creates a persistent user-consent
 task. Caller-bound previews are single-use and target changes invalidate them.
 The application asks its existing local user dialog before deleting any files.
+`download.delete {jobId, fileIndices}` (single jobId) deletes only those files
+of a download: the preview and the dialog list only them, through the same
+user-consent task and the same fingerprint check. On approval the files are
+first removed from the engine selection, then their data is deleted; the other
+files keep downloading or seeding. The files must be local, inside the output
+directory and are never directories. The result carries `task` (readback:
+`included` false, `actualSize` null for the deleted files) and `deletedFiles`.
+The library keeps work, episode and watch progress; the episode simply has no
+playable local file. `media.mesh_files` delete/overwrite decisions are confirmed
+by the caller, not by the user in NipaPlay.
 
 Agent controls use the same Classic torrent session and preferences. Discover
 jobs with `task.list` (`type: download`); `download.read` accepts `jobId` or

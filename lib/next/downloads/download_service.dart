@@ -167,7 +167,12 @@ final class DownloadService {
     final facts = task?.toJson();
     if (task != null) {
       for (final entry in task.files.indexed) {
-        if (entry.$2.complete && entry.$2.location.isLocal) {
+        if (!entry.$2.included && entry.$2.location.isLocal) {
+          // A file no longer selected may still hold data, or have had it deleted.
+          final row = (facts!['files'] as List)[entry.$1] as JsonMap;
+          row['actualSize'] = await backend.readSize(entry.$2);
+          row['playable'] = false;
+        } else if (entry.$2.complete && entry.$2.location.isLocal) {
           final row = (facts!['files'] as List)[entry.$1] as JsonMap;
           final size = await backend.readSize(entry.$2);
           row['actualSize'] = size;
@@ -431,6 +436,88 @@ final class DownloadService {
         if (job.state == JobState.paused) return engine.resume(jobId);
         return engine.get(jobId);
       });
+  /// Deletes the data of some files of a download and stops selecting them;
+  /// the session, the other files and their seeding or downloading go on.
+  /// Only these files, only inside the output directory, never a directory.
+  Future<JsonMap> deleteFiles(String jobId, List<int> indices) =>
+      _serial(() async {
+        final job = await _downloadJob(jobId);
+        if (job.state == JobState.cancelling ||
+            job.state == JobState.cancelled) {
+          throw const Failure(FailureCode.conflict, 'Download was cancelled.');
+        }
+        final backend = backends.resolve(_ref(job));
+        if (backend is! SelectableDownloadBackend ||
+            backend is! FileDeletingDownloadBackend) {
+          throw const Failure(FailureCode.unavailable,
+              'Backend does not support deleting individual files.');
+        }
+        final task = await _task(backend, job);
+        if (task == null) {
+          throw const Failure(
+              FailureCode.notFound, 'Download session is missing.');
+        }
+        if (indices.isEmpty ||
+            indices.toSet().length != indices.length ||
+            indices.any((index) => index < 0 || index >= task.files.length)) {
+          throw const Failure(FailureCode.invalidInput,
+              'File indices must be unique, non-empty manifest indices.');
+        }
+        for (final index in indices) {
+          final file = task.files[index];
+          if (!file.location.isLocal) {
+            throw const Failure(
+                FailureCode.invalidInput, 'Only local files can be deleted.');
+          }
+          await checkedDownloadPath(task.output.path, file.location.path);
+        }
+        final kept = [
+          for (final entry in task.files.indexed)
+            if (entry.$2.included && !indices.contains(entry.$1)) entry.$1
+        ];
+        final wasPaused = task.paused;
+        if (!job.state.isTerminal && job.state != JobState.paused) {
+          await engine.pause(jobId);
+          await executor.quiesce(jobId);
+        }
+        final current = await backend.read(task.handle);
+        if (!current.paused) await backend.pause(task.handle);
+        try {
+          // Unselect first so the engine stops reading these files, then
+          // remove the data.
+          await (backend as SelectableDownloadBackend)
+              .selectFiles(task.handle, kept);
+          await (backend as FileDeletingDownloadBackend)
+              .deleteFiles(task.handle, indices);
+        } finally {
+          if (!wasPaused) {
+            await backend.resume(task.handle);
+            if (!job.state.isTerminal) await engine.resume(jobId);
+          }
+        }
+        final changed = await backend.read(task.handle);
+        for (final entry in changed.files.indexed) {
+          if (entry.$2.included != kept.contains(entry.$1)) {
+            throw const Failure(
+                FailureCode.conflict, 'Backend selection readback differs.');
+          }
+        }
+        for (final index in indices) {
+          if (await backend.readSize(changed.files[index]) != null) {
+            throw const Failure(FailureCode.unavailable,
+                'A file was unselected but its data remains.');
+          }
+        }
+        return {
+          'job': (await engine.get(jobId)).toJson(),
+          'task': changed.toJson(),
+          'deletedFiles': [
+            for (final index in indices)
+              {'index': index, 'path': changed.files[index].location.path}
+          ]
+        };
+      });
+
   Future<Job> remove(String jobId, {bool deleteData = false}) =>
       _serial(() async {
         final job = await _downloadJob(jobId);

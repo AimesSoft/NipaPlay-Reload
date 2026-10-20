@@ -180,6 +180,13 @@ abstract interface class SelectableDownloadBackend {
   Future<void> selectFiles(String handle, List<int> indices);
 }
 
+/// Removes the data of individual files of a session, keeping the session and
+/// the other files. Adapters validate their own deletion boundary: only the
+/// files at [indices], only inside the session's output directory.
+abstract interface class FileDeletingDownloadBackend {
+  Future<void> deleteFiles(String handle, List<int> indices);
+}
+
 abstract interface class BandwidthDownloadBackend {
   Future<JsonMap> bandwidth(JsonMap input);
 }

@@ -184,7 +184,7 @@ final class _DownloadAction extends Action<_DownloadJson, _DownloadJson> {
           'remove' =>
             'Remove session entries for jobId or jobIds, keeping downloaded files. Returns per-item persisted jobs and failures.',
           _ =>
-            'Delete session entries and data for jobId or jobIds. Each item checks output containment and records its own destructive audit, including failures.',
+            'Delete session entries and data for jobId or jobIds. Each item checks output containment and records its own destructive audit, including failures. With fileIndices (single jobId only), delete just those files of the download: they are unselected, then their data is removed, while the session, the other files and their downloading or seeding stay. The files must be local manifest files inside the output directory; directories and other files are never touched. The preview and the user prompt list only those files. Returns job, task (readback: the files are no longer included, data gone) and deletedFiles.',
         },
         effect: operation == 'delete'
             ? Effect.destructive
@@ -218,6 +218,9 @@ final class _DownloadAction extends Action<_DownloadJson, _DownloadJson> {
                 if (operation == 'set_paused') 'paused': const BooleanSchema(),
                 if (operation == 'select_files')
                   'fileIndices': const ArraySchema(IntegerSchema(minimum: 0)),
+                if (operation == 'delete')
+                  'fileIndices': const ArraySchema(IntegerSchema(minimum: 0),
+                      minItems: 1),
               }, required: [
                 if (operation == 'set_paused') 'paused',
                 if (operation == 'select_files') 'fileIndices'
@@ -229,6 +232,13 @@ final class _DownloadAction extends Action<_DownloadJson, _DownloadJson> {
           'job': _downloadJobSchema,
           'task': _downloadTaskSchema,
           'declarationsSaved': const BooleanSchema(),
+          'deletedFiles': const ArraySchema(ObjectSchema({
+            'index': IntegerSchema(minimum: 0),
+            'path': _idSchema,
+          }, required: [
+            'index',
+            'path'
+          ])),
           'bindings': const ArraySchema(ObjectSchema({
             'fileIndex': IntegerSchema(minimum: 0),
             'status': StringSchema(values: [
@@ -270,7 +280,12 @@ final class _DownloadAction extends Action<_DownloadJson, _DownloadJson> {
       String target, JsonMap json, Invocation invocation) async {
     if (operation == 'delete') {
       final outcome = await deletion.invokeJson(
-          'download.delete', {'jobId': target}, invocation);
+          'download.delete',
+          {
+            'jobId': target,
+            if (json['fileIndices'] != null) 'fileIndices': json['fileIndices']
+          },
+          invocation);
       switch (outcome) {
         case Completed(:final value):
           return value.toJson();
@@ -353,6 +368,12 @@ final class _DownloadAction extends Action<_DownloadJson, _DownloadJson> {
       throw const Failure(FailureCode.invalidInput,
           'fileBindings are per torrent; use source, not sources.');
     }
+    if (operation == 'delete' &&
+        json['fileIndices'] != null &&
+        json.containsKey('jobIds')) {
+      throw const Failure(FailureCode.invalidInput,
+          'fileIndices are per download; use jobId, not jobIds.');
+    }
     final field = operation == 'add' ? 'source' : 'jobId';
     final batchField = operation == 'add' ? 'sources' : 'jobIds';
     if (!json.containsKey(batchField)) {
@@ -401,20 +422,40 @@ final class _DeleteAction extends Action<_DownloadJson, _DownloadJson> {
   ActionSpec get spec => ActionSpec(
         id: 'download.delete',
         title: 'Delete download',
-        description: 'Delete one session and its contained data.',
+        description:
+            'Delete one session and its contained data, or only the files at fileIndices.',
         effect: Effect.destructive,
-        input: const ObjectSchema({'jobId': _idSchema}, required: ['jobId']),
-        output:
-            ObjectSchema({'job': _downloadJobSchema}, required: const ['job']),
+        input: const ObjectSchema({
+          'jobId': _idSchema,
+          'fileIndices': ArraySchema(IntegerSchema(minimum: 0), minItems: 1),
+        }, required: [
+          'jobId'
+        ]),
+        output: ObjectSchema({
+          'job': _downloadJobSchema,
+          'task': _downloadTaskSchema,
+          'deletedFiles': const ArraySchema(ObjectSchema({
+            'index': IntegerSchema(minimum: 0),
+            'path': _idSchema,
+          }, required: [
+            'index',
+            'path'
+          ])),
+        }, required: const [
+          'job'
+        ]),
       );
   @override
   _DownloadJson decodeInput(JsonMap json) => _DownloadJson(json);
   @override
   Future<Outcome<_DownloadJson>> run(
           _DownloadJson input, Invocation invocation) async =>
-      Completed(_DownloadJson({
-        'job': (await downloads.remove(input.json['jobId'] as String,
-                deleteData: true))
-            .toJson()
-      }));
+      Completed(_DownloadJson(input.json['fileIndices'] != null
+          ? await downloads.deleteFiles(input.json['jobId'] as String,
+              (input.json['fileIndices'] as List).cast<int>())
+          : {
+              'job': (await downloads.remove(input.json['jobId'] as String,
+                      deleteData: true))
+                  .toJson()
+            }));
 }
