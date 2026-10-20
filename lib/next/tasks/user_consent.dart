@@ -162,6 +162,9 @@ final class DiskDeletion implements JobExecutor {
                 title, message, '删除',
                 stopped: stopped, destructive: true));
   final Future<bool> Function(String, String, Future<void>) prompt;
+
+  /// The conversation behind a request, so the answer comes back to it.
+  Future<JsonMap?> Function(Invocation)? returnTarget;
   late TaskEngine engine;
   late Harness _execution;
   final _previews = <String, JsonMap>{};
@@ -381,7 +384,7 @@ final class _DeletionAction extends Action<_Json, _Json> {
           'With fileIndices (one jobId), only those files of the download are previewed, asked about and deleted; the rest of the download stays. '
           'Only a person clicking Delete in NipaPlay can authorize disk deletion. '
           'waiting_user means no deletion has run; task.wait and followup.register '
-          'can observe it. A refusal fails with 用户没有同意删除. No confirmation or execute argument bypasses this gate.',
+          'can observe it. A refusal fails with 用户没有同意删除. When the user answers, the outcome returns to the requesting conversation. No confirmation or execute argument bypasses this gate.',
       output: const ObjectSchema(
           {'job': ObjectSchema({}, additionalProperties: true)},
           required: ['job']));
@@ -399,12 +402,14 @@ final class _DeletionAction extends Action<_Json, _Json> {
         prompt: '${partial ? '删除这个下载里的这些文件' : '删除这些下载文件'}：${jsonEncode(preview)}',
         options: [DecisionOption(label: '请求删除', call: ActionCall('download.delete.request', {'previewId': id}))]));
     }
+    final target = await deletion.returnTarget?.call(invocation);
     final job = await deletion.engine
         .submit(type: deletion.type, title: '删除文件', input: {
       'action': original.id,
       'arguments': input.value,
       'origin': invocation.origin,
-      'invocationId': invocation.id
+      'invocationId': invocation.id,
+      if (target != null) 'returnTo': target
     });
     return Completed(_Json({'job': job.toJson()}));
   }
@@ -418,6 +423,7 @@ final class _RequestDownloadDeletion extends Action<_Json, _Json> {
     title: '请求删除预览中的下载文件',
     description: 'Use the option returned by download.delete. The process-local preview is single-use and caller-bound. '
       'Creates a persistent disk_deletion task, asks the user in NipaPlay, then checks the manifest again. '
+      'When the user answers (Delete, Cancel or closing the window) the outcome returns to the requesting conversation, queued while a turn is active; a followup you registered on the task jobId replaces that return. The facts carry state, whether it was deleted, and deletedFiles. '
       'This action cannot approve deletion. Restart before requesting requires a new preview.',
     effect: Effect.destructive,
     input: ObjectSchema({'previewId': StringSchema(minLength: 1)}, required: ['previewId']),
@@ -437,10 +443,12 @@ final class _RequestDownloadDeletion extends Action<_Json, _Json> {
       throw const Failure(FailureCode.conflict, 'Download targets changed after preview; preview again.');
     }
     deletion._previews.remove(id);
+    final target = await deletion.returnTarget?.call(invocation);
     final job = await deletion.engine.submit(type: deletion.type, title: '删除下载文件', input: {
       'action': 'download.delete', 'arguments': plan['arguments'],
       'origin': invocation.origin, 'invocationId': plan['invocationId'],
       'expectedPlan': fingerprint, 'preview': plan['preview'],
+      if (target != null) 'returnTo': target,
     });
     return Completed(_Json({'job': job.toJson()}));
   }

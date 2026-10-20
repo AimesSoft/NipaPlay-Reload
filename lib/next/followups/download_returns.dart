@@ -231,6 +231,7 @@ extension DownloadReturns on Followups {
       row['automatic'] = switch (remote['automatic']) {
         'program' => 'meshProgram',
         'subscription' => 'meshSubscription',
+        'userTask' => 'meshUserTask',
         _ => 'meshDownload',
       };
       row['condition'] = {'kind': 'mesh.${remote['automatic']}.facts'};

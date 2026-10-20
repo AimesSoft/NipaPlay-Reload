@@ -46,7 +46,7 @@ const _specs = [
       id: 'accounts.login',
       title: 'Initiate account login',
       description:
-          'Log in through the Classic account service. Without a user-provided secret, the user logs in in NipaPlay’s own window: while the Next interface shows, a 需要登录 card under your reply opens it when they press it; otherwise the window opens at once. Dandanplay uses username/password; Bangumi uses a personal access token. A secret voluntarily supplied by the user in conversation may be passed here; never search for secrets. Returns a jobId; it ends when they log in or close the window, so task.wait or a followup on it tells you. Secrets stay in memory until authentication and never enter job inputs or receipts.',
+          'Log in through the Classic account service. Without a user-provided secret, the user logs in in NipaPlay’s own window: while the Next interface shows, a 需要登录 card under your reply opens it when they press it; otherwise the window opens at once. Dandanplay uses username/password; Bangumi uses a personal access token. A secret voluntarily supplied by the user in conversation may be passed here; never search for secrets. Returns a jobId; it ends when they log in or close the window, so task.wait or a followup on it tells you. A login the user completes in the window, started from a conversation, returns to that conversation when it ends, however it ends (logged in, failed, window closed or cancelled), queued while a turn is active; a followup you registered on its jobId replaces that return. The facts carry provider, method, state and loggedIn, never the account name or any secret. Secrets stay in memory until authentication and never enter job inputs or receipts.',
       effect: Effect.write,
       input: ObjectSchema({
         'provider': _provider,
@@ -175,7 +175,7 @@ final class _AccountAction extends Action<_Json, _Json> {
             ]
           };
         case 'accounts.login':
-          result = await service.login(input);
+          result = await service.login(input, invocation);
         case 'accounts.logout':
           result = await service.logout(provider!);
         case 'accounts.collections.get':

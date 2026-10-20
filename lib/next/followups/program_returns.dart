@@ -62,5 +62,7 @@ bool _taskReturn(JsonMap row) => const {
       'download',
       'meshDownload',
       'program',
-      'meshProgram'
+      'meshProgram',
+      'userTask',
+      'meshUserTask'
     }.contains(row['automatic']);

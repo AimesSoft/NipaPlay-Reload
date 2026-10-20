@@ -17,6 +17,7 @@ import '../state/query.dart';
 
 part 'download_returns.dart';
 part 'program_returns.dart';
+part 'user_task_returns.dart';
 
 const followupFields = ObjectSchema({
   'id': StringSchema(),
@@ -92,6 +93,8 @@ final class Followups {
 
   void _schedule() {
     unawaited(sweep().catchError((Object error, StackTrace stack) {
+      // A sweep still running as the engine closes has nothing left to read.
+      if (error is Failure && error.message == 'Task engine is closed.') return;
       // Infrastructure failures are visible rather than dropping a condition.
       Zone.current.handleUncaughtError(error, stack);
     }));
@@ -353,6 +356,7 @@ final class Followups {
   Future<void> sweep() => _serial(() async {
         await _collectDownloadReturns();
         await _collectProgramReturns();
+        await _collectUserTaskReturns();
         final rows = await _rows();
         // Resolve one-shot subscriptions before deciding which facts they own.
         for (final row in [

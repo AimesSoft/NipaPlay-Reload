@@ -217,6 +217,8 @@ final class NextCore {
     followups = Followups(database, engine, harnessLocation);
     memory = HarnessMemory(harnessLocation, settings, followups.discover);
     programs.returnTarget = followups.downloadReturnTarget;
+    accounts.returnTarget = followups.downloadReturnTarget;
+    diskDeletion.returnTarget = followups.downloadReturnTarget;
     attachMeshDelivery(mesh, followups);
     mesh.describeSelf = () async {
       await harnessLocation.ready;
