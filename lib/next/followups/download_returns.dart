@@ -86,6 +86,7 @@ extension DownloadReturns on Followups {
           if (file['isVideo'] == true &&
               file['imported'] == true &&
               file['verification'] == 'verified' &&
+              (file['binding'] as Map?)?['status'] != 'pending' &&
               !covered.contains(file['objectId']))
             {
               'event': 'download.file_completed',

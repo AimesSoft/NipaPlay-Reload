@@ -61,6 +61,31 @@ completed selection returns a new observation job; the prior receipt stays
 immutable and duplicate add returns the current hash's job. Classic calls omit
 the optional selection and keep their prior behavior.
 
+`download.add.fileBindings` (single `source` only) declares, at order time,
+which episodes a file index is: entries `{fileIndex, workRef, releaseRef?,
+episodeRefs, reason?}` use the catalogue-mode refs of `media.identity.bind_batch`.
+Add validates them and rejects the whole call when an index is declared twice,
+lies outside `fileIndices`, does not exist in a torrent file's manifest (magnets
+have no manifest before the engine fetched metadata, so their out-of-range
+indices are not detected at add), or an entry is malformed. The declaration is
+stored in the job input with the invocation's origin. When a declared local
+video passes verification, the executor saves its `completedFiles` row with
+`binding: {status: pending}`, then runs `DownloadLibrary.bindFile`, which calls
+`MediaService.bindBatch` (kind=file, `entityId` = the file id, requestId
+`download:JOB_ID:file:INDEX`) with that origin. The outcome replaces `pending` on
+the row, the row's `media` is read again, and `download.file_completed` carries it
+as `file.binding`; the fact is not published while the row is pending. A pending
+row found after a restart is bound again under the same requestId, which returns
+the saved result. Statuses: `bound` (`workId`, `releaseId`, `episodeIds`),
+`already_identified` (the file already had episodes, e.g. from Classic;
+`existingEpisodeIds`; nothing is changed), `not_applied` (`file_not_registered`),
+`failed` (`error`). One attempt per file; a failure never fails or retries the
+download. Receipts list declared indices that never reached a binding attempt in
+`details.unboundDeclarations` (`no_such_file`, `not_selected`, `not_video`,
+`not_completed`). A duplicate add returns the existing job and keeps its
+original declarations. Both the application and the headless host implement
+`bindFile` through the same `bindDownloadedFile`.
+
 `download.import` scans completed local videos, including when automatic scan is
 off. It checks containment and actual sizes, reuses the Classic scanner and
 completed-scan marker, and returns actual recognized entries. An attempted scan

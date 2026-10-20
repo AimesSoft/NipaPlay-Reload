@@ -4,6 +4,7 @@ import '../downloads/download_backend.dart';
 import '../downloads/download_service.dart';
 import '../downloads/download_source.dart';
 import '../downloads/download_paths.dart';
+import '../downloads/file_bindings.dart';
 import 'classic_action.dart';
 
 final _downloadJobSchema = ObjectSchema({
@@ -26,6 +27,30 @@ const _backendSchema = ObjectSchema({
   'kind'
 ]);
 const _idSchema = StringSchema(minLength: 1);
+const _refSchema = ObjectSchema({
+  'provider': _idSchema,
+  'objectType': _idSchema,
+  'externalId': _idSchema,
+  'scope': StringSchema(),
+}, required: [
+  'provider',
+  'objectType',
+  'externalId',
+  'scope'
+]);
+const _fileBindingsSchema = ArraySchema(
+    ObjectSchema({
+      'fileIndex': IntegerSchema(minimum: 0),
+      'workRef': _refSchema,
+      'releaseRef': _refSchema,
+      'episodeRefs': ArraySchema(_refSchema, minItems: 1),
+      'reason': _idSchema,
+    }, required: [
+      'fileIndex',
+      'workRef',
+      'episodeRefs'
+    ]),
+    minItems: 1);
 const _idsSchema = ArraySchema(_idSchema);
 const _downloadTaskSchema = ObjectSchema({
   'handle': _idSchema,
@@ -140,7 +165,7 @@ final class _DownloadAction extends Action<_DownloadJson, _DownloadJson> {
         title: '$operation download',
         description: switch (operation) {
           'add' =>
-            'Accept source or sources: magnet URIs, HTTP(S) torrent URLs or local .torrent paths. Optional downloadDirectory and createFolderForTask override defaults for these new tasks without changing settings. Returns queued jobs after metadata validation, deduplicated by backend and infoHash; an existing task keeps its original directory. Batch results preserve input order and individual failures.',
+            'Accept source or sources: magnet URIs, HTTP(S) torrent URLs or local .torrent paths. Optional downloadDirectory and createFolderForTask override defaults for these new tasks without changing settings. Optional fileBindings (single source only) declares file index -> episode identity: entries are {fileIndex, workRef, releaseRef?, episodeRefs, reason?} with the catalogue-mode refs of media.identity.bind_batch. Indices must be unique and exist (checked at add for torrent files; a magnet has no manifest yet, so its out-of-range indices only appear in the receipt as unboundDeclarations), and lie within fileIndices when given; invalid input rejects the whole add. When a declared file passes verification and is registered, NipaPlay binds it with bind_batch (requestId derived from job and file index, so replays do not duplicate) and records the outcome on that file as binding: bound (workId, releaseId, episodeIds), already_identified (the file already had episodes, left untouched), not_applied or failed (error); binding failure never fails the download. An existing task for the same hash keeps its original declarations. Returns queued jobs after metadata validation, deduplicated by backend and infoHash; an existing task keeps its original directory. Batch results preserve input order and individual failures.',
           'set_paused' =>
             'Set paused for jobId or jobIds, including downloading and seeding. Returns persisted jobs and individual batch failures.',
           'pause' =>
@@ -171,6 +196,7 @@ final class _DownloadAction extends Action<_DownloadJson, _DownloadJson> {
                 'downloadDirectory': _idSchema,
                 'createFolderForTask': BooleanSchema(),
                 'fileIndices': ArraySchema(IntegerSchema(minimum: 0)),
+                'fileBindings': _fileBindingsSchema,
               }, oneOfRequired: [
                 ['source'],
                 ['sources']
@@ -246,6 +272,16 @@ final class _DownloadAction extends Action<_DownloadJson, _DownloadJson> {
         throw const Failure(
             FailureCode.invalidInput, 'File indices must be unique.');
       }
+      List<JsonMap>? bindings;
+      if (json['fileBindings'] != null) {
+        final isMagnet = Uri.tryParse(target)?.scheme == 'magnet';
+        bindings = parseFileBindings(json['fileBindings'],
+            fileCount: isMagnet
+                ? null
+                : ((await sources.previewTorrent(prepared))['files'] as List)
+                    .length,
+            fileIndices: indices);
+      }
       job = await downloads.add(
           DownloadRequest(
             source: prepared.source,
@@ -254,6 +290,8 @@ final class _DownloadAction extends Action<_DownloadJson, _DownloadJson> {
             downloadDirectory: directory,
             createFolderForTask: json['createFolderForTask'] as bool?,
             fileIndices: (json['fileIndices'] as List?)?.cast<int>(),
+            fileBindings: bindings,
+            bindingOrigin: bindings == null ? null : invocation.origin,
           ),
           backend: ref,
           invocation: invocation);
@@ -281,6 +319,12 @@ final class _DownloadAction extends Action<_DownloadJson, _DownloadJson> {
   Future<Outcome<_DownloadJson>> run(
       _DownloadJson input, Invocation invocation) async {
     final json = input.json;
+    if (operation == 'add' &&
+        json.containsKey('sources') &&
+        json['fileBindings'] != null) {
+      throw const Failure(FailureCode.invalidInput,
+          'fileBindings are per torrent; use source, not sources.');
+    }
     final field = operation == 'add' ? 'source' : 'jobId';
     final batchField = operation == 'add' ? 'sources' : 'jobIds';
     if (!json.containsKey(batchField)) {

@@ -9,6 +9,7 @@ import 'package:nipaplay/services/torrent_download_service.dart';
 import 'package:nipaplay/utils/settings_storage.dart';
 
 import 'download_backend.dart';
+import 'file_bindings.dart';
 
 final class AppDownloadLibrary implements DownloadLibrary {
   AppDownloadLibrary(this.service);
@@ -78,6 +79,18 @@ final class AppDownloadLibrary implements DownloadLibrary {
     await ServiceProvider.watchHistoryProvider.refresh();
     return success;
   }
+
+  @override
+  Future<JsonMap> bindFile(
+          {required String fileId,
+          required JsonMap declaration,
+          required String requestId,
+          required String origin}) =>
+      bindDownloadedFile(ServiceProvider.nextCore.media.service,
+          fileId: fileId,
+          declaration: declaration,
+          requestId: requestId,
+          origin: origin);
 
   Future<void> _registryUpdates = Future.value();
   @override

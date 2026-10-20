@@ -6,6 +6,7 @@ import '../../models/torrent_task.dart';
 import '../downloads/download_backend.dart';
 import '../downloads/download_paths.dart';
 import '../downloads/download_source.dart';
+import '../downloads/file_bindings.dart';
 import '../media/media_service.dart';
 import 'native.dart';
 
@@ -325,6 +326,18 @@ final class HeadlessDownloadLibrary implements DownloadLibrary {
       'identificationPending': episodes.isEmpty
     };
   }
+
+  @override
+  Future<JsonMap> bindFile(
+          {required String fileId,
+          required JsonMap declaration,
+          required String requestId,
+          required String origin}) =>
+      bindDownloadedFile(media,
+          fileId: fileId,
+          declaration: declaration,
+          requestId: requestId,
+          origin: origin);
 
   @override
   Future<bool> importFiles(List<String> paths, String outputDirectory) async {

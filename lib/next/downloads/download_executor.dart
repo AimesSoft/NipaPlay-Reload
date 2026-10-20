@@ -5,6 +5,7 @@ import 'package:nipa_harness/nipa_harness.dart';
 
 import 'download_backend.dart';
 import 'download_paths.dart';
+import 'file_bindings.dart';
 
 final class DownloadExecutor implements JobExecutor {
   DownloadExecutor(
@@ -288,7 +289,7 @@ final class DownloadExecutor implements JobExecutor {
         await _finishCancelled(context, backend, task, files);
         return;
       }
-      await context.succeed(_receipt(task, files));
+      await context.succeed(_receipt(task, files, unreached: _unreached(context, task)));
     } on FileSystemException catch (error) {
       if (stopped && context.job.cancelRequestedAt == null) return;
       final failure =
@@ -332,9 +333,18 @@ final class DownloadExecutor implements JobExecutor {
 
   Future<void> _completedFiles(JobContext context, DownloadBackend backend,
       DownloadSnapshot task) async {
-    final completed = (context.job.checkpoint['completedFiles'] as List? ?? [])
-        .cast<JsonMap>()
-        .toList();
+    final completed = [
+      for (final row in context.job.checkpoint['completedFiles'] as List? ??
+          [])
+        Map<String, Object?>.from(row as Map)
+    ];
+    // A crash between registering a file and saving its binding leaves the
+    // row pending; the stable requestId makes running it again safe.
+    for (final row in completed) {
+      if ((row['binding'] as Map?)?['status'] == 'pending') {
+        await _bindCompleted(context, completed, row);
+      }
+    }
     for (var index = 0; index < task.files.length; index++) {
       final file = task.files[index];
       if (!file.included ||
@@ -382,12 +392,119 @@ final class DownloadExecutor implements JobExecutor {
           'identificationPending': true,
         'completedAt': DateTime.now().toUtc().toIso8601String(),
       });
+      final declared = _declaration(context, index) != null &&
+          file.isVideo &&
+          file.location.isLocal;
+      // Pending keeps the file event back until the binding outcome is on
+      // the row; the media access check needs this row saved first.
+      if (declared) completed.last['binding'] = {'status': 'pending'};
       // Persist before task observers publish the file event. Recovery reads this fact.
       await context.report(checkpoint: {
         ...context.job.checkpoint,
         'completedFiles': completed.toList(),
       });
+      if (declared) await _bindCompleted(context, completed, completed.last);
     }
+  }
+
+  JsonMap? _declaration(JobContext context, int index) {
+    for (final entry in context.job.input['fileBindings'] as List? ?? []) {
+      if ((entry as Map)['fileIndex'] == index) {
+        return Map<String, Object?>.from(entry);
+      }
+    }
+    return null;
+  }
+
+  /// Applies the file's declared episode identity and saves the outcome on
+  /// its row. Whatever happens here, the download carries on: the outcome is
+  /// a fact for whoever ordered it, and nothing retries it.
+  Future<void> _bindCompleted(
+      JobContext context, List<JsonMap> completed, JsonMap row) async {
+    final index = row['index'] as int;
+    final declaration = _declaration(context, index);
+    JsonMap outcome;
+    try {
+      if (declaration == null) {
+        outcome = {'status': 'not_applied', 'reason': 'no_declaration'};
+      } else {
+        final path = row['path'] as String;
+        var media = await library.lookup(path);
+        final fileId = media?['fileId'] as String?;
+        final existing = [
+          for (final e in media?['episodes'] as List? ?? [])
+            (e as Map)['episodeId']
+        ];
+        if (fileId == null) {
+          outcome = {'status': 'not_applied', 'reason': 'file_not_registered'};
+        } else if (existing.isNotEmpty) {
+          // Another identification came first; the declaration does not
+          // overwrite it.
+          outcome = {
+            'status': 'already_identified',
+            'existingEpisodeIds': existing
+          };
+        } else {
+          final bound = await library.bindFile(
+              fileId: fileId,
+              declaration: declaration,
+              requestId: fileBindingRequestId(context.job.jobId, index),
+              origin: context.job.input['bindingOrigin'] as String? ??
+                  'download');
+          outcome = {
+            'status': 'bound',
+            'workId': bound['workId'],
+            'releaseId': bound['releaseId'],
+            'episodeIds': bound['episodeIds'],
+          };
+          media = await library.lookup(path) ?? media;
+        }
+        if (media != null) {
+          row['media'] = media;
+          row['imported'] = true;
+          if (media['identificationPending'] == true) {
+            row['identificationPending'] = true;
+          } else {
+            row.remove('identificationPending');
+          }
+        }
+      }
+    } on Failure catch (failure) {
+      outcome = {'status': 'failed', 'error': failure.toJson()};
+    } catch (error) {
+      outcome = {
+        'status': 'failed',
+        'error': Failure(FailureCode.internal, 'Binding failed: $error')
+            .toJson()
+      };
+    }
+    row['binding'] = outcome;
+    await context.report(checkpoint: {
+      ...context.job.checkpoint,
+      'completedFiles': completed.toList(),
+    });
+  }
+
+  /// Declared files that did not get a binding attempt, and why.
+  List<JsonMap> _unreached(JobContext context, DownloadSnapshot task) {
+    final done = {
+      for (final row in context.job.checkpoint['completedFiles'] as List? ?? [])
+        if ((row as Map)['binding'] != null) row['index']
+    };
+    return [
+      for (final entry in context.job.input['fileBindings'] as List? ?? [])
+        if (!done.contains((entry as Map)['fileIndex']))
+          {
+            'fileIndex': entry['fileIndex'],
+            'reason': (entry['fileIndex'] as int) >= task.files.length
+                ? 'no_such_file'
+                : !task.files[entry['fileIndex'] as int].included
+                    ? 'not_selected'
+                    : !task.files[entry['fileIndex'] as int].isVideo
+                        ? 'not_video'
+                        : 'not_completed'
+          }
+    ];
   }
 
   /// Each stretch without progress is recorded once, with what the engine
@@ -479,7 +596,8 @@ final class DownloadExecutor implements JobExecutor {
         row['identificationPending'] = true;
       }
     }
-    await context.cancelled(_receipt(task, files, reason: reason));
+    await context.cancelled(_receipt(task, files,
+        reason: reason, unreached: _unreached(context, task)));
   }
 
   Future<bool> _verify(
@@ -535,7 +653,7 @@ final class DownloadExecutor implements JobExecutor {
   }
 
   JobReceipt _receipt(DownloadSnapshot task, List<JsonMap> files,
-          {String? reason}) =>
+          {String? reason, List<JsonMap> unreached = const []}) =>
       JobReceipt(verification: VerificationLevel.verified, details: {
         'infoHash': task.infoHash,
         'outputDirectory': task.output.path,
@@ -550,6 +668,7 @@ final class DownloadExecutor implements JobExecutor {
           for (final row in files)
             ...?((row['media'] as Map?)?['workIds'] as List?)
         }.toList(),
-        if (reason != null) 'reason': reason
+        if (reason != null) 'reason': reason,
+        if (unreached.isNotEmpty) 'unboundDeclarations': unreached
       });
 }

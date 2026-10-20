@@ -201,4 +201,32 @@ final class FakeDownloadLibrary implements DownloadLibrary {
   Future<void> markImported(String key) async {
     importedKeys.add(key);
   }
+
+  /// Every bindFile call, in order; a repeated requestId returns the saved
+  /// result the way the media store does and is not counted in [bound].
+  final bindCalls = <JsonMap>[];
+  final bound = <String, JsonMap>{};
+  Object? bindFailure;
+  Future<void>? bindGate;
+  @override
+  Future<JsonMap> bindFile(
+      {required String fileId,
+      required JsonMap declaration,
+      required String requestId,
+      required String origin}) async {
+    bindCalls.add({
+      'fileId': fileId,
+      'declaration': declaration,
+      'requestId': requestId,
+      'origin': origin
+    });
+    await bindGate;
+    if (bindFailure != null) throw bindFailure!;
+    return bound.putIfAbsent(requestId, () => {
+          'workId': 'work-1',
+          'releaseId': 'release-1',
+          'episodeIds': ['episode-${bound.length + 1}'],
+          'fileId': fileId
+        });
+  }
 }
