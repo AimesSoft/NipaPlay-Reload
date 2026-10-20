@@ -212,6 +212,9 @@ final class FakeDownloadLibrary implements DownloadLibrary {
   final _boundDeclarations = <String, String>{};
   Object? bindFailure;
   Future<void>? bindGate;
+
+  /// Extra fields of a successful bind result, like `supersededClassic`.
+  JsonMap bindExtras = {};
   @override
   Future<JsonMap> bindFile(
       {required String fileId,
@@ -236,7 +239,8 @@ final class FakeDownloadLibrary implements DownloadLibrary {
           'workId': 'work-1',
           'releaseId': 'release-1',
           'episodeIds': ['episode-${bound.length + 1}'],
-          'fileId': fileId
+          'fileId': fileId,
+          ...bindExtras
         });
     for (final entry in media.values) {
       if (entry['fileId'] == fileId) {

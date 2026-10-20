@@ -49,6 +49,7 @@ final class AppDownloadLibrary implements DownloadLibrary {
             }
         ],
         'identificationPending': links.isEmpty,
+        'classicMatchOnly': await media.store.classicMatchOnly(fileId),
         'classicScanPending': item == null
       };
     }
@@ -65,6 +66,7 @@ final class AppDownloadLibrary implements DownloadLibrary {
           }
       ],
       'identificationPending': links.isEmpty,
+      'classicMatchOnly': await media.store.classicMatchOnly(fileId),
       'animeId': item.animeId,
       'episodeId': item.episodeId,
       'animeName': item.animeName,

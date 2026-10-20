@@ -473,9 +473,11 @@ final class DownloadExecutor implements JobExecutor {
             row['bindingRequestId'] == requestId) {
           // This very declaration is what bound the file.
           outcome = Map<String, Object?>.from(previous);
-        } else if (existing.isNotEmpty) {
+        } else if (existing.isNotEmpty &&
+            media?['classicMatchOnly'] != true) {
           // Another identification came first; the declaration does not
-          // overwrite it.
+          // overwrite it. (A Classic match alone is not one: the declaration
+          // takes its place.)
           outcome = {
             'status': 'already_identified',
             'existingEpisodeIds': existing
@@ -493,6 +495,8 @@ final class DownloadExecutor implements JobExecutor {
             'workId': bound['workId'],
             'releaseId': bound['releaseId'],
             'episodeIds': bound['episodeIds'],
+            if (bound['supersededClassic'] != null)
+              'supersededClassic': bound['supersededClassic'],
           };
           row['bindingRequestId'] = requestId;
           media = await library.lookup(path) ?? media;

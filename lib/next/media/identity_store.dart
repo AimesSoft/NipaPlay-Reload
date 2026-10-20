@@ -299,7 +299,11 @@ final class IdentityStore {
                 episodeId > 0 &&
                 (row['animeName'] as String).isNotEmpty &&
                 row['episodeTitle'] != null;
-            if (matched) {
+            // An explicit binding that took the place of this file's Classic
+            // match keeps it: the observation is recorded, nothing is attached.
+            final declared = matched && await _declaredOverClassic(tx, fileId);
+            if (declared) evidence['provenance'] = 'classic_superseded';
+            if (matched && !declared) {
               final work = MetadataRecord(
                   ref: ExternalRef('dandanplay', 'anime', '$animeId'),
                   title: row['animeName'] as String,
@@ -423,6 +427,155 @@ final class IdentityStore {
       }
     }
     return history.length;
+  }
+
+  Future<bool> _declaredOverClassic(DatabaseExecutor tx, String fileId) async {
+    final file = await entity(fileId, db: tx);
+    final marker = (file['attributes'] as JsonMap)['classicSuperseded'];
+    if (marker is! Map) return false;
+    final ids = (marker['bindingIds'] as List? ?? []).cast<String>();
+    if (ids.isEmpty) return false;
+    return (await tx.rawQuery(
+            "SELECT 1 FROM media_bindings WHERE entity_id=? AND status='accepted' AND source!='classic_match' "
+            'AND id IN (${List.filled(ids.length, '?').join(',')}) LIMIT 1',
+            [fileId, ...ids]))
+        .isNotEmpty;
+  }
+
+  /// True when the file has episodes and every one of them comes from a
+  /// Classic match alone: no explicit binding (user or agent) and no
+  /// local_catalog link stands behind any of them.
+  Future<bool> classicMatchOnly(String fileId, {DatabaseExecutor? db}) async {
+    final row = (await (db ?? database).rawQuery(
+            'SELECT COUNT(*) AS total, SUM(CASE WHEN fe.relation=\'local_catalog\' OR EXISTS('
+            'SELECT 1 FROM media_bindings f JOIN media_bindings e ON e.object_id=f.object_id '
+            "WHERE f.entity_id=fe.file_id AND f.status='accepted' AND f.source!='classic_match' "
+            "AND e.entity_id=fe.episode_id AND e.status='accepted') THEN 1 ELSE 0 END) AS explicit "
+            'FROM media_file_episodes fe WHERE fe.file_id=?',
+            [await canonicalFileId(db ?? database, fileId)]))
+        .single;
+    return (row['total'] as int) > 0 && (row['explicit'] as int? ?? 0) == 0;
+  }
+
+  /// Whether a work is something the library shows: it keeps an accepted
+  /// binding or a file somewhere in its tree. A work made of identities
+  /// alone, left with none and with no file, stays stored and shows again
+  /// when bound again.
+  Future<bool> _workPresent(DatabaseExecutor tx, String workId) async =>
+      (await tx.rawQuery(
+              'WITH RECURSIVE t(id) AS (SELECT ? UNION ALL SELECT e.id FROM media_entities e JOIN t ON e.parent_id=t.id) '
+              "SELECT EXISTS(SELECT 1 FROM media_bindings WHERE entity_id IN (SELECT id FROM t) AND status='accepted') "
+              'OR EXISTS(SELECT 1 FROM media_file_episodes WHERE episode_id IN (SELECT id FROM t)) AS kept',
+              [workId]))
+          .single['kept'] ==
+      1;
+
+  /// An explicit binding of [fileId] to [keptEpisodes] takes the place of the
+  /// Classic match the file had: that match's file bindings and episode links
+  /// go, and works that held nothing but Classic matches lose theirs, so they
+  /// leave the library. Returns what was superseded, or null when the file
+  /// had no differing Classic match. Explicit bindings are never touched.
+  Future<JsonMap?> _supersedeClassicMatch(DatabaseExecutor tx, String fileId,
+      List<String> keptEpisodes, JsonMap input, Invocation invocation) async {
+    final explicit = await tx.query('media_bindings',
+        where: "entity_id=? AND status='accepted' AND source!='classic_match'",
+        whereArgs: [fileId]);
+    if (explicit.isEmpty) return null;
+    final explicitObjects = {for (final b in explicit) b['object_id']};
+    final stale = [
+      for (final b in await tx.query('media_bindings',
+          where: "entity_id=? AND status='accepted' AND source='classic_match'",
+          whereArgs: [fileId]))
+        if (!explicitObjects.contains(b['object_id'])) b
+    ];
+    final dropped = <JsonMap>[];
+    for (final link in await tx.query('media_file_episodes',
+        where: "file_id=? AND relation<>'local_catalog'",
+        whereArgs: [fileId])) {
+      if (keptEpisodes.contains(link['episode_id'])) continue;
+      final backed = await tx.rawQuery(
+          'SELECT 1 FROM media_bindings f JOIN media_bindings e ON e.object_id=f.object_id '
+          "WHERE f.entity_id=? AND f.status='accepted' AND f.source!='classic_match' "
+          "AND e.entity_id=? AND e.status='accepted'",
+          [fileId, link['episode_id']]);
+      if (backed.isEmpty) dropped.add(link);
+    }
+    if (stale.isEmpty && dropped.isEmpty) return null;
+    final reason = {
+      'reason': 'Superseded by an explicit binding of this file.'
+    };
+    for (final binding in stale) {
+      await tx.update('media_bindings', {'status': 'revoked'},
+          where: 'id=?', whereArgs: [binding['id']]);
+      await _audit(tx, binding['id'] as String, reason, invocation,
+          event: 'unbind');
+    }
+    final workIds = <String>{};
+    for (final link in dropped) {
+      await tx.delete('media_file_episodes',
+          where: 'file_id=? AND episode_id=?',
+          whereArgs: [fileId, link['episode_id']]);
+      final episode = await entity(link['episode_id'] as String, db: tx);
+      final release = await tx.query('media_entities',
+          where: 'id=?', whereArgs: [episode['parent_id']]);
+      if (release.isNotEmpty && release.single['parent_id'] != null) {
+        workIds.add(release.single['parent_id'] as String);
+      }
+    }
+    final emptied = <String>[];
+    for (final workId in workIds) {
+      final work = await entity(workId, db: tx);
+      final attrs = work['attributes'] as JsonMap;
+      if (attrs['localOnly'] == true || attrs['removed'] == true) continue;
+      final tree = [
+        for (final row in await tx.rawQuery(
+            'WITH RECURSIVE t(id) AS (SELECT ? UNION ALL SELECT e.id FROM media_entities e JOIN t ON e.parent_id=t.id) SELECT id FROM t',
+            [workId]))
+          row['id'] as String
+      ];
+      final marks = List.filled(tree.length, '?').join(',');
+      final held = await tx.rawQuery(
+          "SELECT 1 FROM media_bindings WHERE entity_id IN ($marks) AND status='accepted' AND source!='classic_match' "
+          'UNION ALL SELECT 1 FROM media_file_episodes WHERE episode_id IN ($marks) LIMIT 1',
+          [...tree, ...tree]);
+      if (held.isNotEmpty) continue;
+      for (final binding in await tx.query('media_bindings',
+          where:
+              "status='accepted' AND source='classic_match' AND entity_id IN ($marks)",
+          whereArgs: tree)) {
+        await tx.update('media_bindings', {'status': 'revoked'},
+            where: 'id=?', whereArgs: [binding['id']]);
+        await _audit(
+            tx,
+            binding['id'] as String,
+            {
+              'reason':
+                  'Work held only Classic matches that an explicit binding superseded.'
+            },
+            invocation,
+            event: 'unbind');
+      }
+      emptied.add(workId);
+    }
+    final file = await entity(fileId, db: tx);
+    await tx.update(
+        'media_entities',
+        {
+          'attributes': jsonEncode({
+            ...file['attributes'] as JsonMap,
+            'classicSuperseded': {
+              'bindingIds': [for (final b in explicit) b['id']]
+            }
+          })
+        },
+        where: 'id=?',
+        whereArgs: [fileId]);
+    return {
+      'source': 'classic_match',
+      'workIds': workIds.toList()..sort(),
+      'episodeIds': [for (final link in dropped) link['episode_id']],
+      'emptiedWorkIds': emptied..sort(),
+    };
   }
 
   Future<String> _classicLocal(DatabaseExecutor tx, String kind,
@@ -791,8 +944,14 @@ final class IdentityStore {
         'SELECT b.id,b.source,o.external_id,o.scope,o.provider FROM media_bindings b '
         'JOIN media_external_objects o ON o.id=b.object_id WHERE b.entity_id=? AND b.status=? AND b.source!=?',
         [id, 'accepted', 'classic_match']);
-    for (final observation
-        in classic.where((o) => o['provenance'] == 'classic_match')) {
+    final inForce = {
+      for (final row in await database.query('media_bindings',
+          columns: ['id'], where: "status='accepted'"))
+        row['id']
+    };
+    for (final observation in classic.where((o) =>
+        o['provenance'] == 'classic_match' &&
+        (o['bindingId'] == null || inForce.contains(o['bindingId'])))) {
       for (final binding in bindings) {
         bool same;
         if (binding['provider'] == 'dandanplay') {
@@ -1013,6 +1172,10 @@ final class IdentityStore {
     for (final work in works) {
       if (decodeMediaJson(work['attributes'])['removed'] == true) continue;
       final id = work['id'] as String;
+      if (decodeMediaJson(work['attributes'])['localOnly'] != true &&
+          !await _workPresent(database, id)) {
+        continue;
+      }
       final metadata = await mergedMetadata(id);
       final fields = metadata['fields'] as JsonMap;
       final title = fields['title'] as String? ??
@@ -1165,8 +1328,12 @@ final class IdentityStore {
     return id;
   }
 
+  /// With [supersedeClassicMatch], a file entry's binding takes the place of
+  /// the file's Classic match (see [_supersedeClassicMatch]); without it
+  /// both stay and `identity.get.conflicts` shows where they differ.
   Future<JsonMap> bindBatch(List<JsonMap> entries, String key,
-          String fingerprint, Invocation invocation) =>
+          String fingerprint, Invocation invocation,
+          {bool supersedeClassicMatch = false}) =>
       _filesChanged((newFiles) => _transaction((tx) async {
             final saved = await operation(key, fingerprint, db: tx);
             if (saved != null) return saved;
@@ -1180,7 +1347,8 @@ final class IdentityStore {
                 if (entry.containsKey('ref')) {
                   if (kind == 'file') {
                     results.add(await _bindFileReference(
-                        tx, entry, key, invocation, index));
+                        tx, entry, key, invocation, index,
+                        supersedeClassicMatch: supersedeClassicMatch));
                     continue;
                   }
                   final id = entry['entityId'] as String;
@@ -1327,6 +1495,7 @@ final class IdentityStore {
                   }
                 }
                 String? fileId;
+                JsonMap? supersededClassic;
                 if (kind == 'file') {
                   fileId = entry['entityId'] as String? ??
                       await _ensureFile(
@@ -1425,6 +1594,10 @@ final class IdentityStore {
                     await _queueFileProjection(
                         tx, fileId, file['revision'] as int, revision);
                   }
+                  if (supersedeClassicMatch) {
+                    supersededClassic = await _supersedeClassicMatch(
+                        tx, fileId, episodeIds, entry, invocation);
+                  }
                 }
                 results.add({
                   'index': index,
@@ -1443,7 +1616,9 @@ final class IdentityStore {
                         ]))
                         .map((p) => p['id'])
                         .firstOrNull,
-                  'bindingIds': bindings
+                  'bindingIds': bindings,
+                  if (supersededClassic != null)
+                    'supersededClassic': supersededClassic,
                 });
               } on Failure catch (error) {
                 throw Failure(error.code, 'Entry $index: ${error.message}',
@@ -1565,7 +1740,8 @@ final class IdentityStore {
       });
 
   Future<JsonMap> _bindFileReference(DatabaseExecutor tx, JsonMap entry,
-      String key, Invocation invocation, int index) async {
+      String key, Invocation invocation, int index,
+      {bool supersedeClassicMatch = false}) async {
     final fileId = entry['entityId'] as String;
     final file = await entity(fileId, db: tx);
     final attrs = file['attributes'] as JsonMap;
@@ -1661,6 +1837,10 @@ final class IdentityStore {
         where: 'file_id=? AND binding_revision=?',
         whereArgs: [fileId, revision]);
     final release = await entity(episode['parent_id'] as String, db: tx);
+    final supersededClassic = supersedeClassicMatch
+        ? await _supersedeClassicMatch(
+            tx, fileId, [episodeId], entry, invocation)
+        : null;
     return {
       'index': index,
       'workId': release['parent_id'],
@@ -1668,7 +1848,8 @@ final class IdentityStore {
       'episodeIds': [episodeId],
       'fileId': fileId,
       'classicProjectionId': projections.map((row) => row['id']).firstOrNull,
-      'bindingIds': [binding]
+      'bindingIds': [binding],
+      if (supersededClassic != null) 'supersededClassic': supersededClassic,
     };
   }
 
