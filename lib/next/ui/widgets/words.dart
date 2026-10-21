@@ -36,7 +36,11 @@ abstract final class Words {
             : remaining(task.remaining),
       };
 
-  static String runtime(Duration d) => '${d.inMinutes} 分';
+  /// An episode's length, “24 分”; null when it is not known (no length,
+  /// or a length of nothing), so nothing is said.
+  static String? runtime(Duration? d) => d == null || d <= Duration.zero
+      ? null
+      : '${d.inMinutes < 1 ? 1 : d.inMinutes} 分';
 
   /// “第一季”, “第二季”…; season 0 holds the specials.
   static String season(int? season) {

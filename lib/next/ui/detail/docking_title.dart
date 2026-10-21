@@ -103,28 +103,36 @@ class RenderDockingTitle extends RenderProxyBox {
   @override
   bool hitTest(BoxHitTestResult result, {required Offset position}) => false;
 
+  /// Where the title is drawn this frame, and how opaque.
+  (Matrix4, double) _placement(RenderBox child) {
+    final scrolled = _scroll.hasClients ? math.max(0.0, _scroll.offset) : 0.0;
+    final d = _dock.value;
+    final y0 = _top - scrolled;
+    if (_reduced) return (Matrix4.translationValues(0, y0, 0), 1 - d);
+    final size = child.size;
+    final s1 = math.min(1.0, _docked / size.height);
+    final x1 = (_viewWidth - size.width * s1) / 2 - _left;
+    final y1 = NextMetrics.topBar / 2 - size.height * s1 / 2;
+    final s = 1 + (s1 - 1) * d;
+    return (
+      Matrix4.translationValues(x1 * d, y0 + (y1 - y0) * d, 0)
+        ..scaleByDouble(s, s, 1, 1),
+      1 - const Interval(0.55, 1).transform(d)
+    );
+  }
+
+  /// So the title's place on screen (for assistive tech, say) is where it
+  /// is drawn.
+  @override
+  void applyPaintTransform(RenderObject child, Matrix4 transform) {
+    transform.multiply(_placement(child as RenderBox).$1);
+  }
+
   @override
   void paint(PaintingContext context, Offset offset) {
     final child = this.child;
     if (child == null) return;
-    final scrolled = _scroll.hasClients ? math.max(0.0, _scroll.offset) : 0.0;
-    final d = _dock.value;
-    final y0 = _top - scrolled;
-    final Matrix4 transform;
-    final double opacity;
-    if (_reduced) {
-      transform = Matrix4.translationValues(0, y0, 0);
-      opacity = 1 - d;
-    } else {
-      final size = child.size;
-      final s1 = math.min(1.0, _docked / size.height);
-      final x1 = (_viewWidth - size.width * s1) / 2 - _left;
-      final y1 = NextMetrics.topBar / 2 - size.height * s1 / 2;
-      final s = 1 + (s1 - 1) * d;
-      transform = Matrix4.translationValues(x1 * d, y0 + (y1 - y0) * d, 0)
-        ..scaleByDouble(s, s, 1, 1);
-      opacity = 1 - const Interval(0.55, 1).transform(d);
-    }
+    final (transform, opacity) = _placement(child);
     if (opacity <= 0) return;
     void paintChild(PaintingContext context, Offset offset) =>
         context.pushTransform(needsCompositing, offset, transform, super.paint);

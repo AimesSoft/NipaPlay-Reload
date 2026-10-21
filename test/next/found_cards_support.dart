@@ -36,11 +36,13 @@ final class FoundDetails implements NextDiscoverData {
 }
 
 /// A shell over [cards] in a conversation-wide column; opening a work
-/// pushes the real `/work` page. Dispose the returned shell after the tree.
+/// pushes the real `/work` page (a library work's from [data], which knows
+/// none by default). Dispose the returned shell after the tree.
 Future<NextShellController> pumpFoundCards(
   WidgetTester tester, {
   required List<UiCard> cards,
   required NextDiscoverData discover,
+  NextUiData? data,
   Widget? above,
   void Function(UiWork work)? onPlay,
   double pixelRatio = 1,
@@ -51,7 +53,7 @@ Future<NextShellController> pumpFoundCards(
   final unused = _Unused();
   final shell = NextShellController(
       NextUiServices(
-        data: _Data(),
+        data: data ?? _Data(),
         actions: unused,
         chat: _Port(),
         discover: discover,

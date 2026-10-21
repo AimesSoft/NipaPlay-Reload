@@ -247,7 +247,7 @@ final class CoreSearch implements NextSearchData {
       season: _int(e['season']),
       title: _text(e['title']),
       runtime: switch (e['runtimeMs']) {
-        final int ms => Duration(milliseconds: ms),
+        final int ms when ms > 0 => Duration(milliseconds: ms),
         _ => null,
       },
       still: _text(e['still']),

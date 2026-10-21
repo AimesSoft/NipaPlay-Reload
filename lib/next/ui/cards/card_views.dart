@@ -379,8 +379,8 @@ class EpisodeCardView extends StatelessWidget {
                     overflow: TextOverflow.ellipsis,
                     style: NextText.sans(13.5, weight: FontWeight.w600)),
               ),
-              if (episode.runtime != null)
-                NumText(Words.runtime(episode.runtime!),
+              if (Words.runtime(episode.runtime) case final runtime?)
+                NumText(runtime,
                     style: NextText.sans(12, color: NextColors.p3)),
             ]),
             if (showWork && second.isNotEmpty) ...[

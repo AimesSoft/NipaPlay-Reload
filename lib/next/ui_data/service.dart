@@ -188,6 +188,8 @@ final class UiDataService implements NextUiData, NextNowPlaying {
         [workId]);
     final files = await _view('library.files');
     final result = <UiEpisode>[];
+    // A length of nothing is not known.
+    int? positive(Object? ms) => ms is num && ms > 0 ? ms.toInt() : null;
     for (final row in rows) {
       final attrs = decodeMediaJson(row['attributes']),
           release = decodeMediaJson(row['release_attributes']);
@@ -198,7 +200,7 @@ final class UiDataService implements NextUiData, NextNowPlaying {
       final fields =
           (await media.store.mergedMetadata(id))['fields'] as JsonMap;
       final locations = files.where((f) => f['episodeId'] == id).toList();
-      int? duration = (fields['runtimeMs'] as num?)?.toInt();
+      int? duration = positive(fields['runtimeMs']);
       double? progress;
       var playable = false;
       for (final f in locations) {
@@ -212,9 +214,9 @@ final class UiDataService implements NextUiData, NextNowPlaying {
         final timed = allLinks.length <= 1 || end != null;
         if (timed) {
           duration ??= end != null
-              ? end - start
-              : (fileAttrs['durationMs'] as num?)?.toInt() ??
-                  (p?['durationMs'] as num?)?.toInt();
+              ? positive(end - start)
+              : positive(fileAttrs['durationMs']) ??
+                  positive(p?['durationMs']);
           if (p != null) {
             final d =
                 end != null ? end - start : (p['durationMs'] as num?)?.toInt();

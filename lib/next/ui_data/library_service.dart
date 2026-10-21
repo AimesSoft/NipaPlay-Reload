@@ -625,8 +625,9 @@ final class LibraryDataService implements NextLibraryData, NextLibraryActions {
         number: (m['IndexNumber'] as int?) ?? 1,
         season: m['ParentIndexNumber'] as int?,
         title: item['name'] as String,
-        runtime:
-            duration == null ? null : Duration(microseconds: duration ~/ 10),
+        runtime: duration == null || duration <= 0
+            ? null
+            : Duration(microseconds: duration ~/ 10),
         still: await _sourcePort!.image(sourceId, item, 'Primary'),
         playable: (await _sources())
             .any((s) => s['sourceId'] == sourceId && s['connected'] == true),

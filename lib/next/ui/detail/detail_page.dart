@@ -508,6 +508,7 @@ class _WorkDetailPageState extends State<WorkDetailPage>
       child: LayoutBuilder(builder: (context, constraints) {
         final size = constraints.biggest;
         final copyTop = (size.height / 6).clamp(120.0, 160.0);
+        final column = _column(size);
         final titleTop = copyTop +
             (_original == null ? 0 : 18) +
             WorkTitle.marginsOf(_work).top;
@@ -541,7 +542,12 @@ class _WorkDetailPageState extends State<WorkDetailPage>
                     child: Padding(
                       padding: EdgeInsets.only(
                           left: NextMetrics.gutter, top: copyTop),
-                      child: _copy(),
+                      // Loose, so the column is its own width and the title
+                      // wraps here as it does where it is painted.
+                      child: Align(
+                        alignment: Alignment.topLeft,
+                        child: _copy(column),
+                      ),
                     ),
                   ),
                   SliverFillRemaining(
@@ -564,7 +570,8 @@ class _WorkDetailPageState extends State<WorkDetailPage>
             opacity: _removed != null
                 ? const AlwaysStoppedAnimation(0.35)
                 : content,
-            child: IgnorePointer(child: _bar(size, titleTop, reduced)),
+            child: IgnorePointer(
+                child: _bar(size, column, titleTop, reduced)),
           ),
           Positioned(
             left: NextMetrics.gutter - 9,
@@ -643,8 +650,14 @@ class _WorkDetailPageState extends State<WorkDetailPage>
     );
   }
 
+  /// The words' column: 600 wide, narrower in a narrow window. The title
+  /// is painted apart from the column, so both are given this width.
+  static double _column(Size size) =>
+      math.max(0.0, math.min(600.0, size.width - NextMetrics.gutter * 2));
+
   /// The bar scrim and the docking title (not interactive).
-  Widget _bar(Size size, double titleTop, bool reduced) => Stack(children: [
+  Widget _bar(Size size, double column, double titleTop, bool reduced) =>
+      Stack(children: [
         Positioned(
           left: 0,
           right: 0,
@@ -667,7 +680,7 @@ class _WorkDetailPageState extends State<WorkDetailPage>
           left: NextMetrics.gutter,
           top: 0,
           child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 600),
+            constraints: BoxConstraints(maxWidth: column),
             child: DockingTitle(
               scroll: _scroll,
               dock: _docked,
@@ -701,12 +714,12 @@ class _WorkDetailPageState extends State<WorkDetailPage>
         ),
       ]);
 
-  Widget _copy() {
+  Widget _copy(double width) {
     final work = _work;
     final original = _original;
     final overview = work.overview;
     return SizedBox(
-      width: 600,
+      width: width,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         mainAxisSize: MainAxisSize.min,

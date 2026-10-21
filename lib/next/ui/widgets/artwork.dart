@@ -99,6 +99,13 @@ class NextImage extends StatelessWidget {
   }
 }
 
+/// A tint as a placeholder's colour: a light one (a poster on white paper)
+/// is taken down to half lightness, so no box stands out pale on the page.
+Color _placeholderBase(Color tint) {
+  final hsl = HSLColor.fromColor(tint);
+  return hsl.lightness <= 0.5 ? tint : hsl.withLightness(0.5).toColor();
+}
+
 class _Placeholder extends StatelessWidget {
   const _Placeholder({this.tint, required this.shape});
   final int? tint;
@@ -107,7 +114,8 @@ class _Placeholder extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     if (shape == ArtShape.logo) return const SizedBox.shrink();
-    final base = tint == null ? NextColors.ink3 : Color(tint!);
+    final base =
+        tint == null ? NextColors.ink3 : _placeholderBase(Color(tint!));
     return DecoratedBox(
       decoration: BoxDecoration(
         gradient: LinearGradient(
