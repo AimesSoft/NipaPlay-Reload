@@ -330,8 +330,12 @@ final class UiDataService implements NextUiData, NextNowPlaying {
     final attrs = (await media.store.entity(episodeId))['attributes'] as Map;
     final number = num.tryParse(attrs['number'] as String? ?? '');
     final title = _display(fields['title'] ?? attrs['title']);
+    // Some sources name the episode with its number already (“第2话 …”).
+    final numbered =
+        title != null && RegExp(r'^第\s*\d+\s*[话話集]').hasMatch(title);
     final label = [
-      if (number != null) '第 ${number % 1 == 0 ? number.toInt() : number} 集',
+      if (number != null && !numbered)
+        '第 ${number % 1 == 0 ? number.toInt() : number} 集',
       if (title != null && title != work) title,
     ].join(' ');
     // With the mesh, works and episodes go by their merged names.

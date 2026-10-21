@@ -118,6 +118,15 @@ void main() {
     expect(await service.nowPlaying('/v/Frieren - 05.mkv'), isNull);
   });
 
+  test('a title that carries its own number is not numbered twice', () async {
+    final db = service.media.store.database;
+    await db.update('media_entities',
+        {'attributes': jsonEncode({'number': '5', 'title': '第5话 死者的幻影'})},
+        where: 'id=?', whereArgs: ['e5']);
+    expect((await service.nowPlaying('/v/Frieren - 05.mkv'))!.episode,
+        '第5话 死者的幻影');
+  });
+
   test('a file the library does not hold is not known', () async {
     expect(await service.nowPlaying('/v/elsewhere.mkv'), isNull);
   });
