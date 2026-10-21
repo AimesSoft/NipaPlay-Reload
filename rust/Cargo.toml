@@ -14,6 +14,9 @@ headless = []
 [patch.crates-io]
 # 0.7.0 otherwise calls the Linux-only bind_device API when targeting iOS.
 librqbit-dualstack-sockets = { path = "third_party/librqbit-dualstack-sockets" }
+# 9.0.1 rejects an extended handshake without `m`, so private torrents seeded by
+# Transmission never download; see the directory's NIPAPLAY_PATCH.md.
+librqbit-peer-protocol = { path = "third_party/librqbit-peer-protocol" }
 
 [dependencies]
 flutter_rust_bridge = "=2.12.0"
