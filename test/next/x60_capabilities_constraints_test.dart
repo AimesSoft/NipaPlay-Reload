@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
@@ -7,6 +8,8 @@ import 'package:nipaplay/next/accounts/collections.dart';
 import 'package:nipaplay/next/capabilities/download_metadata_capability.dart';
 import 'package:nipaplay/next/downloads/download_source.dart';
 import 'package:nipaplay/next/state/query.dart';
+import 'package:nipaplay/models/torrent_magnet_preview.dart';
+import 'package:nipaplay/services/torrent_download_service.dart';
 import 'media_test_support.dart';
 
 class _Direct extends HttpOverrides {
@@ -154,6 +157,37 @@ void main() {
     final hostile = Uint8List.fromList(ascii.encode(
         'd4:infod6:lengthi4e4:name2:..12:piece lengthi16e6:pieces20:${'p' * 20}ee'));
     expect(() => torrentManifest(hostile), throwsA(isA<Failure>()));
+  });
+
+  test('a magnet preview without metadata stops at waitSeconds and says so',
+      () async {
+    final root = await Directory.systemTemp.createTemp('x60-magnet-');
+    addTearDown(() => root.delete(recursive: true));
+    final requests = <TorrentPreviewRequest>[];
+    final api = Harness([
+      DownloadMetadataCapability(
+          DownloadSources(Directory('${root.path}/cache')), () async => true,
+          previewMagnet: (source, {downloadDirectory, required request}) {
+        requests.add(request);
+        // Peers answer only for the second magnet; the first has none.
+        return requests.length == 1
+            ? Completer<TorrentMagnetPreview>().future
+            : Future.value(const TorrentMagnetPreview(
+                name: 'n', suggestedFolderName: 'n', totalSize: 1, files: []));
+      })
+    ]);
+    final watch = Stopwatch()..start();
+    final silent = await api.invokeJson(
+        'download.preview',
+        {'source': 'magnet:?xt=urn:btih:${'a' * 40}', 'waitSeconds': 1},
+        Invocation(origin: 'agent'));
+    expect(watch.elapsed, lessThan(const Duration(seconds: 5)));
+    expect(jsonEncode(silent.toEnvelope()), contains('No metadata arrived'));
+    expect(requests.single.throwIfCancelled, throwsStateError,
+        reason: 'the native preview is cancelled');
+    final answered = await api.invokeJson('download.preview',
+        {'source': 'magnet:?xt=urn:btih:${'b' * 40}'}, Invocation(origin: 'gui'));
+    expect((answered as Completed).value.toJson()['name'], 'n');
   });
 
   test(

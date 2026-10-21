@@ -1,17 +1,23 @@
 import 'package:nipa_harness/nipa_harness.dart';
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart'
     show AnyhowException;
+import 'package:nipaplay/models/torrent_magnet_preview.dart';
 import 'package:nipaplay/services/torrent_download_service.dart';
 
 import '../downloads/download_paths.dart';
 import '../downloads/download_source.dart';
 
+/// Classic's magnet metadata resolution, replaceable in tests.
+typedef MagnetPreview = Future<TorrentMagnetPreview> Function(String source,
+    {String? downloadDirectory, required TorrentPreviewRequest request});
+
 final class DownloadMetadataCapability implements Capability {
   DownloadMetadataCapability(
-      DownloadSources sources, Future<bool> Function() isEnabled)
+      DownloadSources sources, Future<bool> Function() isEnabled,
+      {MagnetPreview? previewMagnet})
       : actions = [
           for (final verb in ['preview', 'directories', 'forget_directories'])
-            _MetadataAction(verb, sources, isEnabled),
+            _MetadataAction(verb, sources, isEnabled, previewMagnet),
         ];
   @override
   final List<Action> actions;
@@ -25,17 +31,18 @@ final class _Json implements JsonEncodable {
 }
 
 final class _MetadataAction extends Action<_Json, _Json> {
-  _MetadataAction(this.verb, this.sources, this.isEnabled);
+  _MetadataAction(this.verb, this.sources, this.isEnabled, this.previewMagnet);
   final String verb;
   final DownloadSources sources;
   final Future<bool> Function() isEnabled;
+  final MagnetPreview? previewMagnet;
   @override
   ActionSpec get spec => ActionSpec(
         id: 'download.$verb',
         title: 'Download $verb',
         description: switch (verb) {
           'preview' =>
-            'Preview a magnet, local torrent path/file URI or HTTP(S) torrent address without adding a task. Torrent bytes reuse download.add preparation and cache; magnets use Classic native metadata resolution. Returns name, folder suggestion and indexed files. No media bytes are downloaded.',
+            'Preview a magnet, local torrent path/file URI or HTTP(S) torrent address without adding a task. Torrent bytes reuse download.add preparation and cache; magnets use Classic native metadata resolution. Returns name, folder suggestion and indexed files. No media bytes are downloaded. A magnet\'s metadata comes from its peers; with none, the call waits until Classic gives up (about a minute). waitSeconds bounds that wait: when it passes, the preview stops and fails as unavailable, saying no metadata arrived.',
           'directories' =>
             'Read the Classic default download directory and recent directory choices.',
           _ =>
@@ -46,6 +53,7 @@ final class _MetadataAction extends Action<_Json, _Json> {
           'preview' => const ObjectSchema({
               'source': StringSchema(minLength: 1),
               'downloadDirectory': StringSchema(minLength: 1),
+              'waitSeconds': IntegerSchema(minimum: 1, maximum: 300),
             }, required: [
               'source'
             ]),
@@ -101,9 +109,18 @@ final class _MetadataAction extends Action<_Json, _Json> {
         return Completed(_Json(await sources.previewTorrent(prepared)));
       }
       final request = TorrentPreviewRequest();
+      final wait = (input.json['waitSeconds'] as num?)?.toInt();
       try {
-        final preview = await service.previewMagnet(source,
+        final resolving = (previewMagnet ?? service.previewMagnet)(source,
             downloadDirectory: directory, request: request);
+        final preview = wait == null
+            ? await resolving
+            : await resolving.timeout(Duration(seconds: wait), onTimeout: () {
+                request.cancel();
+                throw Failure(FailureCode.unavailable,
+                    'No metadata arrived from the magnet\'s peers within $wait s.',
+                    retryable: true);
+              });
         return Completed(_Json({
           'name': preview.name,
           'suggestedFolderName': preview.suggestedFolderName,
