@@ -506,6 +506,13 @@ final class Followups {
                         ? 'Chat host has an active turn; waiting until idle.'
                         : null;
             if (reason != null) {
+              // A running turn takes the facts at its next step instead of
+              // making them wait for its end.
+              if (host != null && host.available && host.busy &&
+                  host.repository.path == row['repository'] &&
+                  await _steerIntoTurn(row, host)) {
+                continue;
+              }
               if (row['reason'] != reason) {
                 await _save(row, 'ready', 'pending', reason: reason);
               }
@@ -643,6 +650,67 @@ final class Followups {
           }
         }
       });
+
+  /// Delivers [row] into the turn now running on its conversation, as the same
+  /// text a new turn would have opened with. True when the row is dealt with
+  /// (taken into the turn, or left for reconciliation after an unknown
+  /// outcome); false when it must wait for the turn to end as before.
+  ///
+  /// The turn then owns the row exactly as it would own a turn it opened:
+  /// `started` with that turnId, and once the host is idle again the ordinary
+  /// reconciliation reads the turn and completes the row (or redelivers it
+  /// when the provider failed that turn). Nothing is sent a second time:
+  /// the row is `dispatching` before the text leaves, sweeps are serialized,
+  /// and the host only reports a turn when the runner took the text.
+  Future<bool> _steerIntoTurn(JsonMap row, ChatHost host) async {
+    if (host.dsh == null) return false;
+    // A helper result the parent already collected is recorded by the idle path.
+    if ((row['condition'] as Map)['jobId'] case final String jobId) {
+      final job = await engine.get(jobId);
+      if (await helpers?.nativeResultTaken(job, host) != null) return false;
+    }
+    final target = row['threadId'] as String? ?? host.mainThreadId ?? host.threadId;
+    if (target == null || !host.busyFor(target)) return false;
+    final before = {
+      for (final key in ['threadId', 'dispatchedAt']) key: row[key]
+    };
+    row['threadId'] = target;
+    if (_taskReturn(row)) {
+      row['dispatchedAt'] = DateTime.now().toUtc().toIso8601String();
+    }
+    await _save(row, 'dispatching', 'dispatching');
+    try {
+      final turnId = await host.steerFollowup(target, _prompt(row));
+      if (turnId == null) {
+        for (final entry in before.entries) {
+          if (entry.value == null) {
+            row.remove(entry.key);
+          } else {
+            row[entry.key] = entry.value;
+          }
+        }
+        await _save(row, 'ready', 'pending',
+            reason: 'Chat host has an active turn; waiting until idle.');
+        return false;
+      }
+      row['turnId'] = turnId;
+      row['turnStatus'] = 'inProgress';
+      if ((row['condition'] as Map)['jobId'] case final String jobId) {
+        final job = await engine.get(jobId);
+        if (job.type == 'agent.helper') {
+          await helpers?.shareCards(job, target, turnId);
+        }
+      }
+      await _save(row, 'started', 'started',
+          origin: 'harness_cli:chat:${host.sessionId}');
+    } catch (error) {
+      // The runner may have taken the text before the answer was lost:
+      // reconcile from history instead of sending it again.
+      await _save(row, 'dispatching', 'execution_failed',
+          reason: redactHarnessText(error.toString()));
+    }
+    return true;
+  }
 
   /// Errors that say the model provider was briefly unavailable (rate limits,
   /// server errors, a dropped stream), not that the turn itself went wrong.

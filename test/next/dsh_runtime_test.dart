@@ -354,6 +354,99 @@ trust_level = "trusted"
       expect(heard['params']['item']['agentsStates'][child]['status'], 'interrupted');
     });
 
+    List<_Rule> followupRules() => [
+          _Rule(when: ['first'], unless: ['call_'], calls: [_bash('sleep 3; echo waited')]),
+          _Rule(when: ['FACT_SEEN'], text: 'Saw the fact.'),
+          _Rule(when: ['first', 'call_'], text: 'Done without it.'),
+        ];
+
+    Future<void> registerFact(Followups followups, String thread, String id) async {
+      await followups.register({
+        'when': {'event': 'library.file_added', 'objectId': '/fixture/$id.mp4'},
+        'threadId': thread,
+        'instruction': 'FACT_SEEN $id',
+      }, Invocation(origin: 'harness_cli', id: id));
+      await followups.hookEvent('library.file_added', '/fixture/$id.mp4',
+          {'event': 'library.file_added', 'objectId': '/fixture/$id.mp4'});
+    }
+
+    test('a followup that arrives during a running turn is read at its next step, not sent again', () async {
+      await open(followupRules());
+      final host = await lab.start();
+      await host.getMainSession();
+      final thread = host.mainThreadId!;
+      await lab.attachFollowups(host);
+      final first = (await host.startTurn('first'))['turn']['id'] as String;
+      await lab.next((e) => e['method'] == 'item/started' && e['params']['item']['type'] == 'commandExecution');
+      await registerFact(lab.followups, thread, 'steered');
+      await lab.followups.sweep();
+      final started = (await lab.followups.list()).single;
+      expect(started['state'], 'started', reason: 'taken into the running turn without waiting for it');
+      expect(started['turnId'], first);
+      final ended = await lab.next((e) => e['method'] == 'turn/completed');
+      expect(ended['params']['turn']['id'], first);
+      final seen = fake.requests.indexWhere((r) => jsonEncode(r['input']).contains('FACT_SEEN steered'));
+      expect(seen, 1, reason: 'the step after the command carries the followup text');
+      expect(jsonEncode(fake.requests[seen]['input']), contains('[NipaPlay followup ${started['id']}]'));
+      final done = await lab.until(() async {
+        await lab.followups.sweep();
+        final row = (await lab.followups.list()).single;
+        return row['state'] == 'completed' ? row : null;
+      }, what: 'followup completed by the turn that took it');
+      expect(done['turnId'], first);
+      await lab.followups.sweep();
+      await Future<void>.delayed(const Duration(seconds: 1));
+      expect(((await host.readThread(thread))['turns'] as List), hasLength(1),
+          reason: 'no new turn is opened for what the running turn already read');
+      expect(fake.requests.where((r) => jsonEncode(r['input']).contains('FACT_SEEN steered')), isNotEmpty);
+      expect(lab.events.where((e) => e['method'] == 'turn/started'), hasLength(1));
+    });
+
+    test('a followup the runner refuses to steer waits for the turn to end and is sent then', () async {
+      await open(followupRules());
+      final host = await lab.start();
+      await host.getMainSession();
+      final thread = host.mainThreadId!;
+      await lab.attachFollowups(host);
+      final first = (await host.startTurn('first'))['turn']['id'] as String;
+      await lab.next((e) => e['method'] == 'item/started' && e['params']['item']['type'] == 'commandExecution');
+      // The host's idea of the running turn is stale, as when the turn just ended.
+      host.livenessFor(thread).turnId = 'turn-that-ended';
+      await registerFact(lab.followups, thread, 'refused');
+      await lab.followups.sweep();
+      final pending = (await lab.followups.list()).single;
+      expect(pending['state'], 'ready');
+      expect(pending['turnId'], isNull);
+      expect(pending['reason'], contains('active turn'));
+      expect(fake.requests.where((r) => jsonEncode(r['input']).contains('FACT_SEEN refused')), isEmpty);
+      await lab.next((e) => e['method'] == 'turn/completed' && e['params']['turn']['id'] == first);
+      final done = await lab.until(() async {
+        await lab.followups.sweep();
+        final row = (await lab.followups.list()).single;
+        return row['state'] == 'completed' ? row : null;
+      }, what: 'followup sent as its own turn');
+      expect(done['turnId'], isNot(first));
+      expect(((await host.readThread(thread))['turns'] as List), hasLength(2));
+      expect(fake.requests.where((r) => jsonEncode(r['input']).contains('FACT_SEEN refused')), isNotEmpty);
+    });
+
+    test('a followup that arrives while the conversation is idle opens its own turn', () async {
+      await open(followupRules());
+      final host = await lab.start();
+      await host.getMainSession();
+      final thread = host.mainThreadId!;
+      await lab.attachFollowups(host);
+      await registerFact(lab.followups, thread, 'idle');
+      final done = await lab.until(() async {
+        await lab.followups.sweep();
+        final row = (await lab.followups.list()).single;
+        return row['state'] == 'completed' ? row : null;
+      }, what: 'idle followup completed');
+      final turns = (await host.readThread(thread))['turns'] as List;
+      expect(turns, hasLength(1));
+      expect(done['turnId'], (turns.single as Map)['id']);
+    });
+
     test('a provider 429 fails the turn and the followup is redelivered later', () async {
       await open([_Rule(when: ['Inspect these facts'], status: 429, once: false)]);
       final host = await lab.start();

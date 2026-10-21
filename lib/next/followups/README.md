@@ -34,8 +34,14 @@ An embedded CLI call resolves `harness_cli:chat:<NIPAPLAY_CHAT>` against the liv
 host and records its selected thread. With no session and no explicit target, a
 thread is created in the harness active at registration when delivery becomes
 possible. A change of harness does not move old followups into another repository.
-One host serializes selection and turn start; followups wait while it has any
-active turn. They never interrupt or steer it.
+One host serializes selection and turn start. A followup never interrupts a
+turn. When its conversation has a turn running on DSH, the same text is put into
+that turn as next-step input (`turn/steer`) instead of waiting: the row goes
+`dispatching`, then `started` with the running turn's id, and the ordinary
+reconciliation completes it when that turn ends (or redelivers it if the provider
+failed the turn). If the runner refuses (the turn just ended, another turn id) the
+row returns to `ready` and waits for idle as before; an unknown outcome is never
+resent. Codex followups still wait for idle.
 
 `followup.list`, `followup.cancel` and the `followups` public view expose titles,
 waiting conditions, origin, trigger evidence, actual thread/turn IDs and reasons.

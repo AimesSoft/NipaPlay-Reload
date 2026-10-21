@@ -184,8 +184,8 @@ sentence from that running helper. `task.cancel` interrupts only its thread;
 cancelling before dispatch creates no model turn.
 
 Each helper automatically registers one durable X25/X31 task-terminal followup.
-Success, failure and cancellation return to the original conversation, waiting
-while that conversation is busy. The receipt records actual threadId, turnId,
+Success, failure and cancellation return to the original conversation: into its
+running turn at the next step on DSH (`ChatHost.steerFollowup`), otherwise once it is idle. The receipt records actual threadId, turnId,
 turnStatus and a redacted final reply (up to 8192 characters). A verified helper
 receipt verifies that its Codex turn completed; `resultVerification: unverified`
 explicitly leaves its claimed domain result for the parent to check. It does
