@@ -135,6 +135,24 @@ void main() {
         ]
       });
 
+  Future<JsonMap> unbindNamed(String entityId, List<String> bindingIds,
+          {required String requestId}) =>
+      call('media.identity.unbind_batch', {
+        'requestId': requestId,
+        'entries': [
+          {'entityId': entityId, 'bindingIds': bindingIds, 'reason': 'test'}
+        ]
+      });
+
+  Future<JsonMap> restoreNamed(String entityId, List<String> bindingIds,
+          {required String requestId}) =>
+      call('media.identity.restore_classic_batch', {
+        'requestId': requestId,
+        'entries': [
+          {'entityId': entityId, 'bindingIds': bindingIds, 'reason': 'test'}
+        ]
+      });
+
   Future<JsonMap> restoreClassic(String fileId,
           {String requestId = 'restore-classic', List<String>? bindingIds}) =>
       call('media.identity.restore_classic_batch', {
@@ -211,9 +229,11 @@ void main() {
     final entry = (result['entries'] as List).single as Map;
     expect(entry['bindingIds'], [classicBinding]);
     expect(entry['classicProjectionId'], isNull);
-    // The Classic work held only this file: episode, release and work lose
-    // their Classic identity bindings too.
-    expect(entry['releasedBindingIds'], hasLength(3));
+    // What Classic's recognition still holds up above the file is reported,
+    // not revoked: episode, release and work.
+    final remaining = (entry['remainingClassicBindings'] as List).cast<Map>();
+    expect(remaining.map((r) => r['kind']),
+        unorderedEquals(['episode', 'release', 'work']));
 
     expect(await workIdsOf(path), [explicitWork]);
     final links = await store.linkSources(fileId);
@@ -247,12 +267,54 @@ void main() {
     expect(await classicRow(path), before);
     expect(await outbox(), outboxBefore);
 
-    // Library: the work Classic made has nothing left; the explicit one stays.
+    // Library: revoking the file alone leaves the work Classic made shown.
+    expect(await viewerShows(classicWork), isTrue);
+    expect(await viewerShows(explicitWork), isTrue);
+
+    // Naming the work's Classic identity alone does not hide it while its
+    // release and episode are still bound; naming all three does.
+    String bindingOf(String kind) =>
+        remaining.singleWhere((r) => r['kind'] == kind)['bindingId'] as String;
+    String entityOf(String kind) =>
+        remaining.singleWhere((r) => r['kind'] == kind)['entityId'] as String;
+    await unbindNamed(entityOf('work'), [bindingOf('work')],
+        requestId: 'unbind-work');
+    expect(await viewerShows(classicWork), isTrue);
+    await unbindNamed(entityOf('release'), [bindingOf('release')],
+        requestId: 'unbind-release');
+    await unbindNamed(entityOf('episode'), [bindingOf('episode')],
+        requestId: 'unbind-episode');
     expect(await viewerShows(classicWork), isFalse);
     expect(await viewerShows(explicitWork), isTrue);
+    expect(await classicRow(path), before);
+    expect(await outbox(), outboxBefore);
+    await runtime.service.syncClassicHistory();
+    expect(await viewerShows(classicWork), isFalse);
+
+    // Restoring is by name too: the layers first, then the file.
+    final late = await invoke('media.identity.restore_classic_batch', {
+      'requestId': 'restore-file-early',
+      'entries': [
+        {'entityId': fileId, 'bindingIds': [classicBinding], 'reason': 'test'}
+      ]
+    });
+    expect(late, isA<Failed>());
+    expect(await viewerShows(classicWork), isFalse);
+    await restoreNamed(entityOf('episode'), [bindingOf('episode')],
+        requestId: 'restore-episode');
+    await restoreNamed(entityOf('release'), [bindingOf('release')],
+        requestId: 'restore-release');
+    await restoreNamed(entityOf('work'), [bindingOf('work')],
+        requestId: 'restore-work');
+    expect(await viewerShows(classicWork), isTrue);
+    await restoreNamed(fileId, [classicBinding], requestId: 'restore-file');
+    expect(await workIdsOf(path), hasLength(2));
+    expect((await currentObservation(path))['provenance'], 'classic_match');
+    expect(await classicRow(path), before);
+    expect(await outbox(), outboxBefore);
   });
 
-  test('a Classic work that still has another file is not emptied', () async {
+  test('revoking one file of a Classic work leaves the work and its other file', () async {
     final a = await video('a'), b = await video('b');
     await seedRow(a, 7001, 7107);
     await seedRow(b, 7001, 7108);
@@ -262,9 +324,8 @@ void main() {
     final work = (await workIdsOf(a)).single;
     final result = await unbindClassic(fileA, await classicBindingOf(fileA));
     final entry = (result['entries'] as List).single as Map;
-    // Only the episode of file a loses its identity; release and work keep
-    // the other episode.
-    expect(entry['releasedBindingIds'], hasLength(1));
+    // The episode, release and work are reported, not revoked.
+    expect(entry['remainingClassicBindings'], hasLength(3));
     expect(await workIdsOf(a), isEmpty);
     expect(await workIdsOf(b), [work]);
     expect(await viewerShows(work), isTrue);
@@ -350,12 +411,12 @@ void main() {
     });
     expect(again, isA<Failed>());
     expect(await workIdsOf(path), isEmpty);
-    expect(await viewerShows(classicWork), isFalse);
+    expect(await viewerShows(classicWork), isTrue);
 
     final restored = await restoreClassic(fileId, bindingIds: [binding]);
     final entry = (restored['entries'] as List).single as Map;
     expect(entry['bindingIds'], [binding]);
-    expect(entry['restoredBindingIds'], hasLength(4));
+    expect(entry['bindingIds'], [binding]);
     expect(await workIdsOf(path), [classicWork]);
     expect(await viewerShows(classicWork), isTrue);
     expect((await currentObservation(path))['provenance'], 'classic_match');
@@ -381,7 +442,7 @@ void main() {
   });
 
   test('explicit bindings still go the old way; Classic bindings are not '
-      'selected by omission, and only a file can name one', () async {
+      'selected by omission, and an episode\'s can be named', () async {
     final path = await video('ep7');
     await seedRow(path, 7001, 7107);
     await connect();
@@ -399,29 +460,24 @@ void main() {
     final entry = (result['entries'] as List).single as Map;
     expect(entry['bindingIds'], isNot(contains(classicBinding)));
     expect(entry['bindingIds'], hasLength(1));
-    expect(entry.containsKey('releasedBindingIds'), isFalse);
+    expect(entry.containsKey('remainingClassicBindings'), isFalse);
     expect(await workIdsOf(path), isNot(contains(explicitWork)));
     expect((await store.linkSources(fileId)).values.single.single,
         containsPair('source', 'classic_match'));
     expect((await currentObservation(path))['provenance'], 'classic_match');
 
-    // A Classic binding of an episode cannot be named through the episode.
-    final episode = (await jobs.database.query('media_bindings',
-            where:
-                "source='classic_match' AND status='accepted' AND entity_id!=?",
-            whereArgs: [fileId]))
-        .firstWhere((b) => b['entity_id'] != fileId);
-    final refused = await invoke('media.identity.unbind_batch', {
-      'requestId': 'unbind-episode',
-      'entries': [
-        {
-          'entityId': episode['entity_id'],
-          'bindingIds': [episode['id']],
-          'reason': 'test'
-        }
-      ]
-    });
-    expect(refused, isA<Failed>());
+    // A Classic binding of an episode can be named through the episode; the
+    // file's link that rested on it goes.
+    final episode = (await jobs.database.rawQuery(
+            'SELECT b.* FROM media_bindings b JOIN media_entities e ON e.id=b.entity_id '
+            "WHERE b.source='classic_match' AND b.status='accepted' AND e.kind='episode'"))
+        .single;
+    final named = await unbindNamed(
+        episode['entity_id'] as String, [episode['id'] as String],
+        requestId: 'unbind-episode');
+    expect(((named['entries'] as List).single as Map)['bindingIds'],
+        [episode['id']]);
+    expect(await store.linkSources(fileId), isEmpty);
   });
 
   test('a dandanplay binding of the same episode keeps the link and writes '
@@ -440,7 +496,7 @@ void main() {
     final result = await unbindClassic(fileId, binding);
     final entry = (result['entries'] as List).single as Map;
     expect(entry['classicProjectionId'], isNull);
-    expect(entry.containsKey('releasedBindingIds'), isFalse);
+    expect(entry.containsKey('remainingClassicBindings'), isFalse);
     final links = await store.linkSources(fileId);
     expect(links.values.single.map((s) => s['source']), ['explicit_binding']);
     expect(await classicRow(path), before);

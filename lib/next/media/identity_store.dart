@@ -1558,8 +1558,8 @@ final class IdentityStore {
             // still selects explicit bindings only.
             final bindings = await tx.rawQuery(
                 'SELECT b.*,o.provider,o.external_id,o.scope AS object_scope FROM media_bindings b '
-                'JOIN media_external_objects o ON o.id=b.object_id WHERE b.entity_id=? AND b.status=? AND (b.source!=\'classic_match\' OR ?=1)',
-                [id, 'accepted', entityRow['kind'] == 'file' ? 1 : 0]);
+                'JOIN media_external_objects o ON o.id=b.object_id WHERE b.entity_id=? AND b.status=?',
+                [id, 'accepted']);
             final requested = (entry['bindingIds'] as List?)?.cast<String>();
             if (requested != null &&
                 requested.any((bid) => !bindings.any((b) => b['id'] == bid))) {
@@ -1595,7 +1595,7 @@ final class IdentityStore {
                       ? {'revoked': 'classic_match'}
                       : null);
             }
-            final released = <String>[];
+            final classicFacts = <JsonMap>[];
             if (classicSelected.isNotEmpty) {
               for (final binding in classicSelected) {
                 final observed = await tx.rawQuery(
@@ -1615,21 +1615,24 @@ final class IdentityStore {
                       whereArgs: [observation['id']]);
                 }
               }
-              await _pruneFileLinks(tx, id);
-              final after = {
+              if (entityRow['kind'] == 'file') {
+                await _pruneFileLinks(tx, id);
+                final after = {
+                  for (final link in await tx.query('media_file_episodes',
+                      where: 'file_id=?', whereArgs: [id]))
+                    link['episode_id'] as String
+                };
+                classicFacts.addAll(await _classicIdentitiesAbove(
+                    tx, [for (final e in linksBefore) if (!after.contains(e)) e]));
+              }
+              if (entityRow['kind'] == 'episode') {
                 for (final link in await tx.query('media_file_episodes',
-                    where: 'file_id=?', whereArgs: [id]))
-                  link['episode_id'] as String
-              };
-              released.addAll(await _releaseClassicIdentities(
-                  tx,
-                  [
-                    for (final episode in linksBefore)
-                      if (!after.contains(episode)) episode
-                  ],
-                  [for (final b in classicSelected) b['id'] as String],
-                  entry,
-                  invocation));
+                    columns: ['file_id'],
+                    where: 'episode_id=?',
+                    whereArgs: [id])) {
+                  await _pruneFileLinks(tx, link['file_id'] as String);
+                }
+              }
             }
             if (entityRow['kind'] == 'file' && explicitSelected.isNotEmpty) {
               final remaining = await tx.query('media_bindings',
@@ -1682,7 +1685,7 @@ final class IdentityStore {
                             .map((p) => p['id'])
                             .firstOrNull,
               'bindingIds': [for (final b in selected) b['id']],
-              if (released.isNotEmpty) 'releasedBindingIds': released,
+              if (classicFacts.isNotEmpty) 'remainingClassicBindings': classicFacts,
             });
           } on Failure catch (error) {
             throw Failure(error.code, 'Entry $index: ${error.message}',
@@ -1700,83 +1703,33 @@ final class IdentityStore {
         return result;
       });
 
-  /// Revokes the Classic identity bindings that only a revoked recognition
-  /// held up: an episode left with no file link and no explicit binding, then
-  /// the release and the work above it when nothing under them is bound or
-  /// has a file and they carry no explicit binding. Returns the binding IDs;
-  /// each revocation is audited with `releasedWith` naming the file bindings.
-  /// A work left bare this way is hidden by the library rule that a work with
-  /// no accepted binding and no file under it is not shown.
-  Future<List<String>> _releaseClassicIdentities(
-      DatabaseExecutor tx,
-      List<String> episodeIds,
-      List<String> withBindings,
-      JsonMap input,
-      Invocation invocation) async {
-    final released = <String>[];
-    Future<bool> explicit(String id) async => (await tx.rawQuery(
-                "SELECT EXISTS(SELECT 1 FROM media_bindings WHERE entity_id=? AND status='accepted' AND source!='classic_match') AS x",
-                [id]))
-            .single['x'] ==
-        1;
-    Future<bool> underKept(String id) async => (await tx.rawQuery(
-                'WITH RECURSIVE t(id) AS (SELECT id FROM media_entities WHERE parent_id=? UNION ALL SELECT e.id FROM media_entities e JOIN t ON e.parent_id=t.id) '
-                "SELECT EXISTS(SELECT 1 FROM media_bindings WHERE entity_id IN (SELECT id FROM t) AND status='accepted') "
-                'OR EXISTS(SELECT 1 FROM media_file_episodes WHERE episode_id IN (SELECT id FROM t)) AS x',
-                [id]))
-            .single['x'] ==
-        1;
-    Future<void> release(String id) async {
-      for (final binding in await tx.query('media_bindings',
-          where: "entity_id=? AND status='accepted' AND source='classic_match'",
-          whereArgs: [id])) {
-        await tx.update('media_bindings', {'status': 'revoked'},
-            where: 'id=?', whereArgs: [binding['id']]);
-        await _audit(tx, binding['id'] as String, input, invocation,
-            event: 'unbind',
-            extra: {'revoked': 'classic_match', 'releasedWith': withBindings});
-        released.add(binding['id'] as String);
-      }
-    }
-
-    final releases = <String>{};
+  /// The accepted classic_match bindings on [episodeIds] and on the releases
+  /// and works above them: what Classic's recognition still holds up there
+  /// after a file's binding was revoked. Facts only; nothing is revoked.
+  Future<List<JsonMap>> _classicIdentitiesAbove(
+      DatabaseExecutor tx, List<String> episodeIds) async {
+    final ids = <String>{};
     for (final episode in episodeIds) {
-      if ((await tx.query('media_file_episodes',
-              columns: ['file_id'],
-              where: 'episode_id=?',
-              whereArgs: [episode],
-              limit: 1))
-          .isNotEmpty) {
-        continue;
-      }
-      if (await explicit(episode)) continue;
-      await release(episode);
-      if ((await entity(episode, db: tx))['parent_id'] case final String parent) {
-        releases.add(parent);
+      var current = episode;
+      while (ids.add(current)) {
+        final parent = (await entity(current, db: tx))['parent_id'];
+        if (parent is! String) break;
+        current = parent;
       }
     }
-    final works = <String>{};
-    for (final releaseId in releases) {
-      if (await underKept(releaseId) || await explicit(releaseId)) continue;
-      await release(releaseId);
-      if ((await entity(releaseId, db: tx))['parent_id'] case final String parent) {
-        works.add(parent);
-      }
-    }
-    for (final workId in works) {
-      final work = await entity(workId, db: tx);
-      if ((work['attributes'] as JsonMap)['localOnly'] == true ||
-          await underKept(workId) ||
-          await explicit(workId)) {
-        continue;
-      }
-      await release(workId);
-    }
-    return released;
+    return [
+      for (final id in ids)
+        for (final row in await tx.rawQuery(
+            'SELECT b.id,e.kind FROM media_bindings b JOIN media_entities e ON e.id=b.entity_id '
+            "WHERE b.entity_id=? AND b.status='accepted' AND b.source='classic_match' ORDER BY b.id",
+            [id]))
+          {'entityId': id, 'kind': row['kind'], 'bindingId': row['id']}
+    ];
   }
 
-  /// Puts back the Classic recognition `unbindBatch` revoked, when it is still
-  /// what Classic's current observation of the file says.
+  /// Puts back classic_match bindings `unbindBatch` revoked, by name. A
+  /// file's comes back only while it is still the file's current Classic
+  /// observation, and only when its episode has an accepted identity to link.
   Future<JsonMap> restoreClassicBatch(List<JsonMap> entries, String key,
           String fingerprint, Invocation invocation) =>
       _transaction((tx) async {
@@ -1792,10 +1745,7 @@ final class IdentityStore {
           };
           try {
             final id = entry['entityId'] as String;
-            if ((await entity(id, db: tx))['kind'] != 'file') {
-              throw const Failure(FailureCode.invalidInput,
-                  'entityId must be a file; only a file has a Classic recognition.');
-            }
+            final kind = (await entity(id, db: tx))['kind'];
             final requested = (entry['bindingIds'] as List?)?.cast<String>();
             if (requested != null &&
                 (requested.isEmpty ||
@@ -1803,93 +1753,92 @@ final class IdentityStore {
               throw const Failure(FailureCode.invalidInput,
                   'bindingIds must be nonempty and distinct.');
             }
-            // Only a revoked recognition that is still Classic's current
-            // observation of the file can come back.
-            final candidates = [
+            if (kind != 'file' && requested == null) {
+              throw const Failure(FailureCode.invalidInput,
+                  'bindingIds must name the revoked classic_match bindings of this entity.');
+            }
+            final revoked = await tx.query('media_bindings',
+                where: "entity_id=? AND status='revoked' AND source='classic_match'",
+                whereArgs: [id]);
+            // A file's recognition is revoked and still Classic's current
+            // observation of it, or it cannot come back.
+            final observed = <String, JsonMap>{};
+            if (kind == 'file') {
               for (final row in await tx.rawQuery(
-                  'SELECT o.id AS observation_id,o.payload,b.id AS binding_id,b.object_id FROM media_classic_observations o '
-                  'JOIN media_classic_current c ON c.observation_id=o.id JOIN media_locations l ON l.id=o.location_id '
-                  'JOIN media_bindings b ON b.id=o.binding_id '
-                  "WHERE l.file_id=? AND b.status='revoked' AND b.source='classic_match' AND b.entity_id=?",
-                  [id, id]))
+                  'SELECT o.id,o.payload,o.binding_id FROM media_classic_observations o '
+                  'JOIN media_classic_current c ON c.observation_id=o.id WHERE o.binding_id IS NOT NULL')) {
                 if (decodeMediaJson(row['payload'])['provenance'] ==
-                    'classic_match_revoked')
-                  row
+                    'classic_match_revoked') {
+                  observed[row['binding_id'] as String] = row;
+                }
+              }
+            }
+            final candidates = [
+              for (final b in revoked)
+                if (kind != 'file' || observed.containsKey(b['id'])) b
             ];
             if (requested != null &&
                 requested.any(
-                    (bid) => !candidates.any((c) => c['binding_id'] == bid))) {
+                    (bid) => !candidates.any((c) => c['id'] == bid))) {
               throw const Failure(FailureCode.conflict,
-                  "bindingIds must name this file's revoked Classic recognition that is still the current Classic observation.");
+                  "bindingIds must name revoked classic_match bindings of this entity; a file's must still be the current Classic observation.");
             }
             final selected = candidates
-                .where((c) =>
-                    requested == null || requested.contains(c['binding_id']))
+                .where((c) => requested == null || requested.contains(c['id']))
                 .toList();
             final restored = <String>[];
-            for (final candidate in selected) {
-              final bindingId = candidate['binding_id'] as String;
-              final episodes = [
-                for (final owner in await tx.rawQuery(
+            for (final binding in selected) {
+              final bindingId = binding['id'] as String;
+              final twin = await tx.query('media_bindings',
+                  columns: ['id'],
+                  where:
+                      "entity_id=? AND object_id=? AND status='accepted' AND source='classic_match'",
+                  whereArgs: [id, binding['object_id']]);
+              if (twin.isNotEmpty) continue;
+              String? episodeId;
+              if (kind == 'file') {
+                final owners = await tx.rawQuery(
                     'SELECT DISTINCT b.entity_id FROM media_bindings b JOIN media_entities e ON e.id=b.entity_id '
-                    "WHERE b.object_id=? AND e.kind='episode' AND b.source='classic_match'",
-                    [candidate['object_id']]))
-                  owner['entity_id'] as String
-              ];
-              if (episodes.length != 1) {
-                throw const Failure(FailureCode.conflict,
-                    'The episode of this Classic recognition has no single local owner; Classic must record it again.');
+                    "WHERE b.object_id=? AND e.kind='episode' AND b.status='accepted'",
+                    [binding['object_id']]);
+                if (owners.length != 1) {
+                  throw const Failure(FailureCode.conflict,
+                      'The episode of this Classic recognition has no accepted identity; its classic_match binding is revoked.');
+                }
+                episodeId = owners.single['entity_id'] as String;
               }
-              final bound = <String>[
-                bindingId,
-                for (final row in await tx.rawQuery(
-                    'SELECT DISTINCT b.id FROM media_bindings b JOIN media_evidence e ON e.binding_id=b.id, '
-                    "json_each(json_extract(e.payload,'\$.releasedWith')) j "
-                    "WHERE b.status='revoked' AND j.value=?",
-                    [bindingId]))
-                  row['id'] as String
-              ];
-              for (final b in bound) {
-                final row = (await tx
-                        .query('media_bindings', where: 'id=?', whereArgs: [b]))
-                    .single;
-                final twin = await tx.query('media_bindings',
-                    columns: ['id'],
-                    where:
-                        "entity_id=? AND object_id=? AND status='accepted' AND source='classic_match'",
-                    whereArgs: [row['entity_id'], row['object_id']]);
-                if (twin.isNotEmpty) continue;
-                await tx.update('media_bindings', {'status': 'accepted'},
-                    where: 'id=?', whereArgs: [b]);
-                await _audit(tx, b, entry, invocation,
-                    event: 'restore', extra: {'restored': 'classic_match'});
-                restored.add(b);
+              await tx.update('media_bindings', {'status': 'accepted'},
+                  where: 'id=?', whereArgs: [bindingId]);
+              await _audit(tx, bindingId, entry, invocation,
+                  event: 'restore', extra: {'restored': 'classic_match'});
+              restored.add(bindingId);
+              if (episodeId != null) {
+                await tx.insert(
+                    'media_file_episodes',
+                    {
+                      'file_id': id,
+                      'episode_id': episodeId,
+                      'relation': 'exact',
+                      'ordinal': 0,
+                    },
+                    conflictAlgorithm: ConflictAlgorithm.ignore);
+                final row = observed[bindingId]!;
+                await tx.update(
+                    'media_classic_observations',
+                    {
+                      'payload': jsonEncode({
+                        ...decodeMediaJson(row['payload']),
+                        'provenance': 'classic_match',
+                      })
+                    },
+                    where: 'id=?',
+                    whereArgs: [row['id']]);
               }
-              await tx.insert(
-                  'media_file_episodes',
-                  {
-                    'file_id': id,
-                    'episode_id': episodes.single,
-                    'relation': 'exact',
-                    'ordinal': 0,
-                  },
-                  conflictAlgorithm: ConflictAlgorithm.ignore);
-              await tx.update(
-                  'media_classic_observations',
-                  {
-                    'payload': jsonEncode({
-                      ...decodeMediaJson(candidate['payload']),
-                      'provenance': 'classic_match',
-                    })
-                  },
-                  where: 'id=?',
-                  whereArgs: [candidate['observation_id']]);
             }
             results.add({
               'index': index,
               'entityId': id,
-              'bindingIds': [for (final c in selected) c['binding_id']],
-              if (restored.isNotEmpty) 'restoredBindingIds': restored,
+              'bindingIds': restored,
             });
           } on Failure catch (error) {
             throw Failure(error.code, 'Entry $index: ${error.message}',
