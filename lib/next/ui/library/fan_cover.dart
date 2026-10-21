@@ -5,6 +5,7 @@ import 'package:flutter/widgets.dart';
 
 import '../theme/tokens.dart';
 import '../widgets/artwork.dart';
+import '../widgets/poster_art.dart';
 
 /// A category's or folder's cover: its posters fanned out like a hand of
 /// cards over a blur of its art, darker toward the lower left where its
@@ -165,7 +166,7 @@ class _Poster extends StatelessWidget {
         ),
         child: ClipRRect(
           borderRadius: radius,
-          child: NextImage(path, shape: ArtShape.poster, tint: tint),
+          child: PosterArt(path, tint: tint),
         ),
       ),
     );
@@ -221,13 +222,18 @@ class _Blur extends StatelessWidget {
           imageFilter: ImageFilter.blur(sigmaX: 16, sigmaY: 16),
           child: Transform.scale(
             scale: 1.3,
-            child: Image(
-              image: ResizeImage(artProvider(path), width: 96),
-              fit: BoxFit.cover,
-              width: double.infinity,
-              height: double.infinity,
-              filterQuality: FilterQuality.medium,
-              gaplessPlayback: true,
+            child: SheetBuilder(
+              path: path,
+              builder: (context, sheet) => sheet != null
+                  ? SheetCover(sheet)
+                  : Image(
+                      image: ResizeImage(artProvider(path), width: 96),
+                      fit: BoxFit.cover,
+                      width: double.infinity,
+                      height: double.infinity,
+                      filterQuality: FilterQuality.medium,
+                      gaplessPlayback: true,
+                    ),
             ),
           ),
         ),

@@ -499,9 +499,9 @@ class _StillRow extends StatelessWidget {
                                   ? NextColors.paper
                                   : NextColors.p2)),
                     ),
-                    if (episode.runtime != null) ...[
+                    if (Words.runtime(episode.runtime) case final runtime?) ...[
                       const SizedBox(width: 8),
-                      Text(Words.runtime(episode.runtime!),
+                      Text(runtime,
                           style: NextText.sans(11.5,
                               weight: FontWeight.w500, color: NextColors.p3)),
                     ],

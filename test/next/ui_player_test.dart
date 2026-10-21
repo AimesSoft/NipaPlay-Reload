@@ -370,6 +370,51 @@ void main() {
     expect(playerTestPlays, isEmpty);
   });
 
+  testWidgets('an episode whose length is not known says none in the menu',
+      (tester) async {
+    addTearDown(resetPlayerTestLibrary);
+    const path = '/v/Smoking - 02.mkv';
+    const work = UiWork(workId: 'smoking', title: '躲在超市后门抽烟的两人');
+    playerTestWorks['smoking'] = (
+      work,
+      const [
+        // Its file gone: nothing known of it.
+        UiEpisode(episodeId: 's1', workId: 'smoking', number: 1, title: '吸烟'),
+        UiEpisode(
+            episodeId: 's2',
+            workId: 'smoking',
+            number: 2,
+            title: '相伴',
+            runtime: Duration(minutes: 23, seconds: 50),
+            playable: true),
+        // On disk and never played: a length of nothing.
+        UiEpisode(
+            episodeId: 's4',
+            workId: 'smoking',
+            number: 4,
+            title: '学习',
+            runtime: Duration.zero,
+            playable: true),
+      ]
+    );
+    playerTestLibrary[path] = const UiNowPlaying(
+        workId: 'smoking',
+        work: '躲在超市后门抽烟的两人',
+        episodeId: 's2',
+        episode: '第 2 集 相伴');
+    final p = await pumpPlayer(tester, status: PlayerStatus.playing);
+    p.state.currentVideoPath = path;
+    p.state.notify();
+    await tester.pump();
+    await tester.tap(button('剧集'));
+    await tester.pumpAndSettle();
+    for (final t in ['吸烟', '相伴', '学习']) {
+      expect(find.text(t), findsOneWidget, reason: t);
+    }
+    expect(find.text('23 分'), findsOneWidget);
+    expect(find.text('0 分'), findsNothing);
+  });
+
   /// 葬送的芙莉莲: seven episodes of the first season ([missing] not here
   /// yet), and the second season's first, here.
   List<UiEpisode> frieren({Set<int> missing = const {}}) => [

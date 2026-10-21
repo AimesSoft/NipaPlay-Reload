@@ -7,6 +7,7 @@ import '../home/hero_backdrop.dart' show NoArtGlow, ShadeLayers;
 import '../theme/tokens.dart';
 import '../widgets/art_origin.dart';
 import '../widgets/artwork.dart';
+import '../widgets/poster_art.dart';
 
 /// The detail page's backdrop: the work's artwork full bleed at the
 /// concept's `center 20%`, under its shade, moving at 0.3× the scroll.
@@ -183,25 +184,33 @@ class _Art extends StatelessWidget {
         ]),
       );
     }
-    return Image(
-      image: ResizeImage.resizeIfNeeded(decodeWidth, null, artProvider(file)),
-      fit: BoxFit.cover,
-      alignment: alignment,
-      filterQuality: FilterQuality.medium,
-      gaplessPlayback: true,
-      frameBuilder: (context, child, frame, synchronous) {
-        if (synchronous) return child;
-        return Stack(fit: StackFit.passthrough, children: [
-          if (placeholder) NextImage(null, tint: tint),
-          AnimatedOpacity(
-            opacity: frame == null ? 0 : 1,
-            duration: const Duration(milliseconds: 260),
-            curve: Curves.easeOut,
-            child: child,
-          ),
-        ]);
-      },
-      errorBuilder: (context, error, stack) => NextImage(null, tint: tint),
+    // A contact sheet flies and spreads as the stills its poster shows.
+    return SheetBuilder(
+      path: file,
+      builder: (context, sheet) => sheet != null
+          ? SheetCover(sheet, tint: tint, alignment: alignment)
+          : Image(
+              image: ResizeImage.resizeIfNeeded(
+                  decodeWidth, null, artProvider(file)),
+              fit: BoxFit.cover,
+              alignment: alignment,
+              filterQuality: FilterQuality.medium,
+              gaplessPlayback: true,
+              frameBuilder: (context, child, frame, synchronous) {
+                if (synchronous) return child;
+                return Stack(fit: StackFit.passthrough, children: [
+                  if (placeholder) NextImage(null, tint: tint),
+                  AnimatedOpacity(
+                    opacity: frame == null ? 0 : 1,
+                    duration: const Duration(milliseconds: 260),
+                    curve: Curves.easeOut,
+                    child: child,
+                  ),
+                ]);
+              },
+              errorBuilder: (context, error, stack) =>
+                  NextImage(null, tint: tint),
+            ),
     );
   }
 }

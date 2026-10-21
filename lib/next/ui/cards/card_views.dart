@@ -8,6 +8,7 @@ import '../widgets/artwork.dart';
 import '../widgets/buttons.dart';
 import '../widgets/cards.dart';
 import '../widgets/icons.dart';
+import '../widgets/poster_art.dart';
 import '../widgets/progress.dart';
 import '../widgets/words.dart';
 
@@ -274,8 +275,8 @@ class WorkRowCard extends StatelessWidget {
               radius: 8,
               child: ClipRRect(
                 borderRadius: BorderRadius.circular(8),
-                child: NextImage(work.artwork.poster,
-                    shape: ArtShape.poster, tint: work.artwork.tint),
+                child: PosterArt(work.artwork.poster,
+                    tint: work.artwork.tint),
               ),
             ),
           ),
@@ -379,8 +380,8 @@ class EpisodeCardView extends StatelessWidget {
                     overflow: TextOverflow.ellipsis,
                     style: NextText.sans(13.5, weight: FontWeight.w600)),
               ),
-              if (episode.runtime != null)
-                NumText(Words.runtime(episode.runtime!),
+              if (Words.runtime(episode.runtime) case final runtime?)
+                NumText(runtime,
                     style: NextText.sans(12, color: NextColors.p3)),
             ]),
             if (showWork && second.isNotEmpty) ...[

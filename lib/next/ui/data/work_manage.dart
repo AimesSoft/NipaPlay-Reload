@@ -359,7 +359,7 @@ final class UiFile {
     return UiFile(
       path: row['path'] as String,
       size: row['size'] as int?,
-      duration: ms == null ? null : Duration(milliseconds: ms),
+      duration: ms == null || ms <= 0 ? null : Duration(milliseconds: ms),
       modified: modified == null ? null : DateTime.tryParse(modified),
       device: device,
       manager: manager,

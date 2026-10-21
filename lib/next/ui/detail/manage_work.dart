@@ -10,6 +10,7 @@ import '../widgets/artwork.dart';
 import '../widgets/buttons.dart';
 import '../widgets/devices.dart';
 import '../widgets/icons.dart';
+import '../widgets/poster_art.dart';
 import '../widgets/segmented.dart';
 import 'manage_sheet.dart';
 
@@ -601,8 +602,8 @@ class WorkManageSheetState extends State<WorkManageSheet>
         child: SizedBox(
           width: 40,
           height: 60,
-          child: NextImage(work.artwork.poster ?? work.artwork.backdrop,
-              shape: ArtShape.poster, tint: work.artwork.tint),
+          child: PosterArt(work.artwork.poster ?? work.artwork.backdrop,
+              tint: work.artwork.tint, read: false),
         ),
       ),
       caption: work.originalTitle,

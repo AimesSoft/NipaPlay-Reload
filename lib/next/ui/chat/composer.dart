@@ -7,10 +7,10 @@ import '../conversation/next_sayings.dart';
 import '../conversation/nipa_chat.dart';
 import '../shell/nipa_setup.dart';
 import '../theme/tokens.dart';
-import '../widgets/artwork.dart';
 import '../widgets/attachments.dart';
 import '../widgets/buttons.dart';
 import '../widgets/icons.dart';
+import '../widgets/poster_art.dart';
 import '../widgets/progress.dart';
 import '../widgets/words.dart';
 
@@ -240,8 +240,8 @@ class AboutTag extends StatelessWidget {
             child: SizedBox(
               width: 15,
               height: 22,
-              child: NextImage(work.artwork.poster,
-                  shape: ArtShape.poster, tint: work.artwork.tint),
+              child: PosterArt(work.artwork.poster,
+                  tint: work.artwork.tint, read: false),
             ),
           ),
           const SizedBox(width: 8),
@@ -381,8 +381,8 @@ class _UnderwayRow extends StatelessWidget {
           child: SizedBox(
             width: 30,
             height: 44,
-            child: NextImage(item.artwork?.poster,
-                shape: ArtShape.poster, tint: item.artwork?.tint),
+            child: PosterArt(item.artwork?.poster,
+                tint: item.artwork?.tint, read: false),
           ),
         ),
         const SizedBox(width: 12),

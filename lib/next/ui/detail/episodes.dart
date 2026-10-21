@@ -224,9 +224,9 @@ class _EpisodeTileState extends State<EpisodeTile> {
                 const SizedBox(width: 8),
                 DeviceMark([device]),
               ],
-              if (episode.runtime != null) ...[
+              if (Words.runtime(episode.runtime) case final runtime?) ...[
                 const SizedBox(width: 8),
-                NumText(Words.runtime(episode.runtime!),
+                NumText(runtime,
                     style: NextText.sans(12,
                         weight: FontWeight.w500, color: NextColors.p3)),
               ],

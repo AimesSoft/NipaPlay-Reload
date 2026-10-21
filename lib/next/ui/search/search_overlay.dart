@@ -11,6 +11,7 @@ import '../widgets/devices.dart';
 import '../widgets/glass.dart';
 import '../widgets/icons.dart';
 import '../widgets/nipa_avatar.dart';
+import '../widgets/poster_art.dart';
 import '../widgets/words.dart';
 import 'search_controller.dart';
 
@@ -588,8 +589,8 @@ class _RowState extends State<_Row> {
           child: SizedBox(
             width: 36,
             height: 54,
-            child: NextImage(poster ?? work.artwork.poster,
-                shape: ArtShape.poster, tint: work.artwork.tint),
+            child: PosterArt(poster ?? work.artwork.poster,
+                tint: work.artwork.tint, read: false),
           ),
         ),
         const SizedBox(width: 14),
