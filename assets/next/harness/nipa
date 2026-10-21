@@ -300,8 +300,12 @@ class JsonArgumentParser(argparse.ArgumentParser):
 
 
 def catalog_summary(catalog):
+    # An action is available, needs no setup and has no replacement unless it
+    # says so; leaving those defaults out keeps the list inside one terminal budget.
+    defaults = {"available": True, "availabilityReason": None, "requiredHostSetup": []}
     return {"actions": [{k: a[k] for k in ("id", "effect", "title", "available", "availabilityReason",
-                        "requiredHostSetup", "lifecycle", "replacement") if k in a}
+                        "requiredHostSetup", "lifecycle", "replacement")
+                        if k in a and (k not in defaults or a[k] != defaults[k])}
                         for a in catalog["actions"]]}
 
 

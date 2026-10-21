@@ -68,6 +68,20 @@ class OutputConstraints(unittest.TestCase):
         self.assertEqual(sizes['AGENTS.md']['limitBytes'], 32768)
         self.assertEqual(sizes['memory']['residentBytes'], 12)
 
+    def test_list_summary_leaves_out_defaults_and_keeps_what_differs(self):
+        summary = self.cli['catalog_summary']({'actions': [
+            {'id': 'a.read', 'effect': 'read', 'title': 'Read', 'available': True,
+             'availabilityReason': None, 'requiredHostSetup': [], 'inputSchema': {}},
+            {'id': 'b.run', 'effect': 'write', 'title': 'Run', 'available': False,
+             'availabilityReason': 'Disabled.', 'requiredHostSetup': ['Enable it.'],
+             'lifecycle': 'legacyRecovery', 'replacement': ['c.run']},
+        ]})
+        self.assertEqual(summary['actions'][0], {'id': 'a.read', 'effect': 'read', 'title': 'Read'})
+        self.assertEqual(summary['actions'][1], {
+            'id': 'b.run', 'effect': 'write', 'title': 'Run', 'available': False,
+            'availabilityReason': 'Disabled.', 'requiredHostSetup': ['Enable it.'],
+            'lifecycle': 'legacyRecovery', 'replacement': ['c.run']})
+
 
 if __name__ == "__main__":
     unittest.main()
