@@ -236,6 +236,10 @@ final class FakeWorld implements NextUiData, NextUiActions, NextDiscoverData {
       year: int.tryParse('${m['year'] ?? ''}'),
       genres: genres,
       episodeCount: (o['episodes'] as int?) ?? m['episodes'] as int?,
+      film: m['kind'] == 'movie',
+      runtime: m['runtime'] == null
+          ? null
+          : Duration(minutes: m['runtime'] as int),
       studio: m['studio'] as String?,
       overview: manage.textOf(key, UiTextField.overview,
           (o['overview'] as String?) ?? m['overview'] as String?),
@@ -289,7 +293,11 @@ final class FakeWorld implements NextUiData, NextUiActions, NextDiscoverData {
       number: number ?? n,
       season: season,
       title: manage.episodeTitle('fake:$key:$n', e?['name'] as String?),
-      runtime: Duration(minutes: (e?['runtime'] as int?) ?? 24),
+      // A film's one episode runs as long as the film.
+      runtime: Duration(
+          minutes: (e?['runtime'] as int?) ??
+              (_meta[key]?['runtime'] as int?) ??
+              24),
       still: e?['still'] == null ? null : '$dir/${e!['still']}',
       progress: progress,
       heat: _heat(key, n),

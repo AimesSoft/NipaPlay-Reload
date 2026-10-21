@@ -296,10 +296,13 @@ class _WorkDetailPageState extends State<WorkDetailPage>
 
   NextWorkManage? get _manage => _found ? null : _shell!.services.manage;
 
-  /// Managing the work, in the ⋯ menu's second part.
+  /// Managing the work, in the ⋯ menu's second part. A film's episode has
+  /// no tile, so its sheets come first here.
   List<(String, VoidCallback)> get _manageItems => _manage == null
       ? const []
       : [
+          if (_work.film)
+            if (_episodes?.firstOrNull case final e?) ..._episodeSheets(e),
           ('匹配作品…', () => _openWork(WorkSection.match)),
           ('编辑资料…', () => _openWork(WorkSection.info)),
           ('剧集与文件…', () => _openWork(WorkSection.episodes)),
@@ -314,6 +317,7 @@ class _WorkDetailPageState extends State<WorkDetailPage>
 
   void _openEpisode(UiEpisode episode, EpisodeSection section) =>
       setState(() {
+        _menuOpen = false;
         _tileMenu = null;
         _workSheet = null;
         _episodeSheet = (episode, section);
@@ -362,11 +366,16 @@ class _WorkDetailPageState extends State<WorkDetailPage>
     });
   }
 
-  /// An episode's ⋯: its danmaku, subtitles and files; watched or not.
-  List<(String, VoidCallback)> _episodeItems(UiEpisode e) => [
+  /// An episode's sheets: its danmaku, subtitles and files.
+  List<(String, VoidCallback)> _episodeSheets(UiEpisode e) => [
         ('弹幕…', () => _openEpisode(e, EpisodeSection.danmaku)),
         ('字幕…', () => _openEpisode(e, EpisodeSection.subtitles)),
         ('文件…', () => _openEpisode(e, EpisodeSection.files)),
+      ];
+
+  /// An episode's ⋯: its sheets; watched or not.
+  List<(String, VoidCallback)> _episodeItems(UiEpisode e) => [
+        ..._episodeSheets(e),
         if (e.playable && (e.progress ?? 0) < 1)
           ('看过了', () {
             setState(() => _tileMenu = null);
@@ -385,8 +394,13 @@ class _WorkDetailPageState extends State<WorkDetailPage>
     if (_found) return const [];
     final next = _work.next;
     final season = _seasonOnDisk;
-    final seasonName =
-        _seasons.length > 1 ? Words.season(_currentSeason) : '这一季';
+    // A film is not told by episode or season.
+    final film = _work.film;
+    final seasonName = film
+        ? ''
+        : _seasons.length > 1
+            ? Words.season(_currentSeason)
+            : '这一季';
     final allWatched =
         season.isNotEmpty && season.every((e) => (e.progress ?? 0) >= 1);
     final unwatched = [
@@ -396,7 +410,8 @@ class _WorkDetailPageState extends State<WorkDetailPage>
     return [
       if (_missing) ('下载全部', _downloadAll),
       if (next != null && next.playable && (next.progress ?? 0) < 1)
-        ('${Words.episode(next.number)}看过了', () => _mark([next], true)),
+        ('${film ? '' : Words.episode(next.number)}看过了',
+            () => _mark([next], true)),
       if (unwatched.length > 1)
         ('$seasonName都看过了', () => _mark(unwatched, true)),
       if (allWatched) ('$seasonName标成没看过', () => _mark(season, false)),
@@ -765,11 +780,16 @@ class _WorkDetailPageState extends State<WorkDetailPage>
   Widget _actions() {
     final shell = _shell!;
     final work = _work;
-    final next = work.next;
     final episodes = _episodes;
-    final started = episodes != null
-        ? episodes.any((e) => (e.progress ?? 0) > 0)
-        : (next?.progress ?? 0) > 0;
+    // A film plays its one episode, seen or not: there is no row of them.
+    final next = work.film
+        ? work.next ?? episodes?.where((e) => e.playable).firstOrNull
+        : work.next;
+    final started = work.film
+        ? (next?.progress ?? 0) > 0 && (next?.progress ?? 0) < 1
+        : episodes != null
+            ? episodes.any((e) => (e.progress ?? 0) > 0)
+            : (next?.progress ?? 0) > 0;
     final menu = [..._menuItems, ..._manageItems];
     final row = Row(children: [
       if (_found) ...[
@@ -777,7 +797,11 @@ class _WorkDetailPageState extends State<WorkDetailPage>
         const SizedBox(width: 12),
       ] else if (next != null && next.playable) ...[
         PlayButton(
-          label: started ? '继续 ${Words.episode(next.number)}' : '播放',
+          label: !started
+              ? '播放'
+              : work.film
+                  ? '继续播放'
+                  : '继续 ${Words.episode(next.number)}',
           onTap: () => shell.play(work, episode: next),
         ),
         const SizedBox(width: 12),
@@ -956,9 +980,12 @@ class _WorkDetailPageState extends State<WorkDetailPage>
         ),
       ];
 
+  /// A film has no row of episodes: “播放” plays it.
   Widget _episodesBlock() {
     final episodes = _episodes;
-    if (episodes == null || episodes.isEmpty) return const SizedBox.shrink();
+    if (episodes == null || episodes.isEmpty || _work.film) {
+      return const SizedBox.shrink();
+    }
     final shell = _shell!;
     final seasons = _seasons;
     final season = _currentSeason;

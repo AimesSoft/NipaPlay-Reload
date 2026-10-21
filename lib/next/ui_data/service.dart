@@ -152,6 +152,8 @@ final class UiDataService implements NextUiData, NextNowPlaying {
             .where((e) => e.playable && (e.progress ?? 0) < 1)
             .firstOrNull ??
         episodes.where((e) => (e.progress ?? 0) < 1).firstOrNull;
+    final film = await media.store.workIsFilm(workId);
+    final runtime = fields['runtimeMs'];
     return UiWork(
         workId: workId,
         title: _display(fields['title'] ?? attrs['title']) ?? '未命名作品',
@@ -163,6 +165,13 @@ final class UiDataService implements NextUiData, NextNowPlaying {
         ],
         episodeCount: (fields['episodeCount'] as num?)?.toInt() ??
             (episodes.isEmpty ? null : episodes.length),
+        film: film,
+        // Its own length, or a film's one episode's.
+        runtime: runtime is num && runtime > 0
+            ? Duration(milliseconds: runtime.toInt())
+            : film
+                ? episodes.singleOrNull?.runtime
+                : null,
         studio: _display(fields['studio']),
         overview: _display(fields['overview']),
         ratings: [
@@ -395,7 +404,7 @@ final class UiDataService implements NextUiData, NextNowPlaying {
     if (meshLibrary != null) {
       for (final work in await library()) {
         final ep = (await episodes(work.workId)).where((e) => (e.progress ?? 0) > 0 && (e.progress ?? 0) < 1).firstOrNull;
-        if (ep != null && seen.add(work.workId)) continuing.add(UiShelfItem(work, episode: ep, caption: _caption(ep)));
+        if (ep != null && seen.add(work.workId)) continuing.add(UiShelfItem(work, episode: ep, caption: _caption(work, ep)));
       }
     }
     if (sources.continueWatching != null) {
@@ -414,7 +423,7 @@ final class UiDataService implements NextUiData, NextNowPlaying {
                 linkedIds.contains(e.episodeId) &&
                 (e.progress ?? 0) < 1)
             .firstOrNull;
-        continuing.add(UiShelfItem(work, episode: ep, caption: _caption(ep)));
+        continuing.add(UiShelfItem(work, episode: ep, caption: _caption(work, ep)));
       }
     }
     if (continuing.isNotEmpty) {
@@ -457,7 +466,7 @@ final class UiDataService implements NextUiData, NextNowPlaying {
         } else {
           items.add(UiShelfItem(work,
               episode: work.next,
-              caption: item['note'] as String? ?? _caption(work.next)));
+              caption: item['note'] as String? ?? _caption(work, work.next)));
         }
       }
       if (shelf['placement'] == 'shelf') {
@@ -471,7 +480,7 @@ final class UiDataService implements NextUiData, NextNowPlaying {
     final recent = <UiShelfItem>[];
     for (final work in (await library()).take(20)) {
       recent.add(
-          UiShelfItem(work, episode: work.next, caption: _caption(work.next)));
+          UiShelfItem(work, episode: work.next, caption: _caption(work, work.next)));
     }
     if (recent.isNotEmpty) {
       shelves.add(UiShelf(
@@ -1136,7 +1145,8 @@ String _downloadTitle(String title) {
       ? '下载'
       : '下载 $name';
 }
-String? _caption(UiEpisode? e) {
+/// A film's episode goes without its number.
+String? _caption(UiWork work, UiEpisode? e) {
   if (e == null) return null;
   final left = e.runtime != null &&
           e.progress != null &&
@@ -1144,6 +1154,7 @@ String? _caption(UiEpisode? e) {
           e.progress! < 1
       ? (e.runtime!.inMilliseconds * (1 - e.progress!) / 60000).ceil()
       : null;
+  if (work.film) return left == null ? null : '剩 $left 分钟';
   return '第 ${e.number} 集${left == null ? '' : ' · 剩 $left 分钟'}';
 }
 

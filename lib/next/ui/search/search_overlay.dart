@@ -578,7 +578,7 @@ class _RowState extends State<_Row> {
       if (workTitle != null && workTitle != work.title) workTitle,
       if (source != null) source,
       if (work.year case final year?) '$year',
-      if (work.episodeCount case final n? when n > 1) '$n 集',
+      if (work.episodeCount case final n? when n > 1 && !work.film) '$n 集',
     ].join(' · ');
     return SizedBox(
       height: 68,

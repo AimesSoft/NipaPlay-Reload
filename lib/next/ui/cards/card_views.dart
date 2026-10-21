@@ -241,7 +241,10 @@ class WorkRowCard extends StatelessWidget {
       if (work.ratings.isNotEmpty)
         '★ ${work.ratings.first.value.toStringAsFixed(1)}',
       if (work.year != null) '${work.year}',
-      if (work.episodeCount != null) '${work.episodeCount} 集',
+      if (work.film) ...[
+        if (Words.length(work.runtime) case final length?) length,
+      ] else if (work.episodeCount != null)
+        '${work.episodeCount} 集',
     ].join(' · ');
     return Pressable(
       onTap: callbacks.onOpen == null ? null : () => callbacks.onOpen!(work),

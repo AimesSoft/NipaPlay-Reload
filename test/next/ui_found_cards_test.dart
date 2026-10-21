@@ -11,6 +11,9 @@ import 'package:nipaplay/next/media/identity_store.dart';
 import 'package:nipaplay/next/media/media_service.dart';
 import 'package:nipaplay/next/media/metadata_provider.dart';
 import 'package:nipaplay/next/media/providers.dart';
+import 'package:nipaplay/next/mesh/library.dart';
+import 'package:nipaplay/next/mesh/library_codec.dart';
+import 'package:nipaplay/next/mesh/runtime.dart';
 import 'package:nipaplay/next/state/query.dart';
 import 'package:nipaplay/next/state/views.dart';
 import 'package:nipaplay/next/tasks/sqlite_job_store.dart';
@@ -394,6 +397,106 @@ void main() {
     cards = await read();
     expect((cards.last as UiWorkCard).work.workId, 'found:tmdb:tv:1001');
     expect(tmdb.asked, ['tv/1001']);
+  });
+
+  test('a work is a film only when an identity it holds says so', () async {
+    for (final (id, kind, parent) in [
+      ('w3', 'work', null),
+      ('r3', 'release', 'w3'),
+      ('e3', 'episode', 'r3'),
+    ]) {
+      await store.database.insert('media_entities', {
+        'id': id,
+        'kind': kind,
+        'parent_id': parent,
+        'attributes': jsonEncode({'title': '寻龙记', 'number': '1'})
+      });
+    }
+    Future<UiWork> work(String id) async => (await service.work(id))!;
+    // 最近添加 says which episode, unless it is a film's.
+    Future<String?> caption() async => (await service.home())
+        .shelves
+        .singleWhere((s) => s.kind == UiShelfKind.recent)
+        .items
+        .singleWhere((i) => i.work.workId == 'w3')
+        .caption;
+    // Its title, its one episode: nothing NipaPlay holds says it.
+    expect((await work('w3')).episodeCount, 1);
+    expect((await work('w3')).film, isFalse);
+    expect((await work('w3')).runtime, isNull);
+    expect(await caption(), '第 1 集');
+
+    // A TMDB movie on a release under it, as a binding leaves it.
+    await bind('r3', 'movie', '45745');
+    expect((await work('w3')).film, isTrue);
+    expect(await caption(), isNull);
+    // With a TMDB series beside it nobody knows; revoked, that says nothing.
+    await bind('w3', 'tv', '1001');
+    expect((await work('w3')).film, isFalse);
+    await bind('w3', 'tv', '1001', status: 'revoked');
+    expect((await work('w3')).film, isTrue);
+    await bind('w2', 'tv', '5005');
+    expect((await work('w2')).film, isFalse);
+
+    // Its length: its one episode's, and its own once known.
+    final gui = Invocation(origin: 'gui');
+    await service.media.store.overrideFields([
+      {'entityId': 'e3', 'field': 'runtimeMs', 'value': 92 * 60000}
+    ], gui);
+    expect((await work('w3')).runtime, const Duration(minutes: 92));
+    await service.media.store.overrideFields([
+      {'entityId': 'w3', 'field': 'runtimeMs', 'value': 14 * 60000}
+    ], gui);
+    expect((await work('w3')).runtime, const Duration(minutes: 14));
+
+    // The merged library tells it by the same identities.
+    final mesh =
+        MeshRuntime(root: root, vault: MemoryVault(), token: () async => null);
+    final library = MeshLibrary(service, mesh);
+    try {
+      final merged = (await library.work('w3'))!;
+      expect(merged.workId, isNot('w3'));
+      expect(merged.film, isTrue);
+      expect(merged.runtime, const Duration(minutes: 14));
+      expect((await library.work('w2'))!.film, isFalse);
+    } finally {
+      await library.close();
+      await mesh.close();
+    }
+  });
+
+  test('a found TMDB movie is a film; nothing else found says so', () {
+    expect(Found.fromRecord('found:tmdb:movie:2002', const {'title': '大鱼海棠'}).film,
+        isTrue);
+    for (final id in [
+      'found:tmdb:tv:1001',
+      'found:bangumi:3003',
+      'found:dandanplay:123'
+    ]) {
+      expect(Found.fromRecord(id, const {'title': '作品'}).film, isFalse);
+    }
+    expect(
+        Found.withRecord(
+                const UiWork(workId: 'found:tmdb:movie:2002', title: ''),
+                const {}).film,
+        isTrue);
+  });
+
+  test('the merged catalogue keeps a film and its length', () {
+    const film = UiWork(
+        workId: 'w',
+        title: '寻龙记',
+        film: true,
+        runtime: Duration(minutes: 14));
+    final back = workValue(workJson(film), const [], const []);
+    expect(back.film, isTrue);
+    expect(back.runtime, const Duration(minutes: 14));
+    // From a device that does not say: not known as one.
+    final old = workJson(film)
+      ..remove('film')
+      ..remove('runtimeMs');
+    expect(workValue(old, const [], const []).film, isFalse);
+    expect(workValue(old, const [], const []).runtime, isNull);
   });
 
   test('found IDs name their provider object', () {

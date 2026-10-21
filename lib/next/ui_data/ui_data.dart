@@ -79,6 +79,8 @@ final class UiWork {
     this.year,
     this.genres = const [],
     this.episodeCount,
+    this.film = false,
+    this.runtime,
     this.studio,
     this.overview,
     this.ratings = const [],
@@ -93,6 +95,13 @@ final class UiWork {
   final int? year;
   final List<String> genres;
   final int? episodeCount;
+
+  /// Known to be a film: an identity NipaPlay holds says so (a TMDB movie,
+  /// a server's Movie item). False for a series and when nobody knows.
+  final bool film;
+
+  /// How long it runs, when known: a film's length.
+  final Duration? runtime;
   final String? studio;
   final String? overview;
   final List<UiRating> ratings;

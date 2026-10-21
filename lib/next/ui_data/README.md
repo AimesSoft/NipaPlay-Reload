@@ -128,6 +128,13 @@ sourceInfo 并走同一个播放入口和续播位置。来源原样引用自动
 本机来源为 null。`playable` 表示现在能播，包括在线远端。离线作品保留上次事实、
 `UiDevice.online=false`，仅远端来源的剧集 `playable=false`。
 
+`UiWork.film` 只报告已存的事实：作品或其 release 有已接受的 TMDB movie 身份、且没有
+TMDB tv 身份（`IdentityStore.workIsFilm`，合并作品按合并后的身份键同样判断）；服务器
+原样作品取条目类型 Movie；片库外作品取 `found:tmdb:movie:`。不按标题、文件名或集数
+猜测，没有事实就是 false，界面照旧按剧集展示。`UiWork.runtime` 取作品资料的
+`runtimeMs`（如 TMDB 详情的片长），电影没有时取它唯一一集的时长。界面上电影不写集数、
+写片长，详情页没有季和剧集一排，“播放”播它那一集。
+
 作品按已接受 exact/contains 的弹弹play、TMDB 或 Bangumi 外部身份合并，候选和标题
 相似度不算身份。已接受 release 上的作品身份也参与；无共同身份时，相同文件摘要可
 连接两份目录。剧集在同一作品内按已接受单集身份、明确季/集号，或相同文件摘要加
