@@ -175,17 +175,73 @@ class EpisodeMenu extends StatefulWidget {
   State<EpisodeMenu> createState() => _EpisodeMenuState();
 }
 
-/// The library's side: the work, the episodes shown, the one playing.
-final class _Known {
-  const _Known(this.work, this.episodes, this.currentId, this.heading);
+/// What plays, as the library knows it: the work, the episodes of the
+/// season playing (all of them when the work has one season, or the one
+/// playing is not among them), and the one playing.
+final class PlayingWork {
+  const PlayingWork(this.work, this.episodes, this.current,
+      {this.seasons = false});
   final UiWork work;
   final List<UiEpisode> episodes;
-  final String? currentId;
-  final String heading;
+  final UiEpisode? current;
+
+  /// The work has more than one season.
+  final bool seasons;
+
+  /// The season playing by name, or 剧集.
+  String get heading =>
+      seasons && current != null ? Words.season(current!.season) : '剧集';
+
+  /// The episodes after the one playing, in its season, in order.
+  List<UiEpisode> get _after {
+    final now = current;
+    if (now == null) return const [];
+    return [
+      for (final e in episodes)
+        if (e.season == now.season && e.number > now.number) e
+    ]..sort((a, b) => a.number.compareTo(b.number));
+  }
+
+  /// What 下一集 plays: the first episode after the one playing, in its
+  /// season, that can be played now.
+  UiEpisode? get next => _after.where((e) => e.playable).firstOrNull;
+
+  /// One after it in its season is not here yet.
+  bool get waiting => next == null && _after.isNotEmpty;
+
+  /// The library's side of the file at [path]; null when the library does
+  /// not know it.
+  static Future<PlayingWork?> of(NextUiData data, String? path) async {
+    if (path == null || data is! NextNowPlaying) return null;
+    try {
+      final now = await (data as NextNowPlaying).nowPlaying(path);
+      if (now == null) return null;
+      final (work, all) =
+          await (data.work(now.workId), data.episodes(now.workId)).wait;
+      if (work == null) return null;
+      final current =
+          all.where((e) => e.episodeId == now.episodeId).firstOrNull;
+      final seasons = {for (final e in all) e.season}.length > 1;
+      return PlayingWork(
+        work,
+        seasons && current != null
+            ? [
+                for (final e in all)
+                  if (e.season == current.season) e
+              ]
+            : all,
+        current,
+        seasons: seasons,
+      );
+    } catch (e) {
+      debugPrint('[NextPlayer] library episodes: $e');
+      return null;
+    }
+  }
 }
 
 class _EpisodeMenuState extends State<EpisodeMenu> {
-  _Known? _known;
+  PlayingWork? _known;
   List<EpisodeChoice>? _episodes;
   final _scroll = ScrollController();
 
@@ -205,12 +261,14 @@ class _EpisodeMenuState extends State<EpisodeMenu> {
   }
 
   Future<void> _load() async {
-    final known = await _fromLibrary();
+    final known = await PlayingWork.of(
+        widget.shell.services.data, widget.playback.state.currentVideoPath);
     if (!mounted) return;
-    if (known != null) {
+    if (known != null && known.episodes.isNotEmpty) {
       setState(() => _known = known);
       return _openAt(
-          known.episodes.indexWhere((e) => e.episodeId == known.currentId),
+          known.episodes
+              .indexWhere((e) => e.episodeId == known.current?.episodeId),
           _stillRow);
     }
     List<EpisodeChoice> episodes;
@@ -223,38 +281,6 @@ class _EpisodeMenuState extends State<EpisodeMenu> {
     if (!mounted) return;
     setState(() => _episodes = episodes);
     _openAt(episodes.indexWhere((e) => e.current), _row);
-  }
-
-  /// The work's episodes when the library knows the file: the season of
-  /// the one playing.
-  Future<_Known?> _fromLibrary() async {
-    final path = widget.playback.state.currentVideoPath;
-    final data = widget.shell.services.data;
-    if (path == null || data is! NextNowPlaying) return null;
-    try {
-      final now = await (data as NextNowPlaying).nowPlaying(path);
-      if (now == null) return null;
-      final (work, all) =
-          await (data.work(now.workId), data.episodes(now.workId)).wait;
-      if (work == null || all.isEmpty) return null;
-      final current =
-          all.where((e) => e.episodeId == now.episodeId).firstOrNull;
-      final seasons = {for (final e in all) e.season}.length > 1;
-      return _Known(
-        work,
-        seasons && current != null
-            ? [
-                for (final e in all)
-                  if (e.season == current.season) e
-              ]
-            : all,
-        current?.episodeId,
-        seasons && current != null ? Words.season(current.season) : '剧集',
-      );
-    } catch (e) {
-      debugPrint('[NextPlayer] library episodes: $e');
-      return null;
-    }
   }
 
   /// Opened at the one playing.
@@ -295,7 +321,7 @@ class _EpisodeMenuState extends State<EpisodeMenu> {
           return _StillRow(
             work: known.work,
             episode: e,
-            current: e.episodeId == known.currentId,
+            current: e.episodeId == known.current?.episodeId,
             onTap: () => _playKnown(known.work, e),
           );
         },

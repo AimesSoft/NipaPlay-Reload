@@ -35,8 +35,11 @@ void main() {
     store = await SqliteJobStore.open(root, factory: databaseFactoryFfi);
     executor = FakeExecutor();
     helperExecutor = FakeExecutor(type: 'agent.helper');
-    engine = TaskEngine(
-        store: store, ownerDeviceId: 'fixture', executors: [executor, helperExecutor]);
+    engine = TaskEngine(store: store, ownerDeviceId: 'fixture', executors: [
+      executor,
+      helperExecutor,
+      FakeExecutor(type: 'download', onExecute: (c) => c.succeed(verified())),
+    ]);
     await engine.start();
     final media = MediaService(
         store: IdentityStore(store.database, 'fixture'),
@@ -90,6 +93,30 @@ void main() {
     expect(task.type, 'agent.helper');
     expect(task.artwork, isNull);
     await context.succeed(JobReceipt(verification: VerificationLevel.verified, details: {}));
+  });
+
+  test('a download whose work is not known goes by its own name, never its hash',
+      () async {
+    const release =
+        '[LoliHouse] Sousou no Frieren - 05 [WebRip 1080p HEVC-10bit AAC][简繁内封字幕]';
+    for (final title in [
+      release,
+      '葬送的芙莉莲 05.torrent',
+      'c9e15763f722f23e98a29decdfae341b98d53056',
+      'C9E15763F722F23E98A29DECDFAE341B98D53056.torrent',
+    ]) {
+      await engine.submit(type: 'download', title: title);
+    }
+    final tasks = await service.tasks().first;
+    expect([for (final t in tasks) t.title], unorderedEquals([
+      '下载 $release',
+      '下载 葬送的芙莉莲 05',
+      '下载',
+      '下载',
+    ]));
+    expect({for (final t in tasks) t.action}, {'下载'});
+    expect([for (final t in tasks) t.workTitle].nonNulls, isEmpty,
+        reason: 'a download is not a work');
   });
 
   test('helper cards and tasks retain thread, summary and unknown progress', () async {

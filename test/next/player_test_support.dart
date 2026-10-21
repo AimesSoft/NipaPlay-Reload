@@ -318,8 +318,10 @@ class FakePlayerState extends ChangeNotifier implements VideoPlayerState {
   int get danmakuListVersion => 1;
   @override
   int get bufferedPosition => 4 * 60 * 1000;
+  /// Classic offers a next episode (as it does for any Jellyfin or Emby
+  /// stream, films too).
   @override
-  bool get canPlayNextEpisode => true;
+  bool canPlayNextEpisode = true;
   @override
   bool get instantHidePlayerUiEnabled => false;
 
@@ -469,6 +471,19 @@ final playerTestWorks = <String, (UiWork, List<UiEpisode>)>{};
 
 /// What the shell was asked to play, in order.
 final playerTestPlays = <(UiWork, UiEpisode?)>[];
+
+/// The library knows the file at [path] as [playing] of [work], whose
+/// episodes are [episodes].
+void putInPlayerTestLibrary(
+    String path, UiWork work, List<UiEpisode> episodes, String playing) {
+  playerTestWorks[work.workId] = (work, episodes);
+  final e = episodes.firstWhere((e) => e.episodeId == playing);
+  playerTestLibrary[path] = UiNowPlaying(
+      workId: work.workId,
+      work: work.title,
+      episodeId: playing,
+      episode: '第 ${e.number} 集 ${e.title ?? ''}'.trim());
+}
 
 /// Clears what a test put in the library, and what it played.
 void resetPlayerTestLibrary() {
