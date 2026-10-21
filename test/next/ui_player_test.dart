@@ -370,6 +370,119 @@ void main() {
     expect(playerTestPlays, isEmpty);
   });
 
+  /// 葬送的芙莉莲: seven episodes of the first season ([missing] not here
+  /// yet), and the second season's first, here.
+  List<UiEpisode> frieren({Set<int> missing = const {}}) => [
+        for (var n = 1; n <= 7; n++)
+          UiEpisode(
+              episodeId: 'f$n',
+              workId: 'frieren',
+              number: n,
+              season: 1,
+              playable: !missing.contains(n)),
+        const UiEpisode(
+            episodeId: 's2e1',
+            workId: 'frieren',
+            number: 1,
+            season: 2,
+            playable: true),
+      ];
+  const frierenWork = UiWork(workId: 'frieren', title: '葬送的芙莉莲');
+
+  Future<void> watch(WidgetTester tester, PlayerRig p, String path) async {
+    p.state.currentVideoPath = path;
+    p.state.notify();
+    await tester.pumpAndSettle();
+  }
+
+  testWidgets(
+      '下一集 of a work the library knows: the first after it in its season '
+      'that can be played, played as the shell plays', (tester) async {
+    addTearDown(resetPlayerTestLibrary);
+    // Listed out of order; the fifth is not here.
+    putInPlayerTestLibrary('/v/Frieren - 04.mkv', frierenWork,
+        frieren(missing: {5}).reversed.toList(), 'f4');
+    final p = await pumpPlayer(tester, status: PlayerStatus.playing);
+    await watch(tester, p, '/v/Frieren - 04.mkv');
+    expect(button('下一集').hitTestable(), findsOneWidget);
+
+    await tester.tap(button('下一集'));
+    await tester.pump();
+    expect(playerTestPlays.single.$1.workId, 'frieren');
+    expect(playerTestPlays.single.$2!.episodeId, 'f6');
+    expect(p.state.nextEpisodes, 0, reason: 'not through Classic');
+  });
+
+  testWidgets(
+      'asked again for each video: none after the last episode or a film, '
+      'though Classic offers one', (tester) async {
+    addTearDown(resetPlayerTestLibrary);
+    final episodes = frieren();
+    putInPlayerTestLibrary('/v/Frieren - 06.mkv', frierenWork, episodes, 'f6');
+    putInPlayerTestLibrary('/v/Frieren - 07.mkv', frierenWork, episodes, 'f7');
+    putInPlayerTestLibrary(
+        'jellyfin://server/film',
+        const UiWork(workId: 'raya', title: '寻龙记'),
+        const [
+          UiEpisode(
+              episodeId: 'raya-1', workId: 'raya', number: 1, playable: true)
+        ],
+        'raya-1');
+    final p = await pumpPlayer(tester, status: PlayerStatus.playing);
+    expect(p.state.canPlayNextEpisode, isTrue);
+
+    await watch(tester, p, '/v/Frieren - 06.mkv');
+    expect(button('下一集').hitTestable(), findsOneWidget);
+
+    await watch(tester, p, '/v/Frieren - 07.mkv');
+    expect(button('下一集'), findsNothing,
+        reason: "the last of its season; the next season's is not next");
+
+    await watch(tester, p, 'jellyfin://server/film');
+    expect(button('下一集'), findsNothing, reason: 'a film');
+
+    await watch(tester, p, '/v/unknown.mkv');
+    expect(button('下一集').hitTestable(), findsOneWidget,
+        reason: "a file only Classic knows: Classic's");
+  });
+
+  testWidgets('the next one not here yet: no 下一集 until it can be played',
+      (tester) async {
+    addTearDown(resetPlayerTestLibrary);
+    putInPlayerTestLibrary('/v/Frieren - 05.mkv', frierenWork,
+        frieren(missing: {6, 7}), 'f5');
+    final p = await pumpPlayer(tester, status: PlayerStatus.playing);
+    await watch(tester, p, '/v/Frieren - 05.mkv');
+    expect(button('下一集'), findsNothing,
+        reason: 'the sixth is not here, though Classic offers one');
+
+    // The sixth arrives; the controls come back.
+    playerTestWorks['frieren'] = (frierenWork, frieren(missing: {7}));
+    p.state.showControlsNow(false);
+    await tester.pumpAndSettle();
+    p.state.showControlsNow(true);
+    await tester.pumpAndSettle();
+    await tester.tap(button('下一集'));
+    await tester.pump();
+    expect(playerTestPlays.single.$2!.episodeId, 'f6');
+    expect(p.state.nextEpisodes, 0);
+  });
+
+  testWidgets("下一集 of a file only Classic knows: Classic's", (tester) async {
+    addTearDown(resetPlayerTestLibrary);
+    final p = await pumpPlayer(tester, status: PlayerStatus.playing);
+    await watch(tester, p, '/v/unknown.mkv');
+    await tester.tap(button('下一集'));
+    await tester.pump();
+    expect(p.state.nextEpisodes, 1);
+    expect(playerTestPlays, isEmpty);
+
+    p.state.canPlayNextEpisode = false;
+    p.state.notify();
+    await tester.pumpAndSettle();
+    expect(button('下一集'), findsNothing);
+  });
+
   testWidgets('clicks on the picture are still Classic\'s video\'s',
       (tester) async {
     var taps = 0;

@@ -1,6 +1,7 @@
 import 'package:flutter/widgets.dart';
 
 import '../../ui_data/ui_data.dart';
+import '../downloads/task_open.dart' show isDownload;
 import '../theme/tokens.dart';
 import '../widgets/art_origin.dart';
 import '../widgets/artwork.dart';
@@ -640,7 +641,7 @@ class _StepRow extends StatelessWidget {
 }
 
 /// A background task: thumbnail, name, thin bar, remaining time, pause and
-/// cancel.
+/// cancel. A download with no work's art yet shows the download mark there.
 class TaskRow extends StatelessWidget {
   const TaskRow({super.key, required this.task, required this.callbacks});
   final UiTask task;
@@ -650,14 +651,20 @@ class TaskRow extends StatelessWidget {
   Widget build(BuildContext context) {
     final running = task.state == UiTaskState.running;
     final paused = task.state == UiTaskState.paused;
+    final art = task.artwork?.backdrop ?? task.artwork?.poster;
     return Row(children: [
       Container(
         width: 64,
         height: 36,
         decoration: BoxDecoration(borderRadius: BorderRadius.circular(6)),
         clipBehavior: Clip.antiAlias,
-        child: NextImage(task.artwork?.backdrop ?? task.artwork?.poster,
-            tint: task.artwork?.tint),
+        child: Stack(fit: StackFit.expand, children: [
+          NextImage(art, tint: task.artwork?.tint),
+          if (art == null && isDownload(task))
+            const Center(
+                child: NextIcon(NextGlyph.torrent,
+                    size: 16, color: NextColors.p3)),
+        ]),
       ),
       const SizedBox(width: 12),
       Expanded(

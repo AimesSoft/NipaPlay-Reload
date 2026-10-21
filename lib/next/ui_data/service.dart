@@ -274,7 +274,9 @@ final class UiDataService implements NextUiData, NextNowPlaying {
         type: job.type,
         title: job.type == 'agent.helper' ? job.title :
             job.state == JobState.waitingUser ? '等待你确认删除' :
-            '${_taskVerb(job.type)}${name == null ? '' : '《$name》'}',
+            name != null ? '${_taskVerb(job.type)}《$name》' :
+            job.type == 'download' ? _downloadTitle(job.title) :
+            _taskVerb(job.type),
         workTitle: job.type == 'agent.helper' ? null : name,
         action: job.type == 'agent.helper' ? null : _taskVerb(job.type),
         state: switch (job.state) {
@@ -1116,6 +1118,20 @@ String _taskVerb(String type) => switch (type) {
       'harness.hook' => '处理后续',
       _ => '准备作品'
     };
+
+/// A download whose work is not known yet goes by its own name, as it came
+/// (the torrent's, or the magnet's display name). A source without one (a
+/// magnet without dn, a torrent URL named by its hash) is titled by its info
+/// hash, which is no name to show.
+String _downloadTitle(String title) {
+  final name = title
+      .trim()
+      .replaceFirst(RegExp(r'\.torrent$', caseSensitive: false), '')
+      .trim();
+  return name.isEmpty || RegExp(r'^[0-9a-fA-F]{40}$').hasMatch(name)
+      ? '下载'
+      : '下载 $name';
+}
 String? _caption(UiEpisode? e) {
   if (e == null) return null;
   final left = e.runtime != null &&

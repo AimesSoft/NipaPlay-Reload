@@ -266,6 +266,7 @@ class _NextPlayerLayerState extends State<NextPlayerLayer> {
                   onExit: (_) => _hoverChrome(false),
                   child: _BottomBar(
                     playback: playback,
+                    shell: shell,
                     menu: _menu,
                     onMenu: _toggleMenu,
                     onScrub: _scrub,
@@ -545,11 +546,13 @@ class _Nipa extends StatelessWidget {
 class _BottomBar extends StatelessWidget {
   const _BottomBar({
     required this.playback,
+    required this.shell,
     required this.menu,
     required this.onMenu,
     required this.onScrub,
   });
   final NextPlayback playback;
+  final NextShellController shell;
   final _Menu? menu;
   final void Function(_Menu which) onMenu;
   final ValueChanged<bool> onScrub;
@@ -605,20 +608,7 @@ class _BottomBar extends StatelessWidget {
                   onTap: playback.togglePlay,
                 ),
               ),
-              Selector<VideoPlayerState, bool>(
-                selector: (_, s) => s.canPlayNextEpisode,
-                builder: (context, can, _) => can
-                    ? Padding(
-                        padding: const EdgeInsets.only(left: _gap),
-                        child: _BarButton(
-                          glyph: NextGlyph.nextEpisode,
-                          label: '下一集',
-                          size: 19,
-                          onTap: () => unawaited(playback.nextEpisode()),
-                        ),
-                      )
-                    : const SizedBox.shrink(),
-              ),
+              _NextEpisode(playback: playback, shell: shell),
               const SizedBox(width: 14),
               Selector<VideoPlayerState, (int, int)>(
                 selector: (_, s) =>
@@ -697,6 +687,80 @@ class _BottomBar extends StatelessWidget {
       ),
     );
   }
+}
+
+/// 下一集. A file the library knows: the first episode after it in its
+/// season that can be played now, played as the shell plays anything; with
+/// none (a film, the last episode, the next not here yet) there is no
+/// button. A file only Classic knows: Classic's playlist. Asked again for
+/// each video, and when the controls come back while the next one is still
+/// on its way.
+class _NextEpisode extends StatefulWidget {
+  const _NextEpisode({required this.playback, required this.shell});
+  final NextPlayback playback;
+  final NextShellController shell;
+
+  @override
+  State<_NextEpisode> createState() => _NextEpisodeState();
+}
+
+class _NextEpisodeState extends State<_NextEpisode> {
+  bool _asked = false;
+  String? _path;
+  bool _shown = false;
+  int _asking = 0;
+
+  /// What the library said of [_path]; null until it has.
+  ({PlayingWork? known})? _answer;
+
+  void _ask() {
+    final ask = ++_asking;
+    unawaited(PlayingWork.of(widget.shell.services.data, _path).then((known) {
+      if (mounted && ask == _asking) setState(() => _answer = (known: known));
+    }));
+  }
+
+  @override
+  Widget build(BuildContext context) =>
+      Selector<VideoPlayerState, (String?, bool, bool)>(
+        selector: (_, s) =>
+            (s.currentVideoPath, s.showControls, s.canPlayNextEpisode),
+        builder: (context, v, _) {
+          final (path, shown, classic) = v;
+          if (!_asked || path != _path) {
+            _asked = true;
+            _path = path;
+            _answer = null;
+            _ask();
+          } else if (shown && !_shown && (_answer?.known?.waiting ?? false)) {
+            _ask();
+          }
+          _shown = shown;
+          final answer = _answer;
+          if (answer == null) return const SizedBox.shrink();
+          final VoidCallback? play;
+          if (answer.known case final known?) {
+            final next = known.next;
+            play = next == null
+                ? null
+                : () => widget.shell.play(known.work, episode: next);
+          } else {
+            play = classic
+                ? () => unawaited(widget.playback.nextEpisode())
+                : null;
+          }
+          if (play == null) return const SizedBox.shrink();
+          return Padding(
+            padding: const EdgeInsets.only(left: _BottomBar._gap),
+            child: _BarButton(
+              glyph: NextGlyph.nextEpisode,
+              label: '下一集',
+              size: 19,
+              onTap: play,
+            ),
+          );
+        },
+      );
 }
 
 /// A round control: the glyph in paper, a faint disc under it on hover,
