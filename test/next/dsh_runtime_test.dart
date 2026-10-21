@@ -241,7 +241,7 @@ trust_level = "trusted"
           .firstOrNull, what: 'helper job');
       expect(job.input['source'], 'codexNative');
       expect(job.input['parentThreadId'], parent);
-      expect(job.title, 'CHILD_TASK do it');
+      expect(job.title, 'child job', reason: 'named by what the helper is for');
 
       final command = await lab.next((e) => e['method'] == 'item/completed' &&
           e['params']['threadId'] == child && e['params']['item']['type'] == 'commandExecution');

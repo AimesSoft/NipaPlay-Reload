@@ -120,7 +120,9 @@ function toolItem(threadId, call, cwd) {
       };
     case 'subagent':
     case 'subagent_fork':
-      return collab('spawnAgent', [], args.prompt);
+      // NipaPlay names the helper by the prompt's first sentence; DSH's own
+      // short description says what the helper is for.
+      return collab('spawnAgent', [], args.description ? `${args.description}。\n\n${args.prompt ?? ''}` : args.prompt);
     case 'send_message':
       return collab('sendInput', args.agent_id ? [String(args.agent_id)] : [], args.message);
     case 'web_search': {
