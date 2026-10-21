@@ -37,6 +37,10 @@ final class GuiCalls {
   /// Whether the receiving host has [action] at all.
   Future<bool> has(String action) async =>
       (await harness()).lookup(action) != null;
+
+  /// What [action] does, as its spec says; null when there is no such one.
+  Future<Effect?> effect(String action) async =>
+      (await harness()).lookup(action)?.spec.effect;
 }
 
 /// An Action stopped to ask: its options, each an executable call.

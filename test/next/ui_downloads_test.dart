@@ -16,15 +16,22 @@ import 'package:nipaplay/next/ui/data/downloads.dart';
 import 'package:nipaplay/next/ui/data/gui_calls.dart';
 import 'package:nipaplay/next/ui/data/services.dart';
 import 'package:nipaplay/next/ui/dev/fake_settings.dart';
+import 'package:nipaplay/next/ui/downloads/download_list.dart';
 import 'package:nipaplay/next/ui/downloads/download_sheet.dart';
+import 'package:nipaplay/next/ui/shell/shell_controller.dart';
+import 'package:nipaplay/next/ui/theme/tokens.dart';
 import 'package:nipaplay/next/ui/widgets/buttons.dart';
 import 'package:nipaplay/next/ui/widgets/sheet.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 /// Scripted Actions: each answers from [answers] (a [Decision] asks);
 /// every call is kept.
 final class _Script {
-  _Script(this.answers);
+  _Script(this.answers, {this.effects = const {}});
   final Map<String, Object Function(JsonMap input)> answers;
+
+  /// Actions that do more than write.
+  final Map<String, Effect> effects;
   final calls = <(String, JsonMap)>[];
 
   GuiCalls get gui => GuiCalls(() async => Harness([
@@ -33,7 +40,7 @@ final class _Script {
             _Action(id, (input) {
               calls.add((id, input));
               return answers[id]!(input);
-            })
+            }, effects[id] ?? Effect.write)
         ])
       ]));
 }
@@ -46,15 +53,16 @@ final class _Json implements JsonEncodable {
 }
 
 final class _Action extends Action<_Json, _Json> {
-  _Action(this.id, this.answer);
+  _Action(this.id, this.answer, this.effect);
   final String id;
   final Object Function(JsonMap) answer;
+  final Effect effect;
   @override
   ActionSpec get spec => ActionSpec(
       id: id,
       title: id,
       description: '',
-      effect: Effect.write,
+      effect: effect,
       input: const ObjectSchema({}, additionalProperties: true),
       output: const ObjectSchema({}, additionalProperties: true));
   @override
@@ -77,14 +85,34 @@ final class _Capability implements Capability {
   final List<Action> actions;
 }
 
-JsonMap _job(String id, String state, {String created = '2026-10-01'}) => {
+JsonMap _job(String id, String state,
+        {String created = '2026-10-01',
+        String title = '下载',
+        JsonMap progress = const {'completed': 1, 'total': 4, 'unit': 'bytes'},
+        JsonMap? receipt}) =>
+    {
       'jobId': id,
       'type': 'download',
-      'title': '下载',
+      'title': title,
       'state': state,
-      'progress': {'completed': 1, 'total': 4},
+      'progress': progress,
       'createdAt': created,
+      if (receipt != null) 'receipt': receipt,
     };
+
+/// An ended download's count once its files are verified and imported.
+const _files = {'completed': 6, 'total': 6, 'unit': 'files'};
+
+/// The receipt of an ended download whose session was then removed.
+const _removed = {
+  'verification': 'verified',
+  'details': {
+    'files': [],
+    'sessionPresent': false,
+    'removedAt': '2026-10-21T18:00:00.000Z',
+    'dataDeleted': true
+  }
+};
 
 JsonMap _task({bool paused = false, bool finished = false, String? error}) => {
       'title': 'Frieren [1080p]',
@@ -182,6 +210,11 @@ void main() {
       expect(gone.live, isFalse);
       expect(gone.state, UiDownloadState.queued);
       expect(gone.progress, 0.25);
+      // Once it counts files, that count is not bytes.
+      final ended =
+          UiDownload.from(_job('a', 'succeeded', progress: _files), null);
+      expect([ended.done, ended.size], [0, 0]);
+      expect(ended.progress, 1);
     });
 
     test('the list: newest first, removed ones left out, a missing session kept',
@@ -192,6 +225,8 @@ void main() {
                 _job('old', 'succeeded', created: '2026-09-01'),
                 _job('gone', 'cancelled'),
                 _job('new', 'running', created: '2026-10-02'),
+                _job('deleted', 'succeeded',
+                    created: '2026-10-03', progress: _files, receipt: _removed),
               ]
             },
         'download.read': (input) {
@@ -466,7 +501,120 @@ void main() {
     expect(NextSheetLayer.open, 0);
     await tester.pumpWidget(const SizedBox());
   });
+
+  testWidgets(
+      'the list leaves out a download removed after it ended, and shows no '
+      'count of files as bytes', (tester) async {
+    SharedPreferences.setMockInitialValues({});
+    final script = _Script({
+      'task.list': (_) => {
+            'jobs': [
+              _job('deleted', 'succeeded',
+                  title: '[ANi] Lycoris Recoil',
+                  created: '2026-10-03',
+                  progress: _files,
+                  receipt: _removed),
+              _job('kept', 'succeeded',
+                  title: '[ANi] Frieren', created: '2026-10-02', progress: _files),
+              _job('paused', 'paused',
+                  title: '[ANi] Dungeon Meshi', created: '2026-10-01'),
+            ]
+          },
+      // NipaPlay just started: the engine has not read its sessions back.
+      'download.read': (input) => {
+            'results': [
+              for (final (i, id) in (input['jobIds'] as List).indexed)
+                {
+                  'index': i,
+                  'status': 'completed',
+                  'job': _job('$id', 'succeeded'),
+                  'task': null
+                }
+            ]
+          },
+    });
+    final shell = NextShellController(_services(script.gui), onLeave: () {});
+    await tester.binding.setSurfaceSize(const Size(1200, 900));
+    await tester.pumpWidget(Directionality(
+      textDirection: TextDirection.ltr,
+      child: MediaQuery(
+        data: const MediaQueryData(size: Size(1200, 900)),
+        child: NextShellScope(
+          controller: shell,
+          child: const Stack(children: [
+            Positioned.fill(child: DownloadList()),
+            Positioned.fill(child: NextSheetLayer()),
+          ]),
+        ),
+      ),
+    ));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 100));
+    expect(script.calls.firstWhere((c) => c.$1 == 'download.read').$2,
+        {'jobIds': ['kept', 'paused']});
+    expect(find.text('[ANi] Lycoris Recoil'), findsNothing);
+    expect(find.text('[ANi] Frieren'), findsOneWidget);
+    expect(find.text('完成'), findsOneWidget);
+    expect(find.textContaining('6 B'), findsNothing);
+    // A count of bytes is still shown as bytes.
+    expect(find.text('已暂停  ·  25%  ·  1 B / 4 B'), findsOneWidget);
+    await tester.pumpWidget(const SizedBox());
+    shell.dispose();
+  });
+
+  testWidgets('a question marks the option whose Action destroys, whatever '
+      'its words', (tester) async {
+    final script = _Script({
+      'subtitle.cleanup': (input) => input['confirm'] == true
+          ? {'deleted': 2}
+          : const Decision(prompt: '这些字幕副本没有用了', options: [
+              DecisionOption(
+                  label: 'Delete copies',
+                  call: ActionCall('subtitle.cleanup', {'confirm': true})),
+              DecisionOption(
+                  label: '丢弃这个问题', call: ActionCall('subtitle.skip', {})),
+            ]),
+      'subtitle.skip': (_) => {},
+    }, effects: {
+      'subtitle.cleanup': Effect.destructive
+    });
+    await tester.binding.setSurfaceSize(const Size(1200, 900));
+    await tester.pumpWidget(const Directionality(
+      textDirection: TextDirection.ltr,
+      child: MediaQuery(
+        data: MediaQueryData(size: Size(1200, 900)),
+        child: NextSheetLayer(),
+      ),
+    ));
+    final calls = script.gui;
+    final done =
+        withDecisions(calls, () => calls.call('subtitle.cleanup', {}));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 400));
+    Color? color(String label) =>
+        tester.widget<Text>(find.text(label)).style?.color;
+    expect(color('Delete copies'), NextColors.accent2);
+    expect(color('丢弃这个问题'), NextColors.paper);
+    await tester.tap(find.text('Delete copies'));
+    await tester.pump(const Duration(milliseconds: 400));
+    expect(await done, {'deleted': 2});
+    expect([script.calls.last.$1, script.calls.last.$2],
+        ['subtitle.cleanup', {'confirm': true}]);
+    await tester.pumpWidget(const SizedBox());
+  });
 }
+
+NextUiServices _services(GuiCalls calls) => NextUiServices(
+      data: _Data(),
+      actions: _Stub(),
+      chat: _Port(),
+      discover: _Stub(),
+      library: _Library(),
+      libraryActions: _Stub(),
+      search: _Search(),
+      settings: FakeSettings(),
+      calls: calls,
+    );
 
 Finder _pressable(String label) => find
     .byWidgetPredicate((w) => w is Pressable && w.semanticLabel == label)
@@ -480,6 +628,40 @@ final class _Stub
         ChatPort,
         NextDiscoverData,
         NextLibraryActions {
+  @override
+  dynamic noSuchMethod(core.Invocation invocation) =>
+      throw UnimplementedError('${invocation.memberName}');
+}
+
+/// No background work and nothing changing, for the shell around a page.
+final class _Data implements NextUiData {
+  @override
+  Stream<List<UiTask>> tasks() => Stream.value(const []);
+
+  @override
+  Stream<void> get changes => const Stream.empty();
+
+  @override
+  dynamic noSuchMethod(core.Invocation invocation) =>
+      throw UnimplementedError('${invocation.memberName}');
+}
+
+final class _Port implements ChatPort {
+  @override
+  bool get available => false;
+
+  @override
+  bool get busy => false;
+
+  @override
+  Stream<ChatEvent> get display => const Stream.empty();
+
+  @override
+  Stream<ChatEvent> get questions => const Stream.empty();
+
+  @override
+  void dispose() {}
+
   @override
   dynamic noSuchMethod(core.Invocation invocation) =>
       throw UnimplementedError('${invocation.memberName}');

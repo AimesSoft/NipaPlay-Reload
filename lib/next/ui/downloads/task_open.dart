@@ -12,7 +12,7 @@ Future<void> openTask(NextUiServices services, UiTask task) async {
   if (isDownload(task)) return openDownload(services, task.taskId);
   final question = await services.background.question(task.taskId);
   if (question == null) return;
-  final option = await decisionSheet(question);
+  final option = await decisionSheet(services.calls, question);
   if (option != null) await services.calls.choose(option);
 }
 

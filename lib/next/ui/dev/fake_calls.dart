@@ -143,14 +143,14 @@ final class FakeCalls {
   void _seed() {
     final now = DateTime.now();
     void add(String key, String name, UiTaskState state, double progress,
-        {String? error, Duration ago = Duration.zero}) {
+        {String? error, Duration ago = Duration.zero, bool removed = false}) {
       final id = 'fake-dl-$key';
       final task = _FakeTask(id, world.sample(key).title,
           world.sample(key).artwork, progress)
         ..state = state;
       world._tasks[id] = task;
       _downloads[id] = _FakeDownload.of(world, key, name,
-          error: error, created: now.subtract(ago));
+          error: error, created: now.subtract(ago), removed: removed);
     }
 
     add('bocchi', '[LoliHouse] Bocchi the Rock! [01-12][WebRip 1080p HEVC]',
@@ -159,6 +159,11 @@ final class FakeCalls {
     add('edgerunners', '[ANi] Cyberpunk Edgerunners [01-10][1080P]',
         UiTaskState.failed, 0.38,
         error: 'No space left on device', ago: const Duration(days: 1));
+    // Deleted with its files after it finished: the task stays, its
+    // session is gone.
+    add('violet', '[ANi] Violet Evergarden [01-13][1080P]',
+        UiTaskState.finished, 1,
+        ago: const Duration(days: 3), removed: true);
     if (world._ticker != null) {
       add('lycoris', '[Nekomoe kissaten] Lycoris Recoil [01-13][1080p]',
           UiTaskState.paused, 0.31,
@@ -239,15 +244,34 @@ final class FakeCalls {
                   ? 'cancelled'
                   : _wire(helper.state))
               : _wire(t?.state ?? UiTaskState.finished),
-      'progress': {
-        'completed': ((t?.progress ?? 0) * 1000).round(),
-        'total': 1000
-      },
+      // A finished download's count is of its files.
+      'progress': d != null && d.removed
+          ? {
+              'completed': d.selected.length,
+              'total': d.selected.length,
+              'unit': 'files'
+            }
+          : {
+              'completed': ((t?.progress ?? 0) * 1000).round(),
+              'total': 1000
+            },
       'createdAt': (d?.created ?? DateTime.now()).toUtc().toIso8601String(),
       'updatedAt': DateTime.now().toUtc().toIso8601String(),
       'revision': 1,
       if (d?.error != null)
         'error': {'code': 'unavailable', 'message': d!.error},
+      if (d != null && d.removed)
+        'receipt': {
+          'verification': 'verified',
+          'details': {
+            'sessionPresent': false,
+            'removedAt': d.created
+                .add(const Duration(days: 1))
+                .toUtc()
+                .toIso8601String(),
+            'dataDeleted': true
+          }
+        },
       if (_decisions[id] case final decision?) 'decision': decision.toJson(),
     };
   }
@@ -264,6 +288,7 @@ final class FakeCalls {
     if (d == null || t == null) {
       throw const Failure(FailureCode.notFound, 'No such download.');
     }
+    if (d.removed) return {'job': _job(id), 'task': null};
     final selected = [
       for (final (i, f) in d.files.indexed)
         if (d.selected.contains(i)) f.$2
@@ -413,7 +438,7 @@ final class FakeCalls {
       options: [
         DecisionOption(
             label: '删除',
-            call: ActionCall('fake.consent',
+            call: ActionCall('fake.consent.delete',
                 {'jobId': id, 'download': download, 'approve': true})),
         DecisionOption(
             label: '保留',
@@ -498,7 +523,8 @@ final class FakeCalls {
         DecisionOption(
             label: '删除',
             detail: '2.4 GB',
-            call: ActionCall('fake.decide', {'jobId': id, 'choice': 'delete'})),
+            call: ActionCall(
+                'fake.decide.delete', {'jobId': id, 'choice': 'delete'})),
         DecisionOption(
             label: '保留',
             call: ActionCall('fake.decide', {'jobId': id, 'choice': 'keep'})),
@@ -1110,7 +1136,8 @@ final class FakeCalls {
   // —— the Actions ——
 
   List<Action> _actions() {
-    Action a(String id, FutureOr<Object> Function(JsonMap input) run) =>
+    Action a(String id, FutureOr<Object> Function(JsonMap input) run,
+            {Effect effect = Effect.write}) =>
         _FakeAction(id, (input) async {
           // A failed update check is a result with its error, not a failure.
           if (failing.contains(id) && id != 'app.update.check') {
@@ -1118,7 +1145,7 @@ final class FakeCalls {
           }
           final out = await run(input);
           return out;
-        });
+        }, effect: effect);
     Future<T> slow<T>(int ms, T Function() then) =>
         Future<T>.delayed(Duration(milliseconds: ms), then);
     JsonMap batch(JsonMap input, String one, String many,
@@ -1201,13 +1228,17 @@ final class FakeCalls {
         _capacity[kind] = value;
         return {'key': key, 'value': value};
       }),
-      a('fake.decide', (input) {
-        final id = input['jobId'] as String;
-        _decisions.remove(id);
-        world._tasks.remove(id);
-        world._taskStream.add(world._taskList());
-        return {'jobId': id, 'choice': input['choice']};
-      }),
+      for (final (action, effect) in const [
+        ('fake.decide', Effect.write),
+        ('fake.decide.delete', Effect.destructive),
+      ])
+        a(action, (input) {
+          final id = input['jobId'] as String;
+          _decisions.remove(id);
+          world._tasks.remove(id);
+          world._taskStream.add(world._taskList());
+          return {'jobId': id, 'choice': input['choice']};
+        }, effect: effect),
       // Downloads.
       a('download.read',
           (input) => batch(input, 'jobId', 'jobIds', (id) => _read(id))),
@@ -1257,23 +1288,28 @@ final class FakeCalls {
           throw const Failure(FailureCode.unavailable, 'Scripted failure.');
         }
         return _askDelete(input);
-      }),
+      }, effect: Effect.destructive),
       a('download.delete.request',
-          (input) => slow(400, () => _requestDelete(input))),
+          (input) => slow(400, () => _requestDelete(input)),
+          effect: Effect.destructive),
       // NipaPlay's own window, answered: the download and its files go, or
       // stay.
-      a('fake.consent', (input) {
-        final id = input['jobId'] as String;
-        _decisions.remove(id);
-        world._tasks.remove(id);
-        if (input['approve'] == true) {
-          final download = input['download'] as String;
-          world._tasks.remove(download);
-          _downloads.remove(download);
-        }
-        world._taskStream.add(world._taskList());
-        return {'jobId': id};
-      }),
+      for (final (action, effect) in const [
+        ('fake.consent', Effect.write),
+        ('fake.consent.delete', Effect.destructive),
+      ])
+        a(action, (input) {
+          final id = input['jobId'] as String;
+          _decisions.remove(id);
+          world._tasks.remove(id);
+          if (input['approve'] == true) {
+            final download = input['download'] as String;
+            world._tasks.remove(download);
+            _downloads.remove(download);
+          }
+          world._taskStream.add(world._taskList());
+          return {'jobId': id};
+        }, effect: effect),
       a('download.play', (input) {
         debugPrint('[NextUi dev] play ${input['jobId']} #${input['fileIndex']}');
         return {'opened': true};
@@ -1893,17 +1929,23 @@ final class _FakeUpdate {
 
 final class _FakeDownload {
   _FakeDownload(this.name, this.files,
-      {this.error, required this.folder, required this.created})
+      {this.error,
+      required this.folder,
+      required this.created,
+      this.removed = false})
       : selected = {
           for (final (i, f) in files.indexed)
             if (f.$3) i
         };
 
   factory _FakeDownload.of(FakeWorld world, String key, String name,
-          {String? error, required DateTime created}) =>
+          {String? error, required DateTime created, bool removed = false}) =>
       _FakeDownload(
           name, manifest(world.sample(key).episodeCount ?? 12, 1240 << 20),
-          error: error, folder: '/Users/hikari/Movies/NipaPlay', created: created);
+          error: error,
+          folder: '/Users/hikari/Movies/NipaPlay',
+          created: created,
+          removed: removed);
 
   final String name;
   final List<(String, int, bool)> files;
@@ -1911,6 +1953,9 @@ final class _FakeDownload {
   final String? error;
   final String folder;
   final DateTime created;
+
+  /// Removed after it ended: its session is no longer there.
+  final bool removed;
 
   /// [count] episodes of about [size] bytes, with the usual extras.
   static List<(String, int, bool)> manifest(int count, int size) => [
@@ -1935,21 +1980,23 @@ final class _FakeJson implements JsonEncodable {
 }
 
 final class _FakeAction extends Action<_FakeJson, _FakeJson> {
-  _FakeAction(String id, Future<Object> Function(JsonMap) run)
+  _FakeAction(String id, Future<Object> Function(JsonMap) run,
+      {Effect effect = Effect.write})
       : this.outcome(id, (input) async {
           final out = await run(input);
           return Completed(_FakeJson(Map<String, Object?>.from(out as Map)));
-        });
-  _FakeAction.outcome(this.id, this.execute);
+        }, effect: effect);
+  _FakeAction.outcome(this.id, this.execute, {this.effect = Effect.write});
   final String id;
   final Future<Outcome<_FakeJson>> Function(JsonMap) execute;
+  final Effect effect;
 
   @override
   ActionSpec get spec => ActionSpec(
         id: id,
         title: id,
         description: 'Scripted.',
-        effect: Effect.write,
+        effect: effect,
         input: const ObjectSchema({}, additionalProperties: true),
         output: const ObjectSchema({}, additionalProperties: true),
       );

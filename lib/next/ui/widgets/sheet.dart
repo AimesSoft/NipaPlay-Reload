@@ -304,22 +304,26 @@ Future<JsonMap?> withDecisions(
   try {
     return await action();
   } on DecisionNeeded catch (asked) {
-    final option = await decisionSheet(asked.decision);
+    final option = await decisionSheet(calls, asked.decision);
     if (option == null) return null;
     return withDecisions(calls, () => calls.choose(option));
   }
 }
 
-/// An Action's question, its options as they are.
-Future<DecisionOption?> decisionSheet(Decision decision) async {
+/// An Action's question, its options as they are; one whose call destroys
+/// something (its Action's effect) is marked so.
+Future<DecisionOption?> decisionSheet(
+    GuiCalls calls, Decision decision) async {
   final options = decision.options;
+  final effects = [
+    for (final o in options) await calls.effect(o.call.actionId)
+  ];
   final i = await chooseSheet(
     title: decision.prompt,
     choices: [
-      for (final o in options)
+      for (final (k, o) in options.indexed)
         SheetChoice(o.label,
-            detail: o.detail,
-            danger: RegExp(r'删|移除|覆盖|丢弃').hasMatch(o.label)),
+            detail: o.detail, danger: effects[k] == Effect.destructive),
     ],
   );
   return i == null ? null : options[i];

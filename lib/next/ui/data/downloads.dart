@@ -11,13 +11,18 @@ final class NextDownloads {
   NextDownloads(this.calls);
   final GuiCalls calls;
 
-  /// Every download NipaPlay keeps, newest first; removed ones are gone.
+  /// Every download NipaPlay keeps, newest first; removed ones are gone
+  /// (an ended one's receipt says its session is no longer there).
   Future<List<UiDownload>> list() async {
     final jobs = [
       for (final job in ((await calls.call('task.list', {'type': 'download'}))[
               'jobs'] as List)
           .cast<Map>())
-        if (job['state'] != 'cancelled' && job['state'] != 'cancelling') job
+        if (job['state'] != 'cancelled' &&
+            job['state'] != 'cancelling' &&
+            ((job['receipt'] as Map?)?['details'] as Map?)?['sessionPresent'] !=
+                false)
+          job
     ]..sort((a, b) => '${b['createdAt']}'.compareTo('${a['createdAt']}'));
     if (jobs.isEmpty) return const [];
     final read = await calls.call('download.read', {
@@ -167,7 +172,12 @@ final class UiDownload {
   final bool live;
   final DateTime? createdAt;
 
-  double? get progress => size > 0 ? (done / size).clamp(0.0, 1.0) : null;
+  /// How far, by bytes; a finished one is all there, its bytes read or not.
+  double? get progress => size > 0
+      ? (done / size).clamp(0.0, 1.0)
+      : state == UiDownloadState.finished
+          ? 1
+          : null;
   bool get running =>
       state == UiDownloadState.downloading || state == UiDownloadState.queued;
 
@@ -191,7 +201,11 @@ final class UiDownload {
                 : jobState == 'queued' || jobState == 'waiting_retry'
                     ? UiDownloadState.queued
                     : UiDownloadState.downloading;
-    final progress = job['progress'] as Map?;
+    // Without a session, the task's own count, when it counts bytes (it
+    // counts files once they are verified and imported).
+    final progress = (job['progress'] as Map?)?['unit'] == 'bytes'
+        ? job['progress'] as Map
+        : null;
     final health = task?['health'] as Map?;
     final folder = task?['outputDirectory'] as String?;
     final stalled = (health?['secondsWithoutProgress'] as num?)?.toInt();
