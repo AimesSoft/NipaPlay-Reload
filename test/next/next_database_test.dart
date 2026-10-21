@@ -101,7 +101,7 @@ void main() {
       }
       var db = await openNextDatabase(root, factory: databaseFactoryFfi);
       addTearDown(() => db.close());
-      expect(await db.getVersion(), 17);
+      expect(await db.getVersion(), 18);
       for (final table in [
         'harness_sessions',
         'file_subtitles',
@@ -123,6 +123,7 @@ void main() {
         'media_metadata_edits',
         'media_classic_observations',
         'media_classic_current',
+        'db_commits',
       ]) {
         expect(await db.query(table), isEmpty, reason: table);
       }

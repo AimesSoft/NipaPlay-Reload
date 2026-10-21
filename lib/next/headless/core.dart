@@ -16,6 +16,8 @@ import '../next_database.dart';
 import '../tasks/device_identity.dart';
 import '../tasks/sqlite_job_store.dart';
 import '../state/change_history.dart';
+import '../db/capability.dart';
+import '../db/wiring.dart';
 import '../state/query.dart';
 import '../state/views.dart';
 import '../state/activity.dart';
@@ -284,6 +286,7 @@ final class HeadlessCore {
     registerMergedLibrary(state, uiData.meshLibrary!);
     await uiData.meshLibrary!.start();
     settings.register([uiData.openingSetting]);
+    final db = createDbService(database: database, media: media, uiData: uiData);
     final downloadSources =
         DownloadSources(Directory('${root.path}/torrent_sources'));
     late final Harness harness;
@@ -308,6 +311,7 @@ final class HeadlessCore {
         FollowupCapability(followups),
         UiDataCapability(uiData),
         LibraryCapability(libraryData),
+        DbCapability(db),
         MeshLibraryCapability(uiData.meshLibrary!),
         MeshFilesCapability(uiData.meshLibrary!.files),
         state,

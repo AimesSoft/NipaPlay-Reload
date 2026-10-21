@@ -157,7 +157,14 @@ NipaPlay 自己会做一部分：作品有 TMDB 身份时取图，同步 Classic
   - 图片：`artwork.set`；
   - 弹幕：`danmaku.import`。
 - **媒体身份可以来自多个来源**：弹弹play、Bangumi、TMDB 等。弹弹play 没有收录，不等于无法识别；电视剧、电影常常只有 TMDB 身份。内容哈希匹配只能给出弹弹play 的 ID。文件名需要你自己理解，NipaPlay 不会替你解析。
-- **你取得的结果都可以交给 NipaPlay 保存**（弹幕、元数据、身份），它会记录来源并检查一致性。缺少入口时，如实告诉用户。''',
+- **你取得的结果都可以交给 NipaPlay 保存**（弹幕、元数据、身份），它会记录来源并检查一致性。缺少入口时，如实告诉用户。
+- **专用原语之外，也可以直接读写库**：`db.describe` 列出 next.db 的表、含义、可写范围和跨表规则（classic_match 如何随同步重新导入、覆盖优先于快照、图片覆盖存在哪）；`db.query` 用 SQL 只读查询；`db.write` 先预演再提交，`db.undo` 撤回。专用原语仍是便捷入口，已有身份、资料、绑定的契约不变；直接写入不往 Classic 投影。''',
+  'db': r'''next.db 的直接读写入口，与 media.*、danmaku.* 等专用原语并存。凭据不在这个库里。
+- **读**：`db.describe` 给每张表的列、主键、外键、索引、含义，以及它可不可写、为什么；还给跨表规则（`semantics`）。`db.query` 执行一条 SELECT（含 WITH … SELECT），`?` 按位置绑定 params。SQLite 自己保证只读：非 SELECT 在语法层被拒，连接处于 query_only。结果受 limit 与 maxBytes 限制，被截断时 `truncated` 为 true，`nextOffset` 是续读位置（自己加 ORDER BY 让分页稳定）；过长的单元格被截短。值里的凭据被遮蔽。
+- **写**：`db.write` 一次提交一批 INSERT/UPDATE/DELETE（至多 100 条，同一事务）。不带 previewId 只预演：事务回滚，按表返回插入、更新、删除的行及前后值（太多时给计数和样例）和 `previewId`。带 `previewId` 提交的就是预演过的效果：这些行在预演后被改过，就拒绝并什么都不写，重新预演即可。previewId 只在内存里，约 10 分钟有效，用一次即失效。
+- **边界由 SQLite 执行**：只有 describe 标为可写的表能改（别的表的写入被 SQLite 触发器中止）；DDL、PRAGMA、ATTACH、事务控制、多条语句不被 SQLite 当作单条 INSERT/UPDATE/DELETE 接受；外键、JSON 列和少量不变量在提交前检查，违反就整批回滚并列出原因。可写的是媒体身份与资料（media_entities、media_bindings、media_overrides、media_snapshots……）、danmaku_bindings、ui_shelves、ui_presentations；任务引擎、后续、会话、各类历史与审计、缓存和投影队列只读。
+- **记录与通知**：每次提交写入 db_commits（SQL、参数、改动计数、前后镜像、origin、invocationId、actor），并在 activity 里留一条；发出 `media.assets.changed`（kind 为 metadata、artwork、danmaku 或 identity），刷新读这些行的界面、片库索引和封面缓存。直接写入不往 Classic 投影，不产生专用原语的回执和领域历史，不自动递增 media_entities.revision。
+- **撤回**：`db.undo {commitId}` 恢复那次提交的前镜像。每一行当前内容必须仍等于那次提交的后镜像，否则整个撤回被拒绝并列出冲突的行；`dryRun:true` 只看不改。撤回本身也是一次提交，可再撤回。''',
   'danmaku': danmakuFamilyDescription + r'''- **弹幕**：
   - **轨道**：一条弹幕轨道属于某个文件或某一集，有它的来源平台（弹弹play、优酷、B 站、本地文件……）和该平台上的视频；同一平台的同一个视频只保留一条，再次交入就是刷新。
   - **用在哪里**：剧集的热度线和主视觉上飘的弹幕，都来自 NipaPlay 记下的轨道。用 `danmaku.*` 修改，用 `state.query` 的 `danmaku.bindings`、`danmaku.tracks` 读取。
