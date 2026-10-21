@@ -38,6 +38,9 @@ import 'mesh/library_capability.dart';
 import 'mesh/delivery.dart';
 import 'mesh/capability.dart';
 import 'mesh/debug_claim_names.dart';
+import 'db/capability.dart';
+import 'db/service.dart';
+import 'db/wiring.dart';
 import 'state/query.dart';
 import 'state/views.dart';
 import 'state/change_history.dart';
@@ -126,6 +129,7 @@ final class NextCore {
   late final SessionStore sessions;
   late final HarnessMemory memory;
   late final UiDataService uiData;
+  late final DbService db;
   late final LibraryDataService libraryData;
   LibraryDataService get libraryActions => libraryData;
   final classicScan = ClassicScanExecutor();
@@ -309,6 +313,8 @@ final class NextCore {
     registerMergedLibrary(state, uiData.meshLibrary!);
     await uiData.meshLibrary!.start();
     settings.register([uiData.openingSetting]);
+    db = createDbService(
+        database: database, media: media.service, uiData: uiData);
     capabilities = List.unmodifiable(diskDeletion.protect([
       CredentialCapability(credentials),
       TaskCapability(engine),
@@ -323,6 +329,7 @@ final class NextCore {
       FollowupCapability(followups),
       UiDataCapability(uiData),
       LibraryCapability(libraryData),
+      DbCapability(db),
       MeshLibraryCapability(uiData.meshLibrary!),
         MeshFilesCapability(uiData.meshLibrary!.files),
       downloads.capability,
