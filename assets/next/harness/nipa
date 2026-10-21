@@ -186,6 +186,11 @@ class Client:
         self.device = None
 
     def request(self, operation, **fields):
+        # The socket timeout counts silence, and a wait answers only at its end.
+        timeout = 65
+        if fields.get("action") == "download.wait_files":
+            waited = (fields.get("input") or {}).get("waitSeconds", 300)
+            timeout = (waited if isinstance(waited, int) else 300) + 35
         body = json.dumps(dict(operation=operation, **fields)).encode("utf-8")
         request = urllib.request.Request(self.url, data=body, headers={
             "Authorization": "Bearer " + self.token, "Content-Type": "application/json",
@@ -193,7 +198,7 @@ class Client:
                if os.environ.get("NIPAPLAY_CHAT") else {}),
             **({"X-Nipa-Hook": os.environ["NIPAPLAY_HOOK"]} if os.environ.get("NIPAPLAY_HOOK") else {})})
         try:
-            with self.opener.open(request, timeout=65) as response:
+            with self.opener.open(request, timeout=timeout) as response:
                 return json.load(response)
         except urllib.error.HTTPError as error:
             details = json.load(error)
