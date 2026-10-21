@@ -36,7 +36,7 @@ final class TaskResources implements Capability {
                   ? 'Next 文件索引任务的容量；Classic 扫描器固定一个目录任务。降低容量不停止已运行工作。'
                   : kind == 'metadata'
                       ? 'Next 资料刷新任务和新 Classic 扫描的识别并发；不改变来源请求间隔与限流。'
-                      : '宿主帮手容量；原生 Codex 子代理容量由 Codex 管理。运行中的回合不受影响。',
+                      : '宿主派发回合的容量；原生子代理的容量由运行它的 agent 程序管理。运行中的回合不受影响。',
               schema: const IntegerSchema(minimum: 1),
               defaultValue: kind == 'metadata'
                   ? 4
@@ -123,7 +123,7 @@ final class TaskResources implements Capability {
                 id: 'task.control',
                 title: '批量控制后台任务',
                 description:
-                    '暂停、恢复、取消任务。逐项返回受理快照及支持事实。扫描排空当前文件，在文件边界停止；宿主帮手中断当前回合，恢复在同线程继续原任务。原生 Codex 帮手、hook 和程序不支持安全暂停。取消保留已提交事实，终态回执不会改写。',
+                    '暂停、恢复、取消任务。逐项返回受理快照及支持事实。扫描排空当前文件，在文件边界停止；宿主派发的回合中断当前回合，恢复在同线程继续原任务。原生子代理、hook 和程序不支持安全暂停。取消保留已提交事实，终态回执不会改写。',
                 effect: Effect.write,
                 input: ObjectSchema({
                   'entries': ArraySchema(

@@ -28,13 +28,13 @@ final class _HelperAction extends Action<_Json, _Json> {
   @override
   ActionSpec get spec => ActionSpec(
       id: reporting ? 'agent.dispatch.report' : 'agent.dispatch',
-      title: reporting ? '更新宿主帮手正在做的事' : '启动宿主帮手回合',
+      title: reporting ? '更新宿主派发回合正在做的事' : '启动宿主派发的回合',
       description: reporting
-          ? 'A running helper reports one short viewer-facing sentence about its current activity. jobId defaults to its own task.'
+          ? 'A running host-dispatched turn reports one short viewer-facing sentence about its current activity. jobId defaults to its own task.'
           : 'Host-side dispatch for scripts and hooks, including when no parent Agent turn is running. '
-              'Codex native subagents are also visible as helpers; this action starts an independent host-managed turn. '
+              'Unlike a subagent of the agent program, this starts an independent host-managed turn. '
               'Supply a short viewer-facing title and an instruction with the goal, context and requested result. '
-              'At most two helpers run simultaneously; additional helpers queue. '
+              'At most two run simultaneously; more queue. '
               'Returns immediately with jobId; task.cancel stops it. '
               'Completion (including failure/cancellation) returns through a durable followup to the calling conversation; '
               'outside embedded chat defaults to main, or pass threadId. '

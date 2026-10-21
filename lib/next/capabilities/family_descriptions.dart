@@ -199,14 +199,14 @@ NipaPlay 自己会做一部分：作品有 TMDB 身份时取图，同步 Classic
 - 通过 Mesh 在会话中登记的 `followup.register` 也固定回到发起设备、仓库和线程，沿用持久票据与去重交付；显式线程与发起线程不一致会被拒绝。程序自动回传和同一事件的手动订阅共享事实去重。
 - **耗时操作是 NipaPlay 的后台任务**：Agent 可以登记后续，让自己在任务结束时被唤醒。
 - **新进片库的文件**：文件进入片库时，NipaPlay 把事实合成一批送来，不按内容挑选，也不丢文件。开关是设置 `library.notifyNipaEnabled`（默认开；关闭后不再发送，关闭期间进来的文件之后不补发）。
-  - 不是你的操作带进来的（用户添加的文件夹、Classic 扫描、媒体来源同步）：每一批开一个后台帮手（同 `agent.dispatch`，但不返回任何会话），说明里是这批文件的事实；不进主会话，帮手结束记入动态。同时只有一个这样的帮手；它还在运行时进来的文件排进下一批。
-  - 你的调用带进来的（`media.library.roots.*`、导入、扫描等，任务沿用发起它的来源）：这一批作为后续回到发起的会话，忙时排队，不另开帮手。
+  - 不是你的操作带进来的（用户添加的文件夹、Classic 扫描、媒体来源同步）：每一批开一个宿主派发的后台回合（同 `agent.dispatch`，但不返回任何会话），说明里是这批文件的事实；不进主会话，结束记入动态。同时只有一个这样的回合；它还在运行时进来的文件排进下一批。
+  - 你的调用带进来的（`media.library.roots.*`、导入、扫描等，任务沿用发起它的来源）：这一批作为后续回到发起的会话，忙时排队，不另开回合。
   - 下载导入的文件由下载回报送出，同一个 fileId 不在这里重复送。重启后已送过的文件不会再送。
   - 一批在文件停止进来 30 秒后送出，从第一个文件起最迟 5 分钟，扫描结束时立即送出，一批最多 100 个文件，多出的进下一批。
   - 每个文件的事实：`path`、`fileId`、`via`（怎么进来的：`local_scan` 本地文件夹扫描、`classic_history` Classic 扫描或观看记录、`media_source` 媒体来源同步、`download_import` 下载导入、`metadata_put`、`path` 某个操作点名了这个路径）、`enteredAt`、`source`（位置来源；媒体来源条目另有 `mediaSource` 的 `sourceId`、`type`、`itemId`、`name`）、`workIds`、`works[].identities.tmdb`（作品有没有 TMDB 身份，与 `media.metadata.ui_facts` 相同的判断）、`episodes[]`（`episodeId`、`workId`、`facts`、`identitySources`）。没有剧集关联时 `episodes` 为空。''',
   'agent':
-      r'''- **子代理是后台的帮手**：Codex 原生子代理在同一个 harness 的独立线程里工作；用户在 NipaPlay 里看得到，能用 `task.cancel` 停止。你的回合结束后它才完成的，结果作为持久后续回到这个会话，忙时排队；你已用 `wait` 取到的结果不会重复交回。
-- **宿主派发**：`agent.dispatch` 接收标题、说明及可选的返回线程，脚本或 hooks 在没有父 Agent 回合时也能启动独立回合，默认返回主会话。NipaPlay 自己也用宿主派发处理新进片库的文件，那样的帮手不返回任何会话，结束只记入动态。宿主派发最多同时运行两个，更多的排队；`agent.dispatch.report` 是宿主派发回合的一句话进度接口。原生子代理的并发由 Codex 管理。''',
+      r'''- **子代理（subagent）**：运行你的 agent 程序原生的子代理，在同一个 harness 的独立会话里工作；用户在 NipaPlay 里看到它是一项后台任务，能用 `task.cancel` 停止。它结束时的回复回到派它的会话：你还在回合里就作为下一步的输入，回合已结束就开一个新回合；同一个结果不会交回两次。
+- **宿主派发**：`agent.dispatch` 接收标题、说明及可选的返回线程，脚本或 hooks 在没有父 Agent 回合时也能启动独立回合，默认返回主会话。NipaPlay 自己也用宿主派发处理新进片库的文件，那样的回合不返回任何会话，结束只记入动态。宿主派发最多同时运行两个，更多的排队；`agent.dispatch.report` 是宿主派发回合的一句话进度接口。原生子代理的并发由运行它的 agent 程序管理。''',
   'settings':
       r'''- **设置的每次修改都记录来源**：谁改的、何时、为什么。用户说"以后都这样"时，就是一条持久偏好，修改时写明理由。''',
   'history': r'''观看进度由播放器写入；mark_watched_batch 可以标记看过。state.query history.entries 提供稳定 entryId、fileId、canonical workId/libraryEpisodeId 和本机缓存 poster/still；旧 episodeId 仍是 Classic 数字编号。无绑定/无缓存返回 null，不联网取图。历史按 lastWatchedAt 降序及 entryId 排序，游标存排序值，删掉已读条目或最后锚点仍能继续；这是实时观测，条目的观看时间变化仍可能重排。remove 支持 entryIds/paths/animeIds 的并集，包括 locator=null 的条目，只删除记录，保留视频。''',

@@ -10,6 +10,9 @@ import 'chat_host.dart';
 
 part 'native_helpers.dart';
 
+/// What the conversation that sent off a subagent or dispatch is asked when it ends.
+const _returnInstruction = '派出去的这一份已结束，请根据它的结果回应用户。';
+
 /// Capacity and receipts, with no policy about which work to delegate.
 final class Helpers implements JobExecutor {
   static const limit = 2;
@@ -111,13 +114,14 @@ final class Helpers implements JobExecutor {
     if (job.input['background'] == true) return;
     if ((await followups.list()).any((row) =>
         (row['condition'] as Map)['jobId'] == job.jobId &&
-        row['instruction'] == '帮手已结束，请根据它的结果回应用户。')) return;
+        const {_returnInstruction, '帮手已结束，请根据它的结果回应用户。'}
+            .contains(row['instruction']))) return;
     await followups.register(
         {
           'when': {'jobId': job.jobId},
           'threadId': job.input['parentThreadId'],
           'title': job.title,
-          'instruction': '帮手已结束，请根据它的结果回应用户。',
+          'instruction': _returnInstruction,
         },
         Invocation(
             origin: job.input['source'] == 'codexNative'

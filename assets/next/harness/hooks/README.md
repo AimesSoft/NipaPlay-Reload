@@ -8,7 +8,7 @@
 | --- | --- | --- |
 | `download.completed` | 下载任务完成并验证入库 | 下载的完整 job 快照，含文件回执 |
 | `download.file_completed` | 单个文件的全部片段通过引擎校验，路径/大小核对且本地视频登记入库 | `jobId`、`infoHash`、`file`（索引、路径、校验大小、完成时间、当前媒体关联）；objectId 为 `jobId:fileIndex` |
-| `library.file_added` | 文件首次进入本机媒体索引、Classic 媒体库或媒体来源的索引 | `path`，`via`（怎么进来的），索引事件另含 `fileId`；有调用或任务来源时含 `cause`。不论有没有同名 hook，NipaPlay 都把这些文件的事实合成一批送出：用户添加的文件夹、Classic 扫描、媒体来源同步由一个后台帮手接收；你的调用带进来的回到发起的会话；设置 `library.notifyNipaEnabled` 可关闭 |
+| `library.file_added` | 文件首次进入本机媒体索引、Classic 媒体库或媒体来源的索引 | `path`，`via`（怎么进来的），索引事件另含 `fileId`；有调用或任务来源时含 `cause`。不论有没有同名 hook，NipaPlay 都把这些文件的事实合成一批送出：用户添加的文件夹、Classic 扫描、媒体来源同步由一个宿主派发的后台回合接收；你的调用带进来的回到发起的会话；设置 `library.notifyNipaEnabled` 可关闭 |
 | `playback.started` | 一段播放首次进入 playing；暂停后继续不重复 | `path` |
 
 标准输入是一份 UTF-8 JSON 对象：`{"event":"事件名","objectId":"对象标识",
