@@ -8,20 +8,34 @@ String redactPrivateUrls(String text) => text.replaceAllMapped(
       if (uri == null || uri.userInfo.isNotEmpty) {
         return '[redacted URL]';
       }
+      // Read without strict decoding: streamed text can cut a link inside a
+      // percent-encoded character (`?q=%E8%BA`), which must not throw.
       final names = [
-        ...uri.queryParameters.keys,
+        for (final part in uri.query.split('&')) _loose(part.split('=').first),
         if (uri.fragment.contains('='))
-          ...Uri.splitQueryString(uri.fragment).keys
+          for (final part in uri.fragment.split('&'))
+            _loose(part.split('=').first)
       ];
+      final segments = [for (final part in uri.path.split('/')) _loose(part)];
       // Parameter names that carry access (PT passkeys and authkeys, RSS
       // keys, signatures, sessions), and path segments that look like keys.
       if (names.any(_privateName.hasMatch) ||
-          (uri.pathSegments.any(_trackerSegment.hasMatch) &&
-              uri.pathSegments.any(_keySegment.hasMatch))) {
+          (segments.any(_trackerSegment.hasMatch) &&
+              segments.any(_keySegment.hasMatch))) {
         return '[redacted URL]';
       }
       return raw;
     });
+
+String _loose(String part) {
+  try {
+    return Uri.decodeQueryComponent(part);
+  } on FormatException {
+    return part;
+  } on ArgumentError {
+    return part;
+  }
+}
 
 final _privateName = RegExp(
     r'pass|auth|token|secret|cookie|sess|key|sig|credential|secure|hash|private|uid|^sid$|^code$',

@@ -72,5 +72,16 @@ print(json.dumps(module["redact"](data, ["x34-known+/ secret"])))
     ]) {
       expect(redactPrivateUrls(public), public);
     }
+    // Streamed output can end inside a percent-encoded character.
+    for (final cut in [
+      'http://127.0.0.1:8090/search?q=%E8%BA',
+      'http://127.0.0.1:8090/search?q=%E8%BA%B2%E5%9C%A8%E8',
+      'https://example.com/%E8%B',
+      'https://example.com/a#x=%E8',
+    ]) {
+      expect(redactPrivateUrls(cut), cut, reason: cut);
+    }
+    expect(redactPrivateUrls('https://site.example/x?passkey=%E8%BA'),
+        '[redacted URL]');
   });
 }
