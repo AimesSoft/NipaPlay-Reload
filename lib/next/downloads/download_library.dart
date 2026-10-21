@@ -26,7 +26,8 @@ final class AppDownloadLibrary implements DownloadLibrary {
   Future<JsonMap?> lookup(String path) async {
     final media = ServiceProvider.nextCore.media.service;
     await media.syncClassicHistory();
-    final fileId = await media.store.ensureFile(path);
+    final fileId =
+        await media.store.ensureFile(path, via: 'download_import');
     final links = await media.store.database.rawQuery(
         'SELECT DISTINCT r.parent_id AS workId, e.id AS episodeId, '
         'e.attributes AS episodeFacts FROM media_file_episodes fe '

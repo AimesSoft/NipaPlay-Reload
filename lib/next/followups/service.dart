@@ -16,6 +16,7 @@ import '../state/views.dart' show publicTaskFacts;
 import '../state/query.dart';
 
 part 'download_returns.dart';
+part 'library_arrivals.dart';
 part 'program_returns.dart';
 part 'user_task_returns.dart';
 
@@ -54,6 +55,27 @@ final class Followups {
   void Function()? eventCommitted;
   String? Function()? agentDevice;
   Future<JsonMap> Function(String, JsonMap)? deliverRemote;
+
+  /// Whether files entering the library are reported to Nipa; on when unset.
+  bool Function()? libraryEnabled;
+
+  /// The library's present facts about files that just entered, one per entry.
+  Future<List<JsonMap>> Function(List<JsonMap> entries)? describeLibraryFiles;
+
+  /// Starts a background helper that returns to no conversation. Defaults to
+  /// [Helpers.dispatchBackground].
+  Future<String> Function(
+      {required String jobId,
+      required String title,
+      required String instruction})? backgroundDispatch;
+
+  /// Files stop arriving for this long, or this long passes since the first,
+  /// or the batch is full: the batch is delivered. A scan or sync ending
+  /// delivers at once.
+  Duration libraryQuiet = const Duration(seconds: 30);
+  Duration libraryMaxWait = const Duration(minutes: 5);
+  int libraryBatchLimit = 100;
+  bool _libraryHeld = false;
   Future<JsonMap> turnProcess(String threadId, String turnId) async {
     await location.ready;
     final host = _host;
@@ -350,6 +372,7 @@ final class Followups {
   }
 
   Future<void> sweep() => _serial(() async {
+        _libraryHeld = false;
         await _collectDownloadReturns();
         await _collectProgramReturns();
         await _collectUserTaskReturns();
@@ -437,6 +460,9 @@ final class Followups {
           }
           final host = _host;
           if (row['state'] == 'ready') {
+            if (row['automatic'] == 'library' && !await _libraryGate(row)) {
+              continue;
+            }
             if (_taskReturn(row)) {
               await _filterDownloadReturn(row, await _rows());
               if (row['state'] == 'cancelled') continue;

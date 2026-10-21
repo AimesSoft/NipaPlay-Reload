@@ -63,6 +63,43 @@ final class Helpers implements JobExecutor {
     return {'jobId': job.jobId, 'parentThreadId': parent, 'helperLimit': capacity};
   }
 
+  /// A helper turn nobody waits for: no parent conversation and no return
+  /// followup. Its end is an entry in activity, like any task's. [jobId]
+  /// makes a repeated call return the helper it already started.
+  Future<String> dispatchBackground(
+      {required String jobId,
+      required String title,
+      required String instruction}) async {
+    final chat = host;
+    if (chat == null || !chat.available) {
+      throw const Failure(FailureCode.unavailable, 'Chat host is not running.');
+    }
+    final safe =
+        publicHarnessFacts({'title': title, 'instruction': instruction}) as JsonMap;
+    try {
+      final job = await engine.submit(
+          jobId: jobId,
+          type: type,
+          title: title,
+          input: {
+            ...safe,
+            'background': true,
+            'repository': chat.repository.path,
+            'origin': 'application',
+            'invocationId': jobId
+          },
+          details: {
+            'source': 'host',
+            'background': true,
+            'currentActivity': '等待帮手接手'
+          });
+      return job.jobId;
+    } on Failure catch (error) {
+      if (error.code == FailureCode.conflict) return jobId;
+      rethrow;
+    }
+  }
+
   Future<void> _returns = Future.value();
   Future<void> _returnFor(Job job) {
     final result = _returns.then((_) => _registerReturn(job));
@@ -71,6 +108,7 @@ final class Helpers implements JobExecutor {
   }
 
   Future<void> _registerReturn(Job job) async {
+    if (job.input['background'] == true) return;
     if ((await followups.list()).any((row) =>
         (row['condition'] as Map)['jobId'] == job.jobId &&
         row['instruction'] == '帮手已结束，请根据它的结果回应用户。')) return;

@@ -13,6 +13,7 @@ import 'danmaku/runtime.dart';
 import 'downloads/download_backend.dart';
 import 'downloads/download_runtime.dart';
 import 'media/classic_projection.dart';
+import 'media/library_arrivals.dart';
 import 'media/media_runtime.dart';
 import 'media/media_probe.dart';
 import 'media_sources/service.dart';
@@ -251,6 +252,9 @@ final class NextCore {
     automatic = SystemSettings(danmaku.sidecars, subtitles);
     settings.register([...resources.settings(), ...automatic.entries()]);
     await automatic.load();
+    followups.libraryEnabled = () => automatic.libraryNotifyEnabled;
+    followups.describeLibraryFiles =
+        (entries) => describeLibraryArrivals(media.service.store, entries);
     ScanService.startupRefreshAllowed = () async {
       final prefs = await SharedPreferences.getInstance();
       return prefs.getBool('labs_use_next_interface') != true || automatic.startupScanEnabled;

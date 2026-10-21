@@ -312,7 +312,7 @@ final class HeadlessDownloadLibrary implements DownloadLibrary {
       }).then((_) {});
   @override
   Future<JsonMap?> lookup(String path) async {
-    final id = await media.store.ensureFile(path);
+    final id = await media.store.ensureFile(path, via: 'download_import');
     final episodes = await media.store.database.rawQuery(
         'SELECT e.id AS episodeId, e.parent_id AS workId, e.attributes FROM media_file_episodes fe JOIN media_entities e ON e.id=fe.episode_id WHERE fe.file_id=?',
         [id]);
@@ -333,7 +333,7 @@ final class HeadlessDownloadLibrary implements DownloadLibrary {
   @override
   Future<bool> importFiles(List<String> paths, String outputDirectory) async {
     for (final path in paths) {
-      await media.index(path);
+      await media.index(path, via: 'download_import');
     }
     return true;
   }

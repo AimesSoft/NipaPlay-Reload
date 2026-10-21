@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:io';
+import 'followups/service.dart';
 import 'platform/background_activity.dart';
 import 'platform/loop_lag.dart';
 import 'runtime/codex_runtime.dart';
@@ -598,6 +599,12 @@ final class NextRuntime extends ChangeNotifier {
     ServiceProvider.nextCore.desktopSystem.attach();
     _jobEvents = _taskEngine.changes.listen((job) {
       _queueHook(() => _hooks.taskChanged(job));
+      // A scan ending delivers the files it brought without waiting out the quiet window.
+      if (const {'media.scan', 'media.scan_classic'}.contains(job.type) &&
+          job.state.isTerminal) {
+        _queueHook(() => _reportLibrary(
+            ServiceProvider.nextCore.followups.libraryBatchEnded));
+      }
     });
     _queueHook(() async {
       for (final job in await _taskEngine.list(type: 'download')) {
@@ -608,6 +615,8 @@ final class NextRuntime extends ChangeNotifier {
           final path = file['path'] as String;
           if (_libraryPaths.add(path)) {
             await _hooks.emit('library.file_added', path, file);
+            await _reportLibrary(
+                () => ServiceProvider.nextCore.followups.libraryFileAdded(file));
           }
         }));
     ServiceProvider.watchHistoryProvider.addListener(_libraryChanged);
@@ -619,12 +628,23 @@ final class NextRuntime extends ChangeNotifier {
     final files = {
       for (final item in ServiceProvider.watchHistoryProvider.history)
         if (!_libraryPaths.contains(item.filePath))
-          item.filePath: {'path': item.filePath},
+          item.filePath: {'path': item.filePath, 'via': 'classic_history'},
     };
     for (final entry in files.entries) {
       if (_libraryPaths.add(entry.key)) {
         await _hooks.emit('library.file_added', entry.key, entry.value);
+        await _reportLibrary(
+            () => ServiceProvider.nextCore.followups.libraryFileAdded(entry.value));
       }
+    }
+  }
+
+  /// Telling Nipa never stops the hook chain that follows it.
+  Future<void> _reportLibrary(Future<void> Function() report) async {
+    try {
+      await report();
+    } catch (error, stack) {
+      Zone.current.handleUncaughtError(error, stack);
     }
   }
 
