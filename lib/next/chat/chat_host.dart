@@ -38,7 +38,7 @@ final class ChatHost {
       this.baseInstructions,
       this.dsh,
       this.dshPlugins})
-      : assert(dsh == null || (dshPlugins != null && baseInstructions != null)),
+      : assert(dsh == null || dshPlugins != null),
         sessionId = 'nipa-${DateTime.now().microsecondsSinceEpoch}-'
             '${Random.secure().nextInt(1 << 32).toRadixString(16)}';
 
@@ -302,7 +302,12 @@ final class ChatHost {
         const JsonEncoder.withIndent('  ').convert(dshPatch(
             route: route,
             plugins: dshPlugins!,
-            baseInstructions: baseInstructions!,
+            personaPrefix:
+                (await File('${dshPlugins!.path}/persona-prefix.md').readAsString())
+                    .trim(),
+            personaSuffix:
+                (await File('${dshPlugins!.path}/persona-suffix.md').readAsString())
+                    .trim(),
             harness: repository.path,
             version: runtime.version,
             webSearch: (clean['DEEPSEEK_API_KEY'] ?? '').isNotEmpty)),

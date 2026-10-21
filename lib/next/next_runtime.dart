@@ -541,16 +541,16 @@ final class NextRuntime extends ChangeNotifier {
       await file.writeAsString(await rootBundle.loadString(asset), flush: true);
       return file;
     }
+    // DSH keeps its own system prompt; Nipa is its persona (dsh/persona-*.md).
     final base = dsh == null
         ? await install('assets/next/agent/nipa-base.md', 'nipa-base.md')
-        : await install('assets/next/agent/nipa-base-dsh.md', 'nipa-base-dsh.md');
+        : null;
     if (dsh != null) {
       for (final name in const [
         'nipa-app-server.mjs',
         'nipa-memory.mjs',
-        'nipa-persona.mjs',
-        'nipa-tool-descriptions.mjs',
-        'tool-descriptions.json'
+        'persona-prefix.md',
+        'persona-suffix.md'
       ]) {
         await install('assets/next/agent/dsh/$name', 'dsh/$name');
       }

@@ -48,7 +48,8 @@ trust_level = "trusted"
     final patch = jsonEncode(dshPatch(
         route: route,
         plugins: Directory('/plugins'),
-        baseInstructions: File('/agent/nipa-base-dsh.md'),
+        personaPrefix: 'You are Nipa.',
+        personaSuffix: '# In NipaPlay',
         harness: '/harness',
         version: 'x'));
     expect(patch, isNot(contains('fixture-bearer')));
@@ -95,9 +96,8 @@ trust_level = "trusted"
       final input = request['input'] as List;
       final system = (input.first as Map)['content'] as String;
       expect((input.first as Map)['role'], 'system');
-      expect(system, startsWith('You are Nipa, the assistant inside NipaPlay'));
+      expect(system, contains('You are Nipa, the assistant inside NipaPlay'));
       expect(system, isNot(contains('coding agent')));
-      expect(system, isNot(contains('DeepSeek Harness')));
       final context = jsonEncode(input.skip(1).toList());
       expect(context, contains('AGENTS_FIXTURE_MARKER'));
       expect(context, contains('PREFERENCE_MARKER'));
@@ -130,54 +130,28 @@ trust_level = "trusted"
       expect(jsonEncode(lab.events), isNot(contains(_key)));
     });
 
-    test("the model is offered Nipa's tool descriptions and system prompt, with DSH's parameter schemas", () async {
-      final wanted = Map<String, Object?>.from(jsonDecode(
-          await File('assets/next/agent/dsh/tool-descriptions.json').readAsString()) as Map);
-      Future<Map<String, Object?>> firstRequest() async {
-        final host = await lab.start();
-        await host.getMainSession();
-        await host.startTurn('你好');
-        await lab.next((e) => e['method'] == 'turn/completed');
-        return fake.requests.first;
-      }
-
+    test("the model gets DSH's own prompt and tool descriptions, with Nipa as its persona", () async {
       await open([_Rule(when: ['你好'], text: '好。')]);
-      final request = await firstRequest();
+      final host = await lab.start();
+      await host.getMainSession();
+      await host.startTurn('你好');
+      await lab.next((e) => e['method'] == 'turn/completed');
+      final request = fake.requests.first;
+      final system = ((request['input'] as List).first as Map)['content'] as String;
+      final prefix = File('assets/next/agent/dsh/persona-prefix.md').readAsStringSync().trim();
+      final suffix = File('assets/next/agent/dsh/persona-suffix.md').readAsStringSync().trim();
+      expect(system, startsWith('You are an AI agent powered by DeepSeek Harness.'));
+      for (final part in prefix.split('{{model}}')) {
+        expect(system, contains(part));
+      }
+      expect(system, isNot(contains('You are a coding agent')));
+      expect(system, contains('Start independent delegations with `subagent`'),
+          reason: "DSH's own tool guidance stays");
+      expect(system.trim(), endsWith(suffix));
       final tools = {
         for (final tool in request['tools'] as List) tool['name'] as String: tool as Map,
       };
-      for (final name in ['subagent', 'subagent_fork', 'send_message', 'bash', 'todo_write']) {
-        expect(tools[name]!['description'], wanted[name], reason: name);
-      }
-      for (final entry in wanted.entries) {
-        if (tools[entry.key] case final tool?) expect(tool['description'], entry.value, reason: entry.key);
-      }
-      final system = ((request['input'] as List).first as Map)['content'] as String;
-      expect(system, contains('# What they are waiting for'));
-      expect(system, File('assets/next/agent/nipa-base-dsh.md').readAsStringSync().trim());
-
-      // The same DSH with an empty table: only descriptions differ.
-      final bare = await Directory.systemTemp.createTemp('dsh-bare-plugins-');
-      addTearDown(() => bare.delete(recursive: true));
-      for (final file in Directory('assets/next/agent/dsh').listSync().whereType<File>()) {
-        await file.copy('${bare.path}/${file.uri.pathSegments.last}');
-      }
-      await File('${bare.path}/tool-descriptions.json').writeAsString('{}');
-      await open([_Rule(when: ['你好'], text: '好。')], plugins: bare);
-      final original = {
-        for (final tool in (await firstRequest())['tools'] as List) tool['name'] as String: tool as Map,
-      };
-      expect(tools.keys.toSet(), original.keys.toSet());
-      for (final name in tools.keys) {
-        expect(jsonEncode(tools[name]!['parameters']), jsonEncode(original[name]!['parameters']), reason: name);
-        expect(tools[name]!['type'], original[name]!['type']);
-        if (!wanted.containsKey(name)) {
-          expect(tools[name]!['description'], original[name]!['description'], reason: name);
-        }
-      }
-      for (final name in ['subagent', 'bash', 'todo_write']) {
-        expect(original[name]!['description'], isNot(wanted[name]), reason: name);
-      }
+      expect(tools['subagent']!['description'], startsWith('Delegate a self-contained task to a subagent'));
     });
 
     test("a profile's Codex main conversation stays Codex's; DSH keeps its own", () async {
@@ -633,7 +607,6 @@ def redact(text, secrets=()):
         labRoot: dir,
         sessions: SessionStore(store.database),
         modelLaunch: () async => const ModelLaunch(revision: 0),
-        baseInstructions: File('assets/next/agent/nipa-base-dsh.md'),
         dsh: runtime,
         dshPlugins: plugins ?? Directory('assets/next/agent/dsh'));
     events.clear();

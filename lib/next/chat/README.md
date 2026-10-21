@@ -300,14 +300,20 @@ Codex `codexErrorInfo` names that the followup retry recognises.
 Tools: `bash`, `read`, `read_image`, `write`, `web_fetch` (`web_search` only
 when `DEEPSEEK_API_KEY` is set, the only search backend DSH ships), `subagent`,
 `subagent_fork`, `send_message`, `interrupt_agent`, `list_agents`, the
-background-job tools, `todo_write` and `ask_user_question`. Removed: `edit`,
-`glob`, `grep`, `workflow`, `skill`, `exit_plan_mode`, `working_directory` and
-the goal tools with their round driver. Disabled for privacy: DeepSeek session
+background-job tools and `todo_write`. Removed: `edit`, `glob`, `grep`,
+`workflow`, `skill`, `exit_plan_mode`, `working_directory`,
+`ask_user_question` (she asks with NipaPlay's choices card and ends her turn)
+and the goal tools with their round driver. Disabled for privacy: DeepSeek session
 log upload, package inventory, OTel session telemetry, feedback and account
 sign-in. Permissions are `danger-full-access` with approvals off.
 
-`nipa-persona.mjs` makes `assets/next/agent/nipa-base-dsh.md` DSH's complete
-system prompt. AGENTS.md arrives through DSH's agent-instructions (AGENTS.md
+The system prompt and tool descriptions are DSH's own: its harness opener, the
+guidance each enabled tool registers, and its tools' descriptions. Nipa is the
+persona, through the `system-prompt` row's documented fields:
+`dsh/persona-prefix.md` replaces the coding-agent prefix, and
+`dsh/persona-suffix.md`, after DSH's guidance, says what is particular to
+NipaPlay. DeepSeek's models are tuned on DSH's wording, so NipaPlay adds to it
+rather than replacing it. AGENTS.md arrives through DSH's agent-instructions (AGENTS.md
 only; `DSH_AGENTS_HOME` points at an empty directory so a user's
 `~/.agents/AGENTS.md` does not apply). `nipa-memory.mjs` runs the harness's own
 `hooks/session_start.py` when a session starts, resumes or is compacted, and

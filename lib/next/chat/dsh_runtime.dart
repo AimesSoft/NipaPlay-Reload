@@ -177,13 +177,19 @@ const dshDisabledRows = [
 List<Map<String, Object?>> dshPatch(
         {required DshRoute route,
         required Directory plugins,
-        required File baseInstructions,
+        required String personaPrefix,
+        required String personaSuffix,
         required String harness,
         required String version,
         bool webSearch = false}) =>
     [
       for (final id in dshDisabledRows) {'id': id, 'disabled': true},
       {'id': 'llm-pi-ai', 'config': route.piAiConfig},
+      // DSH's own prompt and tool guidance stay; Nipa is its persona.
+      {
+        'id': 'system-prompt',
+        'config': {'personaPrefix': personaPrefix, 'personaSuffix': personaSuffix}
+      },
       {
         'id': 'tool-fs',
         'config': {'read': true, 'readImage': true, 'write': true, 'edit': false}
@@ -202,16 +208,6 @@ List<Map<String, Object?>> dshPatch(
       },
       {
         'insert': [
-          {
-            'id': 'nipa-persona',
-            'name': '${plugins.absolute.path}/nipa-persona.mjs',
-            'config': {'file': baseInstructions.absolute.path},
-          },
-          {
-            'id': 'nipa-tool-descriptions',
-            'name': '${plugins.absolute.path}/nipa-tool-descriptions.mjs',
-            'config': {'file': '${plugins.absolute.path}/tool-descriptions.json'},
-          },
           {
             'id': 'nipa-memory',
             'name': '${plugins.absolute.path}/nipa-memory.mjs',
