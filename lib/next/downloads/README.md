@@ -50,7 +50,15 @@ classification. `lastProgressAt` is null until an increase is actually observed.
 When an unfinished download goes `stallAfter` (5 minutes) without progress, the
 worker appends one entry to `checkpoint.stalls` with the bytes and peer counts it
 saw. The entry closes (`resumedAt`) only on an observed increase after it began,
-since the counter restarts with the process. An open stall of a download started
+since the counter restarts with the process. Not getting metadata counts too:
+a magnet whose metadata does not resolve keeps retrying the add, and retrying is
+not progress, so once `stallAfter` has passed since submission with no metadata
+and no byte, the entry is appended with `metadata: false`, the last `error`
+(code and message), `completedBytes` 0 and `totalBytes`, `connectedPeers`,
+`seenPeers` and `deadPeers` null (the engine has no session to count). It is
+detected at a retry, so up to one retry delay late, and written once; getting
+the metadata closes it (`resumedAt`), and a later stretch without bytes is a new
+entry. An open stall of a download started
 from a conversation returns there at once as a `download.stalled` fact; passed
 stalls and stalls of finished tasks are not sent. Every open stall, whoever
 started the download, is also the public event `download.stalled`

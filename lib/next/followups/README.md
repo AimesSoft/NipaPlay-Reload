@@ -12,7 +12,8 @@ occurrence semantics. Registration waits for a completion after its creation.
 
 `download.stalled` is a public event like `download.file_completed`: objectId
 `stalled:JOB_ID:INDEX`, data `jobId`, `infoHash`, `title`, `at`, `secondsWithoutProgress`,
-`completedBytes`, `totalBytes`, `connectedPeers`, `seenPeers`, `deadPeers`. It is published
+`completedBytes`, `totalBytes`, `connectedPeers`, `seenPeers`, `deadPeers` (a download whose
+metadata never arrived has `metadata: false`, `error` and null counts). It is published
 once per open stall (never for a passed stall or a finished task) and runs the
 `hooks/download.stalled` program when present. `when: {event: 'download.stalled',
 objectId}` accepts a stall objectId or a bare job id (that download's next stall);

@@ -25,14 +25,18 @@ void main() {
   late DownloadService downloads;
   late Harness harness;
 
-  void connect({List<DownloadBackend> additional = const []}) {
+  void connect(
+      {List<DownloadBackend> additional = const [],
+      Duration retryDelay = const Duration(minutes: 1),
+      Duration stallAfter = const Duration(minutes: 5)}) {
     final backends = DownloadBackends([backend, ...additional]);
     executor = DownloadExecutor(
         backends: backends,
         library: library,
         isEnabled: () async => true,
         pollInterval: const Duration(milliseconds: 10),
-        importRetryDelay: const Duration(minutes: 1));
+        importRetryDelay: retryDelay,
+        stallAfter: stallAfter);
     engine = TaskEngine(
         store: store, ownerDeviceId: 'device-test', executors: [executor]);
     executor.engine = engine;
@@ -226,6 +230,72 @@ void main() {
     stalls = await stallsOnce(job.jobId, (s) => s.length == 2);
     expect(stalls.last['index'], 1);
     expect(before.isBefore(DateTime.parse(stalls.last['at'] as String)), true);
+    await engine.cancel(job.jobId);
+  });
+
+  test('no metadata for the stall time is a stall that closes with it',
+      () async {
+    await engine.close();
+    connect(
+        retryDelay: const Duration(milliseconds: 40),
+        stallAfter: const Duration(seconds: 1));
+    await engine.start();
+    Future<List<Map>> stallsOnce(
+        String jobId, bool Function(List<Map>) done) async {
+      final deadline = DateTime.now().add(const Duration(seconds: 5));
+      while (true) {
+        final job = await engine.get(jobId);
+        final stalls = (job.checkpoint['stalls'] as List? ?? []).cast<Map>();
+        if (done(stalls)) return stalls;
+        expect(DateTime.now().isBefore(deadline), true,
+            reason: jsonEncode(job.toJson()));
+        await Future<void>.delayed(const Duration(milliseconds: 10));
+      }
+    }
+
+    backend.addError = const Failure(
+        FailureCode.unavailable, '磁力链接解析超时',
+        retryable: true);
+    final job = await downloads.add(testRequest);
+    await Future<void>.delayed(const Duration(milliseconds: 300));
+    expect((await engine.get(job.jobId)).checkpoint['stalls'], isNull);
+    var stalls = await stallsOnce(job.jobId, (s) => s.isNotEmpty);
+    final first = stalls.single;
+    expect(first['index'], 0);
+    expect(first['metadata'], false);
+    expect(first['completedBytes'], 0);
+    expect(first['totalBytes'], isNull);
+    expect(first['seenPeers'], isNull);
+    expect(first['connectedPeers'], isNull);
+    expect(first['deadPeers'], isNull);
+    expect(first['secondsWithoutProgress'], isA<int>());
+    expect((first['error'] as Map)['code'], 'unavailable');
+    expect(first['resumedAt'], isNull);
+    // More failed attempts neither add nor rewrite the stretch.
+    await Future<void>.delayed(const Duration(milliseconds: 200));
+    stalls = await stallsOnce(job.jobId, (s) => true);
+    expect(stalls, [first]);
+    expect((await engine.get(job.jobId)).state, JobState.waitingRetry);
+    // Metadata arrives: the stretch closes and stays in the checkpoint.
+    backend.addError = null;
+    backend.health = {
+      'secondsWithoutProgress': 0,
+      'lastProgressAt': null,
+      'connectedPeers': 1,
+      'seenPeers': 1,
+      'deadPeers': 0
+    };
+    stalls = await stallsOnce(
+        job.jobId, (s) => s.isNotEmpty && s.last['resumedAt'] != null);
+    expect(stalls, hasLength(1));
+    expect(stalls.single['at'], first['at']);
+    expect((await engine.get(job.jobId)).checkpoint['handle'], isNotNull);
+    // A real byte stall is still a new stretch.
+    backend.health = {...backend.health!, 'secondsWithoutProgress': 400};
+    stalls = await stallsOnce(job.jobId, (s) => s.length == 2);
+    expect(stalls.last['index'], 1);
+    expect(stalls.last.containsKey('metadata'), false);
+    expect(stalls.first['resumedAt'], isNotNull);
     await engine.cancel(job.jobId);
   });
 

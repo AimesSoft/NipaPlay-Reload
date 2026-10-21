@@ -36,6 +36,10 @@ final class FakeDownloadBackend
   int completed = 0, total = 4;
   String handle = '1';
   String? error;
+
+  /// Thrown by [add] after the session is reachable, like a magnet whose
+  /// metadata never resolves.
+  Failure? addError;
   List<DownloadFile>? overrideFiles;
   JsonMap? health;
   final addEntered = Completer<void>();
@@ -102,6 +106,7 @@ final class FakeDownloadBackend
       throw const DownloadAddStopped();
     }
     await addGate;
+    if (addError != null) throw addError!;
     additions++;
     present = true;
     return snapshot;

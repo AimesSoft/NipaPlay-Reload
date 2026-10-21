@@ -40,6 +40,9 @@ final class DownloadExecutor implements JobExecutor {
     final done = Completer<void>();
     _workers[context.job.jobId] = done;
     var stopped = false;
+    // True while the engine is being asked to add the download: it has not
+    // produced metadata, so a failure here is time without any byte.
+    var adding = false;
     unawaited(context.stopRequested.then((_) => stopped = true));
     DownloadSnapshot? task;
     final files = <JsonMap>[];
@@ -86,7 +89,9 @@ final class DownloadExecutor implements JobExecutor {
           return;
         }
         if (stopped) return;
+        adding = true;
         task = await backend.add(request, stopRequested: context.stopRequested);
+        adding = false;
       }
       // A crash between native add and this checkpoint is reconciled by hash.
       if (!stopped || context.job.cancelRequestedAt != null) {
@@ -109,6 +114,7 @@ final class DownloadExecutor implements JobExecutor {
           ],
         });
       }
+      if (!stopped) await _noteMetadata(context);
       while (true) {
         if (stopped) {
           if (context.job.cancelRequestedAt == null) {
@@ -316,7 +322,8 @@ final class DownloadExecutor implements JobExecutor {
           failure.retryable &&
           context.job.cancelRequestedAt == null) {
         await context.retryAt(
-            DateTime.now().toUtc().add(importRetryDelay), failure);
+            DateTime.now().toUtc().add(importRetryDelay), failure,
+            checkpoint: adding ? _stallBeforeMetadata(context, failure) : null);
       } else {
         await context.fail(
             failure,
@@ -423,6 +430,50 @@ final class DownloadExecutor implements JobExecutor {
         'deadPeers': health['deadPeers'],
       });
     }
+    await context.report(checkpoint: {...context.job.checkpoint, 'stalls': stalls});
+  }
+
+  /// Metadata that never arrives is the commonest stall of a dead torrent.
+  /// Counted from submission, since retrying the add is not progress. The
+  /// entry is written once; [_noteMetadata] closes it. Peer counts are not
+  /// known before the engine has a session, so they stay null.
+  JsonMap? _stallBeforeMetadata(JobContext context, Failure failure) {
+    final job = context.job;
+    final now = DateTime.now().toUtc();
+    final waited = now.difference(job.createdAt);
+    if (waited < stallAfter || (job.checkpoint['stalls'] as List?)?.isNotEmpty == true) {
+      return null;
+    }
+    return {
+      ...job.checkpoint,
+      'stalls': [
+        {
+          'index': 0,
+          'at': now.toIso8601String(),
+          'secondsWithoutProgress': waited.inSeconds,
+          'completedBytes': 0,
+          'totalBytes': null,
+          'connectedPeers': null,
+          'seenPeers': null,
+          'deadPeers': null,
+          'metadata': false,
+          'error': {'code': failure.code.wireName, 'message': failure.message},
+        }
+      ]
+    };
+  }
+
+  /// Metadata arrived: the stretch before it is over.
+  Future<void> _noteMetadata(JobContext context) async {
+    final stalls = [
+      for (final s in context.job.checkpoint['stalls'] as List? ?? [])
+        Map<String, Object?>.from(s as Map)
+    ];
+    final open = stalls.lastOrNull;
+    if (open == null || open['resumedAt'] != null || open['metadata'] != false) {
+      return;
+    }
+    open['resumedAt'] = DateTime.now().toUtc().toIso8601String();
     await context.report(checkpoint: {...context.job.checkpoint, 'stalls': stalls});
   }
 

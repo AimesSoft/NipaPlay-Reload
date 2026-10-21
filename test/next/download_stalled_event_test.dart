@@ -237,4 +237,35 @@ void main() {
     expect(facts, hasLength(1));
     expect((facts.single as Map)['objectId'], 'stalled:${job.jobId}:0');
   });
+
+  test('a stall before metadata is the same event, with unknown counts null',
+      () async {
+    final job = await submit(conversation: true);
+    final context = await executor.entered.future;
+    await publish(context, job, [
+      {
+        'index': 0,
+        'at': DateTime.now().toUtc().toIso8601String(),
+        'secondsWithoutProgress': 300,
+        'completedBytes': 0,
+        'totalBytes': null,
+        'connectedPeers': null,
+        'seenPeers': null,
+        'deadPeers': null,
+        'metadata': false,
+        'error': {'code': 'unavailable', 'message': '磁力链接解析超时'},
+      }
+    ]);
+    final hook = (await hookJobs()).single;
+    final data = (await engine.get(hook.jobId)).input['data'] as Map;
+    expect(data['metadata'], false);
+    expect(data['totalBytes'], isNull);
+    expect(data['seenPeers'], isNull);
+    await followups.sweep();
+    await followups.sweep();
+    final rows = await followups.list();
+    final facts = (rows.single['trigger'] as Map)['facts'] as List;
+    expect(facts, hasLength(1));
+    expect((facts.single as Map)['event'], 'download.stalled');
+  });
 }
