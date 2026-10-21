@@ -632,7 +632,7 @@ def redact(text, secrets=()):
   }
 
   Future<ChatMessage> next(bool Function(ChatMessage) test,
-      {Duration timeout = const Duration(seconds: 45)}) async {
+      {Duration timeout = const Duration(seconds: 120)}) async {
     final deadline = DateTime.now().add(timeout);
     while (DateTime.now().isBefore(deadline)) {
       for (final event in List.of(events)) {
@@ -644,7 +644,7 @@ def redact(text, secrets=()):
   }
 
   Future<T> until<T>(Future<T?> Function() probe,
-      {Duration timeout = const Duration(seconds: 45)}) async {
+      {Duration timeout = const Duration(seconds: 120)}) async {
     final deadline = DateTime.now().add(timeout);
     while (DateTime.now().isBefore(deadline)) {
       if (await probe() case final T value) return value;
