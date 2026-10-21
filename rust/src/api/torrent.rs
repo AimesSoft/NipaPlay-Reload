@@ -209,8 +209,11 @@ pub fn torrent_init_session(
     }
     #[cfg(feature = "headless")]
     let dht_enabled = headless.dht;
+    // A lab profile can keep its downloads off the public DHT
+    // (NIPAPLAY_LAB_DHT=0), so torrents made for local experiments are never
+    // announced beyond the machine.
     #[cfg(not(feature = "headless"))]
-    let dht_enabled = true;
+    let dht_enabled = !(lab_session && std::env::var("NIPAPLAY_LAB_DHT").as_deref() == Ok("0"));
     #[cfg(feature = "headless")]
     let disable_lsd = !headless.local_discovery;
     #[cfg(not(feature = "headless"))]
