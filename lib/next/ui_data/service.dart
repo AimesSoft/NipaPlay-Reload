@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:http/http.dart' as http;
 import 'package:nipa_harness/nipa_harness.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
@@ -24,9 +25,9 @@ import '../mesh/library.dart';
 /// Application-owned projections. Stored presentations contain no task state.
 final class UiDataService implements NextUiData, NextNowPlaying {
   UiDataService(this.media, this.engine, this.state, this.sources,
-      Directory root, CredentialVault vault)
+      Directory root, CredentialVault vault, {http.Client? artworkClient})
       : mediaRoot = root,
-        artwork = ArtworkCache(media, root, vault),
+        artwork = ArtworkCache(media, root, vault, client: artworkClient),
         heat = EpisodeHeat(DanmakuStore(media.store));
   final MediaService media;
   final TaskEngine engine;

@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:nipa_harness/nipa_harness.dart';
 
 import 'service.dart';
@@ -20,14 +22,23 @@ extension UiMetadataFacts on UiDataService {
       final declared = source?.containsKey('mode') == true
           ? fields['${field}Language']
           : source?['language'];
+      final sources = fields['fieldSources'];
+      final recorded = source?.containsKey('mode') == true && sources is Map
+          ? sources[field]
+          : null;
       final kana = value is String &&
           RegExp(r'[\u3041-\u3096\u30a1-\u30fa]').hasMatch(value);
       return {
         'available': value != null,
         'value': value,
-        'source':
-            source ?? (value == null ? null : {'source': 'entity_attributes'}),
+        'source': source == null
+            ? (value == null ? null : {'source': 'entity_attributes'})
+            : recorded == null
+                ? source
+                : {...source, 'record': recorded},
         if (field == 'title' || field == 'overview') ...{
+          'inChinese': declared is String &&
+              declared.toLowerCase().startsWith('zh'),
           'language': kana ? 'ja' : declared ?? 'unknown',
           'declaredLanguage': declared,
           'languageBasis': kana
@@ -59,6 +70,16 @@ extension UiMetadataFacts on UiDataService {
                   'originalFile': edit['originalFile']
               }
       };
+    }
+
+    // An edit's own source, when it was handed in with one.
+    Object? editSource(JsonMap m, String field) {
+      final edit = (m['provenance'] as Map)[field] as Map?;
+      final sources = (m['fields'] as Map)['fieldSources'];
+      return edit != null && edit.containsKey('mode') && sources is Map &&
+              sources[field] != null
+          ? {...edit, 'record': sources[field]}
+          : edit;
     }
 
     final episodes = await this.episodes(workId);
@@ -113,15 +134,14 @@ extension UiMetadataFacts on UiDataService {
         'title': {
           'available': e.title != null,
           'value': e.title,
-          'source': (m['provenance'] as Map)['title'] ??
-              (e.title == null ? null : {'source': 'entity_attributes'})
+          'source': (m['provenance'] as Map)['title'] == null
+              ? (e.title == null ? null : {'source': 'entity_attributes'})
+              : editSource(m, 'title')
         },
         'still': image('still', e.still, m)
       });
     }
-    return {
-      'workId': workId,
-      'fields': {
+    final fieldFacts = <String, Object?>{
         'title': {...text('title', work.title),
           'available': (fields['title'] ?? attrs['title']) is String &&
               ((fields['title'] ?? attrs['title']) as String).trim().isNotEmpty,
@@ -144,6 +164,51 @@ extension UiMetadataFacts on UiDataService {
         'backdrop': image('backdrop', work.artwork.backdrop, metadata),
         'poster': image('poster', work.artwork.poster, metadata),
         'logo': image('logo', work.artwork.logo, metadata),
+    };
+    // Whether the work has a TMDB identity: backdrop, logo and episode
+    // stills come from it.
+    final bool? tmdb;
+    if (evidence != null) {
+      final keys = evidence['keys'];
+      tmdb = keys is List
+          ? keys.any((k) =>
+              (k is String ? jsonDecode(k) as List : k as List).first == 'tmdb')
+          : null;
+    } else {
+      tmdb = (await media.store.database.rawQuery(
+              "SELECT 1 FROM media_bindings b JOIN media_external_objects o ON o.id=b.object_id "
+              "JOIN media_entities e ON e.id=b.entity_id "
+              "WHERE b.status='accepted' AND b.relation IN ('exact','contains') "
+              "AND o.provider='tmdb' AND o.object_type IN ('tv','movie','work') "
+              "AND (e.id=? OR (e.kind='release' AND e.parent_id=?)) LIMIT 1",
+              [workId, workId]))
+          .isNotEmpty;
+    }
+    return {
+      'workId': workId,
+      'fields': fieldFacts,
+      'identities': {if (tmdb != null) 'tmdb': tmdb},
+      // What the facts above lack, as plain lists; nothing else is implied.
+      'missing': {
+        'identities': [if (tmdb == false) 'tmdb'],
+        'fields': [
+          for (final e in fieldFacts.entries)
+            if ((e.value as Map)['available'] != true) e.key
+        ],
+        'chinese': [
+          for (final name in ['title', 'overview'])
+            if ((fieldFacts[name] as Map)['inChinese'] != true) name
+        ],
+        'episodes': {
+          'withoutTitle': [
+            for (final e in episodes)
+              if (e.title == null) e.episodeId
+          ],
+          'withoutStill': [
+            for (final e in episodes)
+              if (e.still == null) e.episodeId
+          ],
+        },
       },
       'heroImage': work.artwork.backdrop != null
           ? 'backdrop'
@@ -163,6 +228,22 @@ extension UiMetadataFacts on UiDataService {
             .length,
         'items': episodeFacts
       }
+    };
+  }
+
+  /// The part of [metadataFacts] that says what is missing.
+  Future<JsonMap> metadataSummary(String workId) async {
+    final facts = await metadataFacts(workId);
+    final episodes = facts['episodes'] as Map;
+    return {
+      'identities': facts['identities'],
+      'missing': facts['missing'],
+      'heroImage': facts['heroImage'],
+      'episodes': {
+        'total': episodes['total'],
+        'titles': episodes['titles'],
+        'stills': episodes['stills'],
+      },
     };
   }
 

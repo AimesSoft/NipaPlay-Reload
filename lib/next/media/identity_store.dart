@@ -1128,10 +1128,28 @@ final class IdentityStore {
 
   Future<void> overrideFields(
       List<JsonMap> entries, Invocation invocation) async {
+    final edits = await overrideEdits(entries, invocation);
+    await _transaction((tx) => writeOverrides(tx, edits));
+    announceOverrides(edits, invocation);
+  }
+
+  /// The entities that share one metadata view: a work and its releases;
+  /// any other entity stands alone.
+  Future<List<String>> metadataFamily(String id) async =>
+      _metadataEntities(await canonicalFileId(database, id));
+
+  /// Override rows resolved against the database, ready for [writeOverrides]
+  /// inside a transaction of the caller's. [created] names entities that
+  /// transaction is about to create; they stand alone.
+  Future<List<(JsonMap, List<String>)>> overrideEdits(
+      List<JsonMap> entries, Invocation invocation,
+      {Set<String> created = const {}}) async {
     final edits = <(JsonMap, List<String>)>[];
     for (final entry in entries) {
-      final id = await canonicalFileId(database, entry['entityId'] as String);
-      final ids = await _metadataEntities(id);
+      final raw = entry['entityId'] as String;
+      final isNew = created.contains(raw);
+      final id = isNew ? raw : await canonicalFileId(database, raw);
+      final ids = isNew ? [id] : await _metadataEntities(id);
       final edit = <String, Object?>{
         'entity_id': id,
         'field': entry['field'],
@@ -1144,20 +1162,27 @@ final class IdentityStore {
       };
       edits.add((edit, ids));
     }
-    await _transaction((tx) async {
-      for (final (edit, ids) in edits) {
-        await tx.insert('media_metadata_edits', edit);
-        if (edit['mode'] == 'clear') {
-          await tx.delete('media_overrides',
-              where:
-                  'entity_id IN (${List.filled(ids.length, '?').join(',')}) AND field=?',
-              whereArgs: [...ids, edit['field']]);
-        } else {
-          await tx.insert('media_overrides', edit,
-              conflictAlgorithm: ConflictAlgorithm.replace);
-        }
+    return edits;
+  }
+
+  Future<void> writeOverrides(
+      DatabaseExecutor tx, List<(JsonMap, List<String>)> edits) async {
+    for (final (edit, ids) in edits) {
+      await tx.insert('media_metadata_edits', edit);
+      if (edit['mode'] == 'clear') {
+        await tx.delete('media_overrides',
+            where:
+                'entity_id IN (${List.filled(ids.length, '?').join(',')}) AND field=?',
+            whereArgs: [...ids, edit['field']]);
+      } else {
+        await tx.insert('media_overrides', edit,
+            conflictAlgorithm: ConflictAlgorithm.replace);
       }
-    });
+    }
+  }
+
+  void announceOverrides(
+      List<(JsonMap, List<String>)> edits, Invocation invocation) {
     for (final (edit, _) in edits) {
       BodySignals.changed('media.assets.changed', edit['entity_id'] as String,
           {'kind': 'metadata', 'field': edit['field'], 'mode': edit['mode'],

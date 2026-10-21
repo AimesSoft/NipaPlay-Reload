@@ -17,11 +17,12 @@ import 'ui_data.dart';
 
 /// Images are source snapshots; downloaded files are a disposable projection.
 final class ArtworkCache {
-  ArtworkCache(this.media, this.root, this.vault);
+  ArtworkCache(this.media, this.root, this.vault, {http.Client? client})
+      : _client = client ?? http.Client();
   final MediaService media;
   final Directory root;
   final CredentialVault vault;
-  final _client = http.Client();
+  final http.Client _client;
   final _pending = <String, Future<JsonMap>>{};
   bool get busy => _pending.isNotEmpty;
 
