@@ -181,6 +181,8 @@ void main() {
     expect(world.scanned, [
       ['/Users/hikari/Movies/电影']
     ]);
+    expect(world.indexed, ['/Users/hikari/Movies/电影'],
+        reason: "the files reach NipaPlay's index even if Classic takes none");
     final near = await folders.nearby();
     expect(near.single.name, '客厅的 Mac mini');
     expect(near.single.address, 'http://192.168.1.20:1180');
@@ -232,6 +234,7 @@ final class _World {
   final _planned = <String, List<String>>{};
   final pruned = <String>[];
   final scanned = <List<String>>[];
+  final indexed = <String>[];
   JsonMap? checked;
   bool downloadsElsewhere = false;
   bool syncAnswers = true;
@@ -296,6 +299,10 @@ final class _World {
       }),
       _Action('media.library.roots.add',
           (_) => {'selected': ['/Users/hikari/Movies/电影'], 'roots': []}),
+      _Action('media.library.scan', (input) {
+        indexed.add(input['root'] as String);
+        return {'job': {'jobId': 'index-${indexed.length}'}};
+      }),
       _Action('media.library.scan_classic', (input) {
         scanned.add((input['paths'] as List).cast<String>());
         return {'jobId': 'scan-${scanned.length}'};

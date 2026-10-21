@@ -369,8 +369,19 @@ final class NextFolders {
         'paths': [path]
       });
 
-  /// Looks through [paths] (all when null); the task doing it.
+  /// Looks through [paths] (all when null); the task doing it. NipaPlay
+  /// indexes their files as well, so they reach Nipa as facts even when
+  /// Classic cannot identify them (without a dandanplay login it takes none).
   Future<String> scan([List<String>? paths]) async {
+    final stamp = DateTime.now().microsecondsSinceEpoch;
+    for (final root in paths ?? (await list()).paths) {
+      try {
+        await calls.call('media.library.scan',
+            {'root': root, 'requestId': 'gui-scan-$stamp-$root'});
+      } catch (_) {
+        // Classic's scan below still runs; the index can be built later.
+      }
+    }
     final r = await calls.call(
         'media.library.scan_classic', {if (paths != null) 'paths': paths});
     return r['jobId'] as String;
