@@ -491,17 +491,6 @@ final _specs = [
           'fileId': StringSchema(nullable: true),
           'classicProjectionId': StringSchema(nullable: true),
           'bindingIds': ArraySchema(StringSchema()),
-          'supersededClassic': ObjectSchema({
-            'source': StringSchema(values: ['classic_match']),
-            'workIds': ArraySchema(StringSchema()),
-            'episodeIds': ArraySchema(StringSchema()),
-            'emptiedWorkIds': ArraySchema(StringSchema())
-          }, required: [
-            'source',
-            'workIds',
-            'episodeIds',
-            'emptiedWorkIds'
-          ]),
           'classicProjection': ArraySchema(ObjectSchema({
             'locator': StringSchema(),
             'status': StringSchema(),

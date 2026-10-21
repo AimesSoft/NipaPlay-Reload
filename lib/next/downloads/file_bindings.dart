@@ -160,6 +160,6 @@ Future<JsonMap> bindDownloadedFile(MediaService media,
         ],
       }
     ]
-  }, Invocation(origin: origin, id: requestId), supersedeClassicMatch: true);
+  }, Invocation(origin: origin, id: requestId));
   return (result['entries'] as List).single as JsonMap;
 }

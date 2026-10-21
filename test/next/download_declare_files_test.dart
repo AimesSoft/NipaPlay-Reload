@@ -255,66 +255,6 @@ void main() {
     expect(effectiveFileBindings(saved).map((e) => e['fileIndex']), [0, 1]);
   });
 
-  test('a file whose episodes come only from a Classic match is bound by the '
-      'declaration, and a file with any other identification is not', () async {
-    setFiles([true, true]);
-    library.media[paths[0]] = {
-      'path': paths[0],
-      'fileId': 'file-0',
-      'workIds': ['work-classic'],
-      'episodes': [
-        {'episodeId': 'episode-classic', 'workId': 'work-classic'}
-      ],
-      'classicMatchOnly': true,
-      'identificationPending': false
-    };
-    library.media[paths[1]] = {
-      'path': paths[1],
-      'fileId': 'file-1',
-      'workIds': ['work-agent'],
-      'episodes': [
-        {'episodeId': 'episode-agent', 'workId': 'work-agent'}
-      ],
-      'classicMatchOnly': false,
-      'identificationPending': false
-    };
-    library.bindExtras = {
-      'supersededClassic': {
-        'source': 'classic_match',
-        'workIds': ['work-classic'],
-        'episodeIds': ['episode-classic'],
-        'emptiedWorkIds': ['work-classic']
-      }
-    };
-    final job = await running();
-    await until(job.jobId, (j) => rows(j).length == 2);
-    final result =
-        await declareFiles(job.jobId, [declare(0, '101'), declare(1, '102')]);
-    expect(results(result), [
-      {
-        'fileIndex': 0,
-        'status': 'bound',
-        'workId': 'work-1',
-        'releaseId': 'release-1',
-        'episodeIds': ['episode-1'],
-        'supersededClassic': {
-          'source': 'classic_match',
-          'workIds': ['work-classic'],
-          'episodeIds': ['episode-classic'],
-          'emptiedWorkIds': ['work-classic']
-        }
-      },
-      {
-        'fileIndex': 1,
-        'status': 'already_identified',
-        'existingEpisodeIds': ['episode-agent']
-      },
-    ]);
-    expect(library.bindCalls.map((c) => c['fileId']), ['file-0']);
-    final saved = await engine.get(job.jobId);
-    expect((row(saved, 0)!['binding'] as Map)['supersededClassic'], isNotNull);
-  });
-
   test('a binding that failed is retried by declaring again, and a changed '
       'declaration is not blocked by the earlier request', () async {
     setFiles([true, true]);

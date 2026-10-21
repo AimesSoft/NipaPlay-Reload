@@ -135,13 +135,6 @@ Classic 有效匹配按现有媒体库来源筛选函数进入同一实体、绑
 撤销旧的 Classic 文件绑定而不改动 Agent/user 绑定。按弹弹play外部对象复用既有实体，
 不按标题或文件名合并。不同来源指向不同集时均保留关联，`identity.get.conflicts` 可见。
 跨来源的同一集可由 Agent 明确提供 `localEpisodeIds` 表达。
-下载声明（`download.add.fileBindings`、`download.declare_files`，经 `MediaService.bindBatch(supersedeClassicMatch: true)`）
-优先于 Classic 对同一文件的自动匹配：文件的集若只来自 `classic_match`，这些集的 `classic_match` 文件绑定撤销、
-文件关联移除，只含 Classic 匹配的作品撤销其 `classic_match` 绑定（记录保留，不再列入作品库，
-再绑定时重新显示），回执条目带 `supersededClassic {source, workIds, episodeIds, emptiedWorkIds}`。
-文件上的用户/Agent 绑定不受影响；之后的 Classic 同步把该文件的观察记为 `classic_superseded`，
-不重新挂回，也不列为冲突，Classic 观看记录本身不改。`media.identity.bind_batch` /
-`media.management.bind_batch` 不带这个参数，显式绑定仍与 Classic 匹配并存，差异见 `identity.get.conflicts`。
 
 Classic 已有不同匹配时，outbox 标为 `conflict`，显式绑定仍已提交，Classic 保持原值。
 再次调用原 requestId 可重试该文件的投递；启动只恢复 `pending`，不自动处理 `conflict`。

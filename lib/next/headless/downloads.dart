@@ -323,8 +323,7 @@ final class HeadlessDownloadLibrary implements DownloadLibrary {
       'workIds': episodes.map((e) => e['workId']).toSet().toList(),
       'episodeIds': [for (final e in episodes) e['episodeId']],
       'episodes': episodes,
-      'identificationPending': episodes.isEmpty,
-      'classicMatchOnly': await media.store.classicMatchOnly(id)
+      'identificationPending': episodes.isEmpty
     };
   }
 

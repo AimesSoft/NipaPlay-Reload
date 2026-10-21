@@ -521,11 +521,7 @@ final class MediaService {
     );
   }
 
-  /// [supersedeClassicMatch] is for callers that declare a file's identity
-  /// ahead of NipaPlay's automatic matching (the download executor); it is
-  /// not an input of `media.identity.bind_batch`.
-  Future<JsonMap> bindBatch(JsonMap input, Invocation invocation,
-          {String? expectedPlan, bool supersedeClassicMatch = false}) =>
+  Future<JsonMap> bindBatch(JsonMap input, Invocation invocation, {String? expectedPlan}) =>
       mutate(() async {
         await store.importLegacy(await classic.history());
         final key = stableMediaId(
@@ -771,9 +767,8 @@ final class MediaService {
                 ]);
           }
         }
-        final result = await store.bindBatch(
-            prepared, key, fingerprint, invocation,
-            supersedeClassicMatch: supersedeClassicMatch);
+        final result =
+            await store.bindBatch(prepared, key, fingerprint, invocation);
         await _deliverBindings(result);
         await _saveProjectionReceipt(key, result);
         return result;
