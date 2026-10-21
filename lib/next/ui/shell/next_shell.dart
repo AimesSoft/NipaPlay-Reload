@@ -113,16 +113,17 @@ class _NextShellState extends State<NextShell> {
 
   @override
   Widget build(BuildContext context) {
-    // Pages hidden while Classic's player shows a video: logins open at
-    // once then.
+    // Pages hidden while Classic's player shows a video. A login Nipa asks
+    // for waits as a card either way: over the video the player tells of
+    // it, and no window covers the picture.
     final playing = widget.playing;
-    final showing = !playing && TickerMode.valuesOf(context).enabled;
-    _onScreen = showing;
-    _services.logins.showing = () => showing && mounted;
+    final visible = TickerMode.valuesOf(context).enabled;
+    _onScreen = !playing && visible;
+    _services.logins.showing = () => visible && mounted;
     WorkDetailBridge.attach(this, (id) async {
-      if (!mounted || !_services.logins.showing()) return null;
+      if (!mounted || !_onScreen) return null;
       final work = await _services.data.work(id);
-      if (!mounted || !_services.logins.showing()) return null;
+      if (!mounted || !_onScreen) return null;
       if (work == null || _shell.navigatorKey.currentState == null) return false;
       _shell.openWork(work);
       return true;

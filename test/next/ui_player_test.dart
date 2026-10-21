@@ -561,6 +561,134 @@ void main() {
     expect(button('跳过片尾').hitTestable(), findsOneWidget);
   });
 
+  /// The conversation panel slides in or out: a frame to start, then its
+  /// time.
+  Future<void> panel(WidgetTester tester) async {
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 600));
+  }
+
+  testWidgets(
+      'a login Nipa asks for over the video: no window on the picture; its '
+      'card waits in the conversation, a note under Nipa opens it',
+      (tester) async {
+    final p = await pumpPlayer(tester, status: PlayerStatus.playing);
+    final shell =
+        NextShellScope.of(tester.element(find.byType(NextPlayerLayer)));
+    final logins = shell.services.logins;
+    var windows = 0;
+    final result = logins.request<String>('弹弹play', () async {
+      windows++;
+      return 'from-window';
+    }, Completer<void>().future);
+    await tester.pump(const Duration(milliseconds: 300));
+    expect(windows, 0, reason: 'nothing covers the picture');
+    expect(logins.pending.single.platform, '弹弹play');
+    expect(shell.panelOpen.value, isFalse,
+        reason: 'the conversation does not come up over the video');
+    expect(button('登录 弹弹play').hitTestable(), findsOneWidget);
+
+    // With the controls away it stays a moment, then goes; it comes back
+    // with them.
+    p.state.showControlsNow(false);
+    await tester.pump(const Duration(seconds: 1));
+    expect(button('登录 弹弹play').hitTestable(), findsOneWidget);
+    await tester.pump(const Duration(seconds: 3));
+    await tester.pump(const Duration(milliseconds: 300));
+    expect(button('登录 弹弹play').hitTestable(), findsNothing);
+    p.state.showControlsNow(true);
+    await tester.pumpAndSettle();
+    expect(button('登录 弹弹play').hitTestable(), findsOneWidget);
+
+    // The conversation over the video has its card; the note gives way.
+    await tester.tap(button('Nipa').hitTestable());
+    await panel(tester);
+    expect(find.text('需要登录 弹弹play'), findsOneWidget);
+    expect(find.text('打开登录窗口'), findsOneWidget);
+    expect(button('登录 弹弹play').hitTestable(), findsNothing);
+    shell.closePanel();
+    await panel(tester);
+    expect(button('登录 弹弹play').hitTestable(), findsOneWidget);
+    expect(windows, 0);
+
+    await tester.tap(button('登录 弹弹play'));
+    await tester.pump();
+    expect(windows, 1);
+    expect(await result, 'from-window');
+    expect(logins.pending, isEmpty);
+    await tester.pumpAndSettle();
+    expect(button('登录 弹弹play').hitTestable(), findsNothing);
+  });
+
+  testWidgets(
+      'a login the person asks for opens its window at once, over '
+      'the video too', (tester) async {
+    await pumpPlayer(tester, status: PlayerStatus.playing);
+    final logins =
+        NextShellScope.of(tester.element(find.byType(NextPlayerLayer)))
+            .services
+            .logins;
+    logins.expect('弹弹play');
+    var windows = 0;
+    final result = logins.request<String>('弹弹play', () async {
+      windows++;
+      return 'from-window';
+    }, Completer<void>().future);
+    expect(windows, 1);
+    expect(await result, 'from-window');
+    expect(logins.pending, isEmpty);
+    await tester.pump(const Duration(milliseconds: 300));
+    expect(button('登录 弹弹play').hitTestable(), findsNothing);
+    // What the person asked for is forgotten after a minute.
+    await tester.pump(const Duration(minutes: 1));
+  });
+
+  testWidgets(
+      'not over a video: the conversation comes up with the card, as before; '
+      'a login that waited through a video, once the video is left',
+      (tester) async {
+    final p = await pumpPlayer(tester);
+    final shell = NextShellScope.of(tester.element(find.byType(NextTopBar)));
+    shell.go(NextSection.activity);
+    await tester.pumpAndSettle();
+    final logins = shell.services.logins;
+    var windows = 0;
+    Future<String?> ask() => logins.request<String>('弹弹play', () async {
+          windows++;
+          return 'from-window';
+        }, Completer<void>().future);
+
+    final first = ask();
+    await panel(tester);
+    expect(windows, 0);
+    expect(shell.panelOpen.value, isTrue);
+    expect(find.text('需要登录 弹弹play'), findsOneWidget);
+    await tester.tap(find.text('打开登录窗口'));
+    await tester.pump();
+    expect(windows, 1);
+    expect(await first, 'from-window');
+    shell.closePanel();
+    await panel(tester);
+
+    p.state.play();
+    await tester.pump(const Duration(milliseconds: 600));
+    final second = ask();
+    await tester.pump(const Duration(milliseconds: 600));
+    expect(windows, 1);
+    expect(shell.panelOpen.value, isFalse);
+
+    await tester.tap(button('返回'));
+    await panel(tester);
+    expect(find.byType(NextPlayerLayer), findsNothing);
+    expect(shell.panelOpen.value, isTrue,
+        reason: 'back on the page, its card is seen');
+    expect(find.text('需要登录 弹弹play'), findsOneWidget);
+    await tester.tap(find.text('打开登录窗口'));
+    await tester.pump();
+    expect(windows, 2);
+    expect(await second, 'from-window');
+  });
+
   testWidgets('while it opens: the title and a pulse, no controls',
       (tester) async {
     await pumpPlayer(tester, status: PlayerStatus.loading);

@@ -25,9 +25,11 @@ enum NextPopover { none, tasks, nipa }
 class NextShellController extends ChangeNotifier {
   NextShellController(this.services, {required this.onLeave}) {
     chat = NipaChat(port: services.chat, data: services.data);
-    // A login card must be seen: the conversation comes up for it.
+    // A login card must be seen: the conversation comes up for it. Not over
+    // a video: the player tells of it, and the conversation comes up when
+    // the video is left.
     services.logins.onRequest = () {
-      if (!chatShown) openChat();
+      if (!_playing && !chatShown) openChat();
     };
     panelOpen.addListener(_syncVisible);
     homeChatOpen.addListener(_syncVisible);
@@ -142,7 +144,8 @@ class NextShellController extends ChangeNotifier {
 
   /// The player opens or closes over the pages. Whatever floated over the
   /// page goes; a conversation open over the video stays, and on the home
-  /// becomes the home's own again.
+  /// becomes the home's own again. A login that waited through the video
+  /// brings the conversation up once it is left.
   void setPlaying(bool value) {
     if (_playing == value) return;
     _playing = value;
@@ -152,6 +155,8 @@ class NextShellController extends ChangeNotifier {
     } else if (panelOpen.value && onHome) {
       _closePanel();
       homeChatOpen.value = true;
+    } else if (services.logins.pending.isNotEmpty && !chatShown) {
+      openChat();
     }
     notifyListeners();
     _syncVisible();
