@@ -248,7 +248,6 @@ final class HeadlessCore {
     followups =
         Followups(database, engine, HeadlessRepository(repository.path));
     downloads.returnTarget = followups.downloadReturnTarget;
-    downloads.onRead = followups.noteDownloadRead;
     programs.returnTarget = followups.downloadReturnTarget;
     attachMeshDelivery(mesh, followups);
     hooks.observeEvent = followups.hookEvent;

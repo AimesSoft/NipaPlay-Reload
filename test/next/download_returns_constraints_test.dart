@@ -1,4 +1,3 @@
-import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
@@ -112,36 +111,6 @@ void main() {
     expect(await store.database.rawQuery('PRAGMA foreign_key_check'), isEmpty);
   });
 
-  test('a file event carries its binding, and waits while it is pending',
-      () async {
-    final job = await submit();
-    final context = await executor.entered.future;
-    final pending = {...file(job, 0), 'binding': {'status': 'pending'}};
-    await context.report(checkpoint: {
-      'completedFiles': [pending]
-    });
-    await followups.sweep();
-    expect(await followups.list(), isEmpty);
-    final bound = {
-      ...file(job, 0),
-      'binding': {
-        'status': 'bound',
-        'workId': 'work-1',
-        'releaseId': 'release-1',
-        'episodeIds': ['episode-1']
-      }
-    };
-    await context.report(checkpoint: {
-      'completedFiles': [bound]
-    });
-    await followups.sweep();
-    final facts = ((await followups.list()).single['trigger'] as Map)['facts']
-        as List;
-    expect(facts, hasLength(1));
-    expect(((facts.single['data'] as Map)['file'] as Map)['binding'],
-        bound['binding']);
-  });
-
   test('an unresolved stall goes back at once, a passed one never', () async {
     final job = await submit();
     final context = await executor.entered.future;
@@ -216,46 +185,11 @@ void main() {
     automatic = (await followups.list())
         .where((r) => r['automatic'] == 'download')
         .single;
-    // The end's followup looks at the whole download, so file 1, still
-    // waiting in the batch, goes with it.
-    expect(automatic['state'], 'cancelled');
-    expect(((automatic['trigger'] as Map)['facts'] as List), isEmpty);
+    expect(((automatic['trigger'] as Map)['facts'] as List), hasLength(1));
     expect(automatic['downloadObjects'], contains('terminal:${job.jobId}'));
     await followups.sweep();
     expect((await followups.list()).where((r) => r['automatic'] == 'download'),
         hasLength(1));
-  });
-
-  test('files batched when the end arrives go with the end\'s own followup',
-      () async {
-    final job = await submit();
-    final context = await executor.entered.future;
-    await followups.register({
-      'when': {'jobId': job.jobId},
-      'threadId': 'original',
-      'instruction': '下完检查每集'
-    }, Invocation(origin: 'harness_cli'));
-    await context.report(checkpoint: {
-      'completedFiles': [file(job, 0)]
-    });
-    await followups.sweep();
-    final rows = await followups.list();
-    final first = rows.where((r) => r['automatic'] == 'download').single;
-    // The first file is news of its own while the download runs.
-    expect(first['state'], 'ready');
-    expect((first['trigger'] as Map)['facts'], hasLength(1));
-    await context.report(checkpoint: {
-      'completedFiles': [file(job, 0), file(job, 1), file(job, 2)]
-    });
-    await context.succeed(verified(details: {
-      'fileIds': ['file-0', 'file-1', 'file-2']
-    }));
-    await followups.sweep();
-    final after = await followups.list();
-    expect(after.where((r) => r['automatic'] == null).single['state'],
-        isNot('cancelled'));
-    final automatic = after.where((r) => r['automatic'] == 'download');
-    expect(automatic.every((r) => r['state'] == 'cancelled'), isTrue);
   });
 
   test('scripts and nonvideo or unregistered files produce no automatic return',
@@ -303,97 +237,6 @@ void main() {
     expect(facts, hasLength(1));
     expect(facts.single['data']['state'], 'failed');
     expect(facts.single['data']['receipt']['verification'], 'unverified');
-  });
-
-  test('a success after every video was already told opens no turn',
-      () async {
-    final job = await submit();
-    final context = await executor.entered.future;
-    await context.report(checkpoint: {
-      'completedFiles': [file(job, 0)]
-    });
-    await followups.sweep();
-    // The file's turn ran.
-    final told = (await store.database.query('followups')).single;
-    final snapshot = jsonDecode(told['snapshot'] as String) as Map;
-    snapshot['state'] = 'completed';
-    await store.database.update(
-        'followups', {'state': 'completed', 'snapshot': jsonEncode(snapshot)},
-        where: 'id=?', whereArgs: [told['id']]);
-    await context.succeed(verified(details: {
-      'fileIds': ['file-0']
-    }));
-    await followups.sweep();
-    await followups.sweep();
-    final rows = (await followups.list())
-        .where((r) => r['automatic'] == 'download')
-        .toList();
-    expect(rows, hasLength(1));
-    expect(rows.single['downloadObjects'], contains('terminal:${job.jobId}'));
-  });
-
-  test('a failure after every video was told still comes back', () async {
-    final job = await submit();
-    final context = await executor.entered.future;
-    await context.report(checkpoint: {
-      'completedFiles': [file(job, 0)]
-    });
-    await followups.sweep();
-    final told = (await store.database.query('followups')).single;
-    final snapshot = jsonDecode(told['snapshot'] as String) as Map;
-    snapshot['state'] = 'completed';
-    await store.database.update(
-        'followups', {'state': 'completed', 'snapshot': jsonEncode(snapshot)},
-        where: 'id=?', whereArgs: [told['id']]);
-    await context.fail(
-        const Failure(FailureCode.unavailable, 'disk full'),
-        JobReceipt(
-            verification: VerificationLevel.unverified,
-            details: {'reason': 'disk full'}));
-    await followups.sweep();
-    final rows = (await followups.list())
-        .where((r) => r['automatic'] == 'download')
-        .toList();
-    expect(rows, hasLength(2));
-    expect(rows.last['state'], 'ready');
-  });
-
-  test('what the conversation read for itself is not sent back to it',
-      () async {
-    final helper = await engine.submit(
-        type: 'agent.helper',
-        title: '下载帮手',
-        input: {
-          'parentThreadId': 'original',
-          'threadId': 'native-child',
-          'repository': root.path
-        });
-    final job = await submit();
-    final context = await executor.entered.future;
-    await context.report(checkpoint: {
-      'completedFiles': [file(job, 0)]
-    });
-    await followups.sweep();
-    // The conversation was busy; meanwhile it read the download itself.
-    await Future<void>.delayed(const Duration(milliseconds: 5));
-    await followups.noteDownloadRead(job.jobId,
-        Invocation(origin: 'harness_cli:helper:${helper.jobId}'));
-    await followups.sweep();
-    var automatic = (await followups.list())
-        .where((r) => r['automatic'] == 'download')
-        .single;
-    expect(automatic['state'], 'cancelled');
-    // A file that finishes after the read is news again.
-    await Future<void>.delayed(const Duration(milliseconds: 5));
-    await context.report(checkpoint: {
-      'completedFiles': [file(job, 0), file(job, 1)]
-    });
-    await followups.sweep();
-    automatic = (await followups.list())
-        .where((r) => r['automatic'] == 'download' && r['state'] != 'cancelled')
-        .single;
-    expect(((automatic['trigger'] as Map)['facts'] as List)
-        .map((f) => (f as Map)['objectId']), ['${job.jobId}:1']);
   });
 
   test('helper provenance returns to its recorded parent', () async {

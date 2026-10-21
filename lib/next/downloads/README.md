@@ -71,89 +71,19 @@ completed selection returns a new observation job; the prior receipt stays
 immutable and duplicate add returns the current hash's job. Classic calls omit
 the optional selection and keep their prior behavior.
 
-`download.add.fileBindings` (single `source` only) declares, at order time,
-which episodes a file index is: entries `{fileIndex, workRef, releaseRef?,
-episodeRefs, reason?}` use the catalogue-mode refs of `media.identity.bind_batch`.
-Add validates them and rejects the whole call when an index is declared twice,
-lies outside `fileIndices`, does not exist in a torrent file's manifest (magnets
-have no manifest before the engine fetched metadata, so their out-of-range
-indices are not detected at add), or an entry is malformed. The declaration is
-stored in the job input with the invocation's origin. When a declared local
-video passes verification, the executor saves its `completedFiles` row with
-`binding: {status: pending}`, then runs `DownloadLibrary.bindFile`, which calls
-`MediaService.bindBatch` (kind=file, `entityId` = the file id, requestId
-`download:JOB_ID:file:INDEX`) with that origin. The outcome replaces `pending` on
-the row, the row's `media` is read again, and `download.file_completed` carries it
-as `file.binding`; the fact is not published while the row is pending. A pending
-row found after a restart is bound again under the same requestId, which returns
-the saved result. Statuses: `bound` (`workId`, `releaseId`, `episodeIds`, and
-`supersededClassic` when the declaration took the place of Classic's automatic
-match, see below), `already_identified` (the file already had episodes from a user
-or agent binding, or a `local_catalog` link; `existingEpisodeIds`; nothing is
-changed), `not_applied` (`file_not_registered`),
-`failed` (`error`). One attempt per file; a failure never fails or retries the
-download. Receipts list declared indices that never reached a binding attempt in
-`details.unboundDeclarations` (`no_such_file`, `not_selected`, `not_video`,
-`not_completed`). A duplicate add returns the existing job and keeps its
-original declarations; `download.declare_files` changes them. Both the application
-and the headless host implement `bindFile` through the same `bindDownloadedFile`,
-and both register `download.declare_files` with the rest of the download family.
-
-`download.declare_files {jobId, fileBindings}` declares or replaces declarations
-of an existing download, with the entries and checks of `download.add` (for a
-known manifest, indices must exist and be among the currently selected files).
-Declarations merge by `fileIndex`: listed indices replace their earlier
-declaration, others stay. They are stored in `checkpoint.fileBindings` (over
-those of the job input) with the invocation's origin, so they survive restarts
-and are carried into the observation job that expanding a selection creates.
-The write goes through `TaskEngine.amendCheckpoint`: it changes neither job state,
-phase, retry time nor the torrent, so it works while the download is running,
-paused, queued, waiting to retry or waiting for a decision. A file that is not
-completed yet is bound by the executor when it completes, as with `add`. A file
-whose `completedFiles` row exists is bound at once, with the same logic, and the
-outcome replaces `binding` on its row (also when it was `failed`, or when there
-was no declaration). The response is `{job, declarationsSaved, bindings}`, one
-`bindings` entry per declared index: the statuses above plus `declared` (saved,
-the file is not completed yet; `reason`) and `not_applied` with `reason`
-`not_video`, `requires_transfer`, `not_selected`, or `not_completed` for a
-finished job. No `download.file_completed` event is published for a row that was
-already complete. A cancelling download returns `conflict`. A finished download's
-receipt is immutable: completed files are still bound and reported, but
-`declarationsSaved` is false and nothing is written.
-
-The requestId of a declaration made with `declare_files` is
-`download:JOB_ID:file:INDEX:DIGEST`, where `DIGEST` derives from the declaration's
-content: the same declaration replays the saved `bind_batch` result (and a file
-whose row says it was bound by that request keeps `bound`), a changed one is a new
-request, so the earlier result cannot reject it. Declarations from `add` keep
-`download:JOB_ID:file:INDEX`. A file whose episodes come from a user's or an
-agent's binding is never overwritten (`already_identified`).
-
-A declaration takes precedence over NipaPlay's own automatic match of the same
-file, that is the Classic scanner's filename/hash match of dandanplay, which the
-Next identity store holds as `source=classic_match`. When every episode a file has
-comes from such a match (`DownloadLibrary.lookup` reports
-`classicMatchOnly: true`), the declaration is bound and the outcome is `bound` with
-`supersededClassic: {source: "classic_match", workIds, episodeIds, emptiedWorkIds}`:
-the work(s) and episode(s) the file was under, and the works that held nothing but
-automatic matches and were taken out of the library (`library.merged`,
-`library.works`; their records stay stored and show again when something is bound to
-them). The file is then only under the declared episodes. Only declarations do this
-(`bindDownloadedFile` passes `supersedeClassicMatch: true` to
-`MediaService.bindBatch`); a plain `media.identity.bind_batch` leaves the match
-beside the binding. Classic's own watch-history row (animeId, episodeId)
-is not changed, and a later `syncClassicHistory` records the observation as
-`classic_superseded` without attaching the file or recreating the work, for as long
-as the declaration's binding is accepted. The Classic projection outbox only
-carries explicit dandanplay bindings, so a declared Bangumi or TMDB identity writes
-nothing to Classic.
-
-Everything that rewrites a job's `completedFiles` rows takes the job's turn
-(`DownloadExecutor.exclusive`): the executor's per-file stage and
-`declare_files`. A `declare_files` that arrives while the worker is registering a
-file waits for it, then reads the rows. The worker's other checkpoint writes
-(`stalls`, `files`, the session facts) use `checkpointPatch`, which sets only
-their keys on the checkpoint as stored when the write is applied.
+A registered local video's library entry (`media`: `fileId`, `workIds`,
+`episodes`) is on its `download.file_completed` event and on its row of
+`download.read`; `download.read` looks the entry up again, so its episode links
+are the ones the file has now, and the event carries the entry as it was when the
+file was registered. Each episode entry has `identitySources`: one item per
+accepted file binding standing behind that link, `{bindingId, source, boundBy,
+origin?}` (`source: classic_match` with `boundBy: null` is Classic's automatic
+match; any other `source` is a binding written through `media.identity.bind_batch`,
+with `boundBy` `agent` or `user` and the `origin` of the invocation that wrote
+it), plus `{source: local_catalog}` for a link made through `localEpisodeIds`.
+A file with no links has `episodes: []` and `identificationPending: true`. The
+download writes no identity itself: binding downloaded files is done with the
+`media.identity` primitives like any other file.
 
 `download.import` scans completed local videos, including when automatic scan is
 off. It checks containment and actual sizes, reuses the Classic scanner and

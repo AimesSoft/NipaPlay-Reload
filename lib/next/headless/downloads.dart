@@ -6,7 +6,6 @@ import '../../models/torrent_task.dart';
 import '../downloads/download_backend.dart';
 import '../downloads/download_paths.dart';
 import '../downloads/download_source.dart';
-import '../downloads/file_bindings.dart';
 import '../media/media_service.dart';
 import 'native.dart';
 
@@ -317,28 +316,19 @@ final class HeadlessDownloadLibrary implements DownloadLibrary {
     final episodes = await media.store.database.rawQuery(
         'SELECT e.id AS episodeId, e.parent_id AS workId, e.attributes FROM media_file_episodes fe JOIN media_entities e ON e.id=fe.episode_id WHERE fe.file_id=?',
         [id]);
+    final sources = await media.store.linkSources(id);
     return {
       'path': path,
       'fileId': id,
       'workIds': episodes.map((e) => e['workId']).toSet().toList(),
       'episodeIds': [for (final e in episodes) e['episodeId']],
-      'episodes': episodes,
-      'identificationPending': episodes.isEmpty,
-      'classicMatchOnly': await media.store.classicMatchOnly(id)
+      'episodes': [
+        for (final e in episodes)
+          {...e, 'identitySources': sources[e['episodeId']] ?? <JsonMap>[]}
+      ],
+      'identificationPending': episodes.isEmpty
     };
   }
-
-  @override
-  Future<JsonMap> bindFile(
-          {required String fileId,
-          required JsonMap declaration,
-          required String requestId,
-          required String origin}) =>
-      bindDownloadedFile(media,
-          fileId: fileId,
-          declaration: declaration,
-          requestId: requestId,
-          origin: origin);
 
   @override
   Future<bool> importFiles(List<String> paths, String outputDirectory) async {

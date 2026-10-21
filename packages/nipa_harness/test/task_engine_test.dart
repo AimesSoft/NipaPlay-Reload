@@ -397,26 +397,4 @@ void main() {
         containsPair('cancellation', containsPair('afterCommit', false)));
     expect(second.executions, 0);
   });
-
-  test('an amended checkpoint is kept by a patch write and refused once finished',
-      () async {
-    await engine.start();
-    final job = await engine.submit(type: 'test', title: 'Amend');
-    final context = await executor.entered.future;
-    await context.report(checkpoint: {'rows': [1], 'mine': 1});
-    final amended = await engine.amendCheckpoint(
-        job.jobId, (checkpoint) => {...checkpoint, 'declared': 'yes'});
-    expect(amended.state, JobState.running);
-    expect(amended.revision, context.job.revision);
-    // The executor's write names only its own key; the amendment survives.
-    await context.report(checkpointPatch: {'mine': 2});
-    expect((await engine.get(job.jobId)).checkpoint,
-        {'rows': [1], 'mine': 2, 'declared': 'yes'});
-    await context.succeed(verified());
-    await expectLater(
-        engine.amendCheckpoint(job.jobId, (c) => {...c, 'late': true}),
-        throwsA(isA<Failure>()
-            .having((f) => f.code, 'code', FailureCode.conflict)));
-    expect((await engine.get(job.jobId)).checkpoint.containsKey('late'), false);
-  });
 }

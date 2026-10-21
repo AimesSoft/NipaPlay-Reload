@@ -116,18 +116,8 @@ final class DownloadRequest implements JsonEncodable {
       required this.title,
       this.downloadDirectory,
       this.fileIndices,
-      this.createFolderForTask,
-      this.fileBindings,
-      this.bindingOrigin});
+      this.createFolderForTask});
   final String source, infoHash, title;
-
-  /// Declared at order time: file index -> episode identity. Normalized by
-  /// `parseFileBindings`; the executor applies each when its file completes.
-  final List<JsonMap>? fileBindings;
-
-  /// Origin of the invocation that declared [fileBindings]; the bindings
-  /// are written on its behalf.
-  final String? bindingOrigin;
   final String? downloadDirectory;
   final bool? createFolderForTask;
   final List<int>? fileIndices;
@@ -137,9 +127,7 @@ final class DownloadRequest implements JsonEncodable {
       title: json['title'] as String,
       downloadDirectory: json['downloadDirectory'] as String?,
       fileIndices: (json['fileIndices'] as List?)?.cast<int>(),
-      createFolderForTask: json['createFolderForTask'] as bool?,
-      fileBindings: (json['fileBindings'] as List?)?.cast<JsonMap>(),
-      bindingOrigin: json['bindingOrigin'] as String?);
+      createFolderForTask: json['createFolderForTask'] as bool?);
   @override
   JsonMap toJson() => {
         'source': source,
@@ -149,8 +137,6 @@ final class DownloadRequest implements JsonEncodable {
         if (fileIndices != null) 'fileIndices': fileIndices,
         if (createFolderForTask != null)
           'createFolderForTask': createFolderForTask,
-        if (fileBindings != null) 'fileBindings': fileBindings,
-        if (bindingOrigin != null) 'bindingOrigin': bindingOrigin,
       };
 }
 
@@ -217,13 +203,4 @@ abstract interface class DownloadLibrary {
   Future<JsonMap?> lookup(String path);
   Future<bool> importFiles(List<String> paths, String outputDirectory);
   Future<void> markImported(String key);
-
-  /// Writes the declared episode identity of one downloaded file through the
-  /// same logic as `media.identity.bind_batch`. [requestId] is stable per
-  /// job and file, so repeating it returns the saved result.
-  Future<JsonMap> bindFile(
-      {required String fileId,
-      required JsonMap declaration,
-      required String requestId,
-      required String origin});
 }
