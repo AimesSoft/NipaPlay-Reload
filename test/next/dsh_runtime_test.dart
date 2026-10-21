@@ -128,6 +128,17 @@ trust_level = "trusted"
       expect(jsonEncode(lab.events), isNot(contains(_key)));
     });
 
+    test("a profile's Codex main conversation stays Codex's; DSH keeps its own", () async {
+      await open([]);
+      final sessions = SessionStore(lab.store.database);
+      await sessions.select(lab.repository.path, 'codex-main-thread');
+      final host = await lab.start();
+      await host.getMainSession();
+      expect(host.mainThreadId, isNot('codex-main-thread'));
+      expect(await sessions.main(lab.repository.path), 'codex-main-thread');
+      expect(await sessions.main('dsh:${lab.repository.path}'), host.mainThreadId);
+    });
+
     test('steering reaches the running turn; interrupting stops it and clears the queue', () async {
       await open([
         _Rule(when: ['first'], unless: ['call_'], calls: [_bash('sleep 2; echo waited')]),
@@ -239,9 +250,11 @@ trust_level = "trusted"
       final wait = lab.events.firstWhere((e) => e['method'] == 'item/completed' && e['params']['item']['tool'] == 'wait');
       expect(wait['params']['threadId'], parent);
       expect(wait['params']['item']['agentsStates'][child]['message'], 'CHILD_RESULT finished');
-      final waitAt = lab.events.indexOf(wait);
+      final parentWoke = lab.events.indexWhere((e) => e['method'] == 'turn/started' &&
+          e['params']['threadId'] == parent && e['params']['turn']['id'] == wait['params']['turnId']);
       final childEnd = lab.events.indexWhere((e) => e['method'] == 'turn/completed' && e['params']['threadId'] == child);
-      expect(childEnd, greaterThan(waitAt), reason: 'DSH hands the result over before the child is reported done');
+      expect(childEnd, greaterThan(parentWoke),
+          reason: 'DSH hands the result over before the child is reported done');
 
       final finished = await lab.until(() async {
         final current = await lab.engine.get(job.jobId);

@@ -17,8 +17,8 @@ export const inject = ['agents', 'sessions'];
 
 /** Message sources that are context, not something said in the conversation. */
 const HIDDEN_SOURCES = new Set(['runtime-context', 'agent-instructions', 'compact-checkpoint', 'tool-registry']);
-/** How long a subagent's turn end waits for DSH to hand its result to the parent. */
-const SETTLEMENT_HOLD_MS = 3000;
+/** Upper bound on how long a subagent's turn end waits for DSH's settlement. */
+const SETTLEMENT_HOLD_MS = 10000;
 const CHAT_KEY = Symbol.for('nipaplay.dsh.chatFor');
 
 const seconds = (ms) => (ms === undefined || ms === null ? null : Math.floor(ms / 1000));
@@ -467,6 +467,11 @@ export function apply(ctx, config = {}) {
   async function threadWithHistory(id, includeTurns = true) {
     const { header, events, isLive } = await readEvents(id);
     const turns = includeTurns ? historyTurns(id, events, header?.cwd ?? defaultCwd, isLive && ctx.agents.get(id) !== undefined) : [];
+    // A held subagent turn reads as running until its end is reported.
+    const held = holds.get(id)?.turnId;
+    for (const turn of turns) {
+      if (turn.id === held) Object.assign(turn, { status: 'inProgress', error: null, completedAt: null, durationMs: null });
+    }
     return threadObject(id, header, turns);
   }
 
@@ -671,11 +676,13 @@ export function apply(ctx, config = {}) {
     };
     const emit = () => notify('turn/completed', payload);
     if (activations.has(threadId)) {
-      // DSH hands a settled child's reply to its parent right after this turn
-      // ends. Report the child's end once that delivery is visible, so
-      // NipaPlay's durable return sees DSH's delivery before it acts itself.
+      // When this turn leaves the child idle, DSH settles it and hands its
+      // reply to the parent: next-step input for a running parent, a new
+      // turn for an idle one. The child's end is reported (in notifications
+      // and history) once that hand-over happened, so NipaPlay's durable
+      // return finds the parent busy or the delivery already in its history.
       releaseHold(threadId);
-      holds.set(threadId, { emit, timer: setTimeout(() => releaseHold(threadId), SETTLEMENT_HOLD_MS) });
+      holds.set(threadId, { emit, turnId, timer: setTimeout(() => releaseHold(threadId), SETTLEMENT_HOLD_MS) });
     } else {
       emit();
     }
@@ -862,9 +869,9 @@ export function apply(ctx, config = {}) {
   ctx.on('subagent/end', (info) => {
     const id = String(info.id);
     activations.delete(id);
-    // Without a parent to wake, nothing will arrive to release the hold.
-    const parent = meta.get(id)?.parentThreadId;
-    if (!parent || ctx.agents.get(parent)?.status !== 'running') setTimeout(() => releaseHold(id), 100);
+    // DSH has handed the result over (or had no parent to hand it to); let
+    // the parent's own turn start first.
+    setTimeout(() => releaseHold(id), 20);
   });
 
   // ---- Each session's shell commands carry its own NIPAPLAY_CHAT ----

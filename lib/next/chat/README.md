@@ -265,7 +265,11 @@ the plugin `assets/next/agent/dsh/nipa-app-server.mjs` (installed under
 this host uses from DSH's own agents, sessions and subagents. Followups,
 helpers, the session store, liveness, turn-process records and the UI are
 unchanged. DSH data lives in `<Next root>/dsh-home` (`DSH_HOME`); thread names
-and previews are in `dsh-home/nipaplay/threads.json`.
+and previews are in `dsh-home/nipaplay/threads.json`. Codex and DSH threads
+cannot resume each other, so `harness_sessions` keeps DSH's main/current
+pointers under `dsh:<harness path>`; switching runtime leaves the other
+runtime's main conversation in place for when it is switched back. Followups
+already bound to the other runtime's threads cannot be delivered meanwhile.
 
 The model route comes from the Codex configuration a Codex launch would use:
 the NipaPlay-managed `codex-home` for a NipaPlay model, otherwise the lab's
@@ -323,7 +327,10 @@ children `native-<child>`, which the endpoint records as `codex_native:<child>`
 When a child settles, DSH itself delivers its closing message to the parent:
 as next-step input if the parent is running, otherwise as a new parent turn.
 That delivery is a completed `wait` item carrying the child's final reply, so
-the native return followup is consumed exactly as for Codex's `wait`; the
-child's `turn/completed` is held (at most 3 s) until the delivery is visible.
+the native return followup is consumed exactly as for Codex's `wait`. The
+child's end is reported (its `turn/completed`, and its turn's status in
+history) only after DSH settled the child and handed the reply over (at most
+10 s), so NipaPlay's own return finds the parent busy or the `wait` already in
+its history and never opens a second turn for the same result.
 If DSH could not deliver (NipaPlay quit while the child ran), the persisted
 followup returns the result instead.

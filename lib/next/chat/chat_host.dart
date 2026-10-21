@@ -61,6 +61,11 @@ final class ChatHost {
 
   /// NipaPlay's DSH plugins (`assets/next/agent/dsh`), required with [dsh].
   final Directory? dshPlugins;
+
+  /// Durable main/current pointers are kept per runtime: a Codex thread
+  /// cannot be resumed by DSH, nor the reverse.
+  String get _sessionKey =>
+      dsh == null ? repository.path : 'dsh:${repository.path}';
   ModelLaunch? _launch;
   int? get activeModelRevision => _launch?.revision;
   bool _restarting = false;
@@ -858,7 +863,7 @@ final class ChatHost {
   /// Select the durable main thread. Explicit new conversations use startThread.
   Future<ChatMessage> getMainSession() => _control(_mainSession);
   Future<ChatMessage> _mainSession() async {
-    final id = mainThreadId ?? await sessions?.main(repository.path);
+    final id = mainThreadId ?? await sessions?.main(_sessionKey);
     if (id == null) return _select('thread/start', _common);
     mainThreadId = id;
     if (threadId == id) {
@@ -876,7 +881,7 @@ final class ChatHost {
   Future<ChatMessage> switchSession(String id) => resumeThread(id);
   Future<ChatMessage> listSessions({String? cursor, int limit = 30}) async {
     final result = await listThreads(cursor: cursor, limit: limit);
-    final main = mainThreadId ?? await sessions?.main(repository.path);
+    final main = mainThreadId ?? await sessions?.main(_sessionKey);
     return {
       ...result,
       'mainThreadId': main,
@@ -916,7 +921,7 @@ final class ChatHost {
       // inventing a user message or opening a model turn.
       await _request('thread/name/set', {
         'threadId': threadId,
-        'name': await sessions?.main(repository.path) == null
+        'name': await sessions?.main(_sessionKey) == null
             ? 'NipaPlay 主会话'
             : 'NipaPlay 对话',
       });
@@ -924,8 +929,8 @@ final class ChatHost {
     if ((thread!['turns'] as List).isEmpty) {
       _freshThreads[threadId!] = thread!;
     }
-    await sessions?.select(repository.path, threadId!);
-    mainThreadId ??= await sessions?.main(repository.path) ?? threadId;
+    await sessions?.select(_sessionKey, threadId!);
+    mainThreadId ??= await sessions?.main(_sessionKey) ?? threadId;
     model = response['model'] as String;
     provider = response['modelProvider'] as String;
     return Map<String, dynamic>.from(redactHarnessJson(response) as Map);
