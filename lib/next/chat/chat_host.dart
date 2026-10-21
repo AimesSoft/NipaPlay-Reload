@@ -3,8 +3,12 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:math';
 
+import 'package:nipaplay/security/credential_vault.dart' show CredentialRef;
+import 'package:nipaplay/security/secret_redactor.dart';
+
 import '../agent_endpoint.dart';
 import '../harness_redaction.dart';
+import 'dsh_runtime.dart';
 import 'liveness.dart';
 import 'session_store.dart';
 import 'turn_process_store.dart';
@@ -31,8 +35,11 @@ final class ChatHost {
       this.modelLaunch,
       this.probe = false,
       this.codexExecutable,
-      this.baseInstructions})
-      : sessionId = 'nipa-${DateTime.now().microsecondsSinceEpoch}-'
+      this.baseInstructions,
+      this.dsh,
+      this.dshPlugins})
+      : assert(dsh == null || (dshPlugins != null && baseInstructions != null)),
+        sessionId = 'nipa-${DateTime.now().microsecondsSinceEpoch}-'
             '${Random.secure().nextInt(1 << 32).toRadixString(16)}';
 
   final AgentEndpoint endpoint;
@@ -44,9 +51,16 @@ final class ChatHost {
   final Future<ModelLaunch> Function()? modelLaunch;
   final bool probe;
 
-  /// Replaces Codex's own base instructions, which are written for a coding
-  /// agent, with NipaPlay's description of Nipa's place and her turns.
+  /// Replaces the runtime's own base instructions, which are written for a
+  /// coding agent, with NipaPlay's description of Nipa's place and her turns.
   final File? baseInstructions;
+
+  /// Runs Nipa on DeepSeek Harness instead of Codex. The app-server protocol,
+  /// and so every consumer of this host, stays the same.
+  final DshRuntime? dsh;
+
+  /// NipaPlay's DSH plugins (`assets/next/agent/dsh`), required with [dsh].
+  final Directory? dshPlugins;
   ModelLaunch? _launch;
   int? get activeModelRevision => _launch?.revision;
   bool _restarting = false;
@@ -221,30 +235,121 @@ final class ChatHost {
     await _startServer();
   }
 
+  /// The user's login-shell environment, as a terminal would start it.
+  Future<Map<String, String>> _loginEnvironment(
+      String shell, Map<String, String> inherited) async {
+    final login = await Process.run(
+        shell, ['-l', '-c', 'exec /usr/bin/env -0'],
+        environment: inherited,
+        includeParentEnvironment: false,
+        stdoutEncoding: null,
+        stderrEncoding: null,
+        workingDirectory: repository.path);
+    if (login.exitCode != 0) {
+      throw ProcessException(
+          shell, ['-l'], 'Cannot read login environment', login.exitCode);
+    }
+    final env = <String, String>{};
+    for (final field
+        in utf8.decode(login.stdout as List<int>).split('\u0000')) {
+      final eq = field.indexOf('=');
+      if (eq > 0) env[field.substring(0, eq)] = field.substring(eq + 1);
+    }
+    return env;
+  }
+
+  /// DSH runs NipaPlay's app-server plugin over the `sdk` profile. The model
+  /// route comes from the same Codex configuration a Codex launch reads; its
+  /// key reaches DSH only as an environment value.
+  Future<void> _launchDsh(DshRuntime runtime) async {
+    final inherited = endpoint.chatEnvironment(Platform.environment);
+    final clean = endpoint.chatEnvironment(Platform.isWindows
+        ? inherited
+        : await _loginEnvironment(
+            Platform.environment['SHELL'] ?? '/bin/zsh', inherited));
+    clean['NIPAPLAY_CHAT'] = sessionId;
+    final next = endpoint.seedRepository.parent;
+    final home = await Directory('${next.path}/dsh-home').create(recursive: true);
+    final codexHome = _launch?.home ??
+        (labRoot != null
+            ? Directory('${labRoot!.path}/codex-home')
+            : Directory(clean['CODEX_HOME'] ??
+                '${clean['HOME'] ?? Platform.environment['HOME']}/.codex'));
+    final config = File('${codexHome.path}/config.toml');
+    if (!await config.exists()) {
+      throw StateError('DSH reads its model from ${config.path}; it is missing.');
+    }
+    final authFile = File('${codexHome.path}/auth.json');
+    final route = DshRoute.fromCodexConfig(await config.readAsString(),
+        model: _launch?.model,
+        provider: _launch?.provider,
+        key: _launch?.environment[DshRoute.keyVariable],
+        environment: clean,
+        auth: await authFile.exists()
+            ? Map<String, Object?>.from(
+                jsonDecode(await authFile.readAsString()) as Map)
+            : null);
+    SecretRedactor.remember(
+        const CredentialRef('next_model', 'dsh'), route.key);
+    final patch = File('${next.path}/dsh/nipa-patch.json');
+    await patch.parent.create(recursive: true);
+    await patch.writeAsString(
+        const JsonEncoder.withIndent('  ').convert(dshPatch(
+            route: route,
+            plugins: dshPlugins!,
+            baseInstructions: baseInstructions!,
+            harness: repository.path,
+            version: runtime.version,
+            webSearch: (clean['DEEPSEEK_API_KEY'] ?? '').isNotEmpty)),
+        flush: true);
+    if (labRoot case final root?) {
+      clean['TMPDIR'] =
+          (await Directory('${root.path}/temp').create(recursive: true)).path;
+    }
+    clean.addAll({
+      'DSH_HOME': home.path,
+      // DSH would otherwise also read ~/.agents/AGENTS.md, written for coding agents.
+      'DSH_AGENTS_HOME':
+          (await Directory('${home.path}/agents-home').create()).path,
+      'DSH_PERMISSION_MODE': 'danger-full-access',
+      'DSH_TELEMETRY_DISABLED': '1',
+      'NIPAPLAY_AGENT_RUNTIME': 'dsh',
+      DshRoute.keyVariable: route.key,
+    });
+    launchEnvironment = {
+      for (final key in [
+        'PATH',
+        'HTTP_PROXY',
+        'HTTPS_PROXY',
+        'ALL_PROXY',
+        'http_proxy',
+        'https_proxy',
+        'all_proxy',
+        'NO_PROXY',
+        'DSH_HOME',
+        'TMPDIR',
+        'NIPAPLAY_CHAT',
+        'NIPAPLAY_AGENT_RUNTIME'
+      ])
+        if (clean[key] != null) key: redactHarnessText(clean[key]!)
+    };
+    _process = await Process.start(
+        runtime.node, [runtime.bin, '--profile', 'sdk', '--patch', patch.path],
+        workingDirectory: repository.path,
+        environment: clean,
+        includeParentEnvironment: false);
+  }
+
   Future<void> _startServer() async {
     if (_process != null) throw StateError('Chat server already started.');
-    if (Platform.isWindows) {
+    if (dsh case final runtime?) {
+      await _launchDsh(runtime);
+    } else if (Platform.isWindows) {
       await _launchWindows();
     } else {
       final shell = Platform.environment['SHELL'] ?? '/bin/zsh';
       final inherited = endpoint.chatEnvironment(Platform.environment);
-      final login = await Process.run(
-          shell, ['-l', '-c', 'exec /usr/bin/env -0'],
-          environment: inherited,
-          includeParentEnvironment: false,
-          stdoutEncoding: null,
-          stderrEncoding: null,
-          workingDirectory: repository.path);
-      if (login.exitCode != 0) {
-        throw ProcessException(
-            shell, ['-l'], 'Cannot read login environment', login.exitCode);
-      }
-      final env = <String, String>{};
-      for (final field
-          in utf8.decode(login.stdout as List<int>).split('\u0000')) {
-        final eq = field.indexOf('=');
-        if (eq > 0) env[field.substring(0, eq)] = field.substring(eq + 1);
-      }
+      final env = await _loginEnvironment(shell, inherited);
       final clean = endpoint.chatEnvironment(env);
       final removed = env.keys.where((key) => !clean.containsKey(key)).toList();
       if (removed
@@ -414,6 +519,15 @@ final class ChatHost {
         if (!probe && modelLaunch != null && wireMethod == 'thread/started') {
           await _rememberRollout(wireParams!['thread'] as Map);
         }
+        if (wireMethod == 'thread/started') {
+          // A runtime-native helper is attributed to itself from its first
+          // turn on, before the helper task that adopts it exists.
+          final started = wireParams!['thread'] as Map;
+          if (started['parentThreadId'] case final String _) {
+            threadOrigins.putIfAbsent(
+                started['id'] as String, () => 'codex_native:${started['id']}');
+          }
+        }
         final eventThread = wireParams?['threadId'] as String? ??
             _requestThreads[message['id']];
         if (eventThread != null) {
@@ -550,6 +664,7 @@ final class ChatHost {
         'commandExecution',
         'fileChange',
         'mcpToolCall',
+        'dynamicToolCall',
         'collabAgentToolCall',
         'plan',
         'webSearch'
@@ -675,6 +790,13 @@ final class ChatHost {
   Future<ChatMessage> startThread() =>
       _control(() => _select('thread/start', _common));
 
+  /// The NIPAPLAY_CHAT value whose calls the endpoint attributes to [origin].
+  String _chatFor(String origin) => origin.startsWith('harness_cli:helper:')
+      ? 'helper-${origin.substring('harness_cli:helper:'.length)}'
+      : origin.startsWith('codex_native:')
+          ? 'native-${origin.substring('codex_native:'.length)}'
+          : sessionId;
+
   /// Does not select the foreground conversation or change its durable pointer.
   Future<String> helperThread(String helperId, String title,
       {String? resumeId}) => _control(() async {
@@ -714,10 +836,7 @@ final class ChatHost {
         'config': {
           ...await _projectHookConfig(),
           if (threadOrigins[id] case final String origin)
-            'shell_environment_policy.set.NIPAPLAY_CHAT':
-                origin.startsWith('harness_cli:helper:')
-                    ? 'helper-${origin.substring('harness_cli:helper:'.length)}'
-                    : sessionId,
+            'shell_environment_policy.set.NIPAPLAY_CHAT': _chatFor(origin),
         }
       });
     }
@@ -786,8 +905,7 @@ final class ChatHost {
       'config': {
         ...await _projectHookConfig(),
         if (origin != null)
-          'shell_environment_policy.set.NIPAPLAY_CHAT':
-              'helper-${origin.substring('harness_cli:helper:'.length)}'
+          'shell_environment_policy.set.NIPAPLAY_CHAT': _chatFor(origin)
       }
     });
     thread = _public(Map<String, dynamic>.from(response['thread'] as Map));

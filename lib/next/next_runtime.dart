@@ -68,6 +68,7 @@ import 'harness_location.dart';
 import 'harness_hooks.dart';
 import 'harness_repository.dart';
 import 'chat/chat_host.dart';
+import 'chat/dsh_runtime.dart';
 import 'memory/recent.dart';
 import 'work_detail_bridge.dart';
 import 'chat/debug_chat.dart';
@@ -521,18 +522,44 @@ final class NextRuntime extends ChangeNotifier {
   Future<void> _startChat(Directory repository) async {
     chatError = null;
     await _hostEvents?.cancel();
+    final labRoot = LabProfile.active ? Directory(LabProfile.root) : null;
+    final DshRuntime? dsh;
+    try {
+      dsh = DshRuntime.select(Platform.environment, labRoot: labRoot);
+    } on StateError catch (error) {
+      chatError = redactHarnessText(error.message);
+      await ServiceProvider.nextCore.followups.attach(null, reason: chatError);
+      _hostSettings!.notify();
+      return;
+    }
     // NipaPlay's, not the harness's: written from the build on every start.
-    final base = File('${ServiceProvider.nextCore.root.path}/agent/nipa-base.md');
-    await base.parent.create(recursive: true);
-    await base.writeAsString(
-        await rootBundle.loadString('assets/next/agent/nipa-base.md'),
-        flush: true);
+    final agent = '${ServiceProvider.nextCore.root.path}/agent';
+    Future<File> install(String asset, String path) async {
+      final file = File('$agent/$path');
+      await file.parent.create(recursive: true);
+      await file.writeAsString(await rootBundle.loadString(asset), flush: true);
+      return file;
+    }
+    final base = dsh == null
+        ? await install('assets/next/agent/nipa-base.md', 'nipa-base.md')
+        : await install('assets/next/agent/nipa-base-dsh.md', 'nipa-base-dsh.md');
+    if (dsh != null) {
+      for (final name in const [
+        'nipa-app-server.mjs',
+        'nipa-memory.mjs',
+        'nipa-persona.mjs'
+      ]) {
+        await install('assets/next/agent/dsh/$name', 'dsh/$name');
+      }
+    }
     final host = chat = ChatHost(endpoint: _endpoint, repository: repository,
       memory: ServiceProvider.nextCore.memory,
       sessions: ServiceProvider.nextCore.sessions,
       modelLaunch: _hostSettings!.launch,
-      labRoot: LabProfile.active ? Directory(LabProfile.root) : null,
-      baseInstructions: base);
+      labRoot: labRoot,
+      baseInstructions: base,
+      dsh: dsh,
+      dshPlugins: dsh == null ? null : Directory('$agent/dsh'));
     final core = ServiceProvider.nextCore;
     core.memory.recent = (current) async => recentMemoryFacts(host,
       [for (final job in await core.engine.list())

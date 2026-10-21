@@ -329,8 +329,13 @@ final class AgentEndpoint {
     if (chat != null && !RegExp(r'^[a-zA-Z0-9_-]{1,128}$').hasMatch(chat)) {
       return _response({'error': 'Invalid chat session.'}, 400);
     }
+    // `native-<thread>` is a runtime-native helper's own shell (DSH subagents
+    // carry it); it is attributed like that helper's task.
     final origin = chat == null ? 'harness_cli' : chat.startsWith('helper-')
-        ? 'harness_cli:helper:${chat.substring(7)}' : 'harness_cli:chat:$chat';
+        ? 'harness_cli:helper:${chat.substring(7)}'
+        : chat.startsWith('native-')
+            ? 'codex_native:${chat.substring(7)}'
+            : 'harness_cli:chat:$chat';
     if (decoded.containsKey('full') && decoded['full'] is! bool) {
       return _response({'error': 'Expected boolean full.'}, 400);
     }
