@@ -550,6 +550,7 @@ class ChatTurn {
     'download.read': '看下载',
     'download.pause': '暂停下载',
     'download.resume': '继续下载',
+    'download.wait_files': '等下载',
     'download.': '管理下载',
     'media.metadata.search': '查资料',
     'media.metadata.search_batch': '查资料',
