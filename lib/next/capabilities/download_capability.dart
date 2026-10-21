@@ -112,6 +112,7 @@ final class DownloadCapability implements Capability {
             'delete'
           ])
             _DownloadAction(downloads, sources, operation, deleteAudit),
+          _WaitFilesAction(downloads),
         ];
   @override
   final List<Action> actions;
@@ -386,4 +387,46 @@ final class _DeleteAction extends Action<_DownloadJson, _DownloadJson> {
                       deleteData: true))
                   .toJson()
             }));
+}
+
+final class _WaitFilesAction extends Action<_DownloadJson, _DownloadJson> {
+  _WaitFilesAction(this.downloads);
+  final DownloadService downloads;
+  @override
+  ActionSpec get spec => const ActionSpec(
+        id: 'download.wait_files',
+        title: 'Wait for download files',
+        description:
+            'Wait until a video file of the download jobId is complete, verified and registered in the library, and return it. known lists the file indices you have already handled; those are never returned again. Each file has the same facts as an entry of download.read task.files, including media. Returns at once if such files already exist. Otherwise it returns when one completes, when the download has ended (state succeeded, failed or cancelled: ended is true and files holds every remaining one, possibly none), or after waitSeconds (default 300, at most 300) with no files and timedOut true. Reports facts only; it binds nothing.',
+        effect: Effect.read,
+        input: ObjectSchema({
+          'jobId': _idSchema,
+          'known': ArraySchema(IntegerSchema(minimum: 0)),
+          'waitSeconds': IntegerSchema(minimum: 0, maximum: 300),
+        }, required: [
+          'jobId'
+        ]),
+        output: ObjectSchema({
+          'jobId': _idSchema,
+          'state': StringSchema(),
+          'files': ArraySchema(ObjectSchema({}, additionalProperties: true)),
+          'ended': BooleanSchema(),
+          'timedOut': BooleanSchema(),
+        }, required: [
+          'jobId',
+          'state',
+          'files',
+          'ended',
+          'timedOut'
+        ]),
+      );
+  @override
+  _DownloadJson decodeInput(JsonMap json) => _DownloadJson(json);
+  @override
+  Future<Outcome<_DownloadJson>> run(
+          _DownloadJson input, Invocation invocation) async =>
+      Completed(_DownloadJson(await downloads.waitFiles(
+          input.json['jobId'] as String,
+          ((input.json['known'] as List?) ?? const []).cast<int>().toSet(),
+          (input.json['waitSeconds'] as num?)?.toInt() ?? 300)));
 }

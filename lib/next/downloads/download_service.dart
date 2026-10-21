@@ -218,6 +218,48 @@ final class DownloadService {
     return {'job': job.toJson(), 'task': facts};
   }
 
+  /// Returns the completed, imported, verified video files of [jobId] whose
+  /// index is not in [known] as soon as there are any, when the download has
+  /// ended, or after [waitSeconds]. It polls the saved checkpoint, which is
+  /// cheap; the full [read] runs only for the answer.
+  Future<JsonMap> waitFiles(String jobId, Set<int> known, int waitSeconds,
+      {Duration interval = const Duration(seconds: 1)}) async {
+    final clock = Stopwatch()..start();
+    final limit = Duration(seconds: waitSeconds);
+    while (true) {
+      final job = await _downloadJob(jobId);
+      final ready = {
+        for (final row in job.checkpoint['completedFiles'] as List? ?? [])
+          if ((row as Map)['isVideo'] == true &&
+              row['imported'] == true &&
+              row['verification'] == 'verified' &&
+              !known.contains(row['index']))
+            row['index'] as int
+      };
+      final ended = job.state.isTerminal;
+      final timedOut = !ended && ready.isEmpty && clock.elapsed >= limit;
+      if (ready.isNotEmpty || ended || timedOut) {
+        final read = await this.read(jobId);
+        final files = [
+          for (final row in (read['task'] as Map?)?['files'] as List? ?? [])
+            if (ready.contains((row as Map)['index']) &&
+                row['isVideo'] == true &&
+                row['imported'] == true)
+              row
+        ];
+        return {
+          'jobId': jobId,
+          'state': (read['job'] as Map)['state'],
+          'files': files,
+          'ended': ended,
+          'timedOut': timedOut,
+        };
+      }
+      final remaining = limit - clock.elapsed;
+      await Future<void>.delayed(remaining < interval ? remaining : interval);
+    }
+  }
+
   Future<JsonMap> selectFiles(String jobId, List<int> indices) =>
       _serial(() async {
         final job = await _downloadJob(jobId);
