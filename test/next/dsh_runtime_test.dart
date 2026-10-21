@@ -11,6 +11,7 @@ import 'package:nipaplay/next/agent_endpoint.dart';
 import 'package:nipaplay/next/chat/chat_host.dart';
 import 'package:nipaplay/next/chat/dsh_runtime.dart';
 import 'package:nipaplay/next/chat/helpers.dart';
+import 'package:nipaplay/next/chat/memory_stale.dart';
 import 'package:nipaplay/next/chat/model_launch.dart';
 import 'package:nipaplay/next/chat/session_store.dart';
 import 'package:nipaplay/next/followups/service.dart';
@@ -61,6 +62,55 @@ trust_level = "trusted"
     expect(env.key, 'from-env');
     expect(() => DshRoute.fromCodexConfig('model = "m"\nmodel_provider = "openai"\n'),
         throwsStateError);
+  });
+
+  group('memory stale notifier', () {
+    test('sends the first change at once and merges a burst into one more send', () async {
+      var sent = 0;
+      final notifier = MemoryStaleNotifier(() => sent++, window: const Duration(milliseconds: 120));
+      addTearDown(notifier.close);
+      notifier.changed();
+      expect(sent, 1);
+      for (var i = 0; i < 5; i++) {
+        notifier.changed();
+      }
+      expect(sent, 1, reason: 'inside the window nothing more is sent yet');
+      await Future<void>.delayed(const Duration(milliseconds: 200));
+      expect(sent, 2, reason: 'the burst became one send when the window ended');
+      await Future<void>.delayed(const Duration(milliseconds: 200));
+      expect(sent, 2, reason: 'no change, no send');
+      notifier.changed();
+      expect(sent, 3, reason: 'a change after a quiet window is sent at once');
+    });
+
+    test('a closed notifier sends nothing, even for a change still waiting', () async {
+      var sent = 0;
+      final notifier = MemoryStaleNotifier(() => sent++, window: const Duration(milliseconds: 60));
+      notifier.changed();
+      notifier.changed();
+      notifier.close();
+      await Future<void>.delayed(const Duration(milliseconds: 150));
+      notifier.changed();
+      expect(sent, 1);
+    });
+
+    test('a host that does not run DSH never sends a stale notice', () async {
+      final host = ChatHost(
+          endpoint: AgentEndpoint(
+              harness: Harness([]),
+              seed: {},
+              appVersion: 'codex',
+              credentialFile: File('${Directory.systemTemp.path}/unused-endpoint.json'),
+              seedRepository: Directory('${Directory.systemTemp.path}/unused-seed'),
+              port: 0),
+          repository: Directory.systemTemp,
+          memoryStaleWindow: const Duration(milliseconds: 10));
+      host.memoryChanged();
+      host.memoryChanged();
+      await Future<void>.delayed(const Duration(milliseconds: 60));
+      expect(host.available, isFalse);
+      await host.close();
+    });
   });
 
   group('DSH runtime', () {
@@ -128,6 +178,50 @@ trust_level = "trusted"
       final patch = await File('${lab.root.path}/dsh/nipa-patch.json').readAsString();
       expect(patch, isNot(contains(_key)));
       expect(jsonEncode(lab.events), isNot(contains(_key)));
+    });
+
+    test("a change in NipaPlay's 动态 rebuilds the memory block for the next request, and only then", () async {
+      await open([]);
+      final host = await lab.start();
+      await host.getMainSession();
+      final extra = File('${lab.repository.path}/recent-extra.txt');
+      Future<int> hookCalls() async =>
+          (await File('${lab.repository.path}/hook-calls.jsonl').readAsLines()).length;
+      Future<void> turn(String text) async {
+        lab.events.clear();
+        await host.startTurn(text);
+        await lab.next((e) => e['method'] == 'turn/completed');
+      }
+
+      await turn('FIRST_QX');
+      expect(await hookCalls(), 1);
+      expect(jsonEncode(fake.requests.last['input']), isNot(contains('ACTIVITY_MARKER_B')));
+
+      // The facts changed, but nobody said so: the block is not rebuilt, and
+      // turns after turns add no snapshot.
+      await extra.writeAsString('ACTIVITY_MARKER_B');
+      await turn('SECOND_QX');
+      await turn('THIRD_QX');
+      expect(await hookCalls(), 1);
+      expect(jsonEncode(fake.requests.last['input']), isNot(contains('ACTIVITY_MARKER_B')));
+
+      host.memoryChanged();
+      await turn('FOURTH_QX');
+      expect(await hookCalls(), 2);
+      final updated = jsonEncode(fake.requests.last['input']);
+      expect(updated, contains('ACTIVITY_MARKER_B'));
+      expect(updated, contains('RECENT_FIXTURE for ${host.mainThreadId}'));
+      // The rebuilt block is a new snapshot; the older one is not edited.
+      expect('RECENT_FIXTURE'.allMatches(updated).length, 2);
+
+      await turn('FIFTH_QX');
+      expect(await hookCalls(), 2, reason: 'one notice rebuilds once');
+      expect('RECENT_FIXTURE'.allMatches(jsonEncode(fake.requests.last['input'])).length, 2);
+      final sources = [
+        for (final line in await File('${lab.repository.path}/hook-calls.jsonl').readAsLines())
+          (jsonDecode(line) as Map)['action']
+      ];
+      expect(sources, hasLength(2));
     });
 
     test("the model gets DSH's own prompt and tool descriptions, with Nipa as its persona", () async {
@@ -682,8 +776,14 @@ class Client:
     def call(self, action, inputs):
         with open(os.path.join(os.path.dirname(os.path.abspath(__file__)), 'hook-calls.jsonl'), 'a') as log:
             log.write(json.dumps({'action': action, 'inputs': inputs, 'chat': os.environ.get('NIPAPLAY_CHAT')}) + '\n')
+        extra = ''
+        try:
+            with open(os.path.join(os.path.dirname(os.path.abspath(__file__)), 'recent-extra.txt')) as f:
+                extra = ' ' + f.read().strip()
+        except OSError:
+            pass
         return {'status': 'completed', 'result': {'settings': {'subtitle': 'zh-Hans'},
-                'recent': {'text': 'RECENT_FIXTURE for ' + str(inputs.get('threadId')), 'omitted': []}}}
+                'recent': {'text': 'RECENT_FIXTURE for ' + str(inputs.get('threadId')) + extra, 'omitted': []}}}
     def result(self, value):
         return value['result']
 def redact(text, secrets=()):

@@ -622,6 +622,12 @@ export function apply(ctx, config = {}) {
   };
 
   async function onMessage({ id, method, params }) {
+    if (method === 'nipa/memoryStale' && (id === undefined || id === null)) {
+      // NipaPlay's recent facts changed: nipa-memory rebuilds its block
+      // before each root session's next model request.
+      globalThis[Symbol.for('nipaplay.dsh.memoryStale')]?.();
+      return;
+    }
     if (method === undefined || id === undefined || id === null) return;
     const handler = handlers[method];
     if (!handler) {

@@ -10,6 +10,7 @@ import '../agent_endpoint.dart';
 import '../harness_redaction.dart';
 import 'dsh_runtime.dart';
 import 'liveness.dart';
+import 'memory_stale.dart';
 import 'session_store.dart';
 import 'turn_process_store.dart';
 import '../memory/service.dart';
@@ -37,10 +38,15 @@ final class ChatHost {
       this.codexExecutable,
       this.baseInstructions,
       this.dsh,
-      this.dshPlugins})
+      this.dshPlugins,
+      Duration memoryStaleWindow = const Duration(seconds: 2)})
       : assert(dsh == null || dshPlugins != null),
         sessionId = 'nipa-${DateTime.now().microsecondsSinceEpoch}-'
-            '${Random.secure().nextInt(1 << 32).toRadixString(16)}';
+            '${Random.secure().nextInt(1 << 32).toRadixString(16)}' {
+    _memoryStale = MemoryStaleNotifier(() {
+      if (available) _send({'method': 'nipa/memoryStale', 'params': {}});
+    }, window: memoryStaleWindow);
+  }
 
   final AgentEndpoint endpoint;
   final Directory repository;
@@ -131,6 +137,15 @@ final class ChatHost {
         'found': processes.read(id, turnId) != null,
         'process': processes.read(id, turnId),
       };
+
+  late final MemoryStaleNotifier _memoryStale;
+
+  /// NipaPlay's recent facts (动态) changed. DSH rebuilds its memory block
+  /// before the next model request of every root session; merged to one
+  /// notice per window. Codex only reads them when a session starts.
+  void memoryChanged() {
+    if (dsh != null) _memoryStale.changed();
+  }
 
   bool get available => _process != null && !_closing && !_transportClosed;
   int? get processId => _process?.pid;
@@ -1111,6 +1126,7 @@ final class ChatHost {
 
   Future<void> _close() async {
     _closing = true;
+    _memoryStale.close();
     _clock?.cancel();
     _flush?.cancel();
     // Closing the process ends its active turn; no liveness timer does this.
