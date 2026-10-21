@@ -331,10 +331,12 @@ view lists). `next_runtime.dart` forwards it to `ChatHost.memoryChanged()`,
 which, under DSH only, sends the notification `nipa/memoryStale` (no
 parameters) at once and merges further changes within 2 seconds into one more
 (`MemoryStaleNotifier`). The shim calls the hook nipa-memory publishes under
-`Symbol.for('nipaplay.dsh.memoryStale')`, which marks every root session's
-state stale and keeps its `source`; the block is rebuilt before that session's
-next `agent/request`. A turn adds no snapshot unless a notice or a file change
-came first. Subagent sessions are not marked. Codex never receives the notice.
+`Symbol.for('nipaplay.dsh.memoryStale')`, which notes the change for every
+root session; the block is rebuilt, keeping its `source`, at the first request
+of that session's next turn. Mid-turn her own calls keep changing 动态, and a
+rebuild per step would append a snapshot per step; what reaches her during a
+turn arrives as followups at her next step. A turn adds at most one snapshot,
+and none unless a notice or a file change came first. Subagent sessions are not marked. Codex never receives the notice.
 
 Subagents: a DSH child session is announced with `thread/started` (source
 `subAgent`, `parentThreadId`); the host attributes it to `codex_native:<child>`

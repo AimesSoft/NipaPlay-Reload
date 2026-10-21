@@ -12,8 +12,9 @@
 // changed, so edits reach the very next request. NipaPlay's recent facts
 // change on their own, so the app-server shim also calls the hook under
 // Symbol.for('nipaplay.dsh.memoryStale') when NipaPlay reports a change; that
-// marks every root session stale, keeping each one's source, and the block is
-// rebuilt at its next request.
+// marks every root session's facts as changed, and the block is rebuilt at
+// the first request of that session's next turn: mid-turn her own calls keep
+// changing the facts, and a rebuild per step would append a snapshot per step.
 import { spawn } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { existsSync, lstatSync, readFileSync } from 'node:fs';
@@ -59,7 +60,7 @@ export function apply(ctx, config = {}) {
   const stateFor = (sessionId) => {
     let state = states.get(sessionId);
     if (!state) {
-      state = { source: 'startup', stale: true, root: true, text: '', files: '', refreshing: undefined };
+      state = { source: 'startup', stale: true, root: true, changed: false, turnStart: false, text: '', files: '', refreshing: undefined };
       states.set(sessionId, state);
     }
     return state;
@@ -111,6 +112,13 @@ export function apply(ctx, config = {}) {
   async function refresh(agent) {
     const sessionId = String(agent.session.id);
     const state = stateFor(sessionId);
+    if (state.turnStart) {
+      state.turnStart = false;
+      if (state.changed) {
+        state.changed = false;
+        state.stale = true;
+      }
+    }
     const current = files();
     if (!state.stale && state.files === current) return;
     if (!state.refreshing) {
@@ -133,6 +141,7 @@ export function apply(ctx, config = {}) {
     state.root = agent.session.header?.parentSession === undefined;
   });
   ctx.on('session/event', (session, event) => {
+    if (event.type === 'turn/start') stateFor(String(session.id)).turnStart = true;
     // A compaction replaces surface history, including the earlier snapshot.
     if (event.surfaceOp && typeof event.surfaceOp === 'object' && event.surfaceOp.op === 'replace') {
       const state = stateFor(String(session.id));
@@ -153,7 +162,7 @@ export function apply(ctx, config = {}) {
   });
   const STALE_KEY = Symbol.for('nipaplay.dsh.memoryStale');
   const markStale = () => {
-    for (const state of states.values()) if (state.root) state.stale = true;
+    for (const state of states.values()) if (state.root) state.changed = true;
   };
   ctx.effect(() => {
     globalThis[STALE_KEY] = markStale;

@@ -224,6 +224,32 @@ trust_level = "trusted"
       expect(sources, hasLength(2));
     });
 
+    test('a change during a turn reaches the block at the next turn, not at the next step', () async {
+      await open([
+        _Rule(when: ['MIDTURN_QX'], unless: ['call_'], calls: [_bash('sleep 2; echo waited')]),
+        _Rule(when: ['MIDTURN_QX', 'call_'], text: 'Done.'),
+      ]);
+      final host = await lab.start();
+      await host.getMainSession();
+      final extra = File('${lab.repository.path}/recent-extra.txt');
+      Future<int> hookCalls() async =>
+          (await File('${lab.repository.path}/hook-calls.jsonl').readAsLines()).length;
+
+      await host.startTurn('MIDTURN_QX');
+      await lab.next((e) => e['method'] == 'item/started' && e['params']['item']['type'] == 'commandExecution');
+      await extra.writeAsString('ACTIVITY_MARKER_C');
+      host.memoryChanged();
+      await lab.next((e) => e['method'] == 'turn/completed');
+      expect(await hookCalls(), 1, reason: 'her own turn goes on with the block it began with');
+      expect(jsonEncode(fake.requests.last['input']), isNot(contains('ACTIVITY_MARKER_C')));
+
+      lab.events.clear();
+      await host.startTurn('NEXT_QX');
+      await lab.next((e) => e['method'] == 'turn/completed');
+      expect(await hookCalls(), 2);
+      expect(jsonEncode(fake.requests.last['input']), contains('ACTIVITY_MARKER_C'));
+    });
+
     test("the model gets DSH's own prompt and tool descriptions, with Nipa as its persona", () async {
       await open([_Rule(when: ['你好'], text: '好。')]);
       final host = await lab.start();
