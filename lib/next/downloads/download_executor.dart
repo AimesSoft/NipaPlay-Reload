@@ -514,25 +514,8 @@ final class DownloadExecutor implements JobExecutor {
   }
 
   Future<List<JsonMap>> _readRemovedFiles(
-      DownloadBackend backend, Job job) async {
-    final files = <JsonMap>[];
-    for (final row
-        in (job.checkpoint['files'] as List? ?? []).cast<JsonMap>()) {
-      final size = await backend.readSize(DownloadFile(
-          location: DownloadLocation(
-              path: row['path'] as String, isLocal: row['local'] as bool),
-          expectedSize: row['expectedSize'] as int,
-          isVideo: false));
-      files.add({
-        'path': row['path'],
-        'expectedSize': row['expectedSize'],
-        'actualSize': size,
-        'retained': size != null,
-        'imported': await library.lookup(row['path'] as String) != null,
-      });
-    }
-    return files;
-  }
+          DownloadBackend backend, Job job) =>
+      readRemovedFiles(backend, library, job);
 
   JobReceipt _receipt(DownloadSnapshot task, List<JsonMap> files,
           {String? reason}) =>
@@ -552,4 +535,26 @@ final class DownloadExecutor implements JobExecutor {
         }.toList(),
         if (reason != null) 'reason': reason
       });
+}
+
+/// Re-reads each manifest file of [job] after its session was removed:
+/// what is still on disk (actualSize, retained) and what the library holds.
+Future<List<JsonMap>> readRemovedFiles(
+    DownloadBackend backend, DownloadLibrary library, Job job) async {
+  final files = <JsonMap>[];
+  for (final row in (job.checkpoint['files'] as List? ?? []).cast<JsonMap>()) {
+    final size = await backend.readSize(DownloadFile(
+        location: DownloadLocation(
+            path: row['path'] as String, isLocal: row['local'] as bool),
+        expectedSize: row['expectedSize'] as int,
+        isVideo: false));
+    files.add({
+      'path': row['path'],
+      'expectedSize': row['expectedSize'],
+      'actualSize': size,
+      'retained': size != null,
+      'imported': await library.lookup(row['path'] as String) != null,
+    });
+  }
+  return files;
 }

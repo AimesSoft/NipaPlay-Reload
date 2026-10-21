@@ -14,6 +14,26 @@ void main() {
   });
   tearDown(() => engine.close());
 
+  test('only the receipt of a finished job can be amended', () async {
+    await engine.start();
+    final submitted = await engine.submit(type: 'test', title: 'Amend');
+    final context = await executor.entered.future;
+    await expectLater(
+        engine.amendReceipt(submitted.jobId, verified(details: {'a': 1})),
+        throwsA(isA<Failure>()
+            .having((f) => f.code, 'code', FailureCode.conflict)));
+    final done = await context.succeed(verified(details: {'a': 0}));
+    final amended =
+        await engine.amendReceipt(submitted.jobId, verified(details: {'a': 1}));
+    expect(amended.state, JobState.succeeded);
+    expect(amended.revision, done.revision + 1);
+    expect(amended.receipt!.details, {'a': 1});
+    expect((await engine.get(submitted.jobId)).toJson(), amended.toJson());
+    final events = await store.events(submitted.jobId);
+    expect(events.last.kind, 'receipt_amended');
+    expect(events.last.snapshot, amended.toJson());
+  });
+
   test('verified lifecycle persists progress, phases, checkpoint and receipt',
       () async {
     await engine.start();

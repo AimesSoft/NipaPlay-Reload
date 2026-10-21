@@ -229,7 +229,7 @@ void main() {
     await engine.cancel(job.jobId);
   });
 
-  test('readding a removed success creates a new job and preserves its receipt',
+  test('readding a removed success creates a new job and amends the old receipt',
       () async {
     backend.present = true;
     await backend.finish();
@@ -241,8 +241,12 @@ void main() {
     await downloads.remove(original.jobId);
     final replacement = await downloads.add(testRequest);
     expect(replacement.jobId, isNot(original.jobId));
-    expect(jsonEncode((await engine.get(original.jobId)).receipt!.toJson()),
-        receipt);
+    // The old receipt stays, now saying the session is gone.
+    final kept = (await engine.get(original.jobId)).receipt!;
+    expect(kept.verification, done.receipt!.verification);
+    expect(kept.details['infoHash'], done.receipt!.details['infoHash']);
+    expect(kept.details['sessionPresent'], false);
+    expect(receipt, isNot(jsonEncode(kept.toJson())));
     expect((await engine.list(type: 'download')).map((j) => j.jobId),
         containsAll([original.jobId, replacement.jobId]));
   });

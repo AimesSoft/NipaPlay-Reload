@@ -17,6 +17,13 @@ directory and are never directories. The result carries `task` (readback:
 The library keeps work, episode and watch progress; the episode simply has no
 playable local file. `media.mesh_files` delete/overwrite decisions are confirmed
 by the caller, not by the user in NipaPlay.
+`download.remove` and `download.delete` of a download that had already ended
+(succeeded, failed or cancelled) and still had a session keep its state but
+amend its receipt: `files` are re-read (`actualSize`, `retained`, `imported`),
+`sessionPresent` is false, `removedAt` is the UTC time and `dataDeleted` says
+whether the data went too. The amendment is a `receipt_amended` task event and
+does not raise a new completion follow-up. A removed download that is added
+again is a new job; the old one keeps its amended record.
 
 Agent controls use the same Classic torrent session and preferences. Discover
 jobs with `task.list` (`type: download`); `download.read` accepts `jobId` or

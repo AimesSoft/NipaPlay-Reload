@@ -285,6 +285,17 @@ final class TaskEngine {
     return job;
   }
 
+  /// Replaces the receipt of a job that already ended. State, error and
+  /// everything else stay as they were; only the recorded facts change.
+  Future<Job> amendReceipt(String jobId, JobReceipt receipt) =>
+      _edit(jobId, 'receipt_amended', (job) {
+        if (!job.state.isTerminal) {
+          throw const Failure(FailureCode.conflict,
+              'Only the receipt of a finished job can be amended.');
+        }
+        return _change(job, receipt: receipt, amendTerminal: true);
+      });
+
   Future<Job> pause(String jobId) async {
     final job = await _edit(
         jobId, 'paused', (job) {
@@ -527,9 +538,10 @@ Job _change(Job job,
     DateTime? retryAt,
     Failure? error,
     JobReceipt? receipt,
-    DateTime? cancelRequestedAt}) {
+    DateTime? cancelRequestedAt,
+    bool amendTerminal = false}) {
   final next = state ?? job.state;
-  if (job.state.isTerminal ||
+  if ((job.state.isTerminal && !amendTerminal) ||
       (next != job.state && !job.state.canTransitionTo(next))) {
     throw Failure(FailureCode.conflict,
         'Illegal job transition: ${job.state.wireName} → ${next.wireName}.');

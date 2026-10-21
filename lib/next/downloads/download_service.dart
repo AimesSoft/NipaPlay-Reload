@@ -504,7 +504,52 @@ final class DownloadService {
           } else {
             await backend.remove(task.handle);
           }
+          // A job that had already ended keeps its old receipt otherwise;
+          // an ended job removed while running was recorded by the executor.
+          if (job.state.isTerminal) {
+            await _amendRemoved(job, backend, deleteData);
+          }
         }
         return engine.get(jobId);
       });
+
+  Future<void> _amendRemoved(
+      Job job, DownloadBackend backend, bool deleteData) async {
+    final reread = {
+      for (final row in await readRemovedFiles(backend, library, job))
+        row['path']: row
+    };
+    final receipt = job.receipt;
+    final old = receipt?.details ?? const <String, Object?>{};
+    final oldFiles = (old['files'] as List? ?? []).cast<JsonMap>();
+    final files = oldFiles.isEmpty
+        ? reread.values.toList()
+        : [
+            for (final row in oldFiles)
+              if (reread[row['path']] case final fresh?)
+                {
+                  for (final entry in row.entries)
+                    if (fresh['retained'] == true ||
+                        (entry.key != 'canonicalPath' &&
+                            entry.key != 'media'))
+                      entry.key: entry.value,
+                  'actualSize': fresh['actualSize'],
+                  'retained': fresh['retained'],
+                  'imported': fresh['imported'],
+                }
+              else
+                row
+          ];
+    await engine.amendReceipt(
+        job.jobId,
+        JobReceipt(
+            verification: receipt?.verification ?? VerificationLevel.verified,
+            details: {
+              ...old,
+              'files': files,
+              'sessionPresent': false,
+              'removedAt': DateTime.now().toUtc().toIso8601String(),
+              'dataDeleted': deleteData
+            }));
+  }
 }
