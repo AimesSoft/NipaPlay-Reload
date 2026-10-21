@@ -6,7 +6,8 @@ import 'service.dart';
 
 /// Field projections of existing facts, in their original order and wording.
 Future<JsonMap> recentMemoryFacts(ChatHost host, List<JsonMap> jobs,
-    List<JsonMap> followups, List<JsonMap> activity, String? current) async {
+    List<JsonMap> followups, List<JsonMap> activity, String? current,
+    {List<JsonMap> finishedHelpers = const []}) async {
   String? source;
   final messages = <JsonMap>[];
   final sessions = await host.listThreads(limit: 30, sortKey: 'updated_at');
@@ -89,6 +90,21 @@ Future<JsonMap> recentMemoryFacts(ChatHost host, List<JsonMap> jobs,
               })
           .toList()),
       450
+    ),
+    // 动态 lists every step; what a subagent or a background turn concluded
+    // is its receipt.
+    (
+      '最近办完的后台任务',
+      jsonEncode(finishedHelpers
+          .map((r) => {
+                for (final key in ['title', 'state', 'updatedAt'])
+                  if (r.containsKey(key)) key: r[key],
+                if (((r['receipt'] as Map?)?['details'] as Map?)?['summary']
+                    case final summary?)
+                  'summary': summary,
+              })
+          .toList()),
+      900
     ),
   ];
   final omitted = <String>[];

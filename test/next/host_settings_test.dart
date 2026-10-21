@@ -454,9 +454,21 @@ print(json.dumps({'hookSpecificOutput': {'hookEventName': 'SessionStart',
     expect(host!.processId, isNot(process));
     expect(host!.model, 'managed-model');
     expect(host!.provider, 'nipaplay');
-    final recent = await recentMemoryFacts(host!, [], [], [], id);
+    final recent = await recentMemoryFacts(host!, [], [], [], id,
+        finishedHelpers: [
+          {
+            'title': '新进片库的 9 个文件',
+            'state': 'succeeded',
+            'receipt': {
+              'details': {'summary': 'BACKGROUND_CONCLUSION 9 集认好'}
+            }
+          }
+        ]);
     expect(recent['sourceThreadId'], id);
     expect(recent['text'], contains('Reply OK again.'));
+    expect(recent['text'], contains('最近办完的后台任务'));
+    expect(recent['text'], contains('BACKGROUND_CONCLUSION 9 集认好'),
+        reason: 'what a background turn concluded, not only its steps');
     await settings.setModel(const UiModelChoice(source: UiModelSource.codex));
     await hookPreference.writeAsString('returned preference');
     await turn('Reply OK a third time.');

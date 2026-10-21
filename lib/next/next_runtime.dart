@@ -573,7 +573,15 @@ final class NextRuntime extends ChangeNotifier {
         if (!job.state.isTerminal) job.toJson()],
       (await core.followups.list()).where((r) =>
         !const {'completed', 'cancelled'}.contains(r['state'])).toList(),
-      (await core.state.views['activity']!.readAll!()).rows, current);
+      (await core.state.views['activity']!.readAll!()).rows, current,
+      finishedHelpers: [
+        for (final job in ((await core.engine.list(type: 'agent.helper'))
+                .where((job) => job.state.isTerminal)
+                .toList()
+              ..sort((a, b) => b.updatedAt.compareTo(a.updatedAt)))
+            .take(3))
+          job.toJson()
+      ]);
     // DSH's memory block carries the latest 动态; tell it when that grows.
     _activityEvents = core.activityChanges.stream.listen((_) => host.memoryChanged());
     _hostEvents = host.events.listen((event) {
