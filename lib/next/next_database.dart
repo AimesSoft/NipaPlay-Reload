@@ -61,7 +61,15 @@ Future<Database> openNextDatabase(Directory root,
   final db = await factory.openDatabase('${root.path}/next.db',
       options: OpenDatabaseOptions(
         version: _migrations.length,
-        onConfigure: (db) => db.execute('PRAGMA foreign_keys = ON'),
+        onConfigure: (db) async {
+          await db.execute('PRAGMA foreign_keys = ON');
+          // Other processes read this file too (a shell, a backup, Spotlight).
+          // In WAL a reader never makes a commit fail, and a busy moment is
+          // waited out: a failed COMMIT left the connection inside its
+          // transaction and every later write locked out (E2E-35).
+          await db.rawQuery('PRAGMA journal_mode = WAL');
+          await db.rawQuery('PRAGMA busy_timeout = 5000');
+        },
         onCreate: (db, version) => _migrate(db, 0, version),
         onUpgrade: _migrate,
       ));

@@ -20,6 +20,23 @@ import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
 void main() {
   sqfliteFfiInit();
+  test('another process reading next.db never makes a commit fail', () async {
+    final root = await Directory.systemTemp.createTemp('next-db-reader-');
+    addTearDown(() => root.delete(recursive: true));
+    final db = await openNextDatabase(root, factory: databaseFactoryFfi);
+    addTearDown(db.close);
+    expect((await db.rawQuery('PRAGMA journal_mode')).single.values.single, 'wal');
+    await db.execute('CREATE TABLE probe (n INTEGER)');
+    // A second connection, as a shell or a backup would open, holds a read.
+    final reader = await databaseFactoryFfi.openDatabase('${root.path}/next.db',
+        options: OpenDatabaseOptions(readOnly: true, singleInstance: false));
+    addTearDown(reader.close);
+    await reader.execute('BEGIN');
+    await reader.rawQuery('SELECT count(*) FROM probe');
+    await db.transaction((tx) => tx.insert('probe', {'n': 1}));
+    await reader.execute('COMMIT');
+    expect(await db.query('probe'), hasLength(1));
+  });
   test('v5 user overrides retain values and host provenance after migration',
       () async {
     final root = await Directory.systemTemp.createTemp('next-overrides-v5-');
