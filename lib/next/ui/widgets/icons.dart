@@ -13,6 +13,10 @@ enum NextGlyph {
   chevronLeft,
   check,
   plus,
+  minus,
+
+  /// ⋯: what is folded away.
+  more,
 
   /// A file, a video, a torrent: what was dropped into the conversation.
   file,
@@ -128,6 +132,12 @@ class _GlyphPainter extends CustomPainter {
       case NextGlyph.plus:
         canvas.drawLine(const Offset(12, 5), const Offset(12, 19), line);
         canvas.drawLine(const Offset(5, 12), const Offset(19, 12), line);
+      case NextGlyph.minus:
+        canvas.drawLine(const Offset(5, 12), const Offset(19, 12), line);
+      case NextGlyph.more:
+        for (final x in const [5.0, 12.0, 19.0]) {
+          canvas.drawCircle(Offset(x, 12), 1.9, fill);
+        }
       case NextGlyph.file:
         canvas.drawPath(
             Path()

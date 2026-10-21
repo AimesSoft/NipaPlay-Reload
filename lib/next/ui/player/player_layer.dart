@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 import 'dart:math' as math;
 
 import 'package:flutter/services.dart';
@@ -18,10 +19,11 @@ import '../widgets/icons.dart';
 import '../widgets/nipa_avatar.dart';
 import '../widgets/progress.dart';
 import 'player_menus.dart';
+import 'player_more.dart';
 import 'playback.dart';
 import 'timeline.dart';
 
-enum _Menu { subtitles, episodes }
+enum _Menu { subtitles, episodes, more }
 
 /// Next's controls over Classic's video. The picture, danmaku, subtitles,
 /// clicks on the picture (pause, double click for full screen), the
@@ -32,7 +34,9 @@ enum _Menu { subtitles, episodes }
 /// They come with the pointer and go when it rests, as Classic's do
 /// ([VideoPlayerState.showControls]); they stay while the pointer is on
 /// them, a menu is open or Nipa's panel is. ⌘K asks Nipa, in the panel
-/// over the video.
+/// over the video. ⋯ holds what the bar has no room for (the speed, the
+/// audio track, the picture's fit, the danmaku's look, a still, picture in
+/// picture); a still taken shows a moment in the corner.
 class NextPlayerLayer extends StatefulWidget {
   const NextPlayerLayer({super.key});
 
@@ -49,6 +53,13 @@ class _NextPlayerLayerState extends State<NextPlayerLayer> {
   _Menu? _menu;
   bool _holding = false;
   final _menuFocus = FocusNode(debugLabel: 'next.player.menu');
+  final _more = GlobalKey<MoreMenuState>();
+
+  /// The still just taken (its file), or that none could be; and the
+  /// flash that says it was.
+  ({String? path})? _shot;
+  int _flash = 0;
+  Timer? _shotGone;
 
   @override
   void initState() {
@@ -79,6 +90,7 @@ class _NextPlayerLayerState extends State<NextPlayerLayer> {
     _shell?.panelOpen.removeListener(_panelChanged);
     _release();
     _menuFocus.dispose();
+    _shotGone?.cancel();
     super.dispose();
   }
 
@@ -137,6 +149,44 @@ class _NextPlayerLayerState extends State<NextPlayerLayer> {
     if (_menuFocus.hasFocus) {
       _menuFocus.unfocus(disposition: UnfocusDisposition.previouslyFocusedChild);
     }
+  }
+
+  /// Esc: back from a page of ⋯, else the menu closes.
+  void _escape() {
+    if (_more.currentState?.back() ?? false) return;
+    _closeMenu();
+  }
+
+  Future<void> _screenshot() async {
+    _closeMenu();
+    String? path;
+    try {
+      path = await _playback!.screenshot();
+    } catch (e) {
+      debugPrint('[NextPlayer] screenshot: $e');
+    }
+    if (!mounted) return;
+    _shotGone?.cancel();
+    setState(() {
+      _shot = (path: path);
+      if (path != null) _flash++;
+    });
+    _shotGone = Timer(const Duration(seconds: 4), () {
+      if (mounted) setState(() => _shot = null);
+    });
+  }
+
+  void _pictureInPicture() {
+    _closeMenu();
+    unawaited(_playback!.pictureInPicture(context).catchError(
+        (Object e) => debugPrint('[NextPlayer] picture in picture: $e')));
+  }
+
+  void _openShot(String path) {
+    _shotGone?.cancel();
+    setState(() => _shot = null);
+    unawaited(_playback!.open(path).catchError(
+        (Object e) => debugPrint('[NextPlayer] open still: $e')));
   }
 
   void _hoverChrome(bool over) {
@@ -223,7 +273,15 @@ class _NextPlayerLayerState extends State<NextPlayerLayer> {
                 ),
               ),
             ),
+            if (_flash > 0 && !NextMotion.reduced(context))
+              Positioned.fill(child: _Flash(key: ValueKey(_flash))),
             _SkipSegment(raised: shown, playback: playback),
+            _Still(
+              shot: _shot,
+              raised: shown,
+              playback: playback,
+              onOpen: _openShot,
+            ),
             if (_menu != null) ...[
               Positioned.fill(
                 child: GestureDetector(
@@ -236,8 +294,7 @@ class _NextPlayerLayerState extends State<NextPlayerLayer> {
                 bottom: _BottomBar.height + 2,
                 child: CallbackShortcuts(
                   bindings: {
-                    const SingleActivator(LogicalKeyboardKey.escape):
-                        _closeMenu,
+                    const SingleActivator(LogicalKeyboardKey.escape): _escape,
                   },
                   child: Focus(
                     focusNode: _menuFocus,
@@ -250,6 +307,11 @@ class _NextPlayerLayerState extends State<NextPlayerLayer> {
                             playback: playback,
                             shell: shell,
                             onDone: _closeMenu),
+                        _Menu.more => MoreMenu(
+                            key: _more,
+                            playback: playback,
+                            onScreenshot: () => unawaited(_screenshot()),
+                            onPictureInPicture: _pictureInPicture),
                       },
                     ),
                   ),
@@ -477,8 +539,9 @@ class _Nipa extends StatelessWidget {
       );
 }
 
-/// The timeline over the controls: play, next, the time on the left;
-/// volume, danmaku, subtitles, episodes and full screen on the right.
+/// The timeline over the controls: play, next, the time (and the speed,
+/// when it is not the normal one) on the left; volume, danmaku, subtitles,
+/// episodes, ⋯ and full screen on the right.
 class _BottomBar extends StatelessWidget {
   const _BottomBar({
     required this.playback,
@@ -497,10 +560,11 @@ class _BottomBar extends StatelessWidget {
   static const height = 24 + _button + 2 + PlayerTimeline.height;
 
   /// Where a menu hangs, from the right edge: its right edge on its
-  /// button's (episodes, then full screen, are right of subtitles).
+  /// button's (episodes, ⋯ and full screen are right of subtitles).
   static double menuRight(_Menu which) => switch (which) {
-        _Menu.subtitles => _side + (_button + _gap) * 2,
-        _Menu.episodes => _side + (_button + _gap),
+        _Menu.subtitles => _side + (_button + _gap) * 3,
+        _Menu.episodes => _side + (_button + _gap) * 2,
+        _Menu.more => _side + (_button + _gap),
       };
 
   @override
@@ -571,6 +635,18 @@ class _BottomBar extends StatelessWidget {
                   maxLines: 1,
                 ),
               ),
+              Selector<VideoPlayerState, double>(
+                selector: (_, s) => playback.rate,
+                builder: (context, rate, _) => (rate - 1).abs() < 0.001
+                    ? const SizedBox.shrink()
+                    : Padding(
+                        padding: const EdgeInsets.only(left: 12),
+                        child: Text(MoreMenuState.rateText(rate),
+                            style: NextText.num(13,
+                                weight: FontWeight.w600,
+                                color: NextColors.p2)),
+                      ),
+              ),
               const Spacer(),
               _Volume(playback: playback),
               const SizedBox(width: _gap),
@@ -596,6 +672,13 @@ class _BottomBar extends StatelessWidget {
                 label: '剧集',
                 lit: menu == _Menu.episodes,
                 onTap: () => onMenu(_Menu.episodes),
+              ),
+              const SizedBox(width: _gap),
+              _BarButton(
+                glyph: NextGlyph.more,
+                label: '更多',
+                lit: menu == _Menu.more,
+                onTap: () => onMenu(_Menu.more),
               ),
               const SizedBox(width: _gap),
               Selector<VideoPlayerState, bool>(
@@ -844,6 +927,116 @@ class _SkipSegment extends StatelessWidget {
           ),
         ),
       );
+}
+
+/// A still just taken: a white breath over the picture.
+class _Flash extends StatelessWidget {
+  const _Flash({super.key});
+
+  @override
+  Widget build(BuildContext context) => IgnorePointer(
+        child: TweenAnimationBuilder<double>(
+          tween: Tween(begin: 0.32, end: 0),
+          duration: const Duration(milliseconds: 360),
+          curve: Curves.easeOut,
+          builder: (context, a, _) =>
+              ColoredBox(color: Color.fromRGBO(255, 255, 255, a)),
+        ),
+      );
+}
+
+/// The still just taken, small in the corner for a moment (a click opens
+/// it); or that none could be.
+class _Still extends StatelessWidget {
+  const _Still({
+    required this.shot,
+    required this.raised,
+    required this.playback,
+    required this.onOpen,
+  });
+  final ({String? path})? shot;
+  final bool raised;
+  final NextPlayback playback;
+  final ValueChanged<String> onOpen;
+
+  static const width = 192.0;
+
+  @override
+  Widget build(BuildContext context) {
+    final shot = this.shot;
+    final path = shot?.path;
+    return Selector<VideoPlayerState, bool>(
+      // Above 跳过片头 when that shows.
+      selector: (_, s) => playback.skippable != null,
+      builder: (context, skip, _) => AnimatedPositioned(
+        duration: const Duration(milliseconds: 260),
+        curve: NextMotion.ease,
+        right: _BottomBar._side,
+        bottom: (raised ? _BottomBar.height + 12 : 40) + (skip ? 52 : 0),
+        child: IgnorePointer(
+          ignoring: shot == null,
+          child: AnimatedOpacity(
+            opacity: shot == null ? 0 : 1,
+            duration: const Duration(milliseconds: 220),
+            child: AnimatedSlide(
+              offset: shot == null ? const Offset(0.08, 0) : Offset.zero,
+              duration: const Duration(milliseconds: 260),
+              curve: NextMotion.ease,
+              child: shot == null
+                  ? const SizedBox(width: width, height: width * 9 / 16)
+                  : path == null
+                      ? Container(
+                          height: 36,
+                          padding: const EdgeInsets.symmetric(horizontal: 16),
+                          alignment: Alignment.center,
+                          decoration: BoxDecoration(
+                            color: const Color(0xCC121218),
+                            borderRadius: BorderRadius.circular(18),
+                            border: Border.all(color: NextColors.line2),
+                          ),
+                          child: Text('截图失败',
+                              style: NextText.sans(13, color: NextColors.p2)),
+                        )
+                      : Pressable(
+                          onTap: () => onOpen(path),
+                          semanticLabel: '打开截图',
+                          pressScale: 0.97,
+                          builder: (context, hovered) => Container(
+                            width: width,
+                            height: width * 9 / 16,
+                            foregroundDecoration: BoxDecoration(
+                              borderRadius: BorderRadius.circular(10),
+                              border: Border.all(
+                                  color: hovered
+                                      ? NextColors.paper
+                                      : const Color(0x8CF5F1EA),
+                                  width: 1.5),
+                            ),
+                            decoration: BoxDecoration(
+                              color: NextColors.ink2,
+                              borderRadius: BorderRadius.circular(10),
+                              boxShadow: nextShadowCard,
+                            ),
+                            child: ClipRRect(
+                              borderRadius: BorderRadius.circular(10),
+                              child: Image.file(
+                                File(path),
+                                fit: BoxFit.cover,
+                                cacheWidth: (width *
+                                        MediaQuery.devicePixelRatioOf(context))
+                                    .round(),
+                                errorBuilder: (_, __, ___) =>
+                                    const SizedBox.shrink(),
+                              ),
+                            ),
+                          ),
+                        ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
 }
 
 /// While the video opens: the title and a pulse, nothing of the process.
