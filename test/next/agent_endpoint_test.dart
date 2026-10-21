@@ -157,6 +157,15 @@ void main() {
     await (await helperCall.close()).drain<void>();
     expect(jsonDecode((await journal.readAsLines()).last)['origin'],
         'harness_cli:helper:job-fixture');
+    final nativeCall = await client.postUrl(running.url.replace(path: '/harness'));
+    nativeCall.headers.set('Authorization', 'Bearer ${before['token']}');
+    nativeCall.headers
+        .set('X-NipaPlay-Chat', 'native-5fa829c2-07bb-4418-b09d-f233b8c7d371');
+    nativeCall.write(jsonEncode(
+        {'operation': 'call', 'action': 'fixture.write', 'input': {}}));
+    await (await nativeCall.close()).drain<void>();
+    expect(jsonDecode((await journal.readAsLines()).last)['origin'],
+        'codex_native:5fa829c2-07bb-4418-b09d-f233b8c7d371');
     expect(
         endpoint.chatEnvironment({
           'PATH': '/bin',

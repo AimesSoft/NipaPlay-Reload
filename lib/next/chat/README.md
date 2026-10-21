@@ -248,3 +248,89 @@ turn/steer/interrupt/answer/status/close. `scripts/next/x23_vm.py` calls it via
 the private VM service URI in the instance log. It is not a harness Action or
 MCP tool and is not registered outside Debug lab profiles. The lab event log is
 redacted and exists only inside the disposable profile.
+
+## DeepSeek Harness runtime (Y16)
+
+Codex stays the default. `NIPAPLAY_AGENT_RUNTIME=dsh` runs Nipa on DeepSeek
+Harness (DSH) instead, with `NIPAPLAY_DSH_NODE` (Node.js 24) and
+`NIPAPLAY_DSH_ROOT` (an npm prefix holding `node_modules/@deepseek-ai/dsh`, or
+`NIPAPLAY_DSH_BIN` for its `lib/bin.js`). A lab profile may keep the same choice
+in `<lab root>/agent-runtime.json` (`{"runtime":"dsh","node":…,"root":…}`);
+environment values win. A wrong selection is reported as `chatError`.
+
+`ChatHost` keeps its protocol: it starts `node <dsh>/lib/bin.js --profile sdk
+--patch <Next root>/dsh/nipa-patch.json` instead of `codex app-server`, and
+the plugin `assets/next/agent/dsh/nipa-app-server.mjs` (installed under
+`<Next root>/agent/dsh/` on every start) answers the Codex app-server methods
+this host uses from DSH's own agents, sessions and subagents. Followups,
+helpers, the session store, liveness, turn-process records and the UI are
+unchanged. DSH data lives in `<Next root>/dsh-home` (`DSH_HOME`); thread names
+and previews are in `dsh-home/nipaplay/threads.json`. Codex and DSH threads
+cannot resume each other, so `harness_sessions` keeps DSH's main/current
+pointers under `dsh:<harness path>`; switching runtime leaves the other
+runtime's main conversation in place for when it is switched back. Followups
+already bound to the other runtime's threads cannot be delivered meanwhile.
+
+The model route comes from the Codex configuration a Codex launch would use:
+the NipaPlay-managed `codex-home` for a NipaPlay model, otherwise the lab's
+`codex-home/config.toml` (or `CODEX_HOME`/`~/.codex`). Its provider's
+`base_url`, `wire_api`, `request_max_retries`, the model and
+`model_reasoning_effort` become the `llm-pi-ai` route `nipaplay`; the key
+(`experimental_bearer_token`, the `env_key` variable or auth.json's
+`OPENAI_API_KEY`) is held in memory and passed only as
+`NIPAPLAY_MODEL_API_KEY`. The overlay file and `launchEnvironment` carry no
+credential; DSH removes `*KEY*`/`*TOKEN*` variables from tool shells.
+
+Protocol mapping: a DSH session is a thread (`thread/start`, `resume`, `read`,
+`list` with `cwd`/`sourceKinds`/cursor, `name/set`); a DSH turn is a turn with
+id `<thread>-t<n>`. `turn/start` queues the input and answers once DSH claims
+it; `turn/steer` checks `expectedTurnId` and submits next-step input;
+`turn/interrupt` cancels the running turn and clears queued input. Assistant
+text and reasoning stream as `item/agentMessage/delta` and
+`item/reasoning/textDelta` (reasoning text, not a summary); `bash` is a
+`commandExecution` with output deltas from DSH's job ring and the exit code
+from its `[exit code: N]` marker; web tools are `webSearch`; other tools are
+`dynamicToolCall`; `todo_write` also emits `turn/plan/updated`. DSH failures
+keep their message and code; HTTP 429/5xx and transport losses carry the
+Codex `codexErrorInfo` names that the followup retry recognises.
+`ask_user_question` becomes the server request `item/tool/requestUserInput`.
+`thread/compact/start` runs DSH's manual compaction and answers when it ends.
+`hooks/list` is empty; `config/read` and `model/list` describe the one route.
+
+Tools: `bash`, `read`, `read_image`, `write`, `web_fetch` (`web_search` only
+when `DEEPSEEK_API_KEY` is set, the only search backend DSH ships), `subagent`,
+`subagent_fork`, `send_message`, `interrupt_agent`, `list_agents`, the
+background-job tools, `todo_write` and `ask_user_question`. Removed: `edit`,
+`glob`, `grep`, `workflow`, `skill`, `exit_plan_mode`, `working_directory` and
+the goal tools with their round driver. Disabled for privacy: DeepSeek session
+log upload, package inventory, OTel session telemetry, feedback and account
+sign-in. Permissions are `danger-full-access` with approvals off.
+
+`nipa-persona.mjs` makes `assets/next/agent/nipa-base-dsh.md` DSH's complete
+system prompt. AGENTS.md arrives through DSH's agent-instructions (AGENTS.md
+only; `DSH_AGENTS_HOME` points at an empty directory so a user's
+`~/.agents/AGENTS.md` does not apply). `nipa-memory.mjs` runs the harness's own
+`hooks/session_start.py` when a session starts, resumes or is compacted, and
+again whenever `memory/preferences.md` or `memory/MEMORY.md` changed, and keeps
+its block as required runtime context: DSH re-reads it before every request,
+appends a new snapshot only when it changed, and appends it again after a
+compaction replaced the old one. Without the hook it injects the two files.
+
+Subagents: a DSH child session is announced with `thread/started` (source
+`subAgent`, `parentThreadId`); the host attributes it to `codex_native:<child>`
+from its first turn. `subagent` is a `collabAgentToolCall` `spawnAgent` whose
+completion names the child, so the existing native-helper adoption creates the
+`agent.helper` task; `task.cancel` interrupts the child's turn. Each session's
+shell commands get their own `NIPAPLAY_CHAT`: helpers' `helper-<job>`, DSH
+children `native-<child>`, which the endpoint records as `codex_native:<child>`
+(so `./nipa` calls, `ui.present` and download returns belong to that helper).
+When a child settles, DSH itself delivers its closing message to the parent:
+as next-step input if the parent is running, otherwise as a new parent turn.
+That delivery is a completed `wait` item carrying the child's final reply, so
+the native return followup is consumed exactly as for Codex's `wait`. The
+child's end is reported (its `turn/completed`, and its turn's status in
+history) only after DSH settled the child and handed the reply over (at most
+10 s), so NipaPlay's own return finds the parent busy or the `wait` already in
+its history and never opens a second turn for the same result.
+If DSH could not deliver (NipaPlay quit while the child ran), the persisted
+followup returns the result instead.

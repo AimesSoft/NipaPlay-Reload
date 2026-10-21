@@ -625,7 +625,8 @@ final class UiDataService implements NextUiData, NextNowPlaying {
 
   Future<JsonMap> present(JsonMap input, Invocation invocation) async {
     if (!invocation.origin.startsWith('harness_cli:chat:') &&
-        !invocation.origin.startsWith('harness_cli:helper:')) {
+        !invocation.origin.startsWith('harness_cli:helper:') &&
+        !invocation.origin.startsWith('codex_native:')) {
       throw const Failure(FailureCode.invalidInput,
           'ui.present requires NIPAPLAY_CHAT from the current embedded chat; do not supply threadId or turnId.');
     }
