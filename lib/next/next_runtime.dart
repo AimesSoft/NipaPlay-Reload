@@ -628,11 +628,21 @@ final class NextRuntime extends ChangeNotifier {
     ServiceProvider.nextCore.desktopSystem.attach();
     _jobEvents = _taskEngine.changes.listen((job) {
       _queueHook(() => _hooks.taskChanged(job));
-      // A scan ending delivers the files it brought without waiting out the quiet window.
+      // A scan ending delivers the files it brought without waiting out the
+      // quiet window, once no other scan is still running: scans started
+      // together (a folder each) arrive as one batch.
       if (const {'media.scan', 'media.scan_classic'}.contains(job.type) &&
           job.state.isTerminal) {
-        _queueHook(() => _reportLibrary(
-            ServiceProvider.nextCore.followups.libraryBatchEnded));
+        _queueHook(() async {
+          for (final type in const ['media.scan', 'media.scan_classic']) {
+            if ((await _taskEngine.list(type: type))
+                .any((other) => !other.state.isTerminal)) {
+              return;
+            }
+          }
+          await _reportLibrary(
+              ServiceProvider.nextCore.followups.libraryBatchEnded);
+        });
       }
     });
     _queueHook(() async {
