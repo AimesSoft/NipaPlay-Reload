@@ -4,7 +4,6 @@ import '../theme/tokens.dart';
 import 'art_origin.dart';
 import 'artwork.dart';
 import 'buttons.dart';
-import 'poster_art.dart';
 import 'progress.dart';
 
 /// Hover handling shared by work cards: scale to 1.03 (not under reduced
@@ -332,7 +331,8 @@ class _PosterCardState extends State<PosterCard> with _HoverCard {
                       child: ClipRRect(
                         borderRadius: radius,
                         child: Stack(fit: StackFit.expand, children: [
-                          PosterArt(widget.image, tint: widget.tint),
+                          NextImage(widget.image,
+                              shape: ArtShape.poster, tint: widget.tint),
                           playOverlay(widget.onPlay),
                         ]),
                       ),

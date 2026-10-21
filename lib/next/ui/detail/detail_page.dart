@@ -12,12 +12,12 @@ import '../settings/settings_layout.dart' show SettingsSection;
 import '../shell/shell_controller.dart';
 import '../theme/tokens.dart';
 import '../widgets/art_origin.dart';
+import '../widgets/artwork.dart';
 import '../widgets/buttons.dart';
 import '../widgets/glass.dart';
 import '../widgets/icons.dart';
 import '../widgets/menu.dart';
 import '../widgets/nipa_avatar.dart';
-import '../widgets/poster_art.dart';
 import '../widgets/words.dart';
 import '../widgets/work_title.dart';
 import 'collection.dart';
@@ -641,7 +641,8 @@ class _WorkDetailPageState extends State<WorkDetailPage>
             ),
             child: ClipRRect(
               borderRadius: BorderRadius.circular(16),
-              child: PosterArt(poster, tint: _work.artwork.tint),
+              child: NextImage(poster,
+                  shape: ArtShape.poster, tint: _work.artwork.tint),
             ),
           ),
         ),

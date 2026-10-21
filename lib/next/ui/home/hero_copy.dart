@@ -5,9 +5,9 @@ import '../cards/card_views.dart';
 import '../chat/transcript.dart' show Shimmer;
 import '../shell/shell_controller.dart';
 import '../theme/tokens.dart';
+import '../widgets/artwork.dart';
 import '../widgets/buttons.dart';
 import '../widgets/nipa_avatar.dart';
-import '../widgets/poster_art.dart';
 import '../widgets/progress.dart';
 import '../widgets/words.dart';
 import '../widgets/work_title.dart';
@@ -163,10 +163,10 @@ class _PreparingLineState extends State<PreparingLine> {
                     decoration:
                         BoxDecoration(borderRadius: BorderRadius.circular(4)),
                     clipBehavior: Clip.antiAlias,
-                    child: PosterArt(
+                    child: NextImage(
                         task.artwork?.poster ?? task.artwork?.backdrop,
-                        tint: task.artwork?.tint,
-                        read: false),
+                        shape: ArtShape.poster,
+                        tint: task.artwork?.tint),
                   ),
                   const SizedBox(width: 12),
                   Text('正在准备',

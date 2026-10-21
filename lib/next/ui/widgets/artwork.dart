@@ -6,7 +6,6 @@ import 'dart:math' as math;
 import 'package:flutter/widgets.dart';
 
 import '../theme/tokens.dart';
-import 'poster_art.dart';
 
 /// The shape of an artwork, used to decode at the size it is shown.
 enum ArtShape {
@@ -41,7 +40,6 @@ class NextImage extends StatelessWidget {
     this.alignment = Alignment.center,
     this.tint,
     this.fade = const Duration(milliseconds: 260),
-    this.decode,
   });
 
   final String? path;
@@ -52,10 +50,6 @@ class NextImage extends StatelessWidget {
   /// ARGB from [UiArtwork.tint], for the placeholder gradient.
   final int? tint;
   final Duration fade;
-
-  /// Decoded at this width instead of the box's: parts of one picture
-  /// shown at different sizes share a decode.
-  final int? decode;
 
   /// Rounded up to 128 physical pixels so window resizes reuse decodes.
   static int decodeWidth(Size box, double dpr, ArtShape shape) {
@@ -77,7 +71,7 @@ class NextImage extends StatelessWidget {
         constraints.hasBoundedWidth ? constraints.maxWidth : 400,
         constraints.hasBoundedHeight ? constraints.maxHeight : 400,
       );
-      final width = decode ?? decodeWidth(box, dpr, shape);
+      final width = decodeWidth(box, dpr, shape);
       return Image(
         image: ResizeImage.resizeIfNeeded(width, null, artProvider(file)),
         fit: fit,
@@ -137,6 +131,7 @@ class _Placeholder extends StatelessWidget {
   }
 }
 
+
 /// A poster standing in for missing wide art: out of focus and dimmed.
 class SoftArt extends StatelessWidget {
   const SoftArt(this.poster, {super.key, this.tint});
@@ -149,14 +144,7 @@ class SoftArt extends StatelessWidget {
           ImageFiltered(
             imageFilter: ImageFilter.blur(sigmaX: 30, sigmaY: 30),
             child: Transform.scale(
-              scale: 1.15,
-              child: SheetBuilder(
-                path: poster,
-                builder: (context, sheet) => sheet == null
-                    ? NextImage(poster, tint: tint)
-                    : SheetCover(sheet, tint: tint),
-              ),
-            ),
+                scale: 1.15, child: NextImage(poster, tint: tint)),
           ),
           const ColoredBox(color: Color(0x33000000)),
         ]),
@@ -175,7 +163,7 @@ class PosterFill extends StatelessWidget {
         Center(
           child: AspectRatio(
             aspectRatio: 2 / 3,
-            child: PosterArt(poster, tint: tint),
+            child: NextImage(poster, tint: tint),
           ),
         ),
       ]);

@@ -8,7 +8,6 @@ import '../widgets/artwork.dart';
 import '../widgets/buttons.dart';
 import '../widgets/cards.dart';
 import '../widgets/icons.dart';
-import '../widgets/poster_art.dart';
 import '../widgets/progress.dart';
 import '../widgets/words.dart';
 
@@ -275,8 +274,8 @@ class WorkRowCard extends StatelessWidget {
               radius: 8,
               child: ClipRRect(
                 borderRadius: BorderRadius.circular(8),
-                child: PosterArt(work.artwork.poster,
-                    tint: work.artwork.tint),
+                child: NextImage(work.artwork.poster,
+                    shape: ArtShape.poster, tint: work.artwork.tint),
               ),
             ),
           ),

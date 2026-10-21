@@ -10,9 +10,9 @@ import '../data/gui_calls.dart';
 import '../data/work_manage.dart' show UiProvider;
 import '../settings/controls.dart' show BusyDots, PillButton;
 import '../theme/tokens.dart';
+import '../widgets/artwork.dart';
 import '../widgets/buttons.dart';
 import '../widgets/icons.dart';
-import '../widgets/poster_art.dart';
 import '../widgets/progress.dart';
 import '../widgets/segmented.dart';
 import '../widgets/sheet.dart';
@@ -1085,7 +1085,7 @@ class _Poster extends StatelessWidget {
         child: SizedBox(
           width: small ? 28 : 34,
           height: small ? 42 : 51,
-          child: PosterArt(image, tint: tint, read: false),
+          child: NextImage(image, shape: ArtShape.poster, tint: tint),
         ),
       );
 }
