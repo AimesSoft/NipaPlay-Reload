@@ -11,6 +11,7 @@ import '../chat/chat_host.dart';
 import '../chat/helpers.dart';
 import '../chat/turn_process_store.dart';
 import '../repository_location.dart';
+import '../harness_hooks.dart' show HarnessHooks;
 import '../harness_redaction.dart';
 import '../state/views.dart' show publicTaskFacts;
 import '../state/query.dart';
@@ -326,7 +327,9 @@ final class Followups {
 
   Future<void> hookEvent(String event, String objectId, JsonMap payload) =>
       _serial(() async {
-        if (event == 'download.file_completed' && (await database.query(
+        if ((event == 'download.file_completed' ||
+                event == 'download.stalled') &&
+            (await database.query(
             'followup_hook_events', where: 'event=? AND object_id=?',
             whereArgs: [event, objectId], limit: 1)).isNotEmpty) {
           return;
@@ -397,13 +400,16 @@ final class Followups {
             } else {
               final matches = await database.query('followup_hook_events',
                   where:
-                      'sequence>? AND event=?${condition['objectId'] == null ? '' : ' AND object_id=?'}'
+                      'sequence>? AND event=?${condition['objectId'] == null ? '' : condition['event'] == 'download.stalled' ? " AND (object_id=? OR json_extract(payload,'\$.data.jobId')=?)" : ' AND object_id=?'}'
                       '${condition['event'] == 'download.file_completed' ? " AND json_extract(payload,'\$.occurredAt')>=?" : ""}',
                   whereArgs: [
                     row['hookCursor'],
                     condition['event'],
-                    if (condition['objectId'] != null) condition['objectId']
-                    ,if (condition['event'] == 'download.file_completed') row['createdAt']
+                    if (condition['objectId'] != null) condition['objectId'],
+                    if (condition['objectId'] != null &&
+                        condition['event'] == 'download.stalled')
+                      condition['objectId'],
+                    if (condition['event'] == 'download.file_completed') row['createdAt']
                   ],
                   orderBy: 'sequence',
                   limit: 1);
@@ -426,6 +432,37 @@ final class Followups {
                     trigger = {'event': 'download.file_completed', 'objectId': objectId,
                       'occurredAt': file['completedAt'],
                       'data': {'jobId': file['jobId'], 'infoHash': job.input['infoHash'], 'file': file}};
+                    break;
+                  }
+                  if (trigger != null) break;
+                }
+              }
+              // A stall persisted before its event was published.
+              if (trigger == null && condition['event'] == 'download.stalled') {
+                for (final job in await engine.list(type: 'download')) {
+                  if (job.state.isTerminal) continue;
+                  for (final stall in (job.checkpoint['stalls'] as List? ?? [])
+                      .cast<Map>()) {
+                    final objectId = HarnessHooks.stallObjectId(job.jobId, stall['index']);
+                    if (stall['resumedAt'] != null ||
+                        condition['objectId'] != null &&
+                            condition['objectId'] != objectId &&
+                            condition['objectId'] != job.jobId ||
+                        DateTime.parse(stall['at'] as String)
+                            .isBefore(DateTime.parse(row['createdAt'] as String))) {
+                      continue;
+                    }
+                    trigger = {
+                      'event': 'download.stalled',
+                      'objectId': objectId,
+                      'occurredAt': stall['at'],
+                      'data': {
+                        'jobId': job.jobId,
+                        'infoHash': job.input['infoHash'],
+                        'title': job.title,
+                        ...Map<String, Object?>.from(stall)..remove('index')..remove('resumedAt'),
+                      }
+                    };
                     break;
                   }
                   if (trigger != null) break;

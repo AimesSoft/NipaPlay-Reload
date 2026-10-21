@@ -34,6 +34,7 @@ final class HarnessHooks implements JobExecutor {
   static const events = {
     'download.completed',
     'download.file_completed',
+    'download.stalled',
     'library.file_added',
     'playback.started',
     'playback.ended', 'playback.failed', 'playback.state_changed', 'playback.seek_requested',
@@ -50,9 +51,15 @@ final class HarnessHooks implements JobExecutor {
   }
 
   final _fileOccurrences = <String>{};
+  final _stallOccurrences = <String>{};
+
+  /// The objectId of one stretch without progress of a download.
+  static String stallObjectId(String jobId, Object? index) =>
+      'stalled:$jobId:$index';
 
   Future<void> taskChanged(Job job) async {
     await fileCompletions(job);
+    await stallOpened(job);
     if (job.type == 'download' && job.state == JobState.succeeded) {
       await emit('download.completed', job.jobId, job.toJson());
     }
@@ -77,6 +84,26 @@ final class HarnessHooks implements JobExecutor {
           _fileOccurrences.add(objectId);
         }
       }
+    }
+  }
+
+  /// Each open stretch without progress is an occurrence, published once. It
+  /// is over when a byte is seen again; a finished download has none.
+  Future<void> stallOpened(Job job) async {
+    if (job.type != 'download' || job.state.isTerminal) return;
+    for (final stall
+        in (job.checkpoint['stalls'] as List? ?? []).cast<Map>()) {
+      if (stall['resumedAt'] != null) continue;
+      final objectId = stallObjectId(job.jobId, stall['index']);
+      if (!_stallOccurrences.add(objectId)) continue;
+      await emit('download.stalled', objectId, {
+        'jobId': job.jobId,
+        'infoHash': job.input['infoHash'],
+        'title': job.title,
+        ...Map<String, Object?>.from(stall)
+          ..remove('index')
+          ..remove('resumedAt'),
+      });
     }
   }
 
@@ -140,7 +167,9 @@ final class HarnessHooks implements JobExecutor {
         'facts': data,
         'occurredAt': event == 'download.file_completed'
             ? (data['file'] as Map)['completedAt']
-            : DateTime.now().toUtc().toIso8601String(),
+            : event == 'download.stalled'
+                ? data['at']
+                : DateTime.now().toUtc().toIso8601String(),
         'data': data,
       }) as JsonMap;
       await observeEvent?.call(event, objectId, payload);
@@ -161,11 +190,13 @@ final class HarnessHooks implements JobExecutor {
       if (program == null) return null;
       final eventKey =
           sha256.convert(utf8.encode(jsonEncode([event, objectId,
-            if (!const {'download.completed', 'download.file_completed', 'library.file_added', 'playback.started'}.contains(event))
+            if (!const {'download.completed', 'download.file_completed', 'download.stalled', 'library.file_added', 'playback.started'}.contains(event))
               payload['eventId']]))).toString();
       final jobs = await engine.list(type: type);
       for (final job in jobs) {
-        if ((!job.state.isTerminal || event == 'download.file_completed') &&
+        if ((!job.state.isTerminal ||
+                event == 'download.file_completed' ||
+                event == 'download.stalled') &&
             job.input['eventKey'] == eventKey) {
           return job;
         }

@@ -8,6 +8,7 @@
 | --- | --- | --- |
 | `download.completed` | 下载任务完成并验证入库 | 下载的完整 job 快照，含文件回执 |
 | `download.file_completed` | 单个文件的全部片段通过引擎校验，路径/大小核对且本地视频登记入库 | `jobId`、`infoHash`、`file`（索引、路径、校验大小、完成时间、当前媒体关联）；objectId 为 `jobId:fileIndex` |
+| `download.stalled` | 下载连续五分钟没有新字节，每段停滞一次；有了新字节这段才算过去，已结束的任务没有 | `jobId`、`infoHash`、`title`、`at`（停滞开始时间）、`secondsWithoutProgress`、`completedBytes`、`totalBytes`、`connectedPeers`、`seenPeers`、`deadPeers`；objectId 为 `stalled:任务号:停滞序号` |
 | `library.file_added` | 文件首次进入本机媒体索引、Classic 媒体库或媒体来源的索引 | `path`，`via`（怎么进来的），索引事件另含 `fileId`；有调用或任务来源时含 `cause`。不论有没有同名 hook，NipaPlay 都把这些文件的事实合成一批送出：用户添加的文件夹、Classic 扫描、媒体来源同步由一个宿主派发的后台回合接收；你的调用带进来的回到发起的会话；设置 `library.notifyNipaEnabled` 可关闭 |
 | `playback.started` | 一段播放首次进入 playing；暂停后继续不重复 | `path` |
 
@@ -23,6 +24,8 @@ stdout/stderr 末尾（各最多 8192 字符）。退出码 0 才成功；最长
 `download.file_completed` 是持久完成事实，同一对象只运行一次；重启不会重跑已提交的 hook。
 `followup.register` 的 `when: {"event":"download.file_completed","objectId":"任务号:文件索引"}`
 可以等待这个文件；省略 objectId 等待下一个文件完成。事件不要求存在 hook 程序，重启可从任务校验记录恢复登记之后发生的完成。
+`download.stalled` 同样是持久事实，每段停滞只运行一次。`followup.register` 的
+`when: {"event":"download.stalled","objectId":"任务号"}` 等待这个下载的下一次停滞（也可以用某段停滞完整的 objectId），省略 objectId 等待任意下载的下一次停滞。脚本发起的下载没有发起会话，要知道它停滞，就写这个 hook 或登记这个后续。
 关闭 Next 会终止正在运行的 hooks。应用重启后的中断任务不会重跑，避免重复副作用。
 hooks 是普通程序，Agent 可以在用户的授权范围内编写和修改它们。
 

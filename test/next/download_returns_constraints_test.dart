@@ -130,6 +130,14 @@ void main() {
         }
       ]
     });
+    // The stall reaches the conversation after its public event is recorded.
+    await followups.sweep();
+    expect(await followups.list(), isEmpty);
+    await followups.hookEvent('download.stalled', 'stalled:${job.jobId}:1', {
+      'event': 'download.stalled',
+      'objectId': 'stalled:${job.jobId}:1',
+      'data': {'jobId': job.jobId, 'at': at}
+    });
     await followups.sweep();
     final row = (await followups.list()).single;
     expect(row['threadId'], 'original');

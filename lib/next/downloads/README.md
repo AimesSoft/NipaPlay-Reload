@@ -44,7 +44,9 @@ worker appends one entry to `checkpoint.stalls` with the bytes and peer counts i
 saw. The entry closes (`resumedAt`) only on an observed increase after it began,
 since the counter restarts with the process. An open stall of a download started
 from a conversation returns there at once as a `download.stalled` fact; passed
-stalls and stalls of finished tasks are not sent.
+stalls and stalls of finished tasks are not sent. Every open stall, whoever
+started the download, is also the public event `download.stalled`
+(see followups/README.md).
 `disk.availableBytes` uses statvfs (Unix) or GetDiskFreeSpaceExW (Windows)
 for the actual task output directory; failures carry an error and a null value.
 The job receipt remains a historical completion observation; live seeding pause

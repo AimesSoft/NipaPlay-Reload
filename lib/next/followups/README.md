@@ -10,6 +10,16 @@ facts and media registration, and is recovered from `checkpoint.completedFiles`.
 Its occurrence is persisted once per object; other hook events keep their
 occurrence semantics. Registration waits for a completion after its creation.
 
+`download.stalled` is a public event like `download.file_completed`: objectId
+`stalled:JOB_ID:INDEX`, data `jobId`, `infoHash`, `title`, `at`, `secondsWithoutProgress`,
+`completedBytes`, `totalBytes`, `connectedPeers`, `seenPeers`, `deadPeers`. It is published
+once per open stall (never for a passed stall or a finished task) and runs the
+`hooks/download.stalled` program when present. `when: {event: 'download.stalled',
+objectId}` accepts a stall objectId or a bare job id (that download's next stall);
+without objectId any download's next stall. A download's automatic return carries a
+stall only after its public event is recorded, so a matching registration has already
+been triggered and owns it; the same stall is never delivered twice.
+
 Conversation-originated `download.add` stores `returnTo` in the new task input.
 Chat CLI sources return to the selected thread at submission; host/native helper
 sources return to their recorded parent. Scripts, hooks and GUI submissions have

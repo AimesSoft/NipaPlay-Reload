@@ -55,7 +55,10 @@ extension DownloadReturns on Followups {
     if (event == null ||
         condition['event'] != event ||
         condition['objectId'] != null &&
-            condition['objectId'] != fact['objectId'] ||
+            condition['objectId'] != fact['objectId'] &&
+            // One download's next stall may be awaited by its job id.
+            !(event == 'download.stalled' &&
+                condition['objectId'] == (fact['data'] as Map)['jobId']) ||
         DateTime.parse(row['createdAt'] as String)
             .isAfter(DateTime.parse(fact['occurredAt'] as String))) {
       return false;
@@ -68,6 +71,15 @@ extension DownloadReturns on Followups {
 
   Future<void> _collectDownloadReturns() async {
     var rows = await _rows();
+    // A stall is delivered after its public event is recorded, so a registered
+    // followup waiting for it has already been triggered and owns it.
+    final published = {
+      for (final row in await database.query('followup_hook_events',
+          columns: ['object_id'],
+          where: 'event=?',
+          whereArgs: ['download.stalled']))
+        row['object_id'] as String
+    };
     for (final job in await engine.list(type: 'download')) {
       final target = job.input['returnTo'] as Map?;
       if (target == null) continue;
@@ -107,10 +119,13 @@ extension DownloadReturns on Followups {
           for (final stall
               in (job.checkpoint['stalls'] as List? ?? []).cast<Map>())
             if (stall['resumedAt'] == null &&
-                !covered.contains('stalled:${job.jobId}:${stall['index']}'))
+                published.contains(
+                    HarnessHooks.stallObjectId(job.jobId, stall['index'])) &&
+                !covered.contains(
+                    HarnessHooks.stallObjectId(job.jobId, stall['index'])))
               {
                 'event': 'download.stalled',
-                'objectId': 'stalled:${job.jobId}:${stall['index']}',
+                'objectId': HarnessHooks.stallObjectId(job.jobId, stall['index']),
                 'occurredAt': stall['at'],
                 'data': {
                   'jobId': job.jobId,
