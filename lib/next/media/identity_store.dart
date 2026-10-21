@@ -425,6 +425,52 @@ final class IdentityStore {
     return history.length;
   }
 
+  /// Where each of a file's episode links comes from, by episode ID: one
+  /// entry per accepted file binding that stands behind the link
+  /// (`classic_match`, or an explicit binding with `boundBy` and the
+  /// `origin` of the invocation that made it), and `local_catalog` for a link
+  /// made through `localEpisodeIds`. A link with no accepted binding behind
+  /// it and no such relation has an empty list.
+  Future<Map<String, List<JsonMap>>> linkSources(String fileId,
+      {DatabaseExecutor? db}) async {
+    final executor = db ?? database;
+    final id = await canonicalFileId(executor, fileId);
+    final links = await executor.query('media_file_episodes',
+        where: 'file_id=?', whereArgs: [id], orderBy: 'ordinal,episode_id');
+    final result = <String, List<JsonMap>>{};
+    for (final link in links) {
+      final episodeId = link['episode_id'] as String;
+      final sources = <JsonMap>[];
+      if (link['relation'] == 'local_catalog') {
+        sources.add({'source': 'local_catalog'});
+      }
+      for (final binding in await executor.rawQuery(
+          'SELECT f.id,f.source,f.bound_by FROM media_bindings f '
+          "WHERE f.entity_id=? AND f.status='accepted' AND EXISTS ("
+          'SELECT 1 FROM media_bindings e WHERE e.entity_id=? AND e.status=\'accepted\' AND e.object_id=f.object_id) '
+          'ORDER BY f.created_at,f.id',
+          [id, episodeId])) {
+        String? origin;
+        for (final row in await executor.query('media_evidence',
+            columns: ['payload'],
+            where: 'binding_id=?',
+            whereArgs: [binding['id']],
+            orderBy: 'created_at,id')) {
+          final payload = decodeMediaJson(row['payload']);
+          if (payload['event'] == 'bind') origin = payload['origin'] as String?;
+        }
+        sources.add({
+          'bindingId': binding['id'],
+          'source': binding['source'],
+          'boundBy': binding['bound_by'],
+          if (origin != null) 'origin': origin,
+        });
+      }
+      result[episodeId] = sources;
+    }
+    return result;
+  }
+
   Future<String> _classicLocal(DatabaseExecutor tx, String kind,
       MetadataRecord record, String? parent) async {
     final owners = await tx.rawQuery(

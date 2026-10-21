@@ -135,6 +135,14 @@ Classic 有效匹配按现有媒体库来源筛选函数进入同一实体、绑
 撤销旧的 Classic 文件绑定而不改动 Agent/user 绑定。按弹弹play外部对象复用既有实体，
 不按标题或文件名合并。不同来源指向不同集时均保留关联，`identity.get.conflicts` 可见。
 跨来源的同一集可由 Agent 明确提供 `localEpisodeIds` 表达。
+文件—剧集关联各自来自哪里由 `IdentityStore.linkSources` 报告（下载的 `media.episodes[].identitySources`
+用它）：每条是站在该关联后面的已接受文件绑定 `{bindingId, source, boundBy, origin?}`，
+`source=classic_match`（`boundBy` 为 null）是 Classic 自动识别，其他是显式绑定，`boundBy` 为 `agent`/`user`，
+`origin` 取自写入它的调用；`local_catalog` 关联记为 `{source: local_catalog}`；没有绑定支撑的关联列表为空。
+`unbind_batch` 只能撤销显式绑定，`classic_match` 不在其选择范围内（点名它的 bindingId 是 conflict）；
+`classic_match` 绑定跟随 Classic 的匹配记录：该路径的 Classic 观看记录被删除（`history.remove`，
+观看进度随之删除）或匹配改变后，下一次同步（任何身份写入、`media.library.import_history`）撤销它的文件绑定，
+并移除不再有绑定支撑的文件—剧集关联。显式绑定及其关联不受影响。
 
 Classic 已有不同匹配时，outbox 标为 `conflict`，显式绑定仍已提交，Classic 保持原值。
 再次调用原 requestId 可重试该文件的投递；启动只恢复 `pending`，不自动处理 `conflict`。

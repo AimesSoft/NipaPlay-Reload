@@ -111,36 +111,6 @@ void main() {
     expect(await store.database.rawQuery('PRAGMA foreign_key_check'), isEmpty);
   });
 
-  test('a file event carries its binding, and waits while it is pending',
-      () async {
-    final job = await submit();
-    final context = await executor.entered.future;
-    final pending = {...file(job, 0), 'binding': {'status': 'pending'}};
-    await context.report(checkpoint: {
-      'completedFiles': [pending]
-    });
-    await followups.sweep();
-    expect(await followups.list(), isEmpty);
-    final bound = {
-      ...file(job, 0),
-      'binding': {
-        'status': 'bound',
-        'workId': 'work-1',
-        'releaseId': 'release-1',
-        'episodeIds': ['episode-1']
-      }
-    };
-    await context.report(checkpoint: {
-      'completedFiles': [bound]
-    });
-    await followups.sweep();
-    final facts = ((await followups.list()).single['trigger'] as Map)['facts']
-        as List;
-    expect(facts, hasLength(1));
-    expect(((facts.single['data'] as Map)['file'] as Map)['binding'],
-        bound['binding']);
-  });
-
   test('an unresolved stall goes back at once, a passed one never', () async {
     final job = await submit();
     final context = await executor.entered.future;

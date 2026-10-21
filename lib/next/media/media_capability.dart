@@ -513,7 +513,7 @@ final _specs = [
       ])),
   _spec(
       'media.identity.unbind_batch',
-      'Atomically revoke Agent/user bindings and retain provenance. Optional bindingIds selects accepted bindings; omitted revokes all explicit bindings. Restore a projected Classic match only when its matching fields still equal the atomic projection journal; changed Classic fields remain untouched and return conflict after Next revocation. classicProjection reports restoration or unchanged independent Classic matches. reason is audited; requestId makes retries idempotent.',
+      'Atomically revoke Agent/user bindings and retain provenance. Optional bindingIds selects accepted bindings; omitted revokes all explicit bindings; a classic_match binding is not selectable and naming it is a conflict (it follows the Classic match record). Restore a projected Classic match only when its matching fields still equal the atomic projection journal; changed Classic fields remain untouched and return conflict after Next revocation. classicProjection reports restoration or unchanged independent Classic matches. reason is audited; requestId makes retries idempotent.',
       Effect.write,
       const ObjectSchema({
         'requestId': _text,

@@ -9,7 +9,6 @@ import 'package:nipaplay/services/torrent_download_service.dart';
 import 'package:nipaplay/utils/settings_storage.dart';
 
 import 'download_backend.dart';
-import 'file_bindings.dart';
 
 final class AppDownloadLibrary implements DownloadLibrary {
   AppDownloadLibrary(this.service);
@@ -34,6 +33,7 @@ final class AppDownloadLibrary implements DownloadLibrary {
         'JOIN media_entities e ON e.id=fe.episode_id '
         'JOIN media_entities r ON r.id=e.parent_id WHERE fe.file_id=?',
         [fileId]);
+    final sources = await media.store.linkSources(fileId);
     final item = await WatchHistoryManager.getHistoryItem(path);
     if (item == null || item.animeId == null || item.episodeId == null) {
       return {
@@ -45,7 +45,8 @@ final class AppDownloadLibrary implements DownloadLibrary {
             {
               'episodeId': row['episodeId'],
               'workId': row['workId'],
-              'facts': jsonDecode(row['episodeFacts'] as String)
+              'facts': jsonDecode(row['episodeFacts'] as String),
+              'identitySources': sources[row['episodeId']] ?? <JsonMap>[]
             }
         ],
         'identificationPending': links.isEmpty,
@@ -61,7 +62,8 @@ final class AppDownloadLibrary implements DownloadLibrary {
           {
             'episodeId': row['episodeId'],
             'workId': row['workId'],
-            'facts': jsonDecode(row['episodeFacts'] as String)
+            'facts': jsonDecode(row['episodeFacts'] as String),
+            'identitySources': sources[row['episodeId']] ?? <JsonMap>[]
           }
       ],
       'identificationPending': links.isEmpty,
@@ -79,18 +81,6 @@ final class AppDownloadLibrary implements DownloadLibrary {
     await ServiceProvider.watchHistoryProvider.refresh();
     return success;
   }
-
-  @override
-  Future<JsonMap> bindFile(
-          {required String fileId,
-          required JsonMap declaration,
-          required String requestId,
-          required String origin}) =>
-      bindDownloadedFile(ServiceProvider.nextCore.media.service,
-          fileId: fileId,
-          declaration: declaration,
-          requestId: requestId,
-          origin: origin);
 
   Future<void> _registryUpdates = Future.value();
   @override
