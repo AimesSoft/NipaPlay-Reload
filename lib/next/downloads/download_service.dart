@@ -20,9 +20,6 @@ final class DownloadService {
   final DownloadBackends backends;
   final DownloadLibrary library;
   Future<JsonMap?> Function(Invocation)? returnTarget;
-
-  /// A caller read a download (download.read).
-  Future<void> Function(String jobId, Invocation invocation)? onRead;
   Future<JsonMap> bandwidth(JsonMap input) => _serial(() async {
     for (final value in input.values.cast<int>()) {
       if (value != 0 && (value < 16384 || value > 4294967295)) {

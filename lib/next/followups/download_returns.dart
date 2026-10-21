@@ -33,14 +33,6 @@ extension DownloadReturns on Followups {
     };
   }
 
-  /// The conversation behind [invocation] read [jobId]: facts that came
-  /// before are not news to it.
-  Future<void> noteDownloadRead(String jobId, Invocation invocation) async {
-    final target = await downloadReturnTarget(invocation);
-    if (target == null) return;
-    _downloadReads['$jobId|${target['threadId']}'] = DateTime.now().toUtc();
-  }
-
   bool _manualCovers(JsonMap row, JsonMap fact, JsonMap target) {
     if (row['automatic'] != null && row['automatic'] != 'subscription' ||
         row['state'] == 'cancelled' ||
@@ -141,33 +133,6 @@ extension DownloadReturns on Followups {
           }
       ];
       if (facts.isEmpty) continue;
-      // A download that succeeded after every one of its videos was already
-      // told has nothing new to say; its end alone would open a turn only to
-      // hear that. A failure, or files still untold, still go.
-      if (job.state == JobState.succeeded &&
-          facts.every((fact) => fact['event'] == 'task.terminal') &&
-          automatic.isNotEmpty &&
-          automatic.every((r) => r['state'] != 'ready')) {
-        final told = {
-          for (final row in automatic)
-            for (final id in row['downloadObjects'] as List) id
-        };
-        final videos = [
-          for (final file in (job.checkpoint['completedFiles'] as List? ?? [])
-              .cast<JsonMap>())
-            if (file['isVideo'] == true && file['imported'] == true)
-              file['objectId']
-        ];
-        if (videos.isNotEmpty && videos.every(told.contains)) {
-          final last = automatic.last;
-          (last['downloadObjects'] as List).add('terminal:${job.jobId}');
-          await _save(redactHarnessJson(last) as JsonMap,
-              last['state'] as String, 'coalesced',
-              reason: last['reason'] as String?);
-          rows = await _rows();
-          continue;
-        }
-      }
       final pending = automatic.where((r) => r['state'] == 'ready' && r['remoteSealed'] != true).lastOrNull;
       final now = DateTime.now().toUtc();
       final last = automatic.lastOrNull;
@@ -286,8 +251,7 @@ extension DownloadReturns on Followups {
     final facts = (trigger['facts'] as List).cast<JsonMap>();
     // Resolve waiting broad subscriptions in occurrence order, just like sweep.
     final claimed = <String>{};
-    var remaining = <JsonMap>[];
-    var endOwned = false;
+    final remaining = <JsonMap>[];
     for (final fact in facts) {
       final manual = rows
           .where(
@@ -297,19 +261,7 @@ extension DownloadReturns on Followups {
         remaining.add(fact);
       } else {
         claimed.add(manual['id'] as String);
-        endOwned = endOwned || fact['event'] == 'task.terminal';
       }
-    }
-    // The followup that takes the download's end looks at the whole
-    // download; files still waiting in this batch are no news after it.
-    if (endOwned) remaining = [];
-    // Neither is what the conversation read for itself after it happened.
-    final read = _downloadReads['${trigger['jobId']}|${row['threadId']}'];
-    if (read != null) {
-      remaining = [
-        for (final fact in remaining)
-          if (DateTime.parse(fact['occurredAt'] as String).isAfter(read)) fact
-      ];
     }
     if (remaining.length == facts.length) return;
     trigger['facts'] = remaining;
