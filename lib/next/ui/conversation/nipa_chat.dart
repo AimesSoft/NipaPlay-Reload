@@ -8,7 +8,7 @@ import '../widgets/words.dart';
 import 'chat_context.dart';
 import 'chat_port.dart';
 import 'chat_turn.dart';
-import 'next_sayings.dart';
+import 'underway.dart';
 
 export 'chat_context.dart';
 export 'chat_turn.dart';
@@ -898,18 +898,7 @@ class NipaChat extends ChangeNotifier {
     return works.map((w) => w.workId).toSet().length == 1 ? works.last : null;
   }
 
-  // —— What comes next ——
-
-  /// Two or three things you might say after Nipa's last answer.
-  List<String> get nextSayings {
-    if (running || loading || question != null || trouble != null) {
-      return const [];
-    }
-    final last = turns.lastOrNull;
-    final answer = last?.answer;
-    if (last == null || answer == null) return const [];
-    return NextSayings.after(answer.text, last.cards);
-  }
+  // —— Under way ——
 
   /// What this conversation set going that is still under way, from its
   /// cards' live state; the latest first.

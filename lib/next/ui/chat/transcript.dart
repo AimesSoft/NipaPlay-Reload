@@ -157,11 +157,6 @@ class _ChatTranscriptState extends State<ChatTranscript> {
       if (chat.quiet) _Quiet(chat: chat),
       if (chat.trouble != null)
         Text(chat.trouble!, style: NextText.sans(14, color: NextColors.p2)),
-      if (chat.nextSayings case final sayings when sayings.isNotEmpty)
-        _NextSayings(
-            key: ValueKey(sayings.join('|')),
-            sayings: sayings,
-            onSay: chat.say),
     ];
     return _Hold(
       hold: _hold,
@@ -884,22 +879,6 @@ class _ReplyTextState extends State<ReplyText>
       ),
     );
   }
-}
-
-/// What you might say next, under Nipa's answer; tapping one says it.
-class _NextSayings extends StatelessWidget {
-  const _NextSayings({super.key, required this.sayings, required this.onSay});
-  final List<String> sayings;
-  final ValueChanged<String> onSay;
-
-  @override
-  Widget build(BuildContext context) => StaggerIn(
-        index: 2,
-        child: Wrap(spacing: 8, runSpacing: 8, children: [
-          for (final s in sayings)
-            _Choice(label: s, chosen: false, onTap: () => onSay(s)),
-        ]),
-      );
 }
 
 /// Three minutes without any event: say so, and let you choose.

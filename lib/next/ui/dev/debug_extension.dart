@@ -946,7 +946,6 @@ abstract final class NextUiDebug {
             }
         ],
         'attachments': c.attachments,
-        'nextSayings': c.nextSayings,
         'underway': [for (final u in c.underway) '${u.title}: ${u.line}'],
         'running': c.running,
         'quiet': c.quiet,
