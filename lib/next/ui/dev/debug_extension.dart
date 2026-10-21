@@ -509,6 +509,17 @@ abstract final class NextUiDebug {
         if (p['submit'] == '1') fields[index].widget.onSubmitted?.call(text);
         await _settle();
         return {'fields': fields.length, ..._status(shell)};
+      case 'guicall':
+        // What the person does in the interface: an action called as the GUI
+        // (a folder added in settings, not by Nipa).
+        final input = p['input'];
+        return {
+          'result': await shell.services.calls.call(
+              p['action']!,
+              input == null
+                  ? {}
+                  : Map<String, Object?>.from(jsonDecode(input) as Map))
+        };
       case 'press':
         await _settle();
         final label = p['label'] ?? '';
