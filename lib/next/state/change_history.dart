@@ -67,6 +67,9 @@ final class ChangeHistory {
   Future<void> _writes = Future.value();
   Future<void> Function(String collection, String id, JsonMap facts)? onChanged;
 
+  /// Called after each change row is stored, for what shows it in 动态.
+  void Function()? onRecorded;
+
   void seed(String collection, List<JsonMap> rows) {
     _previous[collection] = {for (final row in rows) row['id'] as String: row};
   }
@@ -112,6 +115,7 @@ final class ChangeHistory {
       };
       _writes = _writes.then((_) async {
         await database.insert('body_changes', record);
+        onRecorded?.call();
         await onChanged?.call(collection, id, {'before': old, 'after': value});
       });
       // Report storage failures without changing Classic's successful write.

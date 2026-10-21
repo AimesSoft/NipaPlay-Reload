@@ -37,6 +37,28 @@ const activityFields = ObjectSchema({
   'facts': _facts,
 });
 
+/// Whether a journalled invocation is an entry of 动态 (conflicts always are).
+bool activityRecordsInvocation(String action, {required bool conflict}) =>
+    conflict ||
+    action.startsWith('media.sources.') ||
+    action.startsWith('ui.') ||
+    action.startsWith('discover.') ||
+    action.startsWith('accounts.') ||
+    localOperationTitles.containsKey(action);
+
+/// Tells when an invocation just became an entry of 动态.
+final class ActivityInvocationObserver implements InvocationObserver {
+  const ActivityInvocationObserver(this.changed);
+  final void Function() changed;
+  @override
+  void onInvocation(InvocationRecord record) {
+    if (activityRecordsInvocation(record.actionId,
+        conflict: record.failureCode?.wireName == 'conflict')) {
+      changed();
+    }
+  }
+}
+
 String _actor(String? origin) => switch (origin) {
       null => 'unknown',
       'gui' => 'user',
@@ -418,14 +440,7 @@ final class ActivityView {
                       ? (result?['changed'] == true ? '推荐已更新' : '推荐暂时无法更新')
                       : invocation['status'] == 'completed' ? '发现内容已载入' : '发现内容暂时无法载入';
       final conflict = invocation['failureCode'] == 'conflict';
-      if (!conflict &&
-          !action.startsWith('media.sources.') &&
-          !action.startsWith('ui.') &&
-          !action.startsWith('discover.') &&
-          !action.startsWith('accounts.') &&
-          !localOperationTitles.containsKey(action)) {
-        continue;
-      }
+      if (!activityRecordsInvocation(action, conflict: conflict)) continue;
       final input = invocation['input'] as Map? ?? {};
       final finished = DateTime.parse(invocation['startedAt'] as String)
           .add(Duration(milliseconds: invocation['elapsedMs'] as int));

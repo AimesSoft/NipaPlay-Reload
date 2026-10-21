@@ -143,6 +143,14 @@ final class NextCore {
   StreamSubscription<JsonMap>? _networkEvents;
   StreamSubscription<Job>? _bodyTasks;
   final _taskStates = <String, String>{};
+  StreamSubscription<void>? _followupEvents;
+
+  /// Something that 动态 shows has just been recorded. Fires after the
+  /// record is stored; the view itself stays the only reader of the facts.
+  final activityChanges = StreamController<void>.broadcast(sync: true);
+  void activityChanged() {
+    if (!activityChanges.isClosed) activityChanges.add(null);
+  }
 
   Future<void> _initialize(
       Directory? suppliedRoot,
@@ -262,8 +270,11 @@ final class NextCore {
     events = BodyEvents(database);
     followups.eventCommitted = events.changed;
     settings.onChanged = (facts) async {
+      activityChanged();
       await hooks.emit('settings.changed', facts['key'] as String, facts);
     };
+    changeHistory.onRecorded = activityChanged;
+    _followupEvents = events.committed.stream.listen((_) => activityChanged());
     changeHistory.onChanged = (collection, id, facts) async {
       final domain = collection.split(':').first;
       if (domain == 'subtitle') await hooks.emit('media.assets.changed', id, {'kind': 'subtitle', ...facts});
@@ -273,10 +284,14 @@ final class NextCore {
       unawaited(hooks.emit('network.state_changed', facts['id'] as String, facts));
     });
     _bodyTasks = engine.changes.listen((job) {
-      if (job.type == 'harness.hook') return;
+      if (job.type == 'harness.hook') {
+        activityChanged();
+        return;
+      }
       final state = '${job.state.wireName}:${job.phase}';
       if (_taskStates[job.jobId] == state) return;
       _taskStates[job.jobId] = state;
+      activityChanged();
       unawaited(hooks.emit('task.state_changed', job.jobId, job.toJson()));
     });
     storage = SystemStorage(root, database, hooks);
@@ -377,12 +392,15 @@ final class NextCore {
     ScanService.startupRefreshAllowed = null;
     await _networkEvents?.cancel();
     await _bodyTasks?.cancel();
+    await _followupEvents?.cancel();
     changeHistory.onChanged = null;
+    changeHistory.onRecorded = null;
     if (identical(BodyChanges.attached, changeHistory)) BodyChanges.attached = null;
     await changeHistory.drain();
     await followups.close();
     followups.eventCommitted = null;
     await events.committed.close();
+    await activityChanges.close();
     await uiData.close();
     hooks.observeEvent = null;
     await hooks.disable();

@@ -76,6 +76,7 @@ import 'chat/debug_chat.dart';
 import 'ui_data/debug_ui_data.dart';
 import 'ui_data/library_service.dart';
 import 'harness_redaction.dart';
+import 'state/activity.dart';
 import 'state/change_history.dart';
 import 'settings/host_settings_service.dart';
 import 'ui_data/host_settings.dart';
@@ -314,6 +315,7 @@ final class NextRuntime extends ChangeNotifier {
   late final PendingHostSettings hostSettings = PendingHostSettings(_hostReady.future);
   HostSettingsService? _hostSettings;
   StreamSubscription<ChatMessage>? _hostEvents;
+  StreamSubscription<void>? _activityEvents;
   Future<void> closeChat() async {
     await _hostSettings?.codex?.cancel();
     await _operations;
@@ -424,7 +426,8 @@ final class NextRuntime extends ChangeNotifier {
         ...core.capabilities
       ],
       observers: [JsonlJournal(File('${root.path}/journal.jsonl'),
-        effects: Effect.values.toSet())],
+        effects: Effect.values.toSet()),
+        ActivityInvocationObserver(core.activityChanged)],
     );
     core.attachHarness(_harness);
     core.danmaku.startRestoring(_harness, _player);
@@ -523,6 +526,7 @@ final class NextRuntime extends ChangeNotifier {
   Future<void> _startChat(Directory repository) async {
     chatError = null;
     await _hostEvents?.cancel();
+    await _activityEvents?.cancel();
     final labRoot = LabProfile.active ? Directory(LabProfile.root) : null;
     final DshRuntime? dsh;
     try {
@@ -570,6 +574,8 @@ final class NextRuntime extends ChangeNotifier {
       (await core.followups.list()).where((r) =>
         !const {'completed', 'cancelled'}.contains(r['state'])).toList(),
       (await core.state.views['activity']!.readAll!()).rows, current);
+    // DSH's memory block carries the latest 动态; tell it when that grows.
+    _activityEvents = core.activityChanges.stream.listen((_) => host.memoryChanged());
     _hostEvents = host.events.listen((event) {
       if (const {'host/modelChanged', 'host/error', 'turn/completed', 'error'}
           .contains(event['method'])) {
@@ -744,6 +750,7 @@ final class NextRuntime extends ChangeNotifier {
       await ServiceProvider.nextCore.followups.attach(null, reason: 'NipaPlay is shutting down.');
       await chat?.close();
       await _hostEvents?.cancel();
+      await _activityEvents?.cancel();
       await _hostSettings?.close();
       await hostSettings.close();
       await _endpoint.stop();

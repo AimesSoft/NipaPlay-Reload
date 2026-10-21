@@ -317,10 +317,24 @@ rather than replacing it. AGENTS.md arrives through DSH's agent-instructions (AG
 only; `DSH_AGENTS_HOME` points at an empty directory so a user's
 `~/.agents/AGENTS.md` does not apply). `nipa-memory.mjs` runs the harness's own
 `hooks/session_start.py` when a session starts, resumes or is compacted, and
-again whenever `memory/preferences.md` or `memory/MEMORY.md` changed, and keeps
-its block as required runtime context: DSH re-reads it before every request,
+again whenever `memory/preferences.md` or `memory/MEMORY.md` changed, or when
+NipaPlay reports that its 动态 grew, and keeps its block as required runtime context: DSH re-reads it before every request,
 appends a new snapshot only when it changed, and appends it again after a
 compaction replaced the old one. Without the hook it injects the two files.
+
+动态 changes reach the block because the block's 最近动态 section would
+otherwise stay as it was when the session started, while background turns and
+hooks keep recording facts. `NextCore.activityChanges` fires after something
+that 动态 shows is stored (a change row, a job state or phase change, a hook
+job, a followup event, a settings change, a journalled invocation that the
+view lists). `next_runtime.dart` forwards it to `ChatHost.memoryChanged()`,
+which, under DSH only, sends the notification `nipa/memoryStale` (no
+parameters) at once and merges further changes within 2 seconds into one more
+(`MemoryStaleNotifier`). The shim calls the hook nipa-memory publishes under
+`Symbol.for('nipaplay.dsh.memoryStale')`, which marks every root session's
+state stale and keeps its `source`; the block is rebuilt before that session's
+next `agent/request`. A turn adds no snapshot unless a notice or a file change
+came first. Subagent sessions are not marked. Codex never receives the notice.
 
 Subagents: a DSH child session is announced with `thread/started` (source
 `subAgent`, `parentThreadId`); the host attributes it to `codex_native:<child>`

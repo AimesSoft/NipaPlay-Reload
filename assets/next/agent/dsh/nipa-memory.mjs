@@ -9,7 +9,11 @@
 // the previous one, so every request carries the current block. Before each
 // request the plugin also compares memory/preferences.md and memory/MEMORY.md
 // with the versions the block was built from and rebuilds it when either
-// changed, so edits reach the very next request.
+// changed, so edits reach the very next request. NipaPlay's recent facts
+// change on their own, so the app-server shim also calls the hook under
+// Symbol.for('nipaplay.dsh.memoryStale') when NipaPlay reports a change; that
+// marks every root session stale, keeping each one's source, and the block is
+// rebuilt at its next request.
 import { spawn } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { existsSync, lstatSync, readFileSync } from 'node:fs';
@@ -55,7 +59,7 @@ export function apply(ctx, config = {}) {
   const stateFor = (sessionId) => {
     let state = states.get(sessionId);
     if (!state) {
-      state = { source: 'startup', stale: true, text: '', files: '', refreshing: undefined };
+      state = { source: 'startup', stale: true, root: true, text: '', files: '', refreshing: undefined };
       states.set(sessionId, state);
     }
     return state;
@@ -126,6 +130,7 @@ export function apply(ctx, config = {}) {
     const state = stateFor(String(agent.session.id));
     state.source = source === 'resume' ? 'resume' : source === 'compact' ? 'compact' : 'startup';
     state.stale = true;
+    state.root = agent.session.header?.parentSession === undefined;
   });
   ctx.on('session/event', (session, event) => {
     // A compaction replaces surface history, including the earlier snapshot.
@@ -146,6 +151,16 @@ export function apply(ctx, config = {}) {
     }
     return next();
   });
+  const STALE_KEY = Symbol.for('nipaplay.dsh.memoryStale');
+  const markStale = () => {
+    for (const state of states.values()) if (state.root) state.stale = true;
+  };
+  ctx.effect(() => {
+    globalThis[STALE_KEY] = markStale;
+    return () => {
+      if (globalThis[STALE_KEY] === markStale) delete globalThis[STALE_KEY];
+    };
+  }, 'nipa-memory.stale');
   ctx.systemPrompt.context({
     name: 'nipa:memory',
     order: 9000,
