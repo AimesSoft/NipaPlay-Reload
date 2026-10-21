@@ -1032,6 +1032,33 @@ final class ChatHost {
         }
         return _startTurn(text);
       });
+
+  /// Puts a followup's text into the turn that is running on [id] (the main
+  /// conversation when null), to be read at that turn's next step, and returns
+  /// the turn's id. Null means nothing was put in and the caller should wait
+  /// for the turn to end: the runner cannot take input mid-turn, no turn is
+  /// running on that thread, or the runner refused (the turn ended meanwhile).
+  ///
+  /// Only DSH is asked: its `turn/steer` is a next-step message into the
+  /// running turn, like a subagent's report or a finished background command.
+  /// Codex's `turn/steer` is not relied on here; its followups still wait.
+  /// An error that leaves the outcome unknown (the runner went away mid-call)
+  /// is thrown, so the caller never sends the same text a second time.
+  Future<String?> steerFollowup(String? id, String text) => _control(() async {
+        if (dsh == null) return null;
+        final target = id ?? mainThreadId ?? threadId;
+        if (target == null) return null;
+        final live = livenessFor(target);
+        final turnId = live.turnId;
+        if (live.status != 'inProgress' || turnId == null) return null;
+        try {
+          final response = await steer(text, onThread: target);
+          return response['turnId'] as String? ?? turnId;
+        } on ChatRpcError {
+          return null;
+        }
+      });
+
   Future<ChatMessage> interrupt({String? onThread}) async =>
       _public(await _request('turn/interrupt', {
         'threadId': onThread ?? threadId,
