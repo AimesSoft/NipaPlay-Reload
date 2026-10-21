@@ -475,11 +475,17 @@ extension VideoPlayerStatePlayerSetup on VideoPlayerState {
 
       //debugPrint('2. 重置播放器状态...');
       // 完全重置播放器
+      final stopWatch = Stopwatch()..start();
       if (player.state != PlaybackState.stopped) {
         player.state = PlaybackState.stopped;
       }
       // 清除视频资源
       player.state = PlaybackState.stopped;
+      // MDK 停止时会在当前线程重启系统音频队列；系统音频响应慢时整个界面会在这里卡住，
+      // 随后纹理阶段超时。记下来，免得把它当成播放器自己的问题。
+      if (stopWatch.elapsedMilliseconds > 2000) {
+        debugPrint('[PlayerSetup] 停止上一个媒体用了 ${stopWatch.elapsedMilliseconds}ms（多半是系统音频响应慢）');
+      }
       final bool isMediaKitKernel = player.getPlayerKernelName() == 'Media Kit';
       if (!isMediaKitKernel) {
         player.setMedia("", MediaType.video); // 使用空字符串和视频类型清除媒体
