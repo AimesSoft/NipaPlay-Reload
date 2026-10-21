@@ -80,6 +80,8 @@ abstract final class Found {
       originalTitle: _text(record['originalTitle']),
       year: (record['year'] as num?)?.toInt(),
       episodeCount: episodeCount(record),
+      // A TMDB movie is a film; the other objects say nothing of it.
+      film: ref(workId)?.objectType == 'movie',
       overview: _text(record['overview']),
       ratings: [
         if (rating != null) UiRating(source(provider ?? ''), rating),
@@ -98,6 +100,8 @@ abstract final class Found {
       year: more.year ?? work.year,
       genres: work.genres,
       episodeCount: more.episodeCount ?? work.episodeCount,
+      film: work.film || more.film,
+      runtime: work.runtime,
       overview: more.overview ?? work.overview,
       ratings: work.ratings.isEmpty ? more.ratings : work.ratings,
       artwork: UiArtwork(

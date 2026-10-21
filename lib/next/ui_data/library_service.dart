@@ -505,6 +505,8 @@ final class LibraryDataService implements NextLibraryData, NextLibraryActions {
         year: work.year,
         genres: work.genres,
         episodeCount: work.episodeCount,
+        film: work.film,
+        runtime: work.runtime,
         studio: work.studio,
         overview: work.overview,
         ratings: work.ratings,
@@ -576,6 +578,8 @@ final class LibraryDataService implements NextLibraryData, NextLibraryActions {
     if (ref == null) return null;
     final item = await _sourceRecord(id, ref);
     final m = item['metadata'] as Map? ?? {};
+    // The server's own word for it; the movie is its own episode.
+    final film = item['kind'] == 'Movie';
     UiEpisode? next;
     if (item['isDirectory'] == true) {
       for (final filter in ['IsResumable', 'IsUnplayed', null]) {
@@ -601,6 +605,8 @@ final class LibraryDataService implements NextLibraryData, NextLibraryActions {
         overview: m['Overview'] as String?,
         genres: (m['Genres'] as List? ?? []).cast<String>(),
         episodeCount: m['EpisodeCount'] as int?,
+        film: film,
+        runtime: film ? next?.runtime : null,
         ratings: [
           if (m['CommunityRating'] case final num r)
             UiRating('服务器', r.toDouble())

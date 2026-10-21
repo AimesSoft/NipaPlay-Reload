@@ -207,6 +207,11 @@ final class CoreSearch implements NextSearchData {
           if (_text(g) case final genre?) genre
       ],
       episodeCount: _int(w['episodeCount']),
+      film: w['film'] == true,
+      runtime: switch (w['runtimeMs']) {
+        final int ms when ms > 0 => Duration(milliseconds: ms),
+        _ => null,
+      },
       studio: _text(w['studio']),
       overview: _text(w['overview']),
       ratings: [

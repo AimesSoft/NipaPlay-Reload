@@ -345,6 +345,21 @@ void main() {
     expect(cached.artwork.poster, work.artwork.poster);
   });
 
+  test('a server\'s Movie is a film; its Series is not', () async {
+    Future<UiWork> first(_CatalogueSource port) async {
+      library.port = port;
+      final page = await library.page(port.sourceId);
+      return (page.categories.first.preview.first as UiWorkItem).work;
+    }
+
+    final film = await first(_CatalogueSource(root.path));
+    expect(film.film, isTrue);
+    expect((await ui.work(film.workId))!.film, isTrue);
+    final series =
+        await first(_CatalogueSource(root.path, type: 'emby')..series = true);
+    expect(series.film, isFalse);
+  });
+
   test(
       'source caches reject malformed responses and never cross actual server identities',
       () async {

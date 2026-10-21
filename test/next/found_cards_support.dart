@@ -7,6 +7,7 @@ import 'package:nipaplay/next/ui/data/discover.dart';
 import 'package:nipaplay/next/ui/data/search.dart';
 import 'package:nipaplay/next/ui/data/services.dart';
 import 'package:nipaplay/next/ui/data/ui_actions.dart';
+import 'package:nipaplay/next/ui/data/work_manage.dart';
 import 'package:nipaplay/next/ui/detail/work_route.dart';
 import 'package:nipaplay/next/ui/dev/fake_settings.dart';
 import 'package:nipaplay/next/ui/shell/shell_controller.dart';
@@ -37,12 +38,15 @@ final class FoundDetails implements NextDiscoverData {
 
 /// A shell over [cards] in a conversation-wide column; opening a work
 /// pushes the real `/work` page (a library work's from [data], which knows
-/// none by default). Dispose the returned shell after the tree.
+/// none by default; [actions] and [manage] when it plays or is managed).
+/// Dispose the returned shell after the tree.
 Future<NextShellController> pumpFoundCards(
   WidgetTester tester, {
   required List<UiCard> cards,
   required NextDiscoverData discover,
   NextUiData? data,
+  NextUiActions? actions,
+  NextWorkManage? manage,
   Widget? above,
   void Function(UiWork work)? onPlay,
   double pixelRatio = 1,
@@ -54,13 +58,14 @@ Future<NextShellController> pumpFoundCards(
   final shell = NextShellController(
       NextUiServices(
         data: data ?? _Data(),
-        actions: unused,
+        actions: actions ?? unused,
         chat: _Port(),
         discover: discover,
         library: unused,
         libraryActions: unused,
         search: _Search(),
         settings: FakeSettings(),
+        manage: manage,
       ),
       onLeave: () {});
   await tester.pumpWidget(RepaintBoundary(

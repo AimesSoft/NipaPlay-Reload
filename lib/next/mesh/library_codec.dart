@@ -23,6 +23,8 @@ JsonMap workJson(UiWork w) => {
       'year': w.year,
       'genres': w.genres,
       'episodeCount': w.episodeCount,
+      'film': w.film,
+      'runtimeMs': w.runtime?.inMilliseconds,
       'studio': w.studio,
       'overview': w.overview,
       'ratings': [
@@ -70,6 +72,10 @@ UiWork workValue(JsonMap w, List<UiEpisode> episodes, List<UiDevice> devices) {
       genres: (w['genres'] as List).cast<String>(),
       episodeCount: (w['episodeCount'] as int?) ??
           (episodes.isEmpty ? null : episodes.length),
+      film: w['film'] == true,
+      runtime: w['runtimeMs'] == null
+          ? null
+          : Duration(milliseconds: w['runtimeMs'] as int),
       studio: w['studio'] as String?,
       overview: w['overview'] as String?,
       ratings: [

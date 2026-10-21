@@ -771,7 +771,9 @@ final class MeshLibrary {
       for (final w in members.skip(1)) {
         final other = w['value'] as JsonMap;
         if (value['title'] == '未命名作品') value['title'] = other['title'];
-        for (final field in ['originalTitle', 'year', 'studio', 'overview'])
+        for (final field in [
+          'originalTitle', 'year', 'studio', 'overview', 'runtimeMs'
+        ])
           value[field] ??= other[field];
         final art = value['artwork'] as JsonMap,
             otherArt = other['artwork'] as JsonMap;
@@ -780,6 +782,13 @@ final class MeshLibrary {
         for (final field in ['genres', 'ratings', 'danmaku'])
           if ((value[field] as List).isEmpty) value[field] = other[field];
       }
+      // A film when an identity is a TMDB movie and none a TMDB series, as
+      // `IdentityStore.workIsFilm` tells it for one device.
+      final tmdb = {
+        for (final key in keys)
+          if (jsonDecode(key) case ['tmdb', final String type, ...]) type
+      };
+      value['film'] = tmdb.contains('movie') && !tmdb.contains('tv');
       _episodes[id] = episodes;
       value['episodeCount'] = math.max(
           episodes.length,

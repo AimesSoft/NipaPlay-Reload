@@ -67,6 +67,22 @@ final class IdentityStore {
           [workId, workId]))
       .isNotEmpty;
 
+  /// Whether the work is known as a film: an accepted TMDB movie identity
+  /// on it or a release under it, and no TMDB series identity.
+  Future<bool> workIsFilm(String workId) async {
+    final types = {
+      for (final row in await database.rawQuery(
+          "SELECT DISTINCT o.object_type FROM media_bindings b JOIN media_external_objects o ON o.id=b.object_id "
+          "JOIN media_entities e ON e.id=b.entity_id "
+          "WHERE b.status='accepted' AND b.relation IN ('exact','contains') "
+          "AND o.provider='tmdb' AND o.object_type IN ('tv','movie') "
+          "AND (e.id=? OR (e.kind='release' AND e.parent_id=?))",
+          [workId, workId]))
+        row['object_type']
+    };
+    return types.contains('movie') && !types.contains('tv');
+  }
+
   Future<void> closeEvents() => _fileChanges.close();
 
   /// Location-only registration never changes content revisions or infers identity.

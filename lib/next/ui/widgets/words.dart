@@ -12,8 +12,9 @@ abstract final class Words {
   static bool canPlay(UiWork work, [UiEpisode? episode]) =>
       (episode ?? work.next)?.playable ?? false;
 
-  static String play(UiWork work) =>
-      work.next == null ? '播放' : '播放 ${episode(work.next!.number)}';
+  static String play(UiWork work) => work.next == null || work.film
+      ? '播放'
+      : '播放 ${episode(work.next!.number)}';
 
   static String remaining(Duration? left) {
     if (left == null) return '';
@@ -41,6 +42,15 @@ abstract final class Words {
   static String? runtime(Duration? d) => d == null || d <= Duration.zero
       ? null
       : '${d.inMinutes < 1 ? 1 : d.inMinutes} 分';
+
+  /// A film's length, “1 小时 32 分”, “52 分钟”; null when it is not
+  /// known.
+  static String? length(Duration? d) {
+    if (d == null || d <= Duration.zero) return null;
+    final m = (d.inSeconds / 60).round().clamp(1, 1 << 31);
+    if (m < 60) return '$m 分钟';
+    return m % 60 == 0 ? '${m ~/ 60} 小时' : '${m ~/ 60} 小时 ${m % 60} 分';
+  }
 
   /// “第一季”, “第二季”…; season 0 holds the specials.
   static String season(int? season) {
@@ -91,7 +101,8 @@ abstract final class Words {
       work.genres.where((g) => g != '动画' && g != 'Animation').take(2).toList();
 }
 
-/// `.meta`: ★ 8.8 · 2023 · 奇幻 · 冒险 · 28 集
+/// `.meta`: ★ 8.8 · 2023 · 奇幻 · 冒险 · 28 集; a film says its length
+/// instead.
 class MetaLine extends StatelessWidget {
   const MetaLine(this.work,
       {super.key,
@@ -134,7 +145,12 @@ class MetaLine extends StatelessWidget {
       parts.add(Text(shownGenres.join(' · '),
           style: NextText.sans(size, color: NextColors.p2)));
     }
-    if (work.episodeCount != null) {
+    if (work.film) {
+      if (Words.length(work.runtime) case final length?) {
+        parts.add(
+            NumText(length, style: NextText.sans(size, color: NextColors.p2)));
+      }
+    } else if (work.episodeCount != null) {
       parts.add(Row(mainAxisSize: MainAxisSize.min, children: [
         Text('${work.episodeCount}',
             style: NextText.num(size, color: NextColors.p2)),
