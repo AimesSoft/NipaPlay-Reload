@@ -294,4 +294,54 @@ void main() {
     final job = (await runtime.engine.list()).single;
     await untilState(runtime.engine, job.jobId, JobState.succeeded);
   });
+
+  test('a session removed outside Next is noticed at startup and on refresh',
+      () async {
+    final root = await Directory.systemTemp.createTemp('download-vanished-');
+    final backend = FakeDownloadBackend(root)..present = true;
+    await backend.finish();
+    final library = FakeDownloadLibrary();
+    NextCore createRuntime() => createCore(
+        root: root,
+        backend: backend,
+        library: library,
+        isEnabled: () async => true,
+        loadImportedKeys: () async => library.importedKeys);
+    var runtime = createRuntime();
+    addTearDown(() async {
+      await runtime.close();
+      await root.delete(recursive: true);
+    });
+    await runtime.ready;
+    final job = (await runtime.engine.list()).single;
+    final done =
+        await untilState(runtime.engine, job.jobId, JobState.succeeded);
+    await runtime.downloads.refresh();
+    expect((await runtime.engine.get(job.jobId)).toJson(), done.toJson());
+    // Classic forgets it while Next runs.
+    backend.present = false;
+    await runtime.downloads.refresh();
+    final seen = await runtime.engine.get(job.jobId);
+    expect(seen.receipt!.details['sessionPresent'], false);
+    expect(seen.receipt!.details.containsKey('dataDeleted'), isFalse);
+    expect(seen.receipt!.details['observedMissingAt'], isNotNull);
+    await runtime.downloads.refresh();
+    expect((await runtime.engine.get(job.jobId)).toJson(), seen.toJson());
+    // Forgotten while Next was closed: noticed on the next start.
+    backend.present = true;
+    await runtime.close();
+    runtime = createRuntime();
+    await runtime.ready;
+    await runtime.downloads.refresh();
+    final again = (await runtime.engine.list(type: 'download'))
+        .where((j) => j.jobId != job.jobId)
+        .single;
+    await untilState(runtime.engine, again.jobId, JobState.succeeded);
+    backend.present = false;
+    await runtime.close();
+    runtime = createRuntime();
+    await runtime.ready;
+    final restarted = await runtime.engine.get(again.jobId);
+    expect(restarted.receipt!.details['sessionPresent'], false);
+  });
 }

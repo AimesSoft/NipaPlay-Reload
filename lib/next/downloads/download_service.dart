@@ -85,7 +85,10 @@ final class DownloadService {
         final jobs = (await engine.list(type: 'download'))
             .where((job) => _matches(job, backend.reference, task.infoHash))
             .toList();
-        if (jobs.isNotEmpty) {
+        // A job whose session was removed is a record; the same hash back in
+        // the session is a new job.
+        if (jobs.isNotEmpty &&
+            jobs.last.receipt?.details['sessionPresent'] != false) {
           final latest = jobs.last;
           if (!latest.state.isTerminal) return latest;
           if (latest.state == JobState.cancelled && task.paused) return latest;
@@ -513,8 +516,38 @@ final class DownloadService {
         return engine.get(jobId);
       });
 
+  /// An ended download whose session is gone without Next having removed it
+  /// (Classic does that directly). [present] is the backend's listing; its
+  /// receipt then says what is left on disk, found now. A running or paused
+  /// job is the executor's to settle, an already amended one is left alone.
+  Future<void> observeMissingSessions(
+      DownloadBackend backend, List<DownloadSnapshot> present) async {
+    bool candidate(Job job) =>
+        job.state.isTerminal &&
+        job.sideEffectCommitted &&
+        _ref(job).key == backend.reference.key &&
+        job.receipt?.details['sessionPresent'] != false &&
+        !present.any((task) => task.infoHash == job.input['infoHash']);
+    final jobs = (await engine.list(type: 'download')).where(candidate);
+    if (jobs.isEmpty) return;
+    await _serial(() async {
+      // The listing may be older than a removal or an add done meanwhile.
+      final live = await backend.list();
+      for (final listed in jobs) {
+        final job = await engine.get(listed.jobId);
+        if (candidate(job) &&
+            !live.any((task) => task.infoHash == job.input['infoHash'])) {
+          await _amendRemoved(job, backend, null);
+        }
+      }
+    });
+  }
+
+  /// [deleteData] is null when nobody here removed the session and who did,
+  /// or whether the data went with it, is not known.
   Future<void> _amendRemoved(
-      Job job, DownloadBackend backend, bool deleteData) async {
+      Job job, DownloadBackend backend, bool? deleteData) async {
+    final now = DateTime.now().toUtc().toIso8601String();
     final reread = {
       for (final row in await readRemovedFiles(backend, library, job))
         row['path']: row
@@ -548,8 +581,11 @@ final class DownloadService {
               ...old,
               'files': files,
               'sessionPresent': false,
-              'removedAt': DateTime.now().toUtc().toIso8601String(),
-              'dataDeleted': deleteData
+              'removedAt': now,
+              if (deleteData == null)
+                'observedMissingAt': now
+              else
+                'dataDeleted': deleteData
             }));
   }
 }

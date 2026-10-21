@@ -192,4 +192,80 @@ void main() {
     expect(again.receipt, isNull);
     await engine.cancel(again.jobId);
   });
+
+  test('an ended download whose session vanished outside Next is amended once',
+      () async {
+    final done = await finished();
+    final present = await backend.list();
+    // The session is there: nothing changes.
+    await downloads.observeMissingSessions(backend, present);
+    expect((await engine.get(done.jobId)).toJson(), done.toJson());
+    // Classic removed it, keeping the data.
+    backend.present = false;
+    library.media[backend.video.location.path] = {'fileId': 'f'};
+    await downloads.observeMissingSessions(backend, const []);
+    final read = await engine.get(done.jobId);
+    expect(read.state, JobState.succeeded);
+    final details = read.receipt!.details;
+    expect(details['sessionPresent'], false);
+    expect(DateTime.parse(details['removedAt'] as String).isUtc, isTrue);
+    expect(details['observedMissingAt'], details['removedAt']);
+    expect(details.containsKey('dataDeleted'), isFalse);
+    expect(details['infoHash'], testHash);
+    expect(read.receipt!.verification, done.receipt!.verification);
+    expect(fileOf(read)['retained'], true);
+    expect(fileOf(read)['actualSize'], 4);
+    expect(fileOf(read)['imported'], true);
+    // Seen again: not amended twice.
+    await downloads.observeMissingSessions(backend, const []);
+    expect((await engine.get(done.jobId)).toJson(), read.toJson());
+  });
+
+  test('the data deleted elsewhere shows in the re-read files', () async {
+    final done = await finished();
+    backend.present = false;
+    await File(backend.video.location.path).delete();
+    await downloads.observeMissingSessions(backend, const []);
+    final read = await engine.get(done.jobId);
+    expect(read.receipt!.details['sessionPresent'], false);
+    expect(fileOf(read)['retained'], false);
+    expect(fileOf(read)['actualSize'], isNull);
+  });
+
+  test('a listing older than a re-add does not amend a live session',
+      () async {
+    final done = await finished();
+    // The caller's listing is empty, but the backend has the session now.
+    await downloads.observeMissingSessions(backend, const []);
+    expect((await engine.get(done.jobId)).toJson(), done.toJson());
+  });
+
+  test('a job that never had a session and running jobs are left alone',
+      () async {
+    backend.present = true;
+    backend.finished = false;
+    final running = await downloads.add(testRequest);
+    final deadline = DateTime.now().add(const Duration(seconds: 3));
+    while (!(await engine.get(running.jobId)).sideEffectCommitted) {
+      expect(DateTime.now().isBefore(deadline), isTrue);
+      await Future<void>.delayed(const Duration(milliseconds: 5));
+    }
+    backend.present = false;
+    await downloads.observeMissingSessions(backend, const []);
+    final read = await engine.get(running.jobId);
+    expect(read.receipt?.details.containsKey('sessionPresent') ?? false,
+        isFalse);
+    await engine.cancel(running.jobId);
+  });
+
+  test('the same hash back in the session is a new job, not the old record',
+      () async {
+    final done = await finished();
+    backend.present = false;
+    await downloads.observeMissingSessions(backend, const []);
+    backend.present = true;
+    final back = await downloads.adopt(backend, backend.snapshot);
+    expect(back.jobId, isNot(done.jobId));
+    await engine.cancel(back.jobId);
+  });
 }

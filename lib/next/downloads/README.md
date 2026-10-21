@@ -24,6 +24,14 @@ amend its receipt: `files` are re-read (`actualSize`, `retained`, `imported`),
 whether the data went too. The amendment is a `receipt_amended` task event and
 does not raise a new completion follow-up. A removed download that is added
 again is a new job; the old one keeps its amended record.
+A session that disappears without Next (Classic removes it straight from the
+engine) is noticed by the runtime's existing refresh, at Next start and every few
+seconds from then on, using the listing it already reads: an ended job that had a
+session and whose receipt lacks `sessionPresent: false` gets the same amendment,
+with `removedAt` the time it was noticed and `observedMissingAt` the same time
+marking it as observed. `dataDeleted` is not written: who removed it, and whether
+the data went, is unknown; the re-read `retained` says whether the files remain.
+Classic itself is unchanged, and with Next off nothing runs.
 
 Agent controls use the same Classic torrent session and preferences. Discover
 jobs with `task.list` (`type: download`); `download.read` accepts `jobId` or

@@ -109,9 +109,11 @@ final class DownloadRuntime extends ChangeNotifier {
     if (_closed) return;
     if (await _enabled()) {
       await _backend.initialize();
-      for (final task in await _backend.list()) {
+      final tasks = await _backend.list();
+      for (final task in tasks) {
         await downloads.adopt(_backend, task);
       }
+      await downloads.observeMissingSessions(_backend, tasks);
     }
     autoScannedKeys = Set.unmodifiable(await _loadImportedKeys());
     _jobsByHash = {
