@@ -199,12 +199,21 @@ class Player {
     bool? fit,
   }) {
     if (_disposing) return Future<int>.value(-1);
-    final operation = _textureQueue.then((_) => _updateTexture(
+    // NipaPlay: where a texture update waits, when one never finishes.
+    final asked = DateTime.now();
+    debugPrint('[fvp] updateTexture asked for $_media');
+    final operation = _textureQueue.then((_) {
+      final waited = DateTime.now().difference(asked).inMilliseconds;
+      if (waited > 1000) {
+        debugPrint('[fvp] updateTexture waited ${waited}ms for the previous one');
+      }
+      return _updateTexture(
           width: width,
           height: height,
           tunnel: tunnel,
           fit: fit,
-        ));
+        );
+    });
     _textureQueue =
         operation.then<void>((_) {}, onError: (Object _, StackTrace __) {});
     return operation;
@@ -216,15 +225,19 @@ class Player {
     bool? tunnel,
     bool? fit,
   }) async {
+    final started = DateTime.now();
+    String since() => '${DateTime.now().difference(started).inMilliseconds}ms';
     if ((textureId.value ?? -1) >= 0) {
       await FvpPlatform.instance.releaseTexture(nativeHandle, textureId.value!);
       textureId.value = null;
+      debugPrint('[fvp] updateTexture released the old texture after ${since()}');
     }
     if (width != null && width <= 0 || height != null && height <= 0) {
       return -1;
     }
     if (_disposing) return -1;
     final size = await _videoSize.future;
+    debugPrint('[fvp] updateTexture knows the video size $size after ${since()}');
     if (size == null || _disposing) {
       return -1;
     }
@@ -236,6 +249,7 @@ class Player {
         size.height.toInt(),
         tunnel ?? false,
       );
+      debugPrint('[fvp] updateTexture created texture ${textureId.value} after ${since()}');
       return textureId.value!;
     }
     if (width != null && height != null && width > 0 && height > 0) {
@@ -854,6 +868,7 @@ class Player {
     if (vc != null) {
       if (vc.width <= 0 || vc.height <= 0) {
         // failed to parse video size, e.g. small probesize
+        debugPrint('[fvp] video size not known yet for $_media; waiting for the decoder');
         return;
       }
       w = vc.width.toDouble();
