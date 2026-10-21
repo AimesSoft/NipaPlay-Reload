@@ -141,6 +141,33 @@ extension DownloadReturns on Followups {
           }
       ];
       if (facts.isEmpty) continue;
+      // A download that succeeded after every one of its videos was already
+      // told has nothing new to say; its end alone would open a turn only to
+      // hear that. A failure, or files still untold, still go.
+      if (job.state == JobState.succeeded &&
+          facts.every((fact) => fact['event'] == 'task.terminal') &&
+          automatic.isNotEmpty &&
+          automatic.every((r) => r['state'] != 'ready')) {
+        final told = {
+          for (final row in automatic)
+            for (final id in row['downloadObjects'] as List) id
+        };
+        final videos = [
+          for (final file in (job.checkpoint['completedFiles'] as List? ?? [])
+              .cast<JsonMap>())
+            if (file['isVideo'] == true && file['imported'] == true)
+              file['objectId']
+        ];
+        if (videos.isNotEmpty && videos.every(told.contains)) {
+          final last = automatic.last;
+          (last['downloadObjects'] as List).add('terminal:${job.jobId}');
+          await _save(redactHarnessJson(last) as JsonMap,
+              last['state'] as String, 'coalesced',
+              reason: last['reason'] as String?);
+          rows = await _rows();
+          continue;
+        }
+      }
       final pending = automatic.where((r) => r['state'] == 'ready' && r['remoteSealed'] != true).lastOrNull;
       final now = DateTime.now().toUtc();
       final last = automatic.lastOrNull;

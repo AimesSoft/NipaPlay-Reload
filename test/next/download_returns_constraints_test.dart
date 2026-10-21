@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
@@ -302,6 +303,59 @@ void main() {
     expect(facts, hasLength(1));
     expect(facts.single['data']['state'], 'failed');
     expect(facts.single['data']['receipt']['verification'], 'unverified');
+  });
+
+  test('a success after every video was already told opens no turn',
+      () async {
+    final job = await submit();
+    final context = await executor.entered.future;
+    await context.report(checkpoint: {
+      'completedFiles': [file(job, 0)]
+    });
+    await followups.sweep();
+    // The file's turn ran.
+    final told = (await store.database.query('followups')).single;
+    final snapshot = jsonDecode(told['snapshot'] as String) as Map;
+    snapshot['state'] = 'completed';
+    await store.database.update(
+        'followups', {'state': 'completed', 'snapshot': jsonEncode(snapshot)},
+        where: 'id=?', whereArgs: [told['id']]);
+    await context.succeed(verified(details: {
+      'fileIds': ['file-0']
+    }));
+    await followups.sweep();
+    await followups.sweep();
+    final rows = (await followups.list())
+        .where((r) => r['automatic'] == 'download')
+        .toList();
+    expect(rows, hasLength(1));
+    expect(rows.single['downloadObjects'], contains('terminal:${job.jobId}'));
+  });
+
+  test('a failure after every video was told still comes back', () async {
+    final job = await submit();
+    final context = await executor.entered.future;
+    await context.report(checkpoint: {
+      'completedFiles': [file(job, 0)]
+    });
+    await followups.sweep();
+    final told = (await store.database.query('followups')).single;
+    final snapshot = jsonDecode(told['snapshot'] as String) as Map;
+    snapshot['state'] = 'completed';
+    await store.database.update(
+        'followups', {'state': 'completed', 'snapshot': jsonEncode(snapshot)},
+        where: 'id=?', whereArgs: [told['id']]);
+    await context.fail(
+        const Failure(FailureCode.unavailable, 'disk full'),
+        JobReceipt(
+            verification: VerificationLevel.unverified,
+            details: {'reason': 'disk full'}));
+    await followups.sweep();
+    final rows = (await followups.list())
+        .where((r) => r['automatic'] == 'download')
+        .toList();
+    expect(rows, hasLength(2));
+    expect(rows.last['state'], 'ready');
   });
 
   test('what the conversation read for itself is not sent back to it',
