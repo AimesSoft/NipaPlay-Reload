@@ -10,6 +10,7 @@ import 'package:provider/provider.dart';
 import 'package:window_manager/window_manager.dart';
 
 import '../../ui_data/ui_data.dart' show NextNowPlaying, UiNowPlaying;
+import '../data/login_requests.dart';
 import '../shell/nipa_setup.dart';
 import '../shell/shell_controller.dart';
 import '../shell/window_chrome.dart';
@@ -36,7 +37,8 @@ enum _Menu { subtitles, episodes, more }
 /// them, a menu is open or Nipa's panel is. ⌘K asks Nipa, in the panel
 /// over the video. ⋯ holds what the bar has no room for (the speed, the
 /// audio track, the picture's fit, the danmaku's look, a still, picture in
-/// picture); a still taken shows a moment in the corner.
+/// picture); a still taken shows a moment in the corner. A login Nipa asks
+/// for waits in the conversation, told of by a note under her.
 class NextPlayerLayer extends StatefulWidget {
   const NextPlayerLayer({super.key});
 
@@ -282,6 +284,12 @@ class _NextPlayerLayerState extends State<NextPlayerLayer> {
               raised: shown,
               playback: playback,
               onOpen: _openShot,
+            ),
+            _LoginNote(
+              logins: shell.services.logins,
+              controls: shown,
+              covered: shell.panelOpen.value,
+              onHover: _hoverChrome,
             ),
             if (_menu != null) ...[
               Positioned.fill(
@@ -1095,6 +1103,124 @@ class _Still extends StatelessWidget {
                             ),
                           ),
                         ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// A login Nipa asked for while the video plays, its card waiting in the
+/// conversation: 登录 弹弹play under her, for a moment when it comes and
+/// whenever the controls show; a click opens the login window. None while
+/// the conversation is open over the video, where the card is.
+class _LoginNote extends StatefulWidget {
+  const _LoginNote({
+    required this.logins,
+    required this.controls,
+    required this.covered,
+    required this.onHover,
+  });
+  final LoginRequests logins;
+  final bool controls;
+  final bool covered;
+  final ValueChanged<bool> onHover;
+
+  @override
+  State<_LoginNote> createState() => _LoginNoteState();
+}
+
+class _LoginNoteState extends State<_LoginNote> {
+  /// The logins already told of; one new shows without the controls too,
+  /// for a moment.
+  final _told = <LoginRequest>{};
+  bool _fresh = false;
+  Timer? _freshGone;
+
+  /// Kept while the note fades out.
+  String _label = '';
+
+  @override
+  void initState() {
+    super.initState();
+    _told.addAll(widget.logins.pending);
+    widget.logins.addListener(_changed);
+  }
+
+  @override
+  void didUpdateWidget(_LoginNote old) {
+    super.didUpdateWidget(old);
+    if (identical(old.logins, widget.logins)) return;
+    old.logins.removeListener(_changed);
+    widget.logins.addListener(_changed);
+  }
+
+  @override
+  void dispose() {
+    widget.logins.removeListener(_changed);
+    _freshGone?.cancel();
+    super.dispose();
+  }
+
+  void _changed() {
+    final pending = widget.logins.pending;
+    if (pending.any((r) => !_told.contains(r))) {
+      _fresh = true;
+      _freshGone?.cancel();
+      _freshGone = Timer(const Duration(seconds: 4), () {
+        if (mounted) setState(() => _fresh = false);
+      });
+    }
+    _told
+      ..clear()
+      ..addAll(pending);
+    setState(() {});
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final waiting = widget.logins.pending.where((r) => !r.opening).firstOrNull;
+    if (waiting != null) _label = '登录 ${waiting.platform}';
+    final shown =
+        waiting != null && !widget.covered && (widget.controls || _fresh);
+    return Positioned(
+      right: NextMetrics.chromeEdge,
+      top: NextMetrics.topBar - 2,
+      child: IgnorePointer(
+        ignoring: !shown,
+        child: AnimatedOpacity(
+          opacity: shown ? 1 : 0,
+          duration: const Duration(milliseconds: 220),
+          curve: NextMotion.ease,
+          child: Pressable(
+            onTap: waiting == null
+                ? null
+                : () => unawaited(widget.logins.open(waiting)),
+            onHover: widget.onHover,
+            semanticLabel: _label,
+            builder: (context, hovered) => AnimatedContainer(
+              duration: const Duration(milliseconds: 160),
+              height: 32,
+              padding: const EdgeInsets.symmetric(horizontal: 13),
+              decoration: BoxDecoration(
+                color:
+                    hovered ? const Color(0xE61C1C24) : const Color(0xCC121218),
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(color: NextColors.line2),
+              ),
+              child: Row(mainAxisSize: MainAxisSize.min, children: [
+                Container(
+                  width: 6,
+                  height: 6,
+                  decoration: const BoxDecoration(
+                      shape: BoxShape.circle, color: NextColors.accent),
+                ),
+                const SizedBox(width: 8),
+                Text(_label,
+                    style: NextText.sans(12.5,
+                        color: hovered ? NextColors.paper : NextColors.p2)),
+              ]),
             ),
           ),
         ),

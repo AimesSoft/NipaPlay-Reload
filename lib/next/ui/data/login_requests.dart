@@ -17,14 +17,14 @@ final class LoginRequest {
   bool opening = false;
 }
 
-/// Logins waiting for the user. While the Next shell is showing, a login the
-/// agent starts waits here as a card until the user opens the window; when
-/// it is not showing (a video plays in Classic's player) the window opens at
-/// once, as it always did.
+/// Logins waiting for the user. While the Next shell is on screen (its pages,
+/// or its player over a video), a login the agent starts waits here as a
+/// card until the user opens the window; when it is not on screen the
+/// window opens at once, as it always did.
 class LoginRequests extends ChangeNotifier {
   final pending = <LoginRequest>[];
 
-  /// The shell is on screen to show the card.
+  /// The shell is on screen to show the card, or over a video to tell of it.
   bool Function() showing = () => false;
 
   /// A new card arrived (the shell makes sure it can be seen).
