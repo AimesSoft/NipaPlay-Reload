@@ -157,15 +157,19 @@ void main() {
     });
 
     test('files stop arriving, then the batch goes by itself', () async {
-      followups.libraryQuiet = const Duration(milliseconds: 120);
+      // Wide margins: under the full suite a sweep can take hundreds of ms.
+      followups.libraryQuiet = const Duration(milliseconds: 2000);
       await add([_file('a', id: 'file-a')]);
       await followups.sweep();
       expect(dispatched, isEmpty);
+      await Future<void>.delayed(const Duration(milliseconds: 1200));
       await add([_file('b', id: 'file-b')]);
-      await Future<void>.delayed(const Duration(milliseconds: 80));
       await followups.sweep();
       expect(dispatched, isEmpty, reason: 'a new file restarts the quiet time');
-      await Future<void>.delayed(const Duration(milliseconds: 120));
+      await Future<void>.delayed(const Duration(milliseconds: 1200));
+      await followups.sweep();
+      expect(dispatched, isEmpty, reason: 'counted from b, not from a');
+      await Future<void>.delayed(const Duration(milliseconds: 1200));
       await followups.sweep();
       expect(dispatched, hasLength(1));
       expect(dispatched.single['title'], contains('2'));

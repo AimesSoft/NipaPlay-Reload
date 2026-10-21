@@ -237,7 +237,7 @@ trust_level = "trusted"
 
       final job = await lab.until(() async => (await lab.engine.list(type: 'agent.helper'))
           .where((job) => job.input['threadId'] == child)
-          .firstOrNull);
+          .firstOrNull, what: 'helper job');
       expect(job.input['source'], 'codexNative');
       expect(job.input['parentThreadId'], parent);
       expect(job.title, 'CHILD_TASK do it');
@@ -259,14 +259,14 @@ trust_level = "trusted"
       final finished = await lab.until(() async {
         final current = await lab.engine.get(job.jobId);
         return current.state.isTerminal ? current : null;
-      });
+      }, what: 'helper job terminal');
       expect(finished.state, JobState.succeeded);
       expect(finished.receipt!.details['summary'], 'CHILD_RESULT finished');
       final row = await lab.until(() async {
         await lab.followups.sweep();
         final rows = await lab.followups.list();
         return rows.where((r) => (r['condition'] as Map)['jobId'] == job.jobId && r['state'] == 'cancelled').firstOrNull;
-      });
+      }, what: 'helper followup consumed');
       expect(row['consumedBy'], isNotNull);
       await lab.followups.sweep();
       await Future<void>.delayed(const Duration(seconds: 1));
@@ -644,13 +644,13 @@ def redact(text, secrets=()):
   }
 
   Future<T> until<T>(Future<T?> Function() probe,
-      {Duration timeout = const Duration(seconds: 120)}) async {
+      {Duration timeout = const Duration(seconds: 120), String what = ''}) async {
     final deadline = DateTime.now().add(timeout);
     while (DateTime.now().isBefore(deadline)) {
       if (await probe() case final T value) return value;
       await Future<void>.delayed(const Duration(milliseconds: 50));
     }
-    fail('Condition not met in $timeout');
+    fail('Condition not met in $timeout: $what');
   }
 
   Future<void> close() async {
