@@ -104,10 +104,11 @@ trust_level = "trusted"
       expect(context, contains('RECENT_FIXTURE for $thread'));
       final tools = [for (final tool in request['tools'] as List) tool['name']];
       expect(tools, containsAll(['bash', 'read', 'read_image', 'write', 'web_fetch', 'subagent', 'subagent_fork',
-          'send_message', 'interrupt_agent', 'list_agents', 'job_output', 'job_list', 'job_kill', 'todo_write',
-          'ask_user_question']));
+          'send_message', 'interrupt_agent', 'list_agents', 'job_output', 'job_list', 'job_kill', 'todo_write']));
+      // A question that holds the turn open keeps NipaPlay's facts out; she
+      // asks with NipaPlay's choices card instead.
       for (final removed in ['edit', 'glob', 'grep', 'workflow', 'skill', 'exit_plan_mode', 'working_directory',
-          'create_goal', 'get_goal', 'update_goal']) {
+          'create_goal', 'get_goal', 'update_goal', 'ask_user_question']) {
         expect(tools, isNot(contains(removed)));
       }
       // The hook ran as the main conversation's shell would.
@@ -357,36 +358,6 @@ trust_level = "trusted"
       final history = ((await host.readThread(thread))['turns'] as List).single as Map;
       expect(history['status'], 'failed');
       expect(jsonEncode(history['error']), contains('429'));
-    });
-
-    test("ask_user_question reaches the person as Codex's request_user_input", () async {
-      await open([
-        _Rule(when: ['ask me'], unless: ['call_'], calls: [
-          {
-            'name': 'ask_user_question',
-            'args': {
-              'questions': [
-                {'id': 'res', 'question': '要哪个清晰度？', 'header': '清晰度',
-                  'options': [{'label': '1080p'}, {'label': '720p'}]}
-              ]
-            }
-          }
-        ]),
-        _Rule(when: ['ask me', 'call_'], text: '好。'),
-      ]);
-      final host = await lab.start();
-      await host.getMainSession();
-      final asked = host.userInputRequests.first;
-      await host.startTurn('ask me');
-      final request = await asked.timeout(const Duration(seconds: 30));
-      final question = (request['params']['questions'] as List).single as Map;
-      expect(question['question'], '要哪个清晰度？');
-      expect([for (final o in question['options'] as List) o['label']], ['1080p', '720p']);
-      await host.answerUserInput(request['id'] as Object, {'res': ['1080p', '带中文字幕']});
-      await lab.next((e) => e['method'] == 'turn/completed');
-      final output = jsonEncode(fake.requests.last['input']);
-      expect(output, contains('1080p'));
-      expect(output, contains('带中文字幕'));
     });
   }, skip: missing);
 }

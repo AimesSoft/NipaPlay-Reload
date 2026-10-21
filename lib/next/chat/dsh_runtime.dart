@@ -202,7 +202,6 @@ List<Map<String, Object?>> dshPatch(
       },
       {
         'insert': [
-          {'id': 'tool-ask-user', 'name': '@deepseek-ai/dsh-tool-ask-user'},
           {
             'id': 'nipa-persona',
             'name': '${plugins.absolute.path}/nipa-persona.mjs',
