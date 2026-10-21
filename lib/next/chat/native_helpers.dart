@@ -135,11 +135,18 @@ final class _NativeHelpers {
       return;
     }
     final title = _sentence(prompt ?? existing.lastOrNull?.title ?? '后台帮手', 48);
-    final history = await chat.readThread(parent);
+    final history = await chat.readThread(parent, withProcess: false);
+    // Waits already in the parent's history belong to earlier runs. A child
+    // seen for the first time has had none: a wait naming it is this run's
+    // own result, delivered before the history was read.
     final previousWaitIds = [
       for (final turn in (history['turns'] as List).cast<Map>())
         for (final item in (turn['items'] as List).cast<Map>())
-          if (item['type'] == 'collabAgentToolCall' && item['tool'] == 'wait')
+          if (item['type'] == 'collabAgentToolCall' &&
+              item['tool'] == 'wait' &&
+              (existing.isNotEmpty ||
+                  !(item['agentsStates'] as Map? ?? const {})
+                      .containsKey(child)))
             item['id']
     ];
     final job = await runZoned(
@@ -175,8 +182,9 @@ final class _NativeHelpers {
 
   Future<Map?> taken(Job job, ChatHost chat) async {
     if (job.input['source'] != 'codexNative') return null;
-    final history =
-        await chat.readThread(job.input['parentThreadId'] as String);
+    // The runtime's own items: the display copy keeps no agent states.
+    final history = await chat
+        .readThread(job.input['parentThreadId'] as String, withProcess: false);
     final finished = job.receipt?.details['completedAt'] as int?;
     for (final turn in (history['turns'] as List).cast<Map>()) {
       if (turn['completedAt'] == null ||
@@ -192,7 +200,7 @@ final class _NativeHelpers {
           continue;
         }
         final state =
-            (item['agentsStates'] as Map)[job.input['threadId']] as Map?;
+            (item['agentsStates'] as Map?)?[job.input['threadId']] as Map?;
         if (state?['status'] == 'completed' &&
             state?['message'] != null &&
             state!['message'] == job.receipt?.details['summary']) {

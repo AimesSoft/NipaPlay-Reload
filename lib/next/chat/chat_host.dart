@@ -968,7 +968,9 @@ final class ChatHost {
         'input': _input(text)
       }));
 
-  Future<ChatMessage> readThread(String id) async {
+  /// [withProcess] puts NipaPlay's saved display copy of the process back
+  /// into the turns; without it the items are the runtime's own.
+  Future<ChatMessage> readThread(String id, {bool withProcess = true}) async {
     if (modelLaunch != null && !_loaded.contains(id) && _rollouts.containsKey(id)) {
       await _request('thread/resume', {
         ..._common,
@@ -981,8 +983,10 @@ final class ChatHost {
     final result =
         await _request('thread/read', {'threadId': id, 'includeTurns': true});
     final history = Map<String, dynamic>.from(result['thread'] as Map);
-    for (final turn in (history['turns'] as List).cast<Map>()) {
-      processes.restore(id, turn);
+    if (withProcess) {
+      for (final turn in (history['turns'] as List).cast<Map>()) {
+        processes.restore(id, turn);
+      }
     }
     return history;
   }
