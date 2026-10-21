@@ -460,6 +460,7 @@ class _ChoiceRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) => Pressable(
         onTap: settled ? null : onTap,
+        semanticLabel: option.label,
         pressScale: 0.99,
         cursor: settled || onTap == null
             ? SystemMouseCursors.basic
