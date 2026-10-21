@@ -66,10 +66,11 @@ trust_level = "trusted"
     late _Fake fake;
     late _Lab lab;
 
-    Future<void> open(List<_Rule> rules, {int maxRetries = 0}) async {
+    Future<void> open(List<_Rule> rules, {int maxRetries = 0, Directory? plugins}) async {
       fake = await _Fake.start(rules);
       addTearDown(fake.close);
       lab = await _Lab.open(runtime!, fake, maxRetries: maxRetries);
+      lab.plugins = plugins;
       addTearDown(lab.close);
     }
 
@@ -129,6 +130,56 @@ trust_level = "trusted"
       expect(jsonEncode(lab.events), isNot(contains(_key)));
     });
 
+    test("the model is offered Nipa's tool descriptions and system prompt, with DSH's parameter schemas", () async {
+      final wanted = Map<String, Object?>.from(jsonDecode(
+          await File('assets/next/agent/dsh/tool-descriptions.json').readAsString()) as Map);
+      Future<Map<String, Object?>> firstRequest() async {
+        final host = await lab.start();
+        await host.getMainSession();
+        await host.startTurn('你好');
+        await lab.next((e) => e['method'] == 'turn/completed');
+        return fake.requests.first;
+      }
+
+      await open([_Rule(when: ['你好'], text: '好。')]);
+      final request = await firstRequest();
+      final tools = {
+        for (final tool in request['tools'] as List) tool['name'] as String: tool as Map,
+      };
+      for (final name in ['subagent', 'subagent_fork', 'send_message', 'bash', 'todo_write']) {
+        expect(tools[name]!['description'], wanted[name], reason: name);
+      }
+      for (final entry in wanted.entries) {
+        if (tools[entry.key] case final tool?) expect(tool['description'], entry.value, reason: entry.key);
+      }
+      final system = ((request['input'] as List).first as Map)['content'] as String;
+      expect(system, contains('# What they are waiting for'));
+      expect(system, File('assets/next/agent/nipa-base-dsh.md').readAsStringSync().trim());
+
+      // The same DSH with an empty table: only descriptions differ.
+      final bare = await Directory.systemTemp.createTemp('dsh-bare-plugins-');
+      addTearDown(() => bare.delete(recursive: true));
+      for (final file in Directory('assets/next/agent/dsh').listSync().whereType<File>()) {
+        await file.copy('${bare.path}/${file.uri.pathSegments.last}');
+      }
+      await File('${bare.path}/tool-descriptions.json').writeAsString('{}');
+      await open([_Rule(when: ['你好'], text: '好。')], plugins: bare);
+      final original = {
+        for (final tool in (await firstRequest())['tools'] as List) tool['name'] as String: tool as Map,
+      };
+      expect(tools.keys.toSet(), original.keys.toSet());
+      for (final name in tools.keys) {
+        expect(jsonEncode(tools[name]!['parameters']), jsonEncode(original[name]!['parameters']), reason: name);
+        expect(tools[name]!['type'], original[name]!['type']);
+        if (!wanted.containsKey(name)) {
+          expect(tools[name]!['description'], original[name]!['description'], reason: name);
+        }
+      }
+      for (final name in ['subagent', 'bash', 'todo_write']) {
+        expect(original[name]!['description'], isNot(wanted[name]), reason: name);
+      }
+    });
+
     test("a profile's Codex main conversation stays Codex's; DSH keeps its own", () async {
       await open([]);
       final sessions = SessionStore(lab.store.database);
@@ -178,14 +229,14 @@ trust_level = "trusted"
 
     test('a restarted host resumes the thread with its history, memory and AGENTS.md', () async {
       await open([
-        _Rule(when: ['one'], unless: ['two'], text: 'ANSWER_ONE'),
-        _Rule(when: ['two'], unless: ['three'], text: 'ANSWER_TWO'),
-        _Rule(when: ['three'], text: 'ANSWER_THREE'),
+        _Rule(when: ['TURN_ONE_QX'], unless: ['TURN_TWO_QX'], text: 'ANSWER_ONE'),
+        _Rule(when: ['TURN_TWO_QX'], unless: ['TURN_THREE_QX'], text: 'ANSWER_TWO'),
+        _Rule(when: ['TURN_THREE_QX'], text: 'ANSWER_THREE'),
       ]);
       var host = await lab.start();
       await host.getMainSession();
       final thread = host.mainThreadId!;
-      await host.startTurn('one');
+      await host.startTurn('TURN_ONE_QX');
       await lab.next((e) => e['method'] == 'turn/completed');
       await lab.stop();
 
@@ -195,7 +246,7 @@ trust_level = "trusted"
       final history = await host.readThread(thread);
       expect((history['turns'] as List).single['items'].last['text'], 'ANSWER_ONE');
       await File('${lab.repository.path}/memory/preferences.md').writeAsString('PREFERENCE_MARKER_2\n');
-      await host.startTurn('two');
+      await host.startTurn('TURN_TWO_QX');
       await lab.next((e) => e['method'] == 'turn/completed');
       final resumed = jsonEncode(fake.requests.last['input']);
       expect(resumed, contains('ANSWER_ONE'));
@@ -204,7 +255,7 @@ trust_level = "trusted"
 
       await host.compactThread(thread);
       lab.events.clear();
-      await host.startTurn('three');
+      await host.startTurn('TURN_THREE_QX');
       await lab.next((e) => e['method'] == 'turn/completed');
       final compacted = jsonEncode(fake.requests.last['input']);
       expect(compacted, contains('PREFERENCE_MARKER_2'));
@@ -513,6 +564,7 @@ final class _Lab {
   late final Helpers helpers;
   late final AgentEndpoint endpoint;
   ChatHost? host;
+  Directory? plugins;
   StreamSubscription<ChatMessage>? _subscription;
   final events = <ChatMessage>[];
   HttpOverrides? _overrides;
@@ -583,7 +635,7 @@ def redact(text, secrets=()):
         modelLaunch: () async => const ModelLaunch(revision: 0),
         baseInstructions: File('assets/next/agent/nipa-base-dsh.md'),
         dsh: runtime,
-        dshPlugins: Directory('assets/next/agent/dsh'));
+        dshPlugins: plugins ?? Directory('assets/next/agent/dsh'));
     events.clear();
     _subscription = created.events.listen(events.add);
     await created.start();

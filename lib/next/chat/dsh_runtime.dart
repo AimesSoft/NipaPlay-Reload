@@ -208,6 +208,11 @@ List<Map<String, Object?>> dshPatch(
             'config': {'file': baseInstructions.absolute.path},
           },
           {
+            'id': 'nipa-tool-descriptions',
+            'name': '${plugins.absolute.path}/nipa-tool-descriptions.mjs',
+            'config': {'file': '${plugins.absolute.path}/tool-descriptions.json'},
+          },
+          {
             'id': 'nipa-memory',
             'name': '${plugins.absolute.path}/nipa-memory.mjs',
             'config': {'harness': harness},

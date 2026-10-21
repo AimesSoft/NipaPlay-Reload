@@ -548,7 +548,9 @@ final class NextRuntime extends ChangeNotifier {
       for (final name in const [
         'nipa-app-server.mjs',
         'nipa-memory.mjs',
-        'nipa-persona.mjs'
+        'nipa-persona.mjs',
+        'nipa-tool-descriptions.mjs',
+        'tool-descriptions.json'
       ]) {
         await install('assets/next/agent/dsh/$name', 'dsh/$name');
       }
