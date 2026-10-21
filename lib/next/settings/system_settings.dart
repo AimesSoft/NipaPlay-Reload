@@ -18,9 +18,13 @@ final class SystemSettings {
   final SidecarIndexer sidecars;
   final SubtitleLibrary subtitles;
   bool startupScanEnabled = true;
+  bool libraryNotifyEnabled = true;
   Future<void> load() async {
     startupScanEnabled = await SettingsStorage.loadBool(
         'next_startup_scan_enabled',
+        defaultValue: true);
+    libraryNotifyEnabled = await SettingsStorage.loadBool(
+        'next_library_notify_enabled',
         defaultValue: true);
     sidecars.enabled = await SettingsStorage.loadBool(
         'next_sidecar_index_enabled',
@@ -183,6 +187,21 @@ final class SystemSettings {
             description: kind == 'startupScan'
                 ? 'Next 开启时的启动扫描；下一次启动生效。Next 关闭时沿用 Classic 行为。不取消正在执行的扫描。'
                 : '独立控制 Next 的自动附件检查。关闭后当前文件排空，待处理队列保留；显式检查不受影响。开启后立即核对。'),
+      entry(
+          'library.notifyNipaEnabled',
+          '新进片库时让 Nipa 在后台办好',
+          'next_library_notify_enabled',
+          const BooleanSchema(),
+          true,
+          () async => libraryNotifyEnabled,
+          (v) async {
+            await SettingsStorage.saveBool(
+                'next_library_notify_enabled', v as bool);
+            libraryNotifyEnabled = v;
+          },
+          description:
+              '开启时，新进片库的文件（用户添加的文件夹、Classic 扫描、媒体来源同步）合成一批，交给一个后台帮手，结果记在动态里，不进主会话；用户不在旁边时片库也会办好。Nipa 自己的操作带进来的文件回到她发起的会话。'
+              '关闭后不再发送，关闭期间进来的文件之后不补发。已发出的不撤回。'),
       entry(
           'danmaku.spoilerAiConfigured',
           '防剧透 AI 凭据是否已设置',

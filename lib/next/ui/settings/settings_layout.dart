@@ -95,6 +95,7 @@ abstract final class SettingsLayout {
     ('appearance.', SettingsSection.classic),
     ('webdavQuick.', SettingsSection.classic),
     ('next.harnessPath', SettingsSection.nipa),
+    ('library.notifyNipaEnabled', SettingsSection.nipa),
   ];
 
   static SettingsSection sectionOf(String key) {
@@ -211,6 +212,7 @@ abstract final class SettingsLayout {
       ]),
     ],
     SettingsSection.nipa: [
+      SettingsGroup('', ['library.notifyNipaEnabled']),
       SettingsGroup('文件夹', ['next.'], folded: true),
     ],
     SettingsSection.general: [

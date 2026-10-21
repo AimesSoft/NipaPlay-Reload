@@ -249,11 +249,11 @@ final class MediaService {
           : FailureCode.unavailable,
       'Media path is inaccessible: ${error.message}');
 
-  Future<String> index(String locator) async {
+  Future<String> index(String locator, {String via = 'local_scan'}) async {
     final path = await authorizedPath(locator);
     final info = await probe(path);
     return mutate(() async {
-      final id = await store.registerFile(path, info);
+      final id = await store.registerFile(path, info, via: via);
       await projection.drain(fileId: id);
       return id;
     });

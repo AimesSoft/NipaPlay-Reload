@@ -175,14 +175,7 @@ extension UiMetadataFacts on UiDataService {
               (k is String ? jsonDecode(k) as List : k as List).first == 'tmdb')
           : null;
     } else {
-      tmdb = (await media.store.database.rawQuery(
-              "SELECT 1 FROM media_bindings b JOIN media_external_objects o ON o.id=b.object_id "
-              "JOIN media_entities e ON e.id=b.entity_id "
-              "WHERE b.status='accepted' AND b.relation IN ('exact','contains') "
-              "AND o.provider='tmdb' AND o.object_type IN ('tv','movie','work') "
-              "AND (e.id=? OR (e.kind='release' AND e.parent_id=?)) LIMIT 1",
-              [workId, workId]))
-          .isNotEmpty;
+      tmdb = await media.store.workHasTmdb(workId);
     }
     return {
       'workId': workId,

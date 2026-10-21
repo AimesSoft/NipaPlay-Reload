@@ -147,6 +147,7 @@ NipaPlay 自己会做一部分：作品有 TMDB 身份时取图，同步 Classic
 - **一次交一部作品的资料**：`media.metadata.put` 一次提交一部片库作品的标题、原名、简介、年份、类型、海报、背景、Logo，以及按 `episodeId` 或（`season`，`number`）指定的各集标题、简介、播出日期、时长、截图；字段都可省略，省略的不动。图片先取到并能解码才提交，任何一项失败则整批不写。不存在的集按本地目录规则建出来（可以没有文件）。资料来源 `source` 与 actor、origin、invocationId 一并记录；写入的是和 `override`、`artwork.set` 同一份持久覆盖，刷新来源快照后仍在，并优先于所有来源快照。同一 `requestId` 重放结果不变。
 - **剧集列表**：作品下各季的集，只包含绑定过的集。
 - **Classic 同步**：保留识别标题与已有的详情缓存，包括标题语言、简介、海报、背景、类型和集数。未缓存的资料不会自动补抓；没有声明语言的识别标题仍是 `und`。Next 的显式覆盖优先，不修改 Classic 的详情缓存。
+- **新进片库的文件**：文件进入片库，不论是你下载的、用户添加的文件夹、Classic 扫描到的，还是媒体来源同步进来的，NipaPlay 都会把这批文件的事实（路径、`fileId`、怎么进来的、剧集关联与 `identitySources`、作品有没有 TMDB 身份）送给你，见 `followup` 族。TMDB 身份和资料由你补，用户不必开口。
 - **扫描**：`media.library.scan` 只建立索引，不做识别；支持指向授权根目录内视频文件的符号链接，不递归跟随目录链接。新增文件在下一次扫描时进入索引；身份、资料、图片、弹幕是独立的事实。
 - **本地文件读取**：扫描和按根目录调用 `media.files.list` 会逐个读取视频、计算头部哈希并探测时长，并非只枚举文件名。`state.query` 的文件视图读取已有索引与对应关系，不重新探测视频。
 - **搜索**：`media.library.search_merged` 只读搜索本机与组网设备合并片库的中文名、原名、已有别名、年份和剧集标题；返回能打开 Next 的 workId/episodeId、年份、本机图片路径、设备和可播放事实，按 limit/episodeLimit 分别限制作品和剧集。索引随目录刷新，首次建立后逐字查询不扫全库。原 `media.library.search` 仍是 Classic 观看记录系列，返回弹弹play animeId，不能当 Next workId。`media.metadata.search/search_batch` 的候选带 nullable workId：只有已接受的 exact/contains 作品或发行身份算已入库，包括组网设备；同名不算身份。
@@ -196,10 +197,16 @@ NipaPlay 自己会做一部分：作品有 TMDB 身份时取图，同步 Classic
   'followup': r'''- 关闭对话不会中断 NipaPlay 里的任务。定时脚本只在 NipaPlay 运行且 Next 开启时执行。
 - **hooks 和定时程序**：由 NipaPlay 在事件发生时或到点时运行，同样通过 `nipa` 工作。需要你判断时，用 `agent.wake` 叫醒你；只是记下发现，用 `activity.report`。
 - 通过 Mesh 在会话中登记的 `followup.register` 也固定回到发起设备、仓库和线程，沿用持久票据与去重交付；显式线程与发起线程不一致会被拒绝。程序自动回传和同一事件的手动订阅共享事实去重。
-- **耗时操作是 NipaPlay 的后台任务**：Agent 可以登记后续，让自己在任务结束时被唤醒。''',
+- **耗时操作是 NipaPlay 的后台任务**：Agent 可以登记后续，让自己在任务结束时被唤醒。
+- **新进片库的文件**：文件进入片库时，NipaPlay 把事实合成一批送来，不按内容挑选，也不丢文件。开关是设置 `library.notifyNipaEnabled`（默认开；关闭后不再发送，关闭期间进来的文件之后不补发）。
+  - 不是你的操作带进来的（用户添加的文件夹、Classic 扫描、媒体来源同步）：每一批开一个后台帮手（同 `agent.dispatch`，但不返回任何会话），说明里是这批文件的事实；不进主会话，帮手结束记入动态。同时只有一个这样的帮手；它还在运行时进来的文件排进下一批。
+  - 你的调用带进来的（`media.library.roots.*`、导入、扫描等，任务沿用发起它的来源）：这一批作为后续回到发起的会话，忙时排队，不另开帮手。
+  - 下载导入的文件由下载回报送出，同一个 fileId 不在这里重复送。重启后已送过的文件不会再送。
+  - 一批在文件停止进来 30 秒后送出，从第一个文件起最迟 5 分钟，扫描结束时立即送出，一批最多 100 个文件，多出的进下一批。
+  - 每个文件的事实：`path`、`fileId`、`via`（怎么进来的：`local_scan` 本地文件夹扫描、`classic_history` Classic 扫描或观看记录、`media_source` 媒体来源同步、`download_import` 下载导入、`metadata_put`、`path` 某个操作点名了这个路径）、`enteredAt`、`source`（位置来源；媒体来源条目另有 `mediaSource` 的 `sourceId`、`type`、`itemId`、`name`）、`workIds`、`works[].identities.tmdb`（作品有没有 TMDB 身份，与 `media.metadata.ui_facts` 相同的判断）、`episodes[]`（`episodeId`、`workId`、`facts`、`identitySources`）。没有剧集关联时 `episodes` 为空。''',
   'agent':
       r'''- **子代理是后台的帮手**：Codex 原生子代理在同一个 harness 的独立线程里工作；用户在 NipaPlay 里看得到，能用 `task.cancel` 停止。你的回合结束后它才完成的，结果作为持久后续回到这个会话，忙时排队；你已用 `wait` 取到的结果不会重复交回。
-- **宿主派发**：`agent.dispatch` 接收标题、说明及可选的返回线程，脚本或 hooks 在没有父 Agent 回合时也能启动独立回合，默认返回主会话。宿主派发最多同时运行两个，更多的排队；`agent.dispatch.report` 是宿主派发回合的一句话进度接口。原生子代理的并发由 Codex 管理。''',
+- **宿主派发**：`agent.dispatch` 接收标题、说明及可选的返回线程，脚本或 hooks 在没有父 Agent 回合时也能启动独立回合，默认返回主会话。NipaPlay 自己也用宿主派发处理新进片库的文件，那样的帮手不返回任何会话，结束只记入动态。宿主派发最多同时运行两个，更多的排队；`agent.dispatch.report` 是宿主派发回合的一句话进度接口。原生子代理的并发由 Codex 管理。''',
   'settings':
       r'''- **设置的每次修改都记录来源**：谁改的、何时、为什么。用户说"以后都这样"时，就是一条持久偏好，修改时写明理由。''',
   'history': r'''观看进度由播放器写入；mark_watched_batch 可以标记看过。state.query history.entries 提供稳定 entryId、fileId、canonical workId/libraryEpisodeId 和本机缓存 poster/still；旧 episodeId 仍是 Classic 数字编号。无绑定/无缓存返回 null，不联网取图。历史按 lastWatchedAt 降序及 entryId 排序，游标存排序值，删掉已读条目或最后锚点仍能继续；这是实时观测，条目的观看时间变化仍可能重排。remove 支持 entryIds/paths/animeIds 的并集，包括 locator=null 的条目，只删除记录，保留视频。''',
@@ -226,6 +233,7 @@ NipaPlay 自己会做一部分：作品有 TMDB 身份时取图，同步 Classic
 - `media.sources.search {query,sourceIds?,limit?}` 是只读搜索：Jellyfin/Emby 用服务器 SearchTerm 和有界分页，SMB/WebDAV 只查已有文件索引，不枚举目录、不登记新文件、不写发现记录。省略 sourceIds 搜所有支持的已配置来源；limit 限制每个来源（默认 12）。返回 sources[]，每个来源单独给出 entries、total 或 error。离线或登录失败如实返回，其他来源保留结果；索引来源的 unverified 是未知连通状态，不能当成在线。
 - 结果有 sourceId、itemId、标题、可播放事实；已绑定条目带 Next workId/episodeId，服务器原样条目另有 sourceWorkId/sourceEpisodeId。作品 ID 用 ui.open，来源条目用 media.sources.play {sourceId,itemId}。来源分组在界面上可逐个 sourceIds 请求，分别显示结果与错误。
 - browse/sync 是发现与写索引入口；不要用它们实现每次输入的搜索。
+- browse/sync 把条目登记为文件时，首次登记的条目发出 `library.file_added`（`via` 为 `media_source`，`path` 是来源条目的位置，`fileId` 为登记的文件），并计入新进片库的事实，见 `followup` 族。
 - WebDAV、SMB 各有内网和公网两个地址，至少一个非空，空表示未配置。WebDAV 是 url（内网）和 wanUrl（公网）；SMB 是 host/port 和 wanHost/wanPort（同时以 smb:// 的 url、wanUrl 给出）。两个都有时 Classic 优先内网，address 是当前正在使用的那个，可能无需编辑就在内网与公网间变化；Jellyfin、Emby、NipaPlay、Dandanplay 只有 url，address 与它相同。
 - put/update 接受这些字段；省略的字段（包括另一套地址）保持不变，空字符串清除该地址，但至少保留一个。地址规则不变：WebDAV 只允许 HTTP(S)，不带凭据、query、fragment；SMB 主机不带凭据或路径。
 - 已保存的密码属于保存时的那组地址：删除某个地址或在内网与公网间切换仍可使用，新增或更换为不同的地址、或换账号，需要重新 login。''',

@@ -38,23 +38,44 @@ final class IdentityStore {
   Future<T> _transaction<T>(Future<T> Function(Transaction) action) => BodySignals.transaction(database, action);
   final _fileChanges = StreamController<JsonMap>.broadcast();
   Stream<JsonMap> get fileChanges => _fileChanges.stream;
-  Future<T> _filesChanged<T>(
-      Future<T> Function(List<JsonMap>) operation) async {
+  /// [via] says which door the file came through, as far as the caller
+  /// knows; `cause` is whoever's invocation (or task origin) was running.
+  Future<T> _filesChanged<T>(Future<T> Function(List<JsonMap>) operation,
+      {required String via}) async {
     final added = <JsonMap>[];
     final result = await operation(added);
+    final cause = BodyChanges.invocation;
     for (final file in added) {
-      _fileChanges.add(file);
+      _fileChanges.add({
+        ...file,
+        'via': via,
+        if (cause != null)
+          'cause': {'origin': cause.origin, 'invocationId': cause.id}
+      });
     }
     return result;
   }
 
+  /// Whether the work, or a release under it, has an accepted TMDB identity:
+  /// backdrop, logo and episode stills come from it.
+  Future<bool> workHasTmdb(String workId) async => (await database.rawQuery(
+          "SELECT 1 FROM media_bindings b JOIN media_external_objects o ON o.id=b.object_id "
+          "JOIN media_entities e ON e.id=b.entity_id "
+          "WHERE b.status='accepted' AND b.relation IN ('exact','contains') "
+          "AND o.provider='tmdb' AND o.object_type IN ('tv','movie','work') "
+          "AND (e.id=? OR (e.kind='release' AND e.parent_id=?)) LIMIT 1",
+          [workId, workId]))
+      .isNotEmpty;
+
   Future<void> closeEvents() => _fileChanges.close();
 
   /// Location-only registration never changes content revisions or infers identity.
-  Future<String> ensureFile(String locator, {DatabaseExecutor? db}) =>
+  Future<String> ensureFile(String locator,
+          {DatabaseExecutor? db, String via = 'path'}) =>
       db == null
-          ? _filesChanged((added) =>
-              _transaction((tx) => _ensureFile(tx, locator, added)))
+          ? _filesChanged(
+              (added) => _transaction((tx) => _ensureFile(tx, locator, added)),
+              via: via)
           : _ensureFile(db, locator);
 
   Future<String> _ensureFile(DatabaseExecutor tx, String locator,
@@ -120,7 +141,7 @@ final class IdentityStore {
                 where: 'id=?',
                 whereArgs: [id]);
             return id;
-          }));
+          }), via: 'media_source');
 
   Future<JsonMap> entity(String id, {DatabaseExecutor? db}) async {
     id = await canonicalFileId(db ?? database, id);
@@ -136,7 +157,7 @@ final class IdentityStore {
   }
 
   Future<String> registerFile(String locator, JsonMap probe,
-          {String source = 'local'}) =>
+          {String source = 'local', String via = 'local_scan'}) =>
       _filesChanged((added) => _transaction((tx) async {
             final locations = await tx.query('media_locations',
                 where: 'source = ? AND owner_device_id = ? AND locator = ?',
@@ -224,7 +245,7 @@ final class IdentityStore {
             });
             added.add({'fileId': id, 'path': locator});
             return id;
-          }));
+          }), via: via);
 
   Future<List<JsonMap>> locations(String fileId) async => database
       .query('media_locations', where: 'file_id = ?', whereArgs: [await canonicalFileId(database, fileId)]);
@@ -414,7 +435,7 @@ final class IdentityStore {
                 },
                 conflictAlgorithm: ConflictAlgorithm.ignore);
             await _pruneFileLinks(tx, fileId);
-          }));
+          }), via: 'classic_history');
     }
     if (reconcileMissing) {
       final locators = history.map((row) => row['filePath']).toSet();
@@ -1539,7 +1560,7 @@ final class IdentityStore {
               'result': jsonEncode(result)
             });
             return result;
-          }));
+          }), via: 'metadata_put');
 
   Future<JsonMap> unbindBatch(List<JsonMap> entries, String key,
           String fingerprint, Invocation invocation) =>
