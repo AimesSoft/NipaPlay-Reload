@@ -107,6 +107,25 @@ void main() {
     print('X8 nipa status: ${jsonEncode(value)}');
   });
 
+  test('an unknown action names the actions that end the same way', () async {
+    endpoint = AgentEndpoint(
+        harness: Harness([_WriteCapability()]),
+        seed: {},
+        appVersion: 'test',
+        credentialFile: credentials,
+        port: 0);
+    final running = await endpoint.start(repository) as AgentEndpointRunning;
+    final token = (jsonDecode(await credentials.readAsString()) as Map)['token'];
+    final call = await client.postUrl(running.url.replace(path: '/harness'));
+    call.headers.set('Authorization', 'Bearer $token');
+    call.write(jsonEncode(
+        {'operation': 'call', 'action': 'other.write', 'input': {}}));
+    final response = await call.close();
+    expect(response.statusCode, 404);
+    final body = jsonDecode(await utf8.decodeStream(response)) as Map;
+    expect(body['similar'], ['fixture.write']);
+  });
+
   test(
       'chat disclosure revokes both endpoints and records session origin without credentials',
       () async {

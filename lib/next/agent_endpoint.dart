@@ -387,7 +387,17 @@ final class AgentEndpoint {
       }
     }
     if (action == null) {
-      return _response({'error': 'Unknown Action: $name. Run ./nipa list; then ./nipa describe ACTION.'}, 404);
+      // A wrong family with the right verb (playback.cues for subtitle.cues)
+      // is the usual miss; name the actions that end the same way.
+      final verb = name.split('.').last;
+      final near = [
+        for (final spec in _harness.catalog)
+          if (spec.id.split('.').last == verb) spec.id
+      ];
+      return _response({
+        'error': 'Unknown Action: $name. Run ./nipa list; then ./nipa describe ACTION.',
+        if (near.isNotEmpty && near.length <= 8) 'similar': near,
+      }, 404);
     }
     if (operation == 'describe') {
       return _response({..._describe(action.spec),
