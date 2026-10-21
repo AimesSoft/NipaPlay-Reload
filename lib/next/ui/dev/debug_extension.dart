@@ -492,6 +492,10 @@ abstract final class NextUiDebug {
           final route = ModalRoute.of(s.context);
           return route is PopupRoute && route.isCurrent;
         }
+        // area=dialog: a window must be open; never the conversation's field.
+        if (p['area'] == 'dialog' && !all.any(inDialog)) {
+          throw StateError('No window open');
+        }
         final fields =
             all.any(inDialog) ? all.where(inDialog).toList() : all;
         final index = int.parse(p['index'] ?? '0');
