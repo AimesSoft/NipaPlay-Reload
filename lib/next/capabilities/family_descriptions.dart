@@ -142,7 +142,9 @@ NipaPlay 自己会做一部分：作品有 TMDB 身份时取图，同步 Classic
   - 每集截图：用于剧集卡片和继续观看。
   - 主色：从背景图计算，没有背景图时从海报计算。
 
+  背景图、透明 Logo 和每集截图只有在作品有 TMDB 身份并配置了 TMDB 凭据时才由 NipaPlay 自己取；只有弹弹play 或 Bangumi 身份的作品不会有这三项。`media.metadata.ui_facts` 的 `identities` 和 `missing` 如实列出有没有 TMDB 身份，以及缺哪些图片、中文标题或简介、哪些集缺标题或截图。
   有 TMDB 身份并配置了 TMDB 凭据时，NipaPlay 会自己取图。已经保存的 `artworkUrls` 各角色图片、其他来源的 `imageUrl` 和显式图片覆盖，不因缺少 TMDB 凭据而隐藏。`imageUrl` 在作品上是海报，在集上是截图；它没有横版或透明 Logo 的语义。`media.artwork.set` 可以把链接或本地文件，连同来源，设为任意一种图片。
+- **一次交一部作品的资料**：`media.metadata.put` 一次提交一部片库作品的标题、原名、简介、年份、类型、海报、背景、Logo，以及按 `episodeId` 或（`season`，`number`）指定的各集标题、简介、播出日期、时长、截图；字段都可省略，省略的不动。图片先取到并能解码才提交，任何一项失败则整批不写。不存在的集按本地目录规则建出来（可以没有文件）。资料来源 `source` 与 actor、origin、invocationId 一并记录；写入的是和 `override`、`artwork.set` 同一份持久覆盖，刷新来源快照后仍在，并优先于所有来源快照。同一 `requestId` 重放结果不变。
 - **剧集列表**：作品下各季的集，只包含绑定过的集。
 - **Classic 同步**：保留识别标题与已有的详情缓存，包括标题语言、简介、海报、背景、类型和集数。未缓存的资料不会自动补抓；没有声明语言的识别标题仍是 `und`。Next 的显式覆盖优先，不修改 Classic 的详情缓存。
 - **扫描**：`media.library.scan` 只建立索引，不做识别；支持指向授权根目录内视频文件的符号链接，不递归跟随目录链接。新增文件在下一次扫描时进入索引；身份、资料、图片、弹幕是独立的事实。
@@ -151,7 +153,7 @@ NipaPlay 自己会做一部分：作品有 TMDB 身份时取图，同步 Classic
 - **你的工具**：这个仓库里的脚本，或别人的开源工具，负责在外面找东西：RSS、站点、API、文件。找到的结果交给 NipaPlay，才算进入了这个系统：
   - 下载：`download.add`；
   - 身份：`bind_batch`；
-  - 资料：`import_batch` 或 `override`；
+  - 资料：`media.metadata.put`、`import_batch` 或 `override`；
   - 图片：`artwork.set`；
   - 弹幕：`danmaku.import`。
 - **媒体身份可以来自多个来源**：弹弹play、Bangumi、TMDB 等。弹弹play 没有收录，不等于无法识别；电视剧、电影常常只有 TMDB 身份。内容哈希匹配只能给出弹弹play 的 ID。文件名需要你自己理解，NipaPlay 不会替你解析。

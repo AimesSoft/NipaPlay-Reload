@@ -2,6 +2,7 @@ import 'package:nipa_harness/nipa_harness.dart';
 
 import 'service.dart';
 import 'metadata_facts.dart';
+import 'metadata_put.dart';
 import '../capabilities/classic_action.dart';
 
 const _text = StringSchema(minLength: 1);
@@ -62,6 +63,7 @@ final class UiDataCapability implements Capability {
           _UiAction(service, 'shelves.remove'),
           _MetadataAction(service, false),
           _MetadataAction(service, true)
+          , ClassicAction(_putSpec, service.putMetadata)
           , ClassicAction(const ActionSpec(
               id: 'media.artwork.clear', title: '清除图片覆盖',
               description: 'Atomically clear explicit artwork overrides and reveal the source artwork. Keeps cached/local copies and edit provenance. Does not delete disk files.',
@@ -96,6 +98,68 @@ final class UiDataCapability implements Capability {
   @override
   final List<Action> actions;
 }
+
+const _image = StringSchema(minLength: 1, description:
+    'HTTPS image URL or absolute local file path. It is fetched and decoded before anything is committed.');
+const _putSpec = ActionSpec(
+    id: 'media.metadata.put',
+    title: '交一部作品的资料',
+    description:
+        'Hand in one library work\'s data in a single atomic commit: the work\'s title, originalTitle, overview, year, genres, poster, backdrop, logo, and per episode title, overview, airDate, runtime (minutes) and still. '
+        'Every field is optional; omitted fields are not touched. There is no clearing here (use media.metadata.override / media.artwork.clear). '
+        'work.* applies to workId (the whole work family: its releases share this view). '
+        'Each episodes[] item names its episode by episodeId, or by number (string, e.g. "3" or "12.5") with season (integer, omitted when the episode has none; season and number are matched exactly as ui_facts reports them, "03" equals "3"). '
+        'An episode that does not exist is created as a local catalogue episode (localOnly, no file needed) under the work\'s release with that season; a work without one gets a local release. '
+        'The batch is refused whole when a season/number matches several episodes or several releases, when episodeId and season/number disagree, or when two items name one episode. '
+        'language (e.g. zh-CN) is the declared language of title and overview; omitted means unknown. '
+        'source {label, url?, ref?} says where the data came from (a TMDB page, or your own synthesis of several); ref is an external object reference kept as provenance only: it creates no identity binding. '
+        'Images are fetched, decoded and copied into the artwork cache before commit; if any is unreachable or undecodable nothing is written and the error lists every failing path. '
+        'Everything is committed in one transaction; the same requestId with the same input replays the saved result (replayed:true), with different input it is a conflict. '
+        'Storage: the same persistent edits as media.metadata.override and media.artwork.set (media_overrides, audited in media_metadata_edits with actor, origin, invocationId) plus a fieldSources edit holding each text field\'s source; no separate tables. '
+        'Priority: persistent edits show before any provider snapshot (TMDB, Bangumi, dandanplay, imported) and survive media.metadata.refresh; a field you wrote is replaced only by a later edit or by clear. Artwork edits show before artworkUrls fetched from TMDB and before imageUrl. '
+        'A value equal to the persistent edit already stored (and with the same source) is unchanged; writing a value equal to a snapshot still stores it as your edit. runtime sets the episode runtime shown by the library. '
+        'Returns per item written/unchanged, created release and episode ids, and uiFacts (the missing summary of media.metadata.ui_facts after the commit). Missing work: not_found. Backdrop, logo and episode stills otherwise come only from a TMDB identity.',
+    effect: Effect.write,
+    input: ObjectSchema({
+      'requestId': _text,
+      'workId': _ref,
+      'language': _text,
+      'source': ObjectSchema({
+        'label': _text,
+        'url': _text,
+        'ref': ObjectSchema({
+          'provider': _text,
+          'objectType': _text,
+          'externalId': _text,
+          'scope': StringSchema()
+        }, required: ['provider', 'objectType', 'externalId'])
+      }, required: ['label']),
+      'work': ObjectSchema({
+        'title': _text,
+        'originalTitle': _text,
+        'overview': _text,
+        'year': IntegerSchema(minimum: 1800, maximum: 2200),
+        'genres': ArraySchema(_text),
+        'poster': _image,
+        'backdrop': _image,
+        'logo': _image,
+      }),
+      'episodes': ArraySchema(ObjectSchema({
+        'episodeId': _ref,
+        'season': IntegerSchema(minimum: 0),
+        'number': _text,
+        'title': _text,
+        'overview': _text,
+        'airDate': StringSchema(description: 'YYYY-MM-DD'),
+        'runtime': IntegerSchema(minimum: 1, maximum: 2000, description: 'Minutes.'),
+        'still': _image,
+      }))
+    }, required: [
+      'requestId',
+      'workId',
+      'source'
+    ]),
+    output: ObjectSchema({}, additionalProperties: true));
 
 final class _MetadataAction extends Action<_Json, _Json> {
   const _MetadataAction(this.service, this.write);
