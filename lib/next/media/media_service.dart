@@ -802,6 +802,22 @@ final class MediaService {
         return result;
       });
 
+  Future<JsonMap> restoreClassicBatch(JsonMap input, Invocation invocation) =>
+      mutate(() async {
+        await store.importLegacy(await classic.history());
+        final key = stableMediaId(
+            'restore-classic-operation', [invocation.origin, input['requestId']]);
+        final fingerprint = stableMediaId('input', input);
+        final existing = await store.operation(key, fingerprint);
+        if (existing != null) return existing;
+        final entries = (input['entries'] as List).cast<JsonMap>();
+        if (entries.isEmpty) {
+          throw const Failure(
+              FailureCode.invalidInput, 'entries must not be empty.');
+        }
+        return store.restoreClassicBatch(entries, key, fingerprint, invocation);
+      });
+
   Future<void> _saveProjectionReceipt(String key, JsonMap result) async {
     await store.database.update(
         'media_binding_operations', {'result': jsonEncode(result)},

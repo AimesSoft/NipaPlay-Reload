@@ -513,7 +513,7 @@ final _specs = [
       ])),
   _spec(
       'media.identity.unbind_batch',
-      'Atomically revoke Agent/user bindings and retain provenance. Optional bindingIds selects accepted bindings; omitted revokes all explicit bindings; a classic_match binding is not selectable and naming it is a conflict (it follows the Classic match record). Restore a projected Classic match only when its matching fields still equal the atomic projection journal; changed Classic fields remain untouched and return conflict after Next revocation. classicProjection reports restoration or unchanged independent Classic matches. reason is audited; requestId makes retries idempotent.',
+      'Atomically revoke Agent/user bindings and retain provenance. Optional bindingIds selects accepted bindings; omitted revokes all explicit bindings and never a classic_match one. A file\'s classic_match binding (Classic\'s automatic recognition; see identitySources) is revoked only when its bindingId is named; naming one on a non-file entity is a conflict. Revoking it changes Next only: Classic\'s watch record (progress, animeId/episodeId) and Classic UI are untouched and nothing is queued to the Classic projection outbox. The file\'s links that only that binding supported are removed; the Classic observation it came from is recorded with provenance classic_match_revoked (see identity.get classicObservations), so later syncs do not attach it again; a different Classic recognition of the file (changed observation fingerprint) is imported as usual. Episodes, releases and works whose Classic identity bindings were held up only by it, left with no file link, no other accepted binding and nothing bound or with a file below, have those classic_match bindings revoked too and are listed in releasedBindingIds; the library does not show a work with no accepted binding and no file. Undo with media.identity.restore_classic_batch. Restore a projected Classic match only when its matching fields still equal the atomic projection journal; changed Classic fields remain untouched and return conflict after Next revocation. classicProjection reports restoration or unchanged independent Classic matches. reason is audited; requestId makes retries idempotent.',
       Effect.write,
       const ObjectSchema({
         'requestId': _text,
@@ -537,6 +537,7 @@ final _specs = [
           'index': IntegerSchema(),
           'entityId': StringSchema(),
           'bindingIds': ArraySchema(StringSchema()),
+          'releasedBindingIds': ArraySchema(StringSchema()),
           'classicProjectionId': StringSchema(nullable: true),
           'classicProjection': ArraySchema(ObjectSchema({
             'locator': StringSchema(),
@@ -547,6 +548,41 @@ final _specs = [
             'status',
             'restored'
           ]))
+        }, required: [
+          'index',
+          'entityId',
+          'bindingIds'
+        ]))
+      }, required: [
+        'entries'
+      ])),
+  _spec(
+      'media.identity.restore_classic_batch',
+      'Undo the revocation of Classic\'s automatic recognition of files (unbind_batch naming a classic_match bindingId). Entries are file entityIds; optional bindingIds names the revoked bindings returned by unbind_batch, omitted restores the file\'s revoked recognition. It comes back only while it is still the file\'s current Classic observation (provenance classic_match_revoked); if Classic has since recorded something else for the file, or the watch record was deleted, the request is a conflict and nothing is restored. Restores the file binding, the classic_match bindings released with it, the file-episode link and the observation provenance classic_match; Classic\'s record and the projection outbox are not touched. Each restore is audited as event restore. Alternatively bind_batch makes an explicit binding, which is not the same fact and is projected to Classic. reason is audited; requestId makes retries idempotent.',
+      Effect.write,
+      const ObjectSchema({
+        'requestId': _text,
+        'entries': ArraySchema(ObjectSchema({
+          'entityId': _text,
+          'bindingIds': ArraySchema(_text),
+          'reason': _text,
+          'evidence': ArraySchema(ObjectSchema(
+              {'source': _text, 'detail': _text, 'url': StringSchema()},
+              required: ['source', 'detail']))
+        }, required: [
+          'entityId',
+          'reason'
+        ]))
+      }, required: [
+        'requestId',
+        'entries'
+      ]),
+      const ObjectSchema({
+        'entries': ArraySchema(ObjectSchema({
+          'index': IntegerSchema(),
+          'entityId': StringSchema(),
+          'bindingIds': ArraySchema(StringSchema()),
+          'restoredBindingIds': ArraySchema(StringSchema())
         }, required: [
           'index',
           'entityId',
@@ -792,6 +828,8 @@ final class _MediaAction extends Action<_JsonValue, _JsonValue> {
         result = await service.bindBatch(json, invocation);
       case 'media.identity.unbind_batch':
         result = await service.unbindBatch(json, invocation);
+      case 'media.identity.restore_classic_batch':
+        result = await service.restoreClassicBatch(json, invocation);
       case 'media.metadata.get_batch':
       case 'media.metadata.search_batch':
         final items =

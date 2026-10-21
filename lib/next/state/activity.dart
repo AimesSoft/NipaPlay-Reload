@@ -228,7 +228,11 @@ final class ActivityView {
         o.provider,o.external_id,o.object_type FROM media_evidence e
         JOIN media_bindings b ON b.id=e.binding_id JOIN media_external_objects o ON o.id=b.object_id''')) {
       final payload = decodeMediaJson(row['payload']);
-      final operation = payload['event'] == 'unbind' ? 'revoked' : 'bound';
+      final operation = switch (payload['event']) {
+        'unbind' => 'revoked',
+        'restore' => 'restored',
+        _ => 'bound',
+      };
       add(
           'identity:${row['id']}',
           row['created_at'] as String,

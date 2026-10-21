@@ -200,19 +200,16 @@ void main() {
     final explicitWork = entry['workId'] as String;
     expect(await workIdsOf(path), hasLength(2));
 
-    // The Classic binding cannot be named for revocation, and omitting
-    // bindingIds revokes explicit bindings only.
-    final classicBinding = (await jobs.database.query('media_bindings',
-            where: "entity_id=? AND source='classic_match' AND status='accepted'",
-            whereArgs: [fileId]))
-        .single['id'] as String;
-    final refused = await invoke('media.identity.unbind_batch', {
-      'requestId': 'unbind-classic',
+    // Omitting bindingIds revokes explicit bindings only; a Classic binding
+    // is revoked by naming it (classic_match_revoke_test.dart).
+    await call('media.identity.unbind_batch', {
+      'requestId': 'unbind-omitted',
       'entries': [
-        {'entityId': fileId, 'bindingIds': [classicBinding], 'reason': 'test'}
+        {'entityId': fileId, 'reason': 'test'}
       ]
     });
-    expect(refused, isA<Failed>());
+    expect(await workIdsOf(path), [classicWork]);
+    await bind(path, tmdbBinding(''));
     expect(await workIdsOf(path), hasLength(2));
 
     await classicDb.delete('watch_history',

@@ -130,7 +130,7 @@ NipaPlay 自己会做一部分：作品有 TMDB 身份时取图，同步 Classic
 `media.metadata.ui_facts` 读的是和界面同一份数据，按作品给出下面每一项有没有、来自哪里；不必截图去猜。
 
 - **文件与剧集的对应**：一个文件对应到某一集，那一集才能播放。本地文件在片库根目录（`media.library.roots.*`）内，或是 NipaPlay 已验证完成下载的文件，才在 Next 中可访问；文件仍须实际存在。对应关系由 `media.identity.bind_batch` 写入；Classic 识别成功的文件会自动同步过来。
-- **身份**：作品与弹弹play、Bangumi、TMDB 或其他 HTTPS 来源的绑定。本地作品也可用 media.entities.put_batch 建立，不要求外部身份。用 `bind_batch` 和 `unbind_batch` 修改。文件可以同时有 Classic 自动识别的剧集关联（`source=classic_match`，`boundBy` 为 null）和显式绑定的关联，两者指向不同的集时都保留，`identity.get.conflicts` 列出差异。`unbind_batch` 只撤销显式绑定，不动 `classic_match`；`classic_match` 跟随 Classic 的匹配记录：Classic 里该路径的观看记录被删除（`history.remove`，观看进度随记录一起删除）或匹配改变后，下一次同步撤销它的文件绑定，并移除不再有绑定支撑的文件—剧集关联；显式绑定及其关联不受影响。
+- **身份**：作品与弹弹play、Bangumi、TMDB 或其他 HTTPS 来源的绑定。本地作品也可用 media.entities.put_batch 建立，不要求外部身份。用 `bind_batch` 和 `unbind_batch` 修改。文件可以同时有 Classic 自动识别的剧集关联（`source=classic_match`，`boundBy` 为 null）和显式绑定的关联，两者指向不同的集时都保留，`identity.get.conflicts` 列出差异。`unbind_batch` 省略 `bindingIds` 只撤销显式绑定；点名文件上 `classic_match` 的 bindingId（下载事件和 `download.read` 的 `identitySources` 里有）则撤销 Classic 对这个文件的自动识别：只改 Next，Classic 的观看记录（进度、animeId/episodeId）和界面不变，不向 Classic 写任何东西；只由它支撑的文件—剧集关联移除，那次 Classic 观察改记为 `classic_match_revoked`，之后的同步不会再挂回，Classic 对该文件记下不同的识别才导入新的。只靠这条识别存在的剧集、版本、作品，其 Classic 身份绑定一并释放（结果的 `releasedBindingIds`），这样的作品按片库规则不再显示；还有别的文件或显式绑定的不受影响。`restore_classic_batch` 可以恢复，条件是它仍是 Classic 的当前观察。没有点名时，`classic_match` 仍跟随 Classic 的匹配记录：Classic 里该路径的观看记录被删除（`history.remove`，观看进度随记录一起删除）或匹配改变后，下一次同步撤销它的文件绑定，并移除不再有绑定支撑的文件—剧集关联；显式绑定及其关联不受影响。
 - **资料**：各来源的快照合并而成，你的覆盖优先。界面显示标题、原名、简介、年份、类型、制作公司、集数、评分。
   - 标题和简介以简体中文优先；没有中文时显示已有的语言，不会自动翻译。
   - 缺标题时显示“未命名作品”；缺简介就没有简介正文；其他项缺了就省略。

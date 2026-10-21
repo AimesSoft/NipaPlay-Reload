@@ -35,7 +35,8 @@ Action id 是 Harness 名称；MCP 名称把点替换为下划线。输入输出
 | `media.metadata.search_batch` | read | 批量搜索 TMDB、Bangumi、弹弹play等已注册来源。 |
 | `media.metadata.get_batch` | read | 批量查询作品、季或集的详情，同一调用中的相同引用只请求一次。 |
 | `media.identity.bind_batch` | write | 原子保存显式指定的文件、集、季、作品绑定及理由、证据。 |
-| `media.identity.unbind_batch` | write | 原子撤销多个实体的全部或指定显式绑定，保留来源审计；Classic 来源事实跟随 Classic 的匹配操作。 |
+| `media.identity.unbind_batch` | write | 原子撤销多个实体的全部或指定显式绑定，保留来源审计；点名文件的 `classic_match` bindingId 时只在 Next 撤销 Classic 的自动识别。 |
+| `media.identity.restore_classic_batch` | write | 恢复被 `unbind_batch` 撤销、且仍是 Classic 当前观察的自动识别。 |
 | `media.metadata.search` | read | 保留单次来源搜索。 |
 | `media.metadata.get` | read | 保留单个外部对象详情查询。 |
 | `media.identity.get` | read | 读取身份、位置、来源审计、合成元数据，以及 Classic 历次观察和当前冲突。 |
@@ -140,8 +141,26 @@ Classic 有效匹配按现有媒体库来源筛选函数进入同一实体、绑
 用它）：每条是站在该关联后面的已接受文件绑定 `{bindingId, source, boundBy, origin?}`，
 `source=classic_match`（`boundBy` 为 null）是 Classic 自动识别，其他是显式绑定，`boundBy` 为 `agent`/`user`，
 `origin` 取自写入它的调用；`local_catalog` 关联记为 `{source: local_catalog}`；没有绑定支撑的关联列表为空。
-`unbind_batch` 只能撤销显式绑定，`classic_match` 不在其选择范围内（点名它的 bindingId 是 conflict）；
-`classic_match` 绑定跟随 Classic 的匹配记录：该路径的 Classic 观看记录被删除（`history.remove`，
+`unbind_batch` 省略 `bindingIds` 只撤销显式绑定；点名文件上的 `classic_match` bindingId 则撤销 Classic 的自动识别
+（点名非文件实体上的 `classic_match` 仍是 conflict，已撤销的 ID 也是 conflict）。这只改 Next：Classic 的观看记录
+（进度、animeId/episodeId）和 Classic 界面不变，也不向投影 outbox 写任何行（结果里 `classicProjectionId` 为 null）。
+撤销时：文件绑定置 `revoked` 并追加 `unbind` 审计（调用的 origin、理由、`revoked: classic_match`）；只由它支撑的
+文件—剧集关联移除（显式绑定及 `local_catalog` 关联不受影响）；它所来自的 Classic 当前观察改记为
+`provenance=classic_match_revoked`（指纹不变，`identity.get.classicObservations` 可见）。之后的同步看到指纹相同，
+不再挂回；Classic 对该文件记下不同的识别（指纹变了，包括记录被删除后重新识别）才按一般规则导入新的观察，
+旧绑定不会被再次撤销。
+Classic 识别所建的作品若只靠它支撑，也一并释放：该文件失去关联的剧集若没有别的文件关联、没有显式绑定，撤销它的
+`classic_match` 身份绑定；其下再没有已接受绑定或文件的版本、作品同样处理（有显式绑定或 `localOnly` 的不动）。
+这些 ID 在结果的 `releasedBindingIds` 里。片库按现有规则（mesh/library.dart）不显示既无已接受绑定、其下也无文件的
+非 localOnly 作品，所以被释放的作品离开片库，不另设清理规则；实体、快照和进度仍保存。别的剧集仍有文件或绑定时，
+作品和版本留在片库里。`media.library.works` 读 `store.library`，只按 `removed` 过滤，仍会列出这类作品，与之前
+Classic 记录被删后的情形一样。
+`restore_classic_batch` 恢复：条目是文件 `entityId`，可选 `bindingIds`（`unbind_batch` 返回的文件绑定），
+省略则恢复该文件被撤销的识别；仅当它仍是 Classic 对该文件的当前观察（`classic_match_revoked`）时恢复，否则
+conflict、不改动。恢复文件绑定、随它释放的身份绑定（审计事件 `restore`）、文件—剧集关联，观察改回
+`provenance=classic_match`；同样不碰 Classic 记录和 outbox。`requestId` 幂等，可再次撤销。要把这一集记成她自己的
+决定，用 `bind_batch`，那是显式绑定，另一类事实，并会按规则投影到 Classic。
+`classic_match` 绑定仍跟随 Classic 的匹配记录：该路径的 Classic 观看记录被删除（`history.remove`，
 观看进度随之删除）或匹配改变后，下一次同步（任何身份写入、`media.library.import_history`）撤销它的文件绑定，
 并移除不再有绑定支撑的文件—剧集关联。显式绑定及其关联不受影响。
 
