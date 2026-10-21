@@ -2,6 +2,8 @@ import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:flutter/widgets.dart';
+import 'package:nipaplay/utils/video_player_state.dart';
+import 'package:provider/provider.dart';
 
 import '../../ui_data/ui_data.dart';
 import '../detail/episodes.dart' show HeatPainter;
@@ -9,51 +11,16 @@ import '../shell/shell_controller.dart';
 import '../theme/tokens.dart';
 import '../widgets/artwork.dart';
 import '../widgets/buttons.dart';
-import '../widgets/glass.dart';
 import '../widgets/icons.dart';
 import '../widgets/menu.dart';
 import '../widgets/progress.dart';
 import '../widgets/words.dart';
+import 'menu_controls.dart';
 import 'playback.dart';
 
-/// The frosted surface the player's menus sit on, as the shell's popovers.
-class _MenuSurface extends StatelessWidget {
-  const _MenuSurface({required this.width, required this.child});
-  final double width;
-  final Widget child;
-
-  @override
-  Widget build(BuildContext context) => Glass(
-        blur: 30,
-        color: const Color(0xD1121218),
-        borderColor: const Color(0x1AFFFFFF),
-        radius: BorderRadius.circular(16),
-        shadows: const [
-          BoxShadow(
-              color: Color(0x66000000), blurRadius: 40, offset: Offset(0, 12))
-        ],
-        padding: const EdgeInsets.all(6),
-        child: SizedBox(width: width, child: child),
-      );
-}
-
-class _Heading extends StatelessWidget {
-  const _Heading(this.text);
-  final String text;
-
-  @override
-  Widget build(BuildContext context) => Padding(
-        padding: const EdgeInsets.fromLTRB(12, 8, 12, 6),
-        child: Text(text,
-            style: NextText.sans(12,
-                weight: FontWeight.w600,
-                letterSpacing: 0.8,
-                color: NextColors.p3)),
-      );
-}
-
 /// Off, the video's own tracks, and subtitle files; the one on is ticked.
-/// Choosing one turns the others off.
+/// Choosing one turns the others off. With one on, how early or late it
+/// comes and how large it is.
 class SubtitleMenu extends StatefulWidget {
   const SubtitleMenu({super.key, required this.playback, required this.onDone});
   final NextPlayback playback;
@@ -102,13 +69,14 @@ class _SubtitleMenuState extends State<SubtitleMenu> {
   @override
   Widget build(BuildContext context) {
     final choices = _choices;
-    return _MenuSurface(
+    final on = choices?.where((c) => c.selected && !c.off).firstOrNull;
+    return PlayerMenuSurface(
       width: 248,
       child: Column(mainAxisSize: MainAxisSize.min, children: [
-        const Align(alignment: Alignment.centerLeft, child: _Heading('字幕')),
+        const Align(
+            alignment: Alignment.centerLeft, child: PlayerMenuHeading('字幕')),
         if (choices == null)
-          const SizedBox(
-              height: 38, child: Center(child: PulseDot()))
+          const SizedBox(height: 38, child: Center(child: PulseDot()))
         else
           ConstrainedBox(
             constraints: const BoxConstraints(maxHeight: 320),
@@ -127,10 +95,11 @@ class _SubtitleMenuState extends State<SubtitleMenu> {
               ]),
             ),
           ),
-        Container(
-            height: 1,
-            margin: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-            color: NextColors.line),
+        if (on != null) ...[
+          const PlayerMenuDivider(),
+          _SubtitleLook(playback: widget.playback, on: on),
+        ],
+        const PlayerMenuDivider(),
         MenuItem(
           label: _failed ? '这个文件用不了' : '添加字幕文件…',
           onTap: () => unawaited(_add()),
@@ -138,6 +107,52 @@ class _SubtitleMenuState extends State<SubtitleMenu> {
       ]),
     );
   }
+}
+
+/// The subtitle on: earlier or later, smaller or larger.
+class _SubtitleLook extends StatelessWidget {
+  const _SubtitleLook({required this.playback, required this.on});
+  final NextPlayback playback;
+  final SubtitleChoice on;
+
+  void _set(Future<void> Function() change) => unawaited(change().catchError(
+      (Object e) => debugPrint('[NextPlayer] subtitle look: $e')));
+
+  @override
+  Widget build(BuildContext context) =>
+      Selector<VideoPlayerState, (PlayerDial, PlayerDial?)>(
+        selector: (_, s) => (
+          playback.subtitleDelay(on),
+          playback.canScaleSubtitles(on) ? playback.subtitleScale(on) : null,
+        ),
+        builder: (context, look, _) => Column(children: [
+          PlayerMenuRow(
+            label: '偏移',
+            child: Align(
+              alignment: Alignment.centerRight,
+              child: PlayerMenuStepper(
+                label: '偏移',
+                dial: look.$1,
+                onChanged: (v) => _set(() => playback.setSubtitleDelay(on, v)),
+              ),
+            ),
+          ),
+          if (look.$2 case final scale?)
+            PlayerMenuRow(
+              label: '大小',
+              child: Align(
+                alignment: Alignment.centerRight,
+                child: PlayerMenuStepper(
+                  label: '大小',
+                  dial: scale,
+                  rest: 1,
+                  onChanged: (v) =>
+                      _set(() => playback.setSubtitleScale(on, v)),
+                ),
+              ),
+            ),
+        ]),
+      );
 }
 
 /// The episodes of what plays, the one playing marked; a click plays
@@ -307,12 +322,12 @@ class _EpisodeMenuState extends State<EpisodeMenu> {
         ),
       );
     }
-    return _MenuSurface(
+    return PlayerMenuSurface(
       width: known != null ? 392 : 340,
       child: Column(mainAxisSize: MainAxisSize.min, children: [
         Align(
             alignment: Alignment.centerLeft,
-            child: _Heading(known?.heading ?? '剧集')),
+            child: PlayerMenuHeading(known?.heading ?? '剧集')),
         body,
       ]),
     );

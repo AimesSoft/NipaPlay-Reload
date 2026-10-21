@@ -15,6 +15,8 @@ import 'package:nipaplay/next/ui/shell/next_ui_gate.dart';
 import 'package:nipaplay/next/ui/shell/next_ui_preference.dart';
 import 'package:nipaplay/next/ui_data/library.dart';
 import 'package:nipaplay/next/ui_data/ui_data.dart';
+import 'package:nipaplay/player_abstraction/media_kit_player_adapter.dart';
+import 'package:nipaplay/player_abstraction/player_abstraction.dart';
 import 'package:nipaplay/providers/labs_settings_provider.dart';
 import 'package:nipaplay/services/intro_skip/skip_segment.dart';
 import 'package:nipaplay/utils/video_player_state.dart';
@@ -37,6 +39,51 @@ Future<PlayerRig> pumpPlayer(
   FakePlayerState? state,
   FakePlayback Function(FakePlayerState state)? playback,
 }) async {
+  state ??= FakePlayerState();
+  state.status = status;
+  final rig = (playback ?? FakePlayback.new)(state);
+  await _pumpGate(tester,
+      next: next,
+      state: state,
+      playback: rig,
+      classic: classic,
+      size: size,
+      pixelRatio: pixelRatio);
+  return PlayerRig(state, rig);
+}
+
+/// The gate with Next on over Classic's own [VideoPlayerState] (its
+/// settings, its setters, a player kernel that records what it is told):
+/// what Next's controls set is what Classic keeps.
+Future<ClassicRig> pumpClassicPlayer(
+  WidgetTester tester, {
+  ClassicPlayerState? state,
+  Widget classic = const Text('classic'),
+  Size size = const Size(1440, 900),
+  double pixelRatio = 1,
+  ClassicPlayback Function(ClassicPlayerState state)? playback,
+}) async {
+  state ??= ClassicPlayerState();
+  final rig = (playback ?? ClassicPlayback.new)(state);
+  await _pumpGate(tester,
+      next: true,
+      state: state,
+      playback: rig,
+      classic: classic,
+      size: size,
+      pixelRatio: pixelRatio);
+  return ClassicRig(state, rig);
+}
+
+Future<void> _pumpGate(
+  WidgetTester tester, {
+  required bool next,
+  required VideoPlayerState state,
+  required NextPlayback playback,
+  required Widget classic,
+  required Size size,
+  required double pixelRatio,
+}) async {
   tester.view.physicalSize = size * pixelRatio;
   tester.view.devicePixelRatio = pixelRatio;
   addTearDown(tester.view.reset);
@@ -50,9 +97,7 @@ Future<PlayerRig> pumpPlayer(
     await labs.ready;
     await preference.ready;
   });
-  state ??= FakePlayerState();
-  state.status = status;
-  final rig = (playback ?? FakePlayback.new)(state);
+  final rig = playback;
   await tester.pumpWidget(MultiProvider(
     providers: [
       ChangeNotifierProvider.value(value: labs),
@@ -71,7 +116,6 @@ Future<PlayerRig> pumpPlayer(
     ),
   ));
   await tester.pump();
-  return PlayerRig(state, rig);
 }
 
 /// What a test drives: Classic's state and the layer's playback.
@@ -79,6 +123,140 @@ final class PlayerRig {
   PlayerRig(this.state, this.playback);
   final FakePlayerState state;
   final FakePlayback playback;
+}
+
+/// Classic's own state, and Next's playback over it.
+final class ClassicRig {
+  ClassicRig(this.state, this.playback);
+  final ClassicPlayerState state;
+  final ClassicPlayback playback;
+}
+
+/// The player kernel under Classic's state: the tracks of a file, and what
+/// it is told (properties, the speed, the tracks on).
+class ClassicKernel extends Fake implements MediaKitPlayerAdapter {
+  final properties = <String, String>{};
+  @override
+  final buffering = ValueNotifier<bool>(false);
+  @override
+  final textureId = ValueNotifier<int?>(null);
+  @override
+  double volume = 1;
+  @override
+  double playbackRate = 1;
+  @override
+  PlayerPlaybackState state = PlayerPlaybackState.playing;
+  @override
+  PlayerMediaInfo mediaInfo = PlayerMediaInfo(
+    duration: 24 * 60 * 1000,
+    audio: [
+      PlayerAudioStreamInfo(
+          codec: PlayerAudioCodecParams(name: 'flac'),
+          language: 'jpn',
+          rawRepresentation: 'audio 0'),
+      PlayerAudioStreamInfo(
+          codec: PlayerAudioCodecParams(name: 'aac'),
+          title: '评论音轨',
+          language: 'jpn',
+          rawRepresentation: 'audio 1'),
+    ],
+    subtitle: [
+      PlayerSubtitleStreamInfo(
+          title: '简体中文', language: 'chs', rawRepresentation: 'subtitle 0'),
+    ],
+  );
+  @override
+  List<int> activeAudioTracks = [0];
+  @override
+  List<int> activeSubtitleTracks = [0];
+  @override
+  int get position => 0;
+  @override
+  int get bufferedPosition => 0;
+  @override
+  String? getProperty(String key) => properties[key];
+  @override
+  void setProperty(String key, String value) => properties[key] = value;
+  @override
+  void setDecoders(PlayerMediaType type, List<String> decoders) {}
+  @override
+  List<String> getDecoders(PlayerMediaType type) => ['FFmpeg'];
+  @override
+  void setBufferRange({int minMs = -1, int maxMs = -1, bool drop = false}) {}
+  @override
+  void setPlaybackRate(double rate) => playbackRate = rate;
+  @override
+  void dispose() {}
+  @override
+  Future<void> disposeAsync() async {}
+}
+
+/// Classic's [VideoPlayerState] itself, as it is with a video open: only
+/// what the loading would have set (the status, the times, the names, the
+/// danmaku) is given.
+class ClassicPlayerState extends VideoPlayerState {
+  ClassicPlayerState([ClassicKernel? kernel])
+      : this._(kernel ?? ClassicKernel());
+  ClassicPlayerState._(this.kernel)
+      : super.forSettings(Player.withDelegate(kernel));
+  final ClassicKernel kernel;
+
+  PlayerStatus playing = PlayerStatus.playing;
+  Duration at = const Duration(minutes: 14, seconds: 32);
+  List<Map<String, dynamic>> comments = const [];
+
+  @override
+  PlayerStatus get status => playing;
+  @override
+  bool get hasVideo => const {
+        PlayerStatus.ready,
+        PlayerStatus.playing,
+        PlayerStatus.paused
+      }.contains(playing);
+  @override
+  bool get showControls => true;
+  @override
+  Duration get duration => const Duration(minutes: 24);
+  @override
+  Duration get position => at;
+  @override
+  String? get animeTitle => '葬送的芙莉莲';
+  @override
+  String? get episodeTitle => '第5话 死者的幻影';
+  @override
+  List<Map<String, dynamic>> get danmakuList => comments;
+}
+
+/// Next's own playback over Classic's state. Only what would leave the
+/// test (the hotkeys' timers, the window, the disk, the system) is
+/// recorded instead.
+class ClassicPlayback extends NextPlayback {
+  ClassicPlayback(ClassicPlayerState super.state);
+  int holds = 0, screenshots = 0, pictureInPictures = 0;
+  final opened = <String>[];
+
+  /// What a screenshot gives: its file, or null when it could not be taken.
+  String? still = '/tmp/nipa-next/player-more-still.png';
+
+  @override
+  void holdHotkeys() => holds++;
+  @override
+  void releaseHotkeys() => holds--;
+  @override
+  void hover(bool over) {}
+  @override
+  Future<String?> screenshot() async {
+    screenshots++;
+    return still;
+  }
+
+  @override
+  Future<void> open(String path) async => opened.add(path);
+  @override
+  bool get canPictureInPicture => true;
+  @override
+  Future<void> pictureInPicture(BuildContext context) async =>
+      pictureInPictures++;
 }
 
 /// Classic's player state, as much of it as the layer reads.
@@ -93,6 +271,16 @@ class FakePlayerState extends ChangeNotifier implements VideoPlayerState {
   bool danmakuVisible = true;
   @override
   double currentSystemVolume = 0.8;
+  @override
+  double playbackRate = 1;
+  @override
+  double subtitleDelaySeconds = 0;
+  @override
+  double subtitleScale = 1;
+  @override
+  double get subtitleDelayCustomLimitSeconds => 30;
+  @override
+  final Player player = Player.withDelegate(ClassicKernel());
   @override
   Duration position = const Duration(minutes: 1, seconds: 5);
   @override
@@ -180,6 +368,22 @@ class FakePlayback extends NextPlayback {
 
   @override
   Future<void> choose(SubtitleChoice choice) async => chosen.add(choice);
+
+  /// No file is drawn over this video: Classic's own look applies.
+  @override
+  String? drawnOver(SubtitleChoice? on) => null;
+
+  @override
+  Future<void> setSubtitleDelay(SubtitleChoice? on, double seconds) async {
+    _s.subtitleDelaySeconds = seconds;
+    _s.notify();
+  }
+
+  @override
+  Future<void> setSubtitleScale(SubtitleChoice? on, double scale) async {
+    _s.subtitleScale = scale;
+    _s.notify();
+  }
 
   @override
   Future<List<EpisodeChoice>> episodes() async => [
