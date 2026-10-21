@@ -430,6 +430,29 @@ trust_level = "trusted"
       expect(fake.requests.where((r) => jsonEncode(r['input']).contains('FACT_SEEN refused')), isNotEmpty);
     });
 
+    test('a followup put into a turn that is interrupted before reading it is delivered again', () async {
+      await open(followupRules());
+      final host = await lab.start();
+      await host.getMainSession();
+      final thread = host.mainThreadId!;
+      await lab.attachFollowups(host);
+      final first = (await host.startTurn('first'))['turn']['id'] as String;
+      await lab.next((e) => e['method'] == 'item/started' && e['params']['item']['type'] == 'commandExecution');
+      await registerFact(lab.followups, thread, 'dropped');
+      await lab.followups.sweep();
+      expect((await lab.followups.list()).single['turnId'], first);
+      // An interrupt clears what was waiting for the next step.
+      await host.interrupt(onThread: thread);
+      await lab.next((e) => e['method'] == 'turn/completed' && e['params']['turn']['id'] == first);
+      final done = await lab.until(() async {
+        await lab.followups.sweep();
+        final row = (await lab.followups.list()).single;
+        return row['state'] == 'completed' ? row : null;
+      }, what: 'unread followup delivered again');
+      expect(done['turnId'], isNot(first));
+      expect(fake.requests.where((r) => jsonEncode(r['input']).contains('FACT_SEEN dropped')), isNotEmpty);
+    });
+
     test('a followup that arrives while the conversation is idle opens its own turn', () async {
       await open(followupRules());
       final host = await lab.start();

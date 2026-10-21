@@ -624,6 +624,20 @@ final class Followups {
                 await _save(row, 'ready', 'retrying',
                     reason:
                         'The model provider failed this turn; delivering again at ${row['retryAt']}.');
+              } else if (row['steered'] == true &&
+                  status != 'completed' &&
+                  !(turn['items'] as List).cast<Map>().any((item) =>
+                      item['type'] == 'userMessage' &&
+                      jsonEncode(item['content']).contains(_marker(row)))) {
+                // Put into a turn that ended before reading it (an interrupt
+                // clears what was waiting): nobody saw these facts yet.
+                row
+                  ..remove('steered')
+                  ..['turnId'] = null
+                  ..['turnStatus'] = null
+                  ..['failedTurns'] = [...failed, turn['id']];
+                await _save(row, 'ready', 'pending',
+                    reason: 'The turn ended before it read these facts.');
               } else {
                 await _save(
                     row,
@@ -695,6 +709,7 @@ final class Followups {
       }
       row['turnId'] = turnId;
       row['turnStatus'] = 'inProgress';
+      row['steered'] = true;
       if ((row['condition'] as Map)['jobId'] case final String jobId) {
         final job = await engine.get(jobId);
         if (job.type == 'agent.helper') {
