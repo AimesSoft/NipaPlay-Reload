@@ -31,6 +31,7 @@ import 'tasks/sqlite_job_store.dart';
 import 'tasks/user_consent.dart';
 import 'settings/application_settings.dart';
 import 'settings/download_settings.dart';
+import 'settings/consent.dart';
 import 'settings/registry.dart';
 import 'settings/capability.dart';
 import 'settings/classic_settings.dart';
@@ -113,6 +114,7 @@ final class NextCore {
   late final TaskEngine engine;
   final jobOrigins = JobOrigins();
   final diskDeletion = DiskDeletion();
+  late final SettingConsent settingConsent;
   final hooks = HarnessHooks();
   final harnessLocation = HarnessLocation();
   final DownloadRuntime downloads;
@@ -203,6 +205,7 @@ final class NextCore {
       harnessLocation.setting
     ]);
     SettingsAccess.registry = settings;
+    settingConsent = SettingConsent(settings);
     ApplicationSettings.authorizePath = (path, {directory = false}) =>
         media.service.authorizedPath(path, directory: directory);
     danmaku = await DanmakuRuntime.create(media.service.store,
@@ -226,6 +229,7 @@ final class NextCore {
       hooks,
       programs,
       diskDeletion,
+      settingConsent,
       classicScan,
     ];
     engine = TaskEngine(store: jobs, ownerDeviceId: deviceId,
@@ -236,6 +240,7 @@ final class NextCore {
     hooks.engine = engine;
     programs.engine = engine;
     diskDeletion.engine = engine;
+    settingConsent.engine = engine;
     followups = Followups(database, engine, harnessLocation);
     memory = HarnessMemory(harnessLocation, settings, followups.discover);
     catalogChanges =
@@ -243,6 +248,7 @@ final class NextCore {
     programs.returnTarget = followups.downloadReturnTarget;
     accounts.returnTarget = followups.downloadReturnTarget;
     diskDeletion.returnTarget = followups.downloadReturnTarget;
+    settingConsent.returnTarget = followups.downloadReturnTarget;
     mediaSources.returnTarget = followups.downloadReturnTarget;
     attachMeshDelivery(mesh, followups);
     mesh.describeSelf = () async {
@@ -345,7 +351,7 @@ final class NextCore {
     settings.register([uiData.openingSetting]);
     db = createDbService(
         database: database, media: media.service, uiData: uiData);
-    capabilities = List.unmodifiable(diskDeletion.protect([
+    capabilities = List.unmodifiable(diskDeletion.protect(settingConsent.protect([
       CredentialCapability(credentials),
       TaskCapability(engine),
       resources,
@@ -376,7 +382,7 @@ final class NextCore {
       ClassicOperations(settings),
       MeshCapability(mesh),
       state,
-    ]).map(InvocationScopeCapability.new));
+    ])).map(InvocationScopeCapability.new));
     final statusReader = Harness(capabilities);
     Future<JsonMap> readStatus(String action) async {
       final outcome = await statusReader.invokeJson(

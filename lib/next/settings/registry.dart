@@ -270,13 +270,21 @@ final class SettingsRegistry {
     ];
   }
 
-  Future<JsonMap> set(String key, Object? value, Invocation invocation,
-      {String? reason, int? expectedRevision, bool reset = false}) {
-    final entry = _entry(key);
+  /// The visible setting [key], or null when there is none (or it is denied).
+  SettingEntry? lookup(String key) {
+    final entry = _entries[key];
+    return isSettingDenied(key) || entry == null || !entry.visible()
+        ? null
+        : entry;
+  }
+
+  /// Throws the failure [set] would throw for [value], writing nothing.
+  void check(String key, Object? value) => _validate(_entry(key), value);
+
+  void _validate(SettingEntry entry, Object? value) {
     if (!entry.writable) {
       throw const Failure(FailureCode.invalidInput, 'This setting is a read-only fact.');
     }
-    if (reset) value = entry.defaultValue;
     final violations = entry.schema.validate(value);
     if (violations.isEmpty) {
       violations.addAll(entry.validateValue?.call(value) ?? []);
@@ -289,6 +297,13 @@ final class SettingsRegistry {
       throw Failure(FailureCode.invalidInput, 'Invalid setting value.',
           violations: violations);
     }
+  }
+
+  Future<JsonMap> set(String key, Object? value, Invocation invocation,
+      {String? reason, int? expectedRevision, bool reset = false}) {
+    final entry = _entry(key);
+    if (reset) value = entry.defaultValue;
+    _validate(entry, value);
     if (entry.schema is NumberSchema) value = (value as num).toDouble();
     if (entry.schema is IntegerSchema) value = (value as num).toInt();
     return _serial(() async {

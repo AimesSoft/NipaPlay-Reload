@@ -1165,6 +1165,7 @@ String _ratingSource(String source) => switch (source) {
     };
 String _taskVerb(String type) => switch (type) {
       'disk_deletion' => '删除文件',
+      'setting_consent' => '修改设置',
       'download' => '下载',
       'danmaku.fetch' => '准备弹幕',
       'danmaku.align' => '对齐弹幕',

@@ -2,7 +2,12 @@ part of 'service.dart';
 
 /// Tasks that wait for the person at NipaPlay, not for the machine: their
 /// end is news to the conversation that asked, whichever way it ended.
-const userTaskTypes = {'accounts.login', 'media.sources.login', 'disk_deletion'};
+const userTaskTypes = {
+  'accounts.login',
+  'media.sources.login',
+  'disk_deletion',
+  'setting_consent'
+};
 
 extension UserTaskReturns on Followups {
   /// What the conversation is told about [job]: the public task facts, and for
@@ -10,6 +15,14 @@ extension UserTaskReturns on Followups {
   /// the public fields and never enter the receipt it reads from.
   JsonMap userTaskFacts(Job job) {
     final data = publicTaskFacts(job.toJson());
+    if (job.type == 'setting_consent') {
+      return {
+        ...data,
+        'action': 'settings.set',
+        'changed': job.state == JobState.succeeded,
+        'keys': job.input['keys'],
+      };
+    }
     if (job.type != 'disk_deletion') return data;
     final result = job.receipt?.details['result'];
     final batch = result is Map && result['results'] is List;
@@ -60,7 +73,7 @@ extension UserTaskReturns on Followups {
           'state': 'ready',
           'title': '用户操作的结果：${job.title}',
           'instruction':
-              '由此会话发起、需要用户本人完成的事有了结果：账号或媒体来源的登录，或磁盘文件删除的确认。任务终态不等于成功，以状态与回执为准。下一步由你决定。',
+              '由此会话发起、需要用户本人完成的事有了结果：账号或媒体来源的登录，磁盘文件删除的确认，或会把密钥、流量送往别处的设置修改的确认。任务终态不等于成功，以状态与回执为准。下一步由你决定。',
           'condition': {'userTaskJobId': job.jobId},
           'deliverAfter': now,
           'repository': target['repository'],
