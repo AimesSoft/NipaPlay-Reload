@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'dart:isolate';
 import 'dart:math' as math;
 import 'package:crypto/crypto.dart';
 import 'package:nipa_harness/nipa_harness.dart';
@@ -21,6 +22,10 @@ import 'files.dart';
 
 String _hash(Object value) =>
     sha256.convert(utf8.encode(jsonEncode(value))).toString();
+
+/// The same digest, computed on a background isolate: the catalogue grows
+/// with the library, and encoding and hashing it is not the main isolate's.
+Future<String> _hashOffMain(Object value) => Isolate.run(() => _hash(value));
 bool _newer(JsonMap a, JsonMap b) {
   final compared = DateTime.parse(a['at'] as String)
       .compareTo(DateTime.parse(b['at'] as String));
@@ -66,6 +71,13 @@ final class MeshLibrary {
   Future<void>? _sync, _building;
   String? _builtStamp;
   String? _composedStamp;
+
+  /// Moved whenever a peer's catalogue or the progress map is replaced or
+  /// changed, so what the catalogue is composed from is told by these and
+  /// the local version, not by encoding and hashing all of it.
+  int _peersRevision = 0, _progressRevision = 0;
+  String _changeStamp() =>
+      jsonEncode([_local['version'], _peersRevision, _online, _progressRevision]);
   Timer? _timer;
   HttpServer? _http;
   Future<void>? _httpBinding;
@@ -94,6 +106,8 @@ final class MeshLibrary {
       if (id.startsWith('mesh:peer:'))
         _peers[id.substring(10)] = value as JsonMap;
     }
+    _peersRevision++;
+    _progressRevision++;
     _timer = Timer.periodic(const Duration(seconds: 5), (_) => _background());
   }
 
@@ -160,7 +174,7 @@ final class MeshLibrary {
     return id;
   }
 
-  Future<String> _stamp() async => _hash([
+  Future<String> _stamp() async => jsonEncode([
         own,
         await db.rawQuery('SELECT total_changes() AS total'),
         await db.rawQuery('PRAGMA data_version'),
@@ -310,14 +324,15 @@ final class MeshLibrary {
       for (final e in _progress.entries)
         {'kind': 'watch', 'id': e.key, 'value': e.value}
     ]);
-    _local = {'records': records};
-    _local['version'] = _hash(_local);
+    final local = <String, Object?>{'records': records};
+    local['version'] = await _hashOffMain({'records': records});
+    _local = local;
   }
 
   Future<void> refresh() =>
       _sync ??= _refresh().whenComplete(() => _sync = null);
   Future<void> _refresh() async {
-    final before = _hash([_local, _peers, _online, _progress]);
+    final before = _changeStamp();
     _builtStamp = null;
     await _build();
     if (mesh.accountId != null) {
@@ -361,6 +376,7 @@ final class MeshLibrary {
             };
             await _cacheArtwork(id, records);
             _peers[id] = saved;
+            _peersRevision++;
             await _save('mesh:peer:$id', saved);
           }
           _online[id] = true;
@@ -373,7 +389,7 @@ final class MeshLibrary {
       for (final id in _peers.keys) _online[id] = false;
     }
     await _compose();
-    if (before != _hash([_local, _peers, _online, _progress]))
+    if (before != _changeStamp())
       ui.notifyLibraryChanged();
   }
 
@@ -395,7 +411,10 @@ final class MeshLibrary {
         changed = true;
       }
     }
-    if (changed) await _save('mesh:progress', _progress);
+    if (changed) {
+      _progressRevision++;
+      await _save('mesh:progress', _progress);
+    }
   }
 
   Future<void> recordProgress(String episodeId, double progress,
@@ -447,6 +466,7 @@ final class MeshLibrary {
     final merged = {..._progress, ...prepared};
     await _save('mesh:progress', merged);
     _progress.addAll(prepared);
+    _progressRevision++;
     await _compose();
     ui.notifyLibraryChanged();
   }
@@ -517,7 +537,7 @@ final class MeshLibrary {
   }
 
   Future<void> _compose() async {
-    final composition = _hash([own, _local, _peers, _online, _progress]);
+    final composition = jsonEncode([own, _changeStamp()]);
     if (_composedStamp == composition) return;
     final indexRows = <JsonMap>[];
     final records = <JsonMap>[
