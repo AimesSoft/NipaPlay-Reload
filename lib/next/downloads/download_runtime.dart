@@ -14,6 +14,7 @@ import 'download_backend.dart';
 import 'download_executor.dart';
 import 'download_service.dart';
 import 'download_source.dart';
+import 'http_download_backend.dart';
 
 final class DownloadRuntime extends ChangeNotifier {
   DownloadRuntime(
@@ -21,13 +22,18 @@ final class DownloadRuntime extends ChangeNotifier {
       required DownloadLibrary library,
       required Future<bool> Function() isEnabled,
       required Future<Set<String>> Function() loadImportedKeys,
-      Duration refreshInterval = const Duration(seconds: 5)})
+      Duration refreshInterval = const Duration(seconds: 5),
+      HttpDownloadBackend? httpBackend})
       : _backend = backend,
+        http = httpBackend ??
+            HttpDownloadBackend(
+                defaultDirectory: () =>
+                    TorrentDownloadService.instance.getDownloadDirectory()),
         _library = library,
         _enabled = isEnabled,
         _loadImportedKeys = loadImportedKeys,
         _refreshInterval = refreshInterval {
-    _backends = DownloadBackends([backend]);
+    _backends = DownloadBackends([backend, http]);
     executor = DownloadExecutor(
         backends: _backends, library: library, isEnabled: isEnabled);
   }
@@ -39,6 +45,9 @@ final class DownloadRuntime extends ChangeNotifier {
   late final DownloadCapability capability;
   late final DownloadMetadataCapability metadataCapability;
   final DownloadBackend _backend;
+
+  /// Only Next registers this backend; Classic's page never lists it.
+  final HttpDownloadBackend http;
   final DownloadLibrary _library;
   late final DownloadBackends _backends;
   final Future<bool> Function() _enabled;
@@ -54,6 +63,7 @@ final class DownloadRuntime extends ChangeNotifier {
 
   void attach(TaskEngine engine, Directory root) {
     this.engine = engine;
+    http.stateDirectory ??= Directory('${root.path}/http_downloads');
     executor.engine = engine;
     downloads = DownloadService(
         engine: engine,
@@ -65,7 +75,8 @@ final class DownloadRuntime extends ChangeNotifier {
         deleteAudit: JsonlJournal(File('${root.path}/download-audit.jsonl')),
         sources: DownloadSources(Directory('${root.path}/torrent_sources')));
     metadataCapability = DownloadMetadataCapability(
-        DownloadSources(Directory('${root.path}/torrent_sources')), _enabled);
+        DownloadSources(Directory('${root.path}/torrent_sources')), _enabled,
+        httpBackend: http);
   }
 
   Future<void> start() {
@@ -114,6 +125,10 @@ final class DownloadRuntime extends ChangeNotifier {
         await downloads.adopt(_backend, task);
       }
       await downloads.observeMissingSessions(_backend, tasks);
+      // HTTP sessions are never adopted (they only exist because Next added
+      // them); only a session that vanished is noticed.
+      await http.initialize();
+      await downloads.observeMissingSessions(http, await http.list());
     }
     autoScannedKeys = Set.unmodifiable(await _loadImportedKeys());
     _jobsByHash = {
@@ -188,6 +203,7 @@ final class DownloadRuntime extends ChangeNotifier {
     _timer?.cancel();
     await ready;
     await _refreshing;
+    await http.close();
   }
 
   Future<void> quiesce(Iterable<Job> jobs) async {

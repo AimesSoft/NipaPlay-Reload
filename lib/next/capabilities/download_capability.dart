@@ -4,6 +4,7 @@ import '../downloads/download_backend.dart';
 import '../downloads/download_service.dart';
 import '../downloads/download_source.dart';
 import '../downloads/download_paths.dart';
+import '../downloads/http_download_backend.dart';
 import 'classic_action.dart';
 
 final _downloadJobSchema = ObjectSchema({
@@ -42,6 +43,7 @@ const _downloadTaskSchema = ObjectSchema({
   'downloadSpeedBytesPerSecond': IntegerSchema(minimum: 0),
   'uploadSpeedBytesPerSecond': IntegerSchema(minimum: 0),
   'health': ObjectSchema({}, additionalProperties: true),
+  'checksum': ObjectSchema({}, additionalProperties: true),
   'disk': ObjectSchema({}, additionalProperties: true),
   'files': ArraySchema(ObjectSchema({
     'index': IntegerSchema(minimum: 0),
@@ -141,7 +143,7 @@ final class _DownloadAction extends Action<_DownloadJson, _DownloadJson> {
         title: '$operation download',
         description: switch (operation) {
           'add' =>
-            'Accept source or sources: magnet URIs, HTTP(S) torrent URLs or local .torrent paths. Optional downloadDirectory and createFolderForTask override defaults for these new tasks without changing settings. Returns queued jobs after metadata validation, deduplicated by backend and infoHash; an existing task keeps its original directory. Batch results preserve input order and individual failures.',
+            'Accept source or sources: magnet URIs, HTTP(S) torrent URLs or local .torrent paths. Optional downloadDirectory and createFolderForTask override defaults for these new tasks without changing settings. Returns queued jobs after metadata validation, deduplicated by backend and infoHash; an existing task keeps its original directory. Batch results preserve input order and individual failures. With backend {kind: "http"} the source is instead an http:// or https:// address of one file, downloaded as it is (no torrent, no unpacking, no guessing what it is): the file lands in downloadDirectory or the download directory setting (inside a folder named after the file only when createFolderForTask is true) under the name the server gives (Content-Disposition filename, else the last path segment of the final URL), never over an existing file (a taken name gets " (1)", " (2)" ...). The data is written to NAME.nipaplay-part and renamed when complete, so a partial file is never in the library. Pause, resume, cancel and restart continue with a Range request when the server honours it, otherwise from the start. Optional checksum {algorithm: md5|sha1|sha256, value} is compared after the last byte; a mismatch fails the task and the receipt and failure carry expected and actual values (the data stays as NAME.nipaplay-part); without checksum the receipt still records the computed sha256 with matched null. Connection failures and 5xx/408/429 answers are retried and count as no progress (download.stalled applies); other 4xx answers fail the task. The task identity infoHash is "http-" plus the SHA-1 of the normalized URL (fragment removed). Video files are registered like any download; other files (a zip) are reported as not_video and left as they are. Other schemes are refused.',
           'set_paused' =>
             'Set paused for jobId or jobIds, including downloading and seeding. Returns persisted jobs and individual batch failures.',
           'pause' =>
@@ -172,6 +174,14 @@ final class _DownloadAction extends Action<_DownloadJson, _DownloadJson> {
                 'downloadDirectory': _idSchema,
                 'createFolderForTask': BooleanSchema(),
                 'fileIndices': ArraySchema(IntegerSchema(minimum: 0)),
+                'checksum': ObjectSchema({
+                  'algorithm':
+                      StringSchema(values: HttpDownloadBackend.checksumAlgorithms),
+                  'value': StringSchema(minLength: 32),
+                }, required: [
+                  'algorithm',
+                  'value'
+                ]),
               }, oneOfRequired: [
                 ['source'],
                 ['sources']
@@ -256,7 +266,19 @@ final class _DownloadAction extends Action<_DownloadJson, _DownloadJson> {
       }
       final directory = json['downloadDirectory'] as String?;
       if (directory != null) validateDownloadDirectory(directory);
-      final prepared = await sources.prepare(target);
+      final isHttp = ref.kind == HttpDownloadBackend.kind;
+      if (!isHttp && json['checksum'] != null) {
+        throw const Failure(FailureCode.invalidInput,
+            'checksum is only supported by the http backend.');
+      }
+      if (isHttp && json['fileIndices'] != null) {
+        throw const Failure(FailureCode.invalidInput,
+            'The http backend downloads one file; fileIndices does not apply.');
+      }
+      final prepared = isHttp
+          ? HttpDownloadBackend.prepare(target,
+              checksum: json['checksum'] as JsonMap?)
+          : await sources.prepare(target);
       final indices = (json['fileIndices'] as List?)?.cast<int>();
       if (indices != null && indices.toSet().length != indices.length) {
         throw const Failure(
@@ -270,6 +292,7 @@ final class _DownloadAction extends Action<_DownloadJson, _DownloadJson> {
             downloadDirectory: directory,
             createFolderForTask: json['createFolderForTask'] as bool?,
             fileIndices: (json['fileIndices'] as List?)?.cast<int>(),
+            checksum: prepared.checksum,
           ),
           backend: ref,
           invocation: invocation);

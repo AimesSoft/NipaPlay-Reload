@@ -51,6 +51,8 @@ final class DownloadSnapshot {
       this.downloadSpeedBytesPerSecond,
       this.uploadSpeedBytesPerSecond,
       this.error,
+      this.failure,
+      this.checksum,
       this.health,
       this.disk,
       this.files = const []});
@@ -59,6 +61,13 @@ final class DownloadSnapshot {
   final int completed, total;
   final bool finished, paused;
   final String? error;
+
+  /// The backend gave up for a reason retrying cannot change (HTTP 404, a
+  /// checksum mismatch). Unlike [error], the executor ends the task on it.
+  final Failure? failure;
+
+  /// What the backend computed or compared after the last byte, if it did.
+  final JsonMap? checksum;
   final String? libraryKey;
   final String? state;
   final int? downloadSpeedBytesPerSecond, uploadSpeedBytesPerSecond;
@@ -76,7 +85,8 @@ final class DownloadSnapshot {
         'totalBytes': total,
         'finished': finished,
         'paused': paused,
-        'error': error,
+        'error': error ?? failure?.message,
+        if (checksum != null) 'checksum': checksum,
         if (health != null) 'health': health,
         if (disk != null) 'disk': disk,
         if (state != null) 'state': state,
@@ -116,8 +126,12 @@ final class DownloadRequest implements JsonEncodable {
       required this.title,
       this.downloadDirectory,
       this.fileIndices,
-      this.createFolderForTask});
+      this.createFolderForTask,
+      this.checksum});
   final String source, infoHash, title;
+
+  /// `{algorithm, value}` the finished download must match (HTTP downloads).
+  final JsonMap? checksum;
   final String? downloadDirectory;
   final bool? createFolderForTask;
   final List<int>? fileIndices;
@@ -127,7 +141,8 @@ final class DownloadRequest implements JsonEncodable {
       title: json['title'] as String,
       downloadDirectory: json['downloadDirectory'] as String?,
       fileIndices: (json['fileIndices'] as List?)?.cast<int>(),
-      createFolderForTask: json['createFolderForTask'] as bool?);
+      createFolderForTask: json['createFolderForTask'] as bool?,
+      checksum: json['checksum'] as JsonMap?);
   @override
   JsonMap toJson() => {
         'source': source,
@@ -137,6 +152,7 @@ final class DownloadRequest implements JsonEncodable {
         if (fileIndices != null) 'fileIndices': fileIndices,
         if (createFolderForTask != null)
           'createFolderForTask': createFolderForTask,
+        if (checksum != null) 'checksum': checksum,
       };
 }
 

@@ -206,3 +206,65 @@ defaults; host-only switches are documented in `docs/next/HEADLESS.md`.
 Cross-device conversation returns use authenticated host-issued tickets and
 durable batches; see `../followups/README.md`. Files remain on the downloading
 body. Delivery never copies media or treats a remote playable path as local.
+
+## HTTP backend
+
+`download.add {source, backend: {kind: "http"}}` downloads one http:// or https://
+file (other schemes are refused) with `HttpDownloadBackend`, registered in Next
+only; Classic's download page lists the native session and never sees these
+tasks. The job is an ordinary `type: download` task with
+`details.backend = {kind: "http"}`.
+
+Identity: `input.infoHash` is `http-` plus the SHA-1 of the request URL without
+fragment (scheme and host lower-cased, default port dropped), so it never equals a
+BT hash; the session handle is the hex part. Adding the same URL again follows the
+usual hash deduplication. Sessions are kept as JSON under `DATA/http_downloads/`
+and resume after a restart when the downloader is enabled.
+
+Output: `downloadDirectory`, else the download directory setting; a folder named
+after the file only when `createFolderForTask` is true. The file name is the
+`Content-Disposition` filename, else the last path segment of the final URL
+(percent-decoded; directory parts and control characters dropped; `download` if
+nothing is left). An existing file, partial file or other session's target is
+never overwritten: a taken name gets ` (1)`, ` (2)` before the extension. Data is
+written to `NAME.nipaplay-part` and renamed when complete and, if requested,
+verified. `fileIndices` is refused. A removed session leaves its
+`.nipaplay-part` file (like removing a torrent keeps data); `download.delete`
+removes it with the final file.
+
+Transfer: GET with `Accept-Encoding: identity`; resumption sends
+`Range: bytes=N-` (plus `If-Range` with the ETag or Last-Modified), unless the
+server advertised `Accept-Ranges: none`. A 206 whose `Content-Range` starts at N
+continues; a 200 or an unexpected range restarts from byte 0 (`health.http.resume`
+is `confirmed`, `ignored` or `rejected`). Connection errors, timeouts (30 s to
+connect, 60 s without a byte), 5xx, 408 and 429 are retried with 1, 2, 5, 10, then
+30 s pauses and count as no progress, so `health.secondsWithoutProgress` grows and
+the usual `stallAfter` rule appends `checkpoint.stalls`; `health.http.lastError`
+and `retries` say why. 404/410 (`not_found`), other 4xx and certificate errors
+fail the task at once (`unavailable`, not retryable); a failing first request at
+`download.add` is a retryable `unavailable` (or the 4xx failure) like an
+unresolved magnet. Time without progress starts at session start or resume, not
+at pause.
+
+Checksum: `checksum {algorithm: md5|sha1|sha256, value}` is compared after the last
+byte (hashed off the UI isolate). `task.checksum` and `receipt.checksum` are
+`{algorithm, requested, expected, actual, matched}`; `matched` is null when
+nothing was requested (then `algorithm` is sha256). A mismatch fails the task
+(`conflict`, with `details.checksum`) and keeps the data as `.nipaplay-part`
+(`checksum.file`). A failed session is not resumed; remove it and add again.
+
+Proxy: the HTTP client uses `AppHttpProxy` (the player/media-server proxy setting),
+else `SystemProxyService`, loopback excepted, plus the global certificate trust
+overrides; the same resolution as the other Next clients.
+
+`download.preview {source, backend: {kind: "http"}}`: HEAD, or `GET` with
+`Range: bytes=0-0` closed after the headers if HEAD is answered with an error
+status or fails. Returns `url`, `finalUrl`, `redirects`, `statusCode` (an HTTP
+error status is reported, not thrown), `method`, `contentLength`, `contentType`,
+`acceptRanges`, `fileName`, `lastModified`, `etag`. Nothing is downloaded or
+created.
+
+`task.health` for an HTTP download has null peer fields; `files[0].completedBytes`
+is null while the size is unknown. A finished file is a video when its extension
+is one the torrent backend also treats as video; otherwise it is reported as
+`not_video` and left alone.

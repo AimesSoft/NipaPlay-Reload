@@ -131,6 +131,17 @@ final class DownloadExecutor implements JobExecutor {
           return;
         }
         task = await backend.read(task!.handle);
+        if (task.failure case final failure?) {
+          await _verify(backend, task, files, requireComplete: false);
+          await context.fail(
+              failure,
+              JobReceipt(verification: VerificationLevel.unverified, details: {
+                'files': files,
+                'reason': failure.message,
+                if (task.checksum != null) 'checksum': task.checksum,
+              }));
+          return;
+        }
         if (task.error != null && task.error!.isNotEmpty) {
           if (context.job.state == JobState.interrupted) {
             await context.running();
@@ -576,6 +587,7 @@ final class DownloadExecutor implements JobExecutor {
         'downloadComplete': task.finished,
         'paused': task.paused,
         'files': files,
+        if (task.checksum != null) 'checksum': task.checksum,
         'fileIds': {
           for (final row in files)
             if ((row['media'] as Map?)?['fileId'] case final String id) id
