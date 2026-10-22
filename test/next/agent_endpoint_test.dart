@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:nipa_harness/nipa_harness.dart';
 import 'package:nipaplay/next/agent_endpoint.dart';
+import 'package:nipaplay/next/capabilities/classic_action.dart';
 import 'package:nipaplay/next/ui_data/ui_data.dart' show UiNowPlaying;
 
 import 'test_support.dart';
@@ -100,6 +101,211 @@ void main() {
       final playback = await playbackOf(
           fixture, (_) async => throw StateError('not asked'));
       expect(playback, {'state': 'idle'});
+    });
+  });
+
+  group('status summaries', () {
+    TestWidgetsFlutterBinding.ensureInitialized();
+    setUpAll(() => HttpOverrides.global = null);
+
+    ClassicAction read(String id, Future<JsonMap> Function(JsonMap) run) =>
+        ClassicAction(
+            ActionSpec(
+                id: id,
+                title: id,
+                description: 'Fixture',
+                effect: Effect.read,
+                input: const ObjectSchema({}, additionalProperties: true),
+                output: const ObjectSchema({}, additionalProperties: true)),
+            (input, _) => run(input));
+
+    Future<Map> bodyOf(Capability capability) async {
+      endpoint = AgentEndpoint(
+          harness: Harness([capability]),
+          seed: {},
+          appVersion: 'test',
+          instanceFacts: () async => {},
+          credentialFile: credentials,
+          port: 0);
+      final running = await endpoint.start(repository) as AgentEndpointRunning;
+      final token =
+          (jsonDecode(await credentials.readAsString()) as Map)['token'];
+      final call = await client.postUrl(running.url.replace(path: '/harness'));
+      call.headers.set('Authorization', 'Bearer $token');
+      call.write(jsonEncode({'operation': 'status'}));
+      final response = await call.close();
+      final body = jsonDecode(await utf8.decodeStream(response)) as Map;
+      return body['body'] as Map;
+    }
+
+    test('each part is a short summary and says where its detail is', () async {
+      final views = <String, List<Map>>{
+        'media.sources': [
+          {
+            'connectionState': 'connected',
+            'unreachableAddressCount': 0,
+            'credentialState': 'saved',
+            'syncResult': 'succeeded'
+          },
+          {
+            'connectionState': 'failed',
+            'unreachableAddressCount': 2,
+            'credentialState': 'rejected',
+            'syncResult': 'failed'
+          },
+          {
+            'connectionState': 'unverified',
+            'unreachableAddressCount': 1,
+            'credentialState': 'missing',
+            'syncResult': 'running'
+          },
+        ],
+        'downloads.engine': [
+          {
+            'enabled': true,
+            'running': 2,
+            'queued': 1,
+            'paused': 0,
+            'downloadBytesPerSecond': 1000,
+            'uploadBytesPerSecond': 10
+          },
+          {
+            'enabled': true,
+            'running': 1,
+            'queued': 0,
+            'paused': 1,
+            'downloadBytesPerSecond': 500,
+            'uploadBytesPerSecond': 0
+          },
+        ],
+        'library.scan': [
+          {'scanning': true, 'rootCount': 2, 'failedFileCount': 3}
+        ],
+        'network.observations': [
+          {'availability': 'reachable'},
+          {'availability': 'failed'},
+        ],
+        'app.update': [
+          {
+            'checked': true,
+            'checkedAt': '2026-10-22T00:00:00.000Z',
+            'hasUpdate': false,
+            'latestVersion': '1.0.0',
+            'errorCode': null
+          }
+        ],
+        'harness.hooks': [
+          {'state': 'ready'},
+          {'state': 'ready', 'lastState': 'failed'},
+          {'state': 'not_executable'},
+          {'state': 'absent'},
+          {'state': 'unrecognized'},
+        ],
+        'harness.schedules': [
+          {
+            'index': 0,
+            'valid': true,
+            'file': 'valid',
+            'skippedLate': 2,
+            'skippedWhileRunning': 1
+          },
+          {'index': 1, 'valid': false, 'file': 'valid'},
+        ],
+        'mesh.devices': [
+          {'online': true},
+          {'online': false},
+        ],
+      };
+      final body = await bodyOf(_Fixture([
+        read('state.query', (input) async => {
+              'rows': views[input['view']] ??
+                  (throw StateError('no ${input['view']}'))
+            }),
+        read('download.directories', (_) async => {'defaultDirectory': '/d'}),
+        read('storage.status', (_) async => {
+              'volumes': [
+                {'availableBytes': 1, 'totalBytes': 10},
+                {'availableBytes': 2, 'totalBytes': 20},
+              ]
+            }),
+      ]));
+      expect(body['sources'], {
+        'count': 3,
+        'connected': 1,
+        'failed': 1,
+        'unreachableAddresses': 3,
+        'credentialRejected': 1,
+        'credentialMissing': 1,
+        'syncFailed': 1,
+        'syncRunning': 1,
+      });
+      expect(body['downloads'], {
+        'directory': '/d',
+        'enabled': true,
+        'running': 3,
+        'queued': 1,
+        'paused': 1,
+        'downloadBytesPerSecond': 1500,
+        'uploadBytesPerSecond': 10,
+      });
+      expect(body['space'], {
+        'availableBytes': 1,
+        'totalBytes': 10,
+        'volumes': [
+          {'availableBytes': 1, 'totalBytes': 10},
+          {'availableBytes': 2, 'totalBytes': 20},
+        ],
+      });
+      expect(body['scan'], {'scanning': true, 'roots': 2, 'failedFiles': 3});
+      expect(body['network'], {'observed': 2, 'failed': 1});
+      expect(body['updates'], {
+        'checked': true,
+        'checkedAt': '2026-10-22T00:00:00.000Z',
+        'hasUpdate': false,
+        'latestVersion': '1.0.0',
+        'errorCode': null,
+      });
+      expect(body['hooks'], {
+        'ready': 2,
+        'notExecutable': 1,
+        'unrecognized': 1,
+        'failedLastRun': 1,
+        'schedules': {
+          'file': 'valid',
+          'entries': 2,
+          'invalid': 1,
+          'skipped': 3,
+          'failedLastRun': 0,
+        },
+      });
+      expect(body['mesh'], {'devices': 2, 'online': 1});
+      expect((body['views'] as Map)['sources'],
+          ['media.sources', 'media.source_addresses']);
+      expect((body['views'] as Map)['hooks'],
+          ['harness.hooks', 'harness.schedules']);
+    });
+
+    test('a part that cannot be read says why, without hiding the rest',
+        () async {
+      final body = await bodyOf(_Fixture([
+        read('state.query', (input) async {
+          if (input['view'] == 'media.sources') {
+            throw const Failure(FailureCode.unavailable, 'source list broke');
+          }
+          return {'rows': <Map>[]};
+        }),
+        read('storage.status', (_) async => {'volumes': <Map>[]}),
+      ]));
+      final sources = body['sources'] as Map;
+      expect(sources['unavailable'], 'state.query');
+      expect(sources['reason'], containsPair('code', 'unavailable'));
+      expect((sources['reason'] as Map)['message'], contains('source list broke'));
+      expect((body['network'] as Map)['observed'], 0);
+      expect(body['space'], isNull);
+      // A part whose action does not exist at all is told the same way.
+      final missing = body['accounts'] as Map;
+      expect(missing['unavailable'], 'accounts.status');
+      expect(missing['reason'], isNotNull);
     });
   });
 
@@ -323,4 +529,10 @@ final class _WriteAction extends Action<NoInput, NoInput> {
   @override
   Future<Outcome<NoInput>> run(NoInput input, Invocation invocation) async =>
       const Completed(NoInput());
+}
+
+final class _Fixture implements Capability {
+  _Fixture(this.actions);
+  @override
+  final List<Action> actions;
 }

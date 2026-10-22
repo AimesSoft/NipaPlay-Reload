@@ -231,8 +231,10 @@ final class AgentEndpoint {
   }
 
   /// What is worth knowing before the first step: how big the library is,
-  /// which accounts are signed in, where downloads go and how much room is
-  /// left. Each part is read on its own; one failing does not hide the rest.
+  /// which accounts are signed in, the media sources, downloads, scans,
+  /// network, updates, hooks and how much room is left. Each part is a short
+  /// summary read on its own from the view named in `views`; one failing
+  /// does not hide the rest and says why it failed.
   Future<JsonMap> _bodyOverview(String origin) async {
     Future<Object?> read(String action, JsonMap input,
         Object? Function(JsonMap result) pick) async {
@@ -243,11 +245,29 @@ final class AgentEndpoint {
         if (envelope['status'] == 'completed' && envelope['result'] is Map) {
           return pick((envelope['result'] as Map).cast<String, Object?>());
         }
-        return {'unavailable': action};
-      } catch (_) {
-        return {'unavailable': action};
+        final error = envelope['error'];
+        return {
+          'unavailable': action,
+          'reason': error is Map
+              ? {'code': error['code'], 'message': _short(error['message'])}
+              : '${envelope['status']}',
+        };
+      } catch (error) {
+        return {'unavailable': action, 'reason': {'message': _short('$error')}};
       }
     }
+
+    /// The rows of a view, as the summary of one part.
+    Future<Object?> view(String name, Object? Function(List<Map> rows) pick,
+            {int limit = 200}) =>
+        read('state.query', {'view': name, 'limit': limit}, (r) {
+          final rows = (r['rows'] as List? ?? const []).cast<Map>();
+          return pick(rows);
+        });
+    int count(List<Map> rows, bool Function(Map) test) =>
+        rows.where(test).length;
+    int sum(List<Map> rows, String field) => rows.fold<int>(
+        0, (n, row) => n + ((row[field] as num?)?.toInt() ?? 0));
 
     // The library's name for the playing file, when this body has one.
     UiNowPlaying? known;
@@ -301,8 +321,22 @@ final class AgentEndpoint {
             for (final a in (r['accounts'] as List? ?? const []).cast<Map>())
               '${a['provider']}': a['loggedIn'] == true,
           }),
-      'downloads': await read('download.directories', {},
-          (r) => {'directory': r['defaultDirectory']}),
+      'sources': await view(
+          'media.sources',
+          (rows) => {
+                'count': rows.length,
+                'connected':
+                    count(rows, (r) => r['connectionState'] == 'connected'),
+                'failed': count(rows, (r) => r['connectionState'] == 'failed'),
+                'unreachableAddresses': sum(rows, 'unreachableAddressCount'),
+                'credentialRejected':
+                    count(rows, (r) => r['credentialState'] == 'rejected'),
+                'credentialMissing':
+                    count(rows, (r) => r['credentialState'] == 'missing'),
+                'syncFailed': count(rows, (r) => r['syncResult'] == 'failed'),
+                'syncRunning': count(rows, (r) => r['syncResult'] == 'running'),
+              }),
+      'downloads': await _downloadsSummary(read, view),
       'space': await read('storage.status', {}, (r) {
         final volumes = (r['volumes'] as List? ?? const []).cast<Map>();
         return volumes.isEmpty
@@ -310,8 +344,131 @@ final class AgentEndpoint {
             : {
                 'availableBytes': volumes.first['availableBytes'],
                 'totalBytes': volumes.first['totalBytes'],
+                'volumes': [
+                  for (final v in volumes)
+                    {
+                      'availableBytes': v['availableBytes'],
+                      'totalBytes': v['totalBytes'],
+                    }
+                ],
               };
       }),
+      'scan': await view('library.scan', (rows) {
+        final row = rows.isEmpty ? const {} : rows.first;
+        return {
+          'scanning': row['scanning'],
+          'roots': row['rootCount'],
+          'failedFiles': row['failedFileCount'],
+        };
+      }),
+      'network': await view(
+          'network.observations',
+          (rows) => {
+                'observed': rows.length,
+                'failed': count(rows, (r) => r['availability'] == 'failed'),
+              }),
+      'updates': await view('app.update', (rows) {
+        final row = rows.isEmpty ? const {} : rows.first;
+        return {
+          'checked': row['checked'],
+          if (row['checked'] == true) ...{
+            'checkedAt': row['checkedAt'],
+            'hasUpdate': row['hasUpdate'],
+            'latestVersion': row['latestVersion'],
+            'errorCode': row['errorCode'],
+          },
+        };
+      }),
+      'hooks': await _hooksSummary(view, count, sum),
+      'mesh': await view(
+          'mesh.devices',
+          (rows) => {
+                'devices': rows.length,
+                'online': count(rows, (r) => r['online'] == true),
+              }),
+      // Where the detail of each part above is read: state.describe {view}.
+      'views': {
+        'sources': ['media.sources', 'media.source_addresses'],
+        'accounts': ['accounts'],
+        'downloads': ['downloads.engine', 'downloads'],
+        'space': ['storage.volumes', 'storage.directories'],
+        'scan': ['library.scan'],
+        'network': ['network.routes', 'network.observations'],
+        'updates': ['app.update'],
+        'hooks': ['harness.hooks', 'harness.schedules'],
+        'mesh': ['mesh.devices'],
+      },
+    };
+  }
+
+  static String _short(Object? text) {
+    final value = '$text';
+    return value.length > 200 ? '${value.substring(0, 200)}...' : value;
+  }
+
+  /// The default directory with what the engines are doing: tasks running
+  /// and queued, the total rate, and whether downloads are enabled.
+  Future<Object?> _downloadsSummary(
+      Future<Object?> Function(String, JsonMap, Object? Function(JsonMap))
+          read,
+      Future<Object?> Function(String, Object? Function(List<Map>),
+              {int limit})
+          view) async {
+    final directory = await read('download.directories', {},
+        (r) => {'directory': r['defaultDirectory']});
+    final engines = await view('downloads.engine', (rows) {
+      int sum(String field) => rows.fold<int>(
+          0, (n, row) => n + ((row[field] as num?)?.toInt() ?? 0));
+      final unreadable = rows.any((r) => r['enabled'] == true &&
+          r['downloadBytesPerSecond'] == null);
+      return {
+        'enabled': rows.isEmpty ? null : rows.first['enabled'],
+        'running': sum('running'),
+        'queued': sum('queued'),
+        'paused': sum('paused'),
+        'downloadBytesPerSecond': unreadable ? null : sum('downloadBytesPerSecond'),
+        'uploadBytesPerSecond': unreadable ? null : sum('uploadBytesPerSecond'),
+      };
+    });
+    if (directory is Map && directory.containsKey('unavailable')) {
+      return directory;
+    }
+    return {
+      ...?(directory as Map?)?.cast<String, Object?>(),
+      if (engines is Map) ...engines.cast<String, Object?>(),
+    };
+  }
+
+  /// Hook programs and schedules: what exists, what is ignored and what
+  /// was skipped.
+  Future<Object?> _hooksSummary(
+      Future<Object?> Function(String, Object? Function(List<Map>),
+              {int limit})
+          view,
+      int Function(List<Map>, bool Function(Map)) count,
+      int Function(List<Map>, String) sum) async {
+    final hooks = await view(
+        'harness.hooks',
+        (rows) => {
+              'ready': count(rows, (r) => r['state'] == 'ready'),
+              'notExecutable': count(rows, (r) => r['state'] == 'not_executable'),
+              'unrecognized': count(rows, (r) => r['state'] == 'unrecognized'),
+              'failedLastRun': count(rows, (r) => r['lastState'] == 'failed'),
+            });
+    final schedules = await view('harness.schedules', (rows) {
+      final real = rows.where((r) => r['index'] != null).toList();
+      return {
+        'file': rows.isEmpty ? 'absent' : rows.first['file'],
+        'entries': real.length,
+        'invalid': rows.length - count(rows, (r) => r['valid'] == true),
+        'skipped': sum(real, 'skippedLate') + sum(real, 'skippedWhileRunning'),
+        'failedLastRun': count(real, (r) => r['lastState'] == 'failed'),
+      };
+    });
+    if (hooks is Map && hooks.containsKey('unavailable')) return hooks;
+    return {
+      ...?(hooks as Map?)?.cast<String, Object?>(),
+      'schedules': schedules,
     };
   }
 
