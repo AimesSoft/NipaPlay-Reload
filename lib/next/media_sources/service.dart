@@ -23,11 +23,16 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../media/identity_store.dart';
 import 'metadata.dart';
 import 'search.dart';
+import 'source_facts.dart';
+import 'package:nipaplay/services/address_probe.dart';
 
 /// Source configuration and discovery use the same Classic instances and locators.
 final class MediaSourcesService {
   MediaSourcesService(this.store);
   final IdentityStore store;
+
+  /// What was last observed of each source, kept across restarts.
+  final facts = SourceFacts();
   Future<String> Function(String id)? canonicalEntityId;
   Future<String?> Function(String sourceId, JsonMap item)? cachedPoster;
   Future<String?> Function(String sourceId, String itemId)? loadPoster;
@@ -67,6 +72,8 @@ final class MediaSourcesService {
   }
 
   Future<void> close() async {
+    if (AddressProbes.observer == facts.probe) AddressProbes.observer = null;
+    await facts.flush();
     await _jobs?.cancel();
     await _cleanup;
     await _tail;
@@ -97,6 +104,21 @@ final class MediaSourcesService {
     await webdav.initialize();
     await dandanRemote.loadSavedSettings(loadCredentials: false);
     BodyChanges.seed('source:dandanplay_remote', await _dandanRows());
+    facts.exists = _knownProbeTarget;
+    AddressProbes.observer = facts.probe;
+  }
+
+  /// Sources that are configured now.
+  bool _knownProbeTarget(String id) {
+    final reference = key(id);
+    return switch (id.split(':').first) {
+      'smb' => smb.getConnectionByIdOrName(reference) != null,
+      'webdav' => webdav.getConnectionByIdOrName(reference) != null,
+      'jellyfin' || 'emby' => profiles.getProfileById(reference) != null,
+      'nipaplay' => shared?.hosts.any((h) => h.id == reference) ?? false,
+      'dandanplay_remote' => dandanRemote.serverUrl != null,
+      _ => false,
+    };
   }
 
   String validateUrl(String value) {
@@ -160,7 +182,9 @@ final class MediaSourcesService {
     return prefs.getStringList('next.source.$sourceId.libraries') ?? [];
   }
 
-  Future<List<JsonMap>> list() async {
+  /// The sources, and with [withFacts] what was last observed of each: its
+  /// addresses, its last sync, its credential and its last failure.
+  Future<List<JsonMap>> list({bool withFacts = false}) async {
     final result = <JsonMap>[];
     for (final profile in profiles.profiles) {
       final service = server(profile.serverType);
@@ -252,8 +276,181 @@ final class MediaSourcesService {
         source['connected'] = false;
         source['error'] = error;
       }
+      if (withFacts) await _addFacts(source);
     }
     return result;
+  }
+
+  static String? _time(DateTime? value) => value?.toUtc().toIso8601String();
+
+  static JsonMap _entry(String role, String address, JsonMap? fact,
+      {String? label, bool? enabled}) {
+    final reachable = fact?['reachable'];
+    return {
+      'role': role,
+      if (label != null) 'label': label,
+      'address': address,
+      if (enabled != null) 'enabled': enabled,
+      'reachability': reachable == null
+          ? 'unknown'
+          : reachable == true
+              ? 'reachable'
+              : 'unreachable',
+      'lastAttemptAt': fact?['lastAttemptAt'],
+      'lastSuccessAt': fact?['lastSuccessAt'],
+      'lastFailureAt': fact?['lastFailureAt'],
+      'errorCode': fact?['errorCode'],
+      'latencyMs': fact?['latencyMs'],
+    };
+  }
+
+  Future<void> _addFacts(JsonMap source) async {
+    final id = source['sourceId'] as String;
+    final type = source['type'] as String;
+    final saved = await facts.read(id);
+    final probed = ((saved['addresses'] as Map?) ?? const {})
+        .map((key, value) => MapEntry('$key', (value as Map).cast<String, Object?>()));
+    final addresses = <JsonMap>[];
+    if (type == 'smb' || type == 'webdav') {
+      final classic = type == 'smb'
+          ? smb.lastAddressReachability(key(id))
+          : webdav.lastAddressReachability(key(id));
+      JsonMap? fallback(bool? reachable) =>
+          reachable == null ? null : {'reachable': reachable};
+      for (final role in ['lan', 'wan']) {
+        final address = (role == 'lan' ? source['url'] : source['wanUrl'])
+                as String? ??
+            '';
+        if (address.isEmpty) continue;
+        addresses.add(_entry(
+            role,
+            address,
+            probed[role] ??
+                fallback(role == 'lan' ? classic?.lan : classic?.wan)));
+      }
+    } else if (type == 'jellyfin' || type == 'emby') {
+      final profile = profiles.getProfileById(key(id));
+      for (final address in profile?.addresses ?? const []) {
+        final fact = probed[address.id];
+        final ok = address.lastSuccessTime;
+        final failed = address.lastFailureTime;
+        addresses.add(_entry(
+            address.id,
+            address.normalizedUrl,
+            fact ??
+                (ok == null && failed == null
+                    ? null
+                    : {
+                        'reachable': failed == null ||
+                            (ok != null && ok.isAfter(failed)),
+                        'lastAttemptAt': _time(
+                            ok != null && (failed == null || ok.isAfter(failed))
+                                ? ok
+                                : failed),
+                        'lastSuccessAt': _time(ok),
+                        'lastFailureAt': _time(failed),
+                      }),
+            label: address.name,
+            enabled: address.isEnabled)
+          ..['failureCount'] = address.failureCount);
+      }
+    } else {
+      final fact = probed['address'] ??
+          (type == 'nipaplay' && source['lastConnected'] != null
+              ? {
+                  'reachable': source['connected'] == true,
+                  'lastAttemptAt': source['lastConnected'],
+                  if (source['connected'] == true)
+                    'lastSuccessAt': source['lastConnected'],
+                }
+              : null);
+      addresses.add(_entry('address', source['url'] as String? ?? '', fact));
+    }
+    source['addresses'] = addresses;
+    final check = (saved['check'] as Map?)?.cast<String, Object?>();
+    source['lastCheck'] = check;
+    final sync = (saved['sync'] as Map?)?.cast<String, Object?>();
+    final syncedAt = source['lastSyncedAt'] as String?;
+    source['sync'] = {
+      'result': facts.syncResult(id, sync),
+      'jobId': sync?['jobId'],
+      'startedAt': sync?['startedAt'],
+      'finishedAt': sync?['finishedAt'],
+      'lastSuccessAt': sync?['lastSuccessAt'] ?? syncedAt,
+      'indexed': sync?['indexed'],
+      'errorCode': sync?['errorCode'],
+    };
+    final lastError = (saved['lastError'] as Map?)?.cast<String, Object?>();
+    final legacy = source['error'];
+    source['lastError'] = lastError == null && legacy == null
+        ? null
+        : {
+            'code': lastError?['code'],
+            'at': lastError?['at'],
+            'message': legacy,
+          };
+    final rejection = (saved['credential'] as Map?)?.cast<String, Object?>();
+    final held = await _credentialHeld(source);
+    final rejectedAt = rejection?['lastRejectedAt'] as String?;
+    final verifiedAt = rejection?['lastVerifiedAt'] as String?;
+    final rejectedSince = rejectedAt != null &&
+        (verifiedAt == null || rejectedAt.compareTo(verifiedAt) > 0);
+    source['credential'] = {
+      'state': held == null
+          ? 'none'
+          : !held
+              ? 'missing'
+              : rejectedSince
+                  ? 'rejected'
+                  : 'saved',
+      'lastRejectedAt': rejectedAt,
+      'lastRejectedCode': rejection?['lastRejectedCode'],
+      'lastVerifiedAt': verifiedAt,
+    };
+  }
+
+  /// Whether a login is on record for the source: null when it needs none,
+  /// otherwise saved or not. Only presence is looked at; neither the secret
+  /// nor the vault is read.
+  Future<bool?> _credentialHeld(JsonMap source) async {
+    final id = source['sourceId'] as String;
+    final username = source['username'] as String? ?? '';
+    switch (source['type']) {
+      case 'jellyfin':
+      case 'emby':
+        final profile = profiles.getProfileById(key(id));
+        return profile == null ? false : await profile.hasAccessToken();
+      case 'smb':
+        final held = await smb.getConnectionByIdOrName(key(id))?.hasPassword();
+        return held == true ? true : (username.isEmpty ? null : false);
+      case 'webdav':
+        final held =
+            await webdav.getConnectionByIdOrName(key(id))?.hasPassword();
+        return held == true ? true : (username.isEmpty ? null : false);
+      case 'nipaplay':
+        if (username.isEmpty) return null;
+        return (await SharedPreferences.getInstance()).containsKey(
+            'shared_remote_credential_origin.${key(id)}');
+      default:
+        final token = (await SharedPreferences.getInstance())
+            .getString('dandanplay_remote_api_token');
+        if (token != null && token.isNotEmpty) return true;
+        return dandanRemote.tokenRequired ? false : null;
+    }
+  }
+
+  /// A stable code for why a source could not be used. No exception text.
+  static String failureCode(Object error) {
+    if (error is Failure) {
+      final m = error.message;
+      if (m.contains('Login is required') || m.contains('Log in to the')) {
+        return 'login_required';
+      }
+      if (m.contains('authentication failed')) return 'auth_failed';
+      if (m.contains('offline')) return 'offline';
+      return classifyFailure(m);
+    }
+    return classifyFailure(error);
   }
 
   Future<JsonMap> source(String id) async {
@@ -467,6 +664,14 @@ final class MediaSourcesService {
         }
         await (await SharedPreferences.getInstance())
             .remove('next.source.$id.lastError');
+        if (old != null) {
+          final now = await source(id);
+          if (addressesOf(now).difference(addressesOf(old)).isNotEmpty ||
+              addressesOf(old).difference(addressesOf(now)).isNotEmpty ||
+              now['username'] != old['username']) {
+            await facts.reset(id);
+          }
+        }
         await observeDandan();
         return {'source': await source(id)};
       });
@@ -502,6 +707,7 @@ final class MediaSourcesService {
             .remove('next.source.$id.libraries');
         await (await SharedPreferences.getInstance())
             .remove('next.source.$id.lastError');
+        await facts.clear(id);
         await observeDandan();
         return {'sourceId': id, 'removed': true, 'indexedFilesPreserved': true};
       });
@@ -631,9 +837,14 @@ final class MediaSourcesService {
 
   Future<JsonMap> check(String id) async {
     final target = await source(id);
+    final clock = Stopwatch()..start();
     try {
       await libraries(id);
     } catch (error) {
+      final code = failureCode(error);
+      final latency = clock.elapsedMilliseconds;
+      await facts.checked(id, ok: false, errorCode: code, latencyMs: latency);
+      _probed(target, false, latency, code);
       await serial(() async {
         final row = await source(id);
         if (!sameEndpoint(row, target)) {
@@ -652,6 +863,9 @@ final class MediaSourcesService {
       });
       rethrow;
     }
+    final latency = clock.elapsedMilliseconds;
+    await facts.checked(id, ok: true, latencyMs: latency);
+    _probed(target, true, latency, null);
     return serial(() async {
       final row = await source(id);
       if (!sameEndpoint(row, target)) {
@@ -670,6 +884,20 @@ final class MediaSourcesService {
       await observeDandan();
       return {'source': await source(id), 'checked': true};
     });
+  }
+
+  /// Sources with one address and no probe of their own: a check is the
+  /// observation of that address.
+  void _probed(JsonMap row, bool reachable, int latencyMs, String? code) {
+    if (row['type'] != 'nipaplay' && row['type'] != 'dandanplay_remote') return;
+    facts.probe(AddressProbe(
+        sourceId: row['sourceId'] as String,
+        role: 'address',
+        address: row['url'] as String? ?? '',
+        at: DateTime.now().toUtc(),
+        reachable: reachable,
+        latencyMs: latencyMs,
+        errorCode: code));
   }
 
   Future<JsonMap> testConfiguration(JsonMap input) async {
@@ -1253,6 +1481,19 @@ final class MediaSourcesService {
   }
 
   Future<void> completeLogin(JobContext context) async {
+    final id = context.job.input['sourceId'] as String;
+    try {
+      await _completeLogin(context);
+    } catch (error) {
+      await facts.failed(id, failureCode(error));
+      rethrow;
+    }
+    if ((await context.snapshot()).state == JobState.succeeded) {
+      await facts.loggedIn(id);
+    }
+  }
+
+  Future<void> _completeLogin(JobContext context) async {
     await ensureInitialized();
     final input = context.job.input;
     final id = input['sourceId'] as String;
@@ -1437,6 +1678,30 @@ final class MediaSourcesService {
 
   Future<void> synchronize(JobContext context) async {
     await ensureInitialized();
+    final id = context.job.input['sourceId'] as String;
+    final jobId = context.job.jobId;
+    await facts.syncStarted(id, jobId);
+    try {
+      await _synchronize(context);
+    } catch (error) {
+      await facts.syncFinished(id, jobId,
+          result: 'failed', errorCode: failureCode(error));
+      rethrow;
+    }
+    final snapshot = await context.snapshot();
+    final receipt = snapshot.receipt?.details;
+    await facts.syncFinished(id, jobId,
+        result: switch (snapshot.state) {
+          JobState.succeeded => 'succeeded',
+          JobState.cancelled || JobState.cancelling => 'cancelled',
+          JobState.failed => 'failed',
+          _ => 'interrupted',
+        },
+        indexed: receipt?['indexed'] as int?,
+        errorCode: snapshot.state == JobState.failed ? 'unknown' : null);
+  }
+
+  Future<void> _synchronize(JobContext context) async {
     final id = context.job.input['sourceId'] as String;
     final selected = (context.job.input['libraries'] as List).cast<String>();
     var stopped = false;

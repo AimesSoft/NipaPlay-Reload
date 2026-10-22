@@ -13,6 +13,7 @@ class ServerProfile {
   String? get accessToken => _accessToken.value;
   set accessToken(String? value) => _accessToken = StoredCredential(value);
   Future<String?> resolveAccessToken() => _accessToken.resolve();
+  Future<bool> hasAccessToken() => _accessToken.exists();
   String? userId; // 用户ID
   String? lastSuccessfulAddressId; // 最近成功连接的地址ID
   DateTime? lastConnectionTime; // 最后连接时间

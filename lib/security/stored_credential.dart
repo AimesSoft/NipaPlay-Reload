@@ -19,6 +19,14 @@ final class StoredCredential {
   String? get value => _value;
   Object? toJson() => ref?.placeholder ?? _value;
 
+  /// Whether a secret is on record, by value or by reference. The vault is
+  /// not read: a reference whose entry has gone shows up when it is used.
+  Future<bool> exists() async {
+    final held = _value;
+    if (held != null) return held.isNotEmpty;
+    return ref != null;
+  }
+
   Future<String?> resolve() async {
     if (ref != null && _value == null) {
       _value = await CredentialStore.instance.vault.read(ref!);

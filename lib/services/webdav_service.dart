@@ -4,6 +4,7 @@ import 'package:nipaplay/security/credential_vault.dart';
 import 'package:nipaplay/security/credential_authority.dart';
 import 'dart:convert';
 import '../next/state/change_history.dart';
+import 'address_probe.dart';
 import 'dart:io';
 
 import 'package:dio/dio.dart';
@@ -36,6 +37,7 @@ class WebDAVConnection {
       credentialAuthorityOf([originOf(url), originOf(wanUrl)]);
   final StoredCredential _password;
   String get password => _password.value ?? '';
+  Future<bool> hasPassword() => _password.exists();
   bool get passwordIsResolved => _password.ref == null || _password.value != null;
   StoredCredential? retainPassword(String edited, {required String original}) =>
       edited == original ? _password : null;
@@ -512,12 +514,33 @@ class WebDAVService {
     final hasLan = normalized.url.trim().isNotEmpty;
     final hasWan = normalized.wanUrl.trim().isNotEmpty;
 
+    Future<WebDAVConnection?> probe(String role, WebDAVConnection target) async {
+      final note = _ProbeNote();
+      final clock = Stopwatch()..start();
+      WebDAVConnection? result;
+      try {
+        result = await _validateConnection(target, note);
+      } finally {
+        AddressProbes.report(AddressProbe(
+          sourceId: 'webdav:${normalized.id}',
+          role: role,
+          address: role == 'wan' ? normalized.wanUrl : normalized.url,
+          at: DateTime.now().toUtc(),
+          reachable: result != null,
+          latencyMs: clock.elapsedMilliseconds,
+          errorCode: result != null ? null : classifyFailure(note.error),
+        ));
+      }
+      return result;
+    }
+
     final results = await Future.wait([
       hasLan
-          ? _validateConnection(normalized.copyWith(wanUrl: ''))
+          ? probe('lan', normalized.copyWith(wanUrl: ''))
           : Future<WebDAVConnection?>.value(null),
       hasWan
-          ? _validateConnection(
+          ? probe(
+              'wan',
               normalized.copyWith(url: normalized.wanUrl, wanUrl: ''),
             )
           : Future<WebDAVConnection?>.value(null),
@@ -541,9 +564,15 @@ class WebDAVService {
   }
 
   Future<WebDAVConnection?> _validateConnection(
-    WebDAVConnection connection,
-  ) async {
-    await connection.resolvePassword();
+    WebDAVConnection connection, [
+    _ProbeNote? note,
+  ]) async {
+    try {
+      await connection.resolvePassword();
+    } catch (e) {
+      note?.error = e;
+      rethrow;
+    }
     final override = _connectionValidator;
     if (override != null) return override(connection);
     final triedUrls = <String>{};
@@ -570,6 +599,7 @@ class WebDAVService {
         await client.readDir('/');
         return current;
       } on DioException catch (e) {
+        note?.error = e;
         if (_isAuthorizationFailure(e)) {
           final authMsg = _buildAuthorizationErrorMessage(current);
           print(authMsg);
@@ -611,6 +641,7 @@ class WebDAVService {
         print('📍 堆栈: ${e.stackTrace}');
         return null;
       } catch (e, stackTrace) {
+        note?.error = e;
         print('❌ WebDAV连接测试失败: $e');
         print('📍 堆栈: $stackTrace');
         final fallbackConnection = await _legacyTestConnection(current);
@@ -2295,4 +2326,9 @@ class _PropfindVariant {
     this.contentType,
     this.includeBody = true,
   });
+}
+
+/// Carries the last failure of one address probe back to its caller.
+class _ProbeNote {
+  Object? error;
 }

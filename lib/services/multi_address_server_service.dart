@@ -5,6 +5,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:flutter/foundation.dart';
 import '../models/server_profile_model.dart';
 import 'debug_log_service.dart';
+import 'address_probe.dart';
 import '../next/state/change_history.dart';
 
 /// 多地址服务器管理服务
@@ -348,9 +349,21 @@ class MultiAddressServerService {
         'MultiAddressServer: 尝试连接 ${address.name} (${address.url})'
       );
       
+      final clock = Stopwatch()..start();
+      void observe(bool reachable, String? code) =>
+          AddressProbes.report(AddressProbe(
+            sourceId: '${profile.serverType}:${profile.id}',
+            role: address.id,
+            address: address.normalizedUrl,
+            at: DateTime.now().toUtc(),
+            reachable: reachable,
+            latencyMs: clock.elapsedMilliseconds,
+            errorCode: code,
+          ));
       try {
         final success = await testConnection(address.normalizedUrl)
             .timeout(_connectionTimeout);
+        observe(success, success ? null : 'verification_failed');
         
         if (success) {
           // 标记成功
@@ -372,12 +385,14 @@ class MultiAddressServerService {
           updatedProfile = updatedProfile.markAddressFailed(address.id);
         }
       } on TimeoutException {
+        observe(false, 'timeout');
         lastError = '连接超时';
         updatedProfile = updatedProfile.markAddressFailed(address.id);
         DebugLogService().addLog(
           'MultiAddressServer: 地址 ${address.name} 连接超时'
         );
       } catch (e) {
+        observe(false, classifyFailure(e));
         lastError = e.toString();
         updatedProfile = updatedProfile.markAddressFailed(address.id);
         DebugLogService().addLog(

@@ -4,6 +4,7 @@ import 'package:nipaplay/security/credential_vault.dart';
 import 'package:nipaplay/security/credential_authority.dart';
 import 'dart:convert';
 import '../next/state/change_history.dart';
+import 'address_probe.dart';
 
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -33,6 +34,7 @@ class SMBConnection {
       ]);
   final StoredCredential _password;
   String get password => _password.value ?? '';
+  Future<bool> hasPassword() => _password.exists();
   bool get passwordIsResolved => _password.ref == null || _password.value != null;
   StoredCredential? retainPassword(String edited, {required String original}) =>
       edited == original ? _password : null;
@@ -468,17 +470,41 @@ class SMBService {
     final hasLan = normalized.host.trim().isNotEmpty;
     final hasWan = normalized.wanHost.trim().isNotEmpty;
 
+    Future<bool> probe(String role, SMBConnection target, String address) async {
+      final note = _SmbProbeNote();
+      final clock = Stopwatch()..start();
+      var ok = false;
+      try {
+        ok = await _testConnection(target, note);
+      } finally {
+        AddressProbes.report(AddressProbe(
+          sourceId: 'smb:${normalized.id}',
+          role: role,
+          address: address,
+          at: DateTime.now().toUtc(),
+          reachable: ok,
+          latencyMs: clock.elapsedMilliseconds,
+          errorCode: ok ? null : classifyFailure(note.error),
+        ));
+      }
+      return ok;
+    }
+
     final results = await Future.wait([
       hasLan
-          ? _testConnection(normalized.copyWith(wanHost: '', wanPort: 445))
+          ? probe('lan', normalized.copyWith(wanHost: '', wanPort: 445),
+              'smb://${normalized.host}:${normalized.port}')
           : Future<bool>.value(false),
       hasWan
-          ? _testConnection(normalized.copyWith(
-              host: normalized.wanHost,
-              port: normalized.wanPort,
-              wanHost: '',
-              wanPort: 445,
-            ))
+          ? probe(
+              'wan',
+              normalized.copyWith(
+                host: normalized.wanHost,
+                port: normalized.wanPort,
+                wanHost: '',
+                wanPort: 445,
+              ),
+              'smb://${normalized.wanHost}:${normalized.wanPort}')
           : Future<bool>.value(false),
     ]);
 
@@ -625,13 +651,20 @@ class SMBService {
     _directoryCache.removeWhere((key) => key.name == normalizedName);
   }
 
-  Future<bool> _testConnection(SMBConnection connection) async {
-    await connection.resolvePassword();
+  Future<bool> _testConnection(SMBConnection connection,
+      [_SmbProbeNote? note]) async {
+    try {
+      await connection.resolvePassword();
+    } catch (e) {
+      note?.error = e;
+      rethrow;
+    }
     if (Smb2NativeService.instance.isSupported) {
       try {
         await Smb2NativeService.instance.listDirectory(connection, '/');
         return true;
       } catch (e) {
+        note?.error = e;
         print('测试SMB连接失败(libsmb2): $e');
         return false;
       }
@@ -643,6 +676,7 @@ class SMBService {
       await client.listShares();
       return true;
     } catch (e) {
+      note?.error = e;
       print('测试SMB连接失败: $e');
       return false;
     } finally {
@@ -802,4 +836,9 @@ class SMBService {
     }
     return isVideoFile(filename);
   }
+}
+
+/// Carries the last failure of one address probe back to its caller.
+class _SmbProbeNote {
+  Object? error;
 }

@@ -25,6 +25,30 @@ const _source = ObjectSchema({
   'connectionState':
       StringSchema(values: ['connected', 'unverified', 'failed']),
   'selectedLibraries': ArraySchema(_text),
+  'addresses': ArraySchema(
+      ObjectSchema({
+        'role': StringSchema(
+            description:
+                'lan or wan for SMB and WebDAV; the address id for Jellyfin and Emby; address for a source with one address.'),
+        'label': StringSchema(description: 'Address name, when it has one.'),
+        'address': StringSchema(),
+        'enabled': BooleanSchema(),
+        'reachability': StringSchema(
+            values: ['reachable', 'unreachable', 'unknown'],
+            description:
+                'Result of the last attempt on this address; unknown when none was observed.'),
+        'lastAttemptAt': StringSchema(nullable: true),
+        'lastSuccessAt': StringSchema(nullable: true),
+        'lastFailureAt': StringSchema(nullable: true),
+        'errorCode': StringSchema(nullable: true),
+        'latencyMs': IntegerSchema(nullable: true),
+      }, additionalProperties: true),
+      description:
+          'Every configured address with the last attempt on it. Observed facts, kept across restarts.'),
+  'lastCheck': ObjectSchema({}, additionalProperties: true, nullable: true),
+  'sync': ObjectSchema({}, additionalProperties: true),
+  'lastError': ObjectSchema({}, additionalProperties: true, nullable: true),
+  'credential': ObjectSchema({}, additionalProperties: true),
 }, required: [
   'sourceId',
   'type',
@@ -223,7 +247,7 @@ final _specs = [
       id: 'media.sources.list',
       title: 'List media sources',
       description:
-          'List Classic sources and last observed connection status without reading credentials or contacting servers. Unverified does not mean offline. address is the address in use now. WebDAV and SMB can have a LAN and a WAN address: WebDAV url (LAN) and wanUrl (WAN); SMB host/port and wanHost/wanPort, also given as smb:// url and wanUrl. At least one is non-empty; an empty one is not configured. Classic prefers LAN when both are set, so address can change between LAN and WAN without any edit.',
+          'List Classic sources and last observed connection status without reading credentials or contacting servers. Unverified does not mean offline. Besides the current fields each source carries observed facts that survive a restart, each with the time it was observed and null where nothing was: addresses[] (every configured address with role, reachability reachable/unreachable/unknown, lastAttemptAt, lastSuccessAt, lastFailureAt, errorCode, latencyMs; Classic probes SMB/WebDAV addresses at startup and when connections are tested, Jellyfin/Emby addresses when connecting, others when checked); lastCheck {at, result, errorCode, latencyMs} of the last media.sources.check; sync {result running/succeeded/failed/cancelled/interrupted or null, jobId, startedAt, finishedAt, lastSuccessAt, indexed, errorCode}; lastError {code, at, message}; credential {state none (needs no login)/saved (a login is on record; the vault is not read, so an entry that has gone shows as credential_missing when used)/missing/rejected, lastRejectedAt, lastRejectedCode, lastVerifiedAt}, which never holds the credential. rejected means the source refused the saved login after the last time it accepted it. errorCode is a stable code such as timeout, connection_refused, dns_failed, network_unreachable, tls_failed, auth_failed, login_required, credential_missing, http_<status>, connection_failed. address is the address in use now. WebDAV and SMB can have a LAN and a WAN address: WebDAV url (LAN) and wanUrl (WAN); SMB host/port and wanHost/wanPort, also given as smb:// url and wanUrl. At least one is non-empty; an empty one is not configured. Classic prefers LAN when both are set, so address can change between LAN and WAN without any edit.',
       effect: Effect.read,
       input: ObjectSchema({}),
       output: ObjectSchema({'sources': ArraySchema(_source)},
@@ -449,7 +473,7 @@ final class _SourceAction extends Action<_Json, _Json> {
               ? await service.testConfiguration(json)
               : await service.check(json['sourceId'] as String);
         case 'media.sources.list':
-          result = {'sources': await service.list()};
+          result = {'sources': await service.list(withFacts: true)};
         case 'media.sources.add':
           result = await service.configure(json);
         case 'media.sources.update':
