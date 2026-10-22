@@ -64,6 +64,74 @@ trust_level = "trusted"
         throwsStateError);
   });
 
+  group('image input probe', () {
+    const route = DshRoute(
+        baseUrl: 'https://models.example/v1', model: 'm', key: 'k');
+    late Directory dir;
+    setUp(() async => dir = await Directory.systemTemp.createTemp('probe'));
+    tearDown(() => dir.delete(recursive: true));
+
+    test('a model that names the colour takes images, and the answer is kept',
+        () async {
+      final cache = File('${dir.path}/model-input.json');
+      var asked = 0;
+      Future<(int, String)> send(Uri uri, Map<String, Object?> body,
+          Map<String, String> headers) async {
+        asked++;
+        expect(uri.path, '/v1/responses');
+        expect(jsonEncode(body), contains('input_image'));
+        return (
+          200,
+          jsonEncode({
+            'output': [
+              {
+                'content': [
+                  {'type': 'output_text', 'text': 'Red.'}
+                ]
+              }
+            ]
+          })
+        );
+      }
+
+      expect(await probeDshImageInput(route, cache, send: send), isTrue);
+      expect(await probeDshImageInput(route, cache, send: send), isTrue);
+      expect(asked, 1);
+      final overlay = route.withImageInput(true).piAiConfig.toString();
+      expect(overlay, contains('[text, image]'));
+    });
+
+    test('a model that ignores the image or refuses it is text only; an '
+        'unanswered probe is asked again', () async {
+      final cache = File('${dir.path}/model-input.json');
+      expect(
+          await probeDshImageInput(route, cache,
+              send: (_, __, ___) async => (
+                    200,
+                    jsonEncode({
+                      'choices': [
+                        {
+                          'message': {'content': 'I cannot see images.'}
+                        }
+                      ]
+                    })
+                  )),
+          isFalse);
+      await cache.delete();
+      expect(
+          await probeDshImageInput(route, cache,
+              send: (_, __, ___) async => (400, '{"error":"image"}')),
+          isFalse);
+      await cache.delete();
+      expect(
+          await probeDshImageInput(route, cache,
+              send: (_, __, ___) async => (503, '')),
+          isNull);
+      expect(await cache.exists(), isFalse);
+      expect(route.piAiConfig.toString(), isNot(contains('input')));
+    });
+  });
+
   group('memory stale notifier', () {
     test('sends the first change at once and merges a burst into one more send', () async {
       var sent = 0;
@@ -669,6 +737,7 @@ final class _Fake {
   final HttpServer server;
   final List<_Rule> rules;
   final requests = <Map<String, Object?>>[];
+  var probes = 0;
   int get port => server.port;
 
   static Future<_Fake> start(List<_Rule> rules) async {
@@ -686,6 +755,22 @@ final class _Fake {
       return;
     }
     final body = jsonDecode(await utf8.decodeStream(request)) as Map<String, Object?>;
+    if (jsonEncode(body).contains('What colour is this image?')) {
+      // NipaPlay's image-input probe at launch, not a turn.
+      probes++;
+      request.response.headers.contentType = ContentType.json;
+      request.response.write(jsonEncode({
+        'output': [
+          {
+            'content': [
+              {'type': 'output_text', 'text': 'Red'}
+            ]
+          }
+        ]
+      }));
+      await request.response.close();
+      return;
+    }
     final n = requests.length;
     requests.add(body);
     final blob = jsonEncode(body['input']);

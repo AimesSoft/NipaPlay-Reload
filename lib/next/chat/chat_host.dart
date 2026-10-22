@@ -322,11 +322,14 @@ final class ChatHost implements ConversationHistory {
             : null);
     SecretRedactor.remember(
         const CredentialRef('next_model', 'dsh'), route.key);
+    // DSH's read_image hands an image only to a model declared to take one.
+    final imageInput = await probeDshImageInput(
+        route, File('${next.path}/dsh/model-input.json'));
     final patch = File('${next.path}/dsh/nipa-patch.json');
     await patch.parent.create(recursive: true);
     await patch.writeAsString(
         const JsonEncoder.withIndent('  ').convert(dshPatch(
-            route: route,
+            route: route.withImageInput(imageInput),
             plugins: dshPlugins!,
             personaPrefix:
                 (await File('${dshPlugins!.path}/persona-prefix.md').readAsString())

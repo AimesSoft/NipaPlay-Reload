@@ -71,7 +71,8 @@ final class DshRoute {
       this.api = 'openai-responses',
       this.reasoningEffort,
       this.contextWindow,
-      this.maxRetries});
+      this.maxRetries,
+      this.imageInput});
 
   static const keyVariable = 'NIPAPLAY_MODEL_API_KEY';
   static const provider = 'nipaplay';
@@ -79,6 +80,21 @@ final class DshRoute {
   final String baseUrl, model, key, api;
   final String? reasoningEffort;
   final int? contextWindow, maxRetries;
+
+  /// Whether the model answered about an image it was shown
+  /// ([probeDshImageInput]); null when that is not known. DSH's `read_image`
+  /// hands images only to a model declared to take them.
+  final bool? imageInput;
+
+  DshRoute withImageInput(bool? value) => DshRoute(
+      baseUrl: baseUrl,
+      model: model,
+      key: key,
+      api: api,
+      reasoningEffort: reasoningEffort,
+      contextWindow: contextWindow,
+      maxRetries: maxRetries,
+      imageInput: value);
 
   /// [config] is a Codex `config.toml`. [model] and [provider] override its
   /// top-level choice, as a NipaPlay-managed launch does. The credential is
@@ -132,6 +148,8 @@ final class DshRoute {
             'models': [
               {
                 'id': model,
+                if (imageInput != null)
+                  'input': imageInput! ? ['text', 'image'] : ['text'],
                 if (contextWindow != null) 'contextWindow': contextWindow,
                 if (reasoningEffort != null)
                   'reasoningEfforts': {
@@ -144,6 +162,118 @@ final class DshRoute {
         }
       };
 }
+
+/// Sends the model one small image, solid red, and asks its colour: whether
+/// it answers about it is what [DshRoute.imageInput] records. Kept in
+/// [cache] per endpoint, model and wire API; an unanswered probe (network,
+/// timeout, server error) is not kept, so the next launch asks again.
+/// [send] posts a JSON body and returns the status and body; tests replace it.
+Future<bool?> probeDshImageInput(DshRoute route, File cache,
+    {Future<(int, String)> Function(Uri uri, Map<String, Object?> body,
+            Map<String, String> headers)?
+        send,
+    Duration timeout = const Duration(seconds: 8)}) async {
+  final id = '${route.api}|${route.baseUrl}|${route.model}';
+  try {
+    final kept = jsonDecode(await cache.readAsString()) as Map;
+    if (kept['route'] == id && kept['imageInput'] is bool) {
+      return kept['imageInput'] as bool;
+    }
+  } catch (_) {}
+  const question = 'What colour is this image? Answer with one word.';
+  final image = 'data:image/png;base64,$_redPng';
+  final responses = route.api == 'openai-responses';
+  final uri =
+      Uri.parse('${route.baseUrl}/${responses ? 'responses' : 'chat/completions'}');
+  final body = responses
+      ? <String, Object?>{
+          'model': route.model,
+          'input': [
+            {
+              'role': 'user',
+              'content': [
+                {'type': 'input_text', 'text': question},
+                {'type': 'input_image', 'image_url': image},
+              ],
+            }
+          ],
+          'max_output_tokens': 64,
+        }
+      : <String, Object?>{
+          'model': route.model,
+          'messages': [
+            {
+              'role': 'user',
+              'content': [
+                {'type': 'text', 'text': question},
+                {
+                  'type': 'image_url',
+                  'image_url': {'url': image}
+                },
+              ],
+            }
+          ],
+          'max_tokens': 64,
+        };
+  final (int, String) reply;
+  try {
+    reply = await (send ?? _postJson)(uri, body, {
+      'Authorization': 'Bearer ${route.key}',
+      'Content-Type': 'application/json',
+    }).timeout(timeout);
+  } catch (_) {
+    return null;
+  }
+  final (status, text) = reply;
+  if (status >= 500 || status == 429) return null;
+  bool sawRed = false;
+  if (status == 200) {
+    try {
+      final decoded = jsonDecode(text) as Map;
+      final words = <String>[];
+      for (final item in (decoded['output'] as List? ?? const [])) {
+        for (final part in ((item as Map)['content'] as List? ?? const [])) {
+          if ((part as Map)['text'] case final String t) words.add(t);
+        }
+      }
+      for (final choice in (decoded['choices'] as List? ?? const [])) {
+        if (((choice as Map)['message'] as Map?)?['content'] case final String t) {
+          words.add(t);
+        }
+      }
+      final answer = words.join(' ').toLowerCase();
+      sawRed = answer.contains('red') || answer.contains('红');
+    } catch (_) {}
+  }
+  try {
+    await cache.parent.create(recursive: true);
+    await cache.writeAsString(jsonEncode({
+      'route': id,
+      'imageInput': sawRed,
+      'status': status,
+      'checkedAt': DateTime.now().toUtc().toIso8601String(),
+    }));
+  } catch (_) {}
+  return sawRed;
+}
+
+Future<(int, String)> _postJson(
+    Uri uri, Map<String, Object?> body, Map<String, String> headers) async {
+  final client = HttpClient();
+  try {
+    final request = await client.postUrl(uri);
+    headers.forEach(request.headers.set);
+    request.add(utf8.encode(jsonEncode(body)));
+    final response = await request.close();
+    return (response.statusCode, await response.transform(utf8.decoder).join());
+  } finally {
+    client.close(force: true);
+  }
+}
+
+/// 8×8, solid red.
+const _redPng =
+    'iVBORw0KGgoAAAANSUhEUgAAAAgAAAAICAIAAABLbSncAAAAEklEQVR4nGP4z8CAFWEXHbQSACj/P8Fu7N9hAAAAAElFTkSuQmCC';
 
 /// DSH rows that upload sessions or package lists, ask for DeepSeek accounts,
 /// or offer tools Nipa does not use; see lib/next/chat/README.md.
