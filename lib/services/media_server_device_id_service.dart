@@ -1,3 +1,4 @@
+import 'package:nipaplay/next/settings/registry.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:uuid/uuid.dart';
 
@@ -59,14 +60,15 @@ class MediaServerDeviceIdService {
     final normalized = _normalizeCustomDeviceId(deviceId);
     final prefs = await SharedPreferences.getInstance();
 
-    if (normalized == null) {
-      await prefs.remove(_keyCustomDeviceId);
-      _cachedCustomDeviceId = null;
-      return;
-    }
-
-    await prefs.setString(_keyCustomDeviceId, normalized);
-    _cachedCustomDeviceId = normalized;
+    // The cache is updated inside the persisted step, so the settings history
+    // reads the new value.
+    await SettingsAccess.persist(_keyCustomDeviceId, () async {
+      final saved = normalized == null
+          ? await prefs.remove(_keyCustomDeviceId)
+          : await prefs.setString(_keyCustomDeviceId, normalized);
+      _cachedCustomDeviceId = normalized;
+      return saved;
+    });
   }
 
   Future<String> getOrCreateGeneratedDeviceId() async {

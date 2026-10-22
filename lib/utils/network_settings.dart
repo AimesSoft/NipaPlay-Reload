@@ -225,7 +225,8 @@ class NetworkSettings {
     final prefs = await SharedPreferences.getInstance();
     final previous = await getBangumiServer();
     final normalized = _normalizeServerUrl(serverUrl);
-    await prefs.setString(_bangumiServerKey, normalized);
+    await SettingsAccess.persist(
+        _bangumiServerKey, () => prefs.setString(_bangumiServerKey, normalized));
     // 换 API 地址后清旧域名图片/详情缓存，否则旧缓存仍指向旧域名一直加载失败
     if (normalized != previous) {
       final stale = prefs.getKeys()
@@ -256,7 +257,8 @@ class NetworkSettings {
   /// 重置Bangumi为默认服务器
   static Future<void> resetBangumiServer() async {
     final prefs = await SharedPreferences.getInstance();
-    await prefs.remove(_bangumiServerKey);
+    await SettingsAccess.persist(
+        _bangumiServerKey, () => prefs.remove(_bangumiServerKey));
     print('[网络设置] Bangumi服务器已重置为默认: $bangumiDefaultServer');
   }
 

@@ -5,7 +5,7 @@ import 'package:nipa_harness/nipa_harness.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
 import 'denylist.dart';
-import 'effective.dart';
+import 'effective_value.dart';
 import 'presentation.dart';
 
 final class SettingEntry {
@@ -32,6 +32,7 @@ final class SettingEntry {
     this.remote,
     this.step,
     this.writable = true,
+    this.effective,
   })  : _schema = schema,
         _defaultValue = defaultValue,
         visible = visible ?? (() => true);
@@ -60,6 +61,10 @@ final class SettingEntry {
   final JsonMap? remote;
   final num? step;
   final bool writable;
+
+  /// Reads the value in use while the application runs. Without one only
+  /// what [baseEffective] can say is reported.
+  final EffectiveResolver? effective;
 
   String get domain => key.split('.').first;
   JsonMap describe() {
@@ -208,7 +213,7 @@ final class SettingsRegistry {
   Future<Effective> _effective(SettingEntry entry, Object? stored) async {
     try {
       await _startupCaptured;
-      return await EffectiveRules.resolve(entry, stored,
+      return await (entry.effective ?? baseEffective)(entry, stored,
           startup: _startup,
           readOther: (key) async => _entries[key]?.read());
     } on Failure catch (failure) {

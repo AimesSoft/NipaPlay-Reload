@@ -25,6 +25,7 @@ import 'package:nipaplay/utils/video_player_state.dart';
 import 'package:nipaplay/utils/external_player_utils.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:path/path.dart' as p;
+import 'effective.dart';
 import 'registry.dart';
 import '../tasks/user_consent.dart';
 import 'package:nipaplay/services/file_picker_service.dart';
@@ -424,6 +425,7 @@ abstract final class ApplicationSettings {
           reader: source,
           writer: '$source#$setter',
           visible: () => locallyVisible(key) && (visible?.call() ?? true),
+          effective: EffectiveRules.resolve,
           remote: remote,
           decodeStorage: decodeValue,
           read:

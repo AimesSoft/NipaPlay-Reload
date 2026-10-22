@@ -30,6 +30,7 @@ import '../capabilities/classic_home.dart';
 
 import 'application_settings.dart';
 import 'denylist.dart';
+import 'effective.dart';
 import 'registry.dart';
 import '../tasks/user_consent.dart';
 
@@ -150,6 +151,7 @@ final class ClassicSettings {
         },
         visible: visible,
         validateValue: validate,
+        effective: EffectiveRules.resolve,
       ));
     }
 
