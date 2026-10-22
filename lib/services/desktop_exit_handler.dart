@@ -411,7 +411,9 @@ class DesktopExitHandler
   Future<void> _prepareForExit() async {
     final chatContext = _navigatorKey?.currentContext;
     if (chatContext != null) {
-      await chatContext.read<NextRuntime?>()?.closeChat();
+      final next = chatContext.read<NextRuntime?>();
+      await next?.closeChat();
+      await next?.exiting();
     }
     try {
       final context = _navigatorKey?.currentContext;

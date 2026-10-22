@@ -54,6 +54,9 @@ import 'capabilities/local_library_operations.dart';
 import 'capabilities/debug_local_operations.dart';
 import 'capabilities/video_player_state_port.dart';
 import 'capabilities/player_facts.dart';
+import 'system/player_native_log.dart';
+import 'system/runtime_diagnostics.dart';
+import 'system/uncaught_errors.dart';
 import 'media/file_indexing.dart';
 import 'media_sources/login_dialog.dart';
 import 'accounts/login_dialog.dart';
@@ -310,6 +313,7 @@ final class NextRuntime extends ChangeNotifier {
   bool _disposed = false;
   ClassicSettings? _classicSettings;
   MeshPlayback? _meshPlayback;
+  UncaughtErrors? _uncaught;
   ChatHost? chat;
   String? chatError;
   final _hostReady = Completer<NextHostSettings>();
@@ -405,6 +409,9 @@ final class NextRuntime extends ChangeNotifier {
           {'codec': audio.codec.name, 'sampleRate': audio.codec.sampleRate, 'channels': audio.codec.channels}],
         'details': diagnosticsPlayerDetails(media, buffering: _player.isBuffering)};
     };
+    final uncaught = _uncaught = UncaughtErrors(
+        Directory('${root.path}/diagnostics'), appVersion: packageInfo.version)
+      ..context = _playbackContext;
     _harness = Harness(
       [
         FamilyDescriptionCapability(() => _harness.catalog),
@@ -417,6 +424,11 @@ final class NextRuntime extends ChangeNotifier {
         for (final capability in capabilities)
           InvocationScopeCapability(FileIndexingCapability(capability, core.media.service.store)),
         PlaybackControlsCapability(ClassicPlaybackControls(_player)),
+        RuntimeDiagnosticsCapability(
+            errors: uncaught,
+            log: PlayerNativeLog.instance,
+            player: () => _player.player,
+            logDirectory: Directory('${root.path}/diagnostics/player-logs')),
         InvocationScopeCapability(localPlayback),
         InvocationScopeCapability(localLibrary),
         FileIndexingCapability(
@@ -514,6 +526,9 @@ final class NextRuntime extends ChangeNotifier {
     chatError = null;
     final AgentEndpointStatus status;
     if (enabled) {
+      // Only for Next: Classic keeps its handlers and kernel logs as they are.
+      await _uncaught?.attach();
+      PlayerNativeLog.instance.attach();
       ServiceProvider.nextCore.subtitles.attachPlayer(_player);
       await _localLibrary.attachClassicHistory();
       status = await _endpoint.start(Directory(repositoryPath));
@@ -522,6 +537,8 @@ final class NextRuntime extends ChangeNotifier {
         await _startChat(repository);
       }
     } else {
+      await _uncaught?.detach();
+      await PlayerNativeLog.instance.detach();
       ServiceProvider.nextCore.subtitles.detachPlayer();
       await _endpoint.stop();
       status = const AgentEndpointStopped();
@@ -719,6 +736,7 @@ final class NextRuntime extends ChangeNotifier {
     final status = _player.status.name;
     if (status != _lastPlaybackStatus || path != _lastPlaybackPath) {
       final previous = _lastPlaybackStatus;
+      final pathChanged = path != _lastPlaybackPath;
       _lastPlaybackStatus = status;
       _lastPlaybackPath = path;
       _queueHook(() => _hooks.emit('playback.state_changed', path ?? 'player', {
@@ -728,6 +746,9 @@ final class NextRuntime extends ChangeNotifier {
       // Classic sets its error text right after the status; read both once
       // the code that failed has returned.
       if (status == 'error') scheduleMicrotask(_recordFailure);
+      if (pathChanged || status == 'error') {
+        _uncaught?.notePlayback(_playbackContext());
+      }
     }
     if (!_player.hasVideo) {
       _startedPath = null;
@@ -758,6 +779,20 @@ final class NextRuntime extends ChangeNotifier {
     });
   }
 
+  JsonMap _playbackContext() {
+    final path = _player.currentVideoPath;
+    return {
+      'status': _player.status.name,
+      'path': path == null ? null : redactHarnessText(path),
+      'kernel': playerKernelId(_player.player.getPlayerKernelName()),
+      'positionMs': _player.position.inMilliseconds,
+    };
+  }
+
+  /// The app is leaving through its exit path; the next start does not
+  /// report this run as ended abruptly.
+  Future<void> exiting() async => _uncaught?.exiting();
+
   Future<void> _detachHooks() async {
     ServiceProvider.nextCore.desktopSystem.detach();
     _player.removeListener(_playbackChanged);
@@ -782,6 +817,8 @@ final class NextRuntime extends ChangeNotifier {
     _labs.removeListener(_queueEndpointUpdate);
     _location?.removeListener(_queueEndpointUpdate);
     _operations = _operations.then((_) async {
+      await _uncaught?.detach();
+      await PlayerNativeLog.instance.detach();
       await _meshPlayback?.close();
       await _detachHooks();
       await ServiceProvider.nextCore.followups.attach(null, reason: 'NipaPlay is shutting down.');
