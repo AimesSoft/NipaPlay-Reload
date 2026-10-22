@@ -32,6 +32,7 @@ import 'application_settings.dart';
 import 'denylist.dart';
 import 'effective.dart';
 import 'registry.dart';
+import 'setting_descriptions.dart';
 import '../tasks/user_consent.dart';
 
 List<SchemaViolation> validateGithubProxy(Object? value) {
@@ -127,7 +128,8 @@ final class ClassicSettings {
       entries.add(SettingEntry(
         key: key,
         title: title,
-        description: description ?? '调整$title，复用 Classic 的持久化与应用方式。',
+        description: description ??
+            describeWithApply(classicSettingDescriptions[key] ?? '', apply),
         schema: schema,
         defaultValue: fallback,
         dynamicDefaultValue: dynamicDefault,

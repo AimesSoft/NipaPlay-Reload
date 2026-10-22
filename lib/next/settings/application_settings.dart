@@ -27,6 +27,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:path/path.dart' as p;
 import 'effective.dart';
 import 'registry.dart';
+import 'setting_descriptions.dart';
 import '../tasks/user_consent.dart';
 import 'package:nipaplay/services/file_picker_service.dart';
 import 'package:nipaplay/utils/mpv_utils.dart';
@@ -340,6 +341,10 @@ abstract final class ApplicationSettings {
       Future<Object?> Function()? runtimeRead,
     }) {
       final displayTitle = _titles[key] ?? title;
+      final entryApply =
+          ['player.hwdecMode', 'player.softDecodePixelFormat'].contains(key)
+              ? 'reload_player'
+              : apply;
       Object? defaultForEntry() => key == 'danmaku.convertToSimplified'
           ? settings?.defaultDanmakuConvertToSimplified ??
               defaultConvertToSimplified()
@@ -349,35 +354,8 @@ abstract final class ApplicationSettings {
       entries.add(SettingEntry(
           key: key,
           title: displayTitle,
-          description: switch (key) {
-            'player.volume' => '普通播放音量，0–1；桌面控制播放器并保存 Classic 音量，移动端控制系统音量。与音量增强独立。',
-            'player.brightness' => '移动端应用亮度，0–1；即时生效，不保存为长期偏好。',
-            'danmaku.manualOffset' =>
-              '当前会话的弹幕手动偏移（秒）；沿用播放器的偏移方向，不增加持久偏好。切换视频是否保留由 rememberOffset 控制。',
-            'danmaku.fontSize' => '弹幕字号；0 使用设备默认字号，正值为指定字号。保存后用于后续播放。',
-            'subtitle.delaySeconds' ||
-            'subtitle.srtDelaySeconds' =>
-              '字幕时轴偏移（秒）；正值延后，负值提前。SRT 独立偏移沿用当前视频时长限制。',
-            'player.customUserAgent' =>
-              '视频请求的 User-Agent；空字符串使用内核默认值，下次打开视频生效。',
-            'player.screenshotDirectory' => '截图保存目录；空字符串恢复应用的默认目录。',
-            'player.screenshotIncludeDanmaku' =>
-              '截图时保留显示中的弹幕层。Erika 原生弹幕不在截图中，即使开启此项也不包含；截图没有弹幕不能据此判断轨道未加载或屏幕上不可见。',
-            'danmaku.visible' =>
-              '弹幕显示开关，也作用于 Erika 原生弹幕；值为 true 不代表当前时刻屏幕上已有弹幕。轨道加载、时间位置与过滤仍影响实际显示。',
-            'player.externalPath' => '外部播放器程序的绝对路径；可使用媒体目录外已安装的程序，或调用 playback.external_player_path 由用户选择/检测 mpv。空字符串清除。',
-            'subtitle.fontDir' ||
-            'danmaku.fontFilePath' =>
-              '$displayTitle；路径须属于已授权的文件范围。字体文件会通过现有导入流程保存为应用内副本。',
-            'danmaku.spoilerPreventionEnabled' =>
-              '使用用户已配置的 AI 接口过滤剧透弹幕；未完成接口配置时不能启用。',
-            'player.timelinePreviewEnabled' =>
-              '启用 MDK 时间轴截图预览，会创建后台播放器并增加解码与缓存开销；应用内先显示 Classic 性能警告，由用户选择。',
-            'player.externalEnabled' =>
-              '启用前沿用 Classic 自动检测 mpv；未检测到且未配置路径时打开用户选择器，取消则失败并保持关闭。',
-            _ =>
-              '调整$displayTitle。${apply == 'immediate' ? '沿用当前播放器的即时应用方式' : '保存偏好，生效方式为 $apply'}。',
-          },
+          description: describeWithApply(
+              applicationSettingDescriptions[key] ?? '', entryApply),
           schema: schema,
           dynamicSchema: () => dynamicSchema(key, schema),
           validateValue: (value) {
@@ -418,10 +396,7 @@ abstract final class ApplicationSettings {
               key == 'danmaku.convertToSimplified' ? defaultForEntry : null,
           storageKey: storageKey,
           scope: scope,
-          apply:
-              ['player.hwdecMode', 'player.softDecodePixelFormat'].contains(key)
-                  ? 'reload_player'
-                  : apply,
+          apply: entryApply,
           reader: source,
           writer: '$source#$setter',
           visible: () => locallyVisible(key) && (visible?.call() ?? true),

@@ -21,6 +21,7 @@ import '../subtitles/library.dart';
 import 'classic_settings.dart';
 import 'effective.dart';
 import 'registry.dart';
+import 'setting_descriptions.dart';
 
 final class SystemSettings {
   SystemSettings(this.sidecars, this.subtitles);
@@ -77,7 +78,9 @@ final class SystemSettings {
         SettingEntry(
             key: key,
             title: title,
-            description: description,
+            description: description.isEmpty
+                ? systemSettingDescriptions[key] ?? ''
+                : description,
             schema: schema,
             defaultValue: fallback,
             storageKey: storage,
