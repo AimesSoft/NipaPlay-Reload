@@ -9,7 +9,7 @@ import 'package:nipaplay/utils/lab_profile.dart';
 import 'package:nipaplay/utils/media_source_utils.dart';
 
 import 'package:flutter/material.dart';
-import 'package:flutter/foundation.dart' show kDebugMode;
+import 'package:flutter/foundation.dart' show kDebugMode, debugPrint;
 import 'package:flutter/services.dart';
 import 'package:nipa_harness/nipa_harness.dart';
 import 'package:nipaplay/models/watch_history_model.dart';
@@ -430,12 +430,22 @@ final class NextRuntime extends ChangeNotifier {
         ActivityInvocationObserver(core.activityChanged)],
     );
     core.attachHarness(_harness);
+    try {
+      // First launch only stores; later ones record what the catalogue gained,
+      // lost or re-described since.
+      await core.catalogChanges.observe(_harness.catalog,
+          appVersion: packageInfo.version, build: packageInfo.buildNumber);
+    } catch (error) {
+      debugPrint('Capability catalogue fingerprint failed: $error');
+    }
+    core.catalogChanges.onRecorded = () => chat?.memoryChanged();
     core.danmaku.startRestoring(_harness, _player);
     _meshPlayback = MeshPlayback(core, _player)..attach();
     core.media.service.currentPath = () => _player.currentVideoPath;
     _endpoint = AgentEndpoint(
       harness: _harness,
       appVersion: packageInfo.version,
+      catalogChange: () async => (await core.catalogChanges.recent()).firstOrNull,
       instanceFacts: instanceFacts.read,
       seed: seed,
       seedRepository: Directory('${root.path}/harness-seed'),
@@ -575,6 +585,7 @@ final class NextRuntime extends ChangeNotifier {
       (await core.followups.list()).where((r) =>
         !const {'completed', 'cancelled'}.contains(r['state'])).toList(),
       (await core.state.views['activity']!.readAll!()).rows, current,
+      capabilityChanges: await core.catalogChanges.recent(),
       finishedHelpers: [
         for (final job in ((await core.engine.list(type: 'agent.helper'))
                 .where((job) => job.state.isTerminal)

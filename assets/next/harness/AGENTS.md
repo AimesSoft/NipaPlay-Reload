@@ -53,7 +53,7 @@
 
 ## nipa
 
-`./nipa` 连接本机正在运行且开启 Next 的 NipaPlay；连不上时检查这两点。Windows 用 `python nipa`。能力以实时目录为准：
+`./nipa` 连接本机正在运行且开启 Next 的 NipaPlay；连不上时检查这两点。Windows 用 `python nipa`。能力以实时目录为准；NipaPlay 更新后目录有变化时，记忆块的“NipaPlay 更新”和 `./nipa status` 的 `catalogChange` 记着变化的能力族和动作：
 
 ```bash
 ./nipa status

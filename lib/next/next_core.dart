@@ -59,6 +59,7 @@ import 'ui/shell/next_ui_preference.dart';
 import 'ui_data/capability.dart';
 import 'chat/session_store.dart';
 import 'memory/service.dart';
+import 'memory/capability_changes.dart';
 import 'memory/capability.dart';
 import 'chat/helpers.dart';
 import 'subtitles/library.dart';
@@ -131,6 +132,7 @@ final class NextCore {
   late final Followups followups;
   late final SessionStore sessions;
   late final HarnessMemory memory;
+  late final CapabilityCatalogChanges catalogChanges;
   late final UiDataService uiData;
   late final DbService db;
   late final LibraryDataService libraryData;
@@ -233,6 +235,8 @@ final class NextCore {
     diskDeletion.engine = engine;
     followups = Followups(database, engine, harnessLocation);
     memory = HarnessMemory(harnessLocation, settings, followups.discover);
+    catalogChanges =
+        CapabilityCatalogChanges(File('${root.path}/capability_catalog.json'));
     programs.returnTarget = followups.downloadReturnTarget;
     accounts.returnTarget = followups.downloadReturnTarget;
     diskDeletion.returnTarget = followups.downloadReturnTarget;

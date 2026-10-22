@@ -41,12 +41,14 @@ final class AgentEndpoint {
       required this.seed,
       required String appVersion,
       Future<JsonMap> Function()? instanceFacts,
+      Future<JsonMap?> Function()? catalogChange,
       File? credentialFile,
       Directory? seedRepository,
       int? port})
       : _harness = harness,
         _instanceFacts = instanceFacts ?? InstanceFacts(appVersion).read,
         _appVersion = appVersion,
+        _catalogChange = catalogChange,
         _port = LabProfile.active ? 0 : port ?? 47811,
         credentialFile = credentialFile ?? defaultEndpointFile,
         seedRepository = seedRepository ??
@@ -58,6 +60,7 @@ final class AgentEndpoint {
   final Future<JsonMap> Function() _instanceFacts;
   final Map<String, List<int>> seed;
   final String _appVersion;
+  final Future<JsonMap?> Function()? _catalogChange;
   final int _port;
   final File credentialFile;
   final Directory seedRepository;
@@ -359,6 +362,9 @@ final class AgentEndpoint {
         'harnessSeed':
             await harnessSeedStatus(_running!.repository, seedRepository),
         'actions': _harness.catalog.length,
+        // The latest capability change within the last week, if any.
+        if (await _catalogChange?.call() case final change?)
+          'catalogChange': change,
         'tasks': full ? tasks : _taskSummary(tasks),
         'body': await _bodyOverview(origin),
       });

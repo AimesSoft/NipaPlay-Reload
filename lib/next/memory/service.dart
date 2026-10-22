@@ -27,7 +27,7 @@ final class HarnessMemory implements MemoryData {
   final _seen = <String, Map<String, String>>{};
   static const preferenceBytes = 8192;
   static const indexBytes = 8192;
-  static const recentCharacters = 3000;
+  static const recentCharacters = 4200;
 
   Future<File> _file(String path) async {
     await location.ready;

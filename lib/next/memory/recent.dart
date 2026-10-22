@@ -2,12 +2,14 @@ import 'dart:convert';
 import 'package:nipa_harness/nipa_harness.dart';
 import '../chat/chat_host.dart';
 import '../harness_redaction.dart';
+import 'capability_changes.dart';
 import 'service.dart';
 
 /// Field projections of existing facts, in their original order and wording.
-Future<JsonMap> recentMemoryFacts(ChatHost host, List<JsonMap> jobs,
+Future<JsonMap> recentMemoryFacts(ConversationHistory host, List<JsonMap> jobs,
     List<JsonMap> followups, List<JsonMap> activity, String? current,
-    {List<JsonMap> finishedHelpers = const []}) async {
+    {List<JsonMap> finishedHelpers = const [],
+    List<JsonMap> capabilityChanges = const []}) async {
   String? source;
   final messages = <JsonMap>[];
   final sessions = await host.listThreads(limit: 30, sortKey: 'updated_at');
@@ -107,6 +109,13 @@ Future<JsonMap> recentMemoryFacts(ChatHost host, List<JsonMap> jobs,
           .toList()),
       900
     ),
+    // Only when the last launches changed the capability catalogue.
+    if (capabilityChanges.isNotEmpty)
+      (
+        'NipaPlay 更新',
+        capabilityChanges.map(CapabilityCatalogChanges.describe).join('\n'),
+        450
+      ),
   ];
   final omitted = <String>[];
   final output = <String>[];

@@ -26,7 +26,16 @@ final class ChatRpcError implements Exception {
 }
 
 /// One stdio server, with Codex owning thread history and NipaPlay owning facts.
-final class ChatHost {
+/// What the memory block reads of the conversations.
+abstract interface class ConversationHistory {
+  String? get mainThreadId;
+  Map<String, String> get threadOrigins;
+  Future<ChatMessage> listThreads(
+      {String? cursor, int limit, List<String>? sourceKinds, String? sortKey});
+  Future<ChatMessage> readThread(String id, {bool withProcess});
+}
+
+final class ChatHost implements ConversationHistory {
   ChatHost(
       {required this.endpoint,
       required this.repository,
@@ -80,6 +89,7 @@ final class ChatHost {
   Future<void> _rolloutWrites = Future.value();
   ChatMessage _modelDefaults = {};
   File get _rolloutFile => File('${endpoint.seedRepository.parent.path}/chat-rollouts.json');
+  @override
   String? mainThreadId;
   final String sessionId;
   final threadLiveness = <String, ChatLiveness>{};
@@ -90,6 +100,7 @@ final class ChatHost {
       threadLiveness.putIfAbsent(id, ChatLiveness.new);
   bool busyFor(String id) =>
       const {'inProgress', 'starting'}.contains(livenessFor(id).status);
+  @override
   final threadOrigins = <String, String>{};
   String originFor(String id) =>
       threadOrigins[id] ?? 'harness_cli:chat:$sessionId';
@@ -956,6 +967,7 @@ final class ChatHost {
     return Map<String, dynamic>.from(redactHarnessJson(response) as Map);
   }
 
+  @override
   Future<ChatMessage> listThreads({String? cursor, int limit = 30,
       List<String>? sourceKinds, String? sortKey}) async =>
       _public(await _request('thread/list', {
@@ -990,6 +1002,7 @@ final class ChatHost {
 
   /// [withProcess] puts NipaPlay's saved display copy of the process back
   /// into the turns; without it the items are the runtime's own.
+  @override
   Future<ChatMessage> readThread(String id, {bool withProcess = true}) async {
     if (modelLaunch != null && !_loaded.contains(id) && _rollouts.containsKey(id)) {
       await _request('thread/resume', {
