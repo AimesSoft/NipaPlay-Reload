@@ -255,12 +255,13 @@ final class SystemSettings {
                 ? 'debug_log_auto_scroll'
                 : 'debug_log_show_timestamp',
             const BooleanSchema(),
-            true,
+            // The log window's own defaults: debug_log_viewer_page.dart.
+            name != 'autoScroll',
             () => SettingsStorage.loadBool(
                 name == 'autoScroll'
                     ? 'debug_log_auto_scroll'
                     : 'debug_log_show_timestamp',
-                defaultValue: true),
+                defaultValue: name != 'autoScroll'),
             (v) => SettingsStorage.saveBool(
                 name == 'autoScroll'
                     ? 'debug_log_auto_scroll'

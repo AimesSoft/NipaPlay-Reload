@@ -5,6 +5,7 @@ import 'package:nipa_harness/nipa_harness.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
 import 'denylist.dart';
+import 'effective.dart';
 import 'presentation.dart';
 
 final class SettingEntry {
@@ -103,7 +104,31 @@ final class SettingsRegistry {
     register(entries);
   }
 
+  /// Stored values of restart-only settings as they were when the registry
+  /// started: what the running application loaded.
+  final _startup = <String, Object?>{};
+  Future<void> _startupCaptured = Future.value();
+
+  void _captureStartup(Iterable<SettingEntry> added) {
+    final wanted = [
+      for (final entry in added)
+        if (startupLoadedSettings.contains(entry.key)) entry
+    ];
+    if (wanted.isEmpty) return;
+    _startupCaptured = _startupCaptured.then((_) async {
+      for (final entry in wanted) {
+        try {
+          _startup[entry.key] = await entry.read();
+        } catch (_) {
+          // No snapshot: the key then reads as unknown rather than a guess.
+        }
+      }
+    });
+  }
+
   void register(Iterable<SettingEntry> entries) {
+    entries = entries.toList();
+    _captureStartup(entries);
     for (final entry in entries) {
       if (isSettingDenied(entry.key) || isSettingDenied(entry.storageKey)) {
         throw ArgumentError('Forbidden setting: ${entry.key}');
@@ -166,14 +191,32 @@ final class SettingsRegistry {
   Future<JsonMap> get(String key) async {
     final entry = _entry(key);
     final latest = await _latest(key);
+    final stored = await entry.read();
     return {
       'key': key,
-      'value': await entry.read(),
+      'value': stored,
       'revision': latest?['revision'] ?? 0,
       'scope': entry.scope,
       'apply': entry.apply,
       'provenance': latest,
+      ...(await _effective(entry, stored)).toJson(),
     };
+  }
+
+  /// The value in use beside the stored one. A probe that cannot answer is
+  /// reported as unknown with its reason, never as the stored value.
+  Future<Effective> _effective(SettingEntry entry, Object? stored) async {
+    try {
+      await _startupCaptured;
+      return await EffectiveRules.resolve(entry, stored,
+          startup: _startup,
+          readOther: (key) async => _entries[key]?.read());
+    } on Failure catch (failure) {
+      return Effective.unknown('probe_failed', failure.message);
+    } catch (error) {
+      return Effective.unknown(
+          'probe_failed', 'Reading the running value failed (${error.runtimeType}).');
+    }
   }
 
   /// Current values and their latest provenance, rather than copied settings.

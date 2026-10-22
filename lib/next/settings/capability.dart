@@ -9,13 +9,20 @@ const _valueSchema = ObjectSchema({
   'apply': StringSchema(
       values: ['immediate', 'reload_player', 'reload_server', 'restart_app']),
   'provenance': ObjectSchema({}, nullable: true, additionalProperties: true),
+  'effectiveState':
+      StringSchema(values: ['same', 'differs', 'inactive', 'unknown']),
+  'effectiveSource':
+      StringSchema(values: ['live', 'startup', 'storage'], nullable: true),
+  'effectiveReason': StringSchema(nullable: true),
+  'effectiveDetail': StringSchema(nullable: true),
 }, required: [
   'key',
   'value',
   'revision',
   'scope',
   'apply',
-  'provenance'
+  'provenance',
+  'effectiveState'
 ], additionalProperties: true);
 
 const _rowSchema = ObjectSchema({}, additionalProperties: true);
@@ -51,6 +58,11 @@ const _descriptionFields = [
   'value',
   'revision',
   'provenance',
+  'effective',
+  'effectiveState',
+  'effectiveSource',
+  'effectiveReason',
+  'effectiveDetail',
 ];
 const _historyFields = [
   'key',
@@ -127,9 +139,9 @@ final class _SettingsAction extends Action<_Json, _Json> {
         title: 'Settings $verb',
         description: switch (verb) {
           'describe' =>
-            'List locally visible setting contracts and values. Supports keys, domain, keyword, fields and offset/limit pagination.',
+            'List locally visible setting contracts and values, each with the stored value and the effective value (fields as in get). Supports keys, domain, keyword, fields and offset/limit pagination.',
           'get' =>
-            'Read key or keys with values, revisions, apply modes and latest provenance. Batch results preserve input order and individual failures.',
+            'Read key or keys with values, revisions, apply modes and latest provenance. value is the stored value. effective is the value in use while the application runs: effectiveState same, differs, inactive or unknown; effectiveSource live (read from the running component), startup (the stored value as the application started, for settings read only at start) or storage (no separate running value is observable; the setter that saves it is the one the running component uses). When state is differs, effectiveReason and effectiveDetail say why: restart_required, reload_required or runtime_adjusted (the player adjusted the value), speed_boost_active. inactive means the stored value is not in use and effective is null: overridden, inactive_dependency or kernel_unsupported, naming the other setting or kernel. unknown means the running value cannot be read and effective is null: applies_at_next_open, loaded_when_page_created, player_not_attached, no_runtime_probe or probe_failed. Batch results preserve input order and individual failures.',
           'set' =>
             'Save key/value or ordered changes using Classic setters. Each change has its own expectedRevision and reason. Batch results include revision, apply and individual failures; successful changes are not rolled back.',
           'reset' =>
@@ -174,7 +186,15 @@ final class _SettingsAction extends Action<_Json, _Json> {
               ..._valueSchema.properties,
               'results': const ArraySchema(_rowSchema),
             }, oneOfRequired: const [
-              ['key', 'value', 'revision', 'scope', 'apply', 'provenance'],
+              [
+                'key',
+                'value',
+                'revision',
+                'scope',
+                'apply',
+                'provenance',
+                'effectiveState'
+              ],
               ['results']
             ], additionalProperties: true),
         },
