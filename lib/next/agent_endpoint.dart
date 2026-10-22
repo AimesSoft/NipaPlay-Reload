@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:io';
+import 'dart:isolate';
 import 'dart:math';
 import 'platform/lab_profile.dart';
 
@@ -531,9 +532,10 @@ final class AgentEndpoint {
         'outputSchema': spec.output.toJsonSchema(),
       };
 
-  Response _response(Object? value, [int status = 200, bool redact = true]) =>
+  Future<Response> _response(Object? value,
+          [int status = 200, bool redact = true]) async =>
       Response(status,
-          body: jsonEncode(redact ? redactHarnessJson(value) : value),
+          body: await encodeReply(value, redact: redact),
           headers: {'content-type': 'application/json'});
 
   /// Answers like [_json], noting requests that took long: a slow answer
@@ -714,4 +716,25 @@ final class AgentEndpoint {
     _running = null;
     _mcp = null;
   }
+}
+
+/// A reply's JSON, redacted. A reply carries a whole result (rows of a
+/// query, a thread, every danmaku of an episode), so it is redacted and
+/// encoded on a background isolate, with the values SecretRedactor remembers.
+/// A value that cannot be sent there is encoded here, as before.
+Future<String> encodeReply(Object? value, {bool redact = true}) async {
+  final remembered = SecretRedactor.remembered();
+  try {
+    return await Isolate.run(() => _encodeReply(value, redact, remembered));
+  } on ArgumentError {
+    return jsonEncode(redact ? redactHarnessJson(value) : value);
+  }
+}
+
+String _encodeReply(
+    Object? value, bool redact, Map<String, CredentialRef> remembered) {
+  for (final MapEntry(key: secret, value: ref) in remembered.entries) {
+    SecretRedactor.remember(ref, secret);
+  }
+  return jsonEncode(redact ? redactHarnessJson(value) : value);
 }
