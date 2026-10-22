@@ -20,6 +20,7 @@ import '../media/media_probe.dart';
 import '../media/file_identity_merge.dart';
 import '../state/change_history.dart';
 import '../public_url.dart';
+import 'apply_selection.dart';
 import 'webvtt.dart';
 import 'operations.dart';
 import 'detection.dart';
@@ -500,8 +501,8 @@ final class SubtitleLibrary implements SubtitleOperations {
     final selected = (value['selection'] as Map?)?['trackId'];
     final track = (value['tracks'] as List).cast<JsonMap>().where((t)=>t['id']==selected).firstOrNull;
     if(track == null) { player.player.activeSubtitleTracks = []; }
-    else if(track['origin']=='embedded') { player.player.activeSubtitleTracks=[track['index'] as int]; }
-    else { await player.addNextSubtitle(track['playbackPath'] as String? ?? track['path'] as String,track['title'] as String); }
+    else if(track['origin']=='embedded') { await player.applyNextEmbeddedSubtitle(track['index'] as int); }
+    else { await player.applyNextExternalSubtitle(track['playbackPath'] as String? ?? track['path'] as String,track['title'] as String); }
     } finally {
       player.nextSubtitleSelection = selectionCallback;
     }
@@ -578,9 +579,9 @@ final class SubtitleLibrary implements SubtitleOperations {
         .firstOrNull;
     if (track != null) {
       if (track['origin'] == 'embedded') {
-        player.player.activeSubtitleTracks = [track['index'] as int];
+        await player.applyNextEmbeddedSubtitle(track['index'] as int);
       } else {
-        await player.addNextSubtitle(
+        await player.applyNextExternalSubtitle(
             track['playbackPath'] as String? ?? track['path'] as String,
             track['title'] as String);
       }

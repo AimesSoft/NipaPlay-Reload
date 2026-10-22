@@ -7,6 +7,7 @@ import 'package:path/path.dart' as p;
 import '../../utils/video_player_state.dart';
 import '../../player_abstraction/player_factory.dart';
 import '../next_core.dart';
+import '../subtitles/apply_selection.dart';
 
 /// Attaches Mesh observations to the existing player only while Next is alive.
 final class MeshPlayback {
@@ -103,10 +104,10 @@ final class MeshPlayback {
         await current.registerNextSubtitleCandidate(
             t['playbackPath'] as String, t['title'] as String);
         if (t['selected'] == true)
-          await current.addNextSubtitle(
+          await current.applyNextExternalSubtitle(
               t['playbackPath'] as String, t['title'] as String);
       } else if (t['origin'] == 'embedded' && t['selected'] == true) {
-        current.player.activeSubtitleTracks = [t['index'] as int];
+        await current.applyNextEmbeddedSubtitle(t['index'] as int);
       }
       if (t['selectionBasis'] == 'explicit' &&
           !(bundle['subtitles'] as List)
