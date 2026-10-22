@@ -9,7 +9,9 @@ import 'package:nipaplay/utils/video_player_state.dart';
 import 'package:provider/provider.dart';
 import 'package:window_manager/window_manager.dart';
 
-import '../../ui_data/ui_data.dart' show NextNowPlaying, UiNowPlaying;
+import '../../ui_data/ui_data.dart'
+    show NextNowPlaying, NextUiData, UiNowPlaying;
+import '../conversation/nipa_chat.dart';
 import '../data/login_requests.dart';
 import '../shell/nipa_setup.dart';
 import '../shell/shell_controller.dart';
@@ -35,7 +37,8 @@ enum _Menu { subtitles, episodes, more }
 /// They come with the pointer and go when it rests, as Classic's do
 /// ([VideoPlayerState.showControls]); they stay while the pointer is on
 /// them, a menu is open or Nipa's panel is. ⌘K asks Nipa, in the panel
-/// over the video. ⋯ holds what the bar has no room for (the speed, the
+/// over the video; what is said there goes with what plays and where it
+/// is ([_Watch]). ⋯ holds what the bar has no room for (the speed, the
 /// audio track, the picture's fit, the danmaku's look, a still, picture in
 /// picture); a still taken shows a moment in the corner. A login Nipa asks
 /// for waits in the conversation, told of by a note under her.
@@ -50,6 +53,7 @@ class _NextPlayerLayerState extends State<NextPlayerLayer> {
   NextShellController? _shell;
   NextPlayback? _own;
   NextPlayback? _playback;
+  _Watch? _watch;
   bool _overChrome = false;
   bool _scrubbing = false;
   _Menu? _menu;
@@ -84,6 +88,11 @@ class _NextPlayerLayerState extends State<NextPlayerLayer> {
       _playback = playback;
       _syncHold();
     }
+    if (!identical(_watch?.chat, shell.chat) ||
+        !identical(_watch?.state, playback.state)) {
+      _watch?.dispose();
+      _watch = _Watch(shell.chat, playback.state, shell.services.data);
+    }
   }
 
   @override
@@ -91,6 +100,7 @@ class _NextPlayerLayerState extends State<NextPlayerLayer> {
     HardwareKeyboard.instance.removeHandler(_onKey);
     _shell?.panelOpen.removeListener(_panelChanged);
     _release();
+    _watch?.dispose();
     _menuFocus.dispose();
     _shotGone?.cancel();
     super.dispose();
@@ -331,6 +341,82 @@ class _NextPlayerLayerState extends State<NextPlayerLayer> {
         ]);
       },
     );
+  }
+}
+
+/// What plays, for what is said to Nipa over it: the file, what the
+/// library knows it as, where the video is and whether it is paused, read
+/// the moment something is said. Facts only: nothing acts on them here.
+class _Watch {
+  _Watch(this.chat, this.state, this.data) {
+    state.addListener(_changed);
+    // Not in the build that mounted the layer.
+    scheduleMicrotask(() {
+      if (_gone) return;
+      chat.watch(read);
+      _changed();
+    });
+  }
+
+  final NipaChat chat;
+  final VideoPlayerState state;
+  final NextUiData data;
+  bool _gone = false;
+  String? _path;
+  Future<UiNowPlaying?>? _known;
+
+  String? get _playing => state.hasVideo ? state.currentVideoPath : null;
+
+  Future<UiNowPlaying?> _lookup(String path) {
+    if (data case final NextNowPlaying library) {
+      return library.nowPlaying(path).catchError((Object e) {
+        debugPrint('[NextPlayer] what plays: $e');
+        return null;
+      });
+    }
+    return Future.value();
+  }
+
+  /// Another file: the library is asked what it is. The name stays as it
+  /// was until it answers.
+  void _changed() {
+    if (_gone) return;
+    final path = _playing;
+    if (path == null || path == _path) return;
+    _path = path;
+    final known = _known = _lookup(path);
+    unawaited(known.then((k) {
+      if (!_gone && identical(known, _known)) {
+        chat.watch(read, named: Watching.nameOf(path, k));
+      }
+    }));
+  }
+
+  /// What plays and where, now; null with no video up.
+  Future<Watching?> read() async {
+    final path = _playing;
+    if (path == null) return null;
+    // Where it is when this is asked, before anything waits.
+    final position = state.position;
+    final duration = state.duration;
+    final paused = state.status == PlayerStatus.paused;
+    final known = (path == _path ? _known : null) ?? _lookup(path);
+    return Watching(
+      path: path,
+      known: await known.timeout(const Duration(seconds: 2),
+          onTimeout: () => null),
+      position: position,
+      duration: duration,
+      paused: paused,
+    );
+  }
+
+  void dispose() {
+    _gone = true;
+    state.removeListener(_changed);
+    // Not while the tree that let the layer go is locked.
+    final read = this.read;
+    scheduleMicrotask(() => chat.unwatch(read));
   }
 }
 

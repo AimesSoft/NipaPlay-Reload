@@ -316,7 +316,8 @@ class _TurnViewState extends State<_TurnView> {
             key: ObjectKey(part),
             part: part,
             width: widget.width,
-            showAbout: part.about != widget.chat.about?.title),
+            showAbout: part.about != widget.chat.about?.title,
+            showWatched: part.watched != widget.chat.watched),
         ReplyPart() => ReplyText(
             key: ObjectKey(part),
             text: part.text,
@@ -722,16 +723,29 @@ class _CommandState extends State<_Command> {
 }
 
 /// What you said, a light bubble on the right; above it the work it was
-/// about and the files that went with it. Faint until Nipa has it.
+/// about, what played under the conversation, the files that went with it.
+/// Faint until Nipa has it.
 class _You extends StatelessWidget {
   const _You(
       {super.key,
       required this.part,
       required this.width,
-      this.showAbout = true});
+      this.showAbout = true,
+      this.showWatched = true});
   final SaidPart part;
   final double width;
   final bool showAbout;
+
+  /// Not while the same still plays under the conversation.
+  final bool showWatched;
+
+  static Widget _context(String words) => Padding(
+        padding: const EdgeInsets.only(bottom: 6, right: 4),
+        child: Text(words,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: NextText.sans(11.5, color: NextColors.p3)),
+      );
 
   @override
   Widget build(BuildContext context) => Column(
@@ -739,13 +753,9 @@ class _You extends StatelessWidget {
         mainAxisSize: MainAxisSize.min,
         children: [
           if (part.about case final title? when showAbout)
-            Padding(
-              padding: const EdgeInsets.only(bottom: 6, right: 4),
-              child: Text('关于《$title》',
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: NextText.sans(11.5, color: NextColors.p3)),
-            ),
+            _context('关于《$title》'),
+          if (part.watched case final named? when showWatched)
+            _context('看$named时'),
           if (part.files.isNotEmpty)
             Padding(
               padding: EdgeInsets.only(bottom: part.text.isEmpty ? 0 : 6),

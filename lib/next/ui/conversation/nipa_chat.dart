@@ -379,6 +379,33 @@ class NipaChat extends ChangeNotifier {
     _notify();
   }
 
+  /// While a video is up under the conversation: reads what plays and
+  /// where, the moment you speak. What you say goes with it.
+  Future<Watching?> Function()? _watching;
+
+  /// What plays under the conversation, as [Watching.named] names it, once
+  /// known: what was said over it need not say so while it plays.
+  String? watched;
+
+  /// The player, while it is open: [read] tells what plays and where;
+  /// [named] names it, once the library has said what it is (until then
+  /// the name stays as it was).
+  void watch(Future<Watching?> Function() read, {String? named}) {
+    _watching = read;
+    if (named == null || watched == named) return;
+    watched = named;
+    _notify();
+  }
+
+  /// The player is gone: what is said goes alone again.
+  void unwatch(Future<Watching?> Function() read) {
+    if (_watching != read) return;
+    _watching = null;
+    if (watched == null) return;
+    watched = null;
+    _notify();
+  }
+
   /// Whether the input takes text now.
   bool get acceptsTyping => !(question != null && secretAsked);
 
@@ -407,10 +434,20 @@ class NipaChat extends ChangeNotifier {
     if (text.isEmpty && files.isEmpty) return;
     trouble = null;
     attachments = const [];
+    final asked = about;
+    // Where the video is when it is said, not once the library answers.
+    final reading = _watching?.call();
     var input = ChatContext.withFiles(text, files);
-    if (about case final work?) input = ChatContext.about(input, work);
-    final said =
-        SaidPart(text, about: about?.title, files: files, echoed: false);
+    if (asked != null) input = ChatContext.about(input, asked);
+    final now = reading == null
+        ? null
+        : await reading.catchError((Object error) {
+            debugPrint('[NextUi] what plays is not known: $error');
+            return null;
+          });
+    if (now != null) input = ChatContext.watching(input, now);
+    final said = SaidPart(text,
+        about: asked?.title, watched: now?.named, files: files, echoed: false);
     final current = live;
     if (current != null && current.queued && identical(current, _pending)) {
       // Still waiting for the host: it all goes out together.

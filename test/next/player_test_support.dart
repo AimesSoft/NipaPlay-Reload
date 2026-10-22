@@ -449,12 +449,14 @@ class FakePlayback extends NextPlayback {
   Future<void> skip() async => skips++;
 }
 
-NextUiServices playerTestServices() {
+/// The services the player's tests run on; [chat] instead of a host that
+/// is never there.
+NextUiServices playerTestServices({ChatPort? chat}) {
   final unused = _Unused();
   return NextUiServices(
     data: _Data(),
     actions: _Actions(),
-    chat: _Port(),
+    chat: chat ?? _Port(),
     discover: unused,
     library: unused,
     libraryActions: unused,
@@ -508,6 +510,10 @@ final class _Data implements NextUiData, NextNowPlaying {
 
   @override
   Future<UiHome> home() async => const UiHome();
+  @override
+  Future<List<UiCard>> cards(
+          {required String threadId, String? turnId}) async =>
+      const [];
   @override
   Stream<List<UiTask>> tasks() => Stream.value(const []);
   @override

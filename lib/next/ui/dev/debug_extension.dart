@@ -907,9 +907,16 @@ abstract final class NextUiDebug {
   static Map<String, Object?> _status(NextShellController shell) {
     final c = shell.chat;
     String part(TurnPart p) => switch (p) {
-          SaidPart(:final text, :final about, :final files, :final echoed) =>
+          SaidPart(
+            :final text,
+            :final about,
+            :final watched,
+            :final files,
+            :final echoed
+          ) =>
             'you${echoed ? '' : ' (sending)'}: $text'
                 '${about == null ? '' : ' (about $about)'}'
+                '${watched == null ? '' : ' (watching $watched)'}'
                 '${files.isEmpty ? '' : ' +files ${files.join(', ')}'}',
           ReplyPart(:final text) => 'nipa: $text',
           StepsPart() => 'steps${p.open ? ' (open)' : ''}: '
@@ -940,6 +947,7 @@ abstract final class NextUiDebug {
         'fresh': c.fresh,
         'title': c.title,
         'about': c.about?.title,
+        'watched': c.watched,
         'loading': c.loading,
         'turns': [
           for (final t in c.turns)

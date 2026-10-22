@@ -1226,9 +1226,11 @@ final class FakeChatPort implements ChatPort {
     final said = ChatContext.strip(text);
     final files = ChatContext.files(text);
     if (files.isNotEmpty) return _dropped(files);
-    // From a work's page the work is named in the context, not in your words.
-    final fromPage = ChatContext.aboutTitle(text) != null;
-    final key = world._named(fromPage ? text : said);
+    // From a work's page the work is named in the context, not in your words
+    // (nor is it what may play under the conversation).
+    final page = ChatContext.aboutTitle(text);
+    final fromPage = page != null;
+    final key = world._named(page ?? said);
     if (fromPage && key != null) return _about(key, said);
     if (_any(said, ['版本', '选个'])) return _pickVersion(key ?? 'frieren');
     if (_any(said, ['准备', '下载', '下好', '弄一下'])) {

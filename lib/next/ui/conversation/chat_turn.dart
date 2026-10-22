@@ -59,11 +59,16 @@ sealed class TurnPart {}
 
 /// Something you said: the turn's input, or more said while it ran.
 final class SaidPart extends TurnPart {
-  SaidPart(this.text, {this.about, this.files = const [], this.echoed = true});
+  SaidPart(this.text,
+      {this.about, this.watched, this.files = const [], this.echoed = true});
   final String text;
 
   /// The work it was asked about.
   final String? about;
+
+  /// What played under the conversation when it was said, as
+  /// [Watching.named] names it.
+  final String? watched;
   final List<String> files;
 
   /// Codex has it (shown before that, as soon as you send).
@@ -268,7 +273,10 @@ class ChatTurn {
     final text = ChatContext.strip(raw);
     final files = ChatContext.files(raw);
     if (text.isEmpty && files.isEmpty) return null;
-    return SaidPart(text, about: ChatContext.aboutTitle(raw), files: files);
+    return SaidPart(text,
+        about: ChatContext.aboutTitle(raw),
+        watched: ChatContext.watched(raw),
+        files: files);
   }
 
   static bool _isFollowupItem(Map item) {
