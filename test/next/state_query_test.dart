@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:nipa_harness/nipa_harness.dart';
 import 'package:nipaplay/next/capabilities/library_capability.dart';
@@ -10,6 +11,7 @@ import 'package:nipaplay/next/next_core.dart';
 import 'package:nipaplay/next/state/query.dart';
 import 'package:nipaplay/next/state/change_history.dart';
 import 'package:nipaplay/next/tasks/sqlite_job_store.dart';
+import 'package:nipaplay/services/scan_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
@@ -275,8 +277,22 @@ void main() {
         'at': now.toIso8601String(),
         'snapshot': jsonEncode(job.toJson())
       });
+      // The system views read the live host: storage needs its directories
+      // and the scan view a Classic scan service.
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(
+              const MethodChannel('plugins.flutter.io/path_provider'),
+              (call) async => root.path);
+      addTearDown(() => TestDefaultBinaryMessengerBinding
+          .instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(
+              const MethodChannel('plugins.flutter.io/path_provider'), null));
+      final scan = ScanService.forTesting(
+          completedFilesProcessor: (_) async => [], startupAction: () async {});
+      addTearDown(scan.dispose);
+      core.classicScan.scan = scan;
       final description = await call(api, 'state.describe', {});
-      expect((description['views'] as List).length, 26);
+      expect((description['views'] as List).length, 38);
       final before = await db.rawQuery('SELECT total_changes() AS changes');
       for (final view in core.state.views.values) {
         final result = await call(api, 'state.query', {'view': view.name});

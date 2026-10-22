@@ -140,6 +140,83 @@ final class DownloadRuntime extends ChangeNotifier {
     if (!_closed) notifyListeners();
   }
 
+  /// What each download backend is doing now: whether downloads are on,
+  /// how many tasks it holds in each state, the rate it reports and the
+  /// limits set on it. Nothing is started to find out: the backends are
+  /// asked only while downloads are enabled, as the periodic refresh does.
+  Future<List<JsonMap>> engineStatus() async {
+    final enabled = await _enabled();
+    final jobs = await engine.list(type: 'download');
+    final observedAt = DateTime.now().toUtc().toIso8601String();
+    final rows = <JsonMap>[];
+    for (final backend in [_backend, http]) {
+      final key = backend.reference.key;
+      final mine = [
+        for (final job in jobs)
+          // A task without a recorded backend belongs to no engine.
+          if (job.details['backend'] case final JsonMap recorded
+              when DownloadBackendRef.fromJson(recorded).key == key)
+            job
+      ];
+      int count(bool Function(JobState) match) =>
+          mine.where((job) => match(job.state)).length;
+      int? down, up;
+      String? error;
+      if (enabled) {
+        try {
+          down = 0;
+          up = 0;
+          for (final task in await backend.list()) {
+            if (task.finished || task.paused) continue;
+            down = down! + (task.downloadSpeedBytesPerSecond ?? 0);
+            up = up! + (task.uploadSpeedBytesPerSecond ?? 0);
+          }
+        } on Failure catch (failure) {
+          down = up = null;
+          error = failure.code.wireName;
+        } catch (_) {
+          down = up = null;
+          error = 'backend_failed';
+        }
+      }
+      JsonMap? limits;
+      if (enabled && backend is BandwidthDownloadBackend) {
+        try {
+          limits = await downloads.bandwidth({});
+        } catch (_) {
+          limits = null;
+        }
+      }
+      final actual = (limits?['actual'] as Map?)?.cast<String, Object?>();
+      rows.add({
+        'backend': backend.reference.kind,
+        'enabled': enabled,
+        'running': count((s) => s == JobState.running),
+        'queued': count((s) => s == JobState.queued),
+        'paused': count((s) => s == JobState.paused),
+        'waiting': count((s) => const {
+              JobState.waitingRetry,
+              JobState.waitingUser,
+              JobState.needsDecision,
+              JobState.interrupted
+            }.contains(s)),
+        'finished': count((s) => s.isTerminal),
+        'total': mine.length,
+        'downloadBytesPerSecond': down,
+        'uploadBytesPerSecond': up,
+        'limitsSupported':
+            backend is BandwidthDownloadBackend ? (limits?['supported']) : false,
+        'sessionInitialized': limits?['sessionInitialized'],
+        'downloadLimitBytesPerSecond': actual?['downloadBytesPerSecond'],
+        'uploadLimitBytesPerSecond': actual?['uploadBytesPerSecond'],
+        'error': error ??
+            (backend == _backend ? lastSessionError?.code.wireName : null),
+        'observedAt': observedAt,
+      });
+    }
+    return rows;
+  }
+
   bool isImporting(TorrentTask task) {
     final job = _jobsByHash[task.infoHash.toLowerCase()];
     return job != null &&

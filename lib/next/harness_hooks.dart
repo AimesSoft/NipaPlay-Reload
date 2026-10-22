@@ -130,6 +130,7 @@ final class HarnessHooks implements JobExecutor {
         !job.state.isTerminal &&
         job.input['repository'] == repository.path &&
         job.input['scheduleId'] == id)) {
+      schedules.skippedRunning(id, due);
       return;
     }
     await engine.submit(type: type, title: '定时脚本 $id', input: {
@@ -146,6 +147,107 @@ final class HarnessHooks implements JobExecutor {
       'event': 'schedule',
       'objectId': id
     });
+  }
+
+  /// Whether a program file can be run here, as [emit] decides it.
+  Future<String> _programState(File candidate) async {
+    if (!await candidate.exists()) return 'absent';
+    if (Platform.isWindows) return 'ready';
+    return (await candidate.stat()).mode & 0x49 != 0
+        ? 'ready'
+        : 'not_executable';
+  }
+
+  /// What the hooks directory and the clock do now: for every event the
+  /// program that would run (or why none would), for every schedule its
+  /// entry, and for each the last run the task list holds.
+  Future<JsonMap> status() async {
+    final repository = _repository;
+    final jobs = await engine.list(type: type);
+    JsonMap? last(bool Function(Job) match) {
+      Job? found;
+      var runs = 0;
+      for (final job in jobs) {
+        if (!match(job)) continue;
+        runs++;
+        if (found == null || job.createdAt.isAfter(found.createdAt)) {
+          found = job;
+        }
+      }
+      if (found == null) return {'runs': 0};
+      final details = found.receipt?.details ?? const <String, Object?>{};
+      return {
+        'runs': runs,
+        'lastRunAt': found.createdAt.toUtc().toIso8601String(),
+        'lastFinishedAt': found.state.isTerminal
+            ? found.updatedAt.toUtc().toIso8601String()
+            : null,
+        'lastState': found.state.wireName,
+        'lastExitCode': details['exitCode'],
+        'lastElapsedMs': details['elapsedMs'],
+        'lastTimedOut': details['timedOut'],
+        'lastLaunchError': details['launchError'],
+        'lastJobId': found.jobId,
+      };
+    }
+
+    final hooks = <JsonMap>[];
+    final known = <String>{};
+    if (repository != null) {
+      for (final event in events.toList()..sort()) {
+        String? name;
+        var state = 'absent';
+        for (final extension
+            in Platform.isWindows ? ['.exe', '.cmd', '.bat', '.py'] : ['']) {
+          final candidate =
+              File(p.join(repository.path, 'hooks', '$event$extension'));
+          final found = await _programState(candidate);
+          if (found == 'absent') continue;
+          known.add(p.basename(candidate.path));
+          name = p.basename(candidate.path);
+          state = found;
+          if (found == 'ready') break;
+        }
+        hooks.add({
+          'event': event,
+          'program': name,
+          'state': state,
+          ...?last((job) =>
+              job.input['event'] == event && job.input['scheduleId'] == null),
+        });
+      }
+      final directory = Directory(p.join(repository.path, 'hooks'));
+      if (await directory.exists()) {
+        final others = <String>[];
+        await for (final entry in directory.list(followLinks: false)) {
+          final name = p.basename(entry.path);
+          if (entry is File && name != 'schedules.json' && !known.contains(name)) {
+            others.add(name);
+          }
+        }
+        others.sort();
+        for (final name in others) {
+          hooks.add({
+            'event': null,
+            'program': name,
+            'state': 'unrecognized',
+          });
+        }
+      }
+    }
+    final schedule = await schedules.status();
+    for (final entry in (schedule['entries'] as List).cast<JsonMap>()) {
+      final id = entry['id'];
+      if (entry['valid'] != true || repository == null) continue;
+      entry['programState'] = await _programState(
+          File(p.join(repository.path, entry['program'] as String)));
+      entry.addAll(last((job) => job.input['scheduleId'] == id) ?? {});
+    }
+    return {
+      'enabled': repository != null,
+      'hooks': hooks,
+      'schedules': schedule,
+    };
   }
 
   Future<Job?> emit(String event, String objectId, JsonMap data) async {

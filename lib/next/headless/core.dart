@@ -49,6 +49,7 @@ import '../danmaku/capability.dart';
 import '../danmaku/export.dart';
 import '../danmaku/sidecar.dart';
 import '../harness_hooks.dart';
+import '../state/system_views.dart';
 import '../followups/service.dart';
 import '../followups/capability.dart';
 import '../ui_data/service.dart';
@@ -281,6 +282,7 @@ final class HeadlessCore {
       ActivityView(media, settings, File('${root.path}/journal.jsonl'),
           HeadlessRepository(repository.path), history).view,
     ]);
+    registerSystemViews(state, SystemStatusSources()..hooks = hooks.status);
     uiData = UiDataService(media, engine, state, sources, root, vault);
     libraryData = LibraryDataService(uiData);
     uiData.libraryData = libraryData;

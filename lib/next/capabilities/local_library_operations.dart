@@ -36,7 +36,11 @@ final class LocalLibraryOperations implements Capability {
     }
   }
 
-  JsonMap _state() => {
+  JsonMap _state() => scanState(scan);
+
+  /// The Classic scan as `media.library.roots.list` and the `library.scan`
+  /// view report it.
+  static JsonMap scanState(ScanService scan) => {
         'roots': scan.scannedFolders,
         'scanning': scan.isScanning,
         'progress': scan.scanProgress,

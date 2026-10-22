@@ -5,6 +5,7 @@ import 'package:nipa_harness/nipa_harness.dart';
 import 'package:nipaplay/utils/storage_service.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:nipaplay/security/credential_store.dart';
+import 'package:nipaplay/services/bangumi_sync_service.dart';
 import 'package:nipaplay/security/credential_capability.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -45,9 +46,11 @@ import 'db/service.dart';
 import 'db/wiring.dart';
 import 'state/query.dart';
 import 'state/views.dart';
+import 'state/system_views.dart';
 import 'state/change_history.dart';
 import 'state/activity.dart';
 import 'harness_hooks.dart';
+import 'capabilities/local_library_operations.dart';
 import 'harness_location.dart';
 import 'followups/service.dart';
 import 'followups/capability.dart';
@@ -374,6 +377,44 @@ final class NextCore {
       MeshCapability(mesh),
       state,
     ]).map(InvocationScopeCapability.new));
+    final statusReader = Harness(capabilities);
+    Future<JsonMap> readStatus(String action) async {
+      final outcome = await statusReader.invokeJson(
+          action, {}, Invocation(origin: 'application'));
+      if (outcome is Completed) return outcome.value.toJson();
+      throw StateError('$action is unavailable');
+    }
+
+    registerSystemViews(
+        state,
+        SystemStatusSources()
+          ..sources = () async {
+            await mediaSources.ensureInitialized();
+            return mediaSources.list(withFacts: true);
+          }
+          ..accounts = () async {
+            return [
+              for (final provider in ['dandanplay', 'bangumi'])
+                {
+                  ...accounts.status(provider),
+                  if (provider == 'bangumi')
+                    'lastSyncAt': await _bangumiSyncedAt(),
+                }
+            ];
+          }
+          ..network = (() => readStatus('network.status'))
+          ..storage = (() => readStatus('storage.status'))
+          ..scan = (() async {
+            final scan = classicScan.scan;
+            if (scan == null) {
+              throw const Failure(FailureCode.unavailable,
+                  'No Classic scan service is attached to this host.');
+            }
+            return LocalLibraryOperations.scanState(scan);
+          })
+          ..update = (() => readStatus('app.update.status'))
+          ..hooks = hooks.status
+          ..downloadEngines = downloads.engineStatus);
     await engine.start();
     await uiData.start();
     followups.start();
@@ -386,6 +427,17 @@ final class NextCore {
   }
 
   void attachHarness(Harness harness) => mesh.attach(harness);
+
+  /// When Classic last synchronized watch history to Bangumi, if it did.
+  static Future<String?> _bangumiSyncedAt() async {
+    try {
+      return (await BangumiSyncService.getLastSyncTime())
+          ?.toUtc()
+          .toIso8601String();
+    } catch (_) {
+      return null;
+    }
+  }
 
   Future<void> close() async {
     await ready;
