@@ -45,6 +45,7 @@ void main() {
       event('turn/completed', {
         'turn': {'id': 'a', 'status': 'completed'}
       });
+      await store.flush();
       final restored = TurnProcessStore(file);
       expect(restored.read('two', 'a'), isNull);
       final item = (restored.read('one', 'a')!['items'] as List).single;
@@ -68,6 +69,7 @@ void main() {
           'turn': {'id': id}
         });
       }
+      await store.flush();
       expect(TurnProcessStore(file).read('one', 'a'), isNull);
       expect(jsonDecode(file.readAsStringSync()), hasLength(2));
       final small = TurnProcessStore(file, maxBytes: 400);
@@ -78,6 +80,7 @@ void main() {
           'turn': {'id': 'd'}
         }
       }, 'origin', now);
+      await small.flush();
       expect(file.lengthSync(), lessThanOrEqualTo(400));
     } finally {
       await root.delete(recursive: true);
@@ -124,6 +127,7 @@ void main() {
       expect((history['items'] as List).map((v) => v['id']),
           ['item-1', 'r', 'item-2', 'c', 'item-3']);
       expect(((history['items'] as List)[1] as Map)['content'], ['想']);
+      await store.flush();
     } finally {
       await root.delete(recursive: true);
     }

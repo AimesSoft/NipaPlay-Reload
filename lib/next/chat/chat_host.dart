@@ -141,7 +141,8 @@ final class ChatHost implements ConversationHistory {
   String? threadId, model, provider;
   ChatMessage? thread;
   Map<String, String> launchEnvironment = {};
-  late final processes = TurnProcessStore(
+  TurnProcessStore? _processes;
+  TurnProcessStore get processes => _processes ??= TurnProcessStore(
       TurnProcessStore.fileFor(endpoint.seedRepository.parent, repository.path));
 
   ChatMessage turnProcess(String id, String turnId) => {
@@ -1169,6 +1170,11 @@ final class ChatHost implements ConversationHistory {
       }
       await _reader;
       await _stderr;
+    }
+    try {
+      await _processes?.flush();
+    } on FileSystemException {
+      // Facts that could not be written stay in memory until the next start.
     }
     await _events.close();
     await _display.close();
