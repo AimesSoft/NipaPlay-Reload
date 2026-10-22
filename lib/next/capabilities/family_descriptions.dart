@@ -247,7 +247,13 @@ NipaPlay 自己会做一部分：作品有 TMDB 身份时取图，同步 Classic
 播放器共用 Classic 和 Next；播放本地或媒体服务器上的文件，叠加字幕和弹幕。临时加载字幕用 playback.load_subtitle；持久事实用 subtitle。
 - state 另给内部播放器此刻的事实：rate 是选定的倍速，effectiveRate 是此刻实际使用的倍速（按住长按加速时为 speedBoost.rate），kernelRate 是最后交给内核的倍速；kernel 是实际在播放的内核（info 里另有 configured，即内核设置）；danmakuRenderer 是实际画弹幕的那一层（内核自己画时为 player_native）；autoNext 是结束时的动作与下一集倒计时（countingDown、remainingSeconds、next），cancel_auto_next 取消正在进行的倒计时。
 - info 在调用时向内核查询：容器、视频编码与分辨率、声明帧率与实测帧率、码率、解码器与是否硬解、丢帧等计数、音频编码与声道、输出与缓存。内核不提供的项为 null；kernelDetails 保留内核原样的报告。
-- 打开失败或播放出错时，state.error 带 stage（NipaPlay 哪一步报的错）、category（依次由本地文件状态、内核原文、播放器原文、步骤映射，映射不了为 unknown）、kernelRetryable（内核自己的重试判断）和原始 messages。每次失败记入 failures，同时发出 playback.failed 事件，事件跨重启保留。内核日志与未捕获错误见 diagnostics。''',
+- 打开失败或播放出错时，state.error 带 stage（NipaPlay 哪一步报的错）、category（依次由本地文件状态、内核原文、播放器原文、步骤映射，映射不了为 unknown）、kernelRetryable（内核自己的重试判断）和原始 messages。每次失败记入 failures，同时发出 playback.failed 事件，事件跨重启保留。内核日志与未捕获错误见 diagnostics。
+- kernel 在调用时读当前内核：身份与版本（Media Kit 给 mpv 与 ffmpeg，MDK 给 mdk，拿不到为 null）、controls（这个内核能改什么、这台设备能换到哪些内核）、一组固定属性此刻的值（snapshot）和点名读取的属性（properties，带内核自己的错误）。MDK 只报告在这个播放器上设过的属性。Erika 给最近一次解码器事件里的后端（hardware、fellBack 由它读出）、帧/音频/HDR 计数、输出状态、资源、超分、轨道与调试 HUD；计数从会话开始累计，window 是与上一次读取（同一播放器、同一媒体）或 sampleMs 间隔之间的变化与帧率；notReported 列出 Erika 没有暴露的项（迟到丢帧、音画漂移、网络吞吐与重试、缓冲原因、解码警告、音频设备与延迟、字幕渲染、弹幕丢弃、HDR 元数据与杜比视界、时序参数、解码器选择）。
+- set_kernel_properties 改的是当前播放器上这一次播放：Media Kit 收任意 mpv 属性（通过 mpv 当下生效，不变成之后文件的选项），MDK 收任意属性和视频/音频解码器顺序（MDK 多在打开流或解码器时读取），Erika 收 upscaler 与 debugHud（Erika 的轨道、字幕、弹幕偏移与其他内核一样经 playback.select_track、playback.load_subtitle、subtitle.*、danmaku.* 控制）。每项报告 before、requested、after（从内核读回）和内核的错误，记下来源与时间。换到其他媒体时，内核里仍是这里设的值就恢复原值，之后被改过的保持不动；内核没报告过原值的（restorable=false），下一个媒体在新的播放器上打开。playback.retry 沿用同一个播放器，改动保留。restore_kernel_properties 按名称或全部恢复。
+- 能把流量或凭据送到别处的设置（代理、UA、请求头、Cookie、Referer、TLS 信任、stream-lavf-o 这类选项文本里设的上述几项，或值里带地址）要用户在 NipaPlay 里允许；拒绝就什么都不改。
+- 透传：kernel_command 在 Media Kit 上把 mpv 命令（字符串数组）原样交给 mpv，返回 mpv 的结果数据或它自己的错误文本，之后播放器报错时一并返回；任何命令都能执行，包括 vf/af 滤镜、change-list glsl-shaders 着色器、run 与 subprocess；load-script 只收 harness 仓库里的脚本。改属性的命令（set、add、cycle、cycle-values、multiply、change-list、vf、af）报告属性前后值，并像 set_kernel_properties 一样换片恢复、可撤销；lasting 为 unknown 的命令（load-script、loadfile、播放列表命令、apply-profile 等）之后，下一个媒体在新的播放器上打开。命令参数里带地址或代理、请求头、Cookie、UA、Referer 的要用户允许，run 与 subprocess 不需要。kernel_invoke 在 Erika 上把方法名与参数原样交给 Erika（erika_flutter 有 invoke 就用它，否则走它的方法通道；没有这个方法时 supported=false）。watch_kernel_properties 在 Media Kit 与 MDK 上按间隔读若干属性，返回限定时长内的每次变化，调用结束即停止。每次直接调用都记入 changes（谁、何时、内核、命令或属性、原值、结果、错误）。
+- reopen_with_kernel 在当前位置用另一个内核重开当前媒体，走 Classic 的换内核流程，不改内核设置；暂停、倍速、音轨与字幕轨（按语言、标题、编码匹配，否则按序号）和已挂的外挂字幕带过去，结果报告请求的与实际运行的内核、是否打开、错误和各项前后值。旧播放器上的改动随它结束。下一个媒体回到内核设置。
+- Next 关闭时这些改动全部恢复：能恢复的原地恢复；临时内核、原值未知的属性和效果可能留下的命令或调用，让当前媒体在内核设置的新播放器上重开。长期生效的改动用 settings.set。''',
   'discover': r'''弹弹play 每日放送与推荐。''',
   'plugins': r'''应用插件。''',
   'media.sources': r'''SMB、WebDAV、Jellyfin、Emby 等远程来源。

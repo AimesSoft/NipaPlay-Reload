@@ -54,6 +54,7 @@ import 'capabilities/local_library_operations.dart';
 import 'capabilities/debug_local_operations.dart';
 import 'capabilities/video_player_state_port.dart';
 import 'capabilities/player_facts.dart';
+import 'capabilities/kernel_control.dart';
 import 'system/player_native_log.dart';
 import 'system/runtime_diagnostics.dart';
 import 'system/uncaught_errors.dart';
@@ -314,6 +315,7 @@ final class NextRuntime extends ChangeNotifier {
   ClassicSettings? _classicSettings;
   MeshPlayback? _meshPlayback;
   UncaughtErrors? _uncaught;
+  KernelControl? _kernel;
   ChatHost? chat;
   String? chatError;
   final _hostReady = Completer<NextHostSettings>();
@@ -412,6 +414,8 @@ final class NextRuntime extends ChangeNotifier {
     final uncaught = _uncaught = UncaughtErrors(
         Directory('${root.path}/diagnostics'), appVersion: packageInfo.version)
       ..context = _playbackContext;
+    final kernel =
+        _kernel = KernelControl(_player, harness: () => repositoryPath);
     _harness = Harness(
       [
         FamilyDescriptionCapability(() => _harness.catalog),
@@ -424,6 +428,7 @@ final class NextRuntime extends ChangeNotifier {
         for (final capability in capabilities)
           InvocationScopeCapability(FileIndexingCapability(capability, core.media.service.store)),
         PlaybackControlsCapability(ClassicPlaybackControls(_player)),
+        KernelControlCapability(kernel),
         RuntimeDiagnosticsCapability(
             errors: uncaught,
             log: PlayerNativeLog.instance,
@@ -537,6 +542,8 @@ final class NextRuntime extends ChangeNotifier {
         await _startChat(repository);
       }
     } else {
+      // What Next changed in the kernel for this playback goes back first.
+      await _kernel?.release();
       await _uncaught?.detach();
       await PlayerNativeLog.instance.detach();
       ServiceProvider.nextCore.subtitles.detachPlayer();
@@ -817,6 +824,7 @@ final class NextRuntime extends ChangeNotifier {
     _labs.removeListener(_queueEndpointUpdate);
     _location?.removeListener(_queueEndpointUpdate);
     _operations = _operations.then((_) async {
+      await _kernel?.release(reopen: false);
       await _uncaught?.detach();
       await PlayerNativeLog.instance.detach();
       await _meshPlayback?.close();
