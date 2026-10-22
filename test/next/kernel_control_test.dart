@@ -320,6 +320,8 @@ class KernelState extends VideoPlayerState {
   @override
   PlayerStatus get status => playing;
   @override
+  bool get isPaused => playing == PlayerStatus.paused;
+  @override
   bool get hasVideo => const {
         PlayerStatus.ready,
         PlayerStatus.playing,
@@ -770,6 +772,26 @@ void main() {
   });
 
   group('reopening on another kernel', () {
+    test('a paused media is reported paused once the new player has paused',
+        () async {
+      final state = await opened(MpvKernel())..playing = PlayerStatus.paused;
+      final r = rig(state, make: (kernel) {
+        // Classic's reopen plays the media, then pauses it; each takes effect
+        // only once the kernel answers.
+        state.playing = PlayerStatus.playing;
+        Timer(const Duration(milliseconds: 150),
+            () => state.playing = PlayerStatus.paused);
+        return MdkKernel();
+      });
+      final result = await invokeCompleted(r.harness,
+          'playback.reopen_with_kernel', {
+        'sessionId': session(state),
+        'kernel': 'mdk',
+      });
+      expect((result['preserved'] as Map)['paused'],
+          {'before': true, 'after': true});
+    });
+
     test('carries position, pause, tracks and reports the kernel running; '
         'the next media opens on the kernel setting', () async {
       final kernel = MpvKernel()

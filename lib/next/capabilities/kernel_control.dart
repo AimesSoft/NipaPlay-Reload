@@ -1118,6 +1118,9 @@ final class KernelControl {
         final tracks = replaced && state.hasVideo
             ? await _restoreTracks(before)
             : const <String, Object?>{};
+        if (replaced && state.hasVideo) {
+          await _settle(paused: before['paused'] == true);
+        }
         final after = _playbackFacts();
         final actual = playerKernelId(state.player.getPlayerKernelName());
         final configured = kernelIdOf(_configured());
@@ -1164,6 +1167,23 @@ final class KernelControl {
           'state': _snapshot(),
         };
       });
+
+  /// Classic's play() and pause() set the status only once the kernel
+  /// answers, so the state right after a reopen can still be the one before.
+  /// Waits, up to two seconds, until the status has settled and, when the
+  /// media was paused, until the new player is paused too.
+  Future<void> _settle({required bool paused}) async {
+    final until = DateTime.now().add(const Duration(seconds: 2));
+    bool settled() =>
+        state.status == PlayerStatus.error ||
+        (paused
+            ? state.status == PlayerStatus.paused
+            : const {PlayerStatus.playing, PlayerStatus.paused}
+                .contains(state.status));
+    while (!settled() && DateTime.now().isBefore(until)) {
+      await Future<void>.delayed(const Duration(milliseconds: 50));
+    }
+  }
 
   JsonMap _playbackFacts() {
     final info = state.player.mediaInfo;
