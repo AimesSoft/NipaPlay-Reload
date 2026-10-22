@@ -19,7 +19,9 @@ abstract interface class NextWorkManage {
   Future<List<UiMatchCandidate>> search(UiProvider provider, String query);
 
   /// The episodes of [candidate], to say which file is which
-  /// (`media.metadata.get`).
+  /// (`media.metadata.get`, and `media.metadata.get_batch` for the seasons
+  /// of a work whose record lists them without their episodes). Throws
+  /// when any part cannot be read.
   Future<List<UiCandidateEpisode>> candidateEpisodes(
       UiMatchCandidate candidate);
 
@@ -267,12 +269,14 @@ final class UiCandidateEpisode {
       this.season,
       this.title,
       this.release,
-      this.movie = false});
+      this.movie = false,
+      this.seasons = false});
 
   /// A film's one: the film itself ([ref] is the film's), with no release.
   const UiCandidateEpisode.film(Map<String, Object?> ref)
       : this(number: '', ref: ref, movie: true);
 
+  /// Its season as the provider records it; 0 holds the specials.
   final int? season;
   final String number;
   final String? title;
@@ -284,9 +288,51 @@ final class UiCandidateEpisode {
   /// The film itself: 正片.
   final bool movie;
 
-  String get label => movie
-      ? '正片'
-      : [if (int.tryParse(number) != null) '第 $number 集' else number, if (title != null && title!.isNotEmpty) title!].join('  ');
+  /// Of a work of several seasons: which one it is in is said.
+  final bool seasons;
+
+  /// Which one it is: 正片, 第 3 集, 第 2 季 第 3 集, 特别篇 3.
+  String get place {
+    if (movie) return '正片';
+    if (season == 0) return '特别篇 $number'.trim();
+    final episode = int.tryParse(number) != null ? '第 $number 集' : number;
+    return seasons && season != null ? '第 $season 季 $episode' : episode;
+  }
+
+  String get label => [
+        if (place.isNotEmpty) place,
+        if (!movie && title != null && title!.isNotEmpty) title!,
+      ].join('  ');
+}
+
+/// The candidate's episode that an episode of [season] numbered [number]
+/// is, by the records alone: null when none is, or more than one could be.
+///
+/// A candidate with seasons (TMDB) pairs by season and number together;
+/// an episode whose season is not recorded is taken as of season 1, so a
+/// special (season 0) only ever pairs with a special. A candidate without
+/// seasons pairs by the number alone, and not a special: it cannot say
+/// which of its own is one. A film is not paired here. Titles and file
+/// names are never read.
+UiCandidateEpisode? uiPairEpisode(
+    List<UiCandidateEpisode> catalogue, int? season, String number) {
+  final n = number.trim();
+  if (n.isEmpty) return null;
+  bool same(String other) {
+    final a = int.tryParse(n), b = int.tryParse(other.trim());
+    return a != null && b != null ? a == b : other.trim() == n;
+  }
+
+  final seasoned = catalogue.any((c) => c.season != null);
+  if (!seasoned && season == 0) return null;
+  final fits = [
+    for (final c in catalogue)
+      if (!c.movie &&
+          same(c.number) &&
+          (!seasoned || c.season == (season ?? 1)))
+        c
+  ];
+  return fits.length == 1 ? fits.single : null;
 }
 
 final class UiManagedEpisode {

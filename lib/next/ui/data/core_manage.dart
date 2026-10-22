@@ -4,6 +4,7 @@ import 'package:file_selector/file_selector.dart' show XTypeGroup, openFile;
 import 'package:nipa_harness/nipa_harness.dart';
 
 import '../../ui_data/ui_data.dart';
+import 'gui_calls.dart' show failureOf;
 import 'work_manage.dart';
 import 'work_owners.dart';
 
@@ -308,9 +309,13 @@ final class CoreWorkManage implements NextWorkManage {
 
   @override
   Future<List<UiCandidateEpisode>> candidateEpisodes(
-          UiMatchCandidate candidate) async =>
-      candidateEpisodesOf((await _call(
-          'media.metadata.get', {'ref': candidate.ref}))['record'] as Map);
+      UiMatchCandidate candidate) async {
+    try {
+      return await readCandidateEpisodes(_call, candidate.ref);
+    } on Failure catch (failure) {
+      throw _error(failure);
+    }
+  }
 
   /// [owner]'s files linked to episodes of another identity, to be let go
   /// of first: the catalogue refuses to relink them silently.
@@ -1071,38 +1076,85 @@ final class CoreWorkManage implements NextWorkManage {
           ?.path;
 }
 
+/// A provider work's episodes as the agent reads them: the work's record
+/// (`media.metadata.get`) and, where it lists seasons without their
+/// episodes (a TMDB series), every such season's own record in one call
+/// (`media.metadata.get_batch`). A season that cannot be read throws its
+/// [Failure]: part of a work is never shown as if it had no episodes.
+/// [call] runs an Action on this device and throws when it fails.
+Future<List<UiCandidateEpisode>> readCandidateEpisodes(
+    Future<JsonMap> Function(String action, JsonMap input) call,
+    Map<String, Object?> ref) async {
+  final record = Map<String, Object?>.from(
+      (await call('media.metadata.get', {'ref': ref}))['record'] as Map);
+  final entries = CoreWorkManage._maps(record['episodes']);
+  final unread = [
+    for (final (i, e) in entries.indexed)
+      if ((e['ref'] as Map?)?['objectType'] == 'season' &&
+          CoreWorkManage._maps(e['episodes']).isEmpty)
+        i
+  ];
+  if (unread.isEmpty) return candidateEpisodesOf(record);
+  final read = await call('media.metadata.get_batch', {
+    'refs': [for (final i in unread) entries[i]['ref']]
+  });
+  final seasons = [...entries];
+  final filled = <int>{};
+  for (final r in CoreWorkManage._maps(read['results'])) {
+    final at = unread[r['index'] as int];
+    if (r['error'] case final Map error) throw failureOf(error);
+    seasons[at] = {...entries[at], 'episodes': (r['record'] as Map)['episodes']};
+    filled.add(at);
+  }
+  if (filled.length != unread.length) {
+    throw const Failure(FailureCode.internal, 'A season was not read.');
+  }
+  return candidateEpisodesOf({...record, 'episodes': seasons});
+}
+
 /// A provider work's episodes as `media.metadata.get` records them; a
-/// TV season's within it, with the season as their release. A film has
-/// none: it is its own one (`media.management.bind_batch` takes the film's
-/// ref as the episode, with no release).
+/// TV season's within it, with the season as their release, the specials
+/// (season 0) after the others. Of several seasons, each says its own. A
+/// film has none: it is its own one (`media.management.bind_batch` takes
+/// the film's ref as the episode, with no release).
 List<UiCandidateEpisode> candidateEpisodesOf(Map record) {
   if (record['ref'] case final Map ref
       when ref['objectType'] == 'movie' || record['kind'] == 'movie') {
     return [UiCandidateEpisode.film(Map<String, Object?>.from(ref))];
   }
-  final out = <UiCandidateEpisode>[];
-  void add(Map e, Map? release, int? season) {
-    out.add(UiCandidateEpisode(
-      number: '${e['number'] ?? e['order'] ?? ''}',
-      season: CoreWorkManage._int(e['season']) ?? season,
-      title: CoreWorkManage._text(e['title']),
-      ref: Map<String, Object?>.from(e['ref'] as Map),
-      release: release == null ? null : Map<String, Object?>.from(release),
-    ));
-  }
-
+  final found = <(Map, Map?, int?)>[];
   for (final e in CoreWorkManage._maps(record['episodes'])) {
     final ref = e['ref'] as Map;
     if (ref['objectType'] == 'season') {
+      final season =
+          CoreWorkManage._int(e['number']) ?? CoreWorkManage._int(e['season']);
       for (final inner in CoreWorkManage._maps(e['episodes'])) {
-        add(inner, ref,
-            CoreWorkManage._int(e['number']) ?? CoreWorkManage._int(e['season']));
+        found.add((inner, ref, CoreWorkManage._int(inner['season']) ?? season));
       }
     } else {
-      add(e, null, null);
+      found.add((e, null, CoreWorkManage._int(e['season'])));
     }
   }
-  return out;
+  final several = {
+        for (final (_, _, s) in found)
+          if (s != null) s
+      }.length >
+      1;
+  final out = [
+    for (final (e, release, season) in found)
+      UiCandidateEpisode(
+        number: '${e['number'] ?? e['order'] ?? ''}',
+        season: season,
+        title: CoreWorkManage._text(e['title']),
+        ref: Map<String, Object?>.from(e['ref'] as Map),
+        release: release == null ? null : Map<String, Object?>.from(release),
+        seasons: several,
+      )
+  ];
+  return [
+    ...out.where((e) => e.season != 0),
+    ...out.where((e) => e.season == 0),
+  ];
 }
 
 final class _WorkRef {

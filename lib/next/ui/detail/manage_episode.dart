@@ -330,9 +330,11 @@ class EpisodeManageSheetState extends State<EpisodeManageSheet>
   @override
   Widget build(BuildContext context) {
     final e = widget.episode;
+    // A film's one episode goes without a number: it is the film.
+    final film = widget.work.film;
     final title = [
-      if (Words.episode(e.number) case final number?) number,
-      if (e.title != null) e.title!
+      if (Words.episode(film ? null : e.number) case final number?) number,
+      if (e.title != null) e.title! else if (film) '正片'
     ].join('  ');
     return ManageFrame<EpisodeSection>(
       leading: ClipRRect(

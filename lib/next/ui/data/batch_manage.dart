@@ -3,9 +3,9 @@ import 'dart:math' as math;
 import 'package:nipa_harness/nipa_harness.dart';
 
 import '../../ui_data/ui_data.dart';
-import 'core_manage.dart' show candidateEpisodesOf;
+import 'core_manage.dart' show readCandidateEpisodes;
 import 'gui_calls.dart';
-import 'work_manage.dart' show UiCandidateEpisode, UiProvider;
+import 'work_manage.dart' show UiCandidateEpisode, UiProvider, uiPairEpisode;
 import 'work_owners.dart';
 
 /// Several works of the library at once, as the person: their sources
@@ -172,12 +172,14 @@ final class NextBatch {
 
   /// What matching each work to its candidate would touch on every device
   /// that has it, nothing changed yet. As a single work's match: each file
-  /// to the candidate's episode of its episode's number
-  /// (`media.metadata.get`), a file matched to another identity let go of
-  /// first. Episodes no number fits stay as they are. A film is its own
-  /// one episode: a work whose files are one episode is it; of several,
-  /// which is the film is the viewer's to say in the work's sheet, and they
-  /// stay as they are.
+  /// to the candidate's episode its episode's recorded season and number
+  /// are ([uiPairEpisode]; the candidate's seasons read as in
+  /// [readCandidateEpisodes]), a file matched to another identity let go
+  /// of first. Episodes nothing fits stay as they are, for the work's
+  /// sheet. A film is its own one episode: a work whose files are one
+  /// episode is it; of several, which is the film is the viewer's to say
+  /// in the work's sheet, and they stay as they are. A candidate whose
+  /// episodes cannot all be read throws its [Failure].
   Future<UiAssociationPreview> previewMatch(
       List<(UiBatchWork, UiBatchCandidate)> pairs) async {
     const reason = 'Viewer matched several works in the library.';
@@ -187,9 +189,8 @@ final class NextBatch {
     for (final (w, c) in pairs) {
       final catalogue = c.movie
           ? [UiCandidateEpisode.film(c.ref)]
-          : await (catalogues[_refKey(c.ref)] ??= calls
-              .call('media.metadata.get', {'ref': c.ref}).then(
-                  (r) => candidateEpisodesOf(r['record'] as Map)));
+          : await (catalogues[_refKey(c.ref)] ??=
+              readCandidateEpisodes(calls.call, c.ref));
       final film = catalogue.where((e) => e.movie).firstOrNull;
       final mine = {
         for (final e in await data.episodes(w.work.workId)) e.episodeId: e
@@ -227,7 +228,8 @@ final class NextBatch {
               ? (whole ? film : null)
               : number == null
                   ? null
-                  : _fit(catalogue, number);
+                  : uiPairEpisode(
+                      catalogue, number.season, '${number.number ?? ''}');
           if (to == null) {
             missed.addAll(episodes);
             continue;
@@ -255,22 +257,6 @@ final class NextBatch {
     }
     return _preview(
         [for (final (w, _) in pairs) w], parts.values.toList(), fits);
-  }
-
-  /// The candidate's episode for [mine]: the one of its number, and of its
-  /// season when the number is in several.
-  static UiCandidateEpisode? _fit(
-      List<UiCandidateEpisode> catalogue, UiEpisode mine) {
-    final same = [
-      for (final c in catalogue)
-        if (mine.number != null && int.tryParse(c.number) == mine.number) c
-    ];
-    if (same.length <= 1) return same.firstOrNull;
-    final season = [
-      for (final c in same)
-        if (c.season == (mine.season ?? 1)) c
-    ];
-    return season.length == 1 ? season.single : null;
   }
 
   static String _refKey(Map ref) =>

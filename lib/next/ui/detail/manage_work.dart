@@ -166,9 +166,14 @@ class WorkManageSheetState extends State<WorkManageSheet>
       final ref = match == null ? null : '${match.candidate.ref}';
       if (match != null && ref != _matchEpisodesFor) {
         _matchEpisodesFor = ref;
-        final episodes =
-            await widget.manage.candidateEpisodes(match.candidate);
-        if (mounted) setState(() => _matchEpisodes = episodes);
+        try {
+          final episodes =
+              await widget.manage.candidateEpisodes(match.candidate);
+          if (mounted) setState(() => _matchEpisodes = episodes);
+        } on UiManageError {
+          // Read again with the work next time.
+          _matchEpisodesFor = null;
+        }
       }
     } on UiManageError {
       if (mounted) setState(() => _readFailed = true);
@@ -228,10 +233,11 @@ class WorkManageSheetState extends State<WorkManageSheet>
   UiCandidateEpisode? get _film =>
       _pickedEpisodes?.where((e) => e.movie).firstOrNull;
 
-  /// A candidate chosen: its episodes, each file given the one with its
-  /// number (or its place) until the viewer says otherwise. A film is its
-  /// own one episode: the files of a work that is one episode are it; of
-  /// several, which is the film is the viewer's to say.
+  /// A candidate chosen: its episodes, each file given the one its
+  /// episode's recorded season and number are ([uiPairEpisode]) until the
+  /// viewer says otherwise; a file nothing fits is the viewer's to choose.
+  /// A film is its own one episode: the files of a work that is one
+  /// episode are it; of several, which is the film is the viewer's to say.
   Future<void> _pick(UiMatchCandidate candidate) async {
     setState(() {
       _picked = candidate;
@@ -253,12 +259,8 @@ class WorkManageSheetState extends State<WorkManageSheet>
           }
           return;
         }
-        for (final (i, e) in data.episodes.indexed) {
-          final same = episodes.where((c) =>
-              c.number == e.number &&
-              (c.season == null || e.season == null || c.season == e.season));
-          final pick = same.firstOrNull ??
-              (i < episodes.length ? episodes[i] : episodes.firstOrNull);
+        for (final e in data.episodes) {
+          final pick = uiPairEpisode(episodes, e.season, e.number);
           if (pick == null) continue;
           for (final f in e.files) {
             _assign[f] = pick;
@@ -814,6 +816,8 @@ class WorkManageSheetState extends State<WorkManageSheet>
         _quiet('暂时读不到')
       else if (episodes == null)
         const SizedBox(height: 40)
+      else if (episodes.isEmpty)
+        _quiet('没有剧集')
       else if (files.isEmpty)
         _quiet('这台设备上没有文件')
       else ...[
@@ -965,6 +969,7 @@ class WorkManageSheetState extends State<WorkManageSheet>
               device: data.device,
               local: local,
               titled: titled,
+              film: widget.work.film,
               title: _titles[_key(e)] ?? e.title ?? '',
               number: _numbers[_key(e)] ?? e.number,
               onTitle: (v) => setState(() => _titles[_key(e)] = v),
@@ -1178,15 +1183,16 @@ class _FileChoiceRow extends StatelessWidget {
             ),
           ),
           const SizedBox(width: 12),
-          if (value != null || skip)
-            MenuChoice<UiCandidateEpisode?>(
-              value: value,
-              options: [
-                for (final e in options) (e, _short(e.label)),
-                if (skip) (null, '跳过'),
-              ],
-              onChanged: onChanged,
-            ),
+          // Nothing fits by the records: the viewer chooses.
+          MenuChoice<UiCandidateEpisode?>(
+            value: value,
+            options: [
+              if (value == null && !skip) (null, '选择'),
+              for (final e in options) (e, _short(e.label)),
+              if (skip) (null, '跳过'),
+            ],
+            onChanged: onChanged,
+          ),
         ]),
       );
 }
@@ -1201,6 +1207,7 @@ class _EpisodeEditRow extends StatelessWidget {
     required this.device,
     required this.local,
     required this.titled,
+    required this.film,
     required this.title,
     required this.number,
     required this.onTitle,
@@ -1217,6 +1224,9 @@ class _EpisodeEditRow extends StatelessWidget {
   final String? device;
   final bool local;
   final bool titled;
+
+  /// Of a film: its one episode goes without a number.
+  final bool film;
   final String title;
   final String number;
   final ValueChanged<String> onTitle;
@@ -1232,12 +1242,8 @@ class _EpisodeEditRow extends StatelessWidget {
   Widget build(BuildContext context) {
     final e = episode;
     // A film has no other episode to be.
-    final current = relink
-        ?.where((c) =>
-            !c.movie &&
-            c.number == e.number &&
-            (c.season == null || e.season == null || c.season == e.season))
-        .firstOrNull;
+    final current =
+        relink == null ? null : uiPairEpisode(relink!, e.season, e.number);
     return Padding(
       padding: const EdgeInsets.fromLTRB(14, 10, 8, 10),
       child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
@@ -1252,9 +1258,11 @@ class _EpisodeEditRow extends StatelessWidget {
             SizedBox(
               width: 52,
               child: Text(
-                  int.tryParse(e.number) != null
-                      ? e.number.padLeft(2, '0')
-                      : e.number,
+                  film
+                      ? ''
+                      : int.tryParse(e.number) != null
+                          ? e.number.padLeft(2, '0')
+                          : e.number,
                   style: NextText.num(17,
                       weight: FontWeight.w700, color: NextColors.p2)),
             ),
@@ -1263,7 +1271,7 @@ class _EpisodeEditRow extends StatelessWidget {
             child: titled
                 ? LiveTextField(
                     value: title, width: null, hint: '标题', onChanged: onTitle)
-                : Text(e.title ?? e.label,
+                : Text(e.title ?? (film ? '正片' : e.label),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: NextText.sans(13.5)),
@@ -1277,11 +1285,7 @@ class _EpisodeEditRow extends StatelessWidget {
             MenuChoice<UiCandidateEpisode>(
               value: current,
               options: [
-                for (final c in relink!)
-                  (
-                    c,
-                    int.tryParse(c.number) != null ? '第 ${c.number} 集' : c.number
-                  )
+                for (final c in relink!) (c, c.place)
               ],
               onChanged: onRelink,
             ),

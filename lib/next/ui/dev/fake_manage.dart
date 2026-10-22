@@ -456,22 +456,35 @@ final class FakeManage implements NextWorkManage {
       for (final e in (m?['eps'] as List? ?? const []).cast<Map>())
         e['n'] as int: e['name'] as String?
     };
-    return [
-      for (var n = 1; n <= total; n++)
+    // TMDB's within its seasons as the library splits them, its specials
+    // (season 0) after; the others' one list, by number.
+    final tmdb = candidate.provider == UiProvider.tmdb;
+    final seasons = tmdb ? (m?['seasons'] as int?) ?? 1 : 1;
+    final perSeason = (total / seasons).ceil();
+    UiCandidateEpisode one(int season, int number, String? title) =>
         UiCandidateEpisode(
-          number: '$n',
-          season: 1,
-          title: names[n],
+          number: '$number',
+          season: tmdb ? season : null,
+          title: title,
           ref: {
             ...candidate.ref,
             'objectType': 'episode',
-            'externalId': '$key-$n',
-            'scope': 'tv/$key/season/1/episode/$n'
+            'externalId': '$key-$season-$number',
+            'scope': 'tv/$key/season/$season/episode/$number'
           },
-          release: candidate.provider == UiProvider.tmdb
-              ? {...candidate.ref, 'objectType': 'season', 'scope': 'tv/$key/season/1'}
+          release: tmdb
+              ? {
+                  ...candidate.ref,
+                  'objectType': 'season',
+                  'scope': 'tv/$key/season/$season'
+                }
               : null,
-        )
+          seasons: tmdb,
+        );
+    return [
+      for (var n = 1; n <= total; n++)
+        one((n - 1) ~/ perSeason + 1, (n - 1) % perSeason + 1, names[n]),
+      if (tmdb) one(0, 1, '总集篇'),
     ];
   }
 
