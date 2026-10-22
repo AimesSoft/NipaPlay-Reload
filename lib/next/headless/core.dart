@@ -334,6 +334,7 @@ final class HeadlessCore {
         harness: harness,
         seed: seed,
         appVersion: '1.11.10-headless',
+        nowPlaying: uiData.nowPlaying,
         port: port,
         credentialFile: File('${root.path}/endpoint.json'),
         seedRepository: Directory('${root.path}/harness-seed'));

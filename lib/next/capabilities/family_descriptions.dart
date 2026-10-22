@@ -221,6 +221,7 @@ NipaPlay 自己会做一部分：作品有 TMDB 身份时取图，同步 Classic
   'app':
       appFamilyDescription + r'''update.check 立即复用 Classic 发布检查；失败时 hasUpdate/latestVersion 为 null，错误与检查时间保留。update.status 读取上次检查；update.open 打开已核对公开发布页。没有应用内更新安装、自动重启或下载能力。instance 读取当前进程事实。
 这台机器上可能装着多个 NipaPlay（正式版、开发构建、实验副本）；按应用名或 bundle id 打开的未必是 `nipa` 连接的那个实例。`nipa status` 的实例事实和 `ui.*` 的界面操作、截图来自当前连接的实例。
+- `./nipa status` 的 `body.playback` 给当前播放的事实：`state`（播放器状态，没有视频时为 `idle`，此时只有这一项）、`positionMs`、`durationMs`、`path`；资料库认得该文件时再有 `workId`、`work`、`episodeId`、`episode`（如“第 3 集 标题”，电影不带集号）。不认得就只有播放器自己的事实，不猜作品。
 - `./nipa status` 的 `harnessSeed` 给出种子 `path`、当前 `head` 和已抓取的 `trackingHead`。`trackingBehindSeed=true` 表示应抓取更新；`missing_remote` 表示尚未配置远端，`not_fetched` 表示尚未抓取，`different_remote` 表示远端指向另一处，未知状态不等于已同步。此检查只读，不执行 fetch 或合并；`current` 只说明远端跟踪引用最新，不表示你已合并。''',
   'accounts':
       r'''- **需要登录的平台**：用户的浏览器里通常已经登录，直接使用这个登录状态；浏览器也没登录时，打开该平台的登录页，请用户自己登录，然后继续。

@@ -15,6 +15,7 @@ import 'harness_repository.dart';
 import 'harness_redaction.dart';
 import 'instance_facts.dart';
 import 'capabilities/family_descriptions.dart';
+import 'ui_data/ui_data.dart' show UiNowPlaying;
 
 sealed class AgentEndpointStatus {
   const AgentEndpointStatus();
@@ -42,6 +43,7 @@ final class AgentEndpoint {
       required String appVersion,
       Future<JsonMap> Function()? instanceFacts,
       Future<JsonMap?> Function()? catalogChange,
+      Future<UiNowPlaying?> Function(String path)? nowPlaying,
       File? credentialFile,
       Directory? seedRepository,
       int? port})
@@ -49,6 +51,7 @@ final class AgentEndpoint {
         _instanceFacts = instanceFacts ?? InstanceFacts(appVersion).read,
         _appVersion = appVersion,
         _catalogChange = catalogChange,
+        _nowPlaying = nowPlaying,
         _port = LabProfile.active ? 0 : port ?? 47811,
         credentialFile = credentialFile ?? defaultEndpointFile,
         seedRepository = seedRepository ??
@@ -61,6 +64,7 @@ final class AgentEndpoint {
   final Map<String, List<int>> seed;
   final String _appVersion;
   final Future<JsonMap?> Function()? _catalogChange;
+  final Future<UiNowPlaying?> Function(String path)? _nowPlaying;
   final int _port;
   final File credentialFile;
   final Directory seedRepository;
@@ -245,8 +249,41 @@ final class AgentEndpoint {
       }
     }
 
+    // The library's name for the playing file, when this body has one.
+    UiNowPlaying? known;
+    final playback = await read('playback.state', {}, (output) {
+      final r = (output['state'] as Map? ?? const {}).cast<String, Object?>();
+      final video = r['hasVideo'] == true;
+      return {
+        'state': video ? '${r['status']}' : 'idle',
+        if (video && r['path'] != null) 'path': r['path'],
+        if (video && r['positionMs'] != null) 'positionMs': r['positionMs'],
+        if (video && r['durationMs'] != null) 'durationMs': r['durationMs'],
+      };
+    });
+    final path = playback is Map ? playback['path'] : null;
+    if (path is String && _nowPlaying != null) {
+      try {
+        known = await _nowPlaying(path);
+      } catch (_) {}
+    }
+
     const sample = 500;
     return {
+      // Only what the player and the library say: the work and episode appear
+      // when the library knows the file, a film has no episode number, and
+      // nothing playing is just {state: idle}.
+      'playback': known == null || playback is! Map
+          ? playback
+          : {
+              'state': playback['state'],
+              'workId': known.workId,
+              'work': known.work,
+              if (known.episodeId != null) 'episodeId': known.episodeId,
+              if (known.episode != null) 'episode': known.episode,
+              for (final key in const ['positionMs', 'durationMs', 'path'])
+                if (playback[key] != null) key: playback[key],
+            },
       'library': await read(
           'state.query', {'view': 'library.merged', 'limit': sample}, (r) {
         final rows = (r['rows'] as List? ?? const []).cast<Map>();

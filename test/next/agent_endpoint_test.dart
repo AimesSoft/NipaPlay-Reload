@@ -4,6 +4,9 @@ import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:nipa_harness/nipa_harness.dart';
 import 'package:nipaplay/next/agent_endpoint.dart';
+import 'package:nipaplay/next/ui_data/ui_data.dart' show UiNowPlaying;
+
+import 'test_support.dart';
 
 void main() {
   late Directory root, repository;
@@ -26,6 +29,78 @@ void main() {
     client.close(force: true);
     await endpoint.stop();
     await root.delete(recursive: true);
+  });
+
+  group('status playback', () {
+    TestWidgetsFlutterBinding.ensureInitialized();
+    setUpAll(() => HttpOverrides.global = null);
+    Future<Map> playbackOf(PlaybackFixture fixture,
+        Future<UiNowPlaying?> Function(String)? nowPlaying) async {
+      endpoint = AgentEndpoint(
+          harness: fixture.harness,
+          seed: {},
+          appVersion: 'test',
+          nowPlaying: nowPlaying,
+          instanceFacts: () async => {},
+          credentialFile: credentials,
+          port: 0);
+      final running = await endpoint.start(repository) as AgentEndpointRunning;
+      final token =
+          (jsonDecode(await credentials.readAsString()) as Map)['token'];
+      final call = await client.postUrl(running.url.replace(path: '/harness'));
+      call.headers.set('Authorization', 'Bearer $token');
+      call.write(jsonEncode({'operation': 'status'}));
+      final response = await call.close();
+      final body = jsonDecode(await utf8.decodeStream(response)) as Map;
+      return (body['body'] as Map)['playback'] as Map;
+    }
+
+    test('a series episode carries work, episode and position', () async {
+      final playback = await playbackOf(
+          PlaybackFixture(),
+          (path) async => path == '/media/episode.mkv'
+              ? const UiNowPlaying(
+                  workId: 'w1',
+                  work: 'Work',
+                  episodeId: 'e3',
+                  episode: '第 3 集 Title')
+              : null);
+      expect(playback, {
+        'state': 'playing',
+        'workId': 'w1',
+        'work': 'Work',
+        'episodeId': 'e3',
+        'episode': '第 3 集 Title',
+        'positionMs': 500,
+        'durationMs': 1000,
+        'path': '/media/episode.mkv',
+      });
+    });
+
+    test('a film has no episode number and a paused state shows', () async {
+      final fixture = PlaybackFixture()..player.paused = true;
+      final playback = await playbackOf(
+          fixture,
+          (_) async => const UiNowPlaying(
+              workId: 'w2', work: 'Film', episodeId: 'e9'));
+      expect(playback['state'], 'paused');
+      expect(playback['work'], 'Film');
+      expect(playback.containsKey('episode'), false);
+    });
+
+    test('without a library name only the player facts are given', () async {
+      final playback = await playbackOf(PlaybackFixture(), null);
+      expect(playback['state'], 'playing');
+      expect(playback['positionMs'], 500);
+      expect(playback.containsKey('work'), false);
+    });
+
+    test('nothing playing is idle', () async {
+      final fixture = PlaybackFixture()..player.hasVideo = false;
+      final playback = await playbackOf(
+          fixture, (_) async => throw StateError('not asked'));
+      expect(playback, {'state': 'idle'});
+    });
   });
 
   test(

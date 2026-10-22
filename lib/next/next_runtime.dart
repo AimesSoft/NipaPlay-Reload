@@ -447,6 +447,7 @@ final class NextRuntime extends ChangeNotifier {
       appVersion: packageInfo.version,
       catalogChange: () async => (await core.catalogChanges.recent()).firstOrNull,
       instanceFacts: instanceFacts.read,
+      nowPlaying: core.uiData.nowPlaying,
       seed: seed,
       seedRepository: Directory('${root.path}/harness-seed'),
       port: LabProfile.active ? 0 : kDebugMode && Platform.environment['NIPAPLAY_AGENT_PORT'] != null
