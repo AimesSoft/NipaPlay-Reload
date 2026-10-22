@@ -7,6 +7,7 @@ import 'package:flutter/widgets.dart';
 
 import '../cards/card_views.dart';
 import '../chat/chat_frame.dart';
+import '../player/stage.dart';
 import '../shell/shell_controller.dart';
 import '../theme/tokens.dart';
 import '../widgets/attachments.dart';
@@ -17,6 +18,12 @@ import '../widgets/icons.dart';
 /// The conversation side panel, on every page but the home: it slides in
 /// from the right on a 420 ms spring while the page behind blurs and
 /// darkens; Esc or a click outside closes it.
+///
+/// Beside a video it is docked instead: the picture is not dimmed and stays
+/// live (a click on it is the video's), and the picture with its subtitles
+/// and danmaku and the player's controls make room for the panel as it
+/// slides ([NextStage]); Esc, × or Nipa close it. In a small window it is
+/// narrower, so the picture keeps its room.
 class ChatPanelLayer extends StatefulWidget {
   const ChatPanelLayer({super.key});
 
@@ -31,16 +38,26 @@ class _ChatPanelLayerState extends State<ChatPanelLayer>
   late final AnimationController _c = AnimationController(
       vsync: this,
       duration: _open,
-      reverseDuration: const Duration(milliseconds: 260));
+      reverseDuration: const Duration(milliseconds: 260))
+    ..addListener(_publish);
   NextShellController? _shell;
+  ValueNotifier<double>? _stage;
+  bool _reduced = false;
+  bool _docked = false;
 
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
+    _reduced = NextMotion.reduced(context);
+    _stage = NextStage.maybeOf(context)?.slide;
     final shell = NextShellScope.of(context);
     if (identical(shell, _shell)) return;
     _shell?.panelOpen.removeListener(_sync);
-    _shell = shell..panelOpen.addListener(_sync);
+    _shell?.removeListener(_playingChanged);
+    _shell = shell
+      ..panelOpen.addListener(_sync)
+      ..addListener(_playingChanged);
+    _docked = shell.playing;
     _sync();
   }
 
@@ -52,9 +69,30 @@ class _ChatPanelLayerState extends State<ChatPanelLayer>
     }
   }
 
+  void _playingChanged() {
+    if (_shell!.playing == _docked) return;
+    setState(() => _docked = _shell!.playing);
+  }
+
+  /// Where the panel is on its way in or out: the spring in, ease out.
+  double get _slide {
+    if (_reduced) return 1;
+    final t = _c.value;
+    return _c.status == AnimationStatus.reverse
+        ? Curves.easeOutCubic.transform(t)
+        : _spring.transform(t);
+  }
+
+  /// The picture follows the panel, from the controller's tick (before the
+  /// frame lays out), never from a build.
+  void _publish() => _stage?.value = _c.isDismissed ? 0 : _slide;
+
   @override
   void dispose() {
     _shell?.panelOpen.removeListener(_sync);
+    _shell?.removeListener(_playingChanged);
+    // The picture has the window again.
+    _stage?.value = 0;
     _c.dispose();
     super.dispose();
   }
@@ -62,36 +100,39 @@ class _ChatPanelLayerState extends State<ChatPanelLayer>
   @override
   Widget build(BuildContext context) {
     final shell = _shell!;
-    const sheet = RepaintBoundary(child: _Sheet());
+    final docked = _docked;
+    _reduced = NextMotion.reduced(context);
+    final width = docked
+        ? NextStage.panelWidth(MediaQuery.sizeOf(context).width)
+        : NextStage.panelMax;
+    final sheet = RepaintBoundary(child: _Sheet(docked: docked));
     return AnimatedBuilder(
       animation: _c,
       builder: (context, _) {
         if (_c.isDismissed) return const SizedBox.shrink();
         final t = _c.value;
-        final reduced = NextMotion.reduced(context);
-        final closing = _c.status == AnimationStatus.reverse;
-        final slide = reduced
-            ? 1.0
-            : (closing
-                ? Curves.easeOutCubic.transform(t)
-                : _spring.transform(t));
+        final slide = _slide;
         return Stack(children: [
+          // The same two places either way, so the sheet keeps its state
+          // when a video opens or closes under it.
           Positioned.fill(
-            child: GestureDetector(
-              behavior: HitTestBehavior.opaque,
-              onTap: shell.closePanel,
-              child: _Dim(t),
-            ),
+            child: docked
+                ? const SizedBox.shrink()
+                : GestureDetector(
+                    behavior: HitTestBehavior.opaque,
+                    onTap: shell.closePanel,
+                    child: _Dim(t),
+                  ),
           ),
           Positioned(
-            top: 12,
-            right: 12,
-            bottom: 12,
-            width: 520,
+            top: NextStage.margin,
+            right: NextStage.margin,
+            bottom: NextStage.margin,
+            width: width,
             child: Opacity(
-              opacity: reduced ? t : math.min(1, t * 3),
+              opacity: _reduced ? t : math.min(1, t * 3),
               child: Transform.translate(
-                offset: Offset((1 - slide) * 560, 0),
+                offset: Offset((1 - slide) * NextStage.travel(width), 0),
                 child: sheet,
               ),
             ),
@@ -136,11 +177,16 @@ class _Dim extends StatelessWidget {
 }
 
 /// `.sheet`: the conversation ([ChatFrame]) on frosted glass. Files
-/// dropped anywhere on it go with what you say next.
+/// dropped anywhere on it go with what you say next. Beside a video
+/// ([docked]) it casts no shadow: that would fall on the picture.
 class _Sheet extends StatelessWidget {
-  const _Sheet();
+  const _Sheet({required this.docked});
+  final bool docked;
 
   static final _radius = BorderRadius.circular(24);
+  static const _shadow = [
+    BoxShadow(color: Color(0x80000000), blurRadius: 80, offset: Offset(-30, 0)),
+  ];
 
   @override
   Widget build(BuildContext context) {
@@ -156,12 +202,7 @@ class _Sheet extends StatelessWidget {
             borderColor: const Color(0x1AFFFFFF),
             radius: _radius,
             highlight: false,
-            shadows: const [
-              BoxShadow(
-                  color: Color(0x80000000),
-                  blurRadius: 80,
-                  offset: Offset(-30, 0)),
-            ],
+            shadows: docked ? const [] : _shadow,
             child: ChatFrame(
               focusNode: shell.panelFocus,
               columnWidth: 520,

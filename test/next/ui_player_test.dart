@@ -4,10 +4,12 @@ import 'package:flutter/gestures.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:nipaplay/next/ui/chat/chat_frame.dart';
 import 'package:nipaplay/next/ui/detail/episodes.dart' show HeatPainter;
 import 'package:nipaplay/next/ui/panel/chat_panel.dart';
 import 'package:nipaplay/next/ui/player/player_layer.dart';
 import 'package:nipaplay/next/ui/player/player_menus.dart';
+import 'package:nipaplay/next/ui/player/stage.dart';
 import 'package:nipaplay/next/ui/player/timeline.dart';
 import 'package:nipaplay/next/ui/shell/next_shell.dart';
 import 'package:nipaplay/next/ui/shell/shell_controller.dart';
@@ -17,6 +19,7 @@ import 'package:nipaplay/next/ui/widgets/buttons.dart';
 import 'package:nipaplay/next/ui/widgets/progress.dart';
 import 'package:nipaplay/next/ui_data/ui_data.dart';
 import 'package:nipaplay/pages/play_video_page.dart';
+import 'package:nipaplay/player_abstraction/player_abstraction.dart';
 import 'package:nipaplay/services/intro_skip/skip_segment.dart';
 import 'package:nipaplay/utils/globals.dart' as globals;
 import 'package:nipaplay/utils/video_player_state.dart';
@@ -224,6 +227,176 @@ void main() {
     expect(shell.homeChatOpen.value, isTrue);
     expect(p.playback.holds, 0);
   });
+
+  testWidgets(
+      'the conversation beside the video: the picture and the controls make '
+      'room for it as it slides in, and have the whole window once it goes',
+      (tester) async {
+    var taps = 0;
+    final p = await pumpPlayer(tester,
+        status: PlayerStatus.playing,
+        classic: GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTap: () => taps++,
+          child: const SizedBox.expand(key: ValueKey('picture')),
+        ));
+    final shell =
+        NextShellScope.of(tester.element(find.byType(NextPlayerLayer)));
+    // Classic's video, with its subtitles and danmaku over it: where it is
+    // drawn, and the size it is laid out at.
+    final classic = find.byKey(const ValueKey('picture'));
+    Rect picture() => tester.getRect(classic);
+    Rect sheet() => tester.getRect(find.byType(ChatFrame));
+    expect(picture(), const Rect.fromLTWH(0, 0, 1440, 900));
+
+    await tester.tap(button('Nipa').hitTestable());
+    await tester.pump();
+    // Frame by frame the picture's edge stays a margin left of the panel,
+    // drawn smaller as one picture, never laid out again.
+    for (var i = 0; i < 30; i++) {
+      await tester.pump(const Duration(milliseconds: 16));
+      expect(picture().right,
+          lessThanOrEqualTo(sheet().left - NextStage.margin + 0.01),
+          reason: 'frame $i: nothing of the picture under the panel');
+      expect(picture().width / picture().height, closeTo(1440 / 900, 1e-9));
+      expect(tester.getSize(classic), const Size(1440, 900));
+    }
+    await tester.pump(const Duration(milliseconds: 600));
+    expect(shell.panelOpen.value, isTrue);
+    expect(sheet().width, NextStage.panelMax);
+    expect(sheet().right, 1440 - NextStage.margin);
+    const room = 1440 - (520 + 2 * NextStage.margin);
+    const drawn = Size(room, 900 * room / 1440);
+    expect(picture(), Rect.fromLTWH(0, (900 - drawn.height) / 2, room, drawn.height),
+        reason: 'the window less the panel and its margins, centred');
+
+    // The controls are the picture's, left of the panel, all within reach.
+    final timeline = tester.getRect(find.byType(PlayerTimeline));
+    expect(timeline.right, lessThanOrEqualTo(room));
+    for (final label in ['返回', '暂停', '静音', '关闭弹幕', '字幕', '剧集', '全屏']) {
+      expect(button(label).hitTestable(), findsOneWidget, reason: label);
+      expect(tester.getRect(button(label)).right, lessThanOrEqualTo(room),
+          reason: label);
+    }
+    // Nothing dims the picture or takes its clicks: it plays on.
+    await tester.tapAt(const Offset(400, 450));
+    await tester.pump(const Duration(milliseconds: 400));
+    expect(taps, 1);
+    expect(shell.panelOpen.value, isTrue);
+    // The menus hang under their buttons there.
+    await tester.tap(button('字幕'));
+    await tester.pumpAndSettle();
+    expect(tester.getRect(find.byType(SubtitleMenu)).right,
+        closeTo(tester.getRect(button('字幕')).right, 0.5));
+    await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+    await tester.pumpAndSettle();
+
+    shell.closePanel();
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 600));
+    expect(picture(), const Rect.fromLTWH(0, 0, 1440, 900));
+    expect(tester.getRect(find.byType(PlayerTimeline)).right, 1440 - 40);
+    expect(p.playback.holds, 0);
+  });
+
+  testWidgets(
+      'beside the video, the picture\'s right edge is the way into the '
+      'conversation: Classic\'s menu there does not come up over it',
+      (tester) async {
+    var entered = 0;
+    await pumpPlayer(tester,
+        status: PlayerStatus.playing,
+        classic: Stack(children: [
+          // Classic's settings menu, opened by the pointer on the right edge.
+          Positioned(
+            top: 0,
+            right: 0,
+            bottom: 0,
+            width: 8,
+            child: MouseRegion(onEnter: (_) => entered++),
+          ),
+        ]));
+    final shell =
+        NextShellScope.of(tester.element(find.byType(NextPlayerLayer)));
+    final mouse = await tester.createGesture(kind: PointerDeviceKind.mouse);
+    addTearDown(mouse.removePointer);
+    await mouse.addPointer(location: const Offset(400, 450));
+    shell.openChat();
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 600));
+    const edge = 1440 - (520 + 2 * NextStage.margin) - 3.0;
+    await mouse.moveTo(const Offset(edge, 450));
+    await tester.pump();
+    await mouse.moveTo(const Offset(1000, 450));
+    await tester.pump();
+    expect(entered, 0);
+
+    shell.closePanel();
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 600));
+    await mouse.moveTo(const Offset(1436, 450));
+    await tester.pump();
+    expect(entered, 1, reason: 'without the conversation, it is Classic\'s');
+  });
+
+  testWidgets(
+      'a video the system draws under the window: Classic is laid out in the '
+      'room, taken in one step as the panel starts in, given back once it '
+      'is out', (tester) async {
+    await pumpPlayer(tester,
+        status: PlayerStatus.playing,
+        state: _SystemDrawn(),
+        classic: const SizedBox.expand(key: ValueKey('picture')));
+    final shell =
+        NextShellScope.of(tester.element(find.byType(NextPlayerLayer)));
+    final classic = find.byKey(const ValueKey('picture'));
+    const room = 1440 - (520 + 2 * NextStage.margin);
+    shell.openChat();
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 16));
+    expect(tester.getRect(classic), const Rect.fromLTWH(0, 0, room, 900),
+        reason: 'laid out there, not drawn smaller: the system places its '
+            'picture by this layout');
+    expect(tester.getRect(find.byType(PlayerTimeline)).right, room - 40);
+    await tester.pump(const Duration(milliseconds: 600));
+    expect(tester.getRect(classic), const Rect.fromLTWH(0, 0, room, 900));
+
+    shell.closePanel();
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 100));
+    expect(tester.getRect(classic).width, room, reason: 'until it is out');
+    await tester.pump(const Duration(milliseconds: 600));
+    expect(tester.getRect(classic), const Rect.fromLTWH(0, 0, 1440, 900));
+  });
+
+  for (final size in const [Size(1000, 700), Size(600, 400)]) {
+    testWidgets(
+        'beside the video in a window ${size.width.round()} wide: the panel '
+        'narrows, the controls are drawn smaller and whole', (tester) async {
+      await pumpPlayer(tester,
+          status: PlayerStatus.playing,
+          size: size,
+          classic: const SizedBox.expand(key: ValueKey('picture')));
+      final shell =
+          NextShellScope.of(tester.element(find.byType(NextPlayerLayer)));
+      shell.openChat();
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 600));
+      final panel = NextStage.panelWidth(size.width);
+      expect(tester.getRect(find.byType(ChatFrame)).width, panel);
+      final room = size.width - panel - 2 * NextStage.margin;
+      expect(tester.getRect(find.byKey(const ValueKey('picture'))).width, room);
+      for (final label in ['暂停', '静音', '关闭弹幕', '字幕', '剧集', '更多', '全屏']) {
+        expect(button(label).hitTestable(), findsOneWidget, reason: label);
+        expect(tester.getRect(button(label)).right, lessThanOrEqualTo(room),
+            reason: label);
+      }
+      await tester.tap(button('剧集'));
+      await tester.pumpAndSettle();
+      expect(tester.getRect(find.byType(EpisodeMenu)).right,
+          closeTo(tester.getRect(button('剧集')).right, 0.5));
+    });
+  }
 
   testWidgets('subtitles and episodes: chosen in Next\'s menus',
       (tester) async {
@@ -729,4 +902,17 @@ void main() {
             nextHostsPlayer: true, secondaryWindow: false),
         isFalse);
   });
+}
+
+/// Classic's player on a kernel that draws the video itself, under the
+/// window (Erika, Media Kit's native video).
+class _SystemDrawn extends FakePlayerState {
+  static final _player = Player.withDelegate(_SystemDrawnKernel());
+  @override
+  Player get player => _player;
+}
+
+class _SystemDrawnKernel extends ClassicKernel {
+  @override
+  bool get prefersPlatformVideoSurface => true;
 }

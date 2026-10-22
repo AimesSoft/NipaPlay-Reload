@@ -24,6 +24,7 @@ import '../widgets/progress.dart';
 import 'player_menus.dart';
 import 'player_more.dart';
 import 'playback.dart';
+import 'stage.dart';
 import 'timeline.dart';
 
 enum _Menu { subtitles, episodes, more }
@@ -36,9 +37,11 @@ enum _Menu { subtitles, episodes, more }
 ///
 /// They come with the pointer and go when it rests, as Classic's do
 /// ([VideoPlayerState.showControls]); they stay while the pointer is on
-/// them, a menu is open or Nipa's panel is. ⌘K asks Nipa, in the panel
-/// over the video; what is said there goes with what plays and where it
-/// is ([_Watch]). ⋯ holds what the bar has no room for (the speed, the
+/// them or a menu is open. ⌘K asks Nipa, in the panel beside the video:
+/// the picture and these controls make room for it ([NextStage]) and keep
+/// working there as they do in the whole window; what is said goes with
+/// what plays and where it is ([_Watch]). ⋯ holds what the bar has no room
+/// for (the speed, the
 /// audio track, the picture's fit, the danmaku's look, a still, picture in
 /// picture); a still taken shows a moment in the corner. A login Nipa asks
 /// for waits in the conversation, told of by a note under her.
@@ -221,8 +224,19 @@ class _NextPlayerLayerState extends State<NextPlayerLayer> {
 
   @override
   Widget build(BuildContext context) {
-    final shell = _shell!;
     final playback = _playback!;
+    final stage = NextStage.maybeOf(context);
+    final layer = _layer(playback);
+    // With the conversation beside the video, all of this is laid out in
+    // the picture's room, left of it.
+    return stage == null
+        ? layer
+        : NextStageRoom(
+            slide: stage.slide, stepped: stage.stepped, child: layer);
+  }
+
+  Widget _layer(NextPlayback playback) {
+    final shell = _shell!;
     return Selector<VideoPlayerState, (bool, bool, bool)>(
       selector: (_, s) => (
         s.hasVideo,
@@ -232,10 +246,7 @@ class _NextPlayerLayerState extends State<NextPlayerLayer> {
       ),
       builder: (context, frame, _) {
         final (hasVideo, loading, controls) = frame;
-        final pinned = _overChrome ||
-            _scrubbing ||
-            _menu != null ||
-            shell.panelOpen.value;
+        final pinned = _overChrome || _scrubbing || _menu != null;
         final shown = hasVideo && (controls || pinned);
         return Stack(fit: StackFit.expand, children: [
           if (loading && !hasVideo) const Positioned.fill(child: _Loading()),
@@ -301,6 +312,17 @@ class _NextPlayerLayerState extends State<NextPlayerLayer> {
               covered: shell.panelOpen.value,
               onHover: _hoverChrome,
             ),
+            // With the conversation beside the picture, the picture's last
+            // margin is the way into it: Classic's settings menu, opened by
+            // the pointer on the picture's right edge, would come up over
+            // the conversation. Always here, so what follows keeps its place.
+            Positioned(
+              top: 0,
+              right: 0,
+              bottom: 0,
+              width: shell.panelOpen.value ? NextStage.margin : 0,
+              child: const MouseRegion(child: SizedBox.expand()),
+            ),
             if (_menu != null) ...[
               Positioned.fill(
                 child: GestureDetector(
@@ -308,32 +330,40 @@ class _NextPlayerLayerState extends State<NextPlayerLayer> {
                   onTap: _closeMenu,
                 ),
               ),
-              Positioned(
-                right: _BottomBar.menuRight(_menu!),
-                bottom: _BottomBar.height + 2,
-                child: CallbackShortcuts(
-                  bindings: {
-                    const SingleActivator(LogicalKeyboardKey.escape): _escape,
-                  },
-                  child: Focus(
-                    focusNode: _menuFocus,
-                    child: MouseRegion(
-                      onEnter: (_) => _hoverChrome(true),
-                      child: switch (_menu!) {
-                        _Menu.subtitles => SubtitleMenu(
-                            playback: playback, onDone: _closeMenu),
-                        _Menu.episodes => EpisodeMenu(
-                            playback: playback,
-                            shell: shell,
-                            onDone: _closeMenu),
-                        _Menu.more => MoreMenu(
-                            key: _more,
-                            playback: playback,
-                            onScreenshot: () => unawaited(_screenshot()),
-                            onPictureInPicture: _pictureInPicture),
-                      },
+              // Under its button, wherever the bar's width put it.
+              Positioned.fill(
+                child: LayoutBuilder(
+                  builder: (context, room) => Stack(children: [
+                    Positioned(
+                      right: _BottomBar.menuRight(_menu!, room.maxWidth),
+                      bottom: _BottomBar.height + 2,
+                      child: CallbackShortcuts(
+                        bindings: {
+                          const SingleActivator(LogicalKeyboardKey.escape):
+                              _escape,
+                        },
+                        child: Focus(
+                          focusNode: _menuFocus,
+                          child: MouseRegion(
+                            onEnter: (_) => _hoverChrome(true),
+                            child: switch (_menu!) {
+                              _Menu.subtitles => SubtitleMenu(
+                                  playback: playback, onDone: _closeMenu),
+                              _Menu.episodes => EpisodeMenu(
+                                  playback: playback,
+                                  shell: shell,
+                                  onDone: _closeMenu),
+                              _Menu.more => MoreMenu(
+                                  key: _more,
+                                  playback: playback,
+                                  onScreenshot: () => unawaited(_screenshot()),
+                                  onPictureInPicture: _pictureInPicture),
+                            },
+                          ),
+                        ),
+                      ),
                     ),
-                  ),
+                  ]),
                 ),
               ),
             ],
@@ -636,7 +666,9 @@ class _Nipa extends StatelessWidget {
 
 /// The timeline over the controls: play, next, the time (and the speed,
 /// when it is not the normal one) on the left; volume, danmaku, subtitles,
-/// episodes, ⋯ and full screen on the right.
+/// episodes, ⋯ and full screen on the right. Where the picture's room is
+/// narrower than the controls at their widest ([_row]: the panel beside the
+/// video in a small window), the row of controls is drawn smaller, whole.
 class _BottomBar extends StatelessWidget {
   const _BottomBar({
     required this.playback,
@@ -656,13 +688,25 @@ class _BottomBar extends StatelessWidget {
   static const _gap = 6.0;
   static const height = 24 + _button + 2 + PlayerTimeline.height;
 
-  /// Where a menu hangs, from the right edge: its right edge on its
-  /// button's (episodes, ⋯ and full screen are right of subtitles).
-  static double menuRight(_Menu which) => switch (which) {
-        _Menu.subtitles => _side + (_button + _gap) * 3,
-        _Menu.episodes => _side + (_button + _gap) * 2,
-        _Menu.more => _side + (_button + _gap),
-      };
+  /// The row of controls at its widest: an hour-long time, a speed, the
+  /// volume's slider open.
+  static const _row = 640.0;
+
+  /// How much smaller the row is drawn in a room [width] wide.
+  static double scale(double width) =>
+      math.min(1, math.max(0.0, width - 2 * _side) / _row);
+
+  /// Where a menu hangs, from the right edge of a room [width] wide: its
+  /// right edge on its button's (episodes, ⋯ and full screen are right of
+  /// subtitles).
+  static double menuRight(_Menu which, double width) =>
+      _side +
+      scale(width) *
+          switch (which) {
+            _Menu.subtitles => (_button + _gap) * 3,
+            _Menu.episodes => (_button + _gap) * 2,
+            _Menu.more => _button + _gap,
+          };
 
   @override
   Widget build(BuildContext context) {
@@ -690,92 +734,102 @@ class _BottomBar extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 2),
-          SizedBox(
-            height: _button,
-            child: Row(children: [
-              Selector<VideoPlayerState, bool>(
-                selector: (_, s) => s.status == PlayerStatus.playing,
-                builder: (context, playing, _) => _BarButton(
-                  glyph: playing ? NextGlyph.pause : NextGlyph.play,
-                  label: playing ? '暂停' : '播放',
-                  size: 22,
-                  onTap: playback.togglePlay,
-                ),
+          // One structure at every width, so nothing in the row is remounted
+          // as the room narrows or widens.
+          LayoutBuilder(
+            builder: (context, room) => FittedBox(
+              fit: BoxFit.scaleDown,
+              alignment: Alignment.centerLeft,
+              child: SizedBox(
+                width: math.max(room.maxWidth, _row),
+                height: _button,
+                child: Row(children: [
+                  Selector<VideoPlayerState, bool>(
+                    selector: (_, s) => s.status == PlayerStatus.playing,
+                    builder: (context, playing, _) => _BarButton(
+                      glyph: playing ? NextGlyph.pause : NextGlyph.play,
+                      label: playing ? '暂停' : '播放',
+                      size: 22,
+                      onTap: playback.togglePlay,
+                    ),
+                  ),
+                  _NextEpisode(playback: playback, shell: shell),
+                  const SizedBox(width: 14),
+                  Selector<VideoPlayerState, (int, int)>(
+                    selector: (_, s) =>
+                        (s.position.inSeconds, s.duration.inSeconds),
+                    builder: (context, t, _) => Text.rich(
+                      TextSpan(children: [
+                        TextSpan(
+                            text: playerTime(Duration(seconds: t.$1)),
+                            style: NextText.num(13.5, color: NextColors.paper)),
+                        TextSpan(
+                            text: '  /  ${playerTime(Duration(seconds: t.$2))}',
+                            style: NextText.num(13.5, color: NextColors.p3)),
+                      ]),
+                      maxLines: 1,
+                    ),
+                  ),
+                  Selector<VideoPlayerState, double>(
+                    selector: (_, s) => playback.rate,
+                    builder: (context, rate, _) => (rate - 1).abs() < 0.001
+                        ? const SizedBox.shrink()
+                        : Padding(
+                            padding: const EdgeInsets.only(left: 12),
+                            child: Text(MoreMenuState.rateText(rate),
+                                style: NextText.num(13,
+                                    weight: FontWeight.w600,
+                                    color: NextColors.p2)),
+                          ),
+                  ),
+                  const Spacer(),
+                  _Volume(playback: playback),
+                  const SizedBox(width: _gap),
+                  Selector<VideoPlayerState, bool>(
+                    selector: (_, s) => s.danmakuVisible,
+                    builder: (context, on, _) => _BarButton(
+                      glyph: on ? NextGlyph.danmaku : NextGlyph.danmakuOff,
+                      label: on ? '关闭弹幕' : '显示弹幕',
+                      dim: !on,
+                      onTap: playback.toggleDanmaku,
+                    ),
+                  ),
+                  const SizedBox(width: _gap),
+                  _BarButton(
+                    glyph: NextGlyph.subtitles,
+                    label: '字幕',
+                    lit: menu == _Menu.subtitles,
+                    onTap: () => onMenu(_Menu.subtitles),
+                  ),
+                  const SizedBox(width: _gap),
+                  _BarButton(
+                    glyph: NextGlyph.episodes,
+                    label: '剧集',
+                    lit: menu == _Menu.episodes,
+                    onTap: () => onMenu(_Menu.episodes),
+                  ),
+                  const SizedBox(width: _gap),
+                  _BarButton(
+                    glyph: NextGlyph.more,
+                    label: '更多',
+                    lit: menu == _Menu.more,
+                    onTap: () => onMenu(_Menu.more),
+                  ),
+                  const SizedBox(width: _gap),
+                  Selector<VideoPlayerState, bool>(
+                    selector: (_, s) => s.isFullscreen,
+                    builder: (context, full, _) => _BarButton(
+                      glyph: full
+                          ? NextGlyph.exitFullscreen
+                          : NextGlyph.fullscreen,
+                      label: full ? '退出全屏' : '全屏',
+                      size: 19,
+                      onTap: () => unawaited(playback.toggleFullscreen()),
+                    ),
+                  ),
+                ]),
               ),
-              _NextEpisode(playback: playback, shell: shell),
-              const SizedBox(width: 14),
-              Selector<VideoPlayerState, (int, int)>(
-                selector: (_, s) =>
-                    (s.position.inSeconds, s.duration.inSeconds),
-                builder: (context, t, _) => Text.rich(
-                  TextSpan(children: [
-                    TextSpan(
-                        text: playerTime(Duration(seconds: t.$1)),
-                        style: NextText.num(13.5, color: NextColors.paper)),
-                    TextSpan(
-                        text: '  /  ${playerTime(Duration(seconds: t.$2))}',
-                        style: NextText.num(13.5, color: NextColors.p3)),
-                  ]),
-                  maxLines: 1,
-                ),
-              ),
-              Selector<VideoPlayerState, double>(
-                selector: (_, s) => playback.rate,
-                builder: (context, rate, _) => (rate - 1).abs() < 0.001
-                    ? const SizedBox.shrink()
-                    : Padding(
-                        padding: const EdgeInsets.only(left: 12),
-                        child: Text(MoreMenuState.rateText(rate),
-                            style: NextText.num(13,
-                                weight: FontWeight.w600,
-                                color: NextColors.p2)),
-                      ),
-              ),
-              const Spacer(),
-              _Volume(playback: playback),
-              const SizedBox(width: _gap),
-              Selector<VideoPlayerState, bool>(
-                selector: (_, s) => s.danmakuVisible,
-                builder: (context, on, _) => _BarButton(
-                  glyph: on ? NextGlyph.danmaku : NextGlyph.danmakuOff,
-                  label: on ? '关闭弹幕' : '显示弹幕',
-                  dim: !on,
-                  onTap: playback.toggleDanmaku,
-                ),
-              ),
-              const SizedBox(width: _gap),
-              _BarButton(
-                glyph: NextGlyph.subtitles,
-                label: '字幕',
-                lit: menu == _Menu.subtitles,
-                onTap: () => onMenu(_Menu.subtitles),
-              ),
-              const SizedBox(width: _gap),
-              _BarButton(
-                glyph: NextGlyph.episodes,
-                label: '剧集',
-                lit: menu == _Menu.episodes,
-                onTap: () => onMenu(_Menu.episodes),
-              ),
-              const SizedBox(width: _gap),
-              _BarButton(
-                glyph: NextGlyph.more,
-                label: '更多',
-                lit: menu == _Menu.more,
-                onTap: () => onMenu(_Menu.more),
-              ),
-              const SizedBox(width: _gap),
-              Selector<VideoPlayerState, bool>(
-                selector: (_, s) => s.isFullscreen,
-                builder: (context, full, _) => _BarButton(
-                  glyph:
-                      full ? NextGlyph.exitFullscreen : NextGlyph.fullscreen,
-                  label: full ? '退出全屏' : '全屏',
-                  size: 19,
-                  onTap: () => unawaited(playback.toggleFullscreen()),
-                ),
-              ),
-            ]),
+            ),
           ),
         ]),
       ),

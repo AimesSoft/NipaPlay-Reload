@@ -5,6 +5,7 @@ import 'package:nipaplay/utils/globals.dart' as globals;
 import 'package:nipaplay/utils/video_player_state.dart';
 import 'package:provider/provider.dart';
 
+import '../player/stage.dart';
 import 'next_shell.dart';
 import 'next_ui_preference.dart';
 import 'window_chrome.dart';
@@ -16,8 +17,12 @@ import 'window_chrome.dart';
 /// mounted underneath (its services, hotkeys and player keep working) and
 /// is revealed while a video is open, since playback still uses Classic's
 /// player: its video, danmaku and subtitles show through, and the shell
-/// draws the controls over them ([NextShell.playing]). A video moved out
-/// to its own window leaves this one to the shell's pages.
+/// draws the controls over them ([NextShell.playing]). With the
+/// conversation open beside the video, Classic goes left of it, black under
+/// the panel ([NextStageRoom]): drawn smaller as one picture while Flutter
+/// draws the video, laid out there while the system does (its picture
+/// follows Classic's layout). A video moved out to its own window leaves
+/// this one to the shell's pages.
 class NextUiGate extends StatefulWidget {
   const NextUiGate({super.key, required this.classic});
   final Widget classic;
@@ -28,6 +33,15 @@ class NextUiGate extends StatefulWidget {
 
 class _NextUiGateState extends State<NextUiGate> {
   final _classicKey = GlobalKey(debugLabel: 'classic');
+
+  /// How far the conversation is in beside the video; the panel moves it.
+  final _stage = ValueNotifier<double>(0);
+
+  @override
+  void dispose() {
+    _stage.dispose();
+    super.dispose();
+  }
 
   static bool _playing(PlayerStatus status) => const {
         PlayerStatus.loading,
@@ -51,24 +65,42 @@ class _NextUiGateState extends State<NextUiGate> {
     final window = DesktopPlayerWindowService.instance;
     return ListenableBuilder(
       listenable: window,
-      builder: (context, _) => Selector<VideoPlayerState, bool>(
-        selector: (_, player) =>
-            _playing(player.status) && !window.isPlayerDetached,
-        builder: (context, playing, _) => Stack(
-          fit: StackFit.expand,
-          children: [
-            _classic(!playing),
-            // Next's window chrome stays while the video is on, so the
-            // traffic lights keep their place on the player's bar too.
-            NextWindowChromeScope(
-              active: true,
-              child: NextShell(
-                onLeave: () => preference.setEnabled(false),
-                playing: playing,
-              ),
-            ),
-          ],
+      builder: (context, _) => Selector<VideoPlayerState, (bool, bool)>(
+        selector: (_, state) => (
+          _playing(state.status) && !window.isPlayerDetached,
+          // The system draws the video under the window (Erika, Media
+          // Kit's native video), not Flutter in a texture.
+          state.player.prefersPlatformVideoSurface,
         ),
+        builder: (context, frame, _) {
+          final (playing, systemDrawn) = frame;
+          return Stack(
+            fit: StackFit.expand,
+            children: [
+              NextStageRoom(
+                slide: _stage,
+                docked: playing,
+                fit: !systemDrawn,
+                stepped: systemDrawn,
+                backdrop: true,
+                child: _classic(!playing),
+              ),
+              // Next's window chrome stays while the video is on, so the
+              // traffic lights keep their place on the player's bar too.
+              NextStage(
+                slide: _stage,
+                stepped: systemDrawn,
+                child: NextWindowChromeScope(
+                  active: true,
+                  child: NextShell(
+                    onLeave: () => preference.setEnabled(false),
+                    playing: playing,
+                  ),
+                ),
+              ),
+            ],
+          );
+        },
       ),
     );
   }
