@@ -253,9 +253,6 @@ void main() {
         {'season': 1, 'number': '1', 'title': 'A'},
         {'episodeId': episodeId, 'title': 'B'},
       ],
-      [
-        {'episodeId': episodeId, 'season': 1, 'number': '9', 'title': 'A'},
-      ],
     ]) {
       final outcome = await invoke(
           'media.metadata.put',
@@ -265,6 +262,108 @@ void main() {
     }
     expect(await rows('media_overrides'), before);
     expect(await rows('media_entities'), entities);
+  });
+
+  Future<String> addEpisode(String id, {String? number, int? season}) async {
+    await jobs.database.insert('media_entities', {
+      'id': id,
+      'kind': 'episode',
+      'parent_id': releaseId,
+      'revision': 0,
+      'attributes': jsonEncode({
+        'removed': false,
+        'title': '',
+        if (number != null) 'number': number,
+        if (season != null) 'season': season
+      })
+    });
+    return id;
+  }
+
+  Future<Map> attributes(String id) async => decodeMediaJson((await jobs
+          .database
+          .query('media_entities', where: 'id=?', whereArgs: [id]))
+      .single['attributes']);
+
+  test('episodeId with number writes the number of an unnumbered episode',
+      () async {
+    final bare = await addEpisode('ep-bare');
+    expect(
+        (((await facts())['missing'] as Map)['episodes'] as Map)['withoutNumber'],
+        [bare]);
+    final result = await call(
+        'media.metadata.put',
+        put('number', episodes: [
+          {'episodeId': bare, 'season': 1, 'number': '2'}
+        ]));
+    final item = (result['episodes'] as List).single as Map;
+    expect(item['episodeId'], bare);
+    expect(item['created'], false);
+    expect(item['numbering'], {
+      'written': true,
+      'before': {'season': 1, 'number': null},
+      'after': {'season': 1, 'number': '2'}
+    });
+    expect(result['written'], 1);
+    expect((await attributes(bare))['number'], '2');
+    final shown = await facts();
+    expect(((shown['missing'] as Map)['episodes'] as Map)['withoutNumber'],
+        isEmpty);
+    expect(
+        ((shown['episodes'] as Map)['items'] as List)
+            .cast<Map>()
+            .firstWhere((e) => e['episodeId'] == bare)['number'],
+        2);
+    final audit = await jobs.database.query('body_changes',
+        where: "type='media.metadata.put'");
+    expect(audit.last['facts'], contains('numbering'));
+    final again = await call(
+        'media.metadata.put',
+        put('number-again', episodes: [
+          {'episodeId': bare, 'number': '2'}
+        ]));
+    expect(((again['episodes'] as List).single as Map)['numbering']['written'],
+        false);
+    expect(again['unchanged'], 1);
+  });
+
+  test('an existing number is replaced with before and after', () async {
+    final result = await call(
+        'media.metadata.put',
+        put('renumber', episodes: [
+          {'episodeId': episodeId, 'number': '5', 'title': '改号'}
+        ]));
+    final numbering = ((result['episodes'] as List).single as Map)['numbering'];
+    expect(numbering['written'], true);
+    expect(numbering['before']['number'], '1');
+    expect(numbering['after'], {'season': 1, 'number': '5'});
+    expect((await attributes(episodeId))['number'], '5');
+    expect((await merged(episodeId))['title'], '改号');
+  });
+
+  test('a number already held in the same release refuses the whole batch',
+      () async {
+    final other = await addEpisode('ep-other', number: '7', season: 1);
+    final entities = await jobs.database.query('media_entities');
+    final overrides = await rows('media_overrides');
+    final outcome = await invoke(
+        'media.metadata.put',
+        put('clash', work: {'title': '不该写入'}, episodes: [
+          {'episodeId': other, 'number': '1'},
+        ]));
+    expect(outcome, isA<Failed>());
+    expect((outcome as Failed).failure.message, contains(episodeId));
+    expect(await jobs.database.query('media_entities'), entities);
+    expect(await rows('media_overrides'), overrides);
+    // A swap inside one batch leaves no duplicate, so it is accepted.
+    await call(
+        'media.metadata.put',
+        put('swap', episodes: [
+          {'episodeId': other, 'number': '1'},
+          {'episodeId': episodeId, 'number': '7'},
+        ]));
+    expect((await attributes(other))['number'], '1');
+    expect((await attributes(episodeId))['number'], '7');
   });
 
   test('an unreachable image refuses the batch and leaves no trace', () async {

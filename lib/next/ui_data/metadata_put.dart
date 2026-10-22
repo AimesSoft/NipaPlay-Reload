@@ -26,6 +26,18 @@ final class _Target {
   final String? number;
   final bool created;
   final units = <_Unit>[];
+
+  /// An explicit write of the episode's season and number, when the item
+  /// names the episode by episodeId and gives season or number.
+  _Numbering? numbering;
+}
+
+final class _Numbering {
+  _Numbering(this.beforeSeason, this.beforeNumber, this.afterSeason,
+      this.afterNumber, this.changed);
+  final int? beforeSeason, afterSeason;
+  final String? beforeNumber, afterNumber;
+  final bool changed;
 }
 
 bool _sameNumber(String? a, String? b) {
@@ -190,6 +202,7 @@ extension UiMetadataPut on UiDataService {
         final newEpisodeRows = <JsonMap>[];
         final targets = <_Target>[];
         final claimed = <String>{};
+        final numberings = <String, _Numbering>{};
         final items = (input['episodes'] as List? ?? const []).cast<Map>();
         for (var i = 0; i < items.length; i++) {
           final item = items[i].cast<String, Object?>();
@@ -210,12 +223,21 @@ extension UiMetadataPut on UiDataService {
                   FailureCode.notFound);
               continue;
             }
-            if (number != null && !_sameNumber(match.single.number, number) ||
-                item.containsKey('season') && match.single.season != season) {
-              problem(path,
-                  'episodeId and season/number name different episodes.',
-                  FailureCode.conflict);
+            if (item.containsKey('number') && (number == null || number.isEmpty)) {
+              problem('$path.number', 'number must not be empty.');
               continue;
+            }
+            if (number != null || season != null) {
+              final cur = match.single;
+              final afterSeason = season ?? cur.season;
+              final afterNumber = number ?? cur.number;
+              numberings[id] = _Numbering(
+                  cur.season,
+                  cur.number,
+                  afterSeason,
+                  afterNumber,
+                  afterSeason != cur.season ||
+                      !_sameNumber(afterNumber, cur.number));
             }
             episodeId = id;
           } else {
@@ -289,9 +311,38 @@ extension UiMetadataPut on UiDataService {
             continue;
           }
           final target = _Target(i, episodeId, season, number, created);
+          target.numbering = numberings[episodeId];
           target.units.addAll(await units(path, episodeId, item,
               images: {'still'}));
           targets.add(target);
+        }
+
+        // One release never holds two episodes with the same season and
+        // number, judged on what the batch would leave behind.
+        final after = {
+          for (final e in existing)
+            e.id: (season: numberings[e.id]?.afterSeason ?? e.season,
+                number: numberings[e.id]?.afterNumber ?? e.number)
+        };
+        for (final t in targets) {
+          final n = t.numbering;
+          if (n == null || !n.changed || n.afterNumber == null) continue;
+          final releaseId =
+              existing.firstWhere((e) => e.id == t.entityId).releaseId;
+          final clash = [
+            for (final e in existing)
+              if (e.releaseId == releaseId &&
+                  e.id != t.entityId &&
+                  after[e.id]!.season == n.afterSeason &&
+                  _sameNumber(after[e.id]!.number, n.afterNumber))
+                e.id
+          ];
+          if (clash.isNotEmpty) {
+            problem(
+                'episodes[${t.index}]',
+                'Season ${n.afterSeason ?? 'none'} number ${n.afterNumber} is already held by ${clash.join(', ')} in the same release.',
+                FailureCode.conflict);
+          }
         }
 
         if (problems.isNotEmpty) {
@@ -393,7 +444,19 @@ extension UiMetadataPut on UiDataService {
                 'index': t.index,
                 'episodeId': t.entityId,
                 'created': t.created,
-                'fields': outcome(t.units)
+                'fields': outcome(t.units),
+                if (t.numbering != null)
+                  'numbering': {
+                    'written': t.numbering!.changed,
+                    'before': {
+                      'season': t.numbering!.beforeSeason,
+                      'number': t.numbering!.beforeNumber
+                    },
+                    'after': {
+                      'season': t.numbering!.afterSeason,
+                      'number': t.numbering!.afterNumber
+                    }
+                  }
               }
           ],
           'created': {
@@ -403,16 +466,37 @@ extension UiMetadataPut on UiDataService {
           'written': [
             ...workUnits,
             for (final t in targets) ...t.units
-          ].where((u) => u.changed).length,
+          ].where((u) => u.changed).length +
+              targets.where((t) => t.numbering?.changed == true).length,
           'unchanged': [
             ...workUnits,
             for (final t in targets) ...t.units
-          ].where((u) => !u.changed).length,
+          ].where((u) => !u.changed).length +
+              targets.where((t) => t.numbering?.changed == false).length,
         };
 
         await BodySignals.transaction(db, (tx) async {
           for (final row in [...newReleaseRows, ...newEpisodeRows]) {
             await tx.insert('media_entities', row);
+          }
+          for (final t in targets) {
+            final n = t.numbering;
+            if (n == null || !n.changed) continue;
+            final row = await tx.query('media_entities',
+                where: 'id=?', whereArgs: [t.entityId]);
+            final attrs = decodeMediaJson(row.single['attributes']);
+            await tx.update(
+                'media_entities',
+                {
+                  'revision': (row.single['revision'] as int) + 1,
+                  'attributes': jsonEncode({
+                    ...attrs,
+                    if (n.afterNumber != null) 'number': n.afterNumber,
+                    if (n.afterSeason != null) 'season': n.afterSeason
+                  })
+                },
+                where: 'id=?',
+                whereArgs: [t.entityId]);
           }
           await store.writeOverrides(tx, edits);
           await tx.insert('media_binding_operations', {

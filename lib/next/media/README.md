@@ -48,7 +48,7 @@ Action id 是 Harness 名称；MCP 名称把点替换为下划线。输入输出
 | `media.metadata.override` | write | GUI 与 Agent 均可编辑；宿主记录 actor/origin。mode=persistent 刷新保留，correction 被新快照替代，clear 清除编辑。省略 mode 保持持久覆盖兼容语义。 |
 | `media.metadata.refresh` | write | 沿用元数据快照刷新任务，不改变身份。 |
 | `media.metadata.import_batch` | write | 追加任意来源的结构化快照，宿主记录来源、交入时间、actor/origin/invocationId；保留其他 JSON 字段。原子且 requestId 幂等。 |
-| `media.metadata.put` | write | Agent 一次交一部作品的资料（作品文字/类型/三种图片，各集标题/简介/播出日期/时长/截图，按 episodeId 或 season+number 指定，缺的集建为本地目录集）。整批原子、requestId 幂等，图片先取到并解码；存为与 override/artwork.set 相同的持久覆盖并记录 source，优先于所有来源快照，刷新后保留。 |
+| `media.metadata.put` | write | Agent 一次交一部作品的资料（作品文字/类型/三种图片，各集标题/简介/播出日期/时长/截图，按 episodeId 或 season+number 指定，缺的集建为本地目录集；episodeId 同时给 season/number 即写该集的季号集号，回执列 before/after，同一 release 内季号加集号不得重复）。整批原子、requestId 幂等，图片先取到并解码；存为与 override/artwork.set 相同的持久覆盖并记录 source，优先于所有来源快照，刷新后保留。 |
 | `media.metadata.snapshots` | read | 读取实体对应的全部来源快照、原始字段和历史，包括已撤销身份的快照。 |
 
 目录列表、批量哈希和元数据查询不创建绑定或任务；详情候选不保存来源快照。
