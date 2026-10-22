@@ -11,29 +11,42 @@ final class Invocation {
 }
 
 final class InvocationRecord implements JsonEncodable {
-  const InvocationRecord._({
+  InvocationRecord._({
     required this.invocationId,
     required this.actionId,
     required this.origin,
     required this.effect,
-    required this.input,
+    required Schema inputSchema,
+    required Object? rawInput,
     required this.status,
     required this.failureCode,
     required this.startedAt,
     required this.elapsedMs,
-    required this.result,
-  });
+    required Schema outputSchema,
+    required Object? rawResult,
+  })  : _inputSchema = inputSchema,
+        _rawInput = rawInput,
+        _outputSchema = outputSchema,
+        _rawResult = rawResult;
 
   final String invocationId;
   final String actionId;
   final String origin;
   final Effect effect;
-  final Object? input;
   final String status;
   final FailureCode? failureCode;
   final String startedAt;
   final int elapsedMs;
-  final Object? result;
+  final Schema _inputSchema, _outputSchema;
+  final Object? _rawInput, _rawResult;
+
+  /// The input and result as journalled, secrets replaced by references;
+  /// worked out when first read (a large result is only walked by an
+  /// observer that keeps it).
+  late final Object? input = _journalInput(_inputSchema, _rawInput, invocationId, '');
+  late final Object? result = _rawResult == null
+      ? null
+      : _journalInput(_outputSchema, _rawResult, invocationId, '/result');
 
   @override
   JsonMap toJson() => {
@@ -50,8 +63,10 @@ final class InvocationRecord implements JsonEncodable {
       };
 }
 
+/// Told of every invocation before its outcome is returned; an observer
+/// that returns a future (a journal writing its line) is awaited first.
 abstract interface class InvocationObserver {
-  void onInvocation(InvocationRecord record);
+  FutureOr<void> onInvocation(InvocationRecord record);
 }
 
 final class Harness {
@@ -147,7 +162,8 @@ final class Harness {
       actionId: spec.id,
       origin: invocation.origin,
       effect: spec.effect,
-      input: _journalInput(spec.input, input, invocation.id, ''),
+      inputSchema: spec.input,
+      rawInput: input,
       status: switch (outcome) {
         Completed<O>() => 'completed',
         NeedsDecision<O>() => 'needs_decision',
@@ -159,13 +175,14 @@ final class Harness {
       },
       startedAt: startedAt,
       elapsedMs: stopwatch.elapsedMilliseconds,
-      result: outcome is Completed<O>
-          ? _journalInput(spec.output, outcome.value.toJson(), invocation.id, '/result')
-          : null,
+      outputSchema: spec.output,
+      rawResult: outcome is Completed<O> ? outcome.value.toJson() : null,
     );
     for (final observer in _observers) {
       try {
-        observer.onInvocation(record);
+        if (observer.onInvocation(record) case final Future<void> pending) {
+          await pending;
+        }
       } catch (_) {
         // Observer failures must not change an action's outcome.
       }
@@ -173,6 +190,13 @@ final class Harness {
     return outcome;
   }
 }
+
+final _secretField = RegExp(
+    r'^(password|secret|token|access_?token|api_?key|authorization)$',
+    caseSensitive: false);
+final _secretLocator = RegExp(
+    r'(?:[?&](?:token|api_?key|access_?token)=|\w+://[^/\s]+:[^/\s]+@)',
+    caseSensitive: false);
 
 Object? _journalInput(Schema? schema, Object? value, String id, String path) {
   final reference = {
@@ -183,10 +207,7 @@ Object? _journalInput(Schema? schema, Object? value, String id, String path) {
     final result = {
       for (final entry in value.entries)
         entry.key:
-            RegExp(r'^(password|secret|token|access_?token|api_?key|authorization)$',
-                            caseSensitive: false)
-                        .hasMatch(entry.key.toString()) &&
-                    entry.value != null
+            _secretField.hasMatch(entry.key.toString()) && entry.value != null
                 ? {
                     'credentialRef': {
                       'namespace': 'invocation',
@@ -216,10 +237,7 @@ Object? _journalInput(Schema? schema, Object? value, String id, String path) {
         ? value
         : result;
   }
-  if (value is String &&
-      (RegExp(r'(?:[?&](?:token|api_?key|access_?token)=|\w+://[^/\s]+:[^/\s]+@)',
-              caseSensitive: false)
-          .hasMatch(value))) {
+  if (value is String && _secretLocator.hasMatch(value)) {
     return reference;
   }
   return value;
