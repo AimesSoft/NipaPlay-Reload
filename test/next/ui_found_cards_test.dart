@@ -19,6 +19,7 @@ import 'package:nipaplay/next/state/views.dart';
 import 'package:nipaplay/next/tasks/sqlite_job_store.dart';
 import 'package:nipaplay/next/ui_data/capability.dart';
 import 'package:nipaplay/next/ui_data/found.dart';
+import 'package:nipaplay/next/ui_data/metadata_facts.dart';
 import 'package:nipaplay/next/ui_data/service.dart';
 import 'package:nipaplay/next/ui_data/ui_data.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
@@ -460,6 +461,60 @@ void main() {
       expect(merged.runtime, const Duration(minutes: 14));
       expect((await library.work('w2'))!.film, isFalse);
     } finally {
+      await library.close();
+      await mesh.close();
+    }
+  });
+
+  test('ui_facts counts a missing episode number for a series, not a film',
+      () async {
+    final db = store.database;
+    for (final (id, kind, parent, attrs) in [
+      ('w4', 'work', null, {'title': '大雄兔'}),
+      ('r4', 'release', 'w4', {'season': 1}),
+      ('e4', 'episode', 'r4', {'title': '大雄兔'}),
+      ('e5', 'episode', 'r4', {'title': '二'}),
+    ]) {
+      await db.insert('media_entities', {
+        'id': id,
+        'kind': kind,
+        'parent_id': parent,
+        'attributes': jsonEncode(attrs)
+      });
+    }
+    Future<List> without(String id) async => ((((await service.metadataFacts(id))
+            ['missing'] as Map)['episodes'] as Map)['withoutNumber'] as List);
+    // A series work: the unnumbered episodes are listed.
+    expect(await without('w4'), unorderedEquals(['e4', 'e5']));
+    // A film: its episodes have no number to lack.
+    await bind('r4', 'movie', '10378');
+    expect(await without('w4'), isEmpty);
+    await bind('r4', 'movie', '10378', status: 'revoked');
+    expect(await without('w4'), unorderedEquals(['e4', 'e5']));
+
+    // The merged library: the ids are the ones items[] carries, and a
+    // numbered episode is not listed.
+    await db.update('media_entities',
+        {'attributes': jsonEncode({'title': '大雄兔', 'number': '1'})},
+        where: 'id=?', whereArgs: ['e4']);
+    await bind('r4', 'tv', '1004');
+    final mesh =
+        MeshRuntime(root: root, vault: MemoryVault(), token: () async => null);
+    final library = MeshLibrary(service, mesh);
+    service.meshLibrary = library;
+    try {
+      final merged = (await library.work('w4'))!;
+      final facts = await service.metadataFacts(merged.workId);
+      final items = ((facts['episodes'] as Map)['items'] as List).cast<Map>();
+      final numbered = items.singleWhere((i) => i['number'] == 1);
+      final bare = items.singleWhere((i) => i['number'] == null);
+      final listed = (((facts['missing'] as Map)['episodes']
+          as Map)['withoutNumber'] as List);
+      expect(listed, [bare['episodeId']]);
+      expect(listed.single, startsWith('mesh-episode:'));
+      expect(listed, isNot(contains(numbered['episodeId'])));
+    } finally {
+      service.meshLibrary = null;
       await library.close();
       await mesh.close();
     }

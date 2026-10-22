@@ -91,8 +91,11 @@ extension UiMetadataFacts on UiDataService {
       final stored = (episodeEvidence == null
           ? (await media.store.entity(e.episodeId))['attributes']
           : episodeEvidence['attributes']) as Map?;
-      numbered[e.episodeId] =
-          (stored?['number']?.toString().trim() ?? '').isNotEmpty;
+      // With the mesh the number is the merged episode's own, the one
+      // `items[].number` reports; the evidence attributes do not carry it.
+      numbered[e.episodeId] = episodeEvidence != null
+          ? e.number != null
+          : (stored?['number']?.toString().trim() ?? '').isNotEmpty;
       final m = episodeEvidence == null ? await media.store.mergedMetadata(e.episodeId) : episodeEvidence['metadata'] as JsonMap;
       final tracks = episodeEvidence == null ? await heat.tracks(e.episodeId) : <JsonMap>[];
       final danmaku = <JsonMap>[];
@@ -209,8 +212,10 @@ extension UiMetadataFacts on UiDataService {
               if (e.still == null) e.episodeId
           ],
           'withoutNumber': [
-            for (final e in episodes)
-              if (!(numbered[e.episodeId] ?? false)) e.episodeId
+            // A film's episode has no number to lack.
+            if (!work.film)
+              for (final e in episodes)
+                if (!(numbered[e.episodeId] ?? false)) e.episodeId
           ],
         },
       },

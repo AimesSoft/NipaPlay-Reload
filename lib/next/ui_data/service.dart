@@ -336,7 +336,10 @@ final class UiDataService implements NextUiData, NextNowPlaying {
     final episodeId = rows.single['episode'] as String;
     final fields = (await media.store.mergedMetadata(episodeId))['fields'] as Map;
     final attrs = (await media.store.entity(episodeId))['attributes'] as Map;
-    final number = num.tryParse(attrs['number'] as String? ?? '');
+    // A film's episode goes without its number.
+    final number = await media.store.workIsFilm(workId)
+        ? null
+        : num.tryParse(attrs['number'] as String? ?? '');
     final title = _display(fields['title'] ?? attrs['title']);
     final label = [
       if (number != null) '第 ${number % 1 == 0 ? number.toInt() : number} 集',

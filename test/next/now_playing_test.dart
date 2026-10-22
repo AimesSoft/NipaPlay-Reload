@@ -95,6 +95,34 @@ void main() {
         episodes.where((e) => e.episodeId == now.episodeId).single.number, 5);
   });
 
+  test('a film\'s episode is not numbered even when it stores a number',
+      () async {
+    final db = service.media.store.database;
+    expect((await service.nowPlaying('/v/Frieren - 05.mkv'))!.episode,
+        contains('第 5 集'));
+    await db.insert('media_external_objects', {
+      'id': 'o1',
+      'provider': 'tmdb',
+      'object_type': 'movie',
+      'external_id': '10378',
+      'scope': ''
+    });
+    await db.insert('media_bindings', {
+      'id': 'b1',
+      'entity_id': 'r1',
+      'object_id': 'o1',
+      'relation': 'exact',
+      'scope': '',
+      'status': 'accepted',
+      'source': 'test',
+      'bound_by': 'agent',
+      'revision': 1,
+      'created_at': '2026-10-22T00:00:00Z'
+    });
+    expect((await service.nowPlaying('/v/Frieren - 05.mkv'))!.episode,
+        '死者的幻影');
+  });
+
   test('an item of a media source is named too, a path elsewhere is not',
       () async {
     final db = service.media.store.database;
