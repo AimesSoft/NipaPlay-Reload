@@ -117,7 +117,7 @@ const familyFacts = <String, String>{
   - 背景图、Logo 或标题、资料、简介；
   - 各季剧集：截图、集号、标题、时长、观看进度、弹幕热度线、能否播放；
   - 集数不全或有不能播放的集时，出现“下载全部”按钮，按下等于用户对你说了这句话。
-- **对话**：首页展开的对话页，和其他页面的侧栏，是同一个会话。你用 `ui.present` 摆的卡片出现在回复下方，状态实时更新，不必为更新状态再摆一次。一个回合的卡片都显示在该回合回答之后，按摆出的顺序；同一回合里与已摆出的卡片相同的（同类且指向同一对象，或内容完全相同）只显示一次，结果里的 `cards[].alreadyShown` 会说明。从后台帮手调用时，卡片进入帮手自己的对话（结果里 `conversation` 为 `subagent`），主对话里看不到，打开那个帮手的对话才看得到。卡片有：作品（workId 或 ref）、剧集（episodeId）、候选作品（items，每项 workId 或 ref）、任务（taskId）、准备进度（title 与 steps，每步引用任务、实体或后续）、选项（`choices`：可选的 question，2–6 个 options，每项 label、可选 detail 和 recommended）。用户点选项卡片中的一项，等于在对话里说出它的 label。
+- **对话**：首页展开的对话页，和其他页面的侧栏，是同一个会话。你用 `ui.present` 摆的卡片出现在回复下方，状态实时更新，不必为更新状态再摆一次。一个回合的卡片都显示在该回合回答之后，按摆出的顺序；同一回合里与已摆出的卡片相同的（同类且指向同一对象，或内容完全相同）只显示一次，结果里的 `cards[].alreadyShown` 会说明。从后台帮手调用时，卡片进入帮手自己的对话（结果里 `conversation` 为 `subagent`）；帮手的结果交回主对话时，它在那之前摆出的卡片随结果一起复制到主对话，交回之后再摆的只留在帮手自己的对话里，打开它才看得到。卡片有：作品（workId 或 ref）、剧集（episodeId）、候选作品（items，每项 workId 或 ref）、任务（taskId）、准备进度（title 与 steps，每步引用任务、实体或后续）、选项（`choices`：可选的 question，2–6 个 options，每项 label、可选 detail 和 recommended）。用户点选项卡片中的一项，等于在对话里说出它的 label。
   - 片库外的作品用 ref：`{provider, objectType, externalId, scope:""}`，和 `media.metadata.search/get` 返回的一样；可以是 tmdb 的 tv/movie、bangumi 的 subject、dandanplay 的 anime。卡片和片库作品一样显示海报、标题、年份、集数和评分，点开是它的作品页，页上是“让 Nipa 准备”而不是播放。资料在摆的时候向来源读一次并留给卡片；来源读不到这部作品，整批卡片都不摆。片库里已有同一身份（已接受的绑定）的作品，卡片就是片库里那部；之后入库的，卡片也会变成片库里那部。
 - **右上角的进度环**：NipaPlay 的后台任务。
 - **播放器**：播放能播放的集（本地文件或媒体服务器上的文件），叠加弹幕和字幕。
