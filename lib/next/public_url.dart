@@ -1,8 +1,7 @@
 /// Public locators remain usable; authenticated locators never leave the body.
-String redactPrivateUrls(String text) => text.replaceAllMapped(
-        RegExp(
-            r'''(?<![a-zA-Z0-9+.-])[a-zA-Z][a-zA-Z0-9+.-]{0,31}://[^\s<>"'\\]+'''),
-        (match) {
+String redactPrivateUrls(String text) => !text.contains('://')
+    ? text
+    : text.replaceAllMapped(_urlPattern, (match) {
       final raw = match[0]!;
       final uri = Uri.tryParse(raw);
       if (uri == null || uri.userInfo.isNotEmpty) {
@@ -26,6 +25,9 @@ String redactPrivateUrls(String text) => text.replaceAllMapped(
       }
       return raw;
     });
+
+final _urlPattern = RegExp(
+    r'''(?<![a-zA-Z0-9+.-])[a-zA-Z][a-zA-Z0-9+.-]{0,31}://[^\s<>"'\\]+''');
 
 String _loose(String part) {
   try {

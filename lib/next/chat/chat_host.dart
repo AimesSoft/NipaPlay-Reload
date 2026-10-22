@@ -538,6 +538,14 @@ final class ChatHost implements ConversationHistory {
     _restarting = false;
   }
 
+  static const _deltaMethods = {
+    'item/agentMessage/delta',
+    'item/reasoning/textDelta',
+    'item/reasoning/summaryTextDelta',
+    'item/commandExecution/outputDelta',
+    'item/fileChange/outputDelta'
+  };
+
   Future<void> _read() async {
     try {
       await for (final line in _process!.stdout
@@ -548,10 +556,19 @@ final class ChatHost implements ConversationHistory {
         if (decoded is! Map<String, dynamic>) {
           throw const FormatException('Expected RPC object');
         }
-        final message =
-            Map<String, dynamic>.from(redactHarnessJson(decoded) as Map);
         final wireMethod = decoded['method'] as String? ?? '';
         final wireParams = decoded['params'] as Map?;
+        // A stream delta is redacted by protectChatDelta below (together with
+        // the held tail); redacting it here too would scan the same text twice.
+        final deltaStream = _deltaMethods.contains(wireMethod) &&
+            wireParams?['delta'] is String;
+        final message = Map<String, dynamic>.from(redactHarnessJson(
+            deltaStream
+                ? {
+                    ...decoded,
+                    'params': {...wireParams!, 'delta': ''}
+                  }
+                : decoded) as Map);
         if (!probe && modelLaunch != null && wireMethod == 'thread/started') {
           await _rememberRollout(wireParams!['thread'] as Map);
         }
@@ -592,13 +609,7 @@ final class ChatHost implements ConversationHistory {
                   mode: FileMode.append,
                   flush: true);
         }
-        if (const {
-          'item/agentMessage/delta',
-          'item/reasoning/textDelta',
-          'item/reasoning/summaryTextDelta',
-          'item/commandExecution/outputDelta',
-          'item/fileChange/outputDelta'
-        }.contains(wireMethod)) {
+        if (_deltaMethods.contains(wireMethod)) {
           if (wireParams?['delta'] case final String delta) {
             final key =
                 '${wireParams!['threadId']}:$wireMethod:${wireParams['itemId']}:'
