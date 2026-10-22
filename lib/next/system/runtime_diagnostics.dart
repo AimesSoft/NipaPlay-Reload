@@ -98,22 +98,24 @@ final class RuntimeDiagnosticsCapability implements Capability {
                 id: 'diagnostics.errors',
                 title: '未捕获错误与异常退出',
                 description:
-                    'Next 开启期间本进程的未捕获错误，以及上一次（Next 开启时）没有经过 NipaPlay 退出流程就结束的运行（崩溃、被强制结束、被系统结束都属于此类），新的在前。uncaught_error：channels（flutter=框架错误，platform_dispatcher=未捕获的异步错误，isolate=isolate 错误监听）、type、message、stack（前 16 行）、library、context、firstAt、lastAt、count（同一错误再次出现累计）、playback（当时播放的状态、路径、内核）。unclean_exit：firstAt 为那次运行开始，lastAt 为最后一次记录，processId、appVersion、playback 为那次最后记下的播放。原生崩溃本身没有堆栈，只表现为 unclean_exit。原有错误处理照常运行；Next 关闭期间不记录。文本已脱敏。recording 表示当前是否在记录。',
+                    'Next 开启期间本进程的未捕获错误，以及上一次（Next 开启时）没有经过 NipaPlay 退出流程就结束的运行（崩溃、被强制结束、被系统结束都属于此类），新的在前。uncaught_error：channels（flutter=框架错误，platform_dispatcher=未捕获的异步错误，isolate=isolate 错误监听）、type、message、stack（前 16 行）、library、context、firstAt、lastAt、count（同一错误再次出现累计）、playback（当时播放的状态、路径、内核）。unclean_exit：firstAt 为那次运行开始，lastAt 为最后一次记录，processId、appVersion、playback 为那次最后记下的播放。原生崩溃本身没有堆栈，只表现为 unclean_exit。原有错误处理照常运行；Next 关闭期间不记录。文本已脱敏。recording 表示当前是否在记录。thisRun 是本进程记下的不同错误数（errors）与出现次数（occurrences）；uncleanExits 给 total、unread（还没被 diagnostics.errors 返回过的条数）与 latestDetectedAt，返回过的异常退出从此算已读，跨重启保留。summaryOnly=true 只返回这些计数，不返回记录，也不改变已读。',
                 effect: Effect.read,
                 input: ObjectSchema({
                   'limit': IntegerSchema(minimum: 1, maximum: 200),
                   'kind': StringSchema(values: ['uncaught_error', 'unclean_exit']),
+                  'summaryOnly': BooleanSchema(),
                 }),
                 output: ObjectSchema({}, additionalProperties: true)),
             (input, _) => errors.read(
                 limit: input['limit'] as int? ?? 50,
-                kind: input['kind'] as String?)),
+                kind: input['kind'] as String?,
+                summaryOnly: input['summaryOnly'] == true)),
         ClassicAction(
             const ActionSpec(
                 id: 'diagnostics.player_log',
                 title: '播放器内核日志',
                 description:
-                    '读取 Next 开启以来播放内核交给应用的最近若干行（容量 capacity，超出的旧行计入 evicted）：Media Kit 为 mpv 日志消息（默认只有 error 级），MDK 为媒体事件与媒体状态（invalid 状态记为 error），Erika 为播放错误与解码器切换。每行有 sequence、at、kernel、currentPlayer（是否来自当前播放器实例，时间轴预览等实例为 false）、level、source、text（读取时脱敏）。afterSequence 续读，nextSequence 为已检查位置；levels、contains 过滤。file=true 时改为读取 diagnostics.player_log_file 写出的 mpv 完整日志（没有正在写的就读最近一份），cursor 为行偏移，单页至多 256 KiB。',
+                    '读取 Next 开启以来播放内核交给应用的最近若干行（容量 capacity，超出的旧行计入 evicted）：Media Kit 为 mpv 日志消息（默认只有 error 级），MDK 为媒体事件与媒体状态（invalid 状态记为 error）以及 MDK 自己的日志（source=log，level 为 MDK 的级别；进程内所有 MDK 实例共用一份，currentPlayer 为 null），Erika 为播放错误、解码器切换、音频输出变化与视频参数（宽高、primaries、transfer 原始整数）。每行有 sequence、at、kernel、currentPlayer（是否来自当前播放器实例，时间轴预览等实例为 false）、level、source、text（读取时脱敏）。afterSequence 续读，nextSequence 为已检查位置；levels、contains 过滤。file=true 时改为读取 diagnostics.player_log_file 写出的 mpv 完整日志（没有正在写的就读最近一份），cursor 为行偏移，单页至多 256 KiB。mdkLog.reading 表示是否在收 MDK 自己的日志；没有收时 reason 说明原因（mdk_log_env：设了 MDK_LOG，MDK 自己写 stderr，Next 不接管）。MDK 的日志处理器全进程只有一个：Next 开启时接过来，每一行原样交给原来的处理器，Next 关闭时交还。',
                 effect: Effect.read,
                 input: ObjectSchema({
                   'afterSequence': IntegerSchema(minimum: 0),

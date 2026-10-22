@@ -6,15 +6,18 @@ import 'package:nipa_harness/nipa_harness.dart';
 import 'package:nipaplay/player_abstraction/player_abstraction.dart';
 
 import '../harness_redaction.dart';
+import 'mdk_native_log.dart';
 
 /// The last lines player kernels delivered to the app while Next is on, and
 /// mpv's own full log file when asked for. Lines are kept as given and
-/// redacted when read.
+/// redacted when read. MDK's own log, one for the process, comes through
+/// [mdk] (instance 0).
 final class PlayerNativeLog {
-  PlayerNativeLog({this.capacity = 1000});
-  static final instance = PlayerNativeLog();
+  PlayerNativeLog({this.capacity = 1000, this.mdk});
+  static final instance = PlayerNativeLog(mdk: MdkNativeLog.instance);
 
   final int capacity;
+  final MdkNativeLog? mdk;
   final _lines = ListQueue<_Line>();
   int _sequence = 0;
   int _evicted = 0;
@@ -28,12 +31,15 @@ final class PlayerNativeLog {
   void attach() {
     _recording = true;
     PlayerNativeLogTap.observer = add;
+    mdk?.attach((level, text) => add('mdk', 0, level, 'log', text));
   }
 
-  /// Stops keeping lines and has mpv stop writing its file.
+  /// Stops keeping lines, gives MDK's log handler back and has mpv stop
+  /// writing its file.
   Future<void> detach() async {
     _recording = false;
     if (PlayerNativeLogTap.observer == add) PlayerNativeLogTap.observer = null;
+    mdk?.detach();
     await stopFile();
   }
 
@@ -78,8 +84,10 @@ final class PlayerNativeLog {
         'sequence': line.sequence,
         'at': line.at.toIso8601String(),
         'kernel': line.kernel,
-        'currentPlayer':
-            currentInstance == null ? null : line.instance == currentInstance,
+        // MDK's own log belongs to no one player.
+        'currentPlayer': currentInstance == null || line.instance == 0
+            ? null
+            : line.instance == currentInstance,
         'level': line.level,
         'source': line.source,
         'text': text,
@@ -88,6 +96,11 @@ final class PlayerNativeLog {
     }
     return {
       'recording': _recording,
+      if (mdk != null)
+        'mdkLog': {
+          'reading': _recording && mdk!.notAttached == null,
+          'reason': _recording ? mdk!.notAttached : null,
+        },
       'lines': selected,
       'nextSequence': last,
       'more': more,

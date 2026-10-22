@@ -35,10 +35,15 @@ final class UncaughtErrors {
   RawReceivePort? _isolatePort;
   Future<void> _writes = Future.value();
   int _sequence = 0;
+  int _runErrors = 0;
+  int _runOccurrences = 0;
 
   bool get recording => _attached;
   File get _records => File('${directory.path}/errors.jsonl');
   File get _session => File('${directory.path}/session.json');
+
+  /// The newest unclean exit diagnostics.errors has returned.
+  File get _readMarker => File('${directory.path}/errors-read.json');
 
   Future<void> attach() async {
     if (_attached) return;
@@ -135,6 +140,7 @@ final class UncaughtErrors {
         channels.add(channel);
       } else {
         open['count'] = (open['count'] as int) + 1;
+        _runOccurrences++;
       }
       open['lastAt'] = now.toIso8601String();
       final persisted = _persistedAt[open['id']];
@@ -160,6 +166,8 @@ final class UncaughtErrors {
       'playback': _safeContext(),
     };
     _open[fingerprint] = created;
+    _runErrors++;
+    _runOccurrences++;
     if (_open.length > 200) _open.remove(_open.keys.first);
     _append(created);
     return created;
@@ -174,27 +182,84 @@ final class UncaughtErrors {
   }
 
   /// Records, newest first: this file's history merged with this run's
-  /// counts.
-  Future<JsonMap> read({int limit = 50, String? kind}) async {
+  /// counts. The unclean exits returned count as read from then on. With
+  /// [summaryOnly] only the counts come back and nothing becomes read.
+  Future<JsonMap> read(
+      {int limit = 50, String? kind, bool summaryOnly = false}) async {
     await _writes;
     final merged = await _load();
     for (final open in _open.values) {
       merged[open['id'] as String] = open;
     }
-    final records = merged.values
-        .where((r) => kind == null || r['kind'] == kind)
-        .toList()
-      ..sort((a, b) =>
-          (b['lastAt'] as String? ?? '').compareTo(a['lastAt'] as String? ?? ''));
-    return {
+    final readThrough = await _readThrough();
+    final exits = [
+      for (final r in merged.values)
+        if (r['kind'] == 'unclean_exit') r
+    ];
+    final unread = [
+      for (final r in exits)
+        if ('${r['detectedAt'] ?? ''}'.compareTo(readThrough ?? '') > 0) r
+    ];
+    final summary = <String, Object?>{
       'recording': _attached,
       'session': {
         'startedAt': startedAt.toIso8601String(),
         'processId': pid,
       },
-      'records': records.take(limit).toList(),
+      'thisRun': {'errors': _runErrors, 'occurrences': _runOccurrences},
+      'uncleanExits': {
+        'total': exits.length,
+        'unread': unread.length,
+        'latestDetectedAt': exits.fold<String?>(
+            null,
+            (latest, r) => latest == null ||
+                    '${r['detectedAt']}'.compareTo(latest) > 0
+                ? '${r['detectedAt']}'
+                : latest),
+      },
+    };
+    if (summaryOnly) return summary;
+    final records = merged.values
+        .where((r) => kind == null || r['kind'] == kind)
+        .toList()
+      ..sort((a, b) =>
+          (b['lastAt'] as String? ?? '').compareTo(a['lastAt'] as String? ?? ''));
+    final returned = records.take(limit).toList();
+    String? newest;
+    for (final r in returned) {
+      final at = r['detectedAt'];
+      if (r['kind'] == 'unclean_exit' &&
+          at is String &&
+          (newest == null || at.compareTo(newest) > 0)) {
+        newest = at;
+      }
+    }
+    if (newest != null && newest.compareTo(readThrough ?? '') > 0) {
+      final marker = jsonEncode({'uncleanExitsReadThrough': newest});
+      _writes = _writes.then((_) async {
+        try {
+          await directory.create(recursive: true);
+          await _readMarker.writeAsString(marker, flush: true);
+        } catch (_) {}
+      });
+      await _writes;
+    }
+    return {
+      ...summary,
+      'records': returned,
       'total': records.length,
     };
+  }
+
+  Future<String?> _readThrough() async {
+    try {
+      if (!await _readMarker.exists()) return null;
+      final value = (jsonDecode(await _readMarker.readAsString())
+          as Map)['uncleanExitsReadThrough'];
+      return value is String ? value : null;
+    } catch (_) {
+      return null;
+    }
   }
 
   Future<Map<String, JsonMap>> _load() async {

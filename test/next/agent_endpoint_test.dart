@@ -285,6 +285,96 @@ void main() {
           ['harness.hooks', 'harness.schedules']);
     });
 
+    test('playback carries the current error and the newest failure; '
+        'diagnostics counts this run\'s errors and unread unclean exits',
+        () async {
+      final asked = <Map>[];
+      final body = await bodyOf(_Fixture([
+        read('playback.state', (_) async => {
+              'state': {
+                'status': 'error',
+                'hasVideo': false,
+                'path': '/media/a.mkv',
+                'error': {
+                  'code': 'media_load_failed',
+                  'stage': 'media_open',
+                  'category': 'unsupported_format',
+                  'failureId': 'pf-1',
+                },
+              }
+            }),
+        read('playback.failures', (input) async {
+          asked.add(input);
+          return {
+            'failures': [
+              {
+                'failureId': 'pf-1',
+                'at': '2026-10-22T00:00:00.000Z',
+                'category': 'unsupported_format',
+                'stage': 'media_open',
+                'kernel': 'mdk',
+                'path': '/media/a.mkv',
+                'messages': {'kernel': 'not shown here'},
+              }
+            ],
+            'total': 1,
+          };
+        }),
+        read('diagnostics.errors', (input) async {
+          asked.add(input);
+          return {
+            'recording': true,
+            'thisRun': {'errors': 2, 'occurrences': 5},
+            'uncleanExits': {
+              'total': 3,
+              'unread': 1,
+              'latestDetectedAt': '2026-10-22T01:00:00.000Z',
+            },
+          };
+        }),
+      ]));
+      expect(body['playback'], {
+        'state': 'error',
+        'path': '/media/a.mkv',
+        'error': {
+          'stage': 'media_open',
+          'category': 'unsupported_format',
+          'failureId': 'pf-1',
+        },
+        'lastFailure': {
+          'failureId': 'pf-1',
+          'at': '2026-10-22T00:00:00.000Z',
+          'category': 'unsupported_format',
+          'stage': 'media_open',
+          'kernel': 'mdk',
+          'path': '/media/a.mkv',
+        },
+      });
+      expect(body['diagnostics'], {
+        'recording': true,
+        'uncaughtErrors': 2,
+        'uncaughtOccurrences': 5,
+        'uncleanExitUnread': true,
+        'uncleanExitsUnread': 1,
+        'latestUncleanExitAt': '2026-10-22T01:00:00.000Z',
+      });
+      expect(asked, [
+        {'limit': 1},
+        {'summaryOnly': true},
+      ]);
+    });
+
+    test('nothing failed and nothing playing is still idle alone', () async {
+      final body = await bodyOf(_Fixture([
+        read('playback.state', (_) async => {
+              'state': {'status': 'idle', 'hasVideo': false}
+            }),
+        read('playback.failures', (_) async => {'failures': [], 'total': 0}),
+      ]));
+      expect(body['playback'], {'state': 'idle'});
+      expect(body['diagnostics'], containsPair('unavailable', 'diagnostics.errors'));
+    });
+
     test('a part that cannot be read says why, without hiding the rest',
         () async {
       final body = await bodyOf(_Fixture([

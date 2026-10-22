@@ -2,7 +2,9 @@ import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:fvp/mdk.dart' as mdk;
 import 'package:nipa_harness/nipa_harness.dart';
+import 'package:nipaplay/next/system/mdk_native_log.dart';
 import 'package:nipaplay/next/system/player_native_log.dart';
 import 'package:nipaplay/next/system/runtime_diagnostics.dart';
 import 'package:nipaplay/next/system/uncaught_errors.dart';
@@ -18,6 +20,25 @@ class LoggingKernel extends ClassicKernel {
   final logFiles = <String>[];
   @override
   Future<void> setNativeLogFile(String path) async => logFiles.add(path);
+}
+
+/// fvp's process-wide MDK log handler, held here.
+class FakeLogHandlers implements MdkLogHandlers {
+  FakeLogHandlers({this.channelOpen = true, this.current});
+  @override
+  bool channelOpen;
+  @override
+  void Function(mdk.LogLevel, String)? current;
+  final sets = <void Function(mdk.LogLevel, String)?>[];
+  @override
+  void set(void Function(mdk.LogLevel, String)? handler) {
+    sets.add(handler);
+    channelOpen = true;
+    current = handler;
+  }
+
+  /// MDK writing a line.
+  void emit(mdk.LogLevel level, String line) => current?.call(level, line);
 }
 
 void main() {
@@ -202,6 +223,56 @@ void main() {
     });
   });
 
+  group('unread', () {
+    test('an unclean exit is unread until diagnostics.errors returns it, '
+        'across restarts; a summary reads nothing', () async {
+      final directory = await Directory.systemTemp.createTemp('pf-unread-');
+      addTearDown(() => directory.delete(recursive: true));
+      final flutterBefore = FlutterError.onError;
+      final dispatcherBefore = PlatformDispatcher.instance.onError;
+      addTearDown(() {
+        FlutterError.onError = flutterBefore;
+        PlatformDispatcher.instance.onError = dispatcherBefore;
+      });
+      final crashed = UncaughtErrors(directory);
+      await crashed.attach();
+      await crashed.read(summaryOnly: true);
+      final next = UncaughtErrors(directory);
+      await next.attach();
+      addTearDown(next.detach);
+      addTearDown(crashed.detach);
+      final harness = Harness([
+        RuntimeDiagnosticsCapability(
+            errors: next,
+            log: PlayerNativeLog(),
+            player: () => Player.withDelegate(LoggingKernel()),
+            logDirectory: directory)
+      ]);
+      Future<Map> summary() async =>
+          (await invokeCompleted(harness, 'diagnostics.errors',
+              {'summaryOnly': true}))['uncleanExits'] as Map;
+      expect(await summary(), containsPair('unread', 1));
+      expect(await summary(), containsPair('unread', 1));
+      next.record('flutter', 'first', null);
+      next.record('flutter', 'first', null);
+      next.record('isolate', 'second', null);
+      final counts = await invokeCompleted(
+          harness, 'diagnostics.errors', {'summaryOnly': true});
+      expect(counts['thisRun'], {'errors': 2, 'occurrences': 3});
+      expect(counts.containsKey('records'), isFalse);
+      await invokeCompleted(harness, 'diagnostics.errors', {'kind': 'uncaught_error'});
+      expect(await summary(), containsPair('unread', 1),
+          reason: 'only what is returned becomes read');
+      final listed = await invokeCompleted(
+          harness, 'diagnostics.errors', {'kind': 'unclean_exit'});
+      expect((listed['records'] as List), hasLength(1));
+      expect(await summary(), containsPair('unread', 0));
+      expect(await summary(), containsPair('total', 1));
+      expect(((await UncaughtErrors(directory).read(summaryOnly: true))[
+          'uncleanExits'] as Map)['unread'], 0);
+    });
+  });
+
   group('Classic with Next off', () {
     test('nothing listens to the kernels and no handler is wrapped', () {
       final flutterBefore = FlutterError.onError;
@@ -209,6 +280,65 @@ void main() {
       final unattached = UncaughtErrors(Directory.systemTemp);
       expect(unattached.recording, isFalse);
       expect(FlutterError.onError == flutterBefore, isTrue);
+    });
+  });
+  group('MDK log', () {
+    test('each line still reaches the handler that was there, as it came, '
+        'and that handler is back once Next is off', () {
+      final heard = <(mdk.LogLevel, String)>[];
+      void original(mdk.LogLevel level, String line) => heard.add((level, line));
+      final handlers = FakeLogHandlers(current: original);
+      final log = MdkNativeLog(handlers, environment: const {});
+      final lines = <(String, String)>[];
+      log.attach((level, text) => lines.add((level, text)));
+      expect(handlers.current, isNot(original));
+      handlers.emit(mdk.LogLevel.warning, 'avcodec: corrupted frame\n');
+      expect(heard, [(mdk.LogLevel.warning, 'avcodec: corrupted frame\n')]);
+      expect(lines, [('warning', 'avcodec: corrupted frame')]);
+      log.detach();
+      expect(handlers.current, original);
+      handlers.emit(mdk.LogLevel.info, 'after');
+      expect(heard.last, (mdk.LogLevel.info, 'after'));
+      expect(lines, hasLength(1));
+    });
+
+    test('where MDK was silent it stays silent once Next is off; with '
+        'MDK_LOG it is left alone', () {
+      final silent = FakeLogHandlers(channelOpen: false);
+      final log = MdkNativeLog(silent, environment: const {});
+      final lines = <String>[];
+      log.attach((_, text) => lines.add(text));
+      silent.emit(mdk.LogLevel.error, 'open failed');
+      expect(lines, ['open failed']);
+      log.detach();
+      expect(silent.current, isNull);
+
+      final stderr = FakeLogHandlers(channelOpen: false);
+      final untouched =
+          MdkNativeLog(stderr, environment: const {'MDK_LOG': '1'});
+      untouched.attach((_, __) {});
+      expect(stderr.sets, isEmpty);
+      expect(untouched.notAttached, 'mdk_log_env');
+      untouched.detach();
+      expect(stderr.sets, isEmpty);
+    });
+
+    test('player_log shows MDK lines as no one player\'s', () async {
+      final handlers = FakeLogHandlers(current: (_, __) {});
+      final log = PlayerNativeLog(
+          mdk: MdkNativeLog(handlers, environment: const {}))
+        ..attach();
+      handlers.emit(mdk.LogLevel.error, 'tcp: Connection refused\n');
+      final read = log.read(currentInstance: 7);
+      expect(read['mdkLog'], {'reading': true, 'reason': null});
+      expect((read['lines'] as List).single, allOf(
+          containsPair('kernel', 'mdk'),
+          containsPair('source', 'log'),
+          containsPair('level', 'error'),
+          containsPair('currentPlayer', null),
+          containsPair('text', 'tcp: Connection refused')));
+      await log.detach();
+      expect(handlers.sets.last, isNotNull, reason: 'the original is back');
     });
   });
 }

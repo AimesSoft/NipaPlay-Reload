@@ -274,13 +274,42 @@ final class AgentEndpoint {
     final playback = await read('playback.state', {}, (output) {
       final r = (output['state'] as Map? ?? const {}).cast<String, Object?>();
       final video = r['hasVideo'] == true;
-      return {
-        'state': video ? '${r['status']}' : 'idle',
-        if (video && r['path'] != null) 'path': r['path'],
+      final error = r['error'] is Map ? r['error'] as Map : null;
+      final shown = video || error != null;
+      return <String, Object?>{
+        'state': shown ? '${r['status']}' : 'idle',
+        if (shown && r['path'] != null) 'path': r['path'],
         if (video && r['positionMs'] != null) 'positionMs': r['positionMs'],
         if (video && r['durationMs'] != null) 'durationMs': r['durationMs'],
+        if (error != null)
+          'error': {
+            'stage': error['stage'],
+            'category': error['category'],
+            'failureId': error['failureId'],
+          },
       };
     });
+    // The newest failure of this process, playing or not.
+    if (playback is Map && _harness.lookup('playback.failures') != null) {
+      final last = await read('playback.failures', {'limit': 1}, (r) {
+        final failure =
+            (r['failures'] as List? ?? const []).cast<Map>().firstOrNull;
+        return failure == null
+            ? null
+            : {
+                for (final key in const [
+                  'failureId',
+                  'at',
+                  'category',
+                  'stage',
+                  'kernel',
+                  'path'
+                ])
+                  key: failure[key]
+              };
+      });
+      if (last != null) playback['lastFailure'] = last;
+    }
     final path = playback is Map ? playback['path'] : null;
     if (path is String && _nowPlaying != null) {
       try {
@@ -301,9 +330,30 @@ final class AgentEndpoint {
               'work': known.work,
               if (known.episodeId != null) 'episodeId': known.episodeId,
               if (known.episode != null) 'episode': known.episode,
-              for (final key in const ['positionMs', 'durationMs', 'path'])
+              for (final key in const [
+                'positionMs',
+                'durationMs',
+                'path',
+                'error',
+                'lastFailure'
+              ])
                 if (playback[key] != null) key: playback[key],
             },
+      // This process's uncaught errors and runs that ended abruptly that
+      // diagnostics.errors has not returned yet.
+      'diagnostics':
+          await read('diagnostics.errors', {'summaryOnly': true}, (r) {
+          final run = r['thisRun'] as Map? ?? const {};
+          final exits = r['uncleanExits'] as Map? ?? const {};
+          return {
+            'recording': r['recording'],
+            'uncaughtErrors': run['errors'],
+            'uncaughtOccurrences': run['occurrences'],
+            'uncleanExitUnread': ((exits['unread'] as num?) ?? 0) > 0,
+            'uncleanExitsUnread': exits['unread'],
+            'latestUncleanExitAt': exits['latestDetectedAt'],
+          };
+        }),
       'library': await read(
           'state.query', {'view': 'library.merged', 'limit': sample}, (r) {
         final rows = (r['rows'] as List? ?? const []).cast<Map>();
