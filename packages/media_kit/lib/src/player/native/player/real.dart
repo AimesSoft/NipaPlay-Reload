@@ -5,6 +5,7 @@
 /// Use of this source code is governed by MIT license that can be found in the LICENSE file.
 import 'dart:async';
 import 'dart:collection';
+import 'dart:convert';
 import 'dart:ffi';
 import 'dart:io';
 import 'dart:isolate' as dart_isolate;
@@ -1289,6 +1290,202 @@ class NativePlayer extends PlatformPlayer {
     return "";
   }
 
+  /// Sets [property] like [setProperty], and returns mpv's own answer: null
+  /// when mpv took the value, otherwise mpv's error text. [setProperty] only
+  /// logs a failure.
+  Future<String?> setPropertyChecked(String property, String value) async {
+    if (disposed || _isClosing) {
+      return 'player closed';
+    }
+    await waitForPlayerInitialization;
+    await waitForVideoControllerInitializationIfAttached;
+    final name = property.toNativeUtf8();
+    final data = value.toNativeUtf8();
+    final pointer = calloc<Pointer<Void>>(1);
+    pointer.value = Pointer.fromAddress(data.address);
+    try {
+      int code;
+      if (configuration.async) {
+        final requestNumber = _asyncRequestNumber++;
+        final completer =
+            _setPropertyRequests[requestNumber] = Completer<int>();
+        code = mpv.mpv_set_property_async(
+          ctx,
+          requestNumber,
+          name.cast(),
+          generated.mpv_format.MPV_FORMAT_STRING,
+          pointer.cast(),
+        );
+        if (code < 0) {
+          _setPropertyRequests.remove(requestNumber);
+        } else {
+          code = await completer.future;
+        }
+      } else {
+        code = mpv.mpv_set_property_string(ctx, name.cast(), data.cast());
+      }
+      return code < 0
+          ? mpv.mpv_error_string(code).cast<Utf8>().toDartString()
+          : null;
+    } finally {
+      calloc.free(pointer);
+      calloc.free(name);
+      calloc.free(data);
+    }
+  }
+
+  /// Reads [property] like [getProperty], keeping what [getProperty] folds
+  /// into an empty string apart: the value as mpv gives it, or mpv's error
+  /// text when it gives none.
+  Future<({String? value, String? error})> getPropertyChecked(
+    String property,
+  ) async {
+    if (disposed || _isClosing) {
+      return (value: null, error: 'player closed');
+    }
+    await waitForPlayerInitialization;
+    await waitForVideoControllerInitializationIfAttached;
+    final name = property.toNativeUtf8();
+    try {
+      if (configuration.async) {
+        final requestNumber = _asyncRequestNumber++;
+        final completer = _checkedGetPropertyRequests[requestNumber] =
+            Completer<({String? value, int error})>();
+        final immediate = mpv.mpv_get_property_async(
+          ctx,
+          requestNumber,
+          name.cast(),
+          generated.mpv_format.MPV_FORMAT_STRING,
+        );
+        if (immediate < 0) {
+          _checkedGetPropertyRequests.remove(requestNumber);
+          return (
+            value: null,
+            error: mpv.mpv_error_string(immediate).cast<Utf8>().toDartString(),
+          );
+        }
+        final reply = await completer.future;
+        return reply.error < 0
+            ? (
+                value: null,
+                error:
+                    mpv.mpv_error_string(reply.error).cast<Utf8>().toDartString(),
+              )
+            : (value: reply.value, error: null);
+      }
+      final out = calloc<Pointer<Utf8>>(1);
+      try {
+        final code = mpv.mpv_get_property(
+          ctx,
+          name.cast(),
+          generated.mpv_format.MPV_FORMAT_STRING,
+          out.cast(),
+        );
+        if (code < 0) {
+          return (
+            value: null,
+            error: mpv.mpv_error_string(code).cast<Utf8>().toDartString(),
+          );
+        }
+        final text = out.value == nullptr ? null : out.value.toDartString();
+        if (out.value != nullptr) mpv.mpv_free(out.value.cast());
+        return (value: text, error: null);
+      } finally {
+        calloc.free(out);
+      }
+    } finally {
+      calloc.free(name);
+    }
+  }
+
+  /// Runs the mpv command [args] as given, like [command], and returns mpv's
+  /// own answer: null and the command's result data (strings, numbers,
+  /// flags, lists and maps; null when the command returns none), or mpv's
+  /// error text. [command] only logs a failure.
+  Future<({Object? result, String? error})> commandChecked(
+    List<String> args,
+  ) async {
+    if (disposed || _isClosing) {
+      return (result: null, error: 'player closed');
+    }
+    await waitForPlayerInitialization;
+    await waitForVideoControllerInitializationIfAttached;
+    final pointers = args.map<Pointer<Utf8>>((e) => e.toNativeUtf8()).toList();
+    final arr = calloc<Pointer<Utf8>>(args.length + 1);
+    for (int i = 0; i < args.length; i++) {
+      (arr + i).value = pointers[i];
+    }
+    String text(int code) => mpv.mpv_error_string(code).cast<Utf8>().toDartString();
+    try {
+      if (configuration.async) {
+        final requestNumber = _asyncRequestNumber++;
+        final completer = _checkedCommandRequests[requestNumber] =
+            Completer<({Object? result, int error})>();
+        final immediate =
+            mpv.mpv_command_async(ctx, requestNumber, arr.cast());
+        if (immediate < 0) {
+          _checkedCommandRequests.remove(requestNumber);
+          return (result: null, error: text(immediate));
+        }
+        final reply = await completer.future;
+        return reply.error < 0
+            ? (result: null, error: text(reply.error))
+            : (result: reply.result, error: null);
+      }
+      final node = calloc<generated.mpv_node>();
+      try {
+        final code = mpv.mpv_command_ret(ctx, arr.cast(), node);
+        if (code < 0) return (result: null, error: text(code));
+        final result = _nodeValue(node.ref);
+        mpv.mpv_free_node_contents(node);
+        return (result: result, error: null);
+      } finally {
+        calloc.free(node);
+      }
+    } finally {
+      calloc.free(arr);
+      pointers.forEach(calloc.free);
+    }
+  }
+
+  /// An mpv node as Dart values; byte arrays are read as UTF-8 text.
+  static Object? _nodeValue(generated.mpv_node node) {
+    switch (node.format) {
+      case generated.mpv_format.MPV_FORMAT_STRING:
+        return node.u.string == nullptr
+            ? null
+            : node.u.string.cast<Utf8>().toDartString();
+      case generated.mpv_format.MPV_FORMAT_FLAG:
+        return node.u.flag != 0;
+      case generated.mpv_format.MPV_FORMAT_INT64:
+        return node.u.int64;
+      case generated.mpv_format.MPV_FORMAT_DOUBLE:
+        return node.u.double_;
+      case generated.mpv_format.MPV_FORMAT_NODE_ARRAY:
+        final list = node.u.list;
+        if (list == nullptr) return const <Object?>[];
+        return [
+          for (int i = 0; i < list.ref.num; i++) _nodeValue(list.ref.values[i])
+        ];
+      case generated.mpv_format.MPV_FORMAT_NODE_MAP:
+        final list = node.u.list;
+        if (list == nullptr) return const <String, Object?>{};
+        return <String, Object?>{
+          for (int i = 0; i < list.ref.num; i++)
+            list.ref.keys[i].cast<Utf8>().toDartString():
+                _nodeValue(list.ref.values[i])
+        };
+      case generated.mpv_format.MPV_FORMAT_BYTE_ARRAY:
+        final bytes = node.u.ba;
+        if (bytes == nullptr || bytes.ref.size == 0) return '';
+        return utf8.decode(
+            bytes.ref.data.cast<Uint8>().asTypedList(bytes.ref.size),
+            allowMalformed: true);
+      default:
+        return null;
+    }
+  }
+
   /// Observes property for the internal libmpv instance of this [Player].
   /// Please use this method only if you know what you are doing, existing methods in [Player] implementation are suited for the most use cases.
   ///
@@ -1463,6 +1660,22 @@ class NativePlayer extends PlatformPlayer {
     }
     if (event.ref.event_id ==
         generated.mpv_event_id.MPV_EVENT_GET_PROPERTY_REPLY) {
+      final checked =
+          _checkedGetPropertyRequests.remove(event.ref.reply_userdata);
+      if (checked != null) {
+        String? value;
+        if (event.ref.error >= 0 && event.ref.data != nullptr) {
+          final property =
+              event.ref.data.cast<generated.mpv_event_property>();
+          if (property.ref.format == generated.mpv_format.MPV_FORMAT_STRING &&
+              property.ref.data != nullptr) {
+            final text = property.ref.data.cast<Pointer<Int8>>().value;
+            value = text == nullptr ? null : text.cast<Utf8>().toDartString();
+          }
+        }
+        checked.complete((value: value, error: event.ref.error));
+        return;
+      }
       final completer = _getPropertyRequests.remove(event.ref.reply_userdata);
       if (completer == null) {
         print(
@@ -1484,6 +1697,16 @@ class NativePlayer extends PlatformPlayer {
       return;
     }
     if (event.ref.event_id == generated.mpv_event_id.MPV_EVENT_COMMAND_REPLY) {
+      final checked = _checkedCommandRequests.remove(event.ref.reply_userdata);
+      if (checked != null) {
+        Object? result;
+        if (event.ref.error >= 0 && event.ref.data != nullptr) {
+          result = _nodeValue(
+              event.ref.data.cast<generated.mpv_event_command>().ref.result);
+        }
+        checked.complete((result: result, error: event.ref.error));
+        return;
+      }
       final completer = _commandRequests.remove(event.ref.reply_userdata);
       if (completer == null) {
         print(
@@ -2580,6 +2803,10 @@ class NativePlayer extends PlatformPlayer {
   bool _isClosing = false;
   int _asyncRequestNumber = 0;
   final Map<int, Completer<String>> _getPropertyRequests = {};
+  final Map<int, Completer<({String? value, int error})>>
+      _checkedGetPropertyRequests = {};
+  final Map<int, Completer<({Object? result, int error})>>
+      _checkedCommandRequests = {};
   final Map<int, Completer<int>> _setPropertyRequests = {};
   final Map<int, Completer<int>> _commandRequests = {};
 
@@ -2607,6 +2834,20 @@ class NativePlayer extends PlatformPlayer {
       }
     }
     _commandRequests.clear();
+
+    for (final completer in _checkedGetPropertyRequests.values) {
+      if (!completer.isCompleted) {
+        completer.complete((value: null, error: status));
+      }
+    }
+    _checkedGetPropertyRequests.clear();
+
+    for (final completer in _checkedCommandRequests.values) {
+      if (!completer.isCompleted) {
+        completer.complete((result: null, error: status));
+      }
+    }
+    _checkedCommandRequests.clear();
   }
 
   Future<String> _getPropertyString(String name) async {

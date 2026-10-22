@@ -6,6 +6,7 @@ import 'dart:math' as math;
 import 'package:desktop_multi_window/desktop_multi_window.dart';
 import 'package:erika_flutter/erika_flutter.dart';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 
 import './abstract_player.dart';
@@ -622,6 +623,10 @@ class ErikaPlayerAdapter
   Map<String, dynamic> _lastOutputStatus = const <String, dynamic>{};
   Map<String, dynamic> _lastDecoderStatus = const <String, dynamic>{};
   Map<String, dynamic> _lastAudioOutputStatus = const <String, dynamic>{};
+  // Kept for NipaPlay Next; Classic reads neither. Erika starts without its
+  // debug HUD and only [setDebugHud] turns it on.
+  Map<String, Object?>? _lastVideoParams;
+  bool _debugHudEnabled = false;
   String? _lastNativeError;
   int _lastPositionMs = 0;
   DateTime _lastPositionUpdate = DateTime.now();
@@ -918,6 +923,7 @@ class ErikaPlayerAdapter
       _lastPresenterStats = const <String, dynamic>{};
       _lastOutputStatus = const <String, dynamic>{};
       _lastDecoderStatus = const <String, dynamic>{};
+      _lastVideoParams = null;
       _properties.remove('decoder.video');
       _properties.remove('video.decoder');
       _lastAudioOutputStatus = const <String, dynamic>{};
@@ -1527,6 +1533,136 @@ class ErikaPlayerAdapter
     return getDetailedMediaInfo();
   }
 
+  // Read and set by NipaPlay Next; Classic does not call these.
+
+  bool get debugHudEnabled => _debugHudEnabled;
+
+  /// Hands [method] and [arguments] to Erika as they are: to Erika's own
+  /// `invoke` when this erika_flutter has one (arguments as JSON text),
+  /// else over erika_flutter's method channel with this player's id.
+  /// Erika's answer as it gives it, or `supported: false` when neither knows
+  /// the method on this platform.
+  Future<({Object? result, String? error, bool supported})> invokeNative(
+      String method, Map<String, Object?> arguments) async {
+    _ensureSupported();
+    final dynamic player = _player;
+    try {
+      final Object? result =
+          await player.invoke(method, jsonEncode(arguments));
+      return (result: result, error: null, supported: true);
+    } on NoSuchMethodError {
+      // This erika_flutter has no invoke; the channel may know the method.
+    } catch (error) {
+      return (result: null, error: '$error', supported: true);
+    }
+    try {
+      final id = await _player.ensureCreated();
+      final result = await const MethodChannel('erika_flutter/player')
+          .invokeMethod<Object?>(method, <String, Object?>{
+        ...arguments,
+        'playerId': id,
+      });
+      return (result: result, error: null, supported: true);
+    } on MissingPluginException {
+      return (
+        result: null,
+        error: 'Erika has no method $method on this platform',
+        supported: false,
+      );
+    } on PlatformException catch (error) {
+      return (
+        result: error.details,
+        error: '${error.code}: ${error.message ?? ''}',
+        supported: true,
+      );
+    } catch (error) {
+      return (result: null, error: '$error', supported: true);
+    }
+  }
+
+  /// Shows or hides Erika's debug HUD over the video.
+  Future<void> setDebugHud(bool enabled) async {
+    _ensureSupported();
+    await _player.setDebugHudEnabled(enabled);
+    _debugHudEnabled = enabled;
+  }
+
+  /// What Erika reports now, each part asked for once: presenter counters
+  /// (cumulative since the session began), output, resources, upscaler and
+  /// tracks, with the last decoder, audio output and video parameter events.
+  /// A part Erika does not answer is null, its error under `errors`. Leaves
+  /// the values [getDetailedMediaInfo] shows as they were.
+  Future<Map<String, Object?>> readKernelStatus() async {
+    final errors = <String, String>{};
+    Future<Object?> part(String name, Future<Object?> Function() read) async {
+      if (!_isSupported || _disposed) return null;
+      try {
+        return await read();
+      } catch (error) {
+        errors[name] = '$error';
+        return null;
+      }
+    }
+
+    final stats = await part(
+        'presenterStats', () async => (await _player.getPresenterStats()).toMap());
+    final at = DateTime.now().toUtc();
+    final output = await part('outputStatus',
+        () async => _outputStatusToMap(await _player.getOutputStatus()));
+    final resources = await part('resourceStatus', () async {
+      final r = await _player.getResourceStatus();
+      return <String, Object?>{
+        'deviceCurrentAllocatedBytes': r.deviceCurrentAllocatedBytes,
+        'deviceRecommendedWorkingSetBytes': r.deviceRecommendedWorkingSetBytes,
+        'drawableEstimatedBytes': r.drawableEstimatedBytes,
+        'videoFrameBytes': r.videoFrameBytes,
+        'overlayAtlasBytes': r.overlayAtlasBytes,
+        'danmakuAtlasBytes': r.danmakuAtlasBytes,
+        'danmakuVertexBufferBytes': r.danmakuVertexBufferBytes,
+        'upscalerBytes': r.upscalerBytes,
+        'rendererTrackedBytes': r.rendererTrackedBytes,
+        'presenterCpuDanmakuAtlasBytes': r.presenterCpuDanmakuAtlasBytes,
+        'drawableCount': r.drawableCount,
+        'outputModeSwitches': r.outputModeSwitches,
+      };
+    });
+    final upscaler = await part('upscalerStatus', () async {
+      final u = await _player.getUpscalerStatus();
+      return <String, Object?>{
+        'requestedMode': u.requestedMode.name,
+        'activeBackend': u.activeBackend.name,
+        'fallbackCount': u.fallbackCount,
+        'upscaledFrames': u.upscaledFrames,
+        'lastEncodeMicros': u.lastEncodeDuration.inMicroseconds,
+        'lastGpuMicros': u.lastGpuDuration.inMicroseconds,
+      };
+    });
+    final tracks = await part('tracks', () async => [
+          for (final t in await _player.tracks())
+            <String, Object?>{
+              ..._erikaTrackToDebugMap(t),
+              'bitRate': t.bitRate,
+              'frameRateNumerator': t.frameRateNumerator,
+              'frameRateDenominator': t.frameRateDenominator,
+            }
+        ]);
+    return <String, Object?>{
+      'presenterStats': stats,
+      'presenterStatsAt': stats == null ? null : at.toIso8601String(),
+      'outputStatus': output,
+      'resourceStatus': resources,
+      'upscalerStatus': upscaler,
+      'tracks': tracks,
+      'decoder': _lastDecoderStatus.isEmpty ? null : _lastDecoderStatus,
+      'audioOutput':
+          _lastAudioOutputStatus.isEmpty ? null : _lastAudioOutputStatus,
+      'videoParams': _lastVideoParams,
+      'debugHud': _debugHudEnabled,
+      'lastError': _lastNativeError,
+      'errors': errors,
+    };
+  }
+
   Future<void> _refreshPresenterStats() async {
     if (!_isSupported) {
       return;
@@ -1705,6 +1841,33 @@ class ErikaPlayerAdapter
         'failures=${audio.recoveryFailures} '
         'sequence=${audio.transitionSequence}',
       );
+      PlayerNativeLogTap.observer?.call(
+          'erika',
+          identityHashCode(this),
+          'event',
+          'audio_output',
+          'state=${audio.recoveryState} errorCode=${audio.lastErrorCode} '
+              'attempts=${audio.recoveryAttempts} '
+              'recoveries=${audio.recoveryCount} '
+              'failures=${audio.recoveryFailures} '
+              'sequence=${audio.transitionSequence}');
+    }
+
+    if (event.kind == ErikaEventKind.videoParamsChanged) {
+      _lastVideoParams = <String, Object?>{
+        'width': event.video.width,
+        'height': event.video.height,
+        'primaries': event.video.primaries,
+        'transfer': event.video.transfer,
+      };
+      PlayerNativeLogTap.observer?.call(
+          'erika',
+          identityHashCode(this),
+          'event',
+          'video_params',
+          'width=${event.video.width} height=${event.video.height} '
+              'primaries=${event.video.primaries} '
+              'transfer=${event.video.transfer}');
     }
 
     if (event.kind == ErikaEventKind.stateChanged ||

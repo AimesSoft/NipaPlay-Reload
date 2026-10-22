@@ -2928,6 +2928,69 @@ class MediaKitPlayerAdapter
     };
   }
 
+  /// mpv's own answer for each of [names], read now: the value as mpv gives
+  /// it (an empty string stays empty), or mpv's error when it gives none.
+  /// Classic never calls this.
+  Future<Map<String, ({String? value, String? error})>>
+      readMpvPropertiesChecked(List<String> names) async {
+    Future<({String? value, String? error})> read(String name) async {
+      try {
+        final dynamic platform = _player.platform;
+        final dynamic reply = await platform
+            .getPropertyChecked(name)
+            .timeout(const Duration(seconds: 3));
+        return (value: reply.value as String?, error: reply.error as String?);
+      } on TimeoutException {
+        return (value: null, error: 'no reply from mpv within 3 s');
+      } catch (error) {
+        return (value: null, error: '$error');
+      }
+    }
+
+    final values = await Future.wait(names.map(read));
+    return {for (var i = 0; i < names.length; i++) names[i]: values[i]};
+  }
+
+  /// Sets [name] on mpv now, for what plays, without making it an option of
+  /// the files opened later (those keep [_properties]). Returns mpv's error,
+  /// or null when mpv took the value. Classic never calls this.
+  Future<String?> writeMpvProperty(String name, String value) async {
+    if (_isDisposed) return 'player disposed';
+    try {
+      final dynamic platform = _player.platform;
+      final dynamic error = await platform
+          .setPropertyChecked(name, value)
+          .timeout(const Duration(seconds: 3));
+      return error as String?;
+    } on TimeoutException {
+      return 'no reply from mpv within 3 s';
+    } catch (error) {
+      return '$error';
+    }
+  }
+
+  /// Runs the mpv command [args] as given and returns mpv's own answer: the
+  /// command's result data, or mpv's error. A command still running after
+  /// [timeout] keeps running; the answer then says so. Classic never calls
+  /// this.
+  Future<({Object? result, String? error})> runMpvCommand(List<String> args,
+      {Duration timeout = const Duration(seconds: 10)}) async {
+    if (_isDisposed) return (result: null, error: 'player disposed');
+    try {
+      final dynamic platform = _player.platform;
+      final dynamic reply =
+          await platform.commandChecked(args).timeout(timeout);
+      return (result: reply.result as Object?, error: reply.error as String?);
+    } on TimeoutException {
+      return (
+        result: null,
+        error: 'no reply from mpv within ${timeout.inMilliseconds} ms'
+      );
+    } catch (error) {
+      return (result: null, error: '$error');
+    }
+  }
+
   /// Has mpv write its full log to [path], or stop writing when [path] is
   /// empty. Kept out of the media options: it is not a per-file setting.
   /// Classic never calls this.

@@ -717,6 +717,16 @@ class MdkPlayerAdapter
     return getDetailedMediaInfo();
   }
 
+  /// libmdk's version as major.minor.patch. Classic never reads this.
+  String? get nativeVersion {
+    try {
+      final v = mdk.version();
+      return '${(v >> 16) & 0xff}.${(v >> 8) & 0xff}.${v & 0xff}';
+    } catch (_) {
+      return null;
+    }
+  }
+
   /// MDK's typed stream parameters and the decoders it was given, for
   /// diagnostics. Classic never calls this.
   Map<String, Object?> nativeStreamFacts() {

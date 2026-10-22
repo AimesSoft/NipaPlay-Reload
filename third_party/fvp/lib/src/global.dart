@@ -252,12 +252,22 @@ void setLogHandler(void Function(LogLevel, String)? cb) {
   _GlobalCallbacks.instance.setLogHandler(cb);
 }
 
+/// The handler [setLogHandler] last set; null when none is set or
+/// [setLogHandler] was never called.
+void Function(LogLevel, String)? get currentLogHandler =>
+    _GlobalCallbacks._created?._logCb;
+
+/// Whether [setLogHandler] has ever been called, i.e. fvp's log channel
+/// replaced mdk's own default handling of its logs.
+bool get logChannelOpen => _GlobalCallbacks._created != null;
+
 class _GlobalCallbacks {
   static final _receivePort = ReceivePort();
 
   void Function(LogLevel, String)? _logCb;
 
   static _GlobalCallbacks instance = _GlobalCallbacks();
+  static _GlobalCallbacks? _created;
 
   _GlobalCallbacks() {
     // registerType() before registerPort() to ensure no log will be dropped
@@ -281,6 +291,7 @@ class _GlobalCallbacks {
       NativeApi.postCObject.cast(),
       _receivePort.sendPort.nativePort,
     );
+    _created = this;
   }
 
   void setLogHandler(void Function(LogLevel, String)? cb) {

@@ -12,6 +12,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:nipaplay/utils/storage_service.dart';
 import 'video_player_state.dart';
 import '../models/watch_history_model.dart';
+import '../models/playable_item.dart';
 
 /// 播放器内核管理器
 /// 提供多内核支持的静态工具方法
@@ -58,14 +59,23 @@ class PlayerKernelManager {
   }
 
   /// Serialize swaps and create a replacement only after native teardown succeeds.
+  ///
+  /// [kernelType] makes the replacement on that kernel instead of the kernel
+  /// setting, and [request] reopens the media with its own source (stream
+  /// URL, session, detail context). Classic passes neither; NipaPlay Next
+  /// does when it reopens one playback on another kernel.
   static Future<void> performPlayerKernelHotSwap(
     VideoPlayerState videoPlayerState, {
     Duration playerDisposalTimeout = defaultHotSwapPlayerDisposalTimeout,
+    PlayerKernelType? kernelType,
+    PlayableItem? request,
   }) {
     final task = _hotSwapQueue.catchError((Object _) {}).then(
           (_) => _performPlayerKernelHotSwapLocked(
             videoPlayerState,
             playerDisposalTimeout: playerDisposalTimeout,
+            kernelType: kernelType,
+            request: request,
           ),
         );
     _hotSwapQueue = task;
@@ -78,6 +88,8 @@ class PlayerKernelManager {
   static Future<void> _performPlayerKernelHotSwapLocked(
     VideoPlayerState videoPlayerState, {
     required Duration playerDisposalTimeout,
+    PlayerKernelType? kernelType,
+    PlayableItem? request,
   }) async {
     if (videoPlayerState.isDisposed) {
       return;
@@ -94,6 +106,8 @@ class PlayerKernelManager {
     await performPlayerKernelHotSwapSteps(
       videoPlayerState,
       playerDisposalTimeout: playerDisposalTimeout,
+      kernelType: kernelType,
+      request: request,
     );
   }
 
@@ -118,6 +132,8 @@ class PlayerKernelManager {
   static Future<void> performPlayerKernelHotSwapSteps(
     VideoPlayerState videoPlayerState, {
     required Duration playerDisposalTimeout,
+    PlayerKernelType? kernelType,
+    PlayableItem? request,
   }) async {
     if (videoPlayerState.isDisposed) {
       return;
@@ -166,7 +182,8 @@ class PlayerKernelManager {
       if (videoPlayerState.isDisposed) {
         return;
       }
-      videoPlayerState.player = Player();
+      videoPlayerState.player =
+          kernelType == null ? Player() : Player.forKernel(kernelType);
       videoPlayerState.subtitleManager.updatePlayer(videoPlayerState.player);
       videoPlayerState.audioTrackManager.updatePlayer(videoPlayerState.player);
       videoPlayerState.decoderManager.updatePlayer(videoPlayerState.player);
@@ -207,7 +224,8 @@ class PlayerKernelManager {
     }
 
     // 4. 创建新的播放器实例（Player()工厂会自动使用新的内核）
-    videoPlayerState.player = Player();
+    videoPlayerState.player =
+        kernelType == null ? Player() : Player.forKernel(kernelType);
     videoPlayerState.subtitleManager.updatePlayer(videoPlayerState.player);
     videoPlayerState.audioTrackManager.updatePlayer(videoPlayerState.player);
     videoPlayerState.decoderManager.updatePlayer(videoPlayerState.player);
@@ -226,7 +244,12 @@ class PlayerKernelManager {
     await videoPlayerState.initializePlayer(
       currentPath,
       historyItem: historyItem,
+      actualPlayUrl: request?.actualPlayUrl,
+      playbackSession: request?.playbackSession,
+      playbackDetailContext: request?.detailContext,
+      mediaKey: request?.mediaKey,
       resetManualDanmakuOffset: false,
+      manualMatchHandled: request != null,
       episodeFileSelectionHandled: true,
     );
     if (videoPlayerState.isDisposed) return;

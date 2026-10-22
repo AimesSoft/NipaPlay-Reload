@@ -58,6 +58,12 @@ class Player implements core_player.AsyncExternalSubtitlePlayer {
     return Player._internal(PlayerFactory().createPlayer());
   }
 
+  /// A player on [kernelType] whatever the kernel setting says (an
+  /// unsupported kernel falls back as [PlayerFactory.createPlayer] does).
+  /// Classic never asks for one.
+  factory Player.forKernel(PlayerKernelType kernelType) =>
+      Player._internal(PlayerFactory().createPlayer(kernelType: kernelType));
+
   @visibleForTesting
   Player.withDelegate(this._delegate);
 
@@ -551,6 +557,123 @@ class Player implements core_player.AsyncExternalSubtitlePlayer {
     } catch (_) {}
     return const {};
   }
+
+  /// mpv's own answer for each of [names]: the value as given, or mpv's
+  /// error. Empty for kernels without mpv.
+  Future<Map<String, ({String? value, String? error})>>
+      readNativePropertiesChecked(List<String> names) async {
+    try {
+      final values =
+          await (_delegate as dynamic).readMpvPropertiesChecked(names) as Map;
+      return {
+        for (final entry in values.entries)
+          '${entry.key}': entry.value as ({String? value, String? error})
+      };
+    } catch (error) {
+      if (_absent(error)) return const {};
+      rethrow;
+    }
+  }
+
+  /// Sets an mpv property now, for what plays, without carrying it to the
+  /// files opened later. mpv's error, or null when it took the value;
+  /// [UnsupportedError] for kernels without mpv.
+  Future<String?> writeNativeProperty(String name, String value) async {
+    try {
+      return await (_delegate as dynamic).writeMpvProperty(name, value)
+          as String?;
+    } catch (error) {
+      if (_absent(error)) {
+        throw UnsupportedError('The kernel has no mpv properties.');
+      }
+      rethrow;
+    }
+  }
+
+  /// Runs an mpv command as given: its result data, or mpv's error.
+  /// [UnsupportedError] for kernels without mpv.
+  Future<({Object? result, String? error})> runNativeCommand(List<String> args,
+      {Duration timeout = const Duration(seconds: 10)}) async {
+    try {
+      final dynamic reply = await (_delegate as dynamic)
+          .runMpvCommand(args, timeout: timeout);
+      return (result: reply.result as Object?, error: reply.error as String?);
+    } catch (error) {
+      if (_absent(error)) {
+        throw UnsupportedError('The kernel has no mpv commands.');
+      }
+      rethrow;
+    }
+  }
+
+  /// Hands a method and its arguments to Erika as they are.
+  /// [UnsupportedError] for other kernels.
+  Future<({Object? result, String? error, bool supported})> invokeNative(
+      String method, Map<String, Object?> arguments) async {
+    try {
+      final dynamic reply =
+          await (_delegate as dynamic).invokeNative(method, arguments);
+      return (
+        result: reply.result as Object?,
+        error: reply.error as String?,
+        supported: reply.supported as bool,
+      );
+    } catch (error) {
+      if (_absent(error)) {
+        throw UnsupportedError('The kernel takes no invoke.');
+      }
+      rethrow;
+    }
+  }
+
+  /// The kernel library's own version where it reports one (MDK).
+  String? get nativeVersion {
+    try {
+      final value = (_delegate as dynamic).nativeVersion;
+      return value is String ? value : null;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// Erika's own report (presenter counters, output, resources, upscaler,
+  /// tracks, last decoder and audio events); empty for other kernels.
+  Future<Map<String, Object?>> readKernelStatus() async {
+    try {
+      final status = await (_delegate as dynamic).readKernelStatus();
+      if (status is Map<String, Object?>) return status;
+    } catch (error) {
+      if (!_absent(error)) rethrow;
+    }
+    return const {};
+  }
+
+  /// Whether Erika's debug HUD is shown; null for other kernels.
+  bool? get debugHudEnabled {
+    try {
+      final value = (_delegate as dynamic).debugHudEnabled;
+      return value is bool ? value : null;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// Shows or hides Erika's debug HUD; [UnsupportedError] for other kernels.
+  Future<void> setDebugHud(bool enabled) async {
+    try {
+      await (_delegate as dynamic).setDebugHud(enabled);
+    } catch (error) {
+      if (_absent(error)) {
+        throw UnsupportedError('The kernel has no debug HUD.');
+      }
+      rethrow;
+    }
+  }
+
+  /// The kernel has no such member (test doubles say so with
+  /// [UnimplementedError]).
+  static bool _absent(Object error) =>
+      error is NoSuchMethodError || error is UnimplementedError;
 
   /// Has the kernel write its full log to [path] (empty stops). False when
   /// the kernel has no such log.
