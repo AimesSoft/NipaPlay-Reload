@@ -68,4 +68,36 @@ void main() {
         {'key': 'network.bangumiServerUrl'}, Invocation(origin: 'mcp'));
     expect(reset, isA<Completed>());
   });
+
+  test('the core exposes the preference actions and keeps what a setting claims out of them',
+      () async {
+    for (final id in [
+      'settings.prefs.list',
+      'settings.prefs.get',
+      'settings.prefs.set',
+      'settings.prefs.undo',
+      'settings.prefs.history'
+    ]) {
+      expect(harness.lookup(id), isNotNull, reason: id);
+    }
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString('player_http_proxy', 'http://127.0.0.1:7890');
+    await prefs.setString('my_free_note', 'x');
+    final listed = await harness.invokeJson('settings.prefs.list',
+        {'keyword': 'player_http_proxy'}, Invocation(origin: 'mcp'));
+    final row = (((listed as Completed).value.toJson()['prefs']) as List).single as Map;
+    expect(row['class'], 'claimed');
+    expect(row['claimedBy'], ['network.httpProxy']);
+    final refused = await harness.invokeJson(
+        'settings.prefs.set',
+        {'key': 'player_http_proxy', 'value': 'http://evil.example:1'},
+        Invocation(origin: 'mcp'));
+    expect(refused, isA<Failed>());
+    final open = await harness.invokeJson('settings.prefs.set',
+        {'key': 'my_free_note', 'value': 'y'}, Invocation(origin: 'mcp'));
+    expect(open, isA<Completed>(), reason: '${open.toEnvelope()}');
+    await prefs.reload();
+    expect(prefs.getString('player_http_proxy'), 'http://127.0.0.1:7890');
+    expect(prefs.getString('my_free_note'), 'x');
+  });
 }

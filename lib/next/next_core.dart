@@ -37,6 +37,7 @@ import 'tasks/user_consent.dart';
 import 'settings/application_settings.dart';
 import 'settings/download_settings.dart';
 import 'settings/consent.dart';
+import 'settings/prefs.dart';
 import 'settings/registry.dart';
 import 'settings/capability.dart';
 import 'settings/classic_settings.dart';
@@ -400,6 +401,7 @@ final class NextCore {
       danmaku.capability,
       SubtitleCapability(subtitles),
       SettingsCapability(settings),
+      PrefsCapability(PrefsService(settings)),
       MemoryCapability(memory),
       ClassicOperations(settings),
       AppRuntimeCapability(appRuntime, appRestart),

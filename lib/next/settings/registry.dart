@@ -270,6 +270,10 @@ final class SettingsRegistry {
     ];
   }
 
+  /// The settings that store their value under the physical preference [key].
+  List<String> claimOf(String key) =>
+      [for (final entry in _storage[key] ?? const <SettingEntry>[]) entry.key];
+
   /// The visible setting [key], or null when there is none (or it is denied).
   SettingEntry? lookup(String key) {
     final entry = _entries[key];
