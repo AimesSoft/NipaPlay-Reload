@@ -29,6 +29,7 @@ import 'package:nipaplay/utils/video_player_state.dart';
 import 'package:nipaplay/utils/globals.dart' as globals;
 import 'package:nipaplay/player_abstraction/player_factory.dart';
 import 'package:package_info_plus/package_info_plus.dart';
+import 'package:path_provider/path_provider.dart';
 import 'package:provider/provider.dart';
 
 import 'agent_endpoint.dart';
@@ -40,6 +41,8 @@ import 'package:nipaplay/models/watch_history_database.dart';
 import 'capabilities/library_capability.dart';
 import 'capabilities/ui_capability.dart';
 import 'capabilities/ui_capture.dart';
+import 'capabilities/media_frames.dart';
+import 'capabilities/media_frames_mdk.dart';
 import 'instance_facts.dart';
 import 'app_capabilities.dart';
 import 'capabilities/classic_ui_open.dart';
@@ -425,6 +428,13 @@ final class NextRuntime extends ChangeNotifier {
             programEnabled: () => core.programs.enabled),
         InstanceCapability(instanceFacts),
         UiCaptureCapability(ClassicUiCapture(instanceFacts).capture),
+        MediaFramesCapability(
+            engine: const MdkFrameEngine(),
+            outputRoot: () async => Directory(
+                '${(await getTemporaryDirectory()).path}/media-frames'),
+            episodePath: (animeId, episodeId) async => (await WatchHistoryManager
+                    .getHistoryItemByEpisode(animeId, episodeId))
+                ?.filePath),
         for (final capability in capabilities)
           InvocationScopeCapability(FileIndexingCapability(capability, core.media.service.store)),
         PlaybackControlsCapability(ClassicPlaybackControls(_player)),
