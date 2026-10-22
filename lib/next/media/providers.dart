@@ -49,9 +49,23 @@ final class TmdbMetadataProvider implements MetadataProvider {
   @override
   Future<List<MetadataRecord>> search(String query,
       {String kind = 'tv', int? year}) async {
+    if (kind == 'any') {
+      // Series and films together, in TMDB's own order.
+      final response = await transport.request('/3/search/multi',
+          query: {'query': query, 'language': 'zh-CN'});
+      return [
+        for (final row in _rows(response, 'results'))
+          if (row['media_type'] case final String type
+              when type == 'tv' || type == 'movie')
+            if (year == null ||
+                '${row[type == 'tv' ? 'first_air_date' : 'release_date'] ?? ''}'
+                    .startsWith('$year'))
+              _record(row, type)
+      ];
+    }
     if (!{'tv', 'movie'}.contains(kind)) {
       throw const Failure(
-          FailureCode.invalidInput, 'TMDB kind must be tv or movie.');
+          FailureCode.invalidInput, 'TMDB kind must be tv, movie or any.');
     }
     final response = await transport.request('/3/search/$kind', query: {
       'query': query,

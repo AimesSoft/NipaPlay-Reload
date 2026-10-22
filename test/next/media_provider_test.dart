@@ -80,6 +80,26 @@ void main() {
             .any((request) => (request['path'] as String).contains('comment')),
         isFalse);
   });
+  test('TMDB without a kind searches series and films together, in its order',
+      () async {
+    final transport = FixtureTransport('tmdb');
+    transport.responses['/3/search/multi'] = {
+      'total_results': 3,
+      'results': [
+        {'id': 133701, 'media_type': 'movie', 'title': '钢铁之泪', 'release_date': '2012-09-26'},
+        {'id': 7, 'media_type': 'person', 'name': 'Someone'},
+        {'id': 296286, 'media_type': 'tv', 'name': '躲在超市后门抽烟的两人', 'first_air_date': '2026-10-04'},
+      ]
+    };
+    final provider = TmdbMetadataProvider(transport);
+    final all = await provider.search('steel', kind: 'any');
+    expect([for (final r in all) '${r.kind}:${r.ref.externalId}'],
+        ['movie:133701', 'tv:296286']);
+    expect(transport.requests.last['query'],
+        {'query': 'steel', 'language': 'zh-CN'});
+    final dated = await provider.search('steel', kind: 'any', year: 2012);
+    expect([for (final r in dated) r.ref.externalId], ['133701']);
+  });
   test('malformed catalogues fail instead of becoming empty matches', () async {
     final transport = FixtureTransport('tmdb');
     transport.responses['/3/search/tv'] = {'total_results': 0};

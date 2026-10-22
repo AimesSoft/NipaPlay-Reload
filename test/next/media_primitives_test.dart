@@ -66,7 +66,7 @@ void main() {
         true);
     await f.call('media.metadata.search_batch', {
       'queries': [
-        {'provider': 'tmdb', 'query': '长安十二时辰'}
+        {'provider': 'tmdb', 'query': '长安十二时辰', 'kind': 'tv'}
       ]
     });
     await f.call('media.metadata.get_batch', {

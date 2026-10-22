@@ -296,7 +296,7 @@ ActionSpec _spec(String id, String description, Effect effect,
 final _specs = [
   _spec(
       'media.metadata.search',
-      'Search a metadata source. Results are transient candidates; no binding is written. Each result includes nullable workId from accepted exact/contains work or release identities in the local + Mesh catalogue (Next page ID). Title similarity and proposed/rejected/revoked bindings never count. Search may prepare the disposable catalogue/artwork projection on first read.',
+      'Search a metadata source. On TMDB, kind tv or movie searches that kind only; without kind, series and films are searched together in TMDB\'s own order (year then keeps results whose first air or release date is in that year). Results are transient candidates; no binding is written. Each result includes nullable workId from accepted exact/contains work or release identities in the local + Mesh catalogue (Next page ID). Title similarity and proposed/rejected/revoked bindings never count. Search may prepare the disposable catalogue/artwork projection on first read.',
       Effect.read,
       const ObjectSchema({
         'provider': _text,
@@ -617,7 +617,7 @@ final _specs = [
       ])),
   _spec(
       'media.metadata.search_batch',
-      'Search multiple metadata sources or queries in one call. Returns per-query results or explicit errors without tasks or bindings. Each record includes nullable workId from accepted work/release identity in the local + Mesh catalogue; no title inference. First read may prepare the disposable catalogue/artwork projection.',
+      'Search multiple metadata sources or queries in one call. Each query\'s kind works as in media.metadata.search (omitted on TMDB: series and films together). Returns per-query results or explicit errors without tasks or bindings. Each record includes nullable workId from accepted work/release identity in the local + Mesh catalogue; no title inference. First read may prepare the disposable catalogue/artwork projection.',
       Effect.read,
       const ObjectSchema({
         'queries': ArraySchema(ObjectSchema({
@@ -777,7 +777,7 @@ final class _MediaAction extends Action<_JsonValue, _JsonValue> {
         final records = await service
             .provider(json['provider'] as String)
             .search(json['query'] as String,
-                kind: json['kind'] as String? ?? 'tv',
+                kind: json['kind'] as String? ?? 'any',
                 year: (json['year'] as num?)?.toInt());
         result = {
           'results': await service.searchResults(records)
@@ -862,7 +862,7 @@ final class _MediaAction extends Action<_JsonValue, _JsonValue> {
                 'records': await service.searchResults(await service
                       .provider(item['provider'] as String)
                       .search(item['query'] as String,
-                          kind: item['kind'] as String? ?? 'tv',
+                          kind: item['kind'] as String? ?? 'any',
                           year: (item['year'] as num?)?.toInt()))
               };
             });

@@ -488,7 +488,7 @@ void main() {
     });
     await f.call('media.metadata.search_batch', {
       'queries': [
-        {'provider': 'tmdb', 'query': '长安'},
+        {'provider': 'tmdb', 'query': '长安', 'kind': 'tv'},
         {'provider': 'bangumi', 'query': 'title'},
         {'provider': 'dandanplay', 'query': 'sample'}
       ]
