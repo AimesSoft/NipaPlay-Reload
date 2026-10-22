@@ -6,15 +6,18 @@ import '../theme/tokens.dart';
 /// Short natural phrases the interface builds from data. Nothing here may
 /// contain IDs, sources or process details.
 abstract final class Words {
-  static String episode(int number) => '第 $number 集';
+  /// “第 3 集”; null when the episode has no number, so nothing is said.
+  static String? episode(int? number) =>
+      number == null ? null : '第 $number 集';
 
   /// Whether a play button makes sense: NipaPlay can play that episode.
   static bool canPlay(UiWork work, [UiEpisode? episode]) =>
       (episode ?? work.next)?.playable ?? false;
 
-  static String play(UiWork work) => work.next == null || work.film
-      ? '播放'
-      : '播放 ${episode(work.next!.number)}';
+  static String play(UiWork work) => switch (episode(work.next?.number)) {
+        final number? when !work.film => '播放 $number',
+        _ => '播放',
+      };
 
   static String remaining(Duration? left) {
     if (left == null) return '';

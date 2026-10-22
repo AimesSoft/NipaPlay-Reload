@@ -135,7 +135,9 @@ final class UiEpisode {
   });
   final String episodeId;
   final String workId;
-  final int number;
+
+  /// Its stored number; null when it has none.
+  final int? number;
   final int? season;
   final String? title;
   final Duration? runtime;
@@ -155,6 +157,25 @@ final class UiEpisode {
 
   /// The device it plays from; null when the file is on this device.
   final UiDevice? device;
+}
+
+/// Sorts [episodes] by season (none counts as [seasonless]), then by
+/// number. In a season the ones without a number follow the numbered;
+/// episodes left even keep the order they came in.
+void sortEpisodes(List<UiEpisode> episodes, {int seasonless = 0}) {
+  final order = {for (final (i, e) in episodes.indexed) e: i};
+  episodes.sort((a, b) {
+    final season =
+        (a.season ?? seasonless).compareTo(b.season ?? seasonless);
+    if (season != 0) return season;
+    final number = switch ((a.number, b.number)) {
+      (final x?, final y?) => x.compareTo(y),
+      (null, _?) => 1,
+      (_?, null) => -1,
+      _ => 0,
+    };
+    return number != 0 ? number : order[a]!.compareTo(order[b]!);
+  });
 }
 
 /// Another device in the user's mesh, as viewers know it.

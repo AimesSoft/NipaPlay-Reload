@@ -509,8 +509,12 @@ class _RowState extends State<_Row> {
   String get _label => switch (widget.entry) {
         RecentEntry(:final text) => text,
         WorkEntry(:final work) => work.title,
-        EpisodeEntry(:final work, :final episode) =>
-          '${work.title} ${Words.episode(episode.number)}',
+        EpisodeEntry(:final work, :final episode) => [
+            work.title,
+            if (Words.episode(episode.number) ?? episode.title
+                case final name?)
+              name,
+          ].join(' '),
         SourceEntry(:final hit) => '${hit.title} ${hit.source.name}',
         NipaEntry() => '让 Nipa 找',
       };
@@ -624,12 +628,11 @@ class _RowState extends State<_Row> {
   Widget _episode(UiWork work, UiEpisode episode, bool on,
       {String? source, String? image, bool file = false}) {
     final title = episode.title;
-    // A source's episode may come without its number: its name alone.
-    final name = episode.number <= 0
-        ? title ?? ''
-        : title == null || title.isEmpty
-            ? Words.episode(episode.number)
-            : '${Words.episode(episode.number)} · $title';
+    // An episode may come without its number: its name alone.
+    final name = [
+      if (Words.episode(episode.number) case final number?) number,
+      if (title != null && title.isNotEmpty) title,
+    ].join(' · ');
     final meta = [
       if (work.title.isNotEmpty && work.title != name) work.title,
       if (source != null) source,

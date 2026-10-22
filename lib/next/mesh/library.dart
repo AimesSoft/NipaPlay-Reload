@@ -642,9 +642,10 @@ final class MeshLibrary {
         final e = sourceEpisodes[i];
         final v = e['value'] as JsonMap;
         final identity = (e['keys'] as List).cast<String>().toList()..sort();
-        final numbered = v['number'] as int > 0
-            ? '${v['season'] ?? 1}:${v['number']}'
-            : null;
+        final numbered = switch (v['number']) {
+          final int n when n > 0 => '${v['season'] ?? 1}:$n',
+          _ => null,
+        };
         final tokens = [
           if (numbered != null) 'number:$numbered',
           ...identity.map((k) => 'identity:$k'),
@@ -751,9 +752,7 @@ final class MeshLibrary {
                     name: selected['name'] as String,
                     online: selected['online'] as bool)));
       }
-      episodes.sort((a, b) => (a.season ?? 1).compareTo(b.season ?? 1) != 0
-          ? (a.season ?? 1).compareTo(b.season ?? 1)
-          : a.number.compareTo(b.number));
+      sortEpisodes(episodes, seasonless: 1);
       final value = <String, Object?>{
         ...members.first['value'] as JsonMap,
         'workId': id

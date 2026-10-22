@@ -242,13 +242,12 @@ final class CoreSearch implements NextSearchData {
   /// already says whether its device answers.
   static UiEpisode? _episode(Map e) {
     final id = _text(e['episodeId']), workId = _text(e['workId']);
-    final number = _int(e['number']);
-    if (id == null || workId == null || number == null) return null;
+    if (id == null || workId == null) return null;
     final heat = e['heat'] is List ? e['heat'] as List : null;
     return UiEpisode(
       episodeId: id,
       workId: workId,
-      number: number,
+      number: _int(e['number']),
       season: _int(e['season']),
       title: _text(e['title']),
       runtime: switch (e['runtimeMs']) {
@@ -377,8 +376,8 @@ final class CoreSearch implements NextSearchData {
               episodeId: episodeId,
               workId: work.workId,
               number: kind == UiSourceHitKind.episode
-                  ? _int(meta['IndexNumber']) ?? 0
-                  : 0,
+                  ? _int(meta['IndexNumber'])
+                  : null,
               season: _int(meta['ParentIndexNumber']),
               title: title,
               playable: playable,

@@ -771,7 +771,7 @@ final class CoreWorkManage implements NextWorkManage {
 
     return UiManagedEpisode(
       episode: episode,
-      number: '${episode.number}',
+      number: '${episode.number ?? ''}',
       season: episode.season,
       title: episode.title,
       files: files.values.toList(),

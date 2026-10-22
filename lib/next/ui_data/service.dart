@@ -194,7 +194,7 @@ final class UiDataService implements NextUiData, NextNowPlaying {
 
   Future<List<UiEpisode>> localEpisodes(String workId, {int? season}) async {
     final rows = await db.rawQuery(
-        "SELECT e.*,r.attributes AS release_attributes FROM media_entities e JOIN media_entities r ON r.id=e.parent_id WHERE e.kind='episode' AND r.parent_id=?",
+        "SELECT e.*,r.attributes AS release_attributes FROM media_entities e JOIN media_entities r ON r.id=e.parent_id WHERE e.kind='episode' AND r.parent_id=? ORDER BY e.rowid",
         [workId]);
     final files = await _view('library.files');
     final result = <UiEpisode>[];
@@ -249,9 +249,7 @@ final class UiDataService implements NextUiData, NextNowPlaying {
       result.add(UiEpisode(
           episodeId: id,
           workId: workId,
-          number: (num.tryParse(attrs['number'] as String? ?? '') ??
-              int.tryParse(RegExp(r'第\s*(\d+)\s*[集话話]').firstMatch(
-                  (fields['title'] ?? attrs['title']) as String? ?? '')?.group(1) ?? '') ?? 0).toInt(),
+          number: num.tryParse(attrs['number'] as String? ?? '')?.toInt(),
           season: s,
           title: _display(fields['title'] ?? attrs['title']),
           runtime: duration == null ? null : Duration(milliseconds: duration),
@@ -260,9 +258,7 @@ final class UiDataService implements NextUiData, NextNowPlaying {
           heat: await heat.load(id, duration),
           playable: playable));
     }
-    result.sort((a, b) => (a.season ?? 0).compareTo(b.season ?? 0) != 0
-        ? (a.season ?? 0).compareTo(b.season ?? 0)
-        : a.number.compareTo(b.number));
+    sortEpisodes(result);
     return result;
   }
 
@@ -1155,7 +1151,11 @@ String? _caption(UiWork work, UiEpisode? e) {
       ? (e.runtime!.inMilliseconds * (1 - e.progress!) / 60000).ceil()
       : null;
   if (work.film) return left == null ? null : '剩 $left 分钟';
-  return '第 ${e.number} 集${left == null ? '' : ' · 剩 $left 分钟'}';
+  final caption = [
+    if (e.number case final n?) '第 $n 集',
+    if (left != null) '剩 $left 分钟',
+  ].join(' · ');
+  return caption.isEmpty ? null : caption;
 }
 
 final _machineText = RegExp(

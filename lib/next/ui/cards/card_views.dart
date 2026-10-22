@@ -331,9 +331,9 @@ class EpisodeCardView extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final number = episode.number.toString().padLeft(2, '0');
+    final number = episode.number?.toString().padLeft(2, '0');
     final second = [
-      if (showWork) Words.episode(episode.number),
+      if (Words.episode(episode.number) case final n? when showWork) n,
       if (episode.title != null && episode.title!.isNotEmpty) episode.title!,
     ].join(' · ');
     return Align(
@@ -362,17 +362,18 @@ class EpisodeCardView extends StatelessWidget {
                   if (on) callbacks.onFocus?.call(work);
                 },
               ),
-              Positioned(
-                left: 12,
-                bottom: episode.progress == null ? 10 : 20,
-                child: IgnorePointer(
-                  child: Text(number,
-                      style: NextText.num(28,
-                          weight: FontWeight.w700,
-                          letterSpacing: -0.5,
-                          color: const Color(0xEBFFFFFF))),
+              if (number != null)
+                Positioned(
+                  left: 12,
+                  bottom: episode.progress == null ? 10 : 20,
+                  child: IgnorePointer(
+                    child: Text(number,
+                        style: NextText.num(28,
+                            weight: FontWeight.w700,
+                            letterSpacing: -0.5,
+                            color: const Color(0xEBFFFFFF))),
+                  ),
                 ),
-              ),
             ]),
             const SizedBox(height: 10),
             Row(children: [

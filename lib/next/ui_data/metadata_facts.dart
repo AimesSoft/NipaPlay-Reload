@@ -84,7 +84,7 @@ extension UiMetadataFacts on UiDataService {
 
     final episodes = await this.episodes(workId);
     final episodeFacts = <JsonMap>[];
-    // Whether the episode's own number is stored (the viewer shows 0 otherwise).
+    // Whether the episode's own number is stored.
     final numbered = <String, bool>{};
     for (final e in episodes) {
       final episodeEvidence = await meshLibrary?.evidence(e.episodeId);

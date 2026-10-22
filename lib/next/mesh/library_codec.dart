@@ -45,7 +45,7 @@ JsonMap workJson(UiWork w) => {
 UiEpisode episodeValue(JsonMap e, {UiDevice? device}) => UiEpisode(
     episodeId: e['episodeId'] as String,
     workId: e['workId'] as String,
-    number: e['number'] as int,
+    number: e['number'] as int?,
     season: e['season'] as int?,
     title: e['title'] as String?,
     runtime: e['runtimeMs'] == null

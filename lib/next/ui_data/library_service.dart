@@ -628,7 +628,7 @@ final class LibraryDataService implements NextLibraryData, NextLibraryActions {
     return UiEpisode(
         episodeId: episodeId,
         workId: workId,
-        number: (m['IndexNumber'] as int?) ?? 1,
+        number: m['IndexNumber'] as int?,
         season: m['ParentIndexNumber'] as int?,
         title: item['name'] as String,
         runtime: duration == null || duration <= 0
@@ -667,9 +667,7 @@ final class LibraryDataService implements NextLibraryData, NextLibraryActions {
           break;
       }
     }
-    result.sort((a, b) => (a.season ?? 0) == (b.season ?? 0)
-        ? a.number.compareTo(b.number)
-        : (a.season ?? 0).compareTo(b.season ?? 0));
+    sortEpisodes(result);
     return result.where((e) => season == null || e.season == season).toList();
   }
 

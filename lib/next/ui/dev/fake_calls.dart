@@ -738,6 +738,10 @@ final class FakeCalls {
   static String _ownWork(String id) =>
       id.startsWith('file:') ? id.substring(5).split('#').first : id;
 
+  /// A sample file's name: its episode's number, or its title without one.
+  static String _fileName(UiEpisode e) =>
+      e.number?.toString().padLeft(2, '0') ?? e.title ?? e.episodeId;
+
   List<UiEpisode> _episodesOfKey(String key) => world.catalog.owns(key)
       ? world.catalog.episodes(key)
       : world._episodesOf(key);
@@ -1037,7 +1041,10 @@ final class FakeCalls {
         'end_ms': null
       };
       rows.add(row(episode, 'episode', release,
-          attributes: {'title': e.title, 'number': '${e.number}'},
+          attributes: {
+            'title': e.title,
+            if (e.number case final n?) 'number': '$n'
+          },
           associations: [link]));
       final watched = e.progress ?? 0;
       rows.add(row(file, 'file', null, associations: [
@@ -1048,8 +1055,7 @@ final class FakeCalls {
           'file_id': file,
           'source': 'local',
           'owner_device_id': device == null ? 'this-mac' : 'device:$device',
-          'locator': '$_home/Movies/${work.title}/'
-              '${'${e.number}'.padLeft(2, '0')}.mkv',
+          'locator': '$_home/Movies/${work.title}/${_fileName(e)}.mkv',
           'available': 1,
         }
       ], progress: [
@@ -1713,14 +1719,13 @@ final class FakeCalls {
             if (e.device?.name == device)
               {
                 'fileId': _fileOf(own, e),
-                'path': '$_home/Movies/${work.title}/'
-                    '${'${e.number}'.padLeft(2, '0')}.mkv',
-                'size': 1400000000 + e.number * 7340032,
+                'path': '$_home/Movies/${work.title}/${_fileName(e)}.mkv',
+                'size': 1400000000 + (e.number ?? 0) * 7340032,
                 'durationMs': 1440000,
                 'headMd5': '${e.episodeId.hashCode.abs()}'.padLeft(32, '0'),
                 'modifiedAt': '2026-09-30T12:00:00.000Z',
                 'bindings': [
-                  if (ref != null)
+                  if (ref != null && e.number != null)
                     {
                       'bindingId': 'fake-file-binding-${e.episodeId}@$own',
                       'ref': {

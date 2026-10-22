@@ -246,7 +246,7 @@ final class NextBatch {
       List<UiCandidateEpisode> catalogue, UiEpisode mine) {
     final same = [
       for (final c in catalogue)
-        if (int.tryParse(c.number) == mine.number) c
+        if (mine.number != null && int.tryParse(c.number) == mine.number) c
     ];
     if (same.length <= 1) return same.firstOrNull;
     final season = [

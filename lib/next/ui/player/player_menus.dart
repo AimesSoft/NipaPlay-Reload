@@ -192,14 +192,15 @@ final class PlayingWork {
   String get heading =>
       seasons && current != null ? Words.season(current!.season) : '剧集';
 
-  /// The episodes after the one playing, in its season, in order.
+  /// The numbered episodes after the one playing, in its season, in
+  /// order; none when it has no number.
   List<UiEpisode> get _after {
-    final now = current;
-    if (now == null) return const [];
+    final now = current, at = current?.number;
+    if (now == null || at == null) return const [];
     return [
       for (final e in episodes)
-        if (e.season == now.season && e.number > now.number) e
-    ]..sort((a, b) => a.number.compareTo(b.number));
+        if (e.number case final n? when e.season == now.season && n > at) e
+    ]..sort((a, b) => a.number!.compareTo(b.number!));
   }
 
   /// What 下一集 plays: the first episode after the one playing, in its
@@ -415,7 +416,7 @@ class _StillRow extends StatelessWidget {
   Widget build(BuildContext context) {
     final progress = episode.progress;
     final heat = episode.heat;
-    final title = episode.title ?? Words.episode(episode.number);
+    final title = episode.title ?? Words.episode(episode.number) ?? '';
     return Opacity(
       opacity: episode.playable || current ? 1 : 0.5,
       child: Pressable(
@@ -463,10 +464,12 @@ class _StillRow extends StatelessWidget {
                     child: current
                         ? const NextIcon(NextGlyph.play,
                             size: 13, color: NextColors.accent)
-                        : Text(episode.number.toString().padLeft(2, '0'),
-                            style: NextText.num(16,
-                                weight: FontWeight.w700,
-                                color: const Color(0xEBFFFFFF))),
+                        : episode.number == null
+                            ? const SizedBox.shrink()
+                            : Text(episode.number.toString().padLeft(2, '0'),
+                                style: NextText.num(16,
+                                    weight: FontWeight.w700,
+                                    color: const Color(0xEBFFFFFF))),
                   ),
                   if (progress != null && progress > 0.01 && !current)
                     Positioned(

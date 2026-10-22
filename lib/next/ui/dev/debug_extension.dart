@@ -596,7 +596,7 @@ abstract final class NextUiDebug {
           return {
             'episodes': [
               for (final e in await data.episodes(id))
-                '${e.season ?? '-'}/${e.number} ${where(e.device)}'
+                '${e.season ?? '-'}/${e.number ?? '-'} ${where(e.device)}'
                     '${e.playable ? ' playable' : ''}'
             ],
           };
@@ -872,7 +872,7 @@ abstract final class NextUiDebug {
               '${e.hit.playable ? ', plays' : ''}'
               '${e.hit.reachable ? '' : ', unreachable'})',
           EpisodeEntry(:final work, :final episode) =>
-            '${work.title} ${episode.number} ${episode.title ?? ''}',
+            '${work.title} ${episode.number ?? ''} ${episode.title ?? ''}',
           NipaEntry(:final text) => 'nipa: $text',
         };
     return {

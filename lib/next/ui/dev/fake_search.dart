@@ -245,7 +245,7 @@ final class FakeSearch implements NextSearchData {
         episode: UiEpisode(
             episodeId: first.episodeId,
             workId: w.workId,
-            number: 0,
+            number: null,
             title: name,
             playable: playable),
         poster: world.catalog.owns(key) ? w.artwork.poster : null,

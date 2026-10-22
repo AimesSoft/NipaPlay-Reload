@@ -122,6 +122,12 @@ final class FakeWorld implements NextUiData, NextUiActions, NextDiscoverData {
     'violet': 8.7,
   };
 
+  /// Episodes kept without a number, after the numbered ones, on disk
+  /// here. A title may name a number; the library never stored it.
+  static const _unnumbered = {
+    'frieren': ['小芙莉莲 第3话', '总集篇'],
+  };
+
   /// Watch progress per episode number; the first unfinished one is next.
   final _watched = <String, Map<int, double>>{
     'frieren': {1: 1, 2: 1, 3: 0.49},
@@ -349,9 +355,26 @@ final class FakeWorld implements NextUiData, NextUiActions, NextDiscoverData {
         _episode(key, n,
             progress: watched[n],
             season: (n - 1) ~/ perSeason + 1,
-            number: (n - 1) % perSeason + 1)
+            number: (n - 1) % perSeason + 1),
+      for (final (i, title) in (_unnumbered[key] ?? const <String>[]).indexed)
+        _unnumberedEpisode(key, total + i + 1, title,
+            season: seasons, progress: watched[total + i + 1]),
     ];
   }
+
+  UiEpisode _unnumberedEpisode(String key, int n, String title,
+          {required int season, double? progress}) =>
+      UiEpisode(
+        episodeId: 'fake:$key:$n',
+        workId: 'fake:$key',
+        number: null,
+        season: season,
+        title: manage.episodeTitle('fake:$key:$n', title),
+        runtime: const Duration(minutes: 24),
+        progress: progress,
+        heat: _heat(key, n),
+        playable: !manage.fileDeleted('fake:$key:$n'),
+      );
 
   /// Where “继续观看” left off: every episode before it watched.
   static Map<int, double> _continued(String key) {

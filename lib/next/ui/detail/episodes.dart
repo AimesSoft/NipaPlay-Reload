@@ -172,11 +172,13 @@ class _EpisodeTileState extends State<EpisodeTile> {
         height: 144,
         progress: episode.progress,
         selected: current,
-        label: Text(episode.number.toString().padLeft(2, '0'),
-            style: NextText.num(28,
-                weight: FontWeight.w700,
-                letterSpacing: -0.56,
-                color: const Color(0xEBFFFFFF))),
+        label: episode.number == null
+            ? null
+            : Text(episode.number.toString().padLeft(2, '0'),
+                style: NextText.num(28,
+                    weight: FontWeight.w700,
+                    letterSpacing: -0.56,
+                    color: const Color(0xEBFFFFFF))),
         onOpen: onPlay,
         onPlay: onPlay,
       ),

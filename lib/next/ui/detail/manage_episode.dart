@@ -65,8 +65,7 @@ class EpisodeManageSheetState extends State<EpisodeManageSheet>
 
   int? _expanded;
   bool _adding = false;
-  late final _query = TextEditingController(
-      text: '${widget.work.title} ${widget.episode.number}');
+  late final _query = TextEditingController(text: _searchText);
   List<UiDanmakuCandidate>? _found;
   bool _searching = false, _searchFailed = false;
 
@@ -74,6 +73,12 @@ class EpisodeManageSheetState extends State<EpisodeManageSheet>
   String? _editing;
 
   _Ask? _ask;
+
+  /// The danmaku search to start from: the work, and the episode's number
+  /// when it has one.
+  String get _searchText =>
+      [widget.work.title, if (widget.episode.number case final n?) '$n']
+          .join(' ');
 
   @override
   void initState() {
@@ -91,7 +96,7 @@ class EpisodeManageSheetState extends State<EpisodeManageSheet>
       _expanded = null;
       _found = null;
       _adding = false;
-      _query.text = '${widget.work.title} ${widget.episode.number}';
+      _query.text = _searchText;
       _read();
     }
   }
@@ -325,8 +330,10 @@ class EpisodeManageSheetState extends State<EpisodeManageSheet>
   @override
   Widget build(BuildContext context) {
     final e = widget.episode;
-    final title = [Words.episode(e.number), if (e.title != null) e.title!]
-        .join('  ');
+    final title = [
+      if (Words.episode(e.number) case final number?) number,
+      if (e.title != null) e.title!
+    ].join('  ');
     return ManageFrame<EpisodeSection>(
       leading: ClipRRect(
         borderRadius: BorderRadius.circular(8),

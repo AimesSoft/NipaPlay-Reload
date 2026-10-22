@@ -151,7 +151,7 @@ final class FakeManage implements NextWorkManage {
         UiEpisode(
           episodeId: 'fake:$key:${i + 1}',
           workId: 'fake:$key',
-          number: int.tryParse(e.number) ?? i + 1,
+          number: int.tryParse(e.number),
           season: 1,
           title: e.title,
           runtime: Duration(minutes: 4 + (e.files.first.hashCode % 9).abs()),
@@ -313,7 +313,7 @@ final class FakeManage implements NextWorkManage {
   UiManagedEpisode _managed(String key, UiEpisode e, {String? number}) =>
       UiManagedEpisode(
         episode: e,
-        number: number ?? '${e.number}',
+        number: number ?? '${e.number ?? ''}',
         season: e.season,
         title: e.title,
         titleEdited: _episodeTitles.containsKey(e.episodeId),
@@ -775,7 +775,7 @@ final class FakeManage implements NextWorkManage {
     final subs = _subsOf(episode.episodeId);
     return UiManagedEpisode(
       episode: episode,
-      number: '${episode.number}',
+      number: '${episode.number ?? ''}',
       season: episode.season,
       title: episode.title,
       files: files,

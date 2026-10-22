@@ -410,7 +410,7 @@ class _WorkDetailPageState extends State<WorkDetailPage>
     return [
       if (_missing) ('下载全部', _downloadAll),
       if (next != null && next.playable && (next.progress ?? 0) < 1)
-        ('${film ? '' : Words.episode(next.number)}看过了',
+        ('${film ? '' : Words.episode(next.number) ?? ''}看过了',
             () => _mark([next], true)),
       if (unwatched.length > 1)
         ('$seasonName都看过了', () => _mark(unwatched, true)),
@@ -799,9 +799,10 @@ class _WorkDetailPageState extends State<WorkDetailPage>
         PlayButton(
           label: !started
               ? '播放'
-              : work.film
-                  ? '继续播放'
-                  : '继续 ${Words.episode(next.number)}',
+              : switch (Words.episode(next.number)) {
+                  final number? when !work.film => '继续 $number',
+                  _ => '继续播放',
+                },
           onTap: () => shell.play(work, episode: next),
         ),
         const SizedBox(width: 12),
