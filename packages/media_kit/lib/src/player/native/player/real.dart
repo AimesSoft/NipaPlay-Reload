@@ -103,6 +103,8 @@ class NativePlayer extends PlatformPlayer {
       _isClosing = true;
       _completePendingAsyncRequests();
 
+      // Runs [release], where a [VideoController] frees its mpv render
+      // context; mpv aborts if one is still alive when it is destroyed below.
       await super.dispose();
 
       await Initializer(mpv).dispose(ctx);
