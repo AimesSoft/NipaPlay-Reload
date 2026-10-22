@@ -210,7 +210,11 @@ PlayerMediaInfo _toPlayerMediaInfo(mdk.MediaInfo mdkInfo,
 }
 
 class MdkPlayerAdapter
-    implements AbstractPlayer, AsyncDisposablePlayer, BufferingAwarePlayer {
+    implements
+        AbstractPlayer,
+        AsyncDisposablePlayer,
+        AsyncSeekPlayer,
+        BufferingAwarePlayer {
   final ValueNotifier<bool> _buffering = ValueNotifier<bool>(false);
 
   @override
@@ -229,6 +233,10 @@ class MdkPlayerAdapter
   bool _isDisposed = false;
   Future<void>? _disposeAsyncFuture;
   final Set<String> _callsAfterTeardown = {};
+  // Bumped by every seek, so a resume seek stops asking again once anything
+  // has asked for another position.
+  int _seekGeneration = 0;
+  Completer<void>? _seekSettled;
   StreamSubscription<({mdk.MediaStatus oldValue, mdk.MediaStatus newValue})>?
       _mediaStatusSubscription;
   MdkPlayerAdapter({String? httpProxy})
@@ -250,6 +258,7 @@ class MdkPlayerAdapter
       if (!_isDisposed) {
         _buffering.value = status.test(mdk.MediaStatus.buffering);
       }
+      if (!status.test(mdk.MediaStatus.seeking)) _settleSeek();
       PlayerNativeLogTap.observer?.call(
           'mdk',
           identityHashCode(this),
@@ -535,7 +544,44 @@ class MdkPlayerAdapter
   @override
   void seek({required int position}) {
     if (_released('seek')) return;
+    _seekGeneration++;
     _mdkPlayer.seek(position: position);
+  }
+
+  /// MDK cancels a seek (-2), or turns it away (-10), while a seek of its own
+  /// is running, such as the one an active-track change makes to the current
+  /// position; playback then goes on from where that one went. So this waits
+  /// for MDK's answer and, when MDK did not take the seek and nothing has
+  /// asked for another position since, asks again once MDK's own seek is
+  /// done.
+  @override
+  Future<void> seekAndWait({required int position}) async {
+    if (_released('seekAndWait')) return;
+    final generation = ++_seekGeneration;
+    for (var attempt = 0; attempt < 3; attempt++) {
+      final result = await _mdkPlayer
+          .seek(position: position)
+          .timeout(const Duration(seconds: 3), onTimeout: () => 0);
+      if (result >= 0 || _isDisposed || generation != _seekGeneration) return;
+      debugPrint('MDK: seek($position) 未被执行（$result），内核自己的 seek 结束后再请求一次');
+      await _untilSeekSettled();
+      if (_isDisposed || generation != _seekGeneration) return;
+    }
+  }
+
+  Future<void> _untilSeekSettled() {
+    if (!_mdkPlayer.mediaStatus.test(mdk.MediaStatus.seeking)) {
+      return Future<void>.value();
+    }
+    return (_seekSettled ??= Completer<void>())
+        .future
+        .timeout(const Duration(seconds: 2), onTimeout: () {});
+  }
+
+  void _settleSeek() {
+    final settled = _seekSettled;
+    _seekSettled = null;
+    if (settled != null && !settled.isCompleted) settled.complete();
   }
 
   @override
@@ -552,6 +598,7 @@ class MdkPlayerAdapter
   Future<void> _disposeAsyncInternal() async {
     _isDisposed = true;
     _buffering.dispose();
+    _settleSeek();
     await _mediaStatusSubscription?.cancel();
     PlayerKernelManager.traceHotSwapStage('mdk teardown: begin');
     await Future<void>.sync(_mdkPlayer.dispose);
