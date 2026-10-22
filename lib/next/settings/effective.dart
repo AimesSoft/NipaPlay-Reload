@@ -2,6 +2,7 @@ import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 import 'package:nipaplay/danmaku_abstraction/danmaku_kernel_factory.dart';
+import 'package:nipaplay/player_abstraction/player_factory.dart';
 import 'package:nipaplay/services/app_http_proxy.dart';
 import 'package:nipaplay/services/media_server_device_id_service.dart';
 import 'package:nipaplay/utils/network_settings.dart';
@@ -120,6 +121,13 @@ const _kernelNames = {
   'Erika': 'erika',
 };
 
+/// Settings a saved change rebuilds the player for (see [DeferredReloads]).
+const _playerRebuilt = {
+  'network.httpProxy',
+  'player.macosNativeVideoEnabled',
+  'player.erikaAndroidOutputMode',
+};
+
 /// Works out [Effective] for registry entries. Everything here reads state;
 /// nothing is written.
 abstract final class EffectiveRules {
@@ -179,7 +187,21 @@ abstract final class EffectiveRules {
             'The running player kernel has no known name.');
       }
       return compareEffective(entry, stored, running,
-          'The current player instance runs the $running kernel; the stored kernel is used when media is next opened.');
+          'The current player instance runs the $running kernel and the media being watched is not interrupted. When media is next opened, it opens and is then reopened once on a new player on the stored kernel.');
+    }
+    if (_playerRebuilt.contains(key)) {
+      final waiting = DeferredReloads.runningOf(key, PlayerFactory.getKernelType());
+      if (waiting.waiting) {
+        return Effective.differs(
+            waiting.running,
+            'reload_required',
+            key == 'network.httpProxy'
+                ? 'Application requests use the stored proxy now. The player in use was built with the previous one and the media being watched is not interrupted; when media is next opened, it opens and is then reopened once on a new player with the stored proxy.'
+                : 'The player in use was built with the previous value and the media being watched is not interrupted. When media is next opened, it opens and is then reopened once on a new player with the stored value.');
+      }
+      if (key != 'network.httpProxy') {
+        return Effective.same(stored);
+      }
     }
     if (key == 'playback.rate') {
       if (video == null) return _noPlayer;
@@ -208,7 +230,7 @@ abstract final class EffectiveRules {
     }
     if (key == 'network.httpProxy') {
       return compareEffective(entry, stored, AppHttpProxy.endpoint,
-          'Application requests use this value now; the video player takes it when media is next opened.',
+          'Application requests use this value now; the player in use already carries it.',
           sameDetail: true);
     }
 

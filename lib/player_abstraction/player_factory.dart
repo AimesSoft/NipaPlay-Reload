@@ -27,6 +27,68 @@ bool supportsPlayerHttpProxy(PlayerKernelType type) {
   return type == PlayerKernelType.mdk || type == PlayerKernelType.mediaKit;
 }
 
+/// Saves made inside a Next call that the player in use does not carry yet.
+///
+/// A Next call does not interrupt the media being watched, so it saves the
+/// setting and skips the hot swap. This records, per setting, the value the
+/// current player was built with. Whoever owns the player (NipaPlay Next's
+/// kernel control) rebuilds it from the stored values, and every player built
+/// for playback ([built]) takes what it carries off the list.
+abstract final class DeferredReloads {
+  static const kernel = 'player.kernel';
+  static const httpProxy = 'network.httpProxy';
+  static const macosNativeVideo = 'player.macosNativeVideoEnabled';
+  static const erikaAndroidOutput = 'player.erikaAndroidOutputMode';
+
+  static final _running = <String, Object?>{};
+  static final _changes = StreamController<void>.broadcast(sync: true);
+
+  /// Fires when a deferred save is recorded or taken off the list.
+  static Stream<void> get changes => _changes.stream;
+
+  /// Whether a player of [kernelType] reads setting [key].
+  static bool _reads(String key, PlayerKernelType kernelType) => switch (key) {
+        kernel => true,
+        httpProxy => supportsPlayerHttpProxy(kernelType),
+        macosNativeVideo => kernelType == PlayerKernelType.mediaKit,
+        erikaAndroidOutput => kernelType == PlayerKernelType.erika,
+        _ => false,
+      };
+
+  /// Records a save skipped for the player in use. [running] is the value
+  /// before the save; the first one recorded for a key stays, and a save
+  /// back to it leaves nothing waiting.
+  static void defer(String key, Object? running, Object? stored) {
+    _running.putIfAbsent(key, () => running);
+    if (_running[key] == stored) _running.remove(key);
+    _changes.add(null);
+  }
+
+  /// Whether a player built on the stored kernel [stored] would differ from
+  /// the one in use.
+  static bool pendingFor(PlayerKernelType stored) =>
+      _running.keys.any((key) => _reads(key, stored));
+
+  /// Whether [key] waits, and the value the player in use was built with.
+  static ({bool waiting, Object? running}) runningOf(
+      String key, PlayerKernelType stored) {
+    final waiting = _running.containsKey(key) && _reads(key, stored);
+    return (waiting: waiting, running: waiting ? _running[key] : null);
+  }
+
+  /// A player for playback was built on [kernelType] from the stored values
+  /// ([stored] is the kernel setting): what it reads no longer waits.
+  static void built(PlayerKernelType kernelType, PlayerKernelType stored) {
+    final before = _running.length;
+    _running.removeWhere((key, _) =>
+        key == kernel ? kernelType == stored : _reads(key, kernelType));
+    if (_running.length != before) _changes.add(null);
+  }
+
+  @visibleForTesting
+  static void reset() => _running.clear();
+}
+
 class PlayerFactory {
   static PlayerKernelType get defaultKernelType => _defaultKernelType;
   static List<PlayerKernelType> get supportedKernelTypes =>
@@ -65,6 +127,26 @@ class PlayerFactory {
       StreamController<PlayerKernelType>.broadcast();
   static Stream<PlayerKernelType> get onKernelChanged =>
       _kernelChangeController.stream;
+
+  /// A save inside a Next call leaves the player in use as it is
+  /// ([DeferredReloads]); anywhere else the player is rebuilt now.
+  static void _reload(PlayerKernelType kernelType, String key,
+      Object? previous, Object? value) {
+    if (SettingsAccess.deferReload) {
+      DeferredReloads.defer(key, previous, value);
+    } else {
+      _kernelChangeController.add(kernelType);
+    }
+  }
+
+  /// The kernel a player for [requested] (null: the kernel setting) is built on.
+  static PlayerKernelType resolveKernel([PlayerKernelType? requested]) {
+    if (kIsWeb) return PlayerKernelType.videoPlayer;
+    final kernelType = requested ?? getKernelType();
+    return _isKernelSupportedOnCurrentPlatform(kernelType)
+        ? kernelType
+        : _defaultKernelType;
+  }
 
   static bool get isHarmonyOS =>
       !kIsWeb && defaultTargetPlatform.name == 'ohos';
@@ -331,7 +413,8 @@ class PlayerFactory {
       MediaKitPlayerAdapter.setMacOSNativeVideoPreference(enabled);
       if (previous != enabled &&
           (_cachedKernelType ?? getKernelType()) == PlayerKernelType.mediaKit) {
-        if (!SettingsAccess.deferReload) _kernelChangeController.add(PlayerKernelType.mediaKit);
+        _reload(PlayerKernelType.mediaKit, DeferredReloads.macosNativeVideo,
+            previous, enabled);
       }
     } catch (e) {
       debugPrint('[PlayerFactory] 保存 macOS 原生视频设置出错: $e');
@@ -373,7 +456,8 @@ class PlayerFactory {
       _cachedErikaAndroidOutputMode = mode;
       if (previous != mode &&
           (_cachedKernelType ?? getKernelType()) == PlayerKernelType.erika) {
-        if (!SettingsAccess.deferReload) _kernelChangeController.add(PlayerKernelType.erika);
+        _reload(PlayerKernelType.erika, DeferredReloads.erikaAndroidOutput,
+            previous.name, mode.name);
       }
     } catch (e) {
       debugPrint(
@@ -417,14 +501,15 @@ class PlayerFactory {
 
   static Future<void> saveHttpProxy(String proxy) async {
     final resolved = AppHttpProxy.validate(proxy)?.toString() ?? '';
-    final changed = resolved != _cachedHttpProxy;
+    final previousProxy = _cachedHttpProxy;
+    final changed = resolved != previousProxy;
     final preferences = await SharedPreferences.getInstance();
     await SettingsAccess.persist(SettingsKeys.playerHttpProxy, () => preferences.setString(SettingsKeys.playerHttpProxy, resolved));
     _cachedHttpProxy = resolved;
     AppHttpProxy.set(resolved);
     final kernelType = _cachedKernelType ?? PlayerKernelType.mdk;
     if (changed && !kIsWeb && supportsPlayerHttpProxy(kernelType)) {
-      if (!SettingsAccess.deferReload) _kernelChangeController.add(kernelType);
+      _reload(kernelType, DeferredReloads.httpProxy, previousProxy, resolved);
     }
   }
 
@@ -481,6 +566,7 @@ class PlayerFactory {
     }
     try {
       final prefs = await SharedPreferences.getInstance();
+      final previousKernel = _cachedKernelType ?? getKernelType();
       await SettingsAccess.persist(_playerKernelTypeKey, () => prefs.setInt(_playerKernelTypeKey, type.index));
       _cachedKernelType = type;
       debugPrint('[PlayerFactory] 保存内核设置: ${type.toString()}');
@@ -509,7 +595,7 @@ class PlayerFactory {
       SystemResourceMonitor().updatePlayerKernelType();
 
       // 广播内核切换事件
-      if (!SettingsAccess.deferReload) _kernelChangeController.add(type);
+      _reload(type, DeferredReloads.kernel, previousKernel.name, type.name);
     } catch (e) {
       debugPrint('[PlayerFactory] 保存内核设置出错: $e');
     }

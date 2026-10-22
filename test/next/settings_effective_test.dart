@@ -12,6 +12,7 @@ import 'package:nipaplay/next/settings/registry.dart';
 import 'package:nipaplay/next/settings/system_settings.dart';
 import 'package:nipaplay/next/subtitles/library.dart';
 import 'package:nipaplay/player_abstraction/player_abstraction.dart';
+import 'package:nipaplay/player_abstraction/player_factory.dart';
 import 'package:nipaplay/providers/settings_provider.dart';
 import 'package:nipaplay/security/credential_store.dart';
 import 'package:nipaplay/utils/video_player_state.dart';
@@ -136,6 +137,42 @@ void main() {
     expect(row['effectiveState'], 'differs');
     expect(row['effectiveReason'], 'reload_required');
     expect(row['apply'], 'reload_player');
+  });
+
+  test('a setting Next saved waits as reload_required and is same once a '
+      'player is built from it', () async {
+    DeferredReloads.reset();
+    await PlayerFactory.saveKernelType(PlayerKernelType.erika);
+    addTearDown(() async {
+      DeferredReloads.reset();
+      await PlayerFactory.saveKernelType(PlayerKernelType.mdk);
+    });
+    final registry = await open([]);
+    await registry.set('player.erikaAndroidOutputMode', 'extendedLinearHdr',
+        harness.Invocation(origin: 'mcp'));
+    var row = await registry.get('player.erikaAndroidOutputMode');
+    expect(row['value'], 'extendedLinearHdr');
+    expect(row['effective'], 'sdr');
+    expect(row['effectiveState'], 'differs');
+    expect(row['effectiveReason'], 'reload_required');
+    expect(row['effectiveDetail'], contains('reopened once on a new player'));
+
+    // The player the next media opens on is built from the stored values.
+    DeferredReloads.built(PlayerKernelType.erika, PlayerKernelType.erika);
+    row = await registry.get('player.erikaAndroidOutputMode');
+    expect(row['effective'], 'extendedLinearHdr');
+    expect(row['effectiveState'], 'same');
+    expect(row['effectiveReason'], isNull);
+
+    await registry.set(
+        'player.kernel', 'mediaKit', harness.Invocation(origin: 'mcp'));
+    row = await registry.get('player.kernel');
+    expect(row['effective'], 'mdk');
+    expect(row['effectiveState'], 'differs');
+    expect(row['effectiveReason'], 'reload_required');
+    expect(row['effectiveDetail'], contains('not interrupted'));
+    DeferredReloads.built(PlayerKernelType.mediaKit, PlayerKernelType.mediaKit);
+    expect(DeferredReloads.pendingFor(PlayerKernelType.mediaKit), false);
   });
 
   test('reload settings without a probe are unknown, not copied from storage',

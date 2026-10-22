@@ -95,7 +95,9 @@ final class KernelControl {
         _consent = consent ?? _askUser,
         _switch = switcher ?? classicKernelSwitch,
         _configured = configured ?? PlayerFactory.getKernelType,
-        _supported = supported ?? (() => PlayerFactory.supportedKernelTypes);
+        _supported = supported ?? (() => PlayerFactory.supportedKernelTypes) {
+    _deferredSaves = DeferredReloads.changes.listen((_) => _deferredChanged());
+  }
 
   final VideoPlayerState state;
   final String? Function() _harness;
@@ -112,11 +114,17 @@ final class KernelControl {
   /// A call whose effect may outlast the media (a command, an invoke).
   bool _freshByCall = false;
 
+  /// Settings Next saved that the player in use was not rebuilt for.
+  late final StreamSubscription<void> _deferredSaves;
+  bool get _pending => DeferredReloads.pendingFor(_configured());
+
   /// Whether the next media opens on a fresh player: a change whose
-  /// original the kernel never reported, or a call that may outlast it.
+  /// original the kernel never reported, a call that may outlast it, or a
+  /// setting saved by Next that the player in use does not carry.
   bool get _freshPlayerNext =>
-      _freshByCall || _overrides.values.any((o) => !o.originalKnown);
+      _freshByCall || _overrides.values.any((o) => !o.originalKnown) || _pending;
   String? _revertFor;
+  PlayableItem? _seenRequest;
   bool _listening = false;
   bool _reopening = false;
   Future<void> _work = Future.value();
@@ -153,8 +161,30 @@ final class KernelControl {
       _revertFor != null ||
       _freshPlayerNext;
 
+  /// A setting Next saved reached the stored values. With no media open the
+  /// player is rebuilt now, which interrupts nothing; with media playing it
+  /// is left alone and the next media opens on the stored values.
+  void _deferredChanged() {
+    unawaited(_serial(() async {
+      if (!_pending) return;
+      if (state.currentVideoPath == null) {
+        await _revert('setting_saved');
+      } else {
+        _seenRequest = state.lastPlaybackRequest;
+        _binding ??= _now();
+        _listen();
+      }
+    }));
+  }
+
   void _changed() {
     if (_reopening) return;
+    final request = state.lastPlaybackRequest;
+    if (!identical(request, _seenRequest)) {
+      // Another open began, even of the same path on the same player.
+      _seenRequest = request;
+      if (_pending && request != null) _revertFor = request.videoPath;
+    }
     final binding = _binding;
     final now = _now();
     if (binding != null && !binding.same(now)) {
@@ -244,6 +274,8 @@ final class KernelControl {
       'configured': kernelIdOf(_configured()),
       'error': failure,
     });
+    _revertFor = null;
+    _seenRequest = state.lastPlaybackRequest;
     _binding = null;
     _stopListening();
   }
@@ -251,6 +283,7 @@ final class KernelControl {
   /// Restores every change and returns to the kernel setting; called when
   /// Next is turned off. With [reopen] false the player is left as it is.
   Future<void> release({bool reopen = true}) => _serial(() async {
+        if (!reopen) await _deferredSaves.cancel();
         if (reopen) {
           for (final override in _overrides.values.toList()) {
             if (override.originalKnown &&
@@ -1093,8 +1126,11 @@ final class KernelControl {
                 'origin': invocation.origin,
               }
             : null;
-        _binding = _kernelOverride == null ? null : _now();
-        _kernelOverride == null ? _stopListening() : _listen();
+        // What this player was not built from still waits for the next media.
+        final holding = _kernelOverride != null || _pending;
+        _seenRequest = state.lastPlaybackRequest;
+        _binding = holding ? _now() : null;
+        holding ? _listen() : _stopListening();
         final opened = replaced && failure == null && state.hasVideo;
         final error = playbackErrorFacts(state, _snapshot()['sessionId'] as String);
         _record('reopen', 'kernel', {
@@ -1120,7 +1156,7 @@ final class KernelControl {
               key: {'before': before[key], 'after': after[key]},
             ...tracks,
           },
-          'nextMediaOpensConfiguredKernel': _kernelOverride != null,
+          'nextMediaOpensConfiguredKernel': _kernelOverride != null || _pending,
           'state': _snapshot(),
         };
       });

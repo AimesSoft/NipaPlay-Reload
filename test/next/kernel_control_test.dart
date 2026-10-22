@@ -12,7 +12,9 @@ import 'package:nipaplay/next/capabilities/kernel_facts.dart';
 import 'package:nipaplay/next/capabilities/video_player_state_port.dart';
 import 'package:nipaplay/player_abstraction/erika_player_adapter.dart';
 import 'package:nipaplay/player_abstraction/mdk_player_adapter_io.dart';
+import 'package:nipaplay/next/settings/registry.dart' show SettingsAccess;
 import 'package:nipaplay/player_abstraction/player_abstraction.dart';
+import 'package:nipaplay/player_abstraction/player_factory.dart';
 import 'package:nipaplay/utils/video_player_state.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -383,19 +385,27 @@ void main() {
           PlayerKernelType configured = PlayerKernelType.mediaKit,
           List<PlayerKernelType> supported = PlayerKernelType.values,
           String? harness,
+          PlayerKernelType Function()? live,
           AbstractPlayer Function(PlayerKernelType?)? make}) {
     final asked = <String>[];
     final switches = Switches(make ??
         (kernel) => kernel == PlayerKernelType.mdk ? MdkKernel() : MpvKernel());
+    final stored = live ?? () => configured;
     final control = KernelControl(state,
         consent: (title, message, accept, stopped) async {
           asked.add('$title\n$message\n$accept');
           return approve;
         },
-        switcher: switches.call,
-        configured: () => configured,
+        // Classic's switch builds the player with Player(), which takes what
+        // it was built from off the list of saves waiting for a rebuild.
+        switcher: (state, kernel, request) async {
+          await switches.call(state, kernel, request);
+          DeferredReloads.built(kernel ?? stored(), stored());
+        },
+        configured: stored,
         supported: () => supported,
         harness: () => harness);
+    addTearDown(() => control.release(reopen: false));
     return (
       harness: Harness([KernelControlCapability(control)]),
       control: control,
@@ -1000,6 +1010,147 @@ void main() {
         'properties': ['x'],
       }, Invocation(origin: 'test'));
       expect((refused as Failed).failure.code, FailureCode.unavailable);
+    });
+  });
+
+  group('settings saved by Next', () {
+    // The kernel setting is stored; the player in use runs the other one.
+    Future<T> inNext<T>(Future<T> Function() body) => runZoned(body,
+        zoneValues: {SettingsAccess.invocationKey: Invocation(origin: 'mcp')});
+
+    setUp(() async {
+      DeferredReloads.reset();
+      await PlayerFactory.saveKernelType(PlayerKernelType.mdk);
+      await PlayerFactory.saveHttpProxy('');
+    });
+    tearDown(() async {
+      DeferredReloads.reset();
+      await PlayerFactory.saveHttpProxy('');
+    });
+
+    test('with no media open the player is rebuilt on the stored values now',
+        () async {
+      final state = await opened(MdkKernel());
+      state.path = null;
+      final r = rig(state, live: PlayerFactory.getKernelType);
+      await inNext(() => PlayerFactory.saveKernelType(PlayerKernelType.mediaKit));
+      await settle();
+      expect(r.switches.calls, [(null, '/media/episode.mkv')]);
+      expect(state.player.getPlayerKernelName(), 'Media Kit');
+      expect(DeferredReloads.pendingFor(PlayerKernelType.mediaKit), false);
+      state.open('/media/next.mkv');
+      await settle();
+      expect(r.switches.calls, hasLength(1), reason: 'nothing is left to apply');
+    });
+
+    test('media being watched is not interrupted; the next one opens on the '
+        'stored values, once', () async {
+      final state = await opened(MdkKernel());
+      final r = rig(state, live: PlayerFactory.getKernelType);
+      await inNext(() => PlayerFactory.saveKernelType(PlayerKernelType.mediaKit));
+      await settle();
+      expect(r.switches.calls, isEmpty);
+      expect(state.player.getPlayerKernelName(), 'MDK');
+      expect(DeferredReloads.pendingFor(PlayerKernelType.mediaKit), true);
+
+      state.open('/media/next.mkv');
+      await settle();
+      expect(r.switches.calls, [(null, '/media/next.mkv')]);
+      expect(state.player.getPlayerKernelName(), 'Media Kit');
+      expect(DeferredReloads.pendingFor(PlayerKernelType.mediaKit), false);
+      state.open('/media/third.mkv');
+      await settle();
+      expect(r.switches.calls, hasLength(1));
+    });
+
+    test('opening the same file again on the same player counts as an open',
+        () async {
+      final state = await opened(MdkKernel());
+      final r = rig(state, live: PlayerFactory.getKernelType);
+      await inNext(() => PlayerFactory.saveKernelType(PlayerKernelType.mediaKit));
+      await settle();
+      state.open('/media/episode.mkv');
+      await settle();
+      expect(r.switches.calls, [(null, '/media/episode.mkv')]);
+    });
+
+    test('a save back to what the player was built with leaves nothing '
+        'waiting', () async {
+      final state = await opened(MdkKernel());
+      final r = rig(state, live: PlayerFactory.getKernelType);
+      await inNext(() => PlayerFactory.saveKernelType(PlayerKernelType.mediaKit));
+      await inNext(() => PlayerFactory.saveKernelType(PlayerKernelType.mdk));
+      state.open('/media/next.mkv');
+      await settle();
+      expect(r.switches.calls, isEmpty);
+    });
+
+    test('with a reopen_with_kernel override in force the next media is '
+        'switched once, for both', () async {
+      await PlayerFactory.saveKernelType(PlayerKernelType.mediaKit);
+      final state = await opened(MpvKernel());
+      final r = rig(state,
+          live: PlayerFactory.getKernelType,
+          make: (kernel) =>
+              kernel == PlayerKernelType.mdk ? MdkKernel() : MpvKernel());
+      await invokeCompleted(r.harness, 'playback.reopen_with_kernel',
+          {'sessionId': session(state), 'kernel': 'mdk'});
+      await inNext(() => PlayerFactory.saveHttpProxy('http://127.0.0.1:7890'));
+      await settle();
+      expect(r.switches.calls, [(PlayerKernelType.mdk, '/media/episode.mkv')]);
+
+      state.open('/media/next.mkv');
+      await settle();
+      expect(r.switches.calls, [
+        (PlayerKernelType.mdk, '/media/episode.mkv'),
+        (null, '/media/next.mkv'),
+      ], reason: 'one switch puts back the kernel and applies the proxy');
+      final read = await invokeCompleted(r.harness, 'playback.kernel', {});
+      expect(read['kernelOverride'], isNull);
+      expect(read['nextMediaOpensFreshPlayer'], false);
+    });
+
+    test('a reopen_with_kernel after a pending save keeps its own record',
+        () async {
+      await PlayerFactory.saveKernelType(PlayerKernelType.mediaKit);
+      final state = await opened(MpvKernel());
+      final r = rig(state,
+          live: PlayerFactory.getKernelType,
+          make: (kernel) =>
+              kernel == PlayerKernelType.mdk ? MdkKernel() : MpvKernel());
+      await inNext(() => PlayerFactory.saveHttpProxy('http://127.0.0.1:7890'));
+      final result = await invokeCompleted(r.harness,
+          'playback.reopen_with_kernel',
+          {'sessionId': session(state), 'kernel': 'mdk'});
+      expect(r.switches.calls, [(PlayerKernelType.mdk, '/media/episode.mkv')],
+          reason: 'the pending save did not switch the player on its own');
+      expect(result['nextMediaOpensConfiguredKernel'], true);
+      expect((await invokeCompleted(r.harness, 'playback.kernel', {}))[
+          'kernelOverride'], containsPair('kernel', 'mdk'));
+
+      state.open('/media/next.mkv');
+      await settle();
+      expect(r.switches.calls, hasLength(2));
+      expect(r.switches.calls.last, (null, '/media/next.mkv'));
+      state.open('/media/third.mkv');
+      await settle();
+      expect(r.switches.calls, hasLength(2));
+    });
+
+    test('Classic (outside a Next call) still rebuilds at once through the '
+        'kernel change event', () async {
+      final events = <PlayerKernelType>[];
+      final subscription = PlayerFactory.onKernelChanged.listen(events.add);
+      addTearDown(subscription.cancel);
+      await PlayerFactory.saveKernelType(PlayerKernelType.mediaKit);
+      await settle();
+      expect(events, [PlayerKernelType.mediaKit]);
+      expect(DeferredReloads.pendingFor(PlayerKernelType.mediaKit), false);
+
+      await inNext(() => PlayerFactory.saveKernelType(PlayerKernelType.mdk));
+      await settle();
+      expect(events, [PlayerKernelType.mediaKit],
+          reason: 'a Next call does not broadcast');
     });
   });
 

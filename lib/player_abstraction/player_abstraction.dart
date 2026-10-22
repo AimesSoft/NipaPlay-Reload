@@ -55,14 +55,25 @@ class Player implements core_player.AsyncExternalSubtitlePlayer {
   /// This is what `VideoPlayerState` will use, e.g., `Player player = Player();`.
   factory Player() {
     // PlayerFactory 会自动从 SharedPreferences 读取播放器内核设置
-    return Player._internal(PlayerFactory().createPlayer());
+    return Player._forPlayback(null);
+  }
+
+  /// A player VideoPlayerState plays with: what it was built from is no
+  /// longer waiting on a rebuild ([DeferredReloads]).
+  factory Player._forPlayback(PlayerKernelType? kernelType) {
+    final player = Player._internal(PlayerFactory().createPlayer(kernelType: kernelType));
+    if (!kIsWeb) {
+      DeferredReloads.built(
+          PlayerFactory.resolveKernel(kernelType), PlayerFactory.getKernelType());
+    }
+    return player;
   }
 
   /// A player on [kernelType] whatever the kernel setting says (an
   /// unsupported kernel falls back as [PlayerFactory.createPlayer] does).
   /// Classic never asks for one.
   factory Player.forKernel(PlayerKernelType kernelType) =>
-      Player._internal(PlayerFactory().createPlayer(kernelType: kernelType));
+      Player._forPlayback(kernelType);
 
   @visibleForTesting
   Player.withDelegate(this._delegate);
