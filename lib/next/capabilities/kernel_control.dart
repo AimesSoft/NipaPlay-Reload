@@ -199,8 +199,12 @@ final class KernelControl {
   void _checkRevert() {
     final revert = _revertFor;
     if (revert == null || _reopening) return;
+    // Classic's open has settled once it is playing, paused or failed. While
+    // it is ready its play() has not taken yet, and a reopen started then
+    // would carry the media over as paused.
     if (_now().path == revert &&
-        (state.hasVideo || state.status == PlayerStatus.error)) {
+        const {PlayerStatus.playing, PlayerStatus.paused, PlayerStatus.error}
+            .contains(state.status)) {
       _revertFor = null;
       unawaited(_serial(() => _revert('media_changed')));
     }

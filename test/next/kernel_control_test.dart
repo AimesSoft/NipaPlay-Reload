@@ -710,6 +710,11 @@ void main() {
       expect(kernel.props['auto_load'], '0');
       expect(r.switches.calls, isEmpty, reason: 'waits for the media to open');
       state.path = '/media/episode-2.mkv';
+      state.playing = PlayerStatus.ready;
+      state.notify();
+      await settle();
+      expect(r.switches.calls, isEmpty,
+          reason: 'open, but its play() has not taken yet');
       state.playing = PlayerStatus.playing;
       state.notify();
       await settle();
