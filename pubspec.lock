@@ -353,9 +353,11 @@ packages:
   erika_flutter:
     dependency: "direct main"
     description:
-      path: "~/.nipa-next/erika-wt/agent-diagnostics/packages/erika_flutter"
-      relative: false
-    source: path
+      path: "packages/erika_flutter"
+      ref: "5e5a95406f9df3ea55c4254c7da1443eaaabfbcd"
+      resolved-ref: "5e5a95406f9df3ea55c4254c7da1443eaaabfbcd"
+      url: "https://github.com/AimesSoft/liberika.git"
+    source: git
     version: "0.2.1"
   fake_async:
     dependency: transitive

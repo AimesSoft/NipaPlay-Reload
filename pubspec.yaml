@@ -353,13 +353,18 @@ dependency_overrides:
     path: third_party/kmbal_ionicons
   volume_controller:
     path: third_party/volume_controller
-  # Development only, not for release: the Erika worktree on this machine,
-  # ahead of the published 0.2.1 (diagnostics, invokeJson, exportFrame). Build
-  # macOS with ERIKA_MACOS_CAPI_DYLIB pointing at that worktree's
-  # target/release/liberika_capi.dylib. Remove this entry to go back to the
-  # published package.
+  # Until the next erika_flutter release: liberika PRs #165 and #166
+  # (diagnostics, invokeJson, exportFrame, truthful hardware fallback), pinned
+  # to a commit. Without ERIKA_MACOS_CAPI_DYLIB the macOS pod builds erika_capi
+  # from this checkout's source (needs Rust; slow); with it, the pod bundles
+  # that prebuilt dylib instead, e.g. one built by
+  # `ERIKA_NATIVE_PROFILE=lgpl cargo build -p erika_capi --release` in a
+  # liberika checkout. Replace with the published version once released.
   erika_flutter:
-    path: ~/.nipa-next/erika-wt/agent-diagnostics/packages/erika_flutter
+    git:
+      url: https://github.com/AimesSoft/liberika.git
+      ref: 5e5a95406f9df3ea55c4254c7da1443eaaabfbcd
+      path: packages/erika_flutter
 
 
 
