@@ -18,7 +18,10 @@ final class MdkFrameEngine implements FrameEngine {
 
   @override
   Future<FrameSource> open(String source,
-      {int? width, int? maxEdge, required Duration timeout}) async {
+      {int? width,
+      int? maxEdge,
+      String format = 'jpeg',
+      required Duration timeout}) async {
     final player = mdk.Player();
     try {
       player.mute = true;
@@ -82,6 +85,9 @@ final class _MdkFrameSource implements FrameSource {
   final _Size _size;
   var _warmed = false;
   var _closed = false;
+
+  @override
+  String get engine => 'mdk';
 
   @override
   final int? durationMs;

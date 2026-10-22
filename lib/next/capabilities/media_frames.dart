@@ -9,19 +9,25 @@ import 'package:path/path.dart' as p;
 
 import 'classic_action.dart';
 
-/// One decoded picture: RGBA8, tightly packed (`width * height * 4` bytes).
+/// One decoded picture: RGBA8, tightly packed (`width * height * 4` bytes),
+/// or a PNG file the engine encoded itself ([png]).
 final class RawFrame {
   const RawFrame(
       {required this.width,
       required this.height,
       required this.rgba,
-      required this.timestampMs});
+      required this.timestampMs,
+      this.png});
   final int width;
   final int height;
   final Uint8List rgba;
 
   /// Where in the media this picture actually is, as the engine reports it.
   final int timestampMs;
+
+  /// The picture as a PNG file, when the engine encoded it; [rgba] is then
+  /// empty.
+  final Uint8List? png;
 }
 
 /// A single frame that could not be taken, with a stable reason code.
@@ -36,6 +42,8 @@ final class FrameFailure implements Exception {
 /// A media opened by an engine for picking frames. It is private to one
 /// media.frames call and never shares state with what is being played.
 abstract interface class FrameSource {
+  /// The engine that opened this media.
+  String get engine;
   int? get durationMs;
   int? get videoWidth;
   int? get videoHeight;
@@ -50,9 +58,77 @@ abstract interface class FrameEngine {
 
   /// Opens [source] (an absolute path or URL). Exactly one of [width] and
   /// [maxEdge] is set; the engine decodes at that size and keeps the aspect
-  /// ratio. Throws [Failure] when the media cannot be opened.
+  /// ratio. [format] is the file format the pictures end up in (jpeg or png),
+  /// for an engine that can encode it itself. Throws [Failure] when the media
+  /// cannot be opened.
   Future<FrameSource> open(String source,
-      {int? width, int? maxEdge, required Duration timeout});
+      {int? width,
+      int? maxEdge,
+      String format = 'jpeg',
+      required Duration timeout});
+}
+
+/// The first of [engines] that opens the media; the others are fallbacks.
+/// A session opened by a later engine reports why the earlier ones did not
+/// open ([FallbackFrameSource]).
+final class PreferredFrameEngine implements FrameEngine {
+  PreferredFrameEngine(this.engines) : assert(engines.isNotEmpty);
+  final List<FrameEngine> engines;
+
+  @override
+  String get name => engines.first.name;
+
+  @override
+  Future<FrameSource> open(String source,
+      {int? width,
+      int? maxEdge,
+      String format = 'jpeg',
+      required Duration timeout}) async {
+    final skipped = <({String engine, String error})>[];
+    Object? firstError;
+    StackTrace? firstStack;
+    for (final engine in engines) {
+      try {
+        final session = await engine.open(source,
+            width: width, maxEdge: maxEdge, format: format, timeout: timeout);
+        return skipped.isEmpty ? session : FallbackFrameSource(session, skipped);
+      } catch (error, stack) {
+        if (firstError == null) {
+          firstError = error;
+          firstStack = stack;
+        }
+        skipped.add((engine: engine.name, error: _reason(error)));
+      }
+    }
+    Error.throwWithStackTrace(firstError!, firstStack!);
+  }
+
+  static String _reason(Object error) => switch (error) {
+        Failure(:final message) => message,
+        UnsupportedError(:final message) => message ?? '$error',
+        StateError(:final message) => message,
+        _ => '$error',
+      };
+}
+
+/// A session of a fallback engine, with the engines tried before it.
+final class FallbackFrameSource implements FrameSource {
+  FallbackFrameSource(this._inner, this.skipped);
+  final FrameSource _inner;
+  final List<({String engine, String error})> skipped;
+
+  @override
+  String get engine => _inner.engine;
+  @override
+  int? get durationMs => _inner.durationMs;
+  @override
+  int? get videoWidth => _inner.videoWidth;
+  @override
+  int? get videoHeight => _inner.videoHeight;
+  @override
+  Future<RawFrame> frameAt(int atMs) => _inner.frameAt(atMs);
+  @override
+  Future<void> close() => _inner.close();
 }
 
 const mediaFramesMaxCount = 60;
@@ -103,7 +179,9 @@ final class MediaFramesCapability implements Capability {
         '{code,message} instead, and the other frames are still returned. Error codes: beyond_duration, '
         'decode_failed, timeout, skipped_after_timeout. durationMs and the video size are facts of the file when known. '
         'Playback is not touched: the pictures come from a separate decoder, nothing is paused, sought or reopened, '
-        'and the decoder is released before the call returns. The files are temporary, on the device that ran the call, '
+        'and the decoder is released before the call returns. engine names the decoder that took them: erika (Erika\'s '
+        'own frame export) where Erika can open the media, else mdk; engineFallback lists the engines that could not '
+        '(engine, error). The files are temporary, on the device that ran the call, '
         'and are removed after a day. The pictures say nothing about what is in them; deciding that is up to you.',
     effect: Effect.read,
     input: ObjectSchema({
@@ -138,6 +216,13 @@ final class MediaFramesCapability implements Capability {
       'videoWidth': IntegerSchema(nullable: true),
       'videoHeight': IntegerSchema(nullable: true),
       'engine': StringSchema(),
+      'engineFallback': ArraySchema(ObjectSchema({
+        'engine': StringSchema(),
+        'error': StringSchema(),
+      }, required: [
+        'engine',
+        'error'
+      ])),
       'requested': IntegerSchema(),
       'taken': IntegerSchema(),
       'elapsedMs': IntegerSchema(),
@@ -325,6 +410,7 @@ final class _MediaFrames {
       session = await engine.open(source,
           width: width,
           maxEdge: maxEdge,
+          format: format,
           timeout: budget < openTimeout ? budget : openTimeout);
     } on Failure {
       rethrow;
@@ -387,7 +473,12 @@ final class _MediaFrames {
       'durationMs': session.durationMs,
       'videoWidth': session.videoWidth,
       'videoHeight': session.videoHeight,
-      'engine': engine.name,
+      'engine': session.engine,
+      if (session is FallbackFrameSource)
+        'engineFallback': [
+          for (final skipped in session.skipped)
+            {'engine': skipped.engine, 'error': skipped.error}
+        ],
       'requested': times.length,
       'taken': frames.where((frame) => frame['error'] == null).length,
       'elapsedMs': DateTime.now().difference(started).inMilliseconds,
@@ -424,13 +515,15 @@ final class _MediaFrames {
 
   Future<JsonMap> _write(
       Directory directory, int at, RawFrame frame, String format) async {
+    final png = format == 'png' ? frame.png : null;
     if (frame.width <= 0 ||
         frame.height <= 0 ||
-        frame.rgba.length != frame.width * frame.height * 4) {
+        (png == null && frame.rgba.length != frame.width * frame.height * 4)) {
       throw const FrameFailure(
           'decode_failed', 'The decoder returned a picture of the wrong size.');
     }
-    final encoded = await Isolate.run(() => encodeFrame(frame, format));
+    final Uint8List encoded =
+        png ?? await Isolate.run<Uint8List>(() => encodeFrame(frame, format));
     final extension = format == 'png' ? 'png' : 'jpg';
     final file = File(p.join(directory.path, 'frame_${at}ms.$extension'));
     // Two requests for the same time must not overwrite each other.
@@ -452,10 +545,13 @@ final class _MediaFrames {
 }
 
 Uint8List encodeFrame(RawFrame frame, String format) {
+  // The pixels may be a view into a larger buffer (a platform channel
+  // message): read from where the view starts.
   final image = img.Image.fromBytes(
       width: frame.width,
       height: frame.height,
       bytes: frame.rgba.buffer,
+      bytesOffset: frame.rgba.offsetInBytes,
       numChannels: 4,
       order: img.ChannelOrder.rgba);
   return format == 'png'

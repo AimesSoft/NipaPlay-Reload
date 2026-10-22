@@ -11,7 +11,8 @@ import 'mdk_native_log.dart';
 /// The last lines player kernels delivered to the app while Next is on, and
 /// mpv's own full log file when asked for. Lines are kept as given and
 /// redacted when read. MDK's own log, one for the process, comes through
-/// [mdk] (instance 0).
+/// [mdk] (instance 0); so does Erika's, a ring kept inside Erika that is
+/// copied in through [pullEngineLog].
 final class PlayerNativeLog {
   PlayerNativeLog({this.capacity = 1000, this.mdk});
   static final instance = PlayerNativeLog(mdk: MdkNativeLog.instance);
@@ -25,12 +26,21 @@ final class PlayerNativeLog {
   File? _file;
   Player? _filePlayer;
 
+  /// Erika's ring: the next of its entries to copy, entries that left the
+  /// ring before they were copied, and whether it captures FFmpeg's log.
+  int? _erikaNextSeq;
+  int _erikaMissed = 0;
+  String? _erikaCapture;
+  bool _erikaRead = false;
+  Future<void> _engineWork = Future.value();
+
   bool get recording => _recording;
   File? get file => _file;
 
   void attach() {
     _recording = true;
     PlayerNativeLogTap.observer = add;
+    PlayerNativeLogTap.engineLog = pullEngineLog;
     mdk?.attach((level, text) => add('mdk', 0, level, 'log', text));
   }
 
@@ -39,18 +49,61 @@ final class PlayerNativeLog {
   Future<void> detach() async {
     _recording = false;
     if (PlayerNativeLogTap.observer == add) PlayerNativeLogTap.observer = null;
+    if (PlayerNativeLogTap.engineLog == pullEngineLog) {
+      PlayerNativeLogTap.engineLog = null;
+    }
     mdk?.detach();
     await stopFile();
   }
 
   void add(String kernel, int instance, String level, String source,
-      String text) {
-    _lines.add(_Line(++_sequence, DateTime.now().toUtc(), kernel, instance,
-        level, source, text));
+      String text, {DateTime? at, int repeated = 1}) {
+    _lines.add(_Line(++_sequence, at ?? DateTime.now().toUtc(), kernel,
+        instance, level, source, text, repeated));
     while (_lines.length > capacity) {
       _lines.removeFirst();
       _evicted++;
     }
+  }
+
+  /// Copies the entries a kernel's own log gained since the last copy;
+  /// [read] returns them from a sequence on. Only Erika keeps such a log:
+  /// its engine lines (source engine) and FFmpeg's warnings and errors
+  /// (source ffmpeg), for the whole process (instance 0). Copies run one at
+  /// a time.
+  Future<void> pullEngineLog(String kernel,
+      Future<Map<String, Object?>?> Function(int? sinceSeq) read) {
+    if (!_recording || kernel != 'erika') return Future.value();
+    final work = _engineWork.then((_) => _pullErika(read));
+    _engineWork = work.catchError((Object _) {});
+    return work;
+  }
+
+  Future<void> _pullErika(
+      Future<Map<String, Object?>?> Function(int? sinceSeq) read) async {
+    final export = await read(_erikaNextSeq);
+    if (export == null || !_recording) return;
+    _erikaRead = true;
+    final since = _erikaNextSeq;
+    final oldest = (export['oldestSeq'] as num?)?.toInt();
+    if (since != null && oldest != null && oldest > since) {
+      _erikaMissed += oldest - since;
+    }
+    for (final entry in (export['entries'] as List?) ?? const []) {
+      if (entry is! Map) continue;
+      final data = entry['data'];
+      final text = entry['message'] as String? ??
+          (data == null ? '' : jsonEncode(data));
+      final unixMs = entry['unixMs'];
+      add('erika', 0, '${entry['level'] ?? 'info'}',
+          entry['source'] == 'ffmpeg' ? 'ffmpeg' : 'engine', text,
+          at: unixMs is num
+              ? DateTime.fromMillisecondsSinceEpoch(unixMs.toInt(), isUtc: true)
+              : null,
+          repeated: (entry['count'] as num?)?.toInt() ?? 1);
+    }
+    _erikaNextSeq = (export['nextSeq'] as num?)?.toInt() ?? since;
+    _erikaCapture = export['ffmpegCapture'] as String? ?? _erikaCapture;
   }
 
   JsonMap read({
@@ -91,6 +144,7 @@ final class PlayerNativeLog {
         'level': line.level,
         'source': line.source,
         'text': text,
+        if (line.repeated > 1) 'repeated': line.repeated,
       });
       last = line.sequence;
     }
@@ -100,6 +154,12 @@ final class PlayerNativeLog {
         'mdkLog': {
           'reading': _recording && mdk!.notAttached == null,
           'reason': _recording ? mdk!.notAttached : null,
+        },
+      if (_erikaRead)
+        'erikaLog': {
+          'nextSeq': _erikaNextSeq,
+          'missed': _erikaMissed,
+          'ffmpegCapture': _erikaCapture,
         },
       'lines': selected,
       'nextSequence': last,
@@ -173,7 +233,7 @@ final class PlayerNativeLog {
 
 final class _Line {
   _Line(this.sequence, this.at, this.kernel, this.instance, this.level,
-      this.source, this.text);
+      this.source, this.text, this.repeated);
   final int sequence;
   final DateTime at;
   final String kernel;
@@ -181,4 +241,5 @@ final class _Line {
   final String level;
   final String source;
   final String text;
+  final int repeated;
 }

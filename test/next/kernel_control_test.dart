@@ -241,6 +241,17 @@ class ErikaKernel extends Fake implements ErikaPlayerAdapter {
       'getPresenterStats' =>
         (result: {'decodedVideoFrames': 1}, error: null, supported: true),
       'setOutputHeadroom' => (result: null, error: null, supported: true),
+      'listMethods' => (
+          result: {
+            'schema': 1,
+            'methods': [
+              {'name': 'listMethods', 'scope': 'global'},
+              {'name': 'pause', 'scope': 'presenter'},
+            ],
+          },
+          error: null,
+          supported: true
+        ),
       _ => (
           result: null,
           error: 'Erika has no method $method on this platform',
@@ -304,6 +315,16 @@ class ErikaKernel extends Fake implements ErikaPlayerAdapter {
       'debugHud': hud,
       'lastError': null,
       'errors': <String, String>{},
+      'diagnostics': {
+        'schema': 1,
+        'decoder': {'activeBackend': 'videotoolbox', 'hardware': true},
+        'timing': {
+          'scheduler': {'lateDroppedFrames': 3, 'presentedFrames': 990},
+          'clock': {'lastDriftMs': 1.5, 'corrections': 2},
+        },
+        'media': {'video': {'codec': 'hevc'}},
+        'note': 'from /Users/someone/Movies/secret.mkv?token=abc',
+      },
     };
   }
 }
@@ -484,7 +505,11 @@ void main() {
       expect(first['decoder'], containsPair('fellBack', true));
       expect(first['decoder'], containsPair('activeBackend', 'videoToolbox'));
       expect((first['frames'] as Map)['nominalFps'], 23.976);
-      expect((first['frames'] as Map)['lateDropped'], isNull);
+      expect((first['frames'] as Map)['lateDropped'], 3);
+      final diagnostics = first['diagnostics'] as Map;
+      expect(diagnostics['schema'], 1);
+      expect(((diagnostics['timing'] as Map)['clock'] as Map)['corrections'], 2);
+      expect(diagnostics['note'], isNot(contains('token=abc')));
       expect((first['hdr'] as Map)['sdrTonemapFrames'], 1000);
       expect((first['hdr'] as Map)['videoTransfer'], 2);
       expect((first['hdr'] as Map)['metadata'], isNull);
@@ -492,8 +517,10 @@ void main() {
           'display_hdr_unsupported');
       expect(first['resources'], {'videoFrameBytes': 4096, 'drawableCount': 3});
       expect(first['debugHud'], false);
-      expect(first['notReported'], containsAll(['sync.driftMs',
-        'network.throughput', 'frames.lateDropped', 'hdr.metadata']));
+      expect(first['notReported'],
+          containsAll(['network.throughput', 'hdr.metadata']));
+      expect(first['notReported'],
+          isNot(anyOf(contains('frames.lateDropped'), contains('sync.driftMs'))));
 
       kernel.underflow = 512;
       final second = (await invokeCompleted(r.harness, 'playback.kernel', {}))[
@@ -513,6 +540,17 @@ void main() {
           r.harness, 'playback.kernel', {'sampleMs': 500}))['erika'] as Map;
       expect((sampled['window'] as Map)['source'], 'sampled');
       expect((sampled['window'] as Map)['decodedFrames'], 48);
+    });
+
+    test('which Erika methods only read', () {
+      expect(erikaReadsOnly('listMethods', const {}), true);
+      expect(erikaReadsOnly('getDiagnosticsSnapshot', const {}), true);
+      expect(erikaReadsOnly('trackSelection', const {}), true);
+      expect(erikaReadsOnly('pause', const {}), false);
+      expect(erikaReadsOnly('invokeJson', const {'method': 'getLogs'}), true);
+      expect(erikaReadsOnly('invokeJson', const {'method': 'seek'}), false);
+      expect(erikaReadsOnly('invokeJson', const {'method': 'invokeJson'}),
+          false);
     });
 
     test('a reset of Erika\'s counters gives no window', () {
@@ -993,6 +1031,13 @@ void main() {
         'arguments': {'headroom': 2.0},
       });
       expect(set['nextMediaOpensFreshPlayer'], true);
+      final table = await invokeCompleted(r.harness, 'playback.kernel_invoke', {
+        'sessionId': session(state),
+        'method': 'listMethods',
+      });
+      expect(((table['result'] as Map)['methods'] as List).first,
+          containsPair('name', 'listMethods'));
+      expect(kernel.invoked, contains('listMethods'));
       final mpv = rig(await opened(MpvKernel()));
       final refused = await mpv.harness.invokeJson('playback.kernel_invoke', {
         'sessionId': 'x',

@@ -102,12 +102,9 @@ String erikaUpscalerName(PlayerUpscalerMode mode) => switch (mode) {
       PlayerUpscalerMode.off => 'off',
     };
 
-/// What Erika 0.2.1 keeps to itself; playback.kernel names them so their
-/// absence is not read as zero.
+/// What Erika keeps to itself, its diagnostics snapshot included;
+/// playback.kernel names them so their absence is not read as zero.
 const erikaNotReported = [
-  'frames.lateDropped',
-  'sync.driftMs',
-  'sync.corrections',
   'network.throughput',
   'network.retries',
   'buffering.reason',
@@ -119,9 +116,23 @@ const erikaNotReported = [
   'danmaku.dropped',
   'hdr.metadata',
   'hdr.dolbyVision',
-  'timing.config',
   'decoder.selection',
 ];
+
+/// Erika methods that only read: they leave the player as it was.
+bool erikaReadsOnly(String method, Map<String, Object?> arguments) {
+  if (method == 'invokeJson') {
+    final inner = arguments['method'];
+    final innerArguments = arguments['arguments'];
+    return inner is String &&
+        inner != 'invokeJson' &&
+        erikaReadsOnly(inner,
+            innerArguments is Map<String, Object?> ? innerArguments : const {});
+  }
+  return method.startsWith('get') ||
+      const {'listMethods', 'tracks', 'trackSelection', 'danmakuTracks'}
+          .contains(method);
+}
 
 /// What each kernel lets Next read and set for one playback.
 JsonMap kernelControls(String? kernel, Iterable<PlayerKernelType> reopen) {
@@ -379,6 +390,10 @@ JsonMap erikaKernelFacts(JsonMap status,
       : const {};
   final stats = map(status['presenterStats']);
   final decoder = map(status['decoder']);
+  final diagnostics = status['diagnostics'] is Map
+      ? redactHarnessJson(map(status['diagnostics']))
+      : null;
+  final scheduler = map(map(map(diagnostics)['timing'])['scheduler']);
   final output = map(status['outputStatus']);
   final params = map(status['videoParams']);
   Object? s(String key) => stats.isEmpty ? null : stats[key];
@@ -424,7 +439,7 @@ JsonMap erikaKernelFacts(JsonMap status,
       'nominalFps': fpsNum != null && fpsDen != null && fpsNum > 0 && fpsDen > 0
           ? double.parse((fpsNum / fpsDen).toStringAsFixed(3))
           : null,
-      'lateDropped': null,
+      'lateDropped': scheduler['lateDroppedFrames'],
     },
     'audio': {
       'pushedFrames': s('pushedAudioFrames'),
@@ -467,6 +482,7 @@ JsonMap erikaKernelFacts(JsonMap status,
         ? redactHarnessText(status['lastError'] as String)
         : null,
     'errors': status['errors'],
+    'diagnostics': diagnostics,
     'notReported': erikaNotReported,
   };
 }

@@ -60,7 +60,10 @@ class _FfmpegEngine implements FrameEngine {
 
   @override
   Future<FrameSource> open(String source,
-      {int? width, int? maxEdge, required Duration timeout}) async {
+      {int? width,
+      int? maxEdge,
+      String format = 'jpeg',
+      required Duration timeout}) async {
     final probe = await Process.run('/opt/homebrew/bin/ffprobe', [
       '-v', 'error', '-select_streams', 'v:0',
       '-show_entries', 'stream=width,height', '-show_entries', 'format=duration',
@@ -84,6 +87,8 @@ class _FfmpegSource implements FrameSource {
       this.videoWidth, this.videoHeight);
   final String ffmpeg, source;
   final int w, h;
+  @override
+  String get engine => 'ffmpeg-cli (test only)';
   @override
   final int durationMs;
   @override

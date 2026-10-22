@@ -2,10 +2,13 @@ import 'dart:async';
 import 'dart:io';
 import 'dart:typed_data';
 
+import 'package:erika_flutter/erika_flutter.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:image/image.dart' as img;
 import 'package:nipa_harness/nipa_harness.dart';
 import 'package:nipaplay/next/capabilities/family_descriptions.dart';
 import 'package:nipaplay/next/capabilities/media_frames.dart';
+import 'package:nipaplay/next/capabilities/media_frames_erika.dart';
 
 void main() {
   late Directory root;
@@ -70,6 +73,100 @@ void main() {
       expect(bytes.sublist(0, 2), [0xFF, 0xD8]);
       expect(bytes.length, frame['bytes']);
     }
+  });
+
+  test('pixels handed over as a view into a larger buffer encode as they are',
+      () {
+    // A 2x1 picture, red then blue, three bytes into a larger message.
+    final message = Uint8List(3 + 8 + 5)
+      ..setAll(3, [255, 0, 0, 255, 0, 0, 255, 255]);
+    final frame = RawFrame(
+        width: 2,
+        height: 1,
+        rgba: Uint8List.view(message.buffer, 3, 8),
+        timestampMs: 0);
+    final decoded = img.decodePng(encodeFrame(frame, 'png'))!;
+    expect(decoded.getPixel(0, 0).r, 255);
+    expect(decoded.getPixel(0, 0).b, 0);
+    expect(decoded.getPixel(1, 0).b, 255);
+    expect(decoded.getPixel(1, 0).r, 0);
+  });
+
+  group('Erika first, MDK behind it', () {
+    Harness preferred(FrameEngine first) => Harness([
+          MediaFramesCapability(
+              engine: PreferredFrameEngine([first, engine]),
+              outputRoot: () async => Directory('${root.path}/media-frames'))
+        ]);
+
+    test('the Erika engine writes the PNG Erika encoded and names itself',
+        () async {
+      final asked = <(Duration, int, int, ErikaFrameFormat)>[];
+      final png = Uint8List.fromList([0x89, 0x50, 0x4E, 0x47, 1, 2, 3]);
+      final erika = ErikaFrameEngine(
+          exporter: (uri,
+              {required position,
+              width = 0,
+              height = 0,
+              format = ErikaFrameFormat.png}) async {
+        asked.add((position, width, height, format));
+        if (position == const Duration(seconds: 30)) {
+          throw StateError('Frame export failed: position 30s is not '
+              'before the end of the media (20s)');
+        }
+        final pictureOnly = format == ErikaFrameFormat.png;
+        return ErikaExportedFrame(
+          width: position == Duration.zero ? 16 : 640,
+          height: position == Duration.zero ? 7 : 273,
+          format: format,
+          bytes: pictureOnly ? png : Uint8List(16 * 7 * 4),
+          timestamp: position - const Duration(milliseconds: 0),
+          sourceWidth: 4096,
+          sourceHeight: 1744,
+          duration: const Duration(milliseconds: 888032),
+        );
+      });
+      final out = result(await call(preferred(erika), {
+        'path': file,
+        'atMs': [60000, 10000, 30000],
+        'maxEdge': 640,
+        'format': 'png',
+      }));
+      expect(out['engine'], 'erika');
+      expect(out.containsKey('engineFallback'), isFalse);
+      expect(engine.opens, 0, reason: 'MDK was not needed');
+      expect((out['durationMs'], out['videoWidth'], out['videoHeight']),
+          (888032, 4096, 1744));
+      expect(asked.first, (Duration.zero, 16, 16, ErikaFrameFormat.rgba));
+      expect(asked.skip(1).map((a) => (a.$2, a.$3, a.$4)),
+          everyElement((640, 640, ErikaFrameFormat.png)));
+      final frames = (out['frames'] as List).cast<Map>();
+      expect(frames.first, allOf(containsPair('width', 640),
+          containsPair('height', 273), containsPair('mimeType', 'image/png'),
+          containsPair('timestampMs', 60000)));
+      expect(await File(frames.first['path'] as String).readAsBytes(), png);
+      expect(frames.last['error'], containsPair('code', 'beyond_duration'));
+    });
+
+    test('MDK takes the frames when Erika cannot, and the result says why',
+        () async {
+      final erika = ErikaFrameEngine(
+          exporter: (uri,
+                  {required position,
+                  width = 0,
+                  height = 0,
+                  format = ErikaFrameFormat.png}) async =>
+              throw UnsupportedError('no erika_export_frame in this library'));
+      final out = result(await call(preferred(erika), {
+        'path': file,
+        'atMs': [1000],
+      }));
+      expect(out['engine'], 'fake');
+      expect(out['engineFallback'], [
+        {'engine': 'erika', 'error': 'no erika_export_frame in this library'}
+      ]);
+      expect(out['taken'], 1);
+    });
   });
 
   test('png, width and the default size', () async {
@@ -359,7 +456,10 @@ class _FakeEngine implements FrameEngine {
 
   @override
   Future<FrameSource> open(String path,
-      {int? width, int? maxEdge, required Duration timeout}) async {
+      {int? width,
+      int? maxEdge,
+      String format = 'jpeg',
+      required Duration timeout}) async {
     if (openError != null) throw openError!;
     opens++;
     openedWith = (width: width, maxEdge: maxEdge);
@@ -372,15 +472,17 @@ class _FakeEngine implements FrameEngine {
 }
 
 class _FakeSource implements FrameSource {
-  _FakeSource(this.engine, this.source, this.w, this.h);
-  final _FakeEngine engine;
+  _FakeSource(this.fake, this.source, this.w, this.h);
+  final _FakeEngine fake;
   final String source;
   final int w, h;
   final requested = <int>[];
   var closed = false;
 
   @override
-  int? get durationMs => engine.durationMs;
+  String get engine => fake.name;
+  @override
+  int? get durationMs => fake.durationMs;
   @override
   int? get videoWidth => 3840;
   @override
@@ -389,11 +491,11 @@ class _FakeSource implements FrameSource {
   @override
   Future<RawFrame> frameAt(int atMs) async {
     requested.add(atMs);
-    if (engine.delay > Duration.zero) await Future.delayed(engine.delay);
-    if (engine.stuckAt == atMs) await Completer<void>().future;
-    final failure = engine.failAt[atMs];
+    if (fake.delay > Duration.zero) await Future.delayed(fake.delay);
+    if (fake.stuckAt == atMs) await Completer<void>().future;
+    final failure = fake.failAt[atMs];
     if (failure != null) throw failure;
-    final size = engine.wrongSizeAt.contains(atMs) ? w * h * 4 - 4 : w * h * 4;
+    final size = fake.wrongSizeAt.contains(atMs) ? w * h * 4 - 4 : w * h * 4;
     final pixels = Uint8List(size);
     for (var i = 0; i < size; i += 4) {
       pixels[i] = atMs % 256;
@@ -405,6 +507,6 @@ class _FakeSource implements FrameSource {
   @override
   Future<void> close() async {
     closed = true;
-    engine.openSources--;
+    fake.openSources--;
   }
 }

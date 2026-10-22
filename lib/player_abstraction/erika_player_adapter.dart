@@ -1007,6 +1007,11 @@ class ErikaPlayerAdapter
   ) async {
     try {
       await eventSubscription?.cancel();
+      // Erika's log outlives the player only in native memory; what Next
+      // keeps is copied before the player that reads it goes away.
+      await PlayerNativeLogTap.engineLog
+          ?.call('erika', (sinceSeq) => readEngineLog(sinceSeq: sinceSeq))
+          .catchError((Object _) {});
     } finally {
       await _player.dispose();
     }
@@ -1537,46 +1542,39 @@ class ErikaPlayerAdapter
 
   bool get debugHudEnabled => _debugHudEnabled;
 
-  /// Hands [method] and [arguments] to Erika as they are: to Erika's own
-  /// `invoke` when this erika_flutter has one (arguments as JSON text),
-  /// else over erika_flutter's method channel with this player's id.
-  /// Erika's answer as it gives it, or `supported: false` when neither knows
-  /// the method on this platform.
+  /// Hands [method] and [arguments] to Erika's JSON method table as they are
+  /// (`listMethods` returns the table): Erika's value, or Erika's own error;
+  /// `supported: false` when this Erika has no such method or no table.
   Future<({Object? result, String? error, bool supported})> invokeNative(
       String method, Map<String, Object?> arguments) async {
     _ensureSupported();
-    final dynamic player = _player;
+    final Map<String, Object?> envelope;
     try {
-      final Object? result =
-          await player.invoke(method, jsonEncode(arguments));
-      return (result: result, error: null, supported: true);
-    } on NoSuchMethodError {
-      // This erika_flutter has no invoke; the channel may know the method.
+      envelope = await _player.invokeJson(method, arguments);
+    } on UnsupportedError catch (error) {
+      return (result: null, error: '${error.message}', supported: false);
     } catch (error) {
       return (result: null, error: '$error', supported: true);
     }
+    if (envelope['ok'] == true) {
+      return (result: envelope['value'], error: null, supported: true);
+    }
+    return (
+      result: null,
+      error: '${envelope['error'] ?? 'Erika status ${envelope['status']}'}',
+      supported: envelope['code'] != 'unknown_method',
+    );
+  }
+
+  /// Entries of Erika's process-wide log (its own diagnostics and FFmpeg's
+  /// warnings and errors, redacted by Erika) from [sinceSeq] on, as Erika
+  /// exports them (schema 1); null when this Erika keeps no log.
+  Future<Map<String, Object?>?> readEngineLog({int? sinceSeq}) async {
+    if (!_isSupported) return null;
     try {
-      final id = await _player.ensureCreated();
-      final result = await const MethodChannel('erika_flutter/player')
-          .invokeMethod<Object?>(method, <String, Object?>{
-        ...arguments,
-        'playerId': id,
-      });
-      return (result: result, error: null, supported: true);
-    } on MissingPluginException {
-      return (
-        result: null,
-        error: 'Erika has no method $method on this platform',
-        supported: false,
-      );
-    } on PlatformException catch (error) {
-      return (
-        result: error.details,
-        error: '${error.code}: ${error.message ?? ''}',
-        supported: true,
-      );
-    } catch (error) {
-      return (result: null, error: '$error', supported: true);
+      return await _player.getLogs(limit: 0, sinceSeq: sinceSeq);
+    } on UnsupportedError {
+      return null;
     }
   }
 
@@ -1588,8 +1586,9 @@ class ErikaPlayerAdapter
   }
 
   /// What Erika reports now, each part asked for once: presenter counters
-  /// (cumulative since the session began), output, resources, upscaler and
-  /// tracks, with the last decoder, audio output and video parameter events.
+  /// (cumulative since the session began), output, resources, upscaler,
+  /// Erika's own diagnostics snapshot and tracks, with the last decoder,
+  /// audio output and video parameter events.
   /// A part Erika does not answer is null, its error under `errors`. Leaves
   /// the values [getDetailedMediaInfo] shows as they were.
   Future<Map<String, Object?>> readKernelStatus() async {
@@ -1637,6 +1636,8 @@ class ErikaPlayerAdapter
         'lastGpuMicros': u.lastGpuDuration.inMicroseconds,
       };
     });
+    final diagnostics = await part(
+        'diagnostics', () async => await _player.getDiagnosticsSnapshot());
     final tracks = await part('tracks', () async => [
           for (final t in await _player.tracks())
             <String, Object?>{
@@ -1649,6 +1650,7 @@ class ErikaPlayerAdapter
     return <String, Object?>{
       'presenterStats': stats,
       'presenterStatsAt': stats == null ? null : at.toIso8601String(),
+      'diagnostics': diagnostics,
       'outputStatus': output,
       'resourceStatus': resources,
       'upscalerStatus': upscaler,

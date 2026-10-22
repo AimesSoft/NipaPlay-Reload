@@ -323,6 +323,78 @@ void main() {
       expect(stderr.sets, isEmpty);
     });
 
+    test('Erika\'s own log ring is copied in, incrementally, as no one '
+        'player\'s', () async {
+      final log = PlayerNativeLog()..attach();
+      addTearDown(log.detach);
+      final asked = <int?>[];
+      var ring = <Map<String, Object?>>[
+        {
+          'seq': 0,
+          'unixMs': 1792500000000,
+          'level': 'warn',
+          'source': 'erika',
+          'event': 'video_decoder_changed',
+          'count': 1,
+          'data': {
+            'event': 'video_decoder_changed',
+            'stage': 'hwaccel_videotoolbox_to_software',
+          },
+        },
+        {
+          'seq': 1,
+          'unixMs': 1792500000100,
+          'level': 'error',
+          'source': 'ffmpeg',
+          'event': null,
+          'count': 3,
+          'message': 'Failed setup for format videotoolbox_vld',
+        },
+      ];
+      Future<Map<String, Object?>?> read(int? since) async {
+        asked.add(since);
+        return {
+          'schema': 1,
+          'oldestSeq': ring.first['seq'],
+          'nextSeq': (ring.last['seq'] as int) + 1,
+          'ffmpegCapture': 'bundled',
+          'entries': [
+            for (final entry in ring)
+              if (since == null || (entry['seq'] as int) >= since) entry
+          ],
+        };
+      }
+
+      await PlayerNativeLogTap.engineLog!('erika', read);
+      final first = log.read(currentInstance: 7);
+      final lines = (first['lines'] as List).cast<Map>();
+      expect(lines.map((l) => l['source']), ['engine', 'ffmpeg']);
+      expect(lines.first, allOf(containsPair('kernel', 'erika'),
+          containsPair('level', 'warn'), containsPair('currentPlayer', null)));
+      expect(lines.first['text'], contains('hwaccel_videotoolbox_to_software'));
+      expect(lines.first['at'],
+          DateTime.utc(2026, 10, 20, 12, 40).toIso8601String(),
+          reason: 'the time Erika wrote the entry');
+      expect(lines.last, containsPair('repeated', 3));
+      expect(first['erikaLog'],
+          {'nextSeq': 2, 'missed': 0, 'ffmpegCapture': 'bundled'});
+
+      // The next copy asks from where the last stopped; entries that left
+      // the ring meanwhile are counted, not invented.
+      ring = [
+        {'seq': 5, 'level': 'info', 'source': 'erika', 'count': 1,
+          'message': 'seek'},
+      ];
+      await log.pullEngineLog('erika', read);
+      expect(asked, [null, 2]);
+      final second = log.read(afterSequence: first['nextSequence'] as int);
+      expect((second['lines'] as List).single['text'], 'seek');
+      expect((second['erikaLog'] as Map)['missed'], 3);
+      // Other kernels keep no such log.
+      await log.pullEngineLog('mdk', read);
+      expect(asked, hasLength(2));
+    });
+
     test('player_log shows MDK lines as no one player\'s', () async {
       final handlers = FakeLogHandlers(current: (_, __) {});
       final log = PlayerNativeLog(

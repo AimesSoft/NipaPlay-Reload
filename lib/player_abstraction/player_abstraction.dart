@@ -637,6 +637,19 @@ class Player implements core_player.AsyncExternalSubtitlePlayer {
     }
   }
 
+  /// The kernel's own log entries from [sinceSeq] on (Erika's ring, as
+  /// Erika exports it); null for kernels that keep none.
+  Future<Map<String, Object?>?> readEngineLog({int? sinceSeq}) async {
+    try {
+      final value =
+          await (_delegate as dynamic).readEngineLog(sinceSeq: sinceSeq);
+      return value is Map<String, Object?> ? value : null;
+    } catch (error) {
+      if (_absent(error)) return null;
+      rethrow;
+    }
+  }
+
   /// The kernel library's own version where it reports one (MDK).
   String? get nativeVersion {
     try {

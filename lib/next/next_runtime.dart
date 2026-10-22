@@ -42,6 +42,7 @@ import 'capabilities/library_capability.dart';
 import 'capabilities/ui_capability.dart';
 import 'capabilities/ui_capture.dart';
 import 'capabilities/media_frames.dart';
+import 'capabilities/media_frames_erika.dart';
 import 'capabilities/media_frames_mdk.dart';
 import 'instance_facts.dart';
 import 'app_capabilities.dart';
@@ -429,7 +430,12 @@ final class NextRuntime extends ChangeNotifier {
         InstanceCapability(instanceFacts),
         UiCaptureCapability(ClassicUiCapture(instanceFacts).capture),
         MediaFramesCapability(
-            engine: const MdkFrameEngine(),
+            engine: PreferredFrameEngine([
+              if (PlayerFactory.supportedKernelTypes
+                  .contains(PlayerKernelType.erika))
+                const ErikaFrameEngine(),
+              const MdkFrameEngine(),
+            ]),
             outputRoot: () async => Directory(
                 '${(await getTemporaryDirectory()).path}/media-frames'),
             episodePath: (animeId, episodeId) async => (await WatchHistoryManager

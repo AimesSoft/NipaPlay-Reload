@@ -43,6 +43,11 @@ final class RuntimeDiagnosticsCapability implements Capability {
         'writing': log.file?.path == file.path,
       };
     }
+    final current = player();
+    if (playerKernelId(current.getPlayerKernelName()) == 'erika') {
+      await log.pullEngineLog(
+          'erika', (sinceSeq) => current.readEngineLog(sinceSeq: sinceSeq));
+    }
     return {
       'kernel': _kernel(),
       ...log.read(
@@ -115,7 +120,7 @@ final class RuntimeDiagnosticsCapability implements Capability {
                 id: 'diagnostics.player_log',
                 title: '播放器内核日志',
                 description:
-                    '读取 Next 开启以来播放内核交给应用的最近若干行（容量 capacity，超出的旧行计入 evicted）：Media Kit 为 mpv 日志消息（默认只有 error 级），MDK 为媒体事件与媒体状态（invalid 状态记为 error）以及 MDK 自己的日志（source=log，level 为 MDK 的级别；进程内所有 MDK 实例共用一份，currentPlayer 为 null），Erika 为播放错误、解码器切换、音频输出变化与视频参数（宽高、primaries、transfer 原始整数）。每行有 sequence、at、kernel、currentPlayer（是否来自当前播放器实例，时间轴预览等实例为 false）、level、source、text（读取时脱敏）。afterSequence 续读，nextSequence 为已检查位置；levels、contains 过滤。file=true 时改为读取 diagnostics.player_log_file 写出的 mpv 完整日志（没有正在写的就读最近一份），cursor 为行偏移，单页至多 256 KiB。mdkLog.reading 表示是否在收 MDK 自己的日志；没有收时 reason 说明原因（mdk_log_env：设了 MDK_LOG，MDK 自己写 stderr，Next 不接管）。MDK 的日志处理器全进程只有一个：Next 开启时接过来，每一行原样交给原来的处理器，Next 关闭时交还。',
+                    '读取 Next 开启以来播放内核交给应用的最近若干行（容量 capacity，超出的旧行计入 evicted）：Media Kit 为 mpv 日志消息（默认只有 error 级），MDK 为媒体事件与媒体状态（invalid 状态记为 error）以及 MDK 自己的日志（source=log，level 为 MDK 的级别；进程内所有 MDK 实例共用一份，currentPlayer 为 null），Erika 为播放错误、解码器切换、音频输出变化与视频参数（宽高、primaries、transfer 原始整数），以及 Erika 自己的日志环（全进程一份，currentPlayer 为 null）：source=engine 是 Erika 的运行诊断（多为 JSON 文本，level 为 trace/debug/info/warn/error），source=ffmpeg 是 Erika 内 FFmpeg 的警告与错误；读取时（当前播放器是 Erika）以及 Erika 播放器关闭前抄进来，at 为 Erika 记下的时间，同一条重复出现时 repeated 为次数；erikaLog 给 nextSeq、missed（抄进来之前已被挤出环的条数）与 ffmpegCapture。每行有 sequence、at、kernel、currentPlayer（是否来自当前播放器实例，时间轴预览等实例为 false）、level、source、text（读取时脱敏）。afterSequence 续读，nextSequence 为已检查位置；levels、contains 过滤。file=true 时改为读取 diagnostics.player_log_file 写出的 mpv 完整日志（没有正在写的就读最近一份），cursor 为行偏移，单页至多 256 KiB。mdkLog.reading 表示是否在收 MDK 自己的日志；没有收时 reason 说明原因（mdk_log_env：设了 MDK_LOG，MDK 自己写 stderr，Next 不接管）。MDK 的日志处理器全进程只有一个：Next 开启时接过来，每一行原样交给原来的处理器，Next 关闭时交还。',
                 effect: Effect.read,
                 input: ObjectSchema({
                   'afterSequence': IntegerSchema(minimum: 0),

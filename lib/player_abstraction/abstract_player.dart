@@ -52,6 +52,13 @@ abstract interface class MediaLoadAwarePlayer {
 abstract final class PlayerNativeLogTap {
   static void Function(String kernel, int instance, String level,
       String source, String text)? observer;
+
+  /// Copies a kernel's own log (Erika's process-wide ring) through `read`,
+  /// which returns its entries from a sequence on. Set while [observer] is;
+  /// a kernel calls it before its player goes away.
+  static Future<void> Function(String kernel,
+          Future<Map<String, Object?>?> Function(int? sinceSeq) read)?
+      engineLog;
 }
 
 enum GifExportQuality { normal, high }
