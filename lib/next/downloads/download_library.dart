@@ -28,6 +28,18 @@ final class AppDownloadLibrary implements DownloadLibrary {
     await media.syncClassicHistory();
     final fileId =
         await media.store.ensureFile(path, via: 'download_import');
+    return _entry(path, fileId);
+  }
+
+  @override
+  Future<JsonMap?> registered(String path) async {
+    final fileId = await ServiceProvider.nextCore.media.service.store
+        .registeredFileId(path);
+    return fileId == null ? null : _entry(path, fileId);
+  }
+
+  Future<JsonMap> _entry(String path, String fileId) async {
+    final media = ServiceProvider.nextCore.media.service;
     final links = await media.store.database.rawQuery(
         'SELECT DISTINCT r.parent_id AS workId, e.id AS episodeId, '
         'e.attributes AS episodeFacts FROM media_file_episodes fe '

@@ -488,8 +488,8 @@ final class DownloadExecutor implements JobExecutor {
     }
     await _verify(backend, task, files, requireComplete: false);
     // A file's size says nothing here: the engine allocates every file at
-    // full size up front. Only files it verified are looked up, since a
-    // lookup registers the path.
+    // full size up front. Only files it verified are read, and read-only:
+    // a cancelled download registers nothing.
     final verified = {
       for (final f in context.job.checkpoint['completedFiles'] as List? ?? [])
         (f as Map)['path']
@@ -502,7 +502,7 @@ final class DownloadExecutor implements JobExecutor {
       row['complete'] = complete;
       final media =
           complete && file.included && file.isVideo && file.location.isLocal
-              ? await library.lookup(file.location.path)
+              ? await library.registered(file.location.path)
               : null;
       row['imported'] = media != null;
       if (media != null) {
@@ -589,7 +589,8 @@ final class DownloadExecutor implements JobExecutor {
 }
 
 /// Re-reads each manifest file of [job] after its session was removed:
-/// what is still on disk (actualSize, retained) and what the library holds.
+/// what is still on disk (actualSize, retained) and whether the library
+/// already holds it (imported; read-only, never registers a path).
 Future<List<JsonMap>> readRemovedFiles(
     DownloadBackend backend, DownloadLibrary library, Job job) async {
   final files = <JsonMap>[];
@@ -604,7 +605,10 @@ Future<List<JsonMap>> readRemovedFiles(
       'expectedSize': row['expectedSize'],
       'actualSize': size,
       'retained': size != null,
-      'imported': await library.lookup(row['path'] as String) != null,
+      // Read-only: a file still on disk that the library already holds.
+      // Nothing is registered by looking.
+      'imported': size != null &&
+          await library.registered(row['path'] as String) != null,
     });
   }
   return files;

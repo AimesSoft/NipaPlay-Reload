@@ -205,6 +205,13 @@ final class FakeDownloadLibrary implements DownloadLibrary {
     lookups.add(path);
     return media[path];
   }
+  final registeredReads = <String>[];
+  @override
+  Future<JsonMap?> registered(String path) async {
+    registeredReads.add(path);
+    return media[path];
+  }
+
   @override
   Future<bool> importFiles(List<String> paths, String outputDirectory) async {
     scans.add(List.of(paths));

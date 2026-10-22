@@ -109,6 +109,7 @@ void main() {
   test('deleting a finished download amends its record', () async {
     final done = await finished();
     library.media[backend.video.location.path] = {'fileId': 'f'};
+    library.lookups.clear();
     await invoke('download.delete', {'jobId': done.jobId});
     expect(await File(backend.video.location.path).exists(), isFalse);
     final read = await engine.get(done.jobId);
@@ -123,7 +124,9 @@ void main() {
     final file = fileOf(read);
     expect(file['actualSize'], isNull);
     expect(file['retained'], false);
-    expect(file['imported'], true);
+    // The data is gone: nothing on disk is imported any more.
+    expect(file['imported'], false);
+    expect(library.lookups, isEmpty);
     expect(file.containsKey('canonicalPath'), isFalse);
     // The readers see the same record.
     final viaRead = await invoke('download.read', {'jobId': done.jobId});
@@ -267,5 +270,30 @@ void main() {
     final back = await downloads.adopt(backend, backend.snapshot);
     expect(back.jobId, isNot(done.jobId));
     await engine.cancel(back.jobId);
+  });
+
+  test('removing an unregistered file reads imported false and registers nothing',
+      () async {
+    final done = await finished();
+    library.media.clear();
+    library.lookups.clear();
+    await invoke('download.remove', {'jobId': done.jobId});
+    final file = fileOf(await engine.get(done.jobId));
+    expect(file['retained'], true);
+    expect(file['imported'], false);
+    expect(library.registeredReads, [backend.video.location.path]);
+    expect(library.lookups, isEmpty);
+    expect(library.media, isEmpty);
+  });
+
+  test('a registered file kept on remove reads imported true', () async {
+    final done = await finished();
+    library.media[backend.video.location.path] = {'fileId': 'f'};
+    library.lookups.clear();
+    await invoke('download.remove', {'jobId': done.jobId});
+    final file = fileOf(await engine.get(done.jobId));
+    expect(file['retained'], true);
+    expect(file['imported'], true);
+    expect(library.lookups, isEmpty);
   });
 }

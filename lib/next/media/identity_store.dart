@@ -137,6 +137,18 @@ final class IdentityStore {
     return id;
   }
 
+  /// Read-only: the file entity registered at [locator] on this device, or
+  /// null. Never registers anything.
+  Future<String?> registeredFileId(String locator) async {
+    final rows = await database.query('media_locations',
+        columns: ['file_id'],
+        where: 'owner_device_id = ? AND locator = ?',
+        whereArgs: [ownerDeviceId, locator]);
+    final ids = rows.map((r) => r['file_id'] as String).toSet();
+    if (ids.length != 1) return null;
+    return canonicalFileId(database, ids.single);
+  }
+
   Future<String> ensureRemoteFile(
           String locator, String sourceId, JsonMap metadata) =>
       _filesChanged((added) => _transaction((tx) async {

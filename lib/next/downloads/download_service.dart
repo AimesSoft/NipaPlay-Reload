@@ -187,7 +187,7 @@ final class DownloadService {
           // is read again so its episode links are as they are now.
           if (saved['media'] != null) {
             try {
-              final live = await library.lookup(saved['path'] as String);
+              final live = await library.registered(saved['path'] as String);
               if (live != null) row['media'] = live;
             } catch (_) {}
           }

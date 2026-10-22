@@ -200,7 +200,13 @@ abstract interface class DownloadLibrary {
   Future<bool> get enabled;
   bool get isBusy;
   Future<bool> wasImported(String key);
+  /// Registers [path] in the media library (if needed) and reads its entry.
+  /// Only for the import path.
   Future<JsonMap?> lookup(String path);
+
+  /// Read-only counterpart of [lookup]: the entry of a path already registered
+  /// in the library, or null. Never registers or writes anything.
+  Future<JsonMap?> registered(String path);
   Future<bool> importFiles(List<String> paths, String outputDirectory);
   Future<void> markImported(String key);
 }
