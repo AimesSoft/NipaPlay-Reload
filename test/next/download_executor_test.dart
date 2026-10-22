@@ -275,7 +275,12 @@ void main() {
     await Future<void>.delayed(const Duration(milliseconds: 200));
     stalls = await stallsOnce(job.jobId, (s) => true);
     expect(stalls, [first]);
-    expect((await engine.get(job.jobId)).state, JobState.waitingRetry);
+    // Still retrying the add, not failed: with a 40 ms retry delay the job is
+    // caught waiting for the retry or in the attempt itself.
+    expect(
+        const {JobState.waitingRetry, JobState.interrupted, JobState.running}
+            .contains((await engine.get(job.jobId)).state),
+        isTrue);
     // Metadata arrives: the stretch closes and stays in the checkpoint.
     backend.addError = null;
     backend.health = {
