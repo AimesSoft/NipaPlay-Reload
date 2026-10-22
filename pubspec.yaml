@@ -353,6 +353,13 @@ dependency_overrides:
     path: third_party/kmbal_ionicons
   volume_controller:
     path: third_party/volume_controller
+  # Development only, not for release: the Erika worktree on this machine,
+  # ahead of the published 0.2.1 (diagnostics, invokeJson, exportFrame). Build
+  # macOS with ERIKA_MACOS_CAPI_DYLIB pointing at that worktree's
+  # target/release/liberika_capi.dylib. Remove this entry to go back to the
+  # published package.
+  erika_flutter:
+    path: ~/.nipa-next/erika-wt/agent-diagnostics/packages/erika_flutter
 
 
 

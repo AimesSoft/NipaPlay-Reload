@@ -353,10 +353,9 @@ packages:
   erika_flutter:
     dependency: "direct main"
     description:
-      name: erika_flutter
-      sha256: ff53ab90695bf879e224ddd45eb79c024aa151c8279763254f52d61cdc0b9181
-      url: "https://pub.dev"
-    source: hosted
+      path: "~/.nipa-next/erika-wt/agent-diagnostics/packages/erika_flutter"
+      relative: false
+    source: path
     version: "0.2.1"
   fake_async:
     dependency: transitive
