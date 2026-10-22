@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'dart:isolate';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/scheduler.dart';
@@ -95,12 +96,16 @@ final class LabPaths extends PathProviderPlatform {
 }
 
 /// Serial writes preserve simultaneous Classic and Next preference updates.
+/// The file is read once; this instance is its only writer while the lab
+/// runs, so later reads and writes start from what it last wrote, and each
+/// write is encoded and stored on a background isolate.
 final class LabPreferences extends SharedPreferencesStorePlatform {
   LabPreferences(this.file);
   final File file;
   Future<void> _pending = Future.value();
+  Map<String, Object>? _values;
 
-  Map<String, Object> _read() => file.existsSync()
+  Map<String, Object> _read() => _values ??= file.existsSync()
       ? Map<String, Object>.from(jsonDecode(file.readAsStringSync()) as Map)
       : {};
 
@@ -108,9 +113,7 @@ final class LabPreferences extends SharedPreferencesStorePlatform {
     final result = _pending.then((_) async {
       final values = _read();
       operation(values);
-      final staging = File('${file.path}.pending');
-      await staging.writeAsString(jsonEncode(values), flush: true);
-      await staging.rename(file.path);
+      await _store(file.path, values);
       return true;
     });
     _pending = result.then<void>((_) {});
@@ -138,7 +141,7 @@ final class LabPreferences extends SharedPreferencesStorePlatform {
   Future<Map<String, Object>> getAllWithParameters(
       GetAllParameters parameters) async {
     await _pending;
-    return _read()
+    return Map.of(_read())
       ..removeWhere((key, _) =>
           !key.startsWith(parameters.filter.prefix) ||
           (parameters.filter.allowList != null &&
@@ -158,3 +161,10 @@ class _KeepDrawing with WidgetsBindingObserver {
     }
   }
 }
+
+Future<void> _store(String path, Map<String, Object> values) =>
+    Isolate.run(() {
+      final staging = File('$path.pending');
+      staging.writeAsStringSync(jsonEncode(values), flush: true);
+      staging.renameSync(path);
+    });
