@@ -223,8 +223,15 @@ class WorkManageSheetState extends State<WorkManageSheet>
     return ref != null && _sameRef(ref, c.ref);
   }
 
+  /// The chosen film, when the candidate is one: its one episode is the
+  /// film itself.
+  UiCandidateEpisode? get _film =>
+      _pickedEpisodes?.where((e) => e.movie).firstOrNull;
+
   /// A candidate chosen: its episodes, each file given the one with its
-  /// number (or its place) until the viewer says otherwise.
+  /// number (or its place) until the viewer says otherwise. A film is its
+  /// own one episode: the files of a work that is one episode are it; of
+  /// several, which is the film is the viewer's to say.
   Future<void> _pick(UiMatchCandidate candidate) async {
     setState(() {
       _picked = candidate;
@@ -238,6 +245,14 @@ class WorkManageSheetState extends State<WorkManageSheet>
       final data = _data!;
       setState(() {
         _pickedEpisodes = episodes;
+        if (_film case final film?) {
+          if (data.episodes.length == 1) {
+            for (final f in data.episodes.single.files) {
+              _assign[f] = film;
+            }
+          }
+          return;
+        }
         for (final (i, e) in data.episodes.indexed) {
           final same = episodes.where((c) =>
               c.number == e.number &&
@@ -520,6 +535,19 @@ class WorkManageSheetState extends State<WorkManageSheet>
       await _search();
     }
     if (p['pick'] case final i?) await _pick(_results![int.parse(i)]);
+    if (p['assign'] case final d?) {
+      // `N:K`: file N is the candidate's episode K; `N:skip`: it stays.
+      final at = d.indexOf(':');
+      final file = _data!.files[int.parse(d.substring(0, at))];
+      final to = d.substring(at + 1);
+      setState(() {
+        if (to == 'skip') {
+          _assign.remove(file);
+        } else {
+          _assign[file] = _pickedEpisodes![int.parse(to)];
+        }
+      });
+    }
     if (p['back'] == 'true') setState(() => _picked = null);
     if (p['match'] == 'true') _match();
     if (p['local'] == 'true') await _makeLocal();
@@ -758,10 +786,12 @@ class WorkManageSheetState extends State<WorkManageSheet>
     ];
   }
 
-  /// Which file is which of the chosen work's episodes, then 匹配.
+  /// Which file is which of the chosen work's episodes, then 匹配. For a
+  /// film, which files are it; the others stay as they are.
   List<Widget> _assignSection(UiMatchCandidate picked) {
     final episodes = _pickedEpisodes;
     final files = _data!.files;
+    final film = _film;
     return [
       const SizedBox(height: 8),
       Row(children: [
@@ -779,7 +809,7 @@ class WorkManageSheetState extends State<WorkManageSheet>
         ),
         TagChip(picked.provider.label),
       ]),
-      const ManageHeading('剧集'),
+      ManageHeading(film == null ? '剧集' : '文件'),
       if (_pickFailed)
         _quiet('暂时读不到')
       else if (episodes == null)
@@ -794,7 +824,14 @@ class WorkManageSheetState extends State<WorkManageSheet>
               device: _data!.device,
               value: _assign[f],
               options: episodes,
-              onChanged: (e) => setState(() => _assign[f] = e),
+              skip: film != null,
+              onChanged: (e) => setState(() {
+                if (e == null) {
+                  _assign.remove(f);
+                } else {
+                  _assign[f] = e;
+                }
+              }),
             ),
         ]),
         const SizedBox(height: 18),
@@ -804,7 +841,11 @@ class WorkManageSheetState extends State<WorkManageSheet>
             label: '匹配',
             primary: true,
             busy: busy,
-            onTap: _assign.length == files.length ? _match : null,
+            onTap: (film == null
+                    ? _assign.length == files.length
+                    : _assign.isNotEmpty)
+                ? _match
+                : null,
           ),
         ),
       ],
@@ -1103,6 +1144,7 @@ class _FileChoiceRow extends StatelessWidget {
     required this.value,
     required this.options,
     required this.onChanged,
+    this.skip = false,
   });
   final UiFile file;
 
@@ -1110,7 +1152,10 @@ class _FileChoiceRow extends StatelessWidget {
   final String? device;
   final UiCandidateEpisode? value;
   final List<UiCandidateEpisode> options;
-  final ValueChanged<UiCandidateEpisode> onChanged;
+
+  /// It may stay as it is (跳过, null): a film's, which may not be it.
+  final bool skip;
+  final ValueChanged<UiCandidateEpisode?> onChanged;
 
   @override
   Widget build(BuildContext context) => Padding(
@@ -1133,10 +1178,13 @@ class _FileChoiceRow extends StatelessWidget {
             ),
           ),
           const SizedBox(width: 12),
-          if (value != null)
-            MenuChoice<UiCandidateEpisode>(
-              value: value!,
-              options: [for (final e in options) (e, _short(e.label))],
+          if (value != null || skip)
+            MenuChoice<UiCandidateEpisode?>(
+              value: value,
+              options: [
+                for (final e in options) (e, _short(e.label)),
+                if (skip) (null, '跳过'),
+              ],
               onChanged: onChanged,
             ),
         ]),
@@ -1183,8 +1231,10 @@ class _EpisodeEditRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final e = episode;
+    // A film has no other episode to be.
     final current = relink
         ?.where((c) =>
+            !c.movie &&
             c.number == e.number &&
             (c.season == null || e.season == null || c.season == e.season))
         .firstOrNull;

@@ -448,10 +448,7 @@ final class FakeManage implements NextWorkManage {
     final key = candidate.ref['externalId'] as String;
     final m = world._meta[key] as Map<String, dynamic>?;
     if (m?['kind'] == 'movie') {
-      return [
-        UiCandidateEpisode(
-            number: '1', title: m!['title'] as String, ref: {...candidate.ref})
-      ];
+      return [UiCandidateEpisode.film({...candidate.ref})];
     }
     final total =
         (FakeWorld._overrides[key]?['episodes'] as int?) ?? (m?['episodes'] as int?) ?? 12;

@@ -1072,8 +1072,14 @@ final class CoreWorkManage implements NextWorkManage {
 }
 
 /// A provider work's episodes as `media.metadata.get` records them; a
-/// TV season's within it, with the season as their release.
+/// TV season's within it, with the season as their release. A film has
+/// none: it is its own one (`media.management.bind_batch` takes the film's
+/// ref as the episode, with no release).
 List<UiCandidateEpisode> candidateEpisodesOf(Map record) {
+  if (record['ref'] case final Map ref
+      when ref['objectType'] == 'movie' || record['kind'] == 'movie') {
+    return [UiCandidateEpisode.film(Map<String, Object?>.from(ref))];
+  }
   final out = <UiCandidateEpisode>[];
   void add(Map e, Map? release, int? season) {
     out.add(UiCandidateEpisode(

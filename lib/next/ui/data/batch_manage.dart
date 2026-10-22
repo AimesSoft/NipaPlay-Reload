@@ -172,9 +172,12 @@ final class NextBatch {
 
   /// What matching each work to its candidate would touch on every device
   /// that has it, nothing changed yet. As a single work's match: each file
-  /// to the candidate's episode of its episode's number (the movie itself
-  /// for a film; `media.metadata.get`), a file matched to another identity
-  /// let go of first. Episodes no number fits stay as they are.
+  /// to the candidate's episode of its episode's number
+  /// (`media.metadata.get`), a file matched to another identity let go of
+  /// first. Episodes no number fits stay as they are. A film is its own
+  /// one episode: a work whose files are one episode is it; of several,
+  /// which is the film is the viewer's to say in the work's sheet, and they
+  /// stay as they are.
   Future<UiAssociationPreview> previewMatch(
       List<(UiBatchWork, UiBatchCandidate)> pairs) async {
     const reason = 'Viewer matched several works in the library.';
@@ -183,31 +186,45 @@ final class NextBatch {
     final fits = <String, (int, int)>{};
     for (final (w, c) in pairs) {
       final catalogue = c.movie
-          ? const <UiCandidateEpisode>[]
+          ? [UiCandidateEpisode.film(c.ref)]
           : await (catalogues[_refKey(c.ref)] ??= calls
               .call('media.metadata.get', {'ref': c.ref}).then(
                   (r) => candidateEpisodesOf(r['record'] as Map)));
+      final film = catalogue.where((e) => e.movie).firstOrNull;
       final mine = {
         for (final e in await data.episodes(w.work.workId)) e.episodeId: e
       };
-      final fitted = <String>{}, missed = <String>{};
-      for (final o in w.owners) {
-        final part = parts[o.deviceId] ??=
-            _Part(o, _id('gui-batch-release'), _id('gui-batch-match'));
-        part.works[o.workId] = w;
-        final files =
-            (await _at(o, 'media.files.list', {'workId': o.workId}))['files']
-                as List;
-        for (final file in files.cast<Map>()) {
-          final fileId = file['fileId'] as String;
-          if (!part.files.add(fileId)) continue;
-          final episodes = [
+      final listed = <(WorkOwner, List<Map>)>[
+        for (final o in w.owners)
+          (
+            o,
+            ((await _at(o, 'media.files.list', {'workId': o.workId}))['files']
+                    as List)
+                .cast<Map>()
+          )
+      ];
+      List<String> episodesOf(WorkOwner o, Map file) => [
             for (final e in (file['episodes'] as List).cast<Map>())
               if (o.episodes[e['episodeId']] case final merged?) merged
           ];
+      final whole = film != null &&
+          {
+                for (final (o, files) in listed)
+                  for (final file in files) ...episodesOf(o, file)
+              }.length ==
+              1;
+      final fitted = <String>{}, missed = <String>{};
+      for (final (o, files) in listed) {
+        final part = parts[o.deviceId] ??=
+            _Part(o, _id('gui-batch-release'), _id('gui-batch-match'));
+        part.works[o.workId] = w;
+        for (final file in files) {
+          final fileId = file['fileId'] as String;
+          if (!part.files.add(fileId)) continue;
+          final episodes = episodesOf(o, file);
           final number = episodes.map((e) => mine[e]).nonNulls.firstOrNull;
-          final to = c.movie
-              ? UiCandidateEpisode(number: '', ref: c.ref)
+          final to = film != null
+              ? (whole ? film : null)
               : number == null
                   ? null
                   : _fit(catalogue, number);

@@ -262,7 +262,17 @@ final class UiMatchCandidate {
 
 final class UiCandidateEpisode {
   const UiCandidateEpisode(
-      {required this.number, required this.ref, this.season, this.title, this.release});
+      {required this.number,
+      required this.ref,
+      this.season,
+      this.title,
+      this.release,
+      this.movie = false});
+
+  /// A film's one: the film itself ([ref] is the film's), with no release.
+  const UiCandidateEpisode.film(Map<String, Object?> ref)
+      : this(number: '', ref: ref, movie: true);
+
   final int? season;
   final String number;
   final String? title;
@@ -271,8 +281,12 @@ final class UiCandidateEpisode {
   /// The season's reference where the provider has seasons.
   final Map<String, Object?>? release;
 
-  String get label =>
-      [if (int.tryParse(number) != null) '第 $number 集' else number, if (title != null && title!.isNotEmpty) title!].join('  ');
+  /// The film itself: 正片.
+  final bool movie;
+
+  String get label => movie
+      ? '正片'
+      : [if (int.tryParse(number) != null) '第 $number 集' else number, if (title != null && title!.isNotEmpty) title!].join('  ');
 }
 
 final class UiManagedEpisode {

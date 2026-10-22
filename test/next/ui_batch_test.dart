@@ -556,6 +556,86 @@ void main() {
     expect(calls.last.$1, 'media.library.refresh');
   });
 
+  test(
+      'a film is its own one episode: a work of one episode is it, '
+      'one of several stays as it is', () async {
+    final calls = <(String, JsonMap, String)>[];
+    JsonMap manage(JsonMap input) => input['expectedPlan'] != null
+        ? {'entries': const []}
+        : {
+            'expectedPlan': 'plan',
+            'preview': {
+              'diskFilesDeleted': false,
+              'progressChanged': false,
+              'entities': const [],
+            },
+          };
+    const film = {
+      'provider': 'tmdb',
+      'objectType': 'movie',
+      'externalId': '133701',
+      'scope': ''
+    };
+    final batch = _batch(calls, numbers: {
+      'm1': 1,
+      'm2': 1,
+      'm3': 2
+    }, {
+      // Search did not say it is a film; its record does.
+      'media.metadata.get': (_) => {
+            'record': {'ref': film, 'kind': 'movie', 'episodes': const []}
+          },
+      'media.files.list': (input) => {
+            'files': input['workId'] == 'w1'
+                ? [
+                    _file('f1', 'e1', ['b1']),
+                    _file('f1', 'e1', ['b1']),
+                    _file('f1b', 'e1'),
+                  ]
+                : [_file('g1', 'x1'), _file('g2', 'x2')]
+          },
+      'media.management.unbind_batch': manage,
+      'media.management.bind_batch': manage,
+    });
+    final preview = await batch.previewMatch([
+      (
+        _picked('w1', {
+          _on('here', 'w1', {'e1': 'm1'}): const []
+        }),
+        const UiBatchCandidate(title: '钢铁之泪', ref: film)
+      ),
+      (
+        _picked('w2', {
+          _on('here', 'w2', {'x1': 'm2', 'x2': 'm3'}): const []
+        }),
+        const UiBatchCandidate(title: '钢铁之泪', ref: film, movie: true)
+      ),
+    ]);
+    List<JsonMap> sent(String action) => [
+          for (final c in calls)
+            if (c.$1 == action) c.$2
+        ];
+    expect(sent('media.metadata.get'), hasLength(1));
+    JsonMap file(String id) => {
+          'kind': 'file',
+          'reason': isA<String>(),
+          'entityId': id,
+          'workRef': film,
+          'episodeRefs': [film],
+        };
+    expect(sent('media.management.bind_batch').single['entries'],
+        [file('f1'), file('f1b')]);
+    expect(sent('media.management.unbind_batch').single['entries'], [
+      {
+        'entityId': 'f1',
+        'reason': isA<String>(),
+        'bindingIds': ['b1']
+      }
+    ]);
+    expect([for (final g in preview.groups) (g.id, g.fitted, g.missed)],
+        [('w1', 1, 0), ('w2', 0, 2)]);
+  });
+
   test('letting go previews each device whose own work is matched', () async {
     final calls = <(String, JsonMap, String)>[];
     final batch = _batch(calls, {
