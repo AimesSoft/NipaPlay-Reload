@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:http/http.dart' as http;
 import 'package:nipa_harness/nipa_harness.dart';
@@ -639,17 +640,12 @@ final class UiDataService implements NextUiData, NextNowPlaying {
           'ui.present requires NIPAPLAY_CHAT from the current embedded chat; do not supply threadId or turnId.');
     }
     final journal = File('${mediaRoot.path}/journal.jsonl');
-    JsonMap? boundary;
-    if (await journal.exists()) {
-      for (final line in await journal.readAsLines()) {
-        if (line.isEmpty) continue;
-        final row = decodeMediaJson(line);
-        if (row['event'] == 'chat.turn_boundary' &&
-            row['origin'] == invocation.origin) {
-          boundary = row;
-        }
-      }
-    }
+    final boundary = await lastJournalRow(
+        journal,
+        'chat.turn_boundary',
+        (row) =>
+            row['event'] == 'chat.turn_boundary' &&
+            row['origin'] == invocation.origin);
     if (boundary == null || boundary['phase'] != 'started') {
       throw const Failure(FailureCode.invalidInput,
           'NIPAPLAY_CHAT has no active turn; call ui.present inside that chat turn.');
@@ -1219,5 +1215,47 @@ void validateViewerText(String value) {
       _machineText.hasMatch(value)) {
     throw const Failure(FailureCode.invalidInput,
         'Viewer text must be one natural short sentence (1–160 characters), without IDs, URLs, paths or debugging details. Put IDs only in reference fields.');
+  }
+}
+
+/// The last row of a JSONL [journal] that [match]es, read from the end of the
+/// file: only the lines written after it are read, not the whole journal.
+/// Only lines containing [marker] are decoded.
+Future<JsonMap?> lastJournalRow(
+    File journal, String marker, bool Function(JsonMap row) match) async {
+  if (!await journal.exists()) return null;
+  final file = await journal.open();
+  try {
+    var end = await file.length();
+    var tail = Uint8List(0);
+    JsonMap? read(List<int> bytes) {
+      if (bytes.isEmpty) return null;
+      final line = utf8.decode(bytes);
+      if (!line.contains(marker)) return null;
+      final row = decodeMediaJson(line.trimRight());
+      return match(row) ? row : null;
+    }
+
+    while (end > 0) {
+      final start = end > 65536 ? end - 65536 : 0;
+      await file.setPosition(start);
+      final block = BytesBuilder(copy: false)
+        ..add(await file.read(end - start))
+        ..add(tail);
+      final data = block.takeBytes();
+      var lineEnd = data.length;
+      for (var i = data.length - 1; i >= 0; i--) {
+        if (data[i] != 0x0a) continue;
+        if (read(Uint8List.sublistView(data, i + 1, lineEnd)) case final row?) {
+          return row;
+        }
+        lineEnd = i;
+      }
+      tail = Uint8List.sublistView(data, 0, lineEnd);
+      end = start;
+    }
+    return read(tail);
+  } finally {
+    await file.close();
   }
 }
