@@ -443,11 +443,22 @@ final class CoreWorkManage implements NextWorkManage {
   Future<String> createLocal(UiManagedWork from, String title) async {
     const reason = 'Viewer made a work of its own.';
     final owner = _here(from);
-    final files = [
-      for (final f in from.files)
-        if ((f.handle as _FileRef).owner == owner) f
+    // Each episode as it is, with its files here: a file on another
+    // device is in that device's catalogue, not this one's.
+    final episodes = [
+      for (final e in from.episodes)
+        if ([
+          for (final f in e.files)
+            if ((f.handle as _FileRef).owner == owner) f
+        ]
+            case final files when files.isNotEmpty)
+          (e, files)
     ];
-    if (await _letGo(owner, files, reason) case final release?) {
+    final files = {
+      for (final (_, files) in episodes)
+        for (final f in files) (f.handle as _FileRef).fileId: f
+    };
+    if (await _letGo(owner, files.values, reason) case final release?) {
       await _call('media.identity.unbind_batch', release);
     }
     final work = _id('local-work'), release = _id('local-release');
@@ -462,14 +473,17 @@ final class CoreWorkManage implements NextWorkManage {
           'parentId': work,
           'title': title
         },
-        for (final (i, file) in files.indexed)
+        for (final (e, files) in episodes)
           {
             'entityId': _id('local-episode'),
             'kind': 'episode',
             'parentId': release,
-            'title': file.name.replaceFirst(RegExp(r'\.[^.]+$'), ''),
-            'number': '${i + 1}',
-            'fileIds': [(file.handle as _FileRef).fileId],
+            'title': _text(e.title) ??
+                _text(files.first.name.replaceFirst(RegExp(r'\.[^.]+$'), '')) ??
+                title,
+            if (_text(e.number) case final number?) 'number': number,
+            if (e.season != null) 'season': e.season,
+            'fileIds': [for (final f in files) (f.handle as _FileRef).fileId],
           }
       ],
     });

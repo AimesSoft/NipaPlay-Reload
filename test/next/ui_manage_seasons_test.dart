@@ -21,7 +21,8 @@ import 'media_test_support.dart';
 /// file with an episode only by the season and number recorded for it — an
 /// episode without a season as of season 1, a special (season 0) never with
 /// the regular episode of its number. What nothing fits is the viewer's.
-/// A season that cannot be read is said so.
+/// A season that cannot be read is said so. A work made its own keeps its
+/// episodes as they are.
 void main() {
   JsonMapLike season(int n) => {
         'provider': 'tmdb',
@@ -529,6 +530,171 @@ void main() {
           ]),
           throwsA(isA<h.Failure>()
               .having((f) => f.code, 'code', h.FailureCode.unavailable)));
+    });
+  });
+
+  group('a work of its own', () {
+    test(
+        'keeps each episode\'s number, season and title, its files together; '
+        'another device\'s files stay there', () async {
+      final calls = <(String, JsonMapLike)>[];
+      JsonMapLike row(String fileId, String path, String episode) => {
+            'fileId': fileId,
+            'path': path,
+            'bindings': const [],
+            'episodes': [
+              {'episodeId': episode, 'relation': 'primary'}
+            ],
+          };
+      late final h.Harness harness;
+      harness = h.Harness([
+        _Cap({
+          'media.management.targets': (_) => {
+                'entries': [
+                  {
+                    'workId': 'w',
+                    'targets': [
+                      {
+                        'deviceId': 'this-mac',
+                        'workId': 'local-work',
+                        'local': true,
+                        'online': true,
+                        'episodes': [
+                          for (final e in ['3', 'sp', 'x'])
+                            {'episodeId': 'local-$e', 'mergedEpisodeId': 'm:$e'}
+                        ],
+                      },
+                      {
+                        'deviceId': 'study',
+                        'workId': 'their-work',
+                        'local': false,
+                        'online': true,
+                        'episodes': [
+                          for (final e in ['3', 'there'])
+                            {'episodeId': 'their-$e', 'mergedEpisodeId': 'm:$e'}
+                        ],
+                      },
+                    ],
+                  }
+                ]
+              },
+          'state.query': (_) => {
+                'rows': [
+                  {'deviceId': 'study', 'name': '书房的 Mac'}
+                ]
+              },
+          'media.metadata.ui_facts': (_) => {
+                'fields': const {},
+                'episodes': {
+                  'items': [
+                    {
+                      'episodeId': 'm:3',
+                      'number': 3,
+                      'season': 1,
+                      'title': {'value': '苍月草'}
+                    },
+                    {'episodeId': 'm:sp', 'number': 1, 'season': 0},
+                    {'episodeId': 'm:x'},
+                    {'episodeId': 'm:there', 'number': 4, 'season': 1},
+                  ]
+                },
+              },
+          'media.identity.get': (input) => switch (input['entityId']) {
+                'local-work' => {
+                    'identity': {'id': 'local-work', 'bindings': const []}
+                  },
+                'f-3a' => {
+                    'identity': {
+                      'id': 'f-3a',
+                      'bindings': [
+                        {
+                          'bindingId': 'b-3a',
+                          'status': 'accepted',
+                          'ref': mediaEpisodeRef(3)
+                        }
+                      ]
+                    }
+                  },
+                _ => throw const h.Failure(h.FailureCode.notFound, 'none'),
+              },
+          'media.entities.remove_batch': (_) =>
+              throw const h.Failure(h.FailureCode.invalidInput, 'not local'),
+          'media.files.list': (_) => {
+                'files': [
+                  row('f-3a', '/m/03.mkv', 'local-3'),
+                  row('f-3a', '/backup/03.mkv', 'local-3'),
+                  row('f-3b', '/m/03 v2.mkv', 'local-3'),
+                  row('f-sp', '/m/sp01.mkv', 'local-sp'),
+                  row('f-x', '/m/extra.mkv', 'local-x'),
+                ]
+              },
+          'study.media.identity.get': (input) => {
+                'identity': {'id': input['entityId'], 'bindings': const []}
+              },
+          'study.media.files.list': (_) => {
+                'files': [
+                  row('their-3', r'D:\m\03.mkv', 'their-3'),
+                  row('their-4', r'D:\m\04.mkv', 'their-there'),
+                ]
+              },
+          'media.identity.unbind_batch': (_) => {'entries': const []},
+          'media.entities.put_batch': (_) => {'entries': const []},
+          'mesh.invoke': (input) async => switch (await harness.invokeJson(
+                  '${input['deviceId']}.${input['action']}',
+                  Map<String, Object?>.from(input['input'] as Map),
+                  h.Invocation(origin: 'mesh'))) {
+                h.Completed(:final value) => value.toJson(),
+                h.Failed(:final failure) => throw failure,
+                h.NeedsDecision() => throw StateError('decision'),
+              },
+        }, calls)
+      ]);
+      final manage = CoreWorkManage(() => harness, _Data(const []));
+      final work = await manage.work(const UiWork(workId: 'w', title: '芙莉莲'));
+      expect(work.kind, UiWorkKind.loose);
+      calls.clear();
+
+      await manage.createLocal(work, '芙莉莲');
+      JsonMapLike sent(String action) =>
+          calls.singleWhere((c) => c.$1 == action).$2;
+      expect(sent('media.identity.unbind_batch')['entries'], [
+        {
+          'entityId': 'f-3a',
+          'reason': isA<String>(),
+          'bindingIds': ['b-3a']
+        }
+      ]);
+      final entries =
+          (sent('media.entities.put_batch')['entries'] as List).cast<Map>();
+      expect([for (final e in entries) e['kind']],
+          ['work', 'release', 'episode', 'episode', 'episode']);
+      expect([
+        for (final e in entries.skip(2))
+          {for (final k in e.keys) if (k != 'entityId' && k != 'parentId') k: e[k]}
+      ], [
+        {
+          'kind': 'episode',
+          'title': '苍月草',
+          'number': '3',
+          'season': 1,
+          'fileIds': ['f-3a', 'f-3b'],
+        },
+        {
+          'kind': 'episode',
+          'title': 'sp01',
+          'number': '1',
+          'season': 0,
+          'fileIds': ['f-sp'],
+        },
+        {
+          'kind': 'episode',
+          'title': 'extra',
+          'fileIds': ['f-x'],
+        },
+      ]);
+      expect({for (final e in entries.skip(2)) e['parentId']},
+          {entries[1]['entityId']});
+      expect(calls.where((c) => c.$1 == 'mesh.invoke'), isEmpty);
     });
   });
 }

@@ -152,7 +152,7 @@ final class FakeManage implements NextWorkManage {
           episodeId: 'fake:$key:${i + 1}',
           workId: 'fake:$key',
           number: int.tryParse(e.number),
-          season: 1,
+          season: e.season ?? 1,
           title: e.title,
           runtime: Duration(minutes: 4 + (e.files.first.hashCode % 9).abs()),
           progress: watched[i + 1],
@@ -597,10 +597,19 @@ final class FakeManage implements NextWorkManage {
     await _wait(400);
     _check('local');
     final key = 'local:new${++_localCount}';
+    // Each episode as it is, with its files here.
     _locals[key] = _LocalWork(title, [
-      for (final (i, f) in from.files.indexed)
-        _LocalEpisode('${i + 1}', f.name.replaceFirst(RegExp(r'\.[^.]+$'), ''),
-            [f.path])
+      for (final e in from.episodes)
+        if ([
+          for (final f in e.files)
+            if (f.device == null) f
+        ]
+            case final files when files.isNotEmpty)
+          _LocalEpisode(
+              e.number,
+              e.title ?? files.first.name.replaceFirst(RegExp(r'\.[^.]+$'), ''),
+              [for (final f in files) f.path],
+              season: e.season)
     ]);
     _absorbed.add(from.handle as String);
     _changed();
@@ -617,7 +626,8 @@ final class FakeManage implements NextWorkManage {
       ..clear()
       ..addAll([
         for (final e in edits)
-          _LocalEpisode(e.number, e.title, [for (final f in e.files) f.path])
+          _LocalEpisode(e.number, e.title, [for (final f in e.files) f.path],
+              season: e.season)
       ]);
     _changed();
   }
@@ -1013,10 +1023,11 @@ final class _LocalWork {
 }
 
 final class _LocalEpisode {
-  _LocalEpisode(this.number, this.title, this.files);
+  _LocalEpisode(this.number, this.title, this.files, {this.season});
   final String number;
   final String? title;
   final List<String> files;
+  final int? season;
 }
 
 final class _FakeTrack {

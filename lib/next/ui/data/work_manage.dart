@@ -40,8 +40,11 @@ abstract interface class NextWorkManage {
   // —— 本地作品 ——
 
   /// A work of its own for what has no match (home videos, extras, a
-  /// collection): one episode per file, in order
-  /// (`media.entities.put_batch`). Returns the new work's ID.
+  /// collection): each episode as it is, with its files on this device
+  /// together — its number and season where recorded (none where not),
+  /// its title, or a file's name where it has none
+  /// (`media.entities.put_batch`). Another device's files stay that
+  /// device's. Returns the new work's ID.
   Future<String> createLocal(UiManagedWork from, String title);
 
   /// Saves a local work's episodes as edited: numbers, seasons, titles and
