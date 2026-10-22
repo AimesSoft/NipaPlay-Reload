@@ -1,6 +1,8 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:developer';
 import 'dart:io';
+import 'dart:isolate';
 
 import '../../utils/lab_profile.dart';
 import '../harness_redaction.dart';
@@ -74,9 +76,40 @@ void installDebugChat(ChatHost? Function() current) {
   });
 }
 
+/// Appends every host event to the lab's chat-events.jsonl, in order. The
+/// events (a whole thread read back among them) are encoded and written by a
+/// background isolate.
 void recordDebugChat(ChatHost host) {
-  final events = File(LabProfile.location('chat-events.jsonl'));
-  host.events.listen((message) => events.writeAsStringSync(
-      '${jsonEncode({'t': DateTime.now().toIso8601String(), 'm': message})}\n',
-      mode: FileMode.append));
+  final path = LabProfile.location('chat-events.jsonl');
+  final waiting = <Object?>[];
+  SendPort? writer;
+  void send(Object? entry) =>
+      writer == null ? waiting.add(entry) : writer!.send(entry);
+  final ready = ReceivePort();
+  ready.listen((port) {
+    writer = port as SendPort;
+    waiting.forEach(port.send);
+    waiting.clear();
+    ready.close();
+  });
+  unawaited(Isolate.spawn(_appendEvents, (ready.sendPort, path),
+      debugName: 'chat-events'));
+  host.events.listen(
+      (message) => send((DateTime.now().toIso8601String(), message)),
+      onDone: () => send(null));
+}
+
+void _appendEvents((SendPort, String) setup) {
+  final (ready, path) = setup;
+  final file = File(path).openSync(mode: FileMode.append);
+  final port = ReceivePort();
+  port.listen((entry) {
+    if (entry case (String at, Object? message)) {
+      file.writeStringSync('${jsonEncode({'t': at, 'm': message})}\n');
+    } else {
+      file.closeSync();
+      port.close();
+    }
+  });
+  ready.send(port.sendPort);
 }
