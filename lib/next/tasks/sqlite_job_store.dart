@@ -17,6 +17,14 @@ final class SqliteJobStore implements JobStore {
       SqliteJobStore.fromDatabase(
           await openNextDatabase(root, factory: factory));
 
+  /// Each job as last decoded, with the revision it was decoded at. A stored
+  /// snapshot never changes without its revision moving (commit requires the
+  /// next revision), and a Job is immutable, so a job whose stored revision
+  /// matches is returned as it was decoded instead of decoding and copying
+  /// its snapshot again: listing every task costs what changed, not what the
+  /// task history holds.
+  final _decoded = <String, Job>{};
+
   @override
   Future<Job?> get(String jobId) async {
     final rows =
@@ -36,10 +44,34 @@ final class SqliteJobStore implements JobStore {
       arguments.add(type);
     }
     final rows = await _database.query('jobs',
+        columns: ['job_id', 'revision'],
         where: clauses.isEmpty ? null : clauses.join(' AND '),
         whereArgs: arguments,
         orderBy: 'created_at ASC, job_id ASC');
-    return rows.map(_decode).toList();
+    final known = <String, Job>{};
+    final stale = <String>[];
+    for (final row in rows) {
+      final id = row['job_id'] as String, job = _decoded[id];
+      if (job != null && job.revision == row['revision']) {
+        known[id] = job;
+      } else {
+        stale.add(id);
+      }
+    }
+    // Only what changed since it was last decoded is read in full. A job
+    // that moved on between the two reads is returned at its newer revision.
+    for (var start = 0; start < stale.length; start += 500) {
+      final ids = stale.sublist(start, (start + 500).clamp(0, stale.length));
+      for (final row in await _database.query('jobs',
+          where: 'job_id IN (${List.filled(ids.length, '?').join(',')})',
+          whereArgs: ids)) {
+        known[row['job_id'] as String] = _decode(row);
+      }
+    }
+    return [
+      for (final row in rows)
+        if (known[row['job_id']] case final job?) job
+    ];
   }
 
   @override
@@ -113,8 +145,17 @@ final class SqliteJobStore implements JobStore {
     ];
   }
 
-  Job _decode(Map<String, Object?> row) =>
-      Job.fromJson(jsonDecode(row['snapshot'] as String) as JsonMap);
+  /// What is returned is always decoded from storage, as before; the job
+  /// committed in memory is not cached, since storage keeps less of it (a
+  /// failure's details, for one).
+  Job _decode(Map<String, Object?> row) {
+    final id = row['job_id'] as String;
+    final cached = _decoded[id];
+    if (cached != null && cached.revision == row['revision']) return cached;
+    final job = Job.fromJson(jsonDecode(row['snapshot'] as String) as JsonMap);
+    if (cached == null || cached.revision < job.revision) _decoded[id] = job;
+    return job;
+  }
 
   @override
   Future<void> close() => _database.close();
