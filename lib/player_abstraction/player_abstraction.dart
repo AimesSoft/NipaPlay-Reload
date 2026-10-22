@@ -13,6 +13,7 @@ export './abstract_player.dart'
         GifExportRequest,
         GifExportResult,
         MediaLoadAwarePlayer,
+        PlayerNativeLogTap,
         networkMediaLoadMaxAttempts;
 export './player_factory.dart'
     show PlayerKernelType; // Export PlayerKernelType enum
@@ -510,6 +511,59 @@ class Player implements core_player.AsyncExternalSubtitlePlayer {
     } catch (_) {}
     // 回退到同步版本
     return getDetailedMediaInfo();
+  }
+
+  // Diagnostics read by NipaPlay Next; Classic does not call these.
+
+  /// Tells this player's lines apart in [PlayerNativeLogTap].
+  int get kernelInstance => identityHashCode(_delegate);
+
+  /// The kernel's own judgement whether its current load error is retried;
+  /// null when the kernel makes none.
+  bool? get mediaLoadErrorRetryable {
+    try {
+      final value = (_delegate as dynamic).mediaLoadErrorRetryable;
+      return value is bool ? value : null;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// mpv's current values for [names]; empty for kernels without mpv.
+  Future<Map<String, String?>> readNativeProperties(List<String> names) async {
+    try {
+      final values =
+          await (_delegate as dynamic).readMpvProperties(names) as Map;
+      return {
+        for (final entry in values.entries)
+          '${entry.key}': entry.value as String?
+      };
+    } catch (_) {
+      return const {};
+    }
+  }
+
+  /// MDK's typed stream parameters; empty for other kernels.
+  Map<String, Object?> nativeStreamFacts() {
+    try {
+      final facts = (_delegate as dynamic).nativeStreamFacts();
+      if (facts is Map<String, Object?>) return facts;
+    } catch (_) {}
+    return const {};
+  }
+
+  /// Has the kernel write its full log to [path] (empty stops). False when
+  /// the kernel has no such log.
+  Future<bool> setNativeLogFile(String path) async {
+    try {
+      await (_delegate as dynamic).setNativeLogFile(path);
+      return true;
+    } on NoSuchMethodError {
+      return false;
+    } catch (error) {
+      debugPrint('[Player] setNativeLogFile failed: $error');
+      return false;
+    }
   }
 
   bool get supportsUpscaler {

@@ -46,6 +46,14 @@ abstract interface class MediaLoadAwarePlayer {
   Future<bool> retryCurrentMediaLoad();
 }
 
+/// Lines and events a kernel already delivers to the app (mpv log messages,
+/// MDK media events, Erika errors). Nothing listens unless NipaPlay Next is
+/// on; [instance] tells player instances apart.
+abstract final class PlayerNativeLogTap {
+  static void Function(String kernel, int instance, String level,
+      String source, String text)? observer;
+}
+
 enum GifExportQuality { normal, high }
 
 @immutable

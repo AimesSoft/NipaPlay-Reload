@@ -988,6 +988,7 @@ extension VideoPlayerStatePlaybackControls on VideoPlayerState {
     } catch (e) {
       //debugPrint('跳转时出错 (已静默处理): $e');
       _error = '跳转时出错: $e';
+      _tagError('seek');
       _setStatus(PlayerStatus.idle);
       _isSeeking = false;
     }

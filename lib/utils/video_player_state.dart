@@ -461,6 +461,7 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
   final String _introSkipEnabledKey = 'intro_skip_enabled';
   bool _introSkipEnabled = true; // 默认开启
   String? _error;
+  (String, String)? _errorStageTag;
   final bool _isErrorStopping = false; // <<< ADDED THIS FIELD
   double _aspectRatio = 16 / 9; // 默认16:9，但会根据视频实际比例更新
   String? _currentVideoPath;
@@ -1321,6 +1322,18 @@ int _exactEndStreak = 0;
   Duration get duration => _duration;
   Duration get position => _position;
   String? get error => _error;
+
+  /// The playback step that set [error], for as long as that error stands.
+  String? get errorStage {
+    final tag = _errorStageTag;
+    return tag != null && tag.$2 == _error ? tag.$1 : null;
+  }
+
+  void _tagError(String stage) {
+    final error = _error;
+    _errorStageTag = error == null ? null : (stage, error);
+  }
+
   double get aspectRatio => _aspectRatio;
   bool get hasVideo =>
       _status == PlayerStatus.ready ||

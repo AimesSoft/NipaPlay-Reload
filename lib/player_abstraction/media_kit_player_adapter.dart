@@ -1143,6 +1143,8 @@ class MediaKitPlayerAdapter
       if (_mpvDiagnosticsEnabled) {
         debugPrint('MediaKit MPV日志: [${log.level}/${log.prefix}] ${log.text}');
       }
+      PlayerNativeLogTap.observer?.call('media_kit', identityHashCode(this),
+          log.level, log.prefix, log.text);
     });
   }
 
@@ -2144,6 +2146,9 @@ class MediaKitPlayerAdapter
   @override
   String? get mediaLoadError => _mediaLoadError;
 
+  /// Whether the current load error is one this adapter retries.
+  bool get mediaLoadErrorRetryable => _mediaLoadErrorRetryable;
+
   @override
   Future<bool> waitUntilMediaReady({required Duration timeout}) async {
     if (_mediaReady) return true;
@@ -2911,6 +2916,24 @@ class MediaKitPlayerAdapter
       debugPrint(
           '[CHAPTER-DIAG] setChapter($index) 失败（mpv chapter seek 降级，仅精确 seek 生效）: $e');
     }
+  }
+
+  /// mpv's current values for [names], read now; a property mpv does not
+  /// have at this moment is null. Classic never calls this.
+  Future<Map<String, String?>> readMpvProperties(List<String> names) async {
+    final values = await Future.wait(names.map(_getMpvPropertyForDiagnostics));
+    return {
+      for (var i = 0; i < names.length; i++)
+        names[i]: values[i] == null || values[i]!.isEmpty ? null : values[i],
+    };
+  }
+
+  /// Has mpv write its full log to [path], or stop writing when [path] is
+  /// empty. Kept out of the media options: it is not a per-file setting.
+  /// Classic never calls this.
+  Future<void> setNativeLogFile(String path) async {
+    final dynamic platform = _player.platform;
+    await platform.setProperty('log-file', path);
   }
 
   Future<String?> _getMpvPropertyForDiagnostics(String name) async {

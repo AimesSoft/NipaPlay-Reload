@@ -1641,6 +1641,8 @@ class ErikaPlayerAdapter
         'status=${event.status} error=${event.error ?? '-'} '
         'message=${event.message ?? '-'}',
       );
+      PlayerNativeLogTap.observer?.call('erika', identityHashCode(this),
+          'error', 'playback', errorMessage);
     }
 
     final decoder = event.decoder;
@@ -1672,6 +1674,18 @@ class ErikaPlayerAdapter
         'codec=${decoder.codec ?? '-'} format=${decoder.pixelFormat ?? '-'} '
         'reason=${decoder.reason ?? '-'}',
       );
+      PlayerNativeLogTap.observer?.call(
+          'erika',
+          identityHashCode(this),
+          'event',
+          'video_decoder',
+          'stage=${decoder.stage} requested=${decoder.requestedBackend} '
+              'previous=${decoder.previousBackend ?? '-'} '
+              'active=${decoder.activeBackend} '
+              'fallbacks=${decoder.fallbackCount} '
+              'codec=${decoder.codec ?? '-'} '
+              'format=${decoder.pixelFormat ?? '-'} '
+              'reason=${decoder.reason ?? '-'}');
     }
 
     final audio = event.audio;

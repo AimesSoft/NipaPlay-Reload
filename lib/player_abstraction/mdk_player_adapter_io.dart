@@ -249,6 +249,12 @@ class MdkPlayerAdapter
       if (!_isDisposed) {
         _buffering.value = status.test(mdk.MediaStatus.buffering);
       }
+      PlayerNativeLogTap.observer?.call(
+          'mdk',
+          identityHashCode(this),
+          status.test(mdk.MediaStatus.invalid) ? 'error' : 'status',
+          'media_status',
+          status.toString());
     });
     _buffering.value = _mdkPlayer.mediaStatus.test(mdk.MediaStatus.buffering);
   }
@@ -265,6 +271,8 @@ class MdkPlayerAdapter
             _activeAudioDecoder = e.detail;
             break;
         }
+        PlayerNativeLogTap.observer?.call('mdk', identityHashCode(this),
+            'event', e.category, 'error=${e.error} detail=${e.detail}');
       }
 
       // FVP 0.33 exposes onEvent as a callback registrar, while 0.37 exposes
@@ -707,5 +715,45 @@ class MdkPlayerAdapter
   // MDK 的异步接口：直接返回同步结果（MDK 获取多为同步）
   Future<Map<String, dynamic>> getDetailedMediaInfoAsync() async {
     return getDetailedMediaInfo();
+  }
+
+  /// MDK's typed stream parameters and the decoders it was given, for
+  /// diagnostics. Classic never calls this.
+  Map<String, Object?> nativeStreamFacts() {
+    Object? read(Object? Function() value) {
+      try {
+        return value();
+      } catch (_) {
+        return null;
+      }
+    }
+
+    final dynamic info = _mdkPlayer.mediaInfo;
+    return {
+      'format': read(() => info.format),
+      'bitRate': read(() => info.bitRate),
+      'video': [
+        for (final dynamic v in (read(() => info.video) as List?) ?? const [])
+          {
+            'codec': read(() => v.codec.codec),
+            'bitRate': read(() => v.codec.bitRate),
+            'frameRate': read(() => v.codec.frameRate),
+            'formatName': read(() => v.codec.formatName),
+            'width': read(() => v.codec.width),
+            'height': read(() => v.codec.height),
+          }
+      ],
+      'audio': [
+        for (final dynamic a in (read(() => info.audio) as List?) ?? const [])
+          {
+            'codec': read(() => a.codec.codec),
+            'bitRate': read(() => a.codec.bitRate),
+            'channels': read(() => a.codec.channels),
+            'sampleRate': read(() => a.codec.sampleRate),
+          }
+      ],
+      'videoDecoders': read(() => getDecoders(PlayerMediaType.video)),
+      'audioDecoders': read(() => getDecoders(PlayerMediaType.audio)),
+    };
   }
 }

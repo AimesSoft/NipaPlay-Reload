@@ -310,6 +310,7 @@ extension VideoPlayerStatePlayerSetup on VideoPlayerState {
           const message = '浏览器不支持该视频格式/编码，请转换为 H.264/AAC 的 MP4 或更换支持的浏览器';
           _setStatus(PlayerStatus.error, message: message);
           _error = message;
+          _tagError('web_format');
           return;
         }
       }
@@ -322,6 +323,7 @@ extension VideoPlayerStatePlayerSetup on VideoPlayerState {
         message: '找不到文件或无法访问: ${p.basename(videoPath)}',
       );
       _error = '文件不存在或无法访问';
+      _tagError('file_check');
       return;
     }
 
@@ -347,6 +349,7 @@ extension VideoPlayerStatePlayerSetup on VideoPlayerState {
       if (resolvedActualPlayUrl == null || resolvedActualPlayUrl.isEmpty) {
         _setStatus(PlayerStatus.error, message: '无法获取播放会话');
         _error = '无法获取播放会话';
+        _tagError('stream_session');
         _requestPlaybackErrorDialog();
         return;
       }
@@ -367,6 +370,7 @@ extension VideoPlayerStatePlayerSetup on VideoPlayerState {
         if (resolvedActualPlayUrl == null || resolvedActualPlayUrl.isEmpty) {
           _setStatus(PlayerStatus.error, message: '无法解析远程媒体路径，请检查连接配置');
           _error = '无法解析远程媒体路径';
+          _tagError('remote_path');
           _requestPlaybackErrorDialog();
           return;
         }
@@ -382,6 +386,7 @@ extension VideoPlayerStatePlayerSetup on VideoPlayerState {
           message: '解析远程媒体路径失败，请检查连接配置（$safeError）',
         );
         _error = '解析远程媒体路径失败';
+        _tagError('remote_path');
         _requestPlaybackErrorDialog();
         return;
       }
@@ -1307,6 +1312,7 @@ extension VideoPlayerStatePlayerSetup on VideoPlayerState {
         if (isUnsupportedFormat) {
           const message = '浏览器不支持该视频格式/编码，请转换为 H.264/AAC 的 MP4 或更换支持的浏览器';
           _error = message;
+          _tagError('web_format');
           _setStatus(PlayerStatus.error, message: message);
           return;
         }
@@ -1322,6 +1328,7 @@ extension VideoPlayerStatePlayerSetup on VideoPlayerState {
           '[VideoPlayerState] Media prepare failed for $videoPath: $detail',
         );
         _error = message;
+        _tagError(e is TimeoutException ? 'media_ready_timeout' : 'media_open');
         _setStatus(PlayerStatus.error, message: message);
         _notifySeriousPlaybackErrorAfterFrame(
           expectedPlaybackGeneration: initializationGeneration,
@@ -1329,6 +1336,7 @@ extension VideoPlayerStatePlayerSetup on VideoPlayerState {
         return;
       }
       _error = '初始化视频播放器时出错: $e';
+      _tagError('initialize');
       _setStatus(PlayerStatus.error, message: '播放器初始化失败');
       // 尝试恢复
       _tryRecoverFromError();

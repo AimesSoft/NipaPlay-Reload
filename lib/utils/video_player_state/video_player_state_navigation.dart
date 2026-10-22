@@ -1606,6 +1606,7 @@ extension VideoPlayerStateNavigation on VideoPlayerState {
                 'VideoPlayerState: 播放器返回无效的视频数据 (position: $playerPosition, duration: $playerDuration) 路径: $pathForErrorLog. 错误信息: $userMessage. 已停止播放并设置为错误状态.');
 
             _error = userMessage;
+            _tagError('invalid_media');
 
             player.state = PlaybackState.stopped;
 

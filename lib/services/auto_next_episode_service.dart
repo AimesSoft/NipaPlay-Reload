@@ -317,4 +317,6 @@ class AutoNextEpisodeService {
 
   // 获取下一话路径
   String? get nextEpisodePath => _nextEpisode?.videoPath;
+
+  PlaybackDetailEpisode? get nextEpisode => _nextEpisode;
 }
