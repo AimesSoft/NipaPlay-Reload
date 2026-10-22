@@ -6,12 +6,28 @@ final class SecretRedactor {
   static List<String>? _sorted;
   static final Map<String, List<String>> _variants = {};
 
+  static final _listeners = <void Function(String value, CredentialRef ref)>[];
+
   static void remember(CredentialRef ref, String value) {
     if (value.isNotEmpty) {
       _known[value] = ref;
       _sorted = null;
+      for (final listener in List.of(_listeners)) {
+        listener(value, ref);
+      }
     }
   }
+
+  /// Every value remembered so far, for a redactor on another isolate.
+  static Map<String, CredentialRef> remembered() => Map.of(_known);
+
+  /// Told each value as it is remembered, so another isolate's redactor can
+  /// remember it in the same order as the text it redacts arrives.
+  static void addListener(void Function(String value, CredentialRef ref) l) =>
+      _listeners.add(l);
+  static void removeListener(
+          void Function(String value, CredentialRef ref) l) =>
+      _listeners.remove(l);
 
   static final _secretKey = RegExp(
       r'^(password|secret|token|access_?token|api_?key|apiToken|webToken|authorization)$',

@@ -8,6 +8,7 @@ import 'package:nipaplay/security/secret_redactor.dart';
 
 import '../agent_endpoint.dart';
 import '../harness_redaction.dart';
+import 'chat_line_reader.dart';
 import 'dsh_runtime.dart';
 import 'liveness.dart';
 import 'memory_stale.dart';
@@ -17,6 +18,15 @@ import '../memory/service.dart';
 import 'model_launch.dart';
 
 typedef ChatMessage = Map<String, dynamic>;
+
+/// A runtime line that is not an RPC object, or output that could not be
+/// read; [text] is already redacted.
+final class _UnreadableLine implements Exception {
+  const _UnreadableLine(this.text);
+  final String text;
+  @override
+  String toString() => text;
+}
 
 final class ChatRpcError implements Exception {
   ChatRpcError(this.error);
@@ -551,28 +561,20 @@ final class ChatHost implements ConversationHistory {
   };
 
   Future<void> _read() async {
+    // Splitting, decoding and redacting each line run on the reader's
+    // isolate; lines arrive here in the order they were written.
+    final reader = ChatLineReader.start(_process!.stdout,
+        rpc: true, streamDeltaMethods: _deltaMethods);
     try {
-      await for (final line in _process!.stdout
-          .transform(utf8.decoder)
-          .transform(const LineSplitter())) {
-        await endpoint.inspectChatText(line);
-        final decoded = jsonDecode(line);
-        if (decoded is! Map<String, dynamic>) {
-          throw const FormatException('Expected RPC object');
-        }
+      await for (final line in reader.lines) {
+        await endpoint.inspectChatText(line.text);
+        if (line.error case final error?) throw _UnreadableLine(error);
+        final decoded = line.decoded!;
         final wireMethod = decoded['method'] as String? ?? '';
         final wireParams = decoded['params'] as Map?;
         // A stream delta is redacted by protectChatDelta below (together with
-        // the held tail); redacting it here too would scan the same text twice.
-        final deltaStream = _deltaMethods.contains(wireMethod) &&
-            wireParams?['delta'] is String;
-        final message = Map<String, dynamic>.from(redactHarnessJson(
-            deltaStream
-                ? {
-                    ...decoded,
-                    'params': {...wireParams!, 'delta': ''}
-                  }
-                : decoded) as Map);
+        // the held tail); the reader left its text out of the message.
+        final message = line.redacted!;
         if (!probe && modelLaunch != null && wireMethod == 'thread/started') {
           await _rememberRollout(wireParams!['thread'] as Map);
         }
@@ -694,8 +696,13 @@ final class ChatHost implements ConversationHistory {
       }
       if (!_closing && !_restarting) _transportError('app-server stdout closed');
     } catch (error) {
-      if (!_restarting) _transportError(redactHarnessText(error.toString()));
+      if (!_restarting) {
+        _transportError(error is _UnreadableLine
+            ? error.text
+            : redactHarnessText(error.toString()));
+      }
     } finally {
+      await reader.close();
       for (final completer in _pending.values) {
         completer.completeError(StateError('app-server connection closed'));
       }
@@ -749,14 +756,18 @@ final class ChatHost implements ConversationHistory {
   }
 
   Future<void> _readErrors() async {
-    await for (final line in _process!.stderr
-        .transform(utf8.decoder)
-        .transform(const LineSplitter())) {
-      await endpoint.inspectChatText(line);
-      _events.add({
-        'method': 'host/stderr',
-        'params': {'text': redactHarnessText(line)}
-      });
+    final reader = ChatLineReader.start(_process!.stderr, rpc: false);
+    try {
+      await for (final line in reader.lines) {
+        await endpoint.inspectChatText(line.text);
+        if (line.error case final error?) throw _UnreadableLine(error);
+        _events.add({
+          'method': 'host/stderr',
+          'params': {'text': line.redactedText}
+        });
+      }
+    } finally {
+      await reader.close();
     }
   }
 
