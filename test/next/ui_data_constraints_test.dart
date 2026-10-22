@@ -409,4 +409,114 @@ void main() {
     expect((await engine.get(job.jobId)).receipt!.toJson(), receipt);
     expect(await store.database.rawQuery('PRAGMA foreign_key_check'), isEmpty);
   });
+
+  test('a turn shows an identical card once; results say so and name the conversation',
+      () async {
+    Future<JsonMap> present(List<Map<String, Object?>> cards) async {
+      final outcome = await call('ui.present', {'cards': cards});
+      return ((outcome as Completed).value as dynamic).toJson() as JsonMap;
+    }
+
+    final first = await present([
+      {'kind': 'work', 'workId': 'w1'}
+    ]);
+    expect(first['conversation'], 'main');
+    expect(first['cards'], [
+      {'index': 0, 'alreadyShown': false}
+    ]);
+    final again = await present([
+      {'kind': 'work', 'workId': 'w1'},
+      {'kind': 'work', 'workId': 'w2'},
+      {'kind': 'work', 'workId': 'w2'},
+    ]);
+    expect(again['cards'], [
+      {'index': 0, 'alreadyShown': true},
+      {'index': 1, 'alreadyShown': false},
+      {'index': 2, 'alreadyShown': true},
+    ]);
+    await present([
+      {'kind': 'work', 'workId': 'w1'}
+    ]);
+    expect(await store.database.query('ui_presentations'), hasLength(3));
+    final shown = await service.cards(threadId: 'thread', turnId: 'turn');
+    expect([for (final c in shown) (c as UiWorkCard).work.workId],
+        ['w1', 'w2']);
+
+    Map<String, Object?> choices(String second) => {
+          'kind': 'choices',
+          'options': [
+            {'label': '清掉'},
+            {'label': second}
+          ]
+        };
+    expect((await present([choices('留着')]))['cards'], [
+      {'index': 0, 'alreadyShown': false}
+    ]);
+    expect((await present([choices('先不管')]))['cards'], [
+      {'index': 0, 'alreadyShown': false}
+    ]);
+    expect((await present([choices('留着')]))['cards'], [
+      {'index': 0, 'alreadyShown': true}
+    ]);
+    expect(
+        (await service.cards(threadId: 'thread', turnId: 'turn'))
+            .whereType<UiChoicesCard>(),
+        hasLength(2));
+
+    // The same work in another turn is shown there.
+    await File('${root.path}/journal.jsonl').writeAsString(
+        '${jsonEncode({
+              'event': 'chat.turn_boundary',
+              'origin': 'harness_cli:chat:fixture',
+              'threadId': 'thread',
+              'turnId': 'turn2',
+              'phase': 'started'
+            })}\n',
+        mode: FileMode.append);
+    expect((await present([
+      {'kind': 'work', 'workId': 'w1'}
+    ]))['cards'], [
+      {'index': 0, 'alreadyShown': false}
+    ]);
+    expect(
+        await service.cards(threadId: 'thread', turnId: 'turn2'), hasLength(1));
+    expect(
+        (await service.cards(threadId: 'thread')).whereType<UiWorkCard>(),
+        hasLength(3));
+  });
+
+  test('a helper thread reports its cards went to the subagent conversation',
+      () async {
+    final job = await engine.submit(
+        type: 'agent.helper',
+        title: '清理残留',
+        input: {'parentThreadId': 'thread'},
+        details: {'threadId': 'helper-thread', 'source': 'codexNative'});
+    await helperExecutor.entered.future;
+    for (final origin in [
+      'harness_cli:helper:${job.jobId}',
+      'codex_native:helper-thread'
+    ]) {
+      await File('${root.path}/journal.jsonl').writeAsString(
+          '${jsonEncode({
+                'event': 'chat.turn_boundary',
+                'origin': origin,
+                'threadId': 'helper-thread',
+                'turnId': 'helper-turn',
+                'phase': 'started'
+              })}\n',
+          mode: FileMode.append);
+      final outcome = await harness.invokeJson(
+          'ui.present',
+          {
+            'cards': [
+              {'kind': 'work', 'workId': 'w1'}
+            ]
+          },
+          Invocation(origin: origin));
+      final result = ((outcome as Completed).value as dynamic).toJson() as JsonMap;
+      expect(result['conversation'], 'subagent');
+      expect(result['threadId'], 'helper-thread');
+    }
+  });
 }

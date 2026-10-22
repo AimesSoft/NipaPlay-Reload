@@ -665,7 +665,19 @@ final class UiDataService implements NextUiData, NextNowPlaying {
     }
     final resolved = [for (final r in refs.values) await r];
     final turn = boundary;
+    final alreadyShown = <bool>[];
     final id = await db.transaction((tx) async {
+      final seen = <String>{
+        for (final row in await tx.query('ui_presentations',
+            columns: ['cards'],
+            where: 'thread_id=? AND turn_id=?',
+            whereArgs: [turn['threadId'], turn['turnId']]))
+          for (final old in (jsonDecode(row['cards'] as String) as List))
+            _cardIdentity(old as Map)
+      };
+      for (final card in cards) {
+        alreadyShown.add(!seen.add(_cardIdentity(card)));
+      }
       for (final r in resolved) {
         if (r.facts case final facts?) {
           await tx.insert('ui_cache',
@@ -688,6 +700,12 @@ final class UiDataService implements NextUiData, NextNowPlaying {
       'threadId': boundary['threadId'],
       'turnId': boundary['turnId'],
       'count': cards.length,
+      'conversation':
+          invocation.origin.startsWith('harness_cli:chat:') ? 'main' : 'subagent',
+      'cards': [
+        for (var i = 0; i < cards.length; i++)
+          {'index': i, 'alreadyShown': alreadyShown[i]}
+      ],
       if (resolved.isNotEmpty)
         'refs': [
           for (final r in resolved)
@@ -1000,8 +1018,31 @@ final class UiDataService implements NextUiData, NextNowPlaying {
     }
   }
 
+  /// What a card points at: a work by workId or ref, an episode by
+  /// episodeId, a task by taskId; any other card by its whole content.
+  static String _cardIdentity(Map card) {
+    String canonical(Object? v) => jsonEncode(switch (v) {
+          Map() => {
+              for (final k in (v.keys.cast<String>().toList()..sort()))
+                k: jsonDecode(canonical(v[k]))
+            },
+          List() => [for (final e in v) jsonDecode(canonical(e))],
+          _ => v,
+        });
+    final kind = card['kind'];
+    return switch (kind) {
+      'work' when card['ref'] is Map =>
+        'work:ref:${canonical(card['ref'])}',
+      'work' => 'work:id:${card['workId']}',
+      'episode' => 'episode:${card['episodeId']}',
+      'task' => 'task:${card['taskId']}',
+      _ => '$kind:${canonical(card)}',
+    };
+  }
+
   @override
   Future<List<UiCard>> cards({required String threadId, String? turnId}) async {
+    final seen = <String>{};
     final rows = await db.query('ui_presentations',
         where: turnId == null ? 'thread_id=?' : 'thread_id=? AND turn_id=?',
         whereArgs: [threadId, if (turnId != null) turnId],
@@ -1010,6 +1051,9 @@ final class UiDataService implements NextUiData, NextNowPlaying {
     for (final row in rows)
       for (final card
           in (jsonDecode(row['cards'] as String) as List).cast<Map>()) {
+        if (!seen.add('${row['turn_id']}\u0000${_cardIdentity(card)}')) {
+          continue;
+        }
         switch (card['kind']) {
           case 'work':
             final shown = card['ref'] is Map
