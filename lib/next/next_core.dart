@@ -25,6 +25,7 @@ import 'accounts/capability.dart';
 import 'media/metadata_provider.dart';
 import 'next_database.dart';
 import 'tasks/device_identity.dart';
+import 'tasks/job_origin.dart';
 import 'tasks/sqlite_job_store.dart';
 import 'tasks/user_consent.dart';
 import 'settings/application_settings.dart';
@@ -106,6 +107,7 @@ final class NextCore {
   late final Directory root;
   late final String deviceId;
   late final TaskEngine engine;
+  final jobOrigins = JobOrigins();
   final diskDeletion = DiskDeletion();
   final hooks = HarnessHooks();
   final harnessLocation = HarnessLocation();
@@ -221,9 +223,11 @@ final class NextCore {
       diskDeletion,
       classicScan,
     ];
-    engine = TaskEngine(store: jobs, ownerDeviceId: deviceId, executors: [
+    engine = TaskEngine(store: jobs, ownerDeviceId: deviceId,
+        originOf: jobOrigins.of, executors: [
       for (final executor in executors) OriginExecutor(executor, database)
     ]);
+    jobOrigins.lookup = engine.get;
     hooks.engine = engine;
     programs.engine = engine;
     diskDeletion.engine = engine;

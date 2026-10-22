@@ -116,6 +116,7 @@ final class Job implements JsonEncodable {
     JsonMap input = const {},
     JsonMap checkpoint = const {},
     JsonMap details = const {},
+    JsonMap? origin,
     this.error,
     Decision? decision,
     this.receipt,
@@ -127,6 +128,7 @@ final class Job implements JsonEncodable {
   })  : input = _freezeJson(input),
         checkpoint = _freezeJson(checkpoint),
         details = _freezeJson(details),
+        origin = origin == null ? null : _freezeJson(origin),
         decision = decision == null
             ? null
             : _decodeDecision(_freezeJson(decision.toJson())) {
@@ -158,6 +160,7 @@ final class Job implements JsonEncodable {
       'input',
       'checkpoint',
       'details',
+      'origin',
       'retryAt',
       'cancelRequestedAt',
       'cancelRequestedPhase',
@@ -186,6 +189,9 @@ final class Job implements JsonEncodable {
   final DateTime createdAt, updatedAt;
   final int revision;
   final JsonMap input, checkpoint, details;
+
+  /// Who submitted the job, recorded at submission; null when not recorded.
+  final JsonMap? origin;
   final Failure? error;
   final Decision? decision;
   final JobReceipt? receipt;
@@ -208,6 +214,7 @@ final class Job implements JsonEncodable {
         input: json['input'] as JsonMap,
         checkpoint: json['checkpoint'] as JsonMap,
         details: (json['details'] as JsonMap?) ?? const {},
+        origin: json['origin'] as JsonMap?,
         error: json['error'] == null
             ? null
             : _decodeFailure(json['error'] as JsonMap),
@@ -237,6 +244,7 @@ final class Job implements JsonEncodable {
         'updatedAt': updatedAt.toIso8601String(),
         'ownerDeviceId': ownerDeviceId,
         'revision': revision,
+        if (origin != null) 'origin': origin,
         if (error != null) 'error': error!.toJson(),
         if (decision != null) 'decision': decision!.toJson(),
         if (receipt != null)

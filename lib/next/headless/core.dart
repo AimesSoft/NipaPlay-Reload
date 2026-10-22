@@ -14,6 +14,7 @@ import '../events/capability.dart';
 import '../events/signals.dart';
 import '../next_database.dart';
 import '../tasks/device_identity.dart';
+import '../tasks/job_origin.dart';
 import '../tasks/sqlite_job_store.dart';
 import '../state/change_history.dart';
 import '../db/capability.dart';
@@ -233,10 +234,13 @@ final class HeadlessCore {
       ])
         HeadlessExecutor(OriginExecutor(e, database))
     ]);
+    final jobOrigins = JobOrigins();
     engine = TaskEngine(
         store: HeadlessJobStore(SqliteJobStore.fromDatabase(database)),
         ownerDeviceId: identity,
+        originOf: jobOrigins.of,
         executors: _executors);
+    jobOrigins.lookup = engine.get;
     media.engine = engine;
     danmaku.engine = engine;
     hooks.engine = engine;

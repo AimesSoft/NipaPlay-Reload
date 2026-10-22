@@ -56,6 +56,7 @@ Future<JsonMap> recentMemoryFacts(ChatHost host, List<JsonMap> jobs,
                   'state',
                   'title',
                   'phase',
+                  'origin',
                   'currentActivity'
                 ])
                   if (r.containsKey(key)) key: r[key],

@@ -111,6 +111,7 @@ final class TaskEngine {
   TaskEngine(
       {required this.store,
       required this.ownerDeviceId,
+      this.originOf,
       Iterable<JobExecutor> executors = const []}) {
     for (final executor in executors) {
       if (_executors.containsKey(executor.type)) {
@@ -122,6 +123,10 @@ final class TaskEngine {
 
   final JobStore store;
   final String ownerDeviceId;
+
+  /// Describes who is submitting, from the calling context. Consulted by
+  /// submit() when no explicit origin is given; null result records nothing.
+  final FutureOr<JsonMap?> Function(String type, JsonMap details)? originOf;
   final Map<String, JobExecutor> _executors = {};
   final Map<String, JobContext> _active = {};
   final Map<String, Timer> _retries = {};
@@ -190,11 +195,13 @@ final class TaskEngine {
       JsonMap details = const {},
       String phase = 'queued',
       bool sideEffectCommitted = false,
-      String? jobId}) async {
+      String? jobId,
+      JsonMap? origin}) async {
     if (!_executors.containsKey(type)) {
       throw Failure(
           FailureCode.unavailable, 'No executor registered for $type.');
     }
+    origin ??= await originOf?.call(type, details);
     final job = await _serial(() async {
       final now = DateTime.now().toUtc();
       final job = Job(
@@ -210,7 +217,8 @@ final class TaskEngine {
           revision: 0,
           sideEffectCommitted: sideEffectCommitted,
           input: input,
-          details: details);
+          details: details,
+          origin: origin);
       await _commit(job, null, 'submitted');
       return job;
     });

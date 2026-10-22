@@ -568,6 +568,7 @@ final class NextRuntime extends ChangeNotifier {
       dsh: dsh,
       dshPlugins: dsh == null ? null : Directory('$agent/dsh'));
     final core = ServiceProvider.nextCore;
+    core.jobOrigins.threadFor = host.threadForOrigin;
     core.memory.recent = (current) async => recentMemoryFacts(host,
       [for (final job in await core.engine.list())
         if (!job.state.isTerminal) job.toJson()],

@@ -35,9 +35,10 @@ final class _TaskAction extends Action<_TaskInput, _TaskOutput> {
         title: '${operation[0].toUpperCase()}${operation.substring(1)} task',
         description: switch (operation) {
           'list' =>
-            'List persisted task snapshots, optionally filtering by state or type.',
+            'List persisted task snapshots, optionally filtering by state or type. '
+                'origin, when present, records who submitted the task, taken from the call that created it.',
           'get' =>
-            'Read the complete task snapshot. succeeded means verification finished; '
+            'Read the complete task snapshot. origin, when present, records who submitted the task. succeeded means verification finished; '
                 'receipt contains verified results. needs_decision contains optional executable option calls.',
           'wait' => 'Wait for a terminal state, a state/phase/decision change after afterRevision, or timeout. '
               'Progress alone does not wake the wait unless includeProgress is true. '
@@ -183,6 +184,8 @@ final jobSnapshotSchema = ObjectSchema({
   'updatedAt': const StringSchema(),
   'ownerDeviceId': const StringSchema(),
   'revision': const IntegerSchema(minimum: 0),
+  'origin': const ObjectSchema({'kind': StringSchema()},
+      required: ['kind'], additionalProperties: true),
   'error': const ObjectSchema({
     'code': StringSchema(),
     'message': StringSchema(),
