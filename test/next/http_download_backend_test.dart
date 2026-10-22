@@ -22,7 +22,7 @@ Uint8List bytesOf(int n) =>
 
 final class Resource {
   Resource(this.bytes);
-  final Uint8List bytes;
+  Uint8List bytes;
   bool ranges = true, denyHead = false;
   String? disposition, etag;
   int? status;
@@ -34,6 +34,11 @@ final class Resource {
   /// Hang (until [release] completes, or forever) after this many body bytes.
   int? holdAt;
   Completer<void>? release;
+
+  /// Per range start: drop that segment's connection once after this many
+  /// body bytes / hold only that segment's connection at this many bytes.
+  final dropAt = <int, int>{};
+  final holdAtStart = <int, int>{};
 }
 
 final class TestServer {
@@ -81,28 +86,47 @@ final class TestServer {
       return;
     }
     var start = 0;
-    if (res.ranges && range != null) {
-      final match = RegExp(r'bytes=(\d+)-').firstMatch(range);
+    var end = res.bytes.length;
+    final ifRange = request.headers.value('if-range');
+    final rangeHonoured = ifRange == null || ifRange == res.etag;
+    if (res.ranges && range != null && rangeHonoured) {
+      final match = RegExp(r'bytes=(\d+)-(\d*)').firstMatch(range);
       if (match != null) {
         start = int.parse(match.group(1)!);
+        if (match.group(2)!.isNotEmpty) {
+          end = (int.parse(match.group(2)!) + 1).clamp(0, res.bytes.length);
+        }
         response.statusCode = 206;
-        response.headers.set('content-range',
-            'bytes $start-${res.bytes.length - 1}/${res.bytes.length}');
+        response.headers.set(
+            'content-range', 'bytes $start-${end - 1}/${res.bytes.length}');
       }
     }
+    final held = res.holdAtStart[start];
+    final dropped = res.dropAt[start];
     if (res.ranges) response.headers.set('accept-ranges', 'bytes');
     if (res.disposition != null) {
       response.headers.set('content-disposition', res.disposition!);
     }
     if (res.etag != null) response.headers.set('etag', res.etag!);
     response.headers.contentType = ContentType('application', 'octet-stream');
-    response.contentLength = res.bytes.length - start;
+    response.contentLength = end - start;
     if (request.method == 'HEAD') {
       await response.close();
       return;
     }
     var sent = 0;
-    while (start + sent < res.bytes.length) {
+    while (start + sent < end) {
+      if (dropped != null && sent >= dropped && res.dropAt.remove(start) != null) {
+        await response.flush();
+        try {
+          await response.close();
+        } catch (_) {}
+        return;
+      }
+      if (held != null && sent >= held) {
+        await (res.release ??= Completer<void>()).future;
+        res.holdAtStart.remove(start);
+      }
       if (res.dropAfter != null && sent >= res.dropAfter!) {
         res.dropAfter = null;
         await response.flush();
@@ -116,12 +140,18 @@ final class TestServer {
         await (res.release ??= Completer<void>()).future;
         res.holdAt = null;
       }
-      final limit = res.holdAt != null && sent < res.holdAt!
+      var limit = res.holdAt != null && sent < res.holdAt!
           ? start + res.holdAt!
-          : res.bytes.length;
-      final end = (start + sent + 8192).clamp(0, limit);
-      response.add(res.bytes.sublist(start + sent, end));
-      sent = end - start;
+          : end;
+      if (held != null && res.holdAtStart.containsKey(start) && sent < held) {
+        limit = start + held;
+      }
+      if (dropped != null && res.dropAt.containsKey(start) && sent < dropped) {
+        limit = start + dropped;
+      }
+      final upTo = (start + sent + 8192).clamp(0, limit);
+      response.add(res.bytes.sublist(start + sent, upTo));
+      sent = upTo - start;
       await response.flush();
     }
     await response.close();
@@ -632,5 +662,212 @@ void main() {
     expect(File('${elsewhere.path}/folder/folder.mkv').existsSync(), true);
     await downloads.remove(jobId, deleteData: true);
     expect(Directory('${elsewhere.path}/folder').existsSync(), false);
+  });
+
+  // ------------------------------------------------------------ connections
+
+  List<int> rangeStarts(Iterable<String?> ranges) => [
+        for (final r in ranges)
+          if (r != null) int.parse(RegExp(r'bytes=(\d+)-').firstMatch(r)![1]!)
+      ];
+
+  Future<Map> httpFacts(String jobId) async {
+    final task = (await call('download.read', {'jobId': jobId}))['task'] as Map;
+    return (task['health'] as Map)['http'] as Map;
+  }
+
+  test('four connections fetch four ranges into one file and the checksum holds',
+      () async {
+    final data = bytesOf(400000);
+    server.resources['/par.mkv'] = Resource(data);
+    final jobId = await add('/par.mkv', extra: {
+      'connections': 4,
+      'checksum': {
+        'algorithm': 'sha256',
+        'value': sha256.convert(data).toString()
+      }
+    });
+    final done = await untilState(engine, jobId, JobState.succeeded);
+    expect(await File('${downloadsDirectory.path}/par.mkv').readAsBytes(), data);
+    expect(File('${downloadsDirectory.path}/par.mkv.nipaplay-part').existsSync(),
+        false);
+    expect((done.receipt!.details['checksum'] as Map)['matched'], true);
+    final ranged = server.requests
+        .where((r) => r.method == 'GET' && r.range != null)
+        .map((r) => r.range)
+        .toList();
+    expect(ranged.toSet(), hasLength(4));
+    expect(ranged, everyElement(matches(RegExp(r'^bytes=\d+-\d+$'))));
+    expect(rangeStarts(ranged).toSet(), {0, 100000, 200000, 300000});
+    final facts = await httpFacts(jobId);
+    final connections = facts['connections'] as Map;
+    expect(connections['requested'], 4);
+    expect(connections['used'], 4);
+    expect(connections['reason'], isNull);
+    final segments = (connections['segments'] as List).cast<Map>();
+    expect(segments.map((s) => s['completedBytes']).reduce((a, b) => a + b),
+        data.length);
+    final task = (await call('download.read', {'jobId': jobId}))['task'] as Map;
+    expect(task['completedBytes'], data.length);
+  });
+
+  test('a segment that loses its connection resumes alone', () async {
+    final data = bytesOf(400000);
+    server.resources['/drop.mkv'] = Resource(data)
+      ..etag = '"d1"'
+      ..dropAt[100000] = 30000;
+    final jobId = await add('/drop.mkv', extra: {'connections': 4});
+    await untilState(engine, jobId, JobState.succeeded);
+    expect(await File('${downloadsDirectory.path}/drop.mkv').readAsBytes(), data);
+    final starts = rangeStarts(server.requests
+        .where((r) => r.method == 'GET')
+        .map((r) => r.range));
+    expect(starts.where((s) => s == 0), hasLength(1));
+    expect(starts.where((s) => s == 200000), hasLength(1));
+    expect(starts.where((s) => s == 300000), hasLength(1));
+    final again = starts.where((s) => s > 100000 && s < 200000).toList();
+    expect(again, hasLength(1), reason: 'only the dropped segment asks again');
+    expect((await httpFacts(jobId))['retries'], greaterThanOrEqualTo(1));
+  });
+
+  test('pause and resume continue every segment from what it holds', () async {
+    final data = bytesOf(400000);
+    final resource = Resource(data)
+      ..holdAt = 20000
+      ..etag = '"p1"';
+    server.resources['/pp.mkv'] = resource;
+    final jobId = await add('/pp.mkv', extra: {'connections': 4});
+    await bytesAtLeast(jobId, 65536);
+    await call('download.set_paused', {'jobId': jobId, 'paused': true});
+    final paused = await snapshot(jobId);
+    expect(paused.state, 'paused');
+    final before = server.requests.length;
+    resource.release!.complete();
+    await Future<void>.delayed(const Duration(milliseconds: 150));
+    expect((await snapshot(jobId)).completed, paused.completed);
+    await call('download.set_paused', {'jobId': jobId, 'paused': false});
+    await untilState(engine, jobId, JobState.succeeded);
+    expect(await File('${downloadsDirectory.path}/pp.mkv').readAsBytes(), data);
+    final later = rangeStarts(
+        server.requests.skip(before).where((r) => r.method == 'GET').map((r) => r.range));
+    expect(later, isNotEmpty);
+    expect(later.toSet().intersection({0, 100000, 200000, 300000}), isEmpty,
+        reason: 'segments continue after the bytes they already hold');
+  });
+
+  test('a restart continues from the recorded segment ranges', () async {
+    final data = bytesOf(400000);
+    final resource = Resource(data)
+      ..holdAt = 20000
+      ..etag = '"r1"';
+    server.resources['/rs.mkv'] = resource;
+    final jobId = await add('/rs.mkv', extra: {'connections': 4});
+    await bytesAtLeast(jobId, 65536);
+    await engine.close();
+    await executor.quiesce(jobId);
+    await http.close();
+    final before = server.requests.length;
+    resource.holdAt = null;
+    resource.release?.complete();
+    http = newBackend();
+    await connect();
+    await untilState(engine, jobId, JobState.succeeded);
+    expect(await File('${downloadsDirectory.path}/rs.mkv').readAsBytes(), data);
+    final later = rangeStarts(
+        server.requests.skip(before).where((r) => r.method == 'GET').map((r) => r.range));
+    expect(later, isNotEmpty);
+    expect(later.toSet().intersection({0, 100000, 200000, 300000}), isEmpty);
+  });
+
+  test('a server without Range falls back to one connection and says why',
+      () async {
+    final data = bytesOf(90000);
+    server.resources['/nr.mkv'] = Resource(data)..ranges = false;
+    final jobId = await add('/nr.mkv', extra: {'connections': 8});
+    await untilState(engine, jobId, JobState.succeeded);
+    expect(await File('${downloadsDirectory.path}/nr.mkv').readAsBytes(), data);
+    expect(server.requests.every((r) => r.range == null), true);
+    final connections = (await httpFacts(jobId))['connections'] as Map;
+    expect(connections['requested'], 8);
+    expect(connections['used'], 1);
+    expect(connections['reason'], 'no_range');
+    expect(connections.containsKey('segments'), false);
+  });
+
+  test('a single connection reports requested 1, used 1', () async {
+    server.resources['/one.mkv'] = Resource(bytesOf(5000));
+    final jobId = await add('/one.mkv');
+    await untilState(engine, jobId, JobState.succeeded);
+    expect((await httpFacts(jobId))['connections'],
+        {'requested': 1, 'used': 1, 'reason': null});
+  });
+
+  test('connections outside 1-8 and on other backends are refused', () async {
+    for (final value in [0, 9, -1]) {
+      final outcome = await harness.invokeJson(
+          'download.add',
+          {
+            'source': server.url('/a'),
+            'backend': {'kind': 'http'},
+            'connections': value
+          },
+          Invocation(origin: 'mcp'));
+      expect(outcome, isA<Failed>(), reason: '$value');
+      expect((outcome as Failed).failure.code, FailureCode.invalidInput);
+    }
+    final builtin = await harness.invokeJson(
+        'download.add',
+        {
+          'source': 'magnet:?xt=urn:btih:0123456789abcdef0123456789abcdef01234567',
+          'backend': {'kind': 'builtin'},
+          'connections': 4
+        },
+        Invocation(origin: 'mcp'));
+    expect(builtin, isA<Failed>());
+    expect((builtin as Failed).failure.code, FailureCode.invalidInput);
+    expect(await engine.list(type: 'download'), isEmpty);
+    expect(server.requests, isEmpty);
+  });
+
+  test('stall means no segment received a byte', () async {
+    final resource = Resource(bytesOf(400000))
+      ..holdAt = 20000
+      ..etag = '"s1"';
+    server.resources['/ms.mkv'] = resource;
+    final jobId = await add('/ms.mkv', extra: {'connections': 4});
+    await bytesAtLeast(jobId, 65536);
+    skew = const Duration(minutes: 6);
+    var health = (await snapshot(jobId)).health!;
+    expect(health['secondsWithoutProgress'], greaterThanOrEqualTo(300));
+    // One segment moving again is progress for the download.
+    skew = Duration.zero;
+    resource.release!.complete();
+    await untilState(engine, jobId, JobState.succeeded);
+    health = (await snapshot(jobId)).health!;
+    expect(health['secondsWithoutProgress'], lessThan(60));
+  });
+
+  test('content that changed under If-Range starts the download over', () async {
+    final data = bytesOf(200000);
+    final changed = Uint8List.fromList([for (final b in data) (b + 1) & 0xff]);
+    final resource = Resource(data)
+      ..holdAt = 20000
+      ..etag = '"v1"';
+    server.resources['/chg.mkv'] = resource;
+    final jobId = await add('/chg.mkv', extra: {'connections': 2});
+    await bytesAtLeast(jobId, 32768);
+    await call('download.set_paused', {'jobId': jobId, 'paused': true});
+    resource
+      ..bytes = changed
+      ..etag = '"v2"'
+      ..holdAt = null;
+    resource.release!.complete();
+    await call('download.set_paused', {'jobId': jobId, 'paused': false});
+    await untilState(engine, jobId, JobState.succeeded);
+    expect(await File('${downloadsDirectory.path}/chg.mkv').readAsBytes(), changed);
+    final facts = await httpFacts(jobId);
+    expect(facts['resume'], 'ignored');
+    expect(facts['etag'], '"v2"');
+    expect((facts['connections'] as Map)['used'], 2);
   });
 }

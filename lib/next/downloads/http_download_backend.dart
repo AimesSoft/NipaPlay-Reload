@@ -148,6 +148,7 @@ final class HttpDownloadBackend implements DownloadBackend {
       request.headers.set(HttpHeaders.acceptEncodingHeader, 'identity');
       if (range != null) {
         request.headers.set(HttpHeaders.rangeHeader, range);
+        if (ifRange != null) request.headers.set('if-range', ifRange);
       } else if (offset > 0) {
         request.headers.set(HttpHeaders.rangeHeader, 'bytes=$offset-');
         if (ifRange != null) request.headers.set('if-range', ifRange);
@@ -260,10 +261,33 @@ final class HttpDownloadBackend implements DownloadBackend {
     final done = File(s.filePath);
     if (s.finished) return await done.exists() ? await done.length() : 0;
     final part = File(s.partPath);
+    final segments = s.segments;
+    if (segments != null) {
+      if (!await part.exists()) {
+        for (final segment in segments) {
+          segment.done = 0;
+        }
+      }
+      return segments.fold<int>(0, (sum, segment) => sum + segment.done);
+    }
     return await part.exists() ? await part.length() : 0;
   }
 
-  Future<void> _persist(_Session s) async {
+  /// Writes are serialized: segment progress is saved while workers run, and
+  /// two writers must never share the temporary file.
+  Future<void> _persist(_Session s) {
+    final next = s.persisting.then((_) => _write(s));
+    s.persisting = next.then((_) {}, onError: (Object _) {});
+    return next;
+  }
+
+  void _persistSoon(_Session s) {
+    if (s.sinceSaved.elapsedMilliseconds < 300) return;
+    s.sinceSaved.reset();
+    unawaited(_persist(s).catchError((Object _) {}));
+  }
+
+  Future<void> _write(_Session s) async {
     final directory = stateDirectory!;
     await directory.create(recursive: true);
     final file = File(p.join(directory.path, '${s.id}.json'));
@@ -389,6 +413,20 @@ final class HttpDownloadBackend implements DownloadBackend {
           'etag': s.etag,
           'lastModified': s.lastModified,
           'partialFile': s.finished ? null : s.partPath,
+          'connections': {
+            'requested': s.connectionsRequested,
+            'used': s.connectionsUsed,
+            'reason': s.connectionsReason,
+            if (s.segments != null)
+              'segments': [
+                for (final segment in s.segments!)
+                  {
+                    'start': segment.start,
+                    'end': segment.end,
+                    'completedBytes': segment.done,
+                  }
+              ],
+          },
           'retries': s.retries,
           'lastError': s.lastError,
           'lastErrorAt': s.lastErrorAt?.toIso8601String(),
@@ -463,10 +501,17 @@ final class HttpDownloadBackend implements DownloadBackend {
               ? true
               : false;
       if (stopped) throw const DownloadAddStopped();
+      _plan(session, request.connections ?? 1);
       await _persist(session);
       _sessions[id] = session;
-      handedOver = true;
-      _start(session, opened);
+      if (session.segments == null) {
+        handedOver = true;
+        _start(session, opened);
+      } else {
+        // The first response was a whole-file GET; the segments ask for
+        // their own ranges.
+        _start(session, null);
+      }
       return _snapshot(session);
     } finally {
       if (!handedOver) opened.client.close(force: true);
@@ -524,6 +569,7 @@ final class HttpDownloadBackend implements DownloadBackend {
     final s = _session(handle);
     await _stop(s);
     _sessions.remove(handle);
+    await s.persisting;
     final record = File(p.join(stateDirectory!.path, '$handle.json'));
     if (await record.exists()) await record.delete();
   }
@@ -566,6 +612,16 @@ final class HttpDownloadBackend implements DownloadBackend {
   }
 
   Future<void> _work(_Session s, _Opened? first, Completer<void> stop) async {
+    if (s.segments != null) {
+      first?.client.close(force: true);
+      first = null;
+      if (await _workSegments(s, stop)) return;
+    }
+    await _workSingle(s, first, stop);
+  }
+
+  Future<void> _workSingle(
+      _Session s, _Opened? first, Completer<void> stop) async {
     var failures = 0;
     while (!stop.isCompleted && !_closed) {
       _Opened? opened = first;
@@ -618,6 +674,274 @@ final class HttpDownloadBackend implements DownloadBackend {
       await Future.any(
           [Future<void>.delayed(_retryDelay(failures)), stop.future]);
     }
+  }
+
+  // -------------------------------------------------------------- segments
+
+  /// Decides how many connections this download uses: one unless the agent
+  /// asked for more and the server sent `Accept-Ranges: bytes` and a length.
+  void _plan(_Session s, int requested) {
+    s.connectionsRequested = requested;
+    s.connectionsUsed = 1;
+    s.connectionsReason = null;
+    s.segments = null;
+    if (requested <= 1) return;
+    final size = s.expectedSize;
+    if (s.acceptRanges != true) {
+      s.connectionsReason = 'no_range';
+    } else if (size == null) {
+      s.connectionsReason = 'unknown_length';
+    } else if (size < 2) {
+      s.connectionsReason = 'too_small';
+    } else {
+      final used = requested < size ? requested : size;
+      final step = size ~/ used;
+      s.segments = [
+        for (var i = 0; i < used; i++)
+          _Segment(i * step, i == used - 1 ? size : (i + 1) * step)
+      ];
+      s.connectionsUsed = used;
+      s.connectionsReason = used < requested ? 'too_small' : null;
+    }
+  }
+
+  String? _validator(_Session s) =>
+      s.etag != null && !s.etag!.startsWith('W/') ? s.etag : s.lastModified;
+
+  /// Runs the segments in parallel until the file is complete, stopped or
+  /// failed. Returns true when the worker is finished, false when the server
+  /// turned out not to serve ranges and the single connection must go on.
+  Future<bool> _workSegments(_Session s, Completer<void> stop) async {
+    var replans = 0;
+    while (!stop.isCompleted && !_closed) {
+      final segments = s.segments!;
+      final total = s.expectedSize!;
+      final part = File(s.partPath);
+      try {
+        if (!await part.exists()) {
+          for (final segment in segments) {
+            segment.done = 0;
+          }
+          s.bytes = 0;
+        }
+        final handle = await part.open(mode: FileMode.append);
+        try {
+          if (await handle.length() != total) await handle.truncate(total);
+        } finally {
+          await handle.close();
+        }
+      } on FileSystemException catch (error) {
+        s.noteError(error.toString(), _now());
+        await Future.any([Future<void>.delayed(_retryDelay(1)), stop.future]);
+        continue;
+      }
+      final halt = Completer<void>();
+      var next = _Switch.none;
+      void leave(_Switch why) {
+        if (next == _Switch.none) next = why;
+        if (!halt.isCompleted) halt.complete();
+      }
+
+      unawaited(stop.future.then((_) {
+        if (!halt.isCompleted) halt.complete();
+      }));
+      await Future.wait([
+        for (final segment in segments)
+          if (!segment.complete) _runSegment(s, segment, halt, leave)
+      ]);
+      if (!halt.isCompleted) halt.complete();
+      if (stop.isCompleted || _closed || s.failure != null) {
+        await _persist(s);
+        return true;
+      }
+      if (next == _Switch.single ||
+          (next == _Switch.replan && ++replans > 3)) {
+        s.connectionsUsed = 1;
+        s.connectionsReason ??= 'range_ignored';
+        s.segments = null;
+        await _truncate(s);
+        await _persist(s);
+        return false;
+      }
+      if (next == _Switch.replan) {
+        await _truncate(s);
+        _plan(s, s.connectionsRequested);
+        await _persist(s);
+        if (s.segments == null) return false;
+        continue;
+      }
+      if (segments.every((segment) => segment.complete)) {
+        s.lastError = null;
+        await _finalize(s);
+        return true;
+      }
+    }
+    await _persist(s);
+    return true;
+  }
+
+  Future<void> _runSegment(_Session s, _Segment segment, Completer<void> halt,
+      void Function(_Switch) leave) async {
+    var failures = 0;
+    while (!halt.isCompleted && !segment.complete) {
+      final before = segment.done;
+      _Opened? opened;
+      try {
+        opened = await _open(Uri.parse(s.url),
+            range: 'bytes=${segment.next}-${segment.end - 1}',
+            ifRange: _validator(s),
+            abort: halt.future);
+        final outcome = await _receiveSegment(s, segment, opened, halt, leave);
+        if (outcome != _Outcome.done) return;
+        if (segment.complete) {
+          segment.error = null;
+          _refreshError(s);
+          return;
+        }
+        throw Failure(FailureCode.unavailable,
+            'The server ended a segment at ${segment.done} of ${segment.end - segment.start} bytes.',
+            retryable: true);
+      } on Failure catch (failure) {
+        if (halt.isCompleted) return;
+        if (!failure.retryable) {
+          s.failure = failure;
+          s.lastError = null;
+          halt.complete();
+          return;
+        }
+        segment.error = failure.message;
+        s.noteError(failure.message, _now());
+      } on Exception catch (error) {
+        if (halt.isCompleted) return;
+        final failure = _classify(error, 'Download');
+        if (!failure.retryable) {
+          s.failure = failure;
+          halt.complete();
+          return;
+        }
+        segment.error = failure.message;
+        s.noteError(failure.message, _now());
+      } finally {
+        opened?.client.close(force: true);
+      }
+      if (halt.isCompleted) return;
+      failures = segment.done > before ? 1 : failures + 1;
+      s.retries++;
+      await Future.any(
+          [Future<void>.delayed(_retryDelay(failures)), halt.future]);
+    }
+  }
+
+  void _refreshError(_Session s) {
+    s.lastError = s.segments?.where((x) => x.error != null).firstOrNull?.error;
+  }
+
+  Future<_Outcome> _receiveSegment(_Session s, _Segment segment,
+      _Opened opened, Completer<void> halt, void Function(_Switch) leave) async {
+    final response = opened.response;
+    final status = response.statusCode;
+    final headers = response.headers;
+    final anyDone = s.segments!.any((x) => x.done > 0);
+    if (status == HttpStatus.ok ||
+        status == HttpStatus.requestedRangeNotSatisfiable) {
+      // The range was not honoured, or the file under it changed (If-Range).
+      final length = response.contentLength >= 0 ? response.contentLength : null;
+      final etag = headers.value(HttpHeaders.etagHeader);
+      final modified = headers.value(HttpHeaders.lastModifiedHeader);
+      final changed = status == HttpStatus.ok &&
+          ((etag != null && s.etag != null && etag != s.etag) ||
+              (modified != null &&
+                  s.lastModified != null &&
+                  modified != s.lastModified) ||
+              (length != null && length != s.expectedSize));
+      if (status == HttpStatus.ok) {
+        s.etag = etag ?? s.etag;
+        s.lastModified = modified ?? s.lastModified;
+        if (length != null) s.expectedSize = length;
+      }
+      if (anyDone || changed) {
+        s.resume = 'ignored';
+        leave(_Switch.replan);
+      } else {
+        s.connectionsReason =
+            status == HttpStatus.ok ? 'range_ignored' : 'range_unusable';
+        leave(_Switch.single);
+      }
+      return _Outcome.aborted;
+    }
+    if (status != HttpStatus.partialContent) {
+      throw _statusFailure(status, response.reasonPhrase) ??
+          _transientStatus(status, response.reasonPhrase);
+    }
+    final range = _contentRange(headers.value(HttpHeaders.contentRangeHeader));
+    if (range == null ||
+        range.start != segment.next ||
+        (range.total != null && range.total != s.expectedSize)) {
+      if (range?.total != null) s.expectedSize = range!.total;
+      s.resume = 'rejected';
+      if (anyDone) {
+        leave(_Switch.replan);
+      } else {
+        s.connectionsReason = 'range_unusable';
+        leave(_Switch.single);
+      }
+      return _Outcome.aborted;
+    }
+    if (segment.done > 0) s.resume = 'confirmed';
+    s.statusCode = status;
+    s.finalUrl = opened.uri.toString();
+    final file = await File(s.partPath).open(mode: FileMode.append);
+    await file.setPosition(segment.next);
+    final done = Completer<void>();
+    Future<void>? writing;
+    late final StreamSubscription<List<int>> subscription;
+    subscription = response.timeout(idleTimeout).listen((chunk) {
+      subscription.pause();
+      final room = segment.end - segment.next;
+      final data = chunk.length > room ? chunk.sublist(0, room) : chunk;
+      writing = file.writeFrom(data).then((_) {
+        final now = _now();
+        segment.done += data.length;
+        s.bytes += data.length;
+        s.received += data.length;
+        s.lastProgress = now;
+        segment.error = null;
+        _refreshError(s);
+        s.samples.add((at: now, received: s.received));
+        _persistSoon(s);
+        if (done.isCompleted) return;
+        if (segment.complete) {
+          done.complete();
+        } else {
+          subscription.resume();
+        }
+      }, onError: (Object error, StackTrace stack) {
+        if (!done.isCompleted) done.completeError(error, stack);
+      });
+    }, onError: (Object error, StackTrace stack) {
+      if (!done.isCompleted) done.completeError(error, stack);
+    }, onDone: () {
+      if (!done.isCompleted) done.complete();
+    }, cancelOnError: true);
+    unawaited(halt.future.then((_) {
+      opened.client.close(force: true);
+      unawaited(subscription.cancel());
+      if (!done.isCompleted) done.complete();
+    }));
+    try {
+      await done.future;
+    } finally {
+      unawaited(subscription.cancel());
+      try {
+        await writing;
+      } on Object {
+        // The write failure was already reported through [done].
+      }
+      await file.close();
+    }
+    return halt.isCompleted && !segment.complete
+        ? _Outcome.aborted
+        : _Outcome.done;
   }
 
   Future<int> _partBytes(_Session s) async {
@@ -884,6 +1208,20 @@ Future<String> _hashFile(String path, String algorithm) async {
 
 enum _Outcome { done, aborted, restart }
 
+/// One byte range [start, end) fetched on its own connection; [done] bytes
+/// from [start] are on disk.
+final class _Segment {
+  _Segment(this.start, this.end);
+  final int start, end;
+  int done = 0;
+  String? error;
+  int get next => start + done;
+  bool get complete => done >= end - start;
+}
+
+/// What stopped a round of parallel segments.
+enum _Switch { none, single, replan }
+
 final class _Opened {
   _Opened(this.client, this.response, this.uri);
   final HttpClient client;
@@ -914,6 +1252,12 @@ final class _Session {
   int? statusCode;
   bool? acceptRanges;
   String resume = 'untested';
+
+  /// What the agent asked for, what is in use and why they differ. More than
+  /// one connection means [segments] is set.
+  int connectionsRequested = 1, connectionsUsed = 1;
+  String? connectionsReason;
+  List<_Segment>? segments;
   bool paused = false, finished = false;
   Failure? failure;
   JsonMap? checksum;
@@ -931,6 +1275,8 @@ final class _Session {
   final samples = <({DateTime at, int received})>[];
   Future<void>? worker;
   Completer<void>? stop;
+  Future<void> persisting = Future.value();
+  final sinceSaved = Stopwatch()..start();
 
   void noteError(String message, DateTime now) {
     lastError = message;
@@ -953,6 +1299,16 @@ final class _Session {
         'statusCode': statusCode,
         'acceptRanges': acceptRanges,
         'resume': resume,
+        'connections': {
+          'requested': connectionsRequested,
+          'used': connectionsUsed,
+          'reason': connectionsReason,
+          if (segments != null)
+            'segments': [
+              for (final segment in segments!)
+                [segment.start, segment.end, segment.done]
+            ],
+        },
         'paused': paused,
         'finished': finished,
         'checksum': checksum,
@@ -981,9 +1337,21 @@ final class _Session {
       ..statusCode = json['statusCode'] as int?
       ..acceptRanges = json['acceptRanges'] as bool?
       ..resume = json['resume'] as String? ?? 'untested'
+      ..connectionsRequested =
+          (json['connections'] as Map?)?['requested'] as int? ?? 1
+      ..connectionsUsed = (json['connections'] as Map?)?['used'] as int? ?? 1
+      ..connectionsReason = (json['connections'] as Map?)?['reason'] as String?
+      ..segments = [
+        for (final row
+            in ((json['connections'] as Map?)?['segments'] as List?) ??
+                const [])
+          _Segment((row as List)[0] as int, row[1] as int)
+            ..done = row[2] as int
+      ]
       ..paused = json['paused'] as bool
       ..finished = json['finished'] as bool
       ..checksum = (json['checksum'] as Map?)?.cast<String, Object?>();
+    if (s.segments!.isEmpty) s.segments = null;
     if (json['failure'] case final Map failure) {
       s.failure = Failure(
           FailureCode.values.firstWhere(

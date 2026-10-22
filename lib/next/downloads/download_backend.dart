@@ -127,8 +127,13 @@ final class DownloadRequest implements JsonEncodable {
       this.downloadDirectory,
       this.fileIndices,
       this.createFolderForTask,
-      this.checksum});
+      this.checksum,
+      this.connections});
   final String source, infoHash, title;
+
+  /// Parallel connections an HTTP download asks for (1-8); the backend reports
+  /// how many it actually used.
+  final int? connections;
 
   /// `{algorithm, value}` the finished download must match (HTTP downloads).
   final JsonMap? checksum;
@@ -142,7 +147,8 @@ final class DownloadRequest implements JsonEncodable {
       downloadDirectory: json['downloadDirectory'] as String?,
       fileIndices: (json['fileIndices'] as List?)?.cast<int>(),
       createFolderForTask: json['createFolderForTask'] as bool?,
-      checksum: json['checksum'] as JsonMap?);
+      checksum: json['checksum'] as JsonMap?,
+      connections: json['connections'] as int?);
   @override
   JsonMap toJson() => {
         'source': source,
@@ -153,6 +159,7 @@ final class DownloadRequest implements JsonEncodable {
         if (createFolderForTask != null)
           'createFolderForTask': createFolderForTask,
         if (checksum != null) 'checksum': checksum,
+        if (connections != null) 'connections': connections,
       };
 }
 

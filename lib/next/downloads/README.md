@@ -246,6 +246,22 @@ fail the task at once (`unavailable`, not retryable); a failing first request at
 unresolved magnet. Time without progress starts at session start or resume, not
 at pause.
 
+Connections: `connections` (integer 1-8, default 1; other backends refuse it) splits
+the file into that many contiguous byte ranges, each on its own connection with
+`Range: bytes=a-b` and `If-Range`, all written at their offsets into the one
+`.nipaplay-part` (preallocated to the full length). It needs `Accept-Ranges: bytes`
+and a Content-Length; otherwise one connection is used. The session record keeps
+`[start, end, done]` per segment, so pause, cancel and restart continue every
+segment from the bytes it holds. `completedBytes` is the sum of the segments; a
+stall is every segment without a byte; a failing segment is retried alone with the
+usual back-off. A 200 or 416 answer to a segment (range ignored, or the file
+changed) restarts the download from byte 0 with fresh segments (`resume` =
+`ignored`) when bytes were already held or the validators changed, else falls back
+to one connection. `health.http.connections` is `{requested, used, reason,
+segments?}`: `reason` is null when used equals requested, else `no_range`,
+`unknown_length`, `too_small`, `range_ignored` or `range_unusable`; `segments` lists
+`{start, end, completedBytes}` when more than one connection is in use.
+
 Checksum: `checksum {algorithm: md5|sha1|sha256, value}` is compared after the last
 byte (hashed off the UI isolate). `task.checksum` and `receipt.checksum` are
 `{algorithm, requested, expected, actual, matched}`; `matched` is null when
