@@ -30,7 +30,10 @@ void main() {
     await Directory('${repository.path}/hooks').create();
     store = await SqliteJobStore.open(Directory('${root.path}/state'),
         factory: databaseFactoryFfi);
-    hooks = HarnessHooks(timeout: const Duration(seconds: 3));
+    // None of these tests is about the timeout. A short one only turns a slow
+    // machine into a SIGKILLed hook, so the product default stays; it costs
+    // nothing when hooks exit at once.
+    hooks = HarnessHooks();
     engine =
         TaskEngine(store: store, ownerDeviceId: 'test', executors: [hooks]);
     hooks.engine = engine;

@@ -217,7 +217,10 @@ void main() {
     await Future<void>.delayed(const Duration(milliseconds: 60));
     expect((await stallsOnce(job.jobId, (s) => true)).single['resumedAt'],
         isNull);
-    final moved = DateTime.now().toUtc().add(const Duration(seconds: 1));
+    // After the recorded stall, not after the clock now: on a slow machine
+    // more than a second can pass between the two.
+    final moved = DateTime.parse(stalls.single['at'] as String)
+        .add(const Duration(seconds: 1));
     backend.health = {
       ...backend.health!,
       'secondsWithoutProgress': 0,
@@ -235,10 +238,11 @@ void main() {
 
   test('no metadata for the stall time is a stall that closes with it',
       () async {
+    const stallAfter = Duration(seconds: 1);
     await engine.close();
     connect(
         retryDelay: const Duration(milliseconds: 40),
-        stallAfter: const Duration(seconds: 1));
+        stallAfter: stallAfter);
     await engine.start();
     Future<List<Map>> stallsOnce(
         String jobId, bool Function(List<Map>) done) async {
@@ -258,7 +262,13 @@ void main() {
         retryable: true);
     final job = await downloads.add(testRequest);
     await Future<void>.delayed(const Duration(milliseconds: 300));
-    expect((await engine.get(job.jobId)).checkpoint['stalls'], isNull);
+    // No stall may be recorded before the job is stallAfter old. The age is
+    // taken after the read, so it bounds every attempt the read could have
+    // seen; on a machine so slow that the pause outlasted stallAfter there
+    // is nothing left to assert here.
+    final early = await engine.get(job.jobId);
+    final age = DateTime.now().toUtc().difference(early.createdAt);
+    if (age < stallAfter) expect(early.checkpoint['stalls'], isNull);
     var stalls = await stallsOnce(job.jobId, (s) => s.isNotEmpty);
     final first = stalls.single;
     expect(first['index'], 0);
