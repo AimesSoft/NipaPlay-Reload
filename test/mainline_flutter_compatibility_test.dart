@@ -35,7 +35,9 @@ void main() {
       File('pubspec_overrides.ohos.yaml').readAsStringSync(),
     );
 
-    expect(harmonyKeys, containsAll(sharedKeys));
+    // HarmonyOS and tvOS keep the published Erika while next pins liberika
+    // ahead of a release for the desktop Next (see pubspec.yaml).
+    expect(harmonyKeys, containsAll(sharedKeys.difference({'erika_flutter'})));
     final harmonyOverrides =
         File('pubspec_overrides.ohos.yaml').readAsStringSync();
     expect(
@@ -77,7 +79,7 @@ void main() {
       '.github/workflows/build-tvos.yml',
     ).readAsStringSync();
 
-    expect(tvOSKeys, containsAll(sharedKeys));
+    expect(tvOSKeys, containsAll(sharedKeys.difference({'erika_flutter'})));
     expect(tvOSOverrides, isNot(contains('package_info_plus:')));
     expect(tvOSOverrides, isNot(contains('wakelock_plus:')));
     expect(tvOSOverrides, isNot(contains('erika_flutter:')));
