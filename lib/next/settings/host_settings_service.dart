@@ -116,12 +116,14 @@ final class HostSettingsService implements NextHostSettings, NextHostDeviceSetti
     await file.rename('${root.path}/$name');
   }
 
-  CredentialRef _key(JsonMap value) => CredentialRef(
+  /// Where the key of the model set up in NipaPlay is kept in the vault.
+  static CredentialRef modelKey(Directory root, JsonMap value) => CredentialRef(
       'next_model',
       sha256
           .convert(utf8.encode(jsonEncode(
               [root.absolute.path, value['provider'], value['baseUrl']])))
           .toString());
+  CredentialRef _key(JsonMap value) => modelKey(root, value);
   UiModelSource _source(JsonMap value) => value['source'] == 'nipaplay' ||
       (value['source'] == null && codex != null)
       ? UiModelSource.nipaplay

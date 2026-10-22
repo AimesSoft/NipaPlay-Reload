@@ -1,3 +1,8 @@
+import 'capabilities/app_runtime_capability.dart';
+import 'platform/lab_profile.dart';
+import 'system/app_restart.dart';
+import 'system/app_runtime.dart';
+import '../services/desktop_exit_handler.dart';
 import 'mesh/files.dart';
 import 'dart:io';
 
@@ -115,6 +120,8 @@ final class NextCore {
   final jobOrigins = JobOrigins();
   final diskDeletion = DiskDeletion();
   late final SettingConsent settingConsent;
+  late final AppRuntimeFacts appRuntime;
+  late final AppRestart appRestart;
   final hooks = HarnessHooks();
   final harnessLocation = HarnessLocation();
   final DownloadRuntime downloads;
@@ -351,6 +358,21 @@ final class NextCore {
     settings.register([uiData.openingSetting]);
     db = createDbService(
         database: database, media: media.service, uiData: uiData);
+    appRuntime = AppRuntimeFacts(
+        root: root,
+        mesh: mesh,
+        programs: programs,
+        vault: credentialVault,
+        chat: () => followups.chatHost,
+        codexHome: Directory(LabProfile.active
+            ? '${LabProfile.root}/codex-home'
+            : '${Platform.environment[Platform.isWindows ? 'USERPROFILE' : 'HOME']}/.codex'),
+        managedModelByDefault: !LabProfile.active &&
+            (Platform.isMacOS || Platform.isWindows || Platform.isLinux));
+    appRestart = AppRestart(
+        quit: () => DesktopExitHandler.instance.quit(),
+        beforeQuit: settings.drain,
+        profileName: LabProfile.name);
     capabilities = List.unmodifiable(diskDeletion.protect(settingConsent.protect([
       CredentialCapability(credentials),
       TaskCapability(engine),
@@ -380,6 +402,7 @@ final class NextCore {
       SettingsCapability(settings),
       MemoryCapability(memory),
       ClassicOperations(settings),
+      AppRuntimeCapability(appRuntime, appRestart),
       MeshCapability(mesh),
       state,
     ])).map(InvocationScopeCapability.new));

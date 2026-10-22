@@ -52,6 +52,9 @@ final class Followups {
   final TaskEngine engine;
   final RepositoryLocation location;
   ChatHost? _host;
+
+  /// The running conversation host; null while none is attached.
+  ChatHost? get chatHost => _host;
   Helpers? helpers;
   void Function()? eventCommitted;
   String? Function()? agentDevice;

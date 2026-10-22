@@ -3,6 +3,7 @@ const localOperationTitles = {
   'playback.levels': '调整音量和亮度',
   'window.control': '调整窗口',
   'app.quit': '退出应用',
+  'app.restart': '重启应用',
   'playback.external.danmaku': '调整外部播放器弹幕',
   'playback.external_player_path': '选择外部播放器',
   'media.library.roots.add': '添加扫描目录',
