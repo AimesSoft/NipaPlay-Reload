@@ -464,45 +464,11 @@ final class DanmakuStore {
       if (facts['available'] != true) return [];
       return readSidecarEntries(facts['path'] as String);
     }
-    return db.transaction((tx) async {
-      final rows = await tx.query('danmaku_cache_chunks',
-          where: 'cache_key = ?', whereArgs: [key], orderBy: 'chunk_index');
-      final entries = <DanmakuEntry>[];
-      final seen = <String>{};
-      for (final row in rows) {
-        for (final raw in await files.read(row)) {
-          final e =
-              DanmakuEntry.fromJson(Map<String, Object?>.from(raw as Map));
-          final identity = e.sourceEntryId != null
-              ? jsonEncode([e.sourceId, e.videoId, e.sourceEntryId])
-              : e.platformId != null
-                  ? jsonEncode([
-                      e.sourceId,
-                      e.videoId,
-                      e.platform,
-                      e.originVideoId,
-                      e.platformId
-                    ])
-                  : e.sender != null
-                      ? jsonEncode([
-                          e.sourceId,
-                          e.videoId,
-                          e.platform,
-                          e.sender,
-                          e.sourceTimeMs,
-                          e.text,
-                          e.mode,
-                          e.colorRgb
-                        ])
-                      : null;
-          if (identity == null || seen.add(identity)) {
-            entries.add(e);
-          }
-        }
-      }
-      entries.sort((a, b) => a.sourceTimeMs.compareTo(b.sourceTimeMs));
-      return entries;
-    });
+    // The transaction holds the content files until they are read.
+    return db.transaction((tx) async => files.entries(
+        key,
+        await tx.query('danmaku_cache_chunks',
+            where: 'cache_key = ?', whereArgs: [key], orderBy: 'chunk_index')));
   }
 
   Future<List<JsonMap>> coverage(String key) async {

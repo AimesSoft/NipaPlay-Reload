@@ -6,6 +6,8 @@ import 'package:crypto/crypto.dart';
 import 'package:nipa_harness/nipa_harness.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
+import 'source.dart';
+
 /// File publication and collection run under the same database transaction as
 /// their references. Readers also hold that transaction until content is read.
 final class DanmakuFiles {
@@ -20,23 +22,89 @@ final class DanmakuFiles {
     return _encodeAndPublish(path, entries, kind);
   }
 
+  /// One chunk's raw entries. A content file is read, checked against its
+  /// name and counts, and decoded on a background isolate.
   Future<List<Object?>> read(Map<String, Object?> row) async {
     final relative = row['file_path'] as String?;
     if (relative == null) return jsonDecode(row['payload'] as String) as List;
-    if (!RegExp(r'^danmaku/[0-9a-f]{64}\.json$').hasMatch(relative)) {
-      throw const FormatException('Invalid danmaku content reference.');
+    _checkReference(relative);
+    final path = root.path;
+    final byteCount = row['byte_count'], entryCount = row['entry_count'];
+    return Isolate.run(
+        () => _readContent(path, relative, byteCount, entryCount));
+  }
+
+  /// Entries of one cache key, read from its chunk [rows] in chunk order,
+  /// without duplicates, sorted by time. Content files are named by the
+  /// SHA-256 of what they hold, so the same rows always hold the same
+  /// entries: the result is kept per key for those rows and only read and
+  /// decoded again, off the main isolate, when the rows change.
+  Future<List<DanmakuEntry>> entries(
+      String key, List<Map<String, Object?>> rows) async {
+    final signature = _signature(rows);
+    final id = '${root.path}\u0000$key';
+    final hit = _decoded.remove(id);
+    if (hit != null &&
+        signature != null &&
+        hit.signature == signature &&
+        await _unchanged(hit.files)) {
+      _decoded[id] = hit;
+      return List.of(hit.entries);
     }
-    final file = File('${root.path}/$relative');
-    final bytes = await file.readAsBytes();
-    if ('danmaku/${sha256.convert(bytes)}.json' != relative ||
-        bytes.length != row['byte_count']) {
-      throw const FormatException('Danmaku content checksum mismatch.');
+    for (final row in rows) {
+      if (row['file_path'] case final String relative) {
+        _checkReference(relative);
+      }
     }
-    final entries = jsonDecode(utf8.decode(bytes)) as List;
-    if (entries.length != row['entry_count']) {
-      throw const FormatException('Danmaku content count mismatch.');
+    final read = await _decodeChunks(
+        root.path, [for (final row in rows) Map<String, Object?>.of(row)]);
+    final entries = read.entries;
+    if (signature != null && read.files != null) {
+      _decoded[id] =
+          (signature: signature, files: read.files!, entries: entries);
+      var total = 0;
+      for (final value in _decoded.values) {
+        total += value.entries.length;
+      }
+      while (_decoded.length > 1 &&
+          (total > decodedEntryBudget || _decoded.length > 32)) {
+        total -= _decoded.remove(_decoded.keys.first)!.entries.length;
+      }
     }
-    return entries;
+    return List.of(entries);
+  }
+
+  /// Kept decoded entries, least recently read first; at most 32 keys and
+  /// [decodedEntryBudget] entries.
+  static final _decoded = <String,
+      ({
+        String signature,
+        Map<String, String> files,
+        List<DanmakuEntry> entries
+      })>{};
+
+  /// A content file checked when it was read must still be that file: any
+  /// write to it changes its size, modification or change time, and is read
+  /// and checked again (so a damaged file still fails visibly).
+  static Future<bool> _unchanged(Map<String, String> files) async {
+    for (final MapEntry(key: path, value: stamp) in files.entries) {
+      if (_stamp(await File(path).stat()) != stamp) return false;
+    }
+    return true;
+  }
+
+  static const decodedEntryBudget = 200000;
+
+  /// Rows that keep their content inline (before migration) are not kept.
+  static String? _signature(List<Map<String, Object?>> rows) {
+    final parts = <String>[];
+    for (final row in rows) {
+      final path = row['file_path'];
+      if (path == null) return null;
+      parts.add('${row['chunk_index']}:$path:${row['byte_count']}:'
+          '${row['entry_count']}');
+    }
+    return parts.join('|');
   }
 
   /// Commit one legacy row at a time; a crash leaves either its JSON or its
@@ -215,4 +283,104 @@ Future<Map<String, Object?>> _publish(
     'byte_count': bytes.length,
     'storage_kind': kind
   };
+}
+
+final _reference = RegExp(r'^danmaku/[0-9a-f]{64}\.json$');
+
+void _checkReference(String relative) {
+  if (!_reference.hasMatch(relative)) {
+    throw const FormatException('Invalid danmaku content reference.');
+  }
+}
+
+/// Reads and checks one content file; runs on a background isolate.
+List<Object?> _readContent(
+    String root, String relative, Object? byteCount, Object? entryCount) {
+  final bytes = File('$root/$relative').readAsBytesSync();
+  if ('danmaku/${sha256.convert(bytes)}.json' != relative ||
+      bytes.length != byteCount) {
+    throw const FormatException('Danmaku content checksum mismatch.');
+  }
+  final entries = jsonDecode(utf8.decode(bytes)) as List;
+  if (entries.length != entryCount) {
+    throw const FormatException('Danmaku content count mismatch.');
+  }
+  return entries;
+}
+
+String _stamp(FileStat stat) => '${stat.type}:${stat.size}:'
+    '${stat.modified.microsecondsSinceEpoch}:${stat.changed.microsecondsSinceEpoch}';
+
+/// Entries of [rows] with the stamp of every content file as it was read;
+/// files is null when one changed while it was being read.
+Future<({List<DanmakuEntry> entries, Map<String, String>? files})>
+    _decodeChunks(String root, List<Map<String, Object?>> rows) =>
+        Isolate.run(() {
+          Map<String, String>? files = {};
+          for (final row in rows) {
+            if (row['file_path'] case final String relative) {
+              files[relative] = _stamp(File('$root/$relative').statSync());
+            }
+          }
+          final entries = decodeDanmakuChunks(root, rows);
+          for (final MapEntry(key: relative, value: stamp)
+              in files!.entries.toList()) {
+            if (_stamp(File('$root/$relative').statSync()) != stamp) {
+              files = null;
+              break;
+            }
+          }
+          return (
+            entries: entries,
+            files: files == null
+                ? null
+                : {
+                    for (final e in files.entries) '$root/${e.key}': e.value
+                  }
+          );
+        });
+
+/// The entries of [rows] (one cache key's chunks in chunk order): each chunk
+/// read and checked, entries the source identifies alike kept once, sorted
+/// by time.
+List<DanmakuEntry> decodeDanmakuChunks(
+    String root, List<Map<String, Object?>> rows) {
+  final entries = <DanmakuEntry>[];
+  final seen = <String>{};
+  for (final row in rows) {
+    final relative = row['file_path'] as String?;
+    final raws = relative == null
+        ? jsonDecode(row['payload'] as String) as List
+        : _readContent(root, relative, row['byte_count'], row['entry_count']);
+    for (final raw in raws) {
+      final e = DanmakuEntry.fromJson(Map<String, Object?>.from(raw as Map));
+      final identity = e.sourceEntryId != null
+          ? jsonEncode([e.sourceId, e.videoId, e.sourceEntryId])
+          : e.platformId != null
+              ? jsonEncode([
+                  e.sourceId,
+                  e.videoId,
+                  e.platform,
+                  e.originVideoId,
+                  e.platformId
+                ])
+              : e.sender != null
+                  ? jsonEncode([
+                      e.sourceId,
+                      e.videoId,
+                      e.platform,
+                      e.sender,
+                      e.sourceTimeMs,
+                      e.text,
+                      e.mode,
+                      e.colorRgb
+                    ])
+                  : null;
+      if (identity == null || seen.add(identity)) {
+        entries.add(e);
+      }
+    }
+  }
+  entries.sort((a, b) => a.sourceTimeMs.compareTo(b.sourceTimeMs));
+  return entries;
 }
