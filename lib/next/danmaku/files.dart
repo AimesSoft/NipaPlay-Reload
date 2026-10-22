@@ -316,28 +316,16 @@ String _stamp(FileStat stat) => '${stat.type}:${stat.size}:'
 Future<({List<DanmakuEntry> entries, Map<String, String>? files})>
     _decodeChunks(String root, List<Map<String, Object?>> rows) =>
         Isolate.run(() {
-          Map<String, String>? files = {};
+          final files = <String, String>{};
           for (final row in rows) {
             if (row['file_path'] case final String relative) {
-              files[relative] = _stamp(File('$root/$relative').statSync());
+              files['$root/$relative'] = _stamp(File('$root/$relative').statSync());
             }
           }
           final entries = decodeDanmakuChunks(root, rows);
-          for (final MapEntry(key: relative, value: stamp)
-              in files!.entries.toList()) {
-            if (_stamp(File('$root/$relative').statSync()) != stamp) {
-              files = null;
-              break;
-            }
-          }
-          return (
-            entries: entries,
-            files: files == null
-                ? null
-                : {
-                    for (final e in files.entries) '$root/${e.key}': e.value
-                  }
-          );
+          final unchanged = files.entries
+              .every((e) => _stamp(File(e.key).statSync()) == e.value);
+          return (entries: entries, files: unchanged ? files : null);
         });
 
 /// The entries of [rows] (one cache key's chunks in chunk order): each chunk
