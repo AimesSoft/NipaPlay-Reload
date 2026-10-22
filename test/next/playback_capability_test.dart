@@ -234,8 +234,22 @@ void main() {
           },
           FailureCode.unavailable);
       expect(failure.retryable, isTrue);
+      expect(failure.details, isEmpty);
       expect(fixture.started.length, 1);
       expect(fixture.player.seeks, isEmpty);
+    });
+
+    test('a start that could not begin carries the player error it left',
+        () async {
+      fixture.startSucceeds = false;
+      fixture.player.error = {
+        'code': 'media_load_failed',
+        'stage': 'stream_session',
+        'category': 'source_failed',
+      };
+      final failure = await invokeFailed(fixture.harness, 'playback.open',
+          {'path': fixture.rows.single.filePath}, FailureCode.unavailable);
+      expect(failure.details, {'playerError': fixture.player.error});
     });
 
     for (final input in <JsonMap>[

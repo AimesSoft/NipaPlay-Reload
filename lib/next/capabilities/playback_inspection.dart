@@ -4,8 +4,10 @@ import 'package:nipaplay/utils/video_player_state.dart';
 import 'package:nipaplay/utils/subtitle_parser.dart';
 import 'package:nipaplay/models/watch_history_model.dart';
 import 'package:nipaplay/utils/media_identity_resolver.dart';
+import 'package:nipaplay/services/auto_next_episode_service.dart';
 import '../public_url.dart';
 import 'classic_action.dart';
+import 'player_facts.dart';
 import 'video_player_state_port.dart';
 
 abstract interface class PlaybackInspectionPort {
@@ -50,6 +52,21 @@ const _specs = <String, (String, Effect, ObjectSchema)>{
     Effect.write,
     ObjectSchema({'sessionId': _session, 'preservePosition': BooleanSchema()},
         required: ['sessionId'])
+  ),
+  'playback.info': (
+    'Read what the kernel playing now reports about the media, queried from the kernel at call time: kernel (id mdk/media_kit/video_player/erika, name, configured = the kernel setting), container (format, bitrate bit/s), video (codec, width, height, displayWidth/Height, pixelFormat, hwPixelFormat, fps = declared, measuredFps = output estimate, bitrate bit/s, colorMatrix, colorPrimaries, transfer), decoder (name, hardware, method = active hardware method or decoder, requested = hwdec option or ordered decoder list), frames (dropped by output, decoderDropped, mistimed, delayed, decoded, rendered; counters since the file opened), audio (codec, decoder, sampleRate, channels, channelLayout, sampleFormat, bitrate), output (videoOutput, gpuApi, gpuContext, rate, avsyncSeconds), cache (aheadSeconds, pausedForCache, bufferingPercent) and kernelDetails, the kernel report as given. A value the kernel does not report is null. Includes sessionId, hasVideo and the danmaku renderer.',
+    Effect.read,
+    ObjectSchema({})
+  ),
+  'playback.failures': (
+    'Read playback failures recorded in this process while Next is on, newest first: failureId, at, sessionId, path, kernel, stage (file_check, stream_session, remote_path, media_open, media_ready_timeout, initialize, invalid_media, web_format, or null), category (file_not_found, permission_denied, unsupported_format, network, unauthorized, source_failed, timeout, unknown), kernelRetryable, messages (player, kernel, media: raw text, redacted), file (exists, readable, osError for a local file, else null). category comes from the local file state, then the kernel text, then the player text, then the stage. Each failure is also the playback.failed event, which persists across restarts. limit defaults to 20.',
+    Effect.read,
+    ObjectSchema({'limit': IntegerSchema(minimum: 1, maximum: 50)})
+  ),
+  'playback.cancel_auto_next': (
+    'Cancel the running countdown to the next episode, as the countdown bar does. Returns cancelled=false when no countdown runs; state.autoNext shows the countdown before and after.',
+    Effect.write,
+    ObjectSchema({})
   ),
   'playback.chapters': (
     'Read container chapter markers, current index and all detected opening/ending segments with provenance. Empty list means no markers/segments, not permission to invent them.',
@@ -155,6 +172,33 @@ final class PlaybackInspection {
             milliseconds:
                 (timeout - deadline.elapsedMilliseconds).clamp(1, 50)));
       }
+    }
+    switch (operation) {
+      case 'playback.info':
+        final facts = snapshot;
+        return {
+          'sessionId': facts['sessionId'],
+          'observedAt': DateTime.now().toUtc().toIso8601String(),
+          'player': facts['player'],
+          'hasVideo': facts['hasVideo'],
+          if (facts['player'] == 'external')
+            'unavailableReason': 'external_player'
+          else ...{
+            ...await readPlayerMediaFacts(state.player),
+            'danmakuRenderer': facts['danmakuRenderer'],
+          },
+        };
+      case 'playback.failures':
+        final records = PlaybackFailures.instance.records.reversed.toList();
+        return {
+          'failures': records.take(input['limit'] as int? ?? 20).toList(),
+          'total': records.length,
+          'capacity': PlaybackFailures.capacity,
+        };
+      case 'playback.cancel_auto_next':
+        final counting = AutoNextEpisodeService.instance.isCountingDown;
+        if (counting) state.cancelAutoNextEpisode();
+        return {'cancelled': counting, 'state': snapshot};
     }
     if (operation != 'playback.retry') _internal();
     switch (operation) {

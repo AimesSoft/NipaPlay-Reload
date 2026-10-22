@@ -248,6 +248,25 @@ const playbackSnapshotSchema = ObjectSchema({
   'supportedControls': ArraySchema(StringSchema()),
   'volume': NumberSchema(minimum: 0, maximum: 1, nullable: true),
   'brightness': NumberSchema(minimum: 0, maximum: 1, nullable: true),
+  'effectiveRate': NumberSchema(
+      nullable: true,
+      description: 'Rate the player applies now: the long-press boost rate '
+          'while it is held, otherwise rate.'),
+  'kernelRate': NumberSchema(
+      nullable: true,
+      description: 'Rate last applied to the kernel, as the kernel adapter '
+          'keeps it.'),
+  'speedBoost': ObjectSchema({
+    'active': BooleanSchema(),
+    'rate': NumberSchema(),
+  }, nullable: true),
+  'kernel': ObjectSchema({
+    'id': StringSchema(nullable: true),
+    'name': StringSchema(),
+  }, nullable: true, additionalProperties: true),
+  'danmakuRenderer':
+      ObjectSchema({}, nullable: true, additionalProperties: true),
+  'autoNext': ObjectSchema({}, nullable: true, additionalProperties: true),
   'canPrevious': BooleanSchema(),
   'canNext': BooleanSchema(),
 }, required: [
@@ -292,6 +311,12 @@ final class PlaybackSnapshot implements JsonEncodable {
     this.error,
     this.supportedControls = const [],
     this.observedAt,
+    this.effectiveRate,
+    this.kernelRate,
+    this.speedBoost,
+    this.kernel,
+    this.danmakuRenderer,
+    this.autoNext,
   });
 
   final String status;
@@ -318,6 +343,12 @@ final class PlaybackSnapshot implements JsonEncodable {
   final String? player;
   final double? volume;
   final double? brightness;
+  final double? effectiveRate;
+  final double? kernelRate;
+  final JsonMap? speedBoost;
+  final JsonMap? kernel;
+  final JsonMap? danmakuRenderer;
+  final JsonMap? autoNext;
 
   @override
   JsonMap toJson() => {
@@ -325,6 +356,14 @@ final class PlaybackSnapshot implements JsonEncodable {
         if (player != null) 'player': player,
         if (player != null) 'volume': volume,
         if (player != null) 'brightness': brightness,
+        if (player != null) ...{
+          'effectiveRate': effectiveRate,
+          'kernelRate': kernelRate,
+          'speedBoost': speedBoost,
+          'kernel': kernel,
+          'danmakuRenderer': danmakuRenderer,
+          'autoNext': autoNext,
+        },
         'status': status,
         'observedState': error != null ? 'error' : buffering == true ? 'buffering'
             : ready == false && hasVideo ? 'loading' : status,

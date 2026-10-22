@@ -93,6 +93,7 @@ final class TestPlayer implements PlayerPort {
   double rate = 1.25;
   bool canPrevious = true;
   bool canNext = true;
+  JsonMap? error;
   final List<bool> pauseCalls = [];
   final List<Duration> seeks = [];
   final List<EpisodeDirection> switches = [];
@@ -116,6 +117,7 @@ final class TestPlayer implements PlayerPort {
         rate: rate,
         canPrevious: canPrevious,
         canNext: canNext,
+        error: error,
       );
 
   @override

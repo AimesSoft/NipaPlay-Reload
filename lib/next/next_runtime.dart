@@ -53,6 +53,7 @@ import 'capabilities/local_playback_operations.dart';
 import 'capabilities/local_library_operations.dart';
 import 'capabilities/debug_local_operations.dart';
 import 'capabilities/video_player_state_port.dart';
+import 'capabilities/player_facts.dart';
 import 'media/file_indexing.dart';
 import 'media_sources/login_dialog.dart';
 import 'accounts/login_dialog.dart';
@@ -393,7 +394,7 @@ final class NextRuntime extends ChangeNotifier {
     core.storage.scanning = () => ServiceProvider.scanService.isScanning;
     core.diagnostics.playerFacts = () async {
       final info = _player.player.mediaInfo;
-      final details = await _player.player.getDetailedMediaInfoAsync();
+      final media = await readPlayerMediaFacts(_player.player);
       return {'available': true, 'kernel': _player.player.getPlayerKernelName(),
         'status': _player.status.name, 'hasVideo': _player.hasVideo,
         'buffering': _player.isBuffering, 'bufferedPositionMs': _player.bufferedPosition,
@@ -402,8 +403,7 @@ final class NextRuntime extends ChangeNotifier {
           {'codec': video.codecName, 'width': video.codec.width, 'height': video.codec.height}],
         'audio': [for (final audio in info.audio ?? const [])
           {'codec': audio.codec.name, 'sampleRate': audio.codec.sampleRate, 'channels': audio.codec.channels}],
-        'details': {for (final key in ['videoCodec', 'audioCodec', 'videoWidth', 'videoHeight', 'fps', 'hwdec', 'decoder', 'buffering'])
-          if (details.containsKey(key)) key: details[key]}};
+        'details': diagnosticsPlayerDetails(media, buffering: _player.isBuffering)};
     };
     _harness = Harness(
       [
@@ -725,7 +725,9 @@ final class NextRuntime extends ChangeNotifier {
         'status': status, 'previousStatus': previous, 'path': path,
         'changedFields': ['status'],
       }));
-      if (status == 'error') _queueHook(() => _hooks.emit('playback.failed', path ?? 'player', {'status': status}));
+      // Classic sets its error text right after the status; read both once
+      // the code that failed has returned.
+      if (status == 'error') scheduleMicrotask(_recordFailure);
     }
     if (!_player.hasVideo) {
       _startedPath = null;
@@ -739,6 +741,20 @@ final class NextRuntime extends ChangeNotifier {
     _startedPath = path;
     _queueHook(() async {
       await _hooks.emit('playback.started', path, {'path': path});
+    });
+  }
+
+  void _recordFailure() {
+    final sessionId = VideoPlayerStatePort(_player).snapshot().sessionId!;
+    final captured = PlaybackFailures.instance.capture(_player, sessionId);
+    _queueHook(() async {
+      try {
+        final failure = await PlaybackFailures.instance.record(captured);
+        await _hooks.emit('playback.failed',
+            failure['path'] as String? ?? 'player', {...failure, 'status': 'error'});
+      } catch (error, stack) {
+        Zone.current.handleUncaughtError(error, stack);
+      }
     });
   }
 

@@ -162,7 +162,7 @@ final class SystemDiagnostics implements Capability {
                 id: 'diagnostics.status',
                 title: '健康检查与运行诊断',
                 description:
-                    '读取 SQLite quick_check、实际后台任务、内存、平台版本、日志、来源最近失败及迁移状态。无自动修复、不返回播放器实际认证 URL。',
+                    '读取 SQLite quick_check、实际后台任务、内存、平台版本、日志、来源最近失败及迁移状态。player 给播放器简要事实；player.details 与 playback.info 来自同一次内核查询：videoCodec、audioCodec、videoWidth、videoHeight、fps、hwdec（正在使用的硬解方式，软解为 no）、decoder、hardwareDecoding、droppedFrames、buffering，内核未提供的为 null。无自动修复、不返回播放器实际认证 URL。',
                 effect: Effect.read,
                 input: ObjectSchema({}),
                 output: ObjectSchema({}, additionalProperties: true)),

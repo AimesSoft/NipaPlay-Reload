@@ -66,7 +66,11 @@ final class PlaybackOpenAction
         'including files with no watch history, or a recorded episode by IDs. '
         'Multiple episode files return a decision with executable path calls. '
         'An optional start position is supported by controllable players. '
-        'On success, returns the selected path, player type and current state.',
+        'Returns the selected path, player type and the state after opening; '
+        'a source that failed to open leaves state.error with its stage, '
+        'category and the kernel\'s own messages. When playback cannot be '
+        'started at all, the failure details carry playerError if the player '
+        'reported one.',
     effect: Effect.write,
     input: playbackOpenInputSchema,
     output: playbackOpenOutputSchema,
@@ -161,9 +165,10 @@ final class PlaybackOpenAction
       item = resolved;
     }
     if (!await _start(item)) {
-      throw const Failure(FailureCode.unavailable,
+      final error = _player.snapshot().error;
+      throw Failure(FailureCode.unavailable,
           'NipaPlay cannot start playback right now; the window may not be ready.',
-          retryable: true);
+          retryable: true, details: {if (error != null) 'playerError': error});
     }
     if (input.startPositionMs case final position?) {
       await _player.seekTo(Duration(milliseconds: position));
@@ -187,7 +192,21 @@ final class PlaybackStateAction extends Action<NoInput, PlaybackStateOutput> {
     title: 'Get playback state',
     description: 'Read the current player status, video metadata, position, '
         'duration, rate and episode navigation availability. '
-        'The snapshot also describes the player when no video is loaded.',
+        'The snapshot also describes the player when no video is loaded. '
+        'For the internal player: rate is the chosen rate; effectiveRate the '
+        'rate applied now (speedBoost.rate while the long-press boost is '
+        'held, speedBoost.active); kernelRate the rate last given to the '
+        'kernel; kernel the kernel playing (id, name; playback.info adds '
+        'the kernel setting); danmakuRenderer the layer drawing danmaku '
+        '(player_native when the kernel draws them, plugin with pluginId and '
+        'rendererId, or a built-in engine id: cpu, gpu, canvas, '
+        'nipaplay_next with nextPlusPlus, next2, dfm_plus); autoNext the end '
+        'action and the next-episode countdown (countingDown, '
+        'remainingSeconds, next). error, when set, carries stage, category, '
+        'kernel, kernelRetryable (the kernel\'s own retry judgement, null '
+        'when it makes none), messages (player, kernel, media) and failureId '
+        'once recorded in playback.failures. Media details (codec, decoder, '
+        'frame rate, bitrate, dropped frames) are in playback.info.',
     effect: Effect.read,
     input: ObjectSchema({}),
     output: playbackStateOutputSchema,

@@ -91,11 +91,12 @@ const familyFacts = <String, String>{
   'window': r'''bounds.get 读取、bounds.set 设置本进程主窗准确位置与尺寸，读写 effect 分开；不激活窗口，变化发 window.bounds_changed；已有 window.control 管 fullscreen/PiP/托盘。坐标为 window_manager 逻辑像素。目标不会按应用名查找。''',
   'share': r'''prepare 预览文字、公开 URL 或授权本地文件；open 打开该计划的系统面板，由用户选目的地。会核对预览后文件变化。不以打开面板冒充已分享，也不自动上传日志。''',
   'notification': r'''当前 macOS 宿主有原生 OS 通知：status 读取系统设置，send 受系统授权、声音及系统展示策略管理，list 区分 pending/delivered，cancel 请求移除。未授权默认 blocked，requestPermission 明确请求系统询问用户。accepted 不等于用户看到了横幅；其他平台如实返回 unavailable。''',
-  'diagnostics': r'''status 给健康、版本、资源、日志和迁移观察；file_logs 用受限 fileId 与行游标读取脱敏摘录。recover 只执行显式的日志重启、投影核对、索引器检查，不自动修改用户数据或登录。日志公开发布必须有明确目标与内容；本族不上传。''',
+  'diagnostics': r'''status 给健康、版本、资源、日志和迁移观察；file_logs 用受限 fileId 与行游标读取脱敏摘录。recover 只执行显式的日志重启、投影核对、索引器检查，不自动修改用户数据或登录。日志公开发布必须有明确目标与内容；本族不上传。
+- status 的 player.details 与 playback.info 来自同一次内核查询：videoCodec、audioCodec、videoWidth/Height、fps、hwdec（正在用的硬解方式，软解为 no，未知为 null）、decoder、hardwareDecoding、droppedFrames、buffering。''',
   'cache': r'''plan(kinds,maxBytes) 返回实际回收对象、估计字节和保留原因，prune(planId) 重新核对引用与变化并返回逐项结果。仅可重取缓存回收无 NeedsDecision。Next 弹幕池复用引用感知回收；正在获取时推迟。计划是当前进程的预览，不允许夹带任意路径。''',
   'storage': r'''status 给目录真实用量和卷可用空间。父目录包含子目录，不相加。watch 显式订阅空间阈值、unwatch 取消；仅当前进程有效，转换发 storage.space_changed。可重取缓存用 cache.plan/prune；字幕、导入弹幕、用户下载与无法证明可重取的图片保留。磁盘用户文件删除/覆盖沿用 media.mesh_files 的 NeedsDecision。 `state.query storage.volumes`、`storage.directories` 以行给出同样的事实，可过滤。''',
   'network': r'''status 给路由、代理、故障转移、媒体服务器连接 UA 及来源最近错误/上次成功。check 显式检查已登记来源或官方网关 healthz，不更换路由或登录。观测历史只覆盖当前进程，未观察值不宣称可达。第三方凭据去向仍由用户设置；秘密不进输出。 `state.query network.routes`、`network.observations` 以行给出同样的事实；来源逐地址的连通性在 `media.sources` 族的 `addresses[]` 与 `media.source_addresses` 视图。''',
-  'events': r'''身体变化共用 hook 与 followup 的持久事实日志。describe 列出事件；wait(afterCursor) 有界等待和分页，游标跨重启；只重读事实，不重跑脚本。followup.register 订阅下一次事件；hook 名称就是事件名。播放位置不逐帧发事件；seek_requested 是受理意图，settlement 必须另核对。''',
+  'events': r'''身体变化共用 hook 与 followup 的持久事实日志。describe 列出事件；wait(afterCursor) 有界等待和分页，游标跨重启；只重读事实，不重跑脚本。followup.register 订阅下一次事件；hook 名称就是事件名。播放位置不逐帧发事件；seek_requested 是受理意图，settlement 必须另核对。playback.failed 的 facts 是一条播放失败记录，与 playback.failures 的条目相同（stage、category、内核原文等）。''',
   'download.limits': r'''get 读取原生内置下载会话限速，set 调整上传/下载字节每秒预算并返回引擎读回值。0 为无限制，正值至少 16384；省略方向保留现值。不自动初始化会话；applied=false 不能宣称已限速。只影响本机内置会话，重建后恢复默认无限制，不改变服务端限流。''',
   'media.entities': r'''Local catalog entities have stable caller-supplied IDs and expectedRevision on update. parentId is an actual local parent, never an external ID. fileIds on an episode replace its local associations. Removal includes descendants, retains tombstones and exact relationship before-images, and returns undoId; restore refuses subsequent conflicting changes. These operations do not manufacture Classic platform matches.''',
   'ui':
@@ -231,7 +232,10 @@ NipaPlay 自己会做一部分：作品有 TMDB 身份时取图，同步 Classic
 - 由你发起、要用户在 NipaPlay 窗口里登录的 `accounts.login`，结束时（登录成功、失败、关窗或取消）作为后续回到发起它的会话，忙时排队；事实只有平台、方式、状态和是否已登录，没有账号名和密码。你已对该 jobId 登记 `followup.register` 的不再重复送。用户在对话里给出秘密、由你直接传入的登录不回报。''',
   'playback':
       r'''open/pause/seek/navigation accept commands; snapshots observe asynchronously. State reports sessionId, readiness, buffering, buffered position, error/recovery and actual supported controls. External unknown position/duration/pause/rate remain null. wait is bounded and detects a changed session; retry explicitly reloads the source through Classic and may preserve position. chapters exposes container markers and detected skip segments; navigate uses chapter, frame or active skip semantics. Backward frame stepping may be approximate. playlist reports the actual detail source list, without authenticated stream URLs.
-播放器共用 Classic 和 Next；播放本地或媒体服务器上的文件，叠加字幕和弹幕。临时加载字幕用 playback.load_subtitle；持久事实用 subtitle。''',
+播放器共用 Classic 和 Next；播放本地或媒体服务器上的文件，叠加字幕和弹幕。临时加载字幕用 playback.load_subtitle；持久事实用 subtitle。
+- state 另给内部播放器此刻的事实：rate 是选定的倍速，effectiveRate 是此刻实际使用的倍速（按住长按加速时为 speedBoost.rate），kernelRate 是最后交给内核的倍速；kernel 是实际在播放的内核（info 里另有 configured，即内核设置）；danmakuRenderer 是实际画弹幕的那一层（内核自己画时为 player_native）；autoNext 是结束时的动作与下一集倒计时（countingDown、remainingSeconds、next），cancel_auto_next 取消正在进行的倒计时。
+- info 在调用时向内核查询：容器、视频编码与分辨率、声明帧率与实测帧率、码率、解码器与是否硬解、丢帧等计数、音频编码与声道、输出与缓存。内核不提供的项为 null；kernelDetails 保留内核原样的报告。
+- 打开失败或播放出错时，state.error 带 stage（NipaPlay 哪一步报的错）、category（依次由本地文件状态、内核原文、播放器原文、步骤映射，映射不了为 unknown）、kernelRetryable（内核自己的重试判断）和原始 messages。每次失败记入 failures，同时发出 playback.failed 事件，事件跨重启保留。''',
   'discover': r'''弹弹play 每日放送与推荐。''',
   'plugins': r'''应用插件。''',
   'media.sources': r'''SMB、WebDAV、Jellyfin、Emby 等远程来源。
