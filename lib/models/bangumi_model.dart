@@ -218,6 +218,7 @@ class BangumiAnime {
               id: epJson['episodeId'] as int? ?? 0,
               title: epJson['episodeTitle'] as String? ?? '未知剧集',
               airDate: epJson['airDate'] as String?,
+              episodeNumber: epJson['episodeNumber']?.toString(),
             ));
           }
         }
@@ -291,12 +292,14 @@ class BangumiAnime {
       'episodeList': episodeList?.map((e) => {
         'episodeId': e.id, 
         'episodeTitle': e.title,
-        'airDate': e.airDate
+        'airDate': e.airDate,
+        'episodeNumber': e.episodeNumber
       }).toList(),
       'episodes': episodeList?.map((e) => {
         'episodeId': e.id, 
         'episodeTitle': e.title,
-        'airDate': e.airDate
+        'airDate': e.airDate,
+        'episodeNumber': e.episodeNumber
       }).toList(), // 额外保存一份原始格式的数据，确保fromDandanplayDetail能正确解析
       'language': language, // 保存番剧信息的语言类型
     };
@@ -407,8 +410,10 @@ class EpisodeData {
   final int id; // Corresponds to Dandanplay's episodeId in BangumiEpisode schema
   final String title;
   final String? airDate; // From BangumiEpisode schema
+  final String? episodeNumber; // From BangumiEpisode schema, as dandanplay gives it
 
-  EpisodeData({required this.id, required this.title, this.airDate});
+  EpisodeData(
+      {required this.id, required this.title, this.airDate, this.episodeNumber});
 
   factory EpisodeData.fromJson(Map<String, dynamic> json) {
     // Assuming 'json' is an item from the 'episodes' array in BangumiDetails
@@ -417,6 +422,7 @@ class EpisodeData {
       id: json['episodeId'] as int? ?? 0,
       title: json['episodeTitle'] as String? ?? '未知剧集',
       airDate: json['airDate'] as String?,
+      episodeNumber: json['episodeNumber']?.toString(),
     );
   }
 } 

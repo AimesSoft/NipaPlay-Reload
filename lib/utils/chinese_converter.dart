@@ -116,6 +116,7 @@ class ChineseConverter {
                   id: ep.id,
                   title: convert(ep.title),
                   airDate: ep.airDate,
+                  episodeNumber: ep.episodeNumber,
                 );
               }).toList()
             : null,
@@ -251,6 +252,7 @@ class ChineseConverter {
                       id: ep.id,
                       title: convert(ep.title),
                       airDate: ep.airDate,
+                      episodeNumber: ep.episodeNumber,
                     ))
                 .toList()
             : null,

@@ -38,12 +38,14 @@ Future<List<JsonMap>> todayUpdates(
         final clock = hasTime
             ? ' ${date.hour.toString().padLeft(2, '0')}:${date.minute.toString().padLeft(2, '0')}'
             : '';
+        // The number dandanplay gives, not the position in its list.
+        final number = int.tryParse(episode.episodeNumber ?? '');
         result.removeWhere((row) => row['workId'] == id);
         result.add({
           'workId': id,
           'externalEpisodeId': '${episode.id}',
-          'number': index + 1,
-          'caption': '第 ${index + 1} 集 · 今天$clock'
+          if (number != null) 'number': number,
+          'caption': '${number == null ? '' : '第 $number 集 · '}今天$clock'
         });
       }
     }
