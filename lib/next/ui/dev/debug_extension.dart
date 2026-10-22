@@ -525,11 +525,21 @@ abstract final class NextUiDebug {
         final label = p['label'] ?? '';
         final buttons = _pressables(label, p['area']);
         if (buttons.isEmpty) throw StateError('No visible “$label”');
-        final at = _center(buttons.first);
+        // Several of the same name (a tab and a button both “匹配”): index
+        // picks one, in tree order.
+        final index = int.parse(p['index'] ?? '0');
+        if (index >= buttons.length) {
+          throw RangeError('Only ${buttons.length} visible “$label”');
+        }
+        final at = _center(buttons[index]);
         _hoverAt(at);
         _click([at.dx.round(), at.dy.round()]);
         await Future<void>.delayed(const Duration(milliseconds: 300));
-        return {'at': [at.dx.round(), at.dy.round()], ..._status(shell)};
+        return {
+          'at': [at.dx.round(), at.dy.round()],
+          'matches': buttons.length,
+          ..._status(shell)
+        };
       case 'drag':
         final at = _dropPoint(p['target']);
         if (p['do'] == 'exit') {
