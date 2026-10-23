@@ -18,6 +18,7 @@ import 'package:nipaplay/utils/danmaku/style.dart';
 import '../core/clock.dart';
 import '../perf/budget.dart';
 import '../ports/session_playback.dart';
+import 'controller.dart';
 
 /// Next's own overlay: reused renderers, driven exclusively by the session
 /// clock. No Classic notifications, no native getters, no timeline traversal.
@@ -99,7 +100,9 @@ class _NextDanmakuLayerState extends State<NextDanmakuLayer>
     final c = p.danmaku;
     if (!p.hasVideo || c.native) return const SizedBox.shrink();
     final engine = DanmakuKernelFactory.getKernelType();
-    final list = c.timeline.entries;
+    // The comments stay on the worker; the renderers that prepare layout take
+    // their data from it (the version tells them when it changed).
+    const list = <Map<String, dynamic>>[];
     final settings = c.settings;
     final outline = DanmakuOutlineStyle.values.byName(settings['danmaku.outlineStyle'] as String);
     final shadow = DanmakuShadowStyle.values.byName(settings['danmaku.shadowStyle'] as String);
@@ -141,7 +144,7 @@ class _NextDanmakuLayerState extends State<NextDanmakuLayer>
       case DanmakuRenderEngine.nipaplayNext:
         // These legacy renderers own their layout. Feed only their current
         // clock window, selected by binary search (no full-list build scan).
-        renderer = _WindowRenderer(list: list, time: _time,
+        renderer = _WindowRenderer(controller: c, time: _time,
             version: c.version, builder: (window) {
           if (engine == DanmakuRenderEngine.canvas) {
             return CanvasDanmakuManager.createRenderer(
@@ -178,10 +181,14 @@ class _NextDanmakuLayerState extends State<NextDanmakuLayer>
   }
 }
 
+/// For the renderers that lay out for themselves: the comments around the
+/// clock, 4 minutes at a time, asked of the worker when the clock comes
+/// within a minute of either end (or the list changes), and shown meanwhile
+/// from the window held, if the clock is still inside it.
 class _WindowRenderer extends StatefulWidget {
-  const _WindowRenderer({required this.list, required this.time,
+  const _WindowRenderer({required this.controller, required this.time,
     required this.version, required this.builder});
-  final List<Map<String, dynamic>> list;
+  final SessionDanmakuController controller;
   final ValueNotifier<double> time;
   final int version;
   final Widget Function(List<Map<String, dynamic>>) builder;
@@ -191,29 +198,41 @@ class _WindowRenderer extends StatefulWidget {
 
 class _WindowRendererState extends State<_WindowRenderer> {
   List<Map<String, dynamic>> _window = const [];
-  int _bucket = -1, _version = -1;
+  double _from = 0, _to = -1;
+  int _version = -1, _asked = 0;
+  bool _asking = false;
+
+  void _ask(double seconds) {
+    if (_asking) return;
+    _asking = true;
+    final id = ++_asked;
+    final version = widget.version;
+    final from = seconds - 90, to = seconds + 150;
+    unawaited(widget.controller.window(from, to).then((window) {
+      _asking = false;
+      if (!mounted || id != _asked) return;
+      setState(() {
+        _window = window;
+        _from = from;
+        _to = to;
+        _version = version;
+      });
+    }, onError: (Object error) {
+      _asking = false;
+      debugPrint('[NextDanmaku] window: $error');
+    }));
+  }
 
   @override
   Widget build(BuildContext context) => ValueListenableBuilder<double>(
     valueListenable: widget.time,
     builder: (context, time, _) {
-      final bucket = time ~/ 30000;
-      if (bucket != _bucket || _version != widget.version) {
-        _bucket = bucket;
-        _version = widget.version;
-        int bound(double seconds) {
-          var lo = 0, hi = widget.list.length;
-          while (lo < hi) {
-            final mid = (lo + hi) >> 1;
-            if ((widget.list[mid]['time'] as num) < seconds) lo = mid + 1;
-            else hi = mid;
-          }
-          return lo;
-        }
-        _window = widget.list.sublist(bound(bucket * 30 - 60),
-            bound(bucket * 30 + 90));
+      final seconds = time / 1000;
+      if (_version != widget.version || seconds - _from < 30 || _to - seconds < 60) {
+        _ask(seconds);
       }
-      return widget.builder(_window);
+      final inside = seconds >= _from && seconds <= _to;
+      return widget.builder(inside ? _window : const []);
     });
 }
 
@@ -251,7 +270,7 @@ class _PositionedRendererState extends State<_PositionedRenderer> {
       c.settings['danmaku.fontFilePath']);
     if (!_busy && _last != key) {
       _busy = true;
-      final preparing = _bridge.configure(danmakuList: c.timeline.entries,
+      final preparing = _bridge.configure(danmakuList: const [],
         danmakuListVersion: c.version, size: size, fontSize: c.fontSize,
         displayArea: c.number('danmaku.displayArea'), scrollDurationSeconds: c.scrollSeconds,
         allowStacking: c.settings['danmaku.stacking'] == true, mergeDanmaku: merge,

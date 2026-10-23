@@ -38,7 +38,7 @@ void main() {
     await c.settled;
     // `a/` is a literal in Classic (a rule needs two slashes): it blocks only
     // comments containing "a/", not everything.
-    expect(c.timeline.entries.map((e) => e['content']), ['hello']);
+    expect((await c.displayList()).map((e) => e['content']), ['hello']);
     expect(c.timeline.invalidRules, ['invalid/[/']);
     await c.writeSetting('danmaku.manualOffset', 0.5);
     await c.settled;
@@ -96,7 +96,7 @@ void main() {
     expect(p.loaded('a')?['cacheKey'], 'a');
     p.updateTrack(current, 'a', {'enabled': false});
     await c.settled;
-    expect(c.timeline.entries, isEmpty);
+    expect(c.timeline.count, 0);
     final old = current;
     current = const DanmakuPlaybackTarget('/12.mkv', 2);
     c.bind('second');
@@ -126,7 +126,7 @@ void main() {
     c.install('bulk', binding('bulk'), rows);
     await c.settled;
     pulse.cancel();
-    expect(c.timeline.entries.length, 30000);
+    expect(c.timeline.count, 30000);
     expect(heartbeat, greaterThan(5));
     final perf = PlayerPerf.read();
     // ignore: avoid_print
@@ -153,15 +153,16 @@ void main() {
     await c.writeSetting('danmaku.merge', true);
     await c.settled;
     // 6 comments plus Classic's four progress notices (25/50/75/90 %).
-    expect(c.timeline.entries.where((e) => e['content'] == 'same').length, 5);
-    final notices = c.timeline.entries.where((e) => e['source'] == 'timeline');
+    final shown = await c.displayList();
+    expect(shown.where((e) => e['content'] == 'same').length, 5);
+    final notices = shown.where((e) => e['source'] == 'timeline');
     expect(notices.map((e) => e['content']), ['视频播放进度：25%', '视频播放进度：50%', '视频播放进度：75%', '视频播放进度：90%']);
     expect(notices.map((e) => e['time']), [300.0, 600.0, 900.0, 1080.0]);
     expect(c.timeline.heat.length, 120);
     expect(c.timeline.heat.reduce((a, b) => a > b ? a : b), 1.0);
     await c.writeSetting('danmaku.timelineEnabled', false);
     await c.settled;
-    expect(c.timeline.entries.length, 6);
+    expect(c.timeline.count, 6);
   });
 
   test('skip segments: one slot per kind, the most trusted signal wins, late signals count', () async {
@@ -208,7 +209,7 @@ void main() {
       0xfe0502, 0xff7106, 0xffaa01, 0xffd301, 0xffff00, 0xa0ee02, 0x04cd00,
       0x019899, 0x4266be, 0x89d5ff, 0xcc0173];
     final rgb = palette[hash % palette.length];
-    expect(c.timeline.entries.single['color'],
+    expect((await c.displayList()).single['color'],
         'rgb(${rgb >> 16},${(rgb >> 8) & 255},${rgb & 255})');
   });
 
@@ -236,20 +237,35 @@ void main() {
     await Future<void>.delayed(const Duration(milliseconds: 100));
     await c.settled;
     expect(asked, ['凶手 是 他', 'fine']);
-    expect(c.timeline.entries.map((e) => e['content']), ['fine']);
+    expect((await c.displayList()).map((e) => e['content']), ['fine']);
     fail = true;
     c.install('t2', binding('t2'), [entry(3000, 'another')]);
     await c.settled;
     await Future<void>.delayed(const Duration(milliseconds: 100));
     await c.settled;
-    expect(c.timeline.entries.map((e) => e['content']), ['fine', 'another']);
+    expect((await c.displayList()).map((e) => e['content']), ['fine', 'another']);
     await c.writeSetting('danmaku.spoilerPreventionEnabled', false);
     await c.settled;
-    expect(c.timeline.entries.length, 3);
+    expect(c.timeline.count, 3);
     final unconfigured = SessionDanmakuController(spoilerApiKey: () async => null);
     addTearDown(unconfigured.dispose);
     await expectLater(unconfigured.writeSetting('danmaku.spoilerPreventionEnabled', true),
         throwsA(isA<Failure>()));
+  });
+
+  test('windows of the list come from the worker; the main isolate holds counts only', () async {
+    final c = SessionDanmakuController(
+        initialSettings: {'danmaku.timelineEnabled': false});
+    addTearDown(c.dispose);
+    c.bind('window');
+    c.inputs(duration: 1440000);
+    c.install('t', binding('t'), [for (var i = 0; i < 1000; i++) entry(i * 1000, 'c$i')]);
+    await c.settled;
+    expect(c.timeline.entries, isEmpty);
+    expect(c.timeline.count, 1000);
+    final w = await c.window(100, 103);
+    expect(w.map((e) => e['content']), ['c100', 'c101', 'c102']);
+    expect(await c.window(2000, 3000), isEmpty);
   });
 
   test('a comment the user sent is echoed on the local track, as the user\'s own', () async {
@@ -260,7 +276,7 @@ void main() {
     c.inputs(duration: 100000);
     c.echo({'time': 5.0, 'content': 'mine', 'type': 'top', 'color': 'rgb(255,255,255)'});
     await c.settled;
-    final row = c.timeline.entries.single;
+    final row = (await c.displayList()).single;
     expect([row['content'], row['type'], row['isMe'], row['time']], ['mine', 'top', true, 5.0]);
   });
 

@@ -227,8 +227,11 @@ final class SessionDanmakuController extends ChangeNotifier
         final sink = _native;
         if (sink != null) {
           await sink.configureDanmaku(Map.of(settings));
-          if (identical(sink, _native)) {
-            await sink.replaceDanmaku(result.entries);
+          // Only a kernel that composites the danmaku itself gets the list on
+          // this isolate.
+          final list = await displayList();
+          if (identical(sink, _native) && generation == _generation) {
+            await sink.replaceDanmaku(list);
           }
         }
       } catch (e) {
@@ -323,6 +326,17 @@ final class SessionDanmakuController extends ChangeNotifier
     await _mutations;
     await _building;
   }
+
+  /// Every comment shown, as the renderers take it. For a kernel that draws
+  /// them itself and for inspection; the interface never calls it.
+  Future<List<Map<String, dynamic>>> displayList() async =>
+      (await _worker.request<List>('dump', {})).cast<Map<String, dynamic>>();
+
+  /// The comments shown between [from] and [to] seconds, for the renderers
+  /// that lay out for themselves.
+  Future<List<Map<String, dynamic>>> window(double from, double to) async =>
+      (await _worker.request<List>('window', {'from': from, 'to': to}))
+          .cast<Map<String, dynamic>>();
 
   Future<T> prepareLayout<T>(String renderer, Map<String, Object?> configuration) =>
       _worker.request<T>('layout.$renderer', configuration);
@@ -431,7 +445,7 @@ final class SessionDanmakuController extends ChangeNotifier
     });
   }
 
-  JsonMap facts() => {'listVersion': version, 'count': timeline.entries.length,
+  JsonMap facts() => {'listVersion': version, 'count': timeline.count,
     'total': timeline.total, 'backgroundBuildUs': timeline.buildUs,
     'invalidRules': timeline.invalidRules, 'error': error,
     'native': native, 'visible': visible,

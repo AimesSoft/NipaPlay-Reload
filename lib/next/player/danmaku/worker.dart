@@ -145,7 +145,11 @@ void _run(SendPort replies) {
               spoilerTexts: Set<String>.of(data['spoilerTexts'] as List<String>),
               externalSegments: (data['externalSegments'] as List).cast<Map<String, dynamic>>());
           version = data['version'] as int;
-          result = snapshot;
+          result = snapshot.view();
+        case 'dump':
+          result = snapshot.entries;
+        case 'window':
+          result = windowOf(snapshot, data['from'] as double, data['to'] as double);
         case 'page':
           if (data['version'] != version) {
             result = <String, dynamic>{'conflict': true};

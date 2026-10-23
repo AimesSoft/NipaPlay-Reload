@@ -11,11 +11,28 @@ import 'package:nipaplay/services/timeline_danmaku_service.dart';
 
 /// All functions in this file run on the timeline worker, including rules,
 /// folding, density, segment detection and inspection pagination.
+///
+/// The list itself stays on the worker: one isolate group shares a heap, so
+/// a worker that allocates tens of thousands of maps and a main isolate that
+/// then holds a copy of them make every collection stop the main isolate for
+/// longer. The main isolate gets [view]: counts, heat, segments, and asks for
+/// windows and pages when it needs them.
 final class DanmakuTimeline {
   const DanmakuTimeline(this.entries, this.heat, this.segments, this.buildUs,
       this.total, this.invalidRules,
-      {this.spoilerCandidates = const [], this.spoilerHash = ''});
+      {this.spoilerCandidates = const [], this.spoilerHash = '', int? count})
+      : _count = count;
   final List<Map<String, dynamic>> entries;
+  final int? _count;
+
+  /// What is shown (after the rules), whether or not [entries] is here.
+  int get count => _count ?? entries.length;
+
+  DanmakuTimeline view() => DanmakuTimeline(const [], heat, segments, buildUs,
+      total, invalidRules,
+      spoilerCandidates: spoilerCandidates, spoilerHash: spoilerHash,
+      count: entries.length);
+
   final List<double> heat;
   final List<SkipSegment> segments;
   final int buildUs, total;
@@ -65,13 +82,14 @@ DanmakuTimeline buildTimeline(Map<String, Map<String, dynamic>> tracks,
     for (final entry in data['entries'] as List<Map<String, dynamic>>) {
       final mapped = (entry['sourceTimeMs'] as int) + startMs - offset;
       if (endMs != null && mapped >= endMs) continue;
-      merged.add({
-        ...entry,
-        'time': mapped / 1000,
-        'nextTrackId': track.key,
-        'foldEnabled': binding['deduplicate'] == 1,
-        'aggregation': (binding['video'] as Map)['sourceId'] == 'dandanplay',
-      });
+      // The maps are the worker's own: set what this build derives in place
+      // instead of copying every comment (tens of thousands of maps per build
+      // is what made collections long).
+      entry['time'] = mapped / 1000;
+      entry['nextTrackId'] = track.key;
+      entry['foldEnabled'] = binding['deduplicate'] == 1;
+      entry['aggregation'] = (binding['video'] as Map)['sourceId'] == 'dandanplay';
+      merged.add(entry);
     }
   }
   if (settings['danmaku.timelineEnabled'] == true && durationMs > 0) {
@@ -283,4 +301,24 @@ Map<String, dynamic> _randomColor(Map<String, dynamic> item) {
   final color = DanmakuColorPresets.toRgbString(palette[(hash & 0x7fffffff) % palette.length]);
   if ((item['color'] ?? item['r'])?.toString() == color) return item;
   return {...item, 'color': color, 'r': color};
+}
+
+
+/// The comments shown between [from] and [to] seconds (as the renderers that
+/// lay out for themselves take them).
+List<Map<String, dynamic>> windowOf(
+    DanmakuTimeline timeline, double from, double to) {
+  int bound(double seconds) {
+    var lo = 0, hi = timeline.entries.length;
+    while (lo < hi) {
+      final mid = (lo + hi) >> 1;
+      if ((timeline.entries[mid]['time'] as num) < seconds) {
+        lo = mid + 1;
+      } else {
+        hi = mid;
+      }
+    }
+    return lo;
+  }
+  return timeline.entries.sublist(bound(from), bound(to));
 }
