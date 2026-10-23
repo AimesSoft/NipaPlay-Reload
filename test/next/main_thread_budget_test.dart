@@ -128,6 +128,9 @@ void main() {
         (jsonDecode(profile.calendarJson) as List).cast<Map<String, Object?>>();
     addTearDown(() => core.close());
     await core.ready;
+    // Next's interface is open: Nipa's services run (NextRuntime starts them
+    // when it opens, D1).
+    await core.startNipa();
     final history = _History(profile);
     core.memory.recent = (current) async => recentMemoryFacts(
         history,
