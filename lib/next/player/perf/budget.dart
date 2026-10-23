@@ -38,6 +38,14 @@ abstract final class PlayerPerf {
     }
   }
 
+  static final _marks = <({String name, int atMs})>[];
+
+  /// A named instant in the window, to line up with what the event loop
+  /// stalls log (at most 64, the first ones).
+  static void mark(String name) {
+    if (_marks.length < 64) _marks.add((name: name, atMs: _sinceWindowMs));
+  }
+
   static void count(String name, [int by = 1]) =>
       _counts[name] = (_counts[name] ?? 0) + by;
 
@@ -63,6 +71,7 @@ abstract final class PlayerPerf {
     _latencies.clear();
     _counts.clear();
     _slowest.clear();
+    _marks.clear();
     _windowStartUs = _clock.elapsedMicroseconds;
     _stopFrames();
     if (frames) _startFrames();
@@ -135,6 +144,7 @@ abstract final class PlayerPerf {
       'slowest': [
         for (final s in _slowest) {'name': s.name, 'us': s.us, 'atMs': s.atMs}
       ],
+      'marks': [for (final m in _marks) {'name': m.name, 'atMs': m.atMs}],
       if (_frames) ...{
         'frames': {
           'build': _build!.summary(windowMs),
@@ -199,6 +209,7 @@ final class _LoopProbe {
   static const _period = Duration(milliseconds: 4);
   Timer? _timer;
   final _watch = Stopwatch();
+  final stallLog = <Map<String, Object?>>[];
   int _ticks = 0, over16 = 0, over50 = 0, over1000 = 0, maxLateUs = 0;
   final _late = _Series();
 
@@ -213,7 +224,12 @@ final class _LoopProbe {
       if (late <= 0) return;
       _late.add(late);
       if (late > maxLateUs) maxLateUs = late;
-      if (late > 16000) over16++;
+      if (late > 16000) {
+        over16++;
+        if (stallLog.length < 64) {
+          stallLog.add({'atMs': PlayerPerf._sinceWindowMs, 'lateMs': late / 1000});
+        }
+      }
       if (late > 50000) over50++;
       if (late > 1000000) over1000++;
     });
@@ -229,6 +245,7 @@ final class _LoopProbe {
         'stallsOver16ms': over16,
         'stallsOver50ms': over50,
         'stallsOver1s': over1000,
+        'stallLog': stallLog,
         'maxLateUs': maxLateUs,
         'late': _late.summary(math.max(1, _watch.elapsedMilliseconds)),
       };

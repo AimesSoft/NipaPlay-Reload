@@ -5,6 +5,7 @@ import 'package:flutter/widgets.dart' show Widget;
 import 'package:nipa_harness/nipa_harness.dart';
 
 import '../../harness_redaction.dart';
+import '../features/kernel_features.dart' show ChapterFacts;
 import 'native.dart';
 
 /// The playback kernels, by the ids facts use.
@@ -269,12 +270,26 @@ final class KernelTracks {
 @immutable
 final class ResolvedSource {
   const ResolvedSource(
-      {required this.locator, required this.uri, required this.kind});
+      {required this.locator,
+      required this.uri,
+      required this.kind,
+      this.direct = false,
+      this.audioTrack,
+      this.subtitleTrack,
+      this.externalSubtitle});
   final String locator;
   final String uri;
 
   /// local (P1); network kinds arrive with the sources.
   final String kind;
+
+  /// A per-open routing requirement, including mesh and local SMB proxies.
+  final bool direct;
+
+  /// Native ordinals resolved from the selected server version's streams.
+  final int? audioTrack;
+  final int? subtitleTrack;
+  final String? externalSubtitle;
 
   JsonMap toJson() => {'kind': kind, 'path': redactHarnessText(locator)};
 }
@@ -322,6 +337,7 @@ final class MediaFacts {
     this.subtitles = const [],
     this.activeAudio = const [],
     this.activeSubtitles = const [],
+    this.chapters = const [],
   });
 
   final Duration duration;
@@ -337,6 +353,8 @@ final class MediaFacts {
   /// The tracks the kernel has on (its own default until a choice is made).
   final List<int> activeAudio;
   final List<int> activeSubtitles;
+  /// Chapter metadata captured by the driver, never queried by the UI.
+  final List<ChapterFacts> chapters;
 
   bool get hasVideo => width > 0 && height > 0;
   double get aspect => hasVideo ? width / height : 16 / 9;
@@ -353,6 +371,7 @@ final class MediaFacts {
         'subtitles': [for (final t in subtitles) t.toJson()],
         'activeAudio': activeAudio,
         'activeSubtitles': activeSubtitles,
+        'chapters': [for (final c in chapters) c.toJson()],
       };
 }
 
@@ -433,10 +452,13 @@ final class TextureSurface extends VideoSurface {
 /// A picture a Flutter widget of the kernel's package draws (video_player's
 /// own view of its controller), fitted like a texture.
 final class WidgetSurface extends VideoSurface {
-  const WidgetSurface(this.view, {required this.aspect});
+  const WidgetSurface(this.view,
+      {required this.width, required this.height});
   final Widget view;
+  final int width;
+  final int height;
   @override
-  final double aspect;
+  double get aspect => width > 0 && height > 0 ? width / height : 16 / 9;
 }
 
 /// A platform view with a fenced adapter behind it. No native getters in build.

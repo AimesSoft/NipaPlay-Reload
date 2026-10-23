@@ -1,11 +1,15 @@
 import 'dart:async';
+import 'dart:io';
 
+import 'package:file_selector/file_selector.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'package:nipa_harness/nipa_harness.dart';
 import 'package:nipaplay/models/playable_item.dart';
+import 'package:nipaplay/danmaku_abstraction/danmaku_kernel_factory.dart';
 import 'package:nipaplay/services/file_picker_service.dart';
+import 'package:nipaplay/services/intro_skip/skip_segment.dart';
 import 'package:path/path.dart' as p;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -21,9 +25,22 @@ import '../core/session.dart';
 import '../kernel/driver.dart';
 import '../next_playback.dart';
 import '../perf/budget.dart';
+import '../../danmaku/service.dart';
+import '../danmaku/controller.dart';
+import '../danmaku/native_sink.dart';
+import '../danmaku/session_port.dart';
+import '../danmaku/settings.dart';
 import '../subtitles/controller.dart';
 import '../subtitles/look.dart';
+import '../sources/playback_sources.dart';
+import '../sources/resolver.dart';
 import '../track_labels.dart';
+import '../features/capture.dart';
+import '../features/external_handoff.dart';
+import '../features/navigation.dart';
+import '../features/timeline_preview.dart';
+import '../features/windows.dart';
+import '../../ui/player/detached_stage.dart';
 import 'session_ports.dart';
 
 /// Makes Next's local operations (window, levels…) for this playback; the
@@ -43,12 +60,21 @@ typedef LocalOperationsFactory = Capability Function(SettingsRegistry settings,
 final class SessionPlayback implements NextPlayback, VideoStageHost {
   SessionPlayback(this.host,
       {LocalOperationsFactory? localOperations,
+      NextSourceResolver? sourceResolver,
+      this.externalHandoff,
+      PlaybackWindows? windows,
       this.hideAfter = const Duration(seconds: 3)})
-      : _localOperations = localOperations {
+      : _localOperations = localOperations,
+        windows = windows ?? PlaybackWindows() {
     _frame = _Frame(this);
+    danmaku.addListener(_danmakuChanged);
+    unawaited(danmaku.loadSettings());
+    sources = PlaybackSources(host, sourceResolver ?? NextSourceResolver());
+    sources.addListener(_frame.poke);
     _fullscreen.addListener(_frame.poke);
     host.current.addListener(_bind);
     _bind();
+    externalHandoff?.addListener(_externalChanged);
     unawaited(_readLevels());
     if (_desktop) {
       _window = _FullscreenWatch(_fullscreen);
@@ -59,6 +85,25 @@ final class SessionPlayback implements NextPlayback, VideoStageHost {
   final NextPlayerHost host;
   final Duration hideAfter;
   final LocalOperationsFactory? _localOperations;
+  late final PlaybackSources sources;
+  final ExternalHandoff? externalHandoff;
+  final PlaybackWindows windows;
+  final capture = PlaybackCapture();
+  final preview = TimelinePreview();
+  final navigation = const PlaybackNavigation();
+  final aspectMode = ValueNotifier(VideoAspectMode.contain);
+
+  double get videoAspect => _session?.media.value?.aspect ?? 16 / 9;
+
+  void _externalChanged() {
+    if (externalHandoff?.active == true) {
+      _transport.value = const PlaybackTransport(status: 'external',
+          phase: PlaybackPhase.playing, hasVideo: false, systemDrawn: false);
+    } else {
+      _sync();
+    }
+    _frame.poke();
+  }
 
   static bool get _desktop =>
       !kIsWeb &&
@@ -84,6 +129,30 @@ final class SessionPlayback implements NextPlayback, VideoStageHost {
   Timer? _persistVolume;
 
   PlaybackSession? get session => _session;
+  final danmaku = SessionDanmakuController();
+  SessionDanmakuPort? _danmakuPort;
+  Future<bool> Function(String path)? _localDanmakuLoader;
+  String? _sidecarSession;
+
+  void _danmakuChanged() {
+    _danmaku.value = danmaku.version;
+    _frame.poke();
+  }
+
+  JsonMap get danmakuRendererFacts => {
+    'id': danmaku.native ? 'player_native' : switch (DanmakuKernelFactory.getKernelType()) {
+      DanmakuRenderEngine.dfmPlus => 'dfm_plus',
+      DanmakuRenderEngine.nipaplayNext => 'nipaplay_next',
+      final engine => engine.name,
+    },
+    if (danmaku.native) 'kernel': _session?.driver?.kernel.id,
+    // A plugin's renderer chosen in the settings is not hosted by this layer:
+    // the engine above draws.
+    if (DanmakuKernelFactory.selectedPluginRendererId case final id?)
+      'pluginRenderer': {'selected': id, 'applied': false,
+        'reason': 'not_in_playback_layer'},
+    ...danmaku.facts(),
+  };
 
   // ---- following the host's session ----
 
@@ -102,6 +171,10 @@ final class SessionPlayback implements NextPlayback, VideoStageHost {
       old.subtitles.overlay.removeListener(_overlayChanged);
     }
     _session = next;
+    final driver = next?.driver;
+    danmaku.bind(next?.id, sink: driver is SessionNativeDanmakuDriver
+        ? (driver as SessionNativeDanmakuDriver).danmakuSink : null);
+    unawaited(preview.reset());
     if (next != null) {
       _generation++;
       next.phase.addListener(_sync);
@@ -154,6 +227,20 @@ final class SessionPlayback implements NextPlayback, VideoStageHost {
   void _sync() => PlayerPerf.span('facade.sync', () {
         final s = _session;
         final phase = s?.phase.value;
+        if (phase?.done ?? true) {
+          danmaku.fence();
+        } else {
+          final driver = s?.driver;
+          if (driver is SessionNativeDanmakuDriver && !danmaku.native) {
+            danmaku.attachNative((driver as SessionNativeDanmakuDriver).danmakuSink);
+          }
+          danmaku.inputs(duration: s?.duration.inMilliseconds ?? 0,
+              chapterFacts: s?.media.value?.chapters);
+          if (s != null && phase!.open && _sidecarSession != s.id && _localDanmakuLoader != null) {
+            _sidecarSession = s.id;
+            unawaited(_loadSidecar(s.path));
+          }
+        }
         _surface.value = s?.surface.value;
         _media.value = s == null || phase == SessionPhase.closed
             ? PlaybackMedia.none
@@ -227,21 +314,21 @@ final class SessionPlayback implements NextPlayback, VideoStageHost {
   @override
   Duration get buffered => Duration.zero;
   @override
-  bool get danmakuVisible => false;
+  bool get danmakuVisible => danmaku.visible;
   @override
   bool get fullscreen => _fullscreen.value;
   @override
   double get volume => _session?.transport.value.volume ?? _volume;
   @override
-  bool get canPlayNext => false;
+  bool get canPlayNext => sources.canNext;
   @override
   bool get playIntent => _session?.transport.value.playIntent ?? false;
   @override
-  bool get offersDanmaku => false;
+  bool get offersDanmaku => true;
   @override
   bool get offersSubtitles => _session?.phase.value.open ?? false;
   @override
-  bool get offersScreenshot => false;
+  bool get offersScreenshot => hasVideo;
 
   // ---- for capabilities and the rest of Next ----
 
@@ -262,10 +349,27 @@ final class SessionPlayback implements NextPlayback, VideoStageHost {
           {Future<void> Function(
                   String bindingId, String operation, Object? value)?
               requestChange}) =>
-      SessionDanmakuPort();
+      _danmakuPort ??= SessionDanmakuPort(danmaku, () {
+        final s = _session;
+        if (s == null || s.phase.value.done) return null;
+        return DanmakuPlaybackTarget(s.path, _generation,
+            durationMs: s.duration.inMilliseconds);
+      }, requestChange: requestChange);
 
   @override
-  set localDanmakuLoader(Future<bool> Function(String path)? loader) {}
+  set localDanmakuLoader(Future<bool> Function(String path)? loader) {
+    _localDanmakuLoader = loader;
+    final s = _session;
+    if (loader != null && s != null && s.phase.value.open) {
+      _sidecarSession = s.id;
+      unawaited(_loadSidecar(s.path));
+    }
+  }
+
+  Future<void> _loadSidecar(String path) async {
+    try { await _localDanmakuLoader?.call(path); }
+    catch (error) { debugPrint('[NextDanmaku] sidecar: $error'); }
+  }
 
   @override
   Capability localOperations(
@@ -282,7 +386,13 @@ final class SessionPlayback implements NextPlayback, VideoStageHost {
         'available': true,
         'layer': 'next_core',
         ...host.facts(),
+        'sources': {
+          'autoNext': sources.autoNext,
+          'progress': sources.progress?.lastReport,
+          'progressError': sources.progress?.lastError
+        },
         'perf': PlayerPerf.read(),
+        'danmaku': danmaku.facts(),
       };
 
   @override
@@ -324,9 +434,13 @@ final class SessionPlayback implements NextPlayback, VideoStageHost {
 
   @override
   Future<void> close({required String reason}) async {
+    sources.cancelPendingOpen();
     _hide?.cancel();
     if (_fullscreen.value) await _setFullscreen(false);
     await host.close(reason: reason);
+    externalHandoff?.clear();
+    await windows.returnToMain();
+    await preview.reset();
   }
 
   /// Plays [item] in Next's layer: what playback.open, the library, the
@@ -336,16 +450,23 @@ final class SessionPlayback implements NextPlayback, VideoStageHost {
   Future<bool> openItem(PlayableItem item,
       {Duration? start, String? origin}) async {
     final history = item.historyItem;
+    final external = externalHandoff;
+    if (external != null && external.enabled()) {
+      await host.close(reason: 'external_handoff');
+      await windows.returnToMain();
+      try {
+        final resume = start ?? Duration(milliseconds: history?.lastPosition ??
+            await host.records.resumeAt(item.videoPath));
+        await external.open(item, start: resume);
+      } on ProcessException catch (error) {
+        throw Failure(FailureCode.unavailable, '外部播放器启动失败：${error.message}',
+            details: {'reason': 'external_player_launch_failed'});
+      }
+      return true;
+    }
+    external?.clear();
     try {
-      await host.open(MediaRequest(
-        locator: item.videoPath,
-        origin: origin ?? commandOrigin(),
-        title: item.title ?? history?.animeName,
-        episodeTitle: item.subtitle ?? history?.episodeTitle,
-        animeId: item.animeId ?? history?.animeId,
-        episodeId: item.episodeId ?? history?.episodeId,
-        start: start,
-      ));
+      await sources.open(item, start: start, origin: origin ?? commandOrigin());
     } on OpenRefused catch (refused) {
       throw Failure(FailureCode.unavailable, refused.message,
           details: {'reason': refused.reason, ...refused.facts});
@@ -366,13 +487,19 @@ final class SessionPlayback implements NextPlayback, VideoStageHost {
       unawaited(_session?.seek(position, origin: 'gui'));
 
   @override
-  void toggleDanmaku() {}
+  void toggleDanmaku() => unawaited(danmaku.writeSetting('danmaku.visible', !danmaku.visible));
 
   @override
   Future<void> toggleFullscreen() => _setFullscreen(!_fullscreen.value);
 
   Future<void> _setFullscreen(bool on) async {
     if (!_desktop) return;
+    final window = windows.nativeWindow;
+    if (window != null) {
+      await window.setFullscreen(on);
+      _fullscreen.value = window.isFullscreen;
+      return;
+    }
     await windowManager.setFullScreen(on);
     _fullscreen.value = await windowManager.isFullScreen();
     _frame.poke();
@@ -382,7 +509,7 @@ final class SessionPlayback implements NextPlayback, VideoStageHost {
   Future<void> setFullscreen(bool on) => _setFullscreen(on);
 
   @override
-  Future<void> nextEpisode() async {}
+  Future<void> nextEpisode() => sources.switchEpisode(true);
 
   @override
   Future<void> setVolume(double value) async {
@@ -434,9 +561,29 @@ final class SessionPlayback implements NextPlayback, VideoStageHost {
   }
 
   @override
-  SkipSegmentKind? get skippable => null;
+  SkipSegmentKind? get skippable => activeSkipSegment?.kind;
+  SkipSegment? get activeSkipSegment {
+    if (danmaku.settings['player.introSkipEnabled'] != true) return null;
+    final seconds = position.inMicroseconds / 1e6;
+    return danmaku.timeline.segments.where((s) => s.containsSeconds(seconds)).firstOrNull;
+  }
   @override
-  Future<void> skip() async {}
+  Future<void> skip() async {
+    final segment = activeSkipSegment;
+    if (segment != null) await skipTo(segment, origin: 'gui');
+  }
+
+  /// To the end of [segment], held inside the length: a seek past the end
+  /// makes kernels report EOF (Classic's `skipCurrentSegment` clamps alike).
+  Future<void> skipTo(SkipSegment segment, {required String origin}) async {
+    var target = segment.end;
+    final length = _session?.duration ?? Duration.zero;
+    if (length > Duration.zero) {
+      final limit = length - const Duration(milliseconds: 500);
+      if (target > limit) target = limit.isNegative ? Duration.zero : limit;
+    }
+    await _session?.seek(target, origin: origin);
+  }
 
   /// Back to where the video was opened from, out of full screen; the
   /// position kept.
@@ -481,6 +628,26 @@ final class SessionPlayback implements NextPlayback, VideoStageHost {
       return false;
     }
     final key = event.logicalKey;
+    if (key == LogicalKeyboardKey.comma || key == LogicalKeyboardKey.period) {
+      unawaited(inspection.inspect('playback.navigate',
+          {'frameDelta': key == LogicalKeyboardKey.comma ? -1 : 1})
+          .catchError((Object error) => <String, Object?>{'error': '$error'}));
+      _show();
+      return true;
+    }
+    if (key == LogicalKeyboardKey.keyF && event is KeyDownEvent) {
+      unawaited(toggleFullscreen());
+      return true;
+    }
+    if (key == LogicalKeyboardKey.keyM && event is KeyDownEvent) {
+      unawaited(setVolume(volume > 0 ? 0 : 1));
+      return true;
+    }
+    if (key == LogicalKeyboardKey.arrowUp || key == LogicalKeyboardKey.arrowDown) {
+      unawaited(setVolume(volume + (key == LogicalKeyboardKey.arrowUp ? 0.05 : -0.05)));
+      _show();
+      return true;
+    }
     if (key == LogicalKeyboardKey.space && event is KeyDownEvent) {
       togglePlay();
       return true;
@@ -509,6 +676,10 @@ final class SessionPlayback implements NextPlayback, VideoStageHost {
       final levels = await host.levels();
       _volume = levels.volume;
       _rate = levels.rate;
+      final prefs = await SharedPreferences.getInstance();
+      preview.enabled = prefs.getBool('timeline_preview_enabled') ?? false;
+      aspectMode.value = VideoAspectMode.values.where((m) =>
+          m.name == prefs.getString('video_aspect_mode')).firstOrNull ?? VideoAspectMode.contain;
     } catch (error) {
       debugPrint('[NextPlayer] levels: $error');
     }
@@ -528,7 +699,8 @@ final class SessionPlayback implements NextPlayback, VideoStageHost {
   }
 
   @override
-  List<double>? heat() => null;
+  List<double>? heat() => danmaku.settings['danmaku.showDensityChart'] == true
+      && danmaku.timeline.heat.isNotEmpty ? danmaku.timeline.heat : null;
 
   // ---- subtitles and audio, as the menus show and set them ----
 
@@ -587,9 +759,24 @@ final class SessionPlayback implements NextPlayback, VideoStageHost {
   }
 
   @override
-  Future<List<EpisodeChoice>> episodes() async => const [];
+  Future<List<EpisodeChoice>> episodes() async {
+    await sources.playlist();
+    return [
+      for (final (i, episode) in sources.episodes.indexed)
+        EpisodeChoice(
+            title: episode.title,
+            work: episode.subtitle,
+            progress: episode.progress,
+            current: i == sources.currentIndex,
+            source: episode)
+    ];
+  }
+
   @override
-  Future<void> play(EpisodeChoice episode) async {}
+  Future<void> play(EpisodeChoice episode) async {
+    if (episode.source case final source?) await sources.playEpisode(source);
+  }
+
   @override
   double get rate => _session?.transport.value.rate ?? _rate;
 
@@ -606,6 +793,24 @@ final class SessionPlayback implements NextPlayback, VideoStageHost {
   /// ticked.
   @override
   List<AudioChoice> audio() {
+    // A media server's own streams (the server picks which is decoded) take
+    // the list when one plays; otherwise the kernel's tracks.
+    final plan = sources.plan;
+    final version = plan?.serverSession?.selectedSource;
+    if (version != null) {
+      return [
+        for (final track in version.mediaStreams)
+          if (track['Type'] == 'Audio')
+            AudioChoice(
+                track['DisplayTitle'] as String? ??
+                    track['Title'] as String? ??
+                    track['Language'] as String? ??
+                    '音轨 ${track['Index']}',
+                track['Index'] as int,
+                server: true,
+                selected: plan!.selection['audioIndex'] == track['Index'])
+      ];
+    }
     final s = _session;
     final tracks = s?.media.value?.audio ?? const <TrackFacts>[];
     if (s == null || tracks.isEmpty) return const [];
@@ -623,46 +828,88 @@ final class SessionPlayback implements NextPlayback, VideoStageHost {
 
   @override
   Future<void> chooseAudio(AudioChoice choice) async {
+    if (choice.server) {
+      await sources.selectStream({'audioIndex': choice.index});
+      return;
+    }
     if (choice.selected) return;
     await _session?.selectAudio(choice.index, origin: 'gui');
   }
+
   @override
-  bool get canFit => false;
+  bool get canFit => hasVideo;
   @override
-  VideoAspectMode get fit => VideoAspectMode.contain;
+  VideoAspectMode get fit => aspectMode.value;
   @override
-  Future<void> setFit(VideoAspectMode mode) async {}
+  Future<void> setFit(VideoAspectMode mode) async {
+    aspectMode.value = mode;
+    _frame.poke();
+    await SettingsAccess.persist('video_aspect_mode', () async =>
+        (await SharedPreferences.getInstance()).setString('video_aspect_mode', mode.name));
+  }
   @override
-  Future<String?> screenshot() async => null;
+  Future<String?> screenshot() async {
+    final s = _session;
+    if (s == null) return null;
+    final prefs = await SharedPreferences.getInstance();
+    String? output;
+    if (prefs.getInt('screenshot_save_target') == 0) {
+      final extension = prefs.getString('screenshot_format') == 'png' ? 'png' : 'jpg';
+      final location = await getSaveLocation(
+          suggestedName: 'NipaPlay_${DateTime.now().millisecondsSinceEpoch}.$extension',
+          acceptedTypeGroups: [XTypeGroup(label: '图片', extensions: [extension])]);
+      if (location == null) return null;
+      output = location.path;
+    }
+    return (await controls.capture({'kind': 'screenshot',
+      if (output != null) 'outputPath': output}))['path'] as String;
+  }
   @override
   Future<void> open(String path) =>
       launchUrl(Uri.file(path), mode: LaunchMode.externalApplication);
   @override
-  bool get canPictureInPicture => false;
+  bool get canPictureInPicture => hasVideo && PlaybackWindows.supported;
   @override
-  Future<void> pictureInPicture(BuildContext context) async {}
+  Future<void> pictureInPicture(BuildContext context) async {
+    await detach();
+    await windows.setPictureInPicture(!windows.pictureInPicture, videoAspect);
+  }
 
-  static const _dial = PlayerDial(0, 0, 1, 1, DialUnit.percent);
+  Future<void> detach() => windows.detach(
+      (_) => NextDetachedPlayer(playback: this), videoAspect);
+
+  Future<void> featureSettingChanged(String key, Object? value) async {
+    if (key == 'player.timelinePreviewEnabled') {
+      preview.enabled = value == true;
+      if (!preview.enabled) await preview.reset();
+      _frame.poke();
+    } else if (key == 'player.videoAspectMode' && value is String) {
+      aspectMode.value = VideoAspectMode.values.byName(value);
+      _frame.poke();
+    }
+  }
+
   @override
-  PlayerDial get danmakuOpacity => _dial;
+  PlayerDial get danmakuOpacity => PlayerDial(danmaku.number('danmaku.opacity'), 0, 1, 0.01, DialUnit.percent);
   @override
-  Future<void> setDanmakuOpacity(double value) async {}
+  Future<void> setDanmakuOpacity(double value) => danmaku.writeSetting('danmaku.opacity', value);
   @override
-  PlayerDial get danmakuSize => _dial;
+  PlayerDial get danmakuSize => PlayerDial(danmaku.fontSize, 12, 60, 0.5, DialUnit.points);
   @override
-  Future<void> setDanmakuSize(double value, {bool done = false}) async {}
+  Future<void> setDanmakuSize(double value, {bool done = false}) => danmaku.writeSetting('danmaku.fontSize', value);
   @override
-  double get danmakuArea => 1;
+  double get danmakuArea => danmaku.number('danmaku.displayArea');
   @override
-  Future<void> setDanmakuArea(double area) async {}
+  Future<void> setDanmakuArea(double area) => danmaku.writeSetting('danmaku.displayArea', area);
   @override
-  bool blocked(DanmakuLane lane) => false;
+  bool blocked(DanmakuLane lane) => danmaku.settings['danmaku.block${lane.name[0].toUpperCase()}${lane.name.substring(1)}'] == true;
   @override
-  Future<void> block(DanmakuLane lane, bool on) async {}
+  Future<void> block(DanmakuLane lane, bool on) => danmaku.writeSetting('danmaku.block${lane.name[0].toUpperCase()}${lane.name.substring(1)}', on);
   @override
-  PlayerDial get danmakuOffset => _dial;
+  PlayerDial get danmakuOffset => PlayerDial(danmaku.offset, -30, 30, 0.1, DialUnit.seconds);
   @override
-  void setDanmakuOffset(double seconds) {}
+  void setDanmakuOffset(double seconds) =>
+      unawaited(danmaku.writeSetting('danmaku.manualOffset', seconds));
   // The subtitle on: a file NipaPlay draws over the video keeps its own
   // delay (per file) and size; the kernel's take the player's size, and
   // its delay where the kernel shifts subtitles (MDK does not).
@@ -736,11 +983,28 @@ final class SessionPlayback implements NextPlayback, VideoStageHost {
   }
 
   Future<void> dispose() async {
+    setDanmakuSettingsActive(false);
+    danmaku.removeListener(_danmakuChanged);
+    danmaku.dispose();
+    sources.removeListener(_frame.poke);
+    sources.dispose();
     host.current.removeListener(_bind);
     _hide?.cancel();
     _persistVolume?.cancel();
     if (_window case final watch?) windowManager.removeListener(watch);
     _frame.stop();
+    await preview.dispose();
+    await windows.shutdown();
+    externalHandoff?.removeListener(_externalChanged);
+    externalHandoff?.dispose();
+  }
+
+  void setDanmakuSettingsActive(bool active) {
+    if (active) {
+      NextDanmakuSettings.active = danmaku;
+    } else if (identical(NextDanmakuSettings.active, danmaku)) {
+      NextDanmakuSettings.active = null;
+    }
   }
 }
 

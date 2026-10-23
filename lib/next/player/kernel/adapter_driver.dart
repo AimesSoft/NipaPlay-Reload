@@ -9,6 +9,7 @@ import 'package:nipaplay/player_abstraction/player_data_models.dart';
 
 import '../core/arbiter.dart';
 import '../core/clock.dart';
+import '../features/kernel_features.dart' show ChapterFacts;
 import 'driver.dart';
 import 'instances.dart';
 import 'op_queue.dart';
@@ -245,6 +246,11 @@ abstract class AdapterDriver implements KernelDriver {
   @protected
   Future<JsonMap> kernelFacts();
 
+  /// The route this media is opened by: [ResolvedSource.direct] asks for no
+  /// proxy for this open. A kernel with a proxy of its own clears it.
+  @protected
+  Future<void> routeSource(ResolvedSource source) async {}
+
   /// Before the media opens: what the kernel can be told then of the plan
   /// (mpv takes `aid` and `sid` as options of the file; Erika has no
   /// media yet) and the subtitle properties.
@@ -307,7 +313,12 @@ abstract class AdapterDriver implements KernelDriver {
         _openStarted = true;
         await configure();
         queue.live();
+        // The tracks the source maps (a server version's own ordinals) are
+        // what the plan opens with, over the library's.
+        tracks = _planOf(source, tracks);
         _subtitleProperties.addAll(tracks.subtitleProperties);
+        await routeSource(source);
+        queue.live();
         await applyPlan(tracks);
         queue.live();
         applyVolume(volume);
@@ -359,6 +370,26 @@ abstract class AdapterDriver implements KernelDriver {
         return waiter.future
             .timeout(const Duration(seconds: 2), onTimeout: () => observed);
       });
+
+  static KernelTrackPlan _planOf(ResolvedSource source, KernelTrackPlan plan) {
+    if (source.audioTrack == null &&
+        source.subtitleTrack == null &&
+        source.externalSubtitle == null) {
+      return plan;
+    }
+    return KernelTrackPlan(
+      audio: source.audioTrack ?? plan.audio,
+      subtitle: source.externalSubtitle != null
+          ? FileKernelSubtitle(source.externalSubtitle!)
+          : source.subtitleTrack != null
+              ? (source.subtitleTrack! < 0
+                  ? KernelSubtitle.none
+                  : EmbeddedKernelSubtitle(source.subtitleTrack!))
+              : plan.subtitle,
+      subtitleProperties: plan.subtitleProperties,
+      subtitleProbe: plan.subtitleProbe,
+    );
+  }
 
   @override
   Future<SeekOutcome> seek(Duration target, {bool exact = true}) {
@@ -505,7 +536,9 @@ abstract class AdapterDriver implements KernelDriver {
   /// What the media says of its tracks, in the shape the facts have.
   @protected
   MediaFacts mediaFromInfo(PlayerMediaInfo info,
-      {List<int> activeAudio = const [], List<int> activeSubtitles = const []}) {
+      {List<int> activeAudio = const [],
+      List<int> activeSubtitles = const [],
+      double? frameRate}) {
     final first = info.video?.firstOrNull;
     return MediaFacts(
       duration: Duration(milliseconds: info.duration),
@@ -531,6 +564,11 @@ abstract class AdapterDriver implements KernelDriver {
       ],
       activeAudio: List.of(activeAudio),
       activeSubtitles: List.of(activeSubtitles),
+      frameRate: frameRate,
+      chapters: [
+        for (final c in info.chapters ?? const <PlayerChapter>[])
+          ChapterFacts(c.title, c.startMs)
+      ],
     );
   }
 

@@ -1,4 +1,6 @@
 import 'dart:math' as math;
+import 'dart:async';
+import 'dart:typed_data';
 
 import 'package:flutter/widgets.dart';
 
@@ -31,11 +33,13 @@ class PlayerTimeline extends StatefulWidget {
     this.onScrub,
     this.live,
     this.repaint,
+    this.preview,
   });
 
   final Duration position;
   final Duration Function()? live;
   final Listenable? repaint;
+  final Future<Uint8List?> Function(Duration)? preview;
   final Duration duration;
   final Duration buffered;
   final List<double>? heat;
@@ -146,6 +150,13 @@ class _PlayerTimelineState extends State<PlayerTimeline> {
                     ),
                   ),
                 if (shown != null)
+                  if (widget.preview case final preview?)
+                    Positioned(
+                      left: (shown * width - 80).clamp(0.0, math.max(0, width - 160)),
+                      top: -118, width: 160, height: 96,
+                      child: _Preview(at: _at(shown), load: preview),
+                    ),
+                if (shown != null)
                   Positioned(
                     left: (shown * width - 30).clamp(0.0, math.max(0, width - 60)),
                     top: -14,
@@ -157,6 +168,44 @@ class _PlayerTimelineState extends State<PlayerTimeline> {
           ),
         );
       });
+}
+
+class _Preview extends StatefulWidget {
+  const _Preview({required this.at, required this.load});
+  final Duration at;
+  final Future<Uint8List?> Function(Duration) load;
+  @override
+  State<_Preview> createState() => _PreviewState();
+}
+
+class _PreviewState extends State<_Preview> {
+  Timer? _debounce;
+  Uint8List? _bytes;
+  int _generation = 0;
+  @override
+  void initState() { super.initState(); _request(); }
+  @override
+  void didUpdateWidget(_Preview old) {
+    super.didUpdateWidget(old);
+    if (old.at.inSeconds != widget.at.inSeconds) _request();
+  }
+  void _request() {
+    _debounce?.cancel();
+    final generation = ++_generation;
+    _debounce = Timer(const Duration(milliseconds: 120), () async {
+      try {
+        final bytes = await widget.load(widget.at);
+        if (mounted && generation == _generation) setState(() => _bytes = bytes);
+      } catch (_) {
+        if (mounted && generation == _generation) setState(() => _bytes = null);
+      }
+    });
+  }
+  @override
+  void dispose() { _debounce?.cancel(); _generation++; super.dispose(); }
+  @override
+  Widget build(BuildContext context) => _bytes == null
+      ? const SizedBox.shrink() : Image.memory(_bytes!, fit: BoxFit.contain, gaplessPlayback: true);
 }
 
 class _Track extends StatelessWidget {

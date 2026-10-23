@@ -12,6 +12,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../core/arbiter.dart';
 import '../core/clock.dart';
 import '../perf/budget.dart';
+import '../features/kernel_features.dart';
 import 'driver.dart';
 import 'instances.dart';
 import 'native.dart';
@@ -76,7 +77,7 @@ String _mdkDecoderFor(String mode) {
 /// Turning the subtitle off stops MDK drawing it (the `subtitle` property)
 /// and leaves the track decoding, so that off and back on deactivates
 /// nothing.
-final class MdkDriver implements KernelDriver, MdkNative {
+final class MdkDriver implements KernelDriver, MdkNative, KernelFrameFeatures {
   MdkDriver(KernelLease lease, this.config, {mdk.Player Function()? create})
       : instance = nextKernelInstance() {
     // I1: only the lease holder makes a kernel.
@@ -456,6 +457,10 @@ final class MdkDriver implements KernelDriver, MdkNative {
         for (final e in config.properties.entries) {
           p.setProperty(e.key, e.value);
         }
+        if (source.direct) {
+          p.setProperty('avformat.http_proxy', '');
+          p.setProperty('avio.http_proxy', '');
+        }
         if (config.videoDecoders.isNotEmpty) {
           p.videoDecoders = config.videoDecoders;
         }
@@ -486,6 +491,23 @@ final class MdkDriver implements KernelDriver, MdkNative {
           throw KernelOpenFailure(
               'media_open', 'MDK could not open the media (code $landed).',
               code: landed);
+        }
+        // Selecting tracks may seek internally. Complete it on this fresh
+        // instance and restore the requested position before presenting.
+        if (source.audioTrack case final index?) p.activeAudioTracks = [index];
+        if (source.externalSubtitle case final path?) {
+          p.setMedia(path, mdk.MediaType.subtitle);
+          p.activeSubtitleTracks = [0];
+        } else if (source.subtitleTrack case final index?) {
+          p.activeSubtitleTracks = index < 0 ? [] : [index];
+        }
+        if (source.audioTrack != null ||
+            source.subtitleTrack != null ||
+            source.externalSubtitle != null) {
+          await p.seek(
+              position: start.inMilliseconds,
+              flags: const mdk.SeekFlag(mdk.SeekFlag.fromStart));
+          _queue.live();
         }
         final media = _media = _readMedia();
         if (!media.hasVideo && media.audio.isEmpty) {
@@ -823,6 +845,8 @@ final class MdkDriver implements KernelDriver, MdkNative {
       ],
       activeAudio: List.of(_player.activeAudioTracks),
       activeSubtitles: List.of(_player.activeSubtitleTracks),
+      chapters: [for (final c in info.chapters ?? <mdk.ChapterInfo>[])
+        ChapterFacts(c.title ?? '', c.startTime, endMs: c.endTime)],
     );
   }
 
@@ -967,6 +991,28 @@ final class MdkDriver implements KernelDriver, MdkNative {
   @override
   Future<void> setVolume(double volume) =>
       _queue.run(() async => _player.volume = volume);
+
+  @override
+  Future<SeekOutcome> stepFrame(int delta) => _queue.run(() async {
+    final result = await _player.seek(position: delta,
+        flags: const mdk.SeekFlag(mdk.SeekFlag.frame | mdk.SeekFlag.fromNow));
+    _queue.live();
+    if (result < 0) return SeekOutcome(SeekResult.rejected, null, code: result);
+    final landed = Duration(milliseconds: result);
+    _sample(landed, advancing: false);
+    return SeekOutcome(SeekResult.done, landed);
+  });
+
+  @override
+  Future<KernelPicture> snapshotPicture() => _queue.run(() async {
+    final media = _media!;
+    final bytes = await _player.snapshot(width: media.width, height: media.height);
+    _queue.live();
+    if (bytes == null || bytes.length != media.width * media.height * 4) {
+      throw StateError('MDK returned no complete RGBA picture.');
+    }
+    return KernelPicture(media.width, media.height, bytes);
+  });
 
   @override
   Future<JsonMap> readFacts() => _queue.run(() async {

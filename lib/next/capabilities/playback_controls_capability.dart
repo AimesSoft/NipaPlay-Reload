@@ -124,15 +124,17 @@ final class PlaybackControlsCapability implements Capability {
           _Operation(
               'playback.capture',
               'Save a screenshot or GIF',
-              'Actually generates and saves media using Classic capture/export. '
-                  'Screenshots use the Classic save directory unless outputPath is specified. '
-                  'includeDanmaku defaults to the screenshot setting. Erika snapshots '
-                  'exclude native danmaku even when includeDanmaku=true; this does not '
-                  'mean tracks are unloaded or danmaku is invisible on screen. Screenshot '
+              'Generate and save media from the current player session. '
+                  'Screenshots use the shared save directory unless outputPath is specified. '
+                  'includeDanmaku defaults to the screenshot setting. Next captures the '
+                  'displayed scene or combines a kernel picture with its displayed overlays. '
+                  'In Classic, Erika snapshots exclude native danmaku. '
+                  'Native overlays outside the Flutter scene depend on the driver snapshot. Screenshot '
                   'results report danmakuRequested, danmakuIncluded and danmakuReason. '
                   'danmakuIncluded describes inclusion of the displayed layer, not proof '
                   'of visible comments at this position. '
-                  'GIF requires outputPath, startMs and endMs; maximum duration is 30 seconds. '
+                  'GIF uses an independent Erika decoder without display overlays and requires '
+                  'outputPath, startMs and endMs; maximum duration is 30 seconds. '
                   'Existing output files are never overwritten.',
               Effect.write,
               const ObjectSchema({

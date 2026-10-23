@@ -188,6 +188,47 @@ void main() {
     expect(record.watchProgress, 1.0);
   });
 
+  for (final resetBeforeEnd in [true, false]) {
+    test('EOF freezes the endpoint with reset before end: $resetBeforeEnd',
+        () async {
+      final rig = FakeHost();
+      final session = await rig.host.open(request());
+      final driver = rig.drivers.single;
+      driver.sample(session.duration - const Duration(milliseconds: 200));
+      if (resetBeforeEnd) driver.sample(Duration.zero, advancing: false);
+      driver.emit((seq, at) => KernelEnded(driver.instance, seq, at));
+      // Native stop and position callbacks may follow the explicit EOF.
+      driver.transport(KernelTransport.stopped);
+      driver.sample(const Duration(milliseconds: 334), advancing: true);
+      expect(session.position, session.duration);
+      expect(session.clock.advancing, isFalse);
+      await session.setPaused(true, origin: 'end_action');
+      expect(session.position, session.duration);
+
+      // Loop is an explicit seek and play, so it must accept samples again.
+      await session.seek(Duration.zero, origin: 'loop');
+      await session.setPaused(false, origin: 'loop');
+      driver.sample(const Duration(seconds: 1));
+      expect(session.transport.value.ended, isFalse);
+      expect(session.clock.advancing, isTrue);
+      expect(session.position.inMilliseconds, closeTo(1000, 200));
+      await rig.host.close(reason: 'test');
+    });
+  }
+
+  test('EOF without a known duration freezes the last position', () async {
+    final rig = FakeHost(
+        make: (lease) => FakeDriver(lease, duration: Duration.zero));
+    final session = await rig.host.open(request(paused: true));
+    final driver = rig.drivers.single;
+    driver.sample(const Duration(seconds: 8), advancing: false);
+    driver.emit((seq, at) => KernelEnded(driver.instance, seq, at));
+    driver.sample(Duration.zero);
+    expect(session.position, const Duration(seconds: 8));
+    expect(session.clock.advancing, isFalse);
+    await rig.host.close(reason: 'test');
+  });
+
   test('a file that is not there fails at file_check with no kernel made',
       () async {
     final rig = FakeHost();
@@ -217,10 +258,10 @@ void main() {
     await rig.host.open(request());
     expect(
         () => rig.host.open(const MediaRequest(
-            locator: 'jellyfin://abc', origin: 'agent')),
+            locator: 'unknown://abc', origin: 'agent')),
         throwsA(isA<OpenRefused>()
             .having((r) => r.reason, 'reason', 'source_not_supported')
-            .having((r) => r.facts['source'], 'source', 'jellyfin')));
+            .having((r) => r.facts['source'], 'source', 'unknown')));
     expect(rig.host.current.value?.phase.value, SessionPhase.active);
     final other = FakeHost(kernel: 'unknown');
     expect(

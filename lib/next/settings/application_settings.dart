@@ -26,6 +26,7 @@ import 'package:nipaplay/utils/external_player_utils.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:path/path.dart' as p;
 import 'effective.dart';
+import '../player/danmaku/settings.dart';
 import 'registry.dart';
 import 'setting_descriptions.dart';
 import '../tasks/user_consent.dart';
@@ -161,6 +162,9 @@ abstract final class ApplicationSettings {
           (renderer == DanmakuRenderEngine.next2 ||
               renderer == DanmakuRenderEngine.dfmPlus);
     }
+    if (key == 'player.timelinePreviewEnabled' && globals.nextShellHostsPlayer) {
+      return true;
+    }
     if (key == 'player.timelinePreviewEnabled' ||
         key == 'player.precacheBufferDurationSeconds') {
       return kernel == PlayerKernelType.mdk;
@@ -201,6 +205,8 @@ abstract final class ApplicationSettings {
   static JsonMap remoteParameter(String key) =>
       entries().firstWhere((entry) => entry.key == key).remote!;
   static VideoPlayerState? video;
+  static Future<bool> Function(String key, String storageKey, Object? value)?
+      nextFeatureWrite;
   static SettingsProvider? settings;
   static Future<String> Function(String path, {bool directory})? authorizePath;
   static VideoPlayerState get player =>
@@ -403,8 +409,13 @@ abstract final class ApplicationSettings {
           effective: EffectiveRules.resolve,
           remote: remote,
           decodeStorage: decodeValue,
-          read:
-              runtimeRead ?? () => readPreference(key, storageKey, decodeValue),
+          read: () async {
+            final next = NextDanmakuSettings.active;
+            if (next != null && NextDanmakuSettings.keys.containsKey(key)) {
+              return next.readSetting(key);
+            }
+            return runtimeRead != null ? runtimeRead() : readPreference(key, storageKey, decodeValue);
+          },
           write: (value) async {
             if (path && (value as String).isNotEmpty) {
               final authorize = authorizePath;
@@ -414,7 +425,16 @@ abstract final class ApplicationSettings {
               }
               value = await authorize(value, directory: directory);
             }
-            await write(value);
+            if (globals.nextShellHostsPlayer &&
+                await nextFeatureWrite?.call(key, storageKey, value) == true) {
+              return;
+            }
+            final next = NextDanmakuSettings.active;
+            if (next != null && NextDanmakuSettings.keys.containsKey(key)) {
+              await next.writeSetting(key, value);
+            } else {
+              await write(value);
+            }
           }));
     }
 

@@ -147,7 +147,8 @@ final class VideoPlayerDriver extends AdapterDriver {
   Future<void> showPicture(MediaFacts media) async {
     // video_player's own view of its controller: the platform decides what
     // the picture is made of (a texture, a platform view).
-    picture = WidgetSurface(VideoPlayer(_controller!), aspect: media.aspect);
+    picture = WidgetSurface(VideoPlayer(_controller!),
+        width: media.width, height: media.height);
   }
 
   // ---- tracks: video_player lists none and draws no subtitle ----

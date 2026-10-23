@@ -7,6 +7,8 @@ import 'package:flutter/widgets.dart';
 import 'package:window_manager/window_manager.dart';
 
 import '../../player/perf/budget.dart';
+import '../../player/ports/session_playback.dart';
+import '../../player/sources/auto_next_overlay.dart';
 import '../../ui_data/ui_data.dart'
     show NextNowPlaying, NextUiData, UiNowPlaying;
 import '../conversation/nipa_chat.dart';
@@ -246,6 +248,8 @@ class _NextPlayerLayerState extends State<NextPlayerLayer> {
         final pinned = _overChrome || _scrubbing || _menu != null;
         final shown = hasVideo && (controls || pinned);
         return Stack(fit: StackFit.expand, children: [
+          if (playback case final SessionPlayback sessionPlayback)
+            AutoNextOverlay(sources: sessionPlayback.sources),
           if (loading && !hasVideo) const Positioned.fill(child: _Loading()),
           if (hasVideo) ...[
             Positioned(
@@ -735,6 +739,12 @@ class _BottomBar extends StatelessWidget {
               heat: playback.heat(),
               onSeek: playback.seek,
               onScrub: onScrub,
+              preview: switch (playback) {
+                SessionPlayback(:final preview, :final session)
+                    when preview.enabled && session != null =>
+                  (at) => preview.at(session.source.uri, at),
+                _ => null,
+              },
             ),
           ),
           const SizedBox(height: 2),

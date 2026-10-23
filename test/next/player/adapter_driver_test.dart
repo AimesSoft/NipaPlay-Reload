@@ -58,6 +58,9 @@ final class ScriptedDriver extends AdapterDriver {
   @override
   Future<void> configure() async => calls.add('configure');
   @override
+  Future<void> routeSource(ResolvedSource source) async =>
+      calls.add('route ${source.direct ? 'direct' : 'default'}');
+  @override
   Future<void> applyPlan(KernelTrackPlan plan) async =>
       calls.add('plan ${plan.audio} ${plan.subtitle}');
 
@@ -199,6 +202,44 @@ void main() {
     final seqs = events.map((e) => e.seq).toList();
     expect([...seqs]..sort(), seqs);
     await driver.release();
+  });
+
+  test('a source that maps its tracks opens with them, over the library\'s; '
+      'one that goes direct says so before the media opens', () async {
+    final (driver, _) = await made();
+    await driver.open(
+        const ResolvedSource(
+            locator: 'x',
+            uri: 'http://h/x',
+            kind: 'server',
+            direct: true,
+            audioTrack: 1,
+            subtitleTrack: 3),
+        tracks: const KernelTrackPlan(
+            audio: 0, subtitle: EmbeddedKernelSubtitle(0)));
+    expect(driver.calls.where((c) => c.startsWith('plan') || c.startsWith('route')),
+        ['route direct', 'plan 1 embedded 3']);
+    expect(driver.tracks.audio, 1);
+    await driver.release();
+
+    final (file, _) = await made();
+    await file.open(
+        const ResolvedSource(
+            locator: 'x',
+            uri: 'http://h/x',
+            kind: 'server',
+            externalSubtitle: '/subs/a.ass'),
+        tracks: const KernelTrackPlan(subtitle: EmbeddedKernelSubtitle(2)));
+    expect(file.calls, contains('plan null file /subs/a.ass'));
+    await file.release();
+
+    final (none, _) = await made();
+    await none.open(
+        const ResolvedSource(
+            locator: 'x', uri: 'http://h/x', kind: 'server', subtitleTrack: -1),
+        tracks: const KernelTrackPlan(subtitle: EmbeddedKernelSubtitle(2)));
+    expect(none.calls, contains('plan null none'));
+    await none.release();
   });
 
   test('an instance opens once, and one released never again (I5)', () async {

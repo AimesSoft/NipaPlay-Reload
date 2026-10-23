@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:ui' as ui;
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart' show Widget;
@@ -8,6 +9,7 @@ import 'package:nipaplay/player_abstraction/media_kit_player_adapter.dart';
 import 'package:nipaplay/widgets/macos_native_video_view.dart';
 
 import '../core/arbiter.dart';
+import '../features/kernel_features.dart';
 import 'adapter_driver.dart';
 import 'driver.dart';
 import 'native.dart';
@@ -29,7 +31,8 @@ import 'native.dart';
 /// The teardown order is a789943e's: the video output frees mpv's render
 /// context before mpv is destroyed, which [MediaKitPlayerAdapter]'s
 /// disposal does in that order and this driver waits for.
-final class MediaKitDriver extends AdapterDriver implements MpvNative {
+final class MediaKitDriver extends AdapterDriver
+    implements MpvNative, KernelFrameFeatures {
   factory MediaKitDriver(KernelLease lease, KernelConfig config) {
     requireLease(lease, 'Media Kit');
     final megabytes = config.settings['player.precacheBufferSizeMb'];
@@ -91,6 +94,13 @@ final class MediaKitDriver extends AdapterDriver implements MpvNative {
     for (final entry in config.properties.entries) {
       adapter.setProperty(entry.key, entry.value);
     }
+  }
+
+  /// A source that asks to go direct (a mesh or local proxy address) goes
+  /// without the proxy this player was made with.
+  @override
+  Future<void> routeSource(ResolvedSource source) async {
+    if (source.direct) adapter.setProperty('http-proxy', '');
   }
 
   @override
@@ -187,6 +197,9 @@ final class MediaKitDriver extends AdapterDriver implements MpvNative {
 
   @override
   Future<KernelTracks> planOpened(KernelTrackPlan plan, MediaFacts media) async {
+    final fps = (await adapter.readMpvPropertiesChecked(['container-fps']))['container-fps']
+        ?.value;
+    _fps = double.tryParse(fps ?? '');
     await _readTracks();
     var basis = 'property';
     // The plan said `i + 1`; where mpv lists them otherwise, the right one
@@ -313,10 +326,60 @@ final class MediaKitDriver extends AdapterDriver implements MpvNative {
         : Duration(microseconds: (seconds * 1000000).round());
   }
 
+  double? _fps;
+
   @override
   MediaFacts readMedia() => mediaFromInfo(adapter.mediaInfo,
       activeAudio: [if (_audio != null) _audio!],
-      activeSubtitles: [if (_subtitle != null) _subtitle!]);
+      activeSubtitles: [if (_subtitle != null) _subtitle!],
+      frameRate: _fps);
+
+  // ---- frames (design: the kernel's own primitives, in the queue) ----
+
+  /// mpv steps a frame itself and pauses there; it says where it landed
+  /// by the position it then reports.
+  @override
+  Future<SeekOutcome> stepFrame(int delta) => queue.run(() async {
+        final from = lastKnownPosition;
+        final landed = expectSample(from);
+        try {
+          final reply = await adapter.runMpvCommand(
+              [delta < 0 ? 'frame-back-step' : 'frame-step']);
+          queue.live();
+          if (reply.error != null) {
+            return const SeekOutcome(SeekResult.rejected, null);
+          }
+          final at = await landed.landed ?? await readPosition();
+          queue.live();
+          if (at == null) return const SeekOutcome(SeekResult.rejected, null);
+          return SeekOutcome(SeekResult.done, at);
+        } finally {
+          landed.cancel();
+        }
+      });
+
+  /// mpv's own screenshot, subtitles drawn by libass in it, decoded to RGBA
+  /// off the main isolate by the engine's codec.
+  @override
+  Future<KernelPicture> snapshotPicture() => queue.run(() async {
+        final bytes = await adapter.sessionPlayer
+            .screenshot(format: 'image/png', includeLibassSubtitles: true);
+        queue.live();
+        if (bytes == null || bytes.isEmpty) {
+          throw StateError('mpv returned no picture.');
+        }
+        final codec = await ui.instantiateImageCodec(bytes);
+        try {
+          final frame = await codec.getNextFrame();
+          final rgba = await frame.image.toByteData(format: ui.ImageByteFormat.rawRgba);
+          final picture = KernelPicture(frame.image.width, frame.image.height,
+              rgba!.buffer.asUint8List(rgba.offsetInBytes, rgba.lengthInBytes));
+          frame.image.dispose();
+          return picture;
+        } finally {
+          codec.dispose();
+        }
+      });
 
   @override
   Future<void> showPicture(MediaFacts media) async {

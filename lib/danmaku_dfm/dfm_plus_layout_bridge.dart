@@ -10,6 +10,12 @@ import 'package:nipaplay/src/rust/api/dfm_plus.dart' as rust_dfm;
 import 'package:nipaplay/src/rust/rust_init.dart';
 
 class DfmPlusLayoutBridge {
+  DfmPlusLayoutBridge({this.prepareInBackground});
+
+  /// Next's session worker already owns the timeline; only the small viewport
+  /// configuration crosses the main isolate. Classic keeps its existing path.
+  final Future<rust_dfm.DfmPlusPreparedLayout> Function(Map<String, Object?>)?
+      prepareInBackground;
   rust_dfm.DfmPlusPreparedLayout? _prepared;
   int _sourceListIdentity = 0;
   int _sourceListVersion = -1;
@@ -101,6 +107,17 @@ class DfmPlusLayoutBridge {
       rust_dfm.dfmPlusDropLayout(handle: oldHandle);
     }
 
+    final prepare = prepareInBackground;
+    if (prepare != null) {
+      _prepared = await prepare({
+        'width': size.width, 'height': size.height, 'fontSize': fontSize,
+        'displayArea': displayArea, 'scrollDurationSeconds': scrollDurationSeconds,
+        'allowStacking': allowStacking, 'mergeDanmaku': mergeDanmaku,
+        'maxQuantity': maxQuantity, 'maxLinesPerType': maxLinesPerType,
+        'trackGapRatio': trackGapRatio, 'outlineWidth': outlineWidth,
+        'customFontFilePath': customFontFilePath, 'blockWords': blockWords,
+      });
+    } else {
     final fontBytes = await _loadFontBytes(customFontFilePath);
 
     final rawItems = <rust_dfm.DfmPlusRawDanmakuItem>[];
@@ -214,6 +231,7 @@ class DfmPlusLayoutBridge {
         blockWords: blockWords,
       ),
     );
+    }
     _sourceListIdentity = listIdentity;
     _sourceListVersion = danmakuListVersion;
     _lastFontSize = fontSize;

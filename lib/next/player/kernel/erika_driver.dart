@@ -7,6 +7,7 @@ import 'package:nipaplay/player_abstraction/player_data_models.dart';
 import 'package:nipaplay/player_abstraction/player_enums.dart';
 
 import '../core/arbiter.dart';
+import '../features/kernel_features.dart';
 import 'adapter_driver.dart';
 import 'driver.dart';
 import 'native.dart';
@@ -23,7 +24,8 @@ import 'native.dart';
 /// goes on right after, while the media is paused at its start; Erika
 /// reports each selection (`trackSelectionChanged`), which confirms it.
 /// Subtitles Erika draws itself are ASS and SSA files.
-final class ErikaDriver extends AdapterDriver implements ErikaNative {
+final class ErikaDriver extends AdapterDriver
+    implements ErikaNative, KernelPictureSnapshot {
   factory ErikaDriver(KernelLease lease, KernelConfig config) {
     requireLease(lease, 'Erika');
     return ErikaDriver._(
@@ -273,7 +275,23 @@ final class ErikaDriver extends AdapterDriver implements ErikaNative {
   @override
   MediaFacts readMedia() => mediaFromInfo(adapter.mediaInfo,
       activeAudio: adapter.activeAudioTracks,
-      activeSubtitles: adapter.activeSubtitleTracks);
+      activeSubtitles: adapter.activeSubtitleTracks,
+      frameRate: adapter.videoFrameRate);
+
+  /// Erika's own picture, with the subtitles it draws in it. It has no
+  /// frame step of its own: stepping a frame is a seek by the declared
+  /// frame interval, which the navigation says it is.
+  @override
+  Future<KernelPicture> snapshotPicture() => queue.run(() async {
+        final facts = media!;
+        final frame =
+            await adapter.snapshot(width: facts.width, height: facts.height);
+        queue.live();
+        if (frame == null || frame.bytes.length != facts.width * facts.height * 4) {
+          throw StateError('Erika returned no complete RGBA picture.');
+        }
+        return KernelPicture(frame.width, frame.height, frame.bytes);
+      });
 
   @override
   Future<void> showPicture(MediaFacts media) async {

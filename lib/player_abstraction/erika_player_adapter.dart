@@ -882,6 +882,17 @@ class ErikaPlayerAdapter
     }
   }
 
+  /// The frame rate Erika declares for the video it plays (null: none).
+  double? get videoFrameRate {
+    final track = _videoTrackInfos.firstOrNull;
+    if (track == null ||
+        track.frameRateNumerator <= 0 ||
+        track.frameRateDenominator <= 0) {
+      return null;
+    }
+    return track.frameRateNumerator / track.frameRateDenominator;
+  }
+
   /// Turns tracks on and returns once Erika has taken the request (Next's
   /// session driver; the setters above fire and forget). [audio] and
   /// [subtitles] are indices of [mediaInfo]'s lists; an empty [subtitles]

@@ -144,15 +144,15 @@ void main() {
     final cues = await failure(
         () => playback.controls.inspect('subtitle.cues', {'sessionId': 'x'}));
     expect(cues.code, FailureCode.conflict);
-    final entries = await failure(
-        () => playback.controls.inspect('danmaku.entries', {}));
-    expect(entries.details['reason'], 'not_in_playback_layer');
-    expect(entries.details['feature'], 'danmaku');
+    // Danmaku are the layer's own: with nothing open the page is empty.
+    final entries = await playback.controls.inspect('danmaku.entries', {});
+    expect(entries['sessionId'], isNull);
+    expect(entries['total'], 0);
+    expect(entries['items'], isEmpty);
     final network = await failure(() => playback.openItem(
         PlayableItem(videoPath: 'jellyfin://item-1')));
     expect(network.code, FailureCode.unavailable);
-    expect(network.details['reason'], 'source_not_supported');
-    expect(network.details['source'], 'jellyfin');
+    expect(network.details['stage'], 'source_resolution');
     await playback.dispose();
   });
 
