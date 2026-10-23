@@ -29,8 +29,9 @@ class PlayerRemoteControlBridge {
   bool Function()? _nextActive;
 
   void attachNext(NextPlayback playback, bool Function() active,
-      {Future<void> Function(String, Object?)? setParameter}) {
-    _next = NextRemoteControl(playback, setParameter: setParameter);
+      {Future<void> Function(String, Object?)? setParameter,
+      Future<void> Function(Map<String, dynamic>)? sendDanmaku}) {
+    _next = NextRemoteControl(playback, setParameter: setParameter, sendDanmaku: sendDanmaku);
     _nextActive = active;
   }
 
@@ -61,7 +62,7 @@ class PlayerRemoteControlBridge {
   }) async {
     final enabled = await RemoteControlSettings.isReceiverEnabled();
     if (_activeNext case final next?) {
-      return {...next.payload(enabled: enabled,
+      return {...await next.payload(enabled: enabled,
           includeParameters: includeParameters || (paneId?.isNotEmpty ?? false), paneId: paneId),
         'lastCommandAt': _lastCommandAt?.toIso8601String()};
     }

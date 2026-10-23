@@ -98,6 +98,8 @@ import 'ui_data/host_settings.dart';
 import 'settings/debug_host_settings.dart';
 import 'player/features/external_handoff.dart';
 import 'player/features/local_operations.dart';
+import 'player/features/debug_features.dart';
+import 'player/features/settings_adapter.dart';
 import 'package:nipaplay/services/player_remote_control_bridge.dart';
 
 final class NextRuntime extends ChangeNotifier {
@@ -106,7 +108,16 @@ final class NextRuntime extends ChangeNotifier {
     // From now on Classic asks before it opens anything; while Next's
     // interface is what shows, Next's layer plays it (D3, D5).
     globals.nextPlaybackRedirect = _redirect;
+    ApplicationSettings.nextFeatureWrite = writeNextFeatureSetting;
     PlayerRemoteControlBridge.instance.attachNext(playback, () => !_disposed && _nextOpen,
+        sendDanmaku: (input) async {
+          final color = input['color'];
+          await NextFeatureOperations(playback, ServiceProvider.nextCore.settings).sendDanmaku({
+            'text': input['comment']?.toString() ?? '',
+            'mode': switch (input['mode']) { 5 => 'top', 4 => 'bottom', _ => 'scroll' },
+            'color': color is int ? '#${(color & 0xFFFFFF).toRadixString(16).padLeft(6, '0')}' : color?.toString() ?? '#FFFFFF',
+          });
+        },
         setParameter: (key, value) async {
           await ServiceProvider.nextCore.settings.set(key, value, Invocation(origin: 'gui'),
               reason: '通过遥控器调整 Next 播放设置');
@@ -568,6 +579,7 @@ final class NextRuntime extends ChangeNotifier {
     if (kDebugMode && LabProfile.active) {
       _classic.installDebug();
       installDebugPlayerHost(() => playback.host);
+      installDebugPlaybackFeatures(() => playback, catalog: () => harness.catalog);
     }
     _labs.addListener(_queueEndpointUpdate);
     _preference.addListener(_queueEndpointUpdate);
@@ -948,6 +960,7 @@ final class NextRuntime extends ChangeNotifier {
     _disposed = true;
     if (globals.nextPlaybackRedirect == _redirect) {
       globals.nextPlaybackRedirect = null;
+      ApplicationSettings.nextFeatureWrite = null;
     }
     unawaited(_settingEvents?.cancel());
     unawaited(BackgroundActivity.set(false));

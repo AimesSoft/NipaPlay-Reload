@@ -11,6 +11,8 @@ import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:nipaplay/player_abstraction/erika_gif_export.dart';
+import 'package:nipaplay/services/security_bookmark_service.dart';
+import 'package:nipaplay/utils/storage_service.dart';
 import 'package:nipaplay/utils/video_aspect_geometry.dart';
 
 import '../../capabilities/media_frames_erika.dart';
@@ -48,17 +50,26 @@ final class PlaybackCapture {
           true;
       final output = input['outputPath'] as String?;
       final extension = output == null
-          ? (prefs.getString('screenshot_format') == 'jpeg' ? '.jpg' : '.png')
+          ? (prefs.getString('screenshot_format') == 'png' ? '.png' : '.jpg')
           : p.extension(output).toLowerCase();
       if (!{'.png', '.jpg', '.jpeg'}.contains(extension)) {
         throw const Failure(
             FailureCode.invalidInput, 'Screenshot output must be PNG or JPEG.');
       }
-      final savedDirectory = prefs.getString('screenshot_save_directory');
+      var savedDirectory = prefs.getString('screenshot_save_directory')?.trim();
+      if (Platform.isMacOS &&
+          savedDirectory != null &&
+          savedDirectory.isNotEmpty) {
+        savedDirectory =
+            await SecurityBookmarkService.resolveBookmark(savedDirectory) ??
+                savedDirectory;
+      }
       final path = output ??
           p.join(
               savedDirectory == null || savedDirectory.isEmpty
-                  ? (await getApplicationDocumentsDirectory()).path
+                  ? ((await getDownloadsDirectory()) ??
+                          await StorageService.getDownloadsDirectory())
+                      .path
                   : savedDirectory,
               'NipaPlay_${DateTime.now().microsecondsSinceEpoch}$extension');
       await validateOutput(path);
@@ -109,10 +120,11 @@ final class PlaybackCapture {
         overlay = await _readBoundary(overlays, ratio);
       }
       _live(session);
-      final quality = switch (prefs.getString('screenshot_quality')) {
-        'low' => 60,
-        'high' => 95,
-        _ => 85,
+      final quality = switch (prefs.getInt('screenshot_quality')) {
+        0 => 70,
+        1 => 85,
+        3 => 100,
+        _ => 92,
       };
       final natural = Size(media.width.toDouble(), media.height.toDouble());
       final videoRect = VideoAspectGeometry.displayRect(
@@ -136,7 +148,13 @@ final class PlaybackCapture {
           jpeg: extension != '.png',
           quality: quality);
       final bytes = encoded.$1;
-      await File(path).writeAsBytes(bytes, flush: true);
+      final file = await claimOutput(path);
+      try {
+        await file.writeAsBytes(bytes, flush: true);
+      } catch (_) {
+        await file.delete();
+        rethrow;
+      }
       return {
         'path': path,
         'kind': 'screenshot',
@@ -218,6 +236,9 @@ final class PlaybackCapture {
     final output = input['outputPath'] as String?;
     final start = (input['startMs'] as num?)?.toInt();
     final end = (input['endMs'] as num?)?.toInt();
+    final fps = (input['fps'] as num?)?.toInt() ?? 12;
+    final width = (input['width'] as num?)?.toInt() ?? 480;
+    final height = (input['height'] as num?)?.toInt() ?? 270;
     if (output == null ||
         p.extension(output).toLowerCase() != '.gif' ||
         start == null ||
@@ -225,23 +246,36 @@ final class PlaybackCapture {
         start < 0 ||
         end <= start ||
         end - start > 30000 ||
-        end > s.duration.inMilliseconds) {
+        end > s.duration.inMilliseconds ||
+        fps < 1 ||
+        fps > 30 ||
+        width < 2 ||
+        width > 4096 ||
+        height < 2 ||
+        height > 4096) {
       throw const Failure(FailureCode.invalidInput,
           'GIF requires a .gif outputPath and an interval within the video, at most 30 seconds.');
     }
     await validateOutput(output);
+    final file = await claimOutput(output);
     // Independent Erika decoder, regardless of the playback kernel. The
     // exporter performs decoding, scaling and encoding on a worker isolate.
-    final result = await exportGifWithErika({
-      'inputUri': s.source.uri,
-      'outputPath': output,
-      'startMillis': start,
-      'endMillis': end,
-      'framesPerSecond': (input['fps'] as num?)?.toInt() ?? 12,
-      'outputWidth': (input['width'] as num?)?.toInt() ?? 480,
-      'outputHeight': (input['height'] as num?)?.toInt() ?? 270,
-      'quality': input['quality'] == 'high' ? 1 : 0,
-    });
+    final Map<String, Object?> result;
+    try {
+      result = await exportGifWithErika({
+        'inputUri': s.source.uri,
+        'outputPath': output,
+        'startMillis': start,
+        'endMillis': end,
+        'framesPerSecond': fps,
+        'outputWidth': width,
+        'outputHeight': height,
+        'quality': input['quality'] == 'high' ? 1 : 0,
+      });
+    } catch (_) {
+      await file.delete();
+      rethrow;
+    }
     return {
       'path': result['outputPath'],
       'kind': 'gif',
@@ -269,6 +303,18 @@ final class PlaybackCapture {
           FailureCode.conflict, 'The output file already exists.');
     }
     await Directory(p.dirname(path)).create(recursive: true);
+  }
+
+  static Future<File> claimOutput(String path) async {
+    try {
+      return await File(path).create(exclusive: true);
+    } on FileSystemException {
+      if (await FileSystemEntity.type(path) != FileSystemEntityType.notFound) {
+        throw const Failure(
+            FailureCode.conflict, 'The output file already exists.');
+      }
+      rethrow;
+    }
   }
 
   static Future<Uint8List> encodePicture(KernelPicture picture,

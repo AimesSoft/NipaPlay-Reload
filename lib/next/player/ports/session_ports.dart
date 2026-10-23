@@ -212,7 +212,7 @@ final class SessionControls
       episodeId: request.episodeId,
       start: preserve ? old.position : Duration.zero,
       paused: !old.transport.value.playIntent),
-      initialLevels: PlayerLevels(volume: old.transport.value.volume, rate: old.transport.value.rate));
+      initialLevels: PlayerLevels(volume: old.transport.value.volume, boost: old.volumeBoost, rate: old.transport.value.rate));
     if (!identical(next, _playback.session) || next.phase.value.done) {
       throw const Failure(FailureCode.conflict, 'Playback changed while retrying.');
     }

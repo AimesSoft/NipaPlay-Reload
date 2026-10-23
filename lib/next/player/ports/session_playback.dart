@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:io';
 
+import 'package:file_selector/file_selector.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
@@ -627,7 +628,18 @@ final class SessionPlayback implements NextPlayback, VideoStageHost {
   Future<String?> screenshot() async {
     final s = _session;
     if (s == null) return null;
-    return (await controls.capture({'kind': 'screenshot'}))['path'] as String;
+    final prefs = await SharedPreferences.getInstance();
+    String? output;
+    if (prefs.getInt('screenshot_save_target') == 0) {
+      final extension = prefs.getString('screenshot_format') == 'png' ? 'png' : 'jpg';
+      final location = await getSaveLocation(
+          suggestedName: 'NipaPlay_${DateTime.now().millisecondsSinceEpoch}.$extension',
+          acceptedTypeGroups: [XTypeGroup(label: '图片', extensions: [extension])]);
+      if (location == null) return null;
+      output = location.path;
+    }
+    return (await controls.capture({'kind': 'screenshot',
+      if (output != null) 'outputPath': output}))['path'] as String;
   }
   @override
   Future<void> open(String path) =>

@@ -14,6 +14,7 @@ import 'package:nipaplay/next/player/features/external_handoff.dart';
 import 'package:nipaplay/next/player/features/kernel_features.dart';
 import 'package:nipaplay/next/player/features/timeline_preview.dart';
 import 'package:nipaplay/next/player/features/windows.dart';
+import 'package:nipaplay/next/player/features/settings_adapter.dart';
 import 'package:nipaplay/next/player/kernel/driver.dart';
 import 'package:nipaplay/next/player/ports/session_playback.dart';
 import 'package:nipaplay/services/player_remote_control_bridge.dart';
@@ -126,11 +127,18 @@ void main() {
     expect(playback.position, before + const Duration(milliseconds: 11250));
     expect(((seek['payload'] as Map)['snapshot'] as Map)['sessionId'],
         playback.session!.id);
+    final menu =
+        await bridge.buildPayload(paneId: 'chapters', includeParameters: true);
+    expect((menu['parameters'] as List).single['options'], hasLength(3));
+    final jump = await bridge.executeCommand(
+        'set_parameter', {'key': 'playback.chapter', 'value': 2});
+    expect(jump['success'], true);
+    expect(playback.position.inMilliseconds, closeTo(180000, 100));
     await RemoteControlSettings.setReceiverEnabled(false);
     final rejected =
         await bridge.executeCommand('seek_by_seconds', {'seconds': 20});
     expect(rejected['success'], false);
-    expect(playback.position, before + const Duration(milliseconds: 11250));
+    expect(playback.position.inMilliseconds, closeTo(180000, 100));
     nextOpen = false;
     expect((await bridge.buildPayload())['available'], false);
   });
@@ -181,6 +189,30 @@ void main() {
         ['--start-time=10.0', '/v.mkv']);
   });
 
+  test('Next feature preferences preserve the shared storage representation',
+      () async {
+    expect(
+        await writeNextFeatureSetting(
+            'player.screenshotQuality', 'screenshot_quality', 'max'),
+        true);
+    expect(
+        await writeNextFeatureSetting(
+            'player.screenshotSaveTarget', 'screenshot_save_target', 'file'),
+        true);
+    expect(
+        await writeNextFeatureSetting(
+            'player.timelinePreviewEnabled', 'timeline_preview_enabled', true),
+        true);
+    expect(
+        await writeNextFeatureSetting('subtitle.scale', 'subtitle_scale', 1.5),
+        false);
+    final prefs = await SharedPreferences.getInstance();
+    expect(prefs.getInt('screenshot_quality'), 3);
+    expect(prefs.getInt('screenshot_save_target'), 2);
+    expect(prefs.getBool('timeline_preview_enabled'), true);
+    expect(prefs.containsKey('subtitle_scale'), false);
+  });
+
   test('capture encoding runs independently and preserves RGBA pixels',
       () async {
     final picture = KernelPicture(
@@ -198,6 +230,8 @@ void main() {
     await File(output).writeAsString('keep');
     await expectLater(
         PlaybackCapture.validateOutput(output), throwsA(isA<Failure>()));
+    await expectLater(
+        PlaybackCapture.claimOutput(output), throwsA(isA<Failure>()));
     expect(await File(output).readAsString(), 'keep');
   });
 
@@ -205,7 +239,7 @@ void main() {
       'capture includes the displayed danmaku layer and can exclude it without changing tracks',
       (tester) async {
     SharedPreferences.setMockInitialValues(
-        {'screenshot_crop_letterbox': false});
+        {'screenshot_crop_letterbox': false, 'screenshot_quality': 2});
     await tester.runAsync(() async {
       await playback.openItem(PlayableItem(videoPath: video));
       await playback.port.setPaused(true);
@@ -224,9 +258,10 @@ void main() {
                     width: 160,
                     height: 100,
                     child: ColoredBox(
-                        color: Color(0xFF00FF00), child: DefaultTextStyle(
-                          style: TextStyle(fontSize: 14, color: Colors.black),
-                          child: Text('测试弹幕'))))))
+                        color: Color(0xFF00FF00),
+                        child: DefaultTextStyle(
+                            style: TextStyle(fontSize: 14, color: Colors.black),
+                            child: Text('测试弹幕'))))))
       ],
     )));
     Future<img.Image> shot(bool include) => tester.runAsync(() async {

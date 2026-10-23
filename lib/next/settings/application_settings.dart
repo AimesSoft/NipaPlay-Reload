@@ -201,6 +201,8 @@ abstract final class ApplicationSettings {
   static JsonMap remoteParameter(String key) =>
       entries().firstWhere((entry) => entry.key == key).remote!;
   static VideoPlayerState? video;
+  static Future<bool> Function(String key, String storageKey, Object? value)?
+      nextFeatureWrite;
   static SettingsProvider? settings;
   static Future<String> Function(String path, {bool directory})? authorizePath;
   static VideoPlayerState get player =>
@@ -413,6 +415,10 @@ abstract final class ApplicationSettings {
                     'Authorized path scope is not attached.');
               }
               value = await authorize(value, directory: directory);
+            }
+            if (globals.nextShellHostsPlayer &&
+                await nextFeatureWrite?.call(key, storageKey, value) == true) {
+              return;
             }
             await write(value);
           }));

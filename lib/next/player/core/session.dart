@@ -606,6 +606,7 @@ final class PlaybackSession {
   }
 
   late double _boost = _deps.levels.boost;
+  double get volumeBoost => _boost;
 
   // ---- progress and the watch record (§4.2) ----
 

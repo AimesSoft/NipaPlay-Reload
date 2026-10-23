@@ -58,6 +58,10 @@ final class ExternalHandoff extends ChangeNotifier {
         app ? ['-a', resolved, '--args', ...args] : args);
     unawaited(process.stdout.drain<void>());
     unawaited(process.stderr.drain<void>());
+    if (app && await process.exitCode != 0) {
+      throw const Failure(FailureCode.unavailable,
+          'LaunchServices could not open the selected external player.');
+    }
     if (_disposed || generation != _generation) return;
     _process = process;
     _item = item;

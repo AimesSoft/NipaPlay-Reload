@@ -5,13 +5,19 @@ import '../next_playback.dart';
 /// The remote protocol reads the same Dart snapshot and sends the same
 /// commands as Next's controls. It never reads Classic's player state.
 final class NextRemoteControl {
-  const NextRemoteControl(this.playback, {this.setParameter});
+  const NextRemoteControl(this.playback, {this.setParameter, this.sendDanmaku});
   final NextPlayback playback;
   final Future<void> Function(String key, Object? value)? setParameter;
+  final Future<void> Function(Map<String, dynamic> input)? sendDanmaku;
 
-  Map<String, dynamic> payload(
-      {required bool enabled, bool includeParameters = false, String? paneId}) {
+  Future<Map<String, dynamic>> payload(
+      {required bool enabled,
+      bool includeParameters = false,
+      String? paneId}) async {
     final state = playback.snapshot();
+    final chapters = includeParameters && state.hasVideo
+        ? await playback.inspection.inspect('playback.chapters', {})
+        : const <String, Object?>{};
     final snapshot = <String, dynamic>{
       ...state.toJson(),
       'isPaused': state.paused,
@@ -30,7 +36,9 @@ final class NextRemoteControl {
       'message': enabled ? 'ok' : '被遥控端已关闭',
       'snapshot': snapshot,
       'menus': [
-        for (final pane in ['volume', 'playbackRate', 'chapters'])
+        for (final pane in state.external == null
+            ? ['volume', 'playbackRate', 'chapters']
+            : <String>[])
           {
             'paneId': pane,
             'category': 'playback',
@@ -42,14 +50,15 @@ final class NextRemoteControl {
             }
           }
       ],
-      'parameters': includeParameters
+      'parameters': includeParameters && state.external == null
           ? [
               if (paneId == null || paneId == 'volume')
                 {
                   'paneId': 'volume',
                   'key': 'player.volume',
                   'label': '音量',
-                  'type': 'number',
+                  'type': 'double',
+                  'step': 0.05,
                   'value': state.volume,
                   'min': 0,
                   'max': 1
@@ -59,10 +68,24 @@ final class NextRemoteControl {
                   'paneId': 'playbackRate',
                   'key': 'playback.rate',
                   'label': '播放速度',
-                  'type': 'number',
+                  'type': 'double',
+                  'step': 0.05,
                   'value': state.rate,
-                  'min': 0.1,
-                  'max': 10
+                  'min': 0.01,
+                  'max': 5
+                },
+              if ((paneId == null || paneId == 'chapters') && state.hasVideo)
+                {
+                  'paneId': 'chapters',
+                  'key': 'playback.chapter',
+                  'label': '章节',
+                  'type': 'select',
+                  'value': chapters['index'],
+                  'options': [
+                    for (final (i, chapter)
+                        in ((chapters['items'] as List?) ?? const []).indexed)
+                      {'value': i, 'label': (chapter as Map)['title']}
+                  ],
                 },
             ]
           : const <Map<String, dynamic>>[],
@@ -72,14 +95,18 @@ final class NextRemoteControl {
   Future<void> execute(String command, Map<String, dynamic> args) async {
     final p = playback;
     final state = p.snapshot();
+    if (state.external != null) {
+      throw StateError('在外部播放器中播放，NipaPlay 无法控制播放。');
+    }
     switch (command) {
       case 'toggle_play_pause':
-        await p.port.setPaused(!(state.paused ?? true));
+        await p.port.setPaused(p.playIntent);
       case 'seek_by_seconds':
         final raw = args['seconds'];
         final seconds = raw is num ? raw.toDouble() : double.tryParse('$raw');
-        if (seconds == null || !seconds.isFinite)
+        if (seconds == null || !seconds.isFinite) {
           throw ArgumentError('seconds 必须是数字');
+        }
         await p.port.seekTo(Duration(
             milliseconds: (state.positionMs ?? 0) + (seconds * 1000).round()));
       case 'toggle_playback_rate':
@@ -90,18 +117,32 @@ final class NextRemoteControl {
         await p.port.switchEpisode(EpisodeDirection.next);
       case 'skip':
         await p.skip();
+      case 'send_danmaku':
+        final send = sendDanmaku;
+        if (send == null) throw StateError('当前会话没有弹幕发送入口');
+        await send(args);
       case 'set_parameter':
         final key = args['key']?.toString() ?? '';
         final value = args['value'];
         if (key == 'playback.chapter') {
           await p.inspection
               .inspect('playback.navigate', {'chapterIndex': value});
-        } else if (key == 'playback.audioTrack') {
-          await p.controls.selectTrack({'kind': 'audio', 'index': value});
-        } else if (key == 'playback.subtitleTrack') {
-          await p.controls.selectTrack({'kind': 'subtitle', 'index': value});
+        } else if (key == 'playback.audioTrack' ||
+            key == 'audio.activeTrackIndex') {
+          await p.controls.selectTrack(
+              {'kind': 'audio', 'origin': 'embedded', 'index': value});
+        } else if (key == 'playback.subtitleTrack' ||
+            key == 'subtitle.activeTrackIndex') {
+          await p.controls.selectTrack(
+              {'kind': 'subtitle', 'origin': 'embedded', 'index': value});
         } else if (setParameter case final set?) {
           await set(key, value);
+          if (key == 'player.volume' && value is num) {
+            await p.setVolume(value.toDouble());
+          }
+          if (key == 'playback.rate' && value is num) {
+            await p.setRate(value.toDouble());
+          }
         } else if (key == 'player.volume' && value is num) {
           await p.setVolume(value.toDouble());
         } else if (key == 'playback.rate' && value is num) {

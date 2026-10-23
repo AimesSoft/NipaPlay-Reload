@@ -84,7 +84,7 @@ final class NextFeatureOperations implements Capability {
         }
         return {'scheduled': true, 'processId': pid, 'delayMs': 1000};
       case 'danmaku.send':
-        return _send(input);
+        return sendDanmaku(input);
       case 'playback.external.danmaku_state':
       case 'playback.external.danmaku':
         if (playback.externalHandoff?.active != true) {
@@ -113,7 +113,7 @@ final class NextFeatureOperations implements Capability {
     throw Failure(FailureCode.invalidInput, 'Unknown operation $id.');
   }
 
-  Future<JsonMap> _send(JsonMap input) async {
+  Future<JsonMap> sendDanmaku(JsonMap input) async {
     final text = (input['text'] as String).trim();
     final color = input['color'] as String? ?? '#FFFFFF';
     if (text.isEmpty ||
@@ -210,18 +210,20 @@ final class NextFeatureOperations implements Capability {
           FailureCode.invalidInput, 'This command requires enabled.');
     }
     if (const ['pip', 'detached'].contains(command)) {
-      if (target != 'player')
+      if (target != 'player') {
         throw const Failure(
             FailureCode.invalidInput, 'Use target:player for pip/detached.');
+      }
       if (!PlaybackWindows.supported || !playback.hasVideo) {
         throw const Failure(FailureCode.unavailable,
             'An internal video and desktop window support are required.');
       }
       if (enabled!) {
         await playback.detach();
-        if (command == 'pip')
+        if (command == 'pip') {
           await playback.windows
               .setPictureInPicture(true, playback.videoAspect);
+        }
       } else if (command == 'pip') {
         await playback.windows.setPictureInPicture(false, playback.videoAspect);
       } else {
@@ -229,9 +231,10 @@ final class NextFeatureOperations implements Capability {
       }
     } else if (target == 'player') {
       final w = playback.windows.nativeWindow;
-      if (w == null || w.isClosed)
+      if (w == null || w.isClosed) {
         throw const Failure(
             FailureCode.unavailable, 'The selected window is not open.');
+      }
       await _detachedCommand(w, command, enabled);
     } else if (target != 'main') {
       throw const Failure(FailureCode.unavailable, '在外部播放器中播放，窗口由该播放器管理。');
@@ -255,9 +258,10 @@ final class NextFeatureOperations implements Capability {
         case 'tray':
           await DesktopExitHandler.instance.minimizeToTray();
         case 'fit_video':
-          if (!playback.hasVideo)
+          if (!playback.hasVideo) {
             throw const Failure(
                 FailureCode.unavailable, 'An internal video is required.');
+          }
           await windowManager.setSize(Size(640, 640 / playback.videoAspect));
         default:
           throw const Failure(

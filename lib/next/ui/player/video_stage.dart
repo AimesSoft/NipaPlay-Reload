@@ -42,6 +42,15 @@ class _NextVideoStageState extends State<NextVideoStage> {
   Widget build(BuildContext context) {
     final session =
         widget.host is SessionPlayback ? widget.host as SessionPlayback : null;
+    if (session?.externalHandoff?.active == true) {
+      return const ColoredBox(
+          color: Color(0xFF000000),
+          child: Center(
+              child: Text('在外部播放器中播放\n请在该播放器中控制播放',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                      color: Color(0xFFFFFFFF), fontSize: 16, height: 1.8))));
+    }
     final scene = ColoredBox(
       color: const Color(0xFF000000),
       child: MouseRegion(
