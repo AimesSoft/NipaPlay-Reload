@@ -1572,6 +1572,13 @@ class MainFlutterWindow: NSWindow {
     do {
       try LabProfile.install()
       if let profile = LabProfile.name { title = "NipaPlay · LAB [\(profile)]" }
+      if LabProfile.active {
+        // A lab instance shares the bundle id with the user's NipaPlay. It
+        // neither saves nor restores window state, so a killed or crashed
+        // experiment never leaves macOS asking the user to reopen windows.
+        UserDefaults.standard.register(defaults: ["ApplePersistenceIgnoreState": true])
+        isRestorable = false
+      }
       if LabProfile.quiet {
         // Experiments run beside the user: an accessory app is never
         // activated at launch and takes neither the Dock nor the menu bar.
