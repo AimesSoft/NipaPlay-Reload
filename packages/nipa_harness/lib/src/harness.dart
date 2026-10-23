@@ -48,8 +48,10 @@ final class InvocationRecord implements JsonEncodable {
       ? null
       : _journalInput(_outputSchema, _rawResult, invocationId, '/result');
 
+  /// Without [withResult], the result is left out and not walked;
+  /// `resultOmitted` then says there was one.
   @override
-  JsonMap toJson() => {
+  JsonMap toJson({bool withResult = true}) => {
         'invocationId': invocationId,
         'actionId': actionId,
         'origin': origin,
@@ -59,7 +61,8 @@ final class InvocationRecord implements JsonEncodable {
         if (failureCode != null) 'failureCode': failureCode!.wireName,
         'startedAt': startedAt,
         'elapsedMs': elapsedMs,
-        if (result != null) 'result': result,
+        if (withResult && result != null) 'result': result,
+        if (!withResult && _rawResult != null) 'resultOmitted': true,
       };
 }
 

@@ -8,6 +8,7 @@ import 'package:nipaplay/security/secret_redactor.dart';
 
 import '../repository_location.dart';
 import '../capabilities/local_operation_titles.dart';
+import 'activity_invocations.dart';
 import '../media/identity_store.dart';
 import '../media/media_service.dart';
 import '../settings/denylist.dart';
@@ -15,6 +16,13 @@ import '../settings/registry.dart';
 import 'change_history.dart';
 import 'query.dart';
 import 'views.dart';
+
+export 'activity_invocations.dart'
+    show
+        ActivityInvocations,
+        activityRecordsInvocation,
+        activityKeepsResult,
+        nextJournal;
 
 const _text = StringSchema(nullable: true);
 const _facts = ObjectSchema({}, additionalProperties: true);
@@ -39,28 +47,6 @@ const activityFields = ObjectSchema({
   'facts': _facts,
 });
 
-/// Whether a journalled invocation is an entry of 动态 (conflicts always are).
-bool activityRecordsInvocation(String action, {required bool conflict}) =>
-    conflict ||
-    action.startsWith('media.sources.') ||
-    action.startsWith('ui.') ||
-    action.startsWith('discover.') ||
-    action.startsWith('accounts.') ||
-    localOperationTitles.containsKey(action);
-
-/// Tells when an invocation just became an entry of 动态.
-final class ActivityInvocationObserver implements InvocationObserver {
-  const ActivityInvocationObserver(this.changed);
-  final void Function() changed;
-  @override
-  void onInvocation(InvocationRecord record) {
-    if (activityRecordsInvocation(record.actionId,
-        conflict: record.failureCode?.wireName == 'conflict')) {
-      changed();
-    }
-  }
-}
-
 String _actor(String? origin) => switch (origin) {
       null => 'unknown',
       'gui' => 'user',
@@ -71,10 +57,10 @@ String _actor(String? origin) => switch (origin) {
 
 final class ActivityView {
   const ActivityView(
-      this.media, this.settings, this.journal, this.location, this.history);
+      this.media, this.settings, this.invocations, this.location, this.history);
   final MediaService media;
   final SettingsRegistry settings;
-  final File journal;
+  final ActivityInvocations invocations;
   final RepositoryLocation location;
   final ChangeHistory history;
 
@@ -90,11 +76,12 @@ final class ActivityView {
           (await read()).rows.skip(offset).take(limit).toList());
 
   /// The sources are read here (the queries themselves run on the
-  /// database's isolate); reading the journal, decoding, redacting and
-  /// ordering every recorded change grow with the history and run on a
-  /// background isolate.
+  /// database's isolate); decoding, redacting and ordering every recorded
+  /// change grow with the history and run on a background isolate. The
+  /// invocations come from next.db too: journal.jsonl is not read.
   Future<StateRows> read() async {
     await history.drain();
+    await invocations.settled();
     final db = media.store.database;
     Future<List<JsonMap>> rows(String table, {String? orderBy}) async => [
           for (final row in await db.query(table, orderBy: orderBy))
@@ -111,7 +98,9 @@ final class ActivityView {
       }
     }
     final sources = _ActivitySources(
-      journal: journal.path,
+      journalPresent: await invocations.journal.exists(),
+      invocations: await rows('activity_invocations'),
+      invocationOrigins: await rows('invocation_origins'),
       ownerDeviceId: media.store.ownerDeviceId,
       remembered: SecretRedactor.remembered(),
       settings: shown,
@@ -166,7 +155,9 @@ final class ActivityView {
 /// What the activity view is composed from, read on the main isolate.
 final class _ActivitySources {
   _ActivitySources(
-      {required this.journal,
+      {required this.journalPresent,
+      required this.invocations,
+      required this.invocationOrigins,
       required this.ownerDeviceId,
       required this.remembered,
       required this.settings,
@@ -185,12 +176,15 @@ final class _ActivitySources {
       required this.bodyChanges,
       required this.repository,
       required this.git});
-  final String journal, ownerDeviceId, repository;
+  final bool journalPresent;
+  final String ownerDeviceId, repository;
   final Map<String, CredentialRef> remembered;
 
   /// Title and schema of each setting shown in activity, by key.
   final Map<String, (String, Schema)> settings;
-  final List<JsonMap> discoveries,
+  final List<JsonMap> invocations,
+      invocationOrigins,
+      discoveries,
       jobs,
       followupEvents,
       origins,
@@ -216,18 +210,16 @@ Future<(List<JsonMap>, List<String>)> _composeOffMain(
   for (final MapEntry(key: value, value: ref) in sources.remembered.entries) {
     SecretRedactor.remember(ref, value);
   }
-  final invocations = <String, JsonMap>{};
+  final invocations = <String, JsonMap>{
+    for (final row in sources.invocations)
+      row['invocation_id'] as String: activityInvocationRecord(row)
+  };
+  final invocationOrigins = <String, String>{
+    for (final row in sources.invocationOrigins)
+      row['invocation_id'] as String: row['origin'] as String
+  };
   final warnings = <String>[];
-  final journal = File(sources.journal);
-  if (journal.existsSync()) {
-    for (final line in journal.readAsLinesSync()) {
-      if (line.isEmpty) continue;
-      final record = decodeMediaJson(line);
-      if (record['invocationId'] case final String id) invocations[id] = record;
-    }
-  } else {
-    warnings.add('activity.journal_absent');
-  }
+  if (!sources.journalPresent) warnings.add('activity.journal_absent');
   final events = <JsonMap>[];
   void add(String id, String at, String type, String title, String source,
       JsonMap facts,
@@ -239,7 +231,8 @@ Future<(List<JsonMap>, List<String>)> _composeOffMain(
       String? jobId,
       String? subjectId,
       String? deviceId}) {
-    origin ??= invocations[invocationId]?['origin'] as String?;
+    origin ??= invocations[invocationId]?['origin'] as String? ??
+        invocationOrigins[invocationId];
     final ids = {...entityIds, if (entityId != null) entityId}.toList();
     events.add({
       'id': id,

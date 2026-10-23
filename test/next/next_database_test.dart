@@ -118,7 +118,7 @@ void main() {
       }
       var db = await openNextDatabase(root, factory: databaseFactoryFfi);
       addTearDown(() => db.close());
-      expect(await db.getVersion(), 19);
+      expect(await db.getVersion(), 20);
       for (final table in [
         'harness_sessions',
         'file_subtitles',
@@ -133,6 +133,9 @@ void main() {
         'followup_events',
         'followup_hook_events',
         'followup_objects',
+        'activity_invocations',
+        'invocation_origins',
+        'activity_backfill',
         'task_origins',
         'jobs',
         'media_entities',

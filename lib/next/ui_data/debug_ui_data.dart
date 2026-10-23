@@ -6,6 +6,7 @@ import 'package:nipaplay/security/credential_vault.dart';
 import 'package:nipaplay/models/watch_history_model.dart';
 import 'package:nipaplay/providers/service_provider.dart';
 
+import '../chat/turn_boundaries.dart';
 import '../harness_redaction.dart';
 import '../next_core.dart';
 import 'ui_data.dart';
@@ -83,10 +84,8 @@ void installDebugUiData(NextCore core) {
                 params['phase'] == 'completed' ? 'completed' : 'inProgress',
             'startedAt': DateTime.now().toUtc().toIso8601String()
           };
-          await File('${core.root.path}/journal.jsonl').writeAsString(
-              '${jsonEncode(row)}\n',
-              mode: FileMode.append,
-              flush: true);
+          await TurnBoundaries.write(
+              File('${core.root.path}/journal.jsonl'), row);
           result = row;
         case 'hook':
           final job =

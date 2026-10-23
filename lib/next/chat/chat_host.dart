@@ -7,6 +7,7 @@ import 'package:nipaplay/security/credential_vault.dart' show CredentialRef;
 import 'package:nipaplay/security/secret_redactor.dart';
 
 import '../agent_endpoint.dart';
+import 'turn_boundaries.dart';
 import '../harness_redaction.dart';
 import 'chat_line_reader.dart';
 import 'dsh_runtime.dart';
@@ -599,21 +600,18 @@ final class ChatHost implements ConversationHistory {
           if (!probe) processes.observe(message, originFor(eventThread), DateTime.now());
         }
         if (!probe && (wireMethod == 'turn/started' || wireMethod == 'turn/completed')) {
-          File('${endpoint.seedRepository.parent.path}/journal.jsonl')
-              .writeAsStringSync(
-                  '${jsonEncode({
-                        'event': 'chat.turn_boundary',
-                        'origin': originFor(eventThread!),
-                        'threadId': wireParams!['threadId'],
-                        'turnId': wireParams['turn']['id'],
-                        'phase': wireMethod == 'turn/started'
-                            ? 'started'
-                            : 'completed',
-                        'status': wireParams['turn']['status'],
-                        'startedAt': DateTime.now().toUtc().toIso8601String(),
-                      })}\n',
-                  mode: FileMode.append,
-                  flush: true);
+          // Known in memory at once (ui.present asks there); appended in
+          // order with the invocations by the journal's one writer.
+          unawaited(TurnBoundaries.write(
+              File('${endpoint.seedRepository.parent.path}/journal.jsonl'), {
+            'event': 'chat.turn_boundary',
+            'origin': originFor(eventThread!),
+            'threadId': wireParams!['threadId'],
+            'turnId': wireParams['turn']['id'],
+            'phase': wireMethod == 'turn/started' ? 'started' : 'completed',
+            'status': wireParams['turn']['status'],
+            'startedAt': DateTime.now().toUtc().toIso8601String(),
+          }).catchError((Object _) {}));
         }
         if (_deltaMethods.contains(wireMethod)) {
           if (wireParams?['delta'] case final String delta) {

@@ -271,6 +271,8 @@ final class HeadlessCore {
       }, Invocation(origin: 'application'));
     };
     final sources = StateSources();
+    final activity =
+        ActivityInvocations(database, File('${root.path}/journal.jsonl'));
     final state = StateCapability([
       ...publicStateViews(
           media: media,
@@ -279,7 +281,7 @@ final class HeadlessCore {
           mesh: mesh,
           sources: sources),
       followups.view,
-      ActivityView(media, settings, File('${root.path}/journal.jsonl'),
+      ActivityView(media, settings, activity,
           HeadlessRepository(repository.path), history).view,
     ]);
     registerSystemViews(state, SystemStatusSources()..hooks = hooks.status);
@@ -329,8 +331,8 @@ final class HeadlessCore {
             sources: downloadSources),
       ]))
     ], observers: [
-      JsonlJournal(File('${root.path}/journal.jsonl'),
-          effects: Effect.values.toSet())
+      nextJournal(File('${root.path}/journal.jsonl')),
+      activity
     ]);
     endpoint = AgentEndpoint(
         harness: harness,

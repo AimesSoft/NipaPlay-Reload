@@ -33,20 +33,20 @@ Future<void> migrateFollowups(Database db) async {
 /// the lists in a snapshot only grow, so neither does it shrink.
 Future<void> migrateFollowupLookups(DatabaseExecutor db) async {
   for (final sql in [
-    'CREATE INDEX followups_state ON followups(state)',
-    "CREATE INDEX followups_job ON followups(json_extract(snapshot, '\$.condition.jobId'))",
-    "CREATE INDEX followups_download_job ON followups(json_extract(snapshot, '\$.condition.downloadJobId'))",
-    "CREATE INDEX followups_trigger_object ON followups(json_extract(snapshot, '\$.trigger.objectId'))",
-    'CREATE INDEX followup_hook_events_object ON followup_hook_events(event, object_id)',
-    'CREATE INDEX followup_hook_events_cursor ON followup_hook_events(event, sequence)',
-    '''CREATE TABLE followup_objects (
+    'CREATE INDEX IF NOT EXISTS followups_state ON followups(state)',
+    "CREATE INDEX IF NOT EXISTS followups_job ON followups(json_extract(snapshot, '\$.condition.jobId'))",
+    "CREATE INDEX IF NOT EXISTS followups_download_job ON followups(json_extract(snapshot, '\$.condition.downloadJobId'))",
+    "CREATE INDEX IF NOT EXISTS followups_trigger_object ON followups(json_extract(snapshot, '\$.trigger.objectId'))",
+    'CREATE INDEX IF NOT EXISTS followup_hook_events_object ON followup_hook_events(event, object_id)',
+    'CREATE INDEX IF NOT EXISTS followup_hook_events_cursor ON followup_hook_events(event, sequence)',
+    '''CREATE TABLE IF NOT EXISTS followup_objects (
       kind TEXT NOT NULL CHECK(kind IN ('download','library','fileId')),
       object TEXT NOT NULL,
       followup_id TEXT NOT NULL REFERENCES followups(id),
       PRIMARY KEY (kind, object, followup_id)
     )''',
     for (final event in ['INSERT', 'UPDATE OF snapshot'])
-      'CREATE TRIGGER followup_objects_${event == 'INSERT' ? 'inserted' : 'updated'} '
+      'CREATE TRIGGER IF NOT EXISTS followup_objects_${event == 'INSERT' ? 'inserted' : 'updated'} '
           'AFTER $event ON followups BEGIN '
           '${_objects('', 'NEW.snapshot', 'NEW.id').map((s) => '$s;').join(' ')} END',
     ..._objects('followups f, ', 'f.snapshot', 'f.id'),

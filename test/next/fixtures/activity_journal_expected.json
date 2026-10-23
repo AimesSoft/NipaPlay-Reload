@@ -1,0 +1,1146 @@
+{
+  "rows": [
+    {
+      "id": "receipt:fixture-job:0",
+      "at": "2026-10-01T09:00:00.000Z",
+      "type": "task.receipt",
+      "title": "Fixture scan · 回执 verified",
+      "actor": "system",
+      "origin": "mesh:peer-mac",
+      "deviceId": "<device>",
+      "originDeviceId": "peer-mac",
+      "invocationId": "inv-fixture-write-1",
+      "entityId": "file-fixture",
+      "entityIds": [
+        "file-fixture"
+      ],
+      "jobId": "fixture-job",
+      "subjectId": null,
+      "source": "job_events",
+      "facts": {
+        "state": "succeeded",
+        "receipt": {
+          "verification": "verified",
+          "details": {
+            "command": null,
+            "shell": null,
+            "repository": null,
+            "stdoutTail": null,
+            "stderrTail": null,
+            "timedOut": null,
+            "stopped": null,
+            "source": null,
+            "completedAt": null,
+            "summary": null,
+            "resultVerification": null,
+            "threadId": null,
+            "turnId": null,
+            "turnStatus": null,
+            "sourceId": null,
+            "provider": null,
+            "connected": null,
+            "loggedIn": null,
+            "method": null,
+            "event": null,
+            "objectId": null,
+            "exitCode": null,
+            "elapsedMs": null,
+            "reason": null,
+            "fileId": null,
+            "fileIds": [
+              "file-fixture"
+            ],
+            "bindingId": null,
+            "snapshotId": null,
+            "cacheKey": null,
+            "infoHash": null,
+            "outputDirectory": null,
+            "downloadComplete": null,
+            "paused": null,
+            "refreshed": null,
+            "identityChanged": null,
+            "userOverridesPreserved": null,
+            "projectionVerified": null,
+            "indexed": null,
+            "files": null
+          },
+          "cancellation": null
+        }
+      }
+    },
+    {
+      "id": "job:fixture-job:0",
+      "at": "2026-10-01T09:00:00.000Z",
+      "type": "task.created",
+      "title": "Fixture scan · succeeded · done",
+      "actor": "agent",
+      "origin": "mesh:peer-mac",
+      "deviceId": "fixture-device",
+      "originDeviceId": "peer-mac",
+      "invocationId": "inv-fixture-write-1",
+      "entityId": "file-fixture",
+      "entityIds": [
+        "file-fixture"
+      ],
+      "jobId": "fixture-job",
+      "subjectId": null,
+      "source": "job_events",
+      "facts": {
+        "kind": "submitted",
+        "command": null,
+        "shell": null,
+        "repository": null,
+        "stdoutTail": null,
+        "stderrTail": null,
+        "elapsedMs": null,
+        "exitCode": null,
+        "source": null,
+        "parentThreadId": null,
+        "threadId": null,
+        "startedAt": null,
+        "currentActivity": null,
+        "jobId": "fixture-job",
+        "type": "library.scan",
+        "title": "Fixture scan",
+        "state": "succeeded",
+        "phase": "done",
+        "revision": 0,
+        "createdAt": "2026-10-01T09:00:00.000Z",
+        "updatedAt": "2026-10-01T09:00:00.000Z",
+        "ownerDeviceId": "fixture-device",
+        "progress": {
+          "completed": 1,
+          "total": null,
+          "unit": "files"
+        },
+        "errorCode": null,
+        "receipt": {
+          "verification": "verified",
+          "details": {
+            "command": null,
+            "shell": null,
+            "repository": null,
+            "stdoutTail": null,
+            "stderrTail": null,
+            "timedOut": null,
+            "stopped": null,
+            "source": null,
+            "completedAt": null,
+            "summary": null,
+            "resultVerification": null,
+            "threadId": null,
+            "turnId": null,
+            "turnStatus": null,
+            "sourceId": null,
+            "provider": null,
+            "connected": null,
+            "loggedIn": null,
+            "method": null,
+            "event": null,
+            "objectId": null,
+            "exitCode": null,
+            "elapsedMs": null,
+            "reason": null,
+            "fileId": null,
+            "fileIds": [
+              "file-fixture"
+            ],
+            "bindingId": null,
+            "snapshotId": null,
+            "cacheKey": null,
+            "infoHash": null,
+            "outputDirectory": null,
+            "downloadComplete": null,
+            "paused": null,
+            "refreshed": null,
+            "identityChanged": null,
+            "userOverridesPreserved": null,
+            "projectionVerified": null,
+            "indexed": null,
+            "files": null
+          },
+          "cancellation": null
+        },
+        "initiatedBy": {
+          "actor": "unknown",
+          "origin": null,
+          "invocationId": null
+        }
+      }
+    },
+    {
+      "id": "invocation:inv-quit",
+      "at": "2026-10-01T08:28:00.037Z",
+      "type": "invocation.result",
+      "title": "退出应用完成",
+      "actor": "user",
+      "origin": "gui",
+      "deviceId": "<device>",
+      "originDeviceId": null,
+      "invocationId": "inv-quit",
+      "entityId": null,
+      "entityIds": [],
+      "jobId": null,
+      "subjectId": null,
+      "source": "journal",
+      "facts": {
+        "action": "app.quit",
+        "status": "completed",
+        "failureCode": null,
+        "provider": null,
+        "sourceId": null,
+        "result": {
+          "scheduled": true
+        }
+      }
+    },
+    {
+      "id": "invocation:inv-dup",
+      "at": "2026-10-01T08:27:00.037Z",
+      "type": "invocation.result",
+      "title": "没有可关闭的窗口",
+      "actor": "agent",
+      "origin": "harness_cli:chat:fixture-session",
+      "deviceId": "<device>",
+      "originDeviceId": null,
+      "invocationId": "inv-dup",
+      "entityId": null,
+      "entityIds": [],
+      "jobId": null,
+      "subjectId": null,
+      "source": "journal",
+      "facts": {
+        "action": "ui.close",
+        "status": "completed",
+        "failureCode": null,
+        "provider": null,
+        "sourceId": null,
+        "result": {
+          "closed": false
+        }
+      }
+    },
+    {
+      "id": "invocation:inv-query-conflict",
+      "at": "2026-10-01T08:22:00.037Z",
+      "type": "invocation.conflict",
+      "title": "db.query · failed · 冲突",
+      "actor": "hook",
+      "origin": "hook:job-7",
+      "deviceId": "<device>",
+      "originDeviceId": null,
+      "invocationId": "inv-query-conflict",
+      "entityId": null,
+      "entityIds": [],
+      "jobId": null,
+      "subjectId": null,
+      "source": "journal",
+      "facts": {
+        "action": "db.query",
+        "status": "failed",
+        "failureCode": "conflict",
+        "provider": null,
+        "sourceId": null,
+        "attempts": [],
+        "result": null
+      }
+    },
+    {
+      "id": "invocation:inv-bind-conflict",
+      "at": "2026-10-01T08:21:00.037Z",
+      "type": "identity.conflict",
+      "title": "media.identity.bind_batch · failed · 冲突",
+      "actor": "agent",
+      "origin": "harness_cli:chat:fixture-session",
+      "deviceId": "<device>",
+      "originDeviceId": null,
+      "invocationId": "inv-bind-conflict",
+      "entityId": "work-1",
+      "entityIds": [
+        "work-1",
+        "file-2"
+      ],
+      "jobId": null,
+      "subjectId": null,
+      "source": "journal",
+      "facts": {
+        "action": "media.identity.bind_batch",
+        "status": "failed",
+        "failureCode": "conflict",
+        "provider": null,
+        "sourceId": null,
+        "attempts": [
+          {
+            "entityId": "work-1",
+            "kind": "work",
+            "ref": {
+              "provider": "tmdb",
+              "id": "1"
+            },
+            "reason": "title"
+          },
+          {
+            "entityId": "file-2",
+            "workRef": {
+              "provider": "tmdb",
+              "id": "2"
+            },
+            "episodeRefs": [
+              {
+                "season": 1,
+                "episode": 2
+              }
+            ]
+          },
+          {
+            "releaseRef": "r-1"
+          }
+        ],
+        "result": null
+      }
+    },
+    {
+      "id": "invocation:inv-roots-add",
+      "at": "2026-10-01T08:20:00.037Z",
+      "type": "invocation.result",
+      "title": "添加扫描目录等待选择",
+      "actor": "agent",
+      "origin": "harness_cli:chat:fixture-session",
+      "deviceId": "<device>",
+      "originDeviceId": null,
+      "invocationId": "inv-roots-add",
+      "entityId": null,
+      "entityIds": [],
+      "jobId": null,
+      "subjectId": null,
+      "source": "journal",
+      "facts": {
+        "action": "media.library.roots.add",
+        "status": "needs_decision",
+        "failureCode": null,
+        "provider": null,
+        "sourceId": null,
+        "result": null
+      }
+    },
+    {
+      "id": "invocation:inv-danmaku-send-2",
+      "at": "2026-10-01T08:19:00.037Z",
+      "type": "invocation.result",
+      "title": "发送弹幕失败",
+      "actor": "agent",
+      "origin": "harness_cli:chat:fixture-session",
+      "deviceId": "<device>",
+      "originDeviceId": null,
+      "invocationId": "inv-danmaku-send-2",
+      "entityId": null,
+      "entityIds": [],
+      "jobId": null,
+      "subjectId": null,
+      "source": "journal",
+      "facts": {
+        "action": "danmaku.send",
+        "status": "failed",
+        "failureCode": "invalid_input",
+        "provider": null,
+        "sourceId": null,
+        "result": null
+      }
+    },
+    {
+      "id": "invocation:inv-danmaku-send",
+      "at": "2026-10-01T08:18:00.037Z",
+      "type": "invocation.result",
+      "title": "发送弹幕完成",
+      "actor": "agent",
+      "origin": "harness_cli:chat:fixture-session",
+      "deviceId": "<device>",
+      "originDeviceId": null,
+      "invocationId": "inv-danmaku-send",
+      "entityId": "episode-3",
+      "entityIds": [
+        "episode-3"
+      ],
+      "jobId": null,
+      "subjectId": null,
+      "source": "journal",
+      "facts": {
+        "action": "danmaku.send",
+        "status": "completed",
+        "failureCode": null,
+        "provider": null,
+        "sourceId": null,
+        "result": {
+          "sent": true
+        }
+      }
+    },
+    {
+      "id": "invocation:inv-account-status",
+      "at": "2026-10-01T08:17:00.037Z",
+      "type": "invocation.result",
+      "title": "accounts.status · completed",
+      "actor": "system",
+      "origin": "application",
+      "deviceId": "<device>",
+      "originDeviceId": null,
+      "invocationId": "inv-account-status",
+      "entityId": null,
+      "entityIds": [],
+      "jobId": null,
+      "subjectId": "dandanplay",
+      "source": "journal",
+      "facts": {
+        "action": "accounts.status",
+        "status": "completed",
+        "failureCode": null,
+        "provider": "dandanplay",
+        "sourceId": null,
+        "result": {
+          "loggedIn": false,
+          "session": {
+            "credentialRef": {
+              "namespace": "invocation",
+              "key": "inv-account-status/result/session"
+            }
+          }
+        }
+      }
+    },
+    {
+      "id": "invocation:inv-login-1",
+      "at": "2026-10-01T08:16:00.037Z",
+      "type": "invocation.result",
+      "title": "accounts.login · completed",
+      "actor": "agent",
+      "origin": "harness_cli:chat:fixture-session",
+      "deviceId": "<device>",
+      "originDeviceId": null,
+      "invocationId": "inv-login-1",
+      "entityId": null,
+      "entityIds": [],
+      "jobId": null,
+      "subjectId": "bangumi",
+      "source": "journal",
+      "facts": {
+        "action": "accounts.login",
+        "status": "completed",
+        "failureCode": null,
+        "provider": "bangumi",
+        "sourceId": null,
+        "result": {
+          "loggedIn": true,
+          "user": "fixture"
+        }
+      }
+    },
+    {
+      "id": "invocation:inv-source-remove",
+      "at": "2026-10-01T08:15:00.037Z",
+      "type": "invocation.result",
+      "title": "media.sources.remove · completed",
+      "actor": "agent",
+      "origin": "mesh:peer-mac",
+      "deviceId": "<device>",
+      "originDeviceId": "peer-mac",
+      "invocationId": "inv-source-remove",
+      "entityId": null,
+      "entityIds": [],
+      "jobId": null,
+      "subjectId": "src-0",
+      "source": "journal",
+      "facts": {
+        "action": "media.sources.remove",
+        "status": "completed",
+        "failureCode": null,
+        "provider": null,
+        "sourceId": "src-0",
+        "result": {
+          "removed": true
+        }
+      }
+    },
+    {
+      "id": "invocation:inv-source-add",
+      "at": "2026-10-01T08:14:00.037Z",
+      "type": "invocation.result",
+      "title": "media.sources.add · completed",
+      "actor": "agent",
+      "origin": "harness_cli:chat:fixture-session",
+      "deviceId": "<device>",
+      "originDeviceId": null,
+      "invocationId": "inv-source-add",
+      "entityId": null,
+      "entityIds": [],
+      "jobId": null,
+      "subjectId": "jellyfin",
+      "source": "journal",
+      "facts": {
+        "action": "media.sources.add",
+        "status": "completed",
+        "failureCode": null,
+        "provider": "jellyfin",
+        "sourceId": null,
+        "result": {
+          "sourceId": "src-1",
+          "connectionState": "connected"
+        }
+      }
+    },
+    {
+      "id": "invocation:inv-search-1",
+      "at": "2026-10-01T08:13:00.037Z",
+      "type": "invocation.result",
+      "title": "media.sources.search · completed",
+      "actor": "agent",
+      "origin": "harness_cli:chat:fixture-session",
+      "deviceId": "<device>",
+      "originDeviceId": null,
+      "invocationId": "inv-search-1",
+      "entityId": null,
+      "entityIds": [],
+      "jobId": null,
+      "subjectId": null,
+      "source": "journal",
+      "facts": {
+        "action": "media.sources.search",
+        "status": "completed",
+        "failureCode": null,
+        "provider": null,
+        "sourceId": null,
+        "result": {
+          "sources": [
+            {
+              "sourceId": "src-1",
+              "entries": [
+                {
+                  "id": "hit-0",
+                  "title": "作品 hit 0",
+                  "year": 2000,
+                  "score": 0.0,
+                  "tags": [
+                    "tag-0",
+                    "tag-0"
+                  ],
+                  "poster": {
+                    "width": 300,
+                    "height": 450,
+                    "cached": true
+                  }
+                },
+                {
+                  "id": "hit-1",
+                  "title": "作品 hit 1",
+                  "year": 2001,
+                  "score": 0.7,
+                  "tags": [
+                    "tag-1",
+                    "tag-1"
+                  ],
+                  "poster": {
+                    "width": 300,
+                    "height": 450,
+                    "cached": false
+                  }
+                },
+                {
+                  "id": "hit-2",
+                  "title": "作品 hit 2",
+                  "year": 2002,
+                  "score": 1.4,
+                  "tags": [
+                    "tag-2",
+                    "tag-2"
+                  ],
+                  "poster": {
+                    "width": 300,
+                    "height": 450,
+                    "cached": true
+                  }
+                }
+              ],
+              "total": 3
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "invocation:inv-recommend-3",
+      "at": "2026-10-01T08:12:00.037Z",
+      "type": "invocation.result",
+      "title": "推荐暂时无法更新",
+      "actor": "agent",
+      "origin": "harness_cli:chat:fixture-session",
+      "deviceId": "<device>",
+      "originDeviceId": null,
+      "invocationId": "inv-recommend-3",
+      "entityId": null,
+      "entityIds": [],
+      "jobId": null,
+      "subjectId": null,
+      "source": "journal",
+      "facts": {
+        "action": "discover.recommendations",
+        "status": "failed",
+        "failureCode": "unavailable",
+        "provider": null,
+        "sourceId": null,
+        "result": null
+      }
+    },
+    {
+      "id": "invocation:inv-recommend-2",
+      "at": "2026-10-01T08:11:00.037Z",
+      "type": "invocation.result",
+      "title": "发现内容已载入",
+      "actor": "agent",
+      "origin": "harness_cli:chat:fixture-session",
+      "deviceId": "<device>",
+      "originDeviceId": null,
+      "invocationId": "inv-recommend-2",
+      "entityId": null,
+      "entityIds": [],
+      "jobId": null,
+      "subjectId": null,
+      "source": "journal",
+      "facts": {
+        "action": "discover.recommendations",
+        "status": "completed",
+        "failureCode": null,
+        "provider": null,
+        "sourceId": null,
+        "result": {
+          "changed": false,
+          "items": [
+            {
+              "id": "rec2-0",
+              "title": "作品 rec2 0",
+              "year": 2000,
+              "score": 0.0,
+              "tags": [
+                "tag-0",
+                "tag-0"
+              ],
+              "poster": {
+                "width": 300,
+                "height": 450,
+                "cached": true
+              }
+            },
+            {
+              "id": "rec2-1",
+              "title": "作品 rec2 1",
+              "year": 2001,
+              "score": 0.7,
+              "tags": [
+                "tag-1",
+                "tag-1"
+              ],
+              "poster": {
+                "width": 300,
+                "height": 450,
+                "cached": false
+              }
+            },
+            {
+              "id": "rec2-2",
+              "title": "作品 rec2 2",
+              "year": 2002,
+              "score": 1.4,
+              "tags": [
+                "tag-2",
+                "tag-2"
+              ],
+              "poster": {
+                "width": 300,
+                "height": 450,
+                "cached": true
+              }
+            },
+            {
+              "id": "rec2-3",
+              "title": "作品 rec2 3",
+              "year": 2003,
+              "score": 2.1,
+              "tags": [
+                "tag-3",
+                "tag-0"
+              ],
+              "poster": {
+                "width": 300,
+                "height": 450,
+                "cached": false
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "invocation:inv-recommend-1",
+      "at": "2026-10-01T08:10:00.037Z",
+      "type": "invocation.result",
+      "title": "推荐已更新",
+      "actor": "agent",
+      "origin": "harness_cli:chat:fixture-session",
+      "deviceId": "<device>",
+      "originDeviceId": null,
+      "invocationId": "inv-recommend-1",
+      "entityId": null,
+      "entityIds": [],
+      "jobId": null,
+      "subjectId": null,
+      "source": "journal",
+      "facts": {
+        "action": "discover.recommendations",
+        "status": "completed",
+        "failureCode": null,
+        "provider": null,
+        "sourceId": null,
+        "result": {
+          "changed": true,
+          "items": [
+            {
+              "id": "rec-0",
+              "title": "作品 rec 0",
+              "year": 2000,
+              "score": 0.0,
+              "tags": [
+                "tag-0",
+                "tag-0"
+              ],
+              "poster": {
+                "width": 300,
+                "height": 450,
+                "cached": true
+              }
+            },
+            {
+              "id": "rec-1",
+              "title": "作品 rec 1",
+              "year": 2001,
+              "score": 0.7,
+              "tags": [
+                "tag-1",
+                "tag-1"
+              ],
+              "poster": {
+                "width": 300,
+                "height": 450,
+                "cached": false
+              }
+            },
+            {
+              "id": "rec-2",
+              "title": "作品 rec 2",
+              "year": 2002,
+              "score": 1.4,
+              "tags": [
+                "tag-2",
+                "tag-2"
+              ],
+              "poster": {
+                "width": 300,
+                "height": 450,
+                "cached": true
+              }
+            },
+            {
+              "id": "rec-3",
+              "title": "作品 rec 3",
+              "year": 2003,
+              "score": 2.1,
+              "tags": [
+                "tag-3",
+                "tag-0"
+              ],
+              "poster": {
+                "width": 300,
+                "height": 450,
+                "cached": false
+              }
+            },
+            {
+              "id": "rec-4",
+              "title": "作品 rec 4",
+              "year": 2004,
+              "score": 2.8,
+              "tags": [
+                "tag-4",
+                "tag-1"
+              ],
+              "poster": {
+                "width": 300,
+                "height": 450,
+                "cached": true
+              }
+            },
+            {
+              "id": "rec-5",
+              "title": "作品 rec 5",
+              "year": 2005,
+              "score": 3.5,
+              "tags": [
+                "tag-0",
+                "tag-2"
+              ],
+              "poster": {
+                "width": 300,
+                "height": 450,
+                "cached": false
+              }
+            },
+            {
+              "id": "rec-6",
+              "title": "作品 rec 6",
+              "year": 2006,
+              "score": 4.2,
+              "tags": [
+                "tag-1",
+                "tag-0"
+              ],
+              "poster": {
+                "width": 300,
+                "height": 450,
+                "cached": true
+              }
+            },
+            {
+              "id": "rec-7",
+              "title": "作品 rec 7",
+              "year": 2007,
+              "score": 4.9,
+              "tags": [
+                "tag-2",
+                "tag-1"
+              ],
+              "poster": {
+                "width": 300,
+                "height": 450,
+                "cached": false
+              }
+            },
+            {
+              "id": "rec-8",
+              "title": "作品 rec 8",
+              "year": 2008,
+              "score": 5.6,
+              "tags": [
+                "tag-3",
+                "tag-2"
+              ],
+              "poster": {
+                "width": 300,
+                "height": 450,
+                "cached": true
+              }
+            },
+            {
+              "id": "rec-9",
+              "title": "作品 rec 9",
+              "year": 2009,
+              "score": 6.3,
+              "tags": [
+                "tag-4",
+                "tag-0"
+              ],
+              "poster": {
+                "width": 300,
+                "height": 450,
+                "cached": false
+              }
+            },
+            {
+              "id": "rec-10",
+              "title": "作品 rec 10",
+              "year": 2010,
+              "score": 7.0,
+              "tags": [
+                "tag-0",
+                "tag-1"
+              ],
+              "poster": {
+                "width": 300,
+                "height": 450,
+                "cached": true
+              }
+            },
+            {
+              "id": "rec-11",
+              "title": "作品 rec 11",
+              "year": 2011,
+              "score": 7.7,
+              "tags": [
+                "tag-1",
+                "tag-2"
+              ],
+              "poster": {
+                "width": 300,
+                "height": 450,
+                "cached": false
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "invocation:inv-refresh-1",
+      "at": "2026-10-01T08:09:00.037Z",
+      "type": "invocation.result",
+      "title": "首页已刷新",
+      "actor": "agent",
+      "origin": "harness_cli:chat:fixture-session",
+      "deviceId": "<device>",
+      "originDeviceId": null,
+      "invocationId": "inv-refresh-1",
+      "entityId": null,
+      "entityIds": [],
+      "jobId": null,
+      "subjectId": null,
+      "source": "journal",
+      "facts": {
+        "action": "discover.refresh",
+        "status": "completed",
+        "failureCode": null,
+        "provider": null,
+        "sourceId": null,
+        "result": {
+          "refreshed": true
+        }
+      }
+    },
+    {
+      "id": "invocation:inv-close-1",
+      "at": "2026-10-01T08:08:00.037Z",
+      "type": "invocation.result",
+      "title": "窗口已关闭",
+      "actor": "agent",
+      "origin": "harness_cli:chat:fixture-session",
+      "deviceId": "<device>",
+      "originDeviceId": null,
+      "invocationId": "inv-close-1",
+      "entityId": null,
+      "entityIds": [],
+      "jobId": null,
+      "subjectId": null,
+      "source": "journal",
+      "facts": {
+        "action": "ui.close",
+        "status": "completed",
+        "failureCode": null,
+        "provider": null,
+        "sourceId": null,
+        "result": {
+          "closed": true
+        }
+      }
+    },
+    {
+      "id": "invocation:inv-open-5",
+      "at": "2026-10-01T08:07:00.037Z",
+      "type": "invocation.result",
+      "title": "界面已打开",
+      "actor": "user",
+      "origin": "gui",
+      "deviceId": "<device>",
+      "originDeviceId": null,
+      "invocationId": "inv-open-5",
+      "entityId": "work-1",
+      "entityIds": [
+        "work-1"
+      ],
+      "jobId": null,
+      "subjectId": null,
+      "source": "journal",
+      "facts": {
+        "action": "ui.open",
+        "status": "completed",
+        "failureCode": null,
+        "provider": null,
+        "sourceId": null,
+        "result": {
+          "opened": true,
+          "actual": {
+            "kind": "work",
+            "entityId": "work-1"
+          }
+        }
+      }
+    },
+    {
+      "id": "invocation:inv-open-4",
+      "at": "2026-10-01T08:06:00.037Z",
+      "type": "invocation.result",
+      "title": "已请求打开文件夹",
+      "actor": "agent",
+      "origin": "harness_cli:chat:fixture-session",
+      "deviceId": "<device>",
+      "originDeviceId": null,
+      "invocationId": "inv-open-4",
+      "entityId": null,
+      "entityIds": [],
+      "jobId": null,
+      "subjectId": null,
+      "source": "journal",
+      "facts": {
+        "action": "ui.open",
+        "status": "completed",
+        "failureCode": null,
+        "provider": null,
+        "sourceId": null,
+        "result": {
+          "opened": true,
+          "actual": {
+            "kind": "folder_request",
+            "path": "/media"
+          }
+        }
+      }
+    },
+    {
+      "id": "invocation:inv-open-3",
+      "at": "2026-10-01T08:05:00.037Z",
+      "type": "invocation.result",
+      "title": "暂时无法打开界面",
+      "actor": "agent",
+      "origin": "harness_cli:chat:fixture-session",
+      "deviceId": "<device>",
+      "originDeviceId": null,
+      "invocationId": "inv-open-3",
+      "entityId": "work-9",
+      "entityIds": [
+        "work-9"
+      ],
+      "jobId": null,
+      "subjectId": null,
+      "source": "journal",
+      "facts": {
+        "action": "ui.open",
+        "status": "completed",
+        "failureCode": null,
+        "provider": null,
+        "sourceId": null,
+        "result": {
+          "opened": false
+        }
+      }
+    },
+    {
+      "id": "invocation:inv-open-2",
+      "at": "2026-10-01T08:04:00.037Z",
+      "type": "invocation.result",
+      "title": "已请求打开网页",
+      "actor": "agent",
+      "origin": "harness_cli:chat:fixture-session",
+      "deviceId": "<device>",
+      "originDeviceId": null,
+      "invocationId": "inv-open-2",
+      "entityId": null,
+      "entityIds": [],
+      "jobId": null,
+      "subjectId": null,
+      "source": "journal",
+      "facts": {
+        "action": "ui.open",
+        "status": "completed",
+        "failureCode": null,
+        "provider": null,
+        "sourceId": null,
+        "result": {
+          "opened": true,
+          "actual": {
+            "kind": "webpage_request"
+          }
+        }
+      }
+    },
+    {
+      "id": "invocation:inv-open-1",
+      "at": "2026-10-01T08:03:00.037Z",
+      "type": "invocation.result",
+      "title": "已发起视频选择",
+      "actor": "agent",
+      "origin": "harness_cli:chat:fixture-session",
+      "deviceId": "<device>",
+      "originDeviceId": null,
+      "invocationId": "inv-open-1",
+      "entityId": null,
+      "entityIds": [],
+      "jobId": null,
+      "subjectId": null,
+      "source": "journal",
+      "facts": {
+        "action": "ui.open",
+        "status": "completed",
+        "failureCode": null,
+        "provider": null,
+        "sourceId": null,
+        "result": {
+          "opened": true,
+          "actual": {
+            "kind": "native_picker_request"
+          }
+        }
+      }
+    },
+    {
+      "id": "invocation:inv-capture-2",
+      "at": "2026-10-01T08:02:00.037Z",
+      "type": "invocation.result",
+      "title": "界面暂时无法截取",
+      "actor": "agent",
+      "origin": "harness_cli:chat:fixture-session",
+      "deviceId": "<device>",
+      "originDeviceId": null,
+      "invocationId": "inv-capture-2",
+      "entityId": null,
+      "entityIds": [],
+      "jobId": null,
+      "subjectId": null,
+      "source": "journal",
+      "facts": {
+        "action": "ui.capture",
+        "status": "completed",
+        "failureCode": null,
+        "provider": null,
+        "sourceId": null,
+        "result": {
+          "reason": "no window"
+        }
+      }
+    },
+    {
+      "id": "invocation:inv-capture-1",
+      "at": "2026-10-01T08:01:00.037Z",
+      "type": "invocation.result",
+      "title": "界面已截取",
+      "actor": "agent",
+      "origin": "harness_cli:chat:fixture-session",
+      "deviceId": "<device>",
+      "originDeviceId": null,
+      "invocationId": "inv-capture-1",
+      "entityId": null,
+      "entityIds": [],
+      "jobId": null,
+      "subjectId": null,
+      "source": "journal",
+      "facts": {
+        "action": "ui.capture",
+        "status": "completed",
+        "failureCode": null,
+        "provider": null,
+        "sourceId": null,
+        "result": {
+          "path": "/tmp/capture-1.png",
+          "width": 1280,
+          "height": 800
+        }
+      }
+    }
+  ],
+  "warnings": [
+    "activity.harness_no_repository"
+  ]
+}

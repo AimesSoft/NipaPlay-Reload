@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'dart:isolate';
 import 'dart:typed_data';
 
 import 'package:http/http.dart' as http;
@@ -22,6 +23,7 @@ import '../subtitles/facts.dart';
 import 'ui_data.dart';
 import 'library_service.dart';
 import '../mesh/library.dart';
+import '../chat/turn_boundaries.dart';
 
 /// Application-owned projections. Stored presentations contain no task state.
 final class UiDataService implements NextUiData, NextNowPlaying {
@@ -639,13 +641,11 @@ final class UiDataService implements NextUiData, NextNowPlaying {
       throw const Failure(FailureCode.invalidInput,
           'ui.present requires NIPAPLAY_CHAT from the current embedded chat; do not supply threadId or turnId.');
     }
+    // The chat host keeps the current turn in memory; a boundary it did not
+    // write is looked for in the journal, off the main isolate.
     final journal = File('${mediaRoot.path}/journal.jsonl');
-    final boundary = await lastJournalRow(
-        journal,
-        'chat.turn_boundary',
-        (row) =>
-            row['event'] == 'chat.turn_boundary' &&
-            row['origin'] == invocation.origin);
+    final boundary = TurnBoundaries.latest(journal, invocation.origin) ??
+        await lastTurnBoundary(journal, invocation.origin);
     if (boundary == null || boundary['phase'] != 'started') {
       throw const Failure(FailureCode.invalidInput,
           'NIPAPLAY_CHAT has no active turn; call ui.present inside that chat turn.');
@@ -1217,6 +1217,15 @@ void validateViewerText(String value) {
         'Viewer text must be one natural short sentence (1–160 characters), without IDs, URLs, paths or debugging details. Put IDs only in reference fields.');
   }
 }
+
+/// The last `chat.turn_boundary` of [origin] in [journal], by
+/// [lastJournalRow] on a background isolate.
+Future<JsonMap?> lastTurnBoundary(File journal, String origin) =>
+    Isolate.run(() => lastJournalRow(
+        journal,
+        'chat.turn_boundary',
+        (row) =>
+            row['event'] == 'chat.turn_boundary' && row['origin'] == origin));
 
 /// The last row of a JSONL [journal] that [match]es, read from the end of the
 /// file: only the lines written after it are read, not the whole journal.

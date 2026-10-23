@@ -18,6 +18,7 @@ import 'chat/session_store.dart';
 import 'media/file_identity_merge.dart';
 import 'subtitles/migration.dart';
 import 'db/migration.dart';
+import 'state/activity_invocations.dart';
 
 // Each position is a released database version. Append new domain migrations.
 const _migrations = [
@@ -40,6 +41,7 @@ const _migrations = [
   migrateLibraryIndex,
   migrateDbCommits,
   migrateFollowupLookups,
+  migrateActivityInvocations,
 ];
 
 Future<void> _migrate(Database db, int oldVersion, int newVersion) async {

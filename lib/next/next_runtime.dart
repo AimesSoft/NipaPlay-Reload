@@ -458,9 +458,8 @@ final class NextRuntime extends ChangeNotifier {
             core.media.service.store),
         ...core.capabilities
       ],
-      observers: [JsonlJournal(File('${root.path}/journal.jsonl'),
-        effects: Effect.values.toSet()),
-        ActivityInvocationObserver(core.activityChanged)],
+      observers: [nextJournal(File('${root.path}/journal.jsonl')),
+        core.activityInvocations],
     );
     core.attachHarness(_harness);
     try {

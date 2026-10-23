@@ -113,14 +113,11 @@ final class AgentEndpoint {
       await writeEndpointFile(credentialFile,
           running.url.replace(path: '/harness'), endpoint.token);
       final journal = File('${seedRepository.parent.path}/journal.jsonl');
-      await journal.writeAsString(
-          '${jsonEncode({
-                'event': 'chat.endpoint_token_rotated',
-                'origin': 'chat_host',
-                'startedAt': DateTime.now().toUtc().toIso8601String(),
-              })}\n',
-          mode: FileMode.append,
-          flush: true);
+      await JournalAppender.of(journal).appendText('${jsonEncode({
+            'event': 'chat.endpoint_token_rotated',
+            'origin': 'chat_host',
+            'startedAt': DateTime.now().toUtc().toIso8601String(),
+          })}\n');
     });
     return _rotation;
   }

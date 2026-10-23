@@ -142,6 +142,7 @@ final class NextCore {
   final StateSources stateSources = StateSources();
   late final StateCapability state;
   late final ChangeHistory changeHistory;
+  late final ActivityInvocations activityInvocations;
   late final Followups followups;
   late final SessionStore sessions;
   late final HarnessMemory memory;
@@ -186,6 +187,9 @@ final class NextCore {
     final jobs = SqliteJobStore.fromDatabase(database);
     changeHistory = ChangeHistory(database);
     BodyChanges.attached = changeHistory;
+    activityInvocations = ActivityInvocations(
+        database, File('${root.path}/journal.jsonl'),
+        changed: activityChanged);
     media = await MediaRuntime.create(root, jobs.database, deviceId,
         classic: classic,
         authorizedRoots: authorizedRoots,
@@ -333,7 +337,7 @@ final class NextCore {
         danmaku: danmaku.service,
         mesh: mesh,
         sources: stateSources), ActivityView(media.service, settings,
-            File('${root.path}/journal.jsonl'), harnessLocation,
+            activityInvocations, harnessLocation,
             changeHistory).view, followups.view]);
     uiData = UiDataService(media.service, engine, state, stateSources, root, credentialVault);
     uiData.subtitles = subtitles;
@@ -455,6 +459,9 @@ final class NextCore {
     subtitles.start();
     mesh.attach(Harness(capabilities));
     await mesh.startConfigured();
+    // Once, after an upgrade: the old journal into 动态's tables, off the
+    // main isolate and after startup.
+    unawaited(activityInvocations.backfill());
   }
 
   void attachHarness(Harness harness) => mesh.attach(harness);
@@ -488,6 +495,7 @@ final class NextCore {
     changeHistory.onRecorded = null;
     if (identical(BodyChanges.attached, changeHistory)) BodyChanges.attached = null;
     await changeHistory.drain();
+    await activityInvocations.close();
     await followups.close();
     followups.eventCommitted = null;
     await events.committed.close();

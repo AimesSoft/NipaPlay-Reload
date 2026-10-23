@@ -4,6 +4,7 @@ import 'dart:ui' as ui;
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:nipa_harness/nipa_harness.dart';
+import 'package:nipaplay/next/chat/turn_boundaries.dart';
 import 'package:nipaplay/next/media/identity_store.dart';
 import 'package:nipaplay/next/media/media_service.dart';
 import 'package:nipaplay/next/state/query.dart';
@@ -255,6 +256,33 @@ void main() {
         await store.database.query('body_changes',
             where: 'type=?', whereArgs: ['ui.shelf_removed']),
         hasLength(1));
+  });
+
+  test('ui.present takes the current turn from the chat host, not the journal',
+      () async {
+    final journal = File('${root.path}/journal.jsonl');
+    Map<String, Object?> boundary(String phase) => {
+          'event': 'chat.turn_boundary',
+          'origin': 'harness_cli:chat:memory',
+          'threadId': 'thread-m',
+          'turnId': 'turn-m',
+          'phase': phase,
+        };
+    Future<Outcome> present() => harness.invokeJson(
+        'ui.present',
+        {
+          'cards': [
+            {'kind': 'work', 'workId': 'w1'}
+          ]
+        },
+        Invocation(origin: 'harness_cli:chat:memory'));
+    await TurnBoundaries.write(journal, boundary('started'));
+    await journal.delete();
+    final shown = await present();
+    expect(shown, isA<Completed>());
+    expect((shown as Completed).value.toJson()['turnId'], 'turn-m');
+    await TurnBoundaries.write(journal, boundary('completed'));
+    expect(await present(), isA<Failed>());
   });
 
   test('card batches reject missing references and supplied state atomically',
