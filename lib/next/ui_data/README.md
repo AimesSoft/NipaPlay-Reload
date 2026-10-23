@@ -293,6 +293,6 @@ TMDB 的图片 URL、语言选择、评分、类型、集数、制作公司和�
 
 SQLite v12 增加 `media_file_aliases`，事务合并历史的通用 remote 文件和唯一来源范围下的同 URL 文件；保留旧 ID、观察、回执与合并前的行存档。运行时登记也执行相同合并，重复执行不再改变结果。不同服务器范围继续独立。
 
-SQLite v11 只追加 `ui_presentations / ui_shelves / ui_cache`。任务提交后即时通知 changes；其余数据库和 Classic 内存历史每 250ms 观察一次（同连接 total_changes、其他连接 data_version、现有历史供应者），变动后通知。通知可能合并同一观察窗口或因缓存落盘多一次，不承诺每条领域事件一条通知。后台任务变化与轻量缓存投影无网络请求；首次作品/剧集读取可能等待图片下载。
+SQLite v11 只追加 `ui_presentations / ui_shelves / ui_cache`。任务提交后即时通知 changes；其余变化由两个整数告知：数据库的 change_epochs 计数（片库与界面所依据的表上的触发器，任何连接的写入都会推动它，每 250ms 读一次），和 Classic 历史/日历的 StateSources.changed 推送（0 点另有一个定时器）；变动后通知。通知可能合并同一观察窗口或因缓存落盘多一次，不承诺每条领域事件一条通知。后台任务变化与轻量缓存投影无网络请求；首次作品/剧集读取可能等待图片下载。
 
 Debug 且临时 profile 才注册 `ext.nipaplay.uiData`，供实验读同一界面接口、采样流、模拟会话边界、触发真实 hook 和通过正常保险库写入固定测试文件。该入口不在 Agent 能力目录，不在生产启用。

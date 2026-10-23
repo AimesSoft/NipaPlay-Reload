@@ -1,7 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
-import 'dart:isolate';
 import 'dart:math' as math;
 import 'package:crypto/crypto.dart';
 import 'package:nipa_harness/nipa_harness.dart';
@@ -22,12 +21,17 @@ import 'files.dart';
 import '../util/slicer.dart';
 import '../media/library_reads.dart';
 
+final class _DigestSink implements Sink<Digest> {
+  late Digest value;
+  @override
+  void add(Digest data) => value = data;
+  @override
+  void close() {}
+}
+
 String _hash(Object value) =>
     sha256.convert(utf8.encode(jsonEncode(value))).toString();
 
-/// The same digest, computed on a background isolate: the catalogue grows
-/// with the library, and encoding and hashing it is not the main isolate's.
-Future<String> _hashOffMain(Object value) => Isolate.run(() => _hash(value));
 bool _newer(JsonMap a, JsonMap b) {
   final compared = DateTime.parse(a['at'] as String)
       .compareTo(DateTime.parse(b['at'] as String));
@@ -122,13 +126,67 @@ final class MeshLibrary {
   }
 
   Future<void> _save(String id, Object payload) async {
-    final encoded = jsonEncode(payload), fingerprint = _hash(payload);
+    final (encoded, fingerprint) = await _encodeSliced(payload);
     final old = await db.query('ui_cache',
         columns: ['fingerprint'], where: 'id=?', whereArgs: [id]);
     if (old.isNotEmpty && old.single['fingerprint'] == fingerprint) return;
     await db.insert(
         'ui_cache', {'id': id, 'fingerprint': fingerprint, 'payload': encoded},
         conflictAlgorithm: ConflictAlgorithm.replace);
+  }
+
+  /// `jsonEncode(payload)` and its digest, worked out in pieces: a map's
+  /// large values (a peer's records, every historical ID) are encoded one
+  /// item at a time with the event loop let in between.
+  Future<(String, String)> _encodeSliced(Object payload) async {
+    final slice = Slicer();
+    final out = StringBuffer();
+    final digest = _DigestSink();
+    final hash = sha256.startChunkedConversion(digest);
+    Future<void> put(String text) async {
+      out.write(text);
+      hash.add(utf8.encode(text));
+      await slice();
+    }
+
+    Future<void> items(Iterable<Object?> list) async {
+      await put('[');
+      var first = true;
+      for (final item in list) {
+        await put('${first ? '' : ','}${jsonEncode(item)}');
+        first = false;
+      }
+      await put(']');
+    }
+
+    if (payload is Map) {
+      await put('{');
+      var first = true;
+      for (final entry in payload.entries) {
+        await put('${first ? '' : ','}${jsonEncode(entry.key)}:');
+        first = false;
+        final value = entry.value;
+        if (value is List && value.length > 32) {
+          await items(value);
+        } else if (value is Map && value.length > 32) {
+          await put('{');
+          var firstItem = true;
+          for (final item in value.entries) {
+            await put(
+                '${firstItem ? '' : ','}${jsonEncode(item.key)}:${jsonEncode(item.value)}');
+            firstItem = false;
+          }
+          await put('}');
+        } else {
+          await put(jsonEncode(value));
+        }
+      }
+      await put('}');
+    } else {
+      await put(jsonEncode(payload));
+    }
+    hash.close();
+    return (out.toString(), digest.value.toString());
   }
 
   Future<List<String>> _identities(String id) async => [
@@ -188,14 +246,18 @@ final class MeshLibrary {
         for (var attempt = 0; attempt < 3; attempt++) {
           final stamp = await _stamp();
           if (_builtStamp == stamp) return;
-          await _buildLocal();
+          await _buildLocal(stamp);
           _builtStamp = stamp;
         }
       })()
           .whenComplete(() => _building = null);
   /// How many times the local catalogue was built.
   int builds = 0;
-  Future<void> _buildLocal() async {
+  /// Tells this run's versions from an earlier run's: Classic's state, which
+  /// they also stand for, starts over with it.
+  final _run = DateTime.now().microsecondsSinceEpoch.toRadixString(36);
+
+  Future<void> _buildLocal(String stamp) async {
     builds++;
     final records = <JsonMap>[];
     final reads = LibraryReads(ui.media.store);
@@ -329,7 +391,7 @@ final class MeshLibrary {
     }
     if (_added.isNotEmpty) await _save('mesh:added', _added);
     final local = <String, Object?>{'records': records};
-    local['version'] = await _hashOffMain({'records': records});
+    local['version'] = '$_run:$stamp';
     _local = local;
   }
 
@@ -958,8 +1020,8 @@ final class MeshLibrary {
       ..clear()
       ..addAll(newEvidence);
     if (_historicalIds.isNotEmpty) await _save('mesh:aliases', _historicalIds);
-    await replaceLibraryIndex(db, indexRows);
-    searchIndex.replace(indexRows);
+    await replaceLibraryIndex(db, indexRows, slice: slice);
+    await searchIndex.replace(indexRows, slice: slice);
   }
 
   Future<JsonMap> request(String method, JsonMap input, String peer) async {

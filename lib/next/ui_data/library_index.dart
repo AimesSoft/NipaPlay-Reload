@@ -1,6 +1,8 @@
 import 'dart:convert';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
+import '../util/slicer.dart';
+
 /// Disposable local projection of the authenticated X47 catalogue.
 Future<void> migrateLibraryIndex(DatabaseExecutor db) async {
   await db.execute('''CREATE TABLE next_library_index (
@@ -10,32 +12,34 @@ Future<void> migrateLibraryIndex(DatabaseExecutor db) async {
       'CREATE INDEX next_library_added ON next_library_index(added DESC,id)');
 }
 
+/// Makes the index hold [rows]: a row that is new or whose text differs is
+/// written, the rest are left, and rows no longer wanted are deleted. The
+/// existing rows are not read back; the database compares them.
 Future<void> replaceLibraryIndex(
-    Database db, List<Map<String, Object?>> rows) async {
+    Database db, List<Map<String, Object?>> rows,
+    {Slicer? slice}) async {
+  final encoded = <List<Object?>>[];
+  for (final row in rows) {
+    encoded.add([
+      row['id'],
+      row['added'],
+      jsonEncode(row['payload']),
+      jsonEncode(row['facts'])
+    ]);
+    if (slice != null) await slice();
+  }
   await db.transaction((tx) async {
-    final existing = {
-      for (final r in await tx.query('next_library_index')) r['id']: r
-    };
     final batch = tx.batch();
-    for (final row in rows) {
-      final value = {
-        'id': row['id'],
-        'added': row['added'],
-        'payload': jsonEncode(row['payload']),
-        'facts': jsonEncode(row['facts'])
-      };
-      final old = existing.remove(row['id']);
-      if (old == null ||
-          old['payload'] != value['payload'] ||
-          old['facts'] != value['facts'] ||
-          old['added'] != value['added']) {
-        batch.insert('next_library_index', value,
-            conflictAlgorithm: ConflictAlgorithm.replace);
-      }
+    for (final r in encoded) {
+      batch.rawInsert(
+          'INSERT INTO next_library_index(id,added,payload,facts) VALUES(?,?,?,?) '
+          'ON CONFLICT(id) DO UPDATE SET added=excluded.added, payload=excluded.payload, facts=excluded.facts '
+          'WHERE added IS NOT excluded.added OR payload IS NOT excluded.payload OR facts IS NOT excluded.facts',
+          r);
     }
-    for (final id in existing.keys) {
-      batch.delete('next_library_index', where: 'id=?', whereArgs: [id]);
-    }
+    batch.rawDelete(
+        'DELETE FROM next_library_index WHERE id NOT IN (SELECT value FROM json_each(?))',
+        [jsonEncode([for (final r in encoded) r[0]])]);
     await batch.commit(noResult: true);
   });
 }

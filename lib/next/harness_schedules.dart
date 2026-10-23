@@ -17,6 +17,9 @@ final class HarnessSchedules {
   Future<void> _ticks = Future.value();
   String? _invalid;
   DateTime? _enabledAt, _lastTickAt;
+  /// The signature of the file as last read, and what it said.
+  String? _read;
+  List<JsonMap>? _schedules;
   final _skippedLate = <String, int>{};
   final _skippedRunning = <String, int>{};
   final _lastSkippedDue = <String, DateTime>{};
@@ -29,6 +32,8 @@ final class HarnessSchedules {
     _invalid = null;
     _enabledAt = DateTime.now().toUtc();
     _lastTickAt = null;
+    _read = null;
+    _schedules = null;
     _skippedLate.clear();
     _skippedRunning.clear();
     _lastSkippedDue.clear();
@@ -54,10 +59,21 @@ final class HarnessSchedules {
     if (repository == null) return;
     _lastTickAt = now.toUtc();
     final file = File(p.join(repository.path, 'hooks', 'schedules.json'));
-    if (!await file.exists()) {
+    // The file is read again only when it has changed; a tick otherwise
+    // looks at the clock and at what was read.
+    final stat = await file.stat();
+    final signature = stat.type == FileSystemEntityType.notFound
+        ? 'absent'
+        : '${stat.size}:${stat.modified.microsecondsSinceEpoch}';
+    if (stat.type == FileSystemEntityType.notFound) {
+      _read = signature;
       _next.clear();
       _definitions.clear();
       _invalid = null;
+      return;
+    }
+    if (_read == signature && _schedules != null) {
+      await _runDue(_schedules!, now);
       return;
     }
     final text = await file.readAsString();
@@ -89,9 +105,15 @@ final class HarnessSchedules {
       return;
     }
     _invalid = null;
+    _read = signature;
+    _schedules = schedules;
     final ids = schedules.map((s) => s['id']).toSet();
     _next.removeWhere((key, _) => !ids.contains(key));
     _definitions.removeWhere((key, _) => !ids.contains(key));
+    await _runDue(schedules, now);
+  }
+
+  Future<void> _runDue(List<JsonMap> schedules, DateTime now) async {
     for (final schedule in schedules) {
       final id = schedule['id'] as String;
       final definition = jsonEncode(schedule);

@@ -1,3 +1,5 @@
+import 'dart:isolate';
+
 import 'package:nipaplay/security/secret_redactor.dart';
 import 'package:nipa_harness/nipa_harness.dart';
 import 'state/query.dart' show publicValue;
@@ -57,4 +59,20 @@ Object? redactHarnessJson(Object? value) {
   }
   if (value is List) return value.map(redactHarnessJson).toList();
   return value is String ? redactHarnessText(value) : value;
+}
+
+/// [redactHarnessJson] on a background isolate, with the secrets this one
+/// remembers, for a value that grows with what it holds (a thread read back).
+Future<Object?> redactHarnessJsonOffMain(Object? value) async {
+  final remembered = SecretRedactor.remembered();
+  try {
+    return await Isolate.run(() {
+      for (final MapEntry(key: secret, value: ref) in remembered.entries) {
+        SecretRedactor.remember(ref, secret);
+      }
+      return redactHarnessJson(value);
+    });
+  } on ArgumentError {
+    return redactHarnessJson(value);
+  }
 }

@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 
 import '../../ui_data/ui_data.dart';
+import '../../util/slicer.dart';
 import '../widgets/nipa_avatar.dart';
 import '../widgets/words.dart';
 import 'chat_context.dart';
@@ -253,7 +254,7 @@ class NipaChat extends ChangeNotifier {
     try {
       final history = await port.readThread(id);
       if (generation != _generation) return;
-      turns = _fromHistory(history);
+      turns = await _fromHistory(history);
     } catch (error) {
       debugPrint('[NextUi] thread did not open: $error');
       if (generation != _generation) return;
@@ -276,7 +277,8 @@ class NipaChat extends ChangeNotifier {
     await Future.wait([for (final t in recent) _refreshCards(t)]);
   }
 
-  List<ChatTurn> _fromHistory(ChatEvent history) {
+  Future<List<ChatTurn>> _fromHistory(ChatEvent history) async {
+    final slice = Slicer();
     final raw =
         (history['turns'] as List? ?? const []).whereType<Map>().toList();
     final shown = raw.length > historyTurns
@@ -302,6 +304,7 @@ class NipaChat extends ChangeNotifier {
         continue;
       }
       list.add(ChatTurn.fromHistory(turn));
+      await slice();
     }
     return list;
   }

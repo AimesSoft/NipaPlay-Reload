@@ -67,8 +67,13 @@ final class SubtitleLibrary implements SubtitleOperations {
   }
 
   void start() {
-    _events = media.store.fileChanges.listen((_) => _reconcile());
-    _timer = Timer.periodic(const Duration(seconds: 30), (_) => _reconcile());
+    // A file registered or changed is looked at alone; every file is looked
+    // at once now and again by indexers.reconcile.
+    _events = media.store.fileChanges.listen((f) => unawaited(
+        _serial(() => _inspect(f['fileId'] as String, f['path'] as String))
+            .catchError((Object error, StackTrace stack) {
+      reportNextError(error, stack, 'Next headless subtitle indexing');
+    })));
     _reconcile();
   }
 

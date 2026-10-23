@@ -153,7 +153,7 @@ final class ChatHostPort implements ChatPort {
   Future<ChatEvent> readThread(String threadId) async {
     final host = _current;
     if (host == null) throw StateError('chat host unavailable');
-    final history = Map<String, dynamic>.from(redactHarnessJson(
+    final history = Map<String, dynamic>.from(await redactHarnessJsonOffMain(
         await host.readThread(threadId, withProcess: false)) as Map);
     await host.restoreProcess(threadId, history);
     return history;

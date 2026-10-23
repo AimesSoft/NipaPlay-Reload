@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:developer' show Timeline;
 
 /// How long this isolate's event loop was held, told by a timer that asks
 /// to run every [tick]: a run that comes late by more than [slack] means the
@@ -32,7 +33,19 @@ final class MainThreadProbe {
   void _observe() {
     final now = _clock.elapsedMicroseconds;
     final late = now - _last - tick.inMicroseconds;
-    if (late > slack.inMicroseconds) _stretches.add(late);
+    if (late > slack.inMicroseconds) {
+      _stretches.add(late);
+      // A long one is kept with where it was on the VM's clock, so a
+      // profiler's samples can be read for exactly that time.
+      if (late > 40000) {
+        final end = Timeline.now;
+        longOnes.add((end - late, late));
+        if (verbose) {
+          // ignore: avoid_print
+          print('[probe stretch] ${(late / 1000).toStringAsFixed(1)} ms from VM time ${end - late}');
+        }
+      }
+    }
     _last = now;
   }
 
@@ -41,7 +54,20 @@ final class MainThreadProbe {
     _observe();
     _marks.add((name, _markIndex, _stretches.length));
     _markIndex = _stretches.length;
+    if (verbose) {
+      final (_, longest, held) = phases.last;
+      // ignore: avoid_print
+      print('[probe ${(_clock.elapsedMilliseconds / 1000).toStringAsFixed(1)} s] $name: '
+          'longest ${longest.toStringAsFixed(1)} ms, held ${held.toStringAsFixed(1)} ms');
+    }
   }
+
+  /// (start on the VM's timeline clock in microseconds, length in microseconds)
+  /// of each stretch over 40 ms.
+  final longOnes = <(int, int)>[];
+
+  /// Prints each phase as it is marked.
+  bool verbose = false;
 
   /// Longest single stretch, in milliseconds.
   double get longestMs =>

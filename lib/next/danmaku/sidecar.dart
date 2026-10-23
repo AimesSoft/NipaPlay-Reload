@@ -89,7 +89,7 @@ final class SidecarIndexer {
   String? lastRun, lastError;
   JsonMap get status => {'kind': 'danmaku.sidecar', 'enabled': enabled,
     'running': _worker != null, 'queue': _pending.length, 'lastRun': lastRun,
-    'nextRun': enabled ? 'within 30 seconds or on file change' : null, 'error': lastError};
+    'nextRun': enabled ? 'on file change or indexers.reconcile' : null, 'error': lastError};
   Future<void> setEnabled(bool value) async {
     enabled = value;
     if (value) {
@@ -100,7 +100,8 @@ final class SidecarIndexer {
 
   void start() {
     _events = store.identities.fileChanges.listen(enqueue);
-    _timer = Timer.periodic(const Duration(seconds: 30), (_) => reconcile());
+    // Every file is looked at once now; after that a file is looked at when it
+    // is registered or changes, and indexers.reconcile looks at all again.
     unawaited(reconcile());
   }
 

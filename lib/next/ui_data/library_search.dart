@@ -1,3 +1,4 @@
+import '../util/slicer.dart';
 import 'dart:convert';
 import 'package:nipa_harness/nipa_harness.dart';
 import '../media/metadata_provider.dart';
@@ -11,8 +12,11 @@ final class LibrarySearchIndex {
   final _identities = <String, String>{};
   bool ready = false;
 
-  void replace(List<JsonMap> rows) {
-    _identities.clear();
+  /// Without [slice] it is done by the time it returns; with one, in pieces
+  /// of a few milliseconds (what is searched meanwhile is the old and the
+  /// new rows together, and the identities of the old).
+  Future<void> replace(List<JsonMap> rows, {Slicer? slice}) async {
+    final identities = <String, String>{};
     final retained = <String>{};
     var order = 0;
     rows = rows.toList()
@@ -55,9 +59,13 @@ final class LibrarySearchIndex {
         ]);
       }
       for (final key in (facts['identityKeys'] as List? ?? []).cast<String>()) {
-        _identities[key] = work['workId'] as String;
+        identities[key] = work['workId'] as String;
       }
+      if (slice != null) await slice();
     }
+    _identities
+      ..clear()
+      ..addAll(identities);
     for (final key in _ids.keys.where((k) => !retained.contains(k)).toList()) {
       final id = _ids.remove(key)!;
       _removeTokens(id, _documents.remove(id)!.fields);
