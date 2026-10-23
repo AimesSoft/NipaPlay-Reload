@@ -19,6 +19,8 @@ import '../core/session.dart';
 import '../kernel/driver.dart';
 import '../next_playback.dart';
 import '../perf/budget.dart';
+import '../sources/playback_sources.dart';
+import '../sources/resolver.dart';
 import 'session_ports.dart';
 
 /// Makes Next's local operations (window, levels…) for this playback; the
@@ -38,9 +40,12 @@ typedef LocalOperationsFactory = Capability Function(SettingsRegistry settings,
 final class SessionPlayback implements NextPlayback, VideoStageHost {
   SessionPlayback(this.host,
       {LocalOperationsFactory? localOperations,
+      NextSourceResolver? sourceResolver,
       this.hideAfter = const Duration(seconds: 3)})
       : _localOperations = localOperations {
     _frame = _Frame(this);
+    sources = PlaybackSources(host, sourceResolver ?? NextSourceResolver());
+    sources.addListener(_frame.poke);
     _fullscreen.addListener(_frame.poke);
     host.current.addListener(_bind);
     _bind();
@@ -54,6 +59,7 @@ final class SessionPlayback implements NextPlayback, VideoStageHost {
   final NextPlayerHost host;
   final Duration hideAfter;
   final LocalOperationsFactory? _localOperations;
+  late final PlaybackSources sources;
 
   static bool get _desktop =>
       !kIsWeb &&
@@ -212,7 +218,7 @@ final class SessionPlayback implements NextPlayback, VideoStageHost {
   @override
   double get volume => _session?.transport.value.volume ?? _volume;
   @override
-  bool get canPlayNext => false;
+  bool get canPlayNext => sources.canNext;
   @override
   bool get playIntent => _session?.transport.value.playIntent ?? false;
   @override
@@ -261,6 +267,11 @@ final class SessionPlayback implements NextPlayback, VideoStageHost {
         'available': true,
         'layer': 'next_core',
         ...host.facts(),
+        'sources': {
+          'autoNext': sources.autoNext,
+          'progress': sources.progress?.lastReport,
+          'progressError': sources.progress?.lastError
+        },
         'perf': PlayerPerf.read(),
       };
 
@@ -303,6 +314,7 @@ final class SessionPlayback implements NextPlayback, VideoStageHost {
 
   @override
   Future<void> close({required String reason}) async {
+    sources.cancelAutoNext();
     _hide?.cancel();
     if (_fullscreen.value) await _setFullscreen(false);
     await host.close(reason: reason);
@@ -314,17 +326,8 @@ final class SessionPlayback implements NextPlayback, VideoStageHost {
   /// What the layer cannot play yet is unavailable, with the reason (D5).
   Future<bool> openItem(PlayableItem item,
       {Duration? start, String? origin}) async {
-    final history = item.historyItem;
     try {
-      await host.open(MediaRequest(
-        locator: item.videoPath,
-        origin: origin ?? commandOrigin(),
-        title: item.title ?? history?.animeName,
-        episodeTitle: item.subtitle ?? history?.episodeTitle,
-        animeId: item.animeId ?? history?.animeId,
-        episodeId: item.episodeId ?? history?.episodeId,
-        start: start,
-      ));
+      await sources.open(item, start: start, origin: origin ?? commandOrigin());
     } on OpenRefused catch (refused) {
       throw Failure(FailureCode.unavailable, refused.message,
           details: {'reason': refused.reason, ...refused.facts});
@@ -361,7 +364,7 @@ final class SessionPlayback implements NextPlayback, VideoStageHost {
   Future<void> setFullscreen(bool on) => _setFullscreen(on);
 
   @override
-  Future<void> nextEpisode() async {}
+  Future<void> nextEpisode() => sources.switchEpisode(true);
 
   @override
   Future<void> setVolume(double value) async {
@@ -515,9 +518,24 @@ final class SessionPlayback implements NextPlayback, VideoStageHost {
   @override
   Future<bool> addSubtitleFile() async => false;
   @override
-  Future<List<EpisodeChoice>> episodes() async => const [];
+  Future<List<EpisodeChoice>> episodes() async {
+    await sources.playlist();
+    return [
+      for (final (i, episode) in sources.episodes.indexed)
+        EpisodeChoice(
+            title: episode.title,
+            work: episode.subtitle,
+            progress: episode.progress,
+            current: i == sources.currentIndex,
+            source: episode)
+    ];
+  }
+
   @override
-  Future<void> play(EpisodeChoice episode) async {}
+  Future<void> play(EpisodeChoice episode) async {
+    if (episode.source case final source?) await sources.playEpisode(source);
+  }
+
   @override
   double get rate => _session?.transport.value.rate ?? _rate;
 
@@ -531,9 +549,29 @@ final class SessionPlayback implements NextPlayback, VideoStageHost {
   }
 
   @override
-  List<AudioChoice> audio() => const [];
+  List<AudioChoice> audio() {
+    final plan = sources.plan;
+    final version = plan?.serverSession?.selectedSource;
+    if (version == null) return const [];
+    return [
+      for (final track in version.mediaStreams)
+        if (track['Type'] == 'Audio')
+          AudioChoice(
+              track['DisplayTitle'] as String? ??
+                  track['Title'] as String? ??
+                  track['Language'] as String? ??
+                  '音轨 ${track['Index']}',
+              track['Index'] as int,
+              server: true,
+              selected: plan!.selection['audioIndex'] == track['Index'])
+    ];
+  }
+
   @override
-  Future<void> chooseAudio(AudioChoice choice) async {}
+  Future<void> chooseAudio(AudioChoice choice) async {
+    if (choice.server) await sources.selectStream({'audioIndex': choice.index});
+  }
+
   @override
   bool get canFit => false;
   @override
@@ -585,6 +623,8 @@ final class SessionPlayback implements NextPlayback, VideoStageHost {
   Future<void> setSubtitleScale(SubtitleChoice? on, double scale) async {}
 
   Future<void> dispose() async {
+    sources.removeListener(_frame.poke);
+    sources.dispose();
     host.current.removeListener(_bind);
     _hide?.cancel();
     _persistVolume?.cancel();

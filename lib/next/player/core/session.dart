@@ -307,6 +307,10 @@ final class PlaybackSession {
   Future<void> _writes = Future.value();
   JsonMap? _lastSave;
 
+  /// Source-owned work (final remote progress and transcode teardown) is
+  /// drained before a replacement session can start. No native access.
+  Future<void> Function()? closeSource;
+
   ValueListenable<SessionPhase> get phase => _phase;
   ValueListenable<Transport> get transport => _transport;
   ValueListenable<MediaFacts?> get media => _media;
@@ -377,7 +381,7 @@ final class PlaybackSession {
   Future<void> _plan() async {
     final path = _source.locator;
     // resolving: the file, its record and where it was left.
-    if (!await File(path).exists()) {
+    if (_source.kind == 'local' && !await File(path).exists()) {
       throw const KernelOpenFailure(
           'file_check', 'The local file does not exist or is inaccessible.');
     }
@@ -453,6 +457,7 @@ final class PlaybackSession {
     _emit('failed', {'stage': stage, 'message': redactHarnessText(message)});
     // A failed session keeps no kernel.
     await _releaseKernel();
+    await closeSource?.call();
   }
 
   // ---- what the kernel says, reduced (O(1) each) ----
@@ -696,6 +701,7 @@ final class PlaybackSession {
     final wasOpen = _phase.value.open;
     _saver?.cancel();
     _saver = null;
+    clock.anchor(position, advancing: false, source: 'session_close');
     if (wasOpen) {
       // The last word on progress, before the kernel goes.
       _setPhase(SessionPhase.closing);
@@ -711,6 +717,11 @@ final class PlaybackSession {
     await _opened.future;
     await _releaseKernel();
     await _writes;
+    try {
+      await closeSource?.call();
+    } catch (error) {
+      _emit('source_report_failed', {'error': error.runtimeType.toString()});
+    }
     _setPhase(SessionPhase.closed);
     _emit('closed', {'reason': reason, 'releaseMs': releaseMs});
     if (!_opened.isCompleted) _opened.complete();

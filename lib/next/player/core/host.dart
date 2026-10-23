@@ -88,6 +88,18 @@ final class NextPlayerHost {
       path = uri!.toFilePath(windows: Platform.isWindows);
     } else if (scheme.isEmpty && (drive || p.isAbsolute(locator))) {
       path = locator;
+    } else if (const {
+      'http',
+      'https',
+      'webdav',
+      'smb',
+      'jellyfin',
+      'emby',
+      'rtsp',
+      'rtmp',
+      'content'
+    }.contains(scheme)) {
+      path = locator;
     } else {
       throw OpenRefused(
           'source_not_supported',
@@ -108,16 +120,24 @@ final class NextPlayerHost {
       throw const OpenRefused('external_player',
           'Next\'s playback layer does not hand media to an external player yet.');
     }
-    return ResolvedSource(locator: path, uri: path, kind: 'local');
+    return ResolvedSource(
+        locator: path,
+        uri: path,
+        kind: scheme.isEmpty || scheme == 'file' ? 'local' : scheme);
   }
 
   /// Opens [request] after closing what plays. Completes once the open
   /// plan ended: the session is active, failed or (closed meanwhile)
   /// closed. Throws [OpenRefused] before anything closes.
-  Future<PlaybackSession> open(MediaRequest request) async {
+  Future<PlaybackSession> open(
+    MediaRequest request, {
+    ResolvedSource? resolvedSource,
+    void Function(PlaybackSession session)? onCreated,
+  }) async {
     final ResolvedSource source;
     try {
-      source = resolve(request);
+      final checked = resolve(request);
+      source = resolvedSource ?? checked;
     } on OpenRefused catch (refused) {
       _refused(request, refused);
       rethrow;
@@ -136,6 +156,7 @@ final class NextPlayerHost {
             records: records,
             levels: await levels(),
           ));
+      onCreated?.call(session);
       _current.value = session;
       session.events.listen(_events.add, onDone: () => _gone(session));
       unawaited(session.start());

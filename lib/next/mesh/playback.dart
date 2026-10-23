@@ -7,6 +7,8 @@ import 'package:path/path.dart' as p;
 import '../../player_abstraction/player_factory.dart';
 import '../next_core.dart';
 import '../player/next_playback.dart';
+import '../player/ports/session_playback.dart';
+import '../player/core/session.dart';
 
 /// Attaches Mesh observations to what plays only while Next is open.
 final class MeshPlayback {
@@ -15,7 +17,7 @@ final class MeshPlayback {
   final NextPlayback player;
   final _loading = <String, Future<JsonMap>>{};
   final _bindings = <String, JsonMap>{};
-  Timer? _timer;
+  StreamSubscription<PlaybackEvent>? _events;
   String? _last;
   Future<void> _writing = Future.value();
   bool _closed = false;
@@ -23,24 +25,49 @@ final class MeshPlayback {
     core.danmaku.service.remoteTracks = tracks;
     core.danmaku.remoteControl = control;
     core.subtitles.remoteLoader = subtitles;
-    _timer = Timer.periodic(const Duration(seconds: 3), (_) {
-      _writing = _writing.then((_) => _observe());
-      unawaited(_writing.then<void>((_) {},
-          onError: (Object e, StackTrace s) => FlutterError.reportError(
-              FlutterErrorDetails(
-                  exception: e, stack: s, library: 'Mesh progress'))));
-    });
+    if (player case final SessionPlayback playback) {
+      playback.host.current.addListener(_bindSession);
+      _bindSession();
+      _events = playback.host.events.listen((event) {
+        if (event.kind != 'progress_saved' &&
+            event.kind != 'seek_settled' &&
+            event.kind != 'ended') return;
+        final session = playback.session;
+        if (session?.id != event.sessionId) return;
+        _writing = _writing.then((_) => _observe(session));
+        unawaited(_writing.then<void>((_) {},
+            onError: (Object e, StackTrace s) => FlutterError.reportError(
+                FlutterErrorDetails(
+                    exception: e, stack: s, library: 'Mesh progress'))));
+      });
+    }
   }
 
-  Future<void> _observe() async {
+  void _bindSession() {
+    final playback = player as SessionPlayback;
+    final session = playback.host.current.value;
+    _loading.clear();
+    _bindings.clear();
+    _last = null;
+    if (session == null) return;
+    final before = session.closeSource;
+    session.closeSource = () async {
+      await before?.call();
+      await _writing;
+      await _observe(session);
+    };
+  }
+
+  Future<void> _observe([PlaybackSession? session]) async {
     if (_closed) return;
-    final path = player.path;
-    if (path == null || player.duration.inMilliseconds <= 0) return;
+    final path = session?.path ?? player.path;
+    final length = session?.duration ?? player.duration;
+    if (path == null || length.inMilliseconds <= 0) return;
     final library = core.uiData.meshLibrary!;
     final remote = library.playback[path];
     if (remote == null) return;
-    final position = player.position.inMilliseconds,
-        duration = player.duration.inMilliseconds;
+    final position = (session?.position ?? player.position).inMilliseconds,
+        duration = length.inMilliseconds;
     final sample = '$path:$position:$duration';
     if (_last == sample) return;
     _last = sample;
@@ -58,7 +85,7 @@ final class MeshPlayback {
     if (context == null || context['bundle'] == null) return null;
     return _loading.putIfAbsent(path, () async {
       final peer = context['deviceId'] as String;
-      final bundle = jsonDecode(jsonEncode(context['bundle'])) as JsonMap;
+      final bundle = await compute(_copyBundle, context['bundle'] as JsonMap);
       for (final track in (bundle['tracks'] as List).cast<JsonMap>()) {
         final binding = track['binding'] as JsonMap;
         final original = binding['id'] as String;
@@ -71,7 +98,8 @@ final class MeshPlayback {
         };
         final file = await library.cacheAsset(peer, track['assetId'] as String,
             name: 'entries.json');
-        track['entries'] = jsonDecode(await File(file).readAsString());
+        track['entries'] =
+            await compute(_decodeEntries, await File(file).readAsString());
       }
       for (final track in (bundle['subtitles'] as List).cast<JsonMap>()) {
         if (track['assetId'] == null) continue;
@@ -166,12 +194,20 @@ final class MeshPlayback {
   Future<void> close() async {
     await _observe();
     _closed = true;
-    _timer?.cancel();
+    await _events?.cancel();
+    if (player case final SessionPlayback playback) {
+      playback.host.current.removeListener(_bindSession);
+    }
     await _writing;
     core.danmaku.service.remoteTracks = null;
     core.danmaku.remoteControl = null;
     core.subtitles.remoteLoader = null;
-    if (core.uiData.meshLibrary!.playback.containsKey(player.path))
+    if (player is! SessionPlayback &&
+        core.uiData.meshLibrary!.playback.containsKey(player.path))
       directLoopback(player.kernelHost, false);
   }
 }
+
+JsonMap _copyBundle(JsonMap bundle) =>
+    jsonDecode(jsonEncode(bundle)) as JsonMap;
+Object? _decodeEntries(String text) => jsonDecode(text);

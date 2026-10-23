@@ -63,8 +63,9 @@ final class SessionPlayerPort implements PlayerPort {
       effectiveRate: t?.rate ?? p.rate,
       kernelRate: t?.rate ?? p.rate,
       volume: p.volume,
-      canPrevious: false,
-      canNext: false,
+      canPrevious: p.sources.canPrevious,
+      canNext: p.sources.canNext,
+      autoNext: p.sources.autoNext,
       sessionId: live ? s.id : null,
       ready: live ? open : null,
       buffering: open ? t!.buffering : null,
@@ -76,7 +77,14 @@ final class SessionPlayerPort implements PlayerPort {
         'configured': p.host.configuredKernel(),
         'layer': 'next_core',
       },
-      supportedControls: const ['pause', 'resume', 'seek', 'close', 'wait'],
+      supportedControls: const [
+        'pause',
+        'resume',
+        'seek',
+        'close',
+        'wait',
+        'playlist'
+      ],
     );
   }
 
@@ -122,8 +130,8 @@ final class SessionPlayerPort implements PlayerPort {
 
   @override
   Future<void> switchEpisode(EpisodeDirection direction) async =>
-      notInPlaybackLayer('switch_episode',
-          'Next\'s playback layer does not switch episodes yet.');
+      _playback.sources.switchEpisode(direction == EpisodeDirection.next,
+          origin: commandOrigin());
 }
 
 /// playback.wait/close/info/failures… over Next's playback layer; what it
@@ -150,8 +158,10 @@ final class SessionControls
           'capacity': PlaybackFailures.capacity,
         };
       case 'playback.cancel_auto_next':
-        // No countdown runs in Next's playback layer.
-        return {'cancelled': false, 'state': _state};
+        return {
+          'cancelled': _playback.sources.cancelAutoNext(),
+          'state': _state
+        };
       case 'playback.retry':
         notInPlaybackLayer('retry',
             'Next\'s playback layer does not retry yet; open the path again with playback.open.');
@@ -160,8 +170,7 @@ final class SessionControls
         notInPlaybackLayer('chapters',
             'Next\'s playback layer does not read chapters, step frames or skip segments yet.');
       case 'playback.playlist':
-        notInPlaybackLayer('playlist',
-            'Next\'s playback layer does not keep a playlist yet.');
+        return _playback.sources.playlist();
       case 'subtitle.cues':
         notInPlaybackLayer('subtitles',
             'Next\'s playback layer does not present subtitles yet.');
@@ -301,15 +310,28 @@ final class SessionControls
 
   static const _tracks =
       'Next\'s playback layer does not list or select tracks, or mount subtitle files, yet.';
-  static const _streams =
-      'Next\'s playback layer plays local files only; stream versions and quality come with network sources.';
-
   @override
   Future<JsonMap> tracks(JsonMap input) async =>
-      notInPlaybackLayer('tracks', _tracks);
+      _playback.sources.plan?.isServer == true
+          ? {
+              'sessionId': _playback.session?.id,
+              'tracks': [
+                for (final v
+                    in _playback.sources.streamOptions()['versions'] as List)
+                  if (v['id'] ==
+                      _playback.sources.plan?.serverSession?.mediaSourceId)
+                    ...v['tracks'] as List
+              ]
+            }
+          : notInPlaybackLayer('tracks', _tracks);
   @override
   Future<JsonMap> selectTrack(JsonMap input) async =>
-      notInPlaybackLayer('tracks', _tracks);
+      input['origin'] == 'server'
+          ? _playback.sources.selectStream({
+              input['kind'] == 'audio' ? 'audioIndex' : 'subtitleIndex':
+                  input['index']
+            }, origin: commandOrigin())
+          : notInPlaybackLayer('tracks', _tracks);
   @override
   Future<JsonMap> loadSubtitle(JsonMap input) async =>
       notInPlaybackLayer('tracks', _tracks);
@@ -318,10 +340,10 @@ final class SessionControls
       notInPlaybackLayer('tracks', _tracks);
   @override
   Future<JsonMap> streamOptions(JsonMap input) async =>
-      notInPlaybackLayer('streams', _streams);
+      _playback.sources.streamOptions();
   @override
   Future<JsonMap> selectStream(JsonMap input) async =>
-      notInPlaybackLayer('streams', _streams);
+      _playback.sources.selectStream(input, origin: commandOrigin());
   @override
   Future<JsonMap> external(JsonMap input) async => notInPlaybackLayer(
       'external_player',

@@ -147,8 +147,7 @@ void main() {
     final network = await failure(() => playback.openItem(
         PlayableItem(videoPath: 'jellyfin://item-1')));
     expect(network.code, FailureCode.unavailable);
-    expect(network.details['reason'], 'source_not_supported');
-    expect(network.details['source'], 'jellyfin');
+    expect(network.details['stage'], 'source_resolution');
     await playback.dispose();
   });
 

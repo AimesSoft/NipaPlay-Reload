@@ -211,10 +211,10 @@ void main() {
     await rig.host.open(request());
     expect(
         () => rig.host.open(const MediaRequest(
-            locator: 'jellyfin://abc', origin: 'agent')),
+            locator: 'unknown://abc', origin: 'agent')),
         throwsA(isA<OpenRefused>()
             .having((r) => r.reason, 'reason', 'source_not_supported')
-            .having((r) => r.facts['source'], 'source', 'jellyfin')));
+            .having((r) => r.facts['source'], 'source', 'unknown')));
     expect(rig.host.current.value?.phase.value, SessionPhase.active);
     final other = FakeHost(kernel: 'media_kit');
     expect(
