@@ -23,7 +23,8 @@ Future<JsonMap> recentMemoryFacts(ConversationHistory host, List<JsonMap> jobs,
     if (host.threadOrigins.containsKey(row['id'])) {
       continue;
     }
-    final thread = await host.readThread(row['id'] as String);
+    final thread =
+        await host.readThread(row['id'] as String, withProcess: false);
     for (final turn in thread['turns'] as List) {
       for (final item in turn['items'] as List) {
         if (item['type'] == 'userMessage') {

@@ -925,7 +925,7 @@ final class ChatHost implements ConversationHistory {
     mainThreadId = id;
     if (threadId == id) {
       return {
-        'thread': _public(await readThread(id)),
+        'thread': _public(await readThread(id, withProcess: false)),
         'model': model,
         'modelProvider': provider,
         ...header
@@ -1066,7 +1066,7 @@ final class ChatHost implements ConversationHistory {
           await _mainSession();
           return threadId;
         }
-        final history = await readThread(id);
+        final history = await readThread(id, withProcess: false);
         if ((history['turns'] as List)
             .cast<Map>()
             .any((turn) => turn['status'] == 'inProgress')) {
@@ -1078,7 +1078,7 @@ final class ChatHost implements ConversationHistory {
   Future<ChatMessage?> startFollowup(String id, String text) =>
       _control(() async {
         if (busy) return null;
-        final history = await readThread(id);
+        final history = await readThread(id, withProcess: false);
         if ((history['turns'] as List)
             .cast<Map>()
             .any((turn) => turn['status'] == 'inProgress')) {

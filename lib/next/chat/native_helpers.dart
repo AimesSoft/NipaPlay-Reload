@@ -54,7 +54,8 @@ final class _NativeHelpers {
           .listThreads(cursor: cursor, sourceKinds: ['subAgentThreadSpawn']);
       for (final thread in (page['data'] as List).cast<Map>()) {
         final parent = thread['parentThreadId'] as String;
-        final history = await chat.readThread(thread['id'] as String);
+        final history =
+            await chat.readThread(thread['id'] as String, withProcess: false);
         final first = (history['turns'] as List).cast<Map>().firstOrNull;
         if (first != null) {
           _firstTurns.putIfAbsent(
@@ -280,7 +281,9 @@ final class _NativeHelpers {
                 context.job.checkpoint['turnId'] == null &&
                 context.job.input['turnId'] == null &&
                 chat.livenessFor(child).turnId == null;
-        final history = initializing ? null : await chat.readThread(child);
+        final history = initializing
+            ? null
+            : await chat.readThread(child, withProcess: false);
         final turns = (history?['turns'] as List? ?? []).cast<Map>();
         final target = context.job.checkpoint['turnId'] ??
             context.job.input['turnId'] ??

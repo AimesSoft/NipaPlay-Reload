@@ -47,7 +47,7 @@ final class Helpers implements JobExecutor {
     if (parent == null) {
       throw const Failure(FailureCode.unavailable, 'No return conversation.');
     }
-    await chat.readThread(parent);
+    await chat.readThread(parent, withProcess: false);
     final safe = publicHarnessFacts(input) as JsonMap;
     final job =
         await engine.submit(type: type, title: safe['title'] as String, input: {
@@ -207,7 +207,7 @@ final class Helpers implements JobExecutor {
       });
       ChatMessage? turn;
       if (job.checkpoint['threadId'] != null) {
-        final history = await chat.readThread(id);
+        final history = await chat.readThread(id, withProcess: false);
         turn = (history['turns'] as List)
             .cast<ChatMessage>()
             .where((t) => (t['items'] as List).cast<Map>().any((item) =>
@@ -232,7 +232,7 @@ final class Helpers implements JobExecutor {
       final resumeToken = job.checkpoint['resumeToken'] as String?;
       if (resumeToken != null && turn != null) {
         final marker = '[NipaPlay helper resume $resumeToken]';
-        final resumed = ((await chat.readThread(id))['turns'] as List).cast<ChatMessage>()
+        final resumed = ((await chat.readThread(id, withProcess: false))['turns'] as List).cast<ChatMessage>()
             .where((t) => (t['items'] as List).cast<Map>().any((item) =>
                 item['type'] == 'userMessage' && jsonEncode(item['content']).contains(marker))).lastOrNull;
         if (resumed != null) {
@@ -288,7 +288,7 @@ final class Helpers implements JobExecutor {
           turn = event as ChatMessage;
         }
       }
-      final history = await chat.readThread(id);
+      final history = await chat.readThread(id, withProcess: false);
       final completed = (history['turns'] as List)
           .cast<Map>()
           .firstWhere((t) => t['id'] == turn!['id']);

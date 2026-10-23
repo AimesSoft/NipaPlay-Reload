@@ -612,7 +612,8 @@ final class Followups {
               !host.busy &&
               host.repository.path == row['repository']) {
             try {
-              final thread = await host.readThread(row['threadId'] as String);
+              final thread = await host.readThread(row['threadId'] as String,
+                  withProcess: false);
               final turns = thread['turns'] as List;
               final failed = [
                 for (final id in row['failedTurns'] as List? ?? []) id
