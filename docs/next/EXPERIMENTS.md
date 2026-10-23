@@ -374,3 +374,47 @@
 信任实测：dotted key 覆盖失败；整张内联 projects 表能标记项目且不写配置，但 hook 还有独立哈希门。通过 hooks/list 读取当前 harness 的已启用项目 hook，在 start/resume 的线程内配置批准其 hash 后，新 CODEX_HOME 中模型不调用工具即读到种子与 hook 代号，三次通过且 config.toml 字节不变。完整目录 308,496 字节、state.describe 78,538 字节，均完整落盘，终端约 1.7/1.6 KB、文件 0600。
 
 意外：先导没有建剧集、一次 provider 502 初始化失败、一次驱动过早结束于后续 dispatching；均保留并排除，修正后只重跑受影响样本。所有实验实例按 PID 退出并删除 profile；全量 Next 503 通过、7 跳过。实现、逐次 metrics、179 行事实迁移表与退步见 [X50_REPORT.md](X50_REPORT.md)。主控需判断是否接受简介效率与英文过程回复退步，或另开提示实验。
+
+## 2026-10-23 · player-core P0：接缝、基线，以及 Classic 里没有 Nipa
+
+假设：把 `lib/next` 对 `VideoPlayerState` 的直接依赖收进 `NextPlayback`，Next 各模块只订阅低频变化，稳态播放时 `refreshCurrent` 从每分钟约 480 次降到不超过 2 次；Nipa 的一切只在 Next 界面开着时运行。
+
+做了什么：实验配置 core-lab（从 e2e42b 复制，不含下载目录），macOS Debug 构建，片源用 e2e42b 里的《躲在超市后门抽烟的两人》第 10–12 集，内核设置为 MDK，实例静音。先在改动前的提交上加 `ext.nipaplay.player.perf` 探针测基线，再在 572ba3f3 加本次改动后用同一驱动脚本复测（`~/.nipa-next/player-core-runs/drive.py`）。稳态窗口为 60 秒，无操作，控件已隐藏，画面上有 3296 条弹幕（DFM+）。
+
+| 指标 | 改动前（基线） | 改动后 |
+|---|---|---|
+| `refreshCurrent` / 分钟 | 481 | 0 |
+| 挂在 Classic notify 上的 Next 监听 | 3 个（KernelControl 未持有修改时不挂），各 481 次/分，单次 p99 9–27 µs，最大 50 µs | 1 个 `classic.sync`，480 次/分，p50 14 µs，p99 29 µs，最大 67 µs |
+| B1/B2 这些监听的同步耗时占主线程 | 0.016%（不含 `refreshCurrent` 的异步数据库工作） | 0.012% |
+| B3 控件隐藏时播放层重建 | 10700 次/分（178/秒） | 4920 次/分（82/秒，时间轴随位置重建） |
+| B4 整个应用的帧，约 119 fps | build p95 5.44 ms，p99 6.18 ms，最大 42 ms；raster p95 0.57 ms | build p95 5.50 ms，p99 8.78 ms，最大 48 ms；raster p95 0.62 ms |
+| B5 4 ms 事件循环探针 | 超过 16 ms 的卡顿 8 次，最大 40 ms，没有超过 50 ms 的 | 13 次，最大 46 ms，没有超过 50 ms 的 |
+| B6 打开到位置前进 | 3.19 s（首次），2.37 s（关闭后重开） | 2.77 s |
+| B6 跳到 70% 并确认 | 0.13 s，落点 +7.3 s（关键帧） | 0.27 s，落点 −3.1 s |
+| B6 换内核 | MDK→mpv 约 2.1 s，mpv→MDK 2.04 s | 2.23 s，2.07 s；位置和播放状态保留 |
+| B6 关闭到没有视频 | 0.14 s | 0.08 s |
+
+B1–B5 的预算（单次 ≤2 ms、≤3%、隐藏时 0 次重建、build p95 ≤4 ms、0 次 >16 ms）里，B3 和 B4 在过渡实现下不达标：时间轴和时间文字仍随 Classic 的位置重建，帧耗时包含 Classic 的画面与弹幕。这两项由 P1 的时钟和 P3 的弹幕层解决。B5 的卡顿目前无法归因到播放层，播放层的同步耗时都在 0.1 ms 以内。
+
+D1 验收（同一实例，Next → Classic → Next）：
+- Next 开着时，端点在 127.0.0.1 上监听，DSH 的 node 子进程在跑，hooks 和定时开着。主线程的 20 秒 CPU 采样里有 `UiDataService._fingerprint`、`MeshLibrary._buildLocal`、`Followups._rows` 等。
+- 切到 Classic 后：
+  - 端点端口关闭（连不上），没有子进程，hooks 和定时都关了，Nipa 的服务停止，门控关闭；
+  - 30 秒 CPU 采样里，Next 的代码只剩 Classic 也在用的下载运行时刷新；
+  - Classic 的实验室设置页只剩进入 Next 的两个开关；
+  - 还在监听的 `*:端口` 是 Classic 的网页远程访问服务。
+- 切回 Next 后一切恢复：端点换了新端口，node 子进程重新出现。
+
+D2 验收：
+- Next 里播放第 10 集到 602.9 s 时切到 Classic，Classic 没有在播放。回到 Next 后“继续观看”显示剩余 14 分钟；在新实例上重开，从 604.2 s 续播。
+- 在 Classic 里用 Classic 自己的打开方式播放第 11 集，然后切到 Next，Classic 的播放随之关闭，没有自动重开。
+
+意外：
+- MDK 播放器在同一实例里被反复复用时，第二次关闭后的打开会出现“Texture update timed out”，再下一次打开会让主线程永久卡在 fvp 的 `MdkPrepare` 里（`waitFor(Stopped)`）。
+- 采样显示，MDK 的读线程卡在 `FrameReaderImpl::deactivate(subtitle)` 上，等待字幕解码线程结束；而那个线程正在空队列上 `pop`，永远不会结束。触发点是 Classic 在重置时调用 `SubtitleManager._clearExternalSubtitleState`：先 `setMedia("", subtitle)`，再清空字幕轨，MDK 日志里记为 “deactivate track 0 of subtitle”。
+- 不含本次改动的 572ba3f3 也能同样复现，所以这是既有的 Classic/MDK 缺陷。
+- 因为主线程卡住后不会再恢复，LoopLag 也就不会记下“main isolate blocked”；判断主线程是否卡死，不能只看这行日志。
+
+因此改了：
+- 本次没有改 Classic 的字幕重置，这个缺陷需要单独修，提交到 main；
+- P1 的 MDK 驱动每个会话新建实例，拆除顺序固定，不在停止过程中切换轨道。
