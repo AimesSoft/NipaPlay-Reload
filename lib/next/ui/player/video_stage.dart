@@ -4,6 +4,8 @@ import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 
 import 'playback.dart';
+import '../../player/danmaku/layer.dart';
+import '../../player/ports/session_playback.dart';
 import 'subtitle_layer.dart';
 
 /// The picture of Next's own playback layer: the kernel's surface, fitted
@@ -66,6 +68,9 @@ class _NextVideoStageState extends State<NextVideoStage> {
               RepaintBoundary(
                 child: NextSubtitleLayer(overlay: widget.host.subtitleOverlay),
               ),
+              // Danmaku over the subtitles, both under the controls.
+              if (widget.host case final SessionPlayback playback)
+                NextDanmakuLayer(playback: playback),
             ]),
           ),
         ),

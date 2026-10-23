@@ -818,6 +818,8 @@ final class MdkDriver implements KernelDriver {
       ],
       activeAudio: List.of(_player.activeAudioTracks),
       activeSubtitles: List.of(_player.activeSubtitleTracks),
+      chapters: [for (final c in info.chapters ?? <mdk.ChapterInfo>[])
+        {'title': c.title, 'startMs': c.startTime, 'endMs': c.endTime}],
     );
   }
 

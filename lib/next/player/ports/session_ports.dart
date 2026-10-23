@@ -15,8 +15,6 @@ import '../../capabilities/playback_capability.dart';
 import '../../capabilities/playback_controls_capability.dart';
 import '../../capabilities/playback_inspection.dart';
 import '../../capabilities/player_facts.dart';
-import '../../danmaku/service.dart';
-import '../../danmaku/source.dart' show DanmakuEntry;
 import '../../harness_redaction.dart';
 import '../../state/change_history.dart';
 import '../core/session.dart';
@@ -162,7 +160,36 @@ final class SessionControls
         notInPlaybackLayer('retry',
             'Next\'s playback layer does not retry yet; open the path again with playback.open.');
       case 'playback.chapters':
+        return {
+          'sessionId': _playback.session?.id,
+          'items': _playback.danmaku.chapters,
+          'index': _playback.danmaku.chapters.lastIndexWhere((c) =>
+              (c['startMs'] as num) <= _playback.position.inMilliseconds),
+          'skipSegments': [for (final segment in _playback.danmaku.timeline.segments)
+            {'kind': segment.kind.name, 'source': segment.source.name,
+              'startMs': segment.start.inMilliseconds,
+              'endMs': segment.end.inMilliseconds,
+              'evidenceCount': segment.evidenceCount}],
+          'activeSkipKind': _playback.activeSkipSegment?.kind.name,
+        };
       case 'playback.navigate':
+        if (input['skipKind'] case final String kind) {
+          final segment = kind == 'current' ? _playback.activeSkipSegment
+              : _playback.danmaku.timeline.segments.where((s) => s.kind.name == kind).firstOrNull;
+          if (segment != null) {
+            await _playback.session?.seek(segment.end, origin: commandOrigin());
+          }
+          return {'commandStatus': 'accepted', 'method': 'skip', 'state': _state};
+        }
+        if (input['chapterIndex'] case final int index) {
+          final chapters = _playback.danmaku.chapters;
+          if (index < 0 || index >= chapters.length) {
+            throw const Failure(FailureCode.invalidInput, 'Chapter index out of range.');
+          }
+          await _playback.session?.seek(Duration(milliseconds: chapters[index]['startMs'] as int),
+              origin: commandOrigin());
+          return {'commandStatus': 'accepted', 'method': 'chapter', 'state': _state};
+        }
         notInPlaybackLayer('chapters',
             'Next\'s playback layer does not read chapters, step frames or skip segments yet.');
       case 'playback.playlist':
@@ -171,8 +198,7 @@ final class SessionControls
       case 'subtitle.cues':
         return _cues(input);
       case 'danmaku.entries':
-        notInPlaybackLayer('danmaku',
-            'Next\'s playback layer does not present danmaku yet.');
+        return _playback.danmaku.entries(input, _playback.position.inMilliseconds);
     }
     throw Failure(FailureCode.invalidInput, 'Unknown operation $operation.');
   }
@@ -300,7 +326,7 @@ final class SessionControls
       'session': s?.facts(),
       'kernelDetails': kernel,
       'host': _playback.host.facts(),
-      'danmakuRenderer': null,
+      'danmakuRenderer': _playback.danmakuRendererFacts,
     };
   }
 
@@ -705,36 +731,6 @@ final class SessionSubtitleTarget implements SubtitleTarget {
           Future<void> Function(String path, int? index, String? external)?
               selection) =>
       _playback.host.subtitleRecorder = selection;
-}
-
-/// Danmaku are not presented by Next's layer yet: no target, nothing
-/// installed.
-final class SessionDanmakuPort implements PlaybackDanmakuPort {
-  @override
-  DanmakuPlaybackTarget? get target => null;
-  @override
-  Set<String> get managedTracks => const {};
-  @override
-  JsonMap? loaded(String bindingId) => null;
-  @override
-  bool install(DanmakuPlaybackTarget target, JsonMap binding,
-          List<DanmakuEntry> entries,
-          {int startMs = 0, int? endMs}) =>
-      false;
-  @override
-  void remove(String bindingId) {}
-  @override
-  List<JsonMap> get registry => const [];
-  @override
-  bool reuse(DanmakuPlaybackTarget target, JsonMap binding) => false;
-  @override
-  Future<bool> restoreClassic(
-          DanmakuPlaybackTarget target, JsonMap binding) async =>
-      false;
-  @override
-  bool updateTrack(
-          DanmakuPlaybackTarget target, String trackId, JsonMap properties) =>
-      false;
 }
 
 /// [capability]'s actions, the same ids and schemas, each unavailable with

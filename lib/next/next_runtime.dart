@@ -561,6 +561,7 @@ final class NextRuntime extends ChangeNotifier {
     _preference.addListener(_queueEndpointUpdate);
     _location!.addListener(_queueEndpointUpdate);
     _open = _nextOpen;
+    playback.setDanmakuSettingsActive(_open);
     notifyListeners();
     await _updateEndpoint(_open);
   }
@@ -576,6 +577,7 @@ final class NextRuntime extends ChangeNotifier {
     final enabled = _nextOpen;
     if (enabled != _open) {
       _open = enabled;
+      playback.setDanmakuSettingsActive(enabled);
       // Between Next and Classic what plays closes, its progress saved; the
       // other side does not take it over (D2). At once, not behind work
       // still queued.

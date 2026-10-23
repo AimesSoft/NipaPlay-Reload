@@ -12,6 +12,7 @@ import 'package:package_info_plus/package_info_plus.dart';
 import 'application_settings.dart';
 import 'effective_value.dart';
 import 'registry.dart';
+import '../player/danmaku/settings.dart';
 
 /// The identity Jellyfin/Emby requests carry, derived as the media server
 /// client does (services/media_server_service_base.dart).
@@ -149,6 +150,11 @@ abstract final class EffectiveRules {
       {required Map<String, Object?> startup, required ReadOther readOther}) async {
     final key = entry.key;
     final video = ApplicationSettings.video;
+    final nextDanmaku = NextDanmakuSettings.active;
+    if (nextDanmaku != null && NextDanmakuSettings.keys.containsKey(key)) {
+      return compareEffective(entry, stored, nextDanmaku.readSetting(key),
+          'Next 播放会话的弹幕设置。');
+    }
 
     // Settings another setting or the platform switches off.
     if (_externalDependents.contains(key) &&

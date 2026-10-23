@@ -13,6 +13,7 @@ import 'next2_texture_bridge.dart';
 class NipaPlayNext2Overlay extends StatefulWidget {
   const NipaPlayNext2Overlay({
     super.key,
+    this.layoutBridge,
     required this.danmakuList,
     required this.danmakuListVersion,
     required this.playbackTimeMs,
@@ -33,6 +34,7 @@ class NipaPlayNext2Overlay extends StatefulWidget {
   });
 
   final List<Map<String, dynamic>> danmakuList;
+  final Next2LayoutBridge? layoutBridge;
   final int danmakuListVersion;
   final ValueListenable<double> playbackTimeMs;
   final double currentTimeSeconds;
@@ -55,7 +57,7 @@ class NipaPlayNext2Overlay extends StatefulWidget {
 }
 
 class _NipaPlayNext2OverlayState extends State<NipaPlayNext2Overlay> {
-  final Next2LayoutBridge _bridge = Next2LayoutBridge();
+  late final Next2LayoutBridge _bridge;
   final Next2TextureBridge _textureBridge = Next2TextureBridge();
   final Next2EmojiPipeline _emojiPipeline = Next2EmojiPipeline();
 
@@ -76,6 +78,7 @@ class _NipaPlayNext2OverlayState extends State<NipaPlayNext2Overlay> {
   @override
   void initState() {
     super.initState();
+    _bridge = widget.layoutBridge ?? Next2LayoutBridge();
     _surfaceId = 'next2-${identityHashCode(this)}';
   }
 

@@ -317,6 +317,7 @@ final class MediaFacts {
     this.subtitles = const [],
     this.activeAudio = const [],
     this.activeSubtitles = const [],
+    this.chapters = const [],
   });
 
   final Duration duration;
@@ -332,6 +333,8 @@ final class MediaFacts {
   /// The tracks the kernel has on (its own default until a choice is made).
   final List<int> activeAudio;
   final List<int> activeSubtitles;
+  /// Chapter metadata captured by the driver, never queried by the UI.
+  final List<JsonMap> chapters;
 
   bool get hasVideo => width > 0 && height > 0;
   double get aspect => hasVideo ? width / height : 16 / 9;
@@ -348,6 +351,7 @@ final class MediaFacts {
         'subtitles': [for (final t in subtitles) t.toJson()],
         'activeAudio': activeAudio,
         'activeSubtitles': activeSubtitles,
+        'chapters': chapters,
       };
 }
 

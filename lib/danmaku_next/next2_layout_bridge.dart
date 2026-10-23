@@ -6,6 +6,9 @@ import 'package:nipaplay/src/rust/api/next2.dart' as rust_next2;
 import 'package:nipaplay/src/rust/rust_init.dart';
 
 class Next2LayoutBridge {
+  Next2LayoutBridge({this.prepareInBackground});
+  final Future<rust_next2.RustNext2PreparedLayout> Function(Map<String, Object?>)?
+      prepareInBackground;
   rust_next2.RustNext2PreparedLayout? _prepared;
   int _sourceListIdentity = 0;
   int _sourceListVersion = -1;
@@ -48,6 +51,15 @@ class Next2LayoutBridge {
       return;
     }
 
+    final prepare = prepareInBackground;
+    if (prepare != null) {
+      _prepared = await prepare({
+        'width': size.width, 'height': size.height, 'fontSize': fontSize,
+        'displayArea': displayArea, 'scrollDurationSeconds': scrollDurationSeconds,
+        'allowStacking': allowStacking, 'customFontFamily': customFontFamily,
+        'customFontFilePath': customFontFilePath,
+      });
+    } else {
     final items = <rust_next2.RustNext2DanmakuItem>[];
     for (final raw in danmakuList) {
       final text = (raw['content'] ?? raw['c'])?.toString() ?? '';
@@ -85,6 +97,7 @@ class Next2LayoutBridge {
         customFontFilePath: customFontFilePath,
       ),
     );
+    }
     _sourceListIdentity = listIdentity;
     _sourceListVersion = danmakuListVersion;
     _lastFontSize = fontSize;
