@@ -79,6 +79,9 @@ final class ProgramRuntime implements JobExecutor {
   Future<JsonMap?> Function(Invocation)? returnTarget;
   final _active = <Future<void>>{};
   bool _closed = false;
+
+  /// Why NipaPlay itself stopped a program, by job, for its receipt.
+  final _cancelReasons = <String, String>{};
   @override
   String get type => 'program';
 
@@ -123,8 +126,10 @@ final class ProgramRuntime implements JobExecutor {
           ...facts,
           if (target != null) 'returnTo': target
         },
+        // Who asked is the task's own origin (a kernel field), not a detail.
         details: {
-          ...facts,
+          for (final fact in facts.entries)
+            if (fact.key != 'origin') fact.key: fact.value,
           'stdoutTail': '',
           'stderrTail': '',
           'exitCode': null,
@@ -148,6 +153,19 @@ final class ProgramRuntime implements JobExecutor {
   }
 
   Future<void> _execute(JobContext context) async {
+    // Cancelled before it ran (left waiting while Next's interface was
+    // closed): nothing is started only to be stopped.
+    if ((await context.snapshot()).state == JobState.cancelling) {
+      await context.cancelled(JobReceipt(
+          verification: VerificationLevel.verified,
+          details: {
+            ...context.job.details,
+            'started': false,
+            if (_cancelReasons.remove(context.job.jobId) case final reason?)
+              'cancelReason': reason,
+          }));
+      return;
+    }
     requireEnabled();
     final input = context.job.input;
     final command = programCommand(
@@ -175,6 +193,7 @@ final class ProgramRuntime implements JobExecutor {
     Future<void> reports = Future.value();
     var stopped = false, timedOut = false, finished = false;
     int? exitCode;
+    JsonMap? termination;
     JsonMap details() => {
           ...context.job.details,
           'stdoutTail': out.value,
@@ -184,6 +203,9 @@ final class ProgramRuntime implements JobExecutor {
           'timedOut': timedOut,
           'stopped': stopped,
           'pid': process.pid,
+          if (termination != null) 'termination': termination,
+          if (_cancelReasons[context.job.jobId] case final reason?)
+            'cancelReason': reason,
         };
     try {
       await context.markSideEffectCommitted();
@@ -212,7 +234,7 @@ final class ProgramRuntime implements JobExecutor {
       publication?.cancel();
       finished = true;
       // Descendants can keep pipes open even when the shell has exited.
-      await stopProgramTree(process);
+      termination = await stopProgramTree(process);
       exitCode ??= await process.exitCode;
       await Future.wait([outDone.future, errDone.future])
           .timeout(const Duration(seconds: 2), onTimeout: () => <void>[]);
@@ -223,6 +245,7 @@ final class ProgramRuntime implements JobExecutor {
     }
     final receipt = JobReceipt(
         verification: VerificationLevel.verified, details: details());
+    _cancelReasons.remove(context.job.jobId);
     final latest = await context.snapshot();
     if (latest.state == JobState.cancelling) {
       await context.cancelled(receipt);
@@ -250,45 +273,137 @@ final class ProgramRuntime implements JobExecutor {
         'reason': 'interrupted_no_replay'
       }));
 
-  Future<void> close() async {
-    _closed = true;
+  /// Cancels every program not finished yet and returns once each process
+  /// tree is gone. [reason] goes into the receipt (`cancelReason`), where
+  /// Nipa reads why it ended.
+  Future<void> cancelRunning({required String reason}) async {
     for (final job in await engine.list(type: type)) {
-      if (!job.state.isTerminal) await engine.cancel(job.jobId);
+      if (job.state.isTerminal) continue;
+      _cancelReasons[job.jobId] = reason;
+      final cancelled = await engine.cancel(job.jobId);
+      // One that never started ends at once, with the engine's receipt.
+      if (cancelled.state == JobState.cancelled) {
+        _cancelReasons.remove(job.jobId);
+        await engine.amendReceipt(
+            job.jobId,
+            JobReceipt(
+                verification: cancelled.receipt?.verification ??
+                    VerificationLevel.unverified,
+                details: {
+                  ...?cancelled.receipt?.details,
+                  'cancelReason': reason,
+                }));
+      }
     }
     await Future.wait(_active.toList());
   }
+
+  Future<void> close() async {
+    _closed = true;
+    await cancelRunning(reason: 'nipaplay_closing');
+  }
 }
 
-Future<void> stopProgramTree(Process process) async {
-  if (Platform.isWindows) {
-    await Process.run('taskkill.exe', ['/PID', '${process.pid}', '/T', '/F'],
-        environment: programEnvironment(), includeParentEnvironment: false);
-    process.kill();
-    return;
-  }
-  final tree = await Process.run('/bin/ps', ['-axo', 'pid=,ppid='],
-      environment: programEnvironment(), includeParentEnvironment: false);
-  if (tree.exitCode != 0) {
-    process.kill(ProcessSignal.sigkill);
-    throw const Failure(
-        FailureCode.unavailable, 'Cannot inspect program process tree.');
-  }
-  final children = <int, List<int>>{};
-  for (final line in const LineSplitter().convert(tree.stdout as String)) {
-    final fields = line.trim().split(RegExp(r'\s+'));
-    if (fields.length == 2) {
-      (children[int.parse(fields[1])] ??= []).add(int.parse(fields[0]));
-    }
-  }
-  void killChildren(int pid) {
-    for (final child in children[pid] ?? <int>[]) {
-      killChildren(child);
-      Process.killPid(child, ProcessSignal.sigkill);
-    }
-  }
+/// How long a program has after TERM before it is killed.
+const programStopGrace = Duration(seconds: 2);
 
-  killChildren(process.pid);
-  process.kill(ProcessSignal.sigkill);
+/// Ends [process] and every process it started: TERM to the whole tree
+/// first, then KILL to what is still there after [grace]. Returns what was
+/// done, for the receipt; null when nothing of it was left running.
+Future<JsonMap?> stopProgramTree(Process process,
+    {Duration grace = programStopGrace}) async {
+  final watch = Stopwatch()..start();
+  var exited = false;
+  unawaited(process.exitCode.then((_) => exited = true));
+  if (Platform.isWindows) {
+    Future<void> taskkill(bool force) => Process.run('taskkill.exe',
+        ['/PID', '${process.pid}', '/T', if (force) '/F'],
+        environment: programEnvironment(), includeParentEnvironment: false);
+    await taskkill(false);
+    final ended = await process.exitCode
+        .then((_) => true)
+        .timeout(grace, onTimeout: () => false);
+    if (!ended) {
+      await taskkill(true);
+      process.kill();
+    }
+    return {
+      'signal': 'taskkill',
+      'forced': !ended,
+      'elapsedMs': watch.elapsedMilliseconds,
+    };
+  }
+  // The tree as it is now: once the shell is gone its children belong to
+  // launchd, and only these pids still name them.
+  bool running(int pid) =>
+      pid == process.pid ? !exited : _signal(pid, ProcessSignal.sigcont);
+  final tree = await _descendants([process.pid]);
+  var alive = [
+    for (final pid in [process.pid, ...?tree])
+      if (running(pid)) pid
+  ];
+  if (alive.isEmpty) return null;
+  final signaled = List.of(alive);
+  for (final pid in alive) {
+    _signal(pid, ProcessSignal.sigterm);
+  }
+  while (watch.elapsed < grace) {
+    await Future<void>.delayed(const Duration(milliseconds: 100));
+    alive = [
+      for (final pid in alive)
+        if (running(pid)) pid
+    ];
+    if (alive.isEmpty) break;
+  }
+  // Whatever the survivors started meanwhile goes with them.
+  if (alive.isNotEmpty) {
+    alive = {...alive, ...?await _descendants(alive)}.toList();
+    for (final pid in alive) {
+      _signal(pid, ProcessSignal.sigkill);
+    }
+    if (alive.contains(process.pid)) process.kill(ProcessSignal.sigkill);
+  }
+  return {
+    'signaled': signaled,
+    'killed': alive,
+    'graceMs': grace.inMilliseconds,
+    'elapsedMs': watch.elapsedMilliseconds,
+    if (tree == null) 'descendantsUnknown': true,
+  };
+}
+
+bool _signal(int pid, ProcessSignal signal) {
+  try {
+    return Process.killPid(pid, signal);
+  } on ArgumentError {
+    return false;
+  }
+}
+
+/// Every process under [roots], level by level, from pgrep (ps is setuid,
+/// which a sandboxed NipaPlay, such as a lab instance, may not run). Null
+/// when pgrep cannot be run.
+Future<List<int>?> _descendants(List<int> roots) async {
+  final found = <int>[];
+  var level = roots;
+  while (level.isNotEmpty) {
+    final ProcessResult result;
+    try {
+      result = await Process.run('/usr/bin/pgrep', ['-P', level.join(',')],
+          environment: programEnvironment(), includeParentEnvironment: false);
+    } on ProcessException {
+      return null;
+    }
+    // 1: no process matched.
+    if (result.exitCode > 1) return null;
+    level = [
+      for (final line in const LineSplitter().convert(result.stdout as String))
+        if (int.tryParse(line.trim()) case final pid?)
+          if (!found.contains(pid) && !roots.contains(pid)) pid
+    ];
+    found.addAll(level);
+  }
+  return found;
 }
 
 /// Retain complete redacted lines, and never expose an overlong partial line.
@@ -329,7 +444,7 @@ final class _ProgramCapability implements Capability {
                   id: 'program.run',
                   title: '在设备上运行程序',
                   description:
-                      'Run a command/script as an ordinary-user background task in this device harness. Disabled by default; only the target host can enable it. No caller environment or credentials are transferred. Windows defaults to cmd (optional powershell), POSIX to sh. task.get/wait expose redacted output tails, exit code and elapsed time; task.cancel stops the process tree. Interrupted commands are not replayed. Completion returns to the originating conversation unless followup:false. Deletion and overwriting require user authorization.',
+                      'Run a command/script as an ordinary-user background task in this device harness. Disabled by default; only the target host can enable it. No caller environment or credentials are transferred. Windows defaults to cmd (optional powershell), POSIX to sh. task.get/wait expose redacted output tails, exit code and elapsed time; task.cancel stops the process tree (TERM, then KILL after 2 s; receipt termination lists what was signaled and killed). Closing Next\'s interface cancels programs still running, receipt cancelReason next_interface_closed. Interrupted commands are not replayed. Completion returns to the originating conversation unless followup:false. Deletion and overwriting require user authorization.',
                   effect: Effect.write,
                   input: ObjectSchema({
                     'title': StringSchema(minLength: 1, secret: true),

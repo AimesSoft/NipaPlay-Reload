@@ -499,6 +499,8 @@ final class NextCore {
     if (!_nipa) return;
     _nipa = false;
     nipaGate.set(false);
+    // The programs she runs end with her, not later in Classic.
+    await programs.cancelRunning(reason: 'next_interface_closed');
     hooks.observeEvent = null;
     BodySignals.emit = null;
     await followups.pause();
