@@ -13,7 +13,7 @@ package set to download.
 TRACE=0 runs without the recorders. Run it again against the trimmed tree
 (DSH_INSTALL=<materialised lock>) to check that nothing is missing.
 """
-import asyncio, json, os, sys, threading, time, pathlib
+import asyncio, json, os, re, sys, threading, time, pathlib
 from http.server import ThreadingHTTPServer, BaseHTTPRequestHandler
 
 HERE = pathlib.Path(__file__).parent
@@ -39,7 +39,12 @@ class H(BaseHTTPRequestHandler):
         resp = {'id': 'r%d' % n, 'object': 'response', 'created_at': int(time.time()), 'status': 'in_progress', 'model': 'm', 'output': []}
         usage = {'input_tokens': 100, 'output_tokens': 10, 'total_tokens': 110, 'input_tokens_details': {'cached_tokens': 0}, 'output_tokens_details': {'reasoning_tokens': 0}}
         step = SCRIPT[n] if n < len(SCRIPT) else None
-        if step: step = json.loads(json.dumps(step).replace('PORT', str(port)))
+        if step:
+            text = json.dumps(step).replace('PORT', str(port))
+            job = re.findall(r'bash-[0-9a-f]{16}', json.dumps(body))
+            if job:
+                text = text.replace('JOBID', job[-1])
+            step = json.loads(text)
         send('response.created', {'response': resp})
         if step and step.get('tool'):
             names = [t.get('name') for t in body.get('tools', [])]
@@ -71,6 +76,7 @@ async def main():
     for f in (REPO / 'assets/next/agent/dsh').iterdir(): (WORK / 'plugins' / f.name).write_bytes(f.read_bytes())
     work = WORK / 'cwd'; work.mkdir(exist_ok=True)
     (work / 'AGENTS.md').write_text('# test\n')
+    (work / 'out.txt').unlink(missing_ok=True)
     (work / 'pic.png').write_bytes(__import__('base64').b64decode('iVBORw0KGgoAAAANSUhEUgAAAAgAAAAICAIAAABLbSncAAAAEklEQVR4nGP4z8CAFWEXHbQSACj/P8Fu7N9hAAAAAElFTkSuQmCC'))
     home = WORK / 'dsh-home'
     if home.exists(): __import__('shutil').rmtree(home)
@@ -121,8 +127,18 @@ async def main():
     r = await rpc('turn/start', {'threadId': tid, 'input': [{'type': 'text', 'text': 'go'}]})
     c = await wait_turn(180)
     print('turn status', c['params']['turn']['status'], 'requests', len(requests), flush=True)
+    # What each tool answered: a missing module shows here, not in the status.
+    names = {}
+    for body in requests:
+        for item in body.get('input', []):
+            if item.get('type') == 'function_call':
+                names[item['call_id']] = item['name']
+            if item.get('type') == 'function_call_output' and item['call_id'] not in names.get('_seen', ()):
+                out = item['output'] if isinstance(item['output'], str) else json.dumps(item['output'])
+                names.setdefault('_seen', set()).add(item['call_id'])
+                print('  tool', names.get(item['call_id'], '?'), '->', out.replace('\n', ' ')[:110], flush=True)
     if os.environ.get('TRACE_TOOLS') == '1' and requests:
-        print(json.dumps([(t.get('name'), list((t.get('parameters') or {}).get('properties', {}).keys()), (t.get('parameters') or {}).get('required')) for t in requests[0].get('tools', [])], indent=0))
+        print(json.dumps([t for t in requests[0].get('tools', []) if t.get('name') in (os.environ.get('TRACE_SHOW') or 'todo_write').split(',')], indent=1))
     if os.environ.get('TRACE_COMPACT') == '1':
         r = await rpc('thread/compact/start', {'threadId': tid}, 120)
         print('compact', str(r)[:200], flush=True)

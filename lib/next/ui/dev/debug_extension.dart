@@ -506,6 +506,8 @@ abstract final class NextUiDebug {
         final text = p['text'] ?? '';
         fields[index].widget.controller.value = TextEditingValue(
             text: text, selection: TextSelection.collapsed(offset: text.length));
+        // As typing would: the field's owner hears of it.
+        fields[index].widget.onChanged?.call(text);
         // Return, as the field handles it.
         if (p['submit'] == '1') fields[index].widget.onSubmitted?.call(text);
         await _settle();

@@ -31,7 +31,6 @@ EXCLUDE = [
     r'^protobufjs$', r'^@protobufjs/', r'^@types/', r'^koffi$', r'^@koromix/', r'^fontkit$',
     r'^brotli$', r'^web-streams-polyfill$', r'^@deepseek-ai/libreoffice-kit',
 ]
-PLATFORM_OS = 'darwin'  # the platform this lock was traced on
 
 
 def name_of(path):
@@ -45,7 +44,11 @@ def main():
     ap.add_argument('--cache', required=True)
     ap.add_argument('--out', required=True)
     ap.add_argument('--shasums')
-    ap.add_argument('--platforms', nargs='+', default=['macos-arm64'])
+    ap.add_argument('--platforms', nargs='+', default=['macos-arm64'],
+                    help='the platform keys whose package list was traced and tested')
+    ap.add_argument('--os', nargs='+', default=['darwin'],
+                    help="npm os names whose optional native packages are kept (darwin, linux, win32); "
+                         "trace each of them and pass every trace file")
     args = ap.parse_args()
     src = pathlib.Path(args.source).expanduser()
     lock = json.load(open(src / 'package-lock.json'))['packages']
@@ -62,7 +65,7 @@ def main():
 
     def platform_ok(e):
         o, c = e.get('os'), e.get('cpu')
-        return (not o or PLATFORM_OS in o) and (not c or bool({'arm64', 'x64'} & set(c)))
+        return (not o or bool(set(args.os) & set(o))) and (not c or bool({'arm64', 'x64'} & set(c)))
 
     # Packages that were used: something other than package.json was loaded or
     # read. DSH's plugin discovery reads every installed package.json, which

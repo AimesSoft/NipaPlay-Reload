@@ -717,6 +717,7 @@ class NipaSectionState extends State<NipaSection> {
   }
 
   Future<void> _save() async {
+    var saved = false;
     setState(() {
       _saving = true;
       _error = null;
@@ -734,12 +735,13 @@ class NipaSectionState extends State<NipaSection> {
         compat: _compat ?? const {},
       ));
       _dirty = false;
+      saved = true;
     } catch (_) {
       if (mounted) setState(() => _error = '没能保存');
     }
     if (mounted) setState(() => _saving = false);
     await _loadModel();
-    unawaited(_prepare());
+    if (saved) unawaited(_prepare());
   }
 
   /// A model is set and the runtime is not there: fetch it, as the person
@@ -763,15 +765,17 @@ class NipaSectionState extends State<NipaSection> {
       _error = null;
       _check = null;
     });
+    var imported = false;
     try {
       await _host.importCodexModel();
       _dirty = false;
+      imported = true;
     } catch (_) {
       if (mounted) setState(() => _error = '没能导入');
     }
     if (mounted) setState(() => _importing = false);
     await _loadModel();
-    unawaited(_prepare());
+    if (imported) unawaited(_prepare());
   }
 
   Future<void> _setAgent(UiAgentRuntimeKind kind) async {

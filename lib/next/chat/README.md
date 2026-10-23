@@ -269,7 +269,7 @@ fetches. A wrong selection is reported as `chatError`.
 
 **The runtime NipaPlay fetches** (`lib/next/runtime/dsh_install.dart`, manifest
 `assets/next/agent/dsh-runtime.json`). Not bundled: Next is a Labs feature and
-the runtime is ~86 MB to download and ~290 MB unpacked, which would be added to
+the runtime is 73 MB to download (a Node.js archive of 51 MB and 220 npm tarballs of 22 MB) and 264 MB unpacked (Node.js 117 MB, packages 147 MB in 16 000 files), which would be added to
 every download, signature and notarisation of the app, and to every update,
 for people who never open Next. Codex is fetched the same way. The first time
 a model is saved with no runtime in place (or by the 下载 button) NipaPlay
