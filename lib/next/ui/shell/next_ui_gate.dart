@@ -8,6 +8,7 @@ import '../../next_runtime.dart';
 import '../player/playback.dart';
 import '../player/stage.dart';
 import '../player/video_stage.dart';
+import '../../player/ports/session_playback.dart';
 import 'next_shell.dart';
 import 'next_ui_preference.dart';
 import 'window_chrome.dart';
@@ -60,13 +61,14 @@ class _NextUiGateState extends State<NextUiGate> {
     final window = DesktopPlayerWindowService.instance;
     final playback = NextPlaybackScope.maybeOf(context) ??
         context.read<NextRuntime>().playback;
+    final nextWindows = playback is SessionPlayback ? playback.windows : null;
     return NextPlaybackScope(
       playback: playback,
       child: PlaybackSelector<(bool, bool)>(
         playback: playback,
-        listenable: Listenable.merge([window, playback.transport]),
+        listenable: Listenable.merge([window, playback.transport, if (nextWindows != null) nextWindows]),
         selector: (p) => (
-          p.transport.value.active && !window.isPlayerDetached,
+          p.transport.value.active && !(nextWindows?.detached ?? window.isPlayerDetached),
           // The system draws the video under the window (Erika, Media
           // Kit's native video), not Flutter in a texture.
           p.transport.value.systemDrawn,
@@ -87,7 +89,7 @@ class _NextUiGateState extends State<NextUiGate> {
                 backdrop: true,
                 child: Stack(fit: StackFit.expand, children: [
                   _classic(stage != null || !playing),
-                  if (stage != null && playing) NextVideoStage(host: stage),
+                  if (stage != null && playing) NextVideoStage(key: nextWindows?.stageKey, host: stage),
                 ]),
               ),
               // Next's window chrome stays while the video is on, so the

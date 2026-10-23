@@ -9,6 +9,7 @@ import 'package:nipaplay/next/player/danmaku/controller.dart';
 import 'package:nipaplay/next/player/danmaku/native_sink.dart';
 import 'package:nipaplay/next/player/danmaku/session_port.dart';
 import 'package:nipaplay/next/player/danmaku/worker.dart';
+import 'package:nipaplay/next/player/features/kernel_features.dart';
 import 'package:nipaplay/danmaku_dfm/dfm_plus_layout_bridge.dart';
 import 'package:nipaplay/danmaku_next/next2_layout_bridge.dart';
 import 'package:nipaplay/next/player/perf/budget.dart';
@@ -74,8 +75,8 @@ void main() {
     expect(c.timeline.segments.single.end.inMilliseconds, 119500);
     c.remove('late');
     c.inputs(duration: 1440000, chapterFacts: [
-      {'title': 'OP', 'startMs': 30000, 'endMs': 120000},
-      {'title': 'ED', 'startMs': 1350000, 'endMs': 1440000}]);
+      const ChapterFacts('OP', 30000, endMs: 120000),
+      const ChapterFacts('ED', 1350000, endMs: 1440000)]);
     await c.settled;
     expect(c.timeline.segments.map((s) => s.kind.name), ['opening', 'ending']);
     c.inputs(duration: 1440000, chapterFacts: []);

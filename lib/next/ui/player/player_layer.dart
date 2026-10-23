@@ -739,6 +739,12 @@ class _BottomBar extends StatelessWidget {
               heat: playback.heat(),
               onSeek: playback.seek,
               onScrub: onScrub,
+              preview: switch (playback) {
+                SessionPlayback(:final preview, :final session)
+                    when preview.enabled && session != null =>
+                  (at) => preview.at(session.source.uri, at),
+                _ => null,
+              },
             ),
           ),
           const SizedBox(height: 2),

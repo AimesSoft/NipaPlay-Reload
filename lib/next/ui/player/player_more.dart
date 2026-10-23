@@ -7,8 +7,10 @@ import '../widgets/icons.dart';
 import '../widgets/menu.dart';
 import 'menu_controls.dart';
 import 'playback.dart';
+import '../../player/ports/session_playback.dart';
+import 'gif_dialog.dart';
 
-enum _Page { root, rate, audio, fit, danmaku }
+enum _Page { root, rate, audio, fit, danmaku, chapters }
 
 /// What the bar has no room for: the speed, the audio track, how the
 /// picture fits, the danmaku's look; a still of the picture, picture in
@@ -105,6 +107,7 @@ class MoreMenuState extends State<MoreMenu> {
               _Page.rate => _rate(),
               _Page.audio => _audioPage(),
               _Page.fit => _fit(),
+              _Page.chapters => _chapters(),
               _Page.danmaku =>
                 _DanmakuPage(playback: _playback, onBack: back, set: _set),
             },
@@ -143,9 +146,35 @@ class MoreMenuState extends State<MoreMenu> {
               MenuItem(label: '截图', onTap: widget.onScreenshot),
             if (_playback.canPictureInPicture)
               MenuItem(label: '画中画', onTap: widget.onPictureInPicture),
+            if (_playback case final SessionPlayback next) ...[
+              PlayerMenuLink(label: '章节', onTap: () => _open(_Page.chapters)),
+              MenuItem(label: '逐帧后退（,）', onTap: () => _set(() async {
+                await next.inspection.inspect('playback.navigate', {'frameDelta': -1});
+              })),
+              MenuItem(label: '逐帧前进（.）', onTap: () => _set(() async {
+                await next.inspection.inspect('playback.navigate', {'frameDelta': 1});
+              })),
+              MenuItem(label: '截取 GIF', onTap: () => _set(() => showNextGifDialog(context, next))),
+              if (next.canPictureInPicture)
+                MenuItem(label: next.windows.detached ? '返回主窗口' : '分离窗口',
+                    onTap: () => _set(next.windows.detached ? next.windows.returnToMain : next.detach)),
+            ],
           ]);
         },
       );
+
+  Widget _chapters() {
+    final p = _playback;
+    final chapters = p is SessionPlayback ? p.session?.media.value?.chapters : null;
+    return _list<int>(title: '章节',
+      options: [for (final (i, c) in (chapters ?? []).indexed)
+        (i, '${c.title.isEmpty ? '章节 ${i + 1}' : c.title} · ${c.startMs ~/ 60000}:${((c.startMs ~/ 1000) % 60).toString().padLeft(2, '0')}')],
+      selected: (_) => false,
+      onTap: (index) => _set(() async {
+        await p.inspection.inspect('playback.navigate', {'chapterIndex': index});
+        back();
+      }));
+  }
 
   Widget _list<T>({
     required String title,

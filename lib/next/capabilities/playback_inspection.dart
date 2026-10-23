@@ -40,7 +40,7 @@ const _specs = <String, (String, Effect, ObjectSchema)>{
     ])
   ),
   'playback.retry': (
-    'Explicitly reload the same internal source through Classic initialization, resolving its source again. Keeps saved progress, detail context and manual danmaku offset. preservePosition defaults true. Result describes observed readiness; further observation uses wait. External reload is unsupported.',
+    'Explicitly reload the current internal source. Next creates a new kernel instance and preserves pause, volume, volume boost and rate; preservePosition defaults true. Result describes observed readiness; further observation uses wait. External reload is unsupported.',
     Effect.write,
     ObjectSchema({'sessionId': _session, 'preservePosition': BooleanSchema()},
         required: ['sessionId'])
@@ -66,7 +66,7 @@ const _specs = <String, (String, Effect, ObjectSchema)>{
     ObjectSchema({})
   ),
   'playback.navigate': (
-    'Use exactly one chapterIndex, frameDelta (-1 or +1), or skipKind (current/opening/ending). Chapter/skip use the same Classic operation. Frame result reports native or approximate 42ms seek honestly. Accepted command and observed position are distinct.',
+    'Use exactly one chapterIndex, frameDelta (-1 or +1), or skipKind (current/opening/ending). Uses the active player session. Frame result reports a native frame step or an exact seek using the reported frame interval. Accepted command and observed position are distinct.',
     Effect.write,
     ObjectSchema({
       'sessionId': _session,

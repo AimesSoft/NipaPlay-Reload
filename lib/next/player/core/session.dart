@@ -324,6 +324,7 @@ final class PlaybackSession {
   final String id;
   final MediaRequest request;
   final ResolvedSource _source;
+  ResolvedSource get source => _source;
   final SessionDeps _deps;
   final DateTime openedAt;
   final PlaybackClock clock;
@@ -711,6 +712,7 @@ final class PlaybackSession {
   }
 
   late double _boost = _deps.levels.boost;
+  double get volumeBoost => _boost;
 
   KernelTrackPlan? _openPlan;
 

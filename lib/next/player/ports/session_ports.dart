@@ -43,6 +43,7 @@ final class SessionPlayerPort implements PlayerPort {
   @override
   PlaybackSnapshot snapshot() {
     final p = _playback;
+    if (p.externalHandoff?.active == true) return p.externalHandoff!.snapshot();
     final s = p.session;
     final t = s?.transport.value;
     final phase = s?.phase.value;
@@ -75,8 +76,8 @@ final class SessionPlayerPort implements PlayerPort {
       buffering: open ? t!.buffering : null,
       error: live ? errorFacts(s) : null,
       kernel: {
-        'id': KernelId.mdk.id,
-        'name': KernelId.mdk.label,
+        'id': s?.driver?.kernel.id,
+        'name': s?.driver?.kernel.label,
         'instance': s?.driver?.instance,
         'configured': p.host.configuredKernel(),
         'layer': 'next_core',
@@ -87,7 +88,11 @@ final class SessionPlayerPort implements PlayerPort {
         'seek',
         'close',
         'wait',
-        'playlist'
+        'playlist',
+        'retry',
+        'chapters',
+        'frame',
+        'capture'
       ],
     );
   }
@@ -120,6 +125,7 @@ final class SessionPlayerPort implements PlayerPort {
 
   @override
   Future<void> setPaused(bool paused) async {
+    _requireControlled();
     final s = _playback.session;
     if (s == null) return;
     await s.setPaused(paused, origin: commandOrigin());
@@ -127,6 +133,7 @@ final class SessionPlayerPort implements PlayerPort {
 
   @override
   Future<void> seekTo(Duration position) async {
+    _requireControlled();
     final s = _playback.session;
     if (s == null) return;
     await s.seek(position, origin: commandOrigin());
@@ -136,6 +143,14 @@ final class SessionPlayerPort implements PlayerPort {
   Future<void> switchEpisode(EpisodeDirection direction) async =>
       _playback.sources.switchEpisode(direction == EpisodeDirection.next,
           origin: commandOrigin());
+
+  void _requireControlled() {
+    if (_playback.externalHandoff?.active == true) {
+      throw const Failure(FailureCode.unavailable,
+          '在外部播放器中播放，NipaPlay 无法控制播放。',
+          details: {'reason': 'external_player', 'controlAvailable': false});
+    }
+  }
 }
 
 /// playback.wait/close/info/failures… over Next's playback layer; what it
@@ -149,6 +164,9 @@ final class SessionControls
 
   @override
   Future<JsonMap> inspect(String operation, JsonMap input) async {
+    if (const ['playback.retry', 'playback.navigate', 'playback.chapters'].contains(operation)) {
+      _sameSession(input);
+    }
     switch (operation) {
       case 'playback.wait':
         return _wait(input);
@@ -167,41 +185,39 @@ final class SessionControls
           'state': _state
         };
       case 'playback.retry':
-        notInPlaybackLayer('retry',
-            'Next\'s playback layer does not retry yet; open the path again with playback.open.');
+        return _retry(input);
       case 'playback.chapters':
+        // The chapters are the kernel's; the skip segments the danmaku
+        // layer's timeline works out (chapters, danmaku and the server's).
         return {
-          'sessionId': _playback.session?.id,
-          'items': _playback.danmaku.chapters,
-          'index': _playback.danmaku.chapters.lastIndexWhere((c) =>
-              (c['startMs'] as num) <= _playback.position.inMilliseconds),
-          'skipSegments': [for (final segment in _playback.danmaku.timeline.segments)
-            {'kind': segment.kind.name, 'source': segment.source.name,
-              'startMs': segment.start.inMilliseconds,
-              'endMs': segment.end.inMilliseconds,
-              'evidenceCount': segment.evidenceCount}],
+          ..._playback.navigation.chapters(_internal()),
+          'skipSegments': [
+            for (final segment in _playback.danmaku.timeline.segments)
+              {
+                'kind': segment.kind.name,
+                'source': segment.source.name,
+                'startMs': segment.start.inMilliseconds,
+                'endMs': segment.end.inMilliseconds,
+                'evidenceCount': segment.evidenceCount
+              }
+          ],
           'activeSkipKind': _playback.activeSkipSegment?.kind.name,
         };
       case 'playback.navigate':
         if (input['skipKind'] case final String kind) {
-          final segment = kind == 'current' ? _playback.activeSkipSegment
-              : _playback.danmaku.timeline.segments.where((s) => s.kind.name == kind).firstOrNull;
+          final segment = kind == 'current'
+              ? _playback.activeSkipSegment
+              : _playback.danmaku.timeline.segments
+                  .where((s) => s.kind.name == kind)
+                  .firstOrNull;
           if (segment != null) {
             await _playback.skipTo(segment, origin: commandOrigin());
           }
           return {'commandStatus': 'accepted', 'method': 'skip', 'state': _state};
         }
-        if (input['chapterIndex'] case final int index) {
-          final chapters = _playback.danmaku.chapters;
-          if (index < 0 || index >= chapters.length) {
-            throw const Failure(FailureCode.invalidInput, 'Chapter index out of range.');
-          }
-          await _playback.session?.seek(Duration(milliseconds: chapters[index]['startMs'] as int),
-              origin: commandOrigin());
-          return {'commandStatus': 'accepted', 'method': 'chapter', 'state': _state};
-        }
-        notInPlaybackLayer('chapters',
-            'Next\'s playback layer does not read chapters, step frames or skip segments yet.');
+        final result = await _playback.navigation
+            .navigate(_internal(), input, commandOrigin());
+        return {...result, 'state': _state};
       case 'playback.playlist':
         return _playback.sources.playlist();
       case 'subtitle.cues':
@@ -210,6 +226,40 @@ final class SessionControls
         return _playback.danmaku.entries(input, _playback.position.inMilliseconds);
     }
     throw Failure(FailureCode.invalidInput, 'Unknown operation $operation.');
+  }
+
+  void _sameSession(JsonMap input) {
+    if (input['sessionId'] != null && input['sessionId'] != _state['sessionId']) {
+      throw const Failure(FailureCode.conflict,
+          'Playback session changed. Read playback.state.');
+    }
+  }
+
+  PlaybackSession _internal() {
+    final session = _playback.session;
+    if (session == null || session.phase.value.done || _playback.externalHandoff?.active == true) {
+      throw const Failure(FailureCode.unavailable,
+          'This operation requires an internal playback session.');
+    }
+    return session;
+  }
+
+  Future<JsonMap> _retry(JsonMap input) async {
+    final old = _internal();
+    final request = old.request;
+    final preserve = input['preservePosition'] as bool? ?? true;
+    final next = await _playback.host.open(MediaRequest(
+      locator: request.locator, origin: commandOrigin(), title: request.title,
+      episodeTitle: request.episodeTitle, animeId: request.animeId,
+      episodeId: request.episodeId,
+      start: preserve ? old.position : Duration.zero,
+      paused: !old.transport.value.playIntent),
+      initialLevels: PlayerLevels(volume: old.transport.value.volume, boost: old.volumeBoost, rate: old.transport.value.rate));
+    if (!identical(next, _playback.session) || next.phase.value.done) {
+      throw const Failure(FailureCode.conflict, 'Playback changed while retrying.');
+    }
+    return {'commandStatus': next.fault.value == null ? 'accepted' : 'failed',
+      'previousSessionId': old.id, 'state': _state};
   }
 
   /// Event-driven: completes when the session gets there, ends, changes or
@@ -274,6 +324,11 @@ final class SessionControls
   }
 
   Future<JsonMap> _info() async {
+    if (_playback.externalHandoff?.active == true) {
+      return {'sessionId': _state['sessionId'], 'observedAt': DateTime.now().toUtc().toIso8601String(),
+        'player': 'external', 'hasVideo': false, 'external': _playback.externalHandoff!.facts(),
+        'unavailableReason': 'external_player'};
+    }
     final s = _playback.session;
     final driver = s?.driver;
     JsonMap? kernel;
@@ -294,8 +349,8 @@ final class SessionControls
       'hasVideo': _playback.hasVideo,
       'layer': 'next_core',
       'kernel': {
-        'id': KernelId.mdk.id,
-        'name': KernelId.mdk.label,
+        'id': driver?.kernel.id,
+        'name': driver?.kernel.label,
         'configured': _playback.host.configuredKernel(),
         'version': kernel?['version'],
         'instance': driver?.instance,
@@ -597,12 +652,26 @@ final class SessionControls
   Future<JsonMap> selectStream(JsonMap input) async =>
       _playback.sources.selectStream(input, origin: commandOrigin());
   @override
-  Future<JsonMap> external(JsonMap input) async => notInPlaybackLayer(
-      'external_player',
-      'Next\'s playback layer does not hand media to an external player yet.');
+  Future<JsonMap> external(JsonMap input) async {
+    final external = _playback.externalHandoff;
+    if (external?.active != true) {
+      throw const Failure(FailureCode.unavailable, 'No external player handoff is active.');
+    }
+    if (input['command'] == 'state') return external!.facts();
+    throw const Failure(FailureCode.unavailable,
+        '在外部播放器中播放，NipaPlay 无法控制播放。',
+        details: {'reason': 'external_player', 'controlAvailable': false});
+  }
   @override
-  Future<JsonMap> capture(JsonMap input) async => notInPlaybackLayer(
-      'capture', 'Next\'s playback layer does not take stills or GIFs yet.');
+  Future<JsonMap> capture(JsonMap input) async {
+    _sameSession(input);
+    final result = await _playback.capture.capture(_internal(), input, aspectMode: _playback.fit);
+    if (result['kind'] == 'screenshot') {
+      result['danmakuIncluded'] = result['danmakuIncluded'] == true && _playback.danmakuVisible;
+      if (!_playback.danmakuVisible) result['danmakuReason'] = 'The danmaku display switch is off or no danmaku layer is present.';
+    }
+    return result;
+  }
 
   @override
   Future<JsonMap> close(JsonMap input) async {

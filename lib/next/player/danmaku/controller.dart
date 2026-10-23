@@ -14,6 +14,7 @@ import 'package:nipaplay/services/intro_skip/skip_segment.dart';
 import '../../danmaku/source.dart';
 import '../../settings/registry.dart';
 import '../perf/budget.dart';
+import '../features/kernel_features.dart' show ChapterFacts;
 import 'native_sink.dart';
 import 'settings.dart';
 import 'timeline_build.dart';
@@ -133,15 +134,19 @@ final class SessionDanmakuController extends ChangeNotifier
     unawaited(rebuild());
   }
 
-  void inputs({required int duration,
-      List<Map<String, dynamic>>? chapterFacts}) {
+  List<ChapterFacts>? _chapterSource;
+
+  void inputs({required int duration, List<ChapterFacts>? chapterFacts}) {
     if (_closed) return;
     if (duration == durationMs &&
-        (chapterFacts == null || identical(chapterFacts, chapters))) {
+        (chapterFacts == null || identical(chapterFacts, _chapterSource))) {
       return;
     }
     durationMs = duration;
-    if (chapterFacts != null) chapters = chapterFacts;
+    if (chapterFacts != null && !identical(chapterFacts, _chapterSource)) {
+      _chapterSource = chapterFacts;
+      chapters = [for (final c in chapterFacts) c.toJson().cast<String, dynamic>()];
+    }
     unawaited(rebuild());
   }
 

@@ -189,6 +189,7 @@ final class NextPlayerHost {
     MediaRequest request, {
     ResolvedSource? resolvedSource,
     void Function(PlaybackSession session)? onCreated,
+    PlayerLevels? initialLevels,
   }) async {
     final ResolvedSource source;
     try {
@@ -212,7 +213,7 @@ final class NextPlayerHost {
             arbiter: arbiter,
             createDriver: (lease) => createDriver(KernelId.mdk, lease),
             records: records,
-            levels: playerLevels,
+            levels: initialLevels ?? playerLevels,
             cues: cues,
             look: _look,
             placementOf: placementOf,
