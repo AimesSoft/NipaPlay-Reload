@@ -80,6 +80,7 @@ settings = ['player.externalEnabled', 'player.externalPath', 'player.externalTyp
             'player.timelinePreviewEnabled']
 saved = {}
 original_kernel = call('settings.get', {'key': 'player.kernel'}).get('value')
+fake_player_pid = None
 
 
 def setting(key, value):
@@ -104,6 +105,9 @@ try:
     call('playback.seek', {'positionMs': int(current['durationMs'] * .7)})
     time.sleep(2)
     call('playback.set_paused', {'paused': True})
+    call('playback.wait', {'sessionId': current['sessionId'], 'until': 'paused', 'timeoutMs': 5000})
+    # The two independent image reads must follow the last queued video frame.
+    time.sleep(.25)
     current = state()
     call('playback.capture', {'kind': 'screenshot', 'outputPath': str(artifacts / 'midpoint.png'),
                               'includeDanmaku': True})
@@ -162,6 +166,7 @@ try:
     setting('player.externalEnabled', True)
     call('playback.open', {'path': str(episode)})
     external_state = state()
+    fake_player_pid = external_state.get('external', {}).get('pid')
     call('playback.info')
     call('playback.external', {'command': 'state'})
     call('playback.external_state')
@@ -170,12 +175,22 @@ try:
     shot('external-ui')
     assert external_state['player'] == 'external', external_state
     assert external_state['positionMs'] is None and external_state['paused'] is None
+    # Process.start acknowledges the launch before the child's first write.
+    deadline = time.monotonic() + 5
+    while time.monotonic() < deadline:
+        if args_path.exists() and args_path.read_text().splitlines() == [str(episode)]:
+            break
+        time.sleep(.05)
     assert args_path.read_text().splitlines() == [str(episode)]
     call('playback.close')
-    os.kill(external_state['external']['pid'], signal.SIGTERM)
     # Detection is noninteractive and does not launch or focus a player.
     call('playback.external_player_path', {'command': 'detect'})
 finally:
+    if fake_player_pid is not None:
+        try:
+            os.kill(fake_player_pid, signal.SIGTERM)
+        except ProcessLookupError:
+            pass
     setting('player.externalEnabled', False)
     for key in settings[1:]:
         if saved.get(key) is not None:
