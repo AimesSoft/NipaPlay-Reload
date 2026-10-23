@@ -403,6 +403,27 @@ def subtitles_check(kernel):
     gui('playback.close')
 
 
+def mdk_file_plan():
+    """MDK + 字幕库记的外挂 ASS 进打开计划（Sintel）：打开会不会成。"""
+    ass = HOME / '.nipa-next/erika-followups-runs/data/sintel.zh.ass'
+    use('erika')
+    gui('playback.open', {'path': str(SINTEL), 'startPositionMs': 120000})
+    wait_playing()
+    record('off', reply=gui('playback.select_track', {'kind': 'subtitle', 'origin': 'embedded', 'index': -1}), facts=subtitle_facts())
+    gui('playback.close')
+    use('mdk')
+    gui('playback.open', {'path': str(SINTEL), 'startPositionMs': 120000})
+    s = wait_playing()
+    record('mdk_plain', status=s.get('status'), error=s.get('error'), facts=subtitle_facts())
+    record('mdk_load', reply=gui('playback.load_subtitle', {'path': str(ass)}), facts=subtitle_facts())
+    time.sleep(1)
+    gui('playback.close')
+    gui('playback.open', {'path': str(SINTEL), 'startPositionMs': 120000})
+    s = wait_playing()
+    record('mdk_file_plan', status=s.get('status'), error=s.get('error'), facts=subtitle_facts())
+    gui('playback.close')
+
+
 def setting_check():
     """验收 3：播放中保存内核设置，当前播放不受影响，下次打开用新内核。"""
     use('mdk')
@@ -474,14 +495,31 @@ try:
         for kernel in kernels:
             for name in ('sintel', 'episode12'):
                 for iteration in range(count):
-                    if not check(kernel, name, iteration, picture=iteration == 0):
-                        break
+                    check(kernel, name, iteration, picture=iteration == 0)
     elif MODE == 'paused':
         for kernel in ARGS or SETTING:
             paused_check(kernel)
     elif MODE == 'subtitles':
         for kernel in ARGS or SETTING:
             subtitles_check(kernel)
+    elif MODE == 'prep':
+        # prep sintel|episode12 off|embedded N|file PATH: what the subtitle
+        # library records for that media, set through Erika.
+        name, kind = ARGS[0], ARGS[1]
+        use('erika')
+        gui('playback.open', {'path': str(media_for('erika', name)), 'startPositionMs': 5000})
+        wait_playing()
+        if kind == 'off':
+            reply = gui('playback.select_track', {'kind': 'subtitle', 'origin': 'embedded', 'index': -1})
+        elif kind == 'embedded':
+            reply = gui('playback.select_track', {'kind': 'subtitle', 'origin': 'embedded', 'index': int(ARGS[2])})
+        else:
+            reply = gui('playback.load_subtitle', {'path': ARGS[2]})
+        time.sleep(1)
+        record('prep', reply=reply, facts=subtitle_facts())
+        gui('playback.close')
+    elif MODE == 'mdkfile':
+        mdk_file_plan()
     elif MODE == 'swap':
         swap_loop(int(ARGS[0]) if ARGS else 50, ARGS[1] if len(ARGS) > 1 else 'sintel',
                   ARGS[2] if len(ARGS) > 2 else 'srt')

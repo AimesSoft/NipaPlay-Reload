@@ -377,6 +377,11 @@ abstract class AdapterDriver implements KernelDriver {
         queue.live();
         _endSent = false;
         _send(landed, advancing: observed == KernelTransport.playing);
+        // A paused picture is the frame the media is at, not the one before.
+        if (observed != KernelTransport.playing) {
+          await showFrame();
+          queue.live();
+        }
         return SeekOutcome(SeekResult.done, landed);
       } finally {
         sample.cancel();

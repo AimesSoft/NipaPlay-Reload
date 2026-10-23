@@ -45,12 +45,24 @@ final class VideoPlayerDriver extends AdapterDriver {
   double _volume = 1;
   double _speed = 1;
 
+  /// While a frame is made to go up on a paused picture, what the
+  /// controller says of playing is not told (it is no transport change).
+  bool _flashing = false;
+  Completer<void>? _moved;
+
   void _changed() {
     final controller = _controller;
     if (fenced || controller == null) return;
     final value = controller.value;
     if (value.hasError) {
       failed(value.errorDescription ?? 'video_player reported an error.');
+      return;
+    }
+    if (_flashing) {
+      final waiter = _moved;
+      if (waiter != null && !waiter.isCompleted && value.isPlaying) {
+        waiter.complete();
+      }
       return;
     }
     transportChanged(
@@ -167,6 +179,33 @@ final class VideoPlayerDriver extends AdapterDriver {
 
   @override
   Future<void> applySubtitleProperties(Map<String, String> properties) async {}
+
+  /// The platform draws a frame only while the media plays: a paused
+  /// picture is made by playing it, silent, for as long as the platform
+  /// takes to put a frame out, then pausing and putting the position back
+  /// to where it was.
+  @override
+  Future<void> showFrame() async {
+    final controller = _controller;
+    if (controller == null || observed == KernelTransport.playing) return;
+    final at = controller.value.position;
+    _flashing = true;
+    final moved = _moved = Completer<void>();
+    try {
+      await controller.setVolume(0);
+      await controller.play();
+      queue.live();
+      await moved.future.timeout(const Duration(milliseconds: 400), onTimeout: () {});
+      await Future<void>.delayed(const Duration(milliseconds: 60));
+      queue.live();
+      await controller.pause();
+      await controller.seekTo(at);
+    } finally {
+      _moved = null;
+      _flashing = false;
+      if (!fenced) await controller.setVolume(_volume);
+    }
+  }
 
   @override
   Future<JsonMap> kernelFacts() async => {
