@@ -523,16 +523,23 @@ final class SubtitleLibrary implements SubtitleOperations {
     player.loader = (path) => loadForPlayback(player, path);
     player.selection = (path, index, external) async {
       final id = await identities.ensureFile(path);
-      final value = await facts(id);
-      final track = (value['tracks'] as List)
+      Future<JsonMap?> find() async => ((await facts(id))['tracks'] as List)
           .cast<JsonMap>()
           .where((t) => external != null
               ? t['path'] == external || t['playbackPath'] == external
               : t['origin'] == 'embedded' && t['index'] == index)
           .firstOrNull;
-      if (track != null || index == -1) {
-        await select(id, track?['id'] as String?);
+      var track = await find();
+      if (track == null && external != null) {
+        // A file the person or Nipa just mounted: the library reads it from
+        // the shared subtitle list on its next look at the video.
+        await inspect(id, path);
+        track = await find();
       }
+      if (track == null && index != -1) {
+        throw StateError('The subtitle library has no such track for this video.');
+      }
+      await select(id, track?['id'] as String?);
     };
   }
 

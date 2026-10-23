@@ -187,7 +187,7 @@ void main() {
     await playback.close(reason: 'test');
   });
 
-  test('the person\'s and Nipa\'s choices are told to the library; the '
+  test('the person\'s choices (and Nipa\'s with remember) are told to the library; the '
       'library\'s own are not, and its echo keeps the choice theirs', () async {
     final rig = FakeHost();
     final recorded = <(String, int?, String?)>[];
@@ -207,8 +207,13 @@ void main() {
     expect(session.subtitles.state.value.selectedBy, 'gui');
     expect(recorded, hasLength(1));
     // Nipa turns them off through the capability.
-    final off = await playback.controls.selectTrack(
+    final held = await playback.controls.selectTrack(
         {'kind': 'subtitle', 'origin': 'embedded', 'index': -1});
+    expect((held['receipt'] as Map)['outcome'], 'applied');
+    await settle();
+    expect(recorded, hasLength(1));
+    final off = await playback.controls.selectTrack(
+        {'kind': 'subtitle', 'origin': 'embedded', 'index': -1, 'remember': true});
     expect((off['receipt'] as Map)['outcome'], 'applied');
     await settle();
     expect(recorded.last, (video, -1, null));
