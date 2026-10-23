@@ -1,10 +1,16 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:developer';
 
+import 'package:nipaplay/app/app_page_ids.dart';
+import 'package:nipaplay/app/unified_app_view_presenter.dart';
+import 'package:nipaplay/models/playable_item.dart';
 import 'package:nipaplay/models/watch_history_model.dart';
 import 'package:nipaplay/providers/service_provider.dart';
 import 'package:nipaplay/services/danmaku_cache_manager.dart';
 import 'package:nipaplay/services/desktop_player_window_service.dart';
+import 'package:nipaplay/services/playback_service.dart';
+import 'package:nipaplay/utils/globals.dart' as globals;
 import 'package:nipaplay/utils/lab_profile.dart';
 import 'package:nipaplay/utils/video_player_state.dart';
 import 'package:path/path.dart' as p;
@@ -94,6 +100,33 @@ void installDebugLocalOperations(VideoPlayerState player) {
         // capability (in Classic none of Nipa's run).
         final info = await PackageInfo.fromPlatform();
         result = await ClassicUiCapture(InstanceFacts(info.version)).capture();
+      } else if (params['op'] == 'settings') {
+        // Classic's settings at a page (labs…), as its menu opens them.
+        final context = globals.navigatorKey.currentState?.overlay?.context;
+        if (context == null) throw StateError('No window to show settings in.');
+        unawaited(UnifiedAppViewPresenter.show<void>(context,
+            viewId: AppPageIds.settings, initialSubpageId: params['page']));
+        await Future<void>.delayed(const Duration(milliseconds: 800));
+        result = {'shown': params['page']};
+      } else if (params['op'] == 'play') {
+        // Classic's own way of opening a file, as its file list does.
+        result = {
+          'started': await PlaybackService()
+              .play(PlayableItem(videoPath: params['path']!))
+        };
+      } else if (params['op'] == 'nipa') {
+        final core = ServiceProvider.nextCore;
+        result = {
+          'nipaRunning': core.nipaRunning,
+          'gateOpen': core.nipaGate.open,
+          'hooks': await core.hooks.status(),
+          'classic': {
+            'hasVideo': player.hasVideo,
+            'status': player.status.name,
+            'path': player.currentVideoPath,
+            'positionMs': player.position.inMilliseconds,
+          },
+        };
       } else {
         throw ArgumentError('Unknown lab operation.');
       }

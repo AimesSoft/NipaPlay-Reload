@@ -5,6 +5,7 @@ import 'package:nipaplay/l10n/l10n.dart';
 import 'package:nipaplay/models/danmaku/blocked_item.dart';
 import 'package:nipaplay/models/danmaku/danmaku_item.dart';
 import 'package:nipaplay/models/danmaku/style.dart';
+import 'package:nipaplay/next/ui/shell/next_ui_preference.dart';
 import 'package:nipaplay/providers/labs_settings_provider.dart';
 import 'package:nipaplay/services/danmaku/danmaku_service.dart';
 import 'package:nipaplay/services/external_player_console_service.dart';
@@ -15,8 +16,12 @@ import 'package:nipaplay/utils/app_accent_color.dart';
 import 'package:nipaplay/utils/video_player_state.dart';
 import 'package:provider/provider.dart';
 
-bool _audienceView(BuildContext context) =>
-    context.watch<LabsSettingsProvider?>()?.enableAgentEndpoint ?? false;
+/// Next's restrained view of the console, only while Next's interface is
+/// open; Classic's own otherwise.
+bool _audienceView(BuildContext context) => NextUiPreference.interfaceOpen(
+    nextEnabled:
+        context.watch<LabsSettingsProvider?>()?.enableAgentEndpoint ?? false,
+    preference: context.watch<NextUiPreference?>()?.enabled ?? false);
 
 /// 桌面端 mpv 外部播放会话控制台。
 enum ExternalPlayerConsolePane {

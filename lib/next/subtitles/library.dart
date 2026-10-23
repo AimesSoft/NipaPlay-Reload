@@ -577,6 +577,15 @@ final class SubtitleLibrary implements SubtitleOperations {
     return true;
   }
 
+  /// Not following files until [start] again.
+  Future<void> pause() async {
+    _timer?.cancel();
+    _timer = null;
+    await _events?.cancel();
+    _events = null;
+    await _worker;
+  }
+
   Future<void> close() async {
     _closed = true;
     detachPlayer();

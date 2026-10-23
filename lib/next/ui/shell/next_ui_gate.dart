@@ -51,8 +51,8 @@ class _NextUiGateState extends State<NextUiGate> {
   Widget build(BuildContext context) {
     final labs = context.watch<LabsSettingsProvider>();
     final preference = context.watch<NextUiPreference>();
-    final on =
-        globals.isDesktop && labs.enableAgentEndpoint && preference.enabled;
+    final on = NextUiPreference.interfaceOpen(
+        nextEnabled: labs.enableAgentEndpoint, preference: preference.enabled);
     globals.nextShellHostsPlayer = on;
     if (!on) return _classic(false);
     final window = DesktopPlayerWindowService.instance;

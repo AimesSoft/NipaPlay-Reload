@@ -126,6 +126,13 @@ final class MeshRuntime implements MeshDeviceSource {
   }
 
   Future<void> restartConfigured() async {
+    await stop();
+    await startConfigured();
+  }
+
+  /// Offline until [startConfigured] again: no listener, no login watch, no
+  /// heartbeat.
+  Future<void> stop() async {
     _loginWatch?.cancel();
     _heartbeat?.cancel();
     await _operations;
@@ -136,7 +143,6 @@ final class MeshRuntime implements MeshDeviceSource {
     _nextJoinAttempt = DateTime.fromMillisecondsSinceEpoch(0);
     _reachability.clear();
     status = 'disabled';
-    await startConfigured();
   }
   @override
   List<JsonMap> get cachedDevices => [

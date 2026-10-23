@@ -1,7 +1,4 @@
 import 'dart:async';
-import 'package:nipa_harness/nipa_harness.dart' show Invocation, Failed;
-import 'package:nipaplay/next/next_runtime.dart';
-import 'package:nipaplay/providers/service_provider.dart';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -370,10 +367,6 @@ class _AnimeDetailPageState extends State<AnimeDetailPage>
   @override
   void initState() {
     super.initState();
-    if (context.read<LabsSettingsProvider?>()?.enableAgentEndpoint == true) {
-      _nextHistory = context.read<WatchHistoryProvider>();
-      _nextHistory!.addListener(_localHistoryChanged);
-    }
     if (!widget.embeddedInPlayback) {
       _openPageContext = context;
     }
@@ -591,7 +584,6 @@ class _AnimeDetailPageState extends State<AnimeDetailPage>
 
   @override
   void dispose() {
-    _nextHistory?.removeListener(_localHistoryChanged);
     if (_openPageContext == context) {
       _openPageContext = null;
     }
@@ -603,22 +595,6 @@ class _AnimeDetailPageState extends State<AnimeDetailPage>
     _detailTabController?.dispose();
     _largeScreenDetailsFocusNode.dispose();
     super.dispose();
-  }
-
-  WatchHistoryProvider? _nextHistory;
-  void _localHistoryChanged() {
-    if (!mounted) return;
-    setState(() => _episodeHistoryFutures.clear());
-  }
-
-  Future<void> _markLocalWatched(WatchHistoryItem history, bool watched) async {
-    final core = ServiceProvider.nextCore;
-    await core.ready;
-    final fileId = await core.media.service.store.ensureFile(history.filePath);
-    if (!mounted) return;
-    final result = await context.read<NextRuntime>().harness.invokeJson(
-      'history.mark_watched_batch', {'entries': [{'fileId': fileId, 'watched': watched}]}, Invocation(origin: 'gui'));
-    if (result is Failed && mounted) _showBlurSnackBar(context, '观看状态未能保存');
   }
 
   void _dismissDetailIfNeeded() {
@@ -2413,13 +2389,6 @@ class _AnimeDetailPageState extends State<AnimeDetailPage>
                           trailing: Row(
                             mainAxisSize: MainAxisSize.min,
                             children: [
-                              if (_nextHistory != null && historyItem != null)
-                                IconButton(
-                                  tooltip: historyItem.watchProgress >= .95 ? '标记没看过' : '标记看过',
-                                  icon: Icon(historyItem.watchProgress >= .95 ? Ionicons.checkmark_circle : Ionicons.checkmark_circle_outline,
-                                    color: historyItem.watchProgress >= .95 ? progressGreen : secondaryTextColor.withOpacity(.4), size: 18),
-                                  onPressed: () => _markLocalWatched(historyItem, historyItem.watchProgress < .95),
-                                ),
                               if (progressText != null)
                                 Text(
                                   progressText,

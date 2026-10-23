@@ -6,6 +6,7 @@ import 'platform/loop_lag.dart';
 import 'player/classic/classic_backed_playback.dart';
 import 'player/next_playback.dart';
 import 'player/perf/budget.dart';
+import 'ui/shell/next_ui_preference.dart';
 import 'runtime/codex_runtime.dart';
 import 'settings/classic_host_device_settings.dart';
 import 'package:nipaplay/utils/lab_profile.dart';
@@ -90,7 +91,8 @@ import 'ui_data/host_settings.dart';
 import 'settings/debug_host_settings.dart';
 
 final class NextRuntime extends ChangeNotifier {
-  NextRuntime._(this._labs, this.playback, List<Capability> capabilities) {
+  NextRuntime._(this._labs, this._preference, this.playback,
+      List<Capability> capabilities) {
     _operations = _initialize(capabilities);
   }
 
@@ -259,7 +261,7 @@ final class NextRuntime extends ChangeNotifier {
         'state': nextPlayback.snapshot().toJson()
       };
     };
-    return NextRuntime._(labs, nextPlayback, [
+    return NextRuntime._(labs, context.read<NextUiPreference>(), nextPlayback, [
       WatchedHistoryCapability(WatchedHistory(() => core.media.service,
           () => WatchHistoryDatabase.instance.database, history.refresh),
           mergedLibrary: () => core.uiData.meshLibrary!),
@@ -298,6 +300,7 @@ final class NextRuntime extends ChangeNotifier {
   }
 
   final LabsSettingsProvider _labs;
+  final NextUiPreference _preference;
 
   /// What plays, for Next (Classic's player behind it until P1).
   final NextPlayback playback;
@@ -331,6 +334,8 @@ final class NextRuntime extends ChangeNotifier {
   Future<void> closeChat() async {
     await _hostSettings?.codex?.cancel();
     await _operations;
+    // In Classic there is no conversation to close (D1).
+    if (!_nipa && chat == null) return;
     await ServiceProvider.nextCore.followups.attach(null, reason: 'Chat host was closed.');
     await chat?.close();
     chat = null;
@@ -389,6 +394,7 @@ final class NextRuntime extends ChangeNotifier {
     _location = core.harnessLocation;
     await _location!.ready;
     await _labs.ready;
+    await _preference.ready;
     final root = core.root;
     final manifest = await AssetManifest.loadFromAssetBundle(rootBundle);
     const prefix = 'assets/next/harness/';
@@ -467,9 +473,6 @@ final class NextRuntime extends ChangeNotifier {
       debugPrint('Capability catalogue fingerprint failed: $error');
     }
     core.catalogChanges.onRecorded = () => chat?.memoryChanged();
-    core.danmaku.startRestoring(_harness, playback);
-    _meshPlayback = MeshPlayback(core, playback)..attach();
-    core.media.service.currentPath = () => playback.path;
     _endpoint = AgentEndpoint(
       harness: _harness,
       appVersion: packageInfo.version,
@@ -499,7 +502,7 @@ final class NextRuntime extends ChangeNotifier {
       codexHome: Directory(LabProfile.active ? '${LabProfile.root}/codex-home'
         : '${Platform.environment[Platform.isWindows ? 'USERPROFILE' : 'HOME']}/.codex'),
       checkCodex: _checkCodexModel, modelSaved: () async {
-        if (chat != null || _disposed || !_labs.enableAgentEndpoint) return;
+        if (chat != null || _disposed || !_open) return;
         _operations = _operations.then((_) async {
           if (_endpointStatus case AgentEndpointRunning(:final repository)) {
             await _startChat(repository);
@@ -515,18 +518,65 @@ final class NextRuntime extends ChangeNotifier {
     if (kDebugMode && LabProfile.active) installDebugUiData(ServiceProvider.nextCore);
     if (kDebugMode && LabProfile.active) playback.installDebug();
     _labs.addListener(_queueEndpointUpdate);
+    _preference.addListener(_queueEndpointUpdate);
     _location!.addListener(_queueEndpointUpdate);
+    _open = _nextOpen;
     notifyListeners();
-    await _updateEndpoint(_labs.enableAgentEndpoint);
+    await _updateEndpoint(_open);
   }
+
+  /// Next's interface is what shows. Nipa, her endpoint and every
+  /// capability run only then; in Classic none of them do (D1).
+  bool get _nextOpen => NextUiPreference.interfaceOpen(
+      nextEnabled: _labs.enableAgentEndpoint, preference: _preference.enabled);
+  bool _open = false;
 
   void _queueEndpointUpdate() {
     notifyListeners();
-    final enabled = _labs.enableAgentEndpoint;
+    final enabled = _nextOpen;
+    if (enabled != _open) {
+      _open = enabled;
+      // Between Next and Classic what plays closes, its progress saved; the
+      // other side does not take it over (D2). At once, not behind work
+      // still queued.
+      final closing = playback
+          .close(reason: enabled ? 'next_interface_opened' : 'next_interface_closed')
+          .catchError((Object error, StackTrace stack) =>
+              Zone.current.handleUncaughtError(error, stack));
+      _operations = _operations.then((_) => closing);
+    }
     if (!enabled) {
       unawaited(_hostSettings?.codex?.cancel());
     }
     _operations = _operations.then((_) => _updateEndpoint(enabled));
+  }
+
+  /// Nipa's services and what Next hooks into the playback, only while
+  /// Next's interface is open.
+  bool _nipa = false;
+  Future<void> _setNipa(bool on) async {
+    if (on == _nipa) return;
+    _nipa = on;
+    final core = ServiceProvider.nextCore;
+    if (on) {
+      await core.startNipa();
+      core.danmaku.startRestoring(_harness, playback);
+      _meshPlayback = MeshPlayback(core, playback)..attach();
+      core.media.service.currentPath = () => playback.path;
+      return;
+    }
+    await _meshPlayback?.close();
+    _meshPlayback = null;
+    await core.danmaku.stopRestoring();
+    core.media.service.currentPath = null;
+    await _hostEvents?.cancel();
+    await _activityEvents?.cancel();
+    _hostEvents = null;
+    _activityEvents = null;
+    // Nothing keeps the closed conversation's host.
+    core.jobOrigins.threadFor = null;
+    core.memory.recent = null;
+    await core.stopNipa();
   }
 
   Future<void> _updateEndpoint(bool enabled) async {
@@ -542,6 +592,7 @@ final class NextRuntime extends ChangeNotifier {
     chatError = null;
     final AgentEndpointStatus status;
     if (enabled) {
+      await _setNipa(true);
       // Only for Next: Classic keeps its handlers and kernel logs as they are.
       await _uncaught?.attach();
       PlayerNativeLog.instance.attach();
@@ -559,6 +610,7 @@ final class NextRuntime extends ChangeNotifier {
       await PlayerNativeLog.instance.detach();
       ServiceProvider.nextCore.subtitles.detachPlayer();
       await _endpoint.stop();
+      await _setNipa(false);
       status = const AgentEndpointStopped();
     }
     if (_disposed || _endpointStatus == status) return;
@@ -831,6 +883,7 @@ final class NextRuntime extends ChangeNotifier {
     unawaited(_calendarChanges?.cancel());
     if (identical(ClassicSettings.attached, _classicSettings)) ClassicSettings.attached = null;
     _labs.removeListener(_queueEndpointUpdate);
+    _preference.removeListener(_queueEndpointUpdate);
     _location?.removeListener(_queueEndpointUpdate);
     _operations = _operations.then((_) async {
       await _kernel?.release(reopen: false);

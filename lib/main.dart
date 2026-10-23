@@ -713,13 +713,15 @@ Future<void> _main(List<String> args) async {
             ChangeNotifierProvider(
               create: (_) => LargeScreenUiSfxService(),
             ),
+            // Before NextRuntime, which follows it (Nipa runs only while
+            // Next's interface is open).
+            if (!kIsWeb)
+              ChangeNotifierProvider(create: (_) => NextUiPreference()),
             if (!kIsWeb)
               ChangeNotifierProvider(
                 lazy: false,
                 create: NextRuntime.fromContext,
               ),
-            if (!kIsWeb)
-              ChangeNotifierProvider(create: (_) => NextUiPreference()),
           ],
           child: DesktopMultiWindowHost(
             child: NipaPlayApp(

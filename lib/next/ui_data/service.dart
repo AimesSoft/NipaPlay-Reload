@@ -1166,6 +1166,21 @@ final class UiDataService implements NextUiData, NextNowPlaying {
     return result;
   }
 
+  /// Next's interface is closed: nothing here is kept fresh until [start]
+  /// again. Its streams stay open for whoever listens then.
+  Future<void> pause() async {
+    _timer?.cancel();
+    _timer = null;
+    _midnight?.cancel();
+    _midnight = null;
+    await _classic?.cancel();
+    _classic = null;
+    await _jobs?.cancel();
+    _jobs = null;
+    await _polling;
+    await _publishing;
+  }
+
   Future<void> close() async {
     _closed = true;
     _timer?.cancel();

@@ -77,6 +77,7 @@ final class DanmakuRuntime {
     _changed();
   });
   void startIndexing() => sidecars.start();
+  Future<void> pauseIndexing() => sidecars.pause();
   Future<void> stopIndexing() => sidecars.close();
   static Future<DanmakuRuntime> create(IdentityStore identities,
       {Future<String> Function(String path)? authorizeLocalFile}) async {

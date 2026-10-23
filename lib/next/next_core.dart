@@ -78,6 +78,7 @@ import 'programs/runtime.dart';
 import 'programs/repository.dart';
 import 'tasks/resources.dart';
 import 'tasks/classic_scan.dart';
+import 'tasks/nipa_gate.dart';
 import 'events/capability.dart';
 import 'events/signals.dart';
 import 'network/capability.dart';
@@ -87,6 +88,7 @@ import 'system/storage.dart';
 import 'system/diagnostics.dart';
 import 'system/desktop.dart';
 import 'package:nipaplay/services/scan_service.dart';
+import 'package:nipaplay/constants/settings_keys.dart';
 import 'dart:async';
 
 /// Application-owned task and capability composition, independent of Labs.
@@ -152,6 +154,10 @@ final class NextCore {
   late final LibraryDataService libraryData;
   LibraryDataService get libraryActions => libraryData;
   final classicScan = ClassicScanExecutor();
+
+  /// Open while Next's interface is: Nipa's own work waits for it (D1).
+  final nipaGate = NipaGate();
+  bool _nipa = false;
   late final TaskResources resources;
   late final BodyEvents events;
   late final SystemSettings automatic;
@@ -246,7 +252,12 @@ final class NextCore {
     ];
     engine = TaskEngine(store: jobs, ownerDeviceId: deviceId,
         originOf: jobOrigins.of, executors: [
-      for (final executor in executors) OriginExecutor(executor, database)
+      for (final executor in executors)
+        OriginExecutor(
+            nipaTaskTypes.contains(executor.type)
+                ? NipaGatedExecutor(executor, nipaGate)
+                : executor,
+            database)
     ]);
     jobOrigins.lookup = engine.get;
     hooks.engine = engine;
@@ -280,8 +291,6 @@ final class NextCore {
         'source': 'hooks/schedules.json', 'facts': {'error': error}},
         Invocation(origin: 'application'));
     };
-    hooks.observeEvent = followups.hookEvent;
-    BodySignals.emit = (event, id, facts) async { await hooks.emit(event, id, facts); };
     downloads.attach(engine, root);
     resources = TaskResources(engine, downloads.downloads, helpers);
     await resources.load();
@@ -294,7 +303,10 @@ final class NextCore {
         (entries) => describeLibraryArrivals(media.service.store, entries);
     ScanService.startupRefreshAllowed = () async {
       final prefs = await SharedPreferences.getInstance();
-      return prefs.getBool('labs_use_next_interface') != true || automatic.startupScanEnabled;
+      final nextOpen = NextUiPreference.interfaceOpen(
+          nextEnabled: prefs.getBool(SettingsKeys.labsEnableAgentEndpoint) == true,
+          preference: prefs.getBool(NextUiPreference.key) == true);
+      return !nextOpen || automatic.startupScanEnabled;
     };
     events = BodyEvents(database);
     followups.eventCommitted = events.changed;
@@ -359,7 +371,6 @@ final class NextCore {
     stateSources.canonicalEntityId = (id) async => uiData.meshLibrary!.resolvedId(id);
     stateSources.cachedArtwork = uiData.artwork.cached;
     registerMergedLibrary(state, uiData.meshLibrary!);
-    await uiData.meshLibrary!.start();
     settings.register([uiData.openingSetting]);
     db = createDbService(
         database: database, media: media.service, uiData: uiData);
@@ -451,17 +462,51 @@ final class NextCore {
           ..hooks = hooks.status
           ..downloadEngines = downloads.engineStatus);
     await engine.start();
-    await uiData.start();
-    followups.start();
     await downloads.start();
     await media.start();
-    danmaku.startIndexing();
-    subtitles.start();
     mesh.attach(Harness(capabilities));
-    await mesh.startConfigured();
     // Once, after an upgrade: the old journal into 动态's tables, off the
     // main isolate and after startup.
     unawaited(activityInvocations.backfill());
+  }
+
+  /// Nipa's services run only while Next's interface is open (D1): what
+  /// keeps her interface's data fresh, her followups, the indexing of
+  /// sidecar danmaku and subtitles, the mesh, the events her hooks and
+  /// followups take, and her own tasks. The data layer Classic shares
+  /// (database, downloads, media, settings, tasks) runs regardless.
+  Future<void> startNipa() async {
+    await ready;
+    if (_nipa) return;
+    _nipa = true;
+    hooks.observeEvent = followups.hookEvent;
+    BodySignals.emit = (event, id, facts) async { await hooks.emit(event, id, facts); };
+    await uiData.start();
+    await uiData.meshLibrary!.start();
+    followups.start();
+    danmaku.startIndexing();
+    subtitles.start();
+    await mesh.startConfigured();
+    nipaGate.set(true);
+  }
+
+  /// Whether Nipa's services run, for lab observation.
+  bool get nipaRunning => _nipa;
+
+  /// Next's interface closed: Nipa's services stop until [startNipa].
+  Future<void> stopNipa() async {
+    await ready;
+    if (!_nipa) return;
+    _nipa = false;
+    nipaGate.set(false);
+    hooks.observeEvent = null;
+    BodySignals.emit = null;
+    await followups.pause();
+    await uiData.pause();
+    await uiData.meshLibrary?.pause();
+    await danmaku.pauseIndexing();
+    await subtitles.pause();
+    await mesh.stop();
   }
 
   void attachHarness(Harness harness) => mesh.attach(harness);

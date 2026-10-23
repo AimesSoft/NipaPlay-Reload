@@ -2,12 +2,9 @@ import 'package:flutter/cupertino.dart' as cupertino;
 import 'package:flutter/material.dart';
 import 'package:kmbal_ionicons/kmbal_ionicons.dart';
 import 'package:nipaplay/l10n/l10n.dart';
-import 'package:nipaplay/next/agent_endpoint.dart';
-import 'package:nipaplay/next/next_runtime.dart';
 import 'package:nipaplay/next/ui/shell/next_ui_preference.dart';
 import 'package:nipaplay/player_abstraction/player_factory.dart';
 import 'package:nipaplay/providers/labs_settings_provider.dart';
-import 'package:nipaplay/services/folder_opener.dart';
 import 'package:nipaplay/settings/adaptive_settings_widgets.dart';
 import 'package:nipaplay/utils/globals.dart' as globals;
 import 'package:provider/provider.dart';
@@ -88,137 +85,55 @@ class LabsSettingsContent extends StatelessWidget {
                 ),
               ],
             ),
+            // The way into NipaPlay Next, and nothing of it: Nipa, her
+            // endpoint and her settings live in Next's own interface and run
+            // only while it is open (D1).
             if (globals.isDesktop)
-              Consumer<NextRuntime>(
-                builder: (context, runtime, child) {
-                  final status = runtime.endpointStatus;
-                  var subtitle = _text(
-                    context,
-                    '在本机开放 MCP 接口，可在 Codex 中用对话操作 NipaPlay',
-                    '在本機開放 MCP 介面，可在 Codex 中用對話操作 NipaPlay',
-                    'Expose a local MCP endpoint to control NipaPlay through conversation in Codex.',
-                  );
-                  if (labsSettings.isLoaded && !labsSettings.nextAvailable) {
-                    subtitle = _text(context,
-                        '此 macOS 应用处于 App Sandbox 中，无法提供 NipaPlay Next。请使用 GitHub 完整版。',
-                        '此 macOS 應用處於 App Sandbox 中，無法提供 NipaPlay Next。請使用 GitHub 完整版。',
-                        'This macOS app runs in App Sandbox. NipaPlay Next requires the full GitHub release.');
-                  }
-                  if (labsSettings.enableAgentEndpoint) {
-                    final trustHint = _text(
-                      context,
-                      '在 Codex 中添加此文件夹为项目并选择信任',
-                      '在 Codex 中新增此資料夾為專案並選擇信任',
-                      'Add this folder as a project in Codex and choose to trust it.',
-                    );
-                    final statusText = switch (status) {
-                      AgentEndpointRunning(:final url, :final repository) =>
-                        '$url\n${repository.path}\n$trustHint',
-                      AgentEndpointFailed(:final message) => message,
-                      AgentEndpointStopped() => _text(
-                          context,
-                          '正在启动…',
-                          '正在啟動…',
-                          'Starting…',
-                        ),
-                    };
-                    subtitle = '$subtitle\n$statusText';
-                  }
-                  return AdaptiveSettingsSection(
-                    children: [
-                      AdaptiveSettingsTile.toggle(
-                        title: 'NipaPlay Next',
-                        subtitle: subtitle,
-                        icon: Ionicons.flask_outline,
-                        phoneIcon: cupertino.CupertinoIcons.lab_flask,
-                        value: labsSettings.enableAgentEndpoint,
-                        enabled: labsSettings.nextAvailable,
-                        onChanged: (enabled) async {
-                          if (enabled) {
-                            final confirmed = await _confirmNext(context);
-                            if (!confirmed || !context.mounted) return;
-                          }
-                          await labsSettings.setEnableAgentEndpoint(enabled);
-                        },
-                      ),
-                      if (labsSettings.enableAgentEndpoint)
-                        AdaptiveSettingsTile.toggle(
-                          title: _text(context, '使用 Next 界面',
-                              '使用 Next 介面', 'Use the Next Interface'),
-                          subtitle: _text(
+              AdaptiveSettingsSection(
+                children: [
+                  AdaptiveSettingsTile.toggle(
+                    title: 'NipaPlay Next',
+                    subtitle: labsSettings.isLoaded && !labsSettings.nextAvailable
+                        ? _text(
                             context,
-                            '用 Next 的首页替换主界面，可随时回到经典界面',
-                            '用 Next 的首頁取代主介面，可隨時回到經典介面',
-                            'Replace the main interface with Next. You can switch back at any time.',
-                          ),
-                          icon: Ionicons.sparkles_outline,
-                          phoneIcon: cupertino.CupertinoIcons.sparkles,
-                          value: context.watch<NextUiPreference>().enabled,
-                          onChanged: context.read<NextUiPreference>().setEnabled,
-                        ),
-                      AdaptiveSettingsTile.button(
-                        title: _text(context, 'Harness 仓库路径', 'Harness 倉庫路徑',
-                            'Harness Repository Path'),
-                        subtitle: runtime.repositoryPath,
-                        icon: Ionicons.code_outline,
-                        phoneIcon: cupertino
-                            .CupertinoIcons.chevron_left_slash_chevron_right,
-                        onTap: () => _editHarnessPath(context, runtime),
+                            '此 macOS 应用处于 App Sandbox 中，无法提供 NipaPlay Next。请使用 GitHub 完整版。',
+                            '此 macOS 應用處於 App Sandbox 中，無法提供 NipaPlay Next。請使用 GitHub 完整版。',
+                            'This macOS app runs in App Sandbox. NipaPlay Next requires the full GitHub release.')
+                        : _text(context, '全新的界面（实验）', '全新的介面（實驗）',
+                            'A new interface (experimental).'),
+                    icon: Ionicons.flask_outline,
+                    phoneIcon: cupertino.CupertinoIcons.lab_flask,
+                    value: labsSettings.enableAgentEndpoint,
+                    enabled: labsSettings.nextAvailable,
+                    onChanged: (enabled) async {
+                      if (enabled) {
+                        final confirmed = await _confirmNext(context);
+                        if (!confirmed || !context.mounted) return;
+                      }
+                      await labsSettings.setEnableAgentEndpoint(enabled);
+                    },
+                  ),
+                  if (labsSettings.enableAgentEndpoint)
+                    AdaptiveSettingsTile.toggle(
+                      title: _text(context, '使用 Next 界面', '使用 Next 介面',
+                          'Use the Next Interface'),
+                      subtitle: _text(
+                        context,
+                        '用 Next 的首页替换主界面，可随时回到经典界面',
+                        '用 Next 的首頁取代主介面，可隨時回到經典介面',
+                        'Replace the main interface with Next. You can switch back at any time.',
                       ),
-                      if (status case AgentEndpointRunning(:final repository))
-                        AdaptiveSettingsTile.button(
-                          title: _text(
-                            context,
-                            '打开 Harness 仓库',
-                            '開啟 Harness 倉庫',
-                            'Open Harness Repository',
-                          ),
-                          icon: Ionicons.folder_outline,
-                          phoneIcon: cupertino.CupertinoIcons.folder,
-                          onTap: () => FolderOpener.open(repository.path),
-                        ),
-                    ],
-                  );
-                },
+                      icon: Ionicons.sparkles_outline,
+                      phoneIcon: cupertino.CupertinoIcons.sparkles,
+                      value: context.watch<NextUiPreference>().enabled,
+                      onChanged: context.read<NextUiPreference>().setEnabled,
+                    ),
+                ],
               ),
           ],
         );
       },
     );
-  }
-
-  Future<void> _editHarnessPath(
-      BuildContext context, NextRuntime runtime) async {
-    final controller = TextEditingController(text: runtime.repositoryPath);
-    String? error;
-    await showDialog<void>(
-        context: context,
-        builder: (context) => StatefulBuilder(
-              builder: (context, setState) => AlertDialog(
-                title: Text(_text(context, 'Harness 仓库路径', 'Harness 倉庫路徑',
-                    'Harness Repository Path')),
-                content: TextField(
-                    controller: controller,
-                    autofocus: true,
-                    decoration: InputDecoration(errorText: error)),
-                actions: [
-                  TextButton(
-                      onPressed: () => Navigator.pop(context),
-                      child: Text(_text(context, '取消', '取消', 'Cancel'))),
-                  TextButton(
-                      onPressed: () async {
-                        try {
-                          await runtime.setHarnessPath(controller.text.trim());
-                          if (context.mounted) Navigator.pop(context);
-                        } catch (failure) {
-                          setState(() => error = failure.toString());
-                        }
-                      },
-                      child: Text(_text(context, '保存', '儲存', 'Save'))),
-                ],
-              ),
-            ));
-    controller.dispose();
   }
 
   Future<bool> _confirmNext(BuildContext context) async =>

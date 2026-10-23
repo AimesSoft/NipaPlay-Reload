@@ -204,6 +204,15 @@ final class SidecarIndexer {
     return false;
   }
 
+  /// Not indexing until [start] again.
+  Future<void> pause() async {
+    _timer?.cancel();
+    _timer = null;
+    await _events?.cancel();
+    _events = null;
+    await _worker;
+  }
+
   Future<void> close() async {
     _closed = true;
     _timer?.cancel();

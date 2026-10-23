@@ -975,6 +975,15 @@ final class Followups {
       '登记来源：${row['origin']}\n登记说明：\n${row['instruction']}\n'
       '触发事实（任务终态不等于成功，请依据状态与回执判断）：\n${jsonEncode(row['trigger'])}';
 
+  /// Next's interface is closed: no sweeps until [start] again. Task
+  /// changes are still noted, so the first sweep after it looks at them.
+  Future<void> pause() async {
+    _started = false;
+    _wake?.cancel();
+    _wake = null;
+    await _operations;
+  }
+
   Future<void> close() async {
     _closed = true;
     _wake?.cancel();

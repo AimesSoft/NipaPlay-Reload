@@ -1414,6 +1414,15 @@ final class MeshLibrary {
     }
   }
 
+  /// Next's interface is closed: the merged library is not refreshed until
+  /// [start] again.
+  Future<void> pause() async {
+    _timer?.cancel();
+    _timer = null;
+    await _sync;
+    await _building;
+  }
+
   Future<void> close() async {
     if (_closed) return;
     _closed = true;
