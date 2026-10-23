@@ -507,6 +507,8 @@ final class NextCore {
     await danmaku.pauseIndexing();
     await subtitles.pause();
     await mesh.stop();
+    // The disk space watches she asked for end with her.
+    await storage.close();
   }
 
   void attachHarness(Harness harness) => mesh.attach(harness);
