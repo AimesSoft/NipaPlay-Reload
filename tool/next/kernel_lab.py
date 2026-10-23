@@ -51,7 +51,8 @@ RUN = Path(sys.argv[1]).resolve()
 RUN.mkdir(parents=True, exist_ok=True)
 MODE = sys.argv[2] if len(sys.argv) > 2 else 'smoke'
 ARGS = sys.argv[3:]
-app = ROOT / 'build/macos/Build/Products/Debug/NipaPlay.app/Contents/MacOS/NipaPlay'
+# A copy of the build can be driven while the next one is made (KERNEL_LAB_APP).
+app = Path(os.environ.get('KERNEL_LAB_APP') or ROOT / 'build/macos/Build/Products/Debug/NipaPlay.app') / 'Contents/MacOS/NipaPlay'
 log = RUN / 'run.log'
 out = RUN / 'results.jsonl'
 opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
@@ -202,8 +203,14 @@ def check(kernel, name, iteration, picture=False):
     target = int(first['durationMs'] * .7)
     gui('playback.seek', {'positionMs': target}, strict=True)
     a = state()
-    time.sleep(1.2)
-    b = state()
+    # It goes on from there: how long until it has moved half a second.
+    waited = time.monotonic()
+    while True:
+        b = state()
+        if b.get('positionMs', 0) >= a.get('positionMs', 0) + 500 or time.monotonic() - waited > 5:
+            break
+        time.sleep(0.05)
+    advance_ms = round((time.monotonic() - waited) * 1000)
     gui('playback.set_paused', {'paused': True}, strict=True)
     paused = state()
     time.sleep(.5)
@@ -227,7 +234,7 @@ def check(kernel, name, iteration, picture=False):
     reopened = wait_playing()
     record('verify', **row,
            seekErrorMs=a.get('positionMs', 0) - target,
-           advancing=b.get('positionMs', 0) > a.get('positionMs', 0) + 500,
+           advancing=b.get('positionMs', 0) >= a.get('positionMs', 0) + 500, advanceMs=advance_ms,
            paused=paused.get('status'), pauseDeltaMs=still.get('positionMs', 0) - paused.get('positionMs', 0),
            resumed=resumed.get('status'),
            resumeErrorMs=reopened.get('positionMs', 0) - before_close.get('positionMs', 0),
@@ -275,7 +282,8 @@ def swap_loop(count, media='sintel', subtitle='srt'):
         # Where it should be: where it was, plus what ran while it swapped (nothing while paused).
         position = preserved.get('positionMs') or {}
         expected = position.get('before', before.get('positionMs', 0))
-        pos_error = after.get('positionMs', 0) - expected - (0 if paused_now else took * 1000)
+        # Paused while it swaps, it plays on only once it has: where it was, to the second.
+        pos_error = after.get('positionMs', 0) - expected
         facts = subtitle_facts()
         presented = facts.get('presented') or []
         good = (reply.get('opened') is True and (after.get('kernel') or {}).get('id') == kernel

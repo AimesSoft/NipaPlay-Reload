@@ -350,18 +350,18 @@ final class SubtitleController {
   }
 
   /// The playback moves to another kernel instance (a swap): the open plan
-  /// for it. What is chosen stays chosen; a file is planned if the new
-  /// kernel draws it itself, and an embedded track waits for the new
-  /// kernel's own list ([moved]).
+  /// for it. The new kernel opens drawing nothing; what is chosen stays
+  /// chosen and goes on once it is open ([moved]), a file as an embedded
+  /// track alike (a subtitle file in the open plan of a kernel that has not
+  /// read the media's own tracks yet is the plan most kernels are least sure
+  /// of; put on after the open, every kernel does it the way it does a
+  /// choice made in the menu).
   KernelTrackPlan planForMove(KernelCapabilities capabilities, {int? audio}) {
     _capabilities = capabilities;
-    final target =
-        want.path != null ? _kernelTarget(want) : KernelSubtitle.none;
     return KernelTrackPlan(
       audio: audio,
-      subtitle: target,
+      subtitle: KernelSubtitle.none,
       subtitleProperties: _look.kernelProperties(),
-      subtitleProbe: _probe(target),
     );
   }
 

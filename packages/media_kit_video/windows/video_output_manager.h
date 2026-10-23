@@ -11,6 +11,8 @@
 
 #include <flutter/plugin_registrar_windows.h>
 
+#include <functional>
+
 #include <unordered_map>
 
 #include "thread_pool.h"

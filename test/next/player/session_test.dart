@@ -393,8 +393,8 @@ void main() {
       await rig.host.close(reason: 'test');
     });
 
-    test('a subtitle file the old kernel drew itself goes on on the new one: '
-        'in its open plan', () async {
+    test('a subtitle file the old kernel drew itself goes on on the new one, '
+        'after it is open', () async {
       final ass = '${temp.path}/第10集.ass';
       await File(ass).writeAsString('[Script Info]\n');
       final rig = FakeHost();
@@ -402,7 +402,9 @@ void main() {
       await session.chooseSubtitle(SubtitleWant.file(ass), origin: 'test');
       await session.swapKernel(KernelId.mediaKit, origin: 'test');
       final fresh = rig.drivers.last;
-      expect(fresh.plan!.subtitle, FileKernelSubtitle(ass));
+      expect(fresh.plan!.subtitle, KernelSubtitle.none,
+          reason: 'opened drawing nothing, the file put on after');
+      expect(fresh.log, contains('subtitle file $ass'));
       expect(fresh.tracks.subtitle, FileKernelSubtitle(ass));
       expect(session.subtitles.state.value.presented.single.renderer,
           SubtitleRenderer.kernel);
