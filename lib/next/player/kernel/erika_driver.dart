@@ -11,6 +11,7 @@ import '../features/kernel_features.dart';
 import 'adapter_driver.dart';
 import 'driver.dart';
 import 'native.dart';
+import 'versions.dart';
 
 /// Erika, our own kernel, as a [KernelDriver]. The media opens through
 /// Erika's adapter, paused, and seeks to its start position; Erika paints
@@ -318,7 +319,7 @@ final class ErikaDriver extends AdapterDriver
   @override
   Future<Object?> version() => queue.run(_version);
 
-  Future<Object?> _version() async => null;
+  Future<Object?> _version() async => erikaVersion();
 
   @override
   Future<Map<String, NativeRead>> read(List<String> names) async => {

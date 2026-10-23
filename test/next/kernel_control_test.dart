@@ -227,6 +227,23 @@ class FakeErika implements ErikaNative {
   }
 }
 
+/// video_player's controller as a kernel instance's handle.
+class FakeState implements StateNative {
+  @override
+  List<String> get names => const ['position', 'isPlaying'];
+  @override
+  Future<Object?> version() async => {'video_player': '2.9.5'};
+  @override
+  Future<Map<String, NativeRead>> read(List<String> asked) async => {
+        for (final n in asked)
+          n: switch (n) {
+            'position' => (value: '1000', error: null),
+            'isPlaying' => (value: 'true', error: null),
+            _ => (value: null, error: 'no state named $n'),
+          }
+      };
+}
+
 /// The playback as kernel control sees it.
 class FakePlayback extends Fake implements KernelHost {
   FakePlayback(this.rig);
@@ -415,17 +432,20 @@ void main() {
       await r.rig.host.close(reason: 'test');
     });
 
-    test('video_player: the kernel, and no properties to read', () async {
-      final r = await rig(KernelId.videoPlayer);
+    test('video_player: its controller\'s state by name, nothing to set', () async {
+      final r = await rig(KernelId.videoPlayer, native: FakeState());
       final read = await invokeCompleted(r.harness, 'playback.kernel', {
-        'properties': ['x']
+        'properties': ['isPlaying', 'nope']
       });
       expect(read['kernel'], containsPair('id', 'video_player'));
+      expect((read['kernel'] as Map)['version'], {'video_player': '2.9.5'});
+      expect((read['snapshot'] as Map)['position'], '1000');
       expect(read['properties'], {
-        'x': {'value': null, 'error': 'This kernel reports no properties.'}
+        'isPlaying': {'value': 'true', 'error': null},
+        'nope': {'value': null, 'error': 'no state named nope'},
       });
       expect((read['controls'] as Map)['properties'],
-          {'read': 'none', 'write': 'none'});
+          {'read': 'named_state', 'write': 'none'});
       await r.rig.host.close(reason: 'test');
     });
 

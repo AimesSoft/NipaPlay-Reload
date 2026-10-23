@@ -56,6 +56,12 @@ abstract interface class ErikaNative implements KernelNative {
   Future<Map<String, Object?>?> engineLog({int? sinceSeq});
 }
 
+/// A kernel that tells its own state by name (video_player's controller
+/// value), with no properties to set.
+abstract interface class StateNative implements KernelNative {
+  List<String> get names;
+}
+
 /// A kernel with nothing to read or change beyond what playback does.
 final class PlainNative implements KernelNative {
   const PlainNative(this._version);

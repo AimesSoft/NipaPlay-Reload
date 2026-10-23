@@ -8,6 +8,7 @@ import '../core/arbiter.dart';
 import 'adapter_driver.dart';
 import 'driver.dart';
 import 'native.dart';
+import 'versions.dart';
 
 /// video_player as a [KernelDriver], on the controller itself: a texture,
 /// a state the platform reports through the controller's value, no list of
@@ -16,7 +17,7 @@ import 'native.dart';
 ///
 /// The controller's disposal is awaited: the instance is gone when
 /// [release] completes.
-final class VideoPlayerDriver extends AdapterDriver {
+final class VideoPlayerDriver extends AdapterDriver implements StateNative {
   factory VideoPlayerDriver(KernelLease lease, KernelConfig config) {
     requireLease(lease, 'video_player');
     return VideoPlayerDriver._(config);
@@ -30,7 +31,7 @@ final class VideoPlayerDriver extends AdapterDriver {
   @override
   KernelId get kernel => KernelId.videoPlayer;
   @override
-  KernelNative get native => const PlainNative(null);
+  KernelNative get native => this;
   @override
   final KernelCapabilities capabilities = const KernelCapabilities(
     transportEvents: true,
@@ -206,9 +207,55 @@ final class VideoPlayerDriver extends AdapterDriver {
     }
   }
 
+  // ---- StateNative: what the controller says, by name ----
+
+  @override
+  List<String> get names => const [
+        'position',
+        'duration',
+        'size',
+        'isPlaying',
+        'isBuffering',
+        'isCompleted',
+        'volume',
+        'playbackSpeed',
+        'bufferedAheadMs',
+        'hasError',
+        'errorDescription',
+      ];
+
+  @override
+  Future<Object?> version() => queue.run(() async => videoPlayerVersions());
+
+  @override
+  Future<Map<String, NativeRead>> read(List<String> asked) =>
+      queue.run(() async {
+        final value = _controller?.value;
+        String? state(String name) => switch (name) {
+              'position' => '${value?.position.inMilliseconds}',
+              'duration' => '${value?.duration.inMilliseconds}',
+              'size' => '${value?.size.width.round()}x${value?.size.height.round()}',
+              'isPlaying' => '${value?.isPlaying}',
+              'isBuffering' => '${value?.isBuffering}',
+              'isCompleted' => '${value?.isCompleted}',
+              'volume' => '$_volume',
+              'playbackSpeed' => '$_speed',
+              'bufferedAheadMs' => '${_bufferedAhead()}',
+              'hasError' => '${value?.hasError}',
+              'errorDescription' => value?.errorDescription,
+              _ => null,
+            };
+        return {
+          for (final name in asked)
+            name: names.contains(name)
+                ? (value: state(name), error: null)
+                : (value: null, error: 'video_player reports no state named $name.')
+        };
+      });
+
   @override
   Future<JsonMap> kernelFacts() async => {
-        'version': null,
+        'version': videoPlayerVersions(),
         'decoders': {'video': null, 'audio': null, 'requested': config.videoDecoders},
         'bufferedAheadMs': _bufferedAhead(),
       };

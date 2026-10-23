@@ -173,6 +173,14 @@ JsonMap kernelControls(String? kernel, Iterable<PlayerKernelType> reopen) {
         'invoke': true,
         'reopenWith': reopenWith,
       },
+    'video_player' => {
+        'properties': {'read': 'named_state', 'write': 'none'},
+        'decoders': const <String>[],
+        'commands': null,
+        'watch': false,
+        'invoke': false,
+        'reopenWith': reopenWith,
+      },
     _ => {
         'properties': {'read': 'none', 'write': 'none'},
         'decoders': const <String>[],

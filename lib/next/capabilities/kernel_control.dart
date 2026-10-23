@@ -264,7 +264,27 @@ final class KernelControl {
           for (final n in asked)
             n: {'value': safeKernelValue(n, reads[n]?.value), 'error': null}
         };
+      case StateNative():
+        final reads = await native.read([...native.names, ...asked]);
+        result['kernel'] = {
+          ...result['kernel'] as JsonMap,
+          'version': await native.version(),
+        };
+        result['snapshot'] = {
+          for (final n in native.names) n: safeKernelValue(n, reads[n]?.value)
+        };
+        result['properties'] = {
+          for (final n in asked)
+            n: {
+              'value': safeKernelValue(n, reads[n]?.value),
+              'error': reads[n]?.error,
+            }
+        };
       case ErikaNative():
+        result['kernel'] = {
+          ...result['kernel'] as JsonMap,
+          'version': await native.version(),
+        };
         result['erika'] = await _readErika(driver, native, input['sampleMs'] as int?);
         if (asked.isNotEmpty) {
           result['properties'] = {
