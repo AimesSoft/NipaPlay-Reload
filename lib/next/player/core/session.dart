@@ -479,13 +479,18 @@ final class PlaybackSession {
             }
             _syncSaver();
           case KernelPositionSample(:final position, :final rate, :final advancing):
-            // A seek under way keeps the clock at its target.
-            if (_transport.value.seekTarget != null) return;
+            // A seek keeps its target; EOF keeps the endpoint even if the
+            // native stream subsequently reports a reset position (HLS).
+            if (_transport.value.seekTarget != null || _transport.value.ended) {
+              return;
+            }
             clock.anchor(position,
                 advancing: advancing, rate: rate, source: 'kernel_sample');
           case KernelBuffering(:final buffering):
             _setTransport(_transport.value.copyWith(buffering: buffering));
           case KernelEnded(:final inferred):
+            clock.anchor(duration > Duration.zero ? duration : position,
+                advancing: false, source: 'kernel_ended');
             _setTransport(_transport.value.copyWith(ended: true));
             _emit('ended', {'inferred': inferred});
             _save('ended');
