@@ -427,3 +427,57 @@ D2 验收：
 因此改了：
 - 本次没有改 Classic 的字幕重置，这个缺陷需要单独修，提交到 main；
 - P1 的 MDK 驱动每个会话新建实例，拆除顺序固定，不在停止过程中切换轨道。
+
+## 2026-10-23 · player-core P1：Next 用自己的播放层播放本地文件（MDK）
+
+假设：Next 打开本地文件一律走新层（会话、租约、时钟、每会话一个 MDK 实例），不再经过 `VideoPlayerState`；打开时带起点，关闭时先立栅栏再拆；控件隐藏时播放层不重建任何东西；Classic 的打开入口在 Next 界面里一律转进新层。
+
+做了什么：
+- 实验配置 core-lab，macOS Debug 构建（基于 c6d7e231），实例静音（`player.volume` 为 0），实例一次只开一个，停止用 TERM。
+- 片源：e2e42b 下载目录里《躲在超市后门抽烟的两人》第 10–12 集（MKV，HEVC 10bit，内嵌两条 ASS）和 Sintel.mp4。
+- 驱动脚本 `~/.nipa-next/player-core-p1-runs/p1.py`，经 VM service 的 `guicall`（界面身份）、`ext.nipaplay.localOperations op=play`（Classic 自己的打开入口）和 `ext.nipaplay.player.host`（宿主事实与每个内核实例的生命周期）。截图只用 `ui.capture`。
+- 表中数据来自实例 a3；a1、a2 是同一代码的早期构建。转交钩子改为随运行时建立之后，在最终提交 0350bce4 的构建（a4）上复验了第 6 项和 D1、D2。
+
+| 验收 | 结果 |
+|---|---|
+| 1 打开有画面、有声音 | `playback.open` 第 10 集：从保存的 501.8 s 开始，`ui.capture` 有画面。界面的 `shell.play`（首页播放按钮同一条路）打开同一集，0.24–0.44 s 位置开始前进。声音的事实：MDK 打开了音频解码器（`decoder.audio` FFmpeg，aac 44.1 kHz 2 声道，`thread.audio` 已启动）；系统里 coreaudiod 记着 “Created for PID 33856, Resources: audio-out BuiltInSpeakerDevice”，持续时间与播放一致。实例音量一直是 0 |
+| 2 跳到 70% | 目标 1003146 ms，命令 0.09 s 返回，落点 −19 ms（精确跳转）；之后每 100 ms 读一次：−17、+22、+129 … +768 ms，从目标处继续前进 |
+| 3 暂停与恢复 | 暂停 0.04 s 确认，1.5 s 内位置不动；恢复 0.03 s 确认，1 s 走了 970 ms。空格键、单击画面同样切换，→ 键按跳转步长（10 s）前进 |
+| 4 关闭再重开续播 20 次 | 20 次全部在 ±41 ms 内，0 次从头开始；关闭 0.06–0.09 s，重开到位置前进 0.13–0.19 s |
+| 5 打开过程中快速开关 100 次 | 关闭随机落在发出打开后 0–80 ms：81 次在打开途中关闭，19 次在打开完成后。0 崩溃、0 卡死、0 次调用出错；租约 acquired 119 次 = released 119 次，Classic 一次也没有拿到租约，没有被驱逐，没有 violation；结束后事件循环 1 ms 内应答，日志里没有 `main isolate blocked`。a1 另跑了 0–400 ms 的 100 次，同样 0 错误 |
+| 6 Classic 的打开入口 | `PlaybackService.play`（Classic 的文件列表、拖放、打开方式走的就是它）→ `initializePlayer` 开头的转交钩子 → Next 的会话播放 Sintel，0.29 s 位置前进；Classic 的状态是 idle、没有视频；租约记录 `redirected:classic` 1 次，没有 `acquired:classic` |
+| 7 B1–B3 | 见下表 |
+| 8 每会话新建 MDK 实例 | 119 个实例：创建 p50 0.10 ms、p95 0.20 ms、最大 0.31 ms；带起点打开（`prepare(position:)`）p50 50 ms、p95 86 ms；到画面出现 p50 51 ms、p95 87 ms；释放（栅栏 → 撤下画面 → 一帧 → 释放纹理并删除原生播放器）p50 46 ms、p95 83 ms、最大 112 ms；0 次释放超时；栅栏之后到达、被丢弃的原生回调共 301 个 |
+| 9 不支持的情况 | `playback.open jellyfin://…`：unavailable，`reason: source_not_supported`，`source: jellyfin`。`playback.reopen_with_kernel` 换 media_kit：unavailable，`reason: not_in_playback_layer`，`feature: kernel_control` |
+| 10 关闭 Next 界面取消程序 | 见下文 |
+
+B1–B3，稳态播放 60 秒、无操作、控件隐藏：
+
+| 指标 | 结果 |
+|---|---|
+| B1 播放层单次主线程任务 | `mdk.sample`（每 250 ms 读一次 MDK 位置）240 次，p99 77 µs，最大 127 µs；`session.kernel`（事件归约）60 秒内 0–2 次，最大 29 µs。预算 p99 ≤ 2 ms |
+| B2 播放层占主线程 | 0.014%（P0 基线 0.016%，那时还不含 Classic 每帧的轮询）。预算 ≤ 3% |
+| B3 控件隐藏时重建 | a2 窗口可见时：60 秒 0 次重建，整个应用只出了 1 帧（视频纹理不触发 Flutter 的帧）。P0 基线 4920 次/分。a3 窗口被别的窗口挡住，60 秒 0 帧，这一项在 a3 上是空测 |
+| B3 控件显示时 | a2（时间轴还随位置重建的那版）：每秒 1 次刷新，30 秒 300 个元素重建（时间轴与时间文字）。之后时间轴改为按时钟重绘、不重建（组件测试：10 次刷新 0 次重建），只剩时间文字每秒 1 次；这一版在应用里未测，窗口不可见 |
+| B5 事件循环（全局，归修卡顿那边） | a2：0 次超过 16 ms；a3：2 次超过 16 ms，其中 1 次 136 ms。同时段播放层任务最长 0.13 ms，卡顿不在播放层 |
+
+D1、D2 在最终构建 a4 上：
+- Next 界面下，Classic 的入口打开 Sintel：转进 Next，从 116.9 s 续播，Classic 为 idle。
+- 切到 Classic：Next 的会话关闭并记下进度，Nipa 停止。此时 Classic 的入口打开 Sintel，由 Classic 自己播放，从 Next 记下的位置续播；转交次数不变。
+- 切回 Next：Classic 的播放关闭，Next 不自动重开；在 Next 里打开时，从 Classic 记下的 146.4 s 续播。
+
+关闭 Next 界面取消程序（D1 补充，1543c4ba 的验证）：
+- 用 `program.run` 跑一个忽略 TERM、带子进程 `sleep 300` 的 shell。
+- 切到 Classic 界面：1 秒内 `sleep 300` 收到 TERM 结束，shell 在 2 秒宽限后被 KILL，DSH 的 node 子进程也一并结束，NipaPlay 之下不剩子进程。
+- 切回 Next 后 `task.get`：state cancelled，`cancelReason: next_interface_closed`，`termination: {signaled: [35081, 35085, 35162], killed: [35081, 35181], graceMs: 2000, elapsedMs: 2098}`，输出里有 trap 打出的 `got-term`。同一次切换也关闭了正在播放的会话，进度记在 1152.3 s（`lastSave.why = close`）。
+
+意外：
+- a1 进程里第一次打开时，从开播指令到 MDK 回报 playing 用了约 1.1 s，之后每次只要几十毫秒；a2、a3 的第一次打开没有这个现象，原因未查明。
+- MDK 默认把内嵌的第 0 条字幕（JPSC，ASS）画进画面。P1 不选轨，这是内核的默认，事实里如实报告 `activeSubtitles: [0]`。
+- 播放中整个应用几乎不出 Flutter 的帧：视频纹理的更新不经过 Dart。P0 时约 119 fps 的帧都来自 Classic 每帧轮询位置的 Ticker。
+- 实验进行时我把 a2 的窗口缩小并临时置顶了约两分钟，以便测帧。这挡住了用户，违反“实验窗口放在后面”的要求；之后不再对实验窗口做置顶、移动、缩放，测不到就记为未测。
+
+因此改了：
+- Next 的打开（界面、Nipa、下载、Classic 转交）都进新层；MDK 驱动直接用 fvp，没有改 MDK 适配器，也没有在停止过程中切换任何轨道。
+- 时间轴按时钟重绘，不随位置重建。
+- 实验用的 `guicall` 把失败按事实返回；加了 `key`、`click` 两个实验操作，以及 `ext.nipaplay.player.host`。
