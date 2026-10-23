@@ -11,7 +11,7 @@ final class ArbiterEvent {
   ArbiterEvent(this.kind, this.owner, this.lease, this.reason)
       : at = DateTime.now().toUtc();
 
-  /// acquired, released, evicted or violation.
+  /// acquired, released, evicted, violation or redirected.
   final String kind;
   final KernelOwner owner;
   final int? lease;
@@ -32,20 +32,26 @@ final class ArbiterEvent {
 /// other side first runs that side's evictor (its own way of closing what
 /// it plays, progress saved) and waits for it to finish.
 ///
-/// P0: the skeleton. Nothing takes the lease yet; Next's session layer does
-/// from P1, and Classic's opens are told of ([noteOpen]) once the redirect
-/// in `VideoPlayerState.initializePlayer` is on.
+/// Next's session layer takes it for each session and gives it back once
+/// that session's kernel is gone. Classic does not take it: while Next's
+/// interface is open every Classic open is handed to Next (the redirect in
+/// `VideoPlayerState.initializePlayer`), and Classic's player, if it still
+/// plays when Next takes the lease, is closed by its evictor ([busy]).
 final class KernelArbiter {
   KernelArbiter();
 
   static final instance = KernelArbiter();
   static const violationCapacity = 50;
+  static const historyCapacity = 100;
 
   KernelLease? _lease;
   int _sequence = 0;
   Future<void> _turn = Future.value();
   final _evictors = <KernelOwner, Future<void> Function(String reason)>{};
+  final _busy = <KernelOwner, bool Function()>{};
   final _violations = ListQueue<ArbiterEvent>();
+  final _history = ListQueue<ArbiterEvent>();
+  final _counts = <String, int>{};
   final _events = StreamController<ArbiterEvent>.broadcast(sync: true);
 
   KernelOwner? get owner => _lease?.owner;
@@ -54,9 +60,15 @@ final class KernelArbiter {
   List<ArbiterEvent> get violations => List.unmodifiable(_violations);
 
   /// [evict] closes what [who] plays and returns once its kernel is gone.
+  /// [busy] tells whether [who] plays without holding the lease (Classic
+  /// in its own interface): it is closed the same way when the other side
+  /// takes the lease.
   void registerEvictor(
-          KernelOwner who, Future<void> Function(String reason) evict) =>
-      _evictors[who] = evict;
+      KernelOwner who, Future<void> Function(String reason) evict,
+      {bool Function()? busy}) {
+    _evictors[who] = evict;
+    if (busy != null) _busy[who] = busy;
+  }
 
   /// The lease for [who], taken from the other side if it holds it. One
   /// acquisition at a time, in the order asked.
@@ -75,6 +87,13 @@ final class KernelArbiter {
       _emit(ArbiterEvent('evicted', held.owner, held.id, reason));
       held._held = false;
       _lease = null;
+    } else {
+      final other =
+          who == KernelOwner.next ? KernelOwner.classic : KernelOwner.next;
+      if (_busy[other]?.call() ?? false) {
+        await _evictors[other]?.call(reason);
+        _emit(ArbiterEvent('evicted', other, null, reason));
+      }
     }
     final lease = _lease = KernelLease._(this, who, ++_sequence);
     _emit(ArbiterEvent('acquired', who, lease.id, reason));
@@ -101,12 +120,31 @@ final class KernelArbiter {
     _emit(violation);
   }
 
-  void _emit(ArbiterEvent event) => _events.add(event);
+  /// [from] asked to open media through [via] and was handed to the other
+  /// side instead (Classic's opens while Next's interface is open).
+  void noteRedirect(KernelOwner from, String via) =>
+      _emit(ArbiterEvent('redirected', from, _lease?.id, via));
 
-  JsonMap facts() => {
+  void _emit(ArbiterEvent event) {
+    _history.add(event);
+    while (_history.length > historyCapacity) {
+      _history.removeFirst();
+    }
+    final key = '${event.kind}:${event.owner.name}';
+    _counts[key] = (_counts[key] ?? 0) + 1;
+    _events.add(event);
+  }
+
+  /// The holder, the violations, how often each side acquired, released or
+  /// was evicted since launch, and the latest events.
+  JsonMap facts({int recent = 10}) => {
         'owner': owner?.name,
         'lease': _lease?.id,
         'violations': [for (final v in _violations) v.toJson()],
+        'counts': Map.of(_counts),
+        'recent': [
+          for (final e in _history.toList().reversed.take(recent)) e.toJson()
+        ],
       };
 }
 

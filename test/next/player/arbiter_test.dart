@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:nipaplay/next/player/arbiter.dart';
+import 'package:nipaplay/next/player/core/arbiter.dart';
 
 void main() {
   test('one lease: taking it from the other side runs its evictor first',
@@ -62,5 +62,26 @@ void main() {
     await Future.wait([a, b]);
     expect(order, ['classic evicted', 'next evicted']);
     expect(arbiter.owner, KernelOwner.classic);
+  });
+
+  test('a side playing without the lease is closed when the other takes it',
+      () async {
+    final arbiter = KernelArbiter();
+    var classicPlays = true;
+    final log = <String>[];
+    arbiter.registerEvictor(KernelOwner.classic, (reason) async {
+      log.add('classic closes ($reason)');
+      classicPlays = false;
+    }, busy: () => classicPlays);
+    final events = <String>[];
+    arbiter.events.listen((e) => events.add('${e.kind}:${e.owner.name}'));
+    await arbiter.acquire(KernelOwner.next, reason: 'next open');
+    expect(log, ['classic closes (next open)']);
+    expect(events, ['evicted:classic', 'acquired:next']);
+    await arbiter.acquire(KernelOwner.next, reason: 'again');
+    expect(log, hasLength(1));
+    final counts = arbiter.facts()['counts'] as Map;
+    expect(counts['acquired:next'], 1);
+    expect(counts['acquired:classic'], isNull);
   });
 }

@@ -23,7 +23,7 @@ import '../../capabilities/media_models.dart';
 import '../../capabilities/player_facts.dart';
 import '../../harness_redaction.dart';
 import '../../settings/registry.dart';
-import '../arbiter.dart';
+import '../core/arbiter.dart';
 import '../next_playback.dart';
 import '../perf/budget.dart';
 import 'apply_selection.dart';
