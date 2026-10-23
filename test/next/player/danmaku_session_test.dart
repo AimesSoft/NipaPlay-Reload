@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:ui' show Size;
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:nipa_harness/nipa_harness.dart';
@@ -7,6 +8,9 @@ import 'package:nipaplay/next/danmaku/source.dart';
 import 'package:nipaplay/next/player/danmaku/controller.dart';
 import 'package:nipaplay/next/player/danmaku/native_sink.dart';
 import 'package:nipaplay/next/player/danmaku/session_port.dart';
+import 'package:nipaplay/next/player/danmaku/worker.dart';
+import 'package:nipaplay/danmaku_dfm/dfm_plus_layout_bridge.dart';
+import 'package:nipaplay/danmaku_next/next2_layout_bridge.dart';
 import 'package:nipaplay/next/player/perf/budget.dart';
 import 'package:nipaplay/services/intro_skip/skip_segment.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -251,6 +255,26 @@ void main() {
     addTearDown(unconfigured.dispose);
     await expectLater(unconfigured.writeSetting('danmaku.spoilerPreventionEnabled', true),
         throwsA(isA<Failure>()));
+  });
+
+  test('the layout bridges send the worker everything it reads', () async {
+    Map<String, Object?>? dfm, next2;
+    try {
+      await DfmPlusLayoutBridge(prepareInBackground: (c) { dfm = c; throw StateError('captured'); })
+          .configure(danmakuList: const [], danmakuListVersion: 1, size: const Size(800, 600),
+              fontSize: 30, displayArea: 1, scrollDurationSeconds: 10, allowStacking: false,
+              mergeDanmaku: true);
+    } on StateError {/* the capture */}
+    try {
+      await Next2LayoutBridge(prepareInBackground: (c) { next2 = c; throw StateError('captured'); })
+          .configure(danmakuList: const [], danmakuListVersion: 1, size: const Size(800, 600),
+              fontSize: 30, displayArea: 1, scrollDurationSeconds: 10, allowStacking: false,
+              mergeDanmaku: true, customFontFamily: '', customFontFilePath: '');
+    } on StateError {/* the capture */}
+    expect(dfm!.keys, containsAll(dfmLayoutKeys));
+    expect(next2!.keys, containsAll(next2LayoutKeys));
+    expect(dfm!['mergeDanmaku'], true);
+    expect(next2!['mergeDanmaku'], true);
   });
 
   test('windows of the list come from the worker; the main isolate holds counts only', () async {

@@ -56,7 +56,8 @@ class Next2LayoutBridge {
       _prepared = await prepare({
         'width': size.width, 'height': size.height, 'fontSize': fontSize,
         'displayArea': displayArea, 'scrollDurationSeconds': scrollDurationSeconds,
-        'allowStacking': allowStacking, 'customFontFamily': customFontFamily,
+        'allowStacking': allowStacking, 'mergeDanmaku': mergeDanmaku,
+        'customFontFamily': customFontFamily,
         'customFontFilePath': customFontFilePath,
       });
     } else {

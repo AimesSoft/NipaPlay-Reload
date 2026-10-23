@@ -174,6 +174,15 @@ void _run(SendPort replies) {
   }).listen((_) {});
 }
 
+/// What the worker reads from a layout request, one list per renderer; the
+/// bridges must send at least these (a test holds them to it).
+const dfmLayoutKeys = ['width', 'height', 'fontSize', 'displayArea',
+  'scrollDurationSeconds', 'allowStacking', 'mergeDanmaku', 'maxQuantity',
+  'maxLinesPerType', 'trackGapRatio', 'outlineWidth', 'customFontFilePath'];
+const next2LayoutKeys = ['width', 'height', 'fontSize', 'displayArea',
+  'scrollDurationSeconds', 'allowStacking', 'mergeDanmaku', 'customFontFamily',
+  'customFontFilePath'];
+
 int _color(Object? raw) {
   if (raw is int) return (0xFF000000 | (raw & 0xFFFFFF)).toSigned(32);
   final text = raw.toString();
@@ -203,7 +212,7 @@ Future<dfm.DfmPlusPreparedLayout> _prepareDfm(DanmakuTimeline snapshot,
     allowStacking: c['allowStacking'] as bool,
     // Rules and block words were applied by the timeline builder; the merge
     // of same comments is the renderer's, as in Classic.
-    mergeDanmaku: c['mergeDanmaku'] as bool, maxQuantity: c['maxQuantity'] as int?,
+    mergeDanmaku: c['mergeDanmaku'] == true, maxQuantity: c['maxQuantity'] as int?,
     maxLinesPerType: c['maxLinesPerType'] as int?,
     trackGapRatio: c['trackGapRatio'] as double,
     outlineWidth: c['outlineWidth'] as double, customFontBytes: font,
@@ -221,7 +230,7 @@ Future<next2.RustNext2PreparedLayout> _prepareNext2(DanmakuTimeline snapshot,
         fontSize: c['fontSize'] as double, displayArea: c['displayArea'] as double,
         scrollDurationSeconds: c['scrollDurationSeconds'] as double,
         allowStacking: c['allowStacking'] as bool,
-        mergeDanmaku: c['mergeDanmaku'] as bool,
+        mergeDanmaku: c['mergeDanmaku'] == true,
         customFontFamily: c['customFontFamily'] as String? ?? '',
         customFontFilePath: c['customFontFilePath'] as String? ?? '',
       ));
