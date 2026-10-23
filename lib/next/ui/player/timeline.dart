@@ -17,18 +17,25 @@ String playerTime(Duration d) {
 /// and above it the danmaku heat, the same crimson line as an episode's
 /// card. Hovered it thickens and tells the time under the pointer; a click
 /// or a drag goes there.
+///
+/// With [live], what is watched is read from it as the line paints, again
+/// each time [repaint] says: the line moves without being rebuilt.
 class PlayerTimeline extends StatefulWidget {
   const PlayerTimeline({
     super.key,
-    required this.position,
+    this.position = Duration.zero,
     required this.duration,
     this.buffered = Duration.zero,
     this.heat,
     required this.onSeek,
     this.onScrub,
+    this.live,
+    this.repaint,
   });
 
   final Duration position;
+  final Duration Function()? live;
+  final Listenable? repaint;
   final Duration duration;
   final Duration buffered;
   final List<double>? heat;
@@ -67,10 +74,12 @@ class _PlayerTimelineState extends State<PlayerTimeline> {
     widget.onSeek(_at(at));
   }
 
+  Duration get _position => widget.live?.call() ?? widget.position;
+
   @override
   Widget build(BuildContext context) => LayoutBuilder(builder: (context, c) {
         final width = c.maxWidth;
-        final played = _drag ?? _fraction(widget.position);
+        final played = _drag ?? _fraction(_position);
         final shown = _drag ?? _hover;
         final active = _hover != null || _drag != null;
         return MouseRegion(
@@ -111,7 +120,10 @@ class _PlayerTimelineState extends State<PlayerTimeline> {
                   right: 0,
                   top: PlayerTimeline._trackTop,
                   child: _Track(
-                    played: played,
+                    played: _drag == null && widget.live != null
+                        ? () => _fraction(_position)
+                        : () => played,
+                    repaint: _drag == null ? widget.repaint : null,
                     buffered: _fraction(widget.buffered),
                     hover: _hover,
                     thick: active,
@@ -150,10 +162,12 @@ class _PlayerTimelineState extends State<PlayerTimeline> {
 class _Track extends StatelessWidget {
   const _Track(
       {required this.played,
+      this.repaint,
       required this.buffered,
       required this.hover,
       required this.thick});
-  final double played;
+  final double Function() played;
+  final Listenable? repaint;
   final double buffered;
   final double? hover;
   final bool thick;
@@ -167,21 +181,25 @@ class _Track extends StatelessWidget {
           borderRadius: BorderRadius.circular(3),
           child: CustomPaint(
             size: Size.infinite,
-            painter: _TrackPainter(played, buffered, hover),
+            painter: _TrackPainter(played, buffered, hover, repaint),
           ),
         ),
       );
 }
 
 class _TrackPainter extends CustomPainter {
-  _TrackPainter(this.played, this.buffered, this.hover);
-  final double played;
+  _TrackPainter(this._played, this.buffered, this.hover, Listenable? repaint)
+      : _at = _played(),
+        super(repaint: repaint);
+  final double Function() _played;
+  final double _at;
   final double buffered;
   final double? hover;
 
   @override
   void paint(Canvas canvas, Size size) {
     final w = size.width, h = size.height;
+    final played = _played();
     canvas.drawRect(Offset.zero & size, Paint()..color = const Color(0x2EFFFFFF));
     canvas.drawRect(Rect.fromLTWH(0, 0, w * math.max(buffered, played), h),
         Paint()..color = const Color(0x29FFFFFF));
@@ -195,7 +213,7 @@ class _TrackPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(_TrackPainter old) =>
-      old.played != played || old.buffered != buffered || old.hover != hover;
+      old._at != _played() || old.buffered != buffered || old.hover != hover;
 }
 
 class _TimeBubble extends StatelessWidget {

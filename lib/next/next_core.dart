@@ -172,6 +172,10 @@ final class NextCore {
   /// Something that 动态 shows has just been recorded. Fires after the
   /// record is stored; the view itself stays the only reader of the facts.
   final activityChanges = StreamController<void>.broadcast(sync: true);
+
+  /// Each recorded settings change ({key, value, origin…}), for what
+  /// applies a shared setting as it changes (the player).
+  final settingChanges = StreamController<JsonMap>.broadcast(sync: true);
   void activityChanged() {
     if (!activityChanges.isClosed) activityChanges.add(null);
   }
@@ -311,6 +315,7 @@ final class NextCore {
     events = BodyEvents(database);
     followups.eventCommitted = events.changed;
     settings.onChanged = (facts) async {
+      if (!settingChanges.isClosed) settingChanges.add(facts);
       activityChanged();
       await hooks.emit('settings.changed', facts['key'] as String, facts);
     };
@@ -549,6 +554,7 @@ final class NextCore {
     followups.eventCommitted = null;
     await events.committed.close();
     await activityChanges.close();
+    await settingChanges.close();
     await uiData.close();
     await stateSources.close();
     hooks.observeEvent = null;

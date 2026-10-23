@@ -8,6 +8,7 @@ import 'package:flutter/rendering.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
+import 'package:nipa_harness/nipa_harness.dart' show Failure;
 import 'package:provider/provider.dart';
 import 'package:window_manager/window_manager.dart';
 
@@ -511,15 +512,49 @@ abstract final class NextUiDebug {
         return {'fields': fields.length, ..._status(shell)};
       case 'guicall':
         // What the person does in the interface: an action called as the GUI
-        // (a folder added in settings, not by Nipa).
+        // (a folder added in settings, not by Nipa). A failure comes back as
+        // its facts, as the caller would read them.
         final input = p['input'];
-        return {
-          'result': await shell.services.calls.call(
-              p['action']!,
-              input == null
-                  ? {}
-                  : Map<String, Object?>.from(jsonDecode(input) as Map))
+        try {
+          return {
+            'result': await shell.services.calls.call(
+                p['action']!,
+                input == null
+                    ? {}
+                    : Map<String, Object?>.from(jsonDecode(input) as Map))
+          };
+        } on Failure catch (failure) {
+          return {'failure': failure.toJson()};
+        }
+      case 'key':
+        // A key pressed and let go, as the keyboard would.
+        final (physical, logical) = switch (p['key']) {
+          'space' => (PhysicalKeyboardKey.space, LogicalKeyboardKey.space),
+          'left' => (PhysicalKeyboardKey.arrowLeft, LogicalKeyboardKey.arrowLeft),
+          'right' =>
+            (PhysicalKeyboardKey.arrowRight, LogicalKeyboardKey.arrowRight),
+          'escape' => (PhysicalKeyboardKey.escape, LogicalKeyboardKey.escape),
+          _ => throw ArgumentError('key: space, left, right or escape'),
         };
+        final stamp = Duration(milliseconds: DateTime.now().millisecondsSinceEpoch);
+        final handled = HardwareKeyboard.instance.handleKeyEvent(KeyDownEvent(
+            physicalKey: physical, logicalKey: logical, timeStamp: stamp));
+        HardwareKeyboard.instance.handleKeyEvent(KeyUpEvent(
+            physicalKey: physical, logicalKey: logical, timeStamp: stamp));
+        await _settle();
+        return {'handled': handled, ..._status(shell)};
+      case 'click':
+        // A click at x,y (logical pixels of the window); two with double.
+        final [x, y] = p['at']!.split(',').map(int.parse).toList();
+        _hoverAt(Offset(x.toDouble(), y.toDouble()));
+        _click([x, y]);
+        if (p['double'] == 'true') {
+          await Future<void>.delayed(const Duration(milliseconds: 90));
+          _click([x, y]);
+        }
+        await Future<void>.delayed(const Duration(milliseconds: 400));
+        await _settle();
+        return {..._status(shell)};
       case 'press':
         await _settle();
         final label = p['label'] ?? '';

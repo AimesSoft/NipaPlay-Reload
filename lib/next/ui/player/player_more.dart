@@ -135,9 +135,12 @@ class MoreMenuState extends State<MoreMenu> {
                   label: '画面',
                   value: fitLabels[fit],
                   onTap: () => _open(_Page.fit)),
-            PlayerMenuLink(label: '弹幕', onTap: () => _open(_Page.danmaku)),
-            const PlayerMenuDivider(),
-            MenuItem(label: '截图', onTap: widget.onScreenshot),
+            if (_playback.offersDanmaku)
+              PlayerMenuLink(label: '弹幕', onTap: () => _open(_Page.danmaku)),
+            if (_playback.offersScreenshot || _playback.canPictureInPicture)
+              const PlayerMenuDivider(),
+            if (_playback.offersScreenshot)
+              MenuItem(label: '截图', onTap: widget.onScreenshot),
             if (_playback.canPictureInPicture)
               MenuItem(label: '画中画', onTap: widget.onPictureInPicture),
           ]);

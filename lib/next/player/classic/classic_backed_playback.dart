@@ -26,6 +26,7 @@ import '../../settings/registry.dart';
 import '../core/arbiter.dart';
 import '../next_playback.dart';
 import '../perf/budget.dart';
+import '../ports/session_playback.dart';
 import 'apply_selection.dart';
 import 'classic_facts.dart';
 import 'classic_playback_controls.dart';
@@ -138,6 +139,14 @@ class ClassicBackedPlayback implements NextPlayback {
   double get volume => state.currentSystemVolume;
   @override
   bool get canPlayNext => state.canPlayNextEpisode;
+  @override
+  bool get playIntent => state.status == PlayerStatus.playing;
+  @override
+  bool get offersDanmaku => true;
+  @override
+  bool get offersSubtitles => true;
+  @override
+  bool get offersScreenshot => true;
 
   // ---- for capabilities and the rest of Next ----
 
@@ -169,6 +178,22 @@ class ClassicBackedPlayback implements NextPlayback {
   Capability localOperations(
           SettingsRegistry settings, BuildContext Function() context) =>
       LocalPlaybackOperations(state, settings, context);
+
+  /// Next's local operations while Next's own layer plays: Classic's,
+  /// with that layer's levels and full screen.
+  Capability localOperationsFor(SettingsRegistry settings,
+          BuildContext Function() context, SessionPlayback session) =>
+      LocalPlaybackOperations(state, settings, context, session: session);
+
+  /// Classic's player as the lease's other side: when Next takes the lease
+  /// while Classic still plays, Classic closes it its own way (progress and
+  /// watch record saved) before Next opens anything.
+  void registerEvictor(KernelArbiter arbiter) => arbiter.registerEvictor(
+      KernelOwner.classic, (reason) => close(reason: reason),
+      busy: () =>
+          state.hasVideo ||
+          const {PlayerStatus.loading, PlayerStatus.recognizing}
+              .contains(state.status));
 
   @override
   PlaybackSnapshot snapshot() =>

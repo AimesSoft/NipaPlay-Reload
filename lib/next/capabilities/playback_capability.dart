@@ -27,9 +27,10 @@ final class PlaybackCapability implements Capability {
     required Future<WatchHistoryItem?> Function(int animeId, int episodeId)
         episodeItem,
     required EpisodeFileSelectionService fileSelection,
+    Future<bool> Function(PlayableItem item, Duration start)? startAt,
   }) : actions = [
           PlaybackOpenAction._(player, start, usesExternalPlayer, historyItem,
-              episodeItem, fileSelection),
+              episodeItem, fileSelection, startAt),
           PlaybackStateAction._(player),
           PlaybackSetPausedAction._(player),
           PlaybackSeekAction._(player),
@@ -48,8 +49,9 @@ final class PlaybackOpenAction
     this._usesExternalPlayer,
     this._historyItem,
     this._episodeItem,
-    this._fileSelection,
-  );
+    this._fileSelection, [
+    this._startAt,
+  ]);
 
   final PlayerPort _player;
   final Future<bool> Function(PlayableItem item) _start;
@@ -58,6 +60,10 @@ final class PlaybackOpenAction
   final Future<WatchHistoryItem?> Function(int animeId, int episodeId)
       _episodeItem;
   final EpisodeFileSelectionService _fileSelection;
+
+  /// Opens at a start position as part of the open, when the player can;
+  /// otherwise the open is followed by a seek.
+  final Future<bool> Function(PlayableItem item, Duration start)? _startAt;
 
   static const _spec = ActionSpec(
     id: 'playback.open',
@@ -164,13 +170,18 @@ final class PlaybackOpenAction
       }
       item = resolved;
     }
-    if (!await _start(item)) {
+    final position = input.startPositionMs;
+    final startAt = _startAt;
+    final started = position != null && startAt != null
+        ? await startAt(item, Duration(milliseconds: position))
+        : await _start(item);
+    if (!started) {
       final error = _player.snapshot().error;
       throw Failure(FailureCode.unavailable,
           'NipaPlay cannot start playback right now; the window may not be ready.',
           retryable: true, details: {if (error != null) 'playerError': error});
     }
-    if (input.startPositionMs case final position?) {
+    if (position != null && startAt == null) {
       await _player.seekTo(Duration(milliseconds: position));
     }
     final state = _player.snapshot();

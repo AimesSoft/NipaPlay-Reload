@@ -7,6 +7,7 @@ import 'package:provider/provider.dart';
 import '../../next_runtime.dart';
 import '../player/playback.dart';
 import '../player/stage.dart';
+import '../player/video_stage.dart';
 import 'next_shell.dart';
 import 'next_ui_preference.dart';
 import 'window_chrome.dart';
@@ -15,10 +16,11 @@ import 'window_chrome.dart';
 ///
 /// With the preference off this is Classic exactly as before: the same
 /// widget, visible, focusable and animating. With it on, Classic stays
-/// mounted underneath (its services, hotkeys and player keep working) and
-/// is revealed while a video is open, since playback still uses Classic's
-/// player: its video, danmaku and subtitles show through, and the shell
-/// draws the controls over them ([NextShell.playing]). With the
+/// mounted underneath, hidden (its services keep working). While a video
+/// is open, Next's own playback layer draws its picture ([NextVideoStage])
+/// where Classic would be, and the shell draws the controls over it
+/// ([NextShell.playing]). Over Classic's player (the P0 seam, tests) Classic
+/// is revealed instead: its video, danmaku and subtitles show through. With the
 /// conversation open beside the video, Classic goes left of it, black under
 /// the panel ([NextStageRoom]): drawn smaller as one picture while Flutter
 /// draws the video, laid out there while the system does (its picture
@@ -71,6 +73,9 @@ class _NextUiGateState extends State<NextUiGate> {
         ),
         builder: (context, frame, _) {
           final (playing, systemDrawn) = frame;
+          final stage = playback is VideoStageHost
+              ? playback as VideoStageHost
+              : null;
           return Stack(
             fit: StackFit.expand,
             children: [
@@ -80,7 +85,10 @@ class _NextUiGateState extends State<NextUiGate> {
                 fit: !systemDrawn,
                 stepped: systemDrawn,
                 backdrop: true,
-                child: _classic(!playing),
+                child: Stack(fit: StackFit.expand, children: [
+                  _classic(stage != null || !playing),
+                  if (stage != null && playing) NextVideoStage(host: stage),
+                ]),
               ),
               // Next's window chrome stays while the video is on, so the
               // traffic lights keep their place on the player's bar too.

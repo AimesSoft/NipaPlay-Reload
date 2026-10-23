@@ -27,11 +27,12 @@ import 'timeline.dart';
 
 enum _Menu { subtitles, episodes, more }
 
-/// Next's controls over Classic's video. The picture, danmaku, subtitles,
-/// clicks on the picture (pause, double click for full screen), the
-/// right-click menu and the hotkeys stay Classic's; this draws what is
-/// over them: back and the title on the window's bar, Nipa on the right,
-/// the timeline with its heat and the controls below.
+/// Next's controls over the video. The picture is Next's own layer's
+/// ([NextVideoStage]: clicks pause, a double click goes full screen, the
+/// keys play, pause and seek); over P0's seam it is Classic's, with its
+/// danmaku, subtitles, menu and hotkeys. This draws what is over it: back
+/// and the title on the window's bar, Nipa on the right, the timeline with
+/// its heat and the controls below.
 ///
 /// They come with the pointer and go when it rests, as Classic's do
 /// ([NextPlayback.showControls]); they stay while the pointer is on
@@ -717,18 +718,20 @@ class _BottomBar extends StatelessWidget {
       child: Padding(
         padding: const EdgeInsets.fromLTRB(_side, 0, _side, 24),
         child: Column(mainAxisSize: MainAxisSize.min, children: [
-          PlaybackSelector<(int, int, int, int)>(
+          // What is watched moves by painting, not rebuilding: the line
+          // reads the position each time the frame asks for a redraw.
+          PlaybackSelector<(int, int, int)>(
             playback: playback,
             selector: (s) => (
-              s.position.inMilliseconds,
               s.duration.inMilliseconds,
               s.buffered.inMilliseconds,
               s.danmakuVersion.value,
             ),
             builder: (context, t, _) => PlayerTimeline(
-              position: Duration(milliseconds: t.$1),
-              duration: Duration(milliseconds: t.$2),
-              buffered: Duration(milliseconds: t.$3),
+              live: () => playback.position,
+              repaint: playback.frame,
+              duration: Duration(milliseconds: t.$1),
+              buffered: Duration(milliseconds: t.$2),
               heat: playback.heat(),
               onSeek: playback.seek,
               onScrub: onScrub,
@@ -745,9 +748,10 @@ class _BottomBar extends StatelessWidget {
                 width: math.max(room.maxWidth, _row),
                 height: _button,
                 child: Row(children: [
+                  // The intent: the button answers the click at once.
                   PlaybackSelector<bool>(
                     playback: playback,
-                    selector: (s) => s.transport.value.playing,
+                    selector: (s) => s.playIntent,
                     builder: (context, playing, _) => _BarButton(
                       glyph: playing ? NextGlyph.pause : NextGlyph.play,
                       label: playing ? '暂停' : '播放',
@@ -789,24 +793,28 @@ class _BottomBar extends StatelessWidget {
                   const Spacer(),
                   _Volume(playback: playback),
                   const SizedBox(width: _gap),
-                  PlaybackSelector<bool>(
-                    playback: playback,
-                    selector: (s) => s.danmakuVisible,
-                    builder: (context, on, _) => _BarButton(
-                      glyph: on ? NextGlyph.danmaku : NextGlyph.danmakuOff,
-                      label: on ? '关闭弹幕' : '显示弹幕',
-                      dim: !on,
-                      onTap: playback.toggleDanmaku,
+                  if (playback.offersDanmaku) ...[
+                    PlaybackSelector<bool>(
+                      playback: playback,
+                      selector: (s) => s.danmakuVisible,
+                      builder: (context, on, _) => _BarButton(
+                        glyph: on ? NextGlyph.danmaku : NextGlyph.danmakuOff,
+                        label: on ? '关闭弹幕' : '显示弹幕',
+                        dim: !on,
+                        onTap: playback.toggleDanmaku,
+                      ),
                     ),
-                  ),
-                  const SizedBox(width: _gap),
-                  _BarButton(
-                    glyph: NextGlyph.subtitles,
-                    label: '字幕',
-                    lit: menu == _Menu.subtitles,
-                    onTap: () => onMenu(_Menu.subtitles),
-                  ),
-                  const SizedBox(width: _gap),
+                    const SizedBox(width: _gap),
+                  ],
+                  if (playback.offersSubtitles) ...[
+                    _BarButton(
+                      glyph: NextGlyph.subtitles,
+                      label: '字幕',
+                      lit: menu == _Menu.subtitles,
+                      onTap: () => onMenu(_Menu.subtitles),
+                    ),
+                    const SizedBox(width: _gap),
+                  ],
                   _BarButton(
                     glyph: NextGlyph.episodes,
                     label: '剧集',

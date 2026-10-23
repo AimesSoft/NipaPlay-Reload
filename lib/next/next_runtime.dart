@@ -4,8 +4,16 @@ import 'followups/service.dart';
 import 'platform/background_activity.dart';
 import 'platform/loop_lag.dart';
 import 'player/classic/classic_backed_playback.dart';
+import 'player/core/arbiter.dart';
+import 'player/core/host.dart';
+import 'player/core/session.dart' show PlayerLevels;
+import 'player/kernel/mdk_driver.dart';
 import 'player/next_playback.dart';
 import 'player/perf/budget.dart';
+import 'player/ports/debug_player.dart';
+import 'player/ports/session_playback.dart';
+import 'player/ports/session_ports.dart' show NotInPlaybackLayer;
+import 'package:shared_preferences/shared_preferences.dart';
 import 'ui/shell/next_ui_preference.dart';
 import 'runtime/codex_runtime.dart';
 import 'settings/classic_host_device_settings.dart';
@@ -28,7 +36,6 @@ import 'package:nipaplay/providers/jellyfin_provider.dart';
 import 'package:nipaplay/providers/emby_provider.dart';
 import 'package:nipaplay/services/bangumi_service.dart';
 import 'package:nipaplay/services/episode_file_selection_service.dart';
-import 'package:nipaplay/services/playback_service.dart';
 import 'package:nipaplay/utils/globals.dart' as globals;
 import 'package:nipaplay/player_abstraction/player_factory.dart';
 import 'package:package_info_plus/package_info_plus.dart';
@@ -91,8 +98,11 @@ import 'ui_data/host_settings.dart';
 import 'settings/debug_host_settings.dart';
 
 final class NextRuntime extends ChangeNotifier {
-  NextRuntime._(this._labs, this._preference, this.playback,
+  NextRuntime._(this._labs, this._preference, this.playback, this._classic,
       List<Capability> capabilities) {
+    // From now on Classic asks before it opens anything; while Next's
+    // interface is what shows, Next's layer plays it (D3, D5).
+    globals.nextPlaybackRedirect = _redirect;
     _operations = _initialize(capabilities);
   }
 
@@ -151,20 +161,26 @@ final class NextRuntime extends ChangeNotifier {
             PlayerFactory.isHarmonyOS ||
             labs.enableErikaPlayerKernel);
     final settings = context.read<SettingsProvider>();
-    final nextPlayback = ClassicBackedPlayback.of(context);
+    // Classic's player stays as the lease's other side, and for the lab's
+    // observations; Next plays in its own layer (D3, D5).
+    final classic = ClassicBackedPlayback.of(context);
+    classic.registerEvictor(KernelArbiter.instance);
+    final host = NextPlayerHost(
+      createDriver: (kernel, lease) async =>
+          MdkDriver(lease, mdkConfigFrom(await SharedPreferences.getInstance())),
+      configuredKernel: configuredPlayerKernelId,
+      levels: _playerLevels,
+      usesExternalPlayer: () => settings.useExternalPlayer,
+    );
+    final nextPlayback = SessionPlayback(host,
+        localOperations: (settings, context, session) =>
+            classic.localOperationsFor(settings, context, session));
     final history = ServiceProvider.watchHistoryProvider;
     final seriesDetail = BangumiService.instance.getAnimeDetailsFromMemory;
-    var meshProxy = false;
     final playback = PlaybackCapability(
       player: nextPlayback.port,
-      start: (item) {
-        final remote = core.uiData.meshLibrary?.playback.containsKey(item.videoPath) == true;
-        if (remote || meshProxy) {
-          MeshPlayback.directLoopback(nextPlayback.kernelHost, remote);
-        }
-        meshProxy = remote;
-        return PlaybackService().play(item, episodeFileSelectionHandled: true);
-      },
+      start: (item) => nextPlayback.openItem(item),
+      startAt: (item, start) => nextPlayback.openItem(item, start: start),
       usesExternalPlayer: () => settings.useExternalPlayer,
       historyItem: WatchHistoryManager.getHistoryItem,
       episodeItem: WatchHistoryManager.getHistoryItemByEpisode,
@@ -247,21 +263,16 @@ final class NextRuntime extends ChangeNotifier {
         if (outcome is Failed) throw outcome.failure;
         return outcome.toEnvelope();
       }
-      if (!await PlaybackService()
-          .play(item, episodeFileSelectionHandled: true)) {
-        throw const Failure(
-            FailureCode.unavailable, 'NipaPlay cannot start playback.');
-      }
-      if (position != null) {
-        await nextPlayback.port.seekTo(Duration(milliseconds: position));
-      }
+      await nextPlayback.openItem(item,
+          start: position == null ? null : Duration(milliseconds: position));
       return {
         'sourceId': source['sourceId'],
         'itemId': itemId,
         'state': nextPlayback.snapshot().toJson()
       };
     };
-    return NextRuntime._(labs, context.read<NextUiPreference>(), nextPlayback, [
+    return NextRuntime._(
+        labs, context.read<NextUiPreference>(), nextPlayback, classic, [
       WatchedHistoryCapability(WatchedHistory(() => core.media.service,
           () => WatchHistoryDatabase.instance.database, history.refresh),
           mergedLibrary: () => core.uiData.meshLibrary!),
@@ -302,8 +313,23 @@ final class NextRuntime extends ChangeNotifier {
   final LabsSettingsProvider _labs;
   final NextUiPreference _preference;
 
-  /// What plays, for Next (Classic's player behind it until P1).
-  final NextPlayback playback;
+  /// What plays, for Next: Next's own playback layer (P1).
+  final SessionPlayback playback;
+
+  /// Classic's player: the lease's other side, and the lab's observations.
+  final ClassicBackedPlayback _classic;
+  StreamSubscription<JsonMap>? _settingEvents;
+
+  /// The shared levels a session opens with (D3): the desktop player's
+  /// volume, its boost and the speed, as Classic keeps them.
+  static Future<PlayerLevels> _playerLevels() async {
+    final prefs = await SharedPreferences.getInstance();
+    return PlayerLevels(
+      volume: (prefs.getDouble('player_volume') ?? 1).clamp(0.0, 1.0),
+      boost: (prefs.getDouble('player_volume_boost') ?? 1).clamp(1.0, 2.0),
+      rate: (prefs.getDouble('playback_rate') ?? 1).clamp(0.01, 5.0),
+    );
+  }
   late final Harness _harness;
   late final AgentEndpoint _endpoint;
   late final TaskEngine _taskEngine;
@@ -420,8 +446,13 @@ final class NextRuntime extends ChangeNotifier {
     final uncaught = _uncaught = UncaughtErrors(
         Directory('${root.path}/diagnostics'), appVersion: packageInfo.version)
       ..context = playback.errorContext;
-    final kernel =
-        _kernel = KernelControl(playback.kernelHost, harness: () => repositoryPath);
+    // Kernel reads and changes are not in Next's playback layer yet: the
+    // same actions, unavailable with the reason.
+    final kernelControl =
+        KernelControl(playback.kernelHost, harness: () => repositoryPath);
+    unawaited(kernelControl.release(reopen: false));
+    _settingEvents = core.settingChanges.stream.listen((facts) =>
+        playback.host.settingChanged(facts['key'] as String, facts['value']));
     _harness = Harness(
       [
         FamilyDescriptionCapability(() => _harness.catalog),
@@ -446,7 +477,11 @@ final class NextRuntime extends ChangeNotifier {
         for (final capability in capabilities)
           InvocationScopeCapability(FileIndexingCapability(capability, core.media.service.store)),
         PlaybackControlsCapability(playback.controls),
-        KernelControlCapability(kernel),
+        NotInPlaybackLayer(
+            KernelControlCapability(kernelControl),
+            'kernel_control',
+            'Next\'s playback layer runs MDK, a new instance for each session; '
+                'it does not read, change or swap its kernel yet.'),
         RuntimeDiagnosticsCapability(
             errors: uncaught,
             log: PlayerNativeLog.instance,
@@ -456,7 +491,7 @@ final class NextRuntime extends ChangeNotifier {
         InvocationScopeCapability(localLibrary),
         FileIndexingCapability(
             DownloadPlaybackCapability(
-                core.downloads, (item) => PlaybackService().play(item)),
+                core.downloads, (item) => playback.openItem(item)),
             core.media.service.store),
         ...core.capabilities
       ],
@@ -516,7 +551,10 @@ final class NextRuntime extends ChangeNotifier {
     if (kDebugMode && LabProfile.active) installDebugChat(() => chat);
     if (kDebugMode && LabProfile.active) installDebugHostSettings(hostSettings);
     if (kDebugMode && LabProfile.active) installDebugUiData(ServiceProvider.nextCore);
-    if (kDebugMode && LabProfile.active) playback.installDebug();
+    if (kDebugMode && LabProfile.active) {
+      _classic.installDebug();
+      installDebugPlayerHost(() => playback.host);
+    }
     _labs.addListener(_queueEndpointUpdate);
     _preference.addListener(_queueEndpointUpdate);
     _location!.addListener(_queueEndpointUpdate);
@@ -539,10 +577,13 @@ final class NextRuntime extends ChangeNotifier {
       // Between Next and Classic what plays closes, its progress saved; the
       // other side does not take it over (D2). At once, not behind work
       // still queued.
-      final closing = playback
-          .close(reason: enabled ? 'next_interface_opened' : 'next_interface_closed')
-          .catchError((Object error, StackTrace stack) =>
-              Zone.current.handleUncaughtError(error, stack));
+      final reason = enabled ? 'next_interface_opened' : 'next_interface_closed';
+      // Both sides: Next's own layer, and Classic's player if it played.
+      final closing = Future.wait([
+        playback.close(reason: reason),
+        _classic.close(reason: reason),
+      ]).then<void>((_) {}).catchError((Object error, StackTrace stack) =>
+          Zone.current.handleUncaughtError(error, stack));
       _operations = _operations.then((_) => closing);
     }
     if (!enabled) {
@@ -853,6 +894,23 @@ final class NextRuntime extends ChangeNotifier {
     });
   }
 
+  /// Classic asks before it opens [item] (drag and drop, open with, its
+  /// pages): while Next's interface is what shows, Next's layer plays it,
+  /// or says why it cannot, and Classic's player never does. In Classic's
+  /// own interface Classic plays it (D1).
+  Future<bool> _redirect(PlayableItem item, String via) async {
+    await _labs.ready;
+    await _preference.ready;
+    if (_disposed || !_nextOpen) return false;
+    KernelArbiter.instance.noteRedirect(KernelOwner.classic, via);
+    try {
+      await playback.openItem(item, origin: 'classic_redirect');
+    } on Failure catch (failure) {
+      debugPrint('[NextPlayer] $via: ${failure.message}');
+    }
+    return true;
+  }
+
   /// The app is leaving through its exit path; the next start does not
   /// report this run as ended abruptly.
   Future<void> exiting() async => _uncaught?.exiting();
@@ -873,6 +931,10 @@ final class NextRuntime extends ChangeNotifier {
   @override
   void dispose() {
     _disposed = true;
+    if (globals.nextPlaybackRedirect == _redirect) {
+      globals.nextPlaybackRedirect = null;
+    }
+    unawaited(_settingEvents?.cancel());
     unawaited(BackgroundActivity.set(false));
     _loopLag.stop();
     unawaited(_hostSettings?.codex?.cancel());
@@ -886,6 +948,8 @@ final class NextRuntime extends ChangeNotifier {
     _preference.removeListener(_queueEndpointUpdate);
     _location?.removeListener(_queueEndpointUpdate);
     _operations = _operations.then((_) async {
+      await playback.host.dispose();
+      await playback.dispose();
       await _kernel?.release(reopen: false);
       await _uncaught?.detach();
       await PlayerNativeLog.instance.detach();

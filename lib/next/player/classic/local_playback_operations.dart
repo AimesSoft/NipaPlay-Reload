@@ -22,28 +22,47 @@ import 'package:window_manager/window_manager.dart';
 
 import '../../settings/registry.dart';
 import '../../capabilities/classic_action.dart';
+import '../ports/session_playback.dart';
+import '../ports/session_ports.dart' show notInPlaybackLayer;
 export '../../capabilities/local_operation_titles.dart';
 
 const _output = ObjectSchema({}, additionalProperties: true);
 const _unit = NumberSchema(minimum: 0, maximum: 1);
 
 final class LocalPlaybackOperations implements Capability {
-  LocalPlaybackOperations(this.player, this.settings, this.context);
+  LocalPlaybackOperations(this.player, this.settings, this.context,
+      {this.session});
   final VideoPlayerState player;
+
+  /// Next's own playback layer, when it plays instead of Classic's player:
+  /// the levels and full screen are its; what it does not do yet is
+  /// unavailable.
+  final SessionPlayback? session;
   final SettingsRegistry settings;
   final BuildContext Function() context;
   final _desktop = DesktopPlayerWindowService.instance;
   final _consoleWindows = ExternalPlayerConsoleWindowService.instance;
   bool _quitScheduled = false;
 
-  JsonMap _levels() => {
-        'volume': player.currentSystemVolume,
-        'brightness':
-            globals.isMobilePlatform ? player.currentScreenBrightness : null,
-        'brightnessSupported': globals.isMobilePlatform,
-        'volumeTarget': globals.isMobilePlatform ? 'system' : 'internal_player',
-        'playerVolume': player.player.volume,
+  JsonMap _levels() {
+    if (session case final session?) {
+      return {
+        'volume': session.volume,
+        'brightness': null,
+        'brightnessSupported': false,
+        'volumeTarget': 'internal_player',
+        'playerVolume': session.volume,
       };
+    }
+    return {
+      'volume': player.currentSystemVolume,
+      'brightness':
+          globals.isMobilePlatform ? player.currentScreenBrightness : null,
+      'brightnessSupported': globals.isMobilePlatform,
+      'volumeTarget': globals.isMobilePlatform ? 'system' : 'internal_player',
+      'playerVolume': player.player.volume,
+    };
+  }
 
   void _requireExternal() {
     if (!ExternalPlayerConsoleService.hasActiveSession) {
@@ -131,6 +150,10 @@ final class LocalPlaybackOperations implements Capability {
       throw const Failure(
           FailureCode.invalidInput, 'This command requires enabled.');
     }
+    if (session != null && ['pip', 'detached', 'fit_video'].contains(command)) {
+      notInPlaybackLayer('window',
+          'Next\'s playback layer does not move the video to its own window or fit the window to it yet.');
+    }
     if (['pip', 'detached', 'fit_video'].contains(command) &&
         !player.hasVideo) {
       throw const Failure(
@@ -213,7 +236,9 @@ final class LocalPlaybackOperations implements Capability {
     } else {
       switch (command) {
         case 'fullscreen':
-          if (await windowManager.isFullScreen() != enabled) {
+          if (session case final session?) {
+            await session.setFullscreen(enabled!);
+          } else if (await windowManager.isFullScreen() != enabled) {
             await player.toggleFullscreen();
           }
         case 'always_on_top':
@@ -296,6 +321,10 @@ final class LocalPlaybackOperations implements Capability {
                   'text'
                 ]),
                 output: _output), (input, _) async {
+          if (session != null) {
+            notInPlaybackLayer('danmaku',
+                'Next\'s playback layer does not present danmaku yet.');
+          }
           final text = (input['text'] as String).trim();
           if (text.isEmpty) {
             throw const Failure(

@@ -15,7 +15,9 @@ import '../danmaku/service.dart'
     show DanmakuPlayerPort, DanmakuTrackRegistry, DanmakuTrackUpdater;
 import '../settings/registry.dart' show SettingsRegistry;
 import 'choices.dart';
+import 'kernel/driver.dart' show VideoSurface;
 
+export 'kernel/driver.dart' show VideoSurface, TextureSurface;
 export 'package:nipaplay/services/intro_skip/skip_segment.dart'
     show SkipSegmentKind;
 export 'package:nipaplay/utils/video_aspect_geometry.dart' show VideoAspectMode;
@@ -188,9 +190,25 @@ abstract interface class KernelHost {
   Future<void> reopen(PlayerKernelType? kernel, PlayableItem? request);
 }
 
+/// The picture of Next's own playback layer and what comes to it: the
+/// stage under the controls draws [surface] (never the kernel, I3) and
+/// sends the pointer and the keys here.
+abstract interface class VideoStageHost {
+  ValueListenable<VideoSurface?> get surface;
+  void togglePlay();
+  Future<void> toggleFullscreen();
+
+  /// The pointer moved over the picture: the controls come up a while.
+  void pointerMoved();
+
+  /// A key while the picture is up; true when the player took it.
+  bool key(KeyEvent event);
+}
+
 /// Next's playback: everything in Next that is not the player itself reads
-/// and drives what plays through this. Until Next's own session layer
-/// plays (P1), Classic's player plays behind it ([ClassicBackedPlayback]).
+/// and drives what plays through this. From P1 Next's own layer plays
+/// ([SessionPlayback] over [NextPlayerHost]); [ClassicBackedPlayback], P0's
+/// seam over Classic's player, stays only until P6 removes it.
 ///
 /// What changes rarely is pushed ([media], [transport], [danmakuVersion]);
 /// nothing in Next listens to the player at the rate its time moves except
@@ -204,8 +222,9 @@ abstract interface class NextPlayback {
   /// removed, switched, moved).
   ValueListenable<int> get danmakuVersion;
 
-  /// Notifies as the controls over the video need redrawing (the time
-  /// moving among them). Transitional: the session's clock replaces it.
+  /// Notifies as the controls over the video need redrawing: over Next's
+  /// own layer when what they show changes, and while they show, as the
+  /// clock jumps and once a second as it runs.
   Listenable get frame;
 
   // ---- what the controls show ----
@@ -219,6 +238,15 @@ abstract interface class NextPlayback {
   Duration get buffered;
   bool get danmakuVisible;
   bool get fullscreen;
+
+  /// Play was asked last (the play button), before the kernel confirms.
+  bool get playIntent;
+
+  /// What this playback offers besides play, pause, seeking, volume, speed
+  /// and full screen.
+  bool get offersDanmaku;
+  bool get offersSubtitles;
+  bool get offersScreenshot;
   double get volume;
   bool get canPlayNext;
 
