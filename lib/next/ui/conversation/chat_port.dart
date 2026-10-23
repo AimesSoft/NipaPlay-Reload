@@ -146,13 +146,17 @@ final class ChatHostPort implements ChatPort {
       _current?.steer(text, onThread: threadId);
 
   /// Redacted like the live display stream, so history shows what the
-  /// live view showed.
+  /// live view showed. The saved process was redacted as it was saved, so
+  /// only the runtime's history is redacted here; the process goes back in
+  /// after, read off the main isolate.
   @override
   Future<ChatEvent> readThread(String threadId) async {
     final host = _current;
     if (host == null) throw StateError('chat host unavailable');
-    return Map<String, dynamic>.from(
-        redactHarnessJson(await host.readThread(threadId)) as Map);
+    final history = Map<String, dynamic>.from(redactHarnessJson(
+        await host.readThread(threadId, withProcess: false)) as Map);
+    await host.restoreProcess(threadId, history);
+    return history;
   }
 
   @override
