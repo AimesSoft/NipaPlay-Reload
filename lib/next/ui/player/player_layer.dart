@@ -9,6 +9,7 @@ import 'package:nipaplay/utils/video_player_state.dart';
 import 'package:provider/provider.dart';
 import 'package:window_manager/window_manager.dart';
 
+import '../../player/perf/budget.dart';
 import '../../ui_data/ui_data.dart'
     show NextNowPlaying, NextUiData, UiNowPlaying;
 import '../conversation/nipa_chat.dart';
@@ -409,7 +410,8 @@ class _Watch {
 
   /// Another file: the library is asked what it is. The name stays as it
   /// was until it answers.
-  void _changed() {
+  void _changed() => PlayerPerf.span('watch.changed', _change);
+  void _change() {
     if (_gone) return;
     final path = _playing;
     if (path == null || path == _path) return;

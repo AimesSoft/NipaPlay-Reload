@@ -13,6 +13,7 @@ import 'package:nipaplay/utils/video_player_state.dart';
 import 'package:path/path.dart' as p;
 
 import '../harness_redaction.dart';
+import '../player/perf/budget.dart';
 import '../tasks/user_consent.dart';
 import 'classic_action.dart';
 import 'kernel_facts.dart';
@@ -177,7 +178,8 @@ final class KernelControl {
     }));
   }
 
-  void _changed() {
+  void _changed() => PlayerPerf.span('kernel.changed', _change);
+  void _change() {
     if (_reopening) return;
     final request = state.lastPlaybackRequest;
     if (!identical(request, _seenRequest)) {

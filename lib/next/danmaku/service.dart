@@ -9,6 +9,7 @@ import 'export.dart';
 import 'alignment.dart';
 import 'import.dart';
 import 'classic_cache.dart';
+import '../player/perf/budget.dart';
 import 'package:nipaplay/utils/danmaku_parser.dart';
 import 'package:nipaplay/utils/dandanplay_comments.dart';
 
@@ -485,6 +486,7 @@ final class DanmakuService {
   /// Rebuild from committed cache, never start network work on a player callback.
   Future<void> _refreshes = Future.value();
   Future<void> refreshCurrent({String? replaceBindingId}) async {
+    PlayerPerf.count('danmaku.refreshCurrent');
     final previous = _refreshes;
     final done = Completer<void>();
     _refreshes = done.future;

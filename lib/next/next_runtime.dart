@@ -3,6 +3,7 @@ import 'dart:io';
 import 'followups/service.dart';
 import 'platform/background_activity.dart';
 import 'platform/loop_lag.dart';
+import 'player/perf/budget.dart';
 import 'runtime/codex_runtime.dart';
 import 'settings/classic_host_device_settings.dart';
 import 'package:nipaplay/utils/lab_profile.dart';
@@ -400,6 +401,7 @@ final class NextRuntime extends ChangeNotifier {
     }
     final packageInfo = await PackageInfo.fromPlatform();
     final instanceFacts = InstanceFacts(packageInfo.version);
+    PlayerPerf.install();
     final localPlayback = LocalPlaybackOperations(_player, core.settings,
         () => globals.navigatorKey.currentContext!);
     final localLibrary = _localLibrary = LocalLibraryOperations(
@@ -419,7 +421,8 @@ final class NextRuntime extends ChangeNotifier {
           {'codec': video.codecName, 'width': video.codec.width, 'height': video.codec.height}],
         'audio': [for (final audio in info.audio ?? const [])
           {'codec': audio.codec.name, 'sampleRate': audio.codec.sampleRate, 'channels': audio.codec.channels}],
-        'details': diagnosticsPlayerDetails(media, buffering: _player.isBuffering)};
+        'details': diagnosticsPlayerDetails(media, buffering: _player.isBuffering),
+        'perf': PlayerPerf.read()};
     };
     final uncaught = _uncaught = UncaughtErrors(
         Directory('${root.path}/diagnostics'), appVersion: packageInfo.version)
@@ -759,7 +762,9 @@ final class NextRuntime extends ChangeNotifier {
     }
   }
 
-  void _playbackChanged() {
+  void _playbackChanged() =>
+      PlayerPerf.span('runtime.playbackChanged', _playbackChange);
+  void _playbackChange() {
     final path = _player.currentVideoPath;
     final status = _player.status.name;
     if (status != _lastPlaybackStatus || path != _lastPlaybackPath) {

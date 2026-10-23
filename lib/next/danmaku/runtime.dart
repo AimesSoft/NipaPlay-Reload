@@ -17,6 +17,7 @@ import 'sources.dart';
 import 'store.dart';
 import 'local_source.dart';
 import 'sidecar.dart';
+import '../player/perf/budget.dart';
 
 /// Forwards track operations to the host player once the widget tree created it.
 final class _HostPlayerPort
@@ -146,7 +147,8 @@ final class DanmakuRuntime {
     _changed();
   }
 
-  void _changed() {
+  void _changed() => PlayerPerf.span('danmaku.changed', _change);
+  void _change() {
     if (_stopped) return;
     if (_busy) {
       _dirty = true;
@@ -157,7 +159,7 @@ final class DanmakuRuntime {
       _busy = false;
       if (_dirty) {
         _dirty = false;
-        _changed();
+        _change();
       }
     }, onError: (Object error, StackTrace stack) {
       _busy = false;
