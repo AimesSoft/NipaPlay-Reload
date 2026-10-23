@@ -347,11 +347,8 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
     await SettingsAccess.persist(SettingsKeys.danmakuOpacity, () => prefs.setDouble(SettingsKeys.danmakuOpacity, opacity));
   }
 
-  // 获取映射后的弹幕不透明度
-  double get mappedDanmakuOpacity {
-    // 使用平方函数进行映射，使低值区域变化更平缓
-    return danmakuOpacity * danmakuOpacity;
-  }
+  // 交给 Flutter 弹幕渲染器的不透明度，与 Erika 原生弹幕、ASS 导出一致，直接取设置值（线性）
+  double get mappedDanmakuOpacity => danmakuOpacity;
 
   // 加载弹幕可见性
   Future<void> _loadDanmakuVisible() async {

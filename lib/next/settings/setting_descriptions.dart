@@ -176,7 +176,7 @@ const applicationSettingDescriptions = <String, String>{
   'danmaku.timelineEnabled':
       '时间轴告知弹幕：在视频播放到特定进度（25%、50%、75%、90%）时显示一条弹幕提示。默认开启。',
   'danmaku.opacity':
-      '弹幕不透明度，0–1：0 完全透明，1 完全不透明，默认 1。Classic 界面按百分比显示这个值。注意 Flutter 绘制的引擎（CPU、GPU、Canvas、NipaPlay Next、Next2、DFM+ 和插件渲染器）实际使用的是该值的平方，所以 0.7 实际渲染为 0.49；Erika 内核原生弹幕收到的是原值。插件渲染器启用 Titan 设置时改读 danmaku.titan.opacity。',
+      '弹幕不透明度，0–1：0 完全透明，1 完全不透明，默认 1。Classic 界面按百分比显示这个值。所有引擎（Flutter 绘制的 CPU、GPU、Canvas、DFM+、插件渲染器，以及 Erika 内核原生弹幕）都按这个值线性应用，0.7 就是 0.7 的不透明度。插件渲染器启用 Titan 设置时改读 danmaku.titan.opacity。',
   'danmaku.fontSize':
       '弹幕字号，单位像素。0 表示使用设备默认字号（手机 20，其他设备 30），否则取 12–60。保存后用于后续播放。Classic 界面滑块范围 12–60，步长 0.5；插件渲染器启用 Titan 设置时改读 danmaku.titan.fontSize。',
   'danmaku.speedMultiplier':
