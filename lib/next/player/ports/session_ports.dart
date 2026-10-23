@@ -67,8 +67,9 @@ final class SessionPlayerPort implements PlayerPort {
       effectiveRate: t?.rate ?? p.rate,
       kernelRate: t?.rate ?? p.rate,
       volume: p.volume,
-      canPrevious: false,
-      canNext: false,
+      canPrevious: p.sources.canPrevious,
+      canNext: p.sources.canNext,
+      autoNext: p.sources.autoNext,
       sessionId: live ? s.id : null,
       ready: live ? open : null,
       buffering: open ? t!.buffering : null,
@@ -80,7 +81,14 @@ final class SessionPlayerPort implements PlayerPort {
         'configured': p.host.configuredKernel(),
         'layer': 'next_core',
       },
-      supportedControls: const ['pause', 'resume', 'seek', 'close', 'wait'],
+      supportedControls: const [
+        'pause',
+        'resume',
+        'seek',
+        'close',
+        'wait',
+        'playlist'
+      ],
     );
   }
 
@@ -126,8 +134,8 @@ final class SessionPlayerPort implements PlayerPort {
 
   @override
   Future<void> switchEpisode(EpisodeDirection direction) async =>
-      notInPlaybackLayer('switch_episode',
-          'Next\'s playback layer does not switch episodes yet.');
+      _playback.sources.switchEpisode(direction == EpisodeDirection.next,
+          origin: commandOrigin());
 }
 
 /// playback.wait/close/info/failures… over Next's playback layer; what it
@@ -154,8 +162,10 @@ final class SessionControls
           'capacity': PlaybackFailures.capacity,
         };
       case 'playback.cancel_auto_next':
-        // No countdown runs in Next's playback layer.
-        return {'cancelled': false, 'state': _state};
+        return {
+          'cancelled': _playback.sources.cancelAutoNext(),
+          'state': _state
+        };
       case 'playback.retry':
         notInPlaybackLayer('retry',
             'Next\'s playback layer does not retry yet; open the path again with playback.open.');
@@ -193,8 +203,7 @@ final class SessionControls
         notInPlaybackLayer('chapters',
             'Next\'s playback layer does not read chapters, step frames or skip segments yet.');
       case 'playback.playlist':
-        notInPlaybackLayer('playlist',
-            'Next\'s playback layer does not keep a playlist yet.');
+        return _playback.sources.playlist();
       case 'subtitle.cues':
         return _cues(input);
       case 'danmaku.entries':
@@ -330,9 +339,6 @@ final class SessionControls
     };
   }
 
-  static const _streams =
-      'Next\'s playback layer plays local files only; stream versions and quality come with network sources.';
-
   /// The session whose media is open; unavailable otherwise, as Classic.
   PlaybackSession _open() {
     final s = _playback.session;
@@ -348,6 +354,20 @@ final class SessionControls
   /// whether it shows (player-core design §5.1).
   @override
   Future<JsonMap> tracks(JsonMap input) async {
+    // A media server's own streams (the server decides what is decoded)
+    // are listed in place of the kernel's tracks while one plays.
+    if (_playback.sources.plan?.isServer == true) {
+      return {
+        'sessionId': _playback.session?.id,
+        'tracks': [
+          for (final v
+              in _playback.sources.streamOptions()['versions'] as List)
+            if (v['id'] ==
+                _playback.sources.plan?.serverSession?.mediaSourceId)
+              ...v['tracks'] as List
+        ]
+      };
+    }
     final s = _open();
     return PlayerPerf.span('ports.tracks', () => trackFacts(s));
   }
@@ -427,15 +447,18 @@ final class SessionControls
   /// once the kernel reported it, with the receipt.
   @override
   Future<JsonMap> selectTrack(JsonMap input) async {
+    if (input['origin'] == 'server') {
+      return _playback.sources.selectStream({
+        input['kind'] == 'audio' ? 'audioIndex' : 'subtitleIndex':
+            input['index']
+      }, origin: commandOrigin());
+    }
     final s = _open();
     final kind = input['kind'] as String;
     final index = (input['index'] as num).toInt();
     if (kind == 'audio' && index < 0) {
       throw const Failure(FailureCode.invalidInput,
           'An audio track index must be nonnegative.');
-    }
-    if (input['origin'] == 'server') {
-      notInPlaybackLayer('streams', _streams);
     }
     final media = s.media.value;
     final count = kind == 'audio'
@@ -569,10 +592,10 @@ final class SessionControls
   }
   @override
   Future<JsonMap> streamOptions(JsonMap input) async =>
-      notInPlaybackLayer('streams', _streams);
+      _playback.sources.streamOptions();
   @override
   Future<JsonMap> selectStream(JsonMap input) async =>
-      notInPlaybackLayer('streams', _streams);
+      _playback.sources.selectStream(input, origin: commandOrigin());
   @override
   Future<JsonMap> external(JsonMap input) async => notInPlaybackLayer(
       'external_player',

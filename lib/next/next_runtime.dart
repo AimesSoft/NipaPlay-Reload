@@ -12,6 +12,7 @@ import 'player/next_playback.dart';
 import 'player/perf/budget.dart';
 import 'player/ports/debug_player.dart';
 import 'player/ports/session_playback.dart';
+import 'player/sources/resolver.dart';
 import 'player/ports/session_ports.dart' show NotInPlaybackLayer;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'ui/shell/next_ui_preference.dart';
@@ -173,6 +174,7 @@ final class NextRuntime extends ChangeNotifier {
       usesExternalPlayer: () => settings.useExternalPlayer,
     );
     final nextPlayback = SessionPlayback(host,
+        sourceResolver: NextSourceResolver(context: () => context),
         localOperations: (settings, context, session) =>
             classic.localOperationsFor(settings, context, session));
     final history = ServiceProvider.watchHistoryProvider;

@@ -366,6 +366,10 @@ final class PlaybackSession {
   Future<void> _writes = Future.value();
   JsonMap? _lastSave;
 
+  /// Source-owned work (final remote progress and transcode teardown) is
+  /// drained before a replacement session can start. No native access.
+  Future<void> Function()? closeSource;
+
   ValueListenable<SessionPhase> get phase => _phase;
   ValueListenable<Transport> get transport => _transport;
   ValueListenable<MediaFacts?> get media => _media;
@@ -436,7 +440,7 @@ final class PlaybackSession {
   Future<void> _plan() async {
     final path = _source.locator;
     // resolving: the file, its record and where it was left.
-    if (!await File(path).exists()) {
+    if (_source.kind == 'local' && !await File(path).exists()) {
       throw const KernelOpenFailure(
           'file_check', 'The local file does not exist or is inaccessible.');
     }
@@ -536,6 +540,7 @@ final class PlaybackSession {
     // A failed session keeps no kernel, and draws nothing.
     subtitles.close();
     await _releaseKernel();
+    await closeSource?.call();
   }
 
   // ---- what the kernel says, reduced (O(1) each) ----
@@ -557,13 +562,18 @@ final class PlaybackSession {
             }
             _syncSaver();
           case KernelPositionSample(:final position, :final rate, :final advancing):
-            // A seek under way keeps the clock at its target.
-            if (_transport.value.seekTarget != null) return;
+            // A seek keeps its target; EOF keeps the endpoint even if the
+            // native stream subsequently reports a reset position (HLS).
+            if (_transport.value.seekTarget != null || _transport.value.ended) {
+              return;
+            }
             clock.anchor(position,
                 advancing: advancing, rate: rate, source: 'kernel_sample');
           case KernelBuffering(:final buffering):
             _setTransport(_transport.value.copyWith(buffering: buffering));
           case KernelEnded(:final inferred):
+            clock.anchor(duration > Duration.zero ? duration : position,
+                advancing: false, source: 'kernel_ended');
             _setTransport(_transport.value.copyWith(ended: true));
             _emit('ended', {'inferred': inferred});
             _save('ended');
@@ -854,6 +864,7 @@ final class PlaybackSession {
     // Nothing more is drawn over the video or asked of the kernel's tracks
     // (none change while it stops).
     subtitles.close();
+    clock.anchor(position, advancing: false, source: 'session_close');
     if (wasOpen) {
       // The last word on progress, before the kernel goes.
       _setPhase(SessionPhase.closing);
@@ -869,6 +880,11 @@ final class PlaybackSession {
     await _opened.future;
     await _releaseKernel();
     await _writes;
+    try {
+      await closeSource?.call();
+    } catch (error) {
+      _emit('source_report_failed', {'error': error.runtimeType.toString()});
+    }
     _setPhase(SessionPhase.closed);
     _emit('closed', {'reason': reason, 'releaseMs': releaseMs});
     if (!_opened.isCompleted) _opened.complete();

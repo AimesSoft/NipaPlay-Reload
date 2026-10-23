@@ -112,15 +112,20 @@ final class UiOpenAction extends Action<UiOpenValue, UiOpenValue> {
         'reason': reason,
         'message': '暂时无法打开。',
       }));
-  Completed<UiOpenValue> _opened(JsonMap target, JsonMap actual) =>
-      Completed(UiOpenValue({
-        'opened': actual['matched'] != false,
-        'interface': actual['interface'] ?? (actual['presentation'] == 'system' ? 'system' : 'classic'),
-        'target': target,
-        'actual': actual,
-        'reason': actual['matched'] == false ? '目标界面当前不可用。' : null,
-        'message': actual['matched'] == false ? '暂时无法打开。' : null,
-      }));
+  Completed<UiOpenValue> _opened(JsonMap target, JsonMap actual) {
+    final state = actual['state'];
+    final kernel = state is Map ? state['kernel'] : null;
+    final nextPlayer = kernel is Map && kernel['layer'] == 'next_core';
+    return Completed(UiOpenValue({
+      'opened': actual['matched'] != false,
+      'interface': actual['interface'] ??
+          (nextPlayer ? 'next' : actual['presentation'] == 'system' ? 'system' : 'classic'),
+      'target': target,
+      'actual': actual,
+      'reason': actual['matched'] == false ? '目标界面当前不可用。' : null,
+      'message': actual['matched'] == false ? '暂时无法打开。' : null,
+    }));
+  }
 
   Future<Outcome<UiOpenValue>> _play(
       JsonMap target, String path, Invocation invocation, {int? startPositionMs}) async {
@@ -197,11 +202,13 @@ final class UiOpenAction extends Action<UiOpenValue, UiOpenValue> {
           : _opened(target, actual);
     }
     if (target['animeId'] case final int id) {
-      if (id == 0)
+      if (id == 0) {
         throw const Failure(
             FailureCode.invalidInput, 'animeId must be nonzero.');
-      if (openDetail == null || !await openDetail!(id))
+      }
+      if (openDetail == null || !await openDetail!(id)) {
         return _unavailable(target, '作品详情尚未就绪。');
+      }
       return _opened(target, {'kind': 'work_detail', 'animeId': id});
     }
     if (target['page'] case final String page) {

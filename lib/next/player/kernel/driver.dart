@@ -264,12 +264,26 @@ final class KernelTracks {
 @immutable
 final class ResolvedSource {
   const ResolvedSource(
-      {required this.locator, required this.uri, required this.kind});
+      {required this.locator,
+      required this.uri,
+      required this.kind,
+      this.direct = false,
+      this.audioTrack,
+      this.subtitleTrack,
+      this.externalSubtitle});
   final String locator;
   final String uri;
 
   /// local (P1); network kinds arrive with the sources.
   final String kind;
+
+  /// A per-open routing requirement, including mesh and local SMB proxies.
+  final bool direct;
+
+  /// Native ordinals resolved from the selected server version's streams.
+  final int? audioTrack;
+  final int? subtitleTrack;
+  final String? externalSubtitle;
 
   JsonMap toJson() => {'kind': kind, 'path': redactHarnessText(locator)};
 }
