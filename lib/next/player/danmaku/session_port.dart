@@ -88,7 +88,9 @@ final class SessionDanmakuPort implements PlaybackDanmakuPort {
     final id = binding['id'] as String;
     final existing = _tracks[id];
     if (existing == null || existing['cache_key'] != binding['cache_key'] ||
-        existing['cache_revision'] != binding['cache_revision']) return false;
+        existing['cache_revision'] != binding['cache_revision']) {
+      return false;
+    }
     _tracks[id] = {...existing, ...binding};
     controller.update(id, binding);
     return true;

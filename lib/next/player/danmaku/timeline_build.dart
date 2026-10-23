@@ -286,7 +286,7 @@ Map<String, dynamic> pageTimeline(DanmakuTimeline timeline,
 /// Classic's `_resolveRandomizedDanmakuColor`: the same palette and the same
 /// stable hash, so a comment keeps its colour across the two layers.
 Map<String, dynamic> _randomColor(Map<String, dynamic> item) {
-  final palette = DanmakuColorPresets.randomColorfulDanmakuColors;
+  const palette = DanmakuColorPresets.randomColorfulDanmakuColors;
   final time = (item['time'] ?? item['t']) as num? ?? 0;
   final safe = time.isNaN || time.isInfinite ? 0.0 : (time < 0 ? 0.0 : time.toDouble());
   final timeText = safe.toStringAsFixed(3).replaceFirst(RegExp(r'\.?0+$'), '');

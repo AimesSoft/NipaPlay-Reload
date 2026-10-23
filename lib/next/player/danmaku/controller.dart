@@ -137,7 +137,9 @@ final class SessionDanmakuController extends ChangeNotifier
       List<Map<String, dynamic>>? chapterFacts}) {
     if (_closed) return;
     if (duration == durationMs &&
-        (chapterFacts == null || identical(chapterFacts, chapters))) return;
+        (chapterFacts == null || identical(chapterFacts, chapters))) {
+      return;
+    }
     durationMs = duration;
     if (chapterFacts != null) chapters = chapterFacts;
     unawaited(rebuild());
@@ -353,9 +355,11 @@ final class SessionDanmakuController extends ChangeNotifier
     if (end < start) {
       throw const Failure(FailureCode.invalidInput, 'endMs must be >= startMs.');
     }
-    if (sessionId == null) return {'sessionId': null, 'listVersion': version,
+    if (sessionId == null) {
+      return {'sessionId': null, 'listVersion': version,
       'view': 'display_timeline', 'positionMs': position,
       'items': <JsonMap>[], 'nextCursor': null, 'total': 0};
+    }
     final result = await _worker.request<JsonMap>('page', {
       'input': {...input, 'positionMs': position}, 'version': atVersion,
       'sessionId': atSession, 'offset': offset,
@@ -388,14 +392,16 @@ final class SessionDanmakuController extends ChangeNotifier
     // worker and atomically replaces the timeline, never partially publishes.
     notifyListeners();
     if (key == 'danmaku.outlineWidth') {
-      if (value == 0) settings['danmaku.outlineStyle'] = 'none';
-      else if (settings['danmaku.outlineStyle'] == 'none') {
+      if (value == 0) {
+        settings['danmaku.outlineStyle'] = 'none';
+      } else if (settings['danmaku.outlineStyle'] == 'none') {
         settings['danmaku.outlineStyle'] = 'uniform';
       }
     }
     if (key == 'danmaku.outlineStyle') {
-      if (value == 'none') settings['danmaku.outlineWidth'] = 0.0;
-      else if (settings['danmaku.outlineWidth'] == 0) {
+      if (value == 'none') {
+        settings['danmaku.outlineWidth'] = 0.0;
+      } else if (settings['danmaku.outlineWidth'] == 0) {
         settings['danmaku.outlineWidth'] = 2.0;
       }
     }

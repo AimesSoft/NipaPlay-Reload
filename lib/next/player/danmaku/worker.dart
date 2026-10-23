@@ -179,9 +179,11 @@ int _color(Object? raw) {
   final text = raw.toString();
   if (text.startsWith('rgb(')) {
     final parts = text.substring(4, text.length - 1).split(',');
-    if (parts.length >= 3) return (0xFF000000 |
+    if (parts.length >= 3) {
+      return (0xFF000000 |
       (int.parse(parts[0].trim()) << 16) | (int.parse(parts[1].trim()) << 8) |
       int.parse(parts[2].trim())).toSigned(32);
+    }
   }
   return (int.tryParse(text.replaceFirst('#', ''), radix: 16) ?? 0xFFFFFFFF).toSigned(32);
 }

@@ -287,13 +287,15 @@ class _PositionedRendererState extends State<_PositionedRenderer> {
       builder: (context, ms, _) {
         if (!c.visible) return const SizedBox.shrink();
         final positioned = _bridge.layout(ms / 1000 + c.offset);
-        if (widget.gpu) return GPUDanmakuOverlay(
+        if (widget.gpu) {
+          return GPUDanmakuOverlay(
           positionedDanmaku: positioned, isPlaying: widget.playback.playIntent,
           config: GPUDanmakuConfig(fontSize: c.fontSize,
               screenUsageRatio: c.number('danmaku.displayArea'),
               scrollScreensPerSecond: 1 / c.scrollSeconds),
           isVisible: c.visible, opacity: c.number('danmaku.opacity'),
           currentTime: ms / 1000 + c.offset);
+        }
         return Stack(clipBehavior: Clip.hardEdge, children: [
           for (final item in positioned) Positioned(left: item.x, top: item.y,
             child: const CpuDanmakuTextRenderer().build(context, item.content,

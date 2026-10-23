@@ -110,6 +110,11 @@ final class SessionPlayback implements NextPlayback, VideoStageHost {
       final engine => engine.name,
     },
     if (danmaku.native) 'kernel': _session?.driver?.kernel.id,
+    // A plugin's renderer chosen in the settings is not hosted by this layer:
+    // the engine above draws.
+    if (DanmakuKernelFactory.selectedPluginRendererId case final id?)
+      'pluginRenderer': {'selected': id, 'applied': false,
+        'reason': 'not_in_playback_layer'},
     ...danmaku.facts(),
   };
 
