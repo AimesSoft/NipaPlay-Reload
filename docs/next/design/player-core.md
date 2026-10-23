@@ -12,6 +12,7 @@
 这些决定优先于下文 §0.2 和 §8.1 的建议；与本节冲突的内容，一律以本节为准。
 
 - **D1 Classic 界面里没有 Nipa。** 不允许在 Classic 界面使用 agent：Next 界面关着时，Nipa 的运行器、agent 端点和所有能力都不运行，Classic 里也不出现任何 Nipa 的入口。所以不存在“Classic 界面 + `playback.*`”的组合，`VideoPlayerStatePort` 那条路随之删除。
+- **D1 补充**：关闭 Next 界面时，Nipa 已在运行的程序进程也一并取消，不只是不再启动新的。
 - **D2 切换是彻底的。** 在 Next 和 Classic 之间切换，当前会话关闭并保存进度，另一边不接着播，内存里的会话状态也不带过去。
 - **D3 两边隔离，只共用数据层。** 设置（同一批偏好键）、续播进度、观看记录共用，其他一概不共用。Next 不走 Classic 的播放器、不走 `VideoPlayerState`，也不借用 Classic 的播放界面和叠层。
 - **D5 不回退到 Classic 播放器。** 新层还不支持的来源或内核，返回 unavailable，并在事实里说明原因。Next 还没发布，迁移期间可用范围暂时变窄可以接受。§7 里“不支持就走 Classic 播放器”的分流和 `route` 事实作废；`ClassicBackedPlayback` 只作为 P0 的过渡接缝，P1 起 Next 一律走新层。
