@@ -1,4 +1,3 @@
-import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
@@ -45,29 +44,42 @@ void main() {
         'aggregatedOutput': output
       };
 
-  test('the file is the JSON of the kept turns, oldest dropped past the size',
-      () async {
-    final file = File('${root.path}/facts.json');
-    final store = TurnProcessStore(file, maxBytes: 6000);
+  int sizeOf(Directory directory) => directory
+      .listSync()
+      .whereType<File>()
+      .fold(0, (total, file) => total + file.lengthSync());
+
+  test('the files are the kept turns, oldest dropped past the size', () async {
+    final directory = Directory('${root.path}/facts');
+    final store = TurnProcessStore(directory, maxBytes: 6000);
     for (var t = 0; t < 8; t++) {
       turn(store, 't$t', [command('c$t', '输出 $t ' * (40 + t * 10))]);
     }
     await store.flush();
-    final text = file.readAsStringSync();
-    final turns = jsonDecode(text) as List;
-    // The same bytes jsonEncode wrote before, within the byte limit, newest
-    // kept, and each kept turn as it was observed.
-    expect(text, jsonEncode(turns));
-    expect(utf8.encode(text).length, lessThanOrEqualTo(6000));
-    expect(turns.last['turnId'], 't7');
-    for (final kept in turns) {
-      expect(store.read('one', kept['turnId'] as String), kept);
+    // One file per kept turn, within the byte limit, newest kept, and each
+    // kept turn read back as it was observed.
+    final files = directory.listSync().whereType<File>().toList();
+    expect(files.every((f) => f.path.endsWith('.jsonl')), isTrue);
+    expect(sizeOf(directory), lessThanOrEqualTo(6000));
+    final kept = [
+      for (var t = 0; t < 8; t++)
+        if (await store.read('one', 't$t') case final turn?) turn
+    ];
+    expect(kept, hasLength(files.length));
+    expect(kept.last['turnId'], 't7');
+    expect(kept.last['status'], 'completed');
+    expect((kept.last['items'] as List).single['aggregatedOutput'],
+        '输出 7 ' * 110);
+    // The oldest went first: what is kept is the newest run of turns.
+    final first = int.parse((kept.first['turnId'] as String).substring(1));
+    expect([for (final turn in kept) turn['turnId']],
+        [for (var t = first; t < 8; t++) 't$t']);
+    expect(first, greaterThan(0));
+    final reopened = TurnProcessStore(directory, maxBytes: 6000);
+    for (final turn in kept) {
+      expect(await reopened.read('one', turn['turnId'] as String), turn);
     }
-    // One more turn would not fit beside the oldest kept one.
-    final dropped = turns.first['turnId'] as String;
-    final older = 't${int.parse(dropped.substring(1)) - 1}';
-    expect(store.read('one', older), isNull);
-    expect(TurnProcessStore(file).read('one', 't7'), store.read('one', 't7'));
+    expect(await reopened.read('one', 't${first - 1}'), isNull);
   });
 
   test('a long output keeps the same redacted start, at a bounded cost',
@@ -80,15 +92,17 @@ void main() {
       '${'a' * 8190}Bearer abcdefghijklmnop123456 ${'b' * 300000}',
       'short token=$secret',
     ];
-    final file = File('${root.path}/facts.json');
-    final store = TurnProcessStore(file);
+    final directory = Directory('${root.path}/facts');
+    final store = TurnProcessStore(directory);
+    // Opened, so that what is measured is the observing itself.
+    await store.flush();
     for (var i = 0; i < cases.length; i++) {
       final watch = Stopwatch()..start();
       turn(store, 'long$i', [command('c', cases[i])]);
       // ignore: avoid_print
       print('observe ${cases[i].length} chars: ${watch.elapsedMilliseconds} ms');
       expect(watch.elapsed, lessThan(const Duration(seconds: 1)));
-      final kept = (store.read('one', 'long$i')!['items'] as List)
+      final kept = ((await store.read('one', 'long$i'))!['items'] as List)
           .single['aggregatedOutput'] as String;
       final whole = redactHarnessText(cases[i]);
       final expected = whole.runes.length <= 8192
@@ -99,18 +113,20 @@ void main() {
       expect(kept, isNot(contains('abcdefghijklmnop123456')));
     }
     await store.flush();
-    expect(file.readAsStringSync(), isNot(contains(secret)));
+    for (final file in directory.listSync().whereType<File>()) {
+      expect(file.readAsStringSync(), isNot(contains(secret)));
+    }
   });
 
   test('many changes in a row end with the latest state on disk', () async {
-    final file = File('${root.path}/facts.json');
-    final store = TurnProcessStore(file);
+    final directory = Directory('${root.path}/facts');
+    final store = TurnProcessStore(directory);
     turn(store, 'busy', [
       for (var i = 0; i < 100; i++) command('c$i', 'line $i\n' * 50)
     ]);
     await store.flush();
-    final saved = TurnProcessStore(file).read('one', 'busy')!;
-    expect(saved, store.read('one', 'busy'));
+    final saved = (await TurnProcessStore(directory).read('one', 'busy'))!;
+    expect(saved, await store.read('one', 'busy'));
     expect((saved['items'] as List), hasLength(100));
     expect(saved['status'], 'completed');
   });

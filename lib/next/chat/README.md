@@ -98,8 +98,13 @@ aggregatedOutput. Reasoning retains the summary supplied by Codex, never raw
 reasoning content. Missing or evicted records return found=false.
 
 The host saves these facts at turn boundaries and item start/completion, after
-secret inspection/redaction, by atomically replacing a file under the Next data
-directory's `turn-process/` (one file per absolute harness path). Each file keeps
+secret inspection/redaction, under the Next data directory's `turn-process/`:
+one directory per absolute harness path, one file per turn. A turn's file is
+JSON lines, appended one changed item at a time (the last line of an item wins);
+once the turn finishes it is rewritten to one line per item, off the main
+isolate. Opening, reading and restoring run on other isolates, so the main
+isolate only encodes the item that changed. The single file earlier versions
+kept per harness is moved in once, on the first open. A harness keeps
 at most 60 turns and 4 MiB. Each turn keeps at most 128 items, with commands capped
 at 4096 Unicode characters, outputs at 8192 and up to eight summary parts at
 2048 each; truncation is recorded. Oldest turns are evicted first. Output deltas

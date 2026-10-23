@@ -1,5 +1,4 @@
 import 'dart:io';
-import 'dart:convert';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:nipa_harness/nipa_harness.dart';
 import 'package:nipaplay/next/chat/turn_process_store.dart';
@@ -13,8 +12,12 @@ void main() {
       () async {
     final root = await Directory.systemTemp.createTemp('x33-');
     try {
-      final file = File('${root.path}/facts.json');
-      final store = TurnProcessStore(file, maxTurns: 2);
+      final directory = Directory('${root.path}/facts');
+      String saved() => [
+            for (final file in directory.listSync().whereType<File>())
+              file.readAsStringSync()
+          ].join();
+      final store = TurnProcessStore(directory, maxTurns: 2);
       final now = DateTime.utc(2026);
       void event(String method, Map params) => store.observe({
             'method': method,
@@ -46,9 +49,9 @@ void main() {
         'turn': {'id': 'a', 'status': 'completed'}
       });
       await store.flush();
-      final restored = TurnProcessStore(file);
-      expect(restored.read('two', 'a'), isNull);
-      final item = (restored.read('one', 'a')!['items'] as List).single;
+      final restored = TurnProcessStore(directory);
+      expect(await restored.read('two', 'a'), isNull);
+      final item = ((await restored.read('one', 'a'))!['items'] as List).single;
       expect(item['exitCode'], 7);
       expect(item['durationMs'], 35);
       final history = {
@@ -59,20 +62,20 @@ void main() {
           {'id': 'assistant', 'type': 'agentMessage', 'text': '回复'},
         ]
       };
-      restored.restore('one', history);
-      restored.restore('one', history);
+      await restored.restore('one', history);
+      await restored.restore('one', history);
       expect((history['items'] as List).map((v) => v['id']),
           ['user', 'assistant', 'cmd']);
-      expect(file.readAsStringSync(), isNot(contains('private')));
+      expect(saved(), isNot(contains('private')));
       for (final id in ['b', 'c']) {
         event('turn/started', {
           'turn': {'id': id}
         });
       }
       await store.flush();
-      expect(TurnProcessStore(file).read('one', 'a'), isNull);
-      expect(jsonDecode(file.readAsStringSync()), hasLength(2));
-      final small = TurnProcessStore(file, maxBytes: 400);
+      expect(await TurnProcessStore(directory).read('one', 'a'), isNull);
+      expect(directory.listSync().whereType<File>(), hasLength(2));
+      final small = TurnProcessStore(directory, maxBytes: 400);
       small.observe({
         'method': 'turn/started',
         'params': {
@@ -81,7 +84,13 @@ void main() {
         }
       }, 'origin', now);
       await small.flush();
-      expect(file.lengthSync(), lessThanOrEqualTo(400));
+      expect(
+          directory
+              .listSync()
+              .whereType<File>()
+              .fold<int>(0, (total, file) => total + file.lengthSync()),
+          lessThanOrEqualTo(400));
+      expect(await small.read('one', 'd'), isNotNull);
     } finally {
       await root.delete(recursive: true);
     }
@@ -90,7 +99,7 @@ void main() {
   test('a turn read back keeps its process between the messages', () async {
     final root = await Directory.systemTemp.createTemp('x33-order-');
     try {
-      final store = TurnProcessStore(File('${root.path}/facts.json'));
+      final store = TurnProcessStore(Directory('${root.path}/facts'));
       final now = DateTime.utc(2026);
       void event(String method, Map params) => store.observe({
             'method': method,
@@ -122,8 +131,8 @@ void main() {
           {'id': 'item-3', 'type': 'agentMessage', 'text': '好了'},
         ]
       };
-      store.restore('one', history);
-      store.restore('one', history);
+      await store.restore('one', history);
+      await store.restore('one', history);
       expect((history['items'] as List).map((v) => v['id']),
           ['item-1', 'r', 'item-2', 'c', 'item-3']);
       expect(((history['items'] as List)[1] as Map)['content'], ['想']);

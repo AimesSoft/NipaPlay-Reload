@@ -84,8 +84,8 @@ final class Followups {
     await location.ready;
     final host = _host;
     if (host != null) return host.turnProcess(threadId, turnId);
-    final saved = TurnProcessStore(TurnProcessStore.fileFor(
-        File(database.path).parent, location.path)).read(threadId, turnId);
+    final saved = await TurnProcessStore.readSaved(
+        File(database.path).parent, location.path, threadId, turnId);
     return {'found': saved != null, 'process': saved};
   }
   String _unavailable = 'Embedded chat host is not running.';

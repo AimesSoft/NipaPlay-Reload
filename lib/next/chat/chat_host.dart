@@ -152,13 +152,13 @@ final class ChatHost implements ConversationHistory {
   ChatMessage? thread;
   Map<String, String> launchEnvironment = {};
   TurnProcessStore? _processes;
-  TurnProcessStore get processes => _processes ??= TurnProcessStore(
-      TurnProcessStore.fileFor(endpoint.seedRepository.parent, repository.path));
+  TurnProcessStore get processes => _processes ??= TurnProcessStore.forHarness(
+      endpoint.seedRepository.parent, repository.path);
 
-  ChatMessage turnProcess(String id, String turnId) => {
-        'found': processes.read(id, turnId) != null,
-        'process': processes.read(id, turnId),
-      };
+  Future<ChatMessage> turnProcess(String id, String turnId) async {
+    final process = await processes.read(id, turnId);
+    return {'found': process != null, 'process': process};
+  }
 
   late final MemoryStaleNotifier _memoryStale;
 
@@ -1042,13 +1042,16 @@ final class ChatHost implements ConversationHistory {
     final result =
         await _request('thread/read', {'threadId': id, 'includeTurns': true});
     final history = Map<String, dynamic>.from(result['thread'] as Map);
-    if (withProcess) {
-      for (final turn in (history['turns'] as List).cast<Map>()) {
-        processes.restore(id, turn);
-      }
-    }
+    if (withProcess) await restoreProcess(id, history);
     return history;
   }
+
+  /// Puts NipaPlay's saved display copy of the process back into the turns
+  /// of [history], a thread read with `withProcess: false`; every turn is
+  /// read and decoded at once, off the main isolate.
+  Future<void> restoreProcess(String id, ChatMessage history) =>
+      processes.restoreAll(
+          id, (history['turns'] as List? ?? const []).cast<Map>());
 
   Future<ChatMessage> compactThread(String id) =>
       _request('thread/compact/start', {'threadId': id});

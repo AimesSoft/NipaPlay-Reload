@@ -5,7 +5,7 @@ import 'package:nipaplay/next/chat/turn_process_store.dart';
 Future<void> main(List<String> args) async {
   final root = await Directory.systemTemp.createTemp('x33-history-');
   try {
-    final store = TurnProcessStore(File('${root.path}/process.json'));
+    final store = TurnProcessStore(Directory('${root.path}/process'));
     final histories = <String, Map>{};
     for (final line in await File(args.single).readAsLines()) {
       final event = jsonDecode(line) as Map;
@@ -19,14 +19,15 @@ Future<void> main(List<String> args) async {
           histories[thread['id'] as String] = thread;
       }
     }
-    final reopened = TurnProcessStore(store.file);
+    await store.flush();
+    final reopened = TurnProcessStore(store.directory);
     for (final entry in histories.entries) {
       for (final turn in entry.value['turns'] as List) {
         final before = (turn['items'] as List)
             .where((v) =>
                 v['type'] == 'agentMessage' || v['type'] == 'userMessage')
             .toList();
-        reopened.restore(entry.key, turn as Map);
+        await reopened.restore(entry.key, turn as Map);
         final items = turn['items'] as List;
         final after = items
             .where((v) =>
