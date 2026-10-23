@@ -22,6 +22,7 @@ import 'package:window_manager/window_manager.dart';
 
 import '../../settings/registry.dart';
 import '../../capabilities/classic_action.dart';
+import '../danmaku/send.dart';
 import '../ports/session_playback.dart';
 import '../ports/session_ports.dart' show notInPlaybackLayer;
 export '../../capabilities/local_operation_titles.dart';
@@ -321,10 +322,6 @@ final class LocalPlaybackOperations implements Capability {
                   'text'
                 ]),
                 output: _output), (input, _) async {
-          if (session != null) {
-            notInPlaybackLayer('danmaku',
-                'Next\'s playback layer does not present danmaku yet.');
-          }
           final text = (input['text'] as String).trim();
           if (text.isEmpty) {
             throw const Failure(
@@ -339,6 +336,10 @@ final class LocalPlaybackOperations implements Capability {
           if (!RegExp(r'^#[0-9a-fA-F]{6}$').hasMatch(color)) {
             throw const Failure(
                 FailureCode.invalidInput, 'Use an RGB hex color: #RRGGBB.');
+          }
+          if (session != null) {
+            return sendSessionDanmaku(session!,
+                text: text, mode: mode, color: color);
           }
           if (!player.hasVideo ||
               player.episodeId == null ||

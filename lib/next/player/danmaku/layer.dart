@@ -106,6 +106,7 @@ class _NextDanmakuLayerState extends State<NextDanmakuLayer>
     final font = settings['danmaku.fontFamily'] as String;
     final file = settings['danmaku.fontFilePath'] as String;
     final stacking = settings['danmaku.stacking'] == true;
+    final merge = settings['danmaku.merge'] == true;
     final playing = _clock?.advancing ?? false;
     final opacity = c.number('danmaku.opacity');
     final area = c.number('danmaku.displayArea');
@@ -117,7 +118,7 @@ class _NextDanmakuLayerState extends State<NextDanmakuLayer>
           playbackTimeMs: _time, currentTimeSeconds: _time.value / 1000,
           fontSize: c.fontSize, isVisible: c.visible, opacity: opacity,
           displayArea: area, timeOffset: c.offset, scrollDurationSeconds: c.scrollSeconds,
-          allowStacking: stacking, mergeDanmaku: false,
+          allowStacking: stacking, mergeDanmaku: merge,
           customFontFamily: font, customFontFilePath: file,
           outlineWidth: c.number('danmaku.outlineWidth'), shadowStyle: shadow,
           trackGapRatio: c.number('danmaku.trackGap'),
@@ -129,7 +130,7 @@ class _NextDanmakuLayerState extends State<NextDanmakuLayer>
           playbackTimeMs: _time, currentTimeSeconds: _time.value / 1000,
           fontSize: c.fontSize, isVisible: c.visible, opacity: opacity,
           displayArea: area, timeOffset: c.offset, scrollDurationSeconds: c.scrollSeconds,
-          allowStacking: stacking, mergeDanmaku: false,
+          allowStacking: stacking, mergeDanmaku: merge,
           customFontFamily: font, customFontFilePath: file,
           outlineWidth: c.number('danmaku.outlineWidth'), shadowStyle: shadow);
       case DanmakuRenderEngine.cpu:
@@ -145,7 +146,7 @@ class _NextDanmakuLayerState extends State<NextDanmakuLayer>
           if (engine == DanmakuRenderEngine.canvas) {
             return CanvasDanmakuManager.createRenderer(
               fontSize: c.fontSize, opacity: opacity, displayArea: area,
-              visible: c.visible, stacking: stacking, mergeDanmaku: false,
+              visible: c.visible, stacking: stacking, mergeDanmaku: merge,
               blockTopDanmaku: false, blockBottomDanmaku: false,
               blockScrollDanmaku: false, blockWords: const [],
               danmakuList: window, currentTime: _time.value / 1000 + c.offset,
@@ -159,7 +160,7 @@ class _NextDanmakuLayerState extends State<NextDanmakuLayer>
               currentTimeSeconds: _time.value / 1000,
               fontSize: c.fontSize, isVisible: c.visible, opacity: opacity,
               displayArea: area, timeOffset: c.offset, scrollDurationSeconds: c.scrollSeconds,
-              allowStacking: stacking, mergeDanmaku: false,
+              allowStacking: stacking, mergeDanmaku: merge,
               customFontFamily: font, outlineStyle: outline, shadowStyle: shadow,
               isPlaying: playing, playbackRate: _clock?.rate ?? 1);
           }
@@ -168,7 +169,7 @@ class _NextDanmakuLayerState extends State<NextDanmakuLayer>
             currentTimeSeconds: _time.value / 1000,
             fontSize: c.fontSize, isVisible: c.visible, opacity: opacity,
             displayArea: area, timeOffset: c.offset, scrollDurationSeconds: c.scrollSeconds,
-            allowStacking: stacking, mergeDanmaku: false,
+            allowStacking: stacking, mergeDanmaku: merge,
             customFontFamily: font, outlineStyle: outline, shadowStyle: shadow,
             isPlaying: playing);
         });
@@ -244,7 +245,8 @@ class _PositionedRendererState extends State<_PositionedRenderer> {
   Widget build(BuildContext context) => LayoutBuilder(builder: (context, constraints) {
     final c = widget.playback.danmaku;
     final size = constraints.biggest;
-    final key = (size, c.version, c.fontSize, c.number('danmaku.displayArea'),
+    final merge = c.settings['danmaku.merge'] == true;
+    final key = (size, merge, c.version, c.fontSize, c.number('danmaku.displayArea'),
       c.scrollSeconds, c.settings['danmaku.stacking'], c.number('danmaku.trackGap'),
       c.settings['danmaku.fontFilePath']);
     if (!_busy && _last != key) {
@@ -252,7 +254,7 @@ class _PositionedRendererState extends State<_PositionedRenderer> {
       final preparing = _bridge.configure(danmakuList: c.timeline.entries,
         danmakuListVersion: c.version, size: size, fontSize: c.fontSize,
         displayArea: c.number('danmaku.displayArea'), scrollDurationSeconds: c.scrollSeconds,
-        allowStacking: c.settings['danmaku.stacking'] == true, mergeDanmaku: false,
+        allowStacking: c.settings['danmaku.stacking'] == true, mergeDanmaku: merge,
         trackGapRatio: c.number('danmaku.trackGap'),
         customFontFilePath: c.settings['danmaku.fontFilePath'] as String);
       unawaited(preparing.then((_) {

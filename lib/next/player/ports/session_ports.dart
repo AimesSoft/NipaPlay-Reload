@@ -177,7 +177,7 @@ final class SessionControls
           final segment = kind == 'current' ? _playback.activeSkipSegment
               : _playback.danmaku.timeline.segments.where((s) => s.kind.name == kind).firstOrNull;
           if (segment != null) {
-            await _playback.session?.seek(segment.end, origin: commandOrigin());
+            await _playback.skipTo(segment, origin: commandOrigin());
           }
           return {'commandStatus': 'accepted', 'method': 'skip', 'state': _state};
         }

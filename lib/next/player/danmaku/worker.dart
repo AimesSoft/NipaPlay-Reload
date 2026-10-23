@@ -56,7 +56,9 @@ final class DanmakuWorker {
     final done = Completer<Object?>();
     _pending[id] = done;
     PlayerPerf.span('danmaku.dispatch.$op', () => port.send([id, op, input]));
-    return (await done.future) as T;
+    final result = (await done.future) as T;
+    if (op.startsWith('layout.')) PlayerPerf.mark('danmaku.reply.$op');
+    return result;
   }
 
   Future<void> install(String id, Map<String, dynamic> binding,
@@ -108,6 +110,21 @@ void _run(SendPort replies) {
           for (final entry in data['entries'] as List<DanmakuEntry>) {
             entries.add(entry.toPlayer());
           }
+        case 'echo':
+          // Classic's local track for what the user sent (`local_我的弹幕`).
+          final track = tracks.putIfAbsent('local_我的弹幕', () => {
+            'id': 'local_我的弹幕', 'startMs': 0, 'endMs': null, 'enabled': true,
+            'binding': {'enabled': 1, 'deduplicate': 0, 'offset_ms': 0,
+              'video': {'sourceId': 'local'}},
+            'entries': <Map<String, dynamic>>[]});
+          final comment = Map<String, dynamic>.from(data['comment'] as Map);
+          final type = comment['type'];
+          comment['type'] = type is num
+              ? (type == 5 ? 'top' : type == 4 ? 'bottom' : 'scroll')
+              : type?.toString() ?? 'scroll';
+          (track['entries'] as List).add({...comment, 'isMe': true,
+            'content': comment['content'].toString(),
+            'sourceTimeMs': ((comment['time'] as num) * 1000).round()});
         case 'remove':
           tracks.remove(data['id']);
         case 'update':
@@ -124,7 +141,9 @@ void _run(SendPort replies) {
           snapshot = buildTimeline(tracks,
               data['settings'] as Map<String, Object?>,
               data['durationMs'] as int,
-              data['chapters'] as List<Map<String, dynamic>>);
+              data['chapters'] as List<Map<String, dynamic>>,
+              spoilerTexts: Set<String>.of(data['spoilerTexts'] as List<String>),
+              externalSegments: (data['externalSegments'] as List).cast<Map<String, dynamic>>());
           version = data['version'] as int;
           result = snapshot;
         case 'page':
@@ -176,8 +195,9 @@ Future<dfm.DfmPlusPreparedLayout> _prepareDfm(DanmakuTimeline snapshot,
     fontSize: c['fontSize'] as double, displayArea: c['displayArea'] as double,
     scrollDurationSeconds: c['scrollDurationSeconds'] as double,
     allowStacking: c['allowStacking'] as bool,
-    // Same-comment merge has already been applied by the timeline builder.
-    mergeDanmaku: false, maxQuantity: c['maxQuantity'] as int?,
+    // Rules and block words were applied by the timeline builder; the merge
+    // of same comments is the renderer's, as in Classic.
+    mergeDanmaku: c['mergeDanmaku'] as bool, maxQuantity: c['maxQuantity'] as int?,
     maxLinesPerType: c['maxLinesPerType'] as int?,
     trackGapRatio: c['trackGapRatio'] as double,
     outlineWidth: c['outlineWidth'] as double, customFontBytes: font,
@@ -194,7 +214,8 @@ Future<next2.RustNext2PreparedLayout> _prepareNext2(DanmakuTimeline snapshot,
         width: c['width'] as double, height: c['height'] as double,
         fontSize: c['fontSize'] as double, displayArea: c['displayArea'] as double,
         scrollDurationSeconds: c['scrollDurationSeconds'] as double,
-        allowStacking: c['allowStacking'] as bool, mergeDanmaku: false,
+        allowStacking: c['allowStacking'] as bool,
+        mergeDanmaku: c['mergeDanmaku'] as bool,
         customFontFamily: c['customFontFamily'] as String? ?? '',
         customFontFilePath: c['customFontFilePath'] as String? ?? '',
       ));

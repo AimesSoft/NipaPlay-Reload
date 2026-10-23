@@ -5,6 +5,12 @@ import 'package:flutter/foundation.dart';
 import 'package:nipa_harness/nipa_harness.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'package:nipaplay/constants/settings_keys.dart';
+import 'package:nipaplay/security/credential_store.dart';
+import 'package:nipaplay/services/danmaku_spoiler_filter_service.dart';
+
+import 'package:nipaplay/services/intro_skip/skip_segment.dart';
+
 import '../../danmaku/source.dart';
 import '../../settings/registry.dart';
 import '../perf/budget.dart';
@@ -15,10 +21,47 @@ import 'worker.dart';
 
 /// Session-owned Dart snapshots. No kernel reads and no O(comment count)
 /// work here: the timeline worker owns all source and inspection traversal.
+typedef SpoilerDetector = Future<List<String>> Function(
+    {required List<String> danmakuTexts,
+    required SpoilerAiApiFormat apiFormat,
+    required String apiUrl,
+    required String apiKey,
+    required String model,
+    required double temperature,
+    required bool debugPrintResponse});
+
 final class SessionDanmakuController extends ChangeNotifier
     implements NextDanmakuSettingsTarget {
-  SessionDanmakuController({Map<String, Object?>? initialSettings})
-      : settings = {...NextDanmakuSettings.defaults, ...?initialSettings};
+  SessionDanmakuController(
+      {Map<String, Object?>? initialSettings,
+      SpoilerDetector? spoilerDetector,
+      Future<String?> Function()? spoilerApiKey})
+      : settings = {...NextDanmakuSettings.defaults, ...?initialSettings},
+        _detect = spoilerDetector ?? _classicDetector,
+        _readApiKey = spoilerApiKey ?? _classicApiKey;
+
+  static Future<List<String>> _classicDetector(
+          {required List<String> danmakuTexts,
+          required SpoilerAiApiFormat apiFormat,
+          required String apiUrl,
+          required String apiKey,
+          required String model,
+          required double temperature,
+          required bool debugPrintResponse}) =>
+      DanmakuSpoilerFilterService.detectSpoilerDanmakuTexts(
+          danmakuTexts: danmakuTexts, apiFormat: apiFormat, apiUrl: apiUrl,
+          apiKey: apiKey, model: model, temperature: temperature,
+          debugPrintResponse: debugPrintResponse);
+
+  static Future<String?> _classicApiKey() async => CredentialStore.instance
+      .read(await SharedPreferences.getInstance(), SettingsKeys.spoilerAiApiKey);
+
+  final SpoilerDetector _detect;
+  final Future<String?> Function() _readApiKey;
+  Set<String> _spoilerTexts = {};
+  String? _spoilerKey, _spoilerPending;
+  List<String> _spoilerPendingTexts = const [];
+  bool _spoilerRunning = false;
 
   final Map<String, Object?> settings;
   final _worker = DanmakuWorker();
@@ -58,6 +101,9 @@ final class SessionDanmakuController extends ChangeNotifier
     _generation++;
     _revision++;
     timeline = DanmakuTimeline.empty;
+    _spoilerTexts = {};
+    _spoilerKey = _spoilerPending = null;
+    _external.clear();
     version++;
     durationMs = 0;
     chapters = const [];
@@ -74,6 +120,16 @@ final class SessionDanmakuController extends ChangeNotifier
   void attachNative(SessionNativeDanmakuSink sink) {
     if (_closed || identical(sink, _native)) return;
     _native = sink;
+    unawaited(rebuild());
+  }
+
+  final _external = <String, List<SkipSegment>>{};
+
+  /// Skip segments another source knows (the media server's, the user's own),
+  /// by origin; the worker takes each kind from the most trusted signal.
+  void setSkipSegments(String origin, List<SkipSegment> segments) {
+    if (_closed) return;
+    _external[origin] = segments;
     unawaited(rebuild());
   }
 
@@ -101,7 +157,15 @@ final class SessionDanmakuController extends ChangeNotifier
 
   void install(String id, JsonMap binding, List<DanmakuEntry> entries,
       {int startMs = 0, int? endMs}) {
+    PlayerPerf.mark('danmaku.install');
     _enqueue(() => _worker.install(id, binding, entries, startMs, endMs));
+    unawaited(rebuild());
+  }
+
+  /// What the user just sent, on this session's local track.
+  void echo(Map<String, dynamic> comment) {
+    if (!comment.containsKey('time') || !comment.containsKey('content')) return;
+    _enqueue(() => _worker.request<Object?>('echo', {'comment': comment}));
     unawaited(rebuild());
   }
 
@@ -139,7 +203,14 @@ final class SessionDanmakuController extends ChangeNotifier
         final result = await _worker.request<DanmakuTimeline>('build', {
           'settings': settings, 'durationMs': durationMs,
           'chapters': chapters, 'version': version + 1,
+          'externalSegments': [for (final list in _external.values)
+            for (final x in list) {'kind': x.kind.name, 'source': x.source.name,
+              'startSeconds': x.startSeconds, 'endSeconds': x.endSeconds,
+              'evidenceCount': x.evidenceCount}],
+          'spoilerTexts': settings['danmaku.spoilerPreventionEnabled'] == true
+              ? _spoilerTexts.toList() : <String>[],
         });
+        PlayerPerf.mark('danmaku.buildReply');
         if (_closed || generation != _generation || revision != _revision) {
           _dirty = true;
           continue;
@@ -152,6 +223,7 @@ final class SessionDanmakuController extends ChangeNotifier
         });
         PlayerPerf.latency('danmaku.backgroundBuild',
             Duration(microseconds: result.buildUs));
+        _considerSpoilers(result, generation);
         final sink = _native;
         if (sink != null) {
           await sink.configureDanmaku(Map.of(settings));
@@ -165,6 +237,85 @@ final class SessionDanmakuController extends ChangeNotifier
           debugPrint('[NextDanmaku] $e');
         }
       }
+    }
+  }
+
+  // ---- spoiler prevention (Classic's, with the same analysis service) ----
+  // The analysis is a network call, not main-thread work; what it returns
+  // goes to the worker, which filters with it on the next build.
+
+  String get _spoilerConfig => [
+        for (final k in const ['danmaku.spoilerAiApiUrl',
+          'danmaku.spoilerAiApiFormat', 'danmaku.spoilerAiModel',
+          'danmaku.spoilerAiTemperature']) settings[k]].join('|');
+
+  Future<bool> spoilerReady() async {
+    final key = (await _readApiKey())?.trim() ?? '';
+    return key.isNotEmpty &&
+        (settings['danmaku.spoilerAiApiUrl'] as String).trim().isNotEmpty &&
+        (settings['danmaku.spoilerAiModel'] as String).trim().isNotEmpty;
+  }
+
+  void _considerSpoilers(DanmakuTimeline built, int generation) {
+    if (settings['danmaku.spoilerPreventionEnabled'] != true) {
+      return;
+    }
+    if (built.spoilerCandidates.isEmpty) {
+      _spoilerTexts = {};
+      _spoilerKey = null;
+      return;
+    }
+    final key = '$sessionId|$_spoilerConfig|${built.spoilerHash}';
+    if (key == _spoilerKey) {
+      return;
+    }
+    _spoilerKey = key;
+    _spoilerPending = key;
+    _spoilerPendingTexts = built.spoilerCandidates;
+    if (!_spoilerRunning) {
+      unawaited(_runSpoilers(generation));
+    }
+  }
+
+  Future<void> _runSpoilers(int generation) async {
+    _spoilerRunning = true;
+    try {
+      while (_spoilerPending != null && !_closed && generation == _generation) {
+        final key = _spoilerPending!;
+        final texts = _spoilerPendingTexts;
+        _spoilerPending = null;
+        try {
+          final apiKey = (await _readApiKey())?.trim() ?? '';
+          final url = (settings['danmaku.spoilerAiApiUrl'] as String).trim();
+          final model = (settings['danmaku.spoilerAiModel'] as String).trim();
+          if (apiKey.isEmpty || url.isEmpty || model.isEmpty) {
+            continue;
+          }
+          final hits = await _detect(
+              danmakuTexts: texts,
+              apiFormat: settings['danmaku.spoilerAiApiFormat'] == 'gemini'
+                  ? SpoilerAiApiFormat.gemini : SpoilerAiApiFormat.openai,
+              apiUrl: url, apiKey: apiKey, model: model,
+              temperature: (settings['danmaku.spoilerAiTemperature'] as num)
+                  .toDouble().clamp(0.0, 2.0),
+              debugPrintResponse:
+                  settings['danmaku.spoilerAiDebugPrintResponse'] == true);
+          if (_closed || generation != _generation || _spoilerKey != key ||
+              settings['danmaku.spoilerPreventionEnabled'] != true) {
+            continue;
+          }
+          _spoilerTexts = {
+            for (final t in hits)
+              if (normalizeSpoilerText(t).isNotEmpty) normalizeSpoilerText(t)
+          };
+          unawaited(rebuild());
+        } catch (e) {
+          // Classic keeps the previous set when the analysis fails.
+          debugPrint('[NextDanmaku] spoiler analysis: $e');
+        }
+      }
+    } finally {
+      _spoilerRunning = false;
     }
   }
 
@@ -210,6 +361,14 @@ final class SessionDanmakuController extends ChangeNotifier
   @override
   Future<void> writeSetting(String key, Object? value) async {
     if (_closed) return;
+    if (key == 'danmaku.spoilerPreventionEnabled' && value == true &&
+        !await spoilerReady()) {
+      throw const Failure(FailureCode.unavailable,
+          'Spoiler prevention needs the AI endpoint, key and model set first.');
+    }
+    if (NextDanmakuSettings.defaults[key] is double && value is num) {
+      value = value.toDouble();
+    }
     settings[key] = value;
     // Presentation changes are synchronous; comment filtering follows in the
     // worker and atomically replaces the timeline, never partially publishes.
@@ -230,8 +389,10 @@ final class SessionDanmakuController extends ChangeNotifier
       settings['danmaku.fontFamily'] = '';
     }
     final rebuildNeeded = {'danmaku.blockWords', 'danmaku.blockTop',
-      'danmaku.blockBottom', 'danmaku.blockScroll', 'danmaku.merge',
-      'danmaku.randomColor', 'danmaku.manualOffset'}.contains(key);
+      'danmaku.blockBottom', 'danmaku.blockScroll', 'danmaku.randomColor',
+      'danmaku.timelineEnabled', 'danmaku.spoilerPreventionEnabled',
+      'danmaku.spoilerAiApiUrl', 'danmaku.spoilerAiApiFormat',
+      'danmaku.spoilerAiModel', 'danmaku.spoilerAiTemperature'}.contains(key);
     if (rebuildNeeded) unawaited(rebuild());
     final sink = _native;
     if (sink != null) await sink.configureDanmaku(Map.of(settings));

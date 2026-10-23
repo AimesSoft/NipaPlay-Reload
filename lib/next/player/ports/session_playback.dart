@@ -505,7 +505,19 @@ final class SessionPlayback implements NextPlayback, VideoStageHost {
   @override
   Future<void> skip() async {
     final segment = activeSkipSegment;
-    if (segment != null) await _session?.seek(segment.end, origin: 'gui');
+    if (segment != null) await skipTo(segment, origin: 'gui');
+  }
+
+  /// To the end of [segment], held inside the length: a seek past the end
+  /// makes kernels report EOF (Classic's `skipCurrentSegment` clamps alike).
+  Future<void> skipTo(SkipSegment segment, {required String origin}) async {
+    var target = segment.end;
+    final length = _session?.duration ?? Duration.zero;
+    if (length > Duration.zero) {
+      final limit = length - const Duration(milliseconds: 500);
+      if (target > limit) target = limit.isNegative ? Duration.zero : limit;
+    }
+    await _session?.seek(target, origin: origin);
   }
 
   /// Back to where the video was opened from, out of full screen; the

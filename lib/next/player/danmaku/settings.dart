@@ -33,7 +33,14 @@ abstract final class NextDanmakuSettings {
     'danmaku.fontFilePath': 'danmaku_font_file_path',
     'danmaku.blockWords': 'danmaku_block_words',
     'danmaku.rememberOffset': 'remember_danmaku_offset',
+    'danmaku.timelineEnabled': 'timeline_danmaku_enabled',
     'danmaku.manualOffset': '@runtime:danmaku.manualOffset',
+    'danmaku.spoilerPreventionEnabled': 'spoiler_prevention_enabled',
+    'danmaku.spoilerAiApiUrl': 'spoiler_ai_api_url',
+    'danmaku.spoilerAiApiFormat': 'spoiler_ai_api_format',
+    'danmaku.spoilerAiModel': 'spoiler_ai_model',
+    'danmaku.spoilerAiTemperature': 'spoiler_ai_temperature',
+    'danmaku.spoilerAiDebugPrintResponse': 'spoiler_ai_debug_print_response',
     'player.introSkipEnabled': 'intro_skip_enabled',
   };
 
@@ -58,7 +65,14 @@ abstract final class NextDanmakuSettings {
     'danmaku.fontFilePath': '',
     'danmaku.blockWords': <String>[],
     'danmaku.rememberOffset': false,
+    'danmaku.timelineEnabled': true,
     'danmaku.manualOffset': 0.0,
+    'danmaku.spoilerPreventionEnabled': false,
+    'danmaku.spoilerAiApiUrl': '',
+    'danmaku.spoilerAiApiFormat': 'openai',
+    'danmaku.spoilerAiModel': 'gpt-5',
+    'danmaku.spoilerAiTemperature': 0.5,
+    'danmaku.spoilerAiDebugPrintResponse': false,
     'player.introSkipEnabled': true,
   };
 

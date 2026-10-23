@@ -1,35 +1,52 @@
+import 'dart:convert';
 import 'dart:math' as math;
 
+import 'package:crypto/crypto.dart';
+
+import 'package:nipaplay/constants/danmaku_color_presets.dart';
+import 'package:nipaplay/services/danmaku_density_analyzer.dart';
 import 'package:nipaplay/services/intro_skip/danmaku_intro_detector.dart';
 import 'package:nipaplay/services/intro_skip/skip_segment.dart';
+import 'package:nipaplay/services/timeline_danmaku_service.dart';
 
 /// All functions in this file run on the timeline worker, including rules,
 /// folding, density, segment detection and inspection pagination.
 final class DanmakuTimeline {
   const DanmakuTimeline(this.entries, this.heat, this.segments, this.buildUs,
-      this.total, this.invalidRules);
+      this.total, this.invalidRules,
+      {this.spoilerCandidates = const [], this.spoilerHash = ''});
   final List<Map<String, dynamic>> entries;
   final List<double> heat;
   final List<SkipSegment> segments;
   final int buildUs, total;
   final List<String> invalidRules;
 
+  /// What spoiler analysis would be asked about (Classic: the first 1200
+  /// distinct normalised texts of the merged list) and its digest.
+  final List<String> spoilerCandidates;
+  final String spoilerHash;
+
   static const empty = DanmakuTimeline([], [], [], 0, 0, []);
 }
 
 DanmakuTimeline buildTimeline(Map<String, Map<String, dynamic>> tracks,
     Map<String, Object?> settings, int durationMs,
-    List<Map<String, dynamic>> chapters) {
+    List<Map<String, dynamic>> chapters,
+    {Set<String> spoilerTexts = const {},
+    List<Map<String, dynamic>> externalSegments = const []}) {
   final watch = Stopwatch()..start();
+  // Classic's rule format (video_player_state_subtitles.dart `_isRegexRule`):
+  // `name/expression/`; anything else is a literal. Each rule is compiled
+  // once here, not once per comment.
   final literals = <String>[];
   final regexps = <RegExp>[];
   final invalid = <String>[];
   for (final rule in settings['danmaku.blockWords'] as List? ?? const []) {
     final text = rule as String;
-    final slash = text.indexOf('/');
-    if (slash > 0 && text.endsWith('/')) {
+    final parts = text.split('/');
+    if (parts.length >= 3 && parts.first.isNotEmpty && parts.last.isEmpty) {
       try {
-        regexps.add(RegExp(text.substring(slash + 1, text.length - 1)));
+        regexps.add(RegExp(text.substring(text.indexOf('/') + 1, text.length - 1)));
       } on FormatException {
         invalid.add(text);
       }
@@ -57,6 +74,21 @@ DanmakuTimeline buildTimeline(Map<String, Map<String, dynamic>> tracks,
       });
     }
   }
+  if (settings['danmaku.timelineEnabled'] == true && durationMs > 0) {
+    final timeline = TimelineDanmakuService.generateTimelineDanmaku(
+        Duration(milliseconds: durationMs));
+    for (final comment in timeline['comments'] as List) {
+      final entry = Map<String, dynamic>.from(comment as Map);
+      merged.add({
+        ...entry,
+        'sourceTimeMs': ((entry['time'] as num) * 1000).round(),
+        'nextTrackId': 'timeline',
+        'foldEnabled': false,
+        'aggregation': false,
+        'source': 'timeline',
+      });
+    }
+  }
   merged.sort((a, b) => (a['time'] as num).compareTo(b['time'] as num));
   final total = merged.length;
   // Detection uses the unfurled input, so hiding/folding comments cannot
@@ -64,9 +96,24 @@ DanmakuTimeline buildTimeline(Map<String, Map<String, dynamic>> tracks,
   final intro = DanmakuIntroDetector.detect([
     for (final e in merged) DanmakuTextEntry.fromMap(e),
   ], durationSeconds: durationMs > 0 ? durationMs / 1000 : null);
-  final segments = <SkipSegment>[
-    if (intro != null) intro,
-  ];
+  // One slot per kind, filled by rank (Classic's `mergeSkipSegmentSlot`):
+  // a signal is taken unless the slot holds a more trusted one. Signals from
+  // outside (media server, manual) come first; their rank decides.
+  final slots = <SkipSegmentKind, SkipSegment>{};
+  void offer(SkipSegment? candidate) {
+    if (candidate == null) return;
+    final merged = mergeSkipSegmentSlot(slots[candidate.kind], candidate);
+    if (merged.accepted) slots[candidate.kind] = merged.segment;
+  }
+  for (final raw in externalSegments) {
+    offer(SkipSegment(
+        kind: SkipSegmentKind.values.byName(raw['kind'] as String),
+        source: SkipSegmentSource.values.byName(raw['source'] as String),
+        startSeconds: (raw['startSeconds'] as num).toDouble(),
+        endSeconds: (raw['endSeconds'] as num).toDouble(),
+        evidenceCount: raw['evidenceCount'] as int? ?? 0));
+  }
+  offer(intro);
   for (var i = 0; i < chapters.length; i++) {
     final c = chapters[i];
     final title = (c['title'] ?? '').toString();
@@ -82,57 +129,54 @@ DanmakuTimeline buildTimeline(Map<String, Map<String, dynamic>> tracks,
             : durationMs.toDouble());
     if (end <= start || durationMs <= 0) continue;
     final kind = opening ? SkipSegmentKind.opening : SkipSegmentKind.ending;
-    if (segments.any((s) => s.kind == kind)) continue;
-    segments.add(SkipSegment(kind: kind,
+    // The first chapter of a kind is the one that counts.
+    if (slots[kind]?.source == SkipSegmentSource.chapterHeuristic) continue;
+    offer(SkipSegment(kind: kind,
         source: SkipSegmentSource.chapterHeuristic,
         startSeconds: start / 1000,
         endSeconds: math.min(end, durationMs.toDouble()) / 1000));
   }
+  final segments = slots.values.toList();
   merged = _foldSources(merged);
+  final candidates = <String>[];
+  final seen = <String>{};
+  for (final e in merged) {
+    final normalized = normalizeSpoilerText(e['content'] as String);
+    if (normalized.isNotEmpty && seen.add(normalized)) {
+      candidates.add(normalized);
+      if (candidates.length >= 1200) break;
+    }
+  }
   final filtered = <Map<String, dynamic>>[];
-  final groups = <String, Map<String, dynamic>>{};
   for (final e in merged) {
     final type = e['type'] as String;
     final text = e['content'] as String;
     if (settings['danmaku.block${type[0].toUpperCase()}${type.substring(1)}'] == true ||
+        (spoilerTexts.isNotEmpty && spoilerTexts.contains(normalizeSpoilerText(text))) ||
         literals.any(text.contains) || regexps.any((r) => r.hasMatch(text))) {
       continue;
     }
-    if (settings['danmaku.merge'] == true) {
-      final key = '$type|$text';
-      final previous = groups[key];
-      if (previous != null &&
-          (e['time'] as num) - (previous['time'] as num) <= 10) {
-        previous['mergeCount'] = (previous['mergeCount'] as int? ?? 1) + 1;
-        continue;
-      }
-      groups[key] = e;
-    }
-    if (settings['danmaku.randomColor'] == true) {
-      var hash = 2166136261;
-      for (final code in '${e['time']}|$type|${e['id'] ?? ''}|$text'.codeUnits) {
-        hash = ((hash ^ code) * 16777619) & 0x7fffffff;
-      }
-      const colors = ['rgb(255,114,116)', 'rgb(64,199,255)',
-        'rgb(109,255,105)', 'rgb(255,223,88)', 'rgb(220,160,255)'];
-      e['color'] = colors[hash % colors.length];
-    }
-    filtered.add(e);
+    // Same-comment merging (the count and the larger type) belongs to the
+    // renderers, as in Classic; they get the setting, not a folded list.
+    filtered.add(settings['danmaku.randomColor'] == true ? _randomColor(e) : e);
   }
-  final counts = List<double>.filled(100, 0);
-  final offset = (settings['danmaku.manualOffset'] as num?)?.toDouble() ?? 0;
-  if (durationMs > 0) {
-    for (final e in filtered) {
-      final at = (e['time'] as num).toDouble() - offset;
-      if (at < 0 || at * 1000 > durationMs) continue;
-      counts[math.min(99, (at * 100000 / durationMs).floor())]++;
-    }
-  }
-  final maxCount = counts.fold<double>(0, math.max);
-  final heat = maxCount == 0 ? <double>[]
-      : [for (final c in counts) c / maxCount];
+  // Classic: 120 segments over whole seconds, peak-normalised, counted on
+  // the displayed list without the manual offset.
+  final points = DanmakuDensityAnalyzer.analyzeDensity(
+      danmakuList: filtered, videoDurationSeconds: durationMs ~/ 1000,
+      segmentCount: 120);
+  final peak = points.fold<int>(0, (a, p) => math.max(a, p.count));
+  final heat = peak == 0 ? <double>[] : [for (final p in points) p.count / peak];
   return DanmakuTimeline(filtered, heat, segments,
-      watch.elapsedMicroseconds, total, invalid);
+      watch.elapsedMicroseconds, total, invalid,
+      spoilerCandidates: candidates,
+      spoilerHash: sha1.convert(utf8.encode(candidates.join('\u0000'))).toString());
+}
+
+/// Classic's `_normalizeSpoilerMatchText`.
+String normalizeSpoilerText(String text) {
+  final trimmed = text.trim();
+  return trimmed.isEmpty ? '' : trimmed.replaceAll(RegExp(r'\s+'), ' ');
 }
 
 /// Classic's cross-source folding rules, with tuple keys instead of a JSON
@@ -210,7 +254,7 @@ Map<String, dynamic> pageTimeline(DanmakuTimeline timeline,
         'text': e['content'], 'trackId': e['nextTrackId'],
         'provenance': e['originSource'], 'platform': e['source'],
         'sourceId': e['sourceId'], 'foldMembers': e['displayMembers'],
-        'sourceTimeMs': e['sourceTimeMs'], 'mergeCount': e['mergeCount'] ?? 1});
+        'sourceTimeMs': e['sourceTimeMs']});
     }
     total++;
   }
@@ -218,4 +262,25 @@ Map<String, dynamic> pageTimeline(DanmakuTimeline timeline,
     'view': 'display_timeline', 'positionMs': position, 'items': rows,
     'nextCursor': cursor + rows.length < total ? cursor + rows.length : null,
     'total': total};
+}
+
+
+/// Classic's `_resolveRandomizedDanmakuColor`: the same palette and the same
+/// stable hash, so a comment keeps its colour across the two layers.
+Map<String, dynamic> _randomColor(Map<String, dynamic> item) {
+  final palette = DanmakuColorPresets.randomColorfulDanmakuColors;
+  final time = (item['time'] ?? item['t']) as num? ?? 0;
+  final safe = time.isNaN || time.isInfinite ? 0.0 : (time < 0 ? 0.0 : time.toDouble());
+  final timeText = safe.toStringAsFixed(3).replaceFirst(RegExp(r'\.?0+$'), '');
+  final content = (item['content'] ?? item['c'] ?? '').toString();
+  final type = (item['type'] ?? item['y'] ?? '').toString();
+  final id = (item['id'] ?? item['cid'] ?? item['p'] ?? '').toString();
+  var hash = 2166136261;
+  for (final code in '$timeText|$type|$id|$content'.codeUnits) {
+    hash ^= code;
+    hash = (hash * 16777619) & 0x7fffffff;
+  }
+  final color = DanmakuColorPresets.toRgbString(palette[(hash & 0x7fffffff) % palette.length]);
+  if ((item['color'] ?? item['r'])?.toString() == color) return item;
+  return {...item, 'color': color, 'r': color};
 }
