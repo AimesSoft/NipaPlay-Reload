@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'package:nipa_harness/nipa_harness.dart';
 
 import '../../harness_redaction.dart';
+import '../features/kernel_features.dart' show ChapterFacts;
 
 /// The playback kernels, by the ids facts use.
 enum KernelId {
@@ -146,6 +147,7 @@ final class MediaFacts {
     this.subtitles = const [],
     this.activeAudio = const [],
     this.activeSubtitles = const [],
+    this.chapters = const [],
   });
 
   final Duration duration;
@@ -161,6 +163,7 @@ final class MediaFacts {
   /// The tracks the kernel has on (its own default until a choice is made).
   final List<int> activeAudio;
   final List<int> activeSubtitles;
+  final List<ChapterFacts> chapters;
 
   bool get hasVideo => width > 0 && height > 0;
   double get aspect => hasVideo ? width / height : 16 / 9;
@@ -177,6 +180,7 @@ final class MediaFacts {
         'subtitles': [for (final t in subtitles) t.toJson()],
         'activeAudio': activeAudio,
         'activeSubtitles': activeSubtitles,
+        'chapters': [for (final c in chapters) c.toJson()],
       };
 }
 

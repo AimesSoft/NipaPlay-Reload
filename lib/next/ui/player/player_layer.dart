@@ -7,6 +7,7 @@ import 'package:flutter/widgets.dart';
 import 'package:window_manager/window_manager.dart';
 
 import '../../player/perf/budget.dart';
+import '../../player/ports/session_playback.dart';
 import '../../ui_data/ui_data.dart'
     show NextNowPlaying, NextUiData, UiNowPlaying;
 import '../conversation/nipa_chat.dart';
@@ -735,6 +736,12 @@ class _BottomBar extends StatelessWidget {
               heat: playback.heat(),
               onSeek: playback.seek,
               onScrub: onScrub,
+              preview: switch (playback) {
+                SessionPlayback(:final preview, :final session)
+                    when preview.enabled && session != null =>
+                  (at) => preview.at(session.source.uri, at),
+                _ => null,
+              },
             ),
           ),
           const SizedBox(height: 2),

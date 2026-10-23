@@ -12,11 +12,12 @@ import 'package:nipaplay/next/player/progress/records.dart';
 
 /// A kernel that answers as MDK does, at once or when [gate] opens, and
 /// writes down what it is told.
-final class FakeDriver implements KernelDriver {
+class FakeDriver implements KernelDriver {
   FakeDriver(this.lease,
       {this.landed,
       this.duration = const Duration(minutes: 24),
       this.failOpen,
+      this.mediaFacts,
       this.gate,
       this.seekGate})
       : instance = ++_count {
@@ -28,6 +29,8 @@ final class FakeDriver implements KernelDriver {
   final Duration Function(Duration start)? landed;
   final Duration duration;
   final KernelOpenFailure? failOpen;
+  final MediaFacts? mediaFacts;
+  Duration get position => _at;
 
   /// Holds open until completed.
   final Completer<void>? gate;
@@ -101,7 +104,7 @@ final class FakeDriver implements KernelDriver {
     final at = landed?.call(start) ?? start;
     transport(KernelTransport.paused);
     sample(at, advancing: false);
-    return KernelOpened(MediaFacts(duration: duration, width: 1920, height: 1080), at);
+    return KernelOpened(mediaFacts ?? MediaFacts(duration: duration, width: 1920, height: 1080), at);
   }
 
   @override

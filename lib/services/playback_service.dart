@@ -26,6 +26,9 @@ class PlaybackService {
   /// or internal fallback after an external launch failure.
   Future<bool> tryPlayExternally(BuildContext context, PlayableItem item,
       {bool episodeFileSelectionHandled = false}) async {
+    final redirect = globals.nextPlaybackRedirect;
+    if (redirect != null && await redirect(item, 'classic.external_open')) return true;
+    if (!context.mounted) return true;
     // 检查设置是否允许使用外部播放器
     final settings = Provider.of<SettingsProvider>(context, listen: false);
     if (!settings.useExternalPlayer) return false;

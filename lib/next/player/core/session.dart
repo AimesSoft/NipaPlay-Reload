@@ -278,6 +278,7 @@ final class PlaybackSession {
   final String id;
   final MediaRequest request;
   final ResolvedSource _source;
+  ResolvedSource get source => _source;
   final SessionDeps _deps;
   final DateTime openedAt;
   final PlaybackClock clock;

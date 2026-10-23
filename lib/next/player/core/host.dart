@@ -114,7 +114,7 @@ final class NextPlayerHost {
   /// Opens [request] after closing what plays. Completes once the open
   /// plan ended: the session is active, failed or (closed meanwhile)
   /// closed. Throws [OpenRefused] before anything closes.
-  Future<PlaybackSession> open(MediaRequest request) async {
+  Future<PlaybackSession> open(MediaRequest request, {PlayerLevels? initialLevels}) async {
     final ResolvedSource source;
     try {
       source = resolve(request);
@@ -134,7 +134,7 @@ final class NextPlayerHost {
             arbiter: arbiter,
             createDriver: (lease) => createDriver(KernelId.mdk, lease),
             records: records,
-            levels: await levels(),
+            levels: initialLevels ?? await levels(),
           ));
       _current.value = session;
       session.events.listen(_events.add, onDone: () => _gone(session));

@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
@@ -19,6 +20,12 @@ import '../core/session.dart';
 import '../kernel/driver.dart';
 import '../next_playback.dart';
 import '../perf/budget.dart';
+import '../features/capture.dart';
+import '../features/external_handoff.dart';
+import '../features/navigation.dart';
+import '../features/timeline_preview.dart';
+import '../features/windows.dart';
+import '../../ui/player/detached_stage.dart';
 import 'session_ports.dart';
 
 /// Makes Next's local operations (window, levels…) for this playback; the
@@ -38,12 +45,16 @@ typedef LocalOperationsFactory = Capability Function(SettingsRegistry settings,
 final class SessionPlayback implements NextPlayback, VideoStageHost {
   SessionPlayback(this.host,
       {LocalOperationsFactory? localOperations,
+      this.externalHandoff,
+      PlaybackWindows? windows,
       this.hideAfter = const Duration(seconds: 3)})
-      : _localOperations = localOperations {
+      : _localOperations = localOperations,
+        windows = windows ?? PlaybackWindows() {
     _frame = _Frame(this);
     _fullscreen.addListener(_frame.poke);
     host.current.addListener(_bind);
     _bind();
+    externalHandoff?.addListener(_externalChanged);
     unawaited(_readLevels());
     if (_desktop) {
       _window = _FullscreenWatch(_fullscreen);
@@ -54,6 +65,24 @@ final class SessionPlayback implements NextPlayback, VideoStageHost {
   final NextPlayerHost host;
   final Duration hideAfter;
   final LocalOperationsFactory? _localOperations;
+  final ExternalHandoff? externalHandoff;
+  final PlaybackWindows windows;
+  final capture = PlaybackCapture();
+  final preview = TimelinePreview();
+  final navigation = const PlaybackNavigation();
+  final aspectMode = ValueNotifier(VideoAspectMode.contain);
+
+  double get videoAspect => _session?.media.value?.aspect ?? 16 / 9;
+
+  void _externalChanged() {
+    if (externalHandoff?.active == true) {
+      _transport.value = const PlaybackTransport(status: 'external',
+          phase: PlaybackPhase.playing, hasVideo: false, systemDrawn: false);
+    } else {
+      _sync();
+    }
+    _frame.poke();
+  }
 
   static bool get _desktop =>
       !kIsWeb &&
@@ -94,6 +123,7 @@ final class SessionPlayback implements NextPlayback, VideoStageHost {
       old.clock.removeListener(_frame.clockChanged);
     }
     _session = next;
+    unawaited(preview.reset());
     if (next != null) {
       _generation++;
       next.phase.addListener(_sync);
@@ -220,7 +250,7 @@ final class SessionPlayback implements NextPlayback, VideoStageHost {
   @override
   bool get offersSubtitles => false;
   @override
-  bool get offersScreenshot => false;
+  bool get offersScreenshot => hasVideo;
 
   // ---- for capabilities and the rest of Next ----
 
@@ -306,6 +336,9 @@ final class SessionPlayback implements NextPlayback, VideoStageHost {
     _hide?.cancel();
     if (_fullscreen.value) await _setFullscreen(false);
     await host.close(reason: reason);
+    externalHandoff?.clear();
+    await windows.returnToMain();
+    await preview.reset();
   }
 
   /// Plays [item] in Next's layer: what playback.open, the library, the
@@ -315,6 +348,21 @@ final class SessionPlayback implements NextPlayback, VideoStageHost {
   Future<bool> openItem(PlayableItem item,
       {Duration? start, String? origin}) async {
     final history = item.historyItem;
+    final external = externalHandoff;
+    if (external != null && external.enabled()) {
+      await host.close(reason: 'external_handoff');
+      await windows.returnToMain();
+      try {
+        final resume = start ?? Duration(milliseconds: history?.lastPosition ??
+            await host.records.resumeAt(item.videoPath));
+        await external.open(item, start: resume);
+      } on ProcessException catch (error) {
+        throw Failure(FailureCode.unavailable, '外部播放器启动失败：${error.message}',
+            details: {'reason': 'external_player_launch_failed'});
+      }
+      return true;
+    }
+    external?.clear();
     try {
       await host.open(MediaRequest(
         locator: item.videoPath,
@@ -352,6 +400,12 @@ final class SessionPlayback implements NextPlayback, VideoStageHost {
 
   Future<void> _setFullscreen(bool on) async {
     if (!_desktop) return;
+    final window = windows.nativeWindow;
+    if (window != null) {
+      await window.setFullscreen(on);
+      _fullscreen.value = window.isFullscreen;
+      return;
+    }
     await windowManager.setFullScreen(on);
     _fullscreen.value = await windowManager.isFullScreen();
     _frame.poke();
@@ -460,6 +514,26 @@ final class SessionPlayback implements NextPlayback, VideoStageHost {
       return false;
     }
     final key = event.logicalKey;
+    if (key == LogicalKeyboardKey.comma || key == LogicalKeyboardKey.period) {
+      unawaited(inspection.inspect('playback.navigate',
+          {'frameDelta': key == LogicalKeyboardKey.comma ? -1 : 1})
+          .catchError((Object error) => <String, Object?>{'error': '$error'}));
+      _show();
+      return true;
+    }
+    if (key == LogicalKeyboardKey.keyF && event is KeyDownEvent) {
+      unawaited(toggleFullscreen());
+      return true;
+    }
+    if (key == LogicalKeyboardKey.keyM && event is KeyDownEvent) {
+      unawaited(setVolume(volume > 0 ? 0 : 1));
+      return true;
+    }
+    if (key == LogicalKeyboardKey.arrowUp || key == LogicalKeyboardKey.arrowDown) {
+      unawaited(setVolume(volume + (key == LogicalKeyboardKey.arrowUp ? 0.05 : -0.05)));
+      _show();
+      return true;
+    }
     if (key == LogicalKeyboardKey.space && event is KeyDownEvent) {
       togglePlay();
       return true;
@@ -488,6 +562,10 @@ final class SessionPlayback implements NextPlayback, VideoStageHost {
       final levels = await host.levels();
       _volume = levels.volume;
       _rate = levels.rate;
+      final prefs = await SharedPreferences.getInstance();
+      preview.enabled = prefs.getBool('timeline_preview_enabled') ?? false;
+      aspectMode.value = VideoAspectMode.values.where((m) =>
+          m.name == prefs.getString('video_aspect_mode')).firstOrNull ?? VideoAspectMode.contain;
     } catch (error) {
       debugPrint('[NextPlayer] levels: $error');
     }
@@ -535,20 +613,46 @@ final class SessionPlayback implements NextPlayback, VideoStageHost {
   @override
   Future<void> chooseAudio(AudioChoice choice) async {}
   @override
-  bool get canFit => false;
+  bool get canFit => hasVideo;
   @override
-  VideoAspectMode get fit => VideoAspectMode.contain;
+  VideoAspectMode get fit => aspectMode.value;
   @override
-  Future<void> setFit(VideoAspectMode mode) async {}
+  Future<void> setFit(VideoAspectMode mode) async {
+    aspectMode.value = mode;
+    _frame.poke();
+    await SettingsAccess.persist('video_aspect_mode', () async =>
+        (await SharedPreferences.getInstance()).setString('video_aspect_mode', mode.name));
+  }
   @override
-  Future<String?> screenshot() async => null;
+  Future<String?> screenshot() async {
+    final s = _session;
+    if (s == null) return null;
+    return (await controls.capture({'kind': 'screenshot'}))['path'] as String;
+  }
   @override
   Future<void> open(String path) =>
       launchUrl(Uri.file(path), mode: LaunchMode.externalApplication);
   @override
-  bool get canPictureInPicture => false;
+  bool get canPictureInPicture => hasVideo && PlaybackWindows.supported;
   @override
-  Future<void> pictureInPicture(BuildContext context) async {}
+  Future<void> pictureInPicture(BuildContext context) async {
+    await detach();
+    await windows.setPictureInPicture(!windows.pictureInPicture, videoAspect);
+  }
+
+  Future<void> detach() => windows.detach(
+      (_) => NextDetachedPlayer(playback: this), videoAspect);
+
+  Future<void> featureSettingChanged(String key, Object? value) async {
+    if (key == 'player.timelinePreviewEnabled') {
+      preview.enabled = value == true;
+      if (!preview.enabled) await preview.reset();
+      _frame.poke();
+    } else if (key == 'player.videoAspectMode' && value is String) {
+      aspectMode.value = VideoAspectMode.values.byName(value);
+      _frame.poke();
+    }
+  }
 
   static const _dial = PlayerDial(0, 0, 1, 1, DialUnit.percent);
   @override
@@ -590,6 +694,10 @@ final class SessionPlayback implements NextPlayback, VideoStageHost {
     _persistVolume?.cancel();
     if (_window case final watch?) windowManager.removeListener(watch);
     _frame.stop();
+    await preview.dispose();
+    await windows.shutdown();
+    externalHandoff?.removeListener(_externalChanged);
+    externalHandoff?.dispose();
   }
 }
 

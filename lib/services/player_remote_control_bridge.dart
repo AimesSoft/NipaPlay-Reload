@@ -1,4 +1,6 @@
 import 'dart:convert';
+import 'package:nipaplay/next/player/next_playback.dart';
+import 'package:nipaplay/next/player/features/remote_control.dart';
 import 'package:nipaplay/next/settings/application_settings.dart';
 
 import 'package:flutter/material.dart';
@@ -23,6 +25,23 @@ class PlayerRemoteControlBridge {
 
   VideoPlayerState? _videoState;
   DateTime? _lastCommandAt;
+  NextRemoteControl? _next;
+  bool Function()? _nextActive;
+
+  void attachNext(NextPlayback playback, bool Function() active,
+      {Future<void> Function(String, Object?)? setParameter}) {
+    _next = NextRemoteControl(playback, setParameter: setParameter);
+    _nextActive = active;
+  }
+
+  void detachNext(NextPlayback playback) {
+    if (identical(_next?.playback, playback)) {
+      _next = null;
+      _nextActive = null;
+    }
+  }
+
+  NextRemoteControl? get _activeNext => _nextActive?.call() == true ? _next : null;
 
   void attach(VideoPlayerState state) {
     _videoState = state;
@@ -34,13 +53,18 @@ class PlayerRemoteControlBridge {
     }
   }
 
-  bool get isAttached => _videoState != null;
+  bool get isAttached => _activeNext != null || _videoState != null;
 
   Future<Map<String, dynamic>> buildPayload({
     String? paneId,
     bool includeParameters = false,
   }) async {
     final enabled = await RemoteControlSettings.isReceiverEnabled();
+    if (_activeNext case final next?) {
+      return {...next.payload(enabled: enabled,
+          includeParameters: includeParameters || (paneId?.isNotEmpty ?? false), paneId: paneId),
+        'lastCommandAt': _lastCommandAt?.toIso8601String()};
+    }
     final state = _videoState;
     final normalizedPaneId = paneId?.trim();
     final shouldIncludeParameters =
@@ -80,6 +104,18 @@ class PlayerRemoteControlBridge {
     String command,
     Map<String, dynamic> args,
   ) async {
+    if (_activeNext case final next?) {
+      if (!await RemoteControlSettings.isReceiverEnabled()) {
+        return {'success': false, 'message': '被遥控端已关闭', 'payload': await buildPayload()};
+      }
+      try {
+        await next.execute(command, args);
+        _lastCommandAt = DateTime.now();
+        return {'success': true, 'message': 'ok', 'payload': await buildPayload()};
+      } catch (error) {
+        return {'success': false, 'message': '执行失败: $error', 'payload': await buildPayload()};
+      }
+    }
     final state = _videoState;
     if (state == null) {
       return {

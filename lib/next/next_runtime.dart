@@ -96,6 +96,9 @@ import 'state/change_history.dart';
 import 'settings/host_settings_service.dart';
 import 'ui_data/host_settings.dart';
 import 'settings/debug_host_settings.dart';
+import 'player/features/external_handoff.dart';
+import 'player/features/local_operations.dart';
+import 'package:nipaplay/services/player_remote_control_bridge.dart';
 
 final class NextRuntime extends ChangeNotifier {
   NextRuntime._(this._labs, this._preference, this.playback, this._classic,
@@ -103,6 +106,11 @@ final class NextRuntime extends ChangeNotifier {
     // From now on Classic asks before it opens anything; while Next's
     // interface is what shows, Next's layer plays it (D3, D5).
     globals.nextPlaybackRedirect = _redirect;
+    PlayerRemoteControlBridge.instance.attachNext(playback, () => !_disposed && _nextOpen,
+        setParameter: (key, value) async {
+          await ServiceProvider.nextCore.settings.set(key, value, Invocation(origin: 'gui'),
+              reason: '通过遥控器调整 Next 播放设置');
+        });
     _operations = _initialize(capabilities);
   }
 
@@ -173,8 +181,12 @@ final class NextRuntime extends ChangeNotifier {
       usesExternalPlayer: () => settings.useExternalPlayer,
     );
     final nextPlayback = SessionPlayback(host,
+        externalHandoff: ExternalHandoff(enabled: () => settings.useExternalPlayer,
+            playerPath: () => settings.externalPlayerPath,
+            playerType: () => settings.externalPlayerType,
+            userAgent: PlayerFactory.getCustomPlayerUA),
         localOperations: (settings, context, session) =>
-            classic.localOperationsFor(settings, context, session));
+            NextFeatureOperations(session, settings));
     final history = ServiceProvider.watchHistoryProvider;
     final seriesDetail = BangumiService.instance.getAnimeDetailsFromMemory;
     final playback = PlaybackCapability(
@@ -451,8 +463,10 @@ final class NextRuntime extends ChangeNotifier {
     final kernelControl =
         KernelControl(playback.kernelHost, harness: () => repositoryPath);
     unawaited(kernelControl.release(reopen: false));
-    _settingEvents = core.settingChanges.stream.listen((facts) =>
-        playback.host.settingChanged(facts['key'] as String, facts['value']));
+    _settingEvents = core.settingChanges.stream.listen((facts) {
+      playback.host.settingChanged(facts['key'] as String, facts['value']);
+      unawaited(playback.featureSettingChanged(facts['key'] as String, facts['value']));
+    });
     _harness = Harness(
       [
         FamilyDescriptionCapability(() => _harness.catalog),
@@ -930,6 +944,7 @@ final class NextRuntime extends ChangeNotifier {
 
   @override
   void dispose() {
+    PlayerRemoteControlBridge.instance.detachNext(playback);
     _disposed = true;
     if (globals.nextPlaybackRedirect == _redirect) {
       globals.nextPlaybackRedirect = null;
