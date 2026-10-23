@@ -248,13 +248,34 @@ final class SessionControls
     final old = _internal();
     final request = old.request;
     final preserve = input['preservePosition'] as bool? ?? true;
-    final next = await _playback.host.open(MediaRequest(
-      locator: request.locator, origin: commandOrigin(), title: request.title,
-      episodeTitle: request.episodeTitle, animeId: request.animeId,
-      episodeId: request.episodeId,
-      start: preserve ? old.position : Duration.zero,
-      paused: !old.transport.value.playIntent),
-      initialLevels: PlayerLevels(volume: old.transport.value.volume, boost: old.volumeBoost, rate: old.transport.value.rate));
+    final levels = PlayerLevels(
+        volume: old.transport.value.volume,
+        boost: old.volumeBoost,
+        rate: old.transport.value.rate);
+    final start = preserve ? old.position : Duration.zero;
+    final paused = !old.transport.value.playIntent;
+    // A source that played through the sources layer (a media server's
+    // version and tracks, the episode list) is opened again through it, so
+    // that what was chosen and the episode context stay.
+    final plan = _playback.sources.plan;
+    final next = plan != null
+        ? await _playback.sources.open(plan.item,
+            start: start,
+            paused: paused,
+            origin: commandOrigin(),
+            selection: plan.selection,
+            initialLevels: levels)
+        : await _playback.host.open(
+            MediaRequest(
+                locator: request.locator,
+                origin: commandOrigin(),
+                title: request.title,
+                episodeTitle: request.episodeTitle,
+                animeId: request.animeId,
+                episodeId: request.episodeId,
+                start: start,
+                paused: paused),
+            initialLevels: levels);
     if (!identical(next, _playback.session) || next.phase.value.done) {
       throw const Failure(FailureCode.conflict, 'Playback changed while retrying.');
     }

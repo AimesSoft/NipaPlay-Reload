@@ -83,7 +83,8 @@ final class PlaybackSources extends ChangeNotifier {
       bool? paused,
       String origin = 'gui',
       JsonMap selection = const {},
-      bool direct = false}) async {
+      bool direct = false,
+      PlayerLevels? initialLevels}) async {
     final ticket = ++_ticket;
     cancelAutoNext();
     host.resolve(MediaRequest(locator: item.videoPath, origin: origin));
@@ -121,6 +122,7 @@ final class PlaybackSources extends ChangeNotifier {
             episodeId: item.episodeId ?? history?.episodeId,
             start: effectiveStart,
             paused: paused),
+        initialLevels: initialLevels,
         resolvedSource: prepared.source, onCreated: (session) {
       if (_disposed || ticket != _ticket) {
         throw const Failure(FailureCode.conflict,
