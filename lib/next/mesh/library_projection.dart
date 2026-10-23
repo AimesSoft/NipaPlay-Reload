@@ -1,0 +1,926 @@
+import 'dart:convert';
+import 'dart:io';
+import 'dart:math' as math;
+import 'package:crypto/crypto.dart';
+import 'package:nipa_harness/nipa_harness.dart';
+import 'package:sqflite_common_ffi/sqflite_ffi.dart';
+import '../ui_data/service.dart';
+import '../ui_data/ui_data.dart';
+import '../ui_data/library_index.dart';
+import '../ui_data/library_search.dart';
+import '../media/library_reads.dart';
+import '../harness_redaction.dart';
+import 'library_codec.dart';
+
+String _hash(Object value) =>
+    sha256.convert(utf8.encode(jsonEncode(value))).toString();
+bool _newer(JsonMap a, JsonMap b) {
+  final compared = DateTime.parse(a['at'] as String)
+      .compareTo(DateTime.parse(b['at'] as String));
+  return compared > 0 ||
+      (compared == 0 &&
+          (a['writer'] as String).compareTo(b['writer'] as String) > 0);
+}
+
+String _ref(String device, String id) =>
+    'mesh-ref:${base64Url.encode(utf8.encode(jsonEncode([
+              device,
+              id
+            ]))).replaceAll('=', '')}';
+
+/// Owned exclusively by the library isolate. No timers or GUI/native handles.
+final class LibraryProjection {
+  LibraryProjection(this.ui, this.own);
+  final UiDataService ui;
+  final String own;
+  Database get db => ui.db;
+  String? accountId;
+  Map<String, JsonMap> _peers = {}, _progress = {};
+  Map<String, bool> _online = {};
+  Map<String, String> _assets = {};
+  final _samples = <String, (String, String)>{};
+  final _added = <String, int>{};
+  Map<String, List<String>> _historicalIds = {};
+  JsonMap _local = {'records': <JsonMap>[]};
+  Map<String, UiWork> _works = {};
+  Map<String, List<UiEpisode>> _episodes = {};
+  Map<String, String> _aliases = {}, _localTargets = {};
+  Map<String, List<JsonMap>> _locations = {}, _management = {};
+  Map<String, List<String>> _episodeKeys = {};
+  Map<String, JsonMap> _evidence = {};
+  LibrarySearchIndex searchIndex = LibrarySearchIndex();
+  List<UiWork> _orderedWorks = [];
+  Map<String, int> _workOffsets = {};
+  Future<void> initialize() async {
+    for (final row in await db.query('ui_cache',
+        where: "id IN ('mesh:added','mesh:aliases','mesh:progress')")) {
+      final value = jsonDecode(row['payload'] as String) as Map;
+      switch (row['id']) {
+        case 'mesh:added':
+          _added.addAll(value.cast<String, int>());
+        case 'mesh:aliases':
+          _historicalIds = value
+              .map((k, v) => MapEntry(k as String, (v as List).cast<String>()));
+        case 'mesh:progress':
+          _progress = value.cast<String, JsonMap>();
+      }
+    }
+  }
+
+  Future<void> build(String stamp) => _buildLocal(stamp);
+  Future<bool> mergeProgress(Map<String, JsonMap> observations) async {
+    var changed = false;
+    for (final entry in observations.entries) {
+      final value = entry.value;
+      if (value['at'] is! String ||
+          value['writer'] is! String ||
+          value['progress'] is! num ||
+          !(value['progress'] as num).isFinite ||
+          (value['progress'] as num) < 0 ||
+          (value['progress'] as num) > 1 ||
+          DateTime.tryParse(value['at'] as String) == null) {
+        throw const FormatException('Invalid watch observation.');
+      }
+      final old = _progress[entry.key];
+      if (old == null || _newer(value, old)) changed = true;
+    }
+    if (changed) {
+      final merged = {..._progress};
+      for (final entry in observations.entries) {
+        final old = merged[entry.key];
+        if (old == null || _newer(entry.value, old))
+          merged[entry.key] = entry.value;
+      }
+      await _save('mesh:progress', merged);
+      _progress = merged;
+    }
+    return changed;
+  }
+
+  JsonMap page(JsonMap input, int revision) {
+    final version = "${_local['version']}:$revision";
+    if (input['known'] == version) {
+      return {
+        'version': version,
+        'records': <JsonMap>[],
+        'next': null,
+        'unchanged': true
+      };
+    }
+    if (input['version'] != null && input['version'] != version) {
+      throw const Failure(FailureCode.conflict, 'Catalogue version changed.');
+    }
+    final records = [
+      ...(_local['records'] as List).cast<JsonMap>(),
+      for (final entry in _progress.entries)
+        {'kind': 'watch', 'id': entry.key, 'value': entry.value}
+    ];
+    final offset = input['offset'];
+    if (offset is! int || offset < 0 || offset > records.length) {
+      throw const FormatException('Invalid catalogue offset.');
+    }
+    final page = <JsonMap>[];
+    var size = 0, next = offset;
+    while (next < records.length && size < 262144) {
+      final record = records[next];
+      size += utf8.encode(jsonEncode(record)).length;
+      if (size > 524288)
+        throw const FormatException('Catalogue record too large.');
+      page.add(record);
+      next++;
+    }
+    return {
+      'version': version,
+      'records': page,
+      'next': next == records.length ? null : next
+    };
+  }
+
+  int compositions = 0;
+  Future<LibraryProgress> progress(List<JsonMap> entries) async {
+    if (entries.isEmpty) {
+      throw const Failure(
+          FailureCode.invalidInput, 'Supply at least one episode observation.');
+    }
+    final at = DateTime.now().toUtc().toIso8601String();
+    final prepared = <String, JsonMap>{}, changed = <String, double>{};
+    for (final entry in entries) {
+      final fraction = entry['progress'];
+      if (fraction is! num ||
+          !fraction.isFinite ||
+          fraction < 0 ||
+          fraction > 1) {
+        throw const Failure(FailureCode.invalidInput,
+            'Progress must be finite and within 0..1.');
+      }
+      final asked = entry['episodeId'] as String;
+      final id = _aliases[asked] ?? asked;
+      final keys = _episodeKeys[id];
+      if (keys == null)
+        throw const Failure(FailureCode.notFound, 'Unknown merged episode.');
+      final value = <String, Object?>{
+        'progress': fraction,
+        'at': at,
+        'writer': own,
+        'positionMs': entry['positionMs'],
+        'durationMs': entry['durationMs']
+      };
+      for (final key in keys) {
+        if (prepared[key] != null &&
+            jsonEncode(prepared[key]) != jsonEncode(value)) {
+          throw const Failure(FailureCode.conflict,
+              'Conflicting episode observations in batch.');
+        }
+        prepared[key] = value;
+      }
+      changed[id] = fraction.toDouble();
+    }
+    // Persist before changing the published projection. A failed batch leaves
+    // every observation and displayed progress unchanged.
+    await _save('mesh:progress', {..._progress, ...prepared});
+    _progress.addAll(prepared);
+    final workIds = <String>{};
+    for (final id in changed.keys) {
+      workIds.add(_episodeParents[id]!);
+    }
+    final works = <String, UiWork>{}, episodes = <String, List<UiEpisode>>{};
+    for (final workId in workIds) {
+      final previous = _works[workId]!;
+      final updated = episodes[workId] = [
+        for (final episode in _episodes[workId]!)
+          if (changed.containsKey(episode.episodeId))
+            episodeValue({
+              ...episodeJson(episode),
+              'progress': changed[episode.episodeId]
+            }, device: episode.device)
+          else
+            episode
+      ];
+      final value = workJson(previous);
+      final work = works[workId] = workValue(value, updated, previous.devices);
+      _works[workId] = work;
+      _orderedWorks[_workOffsets[workId]!] = work;
+      _episodes[workId] = updated;
+      final rows = await db
+          .query('next_library_index', where: 'id=?', whereArgs: [workId]);
+      if (rows.isNotEmpty) {
+        final facts = jsonDecode(rows.single['facts'] as String) as JsonMap;
+        facts['watch'] = updated
+                .any((e) => (e.progress ?? 0) > 0 && (e.progress ?? 0) < 1)
+            ? 'watching'
+            : updated.isNotEmpty && updated.every((e) => (e.progress ?? 0) >= 1)
+                ? 'watched'
+                : 'unwatched';
+        for (final item in (facts['searchEpisodes'] as List).cast<JsonMap>()) {
+          final episode = item['episode'] as JsonMap;
+          if (changed.containsKey(episode['episodeId'])) {
+            episode['progress'] = changed[episode['episodeId']];
+          }
+        }
+        await db.update('next_library_index',
+            {'payload': jsonEncode(workJson(work)), 'facts': jsonEncode(facts)},
+            where: 'id=?', whereArgs: [workId]);
+      }
+      searchIndex.updateProgress(
+          workJson(work), updated.map(episodeJson).toList());
+    }
+    return LibraryProgress(works, episodes,
+        {for (final work in works.values) _workOffsets[work.workId]!: work});
+  }
+
+  final _episodeParents = <String, String>{};
+  Future<LibrarySnapshot> compose(Map<String, JsonMap> peers,
+      Map<String, bool> online, String? account) async {
+    _peers = peers;
+    _online = online;
+    accountId = account;
+    await _composeNow();
+    return snapshot;
+  }
+
+  Future<void> _save(String id, Object payload) async {
+    final encoded = jsonEncode(payload);
+    final fingerprint = _hash(payload);
+    final old = await db.query('ui_cache',
+        columns: ['fingerprint'], where: 'id=?', whereArgs: [id]);
+    if (old.isNotEmpty && old.single['fingerprint'] == fingerprint) return;
+    await db.insert(
+        'ui_cache', {'id': id, 'fingerprint': fingerprint, 'payload': encoded},
+        conflictAlgorithm: ConflictAlgorithm.replace);
+  }
+
+  Future<List<String>> _identities(String id) async => [
+        for (final b in await db.rawQuery(
+            "SELECT o.* FROM media_bindings b JOIN media_external_objects o ON o.id=b.object_id WHERE b.entity_id=? AND b.status='accepted' AND b.relation IN ('exact','contains') AND o.provider IN ('dandanplay','tmdb','bangumi')",
+            [id]))
+          jsonEncode([
+            b['provider'],
+            b['object_type'] == 'anime' ? 'work' : b['object_type'],
+            b['scope'],
+            b['external_id']
+          ])
+      ];
+  Future<String> _sample(String path) async {
+    final file = File(path), stat = await File(path).stat();
+    final stamp = '${stat.size}:${stat.modified.microsecondsSinceEpoch}';
+    if (_samples[path]?.$1 == stamp) return _samples[path]!.$2;
+    final input = await file.open();
+    try {
+      final head = await input.read(math.min(stat.size, 65536));
+      await input.setPosition(math.max(0, stat.size - 65536));
+      final tail = await input.read(65536);
+      final value = _hash([
+        stat.size,
+        sha256.convert(head).toString(),
+        sha256.convert(tail).toString()
+      ]);
+      _samples[path] = (stamp, value);
+      return value;
+    } finally {
+      await input.close();
+    }
+  }
+
+  Future<String?> _asset(String? path) async {
+    if (path == null) return null;
+    final real = await File(path).resolveSymbolicLinks();
+    final stat = await File(real).stat();
+    final id = 'asset:${_hash([
+          real,
+          stat.size,
+          stat.modified.microsecondsSinceEpoch
+        ])}';
+    _assets[id] = real;
+    return id;
+  }
+
+  Future<void> _buildLocal(String stamp) async {
+    final records = <JsonMap>[];
+    final reads = LibraryReads(ui.media.store);
+    final files = await ui.localFiles();
+    for (final row in await db.query('media_entities',
+        where: "kind='work'", orderBy: 'rowid')) {
+      final id = row['id'] as String;
+      // A work made from identities alone, left with none and with no file,
+      // is nothing the viewer has. It stays stored (progress, provenance)
+      // and shows again when it is bound again.
+      if ((jsonDecode(row['attributes'] as String) as Map)['localOnly'] !=
+              true &&
+          (await db.rawQuery(
+                      'WITH RECURSIVE t(id) AS (SELECT ? UNION ALL SELECT e.id FROM media_entities e JOIN t ON e.parent_id=t.id) '
+                      "SELECT EXISTS(SELECT 1 FROM media_bindings WHERE entity_id IN (SELECT id FROM t) AND status='accepted') "
+                      'OR EXISTS(SELECT 1 FROM media_file_episodes WHERE episode_id IN (SELECT id FROM t)) AS kept',
+                      [id]))
+                  .single['kept'] ==
+              0) {
+        continue;
+      }
+      final episodes = await ui.localEpisodes(id, files: files, reads: reads);
+      final work = workJson((await ui.localWork(id,
+          files: files, episodes: episodes, reads: reads))!);
+      work.remove('next');
+      final art = work['artwork'] as JsonMap;
+      for (final kind in ['poster', 'backdrop', 'logo'])
+        art[kind] = await _asset(art[kind] as String?);
+      if (!_added.containsKey(id)) {
+        final observed = await db.rawQuery(
+            'WITH RECURSIVE children(id) AS (SELECT ? UNION ALL SELECT e.id FROM media_entities e JOIN children c ON e.parent_id=c.id) SELECT MIN(created_at) AS added FROM media_bindings WHERE entity_id IN (SELECT id FROM children)',
+            [id]);
+        _added[id] =
+            DateTime.tryParse(observed.single['added'] as String? ?? '')
+                    ?.microsecondsSinceEpoch ??
+                DateTime.now().microsecondsSinceEpoch;
+      }
+      final identities = await _identities(id);
+      for (final release in await db.query('media_entities',
+          where: "kind='release' AND parent_id=?", whereArgs: [id])) {
+        identities.addAll((await _identities(release['id'] as String)).where(
+            (k) =>
+                ['work', 'tv', 'movie'].contains((jsonDecode(k) as List)[1])));
+      }
+      records.add({
+        'kind': 'work',
+        'id': id,
+        'keys': identities,
+        'added': _added[id],
+        'value': work,
+        'metadata': publicHarnessFacts(await reads.metadata(id)),
+        'attributes': jsonDecode(row['attributes'] as String)
+      });
+      records.last['searchTitles'] = [
+        for (final snapshot in await db.rawQuery(
+            "SELECT s.fields FROM media_snapshots s JOIN media_bindings b ON b.object_id=s.object_id JOIN media_entities e ON e.id=b.entity_id WHERE b.status='accepted' AND b.relation IN ('exact','contains') AND (e.id=? OR (e.kind='release' AND e.parent_id=?))",
+            [
+              id,
+              id
+            ]))
+          ...librarySearchTitles((jsonDecode(snapshot['fields'] as String)
+                  as Map)['metadata'] as Map? ??
+              jsonDecode(snapshot['fields'] as String) as Map)
+      ];
+      final sourceIds = <String>{};
+      for (final f in await db.rawQuery(
+          "SELECT f.attributes FROM media_entities f JOIN media_file_episodes fe ON fe.file_id=f.id JOIN media_entities e ON e.id=fe.episode_id JOIN media_entities r ON r.id=e.parent_id WHERE r.parent_id=?",
+          [id])) {
+        final remote = (jsonDecode(f['attributes'] as String)
+            as Map)['remoteSource'] as Map?;
+        sourceIds.add(remote?['sourceId'] as String? ?? 'local');
+      }
+      records.last['sourceIds'] = sourceIds.toList();
+      for (final episode in episodes) {
+        final value = episodeJson(episode);
+        value['still'] = await _asset(episode.still);
+        final locations = <JsonMap>[];
+        final nativeFiles = await db.rawQuery(
+            "SELECT l.locator,l.file_id AS fileId,e.start_ms AS startMs,e.end_ms AS endMs FROM media_locations l JOIN media_file_episodes e ON e.file_id=l.file_id WHERE e.episode_id=? AND l.owner_device_id=? AND l.source='local' AND l.available=1",
+            [episode.episodeId, ui.media.store.ownerDeviceId]);
+        for (final f in nativeFiles) {
+          final path = f['locator'] as String;
+          if (!await File(path).exists()) continue;
+          locations.add({
+            'fileId': f['fileId'],
+            'sample': await _sample(path),
+            'startMs': f['startMs'] ?? 0,
+            'endMs': f['endMs']
+          });
+        }
+        if (nativeFiles.isNotEmpty) value['playable'] = locations.isNotEmpty;
+        final stamp = files
+            .ofEpisode(episode.episodeId)
+            .map((f) => ((f['progress'] as Map?)?['lastWatchedAt'] ??
+                (f['progress'] as Map?)?['lastWatchTime']) as String?)
+            .whereType<String>()
+            .toList()
+          ..sort();
+        final tracks = <JsonMap>[];
+        for (final t in await ui.heat.tracks(episode.episodeId, reads: reads)) {
+          final local = t['local_file'] as JsonMap?,
+              video = t['video'] as JsonMap;
+          tracks.add({
+            'bindingId': t['id'],
+            'source': video['sourceId'],
+            'platform': local?['platform'] ?? video['sourceId'],
+            'platformVideoId': local?['platformVideoId'] ?? video['videoId'],
+            'count': local?['count'] ??
+                await ui.heat.store.entryCount(t['cache_key'] as String),
+            'enabled': t['enabled'] == 1,
+            'origin': local != null
+                ? 'sidecar'
+                : t['provenance'] != null
+                    ? 'import'
+                    : 'binding'
+          });
+        }
+        final subtitles =
+            await ui.subtitles?.episodeSubtitles(episode.episodeId);
+        records.add({
+          'kind': 'episode',
+          'id': episode.episodeId,
+          'workId': id,
+          'keys': await _identities(episode.episodeId),
+          'files': locations,
+          'metadata':
+              publicHarnessFacts(await reads.metadata(episode.episodeId)),
+          'danmaku': tracks,
+          'subtitles': [
+            for (final t in subtitles?.tracks ?? <JsonMap>[])
+              publicHarnessFacts(t)
+          ],
+          'subtitleFiles': [
+            for (final t in subtitles?.files ?? <JsonMap>[])
+              publicHarnessFacts(t)
+          ],
+          'watchedAt': stamp.isEmpty
+              ? null
+              : DateTime.parse(stamp.last).toUtc().toIso8601String(),
+          'value': value
+        });
+      }
+    }
+    if (_added.isNotEmpty) await _save('mesh:added', _added);
+    final local = <String, Object?>{'records': records};
+    local['version'] = stamp;
+    _local = local;
+  }
+
+  Future<void> _composeNow() async {
+    compositions++;
+    final indexRows = <JsonMap>[];
+    // Records are not copied deeply: what is changed below is copied where
+    // it is changed.
+    final records = <JsonMap>[];
+    for (final r in (_local['records'] as List).cast<JsonMap>()) {
+      if (r['kind'] == 'watch') continue;
+      final value = {...r['value'] as JsonMap};
+      final isWork = r['kind'] == 'work';
+      final paths = isWork ? {...value['artwork'] as JsonMap} : value;
+      if (isWork) value['artwork'] = paths;
+      for (final key in isWork ? ['poster', 'backdrop', 'logo'] : ['still']) {
+        if (paths[key] case final String token) paths[key] = _assets[token];
+      }
+      records.add({
+        ...r,
+        'value': value,
+        'deviceId': own,
+        'name': '',
+        'online': true,
+        'local': true
+      });
+    }
+    for (final peer in _peers.entries) {
+      if (accountId != null && peer.value['account'] != accountId) {
+        continue;
+      }
+      for (final r in (peer.value['records'] as List).cast<JsonMap>()) {
+        records.add({
+          ...r,
+          'deviceId': peer.key,
+          'name': peer.value['name'],
+          'online': _online[peer.key] == true,
+          'local': false
+        });
+      }
+    }
+    final works = <JsonMap>[], episodesOf = <String, List<JsonMap>>{};
+    String ownerOf(Object? device, Object? work) => '$device\u0000$work';
+    for (final r in records) {
+      if (r['kind'] == 'work') {
+        works.add(r);
+      } else if (r['kind'] == 'episode') {
+        (episodesOf[ownerOf(r['deviceId'], r['workId'])] ??= []).add(r);
+      }
+    }
+    final roots = List.generate(works.length, (i) => i);
+    int root(int i) {
+      while (roots[i] != i) {
+        roots[i] = roots[roots[i]];
+        i = roots[i];
+      }
+      return i;
+    }
+
+    final owners = <String, int>{};
+    final workIndex = <String, int>{};
+    for (var i = 0; i < works.length; i++) {
+      final w = works[i],
+          ref = _ref(w['deviceId'] as String, w['id'] as String);
+      workIndex[ref] = i;
+      final keys = (w['keys'] as List).cast<String>().toList();
+      for (final e
+          in episodesOf[ownerOf(w['deviceId'], w['id'])] ?? <JsonMap>[]) {
+        keys.addAll(
+            (e['files'] as List).cast<Map>().map((f) => 'file:${f['sample']}'));
+      }
+      for (final key in keys) {
+        final old = owners[key];
+        if (old != null) {
+          roots[root(i)] = root(old);
+        } else {
+          owners[key] = i;
+        }
+      }
+    }
+    final groups = <int, List<JsonMap>>{};
+    for (var i = 0; i < works.length; i++) {
+      (groups[root(i)] ??= []).add(works[i]);
+    }
+    // Every episode under the group its work is in, in the order of records.
+    final episodesIn = <int, List<JsonMap>>{};
+    for (final w in works) {
+      final group =
+          root(workIndex[_ref(w['deviceId'] as String, w['id'] as String)]!);
+      (episodesIn[group] ??= [])
+          .addAll(episodesOf[ownerOf(w['deviceId'], w['id'])] ?? const []);
+    }
+    final newWorks = <String, UiWork>{};
+    final newManagement = <String, List<JsonMap>>{};
+    final newEpisodes = <String, List<UiEpisode>>{};
+    final newAliases = <String, String>{};
+    final newLocations = <String, List<JsonMap>>{};
+    final newEpisodeKeys = <String, List<String>>{};
+    final newLocalTargets = <String, String>{};
+    final newEvidence = <String, JsonMap>{};
+    final sorted = groups.entries.toList()
+      ..sort((a, b) => b.value
+          .map((w) => w['added'] as int)
+          .reduce(math.max)
+          .compareTo(a.value.map((w) => w['added'] as int).reduce(math.max)));
+    for (final group in sorted) {
+      final members = group.value
+        ..sort((a, b) =>
+            (a['local'] == true ? 0 : 1).compareTo(b['local'] == true ? 0 : 1));
+      final keys = members
+          .expand((w) => (w['keys'] as List).cast<String>())
+          .toSet()
+          .toList()
+        ..sort();
+      final id = keys.isEmpty
+          ? (members.first['local'] == true
+              ? members.first['id'] as String
+              : _ref(members.first['deviceId'] as String,
+                  members.first['id'] as String))
+          : 'mesh-work:${_hash(keys.first)}';
+      _historicalIds[id] = members
+          .map((w) => _ref(w['deviceId'] as String, w['id'] as String))
+          .toList();
+      for (final w in members) {
+        newAliases[_ref(w['deviceId'] as String, w['id'] as String)] = id;
+        if (w['local'] == true) newAliases[w['id'] as String] = id;
+      }
+      final sourceEpisodes = episodesIn[group.key] ?? <JsonMap>[];
+      final episodeRoots = List.generate(sourceEpisodes.length, (i) => i);
+      int episodeRoot(int i) {
+        while (episodeRoots[i] != i) {
+          episodeRoots[i] = episodeRoots[episodeRoots[i]];
+          i = episodeRoots[i];
+        }
+        return i;
+      }
+
+      final contentOwners = <String, int>{};
+      final episodeTokens = <List<String>>[];
+      for (var i = 0; i < sourceEpisodes.length; i++) {
+        final e = sourceEpisodes[i];
+        final v = e['value'] as JsonMap;
+        final identity = (e['keys'] as List).cast<String>().toList()..sort();
+        final numbered = switch (v['number']) {
+          final int n when n > 0 => '${v['season'] ?? 1}:$n',
+          _ => null,
+        };
+        final tokens = [
+          if (numbered != null) 'number:$numbered',
+          ...identity.map((k) => 'identity:$k'),
+          for (final f in (e['files'] as List).cast<Map>())
+            'file:${f['sample']}:${f['startMs']}:${f['endMs']}'
+        ];
+        episodeTokens.add(tokens);
+        for (final token in tokens) {
+          final old = contentOwners[token];
+          if (old != null) {
+            episodeRoots[episodeRoot(i)] = episodeRoot(old);
+          } else {
+            contentOwners[token] = i;
+          }
+        }
+      }
+      final groupedEpisodes = <int, List<JsonMap>>{};
+      final groupedTokens = <int, Set<String>>{};
+      for (var i = 0; i < sourceEpisodes.length; i++) {
+        (groupedEpisodes[episodeRoot(i)] ??= []).add(sourceEpisodes[i]);
+        (groupedTokens[episodeRoot(i)] ??= {}).addAll(episodeTokens[i]);
+      }
+      final episodeGroups = <String, List<JsonMap>>{};
+      for (final g in groupedEpisodes.entries) {
+        final tokens = groupedTokens[g.key]!.toList()..sort();
+        final key = tokens.firstOrNull ??
+            _ref(g.value.first['deviceId'] as String,
+                g.value.first['id'] as String);
+        episodeGroups[key] = g.value;
+      }
+      final episodes = <UiEpisode>[];
+      final searchTitles = <String, Set<String>>{};
+      final mergedIds = <String, String>{};
+      for (final entry in episodeGroups.entries) {
+        final es = entry.value
+          ..sort((a, b) => (a['local'] == true
+                  ? 0
+                  : a['online'] == true
+                      ? 1
+                      : 2)
+              .compareTo(b['local'] == true
+                  ? 0
+                  : b['online'] == true
+                      ? 1
+                      : 2));
+        final selected = es.firstWhere(
+            (e) =>
+                (e['value'] as Map)['playable'] == true && e['online'] == true,
+            orElse: () => es.first);
+        final eid = 'mesh-episode:${_hash([id, entry.key])}';
+        _historicalIds[eid] = es
+            .map((e) => _ref(e['deviceId'] as String, e['id'] as String))
+            .toList();
+        newEvidence[eid] = selected;
+        if (selected['local'] == true) {
+          newLocalTargets[eid] = selected['id'] as String;
+        }
+        final watchKeys = <String>{'episode:$eid'};
+        final locations = <JsonMap>[];
+        JsonMap? watched;
+        final titles = searchTitles[eid] = {};
+        for (final e in es) {
+          final ref = _ref(e['deviceId'] as String, e['id'] as String);
+          newAliases[ref] = eid;
+          mergedIds[ref] = eid;
+          if (e['local'] == true) newAliases[e['id'] as String] = eid;
+          watchKeys.add(ref);
+          titles.addAll(librarySearchTitles(e['value'] as Map));
+          for (final f in (e['files'] as List).cast<JsonMap>()) {
+            watchKeys.add('file:${f['sample']}:${f['startMs']}:${f['endMs']}');
+            if (!locations.any((l) =>
+                l['sample'] == f['sample'] &&
+                l['startMs'] == f['startMs'] &&
+                l['endMs'] == f['endMs'])) {
+              locations.add({
+                ...f,
+                'deviceId': e['deviceId'],
+                'sourceEpisodeId': e['id'],
+                'local': e['local'],
+                'online': e['online']
+              });
+            }
+          }
+          final value = e['value'] as Map;
+          if (value['progress'] != null && e['watchedAt'] != null) {
+            final observation = <String, Object?>{
+              'progress': value['progress'],
+              'at': e['watchedAt'],
+              'writer': e['deviceId']
+            };
+            if (watched == null || _newer(observation, watched)) {
+              watched = observation;
+            }
+          }
+        }
+        for (final key in watchKeys) {
+          final observation = _progress[key];
+          if (observation != null &&
+              (watched == null || _newer(observation, watched))) {
+            watched = observation;
+          }
+        }
+        final value = <String, Object?>{
+          ...selected['value'] as JsonMap,
+          'episodeId': eid,
+          'workId': id,
+          if (watched != null) 'progress': watched['progress']
+        };
+        newEpisodeKeys[eid] = watchKeys.toList();
+        newLocations[eid] = locations;
+        episodes.add(episodeValue(value,
+            device: selected['local'] == true
+                ? null
+                : UiDevice(
+                    name: selected['name'] as String,
+                    online: selected['online'] as bool)));
+      }
+      sortEpisodes(episodes, seasonless: 1);
+      final value = <String, Object?>{
+        ...members.first['value'] as JsonMap,
+        'workId': id
+      };
+      newEvidence[id] = members.first;
+      final sourceEpisodesOf = <String, List<JsonMap>>{};
+      for (final e in sourceEpisodes) {
+        (sourceEpisodesOf[ownerOf(e['deviceId'], e['workId'])] ??= []).add(e);
+      }
+      newManagement[id] = [
+        for (final member in members)
+          {
+            'deviceId': member['deviceId'],
+            'workId': member['id'],
+            'local': member['local'],
+            'online': member['online'],
+            'reason': member['online'] == true ? null : 'source_device_offline',
+            'episodes': [
+              for (final e in sourceEpisodesOf[
+                      ownerOf(member['deviceId'], member['id'])] ??
+                  <JsonMap>[])
+                {
+                  'episodeId': e['id'],
+                  'mergedEpisodeId': newAliases[
+                      _ref(e['deviceId'] as String, e['id'] as String)],
+                  'fileIds': (e['files'] as List)
+                      .cast<Map>()
+                      .map((f) => f['fileId'])
+                      .toSet()
+                      .toList()
+                }
+            ],
+          }
+      ];
+      // The first member's artwork is copied: the others fill its gaps.
+      value['artwork'] = {...value['artwork'] as JsonMap};
+      for (final w in members.skip(1)) {
+        final other = w['value'] as JsonMap;
+        if (value['title'] == '未命名作品') value['title'] = other['title'];
+        for (final field in [
+          'originalTitle',
+          'year',
+          'studio',
+          'overview',
+          'runtimeMs'
+        ]) {
+          value[field] ??= other[field];
+        }
+        final art = value['artwork'] as JsonMap,
+            otherArt = other['artwork'] as JsonMap;
+        for (final field in ['poster', 'backdrop', 'logo', 'tint']) {
+          art[field] ??= otherArt[field];
+        }
+        for (final field in ['genres', 'ratings', 'danmaku']) {
+          if ((value[field] as List).isEmpty) value[field] = other[field];
+        }
+      }
+      // A film when an identity is a TMDB movie and none a TMDB series, as
+      // `IdentityStore.workIsFilm` tells it for one device.
+      final tmdb = {
+        for (final key in keys)
+          if (jsonDecode(key) case ['tmdb', final String type, ...]) type
+      };
+      value['film'] = tmdb.contains('movie') && !tmdb.contains('tv');
+      newEpisodes[id] = episodes;
+      value['episodeCount'] = math.max(
+          episodes.length,
+          members
+              .map((w) => ((w['value'] as Map)['episodeCount'] as int?) ?? 0)
+              .reduce(math.max));
+      final devices = <String, UiDevice>{};
+      for (final w in members) {
+        if (w['local'] != true) {
+          devices[w['deviceId'] as String] =
+              UiDevice(name: w['name'] as String, online: w['online'] as bool);
+        }
+      }
+      final work =
+          newWorks[id] = workValue(value, episodes, devices.values.toList());
+      final types = <String>{};
+      for (final member in members) {
+        final attrs = member['attributes'] as Map;
+        final fields = (member['metadata'] as Map)['fields'] as Map;
+        final type = fields['type'] ?? attrs['type'] ?? attrs['workType'];
+        if (const {'anime', 'series', 'movie'}.contains(type))
+          types.add(type as String);
+        for (final key in (member['keys'] as List).cast<String>()) {
+          final identity = jsonDecode(key) as List;
+          if (identity[1] == 'movie') types.add('movie');
+          if (identity[1] == 'tv') types.add('series');
+          if (identity[0] == 'dandanplay' || identity[0] == 'bangumi')
+            types.add('anime');
+        }
+      }
+      indexRows.add({
+        'id': id,
+        'added': members.map((w) => w['added'] as int).reduce(math.max),
+        'payload': workJson(work),
+        'facts': {
+          'sourceIds': members
+              .expand((w) => (w['sourceIds'] as List? ?? []).cast<String>())
+              .toSet()
+              .toList(),
+          'deviceIds': members.map((w) => w['deviceId']).toSet().toList(),
+          'types': types.toList(),
+          'identified': keys.isNotEmpty,
+          'identityKeys': keys,
+          'searchTitles': <String>{
+            for (final member in members) ...[
+              ...librarySearchTitles(member['value'] as Map),
+              ...librarySearchTitles(member['attributes'] as Map),
+              ...librarySearchTitles(
+                  (member['metadata'] as Map)['fields'] as Map),
+              ...(member['searchTitles'] as List? ?? []).cast<String>(),
+            ]
+          }.toList(),
+          'searchYears': <int>{
+            for (final member in members)
+              if ((member['value'] as Map)['year'] case final int year) year
+          }.toList(),
+          'searchEpisodes': [
+            for (final episode in episodes)
+              {
+                'episode': episodeJson(episode),
+                'titles':
+                    (searchTitles[episode.episodeId] ?? <String>{}).toList(),
+              }
+          ],
+          'watch': episodes
+                  .any((e) => (e.progress ?? 0) > 0 && (e.progress ?? 0) < 1)
+              ? 'watching'
+              : episodes.isNotEmpty &&
+                      episodes.every((e) => (e.progress ?? 0) >= 1)
+                  ? 'watched'
+                  : 'unwatched',
+          'year': value['year'],
+          'genres': value['genres'],
+          'rating': (value['ratings'] as List).isEmpty
+              ? null
+              : ((value['ratings'] as List).first as Map)['value'],
+          'ratingSource': (value['ratings'] as List).isEmpty
+              ? null
+              : ((value['ratings'] as List).first as Map)['source']
+        }
+      });
+    }
+    for (final e in _historicalIds.entries) {
+      final ref = e.value.where(newAliases.containsKey).firstOrNull;
+      if (ref != null &&
+          !newWorks.containsKey(e.key) &&
+          !newLocations.containsKey(e.key)) {
+        newAliases[e.key] = newAliases[ref]!;
+      }
+    }
+    // Publish only complete background projections.
+    _works = newWorks;
+    _orderedWorks = newWorks.values.toList();
+    _workOffsets = {
+      for (var i = 0; i < _orderedWorks.length; i++) _orderedWorks[i].workId: i
+    };
+    _management = newManagement;
+    _episodes = newEpisodes;
+    _aliases = newAliases;
+    _locations = newLocations;
+    _episodeKeys = newEpisodeKeys;
+    _localTargets = newLocalTargets;
+    _evidence = newEvidence;
+    _episodeParents
+      ..clear()
+      ..addEntries(newEpisodes.entries.expand((entry) => entry.value
+          .map((episode) => MapEntry(episode.episodeId, entry.key))));
+    if (_historicalIds.isNotEmpty) await _save('mesh:aliases', _historicalIds);
+    await replaceLibraryIndex(db, indexRows);
+    await searchIndex.replace(indexRows);
+  }
+
+  LibrarySnapshot get snapshot => LibrarySnapshot(
+      _assets,
+      _works,
+      _episodes,
+      _aliases,
+      _locations,
+      _localTargets,
+      _evidence,
+      _management,
+      searchIndex,
+      _orderedWorks,
+      _episodeParents);
+}
+
+final class LibrarySnapshot {
+  const LibrarySnapshot(
+      this.assets,
+      this.works,
+      this.episodes,
+      this.aliases,
+      this.locations,
+      this.localTargets,
+      this.evidence,
+      this.management,
+      this.searchIndex,
+      this.orderedWorks,
+      this.episodeParents);
+  final Map<String, String> assets, aliases, localTargets;
+  final Map<String, UiWork> works;
+  final Map<String, List<UiEpisode>> episodes;
+  final Map<String, List<JsonMap>> locations, management;
+  final Map<String, JsonMap> evidence;
+  final LibrarySearchIndex searchIndex;
+  final List<UiWork> orderedWorks;
+  final Map<String, String> episodeParents;
+}
+
+final class LibraryProgress {
+  const LibraryProgress(this.works, this.episodes, this.orderedUpdates);
+  final Map<String, UiWork> works;
+  final Map<String, List<UiEpisode>> episodes;
+  final Map<int, UiWork> orderedUpdates;
+}

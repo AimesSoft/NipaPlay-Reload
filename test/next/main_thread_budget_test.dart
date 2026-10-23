@@ -28,7 +28,7 @@ import '../security/memory_vault.dart';
 import 'download_test_support.dart';
 import 'media_test_support.dart';
 import 'support/big_profile.dart';
-import 'support/main_thread_probe.dart';
+import 'support/cpu_budget_probe.dart';
 
 /// The performance line for Next on the main isolate, over a large profile:
 /// no single stretch of Next's own work holds the isolate long, and while
@@ -99,7 +99,8 @@ void main() {
 
   test('a large profile keeps the main isolate free', () async {
     final backend = FakeDownloadBackend(profile.root);
-    final probe = MainThreadProbe.start()..verbose = true;
+    final probe = CpuBudgetProbe()..verbose = true;
+    await probe.run(() async {
     // What the machine does to an empty process, for the idle limits.
     await Future<void>.delayed(const Duration(seconds: 5));
     probe.mark('baseline');
@@ -176,6 +177,8 @@ void main() {
     for (var i = 0; i < 3; i++) {
       await home();
     }
+    const regressionMs = int.fromEnvironment('NEXT_PERF_INJECT_BLOCK_MS');
+    if (regressionMs > 0) probe.injectBlock(Duration(milliseconds: regressionMs));
     probe.mark('home refresh x3');
 
     // A Nipa turn: the runtime's output read in, her calls answered, her
@@ -248,6 +251,7 @@ void main() {
 
     await Future<void>.delayed(const Duration(seconds: 6));
     probe.mark('idle after');
+    });
     probe.stop();
     // NEXT_PERF_HOLD keeps the process for a profiler to read afterwards.
     final hold = int.tryParse(const String.fromEnvironment('NEXT_PERF_HOLD')) ?? 0;

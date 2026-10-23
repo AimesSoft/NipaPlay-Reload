@@ -338,6 +338,7 @@ final class NextRuntime extends ChangeNotifier {
   late final HarnessHooks _hooks;
   StreamSubscription<Job>? _jobEvents;
   StreamSubscription<JsonMap>? _fileEvents;
+  StreamSubscription<Iterable<WatchHistoryItem>>? _historyAdditions;
   Future<void> _hookEvents = Future.value();
   String? _lastPlaybackStatus, _lastPlaybackPath;
   Set<String> _libraryPaths = {};
@@ -814,23 +815,22 @@ final class NextRuntime extends ChangeNotifier {
                 () => ServiceProvider.nextCore.followups.libraryFileAdded(file));
           }
         }));
-    ServiceProvider.watchHistoryProvider.addListener(_libraryChanged);
+    _historyAdditions = ServiceProvider.watchHistoryProvider.libraryCandidates
+        .listen(_observeLibrary);
     playback.media.addListener(_playbackChanged);
     playback.transport.addListener(_playbackChanged);
   }
 
-  void _libraryChanged() => _queueHook(_observeLibrary);
-  Future<void> _observeLibrary() async {
-    final files = {
-      for (final item in ServiceProvider.watchHistoryProvider.history)
-        if (!_libraryPaths.contains(item.filePath))
-          item.filePath: {'path': item.filePath, 'via': 'classic_history'},
-    };
-    for (final entry in files.entries) {
-      if (_libraryPaths.add(entry.key)) {
-        await _hooks.emit('library.file_added', entry.key, entry.value);
-        await _reportLibrary(
-            () => ServiceProvider.nextCore.followups.libraryFileAdded(entry.value));
+  void _observeLibrary(Iterable<WatchHistoryItem> additions) {
+    for (final item in additions) {
+      final path = item.filePath;
+      if (_libraryPaths.add(path)) {
+        final facts = <String, Object?>{'path': path, 'via': 'classic_history'};
+        _queueHook(() async {
+          await _hooks.emit('library.file_added', path, facts);
+          await _reportLibrary(
+              () => ServiceProvider.nextCore.followups.libraryFileAdded(facts));
+        });
       }
     }
   }
@@ -919,7 +919,8 @@ final class NextRuntime extends ChangeNotifier {
     ServiceProvider.nextCore.desktopSystem.detach();
     playback.media.removeListener(_playbackChanged);
     playback.transport.removeListener(_playbackChanged);
-    ServiceProvider.watchHistoryProvider.removeListener(_libraryChanged);
+    await _historyAdditions?.cancel();
+    _historyAdditions = null;
     await _jobEvents?.cancel();
     await _fileEvents?.cancel();
     _jobEvents = null;

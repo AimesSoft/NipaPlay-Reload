@@ -30,11 +30,14 @@ final class StateView {
       this.readAll,
       this.cursorKey,
       this.cursorOrder = const [],
+      this.background = false,
       this.relations = const {}});
   final String name, description;
   final ObjectSchema fields;
   final StateReader read;
   final Future<StateRows> Function()? readAll;
+  /// Reconstructed against the library worker's own database connection.
+  final bool background;
   /// Views whose rows can be removed use a value anchor instead of an offset.
   final String? cursorKey;
   final List<JsonMap> cursorOrder;
@@ -144,6 +147,7 @@ final class StateCapability implements Capability {
     actions = [_StateAction(this, false), _StateAction(this, true)];
   }
   final Map<String, StateView> views;
+  Future<JsonMap> Function(JsonMap)? queryWorker;
   @override
   late final List<Action> actions;
 
@@ -232,6 +236,7 @@ final class StateCapability implements Capability {
   }
 
   Future<JsonMap> query(JsonMap input) async {
+    if (queryWorker case final worker?) return worker(input);
     final view = _view(input['view'] as String);
     _validate(view, input);
     if (utf8.encode(jsonEncode(input)).length > 64 * 1024) {

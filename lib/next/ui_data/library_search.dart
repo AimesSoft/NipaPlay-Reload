@@ -80,6 +80,19 @@ final class LibrarySearchIndex {
         ref.externalId
       ])];
 
+  /// Progress cannot change titles or postings. Touch only this work and
+  /// its episode documents; preserve their search order and token indexes.
+  void updateProgress(JsonMap work, List<JsonMap> episodes) {
+    final workId = work['workId'] as String;
+    final document = _documents[_ids['work:$workId']];
+    if (document == null) return;
+    document.work['next'] = work['next'];
+    for (final episode in episodes) {
+      final entry = _documents[_ids["episode:${episode['episodeId']}"]];
+      if (entry != null) entry.episode?['progress'] = episode['progress'];
+    }
+  }
+
   void _add(String key, int order, JsonMap work, JsonMap? episode,
       List<String> fields) {
     final normalized =

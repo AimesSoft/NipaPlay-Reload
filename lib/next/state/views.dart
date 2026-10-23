@@ -297,6 +297,7 @@ List<StateView> publicStateViews(
           name: name,
           description: description,
           fields: fields,
+          background: true,
           relations: relations,
           read: (offset, limit) async {
             final rows =
@@ -597,6 +598,7 @@ List<StateView> publicStateViews(
         transform: (row) async => binding(row)),
     for (final name in ['history.entries', 'history.continue_watching'])
       StateView(
+          background: true,
           name: name,
           description:
               'Classic in-memory history. Classic records a file when it scans or adds it, so a row with played=false is a file nobody has played yet. Returns unavailable before a history supplier is attached. No database migration or refresh.',

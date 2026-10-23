@@ -58,11 +58,24 @@ void main() {
     });
     final provider = WatchHistoryProvider();
     final publishedCounts = <int>[];
+    final candidates = <String>[];
+    final additions = provider.libraryCandidates.listen((items) {
+      candidates.addAll(items.map((item) => item.filePath));
+    });
     provider.addListener(() => publishedCounts.add(provider.history.length));
     await provider.loadHistory();
     expect(publishedCounts, contains(40));
     expect(publishedCounts, contains(1001));
     expect(await database.getHistoryByFilePath(offline), isNotNull);
+    expect(candidates, contains(offline));
+    candidates.clear();
+    final existing = provider.history.first;
+    await provider.addOrUpdateHistory(existing.copyWith(lastPosition: 600));
+    expect(candidates, isEmpty, reason: 'progress must not rescan the library');
+    final added = existing.copyWith(filePath: 'https://test.invalid/new.mp4');
+    await provider.addOrUpdateHistory(added);
+    expect(candidates, [added.filePath]);
+    await additions.cancel();
     provider.dispose();
   });
 }
