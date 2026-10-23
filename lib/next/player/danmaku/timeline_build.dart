@@ -52,7 +52,7 @@ DanmakuTimeline buildTimeline(Map<String, Map<String, dynamic>> tracks,
     {Set<String> spoilerTexts = const {},
     List<Map<String, dynamic>> externalSegments = const []}) {
   final watch = Stopwatch()..start();
-  // Classic's rule format (video_player_state_subtitles.dart `_isRegexRule`):
+  // Classic's rule format:
   // `name/expression/`; anything else is a literal. Each rule is compiled
   // once here, not once per comment.
   final literals = <String>[];
