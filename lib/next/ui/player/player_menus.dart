@@ -2,8 +2,6 @@ import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:flutter/widgets.dart';
-import 'package:nipaplay/utils/video_player_state.dart';
-import 'package:provider/provider.dart';
 
 import '../../ui_data/ui_data.dart';
 import '../detail/episodes.dart' show HeatPainter;
@@ -120,8 +118,9 @@ class _SubtitleLook extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) =>
-      Selector<VideoPlayerState, (PlayerDial, PlayerDial?)>(
-        selector: (_, s) => (
+      PlaybackSelector<(PlayerDial, PlayerDial?)>(
+        playback: playback,
+        selector: (_) => (
           playback.subtitleDelay(on),
           playback.canScaleSubtitles(on) ? playback.subtitleScale(on) : null,
         ),
@@ -263,7 +262,7 @@ class _EpisodeMenuState extends State<EpisodeMenu> {
 
   Future<void> _load() async {
     final known = await PlayingWork.of(
-        widget.shell.services.data, widget.playback.state.currentVideoPath);
+        widget.shell.services.data, widget.playback.path);
     if (!mounted) return;
     if (known != null && known.episodes.isNotEmpty) {
       setState(() => _known = known);

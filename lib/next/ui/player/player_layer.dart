@@ -4,9 +4,6 @@ import 'dart:math' as math;
 
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
-import 'package:nipaplay/services/intro_skip/skip_segment.dart';
-import 'package:nipaplay/utils/video_player_state.dart';
-import 'package:provider/provider.dart';
 import 'package:window_manager/window_manager.dart';
 
 import '../../player/perf/budget.dart';
@@ -37,7 +34,7 @@ enum _Menu { subtitles, episodes, more }
 /// the timeline with its heat and the controls below.
 ///
 /// They come with the pointer and go when it rests, as Classic's do
-/// ([VideoPlayerState.showControls]); they stay while the pointer is on
+/// ([NextPlayback.showControls]); they stay while the pointer is on
 /// them or a menu is open. ⌘K asks Nipa, in the panel beside the video:
 /// the picture and these controls make room for it ([NextStage]) and keep
 /// working there as they do in the whole window; what is said goes with
@@ -55,7 +52,6 @@ class NextPlayerLayer extends StatefulWidget {
 
 class _NextPlayerLayerState extends State<NextPlayerLayer> {
   NextShellController? _shell;
-  NextPlayback? _own;
   NextPlayback? _playback;
   _Watch? _watch;
   bool _overChrome = false;
@@ -85,17 +81,16 @@ class _NextPlayerLayerState extends State<NextPlayerLayer> {
       _shell?.panelOpen.removeListener(_panelChanged);
       _shell = shell..panelOpen.addListener(_panelChanged);
     }
-    final playback = NextPlaybackScope.maybeOf(context) ??
-        (_own ??= NextPlayback(context.read<VideoPlayerState>()));
+    final playback = NextPlaybackScope.of(context);
     if (!identical(playback, _playback)) {
       _release();
       _playback = playback;
       _syncHold();
     }
     if (!identical(_watch?.chat, shell.chat) ||
-        !identical(_watch?.state, playback.state)) {
+        !identical(_watch?.playback, playback)) {
       _watch?.dispose();
-      _watch = _Watch(shell.chat, playback.state, shell.services.data);
+      _watch = _Watch(shell.chat, playback, shell.services.data);
     }
   }
 
@@ -238,11 +233,11 @@ class _NextPlayerLayerState extends State<NextPlayerLayer> {
 
   Widget _layer(NextPlayback playback) {
     final shell = _shell!;
-    return Selector<VideoPlayerState, (bool, bool, bool)>(
-      selector: (_, s) => (
+    return PlaybackSelector<(bool, bool, bool)>(
+      playback: playback,
+      selector: (s) => (
         s.hasVideo,
-        s.status == PlayerStatus.loading ||
-            s.status == PlayerStatus.recognizing,
+        s.transport.value.opening,
         s.showControls,
       ),
       builder: (context, frame, _) {
@@ -379,8 +374,9 @@ class _NextPlayerLayerState extends State<NextPlayerLayer> {
 /// library knows it as, where the video is and whether it is paused, read
 /// the moment something is said. Facts only: nothing acts on them here.
 class _Watch {
-  _Watch(this.chat, this.state, this.data) {
-    state.addListener(_changed);
+  _Watch(this.chat, this.playback, this.data) {
+    playback.media.addListener(_changed);
+    playback.transport.addListener(_changed);
     // Not in the build that mounted the layer.
     scheduleMicrotask(() {
       if (_gone) return;
@@ -390,13 +386,14 @@ class _Watch {
   }
 
   final NipaChat chat;
-  final VideoPlayerState state;
+  final NextPlayback playback;
   final NextUiData data;
   bool _gone = false;
   String? _path;
   Future<UiNowPlaying?>? _known;
 
-  String? get _playing => state.hasVideo ? state.currentVideoPath : null;
+  String? get _playing =>
+      playback.transport.value.hasVideo ? playback.media.value.path : null;
 
   Future<UiNowPlaying?> _lookup(String path) {
     if (data case final NextNowPlaying library) {
@@ -429,9 +426,9 @@ class _Watch {
     final path = _playing;
     if (path == null) return null;
     // Where it is when this is asked, before anything waits.
-    final position = state.position;
-    final duration = state.duration;
-    final paused = state.status == PlayerStatus.paused;
+    final position = playback.position;
+    final duration = playback.duration;
+    final paused = playback.transport.value.phase == PlaybackPhase.paused;
     final known = (path == _path ? _known : null) ?? _lookup(path);
     return Watching(
       path: path,
@@ -445,7 +442,8 @@ class _Watch {
 
   void dispose() {
     _gone = true;
-    state.removeListener(_changed);
+    playback.media.removeListener(_changed);
+    playback.transport.removeListener(_changed);
     // Not while the tree that let the layer go is locked.
     final read = this.read;
     scheduleMicrotask(() => chat.unwatch(read));
@@ -570,8 +568,8 @@ class _TitlesState extends State<_Titles> {
 
   @override
   Widget build(BuildContext context) =>
-      Selector<VideoPlayerState, (String?, String?, String?)>(
-        selector: (_, s) => (s.currentVideoPath, s.animeTitle, s.episodeTitle),
+      PlaybackSelector<(String?, String?, String?)>(
+        selector: (s) => (s.path, s.workTitle, s.episodeTitle),
         builder: (context, v, _) {
           if (v.$1 != _path) {
             _path = v.$1;
@@ -719,12 +717,13 @@ class _BottomBar extends StatelessWidget {
       child: Padding(
         padding: const EdgeInsets.fromLTRB(_side, 0, _side, 24),
         child: Column(mainAxisSize: MainAxisSize.min, children: [
-          Selector<VideoPlayerState, (int, int, int, int)>(
-            selector: (_, s) => (
+          PlaybackSelector<(int, int, int, int)>(
+            playback: playback,
+            selector: (s) => (
               s.position.inMilliseconds,
               s.duration.inMilliseconds,
-              s.bufferedPosition,
-              s.danmakuListVersion,
+              s.buffered.inMilliseconds,
+              s.danmakuVersion.value,
             ),
             builder: (context, t, _) => PlayerTimeline(
               position: Duration(milliseconds: t.$1),
@@ -746,8 +745,9 @@ class _BottomBar extends StatelessWidget {
                 width: math.max(room.maxWidth, _row),
                 height: _button,
                 child: Row(children: [
-                  Selector<VideoPlayerState, bool>(
-                    selector: (_, s) => s.status == PlayerStatus.playing,
+                  PlaybackSelector<bool>(
+                    playback: playback,
+                    selector: (s) => s.transport.value.playing,
                     builder: (context, playing, _) => _BarButton(
                       glyph: playing ? NextGlyph.pause : NextGlyph.play,
                       label: playing ? '暂停' : '播放',
@@ -757,8 +757,9 @@ class _BottomBar extends StatelessWidget {
                   ),
                   _NextEpisode(playback: playback, shell: shell),
                   const SizedBox(width: 14),
-                  Selector<VideoPlayerState, (int, int)>(
-                    selector: (_, s) =>
+                  PlaybackSelector<(int, int)>(
+                    playback: playback,
+                    selector: (s) =>
                         (s.position.inSeconds, s.duration.inSeconds),
                     builder: (context, t, _) => Text.rich(
                       TextSpan(children: [
@@ -772,8 +773,9 @@ class _BottomBar extends StatelessWidget {
                       maxLines: 1,
                     ),
                   ),
-                  Selector<VideoPlayerState, double>(
-                    selector: (_, s) => playback.rate,
+                  PlaybackSelector<double>(
+                    playback: playback,
+                    selector: (s) => s.rate,
                     builder: (context, rate, _) => (rate - 1).abs() < 0.001
                         ? const SizedBox.shrink()
                         : Padding(
@@ -787,8 +789,9 @@ class _BottomBar extends StatelessWidget {
                   const Spacer(),
                   _Volume(playback: playback),
                   const SizedBox(width: _gap),
-                  Selector<VideoPlayerState, bool>(
-                    selector: (_, s) => s.danmakuVisible,
+                  PlaybackSelector<bool>(
+                    playback: playback,
+                    selector: (s) => s.danmakuVisible,
                     builder: (context, on, _) => _BarButton(
                       glyph: on ? NextGlyph.danmaku : NextGlyph.danmakuOff,
                       label: on ? '关闭弹幕' : '显示弹幕',
@@ -818,8 +821,9 @@ class _BottomBar extends StatelessWidget {
                     onTap: () => onMenu(_Menu.more),
                   ),
                   const SizedBox(width: _gap),
-                  Selector<VideoPlayerState, bool>(
-                    selector: (_, s) => s.isFullscreen,
+                  PlaybackSelector<bool>(
+                    playback: playback,
+                    selector: (s) => s.fullscreen,
                     builder: (context, full, _) => _BarButton(
                       glyph: full
                           ? NextGlyph.exitFullscreen
@@ -872,9 +876,9 @@ class _NextEpisodeState extends State<_NextEpisode> {
 
   @override
   Widget build(BuildContext context) =>
-      Selector<VideoPlayerState, (String?, bool, bool)>(
-        selector: (_, s) =>
-            (s.currentVideoPath, s.showControls, s.canPlayNextEpisode),
+      PlaybackSelector<(String?, bool, bool)>(
+        playback: widget.playback,
+        selector: (s) => (s.path, s.showControls, s.canPlayNext),
         builder: (context, v, _) {
           final (path, shown, classic) = v;
           if (!_asked || path != _path) {
@@ -1011,8 +1015,9 @@ class _VolumeState extends State<_Volume> {
   }
 
   @override
-  Widget build(BuildContext context) => Selector<VideoPlayerState, double>(
-        selector: (_, s) => s.currentSystemVolume,
+  Widget build(BuildContext context) => PlaybackSelector<double>(
+        playback: widget.playback,
+        selector: (s) => s.volume,
         builder: (context, volume, _) => MouseRegion(
           onEnter: (_) => _hover(true),
           onExit: (_) => _hover(false),
@@ -1120,8 +1125,9 @@ class _SkipSegment extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) =>
-      Selector<VideoPlayerState, SkipSegmentKind?>(
-        selector: (_, s) => playback.skippable,
+      PlaybackSelector<SkipSegmentKind?>(
+        playback: playback,
+        selector: (s) => s.skippable,
         builder: (context, kind, _) => AnimatedPositioned(
           duration: const Duration(milliseconds: 260),
           curve: NextMotion.ease,
@@ -1179,9 +1185,10 @@ class _Still extends StatelessWidget {
   Widget build(BuildContext context) {
     final shot = this.shot;
     final path = shot?.path;
-    return Selector<VideoPlayerState, bool>(
+    return PlaybackSelector<bool>(
+      playback: playback,
       // Above 跳过片头 when that shows.
-      selector: (_, s) => playback.skippable != null,
+      selector: (s) => s.skippable != null,
       builder: (context, skip, _) => AnimatedPositioned(
         duration: const Duration(milliseconds: 260),
         curve: NextMotion.ease,

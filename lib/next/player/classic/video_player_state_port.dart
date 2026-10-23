@@ -5,9 +5,10 @@ import 'package:nipaplay/utils/globals.dart' as globals;
 
 import 'classic_playback_controls.dart';
 
-import 'media_models.dart';
-import 'playback_capability.dart';
-import 'player_facts.dart';
+import '../../capabilities/media_models.dart';
+import '../../capabilities/playback_capability.dart';
+import '../../capabilities/player_facts.dart';
+import 'classic_facts.dart';
 
 final class VideoPlayerStatePort implements PlayerPort {
   VideoPlayerStatePort(VideoPlayerState state) : _state = state;

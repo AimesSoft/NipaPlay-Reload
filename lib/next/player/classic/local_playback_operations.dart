@@ -20,9 +20,9 @@ import 'package:nipaplay/utils/globals.dart' as globals;
 import 'package:nipaplay/utils/video_player_state.dart';
 import 'package:window_manager/window_manager.dart';
 
-import '../settings/registry.dart';
-import 'classic_action.dart';
-export 'local_operation_titles.dart';
+import '../../settings/registry.dart';
+import '../../capabilities/classic_action.dart';
+export '../../capabilities/local_operation_titles.dart';
 
 const _output = ObjectSchema({}, additionalProperties: true);
 const _unit = NumberSchema(minimum: 0, maximum: 1);

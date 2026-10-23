@@ -30,6 +30,12 @@ extension VideoPlayerStatePlayerSetup on VideoPlayerState {
     bool manualMatchHandled = false,
     bool episodeFileSelectionHandled = false,
   }) async {
+    if (globals.nextPlaybackRedirect case final redirect?) {
+      final item = PlayableItem(videoPath: videoPath, historyItem: historyItem,
+          actualPlayUrl: actualPlayUrl, playbackSession: playbackSession,
+          detailContext: playbackDetailContext, mediaKey: mediaKey);
+      if (await redirect(item, 'classic.initializePlayer')) return;
+    }
     final resolutionGeneration = ++_sourceResolutionGeneration;
     _lastPlaybackRequest = PlayableItem(videoPath: videoPath,
         historyItem: historyItem, actualPlayUrl: actualPlayUrl,

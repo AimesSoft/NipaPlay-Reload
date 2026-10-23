@@ -4,11 +4,11 @@ import 'package:nipaplay/services/danmaku_cache_manager.dart';
 import 'package:nipaplay/utils/danmaku_parser.dart';
 import 'package:nipaplay/utils/dandanplay_comments.dart';
 import 'package:nipaplay/utils/danmaku_track_timing.dart';
-import 'source.dart';
-import 'service.dart';
+import '../../danmaku/source.dart';
+import '../../danmaku/service.dart';
+import '../next_playback.dart';
 
-final class VideoDanmakuPort
-    implements DanmakuPlayerPort, DanmakuTrackRegistry, DanmakuTrackUpdater {
+final class VideoDanmakuPort implements PlaybackDanmakuPort {
   const VideoDanmakuPort(this.player, {this.requestChange});
   final VideoPlayerState player;
   final Future<void> Function(

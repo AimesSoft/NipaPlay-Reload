@@ -4,26 +4,24 @@ import 'package:http/http.dart' as http;
 import 'package:nipa_harness/nipa_harness.dart';
 import 'package:nipaplay/services/dandanplay_http_client.dart';
 import 'package:nipaplay/utils/network_settings.dart';
-import 'package:nipaplay/utils/video_player_state.dart';
 import '../media/identity_store.dart';
 import '../network/dandanplay_gateway.dart';
 import 'capability.dart';
 import 'executors.dart';
 import 'host.dart';
-import 'player_port.dart';
 import 'service.dart';
 import 'source.dart';
 import 'sources.dart';
 import 'store.dart';
 import 'local_source.dart';
 import 'sidecar.dart';
+import '../player/next_playback.dart';
 import '../player/perf/budget.dart';
 
-/// Forwards track operations to the host player once the widget tree created it.
-final class _HostPlayerPort
-    implements DanmakuPlayerPort, DanmakuTrackRegistry, DanmakuTrackUpdater {
-  VideoDanmakuPort? _delegate;
-  void attach(VideoDanmakuPort delegate) => _delegate = delegate;
+/// Forwards track operations to what plays while Next is open.
+final class _HostPlayerPort implements PlaybackDanmakuPort {
+  PlaybackDanmakuPort? _delegate;
+  void attach(PlaybackDanmakuPort delegate) => _delegate = delegate;
   void detach() => _delegate = null;
   @override
   List<JsonMap> get registry => _delegate?.registry ?? const [];
@@ -71,7 +69,8 @@ final class DanmakuRuntime {
   Future<void> _restoring = Future.value();
   bool _busy = false, _stopped = false, _dirty = false;
   Harness? _harness;
-  VideoPlayerState? _player;
+  NextPlayback? _playback;
+  ({String? path, int generation, bool durationKnown})? _media;
   Future<bool> Function(String, String, Object?)? remoteControl;
   Future<void> _controls = Future.value();
   late final sidecars = SidecarIndexer(service.store, () async {
@@ -126,24 +125,46 @@ final class DanmakuRuntime {
     }
   }
 
-  /// Binds the host player and follows playback state. Call after `engine.start()`.
-  void startRestoring(Harness harness, VideoPlayerState player) {
-    _player?.removeListener(_changed);
-    _player?.nextLocalDanmakuLoader = null;
+  /// Binds what plays and follows it: another media (or the same one
+  /// reopened, or its length becoming known) and the danmaku tracks
+  /// changing restore the bound danmaku; nothing else does. Call after
+  /// `engine.start()`.
+  void startRestoring(Harness harness, NextPlayback playback) {
+    _unbind();
     _stopped = false;
     _harness = harness;
-    _player = player;
-    player.nextLocalDanmakuLoader = (path) async {
+    _playback = playback;
+    playback.localDanmakuLoader = (path) async {
       if (path.contains('://')) return false;
       final id = await service.store.identities.ensureFile(path);
       final found = await sidecars.inspect(id, path);
       await service.refreshCurrent();
       return found;
     };
-    _port.attach(VideoDanmakuPort(player,
+    _port.attach(playback.danmakuPort(
         requestChange: (id, operation, value) =>
             _control(id, operation, value)));
-    player.addListener(_changed);
+    playback.media.addListener(_mediaChanged);
+    playback.danmakuVersion.addListener(_changed);
+    _mediaChanged();
+  }
+
+  void _unbind() {
+    _playback?.media.removeListener(_mediaChanged);
+    _playback?.danmakuVersion.removeListener(_changed);
+    _playback?.localDanmakuLoader = null;
+    _media = null;
+  }
+
+  void _mediaChanged() {
+    final media = _playback!.media.value;
+    final now = (
+      path: media.path,
+      generation: media.generation,
+      durationKnown: media.durationKnown
+    );
+    if (now == _media) return;
+    _media = now;
     _changed();
   }
 
@@ -170,12 +191,11 @@ final class DanmakuRuntime {
 
   Future<void> stopRestoring() async {
     _stopped = true;
-    _player?.removeListener(_changed);
-    _player?.nextLocalDanmakuLoader = null;
+    _unbind();
     await _restoring;
     await _controls;
     _port.detach();
-    _player = null;
+    _playback = null;
     _harness = null;
   }
 

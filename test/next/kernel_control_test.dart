@@ -9,7 +9,8 @@ import 'package:nipa_harness/nipa_harness.dart';
 import 'package:nipaplay/models/playable_item.dart';
 import 'package:nipaplay/next/capabilities/kernel_control.dart';
 import 'package:nipaplay/next/capabilities/kernel_facts.dart';
-import 'package:nipaplay/next/capabilities/video_player_state_port.dart';
+import 'package:nipaplay/next/player/classic/classic_backed_playback.dart';
+import 'package:nipaplay/next/player/classic/video_player_state_port.dart';
 import 'package:nipaplay/player_abstraction/erika_player_adapter.dart';
 import 'package:nipaplay/player_abstraction/mdk_player_adapter_io.dart';
 import 'package:nipaplay/next/settings/registry.dart' show SettingsAccess;
@@ -414,14 +415,14 @@ void main() {
     final switches = Switches(make ??
         (kernel) => kernel == PlayerKernelType.mdk ? MdkKernel() : MpvKernel());
     final stored = live ?? () => configured;
-    final control = KernelControl(state,
+    final control = KernelControl(ClassicBackedPlayback(state).kernelHost,
         consent: (title, message, accept, stopped) async {
           asked.add('$title\n$message\n$accept');
           return approve;
         },
         // Classic's switch builds the player with Player(), which takes what
         // it was built from off the list of saves waiting for a rebuild.
-        switcher: (state, kernel, request) async {
+        switcher: (_, kernel, request) async {
           await switches.call(state, kernel, request);
           DeferredReloads.built(kernel ?? stored(), stored());
         },

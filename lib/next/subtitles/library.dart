@@ -13,7 +13,6 @@ import 'package:nipaplay/services/subtitle_service.dart';
 import 'package:nipaplay/constants/settings_keys.dart';
 import 'package:nipaplay/utils/subtitle_file_utils.dart';
 import 'package:nipaplay/utils/subtitle_parser.dart';
-import 'package:nipaplay/utils/video_player_state.dart';
 
 import '../media/identity_store.dart';
 import '../media/media_service.dart';
@@ -21,7 +20,7 @@ import '../media/media_probe.dart';
 import '../media/file_identity_merge.dart';
 import '../state/change_history.dart';
 import '../public_url.dart';
-import 'apply_selection.dart';
+import '../player/next_playback.dart';
 import 'webvtt.dart';
 import 'operations.dart';
 import 'detection.dart';
@@ -44,8 +43,8 @@ final class SubtitleLibrary implements SubtitleOperations {
   StreamSubscription<JsonMap>? _events;
   Timer? _timer;
   Future<void>? _worker;
-  VideoPlayerState? _player;
-  Future<bool> Function(VideoPlayerState, String)? remoteLoader;
+  SubtitleTarget? _player;
+  Future<bool> Function(SubtitleTarget, String)? remoteLoader;
   bool _closed = false;
   bool enabled = true;
   String? lastRun, lastError;
@@ -473,40 +472,22 @@ final class SubtitleLibrary implements SubtitleOperations {
       defaultSelection:(value) => _defaultSelection(path,value)));
     await _refreshPlayer(id);
     result['factsCommitted'] = true;
-    result['playerApplied'] = _player?.currentVideoPath == path;
+    result['playerApplied'] = _player?.path == path;
     return result;
   }
 
   Future<void> _refreshPlayer(String id) async {
     final player = _player;
-    if(player == null || player.currentVideoPath == null) return;
-    final locations = await db.query('media_locations', where:'file_id=? AND locator=?', whereArgs:[id,player.currentVideoPath]);
-    if(locations.isEmpty) return;
+    final path = player?.path;
+    if (player == null || path == null) return;
+    final locations = await db.query('media_locations',
+        where: 'file_id=? AND locator=?', whereArgs: [id, path]);
+    if (locations.isEmpty) return;
     final value = await facts(id);
-    final selectionCallback = player.nextSubtitleSelection;
-    player.nextSubtitleSelection = null;
-    try {
-    player.subtitleTrackInfo.removeWhere((key, value) => key.startsWith('next:') && value['fileId'] == id);
-    for(final path in player.activeExternalSubtitlePaths.toList()) {
-      await player.removeExternalSubtitle(path);
-    }
-    for(final track in (value['tracks'] as List).cast<JsonMap>()) {
-      if(track['origin'] != 'embedded' && track['available'] == true) {
-        await player.registerNextSubtitleCandidate(track['playbackPath'] as String? ?? track['path'] as String,track['title'] as String);
-        player.subtitleManager.updateSubtitleTrackInfo('next:${track['id']}', {
-          ...track, 'fileId': id, 'trackId': track['id'], 'isActive': false,
-          'path': track['playbackPath'] ?? track['path'],
-        });
-      }
-    }
     final selected = (value['selection'] as Map?)?['trackId'];
-    final track = (value['tracks'] as List).cast<JsonMap>().where((t)=>t['id']==selected).firstOrNull;
-    if(track == null) { player.player.activeSubtitleTracks = []; }
-    else if(track['origin']=='embedded') { await player.applyNextEmbeddedSubtitle(track['index'] as int); }
-    else { await player.applyNextExternalSubtitle(track['playbackPath'] as String? ?? track['path'] as String,track['title'] as String); }
-    } finally {
-      player.nextSubtitleSelection = selectionCallback;
-    }
+    final tracks = (value['tracks'] as List).cast<JsonMap>();
+    await player.reapply(
+        id, tracks, tracks.where((t) => t['id'] == selected).firstOrNull);
   }
 
   @override
@@ -536,11 +517,11 @@ final class SubtitleLibrary implements SubtitleOperations {
           {...await facts(file['file_id'] as String)}..remove('tracks')
       ];
 
-  void attachPlayer(VideoPlayerState player) {
+  void attachPlayer(SubtitleTarget player) {
     detachPlayer();
     _player = player;
-    player.nextSubtitleLoader = (path) => loadForPlayback(player, path);
-    player.nextSubtitleSelection = (path, index, external) async {
+    player.loader = (path) => loadForPlayback(player, path);
+    player.selection = (path, index, external) async {
       final id = await identities.ensureFile(path);
       final value = await facts(id);
       final track = (value['tracks'] as List)
@@ -556,24 +537,24 @@ final class SubtitleLibrary implements SubtitleOperations {
   }
 
   void detachPlayer() {
-    _player?.nextSubtitleLoader = null;
-    _player?.nextSubtitleSelection = null;
+    _player?.loader = null;
+    _player?.selection = null;
     _player = null;
   }
 
-  Future<bool> loadForPlayback(VideoPlayerState player, String path) async {
+  Future<bool> loadForPlayback(SubtitleTarget player, String path) async {
     if (await remoteLoader?.call(player, path) == true) return true;
     if (path.contains('://')) return false;
     final id = await identities.ensureFile(path);
     await inspect(id, path);
-    if (player.currentVideoPath != path) return true;
+    if (player.path != path) return true;
     final value = await facts(id);
     for (final track in (value['tracks'] as List).cast<JsonMap>()) {
       if (track['origin'] != 'embedded' && track['available'] == true) {
-        await player.registerNextSubtitleCandidate(
+        await player.offer(
             track['playbackPath'] as String? ?? track['path'] as String,
             track['title'] as String);
-        if (player.currentVideoPath != path) return true;
+        if (player.path != path) return true;
       }
     }
     final selection = value['selection'] as Map?;
@@ -584,14 +565,14 @@ final class SubtitleLibrary implements SubtitleOperations {
         .firstOrNull;
     if (track != null) {
       if (track['origin'] == 'embedded') {
-        await player.applyNextEmbeddedSubtitle(track['index'] as int);
+        await player.applyEmbedded(track['index'] as int);
       } else {
-        await player.applyNextExternalSubtitle(
+        await player.applyExternal(
             track['playbackPath'] as String? ?? track['path'] as String,
             track['title'] as String);
       }
     } else if (selection?['basis'] == 'explicit') {
-      player.player.activeSubtitleTracks = [];
+      await player.clear();
     }
     return true;
   }

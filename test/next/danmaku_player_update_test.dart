@@ -1,6 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:nipa_harness/nipa_harness.dart';
-import 'package:nipaplay/next/danmaku/player_port.dart';
+import 'package:nipaplay/next/player/classic/danmaku_port.dart';
 import 'package:nipaplay/next/danmaku/service.dart';
 import 'package:nipaplay/player_abstraction/player_abstraction.dart';
 import 'package:nipaplay/utils/video_player_state.dart';

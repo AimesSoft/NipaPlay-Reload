@@ -18,8 +18,9 @@ import 'package:nipaplay/services/subtitle_service.dart';
 import 'package:nipaplay/utils/video_player_state.dart';
 import 'package:path/path.dart' as p;
 
-import 'playback_controls_capability.dart';
-import 'playback_inspection.dart';
+import '../../capabilities/playback_controls_capability.dart';
+import '../../capabilities/playback_inspection.dart';
+import 'classic_inspection.dart';
 
 final class ClassicPlaybackControls implements PlaybackControlsPort, PlaybackInspectionPort {
   ClassicPlaybackControls(this.state);

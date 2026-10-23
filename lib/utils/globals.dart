@@ -6,6 +6,7 @@ import 'dart:io' if (dart.library.io) 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:nipaplay/models/playable_item.dart';
 import 'package:nipaplay/plugins/plugin_service.dart';
 import 'package:nipaplay/utils/platform_identity.dart' as platform_identity;
 
@@ -20,6 +21,13 @@ String customBackgroundPath = 'assets/images/main_image.png'; // 添加自定义
 
 /// NipaPlay Next 开启时，Classic 只在播放时露出：播放器铺满窗口，不带 Classic 的标签栏。
 bool nextShellHostsPlayer = false;
+
+/// Hands an open asked of Classic's player to NipaPlay Next's playback
+/// while Next holds it; true when Next took it. Null in Classic, and until
+/// Next's session layer plays (player-core P1).
+typedef NextPlaybackRedirect = Future<bool> Function(
+    PlayableItem item, String via);
+NextPlaybackRedirect? nextPlaybackRedirect;
 //////全局变量/////
 ///
 //////设备类型判断/////

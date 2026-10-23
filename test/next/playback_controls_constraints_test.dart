@@ -2,7 +2,7 @@ import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:nipa_harness/nipa_harness.dart';
-import 'package:nipaplay/next/capabilities/classic_playback_controls.dart';
+import 'package:nipaplay/next/player/classic/classic_playback_controls.dart';
 import 'package:nipaplay/next/capabilities/playback_controls_capability.dart';
 import 'package:nipaplay/player_abstraction/player_abstraction.dart';
 import 'package:nipaplay/utils/video_player_state.dart';

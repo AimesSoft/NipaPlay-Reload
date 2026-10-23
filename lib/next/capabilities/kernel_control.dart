@@ -8,17 +8,15 @@ import 'package:nipaplay/models/playable_item.dart';
 import 'package:nipaplay/player_abstraction/player_abstraction.dart';
 import 'package:nipaplay/player_abstraction/player_factory.dart';
 import 'package:nipaplay/services/external_player_console_service.dart';
-import 'package:nipaplay/utils/player_kernel_manager.dart';
-import 'package:nipaplay/utils/video_player_state.dart';
 import 'package:path/path.dart' as p;
 
 import '../harness_redaction.dart';
+import '../player/next_playback.dart';
 import '../player/perf/budget.dart';
 import '../tasks/user_consent.dart';
 import 'classic_action.dart';
 import 'kernel_facts.dart';
 import 'player_facts.dart';
-import 'video_player_state_port.dart';
 
 /// Asks the person at NipaPlay; [stopped] completes when the question no
 /// longer applies (the media or the player changed).
@@ -28,17 +26,16 @@ typedef KernelConsent = Future<bool> Function(
 /// Replaces the player and reopens what it plays: on [kernel] (null is the
 /// kernel setting), with [request]'s own source.
 typedef KernelSwitch = Future<void> Function(
-    VideoPlayerState state, PlayerKernelType? kernel, PlayableItem? request);
+    KernelHost host, PlayerKernelType? kernel, PlayableItem? request);
 
 Future<bool> _askUser(
         String title, String message, String accept, Future<void> stopped) =>
     showUserConsent(title, message, accept, stopped: stopped);
 
-/// Classic's own kernel hot swap, serialized with Classic's.
-Future<void> classicKernelSwitch(VideoPlayerState state,
-        PlayerKernelType? kernel, PlayableItem? request) =>
-    PlayerKernelManager.performPlayerKernelHotSwap(state,
-        kernelType: kernel, request: request);
+/// The host's own reopen.
+Future<void> _hostReopen(
+        KernelHost host, PlayerKernelType? kernel, PlayableItem? request) =>
+    host.reopen(kernel, request);
 
 /// A kernel value Next changed on one player for one media, and what it
 /// was before.
@@ -86,7 +83,7 @@ final class _Binding {
 /// off restores all of it. Nothing here writes a setting.
 final class KernelControl {
   KernelControl(
-    this.state, {
+    this.host, {
     KernelConsent? consent,
     KernelSwitch? switcher,
     PlayerKernelType Function()? configured,
@@ -94,13 +91,13 @@ final class KernelControl {
     String? Function()? harness,
   })  : _harness = harness ?? (() => null),
         _consent = consent ?? _askUser,
-        _switch = switcher ?? classicKernelSwitch,
+        _switch = switcher ?? _hostReopen,
         _configured = configured ?? PlayerFactory.getKernelType,
         _supported = supported ?? (() => PlayerFactory.supportedKernelTypes) {
     _deferredSaves = DeferredReloads.changes.listen((_) => _deferredChanged());
   }
 
-  final VideoPlayerState state;
+  final KernelHost host;
   final String? Function() _harness;
   final KernelConsent _consent;
   final KernelSwitch _switch;
@@ -135,8 +132,8 @@ final class KernelControl {
   /// The changes in force, newest first, and the record of all of them.
   List<JsonMap> get history => List.unmodifiable(_history.toList().reversed);
 
-  _Binding _now() => _Binding(state.player,
-      state.lastPlaybackRequest?.videoPath ?? state.currentVideoPath);
+  _Binding _now() => _Binding(host.player,
+      host.request?.videoPath ?? host.path);
 
   Future<T> _serial<T>(Future<T> Function() run) {
     final result = _work.then((_) => run());
@@ -144,16 +141,20 @@ final class KernelControl {
     return result;
   }
 
+  /// Another open, another kernel instance, the media or whether it plays
+  /// changing: pushed by the host, never with the position.
   void _listen() {
     if (_listening) return;
     _listening = true;
-    state.addListener(_changed);
+    host.media.addListener(_changed);
+    host.transport.addListener(_changed);
   }
 
   void _stopListening() {
     if (!_listening) return;
     _listening = false;
-    state.removeListener(_changed);
+    host.media.removeListener(_changed);
+    host.transport.removeListener(_changed);
   }
 
   bool get _holding =>
@@ -168,10 +169,10 @@ final class KernelControl {
   void _deferredChanged() {
     unawaited(_serial(() async {
       if (!_pending) return;
-      if (state.currentVideoPath == null) {
+      if (host.path == null) {
         await _revert('setting_saved');
       } else {
-        _seenRequest = state.lastPlaybackRequest;
+        _seenRequest = host.request;
         _binding ??= _now();
         _listen();
       }
@@ -181,7 +182,7 @@ final class KernelControl {
   void _changed() => PlayerPerf.span('kernel.changed', _change);
   void _change() {
     if (_reopening) return;
-    final request = state.lastPlaybackRequest;
+    final request = host.request;
     if (!identical(request, _seenRequest)) {
       // Another open began, even of the same path on the same player.
       _seenRequest = request;
@@ -205,8 +206,8 @@ final class KernelControl {
     // it is ready its play() has not taken yet, and a reopen started then
     // would carry the media over as paused.
     if (_now().path == revert &&
-        const {PlayerStatus.playing, PlayerStatus.paused, PlayerStatus.error}
-            .contains(state.status)) {
+        const {PlaybackPhase.playing, PlaybackPhase.paused, PlaybackPhase.failed}
+            .contains(host.transport.value.phase)) {
       _revertFor = null;
       unawaited(_serial(() => _revert('media_changed')));
     }
@@ -253,11 +254,11 @@ final class KernelControl {
 
   Future<void> _revert(String trigger) async {
     final kernel = _kernelOverride;
-    final before = playerKernelId(state.player.getPlayerKernelName());
+    final before = playerKernelId(host.player.getPlayerKernelName());
     String? failure;
     _reopening = true;
     try {
-      await _switch(state, null, state.lastPlaybackRequest);
+      await _switch(host, null, host.request);
     } catch (error) {
       failure = redactHarnessText('$error');
     } finally {
@@ -276,12 +277,12 @@ final class KernelControl {
       'trigger': trigger,
       'from': before,
       'temporaryKernel': kernel?['kernel'],
-      'to': playerKernelId(state.player.getPlayerKernelName()),
+      'to': playerKernelId(host.player.getPlayerKernelName()),
       'configured': kernelIdOf(_configured()),
       'error': failure,
     });
     _revertFor = null;
-    _seenRequest = state.lastPlaybackRequest;
+    _seenRequest = host.request;
     _binding = null;
     _stopListening();
   }
@@ -293,7 +294,7 @@ final class KernelControl {
         if (reopen) {
           for (final override in _overrides.values.toList()) {
             if (override.originalKnown &&
-                identical(_binding?.player, state.player)) {
+                identical(_binding?.player, host.player)) {
               await _restoreOne(override, 'next_off', null);
             }
           }
@@ -314,7 +315,7 @@ final class KernelControl {
 
   // ---- inputs ----
 
-  JsonMap _snapshot() => VideoPlayerStatePort(state).snapshot().toJson();
+  JsonMap _snapshot() => host.snapshot().toJson();
 
   void _session(JsonMap input, {bool required = true}) {
     final sessionId = input['sessionId'];
@@ -330,8 +331,8 @@ final class KernelControl {
       throw const Failure(FailureCode.unavailable,
           'An external player is playing; its kernel is not NipaPlay\'s.');
     }
-    if (state.currentVideoPath == null &&
-        state.lastPlaybackRequest?.videoPath == null) {
+    if (host.path == null &&
+        host.request?.videoPath == null) {
       throw const Failure(
           FailureCode.unavailable, 'No internal media is open.');
     }
@@ -349,7 +350,7 @@ final class KernelControl {
       'name': name,
       'origin': invocation?.origin ?? 'nipaplay',
       'invocationId': invocation?.id,
-      'kernel': playerKernelId(state.player.getPlayerKernelName()),
+      'kernel': playerKernelId(host.player.getPlayerKernelName()),
       'path': _now().path == null ? null : redactHarnessText(_now().path!),
       ...facts,
     };
@@ -363,7 +364,7 @@ final class KernelControl {
   // ---- reading ----
 
   Future<Object?> _currentValue(_Override override) async {
-    final player = state.player;
+    final player = host.player;
     switch (override.kind) {
       case 'mpv':
         return (await player.readNativePropertiesChecked(
@@ -403,7 +404,7 @@ final class KernelControl {
     if (snapshot['player'] == 'external') {
       return {...base, 'unavailableReason': 'external_player'};
     }
-    final player = state.player;
+    final player = host.player;
     final name = player.getPlayerKernelName();
     final kernel = playerKernelId(name);
     final asked = [
@@ -518,7 +519,7 @@ final class KernelControl {
     return erikaKernelFacts(status,
         window: window.window == null
             ? null
-            : {...window.window!, 'paused': state.isPaused},
+            : {...window.window!, 'paused': host.paused},
         windowUnavailable: window.reason);
   }
 
@@ -528,7 +529,7 @@ final class KernelControl {
   Future<JsonMap> set(JsonMap input, Invocation invocation) => _serial(() async {
         _session(input);
         _internalMedia();
-        final player = state.player;
+        final player = host.player;
         final kernel = playerKernelId(player.getPlayerKernelName());
         final properties = <String, String>{};
         for (final entry
@@ -687,7 +688,7 @@ final class KernelControl {
   /// set; anything else is left as found.
   Future<JsonMap> _restoreOne(
       _Override override, String trigger, Invocation? invocation) async {
-    final player = state.player;
+    final player = host.player;
     final current = await _currentValue(override);
     JsonMap result;
     if (!override.originalKnown) {
@@ -789,7 +790,7 @@ final class KernelControl {
       if (!_now().same(started) && !stopped.isCompleted) stopped.complete();
     }
 
-    state.addListener(watch);
+    host.media.addListener(watch);
     bool approved;
     try {
       approved = await _consent(
@@ -798,7 +799,7 @@ final class KernelControl {
           '允许',
           stopped.future);
     } finally {
-      state.removeListener(watch);
+      host.media.removeListener(watch);
     }
     if (!approved) {
       _record('declined', name, facts, invocation: invocation);
@@ -844,7 +845,7 @@ final class KernelControl {
       _serial(() async {
         _session(input);
         _internalMedia();
-        final player = state.player;
+        final player = host.player;
         final kernel = playerKernelId(player.getPlayerKernelName());
         if (kernel != 'media_kit') {
           throw Failure(FailureCode.unavailable,
@@ -909,7 +910,7 @@ final class KernelControl {
           }
         }
         final sessionId = _snapshot()['sessionId'] as String;
-        final playerError = playbackErrorFacts(state, sessionId);
+        final playerError = host.error(sessionId);
         final entry = _record('command', property ?? body.first, {
           'command': safeCommand,
           'result': safeKernelResult(reply.result),
@@ -951,7 +952,7 @@ final class KernelControl {
       _serial(() async {
         _session(input);
         _internalMedia();
-        final player = state.player;
+        final player = host.player;
         final kernel = playerKernelId(player.getPlayerKernelName());
         if (kernel != 'erika') {
           throw Failure(FailureCode.unavailable,
@@ -976,7 +977,7 @@ final class KernelControl {
           _freshByCall = true;
         }
         final sessionId = _snapshot()['sessionId'] as String;
-        final playerError = playbackErrorFacts(state, sessionId);
+        final playerError = host.error(sessionId);
         final entry = _record('invoke', method, {
           'arguments': safeKernelResult(arguments),
           'supported': reply.supported,
@@ -1008,7 +1009,7 @@ final class KernelControl {
       throw const Failure(FailureCode.unavailable,
           'An external player is playing; its kernel is not NipaPlay\'s.');
     }
-    final player = state.player;
+    final player = host.player;
     final kernel = playerKernelId(player.getPlayerKernelName());
     if (kernel != 'media_kit' && kernel != 'mdk') {
       throw Failure(FailureCode.unavailable,
@@ -1096,7 +1097,7 @@ final class KernelControl {
               'This device cannot run $id; it runs ${supported.map(kernelIdOf).join(', ')}.');
         }
         final before = _playbackFacts();
-        final previous = state.player;
+        final previous = host.player;
         for (final override in _overrides.values) {
           _record('ended', override.name, {
             'trigger': 'player_replaced',
@@ -1109,21 +1110,21 @@ final class KernelControl {
         String? failure;
         _reopening = true;
         try {
-          await _switch(state, target, state.lastPlaybackRequest);
+          await _switch(host, target, host.request);
         } catch (error) {
           failure = redactHarnessText('$error');
         } finally {
           _reopening = false;
         }
-        final replaced = !identical(previous, state.player);
-        final tracks = replaced && state.hasVideo
+        final replaced = !identical(previous, host.player);
+        final tracks = replaced && host.hasVideo
             ? await _restoreTracks(before)
             : const <String, Object?>{};
-        if (replaced && state.hasVideo) {
+        if (replaced && host.hasVideo) {
           await _settle(paused: before['paused'] == true);
         }
         final after = _playbackFacts();
-        final actual = playerKernelId(state.player.getPlayerKernelName());
+        final actual = playerKernelId(host.player.getPlayerKernelName());
         final configured = kernelIdOf(_configured());
         _kernelOverride = replaced && actual != configured
             ? {
@@ -1136,11 +1137,11 @@ final class KernelControl {
             : null;
         // What this player was not built from still waits for the next media.
         final holding = _kernelOverride != null || _pending;
-        _seenRequest = state.lastPlaybackRequest;
+        _seenRequest = host.request;
         _binding = holding ? _now() : null;
         holding ? _listen() : _stopListening();
-        final opened = replaced && failure == null && state.hasVideo;
-        final error = playbackErrorFacts(state, _snapshot()['sessionId'] as String);
+        final opened = replaced && failure == null && host.hasVideo;
+        final error = host.error(_snapshot()['sessionId'] as String);
         _record('reopen', 'kernel', {
           'requested': id,
           'actual': actual,
@@ -1152,7 +1153,7 @@ final class KernelControl {
           'kernel': {
             'requested': id,
             'actual': actual,
-            'name': state.player.getPlayerKernelName(),
+            'name': host.player.getPlayerKernelName(),
             'configured': configured,
           },
           'replaced': replaced,
@@ -1172,22 +1173,34 @@ final class KernelControl {
   /// Classic's play() and pause() set the status only once the kernel
   /// answers, so the state right after a reopen can still be the one before.
   /// Waits, up to two seconds, until the status has settled and, when the
-  /// media was paused, until the new player is paused too.
+  /// media was paused, until the new player is paused too: told by the
+  /// host as the status changes, not looked at on a timer.
   Future<void> _settle({required bool paused}) async {
-    final until = DateTime.now().add(const Duration(seconds: 2));
-    bool settled() =>
-        state.status == PlayerStatus.error ||
-        (paused
-            ? state.status == PlayerStatus.paused
-            : const {PlayerStatus.playing, PlayerStatus.paused}
-                .contains(state.status));
-    while (!settled() && DateTime.now().isBefore(until)) {
-      await Future<void>.delayed(const Duration(milliseconds: 50));
+    bool settled() {
+      final phase = host.transport.value.phase;
+      return phase == PlaybackPhase.failed ||
+          (paused
+              ? phase == PlaybackPhase.paused
+              : const {PlaybackPhase.playing, PlaybackPhase.paused}
+                  .contains(phase));
+    }
+
+    if (settled()) return;
+    final done = Completer<void>();
+    void changed() {
+      if (settled() && !done.isCompleted) done.complete();
+    }
+
+    host.transport.addListener(changed);
+    try {
+      await done.future.timeout(const Duration(seconds: 2), onTimeout: () {});
+    } finally {
+      host.transport.removeListener(changed);
     }
   }
 
   JsonMap _playbackFacts() {
-    final info = state.player.mediaInfo;
+    final info = host.player.mediaInfo;
     JsonMap? describe(List<Object?>? tracks, int? index) {
       if (tracks == null || index == null || index < 0 || index >= tracks.length) {
         return null;
@@ -1212,15 +1225,15 @@ final class KernelControl {
     final path = _now().path;
     return {
       'path': path == null ? null : redactHarnessText(path),
-      'positionMs': state.position.inMilliseconds,
-      'paused': state.isPaused,
-      'rate': state.playbackRate,
-      'audio': describe(info.audio, state.player.activeAudioTracks.firstOrNull),
+      'positionMs': host.position.inMilliseconds,
+      'paused': host.paused,
+      'rate': host.rate,
+      'audio': describe(info.audio, host.player.activeAudioTracks.firstOrNull),
       'audioCount': info.audio?.length ?? 0,
       'subtitle': describe(
-          info.subtitle, state.player.activeSubtitleTracks.firstOrNull),
+          info.subtitle, host.player.activeSubtitleTracks.firstOrNull),
       'subtitleCount': info.subtitle?.length ?? 0,
-      'externalSubtitles': List.of(state.activeExternalSubtitlePaths),
+      'externalSubtitles': List.of(host.externalSubtitles),
     };
   }
 
@@ -1248,15 +1261,15 @@ final class KernelControl {
   }
 
   Future<JsonMap> _restoreTracks(JsonMap before) async {
-    final info = state.player.mediaInfo;
+    final info = host.player.mediaInfo;
     final out = <String, Object?>{};
     final audioBefore = before['audio'] as JsonMap?;
-    final audioNow = state.player.activeAudioTracks.firstOrNull;
+    final audioNow = host.player.activeAudioTracks.firstOrNull;
     final audio = _match(audioBefore, info.audio,
         (before['audioCount'] as int?) ?? (info.audio?.length ?? 0));
     var audioApplied = false;
     if (audio != null && audio != audioNow) {
-      state.selectEmbeddedAudioTrack(audio);
+      host.selectEmbeddedAudio(audio);
       audioApplied = true;
     }
     out['audioTrack'] = {
@@ -1266,13 +1279,13 @@ final class KernelControl {
       if (audioBefore != null && audio == null) 'reason': 'no_matching_track',
     };
     final subtitleBefore = before['subtitle'] as JsonMap?;
-    final subtitleNow = state.player.activeSubtitleTracks.firstOrNull;
+    final subtitleNow = host.player.activeSubtitleTracks.firstOrNull;
     final subtitle = _match(subtitleBefore, info.subtitle,
         (before['subtitleCount'] as int?) ?? (info.subtitle?.length ?? 0));
     var subtitleApplied = false;
     if (subtitle != null && subtitle != subtitleNow) {
-      state.player.activeSubtitleTracks = [subtitle];
-      state.onSubtitleTrackChanged();
+      host.player.activeSubtitleTracks = [subtitle];
+      host.subtitleTracksChanged();
       subtitleApplied = true;
     }
     out['subtitleTrack'] = {
@@ -1286,16 +1299,16 @@ final class KernelControl {
         (before['externalSubtitles'] as List).cast<String>();
     final readded = <String>[];
     for (final path in externalBefore) {
-      if (!state.activeExternalSubtitlePaths.contains(path) &&
+      if (!host.externalSubtitles.contains(path) &&
           await File(path).exists()) {
-        await state.addNextSubtitle(path, p.basename(path));
+        await host.addSubtitle(path, p.basename(path));
         readded.add(path);
       }
     }
     out['externalSubtitles'] = {
       'before': [for (final s in externalBefore) redactHarnessText(s)],
       'after': [
-        for (final s in state.activeExternalSubtitlePaths) redactHarnessText(s)
+        for (final s in host.externalSubtitles) redactHarnessText(s)
       ],
       'readded': [for (final s in readded) redactHarnessText(s)],
     };

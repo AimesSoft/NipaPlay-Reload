@@ -4,12 +4,14 @@ import 'package:flutter/material.dart' show MaterialApp;
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:nipaplay/constants/settings_keys.dart';
+import 'package:nipaplay/models/playable_item.dart';
 import 'package:nipaplay/next/ui/conversation/chat_port.dart';
 import 'package:nipaplay/next/ui/data/discover.dart';
 import 'package:nipaplay/next/ui/data/search.dart';
 import 'package:nipaplay/next/ui/data/services.dart';
 import 'package:nipaplay/next/ui/data/ui_actions.dart';
 import 'package:nipaplay/next/ui/dev/fake_settings.dart';
+import 'package:nipaplay/next/player/classic/classic_backed_playback.dart';
 import 'package:nipaplay/next/ui/player/playback.dart';
 import 'package:nipaplay/next/ui/shell/next_ui_gate.dart';
 import 'package:nipaplay/next/ui/shell/next_ui_preference.dart';
@@ -230,7 +232,7 @@ class ClassicPlayerState extends VideoPlayerState {
 /// Next's own playback over Classic's state. Only what would leave the
 /// test (the hotkeys' timers, the window, the disk, the system) is
 /// recorded instead.
-class ClassicPlayback extends NextPlayback {
+class ClassicPlayback extends ClassicBackedPlayback {
   ClassicPlayback(ClassicPlayerState super.state);
   int holds = 0, screenshots = 0, pictureInPictures = 0;
   final opened = <String>[];
@@ -317,6 +319,12 @@ class FakePlayerState extends ChangeNotifier implements VideoPlayerState {
   @override
   int get danmakuListVersion => 1;
   @override
+  int get playbackGeneration => 1;
+  @override
+  int get playbackRequestGeneration => 1;
+  @override
+  PlayableItem? get lastPlaybackRequest => null;
+  @override
   int get bufferedPosition => 4 * 60 * 1000;
   /// Classic offers a next episode (as it does for any Jellyfin or Emby
   /// stream, films too).
@@ -342,7 +350,7 @@ class FakePlayerState extends ChangeNotifier implements VideoPlayerState {
 }
 
 /// The layer's asks of the player, recorded.
-class FakePlayback extends NextPlayback {
+class FakePlayback extends ClassicBackedPlayback {
   FakePlayback(FakePlayerState super.state);
   int left = 0, holds = 0;
   final chosen = <SubtitleChoice>[];

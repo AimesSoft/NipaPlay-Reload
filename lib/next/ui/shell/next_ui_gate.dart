@@ -2,9 +2,10 @@ import 'package:flutter/widgets.dart';
 import 'package:nipaplay/providers/labs_settings_provider.dart';
 import 'package:nipaplay/services/desktop_player_window_service.dart';
 import 'package:nipaplay/utils/globals.dart' as globals;
-import 'package:nipaplay/utils/video_player_state.dart';
 import 'package:provider/provider.dart';
 
+import '../../next_runtime.dart';
+import '../player/playback.dart';
 import '../player/stage.dart';
 import 'next_shell.dart';
 import 'next_ui_preference.dart';
@@ -43,14 +44,6 @@ class _NextUiGateState extends State<NextUiGate> {
     super.dispose();
   }
 
-  static bool _playing(PlayerStatus status) => const {
-        PlayerStatus.loading,
-        PlayerStatus.recognizing,
-        PlayerStatus.ready,
-        PlayerStatus.playing,
-        PlayerStatus.paused,
-      }.contains(status);
-
   Widget _classic(bool hidden) =>
       _ClassicHost(key: _classicKey, hidden: hidden, child: widget.classic);
 
@@ -63,14 +56,18 @@ class _NextUiGateState extends State<NextUiGate> {
     globals.nextShellHostsPlayer = on;
     if (!on) return _classic(false);
     final window = DesktopPlayerWindowService.instance;
-    return ListenableBuilder(
-      listenable: window,
-      builder: (context, _) => Selector<VideoPlayerState, (bool, bool)>(
-        selector: (_, state) => (
-          _playing(state.status) && !window.isPlayerDetached,
+    final playback = NextPlaybackScope.maybeOf(context) ??
+        context.read<NextRuntime>().playback;
+    return NextPlaybackScope(
+      playback: playback,
+      child: PlaybackSelector<(bool, bool)>(
+        playback: playback,
+        listenable: Listenable.merge([window, playback.transport]),
+        selector: (p) => (
+          p.transport.value.active && !window.isPlayerDetached,
           // The system draws the video under the window (Erika, Media
           // Kit's native video), not Flutter in a texture.
-          state.player.prefersPlatformVideoSurface,
+          p.transport.value.systemDrawn,
         ),
         builder: (context, frame, _) {
           final (playing, systemDrawn) = frame;

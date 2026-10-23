@@ -3,6 +3,8 @@ import 'dart:io';
 import 'followups/service.dart';
 import 'platform/background_activity.dart';
 import 'platform/loop_lag.dart';
+import 'player/classic/classic_backed_playback.dart';
+import 'player/next_playback.dart';
 import 'player/perf/budget.dart';
 import 'runtime/codex_runtime.dart';
 import 'settings/classic_host_device_settings.dart';
@@ -26,7 +28,6 @@ import 'package:nipaplay/providers/emby_provider.dart';
 import 'package:nipaplay/services/bangumi_service.dart';
 import 'package:nipaplay/services/episode_file_selection_service.dart';
 import 'package:nipaplay/services/playback_service.dart';
-import 'package:nipaplay/utils/video_player_state.dart';
 import 'package:nipaplay/utils/globals.dart' as globals;
 import 'package:nipaplay/player_abstraction/player_factory.dart';
 import 'package:package_info_plus/package_info_plus.dart';
@@ -53,11 +54,7 @@ import 'capabilities/playback_capability.dart';
 import 'capabilities/download_playback_capability.dart';
 import 'settings/download_settings.dart';
 import 'capabilities/playback_controls_capability.dart';
-import 'capabilities/classic_playback_controls.dart';
-import 'capabilities/local_playback_operations.dart';
 import 'capabilities/local_library_operations.dart';
-import 'capabilities/debug_local_operations.dart';
-import 'capabilities/video_player_state_port.dart';
 import 'capabilities/player_facts.dart';
 import 'capabilities/kernel_control.dart';
 import 'system/player_native_log.dart';
@@ -93,7 +90,7 @@ import 'ui_data/host_settings.dart';
 import 'settings/debug_host_settings.dart';
 
 final class NextRuntime extends ChangeNotifier {
-  NextRuntime._(this._labs, this._player, List<Capability> capabilities) {
+  NextRuntime._(this._labs, this.playback, List<Capability> capabilities) {
     _operations = _initialize(capabilities);
   }
 
@@ -152,15 +149,17 @@ final class NextRuntime extends ChangeNotifier {
             PlayerFactory.isHarmonyOS ||
             labs.enableErikaPlayerKernel);
     final settings = context.read<SettingsProvider>();
-    final player = context.read<VideoPlayerState>();
+    final nextPlayback = ClassicBackedPlayback.of(context);
     final history = ServiceProvider.watchHistoryProvider;
     final seriesDetail = BangumiService.instance.getAnimeDetailsFromMemory;
     var meshProxy = false;
     final playback = PlaybackCapability(
-      player: VideoPlayerStatePort(player),
+      player: nextPlayback.port,
       start: (item) {
         final remote = core.uiData.meshLibrary?.playback.containsKey(item.videoPath) == true;
-        if (remote || meshProxy) MeshPlayback.directLoopback(player, remote);
+        if (remote || meshProxy) {
+          MeshPlayback.directLoopback(nextPlayback.kernelHost, remote);
+        }
         meshProxy = remote;
         return PlaybackService().play(item, episodeFileSelectionHandled: true);
       },
@@ -252,16 +251,15 @@ final class NextRuntime extends ChangeNotifier {
             FailureCode.unavailable, 'NipaPlay cannot start playback.');
       }
       if (position != null) {
-        await VideoPlayerStatePort(player)
-            .seekTo(Duration(milliseconds: position));
+        await nextPlayback.port.seekTo(Duration(milliseconds: position));
       }
       return {
         'sourceId': source['sourceId'],
         'itemId': itemId,
-        'state': VideoPlayerStatePort(player).snapshot().toJson()
+        'state': nextPlayback.snapshot().toJson()
       };
     };
-    return NextRuntime._(labs, player, [
+    return NextRuntime._(labs, nextPlayback, [
       WatchedHistoryCapability(WatchedHistory(() => core.media.service,
           () => WatchHistoryDatabase.instance.database, history.refresh),
           mergedLibrary: () => core.uiData.meshLibrary!),
@@ -300,7 +298,9 @@ final class NextRuntime extends ChangeNotifier {
   }
 
   final LabsSettingsProvider _labs;
-  final VideoPlayerState _player;
+
+  /// What plays, for Next (Classic's player behind it until P1).
+  final NextPlayback playback;
   late final Harness _harness;
   late final AgentEndpoint _endpoint;
   late final TaskEngine _taskEngine;
@@ -402,33 +402,20 @@ final class NextRuntime extends ChangeNotifier {
     final packageInfo = await PackageInfo.fromPlatform();
     final instanceFacts = InstanceFacts(packageInfo.version);
     PlayerPerf.install();
-    final localPlayback = LocalPlaybackOperations(_player, core.settings,
+    final localPlayback = playback.localOperations(core.settings,
         () => globals.navigatorKey.currentContext!);
     final localLibrary = _localLibrary = LocalLibraryOperations(
         ServiceProvider.scanService, ServiceProvider.watchHistoryProvider, engine: core.engine);
     core.classicScan.scan = ServiceProvider.scanService;
     core.classicScan.history = ServiceProvider.watchHistoryProvider;
-    core.storage.playbackActive = () => _player.hasVideo;
+    core.storage.playbackActive = () => playback.hasVideo;
     core.storage.scanning = () => ServiceProvider.scanService.isScanning;
-    core.diagnostics.playerFacts = () async {
-      final info = _player.player.mediaInfo;
-      final media = await readPlayerMediaFacts(_player.player);
-      return {'available': true, 'kernel': _player.player.getPlayerKernelName(),
-        'status': _player.status.name, 'hasVideo': _player.hasVideo,
-        'buffering': _player.isBuffering, 'bufferedPositionMs': _player.bufferedPosition,
-        'positionMs': _player.position.inMilliseconds, 'durationMs': _player.duration.inMilliseconds,
-        'video': [for (final video in info.video ?? const [])
-          {'codec': video.codecName, 'width': video.codec.width, 'height': video.codec.height}],
-        'audio': [for (final audio in info.audio ?? const [])
-          {'codec': audio.codec.name, 'sampleRate': audio.codec.sampleRate, 'channels': audio.codec.channels}],
-        'details': diagnosticsPlayerDetails(media, buffering: _player.isBuffering),
-        'perf': PlayerPerf.read()};
-    };
+    core.diagnostics.playerFacts = playback.diagnostics;
     final uncaught = _uncaught = UncaughtErrors(
         Directory('${root.path}/diagnostics'), appVersion: packageInfo.version)
-      ..context = _playbackContext;
+      ..context = playback.errorContext;
     final kernel =
-        _kernel = KernelControl(_player, harness: () => repositoryPath);
+        _kernel = KernelControl(playback.kernelHost, harness: () => repositoryPath);
     _harness = Harness(
       [
         FamilyDescriptionCapability(() => _harness.catalog),
@@ -452,12 +439,12 @@ final class NextRuntime extends ChangeNotifier {
                 ?.filePath),
         for (final capability in capabilities)
           InvocationScopeCapability(FileIndexingCapability(capability, core.media.service.store)),
-        PlaybackControlsCapability(ClassicPlaybackControls(_player)),
+        PlaybackControlsCapability(playback.controls),
         KernelControlCapability(kernel),
         RuntimeDiagnosticsCapability(
             errors: uncaught,
             log: PlayerNativeLog.instance,
-            player: () => _player.player,
+            player: () => playback.kernelHost.player,
             logDirectory: Directory('${root.path}/diagnostics/player-logs')),
         InvocationScopeCapability(localPlayback),
         InvocationScopeCapability(localLibrary),
@@ -480,9 +467,9 @@ final class NextRuntime extends ChangeNotifier {
       debugPrint('Capability catalogue fingerprint failed: $error');
     }
     core.catalogChanges.onRecorded = () => chat?.memoryChanged();
-    core.danmaku.startRestoring(_harness, _player);
-    _meshPlayback = MeshPlayback(core, _player)..attach();
-    core.media.service.currentPath = () => _player.currentVideoPath;
+    core.danmaku.startRestoring(_harness, playback);
+    _meshPlayback = MeshPlayback(core, playback)..attach();
+    core.media.service.currentPath = () => playback.path;
     _endpoint = AgentEndpoint(
       harness: _harness,
       appVersion: packageInfo.version,
@@ -504,7 +491,7 @@ final class NextRuntime extends ChangeNotifier {
         inUse: () => chat?.available == true),
       device: ClassicHostDeviceSettings(vault: core.credentialVault,
         webServer: ServiceProvider.webServer,
-        spoilerChanged: (key) => _player.updateSpoilerAiSettings(apiKey: key)),
+        spoilerChanged: playback.spoilerKeyChanged),
       vault: LabProfile.active ? LabModelVault() : core.credentialVault,
       meshRuntime: core.mesh, programs: core.programs, history: core.changeHistory,
       chat: () => chat, chatProblem: () => chatError,
@@ -526,7 +513,7 @@ final class NextRuntime extends ChangeNotifier {
     if (kDebugMode && LabProfile.active) installDebugChat(() => chat);
     if (kDebugMode && LabProfile.active) installDebugHostSettings(hostSettings);
     if (kDebugMode && LabProfile.active) installDebugUiData(ServiceProvider.nextCore);
-    if (kDebugMode && LabProfile.active) installDebugLocalOperations(_player);
+    if (kDebugMode && LabProfile.active) playback.installDebug();
     _labs.addListener(_queueEndpointUpdate);
     _location!.addListener(_queueEndpointUpdate);
     notifyListeners();
@@ -558,7 +545,7 @@ final class NextRuntime extends ChangeNotifier {
       // Only for Next: Classic keeps its handlers and kernel logs as they are.
       await _uncaught?.attach();
       PlayerNativeLog.instance.attach();
-      ServiceProvider.nextCore.subtitles.attachPlayer(_player);
+      ServiceProvider.nextCore.subtitles.attachPlayer(playback.subtitleTarget);
       await _localLibrary.attachClassicHistory();
       status = await _endpoint.start(Directory(repositoryPath));
       if (status case AgentEndpointRunning(:final repository)) {
@@ -695,10 +682,11 @@ final class NextRuntime extends ChangeNotifier {
       for (final item in ServiceProvider.watchHistoryProvider.history)
         item.filePath,
     };
-    _startedPath =
-        {PlayerStatus.playing, PlayerStatus.paused}.contains(_player.status)
-            ? _player.currentVideoPath
-            : null;
+    final transport = playback.transport.value;
+    _startedPath = {PlaybackPhase.playing, PlaybackPhase.paused}
+            .contains(transport.phase)
+        ? playback.media.value.path
+        : null;
     _hooks.enable(repository, _endpoint.credentialFile);
     ServiceProvider.nextCore.desktopSystem.attach();
     _jobEvents = _taskEngine.changes.listen((job) {
@@ -734,7 +722,8 @@ final class NextRuntime extends ChangeNotifier {
           }
         }));
     ServiceProvider.watchHistoryProvider.addListener(_libraryChanged);
-    _player.addListener(_playbackChanged);
+    playback.media.addListener(_playbackChanged);
+    playback.transport.addListener(_playbackChanged);
   }
 
   void _libraryChanged() => _queueHook(_observeLibrary);
@@ -765,8 +754,9 @@ final class NextRuntime extends ChangeNotifier {
   void _playbackChanged() =>
       PlayerPerf.span('runtime.playbackChanged', _playbackChange);
   void _playbackChange() {
-    final path = _player.currentVideoPath;
-    final status = _player.status.name;
+    final path = playback.media.value.path;
+    final transport = playback.transport.value;
+    final status = transport.status;
     if (status != _lastPlaybackStatus || path != _lastPlaybackPath) {
       final previous = _lastPlaybackStatus;
       final pathChanged = path != _lastPlaybackPath;
@@ -780,14 +770,14 @@ final class NextRuntime extends ChangeNotifier {
       // the code that failed has returned.
       if (status == 'error') scheduleMicrotask(_recordFailure);
       if (pathChanged || status == 'error') {
-        _uncaught?.notePlayback(_playbackContext());
+        _uncaught?.notePlayback(playback.errorContext());
       }
     }
-    if (!_player.hasVideo) {
+    if (!transport.hasVideo) {
       _startedPath = null;
       return;
     }
-    if (_player.status != PlayerStatus.playing ||
+    if (!transport.playing ||
         path == null ||
         path == _startedPath) {
       return;
@@ -799,8 +789,7 @@ final class NextRuntime extends ChangeNotifier {
   }
 
   void _recordFailure() {
-    final sessionId = VideoPlayerStatePort(_player).snapshot().sessionId!;
-    final captured = PlaybackFailures.instance.capture(_player, sessionId);
+    final captured = playback.captureFailure();
     _queueHook(() async {
       try {
         final failure = await PlaybackFailures.instance.record(captured);
@@ -812,23 +801,14 @@ final class NextRuntime extends ChangeNotifier {
     });
   }
 
-  JsonMap _playbackContext() {
-    final path = _player.currentVideoPath;
-    return {
-      'status': _player.status.name,
-      'path': path == null ? null : redactHarnessText(path),
-      'kernel': playerKernelId(_player.player.getPlayerKernelName()),
-      'positionMs': _player.position.inMilliseconds,
-    };
-  }
-
   /// The app is leaving through its exit path; the next start does not
   /// report this run as ended abruptly.
   Future<void> exiting() async => _uncaught?.exiting();
 
   Future<void> _detachHooks() async {
     ServiceProvider.nextCore.desktopSystem.detach();
-    _player.removeListener(_playbackChanged);
+    playback.media.removeListener(_playbackChanged);
+    playback.transport.removeListener(_playbackChanged);
     ServiceProvider.watchHistoryProvider.removeListener(_libraryChanged);
     await _jobEvents?.cancel();
     await _fileEvents?.cancel();

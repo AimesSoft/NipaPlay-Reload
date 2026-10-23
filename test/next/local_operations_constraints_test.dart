@@ -7,7 +7,7 @@ import 'package:nipaplay/next/capabilities/local_library_operations.dart';
 import 'package:nipaplay/next/media/identity_store.dart' show stableMediaId;
 import 'package:nipaplay/models/watch_history_database.dart';
 import 'package:nipaplay/models/watch_history_model.dart';
-import 'package:nipaplay/next/capabilities/local_playback_operations.dart';
+import 'package:nipaplay/next/player/classic/local_playback_operations.dart';
 import 'package:nipaplay/next/next_database.dart';
 import 'package:nipaplay/next/settings/application_settings.dart';
 import 'package:nipaplay/next/settings/registry.dart';

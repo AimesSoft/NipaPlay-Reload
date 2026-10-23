@@ -2,11 +2,8 @@ import 'dart:collection';
 import 'dart:io';
 
 import 'package:nipa_harness/nipa_harness.dart';
-import 'package:nipaplay/danmaku_abstraction/danmaku_kernel_factory.dart';
 import 'package:nipaplay/player_abstraction/player_abstraction.dart';
 import 'package:nipaplay/player_abstraction/player_factory.dart';
-import 'package:nipaplay/services/auto_next_episode_service.dart';
-import 'package:nipaplay/utils/video_player_state.dart';
 
 import '../harness_redaction.dart';
 
@@ -303,60 +300,6 @@ String? _plainCodec(String? name) {
   return text;
 }
 
-/// The danmaku layer drawn over the current video: the player kernel's own,
-/// a plugin's, or a built-in engine.
-JsonMap danmakuRendererFacts(VideoPlayerState state) {
-  if (state.isNativeDanmakuActive) {
-    return {
-      'id': 'player_native',
-      'kernel': playerKernelId(state.player.getPlayerKernelName())
-    };
-  }
-  final plugin = DanmakuKernelFactory.activePluginRenderer;
-  if (plugin != null) {
-    return {
-      'id': 'plugin',
-      'pluginId': plugin.pluginId,
-      'rendererId': plugin.id,
-      'name': plugin.name
-    };
-  }
-  final engine = DanmakuKernelFactory.getKernelType();
-  return {
-    'id': switch (engine) {
-      DanmakuRenderEngine.cpu => 'cpu',
-      DanmakuRenderEngine.gpu => 'gpu',
-      DanmakuRenderEngine.canvas => 'canvas',
-      DanmakuRenderEngine.nipaplayNext => 'nipaplay_next',
-      DanmakuRenderEngine.next2 => 'next2',
-      DanmakuRenderEngine.dfmPlus => 'dfm_plus',
-    },
-    if (engine == DanmakuRenderEngine.nipaplayNext)
-      'nextPlusPlus': DanmakuKernelFactory.isNextPlusPlusEnabled,
-  };
-}
-
-/// What happens when the video ends, and the countdown to the next episode.
-JsonMap autoNextFacts(VideoPlayerState state) {
-  final service = AutoNextEpisodeService.instance;
-  final counting = service.isCountingDown;
-  final next = counting ? service.nextEpisode : null;
-  return {
-    'endAction': state.playbackEndAction.name,
-    'countingDown': counting,
-    'remainingSeconds': counting ? service.remainingSeconds : null,
-    'next': next == null
-        ? null
-        : {
-            'path': redactHarnessText(next.videoPath),
-            'title': next.title,
-            'subtitle': next.subtitle,
-            'animeId': next.animeId,
-            'episodeId': next.episodeId,
-          },
-  };
-}
-
 /// Categories of a playback failure, mapped from the kernel's own error, a
 /// look at the local file, or the step that failed; anything else is unknown.
 const playbackFailureCategories = [
@@ -426,49 +369,12 @@ String playbackFailureCategory({
 }
 
 /// Raw player or kernel text as reported, redacted and bounded.
-String? _safe(String? text) {
+String? safePlayerText(String? text) {
   if (text == null || text.trim().isEmpty) return null;
   final redacted = redactHarnessText(text);
   return redacted.length > 2000
       ? '${redacted.substring(0, 2000)}[truncated]'
       : redacted;
-}
-
-/// The current error of the internal player, as playback.state reports it.
-/// A failure already recorded for this session gives its probed category.
-JsonMap? playbackErrorFacts(VideoPlayerState state, String sessionId) {
-  final player = state.player;
-  final kernelMessage = player.mediaLoadError;
-  if (!player.hasMediaLoadFailed && state.error == null) return null;
-  final recorded = PlaybackFailures.instance.latestFor(sessionId);
-  final kernel = playerKernelId(player.getPlayerKernelName());
-  final mediaMessage = player.mediaInfo.specificErrorMessage;
-  return {
-    'code': 'media_load_failed',
-    'message': redactHarnessText(
-        kernelMessage ?? state.error ?? 'The current source failed to load.'),
-    'reason': kernelMessage == null && state.error == null
-        ? 'kernel_load_failure'
-        : 'source_or_decoder_failure',
-    'retryable': true,
-    'recoveryAction': 'playback.retry',
-    'stage': state.errorStage,
-    'category': recorded?['category'] ??
-        playbackFailureCategory(
-            stage: state.errorStage,
-            kernelMessage: kernelMessage,
-            mediaMessage: mediaMessage,
-            playerMessage: state.error),
-    'kernel': kernel,
-    'kernelRetryable':
-        player.hasMediaLoadFailed ? player.mediaLoadErrorRetryable : null,
-    'messages': {
-      'player': _safe(state.error),
-      'kernel': _safe(kernelMessage),
-      'media': _safe(mediaMessage),
-    },
-    if (recorded != null) 'failureId': recorded['failureId'],
-  };
 }
 
 /// Playback failures of this process while Next is on, newest last. Each is
@@ -490,31 +396,6 @@ final class PlaybackFailures {
   }
 
   void clear() => _records.clear();
-
-  /// What the player says now about its failure; [record] completes it
-  /// with a look at a local file.
-  JsonMap capture(VideoPlayerState state, String sessionId) {
-    final player = state.player;
-    final kernel = playerKernelId(player.getPlayerKernelName());
-    final kernelMessage = player.mediaLoadError;
-    return {
-      'at': DateTime.now().toUtc().toIso8601String(),
-      'sessionId': sessionId,
-      'path': state.currentVideoPath == null
-          ? null
-          : redactHarnessText(state.currentVideoPath!),
-      'kernel': kernel,
-      'stage': state.errorStage,
-      'kernelRetryable':
-          player.hasMediaLoadFailed ? player.mediaLoadErrorRetryable : null,
-      'messages': {
-        'player': _safe(state.error),
-        'kernel': _safe(kernelMessage),
-        'media': _safe(player.mediaInfo.specificErrorMessage),
-      },
-      '_localPath': _localPath(state.currentVideoPath),
-    };
-  }
 
   /// Completes a captured failure, keeps it and returns it.
   Future<JsonMap> record(JsonMap captured) async {
@@ -539,7 +420,7 @@ final class PlaybackFailures {
     return record;
   }
 
-  static String? _localPath(String? path) {
+  static String? localPathOf(String? path) {
     if (path == null || path.isEmpty) return null;
     final uri = Uri.tryParse(path);
     if (uri != null && uri.scheme == 'file') {

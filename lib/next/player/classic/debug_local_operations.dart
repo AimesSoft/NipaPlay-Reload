@@ -8,7 +8,11 @@ import 'package:nipaplay/services/desktop_player_window_service.dart';
 import 'package:nipaplay/utils/lab_profile.dart';
 import 'package:nipaplay/utils/video_player_state.dart';
 import 'package:path/path.dart' as p;
+import 'package:package_info_plus/package_info_plus.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+
+import '../../capabilities/ui_capture.dart';
+import '../../instance_facts.dart';
 
 /// Disposable fixture setup and independent Classic observations for lab runs.
 void installDebugLocalOperations(VideoPlayerState player) {
@@ -85,6 +89,11 @@ void installDebugLocalOperations(VideoPlayerState player) {
                   'alwaysOnTop': window.isAlwaysOnTop,
                 },
         };
+      } else if (params['op'] == 'capture') {
+        // The window as it is, Classic included: a lab handle, not a
+        // capability (in Classic none of Nipa's run).
+        final info = await PackageInfo.fromPlatform();
+        result = await ClassicUiCapture(InstanceFacts(info.version)).capture();
       } else {
         throw ArgumentError('Unknown lab operation.');
       }

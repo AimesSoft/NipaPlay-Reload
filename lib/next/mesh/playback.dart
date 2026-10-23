@@ -4,16 +4,15 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:nipa_harness/nipa_harness.dart';
 import 'package:path/path.dart' as p;
-import '../../utils/video_player_state.dart';
 import '../../player_abstraction/player_factory.dart';
 import '../next_core.dart';
-import '../subtitles/apply_selection.dart';
+import '../player/next_playback.dart';
 
-/// Attaches Mesh observations to the existing player only while Next is alive.
+/// Attaches Mesh observations to what plays only while Next is open.
 final class MeshPlayback {
   MeshPlayback(this.core, this.player);
   final NextCore core;
-  final VideoPlayerState player;
+  final NextPlayback player;
   final _loading = <String, Future<JsonMap>>{};
   final _bindings = <String, JsonMap>{};
   Timer? _timer;
@@ -35,7 +34,7 @@ final class MeshPlayback {
 
   Future<void> _observe() async {
     if (_closed) return;
-    final path = player.currentVideoPath;
+    final path = player.path;
     if (path == null || player.duration.inMilliseconds <= 0) return;
     final library = core.uiData.meshLibrary!;
     final remote = library.playback[path];
@@ -95,25 +94,24 @@ final class MeshPlayback {
       (await _bundle(path))?['tracks'] == null
           ? null
           : ((await _bundle(path))!['tracks'] as List).cast<JsonMap>();
-  Future<bool> subtitles(VideoPlayerState current, String path) async {
+  Future<bool> subtitles(SubtitleTarget current, String path) async {
     final bundle = await _bundle(path);
     if (bundle == null) return false;
     for (final t in (bundle['subtitles'] as List).cast<JsonMap>()) {
-      if (current.currentVideoPath != path) return true;
+      if (current.path != path) return true;
       if (t['origin'] != 'embedded' && t['available'] == true) {
-        await current.registerNextSubtitleCandidate(
-            t['playbackPath'] as String, t['title'] as String);
+        await current.offer(t['playbackPath'] as String, t['title'] as String);
         if (t['selected'] == true)
-          await current.applyNextExternalSubtitle(
+          await current.applyExternal(
               t['playbackPath'] as String, t['title'] as String);
       } else if (t['origin'] == 'embedded' && t['selected'] == true) {
-        await current.applyNextEmbeddedSubtitle(t['index'] as int);
+        await current.applyEmbedded(t['index'] as int);
       }
       if (t['selectionBasis'] == 'explicit' &&
           !(bundle['subtitles'] as List)
               .cast<Map>()
               .any((s) => s['selected'] == true))
-        current.player.activeSubtitleTracks = [];
+        await current.clear();
     }
     return true;
   }
@@ -158,11 +156,11 @@ final class MeshPlayback {
   }
 
   /// Per-open player properties, never a persistent settings change.
-  static void directLoopback(VideoPlayerState player, bool remote) {
+  static void directLoopback(KernelHost host, bool remote) {
     final proxy = remote ? '' : PlayerFactory.getHttpProxy();
-    player.player.setProperty('avformat.http_proxy', proxy);
-    player.player.setProperty('avio.http_proxy', proxy);
-    player.player.setProperty('http-proxy', proxy);
+    host.player.setProperty('avformat.http_proxy', proxy);
+    host.player.setProperty('avio.http_proxy', proxy);
+    host.player.setProperty('http-proxy', proxy);
   }
 
   Future<void> close() async {
@@ -173,7 +171,7 @@ final class MeshPlayback {
     core.danmaku.service.remoteTracks = null;
     core.danmaku.remoteControl = null;
     core.subtitles.remoteLoader = null;
-    if (core.uiData.meshLibrary!.playback.containsKey(player.currentVideoPath))
-      directLoopback(player, false);
+    if (core.uiData.meshLibrary!.playback.containsKey(player.path))
+      directLoopback(player.kernelHost, false);
   }
 }

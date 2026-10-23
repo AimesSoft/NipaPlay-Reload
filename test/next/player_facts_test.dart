@@ -2,10 +2,11 @@ import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:nipa_harness/nipa_harness.dart';
-import 'package:nipaplay/next/capabilities/classic_playback_controls.dart';
+import 'package:nipaplay/next/player/classic/classic_playback_controls.dart';
 import 'package:nipaplay/next/capabilities/playback_controls_capability.dart';
 import 'package:nipaplay/next/capabilities/player_facts.dart';
-import 'package:nipaplay/next/capabilities/video_player_state_port.dart';
+import 'package:nipaplay/next/player/classic/classic_facts.dart';
+import 'package:nipaplay/next/player/classic/video_player_state_port.dart';
 import 'package:nipaplay/player_abstraction/player_abstraction.dart';
 import 'package:nipaplay/utils/video_player_state.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -423,7 +424,7 @@ void main() {
         ..stage = 'file_check';
       final sessionId = VideoPlayerStatePort(state).snapshot().sessionId!;
       final failure = await PlaybackFailures.instance
-          .record(PlaybackFailures.instance.capture(state, sessionId));
+          .record(captureClassicFailure(state, sessionId));
       expect(failure['category'], 'file_not_found');
       expect(failure['file'], {'exists': false, 'readable': null});
       expect(failure['stage'], 'file_check');
@@ -439,9 +440,9 @@ void main() {
         ..path = 'https://h.example/v.mkv?api_key=SECRET'
         ..failure = '播放器打开媒体失败: tcp: Connection refused'
         ..stage = 'media_open';
-      final second = await PlaybackFailures.instance.record(PlaybackFailures
-          .instance
-          .capture(remote, VideoPlayerStatePort(remote).snapshot().sessionId!));
+      final second = await PlaybackFailures.instance.record(
+          captureClassicFailure(
+              remote, VideoPlayerStatePort(remote).snapshot().sessionId!));
       expect(second['category'], 'network');
       expect(second['file'], isNull);
       expect('$second', isNot(contains('SECRET')));

@@ -1,8 +1,6 @@
 import 'dart:async';
 
 import 'package:flutter/widgets.dart';
-import 'package:nipaplay/utils/video_player_state.dart';
-import 'package:provider/provider.dart';
 
 import '../theme/tokens.dart';
 import '../widgets/icons.dart';
@@ -116,8 +114,9 @@ class MoreMenuState extends State<MoreMenu> {
     );
   }
 
-  Widget _root() => Selector<VideoPlayerState, (double, bool, VideoAspectMode)>(
-        selector: (_, s) => (_playback.rate, _playback.canFit, _playback.fit),
+  Widget _root() => PlaybackSelector<(double, bool, VideoAspectMode)>(
+        playback: _playback,
+        selector: (s) => (s.rate, s.canFit, s.fit),
         builder: (context, v, _) {
           final (rate, canFit, fit) = v;
           final audio = _audio.where((a) => a.selected).firstOrNull;
@@ -174,8 +173,9 @@ class MoreMenuState extends State<MoreMenu> {
         ),
       ]);
 
-  Widget _rate() => Selector<VideoPlayerState, double>(
-        selector: (_, s) => _playback.rate,
+  Widget _rate() => PlaybackSelector<double>(
+        playback: _playback,
+        selector: (s) => s.rate,
         builder: (context, rate, _) {
           bool same(double a, double b) => (a - b).abs() < 0.001;
           final rates = [
@@ -208,8 +208,9 @@ class MoreMenuState extends State<MoreMenu> {
         },
       );
 
-  Widget _fit() => Selector<VideoPlayerState, VideoAspectMode>(
-        selector: (_, s) => _playback.fit,
+  Widget _fit() => PlaybackSelector<VideoAspectMode>(
+        playback: _playback,
+        selector: (s) => s.fit,
         builder: (context, fit, _) => _list<VideoAspectMode>(
           title: '画面',
           options: [
@@ -250,9 +251,10 @@ class _DanmakuPageState extends State<_DanmakuPage> {
       });
 
   @override
-  Widget build(BuildContext context) => Selector<VideoPlayerState,
+  Widget build(BuildContext context) => PlaybackSelector<
           (PlayerDial, PlayerDial, double, PlayerDial, int)>(
-        selector: (_, s) => (
+        playback: _playback,
+        selector: (_) => (
           _playback.danmakuOpacity,
           _playback.danmakuSize,
           _playback.danmakuArea,

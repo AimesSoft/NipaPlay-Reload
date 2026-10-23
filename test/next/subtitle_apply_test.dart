@@ -1,6 +1,8 @@
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:nipaplay/next/player/classic/classic_backed_playback.dart';
+import 'package:nipaplay/next/player/next_playback.dart';
 import 'package:nipaplay/next/subtitles/library.dart';
 import 'package:nipaplay/utils/video_player_state.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -25,6 +27,7 @@ void main() {
   late SubtitleLibrary library;
   late String id, path, srt;
   late _OpenState state;
+  late SubtitleTarget target;
 
   setUp(() async {
     SharedPreferences.setMockInitialValues({});
@@ -50,6 +53,7 @@ void main() {
     id = await f.identities.ensureFile(path);
     await library.inspect(id, path);
     state = _OpenState(path);
+    target = ClassicBackedPlayback(state).subtitleTarget;
   });
   tearDown(() async {
     await library.close();
@@ -66,7 +70,7 @@ void main() {
       () async {
     await library.select(id, await trackId(false));
     expect(state.player.activeSubtitleTracks, [0]);
-    await library.loadForPlayback(state, path);
+    await library.loadForPlayback(target, path);
     expect(state.activeExternalSubtitlePaths.map((p) => p.split('/').last),
         ['Sintel.zh-Hans.srt']);
     expect(state.player.activeSubtitleTracks, isEmpty);
@@ -74,17 +78,17 @@ void main() {
 
   test('a chosen embedded track takes the external subtitle off', () async {
     await library.select(id, await trackId(false));
-    await library.loadForPlayback(state, path);
+    await library.loadForPlayback(target, path);
     expect(state.activeExternalSubtitlePaths, hasLength(1));
     await library.select(id, await trackId(true));
-    await library.loadForPlayback(state, path);
+    await library.loadForPlayback(target, path);
     expect(state.activeExternalSubtitlePaths, isEmpty);
     expect(state.player.activeSubtitleTracks, [0]);
   });
 
   test('changing the choice while playing keeps only the chosen one',
       () async {
-    library.attachPlayer(state);
+    library.attachPlayer(target);
     await library.select(id, await trackId(false));
     expect(state.activeExternalSubtitlePaths, hasLength(1));
     expect(state.player.activeSubtitleTracks, isEmpty);
