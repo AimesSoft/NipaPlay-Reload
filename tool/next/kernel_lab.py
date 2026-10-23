@@ -366,69 +366,86 @@ def paused_check(kernel):
         gui('playback.close')
 
 
+def wait_position(at_ms, seconds=8):
+    deadline = time.monotonic() + seconds
+    while time.monotonic() < deadline:
+        st = state()
+        if st.get('positionMs', 0) >= at_ms:
+            return st
+        time.sleep(0.05)
+    return state()
+
+
+def strip(name):
+    """字幕所在的底部条带（窗口的下四分之一偏上）。"""
+    return pngstats(RUN / (name + '-window.png'), 0.2, 0.74, 0.6, 0.14)
+
+
 def subtitles_check(kernel):
-    """字幕：Sintel 只显示被选中的那一条，切换生效；第 12 集的 ASS 正常显示。"""
+    """字幕：Sintel 只显示被选中的那一条，切换生效；第 12 集的 ASS 正常显示（播放中取景）。"""
     use(kernel)
     sintel = media_for(kernel, 'sintel')
-    host('open', path=str(sintel), paused='1', startMs=str(131000))
-    time.sleep(1.5)
+    gui('playback.open', {'path': str(sintel), 'startPositionMs': 128000})
+    wait_playing()
     tracks = gui('playback.tracks')
-    record('tracks', kernel=kernel, tracks=tracks)
-    embedded = [t for t in (tracks.get('subtitles') or tracks.get('subtitle') or []) if t.get('origin') == 'embedded']
-    english = next((t for t in embedded if 'en' in (t.get('language') or '').lower()), embedded[1] if len(embedded) > 1 else None)
-    state0 = state()
-    record('subtitle_start', kernel=kernel, facts=subtitle_facts(), status=state0.get('status'))
+    embedded = [t for t in (tracks.get('tracks') or []) if t.get('kind') == 'subtitle' and t.get('origin') == 'embedded']
+    english = next((t for t in embedded if (t.get('language') or '') in ('eng', 'en')), None)
+    record('subtitle_tracks', kernel=kernel, count=len(embedded), english=english)
     if english is not None:
         reply = gui('playback.select_track', {'kind': 'subtitle', 'origin': 'embedded', 'index': english['index']})
-        time.sleep(1)
-        gui('playback.seek', {'positionMs': 131100}, strict=True)
-        time.sleep(1.2)
-        record('subtitle_english', kernel=kernel, reply=reply, facts=subtitle_facts(), text=host('text'))
+        wait_position(131500)
+        record('subtitle_english', kernel=kernel, outcome=((reply.get('receipt') or {}).get('outcome')), facts=subtitle_facts(), text=host('text'))
         shot('%s-sintel-english' % kernel)
+        record('strip', name='english', stats=strip('%s-sintel-english' % kernel))
         reply = gui('playback.select_track', {'kind': 'subtitle', 'origin': 'embedded', 'index': -1})
-        time.sleep(1)
-        record('subtitle_off', kernel=kernel, reply=reply, facts=subtitle_facts(), text=host('text'))
+        time.sleep(0.4)
+        record('subtitle_off', kernel=kernel, outcome=((reply.get('receipt') or {}).get('outcome')), facts=subtitle_facts(), text=host('text'))
         shot('%s-sintel-off' % kernel)
-    gui('playback.load_subtitle', {'path': str(SINTEL_SRT)})
-    gui('playback.seek', {'positionMs': 123500}, strict=True)
-    time.sleep(1.2)
+        record('strip', name='off', stats=strip('%s-sintel-off' % kernel))
+    gui('playback.seek', {'positionMs': 123000}, strict=True)
+    reply = gui('playback.load_subtitle', {'path': str(SINTEL_SRT)})
+    wait_position(124000)
     record('subtitle_srt', kernel=kernel, facts=subtitle_facts())
     shot('%s-sintel-srt' % kernel)
+    record('strip', name='srt', stats=strip('%s-sintel-srt' % kernel))
     gui('playback.close')
     episode = media_for(kernel, 'episode12')
-    host('open', path=str(episode), paused='1', startMs=str(120000))
-    time.sleep(1.5)
-    tracks = gui('playback.tracks')
-    record('tracks', kernel=kernel, media='episode12', tracks=tracks)
-    embedded = [t for t in (tracks.get('subtitles') or tracks.get('subtitle') or []) if t.get('origin') == 'embedded']
-    if embedded:
-        reply = gui('playback.select_track', {'kind': 'subtitle', 'origin': 'embedded', 'index': embedded[0]['index']})
-        time.sleep(1)
-        gui('playback.seek', {'positionMs': 130000}, strict=True)
-        time.sleep(1.5)
-        record('subtitle_ass', kernel=kernel, reply=reply, facts=subtitle_facts(), text=host('text'))
-        shot('%s-episode12-ass' % kernel)
-    gui('playback.close')
-
-
-def mdk_file_plan():
-    """MDK + 字幕库记的外挂 ASS 进打开计划（Sintel）：打开会不会成。"""
-    ass = HOME / '.nipa-next/erika-followups-runs/data/sintel.zh.ass'
-    use('erika')
-    gui('playback.open', {'path': str(SINTEL), 'startPositionMs': 120000})
+    gui('playback.open', {'path': str(episode), 'startPositionMs': 150000})
     wait_playing()
-    record('off', reply=gui('playback.select_track', {'kind': 'subtitle', 'origin': 'embedded', 'index': -1}), facts=subtitle_facts())
+    tracks = gui('playback.tracks')
+    embedded = [t for t in (tracks.get('tracks') or []) if t.get('kind') == 'subtitle' and t.get('origin') == 'embedded']
+    record('subtitle_tracks', kernel=kernel, media='episode12', count=len(embedded), tracks=embedded)
+    for track in embedded[:2]:
+        reply = gui('playback.select_track', {'kind': 'subtitle', 'origin': 'embedded', 'index': track['index']})
+        wait_position(153200 if track['index'] == 0 else 154600)
+        record('subtitle_ass', kernel=kernel, index=track['index'], outcome=((reply.get('receipt') or {}).get('outcome')), facts=subtitle_facts(), text=host('text'))
+        name = '%s-episode12-ass%d' % (kernel, track['index'])
+        shot(name)
+        record('strip', name=name, stats=strip(name))
     gui('playback.close')
-    use('mdk')
-    gui('playback.open', {'path': str(SINTEL), 'startPositionMs': 120000})
-    s = wait_playing()
-    record('mdk_plain', status=s.get('status'), error=s.get('error'), facts=subtitle_facts())
-    record('mdk_load', reply=gui('playback.load_subtitle', {'path': str(ass)}), facts=subtitle_facts())
-    time.sleep(1)
-    gui('playback.close')
-    gui('playback.open', {'path': str(SINTEL), 'startPositionMs': 120000})
-    s = wait_playing()
-    record('mdk_file_plan', status=s.get('status'), error=s.get('error'), facts=subtitle_facts())
+
+
+def erika_subtitle_probe():
+    """Erika：内嵌英语字幕选上之后，播放中与暂停中各画不画。"""
+    use('erika')
+    gui('playback.open', {'path': str(SINTEL), 'startPositionMs': 128000})
+    wait_playing()
+    tracks = gui('playback.tracks')
+    english = next((t for t in tracks['tracks'] if t.get('kind') == 'subtitle' and t.get('origin') == 'embedded' and (t.get('language') or '') in ('eng', 'en')), None)
+    record('erika_probe_tracks', english=english)
+    reply = gui('playback.select_track', {'kind': 'subtitle', 'origin': 'embedded', 'index': english['index']})
+    record('erika_probe_select', receipt=(reply.get('receipt') or {}), facts=subtitle_facts())
+    for i in range(5):
+        time.sleep(0.8)
+        st = state()
+        shot('erika-probe-play-%d' % i)
+        record('erika_probe_pos', i=i, positionMs=st.get('positionMs'),
+               tracks=gui('playback.kernel_invoke', {'sessionId': st['sessionId'], 'method': 'tracks'}).get('result'))
+    gui('playback.set_paused', {'paused': True}, strict=True)
+    time.sleep(0.5)
+    gui('playback.seek', {'positionMs': 131100}, strict=True)
+    time.sleep(1.0)
+    shot('erika-probe-paused')
     gui('playback.close')
 
 
@@ -469,6 +486,17 @@ def facts_check():
             result = methods.get('result') or {}
             row['methods'] = [m.get('name') for m in result.get('methods', [])][:80]
             erika = facts.get('erika') or {}
+            def versions(value, path=''):
+                found = {}
+                if isinstance(value, dict):
+                    for key, inner in value.items():
+                        if any(w in key.lower() for w in ('version', 'build', 'commit', 'engine', 'name')) and not isinstance(inner, (dict, list)):
+                            found[path + key] = inner
+                        found.update(versions(inner, path + key + '.'))
+                return found
+            diagnostics = erika.get('diagnostics') or {}
+            row['erikaDiagnosticsKeys'] = list(diagnostics)
+            row['erikaVersionFields'] = versions(diagnostics)
             row['erikaDecoder'] = erika.get('decoder')
             row['erikaFrames'] = erika.get('frames')
         record('facts', **row)
@@ -507,6 +535,8 @@ try:
     elif MODE == 'paused':
         for kernel in ARGS or SETTING:
             paused_check(kernel)
+    elif MODE == 'erikasub':
+        erika_subtitle_probe()
     elif MODE == 'subtitles':
         for kernel in ARGS or SETTING:
             subtitles_check(kernel)
