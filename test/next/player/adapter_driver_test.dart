@@ -182,6 +182,7 @@ void main() {
         tracks: const KernelTrackPlan(audio: 1));
     expect(driver.calls, [
       'configure',
+      'route default',
       'plan 1 none',
       'volume 0.4',
       'rate 1.5',
@@ -217,7 +218,7 @@ void main() {
             subtitleTrack: 3),
         tracks: const KernelTrackPlan(
             audio: 0, subtitle: EmbeddedKernelSubtitle(0)));
-    expect(driver.calls.where((c) => c.startsWith('plan') || c.startsWith('route')),
+    expect(driver.calls.where((c) => c.startsWith('plan ') || c.startsWith('route')),
         ['route direct', 'plan 1 embedded 3']);
     expect(driver.tracks.audio, 1);
     await driver.release();
