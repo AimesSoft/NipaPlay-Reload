@@ -655,6 +655,11 @@ class ErikaPlayerAdapter
   int _externalSubtitleGeneration = 0;
   Future<void> _externalSubtitleOperation = Future<void>.value();
 
+  /// Completes when the media set last has finished opening (or failed to,
+  /// or was replaced): Erika takes an external subtitle only on an open
+  /// media, so one asked for meanwhile waits for this.
+  Completer<void> _mediaOpened = Completer<void>()..complete();
+
   static const bool _subtitleTraceEnabled = bool.fromEnvironment(
     'NIPAPLAY_ERIKA_SUBTITLE_TRACE',
   );
@@ -930,22 +935,33 @@ class ErikaPlayerAdapter
       _lastNativeError = null;
       _externalSubtitleTrackIds.clear();
       _externalSubtitleGeneration++;
+      if (!_mediaOpened.isCompleted) {
+        _mediaOpened.complete();
+      }
+      _mediaOpened = Completer<void>();
     }
   }
 
   @override
   Future<void> prepare() async {
     _ensureSupported();
-    if (_media.isEmpty) {
-      return;
+    final opened = _mediaOpened;
+    try {
+      if (_media.isEmpty) {
+        return;
+      }
+      await _player.ensureCreated();
+      await _player.open(
+        _media,
+        httpHeaders: _userAgent.isEmpty ? null : {'User-Agent': _userAgent},
+      );
+      _subtitleTrace('prepare open complete media=$_media');
+      _state = PlayerPlaybackState.paused;
+    } finally {
+      if (!opened.isCompleted) {
+        opened.complete();
+      }
     }
-    await _player.ensureCreated();
-    await _player.open(
-      _media,
-      httpHeaders: _userAgent.isEmpty ? null : {'User-Agent': _userAgent},
-    );
-    _subtitleTrace('prepare open complete media=$_media');
-    _state = PlayerPlaybackState.paused;
   }
 
   @override
@@ -986,6 +1002,9 @@ class ErikaPlayerAdapter
       return existing;
     }
     _disposed = true;
+    if (!_mediaOpened.isCompleted) {
+      _mediaOpened.complete();
+    }
     _buffering.dispose();
     _danmakuConfigTimer?.cancel();
     _danmakuConfigTimer = null;
@@ -1193,6 +1212,10 @@ class ErikaPlayerAdapter
       await _player.selectSubtitleTrack(null);
       return;
     }
+
+    // A subtitle can only join a media that is open.
+    await _mediaOpened.future;
+    if (_disposed || generation != _externalSubtitleGeneration) return;
 
     final addWatch = Stopwatch()..start();
     _subtitleTrace(

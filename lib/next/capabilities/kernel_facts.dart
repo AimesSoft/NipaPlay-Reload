@@ -119,7 +119,8 @@ const erikaNotReported = [
   'decoder.selection',
 ];
 
-/// Erika methods that only read: they leave the player as it was.
+/// Erika methods that leave the player as it was: the ones that only read,
+/// and the frame exports, which have a demuxer and decoder of their own.
 bool erikaReadsOnly(String method, Map<String, Object?> arguments) {
   if (method == 'invokeJson') {
     final inner = arguments['method'];
@@ -130,8 +131,14 @@ bool erikaReadsOnly(String method, Map<String, Object?> arguments) {
             innerArguments is Map<String, Object?> ? innerArguments : const {});
   }
   return method.startsWith('get') ||
-      const {'listMethods', 'tracks', 'trackSelection', 'danmakuTracks'}
-          .contains(method);
+      const {
+        'listMethods',
+        'tracks',
+        'trackSelection',
+        'danmakuTracks',
+        'exportFrame',
+        'exportFrames',
+      }.contains(method);
 }
 
 /// What each kernel lets Next read and set for one playback.

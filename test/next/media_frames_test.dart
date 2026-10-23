@@ -101,32 +101,9 @@ void main() {
 
     test('the Erika engine writes the PNG Erika encoded and names itself',
         () async {
-      final asked = <(Duration, int, int, ErikaFrameFormat)>[];
-      final png = Uint8List.fromList([0x89, 0x50, 0x4E, 0x47, 1, 2, 3]);
-      final erika = ErikaFrameEngine(
-          exporter: (uri,
-              {required position,
-              width = 0,
-              height = 0,
-              format = ErikaFrameFormat.png}) async {
-        asked.add((position, width, height, format));
-        if (position == const Duration(seconds: 30)) {
-          throw StateError('Frame export failed: position 30s is not '
-              'before the end of the media (20s)');
-        }
-        final pictureOnly = format == ErikaFrameFormat.png;
-        return ErikaExportedFrame(
-          width: position == Duration.zero ? 16 : 640,
-          height: position == Duration.zero ? 7 : 273,
-          format: format,
-          bytes: pictureOnly ? png : Uint8List(16 * 7 * 4),
-          timestamp: position - const Duration(milliseconds: 0),
-          sourceWidth: 4096,
-          sourceHeight: 1744,
-          duration: const Duration(milliseconds: 888032),
-        );
-      });
-      final out = result(await call(preferred(erika), {
+      final fake = _FakeErikaSession();
+      final out = result(await call(
+          preferred(ErikaFrameEngine(opener: (_) async => fake)), {
         'path': file,
         'atMs': [60000, 10000, 30000],
         'maxEdge': 640,
@@ -137,26 +114,28 @@ void main() {
       expect(engine.opens, 0, reason: 'MDK was not needed');
       expect((out['durationMs'], out['videoWidth'], out['videoHeight']),
           (888032, 4096, 1744));
-      expect(asked.first, (Duration.zero, 16, 16, ErikaFrameFormat.rgba));
-      expect(asked.skip(1).map((a) => (a.$2, a.$3, a.$4)),
+      expect(fake.asked.first, (Duration.zero, 16, 16, ErikaFrameFormat.rgba));
+      expect(fake.asked.skip(1).map((a) => (a.$2, a.$3, a.$4)),
           everyElement((640, 640, ErikaFrameFormat.png)));
+      expect(fake.asked.skip(1).map((a) => a.$1.inMilliseconds),
+          [10000, 30000, 60000],
+          reason: 'one open media, asked in ascending order');
+      expect(fake.opened, 1);
+      expect(fake.closed, 1, reason: 'the media is released afterwards');
       final frames = (out['frames'] as List).cast<Map>();
       expect(frames.first, allOf(containsPair('width', 640),
           containsPair('height', 273), containsPair('mimeType', 'image/png'),
           containsPair('timestampMs', 60000)));
-      expect(await File(frames.first['path'] as String).readAsBytes(), png);
+      expect(await File(frames.first['path'] as String).readAsBytes(),
+          _FakeErikaSession.png);
       expect(frames.last['error'], containsPair('code', 'beyond_duration'));
     });
 
     test('MDK takes the frames when Erika cannot, and the result says why',
         () async {
       final erika = ErikaFrameEngine(
-          exporter: (uri,
-                  {required position,
-                  width = 0,
-                  height = 0,
-                  format = ErikaFrameFormat.png}) async =>
-              throw UnsupportedError('no erika_export_frame in this library'));
+          opener: (_) async => throw UnsupportedError(
+              'no erika_export_frame in this library'));
       final out = result(await call(preferred(erika), {
         'path': file,
         'atMs': [1000],
@@ -166,6 +145,17 @@ void main() {
         {'engine': 'erika', 'error': 'no erika_export_frame in this library'}
       ]);
       expect(out['taken'], 1);
+    });
+
+    test('a media Erika cannot read is released and falls back', () async {
+      final fake = _FakeErikaSession(failFirst: true);
+      final out = result(await call(
+          preferred(ErikaFrameEngine(opener: (_) async => fake)), {
+        'path': file,
+        'atMs': [1000],
+      }));
+      expect(out['engine'], 'fake');
+      expect(fake.closed, 1);
     });
   });
 
@@ -509,4 +499,47 @@ class _FakeSource implements FrameSource {
     closed = true;
     fake.openSources--;
   }
+}
+
+
+final class _FakeErikaSession implements ErikaFrameSession {
+  _FakeErikaSession({this.failFirst = false});
+
+  static final png = Uint8List.fromList([0x89, 0x50, 0x4E, 0x47, 1, 2, 3]);
+
+  final bool failFirst;
+  final asked = <(Duration, int, int, ErikaFrameFormat)>[];
+  int opened = 1;
+  int closed = 0;
+
+  @override
+  Future<ErikaExportedFrame> frameAt(
+    Duration position, {
+    int width = 0,
+    int height = 0,
+    ErikaFrameFormat format = ErikaFrameFormat.png,
+  }) async {
+    asked.add((position, width, height, format));
+    if (failFirst) {
+      throw StateError('Frame export failed: cannot read the media');
+    }
+    if (position == const Duration(seconds: 30)) {
+      throw StateError('Frame export failed: position 30s is not '
+          'before the end of the media (20s)');
+    }
+    final pictureOnly = format == ErikaFrameFormat.png;
+    return ErikaExportedFrame(
+      width: position == Duration.zero ? 16 : 640,
+      height: position == Duration.zero ? 7 : 273,
+      format: format,
+      bytes: pictureOnly ? png : Uint8List(16 * 7 * 4),
+      timestamp: position,
+      sourceWidth: 4096,
+      sourceHeight: 1744,
+      duration: const Duration(milliseconds: 888032),
+    );
+  }
+
+  @override
+  Future<void> close() async => closed += 1;
 }

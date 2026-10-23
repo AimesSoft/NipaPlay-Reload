@@ -6,24 +6,54 @@ import 'package:nipa_harness/nipa_harness.dart';
 
 import 'media_frames.dart';
 
-/// Erika's single-frame export, as erika_flutter gives it.
-typedef ErikaFrameExporter = Future<ErikaExportedFrame> Function(
-  String uri, {
-  required Duration position,
-  int width,
-  int height,
-  ErikaFrameFormat format,
-});
+/// A media Erika keeps open for pictures: the shape of
+/// [ErikaFrameExportSession], so a test can stand in for it.
+abstract interface class ErikaFrameSession {
+  Future<ErikaExportedFrame> frameAt(
+    Duration position, {
+    int width,
+    int height,
+    ErikaFrameFormat format,
+  });
 
-/// Frames from Erika's own headless export: each picture is decoded by an
+  Future<void> close();
+}
+
+/// Opens [uri] in Erika's frame export.
+typedef ErikaFrameSessionOpener = Future<ErikaFrameSession> Function(
+    String uri);
+
+Future<ErikaFrameSession> _openErikaSession(String uri) async =>
+    _ErikaFrameSessionHandle(await ErikaFrameExportSession.open(uri));
+
+final class _ErikaFrameSessionHandle implements ErikaFrameSession {
+  _ErikaFrameSessionHandle(this._session);
+  final ErikaFrameExportSession _session;
+
+  @override
+  Future<ErikaExportedFrame> frameAt(
+    Duration position, {
+    int width = 0,
+    int height = 0,
+    ErikaFrameFormat format = ErikaFrameFormat.png,
+  }) =>
+      _session.frameAt(position, width: width, height: height, format: format);
+
+  @override
+  Future<void> close() => _session.close();
+}
+
+/// Frames from Erika's own headless export: the media is opened once by an
 /// independent demuxer and software decoder inside Erika (no player, nothing
-/// shared with what is playing), scaled there, and handed back as RGBA, or
-/// as a PNG Erika encoded itself when png is asked for. The work runs off
-/// the UI thread.
+/// shared with what is playing), every picture is taken from that one open
+/// media, scaled there, and handed back as RGBA, or as a PNG Erika encoded
+/// itself when png is asked for. Pictures asked for in ascending time order
+/// are decoded on from one to the next without seeking again. The work runs
+/// off the UI thread.
 final class ErikaFrameEngine implements FrameEngine {
-  const ErikaFrameEngine({this.exporter = ErikaPlayer.exportFrame});
+  const ErikaFrameEngine({this.opener = _openErikaSession});
 
-  final ErikaFrameExporter exporter;
+  final ErikaFrameSessionOpener opener;
 
   @override
   String get name => 'erika';
@@ -34,22 +64,29 @@ final class ErikaFrameEngine implements FrameEngine {
       int? maxEdge,
       String format = 'jpeg',
       required Duration timeout}) async {
-    // Opening takes the first picture at the smallest size: Erika reads the
-    // media, and reports its duration and video size.
-    final ErikaExportedFrame first;
+    final ErikaFrameSession session;
     try {
-      first = await exporter(source,
-              position: Duration.zero,
-              width: 16,
-              height: 16,
-              format: ErikaFrameFormat.rgba)
-          .timeout(timeout);
+      session = await opener(source).timeout(timeout);
     } on StateError catch (error) {
       throw Failure(FailureCode.unavailable, error.message);
     }
+    // Opening takes the first picture at the smallest size: Erika reports the
+    // media's duration and video size with it.
+    final ErikaExportedFrame first;
+    try {
+      first = await session
+          .frameAt(Duration.zero,
+              width: 16, height: 16, format: ErikaFrameFormat.rgba)
+          .timeout(timeout);
+    } on StateError catch (error) {
+      await session.close();
+      throw Failure(FailureCode.unavailable, error.message);
+    } catch (_) {
+      await session.close();
+      rethrow;
+    }
     return _ErikaFrameSource(
-      exporter,
-      source,
+      session,
       width: width ?? maxEdge!,
       height: width == null ? maxEdge! : 0,
       png: format == 'png',
@@ -62,8 +99,7 @@ final class ErikaFrameEngine implements FrameEngine {
 
 final class _ErikaFrameSource implements FrameSource {
   _ErikaFrameSource(
-    this._exporter,
-    this._source, {
+    this._session, {
     required int width,
     required int height,
     required bool png,
@@ -74,8 +110,7 @@ final class _ErikaFrameSource implements FrameSource {
         _height = height,
         _png = png;
 
-  final ErikaFrameExporter _exporter;
-  final String _source;
+  final ErikaFrameSession _session;
 
   /// Bounds handed to Erika: a width, or a box for the longest edge. Erika
   /// keeps the aspect ratio and never enlarges past the video.
@@ -96,8 +131,7 @@ final class _ErikaFrameSource implements FrameSource {
   Future<RawFrame> frameAt(int atMs) async {
     final ErikaExportedFrame frame;
     try {
-      frame = await _exporter(_source,
-          position: Duration(milliseconds: atMs),
+      frame = await _session.frameAt(Duration(milliseconds: atMs),
           width: _width,
           height: _height,
           format: _png ? ErikaFrameFormat.png : ErikaFrameFormat.rgba);
@@ -118,5 +152,5 @@ final class _ErikaFrameSource implements FrameSource {
   }
 
   @override
-  Future<void> close() async {}
+  Future<void> close() => _session.close();
 }

@@ -354,8 +354,8 @@ packages:
     dependency: "direct main"
     description:
       path: "packages/erika_flutter"
-      ref: "5e5a95406f9df3ea55c4254c7da1443eaaabfbcd"
-      resolved-ref: "5e5a95406f9df3ea55c4254c7da1443eaaabfbcd"
+      ref: "230666bc58981847af611a3addf3d372904151c0"
+      resolved-ref: "230666bc58981847af611a3addf3d372904151c0"
       url: "https://github.com/AimesSoft/liberika.git"
     source: git
     version: "0.2.1"

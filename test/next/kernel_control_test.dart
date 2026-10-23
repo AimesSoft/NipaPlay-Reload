@@ -546,6 +546,10 @@ void main() {
       expect(erikaReadsOnly('listMethods', const {}), true);
       expect(erikaReadsOnly('getDiagnosticsSnapshot', const {}), true);
       expect(erikaReadsOnly('trackSelection', const {}), true);
+      expect(erikaReadsOnly('exportFrame', const {}), true);
+      expect(erikaReadsOnly('exportFrames', const {}), true);
+      expect(erikaReadsOnly('invokeJson', const {'method': 'exportFrames'}),
+          true);
       expect(erikaReadsOnly('pause', const {}), false);
       expect(erikaReadsOnly('invokeJson', const {'method': 'getLogs'}), true);
       expect(erikaReadsOnly('invokeJson', const {'method': 'seek'}), false);
