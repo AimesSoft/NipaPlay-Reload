@@ -63,6 +63,11 @@ final class KernelCapabilities {
     required this.bufferingTelemetry,
     required this.endEvent,
     required this.openAtPosition,
+    this.trackConfirm = false,
+    this.subtitleFiles = const {},
+    this.subtitleScale = false,
+    this.subtitleDelay = false,
+    this.subtitleText = false,
   });
 
   /// Play and pause are told by the kernel (not inferred from the clock).
@@ -79,13 +84,179 @@ final class KernelCapabilities {
   /// The media opens at a position, the first frame there.
   final bool openAtPosition;
 
+  /// A track change answers once the kernel reports it (a decoder opened
+  /// for it, a property read back).
+  final bool trackConfirm;
+
+  /// The subtitle file formats (lowercase extensions) the kernel draws
+  /// itself when mounted; any other file is drawn over the video.
+  final Set<String> subtitleFiles;
+
+  /// The kernel scales the subtitles it draws.
+  final bool subtitleScale;
+
+  /// The kernel shifts the subtitles it draws in time.
+  final bool subtitleDelay;
+
+  /// The kernel tells the text of the subtitle it draws now.
+  final bool subtitleText;
+
   JsonMap toJson() => {
         'transportEvents': transportEvents,
         'seekConfirm': seekConfirm,
         'bufferingTelemetry': bufferingTelemetry,
         'endEvent': endEvent,
         'openAtPosition': openAtPosition,
+        'trackConfirm': trackConfirm,
+        'subtitleFiles': subtitleFiles.toList()..sort(),
+        'subtitleScale': subtitleScale,
+        'subtitleDelay': subtitleDelay,
+        'subtitleText': subtitleText,
       };
+}
+
+/// The subtitle a kernel draws: none, one of the media's own tracks, or a
+/// subtitle file mounted in the kernel.
+sealed class KernelSubtitle {
+  const KernelSubtitle();
+  static const none = NoKernelSubtitle();
+
+  bool get drawn => this is! NoKernelSubtitle;
+  JsonMap toJson();
+}
+
+final class NoKernelSubtitle extends KernelSubtitle {
+  const NoKernelSubtitle();
+  @override
+  JsonMap toJson() => const {'kind': 'none'};
+  @override
+  bool operator ==(Object other) => other is NoKernelSubtitle;
+  @override
+  int get hashCode => 0;
+  @override
+  String toString() => 'none';
+}
+
+final class EmbeddedKernelSubtitle extends KernelSubtitle {
+  const EmbeddedKernelSubtitle(this.index);
+
+  /// Among the media's subtitle tracks, from 0.
+  final int index;
+  @override
+  JsonMap toJson() => {'kind': 'embedded', 'index': index};
+  @override
+  bool operator ==(Object other) =>
+      other is EmbeddedKernelSubtitle && other.index == index;
+  @override
+  int get hashCode => Object.hash('embedded', index);
+  @override
+  String toString() => 'embedded $index';
+}
+
+final class FileKernelSubtitle extends KernelSubtitle {
+  const FileKernelSubtitle(this.path);
+  final String path;
+  @override
+  JsonMap toJson() => {'kind': 'file', 'path': redactHarnessText(path)};
+  @override
+  bool operator ==(Object other) =>
+      other is FileKernelSubtitle && other.path == path;
+  @override
+  int get hashCode => Object.hash('file', path);
+  @override
+  String toString() => 'file $path';
+}
+
+/// The tracks a kernel instance opens with, set before the media opens so
+/// that nothing has to switch afterwards (player-core design §2.3).
+@immutable
+final class KernelTrackPlan {
+  const KernelTrackPlan({
+    this.audio,
+    this.subtitle = KernelSubtitle.none,
+    this.subtitleProperties = const {},
+    this.subtitleProbe,
+  });
+
+  /// The audio track, from 0; null: the kernel's own (the first).
+  final int? audio;
+  final KernelSubtitle subtitle;
+
+  /// For a subtitle file: a time one of its lines is on, to confirm the
+  /// kernel has it (see [KernelDriver.selectSubtitle]).
+  final Duration? subtitleProbe;
+
+  /// How the kernel draws subtitles (scale, font size, colours…), set
+  /// before the media opens.
+  final Map<String, String> subtitleProperties;
+
+  JsonMap toJson() => {
+        'audio': audio,
+        'subtitle': subtitle.toJson(),
+        'subtitleProperties': subtitleProperties,
+      };
+}
+
+/// The tracks a kernel has on, as it reported them.
+@immutable
+final class KernelTracks {
+  const KernelTracks({
+    this.audio,
+    this.subtitle = KernelSubtitle.none,
+    this.audioConfirmed = false,
+    this.subtitleConfirmed = false,
+    this.basis,
+  });
+
+  /// The audio track the kernel was told; null: its own default.
+  final int? audio;
+
+  /// What the kernel draws.
+  final KernelSubtitle subtitle;
+
+  /// The kernel reported the change: a decoder opened for the track, or
+  /// the property read back. False: told, not reported within the wait.
+  final bool audioConfirmed;
+  final bool subtitleConfirmed;
+
+  /// What the last report was: decoder_open, property, opened, timeout…
+  final String? basis;
+
+  KernelTracks copyWith({
+    int? Function()? audio,
+    KernelSubtitle? subtitle,
+    bool? audioConfirmed,
+    bool? subtitleConfirmed,
+    String? basis,
+  }) =>
+      KernelTracks(
+        audio: audio == null ? this.audio : audio(),
+        subtitle: subtitle ?? this.subtitle,
+        audioConfirmed: audioConfirmed ?? this.audioConfirmed,
+        subtitleConfirmed: subtitleConfirmed ?? this.subtitleConfirmed,
+        basis: basis ?? this.basis,
+      );
+
+  JsonMap toJson() => {
+        'audio': audio,
+        'audioConfirmed': audioConfirmed,
+        'subtitle': subtitle.toJson(),
+        'subtitleConfirmed': subtitleConfirmed,
+        'basis': basis,
+      };
+
+  @override
+  bool operator ==(Object other) =>
+      other is KernelTracks &&
+      other.audio == audio &&
+      other.subtitle == subtitle &&
+      other.audioConfirmed == audioConfirmed &&
+      other.subtitleConfirmed == subtitleConfirmed &&
+      other.basis == basis;
+
+  @override
+  int get hashCode =>
+      Object.hash(audio, subtitle, audioConfirmed, subtitleConfirmed, basis);
 }
 
 /// What the kernel opens: [uri] is what it is given, [locator] what was
@@ -221,6 +392,12 @@ final class KernelEnded extends KernelEvent {
   final bool inferred;
 }
 
+/// The kernel reported the tracks it has on (after an open or a change).
+final class KernelTracksChanged extends KernelEvent {
+  KernelTracksChanged(super.instance, super.seq, super.at, this.tracks);
+  final KernelTracks tracks;
+}
+
 /// The kernel failed after the media opened.
 final class KernelFailed extends KernelEvent {
   KernelFailed(super.instance, super.seq, super.at,
@@ -249,11 +426,15 @@ final class TextureSurface extends VideoSurface {
 }
 
 final class KernelOpened {
-  const KernelOpened(this.media, this.landed);
+  const KernelOpened(this.media, this.landed,
+      [this.tracks = const KernelTracks()]);
   final MediaFacts media;
 
   /// Where the first frame is.
   final Duration landed;
+
+  /// The tracks it opened with, as far as the kernel reported them then.
+  final KernelTracks tracks;
 }
 
 final class SeekOutcome {
@@ -297,15 +478,77 @@ abstract interface class KernelDriver {
   ValueListenable<VideoSurface?> get surface;
   bool get fenced;
 
-  /// Opens [source] at [start], paused, at [volume] and [rate]. Completes
-  /// once the first frame is decoded and the picture is up; throws
-  /// [KernelOpenFailure] when the media does not open.
+  /// Opens [source] at [start], paused, at [volume] and [rate], with the
+  /// [tracks] set before the media opens. Completes once the first frame is
+  /// decoded and the picture is up; throws [KernelOpenFailure] when the
+  /// media does not open.
+  ///
+  /// Tracks (every kernel): the kernel opens with exactly [tracks] — the
+  /// audio track asked (its own first when null) and the subtitle asked,
+  /// none meaning none (never a default track of its own). What it opened
+  /// with is [KernelOpened.tracks] and a [KernelTracksChanged] event;
+  /// `confirmed` there only once the kernel itself reported it (a decoder
+  /// opened, its text at [KernelTrackPlan.subtitleProbe] for a file),
+  /// later by another [KernelTracksChanged] when the report comes after.
+  /// [KernelTrackPlan.subtitleProperties] are set before the media opens.
+  /// The first subtitle line after [start] must be drawn (MDK needs a
+  /// seek to the landing point for it).
   Future<KernelOpened> open(ResolvedSource source,
-      {Duration start = Duration.zero, double volume = 1, double rate = 1});
+      {Duration start = Duration.zero,
+      double volume = 1,
+      double rate = 1,
+      KernelTrackPlan tracks = const KernelTrackPlan()});
+
+  /// The tracks the kernel has on, as last reported (never what was only
+  /// asked and refused).
+  KernelTracks get tracks;
+
+  /// Puts on audio track [index] (from 0, among the media's own) while
+  /// the media is open; in this instance's queue (I8), never while it
+  /// stops. Completes with [tracks] after the kernel's report (a decoder
+  /// opened for it: `audioConfirmed`, basis `decoder_open`) or, after
+  /// about 1.5 s without one, as told and unconfirmed (basis
+  /// `not_reported`); a [KernelTracksChanged] follows each change. If the
+  /// change moved the position (MDK switches by seeking where it is), it
+  /// is put back before this completes, unless a seek was asked meanwhile.
+  /// Throws [KernelFenced] once released.
+  Future<KernelTracks> selectAudio(int index);
+
+  /// Draws [subtitle] and nothing else, as [selectAudio]:
+  /// - [NoKernelSubtitle]: the kernel draws none. A kernel may keep
+  ///   decoding what it drew (MDK only stops drawing, so that off and back
+  ///   on deactivates nothing); confirmed when it reads back as off.
+  /// - [EmbeddedKernelSubtitle]: the media's own subtitle track (from 0,
+  ///   in the order [MediaFacts.subtitles] lists them).
+  /// - [FileKernelSubtitle]: a subtitle file the kernel draws itself (only
+  ///   formats in [KernelCapabilities.subtitleFiles]); one at a time, it
+  ///   replaces whatever the kernel drew. A kernel that does not report
+  ///   opening such a file is given [probe], a time one of its lines is
+  ///   on: having text there confirms it (basis `text_at_probe`).
+  /// Completes once the kernel draws [subtitle] as far as it reports; the
+  /// session shows a file over the video only after the kernel reported
+  /// none (the invariant: never two subtitles at once).
+  Future<KernelTracks> selectSubtitle(KernelSubtitle subtitle,
+      {Duration? probe});
+
+  /// How the kernel draws subtitles from now on: the keys of
+  /// `SubtitleLook.kernelProperties` (MDK's `subtitle.*` properties); a
+  /// kernel maps them to its own, and reports what it cannot apply.
+  Future<void> setSubtitleProperties(Map<String, String> properties);
+
+  /// The text of the subtitle the kernel draws now, or has at [at]; null
+  /// when it cannot tell ([KernelCapabilities.subtitleText]). For
+  /// subtitle.cues (`kernelLine`) and to confirm a mounted file.
+  Future<String?> subtitleText({Duration? at});
 
   /// Completes with the transport the kernel reports afterwards (the one
   /// it had when it did not confirm within 2 s).
   Future<KernelTransport> setPaused(bool paused);
+
+  /// The media stays paused after it opened: the frame where it is goes
+  /// up, if the kernel has not drawn one yet (MDK draws its first frame
+  /// only once it plays). Not a transport change.
+  Future<void> presentFrame();
 
   /// [exact]: the frame at [target]; otherwise the keyframe the kernel
   /// picks. A seek asked before an earlier one ran replaces it

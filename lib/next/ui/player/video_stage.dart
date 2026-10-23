@@ -4,9 +4,11 @@ import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 
 import 'playback.dart';
+import 'subtitle_layer.dart';
 
 /// The picture of Next's own playback layer: the kernel's surface, fitted
-/// and centred on black, under the controls. A click plays or pauses, a
+/// and centred on black, with the subtitle file NipaPlay draws over it
+/// ([NextSubtitleLayer]), under the controls. A click plays or pauses, a
 /// double click goes full screen, the pointer moving brings the controls
 /// up, and the player's keys go to [host]. It reads the surface only,
 /// never the kernel (I3), and rebuilds only when the surface changes.
@@ -42,22 +44,29 @@ class _NextVideoStageState extends State<NextVideoStage> {
             behavior: HitTestBehavior.opaque,
             onTap: widget.host.togglePlay,
             onDoubleTap: () => unawaited(widget.host.toggleFullscreen()),
-            child: ValueListenableBuilder<VideoSurface?>(
-              valueListenable: widget.host.surface,
-              builder: (context, surface, _) => switch (surface) {
-                TextureSurface(:final textureId, :final aspect) => Center(
-                    child: AspectRatio(
-                      aspectRatio: aspect,
-                      child: RepaintBoundary(
-                        child: Texture(
-                            textureId: textureId,
-                            filterQuality: FilterQuality.low),
+            child: Stack(fit: StackFit.expand, children: [
+              ValueListenableBuilder<VideoSurface?>(
+                valueListenable: widget.host.surface,
+                builder: (context, surface, _) => switch (surface) {
+                  TextureSurface(:final textureId, :final aspect) => Center(
+                      child: AspectRatio(
+                        aspectRatio: aspect,
+                        child: RepaintBoundary(
+                          child: Texture(
+                              textureId: textureId,
+                              filterQuality: FilterQuality.low),
+                        ),
                       ),
                     ),
-                  ),
-                _ => const SizedBox.expand(),
-              },
-            ),
+                  _ => const SizedBox.expand(),
+                },
+              ),
+              // A text file NipaPlay draws over the picture; the kernel's
+              // own subtitles are in the picture.
+              RepaintBoundary(
+                child: NextSubtitleLayer(overlay: widget.host.subtitleOverlay),
+              ),
+            ]),
           ),
         ),
       );

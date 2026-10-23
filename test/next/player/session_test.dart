@@ -66,7 +66,8 @@ void main() {
     expect(session.transport.value.playIntent, isFalse);
     gate.complete();
     await opening;
-    expect(rig.drivers.single.log, ['open 0']);
+    // Paused, the frame it opened at is put up (not a transport change).
+    expect(rig.drivers.single.log, ['open 0', 'present']);
     expect(session.transport.value.observed, KernelTransport.paused);
     expect(session.phase.value, SessionPhase.active);
     final resumed = await session.setPaused(false, origin: 'agent');

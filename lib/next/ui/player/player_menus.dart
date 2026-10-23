@@ -118,24 +118,26 @@ class _SubtitleLook extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) =>
-      PlaybackSelector<(PlayerDial, PlayerDial?)>(
+      PlaybackSelector<(PlayerDial?, PlayerDial?)>(
         playback: playback,
         selector: (_) => (
-          playback.subtitleDelay(on),
+          playback.canDelaySubtitles(on) ? playback.subtitleDelay(on) : null,
           playback.canScaleSubtitles(on) ? playback.subtitleScale(on) : null,
         ),
         builder: (context, look, _) => Column(children: [
-          PlayerMenuRow(
-            label: '偏移',
-            child: Align(
-              alignment: Alignment.centerRight,
-              child: PlayerMenuStepper(
-                label: '偏移',
-                dial: look.$1,
-                onChanged: (v) => _set(() => playback.setSubtitleDelay(on, v)),
+          if (look.$1 case final delay?)
+            PlayerMenuRow(
+              label: '偏移',
+              child: Align(
+                alignment: Alignment.centerRight,
+                child: PlayerMenuStepper(
+                  label: '偏移',
+                  dial: delay,
+                  onChanged: (v) =>
+                      _set(() => playback.setSubtitleDelay(on, v)),
+                ),
               ),
             ),
-          ),
           if (look.$2 case final scale?)
             PlayerMenuRow(
               label: '大小',

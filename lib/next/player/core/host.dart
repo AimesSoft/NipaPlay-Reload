@@ -5,10 +5,15 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:nipa_harness/nipa_harness.dart';
 import 'package:path/path.dart' as p;
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../harness_redaction.dart';
+import '../../settings/registry.dart' show SettingsAccess;
 import '../kernel/driver.dart';
 import '../progress/records.dart';
+import '../subtitles/controller.dart';
+import '../subtitles/cue_index.dart';
+import '../subtitles/look.dart';
 import 'arbiter.dart';
 import 'session.dart';
 
@@ -62,6 +67,55 @@ final class NextPlayerHost {
   final PlaybackRecords records;
   final KernelArbiter arbiter;
   final bool Function() _usesExternalPlayer;
+
+  /// Subtitle files parsed for what plays and what played last.
+  final cues = CueCache();
+
+  /// The subtitle library's side (it attaches while Next's interface is
+  /// open): asked for a media's subtitles when it opens, told the choices
+  /// made in the player.
+  SubtitleLoader? subtitleLoader;
+  SubtitleRecorder? subtitleRecorder;
+
+  SharedPreferences? _prefs;
+  SubtitleLook _look = const SubtitleLook();
+
+  /// The shared subtitle settings as last read.
+  SubtitleLook get look => _look;
+
+  Future<void> _readSettings() async {
+    try {
+      final prefs = _prefs ??= await SharedPreferences.getInstance();
+      _look = SubtitleLook.read(prefs);
+    } catch (error) {
+      debugPrint('[NextPlayer] subtitle settings: $error');
+    }
+  }
+
+  /// Where and when the overlay draws [path] (kept per file, D3).
+  OverlayPlacement placementOf(String path) {
+    final prefs = _prefs;
+    return prefs == null
+        ? const OverlayPlacement()
+        : OverlayPlacement.read(prefs, path);
+  }
+
+  /// Keeps [placement] for [path] and applies it to what plays.
+  Future<void> setPlacement(String path, OverlayPlacement placement) async {
+    final prefs = _prefs ??= await SharedPreferences.getInstance();
+    await SettingsAccess.persist(OverlayPlacement.key(path),
+        () => placement.write(prefs, path).then((_) => true));
+    _current.value?.subtitles.placementChanged(path, placement);
+  }
+
+  /// Keeps a shared subtitle setting ([key] as Classic stores it) and
+  /// applies it to what plays.
+  Future<void> setSubtitleSetting(String key, double value) async {
+    final prefs = _prefs ??= await SharedPreferences.getInstance();
+    await SettingsAccess.persist(key, () => prefs.setDouble(key, value));
+    _look = SubtitleLook.read(prefs);
+    await _current.value?.subtitles.lookChanged(_look);
+  }
 
   final _current = ValueNotifier<PlaybackSession?>(null);
   final _events = StreamController<PlaybackEvent>.broadcast(sync: true);
@@ -126,6 +180,8 @@ final class NextPlayerHost {
       final previous = _current.value;
       if (previous != null) await previous.close(reason: 'replaced');
       if (_disposed) throw StateError('Next\'s playback has closed.');
+      final playerLevels = await levels();
+      await _readSettings();
       final session = PlaybackSession(
           'internal:$pid:${++_count}:1',
           request.withLocator(source.locator),
@@ -134,7 +190,12 @@ final class NextPlayerHost {
             arbiter: arbiter,
             createDriver: (lease) => createDriver(KernelId.mdk, lease),
             records: records,
-            levels: await levels(),
+            levels: playerLevels,
+            cues: cues,
+            look: _look,
+            placementOf: placementOf,
+            subtitleLoader: () => subtitleLoader,
+            subtitleRecorder: () => subtitleRecorder,
           ));
       _current.value = session;
       session.events.listen(_events.add, onDone: () => _gone(session));
@@ -185,6 +246,11 @@ final class NextPlayerHost {
   /// plays.
   void settingChanged(String key, Object? value) {
     final session = _current.value;
+    if (key.startsWith('subtitle.')) {
+      // The registry kept it in the shared preferences already.
+      unawaited(_readSettings().then((_) => session?.subtitles.lookChanged(_look)));
+      return;
+    }
     if (session == null || value is! num) return;
     final t = session.transport.value;
     switch (key) {

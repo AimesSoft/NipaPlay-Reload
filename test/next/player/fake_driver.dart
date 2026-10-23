@@ -42,13 +42,6 @@ final class FakeDriver implements KernelDriver {
   KernelId get kernel => KernelId.mdk;
   @override
   KernelConfig get config => const KernelConfig(kernel: KernelId.mdk);
-  @override
-  KernelCapabilities get capabilities => const KernelCapabilities(
-      transportEvents: true,
-      seekConfirm: true,
-      bufferingTelemetry: true,
-      endEvent: true,
-      openAtPosition: true);
 
   final _events = StreamController<KernelEvent>.broadcast(sync: true);
   final _surface = ValueNotifier<VideoSurface?>(null);
@@ -87,11 +80,54 @@ final class FakeDriver implements KernelDriver {
     sample(_at);
   }
 
+  /// The media's own tracks, as MDK lists them.
+  List<TrackFacts> audioTracks = const [
+    TrackFacts(index: 0, codec: 'aac', language: 'jpn'),
+    TrackFacts(index: 1, codec: 'ac3', language: 'eng'),
+  ];
+  List<TrackFacts> subtitleTracks = const [
+    TrackFacts(index: 0, codec: 'subrip', language: 'ger'),
+    TrackFacts(index: 1, codec: 'subrip', language: 'eng'),
+    TrackFacts(index: 2, codec: 'ass', language: 'chi', title: 'JPSC'),
+  ];
+
+  /// What the kernel draws and decodes, as MDK keeps it.
+  KernelTracks _tracks = const KernelTracks();
+  KernelTrackPlan? plan;
+
+  /// Holds each track change until completed (then replaced).
+  Completer<void>? trackGate;
+
+  /// Track changes the kernel never reports (they time out unconfirmed).
+  bool silentTracks = false;
+  final properties = <String, String>{};
+  String kernelText = '';
+
+  @override
+  KernelCapabilities get capabilities => const KernelCapabilities(
+      transportEvents: true,
+      seekConfirm: true,
+      bufferingTelemetry: true,
+      endEvent: true,
+      openAtPosition: true,
+      trackConfirm: true,
+      subtitleFiles: {'ass', 'ssa', 'sup', 'idx'},
+      subtitleScale: true,
+      subtitleText: true);
+
+  @override
+  KernelTracks get tracks => _tracks;
+
   @override
   Future<KernelOpened> open(ResolvedSource source,
-      {Duration start = Duration.zero, double volume = 1, double rate = 1}) async {
+      {Duration start = Duration.zero,
+      double volume = 1,
+      double rate = 1,
+      KernelTrackPlan tracks = const KernelTrackPlan()}) async {
     if (_fenced) throw const KernelFenced();
     log.add('open ${start.inMilliseconds}');
+    plan = tracks;
+    properties.addAll(tracks.subtitleProperties);
     this.volume = volume;
     this.rate = rate;
     if (gate case final gate?) await gate.future;
@@ -101,7 +137,64 @@ final class FakeDriver implements KernelDriver {
     final at = landed?.call(start) ?? start;
     transport(KernelTransport.paused);
     sample(at, advancing: false);
-    return KernelOpened(MediaFacts(duration: duration, width: 1920, height: 1080), at);
+    _tracks = KernelTracks(
+        audio: tracks.audio,
+        subtitle: tracks.subtitle,
+        audioConfirmed: true,
+        subtitleConfirmed: !silentTracks,
+        basis: 'opened');
+    emit((seq, at) => KernelTracksChanged(instance, seq, at, _tracks));
+    return KernelOpened(
+        MediaFacts(
+            duration: duration,
+            width: 1920,
+            height: 1080,
+            audio: audioTracks,
+            subtitles: subtitleTracks),
+        at,
+        _tracks);
+  }
+
+  Duration? lastProbe;
+
+  @override
+  Future<KernelTracks> selectSubtitle(KernelSubtitle subtitle,
+      {Duration? probe}) async {
+    lastProbe = probe;
+    if (_fenced) throw const KernelFenced();
+    log.add('subtitle $subtitle');
+    if (trackGate case final gate?) await gate.future;
+    if (_fenced) throw const KernelFenced();
+    _tracks = _tracks.copyWith(
+        subtitle: subtitle,
+        subtitleConfirmed: !silentTracks || !subtitle.drawn,
+        basis: silentTracks && subtitle.drawn ? 'timeout' : 'decoder_open');
+    emit((seq, at) => KernelTracksChanged(instance, seq, at, _tracks));
+    return _tracks;
+  }
+
+  @override
+  Future<KernelTracks> selectAudio(int index) async {
+    if (_fenced) throw const KernelFenced();
+    log.add('audio $index');
+    if (trackGate case final gate?) await gate.future;
+    if (_fenced) throw const KernelFenced();
+    _tracks = _tracks.copyWith(
+        audio: () => index, audioConfirmed: !silentTracks, basis: 'decoder_open');
+    emit((seq, at) => KernelTracksChanged(instance, seq, at, _tracks));
+    return _tracks;
+  }
+
+  @override
+  Future<void> setSubtitleProperties(Map<String, String> properties) async {
+    if (_fenced) throw const KernelFenced();
+    this.properties.addAll(properties);
+  }
+
+  @override
+  Future<String?> subtitleText({Duration? at}) async {
+    if (_fenced) throw const KernelFenced();
+    return kernelText;
   }
 
   @override
@@ -110,6 +203,12 @@ final class FakeDriver implements KernelDriver {
     log.add(paused ? 'pause' : 'play');
     transport(paused ? KernelTransport.paused : KernelTransport.playing);
     return observed;
+  }
+
+  @override
+  Future<void> presentFrame() async {
+    if (_fenced) throw const KernelFenced();
+    log.add('present');
   }
 
   @override

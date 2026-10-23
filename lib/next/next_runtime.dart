@@ -476,7 +476,9 @@ final class NextRuntime extends ChangeNotifier {
                 ?.filePath),
         for (final capability in capabilities)
           InvocationScopeCapability(FileIndexingCapability(capability, core.media.service.store)),
-        PlaybackControlsCapability(playback.controls),
+        // Scoped, so that a track chosen in the interface is told apart
+        // from Nipa's.
+        InvocationScopeCapability(PlaybackControlsCapability(playback.controls)),
         NotInPlaybackLayer(
             KernelControlCapability(kernelControl),
             'kernel_control',

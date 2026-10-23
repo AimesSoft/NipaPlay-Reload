@@ -10,6 +10,9 @@ import '../../harness_redaction.dart';
 import '../kernel/driver.dart';
 import '../perf/budget.dart';
 import '../progress/records.dart';
+import '../subtitles/controller.dart';
+import '../subtitles/cue_index.dart';
+import '../subtitles/look.dart';
 import 'arbiter.dart';
 import 'clock.dart';
 
@@ -236,16 +239,59 @@ final class PlayerLevels {
 
 /// What a session needs from its host.
 final class SessionDeps {
-  const SessionDeps({
+  SessionDeps({
     required this.arbiter,
     required this.createDriver,
     required this.records,
     required this.levels,
-  });
+    CueCache? cues,
+    this.look = const SubtitleLook(),
+    OverlayPlacement Function(String path)? placementOf,
+    this.subtitleLoader,
+    this.subtitleRecorder,
+  })  : cues = cues ?? CueCache(),
+        placementOf = placementOf ?? ((_) => const OverlayPlacement());
   final KernelArbiter arbiter;
   final Future<KernelDriver> Function(KernelLease lease) createDriver;
   final PlaybackRecords records;
   final PlayerLevels levels;
+  final CueCache cues;
+  final SubtitleLook look;
+  final OverlayPlacement Function(String path) placementOf;
+
+  /// The subtitle library's, read when the plan asks (it attaches and
+  /// detaches as Next's interface opens and closes).
+  final SubtitleLoader? Function()? subtitleLoader;
+  final SubtitleRecorder? Function()? subtitleRecorder;
+}
+
+/// The audio track: the one asked for (null: the kernel's own first), who
+/// asked, and what the kernel reported.
+@immutable
+final class AudioTrackState {
+  const AudioTrackState(
+      {this.want, this.selectedBy = 'default', this.kernel, this.confirmed = false});
+  final int? want;
+  final String selectedBy;
+  final int? kernel;
+  final bool confirmed;
+
+  JsonMap toJson() => {
+        'selected': want,
+        'selectedBy': selectedBy,
+        'kernel': kernel,
+        'confirmed': confirmed,
+      };
+
+  @override
+  bool operator ==(Object other) =>
+      other is AudioTrackState &&
+      other.want == want &&
+      other.selectedBy == selectedBy &&
+      other.kernel == kernel &&
+      other.confirmed == confirmed;
+  @override
+  int get hashCode => Object.hash(want, selectedBy, kernel, confirmed);
 }
 
 final class _Closed implements Exception {
@@ -285,6 +331,19 @@ final class PlaybackSession {
   final _phase = ValueNotifier(SessionPhase.resolving);
   final ValueNotifier<Transport> _transport;
   final _media = ValueNotifier<MediaFacts?>(null);
+  final _audio = ValueNotifier(const AudioTrackState());
+
+  /// The subtitles: what is chosen, what shows, the overlay's line.
+  late final SubtitleController subtitles = SubtitleController(
+    clock: clock,
+    cues: _deps.cues,
+    look: _deps.look,
+    placementOf: _deps.placementOf,
+    recorderOf: () => _deps.subtitleRecorder?.call(),
+  )..mediaPath = request.locator;
+
+  /// The audio track asked for and as the kernel reported it.
+  ValueListenable<AudioTrackState> get audio => _audio;
   final _fault = ValueNotifier<PlaybackFault?>(null);
   final _surface = ValueNotifier<VideoSurface?>(null);
   final _events = StreamController<PlaybackEvent>.broadcast(sync: true);
@@ -404,6 +463,12 @@ final class PlaybackSession {
       _start = start;
       clock.anchor(start, advancing: false, source: 'seek_target');
     }
+    // …and its subtitles, as the subtitle library has them (it offers its
+    // files and puts its choice on, into the open plan).
+    final planWatch = Stopwatch()..start();
+    await subtitles.loadFrom(_deps.subtitleLoader?.call(), path);
+    _phaseTimes['subtitlePlanMs'] = planWatch.elapsedMilliseconds;
+    _check();
     // starting: the lease, then a kernel instance of its own.
     _setPhase(SessionPhase.starting);
     _lease = await _deps.arbiter
@@ -413,18 +478,30 @@ final class PlaybackSession {
     _kernelEvents = driver.events.listen(_kernel);
     driver.surface.addListener(_surfaceChanged);
     await _checkOrRelease();
-    // loading: open at the start position, paused.
+    // loading: open at the start position, paused, the tracks set first.
     _setPhase(SessionPhase.loading);
     final t = _transport.value;
+    final audioPlanned = _audio.value.want;
+    final plan = subtitles.openPlan(audio: audioPlanned);
+    _openPlan = plan;
     final opened = await driver.open(_source,
-        start: _start, volume: t.volume * _boost, rate: t.rate);
+        start: _start, volume: t.volume * _boost, rate: t.rate, tracks: plan);
     _check();
     _landed = opened.landed;
     _media.value = opened.media;
     clock.limit = opened.media.duration;
     clock.anchor(opened.landed, advancing: false, source: 'kernel_open');
-    // preparing: the position the media was asked to open at…
+    _tracksReported(opened.tracks);
+    // preparing: what the open could not set (a choice made meanwhile, a
+    // track the media does not have), confirmed by the kernel…
     _setPhase(SessionPhase.preparing);
+    await subtitles.opened(driver, opened.media);
+    _check();
+    if (_audio.value.want case final want? when want != audioPlanned) {
+      await driver.selectAudio(want);
+      _check();
+    }
+    // …the position the media was asked to open at…
     for (var attempt = 0;
         attempt < 3 && (clock.now() - _start).abs() > const Duration(seconds: 1);
         attempt++) {
@@ -442,6 +519,11 @@ final class PlaybackSession {
       await driver.setPaused(!want);
       _check();
     }
+    // Staying paused, the picture is the frame it opened at, not black.
+    if (!_transport.value.playIntent) {
+      await driver.presentFrame();
+      _check();
+    }
     _setPhase(SessionPhase.active);
     _syncSaver();
   }
@@ -451,7 +533,8 @@ final class PlaybackSession {
     _fault.value = PlaybackFault(stage, message, code: code);
     _setPhase(SessionPhase.failed);
     _emit('failed', {'stage': stage, 'message': redactHarnessText(message)});
-    // A failed session keeps no kernel.
+    // A failed session keeps no kernel, and draws nothing.
+    subtitles.close();
     await _releaseKernel();
   }
 
@@ -487,8 +570,21 @@ final class PlaybackSession {
           case KernelFailed(:final stage, :final message, :final retryable):
             _fault.value = PlaybackFault(stage, message, retryable: retryable);
             _emit('failed', {'stage': stage, 'message': redactHarnessText(message)});
+          case KernelTracksChanged(:final tracks):
+            _tracksReported(tracks);
         }
       });
+
+  void _tracksReported(KernelTracks tracks) {
+    final a = _audio.value;
+    _audio.value = AudioTrackState(
+        want: a.want,
+        selectedBy: a.selectedBy,
+        kernel: tracks.audio,
+        confirmed: tracks.audioConfirmed);
+    subtitles.kernelReported(tracks);
+    _emit('tracks', tracks.toJson());
+  }
 
   void _surfaceChanged() => _surface.value = _driver?.surface.value;
 
@@ -606,6 +702,65 @@ final class PlaybackSession {
 
   late double _boost = _deps.levels.boost;
 
+  KernelTrackPlan? _openPlan;
+
+  /// Puts on audio track [index]: the intent at once; applied once the
+  /// kernel reports it. Before the media opens it goes into the open plan.
+  Future<CommandReceipt> selectAudio(int index, {required String origin}) async {
+    final seq = ++_commandSeq;
+    if (_phase.value.done) return _receipt(seq, 'select_track', 'session_closed');
+    final a = _audio.value;
+    _audio.value = AudioTrackState(
+        want: index, selectedBy: origin, kernel: a.kernel, confirmed: a.confirmed);
+    if (!_phase.value.open || _driver == null) {
+      return _receipt(seq, 'select_track', 'pending', {'kind': 'audio', 'index': index});
+    }
+    try {
+      final tracks = await _driver!.selectAudio(index);
+      return _receipt(
+          seq,
+          'select_track',
+          tracks.audio == index && tracks.audioConfirmed ? 'applied' : 'pending',
+          {'kind': 'audio', 'index': index, 'kernel': tracks.toJson()});
+    } on KernelFenced {
+      return _receipt(seq, 'select_track', 'session_closed');
+    }
+  }
+
+  /// Puts [want] on screen and nothing else (the invariant). [record]: the
+  /// subtitle library records it as the person's or Nipa's choice.
+  Future<CommandReceipt> chooseSubtitle(SubtitleWant want,
+      {required String origin, bool record = true, String? title}) async {
+    final seq = ++_commandSeq;
+    if (_phase.value.done) return _receipt(seq, 'select_track', 'session_closed');
+    final state = await subtitles.choose(want,
+        by: origin, record: record, title: title);
+    if (_phase.value.done) return _receipt(seq, 'select_track', 'session_closed');
+    final presented = state.presented;
+    final String outcome;
+    if (!_phase.value.open) {
+      outcome = 'pending';
+    } else if (state.want != want) {
+      outcome = 'superseded';
+    } else if (state.failure != null && !want.off) {
+      outcome = 'rejected';
+    } else if (want.off
+        ? presented.isEmpty
+        : presented.length == 1 &&
+            presented.single.want == want &&
+            presented.single.confirmed) {
+      outcome = 'applied';
+    } else {
+      outcome = 'pending';
+    }
+    return _receipt(seq, 'select_track', outcome, {
+      'kind': 'subtitle',
+      'selected': want.toJson(),
+      'presented': [for (final p in presented) p.toJson()],
+      if (state.failure != null) 'failure': state.failure,
+    });
+  }
+
   // ---- progress and the watch record (§4.2) ----
 
   void _syncSaver() {
@@ -696,6 +851,9 @@ final class PlaybackSession {
     final wasOpen = _phase.value.open;
     _saver?.cancel();
     _saver = null;
+    // Nothing more is drawn over the video or asked of the kernel's tracks
+    // (none change while it stops).
+    subtitles.close();
     if (wasOpen) {
       // The last word on progress, before the kernel goes.
       _setPhase(SessionPhase.closing);
@@ -749,6 +907,12 @@ final class PlaybackSession {
         },
         'durationMs': duration.inMilliseconds,
         'transport': _transport.value.toJson(),
+        'tracks': {
+          'openPlan': _openPlan?.toJson(),
+          'kernel': _driver?.tracks.toJson(),
+          'audio': _audio.value.toJson(),
+          'subtitles': subtitles.facts(),
+        },
         'fault': _fault.value?.toJson(),
         'lastSave': _lastSave,
         'lease': _lease?.id,

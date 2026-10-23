@@ -1,0 +1,241 @@
+import 'dart:convert';
+
+import 'package:crypto/crypto.dart';
+import 'package:flutter/foundation.dart';
+import 'package:nipa_harness/nipa_harness.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+
+/// The subtitle settings Classic and Next share (D3), as Next applies them:
+/// the same preference keys, read when a session opens and again when one
+/// of them changes.
+///
+/// A file drawn over the video takes the overlay's own size, colour and
+/// font (Classic's long press on it sets them) and its own delay and place
+/// (kept per file); a subtitle the kernel draws takes the player's size and
+/// text style. What the kernel cannot do (MDK has no subtitle delay) is
+/// reported as such ([facts]).
+@immutable
+final class SubtitleLook {
+  const SubtitleLook({
+    this.kernelScale = 1,
+    this.overlayScale = 1,
+    this.color = 0xFFFFFFFF,
+    this.borderColor = 0xFF000000,
+    this.overlayColor = 0xFFFFFFFF,
+    this.overlayFont = '',
+    this.bold = false,
+    this.italic = false,
+    this.borderSize = 3,
+    this.shadowOffset = 0,
+    this.opacity = 1,
+    this.alignX = 1,
+    this.kernelDelaySeconds = 0,
+    this.overlayDelaySeconds = 0,
+  });
+
+  static const minScale = 0.5;
+  static const maxScale = 2.5;
+  static const delayStep = 0.1;
+
+  /// The kernel's subtitles: `subtitle_scale`.
+  final double kernelScale;
+
+  /// Files drawn over the video: `srt_subtitle_scale`.
+  final double overlayScale;
+
+  /// The kernel's text subtitles: `subtitle_color`, `subtitle_border_color`.
+  final int color;
+  final int borderColor;
+
+  /// Files drawn over the video: `external_subtitle_color`,
+  /// `external_subtitle_font_name`.
+  final int overlayColor;
+  final String overlayFont;
+
+  /// Both: `subtitle_bold`, `subtitle_italic`.
+  final bool bold;
+  final bool italic;
+
+  /// Over the video: `subtitle_border_size`, `subtitle_shadow_offset`,
+  /// `subtitle_opacity`, `subtitle_align_x` (0 left, 1 centre, 2 right).
+  final double borderSize;
+  final double shadowOffset;
+  final double opacity;
+  final int alignX;
+
+  /// `subtitle_delay_seconds`: Classic's delay for the kernel's subtitles.
+  final double kernelDelaySeconds;
+
+  /// `srt_subtitle_delay`: the delay of every file drawn over the video,
+  /// added to each file's own.
+  final double overlayDelaySeconds;
+
+  static double _clampScale(double? v) =>
+      (v ?? 1).clamp(minScale, maxScale).toDouble();
+
+  static SubtitleLook read(SharedPreferences prefs) => SubtitleLook(
+        kernelScale: _clampScale(prefs.getDouble('subtitle_scale')),
+        overlayScale: _clampScale(prefs.getDouble('srt_subtitle_scale')),
+        color: prefs.getInt('subtitle_color') ?? 0xFFFFFFFF,
+        borderColor: prefs.getInt('subtitle_border_color') ?? 0xFF000000,
+        overlayColor: prefs.getInt('external_subtitle_color') ?? 0xFFFFFFFF,
+        overlayFont: prefs.getString('external_subtitle_font_name') ?? '',
+        bold: prefs.getBool('subtitle_bold') ?? false,
+        italic: prefs.getBool('subtitle_italic') ?? false,
+        borderSize: prefs.getDouble('subtitle_border_size') ?? 3,
+        shadowOffset: prefs.getDouble('subtitle_shadow_offset') ?? 0,
+        opacity: (prefs.getDouble('subtitle_opacity') ?? 1).clamp(0.0, 1.0),
+        alignX: (prefs.getInt('subtitle_align_x') ?? 1).clamp(0, 2),
+        kernelDelaySeconds: prefs.getDouble('subtitle_delay_seconds') ?? 0,
+        overlayDelaySeconds: prefs.getDouble('srt_subtitle_delay') ?? 0,
+      );
+
+  /// MDK's colours are RGBA; the settings keep ARGB.
+  static String _rgba(int argb) {
+    final rgba = ((argb & 0x00FFFFFF) << 8) | ((argb >> 24) & 0xFF);
+    return '0x${rgba.toRadixString(16).padLeft(8, '0')}';
+  }
+
+  /// What the kernel is told of how it draws subtitles. MDK's text style
+  /// (colour, outline, bold, italic, the base font size Classic gives MDK)
+  /// holds for text tracks, not ASS; its scale holds for all.
+  Map<String, String> kernelProperties() => {
+        'subtitle.scale': kernelScale.toStringAsFixed(2),
+        'subtitle.font.size': '45',
+        'subtitle.color': _rgba(color),
+        'subtitle.color.outline': _rgba(borderColor),
+        'subtitle.bold': bold ? '1' : '0',
+        'subtitle.italic': italic ? '1' : '0',
+      };
+
+  JsonMap toJson() => {
+        'kernel': {
+          'scale': kernelScale,
+          'color': color,
+          'borderColor': borderColor,
+          'bold': bold,
+          'italic': italic,
+          'applied': const [
+            'subtitle.scale',
+            'subtitle.color',
+            'subtitle.borderColor',
+            'subtitle.bold',
+            'subtitle.italic'
+          ],
+          'notApplied': {
+            'subtitle.delaySeconds': 'the kernel cannot shift its subtitles',
+            'subtitle.position': 'not mapped to the kernel',
+            'subtitle.marginX': 'not mapped to the kernel',
+            'subtitle.marginY': 'not mapped to the kernel',
+            'subtitle.opacity': 'not mapped to the kernel',
+            'subtitle.borderSize': 'not mapped to the kernel',
+            'subtitle.shadowOffset': 'not mapped to the kernel',
+            'subtitle.fontName': 'not mapped to the kernel',
+            'subtitle.overrideMode': 'the kernel keeps ASS styles as written',
+          },
+          'textStyleOnly': 'colour, outline, bold and italic hold for text '
+              'tracks; ASS keeps its own styles',
+          if (kernelDelaySeconds != 0) 'delaySecondsSet': kernelDelaySeconds,
+        },
+        'overlay': {
+          'scale': overlayScale,
+          'color': overlayColor,
+          'font': overlayFont,
+          'bold': bold,
+          'italic': italic,
+          'borderSize': borderSize,
+          'shadowOffset': shadowOffset,
+          'opacity': opacity,
+          'alignX': alignX,
+          'delaySeconds': overlayDelaySeconds,
+        },
+      };
+
+  @override
+  bool operator ==(Object other) =>
+      other is SubtitleLook &&
+      other.kernelScale == kernelScale &&
+      other.overlayScale == overlayScale &&
+      other.color == color &&
+      other.borderColor == borderColor &&
+      other.overlayColor == overlayColor &&
+      other.overlayFont == overlayFont &&
+      other.bold == bold &&
+      other.italic == italic &&
+      other.borderSize == borderSize &&
+      other.shadowOffset == shadowOffset &&
+      other.opacity == opacity &&
+      other.alignX == alignX &&
+      other.kernelDelaySeconds == kernelDelaySeconds &&
+      other.overlayDelaySeconds == overlayDelaySeconds;
+
+  @override
+  int get hashCode => Object.hash(
+      kernelScale,
+      overlayScale,
+      color,
+      borderColor,
+      overlayColor,
+      overlayFont,
+      bold,
+      italic,
+      borderSize,
+      shadowOffset,
+      opacity,
+      alignX,
+      kernelDelaySeconds,
+      overlayDelaySeconds);
+}
+
+/// Where one file drawn over the video sits and when: its own delay
+/// (seconds, later when positive), height (0 top … 100 bottom) and
+/// sideways shift, kept per file under the key Classic keeps it.
+@immutable
+final class OverlayPlacement {
+  const OverlayPlacement(
+      {this.delaySeconds = 0, this.position = 90, this.marginX = 0});
+  final double delaySeconds;
+  final double position;
+  final double marginX;
+
+  int get delayMs => (delaySeconds * 1000).round();
+
+  static String key(String path) =>
+      'subtitle_display_${sha1.convert(utf8.encode(path))}';
+
+  static OverlayPlacement read(SharedPreferences prefs, String path) {
+    final raw = prefs.getString(key(path));
+    if (raw == null || raw.isEmpty) return const OverlayPlacement();
+    try {
+      final map = jsonDecode(raw) as Map;
+      return OverlayPlacement(
+        delaySeconds: (map['delay'] as num?)?.toDouble() ?? 0,
+        position: (map['position'] as num?)?.toDouble() ?? 90,
+        marginX: (map['marginX'] as num?)?.toDouble() ?? 0,
+      );
+    } catch (_) {
+      return const OverlayPlacement();
+    }
+  }
+
+  OverlayPlacement withDelay(double seconds) => OverlayPlacement(
+      delaySeconds: seconds, position: position, marginX: marginX);
+
+  Future<void> write(SharedPreferences prefs, String path) => prefs.setString(
+      key(path),
+      jsonEncode(
+          {'delay': delaySeconds, 'position': position, 'marginX': marginX}));
+
+  JsonMap toJson() =>
+      {'delaySeconds': delaySeconds, 'position': position, 'marginX': marginX};
+
+  @override
+  bool operator ==(Object other) =>
+      other is OverlayPlacement &&
+      other.delaySeconds == delaySeconds &&
+      other.position == position &&
+      other.marginX == marginX;
+
+  @override
+  int get hashCode => Object.hash(delaySeconds, position, marginX);
+}

@@ -5,6 +5,8 @@ import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'package:nipa_harness/nipa_harness.dart';
 import 'package:nipaplay/models/playable_item.dart';
+import 'package:nipaplay/services/file_picker_service.dart';
+import 'package:path/path.dart' as p;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:window_manager/window_manager.dart';
@@ -19,6 +21,9 @@ import '../core/session.dart';
 import '../kernel/driver.dart';
 import '../next_playback.dart';
 import '../perf/budget.dart';
+import '../subtitles/controller.dart';
+import '../subtitles/look.dart';
+import '../track_labels.dart';
 import 'session_ports.dart';
 
 /// Makes Next's local operations (window, levels…) for this playback; the
@@ -92,6 +97,9 @@ final class SessionPlayback implements NextPlayback, VideoStageHost {
       old.media.removeListener(_sync);
       old.surface.removeListener(_sync);
       old.clock.removeListener(_frame.clockChanged);
+      old.subtitles.state.removeListener(_frame.poke);
+      old.audio.removeListener(_frame.poke);
+      old.subtitles.overlay.removeListener(_overlayChanged);
     }
     _session = next;
     if (next != null) {
@@ -101,11 +109,23 @@ final class SessionPlayback implements NextPlayback, VideoStageHost {
       next.media.addListener(_sync);
       next.surface.addListener(_sync);
       next.clock.addListener(_frame.clockChanged);
+      // The menus' ticks follow the choices; the overlay its lines.
+      next.subtitles.state.addListener(_frame.poke);
+      next.audio.addListener(_frame.poke);
+      next.subtitles.overlay.addListener(_overlayChanged);
       unawaited(readSeekStep());
       _show();
     }
+    _overlayChanged();
     _sync();
   }
+
+  final _subtitleOverlay = ValueNotifier<OverlayFrame?>(null);
+  void _overlayChanged() =>
+      _subtitleOverlay.value = _session?.subtitles.overlay.value;
+
+  @override
+  ValueListenable<OverlayFrame?> get subtitleOverlay => _subtitleOverlay;
 
   /// What the controls show of the transport, last told.
   (bool, KernelTransport, double, double)? _shownTransport;
@@ -218,7 +238,7 @@ final class SessionPlayback implements NextPlayback, VideoStageHost {
   @override
   bool get offersDanmaku => false;
   @override
-  bool get offersSubtitles => false;
+  bool get offersSubtitles => _session?.phase.value.open ?? false;
   @override
   bool get offersScreenshot => false;
 
@@ -508,12 +528,63 @@ final class SessionPlayback implements NextPlayback, VideoStageHost {
 
   @override
   List<double>? heat() => null;
+
+  // ---- subtitles and audio, as the menus show and set them ----
+
+  /// Off, the media's own tracks, then the files known to this playback;
+  /// the one chosen is ticked (the intent, as the play button shows it).
   @override
-  Future<List<SubtitleChoice>> subtitles() async => const [];
+  Future<List<SubtitleChoice>> subtitles() async {
+    final s = _session;
+    if (s == null) return const [SubtitleChoice.off(selected: true)];
+    final want = s.subtitles.want;
+    return [
+      SubtitleChoice.off(selected: want.off),
+      for (final t in s.media.value?.subtitles ?? const <TrackFacts>[])
+        SubtitleChoice.embedded(
+            TrackLabels.of(t.title, t.language, t.index), t.index,
+            selected: want == SubtitleWant.embedded(t.index)),
+      for (final f in s.subtitles.files)
+        SubtitleChoice.file(p.basenameWithoutExtension(f.title), f.path,
+            selected: want == SubtitleWant.file(f.path)),
+    ];
+  }
+
+  /// One subtitle at a time: the person's choice, put on alone and told to
+  /// the subtitle library.
   @override
-  Future<void> choose(SubtitleChoice choice) async {}
+  Future<void> choose(SubtitleChoice choice) async {
+    final s = _session;
+    if (s == null) return;
+    await s.chooseSubtitle(
+        choice.path != null
+            ? SubtitleWant.file(choice.path!)
+            : choice.index >= 0
+                ? SubtitleWant.embedded(choice.index)
+                : const SubtitleWant.off(),
+        origin: 'gui',
+        title: choice.label);
+  }
+
+  /// A subtitle file the person picks, put on alone and kept in the shared
+  /// subtitle list; false when none was picked or it could not be used.
   @override
-  Future<bool> addSubtitleFile() async => false;
+  Future<bool> addSubtitleFile() async {
+    final s = _session;
+    if (s == null) return false;
+    final file = await FilePickerService().pickSubtitleFile();
+    if (file == null || !identical(_session, s)) return false;
+    try {
+      final receipt = await s.chooseSubtitle(SubtitleWant.file(file),
+          origin: 'gui', title: p.basename(file));
+      await SessionControls.rememberSubtitle(s.path, file, active: true);
+      return receipt.outcome != 'rejected';
+    } catch (e) {
+      debugPrint('[NextPlayer] subtitle file: $e');
+      return false;
+    }
+  }
+
   @override
   Future<List<EpisodeChoice>> episodes() async => const [];
   @override
@@ -530,10 +601,30 @@ final class SessionPlayback implements NextPlayback, VideoStageHost {
             .setDouble('playback_rate', rate)));
   }
 
+  /// The media's audio tracks; the one asked for (or the kernel's first)
+  /// ticked.
   @override
-  List<AudioChoice> audio() => const [];
+  List<AudioChoice> audio() {
+    final s = _session;
+    final tracks = s?.media.value?.audio ?? const <TrackFacts>[];
+    if (s == null || tracks.isEmpty) return const [];
+    final on = s.audio.value.want ?? s.audio.value.kernel ?? 0;
+    final labels = [
+      for (final t in tracks)
+        TrackLabels.of(t.title, t.language, t.index, fallback: '音轨')
+    ];
+    return [
+      for (final (i, t) in tracks.indexed)
+        AudioChoice(TrackLabels.distinct(labels, i, t.codec), t.index,
+            selected: t.index == on),
+    ];
+  }
+
   @override
-  Future<void> chooseAudio(AudioChoice choice) async {}
+  Future<void> chooseAudio(AudioChoice choice) async {
+    if (choice.selected) return;
+    await _session?.selectAudio(choice.index, origin: 'gui');
+  }
   @override
   bool get canFit => false;
   @override
@@ -571,18 +662,77 @@ final class SessionPlayback implements NextPlayback, VideoStageHost {
   PlayerDial get danmakuOffset => _dial;
   @override
   void setDanmakuOffset(double seconds) {}
+  // The subtitle on: a file NipaPlay draws over the video keeps its own
+  // delay (per file) and size; the kernel's take the player's size, and
+  // its delay where the kernel shifts subtitles (MDK does not).
+
+  /// The file of [on] when NipaPlay draws it over the video, not the kernel.
   @override
-  String? drawnOver(SubtitleChoice? on) => null;
+  String? drawnOver(SubtitleChoice? on) {
+    final path = on?.path;
+    final s = _session;
+    if (path == null || s == null) return null;
+    return s.subtitles.rendererOf(path) == SubtitleRenderer.overlay
+        ? path
+        : null;
+  }
+
+  bool get _kernelDelays =>
+      _session?.driver?.capabilities.subtitleDelay ?? false;
+
   @override
-  PlayerDial subtitleDelay(SubtitleChoice? on) => _dial;
+  bool canDelaySubtitles(SubtitleChoice? on) =>
+      on != null && !on.off && (drawnOver(on) != null || _kernelDelays);
+
+  /// Seconds the subtitle comes later (earlier when negative), within the
+  /// media's length.
   @override
-  Future<void> setSubtitleDelay(SubtitleChoice? on, double seconds) async {}
+  PlayerDial subtitleDelay(SubtitleChoice? on) {
+    final seconds = duration.inMilliseconds / 1000;
+    final limit = seconds > 0 ? seconds : 30.0;
+    final overlay = drawnOver(on);
+    final value = overlay != null
+        ? host.placementOf(overlay).delaySeconds
+        : host.look.kernelDelaySeconds;
+    return PlayerDial(value.clamp(-limit, limit).toDouble(), -limit, limit,
+        SubtitleLook.delayStep, DialUnit.seconds);
+  }
+
   @override
-  bool canScaleSubtitles(SubtitleChoice? on) => false;
+  Future<void> setSubtitleDelay(SubtitleChoice? on, double seconds) async {
+    final overlay = drawnOver(on);
+    if (overlay != null) {
+      await host.setPlacement(
+          overlay, host.placementOf(overlay).withDelay(seconds));
+    } else if (_kernelDelays) {
+      await host.setSubtitleSetting('subtitle_delay_seconds', seconds);
+    }
+    _frame.poke();
+  }
+
   @override
-  PlayerDial subtitleScale(SubtitleChoice? on) => _dial;
+  bool canScaleSubtitles(SubtitleChoice? on) =>
+      on != null &&
+      !on.off &&
+      (drawnOver(on) != null ||
+          (_session?.driver?.capabilities.subtitleScale ?? false));
+
   @override
-  Future<void> setSubtitleScale(SubtitleChoice? on, double scale) async {}
+  PlayerDial subtitleScale(SubtitleChoice? on) => PlayerDial(
+      drawnOver(on) != null ? host.look.overlayScale : host.look.kernelScale,
+      SubtitleLook.minScale,
+      SubtitleLook.maxScale,
+      0.05,
+      DialUnit.percent);
+
+  @override
+  Future<void> setSubtitleScale(SubtitleChoice? on, double scale) async {
+    final value = scale.clamp(SubtitleLook.minScale, SubtitleLook.maxScale);
+    await host.setSubtitleSetting(
+        drawnOver(on) != null ? 'srt_subtitle_scale' : 'subtitle_scale',
+        value.toDouble());
+    _frame.poke();
+  }
 
   Future<void> dispose() async {
     host.current.removeListener(_bind);

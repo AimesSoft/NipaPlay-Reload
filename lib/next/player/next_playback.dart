@@ -16,8 +16,10 @@ import '../danmaku/service.dart'
 import '../settings/registry.dart' show SettingsRegistry;
 import 'choices.dart';
 import 'kernel/driver.dart' show VideoSurface;
+import 'subtitles/controller.dart' show OverlayFrame;
 
 export 'kernel/driver.dart' show VideoSurface, TextureSurface;
+export 'subtitles/controller.dart' show OverlayFrame;
 export 'package:nipaplay/services/intro_skip/skip_segment.dart'
     show SkipSegmentKind;
 export 'package:nipaplay/utils/video_aspect_geometry.dart' show VideoAspectMode;
@@ -195,6 +197,9 @@ abstract interface class KernelHost {
 /// sends the pointer and the keys here.
 abstract interface class VideoStageHost {
   ValueListenable<VideoSurface?> get surface;
+
+  /// The subtitle line NipaPlay draws over the picture (null: none).
+  ValueListenable<OverlayFrame?> get subtitleOverlay;
   void togglePlay();
   Future<void> toggleFullscreen();
 
@@ -329,6 +334,10 @@ abstract interface class NextPlayback {
   PlayerDial get danmakuOffset;
   void setDanmakuOffset(double seconds);
   String? drawnOver(SubtitleChoice? on);
+
+  /// The subtitle on can come earlier or later (the kernel's own tracks
+  /// cannot on every kernel).
+  bool canDelaySubtitles(SubtitleChoice? on);
   PlayerDial subtitleDelay(SubtitleChoice? on);
   Future<void> setSubtitleDelay(SubtitleChoice? on, double seconds);
   bool canScaleSubtitles(SubtitleChoice? on);

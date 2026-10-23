@@ -685,6 +685,9 @@ class ClassicBackedPlayback implements NextPlayback {
     return state.externalSubtitleRenderedInApp(path) ? path : null;
   }
 
+  @override
+  bool canDelaySubtitles(SubtitleChoice? on) => true;
+
   /// Seconds the subtitle comes later (earlier when negative).
   @override
   PlayerDial subtitleDelay(SubtitleChoice? on) {

@@ -9,7 +9,8 @@ import 'package:nipa_harness/nipa_harness.dart';
 import 'package:nipaplay/models/playable_item.dart';
 import 'package:nipaplay/next/capabilities/playback_controls_capability.dart';
 import 'package:nipaplay/next/player/kernel/driver.dart';
-import 'package:nipaplay/next/player/next_playback.dart' show VideoStageHost;
+import 'package:nipaplay/next/player/next_playback.dart'
+    show OverlayFrame, VideoStageHost;
 import 'package:nipaplay/next/player/ports/session_playback.dart';
 import 'package:nipaplay/next/player/ports/session_ports.dart';
 import 'package:nipaplay/next/ui/player/timeline.dart';
@@ -137,13 +138,16 @@ void main() {
       fail('expected a failure');
     }
 
+    // Nothing open: the tracks are not there, as with Classic.
     final tracks = await failure(() => playback.controls.tracks({}));
     expect(tracks.code, FailureCode.unavailable);
-    expect(tracks.details['reason'], 'not_in_playback_layer');
-    expect(tracks.details['feature'], 'tracks');
     final cues = await failure(
         () => playback.controls.inspect('subtitle.cues', {'sessionId': 'x'}));
-    expect(cues.details['feature'], 'subtitles');
+    expect(cues.code, FailureCode.conflict);
+    final entries = await failure(
+        () => playback.controls.inspect('danmaku.entries', {}));
+    expect(entries.details['reason'], 'not_in_playback_layer');
+    expect(entries.details['feature'], 'danmaku');
     final network = await failure(() => playback.openItem(
         PlayableItem(videoPath: 'jellyfin://item-1')));
     expect(network.code, FailureCode.unavailable);
@@ -223,6 +227,8 @@ final class _StageHost implements VideoStageHost {
   final picture = ValueNotifier<VideoSurface?>(null);
   @override
   ValueListenable<VideoSurface?> get surface => picture;
+  @override
+  final ValueNotifier<OverlayFrame?> subtitleOverlay = ValueNotifier(null);
   int toggles = 0;
   @override
   void togglePlay() => toggles++;
