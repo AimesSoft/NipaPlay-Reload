@@ -369,6 +369,26 @@ class Player {
   /// Active subtitle tracks set by user
   List<int> get activeSubtitleTracks => _activeST;
 
+  /// As [state] =, called on another isolate: MDK's setState is synchronous
+  /// and can wait (for the threads to pause, for the audio output to
+  /// start), which would hold this isolate meanwhile. Completes once MDK
+  /// returned.
+  Future<void> setStateOffThread(PlaybackState value) {
+    _state = value;
+    return _setStateOn(_player.ref.setState.address, _player.ref.object.address,
+        value.rawValue);
+  }
+
+  static Future<void> _setStateOn(int function, int player, int state) =>
+      Isolate.run(() {
+        Pointer<NativeFunction<Void Function(Pointer<mdkPlayer>, Int32)>>.fromAddress(
+                function)
+            .asFunction<void Function(Pointer<mdkPlayer>, int)>()(
+          Pointer<mdkPlayer>.fromAddress(player),
+          state,
+        );
+      }, debugName: 'mdk setState');
+
   /// Set playback state to start, pause and stop the media.
   /// https://github.com/wang-bin/mdk-sdk/wiki/Player-APIs#void-setstateplaybackstate-value
   set state(PlaybackState value) {
@@ -513,6 +533,46 @@ class Player {
         _player.ref.object, type.rawValue, ca.cast(), value.length);
     calloc.free(ca);
   }
+
+  /// As [setActiveTracks], called on another isolate (MDK can wait for its
+  /// reader while it switches). Completes once MDK returned.
+  Future<void> setActiveTracksOffThread(MediaType type, List<int> value) {
+    switch (type) {
+      case MediaType.audio:
+        _activeAT = value;
+      case MediaType.video:
+        _activeVT = value;
+      case MediaType.subtitle:
+        _activeST = value;
+      default:
+    }
+    return _setTracksOn(_player.ref.setActiveTracks.address,
+        _player.ref.object.address, type.rawValue, List.of(value));
+  }
+
+  static Future<void> _setTracksOn(
+          int function, int player, int type, List<int> tracks) =>
+      Isolate.run(() {
+        final ca = calloc<Int>(tracks.isEmpty ? 1 : tracks.length);
+        try {
+          for (var i = 0; i < tracks.length; ++i) {
+            ca[i] = tracks[i];
+          }
+          Pointer<
+                  NativeFunction<
+                      Void Function(Pointer<mdkPlayer>, Int32, Pointer<Int>,
+                          Size)>>.fromAddress(function)
+              .asFunction<
+                  void Function(Pointer<mdkPlayer>, int, Pointer<Int>, int)>()(
+            Pointer<mdkPlayer>.fromAddress(player),
+            type,
+            ca,
+            tracks.length,
+          );
+        } finally {
+          calloc.free(ca);
+        }
+      }, debugName: 'mdk setActiveTracks');
 
   /// Set media of [type]. Can be used to load external audio track and subtitle file.
   /// An external media can contains other [MediaType] tracks although they will not be used.
@@ -685,6 +745,37 @@ class Player {
       return null;
     }
     return cv.cast<Utf8>().toDartString();
+  }
+
+  /// The text of a text based subtitle (ass, srt…) at [time] seconds, or the
+  /// one rendered now when [time] < 0. [style] 0: plain text, 1: ass style,
+  /// 2: full ass style. Empty when there is none. MDK answers through the
+  /// callback before it returns, on this thread.
+  /// https://github.com/wang-bin/mdk-sdk/wiki/Player-APIs
+  String subtitleText({double time = -1, int style = 0}) {
+    if (_player.ref.subtitleText.address == 0) return '';
+    _subtitleTextOut = '';
+    final cb = calloc<mdkSubtitleCallback>();
+    try {
+      cb.ref.cb = Pointer.fromFunction<
+          Void Function(Pointer<Char>, Pointer<Void>)>(_subtitleTextIn);
+      cb.ref.opaque = nullptr;
+      _player.ref.subtitleText.asFunction<
+              void Function(
+                  Pointer<mdkPlayer>, double, int, mdkSubtitleCallback)>()(
+          _player.ref.object, time, style, cb.ref);
+    } finally {
+      calloc.free(cb);
+    }
+    final text = _subtitleTextOut;
+    _subtitleTextOut = '';
+    return text;
+  }
+
+  // MDK calls back before subtitleText returns, on the calling thread.
+  static String _subtitleTextOut = '';
+  static void _subtitleTextIn(Pointer<Char> value, Pointer<Void> opaque) {
+    if (value.address != 0) _subtitleTextOut = value.cast<Utf8>().toDartString();
   }
 
   // video renderer apis
