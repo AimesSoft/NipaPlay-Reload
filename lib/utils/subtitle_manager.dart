@@ -594,7 +594,18 @@ class SubtitleManager extends ChangeNotifier {
     bool clearPlayer = true,
   }) {
     ++_subtitleLoadToken;
-    if (clearPlayer) {
+    // SRT/VTT only live in the app overlay. With no native external subtitle,
+    // clearing this state must not unload media or disable embedded tracks.
+    // resetPlayer clears again on idle and before reopening, while MDK may
+    // still be stopping: changing its subtitle tracks then can strand the
+    // decoder and make fvp's next prepare wait for Stopped forever.
+    final currentPath = _currentExternalSubtitlePath;
+    final hasNativeExternalSubtitle =
+        (currentPath != null &&
+            !_shouldRenderExternalSubtitleInApp(currentPath)) ||
+        _activeExternalSubtitlePaths
+            .any((path) => !_shouldRenderExternalSubtitleInApp(path));
+    if (clearPlayer && hasNativeExternalSubtitle) {
       try {
         if (_player.supportsExternalSubtitles) {
           _player.setMedia("", MediaType.subtitle);
@@ -740,8 +751,6 @@ class SubtitleManager extends ChangeNotifier {
 
         debugPrint('SubtitleManager: 外部字幕设置成功');
       } else if (path.isEmpty) {
-        _activeExternalSubtitlePaths.clear();
-        _pathDisplayState.clear();
         _clearExternalSubtitleState();
         debugPrint('SubtitleManager: 外部字幕已清除');
       } else {
