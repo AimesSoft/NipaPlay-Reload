@@ -238,6 +238,14 @@ extension VideoPlayerStateSubtitles on VideoPlayerState {
   String pathSubtitleTextAt(String path, int positionMs) =>
       _subtitleManager.pathSubtitleTextAt(path, positionMs);
 
+  /// 叠层里这条外挂字幕的总偏移（毫秒）：SRT/VTT 含共用的 SRT 偏移
+  int overlaySubtitleDelayMs(String path) =>
+      _subtitleManager.overlayDelayMs(path);
+
+  /// 叠层此刻给出的这条外挂字幕的那一行（已按偏移）
+  String overlaySubtitleTextAt(String path, int playbackMs) =>
+      _subtitleManager.overlayTextAt(path, playbackMs);
+
   /// 某条字幕的显示名（无登记时回退文件名）
   String externalSubtitleDisplayName(String path) =>
       _subtitleManager.displayNameForPath(path);

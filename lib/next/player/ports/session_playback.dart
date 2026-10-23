@@ -747,9 +747,11 @@ final class SessionPlayback implements NextPlayback, VideoStageHost {
     final file = await FilePickerService().pickSubtitleFile();
     if (file == null || !identical(_session, s)) return false;
     try {
+      // In the shared list first: the subtitle library finds the file there
+      // when the choice is told to it.
+      await SessionControls.rememberSubtitle(s.path, file, active: true);
       final receipt = await s.chooseSubtitle(SubtitleWant.file(file),
           origin: 'gui', title: p.basename(file));
-      await SessionControls.rememberSubtitle(s.path, file, active: true);
       return receipt.outcome != 'rejected';
     } catch (e) {
       debugPrint('[NextPlayer] subtitle file: $e');
