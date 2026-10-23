@@ -334,6 +334,13 @@ final class UnavailableHostSettings implements NextHostSettings {
       const UiModelCheck(ok: false, message: _problem);
 
   @override
+  Future<UiModelChoice?> codexModel() async => null;
+
+  @override
+  Future<void> importCodexModel() async =>
+      throw const Failure(FailureCode.unavailable, _problem);
+
+  @override
   Future<UiMeshSetup> mesh() async =>
       const UiMeshSetup(available: false, problem: _problem);
 

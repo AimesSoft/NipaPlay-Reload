@@ -10,6 +10,11 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:nipa_harness/nipa_harness.dart';
 import 'package:nipaplay/next/agent_endpoint.dart';
 import 'package:nipaplay/next/chat/chat_host.dart';
+import 'package:nipaplay/next/chat/dsh_runtime.dart';
+import 'package:nipaplay/next/runtime/codex_manifest.dart';
+import 'package:nipaplay/next/runtime/codex_runtime.dart';
+import 'package:nipaplay/next/runtime/dsh_install.dart';
+import 'package:nipaplay/next/runtime/dsh_manifest.dart';
 import 'package:nipaplay/next/chat/session_store.dart';
 import 'package:nipaplay/next/mesh/runtime.dart';
 import 'package:nipaplay/next/memory/recent.dart';
@@ -290,6 +295,239 @@ void main() {
     expect(failed.message, contains('密钥'));
     expect(requests, ['/prefix/v1/responses', '/prefix/v1/responses']);
     await scanSecrets([failed.message, await database.query('body_changes')]);
+  });
+
+
+  group('DeepSeek Harness is the runtime', () {
+    var runtimeChanges = 0;
+    AgentRuntimeFixed fixed = const AgentRuntimeFixed(null);
+    late HostSettingsService dshSettings;
+    late DshInstall install;
+
+    DshManifest manifest() => DshManifest.parse(jsonEncode({
+          'schema': 1,
+          'dsh': '1.0.0',
+          'node': {
+            'version': '24.22.0',
+            'assets': {
+              'macos-arm64': {
+                'url': 'https://nodejs.org/dist/v24.22.0/node.tar.gz',
+                'sha256': '0' * 64,
+                'bytes': 10,
+                'archive': 'tar',
+                'executable': 'node/bin/node'
+              }
+            }
+          },
+          'registry': 'https://registry.npmjs.org',
+          'platforms': ['macos-arm64'],
+          'packages': <Object>[],
+        }));
+
+    HostSettingsService service({CodexRuntime? codex}) => HostSettingsService(
+        root: root,
+        vault: LabModelVault(),
+        meshRuntime: mesh,
+        programs: programs,
+        history: history,
+        chat: () => null,
+        chatProblem: () => null,
+        repository: () => repository.path,
+        codexHome: Directory('${lab.path}/codex-home'),
+        checkCodex: () async => const UiModelCheck(ok: false, message: '尚未配置'),
+        modelSaved: () async {},
+        dsh: install,
+        codex: codex,
+        fixedRuntime: () => fixed,
+        defaultRuntime: AgentRuntimeKind.dsh,
+        runtimeChanged: () async => runtimeChanges++);
+
+    setUp(() {
+      runtimeChanges = 0;
+      fixed = const AgentRuntimeFixed(null);
+      install = DshInstall(
+          root: Directory('${root.path}/dsh-runtime'),
+          manifest: manifest(),
+          platform: 'macos-arm64',
+          notify: () {},
+          httpClient: HttpClient.new,
+          inUse: () => false);
+      dshSettings = service();
+    });
+    tearDown(() => dshSettings.close());
+
+    test('its route is the model set up here, on either wire, and no file holds the key',
+        () async {
+      await dshSettings.setModel(UiModelChoice(
+          source: UiModelSource.nipaplay,
+          provider: 'DeepSeek',
+          baseUrl: 'https://api.deepseek.com/chat/completions',
+          model: 'deepseek-flash',
+          apiKey: secret,
+          api: UiModelApi.chat,
+          reasoning: 'high',
+          compat: const {'thinkingFormat': 'deepseek', 'supportsStore': false}));
+      final launch = await dshSettings.launch();
+      final route = launch.route!;
+      expect(route.baseUrl, 'https://api.deepseek.com');
+      expect(route.api, 'openai-completions');
+      expect(route.key, secret);
+      expect(route.reasoningEffort, 'high');
+      expect(launch.executable, isNull);
+      expect(launch.home, isNull);
+      final provider = (route.piAiConfig['providers'] as Map)[DshRoute.provider]
+          as Map;
+      expect(provider['api'], 'openai-completions');
+      expect(((provider['models'] as List).single as Map)['compat'],
+          {'thinkingFormat': 'deepseek', 'supportsStore': false});
+      expect(jsonEncode(route.piAiConfig), isNot(contains(secret)));
+
+      final shown = await dshSettings.model();
+      expect(shown.runtime, UiAgentRuntimeKind.dsh);
+      expect(shown.source, UiModelSource.nipaplay);
+      expect(shown.api, UiModelApi.chat);
+      expect(shown.reasoning, 'high');
+      expect(shown.hasKey, true);
+
+      // The Responses wire loses a pasted endpoint suffix too.
+      await dshSettings.setModel(UiModelChoice(
+          source: UiModelSource.nipaplay,
+          provider: 'Relay',
+          baseUrl: 'https://relay.example/v1/responses',
+          model: 'm',
+          apiKey: secret,
+          api: UiModelApi.responses,
+          reasoning: '',
+          compat: const {}));
+      final second = (await dshSettings.launch()).route!;
+      expect(second.baseUrl, 'https://relay.example/v1');
+      expect(second.api, 'openai-responses');
+      expect(second.reasoningEffort, isNull);
+      expect(second.compat, isNull);
+      await scanSecrets([await database.query('body_changes'), route.piAiConfig]);
+    });
+
+    test('Nipa is not ready until the runtime is there, and says what is missing first',
+        () async {
+      expect((await dshSettings.model()).problem, '请先填写地址和模型名');
+      await dshSettings.setModel(choice('https://relay.example/v1', key: secret));
+      expect((await dshSettings.model()).problem, '还没有运行环境');
+      expect((await dshSettings.dshRuntime()).status, UiDshStatus.notInstalled);
+      expect(await dshSettings.dshLaunchRuntime(), isNull);
+      // An installation named by the environment stands in for the fetched one.
+      final node = File('${lab.path}/node')..writeAsStringSync('');
+      final bin = File('${lab.path}/dsh/node_modules/@deepseek-ai/dsh/lib/bin.js')
+        ..createSync(recursive: true);
+      fixed = AgentRuntimeFixed(AgentRuntimeKind.dsh,
+          DshRuntime(node: node.path, bin: bin.path, version: '9'));
+      expect((await dshSettings.model()).problem, '模型服务尚未启动');
+      expect((await dshSettings.dshLaunchRuntime())!.version, '9');
+      expect((await dshSettings.dshRuntime()).fixed, true);
+    });
+
+    test('the runtime is chosen here unless the environment decides', () async {
+      expect((await dshSettings.agentRuntime()).kind, UiAgentRuntimeKind.dsh);
+      await expectLater(dshSettings.setAgentRuntime(UiAgentRuntimeKind.codex),
+          throwsUnsupportedError);
+      final withCodex = service(
+          codex: CodexRuntime(
+              root: Directory('${root.path}/codex-runtime'),
+              platform: 'macos',
+              asset: const CodexAsset('x.tgz', '0', 1, 'x'),
+              notify: () {},
+              httpClient: HttpClient.new,
+              inUse: () => false));
+      addTearDown(withCodex.close);
+      await withCodex.setAgentRuntime(UiAgentRuntimeKind.codex);
+      expect(runtimeChanges, 1);
+      expect((await withCodex.agentRuntime()).kind, UiAgentRuntimeKind.codex);
+      expect(jsonDecode(await File('${root.path}/runtime.json').readAsString()),
+          {'runtime': 'codex'});
+      await withCodex.setAgentRuntime(UiAgentRuntimeKind.dsh);
+      expect((await withCodex.agentRuntime()).kind, UiAgentRuntimeKind.dsh);
+      fixed = const AgentRuntimeFixed(AgentRuntimeKind.codex);
+      final decided = await withCodex.agentRuntime();
+      expect((decided.kind, decided.fixed), (UiAgentRuntimeKind.codex, true));
+      await expectLater(
+          withCodex.setAgentRuntime(UiAgentRuntimeKind.dsh), throwsStateError);
+      expect(runtimeChanges, 2);
+    });
+
+    test('a Codex configuration is read, offered without its key, and imported into the vault',
+        () async {
+      expect(await dshSettings.codexModel(), isNull);
+      await expectLater(dshSettings.importCodexModel(), throwsStateError);
+      final home = await Directory('${lab.path}/codex-home').create();
+      await File('${home.path}/config.toml').writeAsString(
+          'model = "deepseek-v4.1-flash"\n'
+          'model_provider = "cpa"\n'
+          'model_reasoning_effort = "high"\n'
+          '[model_providers.cpa]\n'
+          'name = "CPA"\n'
+          'base_url = "https://relay.example/v1/"\n'
+          'wire_api = "responses"\n'
+          'experimental_bearer_token = "$secret"\n');
+      final offer = (await dshSettings.codexModel())!;
+      expect(
+          (offer.provider, offer.baseUrl, offer.model, offer.api, offer.reasoning),
+          ('CPA', 'https://relay.example/v1', 'deepseek-v4.1-flash',
+              UiModelApi.responses, 'high'));
+      expect(offer.apiKey, isNull);
+      expect((await dshSettings.model()).hasKey, false);
+      await dshSettings.importCodexModel();
+      final shown = await dshSettings.model();
+      expect((shown.provider, shown.model, shown.hasKey, shown.reasoning),
+          ('CPA', 'deepseek-v4.1-flash', true, 'high'));
+      final route = (await dshSettings.launch()).route!;
+      expect((route.baseUrl, route.key), ('https://relay.example/v1', secret));
+      // The import copied nothing into the app's own files.
+      expect(await File('${root.path}/model.json').readAsString(),
+          isNot(contains(secret)));
+      expect(jsonEncode(await database.query('body_changes')),
+          isNot(contains(secret)));
+    });
+
+    test('the connection check speaks the wire that was chosen', () async {
+      final seen = <String>[];
+      server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+      server!.listen((request) async {
+        seen.add('${request.method} ${request.uri.path}');
+        await utf8.decoder.bind(request).join();
+        final valid = request.headers.value(HttpHeaders.authorizationHeader) ==
+            'Bearer $secret';
+        request.response.headers.contentType = ContentType.json;
+        request.response.statusCode = valid ? 200 : 401;
+        request.response.write(jsonEncode(valid
+            ? {
+                'choices': [
+                  {
+                    'message': {'role': 'assistant', 'content': 'OK'}
+                  }
+                ],
+              }
+            : {'error': {'message': 'echo $secret'}}));
+        await request.response.close();
+      });
+      final url = 'http://127.0.0.1:${server!.port}/v1';
+      await dshSettings.setModel(UiModelChoice(
+          source: UiModelSource.nipaplay,
+          provider: 'x',
+          baseUrl: url,
+          model: 'm',
+          apiKey: secret,
+          api: UiModelApi.chat));
+      final ok = await dshSettings.checkModel();
+      expect(ok.ok, true, reason: ok.message);
+      await dshSettings.setModel(UiModelChoice(
+          source: UiModelSource.nipaplay,
+          provider: 'x',
+          baseUrl: '$url/chat/completions',
+          model: 'm',
+          apiKey: 'wrong'));
+      final bad = await dshSettings.checkModel();
+      expect((bad.ok, bad.message), (false, '密钥无效或没有权限'));
+      expect(seen, ['POST /v1/chat/completions', 'POST /v1/chat/completions']);
+    });
   });
 
   test(

@@ -979,6 +979,25 @@ final class FakeHostSettings
     implements NextHostSettings, NextHostDeviceSettings, NextHostRuntimeSettings {
   String modelState = 'key';
 
+  /// The runtime Nipa thinks in.
+  UiAgentRuntimeKind runtime = UiAgentRuntimeKind.dsh;
+
+  /// `none`, `downloading`, `unpacking`, `ready`, `failed` or `unsupported`
+  /// for the runtime DeepSeek Harness runs on.
+  String dshState = 'ready';
+  int _dshReceived = 0;
+  static const _dshTotal = 90000000;
+  Timer? _dshDownload;
+  String? _dshRegistry, _dshNode;
+
+  /// What the Codex configuration on this computer offers to import.
+  UiModelChoice? codexOffer = const UiModelChoice(
+      source: UiModelSource.nipaplay,
+      provider: 'CPA',
+      baseUrl: 'https://relay.example/v1',
+      model: 'deepseek-v4.1-flash',
+      api: UiModelApi.responses);
+
   /// `none`, `downloading`, `verifying`, `ready`, `failed`, `path`.
   String codexState = 'ready';
   int _received = 0;
@@ -1014,29 +1033,147 @@ final class FakeHostSettings
   Stream<void> get changes => _changes.stream;
 
   @override
-  Future<UiModelSetup> model() async => switch (modelState) {
-        'codex' => const UiModelSetup(
-            source: UiModelSource.codex,
-            codexAvailable: true,
-            inUse: 'gpt-5.5-codex'),
-        'nocodex' => const UiModelSetup(
-            source: UiModelSource.codex, problem: '这台电脑上没有 Codex'),
-        'nokey' => const UiModelSetup(
-            source: UiModelSource.nipaplay,
-            codexAvailable: true,
-            provider: 'DeepSeek',
-            baseUrl: 'https://api.deepseek.com/',
-            model: 'deepseek-flash',
-            problem: '还没有 API key'),
-        _ => const UiModelSetup(
-            source: UiModelSource.nipaplay,
-            codexAvailable: true,
-            provider: 'DeepSeek',
-            baseUrl: 'https://api.deepseek.com/',
-            model: 'deepseek-flash',
-            hasKey: true,
-            inUse: 'deepseek-flash'),
-      };
+  Future<UiModelSetup> model() async {
+    final dshRuntime = runtime == UiAgentRuntimeKind.dsh;
+    final setup = switch (modelState) {
+      'codex' when !dshRuntime => const UiModelSetup(
+          source: UiModelSource.codex,
+          codexAvailable: true,
+          inUse: 'gpt-5.5-codex'),
+      'nocodex' when !dshRuntime => const UiModelSetup(
+          source: UiModelSource.codex, problem: '这台电脑上没有 Codex'),
+      'empty' => const UiModelSetup(
+          source: UiModelSource.nipaplay,
+          codexAvailable: true,
+          problem: '请先填写地址和模型名'),
+      'nokey' => const UiModelSetup(
+          source: UiModelSource.nipaplay,
+          codexAvailable: true,
+          provider: 'DeepSeek',
+          baseUrl: 'https://api.deepseek.com/',
+          model: 'deepseek-flash',
+          problem: '还没有 API key'),
+      _ => const UiModelSetup(
+          source: UiModelSource.nipaplay,
+          codexAvailable: true,
+          provider: 'DeepSeek',
+          baseUrl: 'https://api.deepseek.com/',
+          model: 'deepseek-flash',
+          hasKey: true,
+          inUse: 'deepseek-flash'),
+    };
+    final runtimeProblem = !dshRuntime || setup.problem != null
+        ? null
+        : switch (dshState) {
+            'none' => '还没有运行环境',
+            'downloading' || 'unpacking' => '正在准备运行环境',
+            'failed' => '下载中断，网络连不上',
+            'unsupported' => '这个平台暂时没有现成的运行环境',
+            _ => null,
+          };
+    return UiModelSetup(
+        source: setup.source,
+        runtime: runtime,
+        codexAvailable: setup.codexAvailable,
+        provider: setup.provider,
+        baseUrl: setup.baseUrl,
+        model: setup.model,
+        api: dshApi,
+        reasoning: dshReasoning,
+        hasKey: setup.hasKey,
+        inUse: runtimeProblem == null ? setup.inUse : null,
+        problem: setup.problem ?? runtimeProblem);
+  }
+
+  UiModelApi dshApi = UiModelApi.responses;
+  String? dshReasoning;
+  final saved = <UiModelChoice>[];
+
+  @override
+  Future<UiModelChoice?> codexModel() async => codexOffer;
+
+  @override
+  Future<void> importCodexModel() async {
+    await Future<void>.delayed(const Duration(milliseconds: 200));
+    final offer = codexOffer;
+    if (offer == null) throw StateError('这台电脑没有可用的 Codex 配置');
+    modelState = 'key';
+    dshApi = offer.api ?? UiModelApi.responses;
+    changed();
+  }
+
+  @override
+  Future<UiAgentRuntime> agentRuntime() async =>
+      UiAgentRuntime(kind: runtime);
+
+  @override
+  Future<void> setAgentRuntime(UiAgentRuntimeKind kind) async {
+    runtime = kind;
+    changed();
+  }
+
+  @override
+  Future<UiDshRuntime> dshRuntime() async => UiDshRuntime(
+      status: switch (dshState) {
+        'none' => UiDshStatus.notInstalled,
+        'downloading' => UiDshStatus.downloading,
+        'unpacking' => UiDshStatus.unpacking,
+        'failed' => UiDshStatus.failed,
+        'unsupported' => UiDshStatus.unsupported,
+        _ => UiDshStatus.ready,
+      },
+      version: '0.2.1-rc.2',
+      receivedBytes: dshState == 'ready' ? _dshTotal : _dshReceived,
+      totalBytes: _dshTotal,
+      problem: dshState == 'failed' ? '下载 zod-4.4.3.tgz 失败：连接中断' : null,
+      registryMirror: _dshRegistry,
+      nodeMirror: _dshNode);
+
+  /// A download that moves on its own, a little at a time.
+  @override
+  Future<void> installDsh() async {
+    _dshDownload?.cancel();
+    dshState = 'downloading';
+    changed();
+    final done = Completer<void>();
+    _dshDownload = Timer.periodic(const Duration(milliseconds: 250), (t) {
+      _dshReceived = (_dshReceived + _dshTotal ~/ 24).clamp(0, _dshTotal);
+      if (_dshReceived >= _dshTotal) {
+        t.cancel();
+        dshState = 'unpacking';
+        changed();
+        Timer(const Duration(milliseconds: 900), () {
+          dshState = 'ready';
+          changed();
+          done.complete();
+        });
+      } else {
+        changed();
+      }
+    });
+    return done.future;
+  }
+
+  @override
+  Future<void> cancelDshInstall() async {
+    _dshDownload?.cancel();
+    dshState = 'none';
+    changed();
+  }
+
+  @override
+  Future<void> removeDsh() async {
+    _dshReceived = 0;
+    dshState = 'none';
+    changed();
+  }
+
+  @override
+  Future<void> setDshMirrors({String? registry, String? node}) async {
+    _dshRegistry = (registry?.isEmpty ?? true) ? null : registry;
+    _dshNode = (node?.isEmpty ?? true) ? null : node;
+    changed();
+  }
 
   @override
   Future<UiCodexRuntime> codexRuntime() async => switch (codexState) {
@@ -1132,6 +1269,11 @@ final class FakeHostSettings
   @override
   Future<void> setModel(UiModelChoice choice) async {
     await Future<void>.delayed(const Duration(milliseconds: 200));
+    saved.add(choice);
+    if (choice.api != null) dshApi = choice.api!;
+    if (choice.reasoning != null) {
+      dshReasoning = choice.reasoning!.isEmpty ? null : choice.reasoning;
+    }
     modelState = choice.source == UiModelSource.codex
         ? 'codex'
         : (choice.apiKey != null || modelState == 'key')

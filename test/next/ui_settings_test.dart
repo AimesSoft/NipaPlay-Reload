@@ -85,7 +85,9 @@ void main() {
   testWidgets('Codex is fetched from the Nipa section; templates only fill in',
       (tester) async {
     final data = FakeSettings();
-    data.host.codexState = 'none';
+    data.host
+      ..runtime = UiAgentRuntimeKind.codex
+      ..codexState = 'none';
     final model = SettingsModel(data);
     await tester.runAsync(model.load);
     await tester.pumpWidget(MaterialApp(
@@ -134,6 +136,109 @@ void main() {
             .map((e) => e.controller.text),
         containsAll(['https://open.bigmodel.cn/api/v1', 'glm-5.3-flash']));
     expect(find.text('保存'), findsOneWidget);
+    model.dispose();
+  });
+
+  testWidgets('DeepSeek Harness: a template brings its wire, saving fetches the runtime, Codex stays a choice',
+      (tester) async {
+    final data = FakeSettings();
+    data.host
+      ..modelState = 'empty'
+      ..dshState = 'none';
+    final model = SettingsModel(data);
+    await tester.runAsync(model.load);
+    await tester.pumpWidget(MaterialApp(
+      home: Material(
+        child: SingleChildScrollView(
+          child: SizedBox(
+            width: 900,
+            child: NipaSection(
+                data: data,
+                model: model,
+                onShow: (_) {},
+                more: false,
+                onMore: () {}),
+          ),
+        ),
+      ),
+    ));
+    await tester.pump(const Duration(milliseconds: 100));
+    // Nothing is set up: the model comes first, the runtime shows its size,
+    // and what Codex already holds can be taken over.
+    expect(find.text('请先填写地址和模型名'), findsOneWidget);
+    expect(find.text('导入 Codex 配置'), findsOneWidget);
+    expect(find.text('86 MB'), findsNothing);
+    expect(find.text('未下载'), findsOneWidget);
+    expect(find.text('在这里设置'), findsNothing); // no choice of source
+
+    await tester.ensureVisible(find.text('DeepSeek'));
+    await tester.tap(find.text('DeepSeek'));
+    await tester.pump();
+    final fields = tester.widgetList<EditableText>(find.byType(EditableText));
+    expect(fields.map((e) => e.controller.text),
+        containsAll(['https://api.deepseek.com', 'deepseek-flash']));
+    await tester.enterText(find.byType(EditableText).at(3), 'sk-fixture');
+    await tester.pump();
+    await tester.tap(find.text('保存'));
+    await tester.pump(const Duration(milliseconds: 400));
+    final saved = data.host.saved.single;
+    expect((saved.api, saved.reasoning, saved.baseUrl, saved.model),
+        (UiModelApi.chat, 'high', 'https://api.deepseek.com', 'deepseek-flash'));
+    expect(saved.compat!['thinkingFormat'], 'deepseek');
+    // Saving a model with no runtime starts the download.
+    await tester.pump(const Duration(milliseconds: 600));
+    expect(find.text('取消'), findsOneWidget);
+    expect(find.byType(ThinBar), findsOneWidget);
+    await tester.pump(const Duration(seconds: 7));
+    await tester.pump(const Duration(seconds: 1));
+    await tester.pump(const Duration(milliseconds: 100));
+    expect(find.text('已就绪'), findsOneWidget);
+    expect(find.text('0.2.1-rc.2'), findsOneWidget);
+    expect(find.text('正在用 deepseek-flash'), findsOneWidget);
+
+    // Codex is the other runtime, one choice away; its cards come back.
+    await tester.ensureVisible(find.text('更多').last);
+    await tester.tap(find.text('更多').last);
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(find.text('Codex'));
+    await tester.tap(find.text('Codex'));
+    await tester.pump(const Duration(milliseconds: 100));
+    await tester.pump(const Duration(milliseconds: 100));
+    expect(data.host.runtime, UiAgentRuntimeKind.codex);
+    expect(find.text('在这里设置'), findsWidgets);
+    expect(find.text('运行环境'), findsNothing);
+    model.dispose();
+  });
+
+  testWidgets('importing the Codex configuration fills the model without typing',
+      (tester) async {
+    final data = FakeSettings();
+    data.host
+      ..modelState = 'empty'
+      ..dshState = 'ready';
+    final model = SettingsModel(data);
+    await tester.runAsync(model.load);
+    await tester.pumpWidget(MaterialApp(
+      home: Material(
+        child: SingleChildScrollView(
+          child: SizedBox(
+            width: 900,
+            child: NipaSection(
+                data: data,
+                model: model,
+                onShow: (_) {},
+                more: false,
+                onMore: () {}),
+          ),
+        ),
+      ),
+    ));
+    await tester.pump(const Duration(milliseconds: 100));
+    await tester.tap(find.text('导入 Codex 配置'));
+    await tester.pump(const Duration(milliseconds: 400));
+    await tester.pump(const Duration(milliseconds: 100));
+    expect(find.text('请先填写地址和模型名'), findsNothing);
+    expect(find.text('已保存'), findsOneWidget);
     model.dispose();
   });
 

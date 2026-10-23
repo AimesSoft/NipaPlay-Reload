@@ -301,18 +301,9 @@ final class ChatHost implements ConversationHistory {
     return env;
   }
 
-  /// DSH runs NipaPlay's app-server plugin over the `sdk` profile. The model
-  /// route comes from the same Codex configuration a Codex launch reads; its
-  /// key reaches DSH only as an environment value.
-  Future<void> _launchDsh(DshRuntime runtime) async {
-    final inherited = endpoint.chatEnvironment(Platform.environment);
-    final clean = endpoint.chatEnvironment(Platform.isWindows
-        ? inherited
-        : await _loginEnvironment(
-            Platform.environment['SHELL'] ?? '/bin/zsh', inherited));
-    clean['NIPAPLAY_CHAT'] = sessionId;
-    final next = endpoint.seedRepository.parent;
-    final home = await Directory('${next.path}/dsh-home').create(recursive: true);
+  /// A lab profile (or an environment) with no model of its own: the route
+  /// of the Codex configuration a Codex launch would use.
+  Future<DshRoute> _routeFromCodex(Map<String, String> clean) async {
     final codexHome = _launch?.home ??
         (labRoot != null
             ? Directory('${labRoot!.path}/codex-home')
@@ -323,7 +314,7 @@ final class ChatHost implements ConversationHistory {
       throw StateError('DSH reads its model from ${config.path}; it is missing.');
     }
     final authFile = File('${codexHome.path}/auth.json');
-    final route = DshRoute.fromCodexConfig(await config.readAsString(),
+    return DshRoute.fromCodexConfig(await config.readAsString(),
         model: _launch?.model,
         provider: _launch?.provider,
         key: _launch?.environment[DshRoute.keyVariable],
@@ -332,6 +323,21 @@ final class ChatHost implements ConversationHistory {
             ? Map<String, Object?>.from(
                 jsonDecode(await authFile.readAsString()) as Map)
             : null);
+  }
+
+  /// DSH runs NipaPlay's app-server plugin over the `sdk` profile. The model
+  /// route is the one set up in NipaPlay (else a Codex configuration's); its
+  /// key reaches DSH only as an environment value.
+  Future<void> _launchDsh(DshRuntime runtime) async {
+    final inherited = endpoint.chatEnvironment(Platform.environment);
+    final clean = endpoint.chatEnvironment(Platform.isWindows
+        ? inherited
+        : await _loginEnvironment(
+            Platform.environment['SHELL'] ?? '/bin/zsh', inherited));
+    clean['NIPAPLAY_CHAT'] = sessionId;
+    final next = endpoint.seedRepository.parent;
+    final home = await Directory('${next.path}/dsh-home').create(recursive: true);
+    final route = _launch?.route ?? await _routeFromCodex(clean);
     SecretRedactor.remember(
         const CredentialRef('next_model', 'dsh'), route.key);
     // DSH's read_image hands an image only to a model declared to take one.

@@ -19,7 +19,10 @@ void installDebugHostSettings(NextHostSettings settings) {
             'hasKey': value.hasKey,
             'codexAvailable': value.codexAvailable,
             'inUse': value.inUse,
-            'problem': value.problem
+            'problem': value.problem,
+            'runtime': value.runtime.name,
+            'api': value.api.name,
+            'reasoning': value.reasoning,
           };
         case 'setModel':
           final choice = jsonDecode(params['choice']!) as Map;
@@ -28,8 +31,34 @@ void installDebugHostSettings(NextHostSettings settings) {
               provider: choice['provider'] as String?,
               baseUrl: choice['baseUrl'] as String?,
               model: choice['model'] as String?,
-              apiKey: choice['apiKey'] as String?));
+              apiKey: choice['apiKey'] as String?,
+              api: choice['api'] == null
+                  ? null
+                  : UiModelApi.values.byName(choice['api'] as String),
+              reasoning: choice['reasoning'] as String?,
+              compat: (choice['compat'] as Map?)?.cast<String, Object?>()));
           result = {'saved': true};
+        case 'importCodex':
+          await settings.importCodexModel();
+          result = {'imported': true};
+        case 'runtime':
+          final runtime = settings.runtimeSettings;
+          final agent = await runtime.agentRuntime();
+          final dsh = await runtime.dshRuntime();
+          result = {
+            'kind': agent.kind.name,
+            'fixed': agent.fixed,
+            'dsh': {
+              'status': dsh.status.name,
+              'version': dsh.version,
+              'receivedBytes': dsh.receivedBytes,
+              'totalBytes': dsh.totalBytes,
+              'problem': dsh.problem,
+            },
+          };
+        case 'installDsh':
+          await settings.runtimeSettings.installDsh();
+          result = {'done': true};
         case 'checkModel':
           final value = await settings.checkModel();
           result = {
