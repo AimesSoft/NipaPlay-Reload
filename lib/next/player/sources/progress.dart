@@ -63,8 +63,11 @@ final class SourceProgress {
   }
 
   void _syncHeartbeat() {
-    if (plan.progress == null && !SharedRemoteHistoryHelper.isSharedRemoteStreamPath(
-        plan.source.locator)) return;
+    if (plan.progress == null &&
+        !SharedRemoteHistoryHelper.isSharedRemoteStreamPath(
+            plan.source.locator)) {
+      return;
+    }
     final playing = !session.transport.value.ended &&
         session.transport.value.observed == KernelTransport.playing;
     if (playing == (_heartbeat != null)) return;

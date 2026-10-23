@@ -52,8 +52,10 @@ final class PlaybackSources extends ChangeNotifier {
   }
 
   bool get canPrevious => _bound?.phase.value.done == false && _index > 0;
-  bool get canNext => _bound?.phase.value.done == false &&
-      _index >= 0 && _index + 1 < _episodes.length;
+  bool get canNext =>
+      _bound?.phase.value.done == false &&
+      _index >= 0 &&
+      _index + 1 < _episodes.length;
   List<PlaybackDetailEpisode> get episodes => _episodes;
   int get currentIndex => _index;
   JsonMap? get autoNext => _remaining == null
@@ -64,11 +66,15 @@ final class PlaybackSources extends ChangeNotifier {
           'countingDown': true,
           'remainingSeconds': _remaining,
           'nextTitle': canNext ? _episodes[_index + 1].title : null,
-          'next': canNext ? {'path': redactHarnessText(_episodes[_index + 1].videoPath),
-            'title': _episodes[_index + 1].title,
-            'subtitle': _episodes[_index + 1].subtitle,
-            'animeId': _episodes[_index + 1].animeId,
-            'episodeId': _episodes[_index + 1].episodeId} : null,
+          'next': canNext
+              ? {
+                  'path': redactHarnessText(_episodes[_index + 1].videoPath),
+                  'title': _episodes[_index + 1].title,
+                  'subtitle': _episodes[_index + 1].subtitle,
+                  'animeId': _episodes[_index + 1].animeId,
+                  'episodeId': _episodes[_index + 1].episodeId
+                }
+              : null,
           'source': 'playback_end_action',
         };
 
@@ -81,8 +87,8 @@ final class PlaybackSources extends ChangeNotifier {
     final ticket = ++_ticket;
     cancelAutoNext();
     host.resolve(MediaRequest(locator: item.videoPath, origin: origin));
-    final effectiveStart = start ?? Duration(milliseconds:
-        await host.records.resumeAt(item.videoPath));
+    final effectiveStart = start ??
+        Duration(milliseconds: await host.records.resumeAt(item.videoPath));
     final SourcePlan prepared;
     try {
       prepared = await resolver.resolve(item,
@@ -90,8 +96,12 @@ final class PlaybackSources extends ChangeNotifier {
     } on Failure {
       rethrow;
     } catch (e) {
-      throw Failure(FailureCode.unavailable, 'Could not resolve the media source.',
-          details: {'stage': 'source_resolution', 'error': e.runtimeType.toString()});
+      throw Failure(
+          FailureCode.unavailable, 'Could not resolve the media source.',
+          details: {
+            'stage': 'source_resolution',
+            'error': e.runtimeType.toString()
+          });
     }
     if (_disposed || ticket != _ticket) {
       await prepared.progress?.stopTranscoding();
@@ -103,16 +113,19 @@ final class PlaybackSources extends ChangeNotifier {
         MediaRequest(
             locator: prepared.source.locator,
             origin: origin,
-            title: item.title ?? history?.animeName,
-            episodeTitle: item.subtitle ?? history?.episodeTitle,
+            title: item.title ?? history?.animeName ?? prepared.detail.title,
+            episodeTitle: item.subtitle ??
+                history?.episodeTitle ??
+                prepared.detail.subtitle,
             animeId: item.animeId ?? history?.animeId,
             episodeId: item.episodeId ?? history?.episodeId,
             start: effectiveStart,
             paused: paused),
         resolvedSource: prepared.source, onCreated: (session) {
-      if (_disposed || ticket != _ticket)
+      if (_disposed || ticket != _ticket) {
         throw const Failure(FailureCode.conflict,
             'A newer playback request replaced this source.');
+      }
       plan = prepared;
       _bound = session;
       _episodes = const [];
@@ -133,21 +146,17 @@ final class PlaybackSources extends ChangeNotifier {
   Future<void> _loadPlaylist(PlaybackSession session, SourcePlan source) async {
     try {
       final episodes = await source.detail.episodeLoader();
-      // Identity work is sliced; an arbitrarily large directory cannot
-      // hold the UI isolate for a whole traversal.
       final key = MediaIdentityResolver.forPath(session.path);
-      int index = -1;
-      for (var i = 0; i < episodes.length; i++) {
-        if (episodes[i].videoPath == session.path ||
-            (episodes[i].mediaKey ??
-                    MediaIdentityResolver.forPath(episodes[i].videoPath)) ==
-                key) index = i;
-        if (i % 32 == 31) await Future<void>.delayed(Duration.zero);
-      }
-      if (!identical(_bound, session) || session.phase.value.done || _disposed)
+      final prepared = await compute(
+          _locatePlaylist, (episodes, session.path, key),
+          debugLabel: 'next.source.playlist');
+      if (!identical(_bound, session) ||
+          session.phase.value.done ||
+          _disposed) {
         return;
-      _episodes = List.unmodifiable(episodes);
-      _index = index;
+      }
+      _episodes = prepared.$1;
+      _index = prepared.$2;
       notifyListeners();
     } catch (e) {
       if (!identical(_bound, session) || _disposed) return;
@@ -169,16 +178,8 @@ final class PlaybackSources extends ChangeNotifier {
         'autoNext': null
       };
     }
-    final rows = <JsonMap>[];
-    for (final e in _episodes) {
-      rows.add({
-        'id': e.id,
-        'path': redactHarnessText(e.videoPath),
-        'title': e.title,
-        'episodeId': e.episodeId
-      });
-      if (rows.length % 32 == 0) await Future<void>.delayed(Duration.zero);
-    }
+    final rows = await compute(_playlistRows, _episodes,
+        debugLabel: 'next.source.playlist_rows');
     _check(session);
     return {
       'supported': true,
@@ -204,12 +205,14 @@ final class PlaybackSources extends ChangeNotifier {
     final source = plan;
     if (session == null || source == null) return;
     _check(session);
-    if (!_episodes.contains(episode))
+    if (!_episodes.contains(episode)) {
       throw const Failure(
           FailureCode.conflict, 'The episode belongs to a previous playlist.');
-    if (_switching)
+    }
+    if (_switching) {
       throw const Failure(
           FailureCode.conflict, 'An episode change is already running.');
+    }
     _switching = true;
     try {
       await open(
@@ -221,9 +224,10 @@ final class PlaybackSources extends ChangeNotifier {
   }
 
   Future<void> switchEpisode(bool next, {String origin = 'gui'}) async {
-    if (next ? !canNext : !canPrevious)
+    if (next ? !canNext : !canPrevious) {
       throw const Failure(
           FailureCode.notFound, 'There is no episode in that direction.');
+    }
     await playEpisode(_episodes[_index + (next ? 1 : -1)], origin: origin);
   }
 
@@ -368,13 +372,15 @@ final class PlaybackSources extends ChangeNotifier {
     final versions = source.serverSession!.mediaSources;
     final version =
         versions.where((v) => v.id == selection['mediaSourceId']).firstOrNull;
-    if (version == null)
+    if (version == null) {
       throw const Failure(
           FailureCode.notFound, 'The media version does not exist.');
+    }
     if (selection['mediaSourceId'] != before['mediaSourceId']) {
       if (!input.containsKey('audioIndex')) selection.remove('audioIndex');
-      if (!input.containsKey('subtitleIndex'))
+      if (!input.containsKey('subtitleIndex')) {
         selection.remove('subtitleIndex');
+      }
     }
     for (final (key, kind) in [
       ('audioIndex', 'Audio'),
@@ -411,19 +417,21 @@ final class PlaybackSources extends ChangeNotifier {
             await EmbyTranscodeProvider().setTranscodeEnabled(enabled)
         : await JellyfinTranscodeProvider().setDefaultVideoQuality(quality) &&
             await JellyfinTranscodeProvider().setTranscodeEnabled(enabled);
-    if (!saved)
+    if (!saved) {
       throw const Failure(FailureCode.unavailable,
           'Could not save the shared stream settings.');
+    }
     _check(session);
     final next = await open(source.item,
         start: session.position,
         paused: !session.transport.value.playIntent,
         origin: origin,
         selection: selection);
-    if (next.phase.value == SessionPhase.failed)
+    if (next.phase.value == SessionPhase.failed) {
       throw Failure(
           FailureCode.unavailable, 'The selected stream failed to open.',
           details: next.fault.value?.toJson() ?? const {});
+    }
     return streamOptions();
   }
 
@@ -436,3 +444,29 @@ final class PlaybackSources extends ChangeNotifier {
     super.dispose();
   }
 }
+
+(List<PlaybackDetailEpisode>, int) _locatePlaylist(
+    (List<PlaybackDetailEpisode>, String, String) input) {
+  final (episodes, path, key) = input;
+  var index = -1;
+  for (var i = 0; i < episodes.length; i++) {
+    final episode = episodes[i];
+    if (episode.videoPath == path ||
+        (episode.mediaKey ??
+                MediaIdentityResolver.forPath(episode.videoPath)) ==
+            key) {
+      index = i;
+    }
+  }
+  return (List.unmodifiable(episodes), index);
+}
+
+List<JsonMap> _playlistRows(List<PlaybackDetailEpisode> episodes) => [
+      for (final episode in episodes)
+        {
+          'id': episode.id,
+          'path': redactHarnessText(episode.videoPath),
+          'title': episode.title,
+          'episodeId': episode.episodeId,
+        }
+    ];

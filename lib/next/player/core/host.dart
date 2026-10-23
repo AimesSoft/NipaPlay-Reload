@@ -95,6 +95,8 @@ final class NextPlayerHost {
       'smb',
       'jellyfin',
       'emby',
+      'mesh',
+      'dandanplay',
       'rtsp',
       'rtmp',
       'content'

@@ -4,11 +4,16 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:nipa_harness/nipa_harness.dart';
 import 'package:path/path.dart' as p;
+import 'package:nipaplay/models/playable_item.dart';
+import 'package:nipaplay/models/playback_detail_context.dart';
 import '../../player_abstraction/player_factory.dart';
 import '../next_core.dart';
 import '../player/next_playback.dart';
 import '../player/ports/session_playback.dart';
 import '../player/core/session.dart';
+import '../player/kernel/driver.dart';
+import '../player/sources/resolver.dart';
+import '../ui_data/ui_data.dart';
 
 /// Attaches Mesh observations to what plays only while Next is open.
 final class MeshPlayback {
@@ -26,21 +31,65 @@ final class MeshPlayback {
     core.danmaku.remoteControl = control;
     core.subtitles.remoteLoader = subtitles;
     if (player case final SessionPlayback playback) {
+      playback.sources.resolver.specialSource = _resolveSource;
       playback.host.current.addListener(_bindSession);
       _bindSession();
       _events = playback.host.events.listen((event) {
         if (event.kind != 'progress_saved' &&
             event.kind != 'seek_settled' &&
-            event.kind != 'ended') return;
+            event.kind != 'ended') {
+          return;
+        }
         final session = playback.session;
         if (session?.id != event.sessionId) return;
-        _writing = _writing.then((_) => _observe(session));
-        unawaited(_writing.then<void>((_) {},
+        final writing = _writing.then((_) => _observe(session));
+        _writing = writing.then<void>((_) {},
             onError: (Object e, StackTrace s) => FlutterError.reportError(
                 FlutterErrorDetails(
-                    exception: e, stack: s, library: 'Mesh progress'))));
+                    exception: e, stack: s, library: 'Mesh progress')));
       });
     }
+  }
+
+  Future<SourcePlan?> _resolveSource(PlayableItem item) async {
+    final library = core.uiData.meshLibrary!;
+    final uri = Uri.tryParse(item.videoPath);
+    final current = library.playback[item.videoPath];
+    final id = uri?.scheme == 'mesh'
+        ? uri!.pathSegments.single
+        : current?['episodeId'] as String?;
+    if (id == null) return null;
+    // Stable Mesh locators resolve afresh for every episode open. The initial
+    // ui.open already made its authenticated grant and resource bundle.
+    final opened = uri?.scheme == 'mesh' ? await library.open(id) : current;
+    final actual = opened?['url'] as String? ?? opened?['path'] as String?;
+    if (opened == null || actual == null) {
+      throw const Failure(
+          FailureCode.notFound, 'The Mesh episode has no readable file.');
+    }
+    final locator = 'mesh:///${Uri.encodeComponent(id)}';
+    library.playback[locator] = opened;
+    final parent = await library.parent(id);
+    final work = parent == null ? null : await library.work(parent);
+    final detail = PlaybackDetailContext(
+        sourceKind: PlaybackSourceKind.networkStream,
+        sourceLabel: 'Mesh',
+        sourceKey: 'mesh:$parent',
+        title: work?.title ?? item.title ?? 'Mesh',
+        isIdentified: false,
+        episodeLoader: () async => parent == null
+            ? const []
+            : compute(_meshEpisodes, await library.episodes(parent),
+                debugLabel: 'next.mesh.episodes'));
+    return SourcePlan(
+        item: PlayableItem(
+            videoPath: locator,
+            title: detail.title,
+            subtitle: item.subtitle,
+            detailContext: detail),
+        detail: detail,
+        source: ResolvedSource(
+            locator: locator, uri: actual, kind: 'mesh', direct: true));
   }
 
   void _bindSession() {
@@ -110,8 +159,9 @@ final class MeshPlayback {
           final downloaded =
               await library.cacheAsset(peer, pair, name: 'pair.sub');
           final companion = File(p.setExtension(file, '.sub'));
-          if (!await companion.exists())
+          if (!await companion.exists()) {
             await File(downloaded).copy(companion.path);
+          }
         }
       }
       return bundle;
@@ -129,17 +179,19 @@ final class MeshPlayback {
       if (current.path != path) return true;
       if (t['origin'] != 'embedded' && t['available'] == true) {
         await current.offer(t['playbackPath'] as String, t['title'] as String);
-        if (t['selected'] == true)
+        if (t['selected'] == true) {
           await current.applyExternal(
               t['playbackPath'] as String, t['title'] as String);
+        }
       } else if (t['origin'] == 'embedded' && t['selected'] == true) {
         await current.applyEmbedded(t['index'] as int);
       }
       if (t['selectionBasis'] == 'explicit' &&
           !(bundle['subtitles'] as List)
               .cast<Map>()
-              .any((s) => s['selected'] == true))
+              .any((s) => s['selected'] == true)) {
         await current.clear();
+      }
     }
     return true;
   }
@@ -197,17 +249,28 @@ final class MeshPlayback {
     await _events?.cancel();
     if (player case final SessionPlayback playback) {
       playback.host.current.removeListener(_bindSession);
+      playback.sources.resolver.specialSource = null;
     }
     await _writing;
     core.danmaku.service.remoteTracks = null;
     core.danmaku.remoteControl = null;
     core.subtitles.remoteLoader = null;
     if (player is! SessionPlayback &&
-        core.uiData.meshLibrary!.playback.containsKey(player.path))
+        core.uiData.meshLibrary!.playback.containsKey(player.path)) {
       directLoopback(player.kernelHost, false);
+    }
   }
 }
 
 JsonMap _copyBundle(JsonMap bundle) =>
     jsonDecode(jsonEncode(bundle)) as JsonMap;
 Object? _decodeEntries(String text) => jsonDecode(text);
+
+List<PlaybackDetailEpisode> _meshEpisodes(List<UiEpisode> episodes) => [
+      for (final episode in episodes)
+        PlaybackDetailEpisode(
+            id: episode.episodeId,
+            videoPath: 'mesh:///${Uri.encodeComponent(episode.episodeId)}',
+            title: episode.title ?? '第 ${episode.number ?? "?"} 集',
+            progress: episode.progress)
+    ];
