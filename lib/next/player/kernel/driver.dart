@@ -430,6 +430,15 @@ final class TextureSurface extends VideoSurface {
   double get aspect => width > 0 && height > 0 ? width / height : 16 / 9;
 }
 
+/// A picture a Flutter widget of the kernel's package draws (video_player's
+/// own view of its controller), fitted like a texture.
+final class WidgetSurface extends VideoSurface {
+  const WidgetSurface(this.view, {required this.aspect});
+  final Widget view;
+  @override
+  final double aspect;
+}
+
 /// A platform view with a fenced adapter behind it. No native getters in build.
 final class PlatformVideoSurface extends VideoSurface {
   const PlatformVideoSurface(this.view, {required this.aspect});

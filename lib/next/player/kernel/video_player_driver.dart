@@ -145,11 +145,9 @@ final class VideoPlayerDriver extends AdapterDriver {
 
   @override
   Future<void> showPicture(MediaFacts media) async {
-    // video_player gives the id its own VideoPlayer widget draws and no
-    // other way to reach it.
-    // ignore: invalid_use_of_visible_for_testing_member
-    final id = _controller!.textureId;
-    picture = TextureSurface(id, width: media.width, height: media.height);
+    // video_player's own view of its controller: the platform decides what
+    // the picture is made of (a texture, a platform view).
+    picture = WidgetSurface(VideoPlayer(_controller!), aspect: media.aspect);
   }
 
   // ---- tracks: video_player lists none and draws no subtitle ----
