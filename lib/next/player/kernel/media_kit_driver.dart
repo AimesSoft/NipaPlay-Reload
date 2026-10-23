@@ -126,7 +126,7 @@ final class MediaKitDriver extends AdapterDriver implements MpvNative {
           adapter.hasMediaLoadFailed ? 'media_open' : 'media_ready_timeout',
           adapter.mediaLoadError ?? 'mpv did not open the media.');
     }
-    await _tracksListed();
+    await _lengthAndTracksListed();
     queue.live();
     await adapter.prepare();
     queue.live();
@@ -143,17 +143,21 @@ final class MediaKitDriver extends AdapterDriver implements MpvNative {
     }
   }
 
-  /// mpv lists the tracks about when it knows the length; the media's facts
-  /// are read once it has.
-  Future<void> _tracksListed() async {
+  /// mpv says the media is ready on the first of its length or its tracks;
+  /// the media's facts are read once it has both.
+  Future<void> _lengthAndTracksListed() async {
     final player = adapter.sessionPlayer;
     bool listed(Tracks tracks) =>
         tracks.video.any((t) => int.tryParse(t.id) != null) ||
         tracks.audio.any((t) => int.tryParse(t.id) != null);
+    if (player.state.duration <= Duration.zero) {
+      await player.stream.duration
+          .firstWhere((d) => d > Duration.zero)
+          .timeout(const Duration(seconds: 5), onTimeout: () => Duration.zero);
+    }
     if (listed(player.state.tracks)) return;
-    await player.stream.tracks
-        .firstWhere(listed)
-        .timeout(const Duration(seconds: 2), onTimeout: () => player.state.tracks);
+    await player.stream.tracks.firstWhere(listed).timeout(
+        const Duration(seconds: 2), onTimeout: () => player.state.tracks);
   }
 
   // ---- tracks ----

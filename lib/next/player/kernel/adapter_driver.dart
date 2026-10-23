@@ -277,6 +277,11 @@ abstract class AdapterDriver implements KernelDriver {
   @protected
   Future<void> showFrame() async {}
 
+  /// The interface has built a frame without the picture: its Texture or
+  /// native view is gone.
+  @protected
+  Future<void> aFramePasses() => SchedulerBinding.instance.endOfFrame;
+
   /// Waits for what the interface owes the kernel before it goes: a native
   /// view detached, a texture released.
   @protected
@@ -578,7 +583,7 @@ abstract class AdapterDriver implements KernelDriver {
     // ③ The picture leaves the interface, and a frame passes without it.
     _surface.value = null;
     await _step('unmount', () async {
-      await SchedulerBinding.instance.endOfFrame;
+      await aFramePasses();
       await unmount();
     });
     // ④⑤ The kernel frees what it renders with, then goes.

@@ -34,6 +34,18 @@ SINTEL = MEDIA / 'sintel-4k-official/Sintel.2010.2160p.mkv'
 SINTEL_SRT = next((MEDIA / 'sintel-4k-official').glob('*.srt'), None)
 EPISODE = next((MEDIA / 'b621baa4d7644b738413c315e504e5d83b867ba5').glob('*.mkv'))
 TOOLS = HOME / '.nipa-next/player-core-k-runs/tools'
+# AVFoundation (video_player's backend on macOS) does not open Matroska
+# ("This media format is not supported", OSStatus -12847): that kernel plays
+# the same two media remuxed to MP4 (streams copied, not re-encoded).
+MP4 = {'sintel': HOME / '.nipa-next/player-core-k-runs/media/sintel.mp4',
+       'episode12': HOME / '.nipa-next/player-core-k-runs/media/episode12.mp4'}
+
+
+def media_for(kernel, name):
+    if kernel == 'video_player':
+        return MP4[name]
+    return SINTEL if name == 'sintel' else EPISODE
+
 SETTING = {'erika': 'erika', 'media_kit': 'mediaKit', 'video_player': 'videoPlayer', 'mdk': 'mdk'}
 RUN = Path(sys.argv[1]).resolve()
 RUN.mkdir(parents=True, exist_ok=True)
@@ -87,10 +99,13 @@ def rpc(method, **params):
     return data['result']
 
 
-def gui(action, data=None):
+def gui(action, data=None, strict=False):
     result = rpc('ext.nipaplay.nextui', isolateId=iso, op='guicall', action=action,
                  input=json.dumps(data or {}, ensure_ascii=False))
-    return result.get('result', result)
+    result = result.get('result', result)
+    if strict and 'failure' in result:
+        raise RuntimeError('%s: %s' % (action, result['failure']))
+    return result
 
 
 def state():
@@ -127,8 +142,13 @@ def pngstats(path, *region):
 
 def shot(name):
     """窗口自己的合成画面（原生视频在透明洞下面）与 Flutter 自己画的那一层，各取中心区域的像素统计。"""
+    # The app writes into its own profile; the copy is the run's.
+    inside = PROFILE / 'temp/k-shots'
+    inside.mkdir(parents=True, exist_ok=True)
     window = RUN / (name + '-window.png')
-    reply = rpc('ext.nipaplay.player.windowShot', isolateId=iso, path=str(window))
+    reply = rpc('ext.nipaplay.player.windowShot', isolateId=iso, path=str(inside / (name + '.png')))
+    if (inside / (name + '.png')).exists():
+        subprocess.run(['cp', str(inside / (name + '.png')), str(window)])
     composed = pngstats(window, 0.2, 0.2, 0.6, 0.5) if window.exists() else None
     flutter = subprocess.run(['./nipa', 'call', 'ui.capture', '{}'], cwd=PROFILE / 'harness',
                              capture_output=True, text=True, timeout=60)
@@ -161,9 +181,9 @@ def wait_playing(seconds=10):
     return state()
 
 
-def check(kernel, path, iteration, picture=False):
+def check(kernel, name, iteration, picture=False):
     """验收 1 的一次：打开，跳到 70%，暂停和恢复，关闭，重开续播。"""
-    name = 'sintel' if path == SINTEL else 'episode12'
+    path = media_for(kernel, name)
     use(kernel)
     # 从头开始：这次的续播起点不受上一次影响。
     start = time.monotonic()
@@ -180,15 +200,15 @@ def check(kernel, path, iteration, picture=False):
         gui('playback.close')
         return False
     target = int(first['durationMs'] * .7)
-    gui('playback.seek', {'sessionId': first['sessionId'], 'positionMs': target})
+    gui('playback.seek', {'positionMs': target}, strict=True)
     a = state()
     time.sleep(1.2)
     b = state()
-    gui('playback.set_paused', {'sessionId': first['sessionId'], 'paused': True})
+    gui('playback.set_paused', {'paused': True}, strict=True)
     paused = state()
     time.sleep(.5)
     still = state()
-    gui('playback.set_paused', {'sessionId': first['sessionId'], 'paused': False})
+    gui('playback.set_paused', {'paused': False}, strict=True)
     time.sleep(.6)
     resumed = state()
     facts = gui('playback.kernel', {})
@@ -221,47 +241,64 @@ def blocked():
     return [line for line in log.read_text(errors='replace').splitlines() if 'main isolate blocked' in line]
 
 
-def swap_loop(count):
+EP_ASS = HOME / '.nipa-next/player-core-k-runs/media/episode12-jptc.ass'
+
+
+def subtitle_facts():
+    current = host().get('current') or {}
+    subtitles = (current.get('tracks') or {}).get('subtitles') or {}
+    return {'selected': subtitles.get('selected'), 'presented': subtitles.get('presented'),
+            'presentedIsSelected': subtitles.get('presentedIsSelected'), 'failure': subtitles.get('failure'),
+            'audio': (current.get('tracks') or {}).get('audio')}
+
+
+def swap_loop(count, media='sintel', subtitle='srt'):
     """验收 2：40% 处播放（挂着外挂字幕），在 mdk、erika、media_kit 之间循环换，穿插跳转和暂停。"""
     use('mdk')
-    gui('playback.open', {'path': str(SINTEL), 'startPositionMs': int(888032 * .4)})
-    s = wait_playing()
-    if SINTEL_SRT:
-        record('mount', reply=host('mount', path=str(SINTEL_SRT)))
+    path = media_for('mdk', media)
+    duration = 888032 if media == 'sintel' else 1418065
+    gui('playback.open', {'path': str(path), 'startPositionMs': int(duration * .4)})
+    wait_playing()
+    file = SINTEL_SRT if subtitle == 'srt' else EP_ASS
+    record('mount', file=str(file), reply=gui('playback.load_subtitle', {'path': str(file)}), facts=subtitle_facts())
     paused_now = False
     failures = 0
     cycle = ['erika', 'media_kit', 'mdk']
     for i in range(count):
         before = state()
         kernel = cycle[i % 3]
-        expect_pos = before['positionMs']
         started = time.monotonic()
         reply = gui('playback.reopen_with_kernel', {'sessionId': before['sessionId'], 'kernel': kernel})
         took = time.monotonic() - started
         after = state()
-        elapsed = (time.monotonic() - started) * 1000 if not paused_now else 0
         preserved = reply.get('preserved') or {}
-        pos_error = after.get('positionMs', 0) - (expect_pos + (elapsed if not paused_now else 0))
+        # Where it should be: where it was, plus what ran while it swapped (nothing while paused).
+        position = preserved.get('positionMs') or {}
+        expected = position.get('before', before.get('positionMs', 0))
+        pos_error = after.get('positionMs', 0) - expected - (0 if paused_now else took * 1000)
+        facts = subtitle_facts()
+        presented = facts.get('presented') or []
         good = (reply.get('opened') is True and (after.get('kernel') or {}).get('id') == kernel
-                and abs(pos_error) <= 1000 + (took * 1000 if not paused_now else 0)
-                and (after.get('status') == 'paused') == paused_now and alive())
+                and abs(pos_error) <= 1000
+                and (after.get('status') == 'paused') == paused_now and alive()
+                and facts.get('presentedIsSelected') is True and len(presented) == 1)
         if not good:
             failures += 1
         record('swap', iteration=i, kernel=kernel, seconds=round(took, 2), positionErrorMs=round(pos_error),
-               paused=after.get('status'), expectedPaused=paused_now, ok=good,
+               status=after.get('status'), expectedPaused=paused_now, ok=good,
                sessionKept=after.get('sessionId') == before.get('sessionId'),
                audioTrack=preserved.get('audioTrack'), subtitleTrack=preserved.get('subtitleTrack'),
-               externalSubtitles=preserved.get('externalSubtitles'), failure=reply.get('failure'))
+               presented=presented, failure=reply.get('failure'))
         if i % 5 == 4:
-            target = int(888032 * (.3 + (i % 20) / 50))
-            gui('playback.seek', {'sessionId': after['sessionId'], 'positionMs': target})
+            target = int(duration * (.3 + (i % 20) / 50))
+            gui('playback.seek', {'positionMs': target}, strict=True)
             again = state()
             record('swap_seek', iteration=i, target=target, landedMs=again.get('positionMs'))
         if i % 10 == 9:
             paused_now = not paused_now
-            gui('playback.set_paused', {'sessionId': after['sessionId'], 'paused': paused_now})
+            gui('playback.set_paused', {'paused': paused_now}, strict=True)
         time.sleep(0.3)
-    record('swap_done', count=count, failures=failures, alive=alive())
+    record('swap_done', count=count, media=media, subtitle=subtitle, failures=failures, alive=alive())
     gui('playback.close')
 
 
@@ -272,7 +309,7 @@ def rapid_loop(kernel, count):
     for i in range(count):
         started = time.monotonic()
         try:
-            gui('playback.open', {'path': str(SINTEL if i % 2 == 0 else EPISODE), 'startPositionMs': 20000})
+            gui('playback.open', {'path': str(media_for(kernel, 'sintel' if i % 2 == 0 else 'episode12')), 'startPositionMs': 20000})
             time.sleep(random_wait.random() * 0.8)
             gui('playback.close')
         except (RuntimeError, Watchdog) as error:
@@ -293,6 +330,77 @@ def rapid_loop(kernel, count):
     late = sum(l.get('lateCallbacks', 0) for l in lifecycles)
     record('rapid_lifecycles', instances=len(lifecycles), withReleaseTimeouts=len(timeouts), lateCallbacks=late,
            releaseMs=sorted(round(l.get('releaseUs', 0) / 1000) for l in lifecycles)[-5:])
+
+
+def paused_check(kernel):
+    """暂停时出帧：以暂停状态打开画面不黑；暂停时跳到 70%，画面是那一帧。"""
+    use(kernel)
+    for name in ('sintel', 'episode12'):
+        path = media_for(kernel, name)
+        opened = host('open', path=str(path), paused='1', startMs=str(120000))
+        time.sleep(1.5)
+        a = state()
+        record('paused_state', state=a, host={k: v for k, v in (host().get('current') or {}).items() if k in ('phase', 'phaseTimesMs', 'fault', 'tracks')})
+        if a.get('error') or a.get('status') != 'paused':
+            record('paused_failed', kernel=kernel, media=name, error=a.get('error'))
+            gui('playback.close')
+            continue
+        open_shot = shot('%s-%s-paused-open' % (kernel, name))
+        target = int(a['durationMs'] * .7)
+        seek_reply = gui('playback.seek', {'positionMs': target}, strict=True)
+        record('paused_seek_reply', reply=seek_reply)
+        time.sleep(1.5)
+        b = state()
+        seek_shot = shot('%s-%s-paused-seek70' % (kernel, name))
+        record('paused', kernel=kernel, media=name, openedMs=opened.get('openedMs'), statusAfterOpen=a.get('status'),
+               positionAfterOpen=a.get('positionMs'), statusAfterSeek=b.get('status'), positionAfterSeek=b.get('positionMs'),
+               targetMs=target, openStats=open_shot[0], seekStats=seek_shot[0])
+        gui('playback.close')
+
+
+def subtitles_check(kernel):
+    """字幕：Sintel 只显示被选中的那一条，切换生效；第 12 集的 ASS 正常显示。"""
+    use(kernel)
+    sintel = media_for(kernel, 'sintel')
+    host('open', path=str(sintel), paused='1', startMs=str(131000))
+    time.sleep(1.5)
+    tracks = gui('playback.tracks')
+    record('tracks', kernel=kernel, tracks=tracks)
+    embedded = [t for t in (tracks.get('subtitles') or tracks.get('subtitle') or []) if t.get('origin') == 'embedded']
+    english = next((t for t in embedded if 'en' in (t.get('language') or '').lower()), embedded[1] if len(embedded) > 1 else None)
+    state0 = state()
+    record('subtitle_start', kernel=kernel, facts=subtitle_facts(), status=state0.get('status'))
+    if english is not None:
+        reply = gui('playback.select_track', {'kind': 'subtitle', 'origin': 'embedded', 'index': english['index']})
+        time.sleep(1)
+        gui('playback.seek', {'positionMs': 131100}, strict=True)
+        time.sleep(1.2)
+        record('subtitle_english', kernel=kernel, reply=reply, facts=subtitle_facts(), text=host('text'))
+        shot('%s-sintel-english' % kernel)
+        reply = gui('playback.select_track', {'kind': 'subtitle', 'origin': 'embedded', 'index': -1})
+        time.sleep(1)
+        record('subtitle_off', kernel=kernel, reply=reply, facts=subtitle_facts(), text=host('text'))
+        shot('%s-sintel-off' % kernel)
+    gui('playback.load_subtitle', {'path': str(SINTEL_SRT)})
+    gui('playback.seek', {'positionMs': 123500}, strict=True)
+    time.sleep(1.2)
+    record('subtitle_srt', kernel=kernel, facts=subtitle_facts())
+    shot('%s-sintel-srt' % kernel)
+    gui('playback.close')
+    episode = media_for(kernel, 'episode12')
+    host('open', path=str(episode), paused='1', startMs=str(120000))
+    time.sleep(1.5)
+    tracks = gui('playback.tracks')
+    record('tracks', kernel=kernel, media='episode12', tracks=tracks)
+    embedded = [t for t in (tracks.get('subtitles') or tracks.get('subtitle') or []) if t.get('origin') == 'embedded']
+    if embedded:
+        reply = gui('playback.select_track', {'kind': 'subtitle', 'origin': 'embedded', 'index': embedded[0]['index']})
+        time.sleep(1)
+        gui('playback.seek', {'positionMs': 130000}, strict=True)
+        time.sleep(1.5)
+        record('subtitle_ass', kernel=kernel, reply=reply, facts=subtitle_facts(), text=host('text'))
+        shot('%s-episode12-ass' % kernel)
+    gui('playback.close')
 
 
 def setting_check():
@@ -320,7 +428,7 @@ def facts_check():
     """验收 4：四个内核都能读到版本和快照，Erika 能 listMethods。"""
     for kernel in SETTING:
         use(kernel)
-        gui('playback.open', {'path': str(SINTEL), 'startPositionMs': 30000})
+        gui('playback.open', {'path': str(media_for(kernel, 'sintel')), 'startPositionMs': 30000})
         s = wait_playing()
         facts = gui('playback.kernel', {'properties': ['hwdec-current']} if kernel == 'media_kit' else {})
         row = dict(kernel=kernel, kernelId=(s.get('kernel') or {}).get('id'), version=(facts.get('kernel') or {}).get('version'),
@@ -364,12 +472,19 @@ try:
         kernels = [k for k in ARGS if k in SETTING] or list(SETTING)
         count = next((int(a) for a in ARGS if a.isdigit()), 1 if MODE == 'smoke' else 10)
         for kernel in kernels:
-            for path in [SINTEL, EPISODE]:
+            for name in ('sintel', 'episode12'):
                 for iteration in range(count):
-                    if not check(kernel, path, iteration, picture=iteration == 0):
+                    if not check(kernel, name, iteration, picture=iteration == 0):
                         break
+    elif MODE == 'paused':
+        for kernel in ARGS or SETTING:
+            paused_check(kernel)
+    elif MODE == 'subtitles':
+        for kernel in ARGS or SETTING:
+            subtitles_check(kernel)
     elif MODE == 'swap':
-        swap_loop(int(ARGS[0]) if ARGS else 50)
+        swap_loop(int(ARGS[0]) if ARGS else 50, ARGS[1] if len(ARGS) > 1 else 'sintel',
+                  ARGS[2] if len(ARGS) > 2 else 'srt')
     elif MODE == 'setting':
         setting_check()
     elif MODE == 'rapid':
