@@ -274,15 +274,19 @@ impl Node {
         *node.listener.lock().unwrap() = Some(task);
         Ok(node)
     }
-    fn check(&self, cert: &CertificateDer<'_>, expected: Option<&str>) -> Result<String, String> {
+    fn check_identity(&self, cert: &CertificateDer<'_>, expected: Option<&str>) -> Result<String, String> {
         let (account, device) = identity(cert)?;
         if account != self.account {
             return Err("account mismatch".into());
         }
-        self.check_device(&device)?;
         if expected.is_some_and(|id| id != device) {
             return Err("unexpected device".into());
         }
+        Ok(device)
+    }
+    fn check(&self, cert: &CertificateDer<'_>, expected: Option<&str>) -> Result<String, String> {
+        let device = self.check_identity(cert, expected)?;
+        self.check_device(&device)?;
         Ok(device)
     }
     fn check_device(&self, device: &str) -> Result<(), String> {
@@ -334,13 +338,38 @@ impl Node {
                 .peer_certificates()
                 .ok_or("missing peer certificate")?[0],
         )?;
-        let peer = self.check(
+        let peer = self.check_identity(
             &tls.get_ref()
                 .1
                 .peer_certificates()
                 .ok_or("missing peer certificate")?[0],
             None,
         )?;
+        if self.check_device(&peer).is_err() {
+            if self.stopped.load(Ordering::SeqCst)
+                || !self.allowed.read().unwrap().contains(&self.device_id)
+            {
+                return Err("device revoked or not registered".into());
+            }
+            static VERIFY_SEQ: AtomicU64 = AtomicU64::new(1 << 62);
+            let verify_id = VERIFY_SEQ.fetch_add(1, Ordering::SeqCst);
+            let (send, receive) = oneshot::channel();
+            if tx
+                .send(Request {
+                    incoming: Incoming {
+                        request_id: verify_id,
+                        device_id: peer.clone(),
+                        body: "\0mesh-verify-peer".into(),
+                    },
+                    response: send,
+                })
+                .await
+                .is_ok()
+            {
+                let _ = timeout(NETWORK_TIMEOUT, receive).await;
+            }
+            self.check_device(&peer)?;
+        }
         tokio::select! {
             _ = tokio::time::sleep(peer_expiry) => Err("peer certificate expired".into()),
             _ = self.cancelled(&peer, changes) => Err("device revoked".into()),
@@ -413,10 +442,11 @@ impl Node {
         tokio::select! {
             _ = self.cancelled(device, changes) => Err("device revoked".into()),
             result = timeout(CALL_TIMEOUT, async {
-                let tcp = timeout(NETWORK_TIMEOUT, TcpStream::connect((host, port))).await.map_err(|_| "connect timeout")?.map_err(|e| e.to_string())?;
-                let mut tls = timeout(NETWORK_TIMEOUT, TlsConnector::from(self.client.clone()).connect(server_name(device)?, tcp)).await.map_err(|_| "TLS handshake timeout")?.map_err(|e| e.to_string())?;
-                self.check(&tls.get_ref().1.peer_certificates().ok_or("missing peer certificate")?[0], Some(device))?;
-                let peer_expiry = remaining_validity(&tls.get_ref().1.peer_certificates().ok_or("missing peer certificate")?[0])?;
+                let tcp = timeout(NETWORK_TIMEOUT, TcpStream::connect((host, port))).await.map_err(|_| "connect: connect timeout".to_owned())?.map_err(|e| format!("connect: {e}"))?;
+                let mut tls = timeout(NETWORK_TIMEOUT, TlsConnector::from(self.client.clone()).connect(server_name(device).map_err(|e| format!("connect: {e}"))?, tcp)).await.map_err(|_| "connect: TLS handshake timeout".to_owned())?.map_err(|e| format!("connect: {e}"))?;
+                let peer_certs = tls.get_ref().1.peer_certificates().ok_or_else(|| "connect: missing peer certificate".to_owned())?;
+                self.check(&peer_certs[0], Some(device)).map_err(|e| format!("connect: {e}"))?;
+                let peer_expiry = remaining_validity(&peer_certs[0]).map_err(|e| format!("connect: {e}"))?;
                 write_frame(&mut tls, body).await?;
                 tokio::select! {
                     _ = tokio::time::sleep(peer_expiry) => Err("peer certificate expired".into()),
@@ -480,5 +510,20 @@ mod tests {
                 "DNS binding must work for {device}"
             );
         }
+    }
+    #[tokio::test]
+    async fn send_to_unreachable_port_reports_connect_stage_prefix() {
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let unused_port = listener.local_addr().unwrap().port();
+        drop(listener);
+        let result = timeout(
+            NETWORK_TIMEOUT,
+            TcpStream::connect(("127.0.0.1", unused_port)),
+        )
+        .await
+        .map_err(|_| "connect: connect timeout".to_owned())
+        .and_then(|r| r.map_err(|e| format!("connect: {e}")));
+        let err = result.unwrap_err();
+        assert!(err.starts_with("connect:"), "expected connect: prefix, got {err}");
     }
 }

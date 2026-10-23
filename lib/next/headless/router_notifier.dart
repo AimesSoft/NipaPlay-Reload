@@ -1,4 +1,5 @@
 const immutable = _Immutable();
+const visibleForTesting = _Immutable();
 
 final class _Immutable {
   const _Immutable();

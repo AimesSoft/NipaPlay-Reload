@@ -1,7 +1,8 @@
 import 'dart:async';
 import 'dart:io';
 
-import 'package:flutter/foundation.dart';
+import '../next/headless/router_notifier.dart'
+    if (dart.library.ui) 'package:flutter/foundation.dart';
 
 /// 提供系统代理的解析结果，并用于 HttpClient.findProxy。
 class SystemProxyService {
