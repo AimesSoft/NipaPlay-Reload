@@ -391,7 +391,7 @@ final class SessionControls
     _sameSession(input);
     final result = await _playback.capture.capture(_internal(), input, aspectMode: _playback.fit);
     if (result['kind'] == 'screenshot') {
-      result['danmakuIncluded'] = result['danmakuRequested'] == true && _playback.danmakuVisible;
+      result['danmakuIncluded'] = result['danmakuIncluded'] == true && _playback.danmakuVisible;
       if (!_playback.danmakuVisible) result['danmakuReason'] = 'The danmaku display switch is off or no danmaku layer is present.';
     }
     return result;

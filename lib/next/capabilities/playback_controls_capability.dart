@@ -128,6 +128,7 @@ final class PlaybackControlsCapability implements Capability {
                   'Screenshots use the shared save directory unless outputPath is specified. '
                   'includeDanmaku defaults to the screenshot setting. Next captures the '
                   'displayed scene or combines a kernel picture with its displayed overlays. '
+                  'In Classic, Erika snapshots exclude native danmaku. '
                   'Native overlays outside the Flutter scene depend on the driver snapshot. Screenshot '
                   'results report danmakuRequested, danmakuIncluded and danmakuReason. '
                   'danmakuIncluded describes inclusion of the displayed layer, not proof '

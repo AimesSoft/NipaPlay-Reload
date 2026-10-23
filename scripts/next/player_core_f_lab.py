@@ -14,6 +14,8 @@ import urllib.request
 
 root = Path(sys.argv[1])
 profile = Path.home() / 'Library/Application Support/NipaPlay/LabProfiles/core-lab-f'
+artifacts = profile / 'cache/player-core-f' / root.name
+artifacts.mkdir(parents=True, exist_ok=True)
 log = root / 'run.log'
 url = re.findall(r'Dart VM service is listening on (http://[^\s]+)', log.read_text(errors='replace'))[-1]
 opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
@@ -76,7 +78,8 @@ catalog = extension('player.features', op='catalog')
 (root / 'catalog.json').write_text(json.dumps(catalog, indent=2))
 settings = ['player.externalEnabled', 'player.externalPath', 'player.externalType',
             'player.timelinePreviewEnabled']
-saved = {key: call('settings.get', {'key': key}).get('value') for key in settings}
+saved = {}
+original_kernel = call('settings.get', {'key': 'player.kernel'}).get('value')
 
 
 def setting(key, value):
@@ -84,20 +87,25 @@ def setting(key, value):
 
 
 try:
+    setting('player.kernel', 'mdk')
+    saved = {key: call('settings.get', {'key': key}).get('value') for key in settings}
     setting('player.externalEnabled', False)
     setting('player.timelinePreviewEnabled', True)
     extension('player.perf', op='reset', frames='true')
-    call('playback.open', {'path': str(episode), 'startMs': 10000})
+    opened = call('playback.open', {'path': str(episode), 'startPositionMs': 10000})
+    assert 'failure' not in opened, opened
     current = state()
     call('playback.wait', {'sessionId': current['sessionId'], 'until': 'playing', 'timeoutMs': 5000})
     call('playback.info')
     time.sleep(3)
+    (root / 'perf-cold.json').write_text(json.dumps(extension('player.perf', op='read'), indent=2))
+    extension('player.perf', op='reset', frames='true')
     current = state()
     call('playback.seek', {'positionMs': int(current['durationMs'] * .7)})
     time.sleep(2)
     call('playback.set_paused', {'paused': True})
     current = state()
-    call('playback.capture', {'kind': 'screenshot', 'outputPath': str(root / 'midpoint.png'),
+    call('playback.capture', {'kind': 'screenshot', 'outputPath': str(artifacts / 'midpoint.png'),
                               'includeDanmaku': True})
     shot('midpoint-ui')
     chapter_result = call('playback.chapters')
@@ -105,9 +113,11 @@ try:
         call('playback.navigate', {'sessionId': current['sessionId'], 'chapterIndex': min(1, len(chapter_result['items']) - 1)})
     call('playback.navigate', {'sessionId': current['sessionId'], 'frameDelta': 1})
     call('playback.navigate', {'sessionId': current['sessionId'], 'frameDelta': -1})
-    call('playback.capture', {'kind': 'gif', 'outputPath': str(root / 'sample.gif'),
+    gif = call('playback.capture', {'kind': 'gif', 'outputPath': str(artifacts / 'sample.gif'),
                               'startMs': 60000, 'endMs': 61000, 'fps': 6, 'width': 320, 'height': 180})
-    preview = extension('player.features', op='preview', atMs='60000', outputPath=str(root / 'preview.jpg'))
+    assert gif.get('frames', 0) > 1 and gif.get('bytes', 0) > 0, gif
+    assert (artifacts / 'sample.gif').read_bytes()[:6] in (b'GIF87a', b'GIF89a')
+    preview = extension('player.features', op='preview', atMs='60000', outputPath=str(artifacts / 'preview.jpg'))
     (root / 'preview.json').write_text(json.dumps(preview, indent=2))
     remote = [extension('player.features', op='remote', command='toggle_play_pause'),
               extension('player.features', op='remote', command='seek_by_seconds',
@@ -118,6 +128,16 @@ try:
     call('playback.retry', {'sessionId': current['sessionId'], 'preservePosition': True})
     call('playback.failures')
     call('playback.cancel_auto_next')
+    call('playback.kernel', {'properties': ['position'], 'sampleMs': 500})
+    for action, data in [
+        ('playback.kernel_command', {'command': ['get_property', 'time-pos']}),
+        ('playback.kernel_invoke', {'method': 'snapshot'}),
+        ('playback.set_kernel_properties', {'properties': {'volume': 0}}),
+        ('playback.restore_kernel_properties', {'names': ['volume']}),
+        ('playback.reopen_with_kernel', {'kernel': 'mdk'}),
+    ]:
+        call(action, {'sessionId': state()['sessionId'], **data})
+    call('playback.watch_kernel_properties', {'properties': ['position'], 'durationMs': 0})
     # Cross-track actions are called with valid inputs. Missing peer modules
     # remain visible in receipts rather than being disguised as successes.
     for action, data in [
@@ -133,8 +153,8 @@ try:
     # without leaving a modal sheet or sending OS keystrokes to the user.
     call('playback.authorize_directory', {'initialDirectory': ''})
     call('playback.close')
-    script = root / 'external-player'
-    args_path = root / 'external-args.txt'
+    script = artifacts / 'external-player'
+    args_path = artifacts / 'external-args.txt'
     script.write_text('#!/bin/sh\nprintf "%s\\n" "$@" > ' + repr(str(args_path)) + '\nexec sleep 20\n')
     script.chmod(0o755)
     setting('player.externalPath', str(script))
@@ -158,11 +178,13 @@ try:
 finally:
     setting('player.externalEnabled', False)
     for key in settings[1:]:
-        if saved[key] is not None:
+        if saved.get(key) is not None:
             setting(key, saved[key])
-    if saved[settings[0]]:
+    if saved.get(settings[0]):
         setting(settings[0], True)
     call('playback.close')
+    if original_kernel is not None:
+        setting('player.kernel', original_kernel)
     (root / 'host.json').write_text(json.dumps(extension('player.host', op='lifecycles'), indent=2))
     (root / 'perf.json').write_text(json.dumps(extension('player.perf', op='read'), indent=2))
     extension('nextui', op='status')
@@ -172,3 +194,6 @@ finally:
         'missing': sorted(a['id'] for a in catalog['actions'] if a['id'] not in called),
         'directoryPicker': 'only invalid-input validation; native selection requires a human',
     }, ensure_ascii=False, indent=2))
+    for artifact in artifacts.iterdir():
+        if artifact.is_file() and artifact.name != 'external-player':
+            shutil.copyfile(artifact, root / artifact.name)

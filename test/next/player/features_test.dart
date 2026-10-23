@@ -1,8 +1,9 @@
 import 'dart:async';
 import 'dart:io';
-import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:image/image.dart' as img;
 import 'package:nipa_harness/nipa_harness.dart';
@@ -233,6 +234,63 @@ void main() {
     await expectLater(
         PlaybackCapture.claimOutput(output), throwsA(isA<Failure>()));
     expect(await File(output).readAsString(), 'keep');
+  });
+
+  test('GIF uses the bundled plugin and removes its claimed output on failure',
+      () async {
+    debugDefaultTargetPlatformOverride = TargetPlatform.macOS;
+    const channel = MethodChannel('erika_flutter/player');
+    final messenger =
+        TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
+    addTearDown(() {
+      messenger.setMockMethodCallHandler(channel, null);
+      debugDefaultTargetPlatformOverride = null;
+    });
+    await playback.openItem(PlayableItem(videoPath: video));
+    final output = '${temp.path}/sample.gif';
+    var calls = 0;
+    messenger.setMockMethodCallHandler(channel, (call) async {
+      expect(call.method, 'exportGif');
+      final args = Map<String, Object?>.from(call.arguments as Map);
+      expect(args['inputUri'], playback.session!.source.uri);
+      expect(args['startMillis'], 1000);
+      expect(args['endMillis'], 2000);
+      expect(args['quality'], 1);
+      expect(args['overwrite'], true);
+      expect(await File(output).length(), 0);
+      calls++;
+      if (calls == 2) throw PlatformException(code: 'export_failed');
+      await File(output).writeAsBytes([71, 73, 70]);
+      return {
+        'outputPath': output,
+        'width': 320,
+        'height': 180,
+        'frameCount': 6,
+        'fileSize': 3,
+      };
+    });
+    final input = <String, Object?>{
+      'kind': 'gif',
+      'outputPath': output,
+      'startMs': 1000,
+      'endMs': 2000,
+      'fps': 6,
+      'width': 320,
+      'height': 180,
+      'quality': 'high',
+    };
+    final receipt = await playback.controls.capture(input);
+    expect(receipt['frames'], 6);
+    expect(receipt['bytes'], 3);
+    expect(receipt['danmakuIncluded'], false);
+    await expectLater(
+        playback.controls.capture(input), throwsA(isA<Failure>()));
+    expect(calls, 1);
+    expect(await File(output).readAsBytes(), [71, 73, 70]);
+    await File(output).delete();
+    await expectLater(
+        playback.controls.capture(input), throwsA(isA<PlatformException>()));
+    expect(await File(output).exists(), false);
   });
 
   testWidgets(

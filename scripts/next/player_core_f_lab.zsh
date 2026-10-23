@@ -31,7 +31,18 @@ for attempt in {1..45}; do
   rg -q 'Dart VM service is listening on' "$F_RUN_DIR/run.log" && break
   sleep 1
 done
-python3 "$HOME/.nipa-next/labmute.py" "$F_RUN_DIR/run.log"
+F_MUTED=0
+for attempt in {1..30}; do
+  if python3 "$HOME/.nipa-next/labmute.py" "$F_RUN_DIR/run.log" > "$F_RUN_DIR/mute.log" 2>&1; then
+    F_MUTED=1
+    break
+  fi
+  sleep 1
+done
+if [[ "$F_MUTED" != 1 ]]; then
+  cat "$F_RUN_DIR/mute.log"
+  exit 1
+fi
 lsappinfo front > "$F_RUN_DIR/front-running.txt"
 python3 "$TASK_ROOT/scripts/next/player_core_f_lab.py" "$F_RUN_DIR" > "$F_RUN_DIR/experiment.log" 2>&1
 print "$F_RUN_DIR"

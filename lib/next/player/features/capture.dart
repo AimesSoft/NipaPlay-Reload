@@ -3,6 +3,7 @@ import 'dart:isolate';
 import 'dart:typed_data';
 import 'dart:ui' as ui;
 
+import 'package:erika_flutter/erika_flutter.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/widgets.dart';
 import 'package:image/image.dart' as img;
@@ -10,7 +11,6 @@ import 'package:nipa_harness/nipa_harness.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:nipaplay/player_abstraction/erika_gif_export.dart';
 import 'package:nipaplay/services/security_bookmark_service.dart';
 import 'package:nipaplay/utils/storage_service.dart';
 import 'package:nipaplay/utils/video_aspect_geometry.dart';
@@ -164,7 +164,7 @@ final class PlaybackCapture {
         'sessionId': session.id,
         'positionMs': at.inMilliseconds,
         'danmakuRequested': danmaku,
-        'danmakuIncluded': danmaku,
+        'danmakuIncluded': danmaku && (!replaceScene || overlay != null),
         'subtitlesRequested': subtitles,
         'subtitlesIncluded': subtitles,
         'source': source
@@ -259,30 +259,35 @@ final class PlaybackCapture {
     await validateOutput(output);
     final file = await claimOutput(output);
     // Independent Erika decoder, regardless of the playback kernel. The
-    // exporter performs decoding, scaling and encoding on a worker isolate.
-    final Map<String, Object?> result;
+    // Plugin resolves its bundled library and runs the export on a native
+    // worker queue on macOS, or an isolate on the other native platforms.
+    final ErikaGifExportResult result;
     try {
-      result = await exportGifWithErika({
-        'inputUri': s.source.uri,
-        'outputPath': output,
-        'startMillis': start,
-        'endMillis': end,
-        'framesPerSecond': fps,
-        'outputWidth': width,
-        'outputHeight': height,
-        'quality': input['quality'] == 'high' ? 1 : 0,
-      });
+      result = await ErikaPlayer.exportGif(ErikaGifExportOptions(
+        inputUri: s.source.uri,
+        outputPath: output,
+        start: Duration(milliseconds: start),
+        end: Duration(milliseconds: end),
+        framesPerSecond: fps,
+        outputWidth: width,
+        outputHeight: height,
+        quality: input['quality'] == 'high'
+            ? ErikaGifExportQuality.high
+            : ErikaGifExportQuality.normal,
+        // Only overwrite the empty file this operation exclusively claimed.
+        overwrite: true,
+      ));
     } catch (_) {
       await file.delete();
       rethrow;
     }
     return {
-      'path': result['outputPath'],
+      'path': result.outputPath,
       'kind': 'gif',
-      'bytes': result['fileSize'],
-      'width': result['width'],
-      'height': result['height'],
-      'frames': result['frameCount'],
+      'bytes': result.fileSize,
+      'width': result.width,
+      'height': result.height,
+      'frames': result.frameCount,
       'source': 'erika_independent_decoder',
       'danmakuIncluded': false,
       'subtitlesIncluded': false

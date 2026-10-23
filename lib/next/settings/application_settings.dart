@@ -161,6 +161,9 @@ abstract final class ApplicationSettings {
           (renderer == DanmakuRenderEngine.next2 ||
               renderer == DanmakuRenderEngine.dfmPlus);
     }
+    if (key == 'player.timelinePreviewEnabled' && globals.nextShellHostsPlayer) {
+      return true;
+    }
     if (key == 'player.timelinePreviewEnabled' ||
         key == 'player.precacheBufferDurationSeconds') {
       return kernel == PlayerKernelType.mdk;
