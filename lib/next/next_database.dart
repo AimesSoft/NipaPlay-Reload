@@ -39,6 +39,7 @@ const _migrations = [
   migrateSubtitles,
   migrateLibraryIndex,
   migrateDbCommits,
+  migrateFollowupLookups,
 ];
 
 Future<void> _migrate(Database db, int oldVersion, int newVersion) async {

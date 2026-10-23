@@ -675,6 +675,7 @@ void main() {
         'followups': {'id': 'f1', 'state': 'waiting', 'snapshot': '{}'},
         'followup_events': {'followup_id': 'f1', 'at': 't', 'type': 'x', 'origin': 'o', 'facts': '{}'},
         'followup_hook_events': {'event': 'e', 'object_id': 'o', 'payload': '{}'},
+        'followup_objects': {'kind': 'download', 'object': 'o', 'followup_id': 'f1'},
         'harness_sessions': {'repository': 'r', 'main_thread': 'm', 'current_thread': 'c'},
         'harness_discoveries': {'at': 't', 'origin': 'o', 'invocation_id': 'i', 'repository': 'r', 'title': 't', 'source': 's', 'facts': '{}'},
         'body_changes': {'at': 't', 'type': 'x', 'subject_id': 's', 'actor': 'a', 'origin': 'o', 'facts': '{}'},

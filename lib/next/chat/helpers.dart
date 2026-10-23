@@ -112,8 +112,7 @@ final class Helpers implements JobExecutor {
 
   Future<void> _registerReturn(Job job) async {
     if (job.input['background'] == true) return;
-    if ((await followups.list()).any((row) =>
-        (row['condition'] as Map)['jobId'] == job.jobId &&
+    if ((await followups.forJob(job.jobId)).any((row) =>
         const {_returnInstruction, '帮手已结束，请根据它的结果回应用户。'}
             .contains(row['instruction']))) return;
     await followups.register(

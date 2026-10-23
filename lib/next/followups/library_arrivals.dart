@@ -28,12 +28,9 @@ extension LibraryArrivals on Followups {
         await location.ready;
         final path = file['path'] as String;
         final fileId = file['fileId'] as String?;
-        final rows = await _rows();
-        final seen = {
-          for (final row in rows.where((r) => r['automatic'] == 'library'))
-            ...(row['libraryObjects'] as List).cast<String>()
-        };
-        if (seen.contains(path) || fileId != null && seen.contains(fileId)) {
+        // Reported once: a path or file id any library batch already holds.
+        if ((await _reported('library', [path, if (fileId != null) fileId]))
+            .isNotEmpty) {
           return;
         }
         JsonMap? target;
@@ -57,12 +54,8 @@ extension LibraryArrivals on Followups {
             'enteredAt': now.toIso8601String(),
           }
         };
-        final open = rows
-            .where((r) =>
-                r['automatic'] == 'library' &&
-                r['state'] == 'ready' &&
-                r['frozen'] != true &&
-                r['batchKey'] == batch)
+        final open = (await _openLibrary())
+            .where((r) => r['batchKey'] == batch)
             .lastOrNull;
         if (open != null &&
             ((open['trigger'] as Map)['facts'] as List).length <
@@ -125,6 +118,16 @@ extension LibraryArrivals on Followups {
         _schedule();
       });
 
+  /// Library batches still taking files, oldest first.
+  Future<List<JsonMap>> _openLibrary() async => [
+        for (final row in await _read(database.query('followups',
+            columns: ['snapshot'],
+            where: "state = 'ready' AND "
+                "json_extract(snapshot, '\$.automatic') = 'library'",
+            orderBy: 'rowid')))
+          if (row['frozen'] != true) row
+      ];
+
   /// The batch is due once files stop arriving for [libraryQuiet], and never
   /// later than [libraryMaxWait] after its first file.
   void _libraryDue(JsonMap row, DateTime now) {
@@ -138,12 +141,7 @@ extension LibraryArrivals on Followups {
 
   /// A scan or sync ended: whatever it brought is delivered now.
   Future<void> libraryBatchEnded() => _serial(() async {
-        for (final row in await _rows()) {
-          if (row['automatic'] != 'library' ||
-              row['state'] != 'ready' ||
-              row['frozen'] == true) {
-            continue;
-          }
+        for (final row in await _openLibrary()) {
           row['deliverAfter'] = DateTime.now().toUtc().toIso8601String();
           await database.update(
               'followups', {'snapshot': jsonEncode(row)},
@@ -169,6 +167,7 @@ extension LibraryArrivals on Followups {
       }
       final due = DateTime.parse(row['deliverAfter'] as String);
       if (DateTime.now().toUtc().isBefore(due)) {
+        _until(due);
         if (row['batchKey'] == 'background') _libraryHeld = true;
         await _libraryPending(
             row, 'Waiting for library files to stop arriving until $due.');
@@ -181,16 +180,11 @@ extension LibraryArrivals on Followups {
         await _libraryPending(row, 'Waiting for the previous library batch.');
         return false;
       }
-      for (final other in await _rows()) {
-        final id = other['helperJobId'] as String?;
-        if (other['automatic'] != 'library' || id == null) continue;
-        final job = await engine.get(id).then<Job?>((j) => j, onError: (_) => null);
-        if (job != null && !job.state.isTerminal) {
-          _libraryHeld = true;
-          await _libraryPending(row,
-              'A background helper is still handling the previous library batch; these files wait for the next one.');
-          return false;
-        }
+      if (await _libraryHelperRunning()) {
+        _libraryHeld = true;
+        await _libraryPending(row,
+            'A background helper is still handling the previous library batch; these files wait for the next one.');
+        return false;
       }
     }
     final dispatch = backgroundDispatch ?? helpers?.dispatchBackground;
@@ -233,7 +227,10 @@ extension LibraryArrivals on Followups {
     final described = describeLibraryFiles == null
         ? entries
         : await describeLibraryFiles!(entries);
-    final reported = await _libraryReported(row, row['threadId'] as String?);
+    final reported = await _libraryReported(row, row['threadId'] as String?, {
+      for (final fact in described)
+        if (fact['fileId'] case final String id) id
+    });
     final left = [
       for (final fact in described)
         if (fact['fileId'] == null || !reported.contains(fact['fileId'])) fact
@@ -262,11 +259,40 @@ extension LibraryArrivals on Followups {
     return true;
   }
 
-  /// fileIds already on their way to [thread] (any conversation when null)
-  /// through a download return, or in another frozen library batch.
-  Future<Set<String>> _libraryReported(JsonMap row, String? thread) async {
+  /// Whether the helper of an earlier background batch is still working.
+  /// Such a helper is the task `library-<that batch's id>`, recorded in the
+  /// batch as its helperJobId.
+  Future<bool> _libraryHelperRunning() async {
+    final running = [
+      for (final state in JobState.values)
+        if (!state.isTerminal) state.wireName
+    ];
+    for (final job in await database.rawQuery(
+        'SELECT job_id FROM jobs WHERE state IN (${_marks(running.length)}) '
+        'AND job_id >= ? AND job_id < ?',
+        [...running, 'library-', 'library.'])) {
+      final id = job['job_id'] as String;
+      final batch = await database.query('followups',
+          columns: ['snapshot'],
+          where: 'id = ?',
+          whereArgs: [id.substring('library-'.length)]);
+      if (batch.isEmpty) continue;
+      final other = _decode(batch.single);
+      if (other['automatic'] == 'library' && other['helperJobId'] == id) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  /// Of [fileIds], those already on their way to [thread] (any conversation
+  /// when null) through a download return, or in another frozen library
+  /// batch.
+  Future<Set<String>> _libraryReported(
+      JsonMap row, String? thread, Set<String> fileIds) async {
     final ids = <String>{};
-    for (final other in await _rows()) {
+    if (fileIds.isEmpty) return ids;
+    for (final other in await _reporting('fileId', fileIds)) {
       if (other['id'] == row['id'] || other['state'] == 'cancelled') continue;
       final facts = ((other['trigger'] as Map?)?['facts'] as List? ?? const [])
           .whereType<Map>();
@@ -286,13 +312,22 @@ extension LibraryArrivals on Followups {
       }
     }
     // A completed file the download return has not been built for yet.
-    for (final job in await engine.list(type: 'download')) {
-      final target = job.input['returnTo'] as Map?;
-      if (target == null || thread != null && target['threadId'] != thread) {
-        continue;
-      }
-      for (final file
-          in (job.checkpoint['completedFiles'] as List? ?? []).cast<Map>()) {
+    for (final chunk in _chunks(fileIds.toList())) {
+      for (final found in await database.rawQuery(
+          "SELECT json_extract(j.snapshot, '\$.input.returnTo') AS target, "
+          'f.value AS file FROM jobs j, '
+          "json_each(j.snapshot, '\$.checkpoint.completedFiles') f "
+          "WHERE j.type = 'download' AND f.type = 'object' AND "
+          "json_extract(f.value, '\$.media.fileId') IN (${_marks(chunk.length)})",
+          chunk)) {
+        final target = found['target'] is String
+            ? jsonDecode(found['target'] as String)
+            : null;
+        if (target is! Map ||
+            thread != null && target['threadId'] != thread) {
+          continue;
+        }
+        final file = jsonDecode(found['file'] as String) as Map;
         final media = file['media'];
         if (file['isVideo'] == true &&
             file['imported'] == true &&
@@ -303,6 +338,6 @@ extension LibraryArrivals on Followups {
         }
       }
     }
-    return ids;
+    return ids.intersection(fileIds);
   }
 }

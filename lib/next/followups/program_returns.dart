@@ -1,15 +1,17 @@
 part of 'service.dart';
 
 extension ProgramReturns on Followups {
-  Future<void> _collectProgramReturns() async {
-    final rows = await _rows();
-    for (final job in await engine.list(type: 'program')) {
+  /// A program this conversation started has ended: its receipt goes back
+  /// once. The row's id is the program's, so asking for it is the check.
+  Future<void> _collectProgramReturns(_Tasks tasks) async {
+    final jobs = await tasks.ofTypes(const ['program'],
+        (job) => job.state.isTerminal && job.input['returnTo'] != null);
+    final existing =
+        await _existing([for (final job in jobs) 'followup-program-${job.jobId}']);
+    for (final job in jobs) {
       final target = job.input['returnTo'] as Map?;
-      if (!job.state.isTerminal ||
-          target == null ||
-          rows.any((row) =>
-              row['automatic'] == 'program' &&
-              (row['condition'] as Map)['programJobId'] == job.jobId)) {
+      if (target == null ||
+          existing.contains('followup-program-${job.jobId}')) {
         continue;
       }
       final now = DateTime.now().toUtc().toIso8601String();
