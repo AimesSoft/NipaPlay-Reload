@@ -85,6 +85,7 @@ class PluginDanmakuRenderer {
     final platform = switch (defaultTargetPlatform) {
       TargetPlatform.android => 'android',
       TargetPlatform.iOS => 'ios',
+      TargetPlatform.macOS => 'macos',
       _ => '',
     };
     return platform.isNotEmpty && platforms.contains(platform);
@@ -108,7 +109,8 @@ class PluginDanmakuRenderer {
     final platforms = rawPlatforms is List
         ? rawPlatforms
             .map((item) => item.toString().trim().toLowerCase())
-            .where((item) => item == 'android' || item == 'ios')
+            .where((item) =>
+                item == 'android' || item == 'ios' || item == 'macos')
             .toSet()
         : <String>{};
     final requestedIds = (json['requires'] as List?)

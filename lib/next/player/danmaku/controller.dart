@@ -95,6 +95,55 @@ final class SessionDanmakuController extends ChangeNotifier
     await rebuild();
   }
 
+  // ---- the enabled plugins' block words ----
+
+  Listenable? _pluginSource;
+  List<String> Function()? _pluginWordsOf;
+  List<String> _pluginBlockWords = const [];
+
+  /// The block words the enabled plugins carry (`PluginService`'s
+  /// `activeDanmakuBlockWords`), told by [source] when plugins change. A
+  /// change of the words is a new build, as a change of the user's own words
+  /// is; enabling or disabling a plugin takes effect at the next one.
+  void followPluginBlockWords(Listenable source, List<String> Function() words) {
+    _pluginSource?.removeListener(_pluginWordsChanged);
+    _pluginSource = source;
+    _pluginWordsOf = words;
+    source.addListener(_pluginWordsChanged);
+    _pluginWordsChanged();
+  }
+
+  void _pluginWordsChanged() {
+    if (_closed) return;
+    final now = _pluginWordsOf!();
+    if (listEquals(now, _pluginBlockWords)) return;
+    _pluginBlockWords = List.of(now);
+    unawaited(rebuild());
+  }
+
+  List<String> get pluginBlockWords => _pluginBlockWords;
+
+  // ---- a plugin's renderer drawing the comments ----
+
+  /// What the plugin renderer hosted by the interface reports of itself:
+  /// null when none is hosted; `loading`, `ready` or `failed`.
+  String? pluginRendererStatus;
+  String? pluginRendererError;
+
+  final _echoes = StreamController<Map<String, dynamic>>.broadcast();
+
+  /// What the user just sent, for a renderer that adds it at once.
+  Stream<Map<String, dynamic>> get echoes => _echoes.stream;
+
+  /// The `load` message of a plugin renderer for the comments between [from]
+  /// and [to] seconds of list time, with the version of the list it was
+  /// taken from: JSON text made on the worker.
+  Future<(int, String)> pluginWindow(double from, double to) async {
+    final reply = await _worker.request<List>('window.plugin',
+        {'from': from, 'to': to});
+    return (reply[0] as int, reply[1] as String);
+  }
+
   void bind(String? id, {SessionNativeDanmakuSink? sink}) {
     if (_closed || id == sessionId && identical(sink, _native)) return;
     sessionId = id;
@@ -174,6 +223,7 @@ final class SessionDanmakuController extends ChangeNotifier
     if (!comment.containsKey('time') || !comment.containsKey('content')) return;
     _enqueue(() => _worker.request<Object?>('echo', {'comment': comment}));
     unawaited(rebuild());
+    if (!_echoes.isClosed) _echoes.add(comment);
   }
 
   void update(String id, JsonMap binding) {
@@ -216,6 +266,7 @@ final class SessionDanmakuController extends ChangeNotifier
               'evidenceCount': x.evidenceCount}],
           'spoilerTexts': settings['danmaku.spoilerPreventionEnabled'] == true
               ? _spoilerTexts.toList() : <String>[],
+          'pluginBlockWords': _pluginBlockWords,
         });
         PlayerPerf.mark('danmaku.buildReply');
         if (_closed || generation != _generation || revision != _revision) {
@@ -460,12 +511,15 @@ final class SessionDanmakuController extends ChangeNotifier
     'total': timeline.total, 'backgroundBuildUs': timeline.buildUs,
     'invalidRules': timeline.invalidRules, 'error': error,
     'native': native, 'visible': visible,
+    'pluginBlockWords': _pluginBlockWords.length,
     'opacity': settings['danmaku.opacity'], 'offsetSeconds': offset};
 
   @override
   void dispose() {
     _closed = true;
     _native = null;
+    _pluginSource?.removeListener(_pluginWordsChanged);
+    unawaited(_echoes.close());
     _worker.close();
     super.dispose();
   }

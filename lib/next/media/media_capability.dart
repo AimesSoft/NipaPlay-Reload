@@ -442,6 +442,9 @@ final _specs = [
       'catalogue mode with a ref no local entity has accepted creates a separate work. '
       'Direct file bindings also require exactly one localEpisodeIds target where this ref is already accepted (including an earlier entry). '
       'New direct provider namespaces must be HTTPS origins; host canonicalizes them. '
+      'To tell playback which anime this is for AniSkip (opening/ending segments), bind its MyAnimeList ID '
+      '(provider https://myanimelist.net) or AniList ID (provider https://anilist.co), objectType anime, scope "", '
+      'to the episode, its season (release) or its work in direct mode; the nearest one is used, with the episode\'s bound number. '
       'Indexed remote files use source browse fileId as entityId and need no local byte probing. '
       'Preserves reason/evidence; host derives boundBy. requestId is durable and cannot be reused with different input.',
       Effect.write,

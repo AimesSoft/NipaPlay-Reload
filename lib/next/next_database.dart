@@ -17,6 +17,7 @@ import 'ui_data/library_index.dart';
 import 'chat/session_store.dart';
 import 'media/file_identity_merge.dart';
 import 'subtitles/migration.dart';
+import 'player/skip/migration.dart';
 import 'db/migration.dart';
 import 'db/epochs.dart';
 import 'state/activity_invocations.dart';
@@ -44,6 +45,7 @@ const _migrations = [
   migrateFollowupLookups,
   migrateActivityInvocations,
   migrateChangeEpochs,
+  migrateSkipSegments,
 ];
 
 Future<void> _migrate(Database db, int oldVersion, int newVersion) async {

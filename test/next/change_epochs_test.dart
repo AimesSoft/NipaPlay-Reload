@@ -34,6 +34,7 @@ void main() {
     'media_bindings': {'scope': '{}'},
     'media_snapshots': {'fields': '{}'},
     'media_entities': {'attributes': '{}', 'kind': 'work'},
+    'file_skip_segments': {'end_ms': 2},
   };
 
   /// A row of [table] with every required column filled.

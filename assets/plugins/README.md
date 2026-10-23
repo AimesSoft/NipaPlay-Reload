@@ -95,12 +95,13 @@ const pluginManifest = {
 };
 ```
 
-清单必须同时申请 `script.external` 与 `danmaku.renderer` 权限。当前 WebView 渲染宿主只在 Android 与 iOS 显示插件引擎；外部脚本仅允许 HTTPS，按声明顺序加载，单文件上限 32 MB。省略 SHA-256 可以运行，但发布插件时强烈建议固定摘要。
+清单必须同时申请 `script.external` 与 `danmaku.renderer` 权限。当前 WebView 渲染宿主在 Android、iOS 与 macOS 显示插件引擎（`platforms` 里写 `'android'`、`'ios'`、`'macos'`）；外部脚本仅允许 HTTPS，按声明顺序加载，单文件上限 32 MB。省略 SHA-256 可以运行，但发布插件时强烈建议固定摘要。
 
 `pluginDanmakuRenderers` 可通过 `requires: ['engine']` 选择清单中的依赖。`bootstrap` 是轻量适配层；它应创建 `window.NipaDanmakuRenderer.handle(message)`。宿主发送以下消息：
 
 - `initialize`：宿主 API 版本与插件/渲染器 ID。
-- `load`：标准化弹幕列表及列表版本。
+- `load`：标准化弹幕列表及列表版本。Classic 一次送整份列表；Next 只送一个时间窗口（当前位置前约 30 秒到后约 210 秒，列表时间），消息里带 `window: {startSeconds, endSeconds}`，时钟走到窗口末尾前一分钟、跳出窗口或列表变化时再送一次新的 `load`（整体替换）。渲染器应当按 `clock` 的位置从收到的列表里取弹幕，不要假设列表覆盖整部视频。
+- `add`：用户刚发送的一条弹幕（只发给声明 `supportsRealtimeAdd` 的渲染器）。
 - `settings`：可见性、透明度、字号、显示区域、滚动时长、屏蔽项及时间偏移。
 - `clock`：播放位置、播放态、倍速和 seek 版本；目前最多每 100 ms 推送一次。
 - `dispose`：释放引擎、DOM 与监听器。
