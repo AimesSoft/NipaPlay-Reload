@@ -257,6 +257,7 @@
 					33CC110E2044A8840003C045 /* Bundle Framework */,
 					3399D490228B24CF009A79C7 /* ShellScript */,
 					5B37853252ABE5D38BD93F49 /* [CP] Embed Pods Frameworks */,
+					5D0A11B1C2D3E4F5A6B7C8D9 /* Use bundled mdk libass */,
 			);
 			buildRules = (
 			);
@@ -459,6 +460,25 @@
 			shellPath = /bin/sh;
 			shellScript = "\"${PODS_ROOT}/Target Support Files/Pods-Runner/Pods-Runner-frameworks.sh\"\n";
 			showEnvVarsInLog = 0;
+		};
+		5D0A11B1C2D3E4F5A6B7C8D9 /* Use bundled mdk libass */ = {
+			isa = PBXShellScriptBuildPhase;
+			alwaysOutOfDate = 1;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputFileListPaths = (
+			);
+			inputPaths = (
+			);
+			name = "Use bundled mdk libass";
+			outputFileListPaths = (
+			);
+			outputPaths = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "\"$PROJECT_DIR/scripts/use_bundled_mdk_libass.sh\"\n";
 		};
 /* End PBXShellScriptBuildPhase section */
 
