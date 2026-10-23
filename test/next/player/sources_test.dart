@@ -156,6 +156,23 @@ void main() {
     sources.dispose();
   });
 
+  test('closing fences an open still resolving its network URL', () async {
+    final rig = FakeHost();
+    final resolver = _Resolver()..gate = Completer<void>();
+    final sources = PlaybackSources(rig.host, resolver);
+    addTearDown(sources.dispose);
+    addTearDown(() => rig.host.dispose());
+    final opening = sources.open(item(0));
+    final rejected = expectLater(opening, throwsA(isA<Failure>()));
+    await flush();
+    sources.cancelPendingOpen();
+    await rig.host.close(reason: 'gui');
+    resolver.gate!.complete();
+    await rejected;
+    expect(rig.drivers, isEmpty);
+    expect(rig.host.current.value, null);
+  });
+
   test('remote heartbeat reports real time, seek, pause and final stop in order', () async {
     final reports = <(String, JsonMap)>[];
     final remote = ServerProgress(

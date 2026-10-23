@@ -237,6 +237,13 @@ final class PlaybackSources extends ChangeNotifier {
     return counting;
   }
 
+  /// Closing during asynchronous URL/credential resolution must fence the
+  /// request too; otherwise its late result could open a new native core.
+  void cancelPendingOpen() {
+    _ticket++;
+    cancelAutoNext();
+  }
+
   void _event(PlaybackEvent event) {
     final session = _bound;
     if (session == null || session.id != event.sessionId) return;

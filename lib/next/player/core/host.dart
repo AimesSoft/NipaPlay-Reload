@@ -103,9 +103,9 @@ final class NextPlayerHost {
     } else {
       throw OpenRefused(
           'source_not_supported',
-          'Next\'s playback layer opens local files only; '
-              '${scheme.isEmpty ? 'a relative path' : '$scheme sources'} '
-              'cannot be played yet.',
+          'Use an absolute local path or a supported media source URL; '
+              '${scheme.isEmpty ? 'a relative path' : 'the $scheme scheme'} '
+              'does not identify a playable source.',
           {'source': scheme.isEmpty ? 'relative_path' : scheme});
     }
     final kernel = configuredKernel();

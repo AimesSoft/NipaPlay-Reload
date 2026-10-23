@@ -314,7 +314,7 @@ final class SessionPlayback implements NextPlayback, VideoStageHost {
 
   @override
   Future<void> close({required String reason}) async {
-    sources.cancelAutoNext();
+    sources.cancelPendingOpen();
     _hide?.cancel();
     if (_fullscreen.value) await _setFullscreen(false);
     await host.close(reason: reason);
