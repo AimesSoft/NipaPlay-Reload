@@ -8,18 +8,22 @@ import 'package:nipaplay/next/player/core/clock.dart';
 import 'package:nipaplay/next/player/core/host.dart';
 import 'package:nipaplay/next/player/core/session.dart';
 import 'package:nipaplay/next/player/kernel/driver.dart';
+import 'package:nipaplay/next/player/kernel/native.dart';
 import 'package:nipaplay/next/player/progress/records.dart';
 
 /// A kernel that answers as MDK does, at once or when [gate] opens, and
 /// writes down what it is told.
 final class FakeDriver implements KernelDriver {
   FakeDriver(this.lease,
-      {this.landed,
+      {this.kernel = KernelId.mdk,
+      KernelNative? native,
+      this.landed,
       this.duration = const Duration(minutes: 24),
       this.failOpen,
       this.gate,
       this.seekGate})
-      : instance = ++_count {
+      : native = native ?? const PlainNative(null),
+        instance = ++_count {
     if (!lease.held) throw StateError('made without the lease');
   }
 
@@ -37,11 +41,13 @@ final class FakeDriver implements KernelDriver {
 
   final log = <String>[];
   @override
+  final KernelNative native;
+  @override
   final int instance;
   @override
-  KernelId get kernel => KernelId.mdk;
+  final KernelId kernel;
   @override
-  KernelConfig get config => const KernelConfig(kernel: KernelId.mdk);
+  KernelConfig get config => KernelConfig(kernel: kernel);
 
   final _events = StreamController<KernelEvent>.broadcast(sync: true);
   final _surface = ValueNotifier<VideoSurface?>(null);
@@ -288,14 +294,21 @@ final class FakeHost {
   FakeHost({
     String kernel = 'mdk',
     FakeDriver Function(KernelLease lease)? make,
+    FakeDriver Function(KernelId kernel, KernelLease lease)? driver,
+    Set<KernelId>? supported,
     PlayerLevels levels = const PlayerLevels(),
   }) {
     host = NextPlayerHost(
-      createDriver: (_, lease) async {
-        final driver = (make ?? FakeDriver.new)(lease);
-        drivers.add(driver);
-        return driver;
+      createDriver: (kernel, lease) async {
+        final made = driver != null
+            ? driver(kernel, lease)
+            : make != null
+                ? make(lease)
+                : FakeDriver(lease, kernel: kernel);
+        drivers.add(made);
+        return made;
       },
+      supportedKernels: supported == null ? null : () => supported,
       configuredKernel: () => kernel,
       levels: () async => levels,
       records: records,

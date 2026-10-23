@@ -70,6 +70,38 @@ class SecurityBookmarkPlugin: NSObject, FlutterPlugin {
         case "labProfileInfo":
             result(["name": LabProfile.name as Any, "root": LabProfile.root?.path as Any,
                     "writeSandbox": LabProfile.writeSandbox])
+        case "labWindowShot":
+            // Lab instances only: the app's own window as the window server
+            // composes it (native video under the transparent hole included),
+            // for the one window and no other. CGWindowListCreateImage is
+            // closed to Swift by the current SDK but still exported, and an app
+            // may capture its own windows without the screen recording grant.
+            guard LabProfile.active,
+                  let arguments = call.arguments as? [String: Any],
+                  let path = arguments["path"] as? String,
+                  let window = NSApp.windows.first(where: { $0 is MainFlutterWindow }) else {
+                result(FlutterError(code: "invalid_reference", message: "Lab profile and a window required", details: nil))
+                return
+            }
+            typealias CreateImage = @convention(c) (CGRect, UInt32, UInt32, UInt32) -> Unmanaged<CGImage>?
+            guard let symbol = dlsym(UnsafeMutableRawPointer(bitPattern: -2), "CGWindowListCreateImage") else {
+                result(FlutterError(code: "unavailable", message: "CGWindowListCreateImage is not exported", details: nil))
+                return
+            }
+            let create = unsafeBitCast(symbol, to: CreateImage.self)
+            // optionIncludingWindow (1 << 3); boundsIgnoreFraming | nominalResolution (1 | 1 << 4)
+            guard let image = create(CGRect.null, 1 << 3, UInt32(window.windowNumber), 1 | (1 << 4))?.takeRetainedValue() else {
+                result(FlutterError(code: "capture_failed", message: "The window could not be captured", details: nil))
+                return
+            }
+            let url = URL(fileURLWithPath: path)
+            guard let destination = CGImageDestinationCreateWithURL(url as CFURL, "public.png" as CFString, 1, nil) else {
+                result(FlutterError(code: "write_failed", message: "Cannot write \(path)", details: nil))
+                return
+            }
+            CGImageDestinationAddImage(destination, image, nil)
+            CGImageDestinationFinalize(destination)
+            result(["path": path, "width": image.width, "height": image.height])
         case "labVault":
             guard LabProfile.active, let arguments = call.arguments as? [String: Any] else {
                 result(FlutterError(code: "invalid_reference", message: "Lab profile required", details: nil))

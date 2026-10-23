@@ -1,9 +1,11 @@
 import 'dart:async';
 
 import 'package:flutter/foundation.dart';
+import 'package:flutter/widgets.dart' show Widget;
 import 'package:nipa_harness/nipa_harness.dart';
 
 import '../../harness_redaction.dart';
+import 'native.dart';
 
 /// The playback kernels, by the ids facts use.
 enum KernelId {
@@ -31,6 +33,7 @@ final class KernelConfig {
     this.hardwareDecoding = true,
     this.bufferMaxMs,
     this.properties = const {},
+    this.settings = const {},
   });
 
   final KernelId kernel;
@@ -44,6 +47,7 @@ final class KernelConfig {
 
   /// Kernel properties set before the media opens.
   final Map<String, String> properties;
+  final Map<String, Object?> settings;
 
   JsonMap toJson() => {
         'kernel': kernel.id,
@@ -51,6 +55,7 @@ final class KernelConfig {
         'hardwareDecoding': hardwareDecoding,
         'bufferMaxMs': bufferMaxMs,
         'properties': properties,
+        'settings': settings,
       };
 }
 
@@ -425,6 +430,14 @@ final class TextureSurface extends VideoSurface {
   double get aspect => width > 0 && height > 0 ? width / height : 16 / 9;
 }
 
+/// A platform view with a fenced adapter behind it. No native getters in build.
+final class PlatformVideoSurface extends VideoSurface {
+  const PlatformVideoSurface(this.view, {required this.aspect});
+  final Widget view;
+  @override
+  final double aspect;
+}
+
 final class KernelOpened {
   const KernelOpened(this.media, this.landed,
       [this.tracks = const KernelTracks()]);
@@ -564,6 +577,11 @@ abstract interface class KernelDriver {
   /// Creation, opening and release of this instance: timings, the late
   /// callbacks dropped behind the fence, release steps that timed out.
   JsonMap get lifecycle;
+
+  /// The kernel's own properties, commands and methods, for kernel control
+  /// (playback.kernel and the rest): the one handle to the native player
+  /// that leaves the driver, queued and fenced like its own calls (I3).
+  KernelNative get native;
 
   /// Idempotent. The first call fences the instance before it returns
   /// its future; the future completes once the instance is gone.

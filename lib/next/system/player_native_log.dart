@@ -3,7 +3,10 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:nipa_harness/nipa_harness.dart';
-import 'package:nipaplay/player_abstraction/player_abstraction.dart';
+import 'package:nipaplay/player_abstraction/abstract_player.dart'
+    show PlayerNativeLogTap;
+
+import '../player/kernel/driver.dart' show KernelFenced;
 
 import '../harness_redaction.dart';
 import 'mdk_native_log.dart';
@@ -24,7 +27,7 @@ final class PlayerNativeLog {
   int _evicted = 0;
   bool _recording = false;
   File? _file;
-  Player? _filePlayer;
+  Future<void> Function(String path)? _fileWriter;
 
   /// Erika's ring: the next of its entries to copy, entries that left the
   /// ring before they were copied, and whether it captures FFmpeg's log.
@@ -170,10 +173,13 @@ final class PlayerNativeLog {
     };
   }
 
-  /// Has [player]'s kernel write its full log to a new file in [directory].
-  /// Returns the file, or null when the kernel keeps no such log.
-  Future<File?> startFile(Player player, Directory directory) async {
+  /// Has a kernel write its full log to a new file in [directory], through
+  /// [write] (null: the kernel keeps no such log). Returns the file, or null
+  /// when the kernel keeps none.
+  Future<File?> startFile(
+      Future<void> Function(String path)? write, Directory directory) async {
     await stopFile();
+    if (write == null) return null;
     await directory.create(recursive: true);
     final stamp = DateTime.now()
         .toUtc()
@@ -181,15 +187,19 @@ final class PlayerNativeLog {
         .replaceAll(RegExp(r'[^0-9T]'), '')
         .substring(0, 15);
     final file = File('${directory.path}/mpv-$stamp.log');
-    if (!await player.setNativeLogFile(file.path)) return null;
-    _filePlayer = player;
+    await write(file.path);
+    _fileWriter = write;
     return _file = file;
   }
 
   Future<void> stopFile() async {
-    final player = _filePlayer;
-    _filePlayer = null;
-    if (player != null) await player.setNativeLogFile('');
+    final write = _fileWriter;
+    _fileWriter = null;
+    try {
+      if (write != null) await write('');
+    } on KernelFenced {
+      // The kernel it was writing for is gone, and its file with it.
+    }
   }
 
   /// Lines of a log file this module started, from line [cursor], redacted.

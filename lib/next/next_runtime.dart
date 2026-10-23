@@ -7,12 +7,15 @@ import 'player/classic/classic_backed_playback.dart';
 import 'player/core/arbiter.dart';
 import 'player/core/host.dart';
 import 'player/core/session.dart' show PlayerLevels;
-import 'player/kernel/mdk_driver.dart';
+import 'player/kernel/driver.dart' show KernelId;
+import 'player/kernel/player_settings.dart';
+import 'capabilities/kernel_facts.dart' show kernelIdOf;
+import 'settings/effective.dart';
+import 'settings/effective_value.dart';
 import 'player/next_playback.dart';
 import 'player/perf/budget.dart';
 import 'player/ports/debug_player.dart';
 import 'player/ports/session_playback.dart';
-import 'player/ports/session_ports.dart' show NotInPlaybackLayer;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'ui/shell/next_ui_preference.dart';
 import 'runtime/codex_runtime.dart';
@@ -167,11 +170,38 @@ final class NextRuntime extends ChangeNotifier {
     classic.registerEvictor(KernelArbiter.instance);
     final host = NextPlayerHost(
       createDriver: (kernel, lease) async =>
-          MdkDriver(lease, mdkConfigFrom(await SharedPreferences.getInstance())),
+          PlayerSettings(await SharedPreferences.getInstance())
+              .create(kernel, lease),
       configuredKernel: configuredPlayerKernelId,
+      supportedKernels: () => {
+        for (final type in PlayerFactory.supportedKernelTypes)
+          KernelId.byId(kernelIdOf(type))!
+      },
       levels: _playerLevels,
       usesExternalPlayer: () => settings.useExternalPlayer,
     );
+    // The kernel settings' running value is what the kernel instance that
+    // plays was made with; with nothing playing, the next open reads them.
+    EffectiveRules.sessionPlayer = (entry, stored) {
+      if (!PlayerSettings.keys.contains(entry.key)) return null;
+      final session = host.current.value;
+      final made = session == null || session.phase.value.done
+          ? null
+          : session.driver?.config;
+      if (made == null) {
+        return Effective.same(stored,
+            source: 'storage',
+            detail: 'No media is open; the next one opens with this value.');
+      }
+      final running = made.settings[entry.key];
+      if (sameValue(stored, running)) return Effective.same(running);
+      return Effective.differs(
+          running,
+          'reload_required',
+          entry.key == 'network.httpProxy'
+              ? 'Application requests use the stored proxy now. The kernel instance that plays was made with the previous one and the media is not interrupted; the next media opens with the stored one.'
+              : 'The kernel instance that plays was made with this value and the media is not interrupted; the next media opens with the stored one.');
+    };
     final nextPlayback = SessionPlayback(host,
         localOperations: (settings, context, session) =>
             classic.localOperationsFor(settings, context, session));
@@ -349,7 +379,6 @@ final class NextRuntime extends ChangeNotifier {
   ClassicSettings? _classicSettings;
   MeshPlayback? _meshPlayback;
   UncaughtErrors? _uncaught;
-  KernelControl? _kernel;
   ChatHost? chat;
   String? chatError;
   final _hostReady = Completer<NextHostSettings>();
@@ -446,11 +475,8 @@ final class NextRuntime extends ChangeNotifier {
     final uncaught = _uncaught = UncaughtErrors(
         Directory('${root.path}/diagnostics'), appVersion: packageInfo.version)
       ..context = playback.errorContext;
-    // Kernel reads and changes are not in Next's playback layer yet: the
-    // same actions, unavailable with the reason.
-    final kernelControl =
-        KernelControl(playback.kernelHost, harness: () => repositoryPath);
-    unawaited(kernelControl.release(reopen: false));
+    final kernelControl = KernelControl(playback.host, playback.kernelHost,
+        harness: () => repositoryPath);
     _settingEvents = core.settingChanges.stream.listen((facts) =>
         playback.host.settingChanged(facts['key'] as String, facts['value']));
     _harness = Harness(
@@ -479,15 +505,11 @@ final class NextRuntime extends ChangeNotifier {
         // Scoped, so that a track chosen in the interface is told apart
         // from Nipa's.
         InvocationScopeCapability(PlaybackControlsCapability(playback.controls)),
-        NotInPlaybackLayer(
-            KernelControlCapability(kernelControl),
-            'kernel_control',
-            'Next\'s playback layer runs MDK, a new instance for each session; '
-                'it does not read, change or swap its kernel yet.'),
+        KernelControlCapability(kernelControl),
         RuntimeDiagnosticsCapability(
             errors: uncaught,
             log: PlayerNativeLog.instance,
-            player: () => playback.kernelHost.player,
+            kernel: () => playback.host.current.value?.driver,
             logDirectory: Directory('${root.path}/diagnostics/player-logs')),
         InvocationScopeCapability(localPlayback),
         InvocationScopeCapability(localLibrary),
@@ -647,8 +669,6 @@ final class NextRuntime extends ChangeNotifier {
         await _startChat(repository);
       }
     } else {
-      // What Next changed in the kernel for this playback goes back first.
-      await _kernel?.release();
       await _uncaught?.detach();
       await PlayerNativeLog.instance.detach();
       ServiceProvider.nextCore.subtitles.detachPlayer();
@@ -952,7 +972,6 @@ final class NextRuntime extends ChangeNotifier {
     _operations = _operations.then((_) async {
       await playback.host.dispose();
       await playback.dispose();
-      await _kernel?.release(reopen: false);
       await _uncaught?.detach();
       await PlayerNativeLog.instance.detach();
       await _meshPlayback?.close();

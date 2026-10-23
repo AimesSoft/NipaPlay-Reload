@@ -46,6 +46,19 @@ abstract interface class MediaLoadAwarePlayer {
   Future<bool> retryCurrentMediaLoad();
 }
 
+/// What a native video view asks of the player it hosts: whether the system
+/// draws its picture, and the attach and detach of the view that does.
+/// [Player] (Classic) and the Media Kit adapter (Next's driver) both are.
+abstract interface class PlatformVideoSurfaceTarget {
+  bool get prefersPlatformVideoSurface;
+  Future<void> attachPlatformVideoSurface({
+    required int viewHandle,
+    int? windowHandle,
+    int? platformViewId,
+  });
+  Future<void> detachPlatformVideoSurface({int? platformViewId});
+}
+
 /// Lines and events a kernel already delivers to the app (mpv log messages,
 /// MDK media events, Erika errors). Nothing listens unless NipaPlay Next is
 /// on; [instance] tells player instances apart.

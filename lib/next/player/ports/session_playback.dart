@@ -174,11 +174,12 @@ final class SessionPlayback implements NextPlayback, VideoStageHost {
     if (s == null || phase == null) return PlaybackTransport.idle;
     PlaybackTransport t(String status, PlaybackPhase phase, bool video) =>
         PlaybackTransport(
-            status: status, phase: phase, hasVideo: video, systemDrawn: false);
+            status: status, phase: phase, hasVideo: video,
+            systemDrawn: s.surface.value is PlatformVideoSurface);
     return switch (phase) {
       SessionPhase.resolving ||
       SessionPhase.starting ||
-      SessionPhase.loading =>
+      SessionPhase.loading || SessionPhase.swapping =>
         t('loading', PlaybackPhase.opening, false),
       SessionPhase.preparing => t('ready', PlaybackPhase.ready, true),
       SessionPhase.active => s.transport.value.observed ==

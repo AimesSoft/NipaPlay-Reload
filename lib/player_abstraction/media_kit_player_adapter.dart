@@ -62,12 +62,17 @@ bool isRetryableMediaKitLoadError(String message) {
 class MediaKitPlayerAdapter
     implements AbstractPlayer, MediaLoadAwarePlayer, AsyncDisposablePlayer,
         BufferingAwarePlayer,
+        PlatformVideoSurfaceTarget,
         TickerProvider {
   static bool _disableMpvLogs = false;
   static int? _cachedMacosMajor;
   static bool _macOSNativeVideoPreference = false;
   final String? _androidAudioOutput;
   final String _httpProxy;
+
+  /// Next's session driver owns the tracks, the clock and the lifetime: the
+  /// adapter picks no track of its own.
+  final bool _sessionOwned;
   static const int _defaultBufferSize = 32 * 1024 * 1024;
   static const String _hdrValidationFlag = 'NIPAPLAY_MACOS_HDR_VALIDATE';
   static const String _windowsHdrValidationFlag =
@@ -354,10 +359,12 @@ class MediaKitPlayerAdapter
   bool _platformVideoSurfaceAvailable = true;
 
   MediaKitPlayerAdapter({
+    bool sessionOwned = false,
     int? bufferSize,
     String? androidAudioOutput,
     String? httpProxy,
-  })  : _mpvDiagnosticsEnabled = _shouldEnableMpvDiagnostics(),
+  })  : _sessionOwned = sessionOwned,
+        _mpvDiagnosticsEnabled = _shouldEnableMpvDiagnostics(),
         _enableHardwareAcceleration = !_shouldDisableHardwareAcceleration(),
         _prefersPlatformVideoSurface = _shouldUsePlatformNativeVideoSurface(),
         _androidAudioOutput = androidAudioOutput,
@@ -402,8 +409,10 @@ class MediaKitPlayerAdapter
       _updateTextureIdFromController();
     });
     _addEventListeners();
-    _setupDefaultTrackSelectionBehavior();
-    _initializeTicker();
+    if (!sessionOwned) {
+      _setupDefaultTrackSelectionBehavior();
+      _initializeTicker();
+    }
     if (_prefersPlatformVideoSurface) {
       _logPlatformVideoSurface(
         'enabled platform=${Platform.operatingSystem} '
@@ -413,11 +422,80 @@ class MediaKitPlayerAdapter
     }
   }
 
+  /// Native event streams for Next's session driver; the position is taken
+  /// from them there, not interpolated here.
+  Player get sessionPlayer => _player;
+
+  Duration? _sessionStart;
+
+  /// Opens [path] as Classic does, at [start]. The media opens paused, and
+  /// once mpv has its length [waitUntilMediaReady] answers. With a native
+  /// video surface the open waits for that surface to attach, as Classic's.
+  void openForSession(String path, Duration start) {
+    if (_isDisposed) throw StateError('The mpv instance is disposed.');
+    _sessionStart = start > Duration.zero ? start : null;
+    setMedia(path, PlayerMediaType.video);
+  }
+
+  Future<void> seekForSession(Duration target) => _player.seek(target);
+
+  /// Turns tracks on and returns once mpv has taken the request. [audio] and
+  /// [subtitles] index [mediaInfo]'s lists; an empty [subtitles] turns the
+  /// subtitle off.
+  Future<void> selectTracksForSession(
+      {int? audio, List<int>? subtitles}) async {
+    if (_isDisposed) return;
+    if (audio != null) {
+      final infos = _mediaInfo.audio ?? const <PlayerAudioStreamInfo>[];
+      if (audio >= 0 && audio < infos.length) {
+        final id = infos[audio].metadata['id'];
+        final track =
+            _player.state.tracks.audio.where((t) => t.id == id).firstOrNull;
+        if (track != null) {
+          await _player.setAudioTrack(track);
+          _activeAudioTracks = [audio];
+        }
+      }
+    }
+    if (subtitles != null) {
+      final infos = _mediaInfo.subtitle ?? const <PlayerSubtitleStreamInfo>[];
+      final index = subtitles.firstOrNull;
+      if (index == null) {
+        await _player.setSubtitleTrack(SubtitleTrack.no());
+        _activeSubtitleTracks = [];
+      } else if (index >= 0 && index < infos.length) {
+        final id = infos[index].metadata['id'];
+        final track =
+            _player.state.tracks.subtitle.where((t) => t.id == id).firstOrNull;
+        if (track != null) {
+          await _player.setSubtitleTrack(track);
+          _activeSubtitleTracks = [index];
+        }
+      }
+    }
+  }
+
+  /// Mounts the subtitle file at [path] and turns it on; returns once mpv
+  /// lists it, or after two seconds.
+  Future<void> mountSubtitleForSession(String path) async {
+    if (_isDisposed) return;
+    int external(Tracks tracks) =>
+        tracks.subtitle.where((t) => t.isExternal).length;
+    final before = external(_player.state.tracks);
+    final listed = _player.stream.tracks
+        .firstWhere((tracks) => external(tracks) > before)
+        .timeout(const Duration(seconds: 2), onTimeout: () => _player.state.tracks);
+    await _player.setSubtitleTrack(
+        SubtitleTrack.uri(normalizeExternalSubtitleTrackUri(path)));
+    await listed;
+  }
+
   /// An adapter over [player] that only listens to its streams: no video
   /// output, options or ticker.
   @visibleForTesting
   MediaKitPlayerAdapter.withPlayer(Player player)
-      : _mpvDiagnosticsEnabled = false,
+      : _sessionOwned = false,
+        _mpvDiagnosticsEnabled = false,
         _enableHardwareAcceleration = true,
         _prefersPlatformVideoSurface = false,
         _androidAudioOutput = null,
@@ -1803,6 +1881,8 @@ class MediaKitPlayerAdapter
   }
 
   void _ensureDefaultTracksSelected() {
+    // A session's tracks are the plan's, never a default of Classic's.
+    if (_sessionOwned) return;
     // Audio track selection (existing logic)
     try {
       if (_mediaInfo.audio != null &&
@@ -2335,7 +2415,9 @@ class MediaKitPlayerAdapter
       preparedMedia.url,
       extras: mediaOptions,
       httpHeaders: preparedMedia.httpHeaders,
+      start: _sessionStart,
     );
+    _sessionStart = null;
 
     //debugPrint('MediaKitAdapter: 打开媒体 (MAIN VIDEO/AUDIO): $path');
     if (!_isDisposed) {
@@ -3133,6 +3215,7 @@ class MediaKitPlayerAdapter
     }
   }
 
+  @override
   bool get prefersPlatformVideoSurface => _usesPlatformVideoSurface;
 
   bool get usesWindowOverlayVideoSurface =>
@@ -3141,6 +3224,7 @@ class MediaKitPlayerAdapter
       !_envFlagEnabled('NIPAPLAY_MACOS_HDR_USE_APPKIT_VIEW') &&
       !_envFlagEnabled('NIPAPLAY_DISABLE_MACOS_WINDOW_OVERLAY');
 
+  @override
   Future<void> attachPlatformVideoSurface({
     required int viewHandle,
     int? windowHandle,
@@ -3330,6 +3414,7 @@ class MediaKitPlayerAdapter
     }
   }
 
+  @override
   Future<void> detachPlatformVideoSurface({int? platformViewId}) async {
     if (!_prefersPlatformVideoSurface) {
       return;

@@ -1,0 +1,336 @@
+import 'dart:async';
+
+import 'package:erika_flutter/erika_flutter.dart';
+import 'package:nipa_harness/nipa_harness.dart';
+import 'package:nipaplay/player_abstraction/erika_player_adapter.dart';
+import 'package:nipaplay/player_abstraction/player_data_models.dart';
+import 'package:nipaplay/player_abstraction/player_enums.dart';
+
+import '../core/arbiter.dart';
+import 'adapter_driver.dart';
+import 'driver.dart';
+import 'native.dart';
+
+/// Erika, our own kernel, as a [KernelDriver]. The media opens through
+/// Erika's adapter, paused, and seeks to its start position; Erika paints
+/// into a native view under the window (the picture is a
+/// [PlatformVideoSurface], which the stage leaves a hole for) and says its
+/// state, position, buffering, tracks and errors by events. Erika does not
+/// say that the media ended: the driver tells it, marked inferred, when
+/// Erika stops at the end.
+///
+/// Tracks: Erika has no media to set them on before it opens, so the plan
+/// goes on right after, while the media is paused at its start; Erika
+/// reports each selection (`trackSelectionChanged`), which confirms it.
+/// Subtitles Erika draws itself are ASS and SSA files.
+final class ErikaDriver extends AdapterDriver implements ErikaNative {
+  factory ErikaDriver(KernelLease lease, KernelConfig config) {
+    requireLease(lease, 'Erika');
+    return ErikaDriver._(
+        config,
+        ErikaPlayerAdapter(
+            sessionOwned: true,
+            androidOutputMode: PlayerErikaAndroidOutputMode.values
+                    .where((m) =>
+                        m.name == config.settings['player.erikaAndroidOutputMode'])
+                    .firstOrNull ??
+                PlayerErikaAndroidOutputMode.sdr));
+  }
+
+  ErikaDriver._(KernelConfig config, this.adapter) : super(config) {
+    adapter.onSessionEvent = _event;
+  }
+
+  final ErikaPlayerAdapter adapter;
+
+  @override
+  KernelId get kernel => KernelId.erika;
+  @override
+  KernelNative get native => this;
+  @override
+  final KernelCapabilities capabilities = const KernelCapabilities(
+    transportEvents: true,
+    seekConfirm: true,
+    bufferingTelemetry: true,
+    endEvent: false,
+    openAtPosition: false,
+    trackConfirm: true,
+    subtitleFiles: {'ass', 'ssa'},
+    subtitleScale: true,
+  );
+
+  final _tracksKnown = Completer<void>();
+  final _durationKnown = Completer<void>();
+  final _selectionWaiters = <(bool Function(), Completer<void>)>[];
+
+  // ---- what Erika says ----
+
+  void _event(ErikaPlayerEvent event) {
+    if (fenced) return;
+    switch (event.kind) {
+      case ErikaEventKind.stateChanged:
+        final transport = switch (event.state) {
+          ErikaPlaybackState.playing => KernelTransport.playing,
+          ErikaPlaybackState.paused ||
+          ErikaPlaybackState.ready ||
+          ErikaPlaybackState.opening =>
+            KernelTransport.paused,
+          _ => KernelTransport.stopped,
+        };
+        final was = observed;
+        transportChanged(transport);
+        // Erika has no end event: it stops where the media ends.
+        if (transport == KernelTransport.stopped &&
+            was == KernelTransport.playing &&
+            opened &&
+            duration > Duration.zero &&
+            lastKnownPosition >= duration - const Duration(seconds: 2)) {
+          ended(inferred: true);
+        }
+      case ErikaEventKind.positionChanged:
+        if (event.position >= Duration.zero) positionChanged(event.position);
+      case ErikaEventKind.bufferingChanged:
+        bufferingChanged(event.buffering);
+      case ErikaEventKind.error:
+        failed(event.error ?? event.message ?? 'Erika reported an error.');
+      default:
+        break;
+    }
+    if (event.trackList.isNotEmpty && !_tracksKnown.isCompleted) {
+      _tracksKnown.complete();
+    }
+    if (adapter.mediaInfo.duration > 0 && !_durationKnown.isCompleted) {
+      _durationKnown.complete();
+    }
+    if (event.kind == ErikaEventKind.tracksChanged ||
+        event.kind == ErikaEventKind.trackSelectionChanged) {
+      for (final (done, waiter) in [..._selectionWaiters]) {
+        if (!waiter.isCompleted && done()) waiter.complete();
+      }
+      _selectionWaiters.removeWhere((w) => w.$2.isCompleted);
+    }
+  }
+
+  bool _subtitleDrawn() => adapter.activeSubtitleTracks.isNotEmpty;
+
+  /// Completes once [done] holds on what Erika reported, or after the wait.
+  Future<bool> _reportedThat(bool Function() done) async {
+    if (done()) return true;
+    final waiter = Completer<void>();
+    _selectionWaiters.add((done, waiter));
+    try {
+      await waiter.future.timeout(AdapterDriver.trackConfirmWait);
+      return true;
+    } on TimeoutException {
+      return done();
+    } finally {
+      _selectionWaiters.removeWhere((w) => identical(w.$2, waiter));
+    }
+  }
+
+  // ---- the kernel's part ----
+
+  @override
+  void applyVolume(double volume) => adapter.volume = volume;
+
+  @override
+  void applyRate(double rate) => adapter.playbackRate = rate;
+
+  @override
+  Future<void> configure() async {
+    final mode = PlayerUpscalerMode.values
+        .where((m) => m.name == config.settings['player.erikaUpscalerMode'])
+        .firstOrNull;
+    if (mode != null && mode != PlayerUpscalerMode.off) {
+      await adapter.setUpscaler(mode);
+    }
+  }
+
+  @override
+  Future<void> applyPlan(KernelTrackPlan plan) =>
+      applySubtitleProperties(plan.subtitleProperties);
+
+  @override
+  Future<Duration> openMedia(ResolvedSource source, Duration start) async {
+    adapter.setMedia(source.uri, PlayerMediaType.video);
+    await adapter.prepare();
+    queue.live();
+    // Duration and the tracks arrive as events once Erika has opened it.
+    await _durationKnown.future;
+    queue.live();
+    await _tracksKnown.future
+        .timeout(const Duration(seconds: 2), onTimeout: () {});
+    queue.live();
+    if (start <= Duration.zero) return Duration.zero;
+    final sample = expectSample(start);
+    try {
+      await adapter.seekAndWait(position: start.inMilliseconds);
+      queue.live();
+      return await sample.landed ?? start;
+    } finally {
+      sample.cancel();
+    }
+  }
+
+  @override
+  Future<KernelTracks> planOpened(
+      KernelTrackPlan plan, MediaFacts media) async {
+    // The plan, exactly: Erika's own default audio is the first, and it
+    // draws no subtitle until one is chosen.
+    final audio = plan.audio;
+    if (audio != null && adapter.activeAudioTracks.firstOrNull != audio) {
+      await adapter.selectTracksForSession(audio: audio);
+      queue.live();
+      await _reportedThat(() => adapter.activeAudioTracks.firstOrNull == audio);
+      queue.live();
+    }
+    var basis = 'opened';
+    var subtitleConfirmed = true;
+    switch (plan.subtitle) {
+      case NoKernelSubtitle():
+        if (_subtitleDrawn()) {
+          await adapter.selectTracksForSession(subtitles: const []);
+          queue.live();
+          subtitleConfirmed = await _reportedThat(() => !_subtitleDrawn());
+          queue.live();
+          basis = subtitleConfirmed ? 'event' : 'not_reported';
+        }
+      case EmbeddedKernelSubtitle(:final index):
+        if (adapter.activeSubtitleTracks.firstOrNull != index) {
+          await adapter.selectTracksForSession(subtitles: [index]);
+          queue.live();
+          subtitleConfirmed = await _reportedThat(
+              () => adapter.activeSubtitleTracks.firstOrNull == index);
+          queue.live();
+          basis = subtitleConfirmed ? 'event' : 'not_reported';
+        }
+      case FileKernelSubtitle(:final path):
+        await adapter.setExternalSubtitleAsync(path);
+        queue.live();
+        subtitleConfirmed = await _reportedThat(_subtitleDrawn);
+        queue.live();
+        basis = subtitleConfirmed ? 'event' : 'not_reported';
+    }
+    final audioNow = adapter.activeAudioTracks.firstOrNull;
+    return KernelTracks(
+        audio: plan.audio,
+        subtitle: plan.subtitle,
+        audioConfirmed: plan.audio == null || audioNow == plan.audio,
+        subtitleConfirmed: subtitleConfirmed,
+        basis: basis);
+  }
+
+  @override
+  Future<TrackReport> switchAudio(int index) async {
+    await adapter.selectTracksForSession(audio: index);
+    queue.live();
+    final reported =
+        await _reportedThat(() => adapter.activeAudioTracks.firstOrNull == index);
+    return (confirmed: reported, basis: reported ? 'event' : 'not_reported');
+  }
+
+  @override
+  Future<TrackReport> switchSubtitle(
+      KernelSubtitle subtitle, Duration? probe) async {
+    switch (subtitle) {
+      case NoKernelSubtitle():
+        await adapter.selectTracksForSession(subtitles: const []);
+        queue.live();
+        final off = await _reportedThat(() => !_subtitleDrawn());
+        return (confirmed: off, basis: off ? 'event' : 'not_reported');
+      case EmbeddedKernelSubtitle(:final index):
+        await adapter.selectTracksForSession(subtitles: [index]);
+        queue.live();
+        final on = await _reportedThat(
+            () => adapter.activeSubtitleTracks.firstOrNull == index);
+        return (confirmed: on, basis: on ? 'event' : 'not_reported');
+      case FileKernelSubtitle(:final path):
+        await adapter.setExternalSubtitleAsync(path);
+        queue.live();
+        final on = await _reportedThat(_subtitleDrawn);
+        return (confirmed: on, basis: on ? 'event' : 'not_reported');
+    }
+  }
+
+  @override
+  Future<void> applySubtitleProperties(Map<String, String> properties) async {
+    // Erika scales what it draws; its other styles are not mapped.
+    final scale = double.tryParse(properties['subtitle.scale'] ?? '');
+    if (scale != null) adapter.setProperty('sub-scale', '$scale');
+  }
+
+  @override
+  Future<void> seekMedia(Duration target, {required bool exact}) =>
+      adapter.seekAndWait(position: target.inMilliseconds);
+
+  @override
+  Future<void> pauseMedia(bool paused) =>
+      paused ? adapter.pauseDirectly() : adapter.playDirectly();
+
+  @override
+  Future<Duration?> readPosition() async => null;
+
+  @override
+  MediaFacts readMedia() => mediaFromInfo(adapter.mediaInfo,
+      activeAudio: adapter.activeAudioTracks,
+      activeSubtitles: adapter.activeSubtitleTracks);
+
+  @override
+  Future<void> showPicture(MediaFacts media) async {
+    picture = PlatformVideoSurface(
+        adapter.buildPlatformVideoSurface(debugLabel: 'next-erika-$instance'),
+        aspect: media.aspect);
+  }
+
+  @override
+  Future<JsonMap> kernelFacts() async => {
+        'version': await _version(),
+        'decoders': {
+          'video': adapter.getProperty('decoder.video'),
+          'audio': null,
+          'requested': config.videoDecoders,
+        },
+      };
+
+  @override
+  Future<void> disposeKernel() => adapter.disposeAsync();
+
+  // ---- ErikaNative: the handle kernel control gets ----
+
+  @override
+  Future<Object?> version() => queue.run(_version);
+
+  Future<Object?> _version() async => null;
+
+  @override
+  Future<Map<String, NativeRead>> read(List<String> names) async => {
+        for (final name in names)
+          name: (value: null, error: 'Erika has no named properties.')
+      };
+
+  @override
+  Future<JsonMap> status() => queue.run(adapter.readKernelStatus);
+
+  @override
+  Future<NativeInvokeReply> invoke(String method, JsonMap arguments) =>
+      queue.alongside(() => adapter.invokeNative(method, arguments));
+
+  @override
+  Future<PlayerUpscalerMode> upscaler() => queue.run(
+      () async => (await adapter.getUpscalerStatus()).requestedMode);
+
+  @override
+  Future<void> setUpscaler(PlayerUpscalerMode mode) =>
+      queue.run(() => adapter.setUpscaler(mode));
+
+  @override
+  Future<bool> debugHud() async => adapter.debugHudEnabled;
+
+  @override
+  Future<void> setDebugHud(bool enabled) =>
+      queue.run(() => adapter.setDebugHud(enabled));
+
+  @override
+  Future<Map<String, Object?>?> engineLog({int? sinceSeq}) =>
+      queue.run(() => adapter.readEngineLog(sinceSeq: sinceSeq));
+}

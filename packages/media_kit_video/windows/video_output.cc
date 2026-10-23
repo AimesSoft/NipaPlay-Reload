@@ -129,6 +129,14 @@ VideoOutput::~VideoOutput() {
             textures_.clear();
             // S/W
             pixel_buffer_textures_.clear();
+            // mpv must release its render context while ANGLE is still alive,
+            // and before the disposal reply allows mpv_terminate_destroy.
+            if (render_context_) {
+              if (surface_manager_) surface_manager_->MakeCurrent(true);
+              mpv_render_context_set_update_callback(render_context_, nullptr, nullptr);
+              mpv_render_context_free(render_context_);
+              render_context_ = nullptr;
+            }
             // Free (call destructor) |ANGLESurfaceManager| through the thread
             // pool. This will ensure synchronized EGL or ANGLE usage & won't
             // conflict with |Render| or |CheckAndResize| of other
@@ -137,14 +145,23 @@ VideoOutput::~VideoOutput() {
             promise.set_value();
           });
         });
+  } else {
+    // Creation can fail before a Flutter texture exists. Still drain the
+    // render worker and complete the fence instead of waiting forever.
+    thread_pool_ref_->Post([&]() {
+      if (render_context_) {
+        mpv_render_context_set_update_callback(render_context_, nullptr, nullptr);
+        mpv_render_context_free(render_context_);
+        render_context_ = nullptr;
+      }
+      surface_manager_.reset(nullptr);
+      promise.set_value();
+    });
   }
 
   promise.get_future().wait();
   texture_id_ = 0;
 
-  thread_pool_ref_->Post([render_context = render_context_]() {
-    mpv_render_context_free(render_context);
-  });
 }
 
 void VideoOutput::NotifyRender() {

@@ -5,6 +5,7 @@ import 'package:flutter/widgets.dart';
 
 import 'playback.dart';
 import 'subtitle_layer.dart';
+import '../../player/kernel/driver.dart' show PlatformVideoSurface;
 
 /// The picture of Next's own playback layer: the kernel's surface, fitted
 /// and centred on black, with the subtitle file NipaPlay draws over it
@@ -48,6 +49,9 @@ class _NextVideoStageState extends State<NextVideoStage> {
               ValueListenableBuilder<VideoSurface?>(
                 valueListenable: widget.host.surface,
                 builder: (context, surface, _) => switch (surface) {
+                  // The system draws it under the window: a hole for it.
+                  PlatformVideoSurface(:final view) => CustomPaint(
+                      painter: const _NativeVideoHole(), child: view),
                   TextureSurface(:final textureId, :final aspect) => Center(
                       child: AspectRatio(
                         aspectRatio: aspect,
@@ -70,4 +74,13 @@ class _NextVideoStageState extends State<NextVideoStage> {
           ),
         ),
       );
+}
+
+final class _NativeVideoHole extends CustomPainter {
+  const _NativeVideoHole();
+  @override
+  void paint(Canvas canvas, Size size) => canvas.drawRect(
+      Offset.zero & size, Paint()..blendMode = BlendMode.clear);
+  @override
+  bool shouldRepaint(_NativeVideoHole oldDelegate) => false;
 }

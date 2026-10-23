@@ -4,41 +4,31 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:nipa_harness/nipa_harness.dart';
-import 'package:nipaplay/models/playable_item.dart';
-import 'package:nipaplay/player_abstraction/player_abstraction.dart';
-import 'package:nipaplay/player_abstraction/player_factory.dart';
+import 'package:nipaplay/player_abstraction/player_abstraction.dart' show PlayerKernelType;
 import 'package:nipaplay/services/external_player_console_service.dart';
 import 'package:path/path.dart' as p;
 
 import '../harness_redaction.dart';
+import '../player/core/host.dart';
+import '../player/core/session.dart';
+import '../player/kernel/driver.dart';
+import '../player/kernel/native.dart';
 import '../player/next_playback.dart';
-import '../player/perf/budget.dart';
 import '../tasks/user_consent.dart';
 import 'classic_action.dart';
 import 'kernel_facts.dart';
-import 'player_facts.dart';
 
 /// Asks the person at NipaPlay; [stopped] completes when the question no
-/// longer applies (the media or the player changed).
+/// longer applies (the media or the kernel changed).
 typedef KernelConsent = Future<bool> Function(
     String title, String message, String accept, Future<void> stopped);
-
-/// Replaces the player and reopens what it plays: on [kernel] (null is the
-/// kernel setting), with [request]'s own source.
-typedef KernelSwitch = Future<void> Function(
-    KernelHost host, PlayerKernelType? kernel, PlayableItem? request);
 
 Future<bool> _askUser(
         String title, String message, String accept, Future<void> stopped) =>
     showUserConsent(title, message, accept, stopped: stopped);
 
-/// The host's own reopen.
-Future<void> _hostReopen(
-        KernelHost host, PlayerKernelType? kernel, PlayableItem? request) =>
-    host.reopen(kernel, request);
-
-/// A kernel value Next changed on one player for one media, and what it
-/// was before.
+/// A kernel value Next changed on one kernel instance, and what it was
+/// before.
 final class _Override {
   _Override(this.name, this.kind, this.original, this.originalKnown,
       this.firstAt);
@@ -63,68 +53,35 @@ final class _Override {
       };
 }
 
-/// The player and the media a set of changes belongs to.
-final class _Binding {
-  const _Binding(this.player, this.path);
-  final Player player;
-  final String? path;
-  bool same(_Binding other) =>
-      identical(player, other.player) && path == other.path;
-}
-
-/// Kernel reads and per-playback kernel changes for NipaPlay Next.
+/// Kernel reads and per-playback kernel changes for NipaPlay Next, over
+/// Next's own playback layer: the kernel instance of the session that plays
+/// now, through the handle it gives ([KernelNative], queued and fenced like
+/// its own calls), never the kernel itself (I3).
 ///
-/// A change holds for the player and media it was made on: a different
-/// media restores the values it changed (a value NipaPlay or the user set
-/// since is left as it is), a value whose original the kernel never
-/// reported makes NipaPlay open the next media on a fresh player, and a
-/// player replaced by NipaPlay ends them. Reopening on another kernel holds
-/// the same way: the next media opens on the kernel setting. Turning Next
-/// off restores all of it. Nothing here writes a setting.
+/// A change holds for the kernel instance it was made on: the next media
+/// opens a new instance on the settings (D6), and a swap to another kernel
+/// is another instance, so either ends the changes (they are recorded as
+/// ended). Nothing here writes a setting.
 final class KernelControl {
   KernelControl(
-    this.host, {
+    this.host,
+    this.playback, {
     KernelConsent? consent,
-    KernelSwitch? switcher,
-    PlayerKernelType Function()? configured,
-    List<PlayerKernelType> Function()? supported,
     String? Function()? harness,
-  })  : _harness = harness ?? (() => null),
-        _consent = consent ?? _askUser,
-        _switch = switcher ?? _hostReopen,
-        _configured = configured ?? PlayerFactory.getKernelType,
-        _supported = supported ?? (() => PlayerFactory.supportedKernelTypes) {
-    _deferredSaves = DeferredReloads.changes.listen((_) => _deferredChanged());
-  }
+  })  : _consent = consent ?? _askUser,
+        _harness = harness ?? (() => null);
 
-  final KernelHost host;
-  final String? Function() _harness;
+  final NextPlayerHost host;
+
+  /// The playback's own snapshot and failure facts.
+  final KernelHost playback;
   final KernelConsent _consent;
-  final KernelSwitch _switch;
-  final PlayerKernelType Function() _configured;
-  final List<PlayerKernelType> Function() _supported;
+  final String? Function() _harness;
 
   static const historyCapacity = 200;
   final _overrides = <String, _Override>{};
   final _history = ListQueue<JsonMap>();
-  _Binding? _binding;
-  JsonMap? _kernelOverride;
-  /// A call whose effect may outlast the media (a command, an invoke).
-  bool _freshByCall = false;
-
-  /// Settings Next saved that the player in use was not rebuilt for.
-  late final StreamSubscription<void> _deferredSaves;
-  bool get _pending => DeferredReloads.pendingFor(_configured());
-
-  /// Whether the next media opens on a fresh player: a change whose
-  /// original the kernel never reported, a call that may outlast it, or a
-  /// setting saved by Next that the player in use does not carry.
-  bool get _freshPlayerNext =>
-      _freshByCall || _overrides.values.any((o) => !o.originalKnown) || _pending;
-  String? _revertFor;
-  PlayableItem? _seenRequest;
-  bool _listening = false;
-  bool _reopening = false;
+  KernelDriver? _bound;
   Future<void> _work = Future.value();
   ErikaSample? _erikaSample;
   int _sequence = 0;
@@ -132,217 +89,71 @@ final class KernelControl {
   /// The changes in force, newest first, and the record of all of them.
   List<JsonMap> get history => List.unmodifiable(_history.toList().reversed);
 
-  _Binding _now() => _Binding(host.player,
-      host.request?.videoPath ?? host.path);
-
   Future<T> _serial<T>(Future<T> Function() run) {
     final result = _work.then((_) => run());
     _work = result.then((_) {}, onError: (Object _) {});
     return result;
   }
 
-  /// Another open, another kernel instance, the media or whether it plays
-  /// changing: pushed by the host, never with the position.
-  void _listen() {
-    if (_listening) return;
-    _listening = true;
-    host.media.addListener(_changed);
-    host.transport.addListener(_changed);
-  }
-
-  void _stopListening() {
-    if (!_listening) return;
-    _listening = false;
-    host.media.removeListener(_changed);
-    host.transport.removeListener(_changed);
-  }
-
-  bool get _holding =>
-      _overrides.isNotEmpty ||
-      _kernelOverride != null ||
-      _revertFor != null ||
-      _freshPlayerNext;
-
-  /// A setting Next saved reached the stored values. With no media open the
-  /// player is rebuilt now, which interrupts nothing; with media playing it
-  /// is left alone and the next media opens on the stored values.
-  void _deferredChanged() {
-    unawaited(_serial(() async {
-      if (!_pending) return;
-      if (host.path == null) {
-        await _revert('setting_saved');
-      } else {
-        _seenRequest = host.request;
-        _binding ??= _now();
-        _listen();
-      }
-    }));
-  }
-
-  void _changed() => PlayerPerf.span('kernel.changed', _change);
-  void _change() {
-    if (_reopening) return;
-    final request = host.request;
-    if (!identical(request, _seenRequest)) {
-      // Another open began, even of the same path on the same player.
-      _seenRequest = request;
-      if (_pending && request != null) _revertFor = request.videoPath;
-    }
-    final binding = _binding;
-    final now = _now();
-    if (binding != null && !binding.same(now)) {
-      _binding = now;
-      unawaited(_serial(() => _bindingMoved(binding, now)));
-    }
-    _checkRevert();
-  }
-
-  /// Once the next media has opened (or failed), reopens it on a fresh
-  /// player on the kernel setting.
-  void _checkRevert() {
-    final revert = _revertFor;
-    if (revert == null || _reopening) return;
-    // Classic's open has settled once it is playing, paused or failed. While
-    // it is ready its play() has not taken yet, and a reopen started then
-    // would carry the media over as paused.
-    if (_now().path == revert &&
-        const {PlaybackPhase.playing, PlaybackPhase.paused, PlaybackPhase.failed}
-            .contains(host.transport.value.phase)) {
-      _revertFor = null;
-      unawaited(_serial(() => _revert('media_changed')));
-    }
-  }
-
-  Future<void> _bindingMoved(_Binding from, _Binding to) async {
-    if (!identical(from.player, to.player)) {
-      for (final override in _overrides.values.toList()) {
-        _record('ended', override.name, {
-          'trigger': 'player_replaced',
-          'original': safeKernelValue(override.name, override.original),
-        });
-      }
-      _overrides.clear();
-      _freshByCall = false;
-      final kernel = _kernelOverride;
-      if (kernel != null &&
-          playerKernelId(to.player.getPlayerKernelName()) ==
-              kernelIdOf(_configured())) {
-        _record('ended', 'kernel', {
-          'trigger': 'player_replaced',
-          'kernel': kernel['kernel'],
-        });
-        _kernelOverride = null;
-        _revertFor = null;
-      }
-    } else {
-      for (final override in _overrides.values.toList()) {
-        if (override.originalKnown) {
-          await _restoreOne(override, 'media_changed', null);
-        }
-      }
-      if (_freshPlayerNext || _kernelOverride != null) {
-        _revertFor = to.path;
-      }
-      _overrides.removeWhere((_, o) => o.originalKnown);
-    }
-    if (!_holding) {
-      _binding = null;
-      _stopListening();
-    }
-    scheduleMicrotask(_checkRevert);
-  }
-
-  Future<void> _revert(String trigger) async {
-    final kernel = _kernelOverride;
-    final before = playerKernelId(host.player.getPlayerKernelName());
-    String? failure;
-    _reopening = true;
-    try {
-      await _switch(host, null, host.request);
-    } catch (error) {
-      failure = redactHarnessText('$error');
-    } finally {
-      _reopening = false;
-    }
-    for (final override in _overrides.values) {
-      _record('ended', override.name, {
-        'trigger': 'player_recreated',
-        'original': safeKernelValue(override.name, override.original),
-      });
-    }
-    _overrides.clear();
-    _freshByCall = false;
-    _kernelOverride = null;
-    _record('revert', 'kernel', {
-      'trigger': trigger,
-      'from': before,
-      'temporaryKernel': kernel?['kernel'],
-      'to': playerKernelId(host.player.getPlayerKernelName()),
-      'configured': kernelIdOf(_configured()),
-      'error': failure,
-    });
-    _revertFor = null;
-    _seenRequest = host.request;
-    _binding = null;
-    _stopListening();
-  }
-
-  /// Restores every change and returns to the kernel setting; called when
-  /// Next is turned off. With [reopen] false the player is left as it is.
-  Future<void> release({bool reopen = true}) => _serial(() async {
-        if (!reopen) await _deferredSaves.cancel();
-        if (reopen) {
-          for (final override in _overrides.values.toList()) {
-            if (override.originalKnown &&
-                identical(_binding?.player, host.player)) {
-              await _restoreOne(override, 'next_off', null);
-            }
-          }
-          _overrides.removeWhere((_, o) => o.originalKnown);
-          if (_kernelOverride != null ||
-              _freshPlayerNext ||
-              _overrides.isNotEmpty) {
-            await _revert('next_off');
-          }
-        }
-        _overrides.clear();
-        _kernelOverride = null;
-        _revertFor = null;
-        _freshByCall = false;
-        _binding = null;
-        _stopListening();
-      });
-
   // ---- inputs ----
 
-  JsonMap _snapshot() => host.snapshot().toJson();
+  PlaybackSession? get _session => host.current.value;
 
-  void _session(JsonMap input, {bool required = true}) {
+  /// [input]'s session is the one that plays now.
+  void _check(JsonMap input, {bool required = true}) {
     final sessionId = input['sessionId'];
     if (sessionId == null && !required) return;
-    if (sessionId != _snapshot()['sessionId']) {
+    if (sessionId != _session?.id) {
       throw const Failure(FailureCode.conflict,
           'Playback session changed. Read playback.state.');
     }
   }
 
-  void _internalMedia() {
+  /// The kernel instance that plays, ready for a call.
+  KernelDriver _driver() {
     if (ExternalPlayerConsoleService.hasActiveSession) {
       throw const Failure(FailureCode.unavailable,
           'An external player is playing; its kernel is not NipaPlay\'s.');
     }
-    if (host.path == null &&
-        host.request?.videoPath == null) {
+    final session = _session;
+    if (session == null || session.phase.value.done) {
       throw const Failure(
           FailureCode.unavailable, 'No internal media is open.');
     }
+    final driver = session.driver;
+    if (session.phase.value == SessionPhase.swapping ||
+        driver == null ||
+        driver.fenced) {
+      throw const Failure(FailureCode.conflict,
+          'The playback is changing kernels or has no kernel open; read again in a moment.',
+          retryable: true);
+    }
+    _endChangesOf(driver);
+    return driver;
+  }
+
+  /// Changes belong to one kernel instance: once another plays they are
+  /// over, and recorded so.
+  void _endChangesOf(KernelDriver driver) {
+    final bound = _bound;
+    if (identical(bound, driver)) return;
+    for (final override in _overrides.values) {
+      _record('ended', override.name, {
+        'trigger': 'player_replaced',
+        'original': safeKernelValue(override.name, override.original),
+      }, driver: bound);
+    }
+    _overrides.clear();
+    _bound = driver;
   }
 
   String _id(String prefix) =>
       '$prefix-${DateTime.now().microsecondsSinceEpoch}-${++_sequence}';
 
   JsonMap _record(String action, String name, JsonMap facts,
-      {Invocation? invocation}) {
+      {Invocation? invocation, KernelDriver? driver}) {
+    final kernel = driver ?? _session?.driver;
+    final path = _session?.path;
     final entry = <String, Object?>{
       'changeId': _id('kc'),
       'at': DateTime.now().toUtc().toIso8601String(),
@@ -350,8 +161,8 @@ final class KernelControl {
       'name': name,
       'origin': invocation?.origin ?? 'nipaplay',
       'invocationId': invocation?.id,
-      'kernel': playerKernelId(host.player.getPlayerKernelName()),
-      'path': _now().path == null ? null : redactHarnessText(_now().path!),
+      'kernel': kernel?.kernel.id,
+      'path': path == null ? null : redactHarnessText(path),
       ...facts,
     };
     _history.add(entry);
@@ -361,70 +172,60 @@ final class KernelControl {
     return entry;
   }
 
+  String get _configured => host.configuredKernel();
+
   // ---- reading ----
-
-  Future<Object?> _currentValue(_Override override) async {
-    final player = host.player;
-    switch (override.kind) {
-      case 'mpv':
-        return (await player.readNativePropertiesChecked(
-                [override.name]))[override.name]
-            ?.value;
-      case 'mdk':
-        return player.getProperty(override.name);
-      case 'decoders':
-        return player.getDecoders(override.name == 'videoDecoders'
-            ? MediaType.video
-            : MediaType.audio);
-      case 'erika':
-        return _erikaSetting(player, override.name);
-    }
-    return null;
-  }
-
-  static Future<String?> _erikaSetting(Player player, String name) async {
-    if (name == 'debugHud') return player.debugHudEnabled?.toString();
-    final status = await player.getUpscalerStatus();
-    return status == null ? null : erikaUpscalerName(status.requestedMode);
-  }
 
   static bool _equal(Object? a, Object? b) => a is List && b is List
       ? a.join('\u0000') == b.join('\u0000')
       : a == b;
 
+  Future<Object?> _currentValue(KernelNative native, _Override override) async {
+    switch (override.kind) {
+      case 'mpv':
+        return (await native.read([override.name]))[override.name]?.value;
+      case 'mdk':
+        return (await native.read([override.name]))[override.name]?.value;
+      case 'decoders':
+        return (native as MdkNative)
+            .decoders(video: override.name == 'videoDecoders');
+      case 'erika':
+        final erika = native as ErikaNative;
+        return override.name == 'debugHud'
+            ? (await erika.debugHud()).toString()
+            : erikaUpscalerName(await erika.upscaler());
+    }
+    return null;
+  }
+
   /// playback.kernel: who the kernel is, what it lets Next read and set,
   /// what it reports now, and the changes in force.
   Future<JsonMap> read(JsonMap input) async {
-    final snapshot = _snapshot();
-    final base = <String, Object?>{
-      'sessionId': snapshot['sessionId'],
-      'observedAt': DateTime.now().toUtc().toIso8601String(),
-      'player': snapshot['player'],
-    };
-    if (snapshot['player'] == 'external') {
-      return {...base, 'unavailableReason': 'external_player'};
-    }
-    final player = host.player;
-    final name = player.getPlayerKernelName();
-    final kernel = playerKernelId(name);
+    _check(input, required: false);
+    final driver = _driver();
+    final native = driver.native;
+    final kernel = driver.kernel.id;
     final asked = [
       for (final n in (input['properties'] as List? ?? const []).cast<String>())
         n
     ];
     final result = <String, Object?>{
-      ...base,
+      'sessionId': _session?.id,
+      'observedAt': DateTime.now().toUtc().toIso8601String(),
+      'player': 'internal',
       'kernel': {
         'id': kernel,
-        'name': name,
-        'configured': kernelIdOf(_configured()),
+        'name': driver.kernel.label,
+        'instance': driver.instance,
+        'configured': _configured,
         'version': null,
       },
-      'controls': kernelControls(kernel, _supported()),
+      'controls': kernelControls(kernel, _reopenable),
     };
-    switch (kernel) {
-      case 'media_kit':
+    switch (native) {
+      case MpvNative():
         final names = {...mpvKernelSnapshot, ...asked}.toList();
-        final reads = await player.readNativePropertiesChecked(names);
+        final reads = await native.read(names);
         String? value(String n) => reads[n]?.value;
         result['kernel'] = {
           ...result['kernel'] as JsonMap,
@@ -443,27 +244,28 @@ final class KernelControl {
               'error': reads[n]?.error,
             }
         };
-      case 'mdk':
+      case MdkNative():
+        final reads = await native.read([...mdkKernelSnapshot, ...asked]);
         result['kernel'] = {
           ...result['kernel'] as JsonMap,
-          'version': {'mdk': player.nativeVersion},
+          'version': await native.version(),
         };
         result['snapshot'] = {
           for (final n in mdkKernelSnapshot)
-            n: safeKernelValue(n, player.getProperty(n))
+            n: safeKernelValue(n, reads[n]?.value)
         };
         result['decoders'] = {
-          'video': player.getDecoders(MediaType.video),
-          'audio': player.getDecoders(MediaType.audio),
-          'activeVideo': player.getProperty('decoder.video'),
-          'activeAudio': player.getProperty('decoder.audio'),
+          'video': await native.decoders(video: true),
+          'audio': await native.decoders(video: false),
+          'activeVideo': await native.activeDecoder(video: true),
+          'activeAudio': await native.activeDecoder(video: false),
         };
         result['properties'] = {
           for (final n in asked)
-            n: {'value': safeKernelValue(n, player.getProperty(n)), 'error': null}
+            n: {'value': safeKernelValue(n, reads[n]?.value), 'error': null}
         };
-      case 'erika':
-        result['erika'] = await _readErika(player, input['sampleMs'] as int?);
+      case ErikaNative():
+        result['erika'] = await _readErika(driver, native, input['sampleMs'] as int?);
         if (asked.isNotEmpty) {
           result['properties'] = {
             for (final n in asked)
@@ -478,25 +280,32 @@ final class KernelControl {
           };
         }
     }
+    final running = kernel;
     result['overrides'] = [for (final o in _overrides.values) o.toJson()];
-    result['kernelOverride'] = _kernelOverride;
-    result['nextMediaOpensFreshPlayer'] =
-        _freshPlayerNext || _kernelOverride != null;
+    result['kernelOverride'] = running == _configured
+        ? null
+        : {'kernel': running, 'configured': _configured};
+    result['nextMediaOpensFreshPlayer'] = true;
     final history = _history.toList().reversed.toList();
     result['changes'] = history.take(20).toList();
     result['changesTotal'] = history.length;
     return result;
   }
 
-  Future<JsonMap> _readErika(Player player, int? sampleMs) async {
-    final instance = player.kernelInstance;
-    final path = _now().path;
-    var status = await player.readKernelStatus();
+  /// The kernels a reopen may name on this device.
+  List<PlayerKernelType> get _reopenable => [
+        for (final k in host.supportedKernels) kernelTypesById[k.id]!,
+      ];
+
+  Future<JsonMap> _readErika(
+      KernelDriver driver, ErikaNative native, int? sampleMs) async {
+    final path = _session?.path;
+    var status = await native.status();
     ErikaSample? sample(JsonMap status) {
       final stats = status['presenterStats'];
       final at = status['presenterStatsAt'];
       return stats is Map && at is String
-          ? ErikaSample(DateTime.parse(at), instance, path,
+          ? ErikaSample(DateTime.parse(at), driver.instance, path,
               {for (final e in stats.entries) '${e.key}': e.value})
           : null;
     }
@@ -506,7 +315,7 @@ final class KernelControl {
     if (sampleMs != null) {
       previous = sample(status);
       await Future<void>.delayed(Duration(milliseconds: sampleMs));
-      status = await player.readKernelStatus();
+      status = await native.status();
       source = 'sampled';
     }
     final current = sample(status);
@@ -519,7 +328,10 @@ final class KernelControl {
     return erikaKernelFacts(status,
         window: window.window == null
             ? null
-            : {...window.window!, 'paused': host.paused},
+            : {
+                ...window.window!,
+                'paused': !(_session?.transport.value.playIntent ?? false)
+              },
         windowUnavailable: window.reason);
   }
 
@@ -527,10 +339,10 @@ final class KernelControl {
 
   /// playback.set_kernel_properties.
   Future<JsonMap> set(JsonMap input, Invocation invocation) => _serial(() async {
-        _session(input);
-        _internalMedia();
-        final player = host.player;
-        final kernel = playerKernelId(player.getPlayerKernelName());
+        _check(input);
+        final driver = _driver();
+        final native = driver.native;
+        final kernel = driver.kernel.id;
         final properties = <String, String>{};
         for (final entry
             in ((input['properties'] as Map?) ?? const {}).entries) {
@@ -550,18 +362,18 @@ final class KernelControl {
           throw const Failure(FailureCode.invalidInput,
               'Give properties, videoDecoders or audioDecoders.');
         }
-        switch (kernel) {
-          case 'media_kit':
+        switch (native) {
+          case MpvNative():
             if (decoders.isNotEmpty) {
               throw const Failure(FailureCode.invalidInput,
                   'Media Kit has no decoder list; mpv picks its decoder through properties such as hwdec and vd.');
             }
-          case 'mdk':
+          case MdkNative():
             break;
-          case 'erika':
+          case ErikaNative():
             if (decoders.isNotEmpty) {
-              throw const Failure(FailureCode.invalidInput,
-                  'Erika takes no decoder list.');
+              throw const Failure(
+                  FailureCode.invalidInput, 'Erika takes no decoder list.');
             }
             for (final entry in properties.entries) {
               final values = erikaKernelSettings[entry.key];
@@ -571,8 +383,8 @@ final class KernelControl {
               }
             }
           default:
-            throw const Failure(FailureCode.unavailable,
-                'This kernel takes no properties.');
+            throw const Failure(
+                FailureCode.unavailable, 'This kernel takes no properties.');
         }
         final network = {
           for (final entry in properties.entries)
@@ -581,7 +393,7 @@ final class KernelControl {
         };
         final consent = network.isEmpty
             ? 'not_needed'
-            : await _askNetwork([
+            : await _askNetwork(driver, [
                 for (final entry in network.entries)
                   '· ${entry.key}：${redactHarnessText(entry.value)}',
               ], network.keys.join(','), {
@@ -590,77 +402,72 @@ final class KernelControl {
                     e.key: safeKernelValue(e.key, e.value)
                 },
               }, invocation);
-        _bindHere();
         final changes = <JsonMap>[];
         for (final entry in properties.entries) {
-          changes.add(await _apply(player, kernel!, entry.key, entry.value,
+          changes.add(await _apply(driver, native, entry.key, entry.value,
               invocation,
               consent: network.containsKey(entry.key) ? consent : null));
         }
         for (final entry in decoders.entries) {
-          changes.add(await _apply(player, 'decoders', entry.key, entry.value,
+          changes.add(await _apply(driver, native, entry.key, entry.value,
               invocation));
         }
-        if (!_holding) {
-          _binding = null;
-          _stopListening();
-        }
         return {
-          'sessionId': _snapshot()['sessionId'],
-          'kernel': {'id': kernel, 'name': player.getPlayerKernelName()},
+          'sessionId': _session?.id,
+          'kernel': {'id': kernel, 'name': driver.kernel.label},
           'changes': changes,
           'overrides': [for (final o in _overrides.values) o.toJson()],
-          'nextMediaOpensFreshPlayer':
-              _freshPlayerNext || _kernelOverride != null,
+          'nextMediaOpensFreshPlayer': true,
         };
       });
 
-  Future<JsonMap> _apply(Player player, String kind, String name,
+  Future<JsonMap> _apply(KernelDriver driver, KernelNative native, String name,
       Object value, Invocation invocation,
       {String? consent}) async {
-    final kindName = switch (kind) {
-      'media_kit' => 'mpv',
-      'mdk' => 'mdk',
-      'erika' => 'erika',
+    final kind = switch (native) {
+      MpvNative() when value is String => 'mpv',
+      MdkNative() when value is String => 'mdk',
+      ErikaNative() => 'erika',
       _ => 'decoders',
     };
-    final probe = _Override(name, kindName, null, true, DateTime.now().toUtc());
+    final probe = _Override(name, kind, null, true, DateTime.now().toUtc());
     Object? before;
     String? beforeError;
-    if (kindName == 'mpv') {
-      final read =
-          (await player.readNativePropertiesChecked([name]))[name];
+    if (kind == 'mpv') {
+      final read = (await native.read([name]))[name];
       before = read?.value;
       beforeError = read?.error;
     } else {
-      before = await _currentValue(probe);
+      before = await _currentValue(native, probe);
     }
     String? error;
     try {
-      switch (kindName) {
+      switch (kind) {
         case 'mpv':
-          error = await player.writeNativeProperty(name, value as String);
+          error = await (native as MpvNative).write(name, value as String);
         case 'mdk':
-          player.setProperty(name, value as String);
+          await (native as MdkNative).write(name, value as String);
         case 'decoders':
-          player.setDecoders(
-              name == 'videoDecoders' ? MediaType.video : MediaType.audio,
-              value as List<String>);
+          await (native as MdkNative).setDecoders(value as List<String>,
+              video: name == 'videoDecoders');
         case 'erika':
+          final erika = native as ErikaNative;
           if (name == 'debugHud') {
-            await player.setDebugHud(value == 'true');
+            await erika.setDebugHud(value == 'true');
           } else {
-            await player.setUpscaler(erikaUpscalerMode(value as String));
+            await erika.setUpscaler(erikaUpscalerMode(value as String));
           }
       }
+    } on KernelFenced {
+      rethrow;
     } catch (e) {
       error = redactHarnessText('$e');
     }
-    final after = await _currentValue(probe);
+    final after = await _currentValue(native, probe);
     final applied = error == null;
     if (applied) {
-      final known = kindName == 'mpv' ? beforeError == null : before != null;
-      _noteOverride(name, kindName, before, known, value, after);
+      final known = kind == 'mpv' ? beforeError == null : before != null;
+      _noteOverride(name, kind, before, known, value, after);
     }
     final entry = _record('set', name, {
       'before': safeKernelValue(name, before),
@@ -669,7 +476,7 @@ final class KernelControl {
       'after': safeKernelValue(name, after),
       'error': error,
       'consent': consent,
-    }, invocation: invocation);
+    }, invocation: invocation, driver: driver);
     if (applied) _overrides[name]!.changeIds.add(entry['changeId'] as String);
     return {
       'changeId': entry['changeId'],
@@ -686,10 +493,10 @@ final class KernelControl {
 
   /// Puts [override]'s original back when the kernel still holds what Next
   /// set; anything else is left as found.
-  Future<JsonMap> _restoreOne(
-      _Override override, String trigger, Invocation? invocation) async {
-    final player = host.player;
-    final current = await _currentValue(override);
+  Future<JsonMap> _restoreOne(KernelDriver driver, _Override override,
+      String trigger, Invocation? invocation) async {
+    final native = driver.native;
+    final current = await _currentValue(native, override);
     JsonMap result;
     if (!override.originalKnown) {
       result = {'restored': false, 'reason': 'original_unknown'};
@@ -705,37 +512,38 @@ final class KernelControl {
         final original = override.original;
         switch (override.kind) {
           case 'mpv':
-            error = await player.writeNativeProperty(
-                override.name, original as String? ?? '');
+            error = await (native as MpvNative)
+                .write(override.name, original as String? ?? '');
           case 'mdk':
-            player.setProperty(override.name, original as String);
+            await (native as MdkNative).write(override.name, original as String);
           case 'decoders':
-            player.setDecoders(
-                override.name == 'videoDecoders'
-                    ? MediaType.video
-                    : MediaType.audio,
-                (original as List).cast<String>());
+            await (native as MdkNative).setDecoders(
+                (original as List).cast<String>(),
+                video: override.name == 'videoDecoders');
           case 'erika':
+            final erika = native as ErikaNative;
             if (override.name == 'debugHud') {
-              await player.setDebugHud(original == 'true');
+              await erika.setDebugHud(original == 'true');
             } else {
-              await player.setUpscaler(erikaUpscalerMode(original as String));
+              await erika.setUpscaler(erikaUpscalerMode(original as String));
             }
         }
+      } on KernelFenced {
+        rethrow;
       } catch (e) {
         error = redactHarnessText('$e');
       }
       _overrides.remove(override.name);
       result = {'restored': error == null, if (error != null) 'error': error};
     }
-    final after = await _currentValue(override);
+    final after = await _currentValue(native, override);
     final entry = _record('restore', override.name, {
       'trigger': trigger,
       'before': safeKernelValue(override.name, current),
       'original': safeKernelValue(override.name, override.original),
       'after': safeKernelValue(override.name, after),
       ...result,
-    }, invocation: invocation);
+    }, invocation: invocation, driver: driver);
     return {
       'changeId': entry['changeId'],
       'name': override.name,
@@ -749,48 +557,44 @@ final class KernelControl {
   /// playback.restore_kernel_properties.
   Future<JsonMap> restore(JsonMap input, Invocation invocation) =>
       _serial(() async {
-        _session(input, required: false);
-        final binding = _binding;
-        if (binding != null && !binding.same(_now())) {
-          await _bindingMoved(binding, _now());
-          _binding = _holding ? _now() : null;
-        }
+        _check(input, required: false);
+        final driver = _driver();
         final names = (input['names'] as List?)?.cast<String>() ??
             _overrides.keys.toList();
         final results = <JsonMap>[];
         for (final name in names) {
           final override = _overrides[name];
           if (override == null) {
-            results.add({'name': name, 'restored': false, 'reason': 'not_changed'});
+            results.add(
+                {'name': name, 'restored': false, 'reason': 'not_changed'});
             continue;
           }
-          results.add(await _restoreOne(override, 'requested', invocation));
-        }
-
-        if (!_holding) {
-          _binding = null;
-          _stopListening();
+          results.add(await _restoreOne(driver, override, 'requested', invocation));
         }
         return {
           'restored': results,
           'overrides': [for (final o in _overrides.values) o.toJson()],
-          'nextMediaOpensFreshPlayer':
-              _freshPlayerNext || _kernelOverride != null,
+          'nextMediaOpensFreshPlayer': true,
         };
       });
 
   /// Asks the person at NipaPlay about [lines]; the answer, or a refusal
   /// recorded and thrown. The question goes away when the media or the
-  /// player changes.
-  Future<String> _askNetwork(List<String> lines, String name, JsonMap facts,
-      Invocation invocation) async {
-    final started = _now();
+  /// kernel changes.
+  Future<String> _askNetwork(KernelDriver driver, List<String> lines,
+      String name, JsonMap facts, Invocation invocation) async {
+    final session = _session;
     final stopped = Completer<void>();
     void watch() {
-      if (!_now().same(started) && !stopped.isCompleted) stopped.complete();
+      final now = _session;
+      if ((now != session || !identical(now?.driver, driver)) &&
+          !stopped.isCompleted) {
+        stopped.complete();
+      }
     }
 
-    host.media.addListener(watch);
+    host.current.addListener(watch);
+    session?.phase.addListener(watch);
     bool approved;
     try {
       approved = await _consent(
@@ -799,31 +603,18 @@ final class KernelControl {
           '允许',
           stopped.future);
     } finally {
-      host.media.removeListener(watch);
+      host.current.removeListener(watch);
+      session?.phase.removeListener(watch);
     }
     if (!approved) {
-      _record('declined', name, facts, invocation: invocation);
+      _record('declined', name, facts, invocation: invocation, driver: driver);
       throw const Failure(FailureCode.conflict, '用户没有同意这次播放使用这些网络设置');
     }
-    if (!_now().same(started)) {
+    if (_session != session || !identical(_session?.driver, driver)) {
       throw const Failure(
           FailureCode.conflict, 'Playback changed while waiting for the user.');
     }
     return 'user_approved';
-  }
-
-  /// Changes made now belong to this player and media. (While listening,
-  /// a move was already queued ahead of this work by [_changed].)
-  void _bindHere() {
-    _binding = _now();
-    _listen();
-  }
-
-  void _unbindIfIdle() {
-    if (!_holding) {
-      _binding = null;
-      _stopListening();
-    }
   }
 
   /// Records [name] as changed from [before] (known when the kernel reported
@@ -834,7 +625,6 @@ final class KernelControl {
         name, () => _Override(name, kind, before, known, DateTime.now().toUtc()));
     override.requested = requested;
     override.lastSet = after;
-
     return override;
   }
 
@@ -843,13 +633,12 @@ final class KernelControl {
   /// playback.kernel_command.
   Future<JsonMap> command(JsonMap input, Invocation invocation) =>
       _serial(() async {
-        _session(input);
-        _internalMedia();
-        final player = host.player;
-        final kernel = playerKernelId(player.getPlayerKernelName());
-        if (kernel != 'media_kit') {
+        _check(input);
+        final driver = _driver();
+        final native = driver.native;
+        if (native is! MpvNative) {
           throw Failure(FailureCode.unavailable,
-              'Only Media Kit runs mpv commands; this player runs $kernel.');
+              'Only Media Kit runs mpv commands; this player runs ${driver.kernel.id}.');
         }
         final args = [for (final a in input['command'] as List) '$a'];
         final body = mpvCommandBody(args);
@@ -880,20 +669,18 @@ final class KernelControl {
         final safeCommand = [for (final a in args) redactHarnessText(a)];
         final consent = kernelCommandConsent(args) == null
             ? 'not_needed'
-            : await _askNetwork(['· ${safeCommand.join(' ')}'], body.first,
+            : await _askNetwork(driver, ['· ${safeCommand.join(' ')}'], body.first,
                 {'command': safeCommand}, invocation);
-        _bindHere();
         final property = mpvCommandProperty(args);
-        ({String? value, String? error})? before;
+        NativeRead? before;
         if (property != null) {
-          before = (await player.readNativePropertiesChecked([property]))[property];
+          before = (await native.read([property]))[property];
         }
-        final reply = await player.runNativeCommand(args,
+        final reply = await native.command(args,
             timeout: Duration(milliseconds: input['timeoutMs'] as int? ?? 10000));
         String? after;
         if (property != null) {
-          after = (await player.readNativePropertiesChecked([property]))[property]
-              ?.value;
+          after = (await native.read([property]))[property]?.value;
         }
         final lasting = property != null
             ? 'property'
@@ -901,16 +688,12 @@ final class KernelControl {
                 ? 'none'
                 : 'unknown';
         _Override? override;
-        if (reply.error == null) {
-          if (property != null) {
-            override = _noteOverride(property, 'mpv', before?.value,
-                before?.error == null, safeCommand.join(' '), after);
-          } else if (lasting == 'unknown') {
-            _freshByCall = true;
-          }
+        if (reply.error == null && property != null) {
+          override = _noteOverride(property, 'mpv', before?.value,
+              before?.error == null, safeCommand.join(' '), after);
         }
-        final sessionId = _snapshot()['sessionId'] as String;
-        final playerError = host.error(sessionId);
+        final sessionId = _session?.id;
+        final playerError = sessionId == null ? null : playback.error(sessionId);
         final entry = _record('command', property ?? body.first, {
           'command': safeCommand,
           'result': safeKernelResult(reply.result),
@@ -923,9 +706,8 @@ final class KernelControl {
           'lasting': lasting,
           'consent': consent,
           if (playerError != null) 'playerError': playerError['message'],
-        }, invocation: invocation);
+        }, invocation: invocation, driver: driver);
         override?.changeIds.add(entry['changeId'] as String);
-        _unbindIfIdle();
         return {
           'changeId': entry['changeId'],
           'sessionId': sessionId,
@@ -942,21 +724,19 @@ final class KernelControl {
           'lasting': lasting,
           'consent': consent,
           'playerError': playerError,
-          'nextMediaOpensFreshPlayer':
-              _freshPlayerNext || _kernelOverride != null,
+          'nextMediaOpensFreshPlayer': true,
         };
       });
 
   /// playback.kernel_invoke.
   Future<JsonMap> invoke(JsonMap input, Invocation invocation) =>
       _serial(() async {
-        _session(input);
-        _internalMedia();
-        final player = host.player;
-        final kernel = playerKernelId(player.getPlayerKernelName());
-        if (kernel != 'erika') {
+        _check(input);
+        final driver = _driver();
+        final native = driver.native;
+        if (native is! ErikaNative) {
           throw Failure(FailureCode.unavailable,
-              'Only Erika takes invoke; this player runs $kernel.');
+              'Only Erika takes invoke; this player runs ${driver.kernel.id}.');
         }
         final method = input['method'] as String;
         final arguments = <String, Object?>{
@@ -965,19 +745,14 @@ final class KernelControl {
         };
         final consent = kernelInvokeConsent(arguments) == null
             ? 'not_needed'
-            : await _askNetwork([
+            : await _askNetwork(driver, [
                 '· $method ${redactHarnessText(jsonEncode(arguments))}'
               ], method, {
                 'arguments': safeKernelResult(arguments)
               }, invocation);
-        _bindHere();
-        final reply = await player.invokeNative(method, arguments);
-        final reading = erikaReadsOnly(method, arguments);
-        if (reply.error == null && reply.supported && !reading) {
-          _freshByCall = true;
-        }
-        final sessionId = _snapshot()['sessionId'] as String;
-        final playerError = host.error(sessionId);
+        final reply = await native.invoke(method, arguments);
+        final sessionId = _session?.id;
+        final playerError = sessionId == null ? null : playback.error(sessionId);
         final entry = _record('invoke', method, {
           'arguments': safeKernelResult(arguments),
           'supported': reply.supported,
@@ -985,8 +760,7 @@ final class KernelControl {
           'error': reply.error,
           'consent': consent,
           if (playerError != null) 'playerError': playerError['message'],
-        }, invocation: invocation);
-        _unbindIfIdle();
+        }, invocation: invocation, driver: driver);
         return {
           'changeId': entry['changeId'],
           'sessionId': sessionId,
@@ -996,40 +770,32 @@ final class KernelControl {
           'error': reply.error,
           'consent': consent,
           'playerError': playerError,
-          'nextMediaOpensFreshPlayer':
-              _freshPlayerNext || _kernelOverride != null,
+          'nextMediaOpensFreshPlayer': true,
         };
       });
 
   /// playback.watch_kernel_properties: what the named properties were, and
   /// each change seen over a bounded time, read every [intervalMs].
   Future<JsonMap> watch(JsonMap input) async {
-    final snapshot = _snapshot();
-    if (snapshot['player'] == 'external') {
-      throw const Failure(FailureCode.unavailable,
-          'An external player is playing; its kernel is not NipaPlay\'s.');
-    }
-    final player = host.player;
-    final kernel = playerKernelId(player.getPlayerKernelName());
-    if (kernel != 'media_kit' && kernel != 'mdk') {
+    _check(input, required: false);
+    final driver = _driver();
+    final native = driver.native;
+    if (native is! MpvNative && native is! MdkNative) {
       throw Failure(FailureCode.unavailable,
-          'Named properties are watched on Media Kit and MDK; this player runs $kernel.');
+          'Named properties are watched on Media Kit and MDK; this player runs ${driver.kernel.id}.');
     }
     final names = [for (final n in input['properties'] as List) '$n'];
     final duration = input['durationMs'] as int? ?? 0;
     final interval = input['intervalMs'] as int? ?? 250;
-    Future<Map<String, ({String? value, String? error})>> sample() async =>
-        kernel == 'mdk'
-            ? {for (final n in names) n: (value: player.getProperty(n), error: null)}
-            : await player.readNativePropertiesChecked(names);
-    JsonMap values(Map<String, ({String? value, String? error})> read) => {
+    final session = _session!;
+    Future<Map<String, NativeRead>> sample() => native.read(names);
+    JsonMap values(Map<String, NativeRead> read) => {
           for (final n in names)
             n: {
               'value': safeKernelValue(n, read[n]?.value),
               'error': read[n]?.error,
             }
         };
-    final started = _now();
     final startedAt = DateTime.now().toUtc();
     final clock = Stopwatch()..start();
     final initial = await sample();
@@ -1040,14 +806,17 @@ final class KernelControl {
     while (clock.elapsedMilliseconds < duration) {
       await Future<void>.delayed(Duration(
           milliseconds: (duration - clock.elapsedMilliseconds).clamp(1, interval)));
-      final now = _now();
-      if (!now.same(started)) {
-        endedBy = identical(now.player, started.player)
-            ? 'media_changed'
-            : 'player_replaced';
+      if (driver.fenced || !identical(_session?.driver, driver)) {
+        endedBy = identical(_session, session) ? 'player_replaced' : 'media_changed';
         break;
       }
-      final current = await sample();
+      final Map<String, NativeRead> current;
+      try {
+        current = await sample();
+      } on KernelFenced {
+        endedBy = identical(_session, session) ? 'player_replaced' : 'media_changed';
+        break;
+      }
       samples++;
       for (final n in names) {
         if (current[n]?.value != previous[n]?.value ||
@@ -1068,8 +837,8 @@ final class KernelControl {
       }
     }
     return {
-      'sessionId': snapshot['sessionId'],
-      'kernel': kernel,
+      'sessionId': session.id,
+      'kernel': driver.kernel.id,
       'startedAt': startedAt.toIso8601String(),
       'endedAt': DateTime.now().toUtc().toIso8601String(),
       'elapsedMs': clock.elapsedMilliseconds,
@@ -1087,233 +856,60 @@ final class KernelControl {
   /// playback.reopen_with_kernel.
   Future<JsonMap> reopen(JsonMap input, Invocation invocation) =>
       _serial(() async {
-        _session(input);
-        _internalMedia();
-        final id = input['kernel'] as String;
-        final target = kernelTypesById[id]!;
-        final supported = _supported();
-        if (!supported.contains(target)) {
-          throw Failure(FailureCode.unavailable,
-              'This device cannot run $id; it runs ${supported.map(kernelIdOf).join(', ')}.');
+        _check(input);
+        final session = _session!;
+        if (ExternalPlayerConsoleService.hasActiveSession) {
+          throw const Failure(FailureCode.unavailable,
+              'An external player is playing; its kernel is not NipaPlay\'s.');
         }
-        final before = _playbackFacts();
-        final previous = host.player;
+        if (session.phase.value.done) {
+          throw const Failure(
+              FailureCode.unavailable, 'No internal media is open.');
+        }
+        final id = input['kernel'] as String;
+        final target = KernelId.byId(id)!;
+        if (!host.supportedKernels.contains(target)) {
+          throw Failure(FailureCode.unavailable,
+              'This device cannot run $id; it runs ${host.supportedKernels.map((k) => k.id).join(', ')}.');
+        }
+        final previous = session.driver;
+        final reply = await session.swapKernel(target, origin: invocation.origin);
         for (final override in _overrides.values) {
           _record('ended', override.name, {
             'trigger': 'player_replaced',
             'original': safeKernelValue(override.name, override.original),
-          }, invocation: invocation);
+          }, invocation: invocation, driver: previous);
         }
         _overrides.clear();
-        _freshByCall = false;
-        _revertFor = null;
-        String? failure;
-        _reopening = true;
-        try {
-          await _switch(host, target, host.request);
-        } catch (error) {
-          failure = redactHarnessText('$error');
-        } finally {
-          _reopening = false;
-        }
-        final replaced = !identical(previous, host.player);
-        final tracks = replaced && host.hasVideo
-            ? await _restoreTracks(before)
-            : const <String, Object?>{};
-        if (replaced && host.hasVideo) {
-          await _settle(paused: before['paused'] == true);
-        }
-        final after = _playbackFacts();
-        final actual = playerKernelId(host.player.getPlayerKernelName());
-        final configured = kernelIdOf(_configured());
-        _kernelOverride = replaced && actual != configured
-            ? {
-                'kernel': actual,
-                'configured': configured,
-                'path': after['path'],
-                'at': DateTime.now().toUtc().toIso8601String(),
-                'origin': invocation.origin,
-              }
-            : null;
-        // What this player was not built from still waits for the next media.
-        final holding = _kernelOverride != null || _pending;
-        _seenRequest = host.request;
-        _binding = holding ? _now() : null;
-        holding ? _listen() : _stopListening();
-        final opened = replaced && failure == null && host.hasVideo;
-        final error = host.error(_snapshot()['sessionId'] as String);
+        _bound = null;
+        final replaced = reply['replaced'] == true;
+        final opened = reply['opened'] == true;
+        final actual = session.driver?.kernel.id;
+        final error = playback.error(session.id);
         _record('reopen', 'kernel', {
           'requested': id,
           'actual': actual,
-          'configured': configured,
+          'configured': _configured,
           'opened': opened,
-          'error': failure ?? (error?['message']),
+          'error': reply['failure'] ?? error?['message'],
         }, invocation: invocation);
         return {
           'kernel': {
             'requested': id,
             'actual': actual,
-            'name': host.player.getPlayerKernelName(),
-            'configured': configured,
+            'name': session.driver?.kernel.label,
+            'configured': _configured,
           },
           'replaced': replaced,
           'opened': opened,
-          'failure': failure,
+          if (reply['reason'] != null) 'reason': reply['reason'],
+          'failure': reply['failure'],
           'error': error,
-          'preserved': {
-            for (final key in const ['positionMs', 'paused', 'rate'])
-              key: {'before': before[key], 'after': after[key]},
-            ...tracks,
-          },
-          'nextMediaOpensConfiguredKernel': _kernelOverride != null || _pending,
-          'state': _snapshot(),
+          'preserved': reply['preserved'],
+          'nextMediaOpensConfiguredKernel': actual != null && actual != _configured,
+          'state': playback.snapshot().toJson(),
         };
       });
-
-  /// Classic's play() and pause() set the status only once the kernel
-  /// answers, so the state right after a reopen can still be the one before.
-  /// Waits, up to two seconds, until the status has settled and, when the
-  /// media was paused, until the new player is paused too: told by the
-  /// host as the status changes, not looked at on a timer.
-  Future<void> _settle({required bool paused}) async {
-    bool settled() {
-      final phase = host.transport.value.phase;
-      return phase == PlaybackPhase.failed ||
-          (paused
-              ? phase == PlaybackPhase.paused
-              : const {PlaybackPhase.playing, PlaybackPhase.paused}
-                  .contains(phase));
-    }
-
-    if (settled()) return;
-    final done = Completer<void>();
-    void changed() {
-      if (settled() && !done.isCompleted) done.complete();
-    }
-
-    host.transport.addListener(changed);
-    try {
-      await done.future.timeout(const Duration(seconds: 2), onTimeout: () {});
-    } finally {
-      host.transport.removeListener(changed);
-    }
-  }
-
-  JsonMap _playbackFacts() {
-    final info = host.player.mediaInfo;
-    JsonMap? describe(List<Object?>? tracks, int? index) {
-      if (tracks == null || index == null || index < 0 || index >= tracks.length) {
-        return null;
-      }
-      final track = tracks[index];
-      return switch (track) {
-        PlayerAudioStreamInfo t => {
-            'index': index,
-            'title': t.title,
-            'language': t.language,
-            'codec': t.codec.name,
-          },
-        PlayerSubtitleStreamInfo t => {
-            'index': index,
-            'title': t.title,
-            'language': t.language,
-          },
-        _ => {'index': index},
-      };
-    }
-
-    final path = _now().path;
-    return {
-      'path': path == null ? null : redactHarnessText(path),
-      'positionMs': host.position.inMilliseconds,
-      'paused': host.paused,
-      'rate': host.rate,
-      'audio': describe(info.audio, host.player.activeAudioTracks.firstOrNull),
-      'audioCount': info.audio?.length ?? 0,
-      'subtitle': describe(
-          info.subtitle, host.player.activeSubtitleTracks.firstOrNull),
-      'subtitleCount': info.subtitle?.length ?? 0,
-      'externalSubtitles': List.of(host.externalSubtitles),
-    };
-  }
-
-  /// The same track on the new kernel: one with the same language, title
-  /// (and codec for audio), else the same index when both list as many.
-  static int? _match(JsonMap? before, List<Object?>? tracks, int beforeCount) {
-    if (before == null || tracks == null) return null;
-    final candidates = <int>[];
-    for (var i = 0; i < tracks.length; i++) {
-      final track = tracks[i];
-      final (title, language, codec) = switch (track) {
-        PlayerAudioStreamInfo t => (t.title, t.language, t.codec.name),
-        PlayerSubtitleStreamInfo t => (t.title, t.language, null),
-        _ => (null, null, null),
-      };
-      if (title == before['title'] &&
-          language == before['language'] &&
-          (codec == null || before['codec'] == null || codec == before['codec'])) {
-        candidates.add(i);
-      }
-    }
-    if (candidates.length == 1) return candidates.single;
-    final index = before['index'] as int;
-    return tracks.length == beforeCount && index < tracks.length ? index : null;
-  }
-
-  Future<JsonMap> _restoreTracks(JsonMap before) async {
-    final info = host.player.mediaInfo;
-    final out = <String, Object?>{};
-    final audioBefore = before['audio'] as JsonMap?;
-    final audioNow = host.player.activeAudioTracks.firstOrNull;
-    final audio = _match(audioBefore, info.audio,
-        (before['audioCount'] as int?) ?? (info.audio?.length ?? 0));
-    var audioApplied = false;
-    if (audio != null && audio != audioNow) {
-      host.selectEmbeddedAudio(audio);
-      audioApplied = true;
-    }
-    out['audioTrack'] = {
-      'before': audioBefore,
-      'after': audio ?? audioNow,
-      'reapplied': audioApplied,
-      if (audioBefore != null && audio == null) 'reason': 'no_matching_track',
-    };
-    final subtitleBefore = before['subtitle'] as JsonMap?;
-    final subtitleNow = host.player.activeSubtitleTracks.firstOrNull;
-    final subtitle = _match(subtitleBefore, info.subtitle,
-        (before['subtitleCount'] as int?) ?? (info.subtitle?.length ?? 0));
-    var subtitleApplied = false;
-    if (subtitle != null && subtitle != subtitleNow) {
-      host.player.activeSubtitleTracks = [subtitle];
-      host.subtitleTracksChanged();
-      subtitleApplied = true;
-    }
-    out['subtitleTrack'] = {
-      'before': subtitleBefore,
-      'after': subtitle ?? subtitleNow,
-      'reapplied': subtitleApplied,
-      if (subtitleBefore != null && subtitle == null)
-        'reason': 'no_matching_track',
-    };
-    final externalBefore =
-        (before['externalSubtitles'] as List).cast<String>();
-    final readded = <String>[];
-    for (final path in externalBefore) {
-      if (!host.externalSubtitles.contains(path) &&
-          await File(path).exists()) {
-        await host.addSubtitle(path, p.basename(path));
-        readded.add(path);
-      }
-    }
-    out['externalSubtitles'] = {
-      'before': [for (final s in externalBefore) redactHarnessText(s)],
-      'after': [
-        for (final s in host.externalSubtitles) redactHarnessText(s)
-      ],
-      'readded': [for (final s in readded) redactHarnessText(s)],
-    };
-    return out;
-  }
 }
 
 /// playback.kernel and the per-playback kernel changes.
@@ -1339,7 +935,7 @@ final class KernelControlCapability implements Capability {
                   id: 'playback.set_kernel_properties',
                   title: 'Change kernel properties for this playback',
                   description:
-                      'Set kernel values on the current player for the media playing now. properties: Media Kit takes any mpv property (applied through mpv now, not made an option of later files); MDK takes any player property (MDK applies many when a stream or decoder opens); Erika takes upscaler (off/artCnnC4F16/artCnnC4F32/artCnnC4F16Ds) and debugHud (true/false). videoDecoders/audioDecoders: MDK\'s ordered decoder lists. Each change reports before, requested, after (read back from the kernel) and the kernel\'s error, and is recorded with origin and time. A change holds until another media opens: then NipaPlay puts back the original when the kernel still holds the value set here (a value changed since is left), and when the kernel never reported the original (restorable=false) the next media opens on a fresh player. playback.retry keeps the same player and the changes; turning Next off restores them. Settings that can send traffic or credentials elsewhere (proxy, user agent, headers, cookies, referrer, TLS trust, option text such as stream-lavf-o that sets one of these, or a value holding an address) wait for the person at NipaPlay to allow them; a refusal fails with 用户没有同意这次播放使用这些网络设置 and changes nothing. Settings stay as they are; lasting changes are made with settings.set.',
+                      'Set kernel values on the current player for the media playing now. properties: Media Kit takes any mpv property (applied through mpv now, not made an option of later files); MDK takes any player property (MDK applies many when a stream or decoder opens); Erika takes upscaler (off/artCnnC4F16/artCnnC4F32/artCnnC4F16Ds) and debugHud (true/false). videoDecoders/audioDecoders: MDK\'s ordered decoder lists. Each change reports before, requested, after (read back from the kernel) and the kernel\'s error, and is recorded with origin and time. A change holds for the kernel instance that plays now: another media opens a new instance on the settings, and so does reopen_with_kernel, so the change is over then (recorded as ended). restore_kernel_properties puts an original back while it plays (restorable=false: the kernel never reported the original, so it cannot). Settings that can send traffic or credentials elsewhere (proxy, user agent, headers, cookies, referrer, TLS trust, option text such as stream-lavf-o that sets one of these, or a value holding an address) wait for the person at NipaPlay to allow them; a refusal fails with 用户没有同意这次播放使用这些网络设置 and changes nothing. Settings stay as they are; lasting changes are made with settings.set.',
                   effect: Effect.write,
                   input: ObjectSchema({
                     'sessionId': StringSchema(minLength: 1),
@@ -1371,7 +967,7 @@ final class KernelControlCapability implements Capability {
                   id: 'playback.kernel_command',
                   title: 'Run an mpv command',
                   description:
-                      'Media Kit only. Runs command, an mpv command as an array of strings passed to mpv as given (name first, mpv prefixes allowed), on the current player, and returns mpv\'s result data (strings, numbers, flags, lists, maps; byte output read as UTF-8) or mpv\'s own error text, with the playback error when the player reports one afterwards. Any command runs, including filters (vf, af), shaders through change-list glsl-shaders, run and subprocess; load-script takes a script inside the harness repository. A command that changes a property (set, add, cycle, cycle-values, multiply, change-list, vf, af) reports the property before and after and holds like set_kernel_properties: restored when another media opens, restorable through restore_kernel_properties. lasting is property, none (nothing stays past this file) or unknown; after an unknown one (load-script, loadfile, playlist commands, apply-profile and others) the next media opens on a fresh player. A command that sends traffic or credentials elsewhere (an address or a proxy, header, cookie, user agent or referrer among its arguments, or such a property) waits for the person at NipaPlay; run and subprocess do not wait. timeoutMs (default 10000) bounds the wait for mpv\'s answer; the command itself keeps running past it. Every call is recorded (who, when, command, before, result, error).',
+                      'Media Kit only. Runs command, an mpv command as an array of strings passed to mpv as given (name first, mpv prefixes allowed), on the current player, and returns mpv\'s result data (strings, numbers, flags, lists, maps; byte output read as UTF-8) or mpv\'s own error text, with the playback error when the player reports one afterwards. Any command runs, including filters (vf, af), shaders through change-list glsl-shaders, run and subprocess; load-script takes a script inside the harness repository. A command that changes a property (set, add, cycle, cycle-values, multiply, change-list, vf, af) reports the property before and after and holds like set_kernel_properties: for this kernel instance, restorable through restore_kernel_properties. lasting is property, none (nothing stays past this file) or unknown (load-script, loadfile, playlist commands, apply-profile and others); either way the next media opens a new instance. A command that sends traffic or credentials elsewhere (an address or a proxy, header, cookie, user agent or referrer among its arguments, or such a property) waits for the person at NipaPlay; run and subprocess do not wait. timeoutMs (default 10000) bounds the wait for mpv\'s answer; the command itself keeps running past it. Every call is recorded (who, when, command, before, result, error).',
                   effect: Effect.write,
                   input: ObjectSchema({
                     'sessionId': StringSchema(minLength: 1),
@@ -1389,7 +985,7 @@ final class KernelControlCapability implements Capability {
                   id: 'playback.kernel_invoke',
                   title: 'Invoke an Erika method',
                   description:
-                      'Erika only. Hands method and arguments as they are to Erika\'s JSON method table, the same table Erika\'s other hosts use. method listMethods (no arguments) returns that table: every method with its scope, a summary, its arguments (name, type, required), what it returns, whether it blocks until the work is done and whether it writes files; methods Erika adds later appear there and work here without a NipaPlay change. Returns Erika\'s value as result, or Erika\'s own error; supported=false when this Erika has no such method (or no table on this platform). The playback error is added when the player reports one afterwards. After a method that changes the player succeeds (anything but listMethods, get…, tracks, trackSelection, danmakuTracks, exportFrame, exportFrames, and invokeJson of one of these), the next media opens on a fresh player. Arguments that name or hold a network setting or an address wait for the person at NipaPlay. Every call is recorded.',
+                      'Erika only. Hands method and arguments as they are to Erika\'s JSON method table, the same table Erika\'s other hosts use. method listMethods (no arguments) returns that table: every method with its scope, a summary, its arguments (name, type, required), what it returns, whether it blocks until the work is done and whether it writes files; methods Erika adds later appear there and work here without a NipaPlay change. Returns Erika\'s value as result, or Erika\'s own error; supported=false when this Erika has no such method (or no table on this platform). The playback error is added when the player reports one afterwards. Arguments that name or hold a network setting or an address wait for the person at NipaPlay. Every call is recorded.',
                   effect: Effect.write,
                   input: ObjectSchema({
                     'sessionId': StringSchema(minLength: 1),
@@ -1423,7 +1019,7 @@ final class KernelControlCapability implements Capability {
                   id: 'playback.reopen_with_kernel',
                   title: 'Reopen this media on another kernel',
                   description:
-                      'Replace the player with one on kernel and reopen the current media at its position, through Classic\'s kernel switch, without changing the kernel setting. Pause, rate, the audio and subtitle track (matched by language, title and codec, else index) and mounted external subtitles are carried over. Reports the kernel requested, the one actually running (a kernel this device cannot run is refused), whether it opened, the playback error, and each carried value before and after. Changes made by set_kernel_properties end with the old player. The next media opens on the kernel setting again.',
+                      'Move this playback to a new instance of kernel and reopen the current media at its position, without changing the kernel setting; the session stays and so does its watch record. Position, playing or paused, rate, volume, the audio and subtitle track (matched by language, title and codec, else index) and mounted external subtitle files are carried over, and what was asked meanwhile (a pause, a seek) is applied to the new instance. Reports the kernel requested, the one actually running (a kernel this device cannot run is refused), whether it opened, the playback error, and each carried value before and after. Changes made by set_kernel_properties end with the old instance. The next media opens on the kernel setting again.',
                   effect: Effect.write,
                   input: ObjectSchema({
                     'sessionId': const StringSchema(minLength: 1),
