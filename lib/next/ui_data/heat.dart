@@ -6,20 +6,51 @@ import 'package:nipa_harness/nipa_harness.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
 import '../danmaku/store.dart';
+import '../media/library_reads.dart';
 
 final class EpisodeHeat {
   const EpisodeHeat(this.store);
   final DanmakuStore store;
 
-  Future<List<JsonMap>> tracks(String id) async {
+  Future<List<JsonMap>> tracks(String id, {LibraryReads? reads}) =>
+      reads == null ? _tracks(id) : reads.once(('tracks', id), () => _tracks(id));
+
+  /// The danmaku tracks of an episode and of its files, in three queries:
+  /// the files it is in, those entities' revisions, their bindings.
+  Future<List<JsonMap>> _tracks(String id) async {
     final links = await store.db.rawQuery(
         'SELECT fe.*,(SELECT COUNT(*) FROM media_file_episodes x WHERE x.file_id=fe.file_id) AS episode_count '
         'FROM media_file_episodes fe WHERE fe.episode_id=? ORDER BY fe.file_id',
         [id]);
+    final targets = [id, for (final l in links) l['file_id'] as String];
+    // A target named by a merged file's old ID is the file it became.
+    final entities = {
+      for (final e in await store.db.rawQuery(
+          'SELECT t.id AS asked, e.id, e.revision FROM media_entities e '
+          'JOIN (SELECT value AS id FROM json_each(?)) t '
+          'ON e.id = COALESCE((SELECT file_id FROM media_file_aliases WHERE old_id = t.id), t.id)',
+          [jsonEncode(targets)]))
+        e['asked'] as String: e
+    };
+    final ids = {for (final e in entities.values) e['id'] as String}.toList();
+    final bindings = <String, List<JsonMap>>{};
+    if (ids.isNotEmpty) {
+      for (final b in await store.db.rawQuery(
+          'SELECT * FROM danmaku_bindings WHERE entity_id IN (${List.filled(ids.length, '?').join(',')}) '
+          'ORDER BY entity_id,created_at,id',
+          ids)) {
+        (bindings[b['entity_id'] as String] ??= []).add(store.decodeBinding(b));
+      }
+    }
     final tracks = <JsonMap>[];
-    for (final target in [id, for (final l in links) l['file_id'] as String]) {
-      final entity = await store.identities.entity(target);
-      for (final binding in await store.bindings(target)) {
+    for (final target in targets) {
+      final entity = entities[target];
+      // An entity that is not there was an error before; it still is.
+      if (entity == null) {
+        await store.identities.entity(target);
+        continue;
+      }
+      for (final binding in bindings[entity['id']] ?? const <JsonMap>[]) {
         if (binding['status'] != 'accepted' ||
             binding['entity_revision'] != entity['revision'] ||
             binding['cache_key'] == null) {
@@ -42,8 +73,9 @@ final class EpisodeHeat {
     return tracks;
   }
 
-  Future<List<double>?> load(String id, int? runtimeMs) async {
-    final tracks = await this.tracks(id);
+  Future<List<double>?> load(String id, int? runtimeMs,
+      {LibraryReads? reads}) async {
+    final tracks = await this.tracks(id, reads: reads);
     final chunks = <JsonMap>[];
     for (final key in tracks.map((b) => b['cache_key']).toSet()) {
       chunks.addAll(await store.db.query('danmaku_cache_chunks',
@@ -110,11 +142,13 @@ final class EpisodeHeat {
   }
 
   Future<List<String>> comments(List<(String, int?)> episodes,
-      {Duration openingWindow = const Duration(minutes: 3), int maxEpisodes = 3}) async {
+      {Duration openingWindow = const Duration(minutes: 3),
+      int maxEpisodes = 3,
+      LibraryReads? reads}) async {
     final result = <String>[], seen = <String>{}, seenTracks = <String>{};
     for (final (id, duration) in episodes.take(maxEpisodes)) {
       final candidates = <({String text, int time})>[];
-      for (final track in await tracks(id)) {
+      for (final track in await tracks(id, reads: reads)) {
         final start = track['start'] as int, end = track['end'] as int?;
         if (!seenTracks.add(jsonEncode([track['cache_key'], start, end, track['offset_ms']]))) continue;
         for (final entry in await store.entries(track['cache_key'] as String)) {

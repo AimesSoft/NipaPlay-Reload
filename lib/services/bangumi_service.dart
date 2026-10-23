@@ -33,6 +33,12 @@ class BangumiService {
   final Map<int, Object> _pendingDetailEdits = {};
   Future<BangumiAnime> Function(BangumiAnime)? metadataView;
 
+  final _calendarChanged = StreamController<void>.broadcast(sync: true);
+
+  /// Told when the calendar or an anime's details held here changed.
+  Stream<void> get calendarChanges => _calendarChanged.stream;
+  void _calendarMoved() => _calendarChanged.add(null);
+
   void _rememberDetail(int id, BangumiAnime anime, DateTime time) {
     _detailsCache.remove(id);
     _detailsCache[id] = anime;
@@ -43,6 +49,7 @@ class BangumiService {
       _detailsCacheTime.remove(oldest);
     }
     // Only memory entries are evicted; custom metadata stays persisted on disk.
+    _calendarMoved();
   }
 
   void _refreshMissingTags(int id) {
@@ -359,6 +366,7 @@ class BangumiService {
         'animes': animes.map((a) => a.toJson()).toList(),
       };
       await prefs.setString(_cacheKey, json.encode(data));
+      _calendarMoved();
       //debugPrint('[新番-弹弹play] 数据已保存到本地存储 (key: $_cacheKey)');
     } catch (e) {
       //debugPrint('[新番-弹弹play] 保存到本地存储时出错: ${e.toString()}');
@@ -622,6 +630,7 @@ class BangumiService {
 
       final cacheKey = '$_detailsCacheKeyPrefix$animeId';
       await prefs.setString(cacheKey, json.encode(data));
+      _calendarMoved();
       final cacheDuration = _getCacheDurationForAnime(animeId);
       ////debugPrint('[番剧服务] 番剧 $animeId 详情已保存到磁盘缓存 (缓存时间: ${cacheDuration.inHours}小时)');
     } catch (e) {
@@ -865,6 +874,7 @@ class BangumiService {
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove('$_detailsCacheKeyPrefix$animeId');
     await prefs.remove(_customBackgroundKey(animeId));
+    _calendarMoved();
   }
 }
 

@@ -342,6 +342,7 @@ final class NextRuntime extends ChangeNotifier {
     ServiceProvider.nextCore.settings.replaceGroup('plugins.settings.', classic.pluginEntries());
   }
 
+  StreamSubscription<void>? _calendarChanges;
   Harness get harness => _harness;
   TaskEngine get taskEngine => _taskEngine;
   AgentEndpointStatus get endpointStatus => _endpointStatus;
@@ -373,6 +374,11 @@ final class NextRuntime extends ChangeNotifier {
               in ServiceProvider.watchHistoryProvider.continueWatchingItems)
             item.toJson()
         ];
+    // Classic tells when its history and calendar move; what Next reads from
+    // them is read again then and not before.
+    ServiceProvider.watchHistoryProvider.addListener(core.stateSources.changed);
+    _calendarChanges = BangumiService.instance.calendarChanges
+        .listen((_) => core.stateSources.changed());
     core.stateSources.classicLibrary = classicLibraryStateViews(
       history: () => ServiceProvider.watchHistoryProvider.history,
       seriesDetail: BangumiService.instance.getAnimeDetailsFromMemory,
@@ -835,6 +841,9 @@ final class NextRuntime extends ChangeNotifier {
     unawaited(_hostSettings?.codex?.cancel());
     ServiceProvider.nextCore.subtitles.detachPlayer();
     _classicSettings?.plugins.removeListener(_syncPluginSettings);
+    ServiceProvider.watchHistoryProvider
+        .removeListener(ServiceProvider.nextCore.stateSources.changed);
+    unawaited(_calendarChanges?.cancel());
     if (identical(ClassicSettings.attached, _classicSettings)) ClassicSettings.attached = null;
     _labs.removeListener(_queueEndpointUpdate);
     _location?.removeListener(_queueEndpointUpdate);

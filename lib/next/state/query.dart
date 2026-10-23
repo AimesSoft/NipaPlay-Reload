@@ -4,6 +4,7 @@ import 'dart:convert';
 import 'package:crypto/crypto.dart';
 import 'package:nipa_harness/nipa_harness.dart';
 import '../public_url.dart';
+import '../util/slicer.dart';
 
 typedef StateReader = Future<List<JsonMap>> Function(int offset, int limit);
 
@@ -284,7 +285,7 @@ final class StateCapability implements Capability {
     }
     final context = _ReadContext(this, input['timeoutMs'] as int?);
     final source = await context.rows(view, startOffset: sourceOffset);
-    var matched = _match(source, {
+    var matched = await _match(source, {
       ...input,
       if (view.cursorKey != null) 'orderBy': order
     });
@@ -344,38 +345,45 @@ final class StateCapability implements Capability {
 void _invalid(String code, String message) =>
     throw Failure(FailureCode.invalidInput, '$code: $message');
 
-List<JsonMap> _match(List<JsonMap> rows, JsonMap query) {
+/// The rows that pass the query's filter, in the query's order, worked out
+/// in short pieces so that a large view does not hold the isolate.
+Future<List<JsonMap>> _match(List<JsonMap> rows, JsonMap query) async {
   final filter = query['filter'] as Map? ?? {};
-  final found = rows
-      .where((row) => filter.entries.every((e) {
-            final actual = row[e.key];
-            return (e.value as Map).entries.every((p) => switch (p.key) {
-                  'eq' => actual == p.value,
-                  'ne' => actual != p.value,
-                  'in' => (p.value as List).contains(actual),
-                  'contains' => actual is String &&
+  final slice = Slicer();
+  bool passes(JsonMap row) => filter.entries.every((e) {
+        final actual = row[e.key];
+        return (e.value as Map).entries.every((p) => switch (p.key) {
+              'eq' => actual == p.value,
+              'ne' => actual != p.value,
+              'in' => (p.value as List).contains(actual),
+              'contains' => actual is String &&
                       actual
                           .toLowerCase()
-                          .contains((p.value as String).toLowerCase()) || actual is List && actual.contains(p.value),
-                  'gt' => actual != null &&
-                      p.value != null &&
-                      _compare(actual, p.value) > 0,
-                  'gte' => actual != null &&
-                      p.value != null &&
-                      _compare(actual, p.value) >= 0,
-                  'lt' => actual != null &&
-                      p.value != null &&
-                      _compare(actual, p.value) < 0,
-                  'lte' => actual != null &&
-                      p.value != null &&
-                      _compare(actual, p.value) <= 0,
-                  _ => false
-                });
-          }))
-      .toList();
+                          .contains((p.value as String).toLowerCase()) ||
+                  actual is List && actual.contains(p.value),
+              'gt' => actual != null &&
+                  p.value != null &&
+                  _compare(actual, p.value) > 0,
+              'gte' => actual != null &&
+                  p.value != null &&
+                  _compare(actual, p.value) >= 0,
+              'lt' => actual != null &&
+                  p.value != null &&
+                  _compare(actual, p.value) < 0,
+              'lte' => actual != null &&
+                  p.value != null &&
+                  _compare(actual, p.value) <= 0,
+              _ => false
+            });
+      });
+  final found = <JsonMap>[];
+  for (final row in rows) {
+    if (passes(row)) found.add(row);
+    await slice();
+  }
   final order = query['orderBy'] as List? ?? [];
   final indexed = found.asMap().entries.toList();
-  indexed.sort((a, b) {
+  final sorted = await slicedSort(indexed, (a, b) {
     for (final raw in order) {
       final key = (raw as Map)['field'];
       final comparison = _compare(a.value[key], b.value[key]);
@@ -384,8 +392,8 @@ List<JsonMap> _match(List<JsonMap> rows, JsonMap query) {
       }
     }
     return a.key.compareTo(b.key);
-  });
-  return [for (final e in indexed) e.value];
+  }, slice);
+  return [for (final e in sorted) e.value];
 }
 
 int _compare(Object? a, Object? b) => a == b
@@ -467,6 +475,7 @@ final class _ReadContext {
   final observed = <String, Object?>{};
   final warnings = <String>{};
   final incomplete = <String>{};
+  final slice = Slicer();
   Future<List<JsonMap>> _read(StateView view, int offset, int size) async {
     try {
       return await view.read(offset, size);
@@ -491,7 +500,12 @@ final class _ReadContext {
               Duration(milliseconds: (timeoutMs! - clock.elapsedMilliseconds).clamp(1, timeoutMs!)),
               onTimeout: () => const StateRows([], warnings: ['time_limit']));
           warnings.addAll(source.warnings);
-          cache[view.name] = [for (final row in source.rows) publicValue(row, view.fields) as JsonMap];
+          final slice = Slicer(), shown = <JsonMap>[];
+          for (final row in source.rows) {
+            shown.add(publicValue(row, view.fields) as JsonMap);
+            await slice();
+          }
+          cache[view.name] = shown;
         } on Failure catch (failure) {
           if (['history_unavailable', 'classic_library_unavailable'].contains(failure.message)) {
             rethrow;
@@ -523,6 +537,7 @@ final class _ReadContext {
       observed[view.name] = DateTime.now().toUtc().toIso8601String();
       for (final row in page) {
         result.add(publicValue(row, view.fields) as JsonMap);
+        await slice();
       }
       offset += page.length;
       if (page.length < size && !warnings.contains('time_limit')) {
@@ -546,7 +561,7 @@ final class _ReadContext {
       final relation = view.relations[e.key]!;
       final target = capability._view(relation.view);
       final options = Map<String, Object?>.from(e.value as Map);
-      final children = _match(
+      final children = await _match(
           (await rows(target))
               .where((child) =>
                   row[relation.localField] != null &&

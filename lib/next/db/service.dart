@@ -984,7 +984,8 @@ final class DbService {
     }
     for (var index = 0; index < tables.length; index++) {
       final t = tables[index];
-      if (t.name.startsWith('sqlite_')) continue;
+      // The change counter is moved by triggers of the tables it counts.
+      if (t.name.startsWith('sqlite_') || t.name == 'change_epochs') continue;
       final base = '${log}_t$index';
       if (!t.writable) {
         final message = _lit('nipa_db_readonly|${t.name}|${t.readOnlyReason}');

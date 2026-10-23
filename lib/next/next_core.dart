@@ -501,6 +501,7 @@ final class NextCore {
     await events.committed.close();
     await activityChanges.close();
     await uiData.close();
+    await stateSources.close();
     hooks.observeEvent = null;
     await hooks.disable();
     harnessLocation.dispose();

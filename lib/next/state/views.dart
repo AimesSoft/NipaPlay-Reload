@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:nipa_harness/nipa_harness.dart';
@@ -12,6 +13,7 @@ import '../media/metadata_snapshot.dart';
 import '../mesh/device_source.dart';
 import '../settings/denylist.dart';
 import '../settings/registry.dart';
+import '../util/slicer.dart';
 import 'query.dart';
 
 Future<String?> visibleLocator(String? locator, MediaService media) async {
@@ -207,13 +209,77 @@ JsonMap publicTaskFacts(JsonMap snapshot) => publicValue({
 
 /// Runtime suppliers expose existing in-memory Classic state, never migration
 /// or refresh entry points. Core remains usable before a GUI is attached.
+///
+/// Classic's history is read as JSON once per change: whoever owns the
+/// supplier calls [changed] when its state moves (the GUI does it from the
+/// watch history provider), and everything that asks in between is given the
+/// same rows. They are shared and must not be modified.
 final class StateSources {
-  List<JsonMap> Function()? history;
-  List<JsonMap> Function()? continueWatching;
+  List<JsonMap> Function()? _history, _continueWatching;
+  List<JsonMap>? _historyRows, _continueRows;
   Future<List<JsonMap>> Function()? calendar;
   List<StateView>? classicLibrary;
   Future<String> Function(String)? canonicalEntityId;
   Future<JsonMap> Function(String)? cachedArtwork;
+
+  final _changes = StreamController<void>.broadcast(sync: true);
+
+  /// Told when Classic state read through these suppliers has changed: the
+  /// history, what to continue, the calendar.
+  Stream<void> get changes => _changes.stream;
+
+  int _revision = 0;
+
+  /// Moves whenever Classic state read here changed, so a reader can tell
+  /// whether what it built from it is still current.
+  int get revision => _revision;
+
+  /// Classic state read through these suppliers changed.
+  void changed() {
+    _revision++;
+    _historyRows = _continueRows = _byBasename = null;
+    if (!_changes.isClosed) _changes.add(null);
+  }
+
+  List<JsonMap> Function()? get history {
+    final read = _history;
+    return read == null ? null : () => _historyRows ??= read();
+  }
+
+  set history(List<JsonMap> Function()? read) {
+    _history = read;
+    _revision++;
+    _historyRows = _byBasename = null;
+  }
+
+  Map<String, List<JsonMap>>? _byBasename;
+
+  /// The history entries whose file has this base name, in history order.
+  List<JsonMap> historyNamed(String basename) {
+    final rows = history?.call();
+    if (rows == null) return const [];
+    var index = _byBasename;
+    if (index == null) {
+      index = _byBasename = {};
+      for (final row in rows) {
+        (index[p.basename(row['filePath'] as String)] ??= []).add(row);
+      }
+    }
+    return index[basename] ?? const [];
+  }
+
+  List<JsonMap> Function()? get continueWatching {
+    final read = _continueWatching;
+    return read == null ? null : () => _continueRows ??= read();
+  }
+
+  set continueWatching(List<JsonMap> Function()? read) {
+    _continueWatching = read;
+    _revision++;
+    _continueRows = null;
+  }
+
+  Future<void> close() => _changes.close();
 }
 
 List<StateView> publicStateViews(
@@ -235,10 +301,13 @@ List<StateView> publicStateViews(
           read: (offset, limit) async {
             final rows =
                 await db.rawQuery('$query LIMIT ? OFFSET ?', [limit, offset]);
-            return [
-              for (final row in rows)
-                transform == null ? row : await transform(row)
-            ];
+            if (transform == null) return rows;
+            final slice = Slicer(), result = <JsonMap>[];
+            for (final row in rows) {
+              result.add(await transform(row));
+              await slice();
+            }
+            return result;
           });
   Future<JsonMap> task(JsonMap row) async {
     final snapshot = jsonDecode(row['snapshot'] as String) as JsonMap;
@@ -476,14 +545,14 @@ List<StateView> publicStateViews(
         visible = await media.mayShow(locator);
       }
       JsonMap? watched;
-      for (final entry in sources.history?.call() ?? []) {
-        final recorded = entry['filePath'] as String;
-        if (recorded == locator ||
-            locator != null &&
-                p.basename(recorded) == p.basename(locator) &&
-                await visibleLocator(recorded, media) == locator) {
-          watched = entry;
-          break;
+      if (locator != null) {
+        for (final entry in sources.historyNamed(p.basename(locator))) {
+          final recorded = entry['filePath'] as String;
+          if (recorded == locator ||
+              await visibleLocator(recorded, media) == locator) {
+            watched = entry;
+            break;
+          }
         }
       }
       return {

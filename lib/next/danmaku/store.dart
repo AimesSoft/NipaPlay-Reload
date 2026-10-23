@@ -471,6 +471,13 @@ final class DanmakuStore {
             where: 'cache_key = ?', whereArgs: [key], orderBy: 'chunk_index')));
   }
 
+  /// How many comments a cache holds, as its chunks say (no content is read).
+  Future<int> entryCount(String key) async => (await db.rawQuery(
+          'SELECT COALESCE(SUM(COALESCE(entry_count,json_array_length(payload))),0) AS n '
+          'FROM danmaku_cache_chunks WHERE cache_key = ?',
+          [key]))
+      .single['n'] as int;
+
   Future<List<JsonMap>> coverage(String key) async {
     if (key.startsWith('sidecar:')) {
       final b = await binding(key.substring(8), active: false);

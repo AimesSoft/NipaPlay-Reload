@@ -9,6 +9,7 @@ import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
 import '../../security/built_in_credentials.dart';
 import '../media/identity_store.dart';
+import '../media/library_reads.dart';
 import '../events/signals.dart';
 import '../media/media_service.dart';
 import '../media/metadata_provider.dart';
@@ -45,9 +46,10 @@ final class ArtworkCache {
     return await _filesExist(result) ? result : {};
   }
 
-  Future<JsonMap> load(String entityId) => _pending.putIfAbsent(
+  Future<JsonMap> load(String entityId, {LibraryReads? reads}) =>
+      _pending.putIfAbsent(
       entityId,
-      () => _load(entityId).whenComplete(() {
+      () => _load(entityId, reads).whenComplete(() {
             _pending.remove(entityId);
           }));
 
@@ -83,10 +85,11 @@ final class ArtworkCache {
         {'kind': 'artwork', 'changedFields': fields.keys.toList(), 'source': object['provider']});
   }
 
-  Future<JsonMap> _load(String id) async {
-    final identities = await _identities(id);
+  Future<JsonMap> _load(String id, LibraryReads? reads) async {
+    final identities = await (reads?.once(('artwork identities', id), () => _identities(id)) ??
+        _identities(id));
     final tmdb = identities.where((o) => o['provider'] == 'tmdb').firstOrNull;
-    final metadata = await media.store.mergedMetadata(id);
+    final metadata = await (reads?.metadata(id) ?? media.store.mergedMetadata(id));
     final fields = metadata['fields'] as JsonMap;
     final fingerprint = jsonEncode([
       for (final o in identities) o['id'],

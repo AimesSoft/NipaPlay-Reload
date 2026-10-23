@@ -9,6 +9,7 @@ import 'package:nipa_harness/nipa_harness.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
 import '../danmaku/store.dart';
+import '../media/library_reads.dart';
 import '../media/identity_store.dart';
 import '../media/media_service.dart';
 import '../media/metadata_provider.dart';
@@ -24,6 +25,25 @@ import 'ui_data.dart';
 import 'library_service.dart';
 import '../mesh/library.dart';
 import '../chat/turn_boundaries.dart';
+
+/// The `library.files` rows, found by episode and by file.
+final class LocalFiles {
+  LocalFiles(this.rows) {
+    for (final row in rows) {
+      (_byEpisode[row['episodeId']] ??= []).add(row);
+      (_episodes[row['fileId']] ??= {}).add(row['episodeId']);
+    }
+  }
+  final List<JsonMap> rows;
+  final _byEpisode = <Object?, List<JsonMap>>{};
+  final _episodes = <Object?, Set<Object?>>{};
+
+  /// The rows of an episode.
+  List<JsonMap> ofEpisode(Object? episodeId) => _byEpisode[episodeId] ?? const [];
+
+  /// The episodes a file is linked to.
+  Set<Object?> episodesOf(Object? fileId) => _episodes[fileId] ?? const {};
+}
 
 /// Application-owned projections. Stored presentations contain no task state.
 final class UiDataService implements NextUiData, NextNowPlaying {
@@ -42,7 +62,7 @@ final class UiDataService implements NextUiData, NextNowPlaying {
   MeshLibrary? meshLibrary;
   LibraryDataService? libraryData;
   void notifyLibraryChanged() => _changed();
-  Future<List<JsonMap>> localFiles() => _view('library.files');
+  Future<LocalFiles> localFiles() async => LocalFiles(await _view('library.files'));
   Database get db => media.store.database;
   static const _openingKey = 'preference:hero-opening-seconds';
   Future<int> _openingSeconds() async {
@@ -63,12 +83,23 @@ final class UiDataService implements NextUiData, NextNowPlaying {
   final _changes = StreamController<void>.broadcast();
   final _tasks = StreamController<List<UiTask>>.broadcast();
   StreamSubscription<Job>? _jobs;
-  Timer? _timer;
+  StreamSubscription<void>? _classic;
+  Timer? _timer, _midnight;
   String? _observed;
   Future<void> _polling = Future.value(), _publishing = Future.value();
   bool _closed = false;
   @override
   Stream<void> get changes => _changes.stream;
+
+  /// What the catalogue and the interface are made from, told by two
+  /// integers however much there is: the database's change epoch (moved by
+  /// triggers on the tables they read, whoever writes them, see
+  /// `db/epochs.dart`) and Classic's state pushed through [StateSources].
+  Future<String> catalogueStamp() async {
+    final epoch = await db.rawQuery(
+        "SELECT COALESCE((SELECT n FROM change_epochs WHERE name='catalogue'),0) AS n");
+    return '${epoch.single['n']}:${sources.revision}';
+  }
 
   Future<void> start() async {
     _observed = await _fingerprint();
@@ -85,6 +116,8 @@ final class UiDataService implements NextUiData, NextNowPlaying {
           onError: (Object e, StackTrace s) =>
               Zone.current.handleUncaughtError(e, s)));
     });
+    // The history, what to continue and the calendar tell when they move.
+    _classic = sources.changes.listen((_) => _changed());
     _timer = Timer.periodic(const Duration(milliseconds: 250), (_) {
       _polling = _polling.then((_) async {
         final fingerprint = await _fingerprint();
@@ -97,17 +130,21 @@ final class UiDataService implements NextUiData, NextNowPlaying {
           onError: (Object e, StackTrace s) =>
               Zone.current.handleUncaughtError(e, s)));
     });
+    _scheduleMidnight();
   }
 
-  Future<String> _fingerprint() async => jsonEncode([
-        await db.rawQuery('SELECT total_changes() AS total'),
-        await db.rawQuery('PRAGMA data_version'),
-        sources.history?.call(),
-        sources.continueWatching?.call(),
-        DateTime.now().toIso8601String().substring(0, 10),
-        await sources.calendar?.call(),
-        await libraryData?.sourceStamp()
-      ]);
+  /// "Today" moves once a day: the airing shelf is read again then.
+  void _scheduleMidnight() {
+    final now = DateTime.now();
+    final next = DateTime(now.year, now.month, now.day + 1);
+    _midnight = Timer(next.difference(now) + const Duration(seconds: 1), () {
+      _changed();
+      if (!_closed) _scheduleMidnight();
+    });
+  }
+
+  Future<String> _fingerprint() async =>
+      '${await catalogueStamp()}:${await libraryData?.sourceStamp()}';
   void _changed() {
     if (!_closed) _changes.add(null);
   }
@@ -135,15 +172,19 @@ final class UiDataService implements NextUiData, NextNowPlaying {
     return localWork(workId);
   }
 
-  Future<UiWork?> localWork(String workId) async {
+  /// [files] ([localFiles]) and [episodes] ([localEpisodes]) may be given
+  /// when the caller already holds them.
+  Future<UiWork?> localWork(String workId,
+      {LocalFiles? files, List<UiEpisode>? episodes, LibraryReads? reads}) async {
     final rows = await db.query('media_entities',
         where: "id=? AND kind='work'", whereArgs: [workId]);
     if (rows.isEmpty) return null;
-    final art = await artwork.load(workId);
-    final metadata = await media.store.mergedMetadata(workId);
+    final art = await artwork.load(workId, reads: reads);
+    final metadata = await (reads?.metadata(workId) ??
+        media.store.mergedMetadata(workId));
     final fields = metadata['fields'] as JsonMap;
     final attrs = decodeMediaJson(rows.single['attributes']);
-    final episodes = await localEpisodes(workId);
+    episodes ??= await localEpisodes(workId, files: files, reads: reads);
     final next = episodes
             .where((e) =>
                 e.playable &&
@@ -185,7 +226,10 @@ final class UiDataService implements NextUiData, NextNowPlaying {
         artwork: uiArtwork(art),
         next: next,
         danmaku: await heat.comments([for (final e in episodes) (e.episodeId, e.runtime?.inMilliseconds)],
-            openingWindow: Duration(seconds: await _openingSeconds())));
+            openingWindow: Duration(
+                seconds: await (reads?.once('opening', _openingSeconds) ??
+                    _openingSeconds())),
+            reads: reads));
   }
 
   @override
@@ -195,11 +239,12 @@ final class UiDataService implements NextUiData, NextNowPlaying {
     return localEpisodes(workId, season: season);
   }
 
-  Future<List<UiEpisode>> localEpisodes(String workId, {int? season}) async {
+  Future<List<UiEpisode>> localEpisodes(String workId,
+      {int? season, LocalFiles? files, LibraryReads? reads}) async {
     final rows = await db.rawQuery(
         "SELECT e.*,r.attributes AS release_attributes FROM media_entities e JOIN media_entities r ON r.id=e.parent_id WHERE e.kind='episode' AND r.parent_id=? ORDER BY e.rowid",
         [workId]);
-    final files = await _view('library.files');
+    files ??= await localFiles();
     final result = <UiEpisode>[];
     // A length of nothing is not known.
     int? positive(Object? ms) => ms is num && ms > 0 ? ms.toInt() : null;
@@ -209,10 +254,10 @@ final class UiDataService implements NextUiData, NextNowPlaying {
       final s = attrs['season'] as int? ?? release['season'] as int?;
       if (season != null && s != season) continue;
       final id = row['id'] as String;
-      final art = await artwork.load(id);
-      final fields =
-          (await media.store.mergedMetadata(id))['fields'] as JsonMap;
-      final locations = files.where((f) => f['episodeId'] == id).toList();
+      final art = await artwork.load(id, reads: reads);
+      final fields = (await (reads?.metadata(id) ??
+          media.store.mergedMetadata(id)))['fields'] as JsonMap;
+      final locations = files.ofEpisode(id);
       int? duration = positive(fields['runtimeMs']);
       double? progress;
       var playable = false;
@@ -220,10 +265,7 @@ final class UiDataService implements NextUiData, NextNowPlaying {
         final fileAttrs = decodeMediaJson(f['attributes']);
         final p = f['progress'] as Map?;
         final start = f['startMs'] as int? ?? 0, end = f['endMs'] as int?;
-        final allLinks = files
-            .where((other) => other['fileId'] == f['fileId'])
-            .map((f) => f['episodeId'])
-            .toSet();
+        final allLinks = files.episodesOf(f['fileId']);
         final timed = allLinks.length <= 1 || end != null;
         if (timed) {
           duration ??= end != null
@@ -258,7 +300,7 @@ final class UiDataService implements NextUiData, NextNowPlaying {
           runtime: duration == null ? null : Duration(milliseconds: duration),
           still: art['still'] as String?,
           progress: progress,
-          heat: await heat.load(id, duration),
+          heat: await heat.load(id, duration, reads: reads),
           playable: playable));
     }
     sortEpisodes(result);
@@ -1127,6 +1169,8 @@ final class UiDataService implements NextUiData, NextNowPlaying {
   Future<void> close() async {
     _closed = true;
     _timer?.cancel();
+    _midnight?.cancel();
+    await _classic?.cancel();
     await _jobs?.cancel();
     await _polling;
     await _publishing;

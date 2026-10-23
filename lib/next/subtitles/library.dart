@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'episode_subtitles.dart';
 import 'dart:convert';
 import 'dart:io';
 
@@ -523,6 +524,10 @@ final class SubtitleLibrary implements SubtitleOperations {
     }
     return tracks;
   }
+
+  @override
+  Future<({List<JsonMap> tracks, List<JsonMap> files})> episodeSubtitles(String id) =>
+      readEpisodeSubtitles(db, id);
 
   @override
   Future<List<JsonMap>> episodeFiles(String id) async => [

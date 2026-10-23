@@ -19,6 +19,8 @@ import '../ui_data/library_index.dart';
 import '../ui_data/library_search.dart';
 import '../media/metadata_provider.dart';
 import 'files.dart';
+import '../util/slicer.dart';
+import '../media/library_reads.dart';
 
 String _hash(Object value) =>
     sha256.convert(utf8.encode(jsonEncode(value))).toString();
@@ -174,21 +176,29 @@ final class MeshLibrary {
     return id;
   }
 
-  Future<String> _stamp() async => jsonEncode([
-        own,
-        await db.rawQuery('SELECT total_changes() AS total'),
-        await db.rawQuery('PRAGMA data_version'),
-        ui.sources.history?.call()
-      ]);
+  /// What the local catalogue is built from, told by a few integers: the
+  /// database's change epoch and Classic's state (see
+  /// [UiDataService.catalogueStamp]).
+  Future<String> _stamp() async => jsonEncode([own, await ui.catalogueStamp()]);
+
+  /// Builds the local catalogue again when what it is made of has changed
+  /// since it was last built, and not otherwise. The stamp is taken before
+  /// reading, so a change made meanwhile builds once more.
   Future<void> _build() => _building ??= (() async {
-        if (_builtStamp != await _stamp()) {
+        for (var attempt = 0; attempt < 3; attempt++) {
+          final stamp = await _stamp();
+          if (_builtStamp == stamp) return;
           await _buildLocal();
-          _builtStamp = await _stamp();
+          _builtStamp = stamp;
         }
       })()
           .whenComplete(() => _building = null);
+  /// How many times the local catalogue was built.
+  int builds = 0;
   Future<void> _buildLocal() async {
+    builds++;
     final records = <JsonMap>[];
+    final reads = LibraryReads(ui.media.store);
     final files = await ui.localFiles();
     for (final row in await db.query('media_entities',
         where: "kind='work'", orderBy: 'rowid')) {
@@ -205,7 +215,9 @@ final class MeshLibrary {
               .single['kept'] == 0) {
         continue;
       }
-      final work = workJson((await ui.localWork(id))!);
+      final episodes = await ui.localEpisodes(id, files: files, reads: reads);
+      final work = workJson((await ui.localWork(id,
+          files: files, episodes: episodes, reads: reads))!);
       work.remove('next');
       final art = work['artwork'] as JsonMap;
       for (final kind in ['poster', 'backdrop', 'logo'])
@@ -232,7 +244,7 @@ final class MeshLibrary {
         'keys': identities,
         'added': _added[id],
         'value': work,
-        'metadata': publicHarnessFacts(await ui.media.store.mergedMetadata(id)),
+        'metadata': publicHarnessFacts(await reads.metadata(id)),
         'attributes': jsonDecode(row['attributes'] as String)
       });
       records.last['searchTitles'] = [
@@ -247,7 +259,7 @@ final class MeshLibrary {
         sourceIds.add(remote?['sourceId'] as String? ?? 'local');
       }
       records.last['sourceIds'] = sourceIds.toList();
-      for (final episode in await ui.localEpisodes(id)) {
+      for (final episode in episodes) {
         final value = episodeJson(episode);
         value['still'] = await _asset(episode.still);
         final locations = <JsonMap>[];
@@ -266,14 +278,14 @@ final class MeshLibrary {
         }
         if (nativeFiles.isNotEmpty) value['playable'] = locations.isNotEmpty;
         final stamp = files
-            .where((f) => f['episodeId'] == episode.episodeId)
+            .ofEpisode(episode.episodeId)
             .map((f) => ((f['progress'] as Map?)?['lastWatchedAt'] ??
                 (f['progress'] as Map?)?['lastWatchTime']) as String?)
             .whereType<String>()
             .toList()
           ..sort();
         final tracks = <JsonMap>[];
-        for (final t in await ui.heat.tracks(episode.episodeId)) {
+        for (final t in await ui.heat.tracks(episode.episodeId, reads: reads)) {
           final local = t['local_file'] as JsonMap?,
               video = t['video'] as JsonMap;
           tracks.add({
@@ -282,7 +294,7 @@ final class MeshLibrary {
             'platform': local?['platform'] ?? video['sourceId'],
             'platformVideoId': local?['platformVideoId'] ?? video['videoId'],
             'count': local?['count'] ??
-                (await ui.heat.store.entries(t['cache_key'] as String)).length,
+                await ui.heat.store.entryCount(t['cache_key'] as String),
             'enabled': t['enabled'] == 1,
             'origin': local != null
                 ? 'sidecar'
@@ -291,25 +303,21 @@ final class MeshLibrary {
                     : 'binding'
           });
         }
+        final subtitles = await ui.subtitles?.episodeSubtitles(episode.episodeId);
         records.add({
           'kind': 'episode',
           'id': episode.episodeId,
           'workId': id,
           'keys': await _identities(episode.episodeId),
           'files': locations,
-          'metadata': publicHarnessFacts(
-              await ui.media.store.mergedMetadata(episode.episodeId)),
+          'metadata': publicHarnessFacts(await reads.metadata(episode.episodeId)),
           'danmaku': tracks,
           'subtitles': [
-            for (final t
-                in await ui.subtitles?.episodeTracks(episode.episodeId) ??
-                    <JsonMap>[])
+            for (final t in subtitles?.tracks ?? <JsonMap>[])
               publicHarnessFacts(t)
           ],
           'subtitleFiles': [
-            for (final t
-                in await ui.subtitles?.episodeFiles(episode.episodeId) ??
-                    <JsonMap>[])
+            for (final t in subtitles?.files ?? <JsonMap>[])
               publicHarnessFacts(t)
           ],
           'watchedAt': stamp.isEmpty
@@ -320,10 +328,6 @@ final class MeshLibrary {
       }
     }
     if (_added.isNotEmpty) await _save('mesh:added', _added);
-    records.addAll([
-      for (final e in _progress.entries)
-        {'kind': 'watch', 'id': e.key, 'value': e.value}
-    ]);
     final local = <String, Object?>{'records': records};
     local['version'] = await _hashOffMain({'records': records});
     _local = local;
@@ -333,7 +337,6 @@ final class MeshLibrary {
       _sync ??= _refresh().whenComplete(() => _sync = null);
   Future<void> _refresh() async {
     final before = _changeStamp();
-    _builtStamp = null;
     await _build();
     if (mesh.accountId != null) {
       if (DateTime.now().difference(_deviceRead).inSeconds >= 30) {
@@ -348,10 +351,10 @@ final class MeshLibrary {
           continue;
         }
         try {
-          final first =
-              await mesh.rpc(id, 'mesh/library/snapshot', {'offset': 0});
           final old = _peers[id];
-          if (old?['version'] != first['version']) {
+          final first = await mesh.rpc(id, 'mesh/library/snapshot',
+              {'offset': 0, if (old?['version'] != null) 'known': old!['version']});
+          if (first['unchanged'] != true && old?['version'] != first['version']) {
             final records = (first['records'] as List).cast<JsonMap>().toList();
             var next = first['next'] as int?;
             while (next != null) {
@@ -536,41 +539,72 @@ final class MeshLibrary {
     return result;
   }
 
-  Future<void> _compose() async {
-    final composition = jsonEncode([own, _changeStamp()]);
-    if (_composedStamp == composition) return;
+  Future<void>? _composing;
+
+  /// Composes again when what it is made of has changed since, and not
+  /// otherwise. A call that comes while one runs waits for it, and the run
+  /// looks again before it returns, so a change made meanwhile is composed.
+  Future<void> _compose() => _composing ??= (() async {
+        for (var attempt = 0; attempt < 3; attempt++) {
+          final composition = jsonEncode([own, _changeStamp()]);
+          if (_composedStamp == composition) return;
+          await _composeNow();
+          _composedStamp = composition;
+        }
+      })()
+          .whenComplete(() => _composing = null);
+
+  /// The catalogue, merged across devices, in pieces of a few milliseconds:
+  /// it is worked out aside and takes the place of the last one at the end.
+  Future<void> _composeNow() async {
+    final slice = Slicer();
     final indexRows = <JsonMap>[];
-    final records = <JsonMap>[
-      for (final r in (_local['records'] as List)
-          .cast<JsonMap>()
-          .where((r) => r['kind'] != 'watch'))
-        {
-          ...jsonDecode(jsonEncode(r)) as JsonMap,
-          'deviceId': own,
-          'name': '',
-          'online': true,
-          'local': true
-        },
-      for (final peer in _peers.entries)
-        if (mesh.accountId == null || peer.value['account'] == mesh.accountId)
-          for (final r in (peer.value['records'] as List).cast<JsonMap>())
-            {
-              ...jsonDecode(jsonEncode(r)) as JsonMap,
-              'deviceId': peer.key,
-              'name': peer.value['name'],
-              'online': _online[peer.key] == true,
-              'local': false
-            }
-    ];
-    for (final r in records.where((r) => r['local'] == true)) {
-      final value = r['value'] as JsonMap;
-      final paths = r['kind'] == 'work' ? value['artwork'] as JsonMap : value;
-      for (final key
-          in r['kind'] == 'work' ? ['poster', 'backdrop', 'logo'] : ['still']) {
+    // Records are not copied deeply: what is changed below is copied where
+    // it is changed.
+    final records = <JsonMap>[];
+    for (final r in (_local['records'] as List).cast<JsonMap>()) {
+      if (r['kind'] == 'watch') continue;
+      final value = {...r['value'] as JsonMap};
+      final isWork = r['kind'] == 'work';
+      final paths = isWork ? {...value['artwork'] as JsonMap} : value;
+      if (isWork) value['artwork'] = paths;
+      for (final key in isWork ? ['poster', 'backdrop', 'logo'] : ['still']) {
         if (paths[key] case final String token) paths[key] = _assets[token];
       }
+      records.add({
+        ...r,
+        'value': value,
+        'deviceId': own,
+        'name': '',
+        'online': true,
+        'local': true
+      });
+      await slice();
     }
-    final works = records.where((r) => r['kind'] == 'work').toList();
+    for (final peer in _peers.entries) {
+      if (mesh.accountId != null && peer.value['account'] != mesh.accountId) {
+        continue;
+      }
+      for (final r in (peer.value['records'] as List).cast<JsonMap>()) {
+        records.add({
+          ...r,
+          'deviceId': peer.key,
+          'name': peer.value['name'],
+          'online': _online[peer.key] == true,
+          'local': false
+        });
+        await slice();
+      }
+    }
+    final works = <JsonMap>[], episodesOf = <String, List<JsonMap>>{};
+    String ownerOf(Object? device, Object? work) => '$device\u0000$work';
+    for (final r in records) {
+      if (r['kind'] == 'work') {
+        works.add(r);
+      } else if (r['kind'] == 'episode') {
+        (episodesOf[ownerOf(r['deviceId'], r['workId'])] ??= []).add(r);
+      }
+    }
     final roots = List.generate(works.length, (i) => i);
     int root(int i) {
       while (roots[i] != i) {
@@ -587,32 +621,39 @@ final class MeshLibrary {
           ref = _ref(w['deviceId'] as String, w['id'] as String);
       workIndex[ref] = i;
       final keys = (w['keys'] as List).cast<String>().toList();
-      for (final e in records.where((e) =>
-          e['kind'] == 'episode' &&
-          e['deviceId'] == w['deviceId'] &&
-          e['workId'] == w['id'])) {
+      for (final e in episodesOf[ownerOf(w['deviceId'], w['id'])] ?? <JsonMap>[]) {
         keys.addAll(
             (e['files'] as List).cast<Map>().map((f) => 'file:${f['sample']}'));
       }
       for (final key in keys) {
         final old = owners[key];
-        if (old != null)
+        if (old != null) {
           roots[root(i)] = root(old);
-        else
+        } else {
           owners[key] = i;
+        }
       }
+      await slice();
     }
     final groups = <int, List<JsonMap>>{};
-    for (var i = 0; i < works.length; i++)
+    for (var i = 0; i < works.length; i++) {
       (groups[root(i)] ??= []).add(works[i]);
-    _works.clear();
-    _management.clear();
-    _episodes.clear();
-    _aliases.clear();
-    _locations.clear();
-    _episodeKeys.clear();
-    _localTargets.clear();
-    _evidence.clear();
+    }
+    // Every episode under the group its work is in, in the order of records.
+    final episodesIn = <int, List<JsonMap>>{};
+    for (final w in works) {
+      final group = root(workIndex[_ref(w['deviceId'] as String, w['id'] as String)]!);
+      (episodesIn[group] ??= [])
+          .addAll(episodesOf[ownerOf(w['deviceId'], w['id'])] ?? const []);
+    }
+    final newWorks = <String, UiWork>{};
+    final newManagement = <String, List<JsonMap>>{};
+    final newEpisodes = <String, List<UiEpisode>>{};
+    final newAliases = <String, String>{};
+    final newLocations = <String, List<JsonMap>>{};
+    final newEpisodeKeys = <String, List<String>>{};
+    final newLocalTargets = <String, String>{};
+    final newEvidence = <String, JsonMap>{};
     final sorted = groups.entries.toList()
       ..sort((a, b) => b.value
           .map((w) => w['added'] as int)
@@ -637,16 +678,10 @@ final class MeshLibrary {
           .map((w) => _ref(w['deviceId'] as String, w['id'] as String))
           .toList();
       for (final w in members) {
-        _aliases[_ref(w['deviceId'] as String, w['id'] as String)] = id;
-        if (w['local'] == true) _aliases[w['id'] as String] = id;
+        newAliases[_ref(w['deviceId'] as String, w['id'] as String)] = id;
+        if (w['local'] == true) newAliases[w['id'] as String] = id;
       }
-      final sourceEpisodes = records
-          .where((e) =>
-              e['kind'] == 'episode' &&
-              root(workIndex[
-                      _ref(e['deviceId'] as String, e['workId'] as String)]!) ==
-                  group.key)
-          .toList();
+      final sourceEpisodes = episodesIn[group.key] ?? <JsonMap>[];
       final episodeRoots = List.generate(sourceEpisodes.length, (i) => i);
       int episodeRoot(int i) {
         while (episodeRoots[i] != i) {
@@ -675,10 +710,11 @@ final class MeshLibrary {
         episodeTokens.add(tokens);
         for (final token in tokens) {
           final old = contentOwners[token];
-          if (old != null)
+          if (old != null) {
             episodeRoots[episodeRoot(i)] = episodeRoot(old);
-          else
+          } else {
             contentOwners[token] = i;
+          }
         }
       }
       final groupedEpisodes = <int, List<JsonMap>>{};
@@ -696,6 +732,8 @@ final class MeshLibrary {
         episodeGroups[key] = g.value;
       }
       final episodes = <UiEpisode>[];
+      final searchTitles = <String, Set<String>>{};
+      final mergedIds = <String, String>{};
       for (final entry in episodeGroups.entries) {
         final es = entry.value
           ..sort((a, b) => (a['local'] == true
@@ -716,22 +754,27 @@ final class MeshLibrary {
         _historicalIds[eid] = es
             .map((e) => _ref(e['deviceId'] as String, e['id'] as String))
             .toList();
-        _evidence[eid] = selected;
-        if (selected['local'] == true)
-          _localTargets[eid] = selected['id'] as String;
+        newEvidence[eid] = selected;
+        if (selected['local'] == true) {
+          newLocalTargets[eid] = selected['id'] as String;
+        }
         final watchKeys = <String>{'episode:$eid'};
         final locations = <JsonMap>[];
         JsonMap? watched;
+        final titles = searchTitles[eid] = {};
         for (final e in es) {
-          _aliases[_ref(e['deviceId'] as String, e['id'] as String)] = eid;
-          if (e['local'] == true) _aliases[e['id'] as String] = eid;
-          watchKeys.add(_ref(e['deviceId'] as String, e['id'] as String));
+          final ref = _ref(e['deviceId'] as String, e['id'] as String);
+          newAliases[ref] = eid;
+          mergedIds[ref] = eid;
+          if (e['local'] == true) newAliases[e['id'] as String] = eid;
+          watchKeys.add(ref);
+          titles.addAll(librarySearchTitles(e['value'] as Map));
           for (final f in (e['files'] as List).cast<JsonMap>()) {
             watchKeys.add('file:${f['sample']}:${f['startMs']}:${f['endMs']}');
             if (!locations.any((l) =>
                 l['sample'] == f['sample'] &&
                 l['startMs'] == f['startMs'] &&
-                l['endMs'] == f['endMs']))
+                l['endMs'] == f['endMs'])) {
               locations.add({
                 ...f,
                 'deviceId': e['deviceId'],
@@ -739,6 +782,7 @@ final class MeshLibrary {
                 'local': e['local'],
                 'online': e['online']
               });
+            }
           }
           final value = e['value'] as Map;
           if (value['progress'] != null && e['watchedAt'] != null) {
@@ -747,15 +791,17 @@ final class MeshLibrary {
               'at': e['watchedAt'],
               'writer': e['deviceId']
             };
-            if (watched == null || _newer(observation, watched))
+            if (watched == null || _newer(observation, watched)) {
               watched = observation;
+            }
           }
         }
         for (final key in watchKeys) {
           final observation = _progress[key];
           if (observation != null &&
-              (watched == null || _newer(observation, watched)))
+              (watched == null || _newer(observation, watched))) {
             watched = observation;
+          }
         }
         final value = <String, Object?>{
           ...selected['value'] as JsonMap,
@@ -763,43 +809,52 @@ final class MeshLibrary {
           'workId': id,
           if (watched != null) 'progress': watched['progress']
         };
-        _episodeKeys[eid] = watchKeys.toList();
-        _locations[eid] = locations;
+        newEpisodeKeys[eid] = watchKeys.toList();
+        newLocations[eid] = locations;
         episodes.add(episodeValue(value,
             device: selected['local'] == true
                 ? null
                 : UiDevice(
                     name: selected['name'] as String,
                     online: selected['online'] as bool)));
+        await slice();
       }
       sortEpisodes(episodes, seasonless: 1);
       final value = <String, Object?>{
         ...members.first['value'] as JsonMap,
         'workId': id
       };
-      _evidence[id] = members.first;
-      _management[id] = [for (final member in members)
+      newEvidence[id] = members.first;
+      final sourceEpisodesOf = <String, List<JsonMap>>{};
+      for (final e in sourceEpisodes) {
+        (sourceEpisodesOf[ownerOf(e['deviceId'], e['workId'])] ??= []).add(e);
+      }
+      newManagement[id] = [for (final member in members)
         {'deviceId': member['deviceId'], 'workId': member['id'],
           'local': member['local'], 'online': member['online'],
           'reason': member['online'] == true ? null : 'source_device_offline',
-          'episodes': [for (final e in sourceEpisodes.where((e) =>
-            e['deviceId'] == member['deviceId'] && e['workId'] == member['id']))
-              {'episodeId': e['id'], 'mergedEpisodeId': _aliases[_ref(e['deviceId'] as String, e['id'] as String)],
+          'episodes': [for (final e in sourceEpisodesOf[ownerOf(member['deviceId'], member['id'])] ?? <JsonMap>[])
+              {'episodeId': e['id'], 'mergedEpisodeId': newAliases[_ref(e['deviceId'] as String, e['id'] as String)],
                 'fileIds': (e['files'] as List).cast<Map>().map((f) => f['fileId']).toSet().toList()}],
         }];
+      // The first member's artwork is copied: the others fill its gaps.
+      value['artwork'] = {...value['artwork'] as JsonMap};
       for (final w in members.skip(1)) {
         final other = w['value'] as JsonMap;
         if (value['title'] == '未命名作品') value['title'] = other['title'];
         for (final field in [
           'originalTitle', 'year', 'studio', 'overview', 'runtimeMs'
-        ])
+        ]) {
           value[field] ??= other[field];
+        }
         final art = value['artwork'] as JsonMap,
             otherArt = other['artwork'] as JsonMap;
-        for (final field in ['poster', 'backdrop', 'logo', 'tint'])
+        for (final field in ['poster', 'backdrop', 'logo', 'tint']) {
           art[field] ??= otherArt[field];
-        for (final field in ['genres', 'ratings', 'danmaku'])
+        }
+        for (final field in ['genres', 'ratings', 'danmaku']) {
           if ((value[field] as List).isEmpty) value[field] = other[field];
+        }
       }
       // A film when an identity is a TMDB movie and none a TMDB series, as
       // `IdentityStore.workIsFilm` tells it for one device.
@@ -808,18 +863,20 @@ final class MeshLibrary {
           if (jsonDecode(key) case ['tmdb', final String type, ...]) type
       };
       value['film'] = tmdb.contains('movie') && !tmdb.contains('tv');
-      _episodes[id] = episodes;
+      newEpisodes[id] = episodes;
       value['episodeCount'] = math.max(
           episodes.length,
           members
               .map((w) => ((w['value'] as Map)['episodeCount'] as int?) ?? 0)
               .reduce(math.max));
       final devices = <String, UiDevice>{};
-      for (final w in members)
-        if (w['local'] != true)
+      for (final w in members) {
+        if (w['local'] != true) {
           devices[w['deviceId'] as String] =
               UiDevice(name: w['name'] as String, online: w['online'] as bool);
-      _works[id] = workValue(value, episodes, devices.values.toList());
+        }
+      }
+      final work = newWorks[id] = workValue(value, episodes, devices.values.toList());
       final types = <String>{};
       for (final member in members) {
         final attrs = member['attributes'] as Map;
@@ -835,7 +892,7 @@ final class MeshLibrary {
       }
       indexRows.add({'id': id,
         'added': members.map((w) => w['added'] as int).reduce(math.max),
-        'payload': workJson(_works[id]!),
+        'payload': workJson(work),
         'facts': {
           'sourceIds': members.expand((w) => (w['sourceIds'] as List? ?? []).cast<String>()).toSet().toList(),
           'deviceIds': members.map((w) => w['deviceId']).toSet().toList(),
@@ -856,11 +913,7 @@ final class MeshLibrary {
           'searchEpisodes': [
             for (final episode in episodes) {
               'episode': episodeJson(episode),
-              'titles': <String>{
-                for (final e in sourceEpisodes)
-                  if (_aliases[_ref(e['deviceId'] as String, e['id'] as String)] == episode.episodeId)
-                    ...librarySearchTitles(e['value'] as Map)
-              }.toList(),
+              'titles': (searchTitles[episode.episodeId] ?? <String>{}).toList(),
             }
           ],
           'watch': episodes.any((e) => (e.progress ?? 0) > 0 && (e.progress ?? 0) < 1) ? 'watching' :
@@ -869,17 +922,44 @@ final class MeshLibrary {
           'rating': (value['ratings'] as List).isEmpty ? null : ((value['ratings'] as List).first as Map)['value'],
           'ratingSource': (value['ratings'] as List).isEmpty ? null : ((value['ratings'] as List).first as Map)['source']
         }});
+      await slice();
     }
     for (final e in _historicalIds.entries) {
-      final ref = e.value.where(_aliases.containsKey).firstOrNull;
+      final ref = e.value.where(newAliases.containsKey).firstOrNull;
       if (ref != null &&
-          !_works.containsKey(e.key) &&
-          !_locations.containsKey(e.key)) _aliases[e.key] = _aliases[ref]!;
+          !newWorks.containsKey(e.key) &&
+          !newLocations.containsKey(e.key)) {
+        newAliases[e.key] = newAliases[ref]!;
+      }
     }
+    // The last composition gives way to this one in one step.
+    _works
+      ..clear()
+      ..addAll(newWorks);
+    _management
+      ..clear()
+      ..addAll(newManagement);
+    _episodes
+      ..clear()
+      ..addAll(newEpisodes);
+    _aliases
+      ..clear()
+      ..addAll(newAliases);
+    _locations
+      ..clear()
+      ..addAll(newLocations);
+    _episodeKeys
+      ..clear()
+      ..addAll(newEpisodeKeys);
+    _localTargets
+      ..clear()
+      ..addAll(newLocalTargets);
+    _evidence
+      ..clear()
+      ..addAll(newEvidence);
     if (_historicalIds.isNotEmpty) await _save('mesh:aliases', _historicalIds);
     await replaceLibraryIndex(db, indexRows);
     searchIndex.replace(indexRows);
-    _composedStamp = composition;
   }
 
   Future<JsonMap> request(String method, JsonMap input, String peer) async {
@@ -888,10 +968,21 @@ final class MeshLibrary {
     switch (method) {
       case 'mesh/library/snapshot':
         await _build();
-        if (input['version'] != null && input['version'] != _local['version'])
+        // What this device's catalogue is and how far it has watched, as one
+        // version: a peer that already has it is sent no records.
+        final version = '${_local['version']}:$_progressRevision';
+        if (input['known'] == version) {
+          return {'version': version, 'records': <JsonMap>[], 'next': null, 'unchanged': true};
+        }
+        if (input['version'] != null && input['version'] != version) {
           throw const Failure(
               FailureCode.conflict, 'Catalogue version changed.');
-        final records = (_local['records'] as List).cast<JsonMap>();
+        }
+        final records = [
+          ...(_local['records'] as List).cast<JsonMap>(),
+          for (final e in _progress.entries)
+            {'kind': 'watch', 'id': e.key, 'value': e.value}
+        ];
         final offset = input['offset'];
         if (offset is! int || offset < 0 || offset > records.length)
           throw const FormatException('Invalid catalogue offset.');
@@ -906,7 +997,7 @@ final class MeshLibrary {
           next++;
         }
         return {
-          'version': _local['version'],
+          'version': version,
           'records': page,
           'next': next == records.length ? null : next
         };

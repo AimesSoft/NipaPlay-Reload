@@ -705,7 +705,12 @@ void main() {
       await write([stmt("UPDATE media_entities SET revision=1 WHERE id='w1'")]);
       final readOnly = [
         for (final e in dbTableDocs.entries)
-          if (e.value.access == DbAccess.read && e.key != 'sqlite_sequence') e.key
+          // change_epochs is moved by the triggers of the tables it counts, so
+          // a statement that writes those cannot be refused for touching it.
+          if (e.value.access == DbAccess.read &&
+              e.key != 'sqlite_sequence' &&
+              e.key != 'change_epochs')
+            e.key
       ]..sort();
       expect(readOnly, [...seeds.keys, 'db_commits']..sort(),
           reason: 'a new read-only table needs a seed row here');

@@ -172,11 +172,14 @@ final class IdentityStore {
           }), via: 'media_source');
 
   Future<JsonMap> entity(String id, {DatabaseExecutor? db}) async {
-    id = await canonicalFileId(db ?? database, id);
-    final rows = await (db ?? database)
-        .query('media_entities', where: 'id = ?', whereArgs: [id]);
+    // A merged file's old ID names the file it became: one query for both.
+    final rows = await (db ?? database).rawQuery(
+        'SELECT * FROM media_entities WHERE id = '
+        'COALESCE((SELECT file_id FROM media_file_aliases WHERE old_id = ?1), ?1)',
+        [id]);
     if (rows.isEmpty) {
-      throw Failure(FailureCode.notFound, 'Media entity $id not found.');
+      throw Failure(FailureCode.notFound,
+          'Media entity ${await canonicalFileId(db ?? database, id)} not found.');
     }
     return {
       ...rows.single,
@@ -785,6 +788,27 @@ final class IdentityStore {
     return [workId, for (final row in releases) row['id'] as String];
   }
 
+  /// The rows of the entities [_metadataEntities] names, in its order, in
+  /// two queries.
+  Future<List<JsonMap>> _metadataFamily(String id) async {
+    final target = await entity(id);
+    if (target['kind'] != 'work' && target['kind'] != 'release') {
+      return [target];
+    }
+    final workId =
+        target['kind'] == 'work' ? target['id'] as String : target['parent_id'] as String;
+    final rows = await database.query('media_entities',
+        where: "id=? OR (kind='release' AND parent_id=?)",
+        whereArgs: [workId, workId],
+        orderBy: 'id');
+    return [
+      for (final row in rows)
+        if (row['id'] == workId) row,
+      for (final row in rows)
+        if (row['id'] != workId) row
+    ];
+  }
+
   Future<List<JsonMap>> _metadataSnapshots(List<String> ids,
           {bool acceptedOnly = true}) =>
       database.rawQuery(
@@ -944,13 +968,15 @@ final class IdentityStore {
   }
 
   Future<JsonMap> mergedMetadata(String entityId) async {
-    entityId = await canonicalFileId(database, entityId);
-    final ids = await _metadataEntities(entityId);
+    final family = await _metadataFamily(entityId);
+    final ids = [for (final row in family) row['id'] as String];
     final rows = await _metadataSnapshots(ids);
     final fields = <String, Object?>{}, provenance = <String, Object?>{};
-    for (final id in ids) {
-      final local = await entity(id);
-      final attrs = local['attributes'] as JsonMap;
+    for (final local in family) {
+      final id = local['id'] as String;
+      final attrs = local['attributes'] is Map
+          ? local['attributes'] as JsonMap
+          : decodeMediaJson(local['attributes']);
       if (attrs['localOnly'] == true && !fields.containsKey('title')) {
         fields['title'] = attrs['title'];
         provenance['title'] = {'provider': 'local', 'source': 'local_catalog',
