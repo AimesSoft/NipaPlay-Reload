@@ -967,6 +967,13 @@ void main() {
     try {
       final a = await join('budget-a');
       final b = await join('budget-b');
+
+      // A refresh already on the wire may predate what the caller knows, so
+      // concurrent callers get one follow-up, not the stale in-flight answer.
+      env.resetCounts();
+      await Future.wait(
+          [a.refreshDevices(), a.refreshDevices(), a.refreshDevices()]);
+      expect(env.countFor('GET', '/mesh/v1/devices'), 2);
       final completed = await a.invoke(
           b.identity!.deviceId, 'download.echo', {'value': 'x'},
           destructive: false);

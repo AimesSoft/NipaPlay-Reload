@@ -718,14 +718,26 @@ final class MeshRuntime implements MeshDeviceSource {
     }
   }
 
+  Future<void>? _refreshQueued;
+
+  /// Fetches the roster. A refresh that is already on the wire may have been
+  /// answered before the change this caller knows about (a device that just
+  /// registered), so it is never handed back as the caller's result: callers
+  /// that arrive while one is running share a single follow-up refresh.
   Future<void> refreshDevices() {
     final inFlight = _refreshingDevices;
-    if (inFlight != null) return inFlight;
-    final operation = _doRefreshDevices().whenComplete(() {
-      _refreshingDevices = null;
+    if (inFlight == null) {
+      final operation = _doRefreshDevices().whenComplete(() {
+        _refreshingDevices = null;
+      });
+      _refreshingDevices = operation;
+      return operation;
+    }
+    return _refreshQueued ??=
+        inFlight.then<void>((_) {}, onError: (_) {}).then((_) {
+      _refreshQueued = null;
+      return refreshDevices();
     });
-    _refreshingDevices = operation;
-    return operation;
   }
 
   Timer? _deferredRefresh;
