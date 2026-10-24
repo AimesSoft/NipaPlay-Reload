@@ -103,8 +103,9 @@ final class VideoPlayerDriver extends AdapterDriver implements StateNative {
             uri.scheme != 'file' &&
             uri.scheme.length > 1
         ? VideoPlayerController.networkUrl(uri)
-        : VideoPlayerController.file(
-            File(uri != null && uri.scheme == 'file' ? uri.toFilePath() : source.uri));
+        : VideoPlayerController.file(File(uri != null && uri.scheme == 'file'
+            ? uri.toFilePath()
+            : source.uri));
     await controller.initialize();
     queue.live();
     await controller.setVolume(_volume);
@@ -155,7 +156,8 @@ final class VideoPlayerDriver extends AdapterDriver implements StateNative {
   // ---- tracks: video_player lists none and draws no subtitle ----
 
   @override
-  Future<KernelTracks> planOpened(KernelTrackPlan plan, MediaFacts media) async =>
+  Future<KernelTracks> planOpened(
+          KernelTrackPlan plan, MediaFacts media) async =>
       KernelTracks(
           audio: plan.audio,
           subtitle: KernelSubtitle.none,
@@ -195,7 +197,8 @@ final class VideoPlayerDriver extends AdapterDriver implements StateNative {
       await controller.setVolume(0);
       await controller.play();
       queue.live();
-      await moved.future.timeout(const Duration(milliseconds: 400), onTimeout: () {});
+      await moved.future
+          .timeout(const Duration(milliseconds: 400), onTimeout: () {});
       await Future<void>.delayed(const Duration(milliseconds: 60));
       queue.live();
       await controller.pause();
@@ -234,7 +237,8 @@ final class VideoPlayerDriver extends AdapterDriver implements StateNative {
         String? state(String name) => switch (name) {
               'position' => '${value?.position.inMilliseconds}',
               'duration' => '${value?.duration.inMilliseconds}',
-              'size' => '${value?.size.width.round()}x${value?.size.height.round()}',
+              'size' =>
+                '${value?.size.width.round()}x${value?.size.height.round()}',
               'isPlaying' => '${value?.isPlaying}',
               'isBuffering' => '${value?.isBuffering}',
               'isCompleted' => '${value?.isCompleted}',
@@ -249,14 +253,21 @@ final class VideoPlayerDriver extends AdapterDriver implements StateNative {
           for (final name in asked)
             name: names.contains(name)
                 ? (value: state(name), error: null)
-                : (value: null, error: 'video_player reports no state named $name.')
+                : (
+                    value: null,
+                    error: 'video_player reports no state named $name.'
+                  )
         };
       });
 
   @override
   Future<JsonMap> kernelFacts() async => {
         'version': videoPlayerVersions(),
-        'decoders': {'video': null, 'audio': null, 'requested': config.videoDecoders},
+        'decoders': {
+          'video': null,
+          'audio': null,
+          'requested': config.videoDecoders
+        },
         'bufferedAheadMs': _bufferedAhead(),
       };
 

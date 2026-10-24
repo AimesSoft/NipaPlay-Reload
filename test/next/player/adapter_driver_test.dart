@@ -75,7 +75,8 @@ final class ScriptedDriver extends AdapterDriver {
   }
 
   @override
-  Future<KernelTracks> planOpened(KernelTrackPlan plan, MediaFacts media) async {
+  Future<KernelTracks> planOpened(
+      KernelTrackPlan plan, MediaFacts media) async {
     calls.add('planOpened');
     return KernelTracks(
         audio: plan.audio,
@@ -91,21 +92,29 @@ final class ScriptedDriver extends AdapterDriver {
     if (switchGate case final gate?) await gate.future;
     queue.live();
     if (movesBy case final by?) saysPosition(position + by);
-    return (confirmed: reportsAudio, basis: reportsAudio ? 'event' : 'not_reported');
+    return (
+      confirmed: reportsAudio,
+      basis: reportsAudio ? 'event' : 'not_reported'
+    );
   }
 
   @override
-  Future<TrackReport> switchSubtitle(KernelSubtitle subtitle, Duration? probe) async {
+  Future<TrackReport> switchSubtitle(
+      KernelSubtitle subtitle, Duration? probe) async {
     calls.add('subtitle $subtitle');
     if (switchGate case final gate?) await gate.future;
     queue.live();
     if (movesBy case final by?) saysPosition(position + by);
-    return (confirmed: reportsSubtitle, basis: reportsSubtitle ? 'event' : 'not_reported');
+    return (
+      confirmed: reportsSubtitle,
+      basis: reportsSubtitle ? 'event' : 'not_reported'
+    );
   }
 
   @override
   Future<void> applySubtitleProperties(Map<String, String> properties) async =>
-      calls.add('look ${properties.entries.map((e) => '${e.key}=${e.value}').join(',')}');
+      calls.add(
+          'look ${properties.entries.map((e) => '${e.key}=${e.value}').join(',')}');
 
   @override
   Future<void> seekMedia(Duration target, {required bool exact}) async {
@@ -205,7 +214,8 @@ void main() {
     await driver.release();
   });
 
-  test('a source that maps its tracks opens with them, over the library\'s; '
+  test(
+      'a source that maps its tracks opens with them, over the library\'s; '
       'one that goes direct says so before the media opens', () async {
     final (driver, _) = await made();
     await driver.open(
@@ -218,7 +228,9 @@ void main() {
             subtitleTrack: 3),
         tracks: const KernelTrackPlan(
             audio: 0, subtitle: EmbeddedKernelSubtitle(0)));
-    expect(driver.calls.where((c) => c.startsWith('plan ') || c.startsWith('route')),
+    expect(
+        driver.calls
+            .where((c) => c.startsWith('plan ') || c.startsWith('route')),
         ['route direct', 'plan 1 embedded 3']);
     expect(driver.tracks.audio, 1);
     await driver.release();
@@ -255,14 +267,17 @@ void main() {
       () async {
     final (driver, _) = await made();
     driver.length = Duration.zero;
-    expect(driver.open(source),
-        throwsA(isA<KernelOpenFailure>().having((f) => f.stage, 'stage', 'media_open')));
+    expect(
+        driver.open(source),
+        throwsA(isA<KernelOpenFailure>()
+            .having((f) => f.stage, 'stage', 'media_open')));
     final (broken, _) = await made();
     broken.failOpen = const KernelOpenFailure('media_open', 'no codec');
     expect(broken.open(source), throwsA(isA<KernelOpenFailure>()));
   });
 
-  test('play and pause wait for the kernel to say it, and do not when it '
+  test(
+      'play and pause wait for the kernel to say it, and do not when it '
       'does not', () async {
     final (driver, _) = await made();
     await driver.open(source);
@@ -274,7 +289,8 @@ void main() {
     await driver.release();
   });
 
-  test('a seek answers where the kernel landed; a later one replaces one '
+  test(
+      'a seek answers where the kernel landed; a later one replaces one '
       'still waiting', () async {
     final (driver, _) = await made();
     await driver.open(source);
@@ -309,7 +325,8 @@ void main() {
   });
 
   group('tracks', () {
-    test('a change waits for the kernel\'s report, and says when it did not '
+    test(
+        'a change waits for the kernel\'s report, and says when it did not '
         'come', () async {
       final (driver, _) = await made();
       await driver.open(source);
@@ -340,9 +357,12 @@ void main() {
       final (driver, _) = await made();
       await driver.open(source);
       final order = <String>[];
-      final a = driver.selectSubtitle(const EmbeddedKernelSubtitle(2))
+      final a = driver
+          .selectSubtitle(const EmbeddedKernelSubtitle(2))
           .then((_) => order.add('a'));
-      final b = driver.selectSubtitle(KernelSubtitle.none).then((_) => order.add('b'));
+      final b = driver
+          .selectSubtitle(KernelSubtitle.none)
+          .then((_) => order.add('b'));
       await Future.wait([a, b]);
       expect(order, ['a', 'b']);
       expect(driver.tracks.subtitle, KernelSubtitle.none);
@@ -371,9 +391,11 @@ void main() {
     test('the look reaches the kernel once per change', () async {
       final (driver, _) = await made();
       await driver.open(source,
-          tracks: const KernelTrackPlan(subtitleProperties: {'subtitle.scale': '1.00'}));
+          tracks: const KernelTrackPlan(
+              subtitleProperties: {'subtitle.scale': '1.00'}));
       await driver.setSubtitleProperties({'subtitle.scale': '1.00'});
-      await driver.setSubtitleProperties({'subtitle.scale': '1.50', 'subtitle.bold': '1'});
+      await driver.setSubtitleProperties(
+          {'subtitle.scale': '1.50', 'subtitle.bold': '1'});
       expect(driver.calls.where((c) => c.startsWith('look')),
           ['look subtitle.scale=1.50,subtitle.bold=1']);
       await driver.release();

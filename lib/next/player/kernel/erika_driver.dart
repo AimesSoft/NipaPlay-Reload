@@ -35,7 +35,8 @@ final class ErikaDriver extends AdapterDriver
             sessionOwned: true,
             androidOutputMode: PlayerErikaAndroidOutputMode.values
                     .where((m) =>
-                        m.name == config.settings['player.erikaAndroidOutputMode'])
+                        m.name ==
+                        config.settings['player.erikaAndroidOutputMode'])
                     .firstOrNull ??
                 PlayerErikaAndroidOutputMode.sdr));
   }
@@ -227,8 +228,8 @@ final class ErikaDriver extends AdapterDriver
   Future<TrackReport> switchAudio(int index) async {
     await adapter.selectTracksForSession(audio: index);
     queue.live();
-    final reported =
-        await _reportedThat(() => adapter.activeAudioTracks.firstOrNull == index);
+    final reported = await _reportedThat(
+        () => adapter.activeAudioTracks.firstOrNull == index);
     return (confirmed: reported, basis: reported ? 'event' : 'not_reported');
   }
 
@@ -288,7 +289,8 @@ final class ErikaDriver extends AdapterDriver
         final frame =
             await adapter.snapshot(width: facts.width, height: facts.height);
         queue.live();
-        if (frame == null || frame.bytes.length != facts.width * facts.height * 4) {
+        if (frame == null ||
+            frame.bytes.length != facts.width * facts.height * 4) {
           throw StateError('Erika returned no complete RGBA picture.');
         }
         return KernelPicture(frame.width, frame.height, frame.bytes);
@@ -335,8 +337,8 @@ final class ErikaDriver extends AdapterDriver
       queue.alongside(() => adapter.invokeNative(method, arguments));
 
   @override
-  Future<PlayerUpscalerMode> upscaler() => queue.run(
-      () async => (await adapter.getUpscalerStatus()).requestedMode);
+  Future<PlayerUpscalerMode> upscaler() =>
+      queue.run(() async => (await adapter.getUpscalerStatus()).requestedMode);
 
   @override
   Future<void> setUpscaler(PlayerUpscalerMode mode) =>

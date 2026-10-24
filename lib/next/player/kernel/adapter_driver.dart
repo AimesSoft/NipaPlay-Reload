@@ -192,13 +192,13 @@ abstract class AdapterDriver implements KernelDriver {
   }
 
   @protected
-  void failed(String message, {String stage = 'playback'}) =>
-      _emit((seq, at) => KernelFailed(instance, seq, at,
-          stage: stage, message: message));
+  void failed(String message, {String stage = 'playback'}) => _emit((seq, at) =>
+      KernelFailed(instance, seq, at, stage: stage, message: message));
 
   @protected
   void log(String level, String source, String text) =>
-      PlayerNativeLogTap.observer?.call(kernel.id, instance, level, source, text);
+      PlayerNativeLogTap.observer
+          ?.call(kernel.id, instance, level, source, text);
 
   // ---- what a kernel does (the subclass) ----
 
@@ -334,8 +334,8 @@ abstract class AdapterDriver implements KernelDriver {
               '${kernel.label} found no audio or video stream.');
         }
         if (facts.duration <= Duration.zero) {
-          throw KernelOpenFailure('media_open',
-              '${kernel.label} reported no media duration.');
+          throw KernelOpenFailure(
+              'media_open', '${kernel.label} reported no media duration.');
         }
         duration = facts.duration;
         // What the plan could not set before the media opened, and what the
@@ -548,7 +548,8 @@ abstract class AdapterDriver implements KernelDriver {
           ? null
           : first.codecName,
       audio: [
-        for (final (i, a) in (info.audio ?? const <PlayerAudioStreamInfo>[]).indexed)
+        for (final (i, a)
+            in (info.audio ?? const <PlayerAudioStreamInfo>[]).indexed)
           TrackFacts(
               index: i,
               codec: a.codec.name,
@@ -644,7 +645,8 @@ abstract class AdapterDriver implements KernelDriver {
     } on TimeoutException {
       _releaseTimeouts.add(name);
     } catch (error) {
-      debugPrint('[NextPlayer] ${kernel.label} $instance release $name: $error');
+      debugPrint(
+          '[NextPlayer] ${kernel.label} $instance release $name: $error');
     }
   }
 }
@@ -656,9 +658,8 @@ final class SampleWait {
   final AdapterDriver _driver;
   final Completer<Duration?> _waiter;
 
-  Future<Duration?> get landed => _waiter.future.timeout(
-      const Duration(milliseconds: 1500),
-      onTimeout: () => null);
+  Future<Duration?> get landed => _waiter.future
+      .timeout(const Duration(milliseconds: 1500), onTimeout: () => null);
 
   void cancel() {
     if (identical(_driver._sampleWaiter, _waiter)) _driver._sampleWaiter = null;

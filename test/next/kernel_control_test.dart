@@ -136,8 +136,11 @@ class FakeErika implements ErikaNative {
   Future<NativeInvokeReply> invoke(String method, JsonMap arguments) async {
     invoked.add(method);
     return switch (method) {
-      'getPresenterStats' =>
-        (result: {'decodedVideoFrames': 1}, error: null, supported: true),
+      'getPresenterStats' => (
+          result: {'decodedVideoFrames': 1},
+          error: null,
+          supported: true
+        ),
       'setOutputHeadroom' => (result: null, error: null, supported: true),
       'listMethods' => (
           result: {
@@ -209,7 +212,12 @@ class FakeErika implements ErikaNative {
         'fallbackCount': 0,
       },
       'audioOutput': null,
-      'videoParams': {'width': 3840, 'height': 2160, 'primaries': 3, 'transfer': 2},
+      'videoParams': {
+        'width': 3840,
+        'height': 2160,
+        'primaries': 3,
+        'transfer': 2
+      },
       'debugHud': hud,
       'lastError': null,
       'errors': <String, String>{},
@@ -220,7 +228,9 @@ class FakeErika implements ErikaNative {
           'scheduler': {'lateDroppedFrames': 3, 'presentedFrames': 990},
           'clock': {'lastDriftMs': 1.5, 'corrections': 2},
         },
-        'media': {'video': {'codec': 'hevc'}},
+        'media': {
+          'video': {'codec': 'hevc'}
+        },
         'note': 'from /Users/someone/Movies/secret.mkv?token=abc',
       },
     };
@@ -294,19 +304,20 @@ void main() {
   /// control over it. A swap makes a new instance of the kernel asked, with a
   /// native of its own ([natives] keeps them in the order made).
   Future<
-      ({
-        Harness harness,
-        KernelControl control,
-        FakeHost rig,
-        PlaybackSession session,
-        List<String> asked,
-        List<KernelNative> natives,
-        List<KernelId> supported,
-      })> rig(KernelId kernel,
-      {KernelNative? native,
-      bool approve = true,
-      String? harness,
-      List<KernelId>? supported}) async {
+          ({
+            Harness harness,
+            KernelControl control,
+            FakeHost rig,
+            PlaybackSession session,
+            List<String> asked,
+            List<KernelNative> natives,
+            List<KernelId> supported,
+          })>
+      rig(KernelId kernel,
+          {KernelNative? native,
+          bool approve = true,
+          String? harness,
+          List<KernelId>? supported}) async {
     final natives = <KernelNative>[];
     final asked = <String>[];
     final kernels = supported ?? [...KernelId.values];
@@ -314,9 +325,8 @@ void main() {
     final host = FakeHost(
         kernel: kernel.id,
         driver: (kernel, lease) {
-          final handle = natives.isEmpty && native != null
-              ? native
-              : nativeFor(kernel);
+          final handle =
+              natives.isEmpty && native != null ? native : nativeFor(kernel);
           natives.add(handle);
           return FakeDriver(lease, kernel: kernel, native: handle);
         },
@@ -340,7 +350,8 @@ void main() {
   }
 
   group('reading', () {
-    test('Media Kit: mpv and ffmpeg versions, a snapshot and the properties '
+    test(
+        'Media Kit: mpv and ffmpeg versions, a snapshot and the properties '
         'asked for with mpv\'s own error', () async {
       final r = await rig(KernelId.mediaKit);
       final read = await invokeCompleted(r.harness, 'playback.kernel', {
@@ -391,12 +402,14 @@ void main() {
       await r.rig.host.close(reason: 'test');
     });
 
-    test('Erika: decoder, frame, audio and HDR facts as reported, a window '
+    test(
+        'Erika: decoder, frame, audio and HDR facts as reported, a window '
         'between reads, and what it does not expose', () async {
       final native = FakeErika();
       final r = await rig(KernelId.erika, native: native);
-      final first = (await invokeCompleted(r.harness, 'playback.kernel', {}))[
-          'erika'] as Map;
+      final first =
+          (await invokeCompleted(r.harness, 'playback.kernel', {}))['erika']
+              as Map;
       expect(first['window'], isNull);
       expect(first['windowUnavailable'], 'no_previous_read');
       expect(first['decoder'], containsPair('hardware', true));
@@ -414,8 +427,9 @@ void main() {
           containsAll(['network.throughput', 'hdr.metadata']));
 
       native.underflow = 512;
-      final second = (await invokeCompleted(r.harness, 'playback.kernel', {}))[
-          'erika'] as Map;
+      final second =
+          (await invokeCompleted(r.harness, 'playback.kernel', {}))['erika']
+              as Map;
       final window = second['window'] as Map;
       expect(window['source'], 'previous_read');
       expect(window['seconds'], 2.0);
@@ -432,7 +446,8 @@ void main() {
       await r.rig.host.close(reason: 'test');
     });
 
-    test('video_player: its controller\'s state by name, nothing to set', () async {
+    test('video_player: its controller\'s state by name, nothing to set',
+        () async {
       final r = await rig(KernelId.videoPlayer, native: FakeState());
       final read = await invokeCompleted(r.harness, 'playback.kernel', {
         'properties': ['isPlaying', 'nope']
@@ -454,12 +469,15 @@ void main() {
       final r = await rig(KernelId.mediaKit);
       final conflict = await r.harness.invokeJson(
           'playback.set_kernel_properties',
-          {'sessionId': 'internal:other', 'properties': {'a': 'b'}},
+          {
+            'sessionId': 'internal:other',
+            'properties': {'a': 'b'}
+          },
           Invocation(origin: 'test'));
       expect((conflict as Failed).failure.code, FailureCode.conflict);
       await r.rig.host.close(reason: 'test');
-      final none = await r.harness.invokeJson('playback.kernel', {},
-          Invocation(origin: 'test'));
+      final none = await r.harness
+          .invokeJson('playback.kernel', {}, Invocation(origin: 'test'));
       expect((none as Failed).failure.code, FailureCode.unavailable);
     });
 
@@ -485,12 +503,13 @@ void main() {
   });
 
   group('changing for this playback', () {
-    test('mpv takes the value now; it is the kernel instance\'s, and another '
+    test(
+        'mpv takes the value now; it is the kernel instance\'s, and another '
         'instance ends it', () async {
       final r = await rig(KernelId.mediaKit);
       final mpv = r.natives.single as FakeMpv;
-      final result = await invokeCompleted(
-          r.harness, 'playback.set_kernel_properties', {
+      final result =
+          await invokeCompleted(r.harness, 'playback.set_kernel_properties', {
         'sessionId': r.session.id,
         'properties': {'hwdec': 'no', 'deband': 'yes', 'vf': 'hflip'},
       });
@@ -515,7 +534,8 @@ void main() {
       await r.rig.host.close(reason: 'test');
     });
 
-    test('each change is recorded with who and when, and restore puts the '
+    test(
+        'each change is recorded with who and when, and restore puts the '
         'original back', () async {
       final r = await rig(KernelId.mediaKit);
       final mpv = r.natives.single as FakeMpv;
@@ -555,7 +575,8 @@ void main() {
       expect(mpv.mpv['hwdec'], 'auto-copy');
       read = await invokeCompleted(r.harness, 'playback.kernel', {});
       expect(read['overrides'], isEmpty);
-      expect((read['changes'] as List).first, containsPair('action', 'restore'));
+      expect(
+          (read['changes'] as List).first, containsPair('action', 'restore'));
 
       // A value changed since is left as found.
       await invokeCompleted(r.harness, 'playback.set_kernel_properties', {
@@ -571,7 +592,8 @@ void main() {
       await r.rig.host.close(reason: 'test');
     });
 
-    test('a setting that can send traffic elsewhere waits for the person, '
+    test(
+        'a setting that can send traffic elsewhere waits for the person, '
         'and a no changes nothing', () async {
       final declined = await rig(KernelId.mediaKit, approve: false);
       final mpv = declined.natives.single as FakeMpv;
@@ -605,14 +627,22 @@ void main() {
       expect((allowed.natives.single as FakeMpv).mpv['external-files'],
           'https://example.com/a.ass');
       expect(kernelSettingConsent('hwdec', 'no'), isNull);
-      for (final name in ['user-agent', 'http-header-fields', 'cookies-file',
-        'tls-verify', 'referrer', 'avio.http_proxy', 'avformat.headers']) {
+      for (final name in [
+        'user-agent',
+        'http-header-fields',
+        'cookies-file',
+        'tls-verify',
+        'referrer',
+        'avio.http_proxy',
+        'avformat.headers'
+      ]) {
         expect(kernelSettingConsent(name, 'x'), 'network', reason: name);
       }
       await allowed.rig.host.close(reason: 'test');
     });
 
-    test('a question that waits for the person goes away when the kernel '
+    test(
+        'a question that waits for the person goes away when the kernel '
         'does', () async {
       final r = await rig(KernelId.mediaKit);
       final gate = Completer<bool>();
@@ -639,11 +669,12 @@ void main() {
       await r.rig.host.close(reason: 'test');
     });
 
-    test('MDK: decoders go back; a property MDK never reported cannot', () async {
+    test('MDK: decoders go back; a property MDK never reported cannot',
+        () async {
       final r = await rig(KernelId.mdk);
       final mdk = r.natives.single as FakeMdk;
-      final result = await invokeCompleted(
-          r.harness, 'playback.set_kernel_properties', {
+      final result =
+          await invokeCompleted(r.harness, 'playback.set_kernel_properties', {
         'sessionId': r.session.id,
         'properties': {'video.avfilter': 'hflip', 'auto_load': '1'},
         'videoDecoders': ['FFmpeg', 'dav1d'],
@@ -653,17 +684,18 @@ void main() {
       };
       expect(changes['video.avfilter'], containsPair('restorable', false));
       expect(changes['auto_load'], containsPair('before', '0'));
-      expect(changes['videoDecoders'], containsPair('before', ['VT', 'FFmpeg']));
+      expect(
+          changes['videoDecoders'], containsPair('before', ['VT', 'FFmpeg']));
       expect(mdk.video, ['FFmpeg', 'dav1d']);
       final restored = await invokeCompleted(
           r.harness, 'playback.restore_kernel_properties', {});
       expect(mdk.video, ['VT', 'FFmpeg']);
       expect(mdk.props['auto_load'], '0');
       final byName = {
-        for (final c in (restored['restored'] as List).cast<Map>())
-          c['name']: c
+        for (final c in (restored['restored'] as List).cast<Map>()) c['name']: c
       };
-      expect(byName['video.avfilter'], containsPair('reason', 'original_unknown'));
+      expect(
+          byName['video.avfilter'], containsPair('reason', 'original_unknown'));
       await r.rig.host.close(reason: 'test');
     });
 
@@ -671,16 +703,19 @@ void main() {
         () async {
       final r = await rig(KernelId.erika);
       final erika = r.natives.single as FakeErika;
-      final result = await invokeCompleted(
-          r.harness, 'playback.set_kernel_properties', {
+      final result =
+          await invokeCompleted(r.harness, 'playback.set_kernel_properties', {
         'sessionId': r.session.id,
         'properties': {'upscaler': 'artCnnC4F16', 'debugHud': 'true'},
       });
-      expect((result['changes'] as List).cast<Map>().map((c) =>
-          [c['name'], c['before'], c['after']]), [
-        ['upscaler', 'off', 'artCnnC4F16'],
-        ['debugHud', 'false', 'true'],
-      ]);
+      expect(
+          (result['changes'] as List)
+              .cast<Map>()
+              .map((c) => [c['name'], c['before'], c['after']]),
+          [
+            ['upscaler', 'off', 'artCnnC4F16'],
+            ['debugHud', 'false', 'true'],
+          ]);
       expect(erika.hud, isTrue);
       expect(erika.mode, PlayerUpscalerMode.erikaArtCnnC4F16);
       final refused = await r.harness.invokeJson(
@@ -710,13 +745,14 @@ void main() {
   });
 
   group('reopening on another kernel', () {
-    test('the same session moves to a new instance; the next media opens on '
+    test(
+        'the same session moves to a new instance; the next media opens on '
         'the kernel setting', () async {
       final r = await rig(KernelId.mediaKit);
       final before = r.session.driver!;
       await r.session.seek(const Duration(minutes: 3), origin: 'test');
-      final result = await invokeCompleted(r.harness,
-          'playback.reopen_with_kernel', {
+      final result =
+          await invokeCompleted(r.harness, 'playback.reopen_with_kernel', {
         'sessionId': r.session.id,
         'kernel': 'mdk',
       });
@@ -737,8 +773,8 @@ void main() {
       expect(preserved['paused'], {'before': false, 'after': false});
       expect(result['nextMediaOpensConfiguredKernel'], true);
       final read = await invokeCompleted(r.harness, 'playback.kernel', {});
-      expect(read['kernelOverride'],
-          {'kernel': 'mdk', 'configured': 'media_kit'});
+      expect(
+          read['kernelOverride'], {'kernel': 'mdk', 'configured': 'media_kit'});
       expect((read['changes'] as List).cast<Map>().map((c) => c['action']),
           contains('reopen'));
       await r.rig.host.close(reason: 'test');
@@ -751,7 +787,8 @@ void main() {
     test('a kernel this device cannot run is refused', () async {
       final r = await rig(KernelId.mediaKit,
           supported: [KernelId.mdk, KernelId.mediaKit]);
-      final outcome = await r.harness.invokeJson('playback.reopen_with_kernel',
+      final outcome = await r.harness.invokeJson(
+          'playback.reopen_with_kernel',
           {'sessionId': r.session.id, 'kernel': 'erika'},
           Invocation(origin: 'test'));
       expect((outcome as Failed).failure.code, FailureCode.unavailable);
@@ -759,7 +796,8 @@ void main() {
       await r.rig.host.close(reason: 'test');
     });
 
-    test('a kernel that cannot open the media fails the session; another '
+    test(
+        'a kernel that cannot open the media fails the session; another '
         'swap brings it back', () async {
       var made = 0;
       final host = FakeHost(
@@ -773,8 +811,8 @@ void main() {
       final session = await host.host.open(request());
       final control = KernelControl(host.host, FakePlayback(host));
       final harness = Harness([KernelControlCapability(control)]);
-      final failed = await invokeCompleted(harness,
-          'playback.reopen_with_kernel', {
+      final failed =
+          await invokeCompleted(harness, 'playback.reopen_with_kernel', {
         'sessionId': session.id,
         'kernel': 'erika',
       });
@@ -782,8 +820,8 @@ void main() {
       expect(failed['failure'], 'no such codec');
       expect(session.phase.value, SessionPhase.failed);
       expect(host.arbiter.owner, isNull);
-      final back = await invokeCompleted(harness,
-          'playback.reopen_with_kernel', {
+      final back =
+          await invokeCompleted(harness, 'playback.reopen_with_kernel', {
         'sessionId': session.id,
         'kernel': 'mdk',
       });
@@ -795,7 +833,8 @@ void main() {
   });
 
   group('passing through', () {
-    test('an mpv command goes to mpv as given; one that changes a property '
+    test(
+        'an mpv command goes to mpv as given; one that changes a property '
         'holds like a property change', () async {
       final r = await rig(KernelId.mediaKit);
       final mpv = r.natives.single as FakeMpv;
@@ -820,14 +859,15 @@ void main() {
       expect(text['result'], r'expanded ${hwdec-current}');
       expect(text['lasting'], 'none');
 
-      final bogus = await invokeCompleted(r.harness, 'playback.kernel_command', {
+      final bogus =
+          await invokeCompleted(r.harness, 'playback.kernel_command', {
         'sessionId': r.session.id,
         'command': ['no-such-command'],
       });
       expect(bogus['error'], 'invalid parameter');
 
-      final program = await invokeCompleted(
-          r.harness, 'playback.kernel_command', {
+      final program =
+          await invokeCompleted(r.harness, 'playback.kernel_command', {
         'sessionId': r.session.id,
         'command': ['subprocess', 'curl', 'https://example.com'],
       });
@@ -847,13 +887,17 @@ void main() {
       await script.create(recursive: true);
       final r = await rig(KernelId.mediaKit, harness: harness.path);
       final mpv = r.natives.single as FakeMpv;
-      final outside = await r.harness.invokeJson('playback.kernel_command', {
-        'sessionId': r.session.id,
-        'command': ['load-script', '/etc/hosts'],
-      }, Invocation(origin: 'test'));
+      final outside = await r.harness.invokeJson(
+          'playback.kernel_command',
+          {
+            'sessionId': r.session.id,
+            'command': ['load-script', '/etc/hosts'],
+          },
+          Invocation(origin: 'test'));
       expect((outside as Failed).failure.code, FailureCode.invalidInput);
       expect(mpv.commands, isEmpty);
-      final loaded = await invokeCompleted(r.harness, 'playback.kernel_command', {
+      final loaded =
+          await invokeCompleted(r.harness, 'playback.kernel_command', {
         'sessionId': r.session.id,
         'command': ['load-script', script.path],
       });
@@ -865,17 +909,22 @@ void main() {
         () async {
       final r = await rig(KernelId.mediaKit, approve: false);
       final mpv = r.natives.single as FakeMpv;
-      final outcome = await r.harness.invokeJson('playback.kernel_command', {
-        'sessionId': r.session.id,
-        'command': ['loadfile', 'https://user:pw@example.com/v.mkv'],
-      }, Invocation(origin: 'test'));
+      final outcome = await r.harness.invokeJson(
+          'playback.kernel_command',
+          {
+            'sessionId': r.session.id,
+            'command': ['loadfile', 'https://user:pw@example.com/v.mkv'],
+          },
+          Invocation(origin: 'test'));
       expect((outcome as Failed).failure.message, '用户没有同意这次播放使用这些网络设置');
       expect(mpv.commands, isEmpty);
       expect(r.asked.single, isNot(contains('pw@')));
-      expect(kernelCommandConsent(['set', 'http-proxy', 'http://p:1']),
-          'network');
-      expect(mpvCommandProperty(['no-osd', 'cycle-values', '!reverse', 'hwdec',
-        'no', 'auto']), 'hwdec');
+      expect(
+          kernelCommandConsent(['set', 'http-proxy', 'http://p:1']), 'network');
+      expect(
+          mpvCommandProperty(
+              ['no-osd', 'cycle-values', '!reverse', 'hwdec', 'no', 'auto']),
+          'hwdec');
       await r.rig.host.close(reason: 'test');
     });
 
@@ -883,24 +932,28 @@ void main() {
       final erika = await rig(KernelId.erika);
       final command = await erika.harness.invokeJson(
           'playback.kernel_command',
-          {'sessionId': erika.session.id, 'command': ['set', 'a', 'b']},
+          {
+            'sessionId': erika.session.id,
+            'command': ['set', 'a', 'b']
+          },
           Invocation(origin: 'test'));
       expect((command as Failed).failure.code, FailureCode.unavailable);
-      final read = await invokeCompleted(erika.harness, 'playback.kernel_invoke', {
+      final read =
+          await invokeCompleted(erika.harness, 'playback.kernel_invoke', {
         'sessionId': erika.session.id,
         'method': 'getPresenterStats',
       });
       expect(read['supported'], true);
       expect(read['result'], {'decodedVideoFrames': 1});
-      final missing = await invokeCompleted(
-          erika.harness, 'playback.kernel_invoke', {
+      final missing =
+          await invokeCompleted(erika.harness, 'playback.kernel_invoke', {
         'sessionId': erika.session.id,
         'method': 'getDiagnosticsJson',
       });
       expect(missing['supported'], false);
       expect(missing['error'], contains('no method'));
-      final table = await invokeCompleted(
-          erika.harness, 'playback.kernel_invoke', {
+      final table =
+          await invokeCompleted(erika.harness, 'playback.kernel_invoke', {
         'sessionId': erika.session.id,
         'method': 'listMethods',
       });
@@ -909,20 +962,24 @@ void main() {
       await erika.rig.host.close(reason: 'test');
 
       final mpv = await rig(KernelId.mediaKit);
-      final refused = await mpv.harness.invokeJson('playback.kernel_invoke', {
-        'sessionId': mpv.session.id,
-        'method': 'm',
-      }, Invocation(origin: 'test'));
+      final refused = await mpv.harness.invokeJson(
+          'playback.kernel_invoke',
+          {
+            'sessionId': mpv.session.id,
+            'method': 'm',
+          },
+          Invocation(origin: 'test'));
       expect((refused as Failed).failure.code, FailureCode.unavailable);
       await mpv.rig.host.close(reason: 'test');
     });
 
-    test('watching reads once, or each change over a bounded time, and ends '
+    test(
+        'watching reads once, or each change over a bounded time, and ends '
         'when the kernel is replaced', () async {
       final r = await rig(KernelId.mediaKit);
       final mpv = r.natives.single as FakeMpv;
-      final once = await invokeCompleted(r.harness,
-          'playback.watch_kernel_properties', {
+      final once =
+          await invokeCompleted(r.harness, 'playback.watch_kernel_properties', {
         'properties': ['hwdec-current', 'nothing-here'],
       });
       expect(once['samples'], 1);
@@ -934,21 +991,22 @@ void main() {
       });
       Timer(const Duration(milliseconds: 250),
           () => mpv.mpv['hwdec-current'] = 'no');
-      final watched = await invokeCompleted(r.harness,
-          'playback.watch_kernel_properties', {
+      final watched =
+          await invokeCompleted(r.harness, 'playback.watch_kernel_properties', {
         'properties': ['hwdec-current'],
         'durationMs': 700,
         'intervalMs': 100,
       });
-      expect((watched['changes'] as List).single,
+      expect(
+          (watched['changes'] as List).single,
           allOf(containsPair('name', 'hwdec-current'),
               containsPair('value', 'no')));
       expect(watched['samples'], greaterThan(3));
 
       Timer(const Duration(milliseconds: 150),
           () => r.session.swapKernel(KernelId.mdk, origin: 'test'));
-      final cut = await invokeCompleted(r.harness,
-          'playback.watch_kernel_properties', {
+      final cut =
+          await invokeCompleted(r.harness, 'playback.watch_kernel_properties', {
         'properties': ['hwdec-current'],
         'durationMs': 2000,
         'intervalMs': 100,
@@ -958,9 +1016,11 @@ void main() {
 
       final erika = await rig(KernelId.erika);
       final refused = await erika.harness.invokeJson(
-          'playback.watch_kernel_properties', {
-        'properties': ['x'],
-      }, Invocation(origin: 'test'));
+          'playback.watch_kernel_properties',
+          {
+            'properties': ['x'],
+          },
+          Invocation(origin: 'test'));
       expect((refused as Failed).failure.code, FailureCode.unavailable);
       await erika.rig.host.close(reason: 'test');
     });

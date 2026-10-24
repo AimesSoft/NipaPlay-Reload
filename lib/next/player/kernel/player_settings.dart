@@ -39,11 +39,10 @@ final class PlayerSettings {
       (m) => m.name == prefs.getString('hwdec_mode'),
       orElse: () => HwDecType.auto);
   String get pixelFormat => prefs.getString('soft_decode_pixel_format') ?? '';
-  int get precacheMb =>
-      (prefs.getInt('player_precache_buffer_size_mb') ??
-              PlayerFactory.defaultPrecacheBufferSizeMb)
-          .clamp(PlayerFactory.minPrecacheBufferSizeMb,
-              PlayerFactory.maxPrecacheBufferSizeMb);
+  int get precacheMb => (prefs.getInt('player_precache_buffer_size_mb') ??
+          PlayerFactory.defaultPrecacheBufferSizeMb)
+      .clamp(PlayerFactory.minPrecacheBufferSizeMb,
+          PlayerFactory.maxPrecacheBufferSizeMb);
   int get precacheSeconds =>
       (prefs.getInt('player_precache_buffer_duration_seconds') ?? 4)
           .clamp(1, 120);

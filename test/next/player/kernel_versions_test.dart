@@ -9,7 +9,8 @@ void main() {
   final lock = File('pubspec.lock').readAsStringSync();
 
   String? field(String package, String key) {
-    final block = RegExp('\n  $package:\n((?:    .*\n|\n)*)').firstMatch(lock)?.group(1);
+    final block =
+        RegExp('\n  $package:\n((?:    .*\n|\n)*)').firstMatch(lock)?.group(1);
     return block == null
         ? null
         : RegExp('$key: "?([^"\n]+)"?').firstMatch(block)?.group(1);

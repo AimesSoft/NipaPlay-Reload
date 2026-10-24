@@ -4,7 +4,8 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:nipa_harness/nipa_harness.dart';
-import 'package:nipaplay/player_abstraction/player_abstraction.dart' show PlayerKernelType;
+import 'package:nipaplay/player_abstraction/player_abstraction.dart'
+    show PlayerKernelType;
 import 'package:nipaplay/services/external_player_console_service.dart';
 import 'package:path/path.dart' as p;
 
@@ -30,8 +31,8 @@ Future<bool> _askUser(
 /// A kernel value Next changed on one kernel instance, and what it was
 /// before.
 final class _Override {
-  _Override(this.name, this.kind, this.original, this.originalKnown,
-      this.firstAt);
+  _Override(
+      this.name, this.kind, this.original, this.originalKnown, this.firstAt);
   final String name;
   final String kind;
   final Object? original;
@@ -138,10 +139,14 @@ final class KernelControl {
     final bound = _bound;
     if (identical(bound, driver)) return;
     for (final override in _overrides.values) {
-      _record('ended', override.name, {
-        'trigger': 'player_replaced',
-        'original': safeKernelValue(override.name, override.original),
-      }, driver: bound);
+      _record(
+          'ended',
+          override.name,
+          {
+            'trigger': 'player_replaced',
+            'original': safeKernelValue(override.name, override.original),
+          },
+          driver: bound);
     }
     _overrides.clear();
     _bound = driver;
@@ -176,9 +181,8 @@ final class KernelControl {
 
   // ---- reading ----
 
-  static bool _equal(Object? a, Object? b) => a is List && b is List
-      ? a.join('\u0000') == b.join('\u0000')
-      : a == b;
+  static bool _equal(Object? a, Object? b) =>
+      a is List && b is List ? a.join('\u0000') == b.join('\u0000') : a == b;
 
   Future<Object?> _currentValue(KernelNative native, _Override override) async {
     switch (override.kind) {
@@ -285,7 +289,8 @@ final class KernelControl {
           ...result['kernel'] as JsonMap,
           'version': await native.version(),
         };
-        result['erika'] = await _readErika(driver, native, input['sampleMs'] as int?);
+        result['erika'] =
+            await _readErika(driver, native, input['sampleMs'] as int?);
         if (asked.isNotEmpty) {
           result['properties'] = {
             for (final n in asked)
@@ -358,7 +363,8 @@ final class KernelControl {
   // ---- setting ----
 
   /// playback.set_kernel_properties.
-  Future<JsonMap> set(JsonMap input, Invocation invocation) => _serial(() async {
+  Future<JsonMap> set(JsonMap input, Invocation invocation) =>
+      _serial(() async {
         _check(input);
         final driver = _driver();
         final native = driver.native;
@@ -413,24 +419,29 @@ final class KernelControl {
         };
         final consent = network.isEmpty
             ? 'not_needed'
-            : await _askNetwork(driver, [
-                for (final entry in network.entries)
-                  '· ${entry.key}：${redactHarnessText(entry.value)}',
-              ], network.keys.join(','), {
-                'requested': {
-                  for (final e in network.entries)
-                    e.key: safeKernelValue(e.key, e.value)
+            : await _askNetwork(
+                driver,
+                [
+                  for (final entry in network.entries)
+                    '· ${entry.key}：${redactHarnessText(entry.value)}',
+                ],
+                network.keys.join(','),
+                {
+                  'requested': {
+                    for (final e in network.entries)
+                      e.key: safeKernelValue(e.key, e.value)
+                  },
                 },
-              }, invocation);
+                invocation);
         final changes = <JsonMap>[];
         for (final entry in properties.entries) {
-          changes.add(await _apply(driver, native, entry.key, entry.value,
-              invocation,
+          changes.add(await _apply(
+              driver, native, entry.key, entry.value, invocation,
               consent: network.containsKey(entry.key) ? consent : null));
         }
         for (final entry in decoders.entries) {
-          changes.add(await _apply(driver, native, entry.key, entry.value,
-              invocation));
+          changes.add(
+              await _apply(driver, native, entry.key, entry.value, invocation));
         }
         return {
           'sessionId': _session?.id,
@@ -489,14 +500,19 @@ final class KernelControl {
       final known = kind == 'mpv' ? beforeError == null : before != null;
       _noteOverride(name, kind, before, known, value, after);
     }
-    final entry = _record('set', name, {
-      'before': safeKernelValue(name, before),
-      if (beforeError != null) 'beforeError': beforeError,
-      'requested': safeKernelValue(name, value),
-      'after': safeKernelValue(name, after),
-      'error': error,
-      'consent': consent,
-    }, invocation: invocation, driver: driver);
+    final entry = _record(
+        'set',
+        name,
+        {
+          'before': safeKernelValue(name, before),
+          if (beforeError != null) 'beforeError': beforeError,
+          'requested': safeKernelValue(name, value),
+          'after': safeKernelValue(name, after),
+          'error': error,
+          'consent': consent,
+        },
+        invocation: invocation,
+        driver: driver);
     if (applied) _overrides[name]!.changeIds.add(entry['changeId'] as String);
     return {
       'changeId': entry['changeId'],
@@ -535,7 +551,8 @@ final class KernelControl {
             error = await (native as MpvNative)
                 .write(override.name, original as String? ?? '');
           case 'mdk':
-            await (native as MdkNative).write(override.name, original as String);
+            await (native as MdkNative)
+                .write(override.name, original as String);
           case 'decoders':
             await (native as MdkNative).setDecoders(
                 (original as List).cast<String>(),
@@ -557,13 +574,18 @@ final class KernelControl {
       result = {'restored': error == null, if (error != null) 'error': error};
     }
     final after = await _currentValue(native, override);
-    final entry = _record('restore', override.name, {
-      'trigger': trigger,
-      'before': safeKernelValue(override.name, current),
-      'original': safeKernelValue(override.name, override.original),
-      'after': safeKernelValue(override.name, after),
-      ...result,
-    }, invocation: invocation, driver: driver);
+    final entry = _record(
+        'restore',
+        override.name,
+        {
+          'trigger': trigger,
+          'before': safeKernelValue(override.name, current),
+          'original': safeKernelValue(override.name, override.original),
+          'after': safeKernelValue(override.name, after),
+          ...result,
+        },
+        invocation: invocation,
+        driver: driver);
     return {
       'changeId': entry['changeId'],
       'name': override.name,
@@ -589,7 +611,8 @@ final class KernelControl {
                 {'name': name, 'restored': false, 'reason': 'not_changed'});
             continue;
           }
-          results.add(await _restoreOne(driver, override, 'requested', invocation));
+          results.add(
+              await _restoreOne(driver, override, 'requested', invocation));
         }
         return {
           'restored': results,
@@ -639,10 +662,10 @@ final class KernelControl {
 
   /// Records [name] as changed from [before] (known when the kernel reported
   /// it) to [after].
-  _Override _noteOverride(String name, String kind, Object? before,
-      bool known, Object? requested, Object? after) {
-    final override = _overrides.putIfAbsent(
-        name, () => _Override(name, kind, before, known, DateTime.now().toUtc()));
+  _Override _noteOverride(String name, String kind, Object? before, bool known,
+      Object? requested, Object? after) {
+    final override = _overrides.putIfAbsent(name,
+        () => _Override(name, kind, before, known, DateTime.now().toUtc()));
     override.requested = requested;
     override.lastSet = after;
     return override;
@@ -689,15 +712,16 @@ final class KernelControl {
         final safeCommand = [for (final a in args) redactHarnessText(a)];
         final consent = kernelCommandConsent(args) == null
             ? 'not_needed'
-            : await _askNetwork(driver, ['· ${safeCommand.join(' ')}'], body.first,
-                {'command': safeCommand}, invocation);
+            : await _askNetwork(driver, ['· ${safeCommand.join(' ')}'],
+                body.first, {'command': safeCommand}, invocation);
         final property = mpvCommandProperty(args);
         NativeRead? before;
         if (property != null) {
           before = (await native.read([property]))[property];
         }
         final reply = await native.command(args,
-            timeout: Duration(milliseconds: input['timeoutMs'] as int? ?? 10000));
+            timeout:
+                Duration(milliseconds: input['timeoutMs'] as int? ?? 10000));
         String? after;
         if (property != null) {
           after = (await native.read([property]))[property]?.value;
@@ -713,20 +737,26 @@ final class KernelControl {
               before?.error == null, safeCommand.join(' '), after);
         }
         final sessionId = _session?.id;
-        final playerError = sessionId == null ? null : playback.error(sessionId);
-        final entry = _record('command', property ?? body.first, {
-          'command': safeCommand,
-          'result': safeKernelResult(reply.result),
-          'error': reply.error,
-          if (property != null) ...{
-            'property': property,
-            'before': safeKernelValue(property, before?.value),
-            'after': safeKernelValue(property, after),
-          },
-          'lasting': lasting,
-          'consent': consent,
-          if (playerError != null) 'playerError': playerError['message'],
-        }, invocation: invocation, driver: driver);
+        final playerError =
+            sessionId == null ? null : playback.error(sessionId);
+        final entry = _record(
+            'command',
+            property ?? body.first,
+            {
+              'command': safeCommand,
+              'result': safeKernelResult(reply.result),
+              'error': reply.error,
+              if (property != null) ...{
+                'property': property,
+                'before': safeKernelValue(property, before?.value),
+                'after': safeKernelValue(property, after),
+              },
+              'lasting': lasting,
+              'consent': consent,
+              if (playerError != null) 'playerError': playerError['message'],
+            },
+            invocation: invocation,
+            driver: driver);
         override?.changeIds.add(entry['changeId'] as String);
         return {
           'changeId': entry['changeId'],
@@ -765,22 +795,29 @@ final class KernelControl {
         };
         final consent = kernelInvokeConsent(arguments) == null
             ? 'not_needed'
-            : await _askNetwork(driver, [
-                '· $method ${redactHarnessText(jsonEncode(arguments))}'
-              ], method, {
-                'arguments': safeKernelResult(arguments)
-              }, invocation);
+            : await _askNetwork(
+                driver,
+                ['· $method ${redactHarnessText(jsonEncode(arguments))}'],
+                method,
+                {'arguments': safeKernelResult(arguments)},
+                invocation);
         final reply = await native.invoke(method, arguments);
         final sessionId = _session?.id;
-        final playerError = sessionId == null ? null : playback.error(sessionId);
-        final entry = _record('invoke', method, {
-          'arguments': safeKernelResult(arguments),
-          'supported': reply.supported,
-          'result': safeKernelResult(reply.result),
-          'error': reply.error,
-          'consent': consent,
-          if (playerError != null) 'playerError': playerError['message'],
-        }, invocation: invocation, driver: driver);
+        final playerError =
+            sessionId == null ? null : playback.error(sessionId);
+        final entry = _record(
+            'invoke',
+            method,
+            {
+              'arguments': safeKernelResult(arguments),
+              'supported': reply.supported,
+              'result': safeKernelResult(reply.result),
+              'error': reply.error,
+              'consent': consent,
+              if (playerError != null) 'playerError': playerError['message'],
+            },
+            invocation: invocation,
+            driver: driver);
         return {
           'changeId': entry['changeId'],
           'sessionId': sessionId,
@@ -825,16 +862,19 @@ final class KernelControl {
     var endedBy = 'duration';
     while (clock.elapsedMilliseconds < duration) {
       await Future<void>.delayed(Duration(
-          milliseconds: (duration - clock.elapsedMilliseconds).clamp(1, interval)));
+          milliseconds:
+              (duration - clock.elapsedMilliseconds).clamp(1, interval)));
       if (driver.fenced || !identical(_session?.driver, driver)) {
-        endedBy = identical(_session, session) ? 'player_replaced' : 'media_changed';
+        endedBy =
+            identical(_session, session) ? 'player_replaced' : 'media_changed';
         break;
       }
       final Map<String, NativeRead> current;
       try {
         current = await sample();
       } on KernelFenced {
-        endedBy = identical(_session, session) ? 'player_replaced' : 'media_changed';
+        endedBy =
+            identical(_session, session) ? 'player_replaced' : 'media_changed';
         break;
       }
       samples++;
@@ -893,12 +933,18 @@ final class KernelControl {
               'This device cannot run $id; it runs ${host.supportedKernels.map((k) => k.id).join(', ')}.');
         }
         final previous = session.driver;
-        final reply = await session.swapKernel(target, origin: invocation.origin);
+        final reply =
+            await session.swapKernel(target, origin: invocation.origin);
         for (final override in _overrides.values) {
-          _record('ended', override.name, {
-            'trigger': 'player_replaced',
-            'original': safeKernelValue(override.name, override.original),
-          }, invocation: invocation, driver: previous);
+          _record(
+              'ended',
+              override.name,
+              {
+                'trigger': 'player_replaced',
+                'original': safeKernelValue(override.name, override.original),
+              },
+              invocation: invocation,
+              driver: previous);
         }
         _overrides.clear();
         _bound = null;
@@ -906,13 +952,17 @@ final class KernelControl {
         final opened = reply['opened'] == true;
         final actual = session.driver?.kernel.id;
         final error = playback.error(session.id);
-        _record('reopen', 'kernel', {
-          'requested': id,
-          'actual': actual,
-          'configured': _configured,
-          'opened': opened,
-          'error': reply['failure'] ?? error?['message'],
-        }, invocation: invocation);
+        _record(
+            'reopen',
+            'kernel',
+            {
+              'requested': id,
+              'actual': actual,
+              'configured': _configured,
+              'opened': opened,
+              'error': reply['failure'] ?? error?['message'],
+            },
+            invocation: invocation);
         return {
           'kernel': {
             'requested': id,
@@ -926,7 +976,8 @@ final class KernelControl {
           'failure': reply['failure'],
           'error': error,
           'preserved': reply['preserved'],
-          'nextMediaOpensConfiguredKernel': actual != null && actual != _configured,
+          'nextMediaOpensConfiguredKernel':
+              actual != null && actual != _configured,
           'state': playback.snapshot().toJson(),
         };
       });
@@ -978,7 +1029,8 @@ final class KernelControlCapability implements Capability {
                   effect: Effect.write,
                   input: ObjectSchema({
                     'sessionId': StringSchema(minLength: 1),
-                    'names': ArraySchema(StringSchema(minLength: 1), minItems: 1),
+                    'names':
+                        ArraySchema(StringSchema(minLength: 1), minItems: 1),
                   }),
                   output: ObjectSchema({}, additionalProperties: true)),
               control.restore),
@@ -991,8 +1043,8 @@ final class KernelControlCapability implements Capability {
                   effect: Effect.write,
                   input: ObjectSchema({
                     'sessionId': StringSchema(minLength: 1),
-                    'command': ArraySchema(StringSchema(),
-                        minItems: 1, maxItems: 64),
+                    'command':
+                        ArraySchema(StringSchema(), minItems: 1, maxItems: 64),
                     'timeoutMs': IntegerSchema(minimum: 100, maximum: 120000),
                   }, required: [
                     'sessionId',
@@ -1043,7 +1095,8 @@ final class KernelControlCapability implements Capability {
                   effect: Effect.write,
                   input: ObjectSchema({
                     'sessionId': const StringSchema(minLength: 1),
-                    'kernel': StringSchema(values: kernelTypesById.keys.toList()),
+                    'kernel':
+                        StringSchema(values: kernelTypesById.keys.toList()),
                   }, required: [
                     'sessionId',
                     'kernel'

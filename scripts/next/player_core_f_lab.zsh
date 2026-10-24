@@ -4,12 +4,15 @@ set -eu
 unset HTTP_PROXY HTTPS_PROXY http_proxy https_proxy ALL_PROXY all_proxy
 TASK_ROOT=${0:A:h:h:h}
 F_RUN_DIR=${1:-$HOME/.nipa-next/player-core-f-runs/$(date +%Y%m%d-%H%M%S)}
-F_PROFILE="$HOME/Library/Application Support/NipaPlay/LabProfiles/core-lab-f"
-F_APP="$TASK_ROOT/build/macos/Build/Products/Debug/NipaPlay.app/Contents/MacOS/NipaPlay"
+# F_PROFILE_NAME and F_APP_DIR let another line run this script on its own
+# experiment profile and build copy; F_KERNEL names the kernel it plays on.
+F_PROFILE_NAME=${F_PROFILE_NAME:-core-lab-f}
+F_PROFILE="$HOME/Library/Application Support/NipaPlay/LabProfiles/$F_PROFILE_NAME"
+F_APP="${F_APP_DIR:-$TASK_ROOT/build/macos/Build/Products/Debug/NipaPlay.app}/Contents/MacOS/NipaPlay"
 mkdir -p "$F_RUN_DIR"
 lsappinfo front > "$F_RUN_DIR/front-before.txt"
 cd "$F_PROFILE"
-NIPAPLAY_LAB_DHT=0 NIPAPLAY_PROFILE=core-lab-f CODEX_CA_CERTIFICATE="$F_PROFILE/system-ca.pem" SSL_CERT_FILE="$F_PROFILE/system-ca.pem" "$F_APP" > "$F_RUN_DIR/run.log" 2>&1 &
+NIPAPLAY_LAB_DHT=0 NIPAPLAY_PROFILE=$F_PROFILE_NAME CODEX_CA_CERTIFICATE="$F_PROFILE/system-ca.pem" SSL_CERT_FILE="$F_PROFILE/system-ca.pem" "$F_APP" > "$F_RUN_DIR/run.log" 2>&1 &
 F_PID=$!
 print "$F_PID" > "$F_RUN_DIR/pid"
 cleanup() {

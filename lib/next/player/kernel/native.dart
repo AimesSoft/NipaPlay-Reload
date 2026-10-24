@@ -1,5 +1,6 @@
 import 'package:nipa_harness/nipa_harness.dart';
-import 'package:nipaplay/player_abstraction/player_data_models.dart' show PlayerUpscalerMode;
+import 'package:nipaplay/player_abstraction/player_data_models.dart'
+    show PlayerUpscalerMode;
 
 /// A value as the kernel gave it, or the kernel's own error.
 typedef NativeRead = ({String? value, String? error});

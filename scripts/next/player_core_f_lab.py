@@ -13,7 +13,8 @@ import urllib.parse
 import urllib.request
 
 root = Path(sys.argv[1])
-profile = Path.home() / 'Library/Application Support/NipaPlay/LabProfiles/core-lab-f'
+profile = Path.home() / 'Library/Application Support/NipaPlay/LabProfiles' / os.environ.get('F_PROFILE_NAME', 'core-lab-f')
+kernel = os.environ.get('F_KERNEL', 'mdk')
 artifacts = profile / 'cache/player-core-f' / root.name
 artifacts.mkdir(parents=True, exist_ok=True)
 log = root / 'run.log'
@@ -72,8 +73,10 @@ def state():
 
 
 downloads = Path.home() / 'Library/Application Support/NipaPlay/LabProfiles/e2e42b/data/downloads'
-episode = next(p for p in downloads.rglob('*.mkv')
-               if p.parts[-2].startswith('c8151aed'))
+# F_EPISODE: a media the kernel can open (video_player's AVFoundation does
+# not open Matroska).
+episode = Path(os.environ['F_EPISODE']) if os.environ.get('F_EPISODE') else next(
+    p for p in downloads.rglob('*.mkv') if p.parts[-2].startswith('c8151aed'))
 catalog = extension('player.features', op='catalog')
 (root / 'catalog.json').write_text(json.dumps(catalog, indent=2))
 settings = ['player.externalEnabled', 'player.externalPath', 'player.externalType',
@@ -88,7 +91,7 @@ def setting(key, value):
 
 
 try:
-    setting('player.kernel', 'mdk')
+    setting('player.kernel', {'media_kit': 'mediaKit', 'video_player': 'videoPlayer'}.get(kernel, kernel))
     saved = {key: call('settings.get', {'key': key}).get('value') for key in settings}
     setting('player.externalEnabled', False)
     setting('player.timelinePreviewEnabled', True)
@@ -138,7 +141,7 @@ try:
         ('playback.kernel_invoke', {'method': 'snapshot'}),
         ('playback.set_kernel_properties', {'properties': {'volume': 0}}),
         ('playback.restore_kernel_properties', {'names': ['volume']}),
-        ('playback.reopen_with_kernel', {'kernel': 'mdk'}),
+        ('playback.reopen_with_kernel', {'kernel': kernel}),
     ]:
         call(action, {'sessionId': state()['sessionId'], **data})
     call('playback.watch_kernel_properties', {'properties': ['position'], 'durationMs': 0})

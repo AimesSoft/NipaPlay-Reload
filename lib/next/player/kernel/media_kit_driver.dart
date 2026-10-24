@@ -46,8 +46,10 @@ final class MediaKitDriver extends AdapterDriver
 
   MediaKitDriver._(KernelConfig config, this.adapter) : super(config) {
     final stream = adapter.sessionPlayer.stream;
-    listen(stream.playing, (playing) => transportChanged(
-        playing ? KernelTransport.playing : KernelTransport.paused));
+    listen(
+        stream.playing,
+        (playing) => transportChanged(
+            playing ? KernelTransport.playing : KernelTransport.paused));
     listen(stream.position, positionChanged);
     listen(stream.buffering, bufferingChanged);
     listen(stream.completed, (done) {
@@ -106,7 +108,8 @@ final class MediaKitDriver extends AdapterDriver
   @override
   Future<void> applyPlan(KernelTrackPlan plan) async {
     // As options of the file: mpv opens with exactly these.
-    if (plan.audio case final audio?) adapter.setProperty('aid', '${audio + 1}');
+    if (plan.audio case final audio?)
+      adapter.setProperty('aid', '${audio + 1}');
     adapter.setProperty(
         'sid',
         switch (plan.subtitle) {
@@ -129,7 +132,8 @@ final class MediaKitDriver extends AdapterDriver
       picture = PlatformVideoSurface(_nativeView(), aspect: 16 / 9);
     }
     adapter.openForSession(source.uri, start);
-    final ready = await adapter.waitUntilMediaReady(timeout: AdapterDriver.openTimeout);
+    final ready =
+        await adapter.waitUntilMediaReady(timeout: AdapterDriver.openTimeout);
     queue.live();
     if (!ready) {
       throw KernelOpenFailure(
@@ -142,7 +146,8 @@ final class MediaKitDriver extends AdapterDriver
     queue.live();
     if (start <= Duration.zero) return Duration.zero;
     // mpv's first position is where the start took it.
-    if ((lastKnownPosition - start).abs() <= const Duration(milliseconds: 1500)) {
+    if ((lastKnownPosition - start).abs() <=
+        const Duration(milliseconds: 1500)) {
       return lastKnownPosition;
     }
     final sample = expectSample(start);
@@ -167,7 +172,8 @@ final class MediaKitDriver extends AdapterDriver
     }
     if (listed(player.state.tracks)) return;
     await player.stream.tracks.firstWhere(listed).timeout(
-        const Duration(seconds: 2), onTimeout: () => player.state.tracks);
+        const Duration(seconds: 2),
+        onTimeout: () => player.state.tracks);
   }
 
   // ---- tracks ----
@@ -196,8 +202,10 @@ final class MediaKitDriver extends AdapterDriver
   bool _sidOn = false;
 
   @override
-  Future<KernelTracks> planOpened(KernelTrackPlan plan, MediaFacts media) async {
-    final fps = (await adapter.readMpvPropertiesChecked(['container-fps']))['container-fps']
+  Future<KernelTracks> planOpened(
+      KernelTrackPlan plan, MediaFacts media) async {
+    final fps = (await adapter
+            .readMpvPropertiesChecked(['container-fps']))['container-fps']
         ?.value;
     _fps = double.tryParse(fps ?? '');
     await _readTracks();
@@ -284,10 +292,14 @@ final class MediaKitDriver extends AdapterDriver
       'sub-border-color': color(properties['subtitle.color.outline']),
       'sub-bold': properties['subtitle.bold'] == null
           ? null
-          : properties['subtitle.bold'] == '1' ? 'yes' : 'no',
+          : properties['subtitle.bold'] == '1'
+              ? 'yes'
+              : 'no',
       'sub-italic': properties['subtitle.italic'] == null
           ? null
-          : properties['subtitle.italic'] == '1' ? 'yes' : 'no',
+          : properties['subtitle.italic'] == '1'
+              ? 'yes'
+              : 'no',
       'sub-delay': properties['subtitle.delay'],
     };
     for (final entry in options.entries) {
@@ -319,7 +331,8 @@ final class MediaKitDriver extends AdapterDriver
 
   @override
   Future<Duration?> readPosition() async {
-    final read = (await adapter.readMpvPropertiesChecked(['time-pos']))['time-pos'];
+    final read =
+        (await adapter.readMpvPropertiesChecked(['time-pos']))['time-pos'];
     final seconds = double.tryParse(read?.value ?? '');
     return seconds == null
         ? null
@@ -343,8 +356,8 @@ final class MediaKitDriver extends AdapterDriver
         final from = lastKnownPosition;
         final landed = expectSample(from);
         try {
-          final reply = await adapter.runMpvCommand(
-              [delta < 0 ? 'frame-back-step' : 'frame-step']);
+          final reply = await adapter
+              .runMpvCommand([delta < 0 ? 'frame-back-step' : 'frame-step']);
           queue.live();
           if (reply.error != null) {
             return const SeekOutcome(SeekResult.rejected, null);
@@ -371,7 +384,8 @@ final class MediaKitDriver extends AdapterDriver
         final codec = await ui.instantiateImageCodec(bytes);
         try {
           final frame = await codec.getNextFrame();
-          final rgba = await frame.image.toByteData(format: ui.ImageByteFormat.rawRgba);
+          final rgba =
+              await frame.image.toByteData(format: ui.ImageByteFormat.rawRgba);
           final picture = KernelPicture(frame.image.width, frame.image.height,
               rgba!.buffer.asUint8List(rgba.offsetInBytes, rgba.lengthInBytes));
           frame.image.dispose();
@@ -388,7 +402,8 @@ final class MediaKitDriver extends AdapterDriver
     if (adapter.textureId.value == null) {
       final made = Completer<void>();
       void changed() {
-        if (adapter.textureId.value != null && !made.isCompleted) made.complete();
+        if (adapter.textureId.value != null && !made.isCompleted)
+          made.complete();
       }
 
       adapter.textureId.addListener(changed);
@@ -406,7 +421,10 @@ final class MediaKitDriver extends AdapterDriver
   void _texture() {
     final id = adapter.textureId.value;
     final facts = media;
-    if (fenced || adapter.prefersPlatformVideoSurface || id == null || facts == null) {
+    if (fenced ||
+        adapter.prefersPlatformVideoSurface ||
+        id == null ||
+        facts == null) {
       return;
     }
     picture = TextureSurface(id, width: facts.width, height: facts.height);
@@ -434,8 +452,9 @@ final class MediaKitDriver extends AdapterDriver
         'audio': value('audio-codec'),
         'requested': config.videoDecoders,
       },
-      'bufferedAheadMs':
-          cache == null || position == null ? null : ((cache - position) * 1000).round(),
+      'bufferedAheadMs': cache == null || position == null
+          ? null
+          : ((cache - position) * 1000).round(),
     };
   }
 
@@ -448,7 +467,8 @@ final class MediaKitDriver extends AdapterDriver
   Future<Object?> version() => queue.run(_version);
 
   Future<Object?> _version() async {
-    final read = await adapter.readMpvPropertiesChecked(['mpv-version', 'ffmpeg-version']);
+    final read = await adapter
+        .readMpvPropertiesChecked(['mpv-version', 'ffmpeg-version']);
     return {
       'mpv': read['mpv-version']?.value,
       'ffmpeg': read['ffmpeg-version']?.value,
