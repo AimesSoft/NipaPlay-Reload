@@ -556,3 +556,17 @@ MDK 的事实（实测）：
 - `NextDanmakuLayer` 承载六个引擎，会话时钟驱动；原生弹幕由驱动的接收端拿整份列表。
 - 发送弹幕（`danmaku.send`）、时间轴告知弹幕、防剧透分析、片头片尾区间按来源的可信度占槽（别处的区间通过 `setSkipSegments` 给）。
 - 没做的：插件弹幕渲染器（WebView 叠层绑着 `VideoPlayerState`，设置里选了之后事实里报告 `pluginRenderer.applied: false`）、插件对弹幕的屏蔽词与过滤钩子、AniSkip 的网络识别（走标题搜索换 MAL ID）、Jellyfin 的 MediaSegments（等网络来源线通过 `setSkipSegments` 给）。
+
+## 2026-10-24 · player-core K：四个内核在 Next 自己的层里
+
+假设：Erika、Media Kit（mpv）、video_player、MDK 都能用同一套驱动接口（类型化的原生句柄、串行队列、单租约）接进 Next 的播放层，换内核、内核控制和内核设置都走新层，不再回到 Classic 的播放器。
+
+做了什么：四个驱动（Erika 最扎实）、swapKernel / playback.reopen_with_kernel、playback.kernel 与 set/restore_kernel_properties、kernel_command、kernel_invoke、watch_kernel_properties；设置 player.kernel 改的是下一次打开；macOS 实例内加了只截本窗口的 labWindowShot。数据在 ~/.nipa-next/player-core-k-runs/final（K 的验收）和 flab（F 的脚本，三个内核各 37 个动作，missing 为空，无主线程阻塞记录）。
+
+观察：
+- 四个内核各打开 Sintel 与第 12 集 10 次，全部有画面、跳到 70% 后继续前进、暂停/恢复正确，重开位置误差最大 54 ms。
+- Sintel 外挂字幕下三内核互换 50 次：全部成功，0 崩溃，位置误差 -84 到 143 ms，会话保持。第 12 集互换 10 次成功 9 次：第 9 次换入 Erika 时 play failed ErikaStatus 3，尚未查明（open issue）。
+- 连续打开关闭 100 次：Erika、mpv、MDK、video_player 都是 0 失败 0 超时；mpv/MDK 出现迟到回调（106/52 次），都被实例绑定的回调挡掉。
+- 意外：video_player 在 macOS 打不开 MKV（用 MP4 重封装）；它只在播放时才绘制，暂停画面要先静默播放一下；MDK 冷启动挂外挂 ASS 会崩（P2 后续在打开后挂文件，K 的互换也按此做）。
+
+限制：Erika 与 MDK 在暂停后的 seek 画面上不绘制字幕；Erika 的版本只能读锁文件；重试用当前设置的内核；Windows 的 media_kit_video 释放顺序修复没有编译验证。
