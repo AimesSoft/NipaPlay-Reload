@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:erika_flutter/erika_flutter.dart';
+import 'package:flutter/services.dart' show PlatformException;
 import 'package:nipa_harness/nipa_harness.dart';
 import 'package:nipaplay/player_abstraction/erika_player_adapter.dart';
 import 'package:nipaplay/player_abstraction/player_data_models.dart';
@@ -66,6 +67,16 @@ final class ErikaDriver extends AdapterDriver
   final _tracksKnown = Completer<void>();
   final _durationKnown = Completer<void>();
   final _selectionWaiters = <(bool Function(), Completer<void>)>[];
+  final _stateWaiters = <(bool Function(), Completer<void>)>[];
+
+  /// The state Erika last reported.
+  ErikaPlaybackState? _erikaState;
+
+  bool _canPlay() => const {
+        ErikaPlaybackState.ready,
+        ErikaPlaybackState.paused,
+        ErikaPlaybackState.stopped
+      }.contains(_erikaState);
 
   // ---- what Erika says ----
 
@@ -73,6 +84,11 @@ final class ErikaDriver extends AdapterDriver
     if (fenced) return;
     switch (event.kind) {
       case ErikaEventKind.stateChanged:
+        _erikaState = event.state;
+        for (final (state, waiter) in [..._stateWaiters]) {
+          if (!waiter.isCompleted && state()) waiter.complete();
+        }
+        _stateWaiters.removeWhere((w) => w.$2.isCompleted);
         final transport = switch (event.state) {
           ErikaPlaybackState.playing => KernelTransport.playing,
           ErikaPlaybackState.paused ||
@@ -268,8 +284,29 @@ final class ErikaDriver extends AdapterDriver
       adapter.seekAndWait(position: target.inMilliseconds);
 
   @override
-  Future<void> pauseMedia(bool paused) =>
-      paused ? adapter.pauseDirectly() : adapter.playDirectly();
+  Future<void> pauseMedia(bool paused) async {
+    if (paused) return adapter.pauseDirectly();
+    try {
+      await adapter.playDirectly();
+    } on PlatformException catch (refused) {
+      // Erika takes play from ready, paused or stopped only. A state it
+      // has not reported yet (the open still settling) is waited for, once;
+      // otherwise the state it is in is the answer.
+      if (_canPlay()) rethrow;
+      final waiter = Completer<void>();
+      _stateWaiters.add((_canPlay, waiter));
+      try {
+        await waiter.future.timeout(const Duration(seconds: 3));
+      } on TimeoutException {
+        throw StateError(
+            'Erika did not take play while ${_erikaState?.name ?? 'in no reported state'}: ${refused.message}');
+      } finally {
+        _stateWaiters.removeWhere((w) => identical(w.$2, waiter));
+      }
+      queue.live();
+      await adapter.playDirectly();
+    }
+  }
 
   @override
   Future<Duration?> readPosition() async => null;

@@ -425,6 +425,46 @@ def subtitles_check(kernel):
     gui('playback.close')
 
 
+def paused_subtitle_check(kernel):
+    """暂停拖动：字幕和画面同步出现。字幕选上之后在暂停中跳到有对白的时刻，再跳到另一句，比字幕条带与关掉字幕时的差别。"""
+    use(kernel)
+    cases = [('sintel', 'english', 'embedded', [131500, 138000, 131500]),
+             ('episode12', 'ass0', 'embedded', [153200, 154600, 153200])]
+    for media, label, origin, targets in cases:
+        path = media_for(kernel, media)
+        host('open', path=str(path), paused='1', startMs=str(targets[0] - 4000))
+        time.sleep(1.5)
+        tracks = gui('playback.tracks')
+        embedded = [t for t in (tracks.get('tracks') or []) if t.get('kind') == 'subtitle' and t.get('origin') == origin]
+        pick = next((t for t in embedded if (t.get('language') or '') in ('eng', 'en')), None) if media == 'sintel' else (embedded[0] if embedded else None)
+        if pick is None:
+            record('psub_skipped', kernel=kernel, media=media, tracks=len(embedded))
+            gui('playback.close')
+            continue
+        reply = gui('playback.select_track', {'kind': 'subtitle', 'origin': origin, 'index': pick['index']})
+        time.sleep(0.6)
+        record('psub_selected', kernel=kernel, media=media, outcome=((reply.get('receipt') or {}).get('outcome')), status=state().get('status'))
+        for i, target in enumerate(targets):
+            gui('playback.seek', {'positionMs': target}, strict=True)
+            time.sleep(1.2)
+            st = state()
+            name = '%s-%s-psub%d' % (kernel, media, i)
+            shot(name)
+            on = strip(name)
+            record('psub', kernel=kernel, media=media, iteration=i, target=target, positionMs=st.get('positionMs'), status=st.get('status'),
+                   text=host('text', atMs=str(target)), stripOn=on)
+        # The same moments with the subtitle off: what the strip is without it.
+        gui('playback.select_track', {'kind': 'subtitle', 'origin': origin, 'index': -1})
+        time.sleep(0.6)
+        for i, target in enumerate(targets[:2]):
+            gui('playback.seek', {'positionMs': target}, strict=True)
+            time.sleep(1.2)
+            name = '%s-%s-psuboff%d' % (kernel, media, i)
+            shot(name)
+            record('psub_off', kernel=kernel, media=media, iteration=i, target=target, stripOff=strip(name))
+        gui('playback.close')
+
+
 def erika_subtitle_probe():
     """Erika：内嵌英语字幕选上之后，播放中与暂停中各画不画。"""
     use('erika')
@@ -535,6 +575,9 @@ try:
     elif MODE == 'paused':
         for kernel in ARGS or SETTING:
             paused_check(kernel)
+    elif MODE == 'psub':
+        for kernel in sys.argv[3:]:
+            paused_subtitle_check(kernel)
     elif MODE == 'erikasub':
         erika_subtitle_probe()
     elif MODE == 'subtitles':
