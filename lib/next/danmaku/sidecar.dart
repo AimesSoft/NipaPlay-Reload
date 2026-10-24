@@ -15,48 +15,60 @@ import '../util/slicer.dart';
 
 Future<({JsonMap facts, List<DanmakuEntry> entries})> readSidecar(
         String path) =>
-    Isolate.run(() async {
-      final watch = Stopwatch()..start();
-      final file = File(path), before = await File(path).stat();
-      final data = parseLocalDanmakuBytes(await file.readAsBytes());
-      final rows = parseDanmakuListInBackground(data['comments'] as List);
-      if (rows.isEmpty) throw const FormatException('No playable comments');
-      final platform = data['platform'] as String;
-      final videoId = data['platformVideoId'] as String?;
-      final entries = [
-        for (var i = 0; i < rows.length; i++)
-          classicDanmakuEntry(rows[i], i, 'local', path,
-              platform: platform == 'unknown'
-                  ? rows[i]['source'] as String? ?? 'unknown'
-                  : platform,
-              originVideoId: videoId ?? rows[i]['platformVideoId'] as String?,
-              preserveDeclaredOrigin: true)
-      ];
-      final after = await file.stat();
-      if (before.size != after.size || before.modified != after.modified) {
-        throw const FileSystemException('Danmaku changed while reading');
-      }
-      final times = <String, int>{};
-      for (final e in entries) {
-        final t = e.sourceTimeMs.toString();
-        times[t] = (times[t] ?? 0) + 1;
-      }
-      return (
-        facts: <String, Object?>{
-          'path': path,
-          'available': true,
-          'platform': platform,
-          'platformVideoId': videoId,
-          'size': after.size,
-          'modifiedAt': after.modified.toUtc().toIso8601String(),
-          'readAt': DateTime.now().toUtc().toIso8601String(),
-          'readMs': watch.elapsedMilliseconds,
-          'count': entries.length,
-          'timeCounts': times,
-        },
-        entries: entries
-      );
-    });
+    Isolate.run(() => _readSidecar(path));
+
+/// Indexing stores [facts] only. Keeping parsed entries inside the isolate
+/// avoids copying a whole track through the main isolate for every file.
+Future<JsonMap> readSidecarFacts(String path) =>
+    Isolate.run(() async => (await _readSidecar(path)).facts);
+
+/// For callers that are already inside a worker isolate.
+Future<JsonMap> readSidecarFactsHere(String path) async =>
+    (await _readSidecar(path)).facts;
+
+Future<({JsonMap facts, List<DanmakuEntry> entries})> _readSidecar(
+    String path) async {
+  final watch = Stopwatch()..start();
+  final file = File(path), before = await File(path).stat();
+  final data = parseLocalDanmakuBytes(await file.readAsBytes());
+  final rows = parseDanmakuListInBackground(data['comments'] as List);
+  if (rows.isEmpty) throw const FormatException('No playable comments');
+  final platform = data['platform'] as String;
+  final videoId = data['platformVideoId'] as String?;
+  final entries = [
+    for (var i = 0; i < rows.length; i++)
+      classicDanmakuEntry(rows[i], i, 'local', path,
+          platform: platform == 'unknown'
+              ? rows[i]['source'] as String? ?? 'unknown'
+              : platform,
+          originVideoId: videoId ?? rows[i]['platformVideoId'] as String?,
+          preserveDeclaredOrigin: true)
+  ];
+  final after = await file.stat();
+  if (before.size != after.size || before.modified != after.modified) {
+    throw const FileSystemException('Danmaku changed while reading');
+  }
+  final times = <String, int>{};
+  for (final e in entries) {
+    final t = e.sourceTimeMs.toString();
+    times[t] = (times[t] ?? 0) + 1;
+  }
+  return (
+    facts: <String, Object?>{
+      'path': path,
+      'available': true,
+      'platform': platform,
+      'platformVideoId': videoId,
+      'size': after.size,
+      'modifiedAt': after.modified.toUtc().toIso8601String(),
+      'readAt': DateTime.now().toUtc().toIso8601String(),
+      'readMs': watch.elapsedMilliseconds,
+      'count': entries.length,
+      'timeCounts': times,
+    },
+    entries: entries
+  );
+}
 
 final _entryCache =
     <String, ({int size, DateTime modified, List<DanmakuEntry> entries})>{};
@@ -85,13 +97,14 @@ final class SidecarIndexer {
   StreamSubscription<JsonMap>? _events;
   Timer? _timer;
   Future<void>? _worker;
+  bool _bulkRunning = false;
   bool _closed = false;
   bool enabled = true;
   String? lastRun, lastError;
   JsonMap get status => {
         'kind': 'danmaku.sidecar',
         'enabled': enabled,
-        'running': _worker != null,
+        'running': _worker != null || _bulkRunning,
         'queue': _pending.length,
         'lastRun': lastRun,
         'nextRun': enabled ? 'on file change or indexers.reconcile' : null,
@@ -101,17 +114,52 @@ final class SidecarIndexer {
     enabled = value;
     if (value) {
       await reconcile();
-      if (_pending.isNotEmpty && _worker == null) {
-        _worker = _drain().whenComplete(() => _worker = null);
-      }
+      _startPending();
     }
   }
 
+  /// Listens before the catalogue scan starts, so a file registered during the
+  /// scan is not lost. The scan itself is submitted separately to the library
+  /// worker.
+  void watch() {
+    _events ??= store.identities.fileChanges.listen(enqueue);
+  }
+
   Future<void> start() async {
-    _events = store.identities.fileChanges.listen(enqueue);
+    watch();
     // Every file is looked at once now; after that a file is looked at when it
     // is registered or changes, and indexers.reconcile looks at all again.
     await reconcile();
+  }
+
+  /// Claims the initial catalogue pass. Events arriving during it stay queued
+  /// until the worker has committed its result.
+  void beginBulk() {
+    if (!enabled || _closed) return;
+    _pending.clear();
+    _bulkRunning = true;
+  }
+
+  void finishBulk(JsonMap? summary, {Object? error}) {
+    _bulkRunning = false;
+    if (summary != null) {
+      lastRun = summary['lastRun'] as String?;
+      lastError = summary['error'] as String?;
+    } else if (error != null) {
+      lastError = error.runtimeType.toString();
+    }
+    _startPending();
+  }
+
+  void _startPending() {
+    if (_closed ||
+        !enabled ||
+        _bulkRunning ||
+        _pending.isEmpty ||
+        _worker != null) {
+      return;
+    }
+    _worker = _drain().whenComplete(() => _worker = null);
   }
 
   Future<void> reconcile() async {
@@ -131,7 +179,7 @@ final class SidecarIndexer {
     if (_closed || (file['path'] as String).contains('://')) return;
     _pending[file['fileId'] as String] = file;
     if (!enabled) return;
-    _worker ??= _drain().whenComplete(() => _worker = null);
+    _startPending();
   }
 
   Future<void> _drain() async {
@@ -183,8 +231,8 @@ final class SidecarIndexer {
         return true;
       }
       try {
-        final read = await readSidecar(candidate);
-        await store.recordSidecar(id, read.facts);
+        final facts = await readSidecarFacts(candidate);
+        await store.recordSidecar(id, facts);
         await onChanged();
         return true;
       } on FormatException catch (error) {

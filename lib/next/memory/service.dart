@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:io';
+import 'dart:isolate';
 
 import 'package:crypto/crypto.dart';
 import 'package:nipa_harness/nipa_harness.dart';
@@ -18,10 +19,13 @@ abstract interface class MemoryData {
 
 /// Markdown remains the source of truth; no extracted memory or transcript store.
 final class HarnessMemory implements MemoryData {
-  HarnessMemory(this.location, this.settings, this.report);
+  HarnessMemory(this.location, this.settings, this.report, {this.redact});
   final RepositoryLocation location;
   final SettingsRegistry settings;
   final Future<JsonMap> Function(JsonMap, Invocation) report;
+
+  /// A host-provided off-main redactor, shared when one is available.
+  Future<String> Function(String)? redact;
   Future<JsonMap> Function(String?)? recent;
   Future<void> _pending = Future.value();
   final _seen = <String, Map<String, String>>{};
@@ -62,7 +66,7 @@ final class HarnessMemory implements MemoryData {
     final content = await file.readAsString();
     return {
       'path': path,
-      'content': redactMemoryText(content),
+      'content': await _redact(content),
       'revision': _revision(content),
       'bytes': utf8.encode(content).length
     };
@@ -92,10 +96,13 @@ final class HarnessMemory implements MemoryData {
     ];
   }
 
-  Future<Map<String, String>> snapshot() async => {
-        for (final row in await list())
-          row['path'] as String: row['revision'] as String
-      };
+  /// Reading and hashing every memory file grows with what Nipa remembers.
+  /// Keep that work behind the isolate boundary; callers only receive the
+  /// small path/revision map used to detect changes.
+  Future<Map<String, String>> snapshot() async {
+    final root = (await _file('MEMORY.md')).parent.path;
+    return Isolate.run(() => _snapshotMemory(root));
+  }
 
   Future<void> rememberThread(String id) async {
     final key = '${location.path}:$id';
@@ -254,7 +261,7 @@ final class HarnessMemory implements MemoryData {
   Future<String> _resident(String path, int bytes) async {
     final file = await _file(path);
     if (!await file.exists()) return '(memory/$path 不存在)';
-    final value = redactMemoryText(await file.readAsString());
+    final value = await _redact(await file.readAsString());
     final encoded = utf8.encode(value);
     if (encoded.length <= bytes) return value;
     final prefix = utf8
@@ -266,10 +273,39 @@ final class HarnessMemory implements MemoryData {
 
   Future<JsonMap> context(String? threadId) async => {
         'preferences': await _resident('preferences.md', preferenceBytes),
-        'settings': redactHarnessJson(await settings.preferences()),
+        'settings':
+            await redactHarnessJsonOffMain(await settings.preferences()),
         'index': await _resident('MEMORY.md', indexBytes),
         'recent': await recent?.call(threadId) ??
             {'text': '(对话宿主不可用)', 'truncated': false},
       };
+
+  Future<String> _redact(String value) =>
+      redact?.call(value) ?? redactMemoryTextOffMain(value);
 }
 
+Map<String, String> _snapshotMemory(String rootPath) {
+  final root = Directory(rootPath);
+  if (!root.existsSync()) return const {};
+  final files = <String>[];
+  void visit(Directory directory, String prefix) {
+    for (final entry in directory.listSync(followLinks: false)) {
+      final name = entry.uri.pathSegments.where((part) => part.isNotEmpty).last;
+      final path = '$prefix$name';
+      if (entry is Directory) {
+        visit(entry, '$path/');
+      } else if (entry is File && name.endsWith('.md')) {
+        files.add(path);
+      }
+    }
+  }
+
+  visit(root, '');
+  files.sort();
+  return {
+    for (final path in files)
+      path: sha256
+          .convert(utf8.encode(File('$rootPath/$path').readAsStringSync()))
+          .toString()
+  };
+}

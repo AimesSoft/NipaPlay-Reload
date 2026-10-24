@@ -30,6 +30,7 @@ void main() {
   late Harness harness;
   late FakeExecutor executor;
   late FakeExecutor helperExecutor;
+  late StateSources sources;
   setUp(() async {
     sqfliteFfiInit();
     root = await Directory.systemTemp.createTemp('ui-data-constraints-');
@@ -47,7 +48,7 @@ void main() {
         providers: [],
         classic: MemoryClassic(),
         authorizedRoots: () => [root.path]);
-    final sources = StateSources();
+    sources = StateSources();
     service = UiDataService(
         media,
         engine,
@@ -84,19 +85,74 @@ void main() {
   Future<Outcome> call(String action, JsonMap input) => harness.invokeJson(
       action, input, Invocation(origin: 'harness_cli:chat:fixture'));
 
+  test('home resolves only the Classic locators it was given', () async {
+    final locator = '${root.path}/media/Classic episode.mkv';
+    await store.database.insert('media_entities', {
+      'id': 'release-home',
+      'kind': 'release',
+      'parent_id': 'w1',
+      'attributes': jsonEncode({'title': '第一季'})
+    });
+    await store.database.insert('media_entities', {
+      'id': 'episode-home',
+      'kind': 'episode',
+      'parent_id': 'release-home',
+      'attributes': jsonEncode({'title': '第一集', 'number': '1'})
+    });
+    await store.database.insert('media_entities', {
+      'id': 'file-home',
+      'kind': 'file',
+      'attributes': jsonEncode({
+        'probe': {'durationMs': 1440000}
+      })
+    });
+    await store.database.insert('media_file_episodes', {
+      'file_id': 'file-home',
+      'episode_id': 'episode-home',
+      'relation': 'exact',
+      'ordinal': 0
+    });
+    await store.database.insert('media_locations', {
+      'id': 'location-home',
+      'file_id': 'file-home',
+      'source': 'local',
+      'owner_device_id': 'fixture',
+      'locator': locator,
+      'available': 1
+    });
+    sources.continueWatching = () => [
+          {'filePath': locator, 'watchProgress': .4}
+        ];
+    sources.history = () => [
+          {'filePath': locator, 'watchProgress': .4}
+        ];
+
+    final home = await service.home();
+    final shelf = home.shelves
+        .singleWhere((shelf) => shelf.kind == UiShelfKind.continueWatching);
+    expect(shelf.items.single.work.workId, 'w1');
+    expect(shelf.items.single.episode?.episodeId, 'episode-home');
+  });
+
   test('task remains readable after its source work disappears', () async {
     service.libraryData = LibraryDataService(service);
-    final job = await engine.submit(type: 'agent.helper', title: '来源任务',
-      input: {'workId': sourceEntityId('work', 'jellyfin:missing', 'missing')});
+    final job = await engine.submit(
+        type: 'agent.helper',
+        title: '来源任务',
+        input: {
+          'workId': sourceEntityId('work', 'jellyfin:missing', 'missing')
+        });
     final context = await helperExecutor.entered.future;
     final task = (await service.tasks().first).single;
     expect(task.taskId, job.jobId);
     expect(task.type, 'agent.helper');
     expect(task.artwork, isNull);
-    await context.succeed(JobReceipt(verification: VerificationLevel.verified, details: {}));
+    await context.succeed(
+        JobReceipt(verification: VerificationLevel.verified, details: {}));
   });
 
-  test('a download whose work is not known goes by its own name, never its hash',
+  test(
+      'a download whose work is not known goes by its own name, never its hash',
       () async {
     const release =
         '[LoliHouse] Sousou no Frieren - 05 [WebRip 1080p HEVC-10bit AAC][简繁内封字幕]';
@@ -109,24 +165,30 @@ void main() {
       await engine.submit(type: 'download', title: title);
     }
     final tasks = await service.tasks().first;
-    expect([for (final t in tasks) t.title], unorderedEquals([
-      '下载 $release',
-      '下载 葬送的芙莉莲 05',
-      '下载',
-      '下载',
-    ]));
+    expect(
+        [for (final t in tasks) t.title],
+        unorderedEquals([
+          '下载 $release',
+          '下载 葬送的芙莉莲 05',
+          '下载',
+          '下载',
+        ]));
     expect({for (final t in tasks) t.action}, {'下载'});
     expect([for (final t in tasks) t.workTitle].nonNulls, isEmpty,
         reason: 'a download is not a work');
   });
 
-  test('helper cards and tasks retain thread, summary and unknown progress', () async {
-    final job = await engine.submit(type: 'agent.helper', title: '补齐弹幕',
-        input: {'parentThreadId': 'parent'}, details: {
-          'threadId': 'helper-thread', 'startedAt': '2026-10-12T00:00:00Z',
-          'currentActivity': '正在整理弹幕',
-          'source': 'codexNative',
-        });
+  test('helper cards and tasks retain thread, summary and unknown progress',
+      () async {
+    final job =
+        await engine.submit(type: 'agent.helper', title: '补齐弹幕', input: {
+      'parentThreadId': 'parent'
+    }, details: {
+      'threadId': 'helper-thread',
+      'startedAt': '2026-10-12T00:00:00Z',
+      'currentActivity': '正在整理弹幕',
+      'source': 'codexNative',
+    });
     final context = await helperExecutor.entered.future;
     final task = (await service.tasks().first).single;
     expect(task.kind, UiTaskKind.helper);
@@ -137,23 +199,38 @@ void main() {
     expect(task.parentThreadId, 'parent');
     expect(task.currentActivity, '正在整理弹幕');
     expect(task.progress, isNull);
-    await File('${root.path}/journal.jsonl').writeAsString('${jsonEncode({
-      'event': 'chat.turn_boundary', 'origin': 'harness_cli:helper:${job.jobId}',
-      'threadId': 'helper-thread', 'turnId': 'helper-turn', 'phase': 'started',
-    })}\n', mode: FileMode.append);
-    expect(await harness.invokeJson('ui.present', {'cards': [
-      {'kind': 'task', 'taskId': job.jobId}
-    ]}, Invocation(origin: 'harness_cli:helper:${job.jobId}')), isA<Completed>());
+    await File('${root.path}/journal.jsonl').writeAsString(
+        '${jsonEncode({
+              'event': 'chat.turn_boundary',
+              'origin': 'harness_cli:helper:${job.jobId}',
+              'threadId': 'helper-thread',
+              'turnId': 'helper-turn',
+              'phase': 'started',
+            })}\n',
+        mode: FileMode.append);
+    expect(
+        await harness.invokeJson(
+            'ui.present',
+            {
+              'cards': [
+                {'kind': 'task', 'taskId': job.jobId}
+              ]
+            },
+            Invocation(origin: 'harness_cli:helper:${job.jobId}')),
+        isA<Completed>());
     expect(await service.cards(threadId: 'parent'), isEmpty);
     expect(await service.cards(threadId: 'helper-thread'), hasLength(1));
-    await context.succeed(JobReceipt(verification: VerificationLevel.verified,
+    await context.succeed(JobReceipt(
+        verification: VerificationLevel.verified,
         details: {'summary': '九集已检查'}));
     final finished = (await service.tasks().first).single;
     expect(finished.summary, '九集已检查');
     expect(finished.progress, isNull);
   });
 
-  test('artwork batches keep provenance and source files; invalid batch cannot edit metadata', () async {
+  test(
+      'artwork batches keep provenance and source files; invalid batch cannot edit metadata',
+      () async {
     final recorder = ui.PictureRecorder();
     final canvas = ui.Canvas(recorder);
     canvas.drawColor(const ui.Color(0xffaa4422), ui.BlendMode.src);
@@ -162,15 +239,35 @@ void main() {
     final bytes = (await image.toByteData(format: ui.ImageByteFormat.png))!;
     final file = File('${root.path}/input.png');
     await file.writeAsBytes(bytes.buffer.asUint8List());
-    image.dispose(); picture.dispose();
-    JsonMap entry(String id, String kind) => {'entityId': id, 'kind': kind,
-      'file': file.path, 'source': {'label': 'fixture source', 'url': 'https://example.test/art'}};
+    image.dispose();
+    picture.dispose();
+    JsonMap entry(String id, String kind) => {
+          'entityId': id,
+          'kind': kind,
+          'file': file.path,
+          'source': {
+            'label': 'fixture source',
+            'url': 'https://example.test/art'
+          }
+        };
     final before = await store.database.query('media_metadata_edits');
-    expect(await call('media.artwork.set', {'entries': [entry('w1', 'poster'), entry('w2', 'still')]}), isA<Failed>());
+    expect(
+        await call('media.artwork.set', {
+          'entries': [entry('w1', 'poster'), entry('w2', 'still')]
+        }),
+        isA<Failed>());
     expect(await store.database.query('media_metadata_edits'), before);
-    expect(await call('media.artwork.set', {'entries': [{...entry('w1', 'poster'), 'url': 'https://example.test/a'}]}), isA<Failed>());
+    expect(
+        await call('media.artwork.set', {
+          'entries': [
+            {...entry('w1', 'poster'), 'url': 'https://example.test/a'}
+          ]
+        }),
+        isA<Failed>());
     expect(await store.database.query('media_metadata_edits'), before);
-    final saved = await call('media.artwork.set', {'entries': [entry('w1', 'poster'), entry('w1', 'logo')]});
+    final saved = await call('media.artwork.set', {
+      'entries': [entry('w1', 'poster'), entry('w1', 'logo')]
+    });
     expect(saved, isA<Completed>());
     final receipt = (saved as Completed).value.toJson()['entries'] as List;
     await file.delete();
@@ -181,16 +278,31 @@ void main() {
     expect(work.artwork.tint, 0xffaa4422);
     final edits = await store.database.query('media_metadata_edits');
     expect(edits, hasLength(2));
-    expect(edits.every((e) => e['origin'] == 'harness_cli:chat:fixture' && e['invocation_id'] != null), true);
-    final metadata = (await service.media.store.mergedMetadata('w1'))['fields'] as Map;
-    expect((metadata['artwork.poster'] as Map)['source'], {'label': 'fixture source', 'url': 'https://example.test/art'});
+    expect(
+        edits.every((e) =>
+            e['origin'] == 'harness_cli:chat:fixture' &&
+            e['invocation_id'] != null),
+        true);
+    final metadata =
+        (await service.media.store.mergedMetadata('w1'))['fields'] as Map;
+    expect((metadata['artwork.poster'] as Map)['source'],
+        {'label': 'fixture source', 'url': 'https://example.test/art'});
     final facts = await service.metadataFacts('w1');
     expect((facts['fields'] as Map)['poster']['path'], work.artwork.poster);
     expect(facts['heroImage'], 'poster');
-    await service.media.store.overrideField('w1', 'overview', '中文简介', Invocation(origin: 'mcp'), language: 'zh-CN');
-    expect(((await service.metadataFacts('w1'))['fields'] as Map)['overview']['language'], 'zh-CN');
-    await service.media.store.overrideField('w1', 'overview', 'English synopsis', Invocation(origin: 'mcp'));
-    expect(((await service.metadataFacts('w1'))['fields'] as Map)['overview']['language'], 'unknown');
+    await service.media.store.overrideField(
+        'w1', 'overview', '中文简介', Invocation(origin: 'mcp'),
+        language: 'zh-CN');
+    expect(
+        ((await service.metadataFacts('w1'))['fields'] as Map)['overview']
+            ['language'],
+        'zh-CN');
+    await service.media.store.overrideField(
+        'w1', 'overview', 'English synopsis', Invocation(origin: 'mcp'));
+    expect(
+        ((await service.metadataFacts('w1'))['fields'] as Map)['overview']
+            ['language'],
+        'unknown');
   });
 
   test(
@@ -340,8 +452,7 @@ void main() {
 
   test('choices offer distinct answers and read back as a choices card',
       () async {
-    Future<Outcome> present(Map<String, Object?> card) =>
-        call('ui.present', {
+    Future<Outcome> present(Map<String, Object?> card) => call('ui.present', {
           'cards': [card]
         });
     expect(
@@ -438,7 +549,8 @@ void main() {
     expect(await store.database.rawQuery('PRAGMA foreign_key_check'), isEmpty);
   });
 
-  test('a turn shows an identical card once; results say so and name the conversation',
+  test(
+      'a turn shows an identical card once; results say so and name the conversation',
       () async {
     Future<JsonMap> present(List<Map<String, Object?>> cards) async {
       final outcome = await call('ui.present', {'cards': cards});
@@ -467,8 +579,8 @@ void main() {
     ]);
     expect(await store.database.query('ui_presentations'), hasLength(3));
     final shown = await service.cards(threadId: 'thread', turnId: 'turn');
-    expect([for (final c in shown) (c as UiWorkCard).work.workId],
-        ['w1', 'w2']);
+    expect(
+        [for (final c in shown) (c as UiWorkCard).work.workId], ['w1', 'w2']);
 
     Map<String, Object?> choices(String second) => {
           'kind': 'choices',
@@ -501,15 +613,16 @@ void main() {
               'phase': 'started'
             })}\n',
         mode: FileMode.append);
-    expect((await present([
-      {'kind': 'work', 'workId': 'w1'}
-    ]))['cards'], [
-      {'index': 0, 'alreadyShown': false}
-    ]);
+    expect(
+        (await present([
+          {'kind': 'work', 'workId': 'w1'}
+        ]))['cards'],
+        [
+          {'index': 0, 'alreadyShown': false}
+        ]);
     expect(
         await service.cards(threadId: 'thread', turnId: 'turn2'), hasLength(1));
-    expect(
-        (await service.cards(threadId: 'thread')).whereType<UiWorkCard>(),
+    expect((await service.cards(threadId: 'thread')).whereType<UiWorkCard>(),
         hasLength(3));
   });
 
@@ -542,7 +655,8 @@ void main() {
             ]
           },
           Invocation(origin: origin));
-      final result = ((outcome as Completed).value as dynamic).toJson() as JsonMap;
+      final result =
+          ((outcome as Completed).value as dynamic).toJson() as JsonMap;
       expect(result['conversation'], 'subagent');
       expect(result['threadId'], 'helper-thread');
     }

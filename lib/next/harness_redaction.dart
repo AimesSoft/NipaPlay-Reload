@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:isolate';
 
 import 'package:nipaplay/security/secret_redactor.dart';
@@ -97,6 +98,23 @@ Future<Object?> redactHarnessJsonOffMain(Object? value) async {
     });
   } on ArgumentError {
     return redactHarnessJson(value);
+  }
+}
+
+/// Redacts and encodes a value in one background pass. Hooks persist their
+/// payload as JSON after delivering it to observers, so returning text avoids
+/// a second redaction and encoding turn on the UI isolate.
+Future<String> redactAndEncodeHarnessJsonOffMain(Object? value) async {
+  final remembered = SecretRedactor.remembered();
+  try {
+    return await Isolate.run(() {
+      for (final MapEntry(key: secret, value: ref) in remembered.entries) {
+        SecretRedactor.remember(ref, secret);
+      }
+      return jsonEncode(redactHarnessJson(value));
+    });
+  } on ArgumentError {
+    return jsonEncode(redactHarnessJson(value));
   }
 }
 

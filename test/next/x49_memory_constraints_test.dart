@@ -111,13 +111,21 @@ void main() {
     // During the next turn the user edits it from the interface.
     since = DateTime.now();
     final read = await memory.read('preferences.md');
-    await memory.edit('preferences.md', '- 用户改过。\n',
-        read['revision'] as String, Invocation(origin: 'gui'));
+    await memory.edit('preferences.md', '- 用户改过。\n', read['revision'] as String,
+        Invocation(origin: 'gui'));
     await memory.settle('a', since);
     final notice = await memory.changesFor('a');
     expect(notice, contains('preferences.md'));
     // The conversation shows what was said, not the notice after it.
     expect(ChatContext.strip('怎么样了？\n\n$notice'), '怎么样了？');
+  });
+
+  test('direct file edits are observed without a memory API write', () async {
+    await memory.rememberThread('a');
+    final file = File('${repo.path}/memory/preferences.md');
+    await file.writeAsString('${await file.readAsString()}- 直接改盘。\n');
+    expect(await memory.changesFor('a'), contains('preferences.md'));
+    expect(await memory.changesFor('a'), isNull);
   });
 
   test('a staged target stays intact when the user tries to delete it',
