@@ -129,6 +129,63 @@ void main() {
             .progress,
         .4);
   });
+  test('prepare runs the complete index loop in the worker', () async {
+    final first = await worker.prepare(
+        owner: 'owner',
+        peers: const {},
+        peerRevision: 0,
+        online: const {},
+        onlineRevision: 0,
+        account: null,
+        composedStamp: null);
+    expect(first.builds, 1);
+    expect(first.composed, isTrue);
+    expect(first.snapshot!.works.values.single.title, '最初的名字');
+
+    final unchanged = await worker.prepare(
+        owner: 'owner',
+        peers: const {},
+        peerRevision: 0,
+        online: const {},
+        onlineRevision: 0,
+        account: null,
+        composedStamp: first.compositionStamp);
+    expect(unchanged.builds, 0);
+    expect(unchanged.composed, isFalse);
+    expect(unchanged.snapshot, isNull);
+    expect(unchanged.compositionStamp, first.compositionStamp);
+
+    final peerChanged = await worker.prepare(
+        owner: 'owner',
+        peers: const {},
+        peerRevision: 1,
+        online: const {},
+        onlineRevision: 0,
+        account: null,
+        composedStamp: first.compositionStamp);
+    expect(peerChanged.builds, 0);
+    expect(peerChanged.composed, isTrue);
+    expect(peerChanged.snapshot, isNotNull);
+
+    await jobs.database.update(
+        'media_entities',
+        {
+          'attributes': jsonEncode({'title': '改过的名字', 'localOnly': true})
+        },
+        where: 'id=?',
+        whereArgs: ['w']);
+    final rebuilt = await worker.prepare(
+        owner: 'owner',
+        peers: const {},
+        peerRevision: 1,
+        online: const {},
+        onlineRevision: 0,
+        account: null,
+        composedStamp: peerChanged.compositionStamp);
+    expect(rebuilt.builds, 1);
+    expect(rebuilt.composed, isTrue);
+    expect(rebuilt.snapshot!.works.values.single.title, '改过的名字');
+  });
   test('a worker that ends on its own is replaced by the next request',
       () async {
     await worker.build('one');
@@ -138,11 +195,9 @@ void main() {
     await worker.call('sources', (null, null, <String>[]));
     worker.killWorkerForTest();
     await Future<void>.delayed(const Duration(milliseconds: 300));
-    final update = await worker
-        .call('progress', [
-          {'episodeId': id, 'progress': 0.2, 'positionMs': 200, 'durationMs': 1000}
-        ])
-        .timeout(const Duration(seconds: 20)) as LibraryProgress;
+    final update = await worker.call('progress', [
+      {'episodeId': id, 'progress': 0.2, 'positionMs': 200, 'durationMs': 1000}
+    ]).timeout(const Duration(seconds: 20)) as LibraryProgress;
     expect(
         update.episodes.values.single
             .singleWhere((e) => e.episodeId == id)

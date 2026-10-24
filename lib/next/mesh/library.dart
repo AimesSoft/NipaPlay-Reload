@@ -33,6 +33,7 @@ final class MeshLibrary {
     mesh.libraryRequest = request;
     ui.media.searchWorkIds = searchWorkIds;
     mesh.hostConfigurationChanged = _hostConfigurationChanged;
+    _libraryChanges = ui.changes.listen((_) => invalidateIndex());
   }
   late final MeshFiles files;
   late final LibraryWorker worker;
@@ -51,13 +52,19 @@ final class MeshLibrary {
   Map<String, List<JsonMap>> _locations = {};
   Map<String, String> _localTargets = {};
 
-  Future<void>? _sync, _building;
+  Future<void>? _sync, _building, _preparing;
   String? _builtStamp;
   String? _composedStamp;
+  StreamSubscription<void>? _libraryChanges;
+  bool _indexPrepared = false;
+  int _indexEpoch = 0;
+  String? _preparedBuiltStamp, _preparedAccount;
+  int? _preparedPeerRevision, _preparedOnlineRevision;
 
   /// Progress moves independently of the catalogue's composition revision.
-  int _peersRevision = 0, _progressRevision = 0;
-  String _changeStamp() => jsonEncode([_builtStamp, _peersRevision, _online]);
+  int _peersRevision = 0, _progressRevision = 0, _onlineRevision = 0;
+  String _changeStamp() =>
+      jsonEncode([_builtStamp, _peersRevision, _onlineRevision]);
   Timer? _timer;
   HttpServer? _http;
   Future<void>? _httpBinding;
@@ -115,31 +122,21 @@ final class MeshLibrary {
     return id;
   }
 
-  /// What the local catalogue is built from, told by a few integers: the
-  /// database's change epoch and Classic's state (see
-  /// [UiDataService.catalogueStamp]).
-  Future<String> _stamp() async => jsonEncode([own, await ui.catalogueStamp()]);
-
   /// Builds the local catalogue again when what it is made of has changed
-  /// since it was last built, and not otherwise. The stamp is taken before
-  /// reading, so a change made meanwhile builds once more.
-  Future<void> _build() => _building ??= (() async {
-        for (var attempt = 0; attempt < 3; attempt++) {
-          final stamp = await _stamp();
-          if (_builtStamp == stamp) return;
-          builds++;
-          await worker.build('$_run:$stamp');
-          _builtStamp = stamp;
-        }
-      })()
-          .whenComplete(() => _building = null);
+  /// since it was last built, and not otherwise. The stamp is read in the
+  /// library worker, before it reads the catalogue.
+  Future<void> _build() {
+    if (_indexIsCurrent) return Future<void>.value();
+    return _building ??= (() async {
+      final result = await worker.buildCurrent(own);
+      builds += result.builds;
+      _builtStamp = result.stamp;
+    })()
+        .whenComplete(() => _building = null);
+  }
 
   /// How many times the local catalogue was built.
   int builds = 0;
-
-  /// Tells this run's versions from an earlier run's: Classic's state, which
-  /// they also stand for, starts over with it.
-  final _run = DateTime.now().microsecondsSinceEpoch.toRadixString(36);
 
   Future<void> refresh() =>
       _sync ??= _refresh().whenComplete(() => _sync = null);
@@ -155,7 +152,7 @@ final class MeshLibrary {
           in mesh.cachedDevices.where((d) => d['deviceId'] != own)) {
         final id = peer['deviceId'] as String;
         if (peer['revoked'] == true) {
-          _online[id] = false;
+          _setOnline(id, false);
           continue;
         }
         try {
@@ -194,23 +191,29 @@ final class MeshLibrary {
             _peersRevision++;
             await _save('mesh:peer:$id', saved);
           }
-          _online[id] = true;
+          _setOnline(id, true);
         } on Failure catch (error) {
-          _online[id] = false;
+          _setOnline(id, false);
           lastError = error.message;
         }
       }
     } else {
       for (final id in _peers.keys) {
-        _online[id] = false;
+        _setOnline(id, false);
       }
     }
-    await _compose();
+    await prepareIndex();
     if (before != _changeStamp()) ui.notifyLibraryChanged();
   }
 
   Future<void> _mergeProgress(Map<String, JsonMap> values) async {
     if (await worker.call('merge', values) == true) _progressRevision++;
+  }
+
+  void _setOnline(String id, bool value) {
+    if (_online[id] == value) return;
+    _online[id] = value;
+    _onlineRevision++;
   }
 
   Future<void> recordProgress(String episodeId, double progress,
@@ -254,9 +257,62 @@ final class MeshLibrary {
     return UnmodifiableListView(_orderedWorks);
   }
 
-  Future<void> prepareIndex() async {
-    await _build();
-    await _compose();
+  void invalidateIndex() {
+    _indexPrepared = false;
+    _indexEpoch++;
+  }
+
+  bool get _indexIsCurrent =>
+      _indexPrepared &&
+      _preparedBuiltStamp == _builtStamp &&
+      _preparedPeerRevision == _peersRevision &&
+      _preparedOnlineRevision == _onlineRevision &&
+      _preparedAccount == mesh.accountId;
+
+  Future<void> prepareIndex() {
+    final current = _preparing;
+    if (current != null) return current;
+    if (_indexIsCurrent) return Future<void>.value();
+    final epoch = _indexEpoch;
+    return _preparing =
+        _prepareIndex(epoch).whenComplete(() => _preparing = null);
+  }
+
+  /// The worker owns the complete prepare loop: stamping, conditional build,
+  /// composition and transfer. The UI publishes the result with reference
+  /// replacements only.
+  Future<void> _prepareIndex(int epoch) async {
+    for (var attempt = 0; attempt < 3; attempt++) {
+      final peerRevision = _peersRevision;
+      final onlineRevision = _onlineRevision;
+      final account = mesh.accountId;
+      final result = await worker.prepare(
+          owner: own,
+          peers: _peers,
+          peerRevision: peerRevision,
+          online: _online,
+          onlineRevision: onlineRevision,
+          account: account,
+          composedStamp: _composedStamp);
+      builds += result.builds;
+      _builtStamp = result.builtStamp;
+      if (result.snapshot case final snapshot?) {
+        compositions++;
+        _publish(snapshot);
+        _composedStamp = result.compositionStamp;
+      }
+      if (epoch == _indexEpoch &&
+          peerRevision == _peersRevision &&
+          onlineRevision == _onlineRevision &&
+          account == mesh.accountId) {
+        _preparedBuiltStamp = _builtStamp;
+        _preparedPeerRevision = peerRevision;
+        _preparedOnlineRevision = onlineRevision;
+        _preparedAccount = account;
+        _indexPrepared = true;
+        return;
+      }
+    }
   }
 
   Future<JsonMap> search(String query,
@@ -312,35 +368,18 @@ final class MeshLibrary {
     return await worker.call('evidence', id) as JsonMap;
   }
 
-  Future<void>? _composing;
-
-  /// Composes again when what it is made of has changed since, and not
-  /// otherwise. A call that comes while one runs waits for it, and the run
-  /// looks again before it returns, so a change made meanwhile is composed.
-  Future<void> _compose() => _composing ??= (() async {
-        for (var attempt = 0; attempt < 3; attempt++) {
-          final composition = jsonEncode([own, _changeStamp()]);
-          if (_composedStamp == composition) return;
-          await _composeNow();
-          _composedStamp = composition;
-        }
-      })()
-          .whenComplete(() => _composing = null);
-
   /// The complete projection is transferred by the worker. Publishing consists
   /// solely of reference replacements, independent of catalogue size.
   int compositions = 0;
-  Future<void> _composeNow() async {
-    final result = await worker.compose(_peers, _online, mesh.accountId);
-    compositions++;
-    _assets = result.assets;
-    _works = result.works;
-    _orderedWorks = result.orderedWorks;
-    _episodeParents = result.episodeParents;
-    _episodes = result.episodes;
-    _aliases = result.aliases;
-    _locations = result.locations;
-    _localTargets = result.localTargets;
+  void _publish(LibrarySnapshot snapshot) {
+    _assets = snapshot.assets;
+    _works = snapshot.works;
+    _orderedWorks = snapshot.orderedWorks;
+    _episodeParents = snapshot.episodeParents;
+    _episodes = snapshot.episodes;
+    _aliases = snapshot.aliases;
+    _locations = snapshot.locations;
+    _localTargets = snapshot.localTargets;
   }
 
   Future<JsonMap> request(String method, JsonMap input, String peer) async {
@@ -732,6 +771,7 @@ final class MeshLibrary {
     _timer = null;
     await _sync;
     await _building;
+    await _preparing;
   }
 
   Future<void> close() async {
@@ -746,7 +786,9 @@ final class MeshLibrary {
     _readers.clear();
     playback.clear();
     _proxyState = 'closed';
-    await _composing;
+    await _preparing;
+    await _libraryChanges?.cancel();
+    _libraryChanges = null;
     await worker.close();
     ui.state.queryWorker = null;
     await files.close();

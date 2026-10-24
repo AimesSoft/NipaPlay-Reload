@@ -34,6 +34,9 @@ DbService createDbService(
     if (artwork.isNotEmpty) refreshed.add('artwork_cache');
     final mesh = uiData.meshLibrary;
     if (mesh != null) {
+      // The commit may have touched catalogue tables. Let the worker compare
+      // its stamp; a preloaded index must not hide this commit.
+      mesh.invalidateIndex();
       await mesh.prepareIndex();
       refreshed.add('mesh_library_index');
     }

@@ -11,6 +11,7 @@ import 'package:nipaplay/utils/danmaku_parser.dart';
 import 'import.dart';
 import 'source.dart';
 import 'store.dart';
+import '../util/slicer.dart';
 
 Future<({JsonMap facts, List<DanmakuEntry> entries})> readSidecar(
         String path) =>
@@ -87,31 +88,43 @@ final class SidecarIndexer {
   bool _closed = false;
   bool enabled = true;
   String? lastRun, lastError;
-  JsonMap get status => {'kind': 'danmaku.sidecar', 'enabled': enabled,
-    'running': _worker != null, 'queue': _pending.length, 'lastRun': lastRun,
-    'nextRun': enabled ? 'on file change or indexers.reconcile' : null, 'error': lastError};
+  JsonMap get status => {
+        'kind': 'danmaku.sidecar',
+        'enabled': enabled,
+        'running': _worker != null,
+        'queue': _pending.length,
+        'lastRun': lastRun,
+        'nextRun': enabled ? 'on file change or indexers.reconcile' : null,
+        'error': lastError
+      };
   Future<void> setEnabled(bool value) async {
     enabled = value;
     if (value) {
       await reconcile();
-      if (_pending.isNotEmpty && _worker == null) _worker = _drain().whenComplete(() => _worker = null);
+      if (_pending.isNotEmpty && _worker == null) {
+        _worker = _drain().whenComplete(() => _worker = null);
+      }
     }
   }
 
-  void start() {
+  Future<void> start() async {
     _events = store.identities.fileChanges.listen(enqueue);
     // Every file is looked at once now; after that a file is looked at when it
     // is registered or changes, and indexers.reconcile looks at all again.
-    unawaited(reconcile());
+    await reconcile();
   }
 
   Future<void> reconcile() async {
     if (!enabled || _closed) return;
+    final slice = Slicer();
     for (final row in await store.db.query('media_locations',
         where: 'source=? AND owner_device_id=?',
         whereArgs: ['local', store.identities.ownerDeviceId])) {
       enqueue({'fileId': row['file_id'], 'path': row['locator']});
+      await slice();
     }
+    // The catalogue is built after the initial pass has stored what it saw.
+    await _worker;
   }
 
   void enqueue(JsonMap file) {
@@ -122,7 +135,9 @@ final class SidecarIndexer {
   }
 
   Future<void> _drain() async {
+    final slice = Slicer();
     while (_pending.isNotEmpty && !_closed && enabled) {
+      await slice();
       final id = _pending.keys.first,
           file = _pending.remove(_pending.keys.first)!;
       try {

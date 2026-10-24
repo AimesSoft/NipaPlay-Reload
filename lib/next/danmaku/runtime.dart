@@ -76,7 +76,7 @@ final class DanmakuRuntime {
   late final sidecars = SidecarIndexer(service.store, () async {
     _changed();
   });
-  void startIndexing() => sidecars.start();
+  Future<void> startIndexing() => sidecars.start();
   Future<void> pauseIndexing() => sidecars.pause();
   Future<void> stopIndexing() => sidecars.close();
   static Future<DanmakuRuntime> create(IdentityStore identities,
