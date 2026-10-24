@@ -7,6 +7,7 @@
 #import "FvpPlugin.h"
 #include "mdk/RenderAPI.h"
 #include "mdk/Player.h"
+#include "callbacks.h"
 #import <AVFoundation/AVFoundation.h>
 #import <CoreVideo/CoreVideo.h>
 #import <Metal/Metal.h>
@@ -87,7 +88,7 @@ class TexturePlayer final: public Player
 {
 public:
     TexturePlayer(int64_t handle, int width, int height, NSObject<FlutterTextureRegistry>* texReg)
-        : Player(reinterpret_cast<mdkPlayerAPI*>(handle))
+        : Player(reinterpret_cast<mdkPlayerAPI*>(handle)), handle_(handle)
     {
         mtex_ = [[MetalTexture alloc] initWithWidth:width height:height];
         texId_ = [texReg registerTexture:mtex_];
@@ -112,7 +113,9 @@ public:
     }
 
     int64_t textureId() const { return texId_;}
+    int64_t handle() const { return handle_;}
 private:
+    int64_t handle_ = 0;
     int64_t texId_ = 0;
     MetalTexture* mtex_ = nil;
 };
@@ -165,7 +168,13 @@ private:
     } else if ([call.method isEqualToString:@"ReleaseRT"]) {
         const auto texId = ((NSNumber*)call.arguments[@"texture"]).longLongValue;
         [_texRegistry unregisterTexture:texId];
+        const auto it = players.find(texId);
+        const auto handle = it == players.end() ? 0 : it->second->handle();
         players.erase(texId);
+        // Destroying the texture's wrapper reset every callback on the native
+        // player; the player lives on and its Dart side still needs them.
+        if (handle)
+            MdkCallbacksRearm(handle);
         result(nil);
     } else if ([call.method isEqualToString:@"MixWithOthers"]) {
         [[maybe_unused]] const auto value = ((NSNumber*)call.arguments[@"value"]).boolValue;
