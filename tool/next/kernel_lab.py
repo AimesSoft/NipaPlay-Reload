@@ -531,7 +531,8 @@ def accept_check(kernel):
         shot('%s-accept-ass' % kernel)
     gui('playback.close')
     # An external SRT over Sintel.
-    sintel = media_for(kernel, 'sintel')
+    # (video_player plays MP4 only, and the Sintel one is not kept: the same SRT, over the episode.)
+    sintel = media_for(kernel, 'episode12' if kernel == 'video_player' else 'sintel')
     gui('playback.open', {'path': str(sintel), 'startPositionMs': 120000})
     wait_playing()
     reply = gui('playback.load_subtitle', {'path': str(SINTEL_SRT)})
