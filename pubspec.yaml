@@ -33,6 +33,9 @@ dependencies:
   flutter_localizations:
     sdk: flutter
 
+  # Pure-Dart annotations used by libraries shared with the headless host.
+  meta: ^1.18.0
+
   # Cross-platform IPC (Windows named pipe / Unix domain socket)
   dart_ipc: ^1.0.1
 
