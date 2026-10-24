@@ -14,6 +14,7 @@ import '../harness_redaction.dart';
 import '../memory/recent.dart';
 import '../memory/service.dart';
 import '../runtime/dsh_manifest.dart';
+import '../state/query.dart';
 import '../tasks/job_origin.dart';
 import 'dsh.dart';
 import 'model.dart';
@@ -78,7 +79,7 @@ final class HeadlessNipa {
       required this.jobOrigins,
       required this.memory,
       required this.sessions,
-      required this.activityRows,
+      required this.activityPage,
       this.staleSources = const [],
       this.redact,
       Map<String, String>? environment})
@@ -98,7 +99,7 @@ final class HeadlessNipa {
   final JobOrigins jobOrigins;
   final HarnessMemory memory;
   final SessionStore sessions;
-  final Future<List<JsonMap>> Function() activityRows;
+  final Future<StateRows> Function(int offset, int limit) activityPage;
 
   /// Streams that fire when what 动态 shows has grown.
   final List<Stream<Object?>> staleSources;
@@ -311,21 +312,21 @@ final class HeadlessNipa {
         environment: {'NIPAPLAY_ENDPOINT_FILE': endpoint.credentialFile.path});
     _host = host;
     jobOrigins.threadFor = host.threadForOrigin;
-    memory.recent = (current) async => recentMemoryFacts(
-        host,
-        await activeJobFacts(engine),
-        await followups.activeList(),
-        await activityRows(),
-        current,
-        finishedHelpers: [
-          for (final job in ((await engine.list(type: 'agent.helper'))
-                  .where((job) => job.state.isTerminal)
-                  .toList()
-                ..sort((a, b) => b.updatedAt.compareTo(a.updatedAt)))
-              .take(3))
-            job.toJson()
-        ],
-        redact: redact);
+    memory.recent = (current) async {
+      final activity = await activityPage(0, 5);
+      return recentMemoryFacts(host, await activeJobFacts(engine),
+          await followups.activeList(), activity.rows, current,
+          activityTotal: activity.total,
+          finishedHelpers: [
+            for (final job in ((await engine.list(type: 'agent.helper'))
+                    .where((job) => job.state.isTerminal)
+                    .toList()
+                  ..sort((a, b) => b.updatedAt.compareTo(a.updatedAt)))
+                .take(3))
+              job.toJson()
+          ],
+          redact: redact);
+    };
     // The memory block carries the latest 动态; tell the runtime when it grew.
     for (final source in [engine.changes, ...staleSources]) {
       _subscriptions.add(source.listen((_) => host.memoryChanged()));

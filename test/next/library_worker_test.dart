@@ -8,12 +8,14 @@ import 'package:nipaplay/next/danmaku/store.dart';
 import 'package:nipaplay/next/headless/ports.dart';
 import 'package:nipaplay/next/media/identity_store.dart';
 import 'package:nipaplay/next/media/media_service.dart';
+import 'package:nipaplay/next/mesh/library_codec.dart';
 import 'package:nipaplay/next/mesh/library_projection.dart';
 import 'package:nipaplay/next/mesh/library_worker.dart';
 import 'package:nipaplay/next/settings/registry.dart';
 import 'package:nipaplay/next/state/query.dart';
 import 'package:nipaplay/next/state/views.dart';
 import 'package:nipaplay/next/tasks/sqlite_job_store.dart';
+import 'package:nipaplay/next/ui_data/ui_data.dart';
 import 'package:nipaplay/next/ui_data/service.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import '../security/memory_vault.dart';
@@ -31,6 +33,11 @@ Future<JsonMap> _probeInWorker(String path) async => {
         }
       ]
     };
+
+UiWork _packedWork(PackedWorks packed) {
+  return transferredWorkValue(
+      (jsonDecode(packed.recordAt(0)) as Map).cast<String, Object?>());
+}
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -225,7 +232,10 @@ void main() {
         composedStamp: null);
     expect(first.builds, 1);
     expect(first.composed, isTrue);
-    expect(first.snapshot!.works.values.single.title, '最初的名字');
+    expect(first.snapshot, isNull);
+    final packed = await worker.works();
+    expect(packed.length, 1);
+    expect(_packedWork(packed).title, '最初的名字');
 
     final unchanged = await worker.prepare(
         owner: 'owner',
@@ -250,7 +260,7 @@ void main() {
         composedStamp: first.compositionStamp);
     expect(peerChanged.builds, 0);
     expect(peerChanged.composed, isTrue);
-    expect(peerChanged.snapshot, isNotNull);
+    expect(peerChanged.snapshot, isNull);
 
     await jobs.database.update(
         'media_entities',
@@ -269,7 +279,7 @@ void main() {
         composedStamp: peerChanged.compositionStamp);
     expect(rebuilt.builds, 1);
     expect(rebuilt.composed, isTrue);
-    expect(rebuilt.snapshot!.works.values.single.title, '改过的名字');
+    expect(_packedWork(await worker.works()).title, '改过的名字');
   });
   test('a worker that ends on its own is replaced by the next request',
       () async {

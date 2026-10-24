@@ -23,6 +23,7 @@ Future<JsonMap> recentMemoryFacts(ConversationHistory host, List<JsonMap> jobs,
     List<JsonMap> followups, List<JsonMap> activity, String? current,
     {List<JsonMap> finishedHelpers = const [],
     List<JsonMap> capabilityChanges = const [],
+    int? activityTotal,
     Future<String> Function(String)? redact}) async {
   String? source;
   final messages = ListQueue<JsonMap>();
@@ -170,7 +171,10 @@ Future<JsonMap> recentMemoryFacts(ConversationHistory host, List<JsonMap> jobs,
   if (olderMessagesOmitted) {
     omitted.add('较早的会话只保留最后 6 句话');
   }
-  if (activity.length > 5) omitted.add('较早的 ${activity.length - 5} 条动态');
+  final totalActivity = activityTotal ?? activity.length;
+  if (totalActivity > 5) {
+    omitted.add('较早的 ${totalActivity - 5} 条动态');
+  }
   if (sessions['nextCursor'] != null) {
     omitted.add('30 个会话之外的历史未扫描');
   }

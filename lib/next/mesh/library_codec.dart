@@ -91,3 +91,26 @@ UiWork workValue(JsonMap w, List<UiEpisode> episodes, List<UiDevice> devices) {
       next: next,
       devices: devices);
 }
+
+/// Rebuilds one work from the compact record published by the library worker.
+/// The record carries the selected next episode directly, so the UI does not
+/// need a catalogue-sized episode map just to decode a work on demand.
+UiWork transferredWorkValue(JsonMap w) {
+  final rawNext = w['next'] as Map?;
+  final nextDevice = rawNext?['device'] as Map?;
+  final next = rawNext == null
+      ? const <UiEpisode>[]
+      : [
+          episodeValue(rawNext.cast<String, Object?>(),
+              device: nextDevice == null
+                  ? null
+                  : UiDevice(
+                      name: nextDevice['name'] as String,
+                      online: nextDevice['online'] == true))
+        ];
+  final devices = [
+    for (final device in (w['devices'] as List? ?? const []).cast<Map>())
+      UiDevice(name: device['name'] as String, online: device['online'] == true)
+  ];
+  return workValue(w, next, devices);
+}

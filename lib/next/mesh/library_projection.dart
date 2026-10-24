@@ -1,6 +1,8 @@
 import 'dart:convert';
 import 'dart:io';
+import 'dart:isolate';
 import 'dart:math' as math;
+import 'dart:typed_data';
 import 'package:crypto/crypto.dart';
 import 'package:nipa_harness/nipa_harness.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
@@ -72,6 +74,33 @@ final class LibraryProjection {
   String? get builtStamp => _local['version'] as String?;
   Map<String, JsonMap> get peers => _peers;
   Map<String, bool> get online => _online;
+
+  /// Resolves both the current aliases and canonical IDs retired by an earlier
+  /// composition. A merge can otherwise leave one old public ID looking like a
+  /// peer reference even though this device remembers which members it joined.
+  String canonical(String id) {
+    final visited = <String>{id};
+    var current = id;
+    while (true) {
+      final next = _aliases[current];
+      if (next != null && next != current && visited.add(next)) {
+        current = next;
+        continue;
+      }
+      String? retired;
+      for (final ref in _historicalIds[current] ?? const <String>[]) {
+        final target = _aliases[ref];
+        if (target != null && target != current && !visited.contains(target)) {
+          retired = target;
+          break;
+        }
+      }
+      if (retired == null) return current;
+      visited.add(retired);
+      current = retired;
+    }
+  }
+
   Future<bool> mergeProgress(Map<String, JsonMap> observations) async {
     var changed = false;
     for (final entry in observations.entries) {
@@ -926,7 +955,8 @@ final class LibraryProjection {
 final class LibrarySnapshot {
   const LibrarySnapshot(this.assets, this.works, this.episodes, this.aliases,
       this.locations, this.localTargets, this.orderedWorks, this.episodeParents,
-      {this.builtStamp,
+      {this.packedWorks,
+      this.builtStamp,
       this.compositionStamp,
       this.builds = 0,
       this.composed = false});
@@ -936,9 +966,147 @@ final class LibrarySnapshot {
   final Map<String, List<JsonMap>> locations;
   final List<UiWork> orderedWorks;
   final Map<String, String> episodeParents;
+  final PackedWorks? packedWorks;
   final String? builtStamp, compositionStamp;
   final int builds;
   final bool composed;
+}
+
+/// The published catalogue without its materialised object graph. Records are
+/// transferred as one binary block and decoded one work at a time when a view
+/// asks for that reference. A single [TransferableTypedData] avoids copying
+/// hundreds of separate strings through the UI isolate during startup.
+final class PackedWorks {
+  PackedWorks._(this.length, TransferableTypedData packed) : _packed = packed;
+
+  static const _headerBytes = 16;
+  static const _entryBytes = 16;
+
+  factory PackedWorks.pack(List<String> orderedIds, List<String> records) {
+    if (orderedIds.length != records.length) {
+      throw ArgumentError('Every ordered work needs exactly one record.');
+    }
+    final ids = [for (final id in orderedIds) utf8.encode(id)];
+    final encoded = [for (final record in records) utf8.encode(record)];
+    var buckets = 1;
+    while (buckets < orderedIds.length * 2) {
+      buckets <<= 1;
+    }
+    final idsLength = ids.fold<int>(0, (total, id) => total + id.length);
+    final recordsLength =
+        encoded.fold<int>(0, (total, record) => total + record.length);
+    final entriesAt = _headerBytes;
+    final idsAt = entriesAt + orderedIds.length * _entryBytes;
+    final bucketsAt = idsAt + idsLength;
+    final recordsAt = bucketsAt + buckets * 4;
+    final bytes = Uint8List(recordsAt + recordsLength);
+    final header = ByteData.sublistView(bytes);
+    header.setUint32(0, orderedIds.length, Endian.little);
+    header.setUint32(4, buckets, Endian.little);
+    header.setUint32(8, bucketsAt, Endian.little);
+    var idOffset = idsAt;
+    var recordOffset = recordsAt;
+    for (var i = 0; i < encoded.length; i++) {
+      final entry = entriesAt + i * _entryBytes;
+      header.setUint32(entry, idOffset, Endian.little);
+      header.setUint32(entry + 4, ids[i].length, Endian.little);
+      header.setUint32(entry + 8, recordOffset, Endian.little);
+      header.setUint32(entry + 12, encoded[i].length, Endian.little);
+      bytes.setRange(idOffset, idOffset + ids[i].length, ids[i]);
+      bytes.setRange(
+          recordOffset, recordOffset + encoded[i].length, encoded[i]);
+      idOffset += ids[i].length;
+      recordOffset += encoded[i].length;
+    }
+    // The worker builds the lookup table while holding the packed binary. The
+    // UI isolate can then resolve a record without decoding every work ID.
+    final bucketMask = buckets - 1;
+    for (var i = 0; i < orderedIds.length; i++) {
+      var bucket = _hash(orderedIds[i]) & bucketMask;
+      while (header.getUint32(bucketsAt + bucket * 4, Endian.little) != 0) {
+        bucket = (bucket + 1) & bucketMask;
+      }
+      header.setUint32(bucketsAt + bucket * 4, i + 1, Endian.little);
+    }
+    return PackedWorks._(
+        orderedIds.length, TransferableTypedData.fromList([bytes]));
+  }
+
+  final int length;
+  final TransferableTypedData _packed;
+  Uint8List? _bytes;
+  ByteData? _header;
+
+  void _open() {
+    if (_bytes != null) return;
+    final bytes = _bytes = _packed.materialize().asUint8List();
+    final header = _header = ByteData.sublistView(bytes);
+    final count = header.getUint32(0, Endian.little);
+    if (count != length) {
+      throw StateError('Packed work count does not match its order.');
+    }
+  }
+
+  int? _indexOf(String workId) {
+    _open();
+    final buckets = _header!.getUint32(4, Endian.little);
+    final bucketsAt = _header!.getUint32(8, Endian.little);
+    final bucketMask = buckets - 1;
+    var bucket = _hash(workId) & bucketMask;
+    for (var probe = 0; probe < buckets; probe++) {
+      final value = _header!.getUint32(bucketsAt + bucket * 4, Endian.little);
+      if (value == 0) return null;
+      final index = value - 1;
+      final entry = _headerBytes + index * _entryBytes;
+      final idStart = _header!.getUint32(entry, Endian.little);
+      final idLength = _header!.getUint32(entry + 4, Endian.little);
+      final candidate = utf8
+          .decode(Uint8List.sublistView(_bytes!, idStart, idStart + idLength));
+      if (candidate == workId) return index;
+      bucket = (bucket + 1) & bucketMask;
+    }
+    return null;
+  }
+
+  static int _hash(String value) {
+    var hash = 0x811c9dc5;
+    for (final unit in value.codeUnits) {
+      hash = ((hash ^ (unit & 0xff)) * 0x01000193) & 0xffffffff;
+      hash = ((hash ^ (unit >> 8)) * 0x01000193) & 0xffffffff;
+    }
+    return hash;
+  }
+
+  String? record(String workId) {
+    final index = _indexOf(workId);
+    return index == null ? null : recordAt(index);
+  }
+
+  bool contains(String workId) => _indexOf(workId) != null;
+
+  String idAt(int index) {
+    _open();
+    if (index < 0 || index >= length) {
+      throw RangeError.index(index, this);
+    }
+    final entry = _headerBytes + index * _entryBytes;
+    final idStart = _header!.getUint32(entry, Endian.little);
+    final idLength = _header!.getUint32(entry + 4, Endian.little);
+    return utf8
+        .decode(Uint8List.sublistView(_bytes!, idStart, idStart + idLength));
+  }
+
+  String recordAt(int index) {
+    _open();
+    if (index < 0 || index >= length) {
+      throw RangeError.index(index, this);
+    }
+    final entry = _headerBytes + index * _entryBytes;
+    final start = _header!.getUint32(entry + 8, Endian.little);
+    final recordLength = _header!.getUint32(entry + 12, Endian.little);
+    return utf8
+        .decode(Uint8List.sublistView(_bytes!, start, start + recordLength));
+  }
 }
 
 final class LibraryProgress {

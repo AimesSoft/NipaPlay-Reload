@@ -16,6 +16,8 @@ final class _Timespec extends Struct {
 /// each callback takes a fresh pair of readings. Nested zone calls count once.
 final class CpuBudgetProbe {
   static const _trace = bool.fromEnvironment('NEXT_PERF_TRACE');
+  static const _traceMicros =
+      int.fromEnvironment('NEXT_PERF_TRACE_US', defaultValue: 4000);
   final _wall = Stopwatch()..start();
   final _clock = _ThreadClock();
   final _phases = <(String, double, double)>[];
@@ -42,7 +44,7 @@ final class CpuBudgetProbe {
     final end = _clock.now;
     final elapsed = end - _start;
     _start = end;
-    if (_trace && stack != null && elapsed >= 4000) {
+    if (_trace && stack != null && elapsed >= _traceMicros) {
       // ignore: avoid_print
       print(
           '[CPU probe stack] ${(elapsed / 1000).toStringAsFixed(3)} ms\n$stack');

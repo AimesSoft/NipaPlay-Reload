@@ -8,7 +8,7 @@ import '../next_database.dart';
 import '../state/change_history.dart';
 import '../util/slicer.dart';
 
-final class SqliteJobStore implements JobStore {
+final class SqliteJobStore implements JobStore, JobCountStore, JobPageStore {
   SqliteJobStore.fromDatabase(this._database);
   final Database _database;
   Database get database => _database;
@@ -56,6 +56,60 @@ final class SqliteJobStore implements JobStore {
         JobState.cancelled.wireName,
       ]);
 
+  @override
+  Future<List<JobStateCount>> countByStateAndType(
+      {required Set<JobState> states}) async {
+    if (states.isEmpty) return const [];
+    final rows = await _database.rawQuery(
+        'SELECT type, state, COUNT(*) AS n FROM jobs '
+        'WHERE state IN (${List.filled(states.length, '?').join(',')}) '
+        'GROUP BY type, state',
+        [for (final state in states) state.wireName]);
+    return [
+      for (final row in rows)
+        JobStateCount(
+            row['type'] as String,
+            JobState.values.singleWhere(
+                (state) => state.wireName == row['state'] as String),
+            row['n'] as int),
+    ];
+  }
+
+  @override
+  Future<JobPage> listCreated(
+      {JobState? state,
+      String? type,
+      required int limit,
+      required int offset,
+      required bool newestFirst}) async {
+    if (limit < 1 || limit > 1000 || offset < 0) {
+      throw ArgumentError('Created job pages require limit 1..1000.');
+    }
+    final clauses = <String>[], arguments = <Object?>[];
+    if (state != null) {
+      clauses.add('state = ?');
+      arguments.add(state.wireName);
+    }
+    if (type != null) {
+      clauses.add('type = ?');
+      arguments.add(type);
+    }
+    final where = clauses.isEmpty ? '' : ' WHERE ${clauses.join(' AND ')}';
+    final total = (await _database.rawQuery(
+            'SELECT COUNT(*) AS n FROM jobs$where', arguments))
+        .single['n'] as int;
+    final rows = await _database.query('jobs',
+        columns: ['job_id', 'revision'],
+        where: clauses.isEmpty ? null : clauses.join(' AND '),
+        whereArgs: arguments,
+        orderBy: newestFirst
+            ? 'created_at DESC, job_id DESC'
+            : 'created_at ASC, job_id ASC',
+        limit: limit,
+        offset: offset);
+    return JobPage(await _decodeRows(rows), total);
+  }
+
   Future<List<Job>> _listWhere(
       List<String> clauses, List<Object?> arguments) async {
     final where = clauses.isEmpty ? null : clauses.join(' AND ');
@@ -77,6 +131,11 @@ final class SqliteJobStore implements JobStore {
       await slice();
       if (page.length < 250) break;
     }
+    return _decodeRows(rows);
+  }
+
+  Future<List<Job>> _decodeRows(List<Map<String, Object?>> rows) async {
+    final slice = Slicer();
     final known = <String, Job>{};
     final stale = <String>[];
     for (final row in rows) {

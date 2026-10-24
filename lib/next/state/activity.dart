@@ -85,7 +85,8 @@ PackedActivityRows packActivityRows(
 
 StateRows unpackActivityRows(PackedActivityRows packed) {
   final (head, chunks, total, warnings) = packed;
-  return StateRows(_ChunkedJsonList(head, chunks, total), warnings: warnings);
+  return StateRows(_ChunkedJsonList(head, chunks, total),
+      warnings: warnings, total: total);
 }
 
 final class _ChunkedJsonList extends ListBase<JsonMap> {
@@ -192,6 +193,8 @@ final class ActivityView {
   final RepositoryLocation location;
   final ChangeHistory history;
   Future<PackedActivityRows?> Function(ActivityHostContext)? workerRead;
+  Future<StateRows?> Function(ActivityHostContext, int offset, int limit)?
+      workerReadPage;
 
   StateView get view => StateView(
       name: 'activity',
@@ -202,8 +205,8 @@ final class ActivityView {
           'Cursors paginate live observations; concurrent inserts may shift pages. No credentials or comment bodies.',
       fields: activityFields,
       readAll: read,
-      read: (offset, limit) async =>
-          (await read()).rows.skip(offset).take(limit).toList());
+      readPage: readPage,
+      read: (offset, limit) async => (await readPage(offset, limit)).rows);
 
   Future<ActivityHostContext> prepare() async {
     await history.drain();
@@ -238,6 +241,21 @@ final class ActivityView {
         includeGit: false);
     final packed = await _composeOffMain(sources);
     return unpackActivityRows(packed);
+  }
+
+  /// A query page crosses the isolate without its complete history. The
+  /// worker still composes from its own database view; the UI only decodes the
+  /// requested window.
+  Future<StateRows> readPage(int offset, int limit) async {
+    final context = await prepare();
+    if (workerReadPage case final delegate?) {
+      if (await delegate(context, offset, limit) case final page?) {
+        return page;
+      }
+    }
+    final all = await read();
+    return StateRows(all.rows.skip(offset).take(limit).toList(),
+        warnings: all.warnings, total: all.total ?? all.rows.length);
   }
 }
 

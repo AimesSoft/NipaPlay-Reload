@@ -10,6 +10,7 @@ final class TaskResources implements Capability {
   final TaskEngine engine;
   final DownloadService downloads;
   final Helpers helpers;
+  Future<Map<String, int>> Function()? queuedJobs;
   int scanConcurrency = 1, metadataConcurrency = 4;
 
   Future<void> load() async {
@@ -81,14 +82,16 @@ final class TaskResources implements Capability {
                 input: ObjectSchema({}),
                 output: ObjectSchema({}, additionalProperties: true)),
             (_, __) async {
-          // Capacity reports count only jobs that still occupy a queue. Reading
-          // and decoding every terminal job makes this cheap probe grow with
-          // the complete history; ask the store for the three live states.
-          final queued = [
-            ...await engine.list(state: JobState.queued),
-            ...await engine.list(state: JobState.waitingRetry),
-            ...await engine.list(state: JobState.interrupted),
-          ];
+          // Capacity reports count only jobs that still occupy a queue. The
+          // store aggregates these three live states without decoding the
+          // complete task history on the UI isolate.
+          final queued = queuedJobs == null
+              ? await engine.countJobsByType(states: const {
+                  JobState.queued,
+                  JobState.waitingRetry,
+                  JobState.interrupted,
+                })
+              : await queuedJobs!();
           return {
             'pools': [
               for (final type in [
@@ -105,14 +108,15 @@ final class TaskResources implements Capability {
                   'active': type == 'agent.helper'
                       ? helpers.activeCount
                       : engine.activeCount(type),
-                  'queued': queued.where((job) => job.type == type).length
+                  'queued': queued[type] ?? 0
                 },
             ],
             'classicMatching': {
               'capacity': metadataConcurrency,
               'applies': 'new scan'
             },
-            'downloadLimits': await downloads.bandwidth({}),
+            'downloadLimits':
+                downloads.bandwidthFacts ?? await downloads.bandwidth({}),
             'nativeHelpers': {'capacityOwner': 'Codex'}
           };
         }),

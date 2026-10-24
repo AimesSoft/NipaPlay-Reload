@@ -128,26 +128,22 @@ final class _TaskAction extends Action<_TaskInput, _TaskOutput> {
     final json = input.json;
     if (operation == 'list') {
       final state = json['state'] as String?;
-      final jobs = await engine.list(
+      final offset = json['offset'] as int? ?? 0;
+      final limit = json['limit'] as int? ?? 50;
+      final page = await engine.listCreatedPage(
           type: json['type'] as String?,
           state: state == null
               ? null
-              : JobState.values.singleWhere((s) => s.wireName == state));
-      final newestFirst = json['order'] != 'oldest';
-      jobs.sort((a, b) {
-        final byTime = a.createdAt.compareTo(b.createdAt);
-        final byIdentity = a.jobId.compareTo(b.jobId);
-        final oldestFirst = byTime != 0 ? byTime : byIdentity;
-        return newestFirst ? -oldestFirst : oldestFirst;
-      });
-      final offset = json['offset'] as int? ?? 0;
-      final limit = json['limit'] as int? ?? 50;
-      final page = jobs.skip(offset).take(limit).toList();
+              : JobState.values.singleWhere((s) => s.wireName == state),
+          limit: limit,
+          offset: offset,
+          newestFirst: json['order'] != 'oldest');
       return Completed(_TaskOutput({
-        'jobs': [for (final job in page) job.toJson()],
-        'total': jobs.length,
-        'nextOffset':
-            offset + page.length < jobs.length ? offset + page.length : null,
+        'jobs': [for (final job in page.jobs) job.toJson()],
+        'total': page.total,
+        'nextOffset': offset + page.jobs.length < page.total
+            ? offset + page.jobs.length
+            : null,
       }));
     }
     if (operation == 'cancel' && json.containsKey('jobIds')) {

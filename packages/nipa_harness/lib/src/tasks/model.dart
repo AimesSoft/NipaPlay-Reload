@@ -324,6 +324,36 @@ abstract interface class JobStore {
   Future<void> close();
 }
 
+final class JobStateCount {
+  const JobStateCount(this.type, this.state, this.count);
+  final String type;
+  final JobState state;
+  final int count;
+}
+
+final class JobPage {
+  const JobPage(this.jobs, this.total);
+  final List<Job> jobs;
+  final int total;
+}
+
+/// Optional storage aggregation for callers that need bounded live counts.
+/// Keeping it separate lets simple stores retain the small [JobStore] surface.
+abstract interface class JobCountStore {
+  Future<List<JobStateCount>> countByStateAndType(
+      {required Set<JobState> states});
+}
+
+/// Optional creation-ordered page for task listings whose total is unbounded.
+abstract interface class JobPageStore {
+  Future<JobPage> listCreated(
+      {JobState? state,
+      String? type,
+      required int limit,
+      required int offset,
+      required bool newestFirst});
+}
+
 DateTime? _date(Object? value) =>
     value == null ? null : DateTime.parse(value as String).toUtc();
 Failure _decodeFailure(JsonMap json) => Failure(
