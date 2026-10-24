@@ -209,22 +209,12 @@ final class ActivityView {
     await history.drain();
     await invocations.settled();
     await location.ready;
-    final changedKeys = {
-      for (final row in await media.store.database
-          .rawQuery('SELECT DISTINCT key FROM settings_changes'))
-        row['key'] as String
+    // The worker already reads settings_changes from its own connection.
+    // Send the fixed registry metadata, not the changing database keys.
+    final shown = <String, (String, Schema)>{
+      for (final s in settings.entries)
+        if (!isSettingDenied(s.key) && s.visible()) s.key: (s.title, s.schema)
     };
-    final shown = <String, (String, Schema)>{};
-    if (changedKeys.isNotEmpty) {
-      for (final s in settings.entries) {
-        if (changedKeys.contains(s.key) &&
-            !shown.containsKey(s.key) &&
-            !isSettingDenied(s.key) &&
-            s.visible()) {
-          shown[s.key] = (s.title, s.schema);
-        }
-      }
-    }
     return (
       location.path,
       invocations.journal.path,

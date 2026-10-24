@@ -73,6 +73,7 @@ final class MeshLibrary {
   String get own => mesh.identity?.deviceId ?? ui.media.store.ownerDeviceId;
 
   Future<void> start() async {
+    await worker.warm();
     final peers = await worker.call('saved') as Map<String, JsonMap>;
     _peers.addAll(peers);
     _peersRevision++;

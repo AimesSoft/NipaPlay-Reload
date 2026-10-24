@@ -535,15 +535,19 @@ final class DownloadService {
   /// job is the executor's to settle, an already amended one is left alone.
   Future<bool> observeMissingSessions(
       DownloadBackend backend, List<DownloadSnapshot> present,
-      {Iterable<Job>? listedJobs}) async {
+      {Iterable<Job>? listedJobs, Iterable<String>? candidateIds}) async {
     bool candidate(Job job) =>
         job.state.isTerminal &&
         job.sideEffectCommitted &&
         _ref(job).key == backend.reference.key &&
         job.receipt?.details['sessionPresent'] != false &&
         !present.any((task) => task.infoHash == job.input['infoHash']);
-    final jobs =
-        (listedJobs ?? await engine.list(type: 'download')).where(candidate);
+    final jobs = candidateIds == null
+        ? (listedJobs ?? await engine.list(type: 'download')).where(candidate)
+        : [
+            for (final id in candidateIds)
+              if (await engine.get(id) case final job when candidate(job)) job
+          ];
     if (jobs.isEmpty) return false;
     var amended = false;
     await _serial(() async {

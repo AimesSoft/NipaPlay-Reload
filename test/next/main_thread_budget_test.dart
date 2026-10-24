@@ -230,7 +230,7 @@ void main() {
 
       await core.memory.context(null);
       probe.mark('turn: memory context');
-      for (final query in [
+      final queries = [
         {'view': 'activity', 'limit': 20},
         {
           'view': 'tasks',
@@ -254,10 +254,12 @@ void main() {
         },
         {'view': 'followups', 'limit': 20},
         {'view': 'library.works', 'limit': 20},
-      ]) {
+      ];
+      for (var i = 0; i < queries.length; i++) {
+        final query = queries[i];
         await call('state.query', query);
+        probe.mark('turn: state.query ${query['view']}');
       }
-      probe.mark('turn: state.query');
       await call('task.list', {});
       probe.mark('turn: task.list');
       await call('db.query', {

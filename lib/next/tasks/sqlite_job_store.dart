@@ -90,6 +90,43 @@ final class SqliteJobStore implements JobStore {
     ];
   }
 
+  /// Terminal download records whose backend session disappeared from the
+  /// current listing. This asks SQLite for the few fields needed to decide,
+  /// rather than decoding every historical download snapshot (whose
+  /// checkpoints grow with their completed files) on the UI isolate.
+  Future<List<String>> missingDownloadSessionIds({
+    required String backendKind,
+    required String? backendId,
+    required Set<String> presentHashes,
+  }) async {
+    const pageSize = 256;
+    final ids = <String>[];
+    final slice = Slicer();
+    for (var offset = 0;; offset += pageSize) {
+      final rows = await _database.rawQuery(r'''
+SELECT job_id, json_extract(snapshot, '$.input.infoHash') AS info_hash
+FROM jobs
+WHERE type = 'download'
+  AND state IN ('succeeded', 'failed', 'cancelled')
+  AND json_extract(snapshot, '$.sideEffectCommitted') = 1
+  AND json_extract(snapshot, '$.details.backend.kind') = ?
+  AND COALESCE(json_extract(snapshot, '$.details.backend.id'), '') = ?
+  AND COALESCE(
+        json_extract(snapshot, '$.receipt.details.sessionPresent'), 1) != 0
+ORDER BY created_at ASC, job_id ASC
+LIMIT ? OFFSET ?''', [backendKind, backendId ?? '', pageSize, offset]);
+      for (final row in rows) {
+        final hash = row['info_hash'];
+        if (hash is String && !presentHashes.contains(hash)) {
+          ids.add(row['job_id'] as String);
+        }
+      }
+      await slice();
+      if (rows.length < pageSize) break;
+    }
+    return ids;
+  }
+
   @override
   Future<void> commit(Job job, JobEvent event,
       {required int? expectedRevision}) async {

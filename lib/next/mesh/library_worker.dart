@@ -175,6 +175,15 @@ final class LibraryWorker {
         }
       })();
 
+  /// Opens the catalogue isolate and hands it the current Classic sources
+  /// while Nipa's services start. The first home therefore neither spawns a
+  /// worker nor materialises the history snapshot on the UI isolate.
+  Future<void> warm() => _serial(() async {
+        if (_closed) return;
+        final target = await _start();
+        await _syncSources(target);
+      });
+
   Future<Object?> _hostRequest(String method, Object? input) async {
     switch (method) {
       case 'vault':

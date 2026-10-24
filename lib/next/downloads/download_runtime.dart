@@ -10,6 +10,7 @@ import 'package:nipaplay/services/torrent_download_service.dart';
 import '../capabilities/download_capability.dart';
 import '../state/change_history.dart';
 import '../capabilities/download_metadata_capability.dart';
+import '../tasks/sqlite_job_store.dart';
 import 'download_backend.dart';
 import 'download_executor.dart';
 import 'download_service.dart';
@@ -118,37 +119,40 @@ final class DownloadRuntime extends ChangeNotifier {
       _refreshing ??= _refresh().whenComplete(() => _refreshing = null);
   Future<void> _refresh() async {
     if (_closed) return;
-    List<Job>? downloadJobs;
+    final jobsByHash = <String, Job>{};
     if (await _enabled()) {
       await _backend.initialize();
       final tasks = await _backend.list();
       for (final task in tasks) {
-        await downloads.adopt(_backend, task);
+        jobsByHash[task.infoHash.toLowerCase()] =
+            await downloads.adopt(_backend, task);
       }
-      downloadJobs = await engine.list(type: 'download');
-      if (await downloads.observeMissingSessions(_backend, tasks,
-          listedJobs: downloadJobs)) {
-        downloadJobs = null;
-      }
+      await downloads.observeMissingSessions(_backend, tasks,
+          candidateIds: await _missingSessionIds(_backend, tasks));
       // HTTP sessions are never adopted (they only exist because Next added
       // them); only a session that vanished is noticed.
       await http.initialize();
       final httpTasks = await http.list();
-      downloadJobs ??= await engine.list(type: 'download');
-      if (await downloads.observeMissingSessions(http, httpTasks,
-          listedJobs: downloadJobs)) {
-        downloadJobs = null;
-      }
+      await downloads.observeMissingSessions(http, httpTasks,
+          candidateIds: await _missingSessionIds(http, httpTasks));
     }
     autoScannedKeys = Set.unmodifiable(await _loadImportedKeys());
-    downloadJobs ??= await engine.list(type: 'download');
-    _jobsByHash = {
-      for (final job in downloadJobs)
-        if ((job.details['backend'] as JsonMap)['kind'] == 'builtin')
-          job.input['infoHash'] as String: job
-    };
+    _jobsByHash = Map.unmodifiable(jobsByHash);
     lastSessionError = null;
     if (!_closed) notifyListeners();
+  }
+
+  /// The SQL store can identify vanished sessions without decoding the
+  /// complete download history. Other stores (used by callers and tests) keep
+  /// the previous full-list fallback in DownloadService.
+  Future<List<String>?> _missingSessionIds(
+      DownloadBackend backend, List<DownloadSnapshot> present) async {
+    final store = engine.store;
+    if (store is! SqliteJobStore) return null;
+    return store.missingDownloadSessionIds(
+        backendKind: backend.reference.kind,
+        backendId: backend.reference.id,
+        presentHashes: {for (final task in present) task.infoHash});
   }
 
   /// What each download backend is doing now: whether downloads are on,
