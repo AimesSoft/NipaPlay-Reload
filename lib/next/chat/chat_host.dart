@@ -68,6 +68,7 @@ final class ChatHost implements ConversationHistory {
       this.baseInstructions,
       this.dsh,
       this.dshPlugins,
+      this.environment = const {},
       Duration memoryStaleWindow = const Duration(seconds: 2)})
       : assert(dsh == null || dshPlugins != null),
         sessionId = 'nipa-${DateTime.now().microsecondsSinceEpoch}-'
@@ -96,6 +97,11 @@ final class ChatHost implements ConversationHistory {
 
   /// NipaPlay's DSH plugins (`assets/next/agent/dsh`), required with [dsh].
   final Directory? dshPlugins;
+
+  /// Values the host adds to the runtime's environment (DSH only), e.g. the
+  /// endpoint file a host without the desktop's default location uses. They
+  /// are set after the login environment and never hold a credential.
+  final Map<String, String> environment;
 
   /// Durable main/current pointers are kept per runtime: a Codex thread
   /// cannot be resumed by DSH, nor the reverse.
@@ -355,7 +361,11 @@ final class ChatHost implements ConversationHistory {
     final clean = endpoint.chatEnvironment(Platform.isWindows
         ? inherited
         : await _loginEnvironment(
-            Platform.environment['SHELL'] ?? '/bin/zsh', inherited));
+            // A service started without a login has no SHELL; Linux hosts
+            // need not have zsh.
+            Platform.environment['SHELL'] ??
+                (await File('/bin/zsh').exists() ? '/bin/zsh' : '/bin/sh'),
+            inherited));
     clean['NIPAPLAY_CHAT'] = sessionId;
     final next = endpoint.seedRepository.parent;
     final home =
@@ -395,6 +405,7 @@ final class ChatHost implements ConversationHistory {
       'DSH_TELEMETRY_DISABLED': '1',
       'NIPAPLAY_AGENT_RUNTIME': 'dsh',
       DshRoute.keyVariable: route.key,
+      ...environment,
     });
     launchEnvironment = {
       for (final key in [
@@ -409,7 +420,8 @@ final class ChatHost implements ConversationHistory {
         'DSH_HOME',
         'TMPDIR',
         'NIPAPLAY_CHAT',
-        'NIPAPLAY_AGENT_RUNTIME'
+        'NIPAPLAY_AGENT_RUNTIME',
+        ...environment.keys
       ])
         if (clean[key] != null) key: redactHarnessText(clean[key]!)
     };

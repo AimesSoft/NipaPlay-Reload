@@ -63,14 +63,8 @@ final class HeadlessCapabilities implements Capability {
       : actions = [
           for (final c in capabilities)
             for (final a in c.actions)
-              if (!{
-                    'download.delete',
-                    'media.library.import_history',
-                    'agent.dispatch',
-                    'agent.dispatch.report',
-                    'chat.turn.process'
-                  }.contains(a.spec.id) &&
-                  !a.spec.id.startsWith('chat.session.'))
+              if (!{'download.delete', 'media.library.import_history'}
+                  .contains(a.spec.id))
                 a
         ];
   @override

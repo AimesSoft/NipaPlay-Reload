@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'package:path/path.dart' as p;
+import 'package:nipaplay/next/headless/agent_cli.dart';
 import 'package:nipaplay/next/headless/core.dart';
 import 'package:nipaplay/next/headless/dsh.dart';
 import 'package:nipaplay/next/media/media_probe_io.dart';
@@ -25,7 +26,8 @@ Future<void> main(List<String> arguments) async {
   var stop = false;
   var enroll = false;
   var enrollCredential = false;
-  String? dshMode;
+  String? dshMode, agentMode;
+  var keyStdin = false;
   for (var i = 0; i < arguments.length; i++) {
     final key = arguments[i];
     if (key == '--help') {
@@ -45,7 +47,13 @@ Future<void> main(List<String> arguments) async {
           '  --dsh-status --data DIR (which runtime would be launched)\n'
           '  --dsh-check --data DIR (start it with NipaPlay plugins and open a thread, no model call)\n'
           '  --agent-assets ABSOLUTE_DIR (default assets/next/agent: dsh-runtime.json and dsh/)\n'
-          '  NIPAPLAY_AGENT_RUNTIME=dsh with NIPAPLAY_DSH_NODE and NIPAPLAY_DSH_ROOT name an installation of your own');
+          '  NIPAPLAY_AGENT_RUNTIME=dsh with NIPAPLAY_DSH_NODE and NIPAPLAY_DSH_ROOT name an installation of your own\n'
+          '  Nipa on this host (the person at the host sets these; Nipa cannot):\n'
+          '  --model-set --base-url URL --model NAME [--provider NAME] [--api responses|chat] [--reasoning low|medium|high] [--key-stdin] --data DIR\n'
+          '      (the key is read from standard input, never from an argument: printf %s "\$KEY" | ... --key-stdin)\n'
+          '  --model-status | --model-check | --model-clear --data DIR\n'
+          '  --agent-enable | --agent-disable | --agent-status --data DIR (the switch that lets Nipa run on this host)\n'
+          '  A running host applies these without a restart. Talk to her with ./nipa chat in the host harness.');
       return;
     }
     if (key == '--enroll-token-stdin') { enroll = true; continue; }
@@ -54,12 +62,21 @@ Future<void> main(List<String> arguments) async {
       dshMode = key.substring(6);
       continue;
     }
+    if (key == '--key-stdin') { keyStdin = true; continue; }
+    if (const {
+      '--model-set', '--model-status', '--model-check', '--model-clear',
+      '--agent-enable', '--agent-disable', '--agent-status'
+    }.contains(key)) {
+      agentMode = key.substring(2);
+      continue;
+    }
     if (key == '--stop') {
       stop = true;
       continue;
     }
     if (!{'--data', '--media-root', '--port', '--seed', '--ffprobe', '--native-library',
-          '--credential-namespace', '--credential-key', '--agent-assets'}
+          '--credential-namespace', '--credential-key', '--agent-assets',
+          '--provider', '--base-url', '--model', '--api', '--reasoning'}
             .contains(key) ||
         i + 1 == arguments.length) {
       stderr.writeln('Invalid option: $key');
@@ -82,6 +99,17 @@ Future<void> main(List<String> arguments) async {
   final root = Directory(await _canonicalDirectory(p.normalize(data)));
   if (dshMode != null) {
     exitCode = await runHeadlessDshCommand(dshMode, root, assets: options['--agent-assets']);
+    return;
+  }
+  if (agentMode != null) {
+    exitCode = await runHeadlessAgentCommand(agentMode, root,
+        options: options, keyStdin: keyStdin);
+    return;
+  }
+  if (keyStdin || const {'--provider', '--base-url', '--model', '--api', '--reasoning'}
+      .any(options.containsKey)) {
+    stderr.writeln('--key-stdin and the model options belong to --model-set.');
+    exitCode = 64;
     return;
   }
   if (enroll || enrollCredential) {
@@ -195,6 +223,8 @@ Future<void> main(List<String> arguments) async {
         repository: Directory(p.join(root.path, 'harness')),
         mediaRoots: roots,
         seed: seed,
+        agentAssets: Directory(options['--agent-assets'] ??
+            p.join(Directory.current.path, 'assets', 'next', 'agent')),
         nativeLibrary: options['--native-library'],
         port: port);
     final status = await core.start();

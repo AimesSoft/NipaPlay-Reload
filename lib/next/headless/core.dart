@@ -74,6 +74,13 @@ import '../mesh/capability.dart';
 import '../mesh/delivery.dart';
 import '../mesh/native.dart';
 import '../../security/credential_vault.dart';
+import '../chat/helpers.dart';
+import '../chat/session_store.dart';
+import '../memory/capability.dart';
+import '../memory/service.dart';
+import 'chat_capability.dart';
+import 'model.dart';
+import 'nipa.dart';
 
 /// Composes the same domain services without attaching Classic or a widget tree.
 final class HeadlessCore {
@@ -82,9 +89,19 @@ final class HeadlessCore {
       required this.repository,
       required this.mediaRoots,
       required this.seed,
+      required this.agentAssets,
       this.nativeLibrary,
+      this.environment,
       this.port = 0});
   final Directory root, repository;
+
+  /// `assets/next/agent`: the DSH manifest and NipaPlay's plugins for Nipa.
+  final Directory agentAssets;
+
+  /// What selects the runtime Nipa runs on (`NIPAPLAY_AGENT_RUNTIME`,
+  /// `NIPAPLAY_DSH_NODE`, `NIPAPLAY_DSH_ROOT`); the process environment unless
+  /// given.
+  final Map<String, String>? environment;
   final List<String> mediaRoots;
   final Map<String, List<int>> seed;
   final int port;
@@ -107,6 +124,9 @@ final class HeadlessCore {
   late final ProgramRepository programRepository;
   late final SubtitleLibrary subtitles;
   late final BodyEvents bodyEvents;
+  late final HeadlessModel model;
+  late final HeadlessNipa nipa;
+  late final HarnessMemory memory;
   final hooks = HarnessHooks();
   final _client = http.Client();
   DandanplayHttpClient? _dandanplay;
@@ -159,7 +179,10 @@ final class HeadlessCore {
         native: MeshNative(bridge: native));
     mesh.describeSelf = () async => {
           'host': 'headless',
-          'conversationHost': false,
+          // Live: whether Nipa runs on this host now (the agent switch is on
+          // and the model, its key and the runtime are in place).
+          'conversationHost': nipa.host != null,
+          'agent': nipa.facts(),
           'mediaRoots': mediaRoots.toList(),
           'mediaReadOnlyScope': ['indexing', 'downloadDestination'],
           'fileOperations': 'processPermissions',
@@ -201,6 +224,7 @@ final class HeadlessCore {
             ScopedDanmakuHost(danmakuHost, onlineDanmaku.describe),
             allowedHosts: onlineDanmaku.allowedHosts), LocalDanmakuSource(media.authorizedPath)],
         player: NoPlayer());
+    final helpers = Helpers();
     final exportRoot =
         await Directory(p.join(root.path, 'exports')).create(recursive: true);
     danmaku.exporter = DanmakuExporter(danmaku.store, (path) async {
@@ -231,7 +255,8 @@ final class HeadlessCore {
         ...danmakuExecutors(danmaku),
         hooks,
         programs,
-        downloadExecutor
+        downloadExecutor,
+        helpers
       ])
         HeadlessExecutor(OriginExecutor(e, database))
     ]);
@@ -254,6 +279,9 @@ final class HeadlessCore {
         library: library);
     followups =
         Followups(database, engine, HeadlessRepository(repository.path));
+    helpers.engine = engine;
+    helpers.followups = followups;
+    followups.helpers = helpers;
     downloads.returnTarget = followups.downloadReturnTarget;
     programs.returnTarget = followups.downloadReturnTarget;
     attachMeshDelivery(mesh, followups);
@@ -273,6 +301,8 @@ final class HeadlessCore {
     final sources = StateSources();
     final activity =
         ActivityInvocations(database, File('${root.path}/journal.jsonl'));
+    final activityView = ActivityView(media, settings, activity,
+        HeadlessRepository(repository.path), history).view;
     final state = StateCapability([
       ...publicStateViews(
           media: media,
@@ -281,8 +311,7 @@ final class HeadlessCore {
           mesh: mesh,
           sources: sources),
       followups.view,
-      ActivityView(media, settings, activity,
-          HeadlessRepository(repository.path), history).view,
+      activityView,
     ]);
     registerSystemViews(state, SystemStatusSources()..hooks = hooks.status);
     uiData = UiDataService(media, engine, state, sources, root, vault);
@@ -294,6 +323,24 @@ final class HeadlessCore {
     registerMergedLibrary(state, uiData.meshLibrary!);
     await uiData.meshLibrary!.start();
     settings.register([uiData.openingSetting]);
+    memory = HarnessMemory(
+        HeadlessRepository(repository.path), settings, followups.discover)
+      ..redact = uiData.meshLibrary!.worker.redactText;
+    model = HeadlessModel(root: root, vault: vault);
+    nipa = HeadlessNipa(
+        root: root,
+        repository: repository,
+        agentAssets: agentAssets,
+        model: model,
+        followups: followups,
+        engine: engine,
+        jobOrigins: jobOrigins,
+        memory: memory,
+        sessions: SessionStore(database),
+        activityRows: () async => (await activityView.readAll!()).rows,
+        staleSources: [bodyEvents.committed.stream],
+        redact: uiData.meshLibrary!.worker.redactText,
+        environment: environment);
     final db = createDbService(database: database, media: media, uiData: uiData);
     final downloadSources =
         DownloadSources(Directory('${root.path}/torrent_sources'));
@@ -313,6 +360,9 @@ final class HeadlessCore {
         SubtitleCapability(subtitles),
         MeshCapability(mesh),
         HeadlessLibraryRoots(root, mediaRoots),
+        MemoryCapability(memory),
+        HeadlessChatCapability(nipa,
+            model: model, programsEnabled: () => programs.enabled),
         MediaCapability(media),
         DanmakuCapability(danmaku),
         SettingsCapability(settings),
@@ -342,6 +392,7 @@ final class HeadlessCore {
         port: port,
         credentialFile: File('${root.path}/endpoint.json'),
         seedRepository: Directory('${root.path}/harness-seed'));
+    nipa.endpoint = endpoint;
     _resourcesReady = true;
     await engine.start();
     await uiData.start();
@@ -363,6 +414,9 @@ final class HeadlessCore {
     subtitles.start();
     mesh.attach(harness);
     await mesh.startConfigured();
+    // Nipa comes up in the background (the runtime takes seconds to start);
+    // until she does, app.runtime says whether she will and what she lacks.
+    nipa.start();
     return status;
   }
 
@@ -376,6 +430,7 @@ final class HeadlessCore {
       _danmakuClient?.close();
       return;
     }
+    await nipa.close();
     await endpoint.stop();
     await mesh.close();
     await _jobs?.cancel();
