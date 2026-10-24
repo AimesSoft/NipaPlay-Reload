@@ -220,6 +220,10 @@ final class MeshDiscovery {
     if (peer == deviceId || host.isEmpty || peerPort < 1 || peerPort > 65535) {
       return;
     }
+    // A link-local address (fe80::, 169.254/16) has no meaning without the
+    // interface it was heard on, so it cannot be dialled from here.
+    final parsed = InternetAddress.tryParse(host);
+    if (parsed != null && parsed.isLinkLocal) return;
     final now = DateTime.now();
     final list = _hints[peer] ??= <({JsonMap address, DateTime expires})>[];
     list.removeWhere(

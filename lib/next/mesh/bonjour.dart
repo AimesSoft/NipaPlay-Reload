@@ -119,15 +119,13 @@ final class MeshBonjour {
     });
   }
 
-  /// Joins the group on the default interface and on every non-virtual
-  /// interface that has an IPv4 address, so a multi-homed host hears peers on
-  /// all its real networks. Interfaces that refuse are skipped.
+  /// Joins the group on every non-virtual interface that has an IPv4 address,
+  /// so a multi-homed host hears peers on all its real networks; the default
+  /// interface only when none of those worked. `joinMulticast` reports failure
+  /// as an OSError (not a SocketException) and a second join on the same
+  /// interface is EADDRINUSE, so every join is allowed to fail on its own.
   Future<void> _joinGroup(RawDatagramSocket socket) async {
-    try {
-      socket.joinMulticast(multicastAddress);
-    } on SocketException {
-      // Isolated or loopback-only hosts have no default multicast interface.
-    }
+    var joined = false;
     try {
       final interfaces = await NetworkInterface.list(
         type: InternetAddressType.IPv4,
@@ -136,12 +134,19 @@ final class MeshBonjour {
         if (isVirtualInterface(interface.name)) continue;
         try {
           socket.joinMulticast(multicastAddress, interface);
-        } on SocketException {
-          // Already joined through the default interface, or not multicast.
+          joined = true;
+        } catch (_) {
+          // Not multicast capable, or already a member through this interface.
         }
       }
-    } on SocketException {
-      // Interface listing can fail in sandboxes; the default join stands.
+    } catch (_) {
+      // Interface listing can fail in sandboxes; the default join follows.
+    }
+    if (joined) return;
+    try {
+      socket.joinMulticast(multicastAddress);
+    } catch (_) {
+      // Isolated or loopback-only hosts have no multicast interface at all.
     }
   }
 

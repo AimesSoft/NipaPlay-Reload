@@ -80,6 +80,8 @@ final class MeshRuntime implements MeshDeviceSource {
     this.coordinatorRetryDelay = const Duration(seconds: 15),
     this.candidateStaggerDelay = const Duration(milliseconds: 250),
     this.unknownPeerRefreshCooldown = const Duration(seconds: 30),
+    this.toolsPageBytes = 400 * 1024,
+    this.candidateLookupInterval = const Duration(minutes: 10),
     this.interfaceProvider,
     MeshNative? native,
     int Function()? clockSeconds,
@@ -95,6 +97,17 @@ final class MeshRuntime implements MeshDeviceSource {
   final Duration coordinatorRetryDelay;
   final Duration candidateStaggerDelay;
   final Duration unknownPeerRefreshCooldown;
+
+  /// One `tools/list` page stays far below the 1 MiB Mesh frame: a Next
+  /// interface registers hundreds of Actions whose schemas together exceed it.
+  final int toolsPageBytes;
+
+  /// A peer's coordinator-reported addresses are asked for at most this often.
+  /// Peers re-report on their own heartbeat (>= 15 minutes), and the library
+  /// calls every peer every few seconds: without this an offline laptop would
+  /// cost one lookup per call and exhaust the account's 60 address requests
+  /// per hour within minutes.
+  final Duration candidateLookupInterval;
   final Future<List<NetworkInterfaceSnapshot>> Function()? interfaceProvider;
   final int Function()? _clockSeconds;
 
@@ -138,6 +151,7 @@ final class MeshRuntime implements MeshDeviceSource {
   final _seen = <String, int>{};
   final _descriptions = <String, JsonMap>{};
   final _unknownPeerCheckedAt = <String, DateTime>{};
+  final _candidateLookupAt = <String, DateTime>{};
   bool _hostFactsLoaded = false;
   bool _routesLoaded = false;
   Future<void> _routeWrites = Future.value();
@@ -515,7 +529,9 @@ final class MeshRuntime implements MeshDeviceSource {
     if (broadcast) {
       try {
         await _discovery!.start();
-      } on SocketException {
+      } catch (_) {
+        // Discovery only adds hints; whatever goes wrong here (port taken,
+        // no multicast, sandbox) must not stop the node from joining.
         discoveryNotice =
             'LAN broadcast unavailable; coordinator candidates remain available.';
       }
@@ -977,8 +993,20 @@ final class MeshRuntime implements MeshDeviceSource {
   }
 
   Future<List<JsonMap>> _catalog(String peer) async {
-    final result = await rpc(peer, 'tools/list', {});
-    final tools = (result['tools'] as List).cast<JsonMap>();
+    final tools = <JsonMap>[];
+    String? cursor;
+    // MCP pagination: a page carries `nextCursor` until the list is complete.
+    for (var page = 0; page < 64; page++) {
+      final result =
+          await rpc(peer, 'tools/list', {if (cursor != null) 'cursor': cursor});
+      tools.addAll((result['tools'] as List).cast<JsonMap>());
+      cursor = result['nextCursor'] as String?;
+      if (cursor == null) break;
+    }
+    if (cursor != null) {
+      throw const Failure(
+          FailureCode.unavailable, 'Remote Action catalog has too many pages.');
+    }
     final actions = [
       for (final tool in tools)
         {
@@ -1082,8 +1110,14 @@ final class MeshRuntime implements MeshDeviceSource {
 
   Future<List<JsonMap>> _coordinatorCandidatesFor(String peer) async {
     final coordinator = _coordinator;
-    if (coordinator == null || _coordinatorSyncPending) {
-      return _peerCandidates[peer] ?? const [];
+    final cached = _peerCandidates[peer];
+    final lookedUp = _candidateLookupAt[peer];
+    if (coordinator == null ||
+        _coordinatorSyncPending ||
+        cached != null &&
+            lookedUp != null &&
+            DateTime.now().difference(lookedUp) < candidateLookupInterval) {
+      return cached ?? const [];
     }
     try {
       final response = await coordinator.request(
@@ -1092,6 +1126,7 @@ final class MeshRuntime implements MeshDeviceSource {
           .map((e) => Map<String, Object?>.from(e as Map))
           .toList();
       _peerCandidates[peer] = list;
+      _candidateLookupAt[peer] = DateTime.now();
       unawaited(_persistRoutes());
       return list;
     } on Failure catch (failure) {
@@ -1510,6 +1545,9 @@ final class MeshRuntime implements MeshDeviceSource {
                   frame, Invocation(origin: 'mesh:${event.deviceId}', id: id)),
               zoneValues: {#meshReturnTarget: returnTo}) ??
           {'jsonrpc': '2.0', 'id': null, 'result': <String, Object?>{}};
+      if (frame['method'] == 'tools/list') {
+        response = _toolsListPage(response, params?['cursor']);
+      }
       final result = response['result'] as JsonMap?;
       if (result?.containsKey('structuredContent') == true) {
         // Mesh consumers decode structuredContent; duplicating it as escaped
@@ -1534,6 +1572,34 @@ final class MeshRuntime implements MeshDeviceSource {
       // Closing/revoked peers no longer have a response channel.
       status = _node == node ? 'peer_disconnected' : status;
     }
+  }
+
+  /// Cuts the full `tools/list` answer to one page of at most
+  /// [toolsPageBytes] (always at least one tool); `cursor` is the index of the
+  /// first tool of the page, and `nextCursor` is absent on the last page.
+  JsonMap _toolsListPage(JsonMap response, Object? cursor) {
+    final result = response['result'];
+    if (result is! JsonMap || result['tools'] is! List) return response;
+    final tools = (result['tools'] as List).cast<JsonMap>();
+    final start =
+        cursor == null ? 0 : (cursor is String ? int.tryParse(cursor) : null);
+    if (start == null || start < 0 || start > tools.length) {
+      throw const FormatException('Invalid tools/list cursor.');
+    }
+    var bytes = 0, end = start;
+    while (end < tools.length) {
+      bytes += utf8.encode(jsonEncode(tools[end])).length;
+      if (end > start && bytes > toolsPageBytes) break;
+      end++;
+    }
+    return {
+      ...response,
+      'result': {
+        ...result,
+        'tools': tools.sublist(start, end),
+        if (end < tools.length) 'nextCursor': '$end',
+      },
+    };
   }
 
   Object? _rpcId(String body) {

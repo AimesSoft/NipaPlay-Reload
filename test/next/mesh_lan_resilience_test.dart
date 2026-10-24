@@ -65,8 +65,8 @@ final class _EchoAction extends Action<MeshJson, MeshJson> {
         effect: Effect.write,
         input: ObjectSchema({'value': StringSchema()},
             additionalProperties: false),
-        output: ObjectSchema({'value': StringSchema()},
-            additionalProperties: true),
+        output:
+            ObjectSchema({'value': StringSchema()}, additionalProperties: true),
       );
   @override
   MeshJson decodeInput(JsonMap json) => MeshJson(json);
@@ -111,7 +111,8 @@ final class _ControllableCoordinator {
       await request.response.close();
     });
 
-    final coordSocket = await ServerSocket.bind(InternetAddress.loopbackIPv4, 0);
+    final coordSocket =
+        await ServerSocket.bind(InternetAddress.loopbackIPv4, 0);
     final coordPort = coordSocket.port;
     await coordSocket.close();
     coordinatorUri = Uri.parse('http://127.0.0.1:$coordPort');
@@ -141,9 +142,9 @@ final class _ControllableCoordinator {
     final deadline = DateTime.now().add(const Duration(seconds: 10));
     while (true) {
       try {
-        final response = await (await client
-                .getUrl(coordinatorUri.resolve('/healthz')))
-            .close();
+        final response =
+            await (await client.getUrl(coordinatorUri.resolve('/healthz')))
+                .close();
         await response.drain<void>();
         break;
       } on SocketException {
@@ -296,7 +297,8 @@ void main() {
 
     // Verify a live coordinator client actually routes through the configured proxy.
     final proxyRequests = <String>[];
-    final proxyServer = await ServerSocket.bind(InternetAddress.loopbackIPv4, 0);
+    final proxyServer =
+        await ServerSocket.bind(InternetAddress.loopbackIPv4, 0);
     proxyServer.listen((socket) async {
       final line = await socket
           .cast<List<int>>()
@@ -389,7 +391,12 @@ void main() {
     final withRemembered = rankMeshCandidates(
       [
         ...rawCandidates,
-        {'kind': 'manual', 'host': '203.0.113.10', 'port': 47812, 'priority': 1000},
+        {
+          'kind': 'manual',
+          'host': '203.0.113.10',
+          'port': 47812,
+          'priority': 1000
+        },
       ],
       localHosts: ['192.168.1.10'],
     );
@@ -400,7 +407,12 @@ void main() {
     final awayRanked = rankMeshCandidates(
       [
         {'kind': 'lan', 'host': '192.168.1.25', 'port': 47812, 'priority': 100},
-        {'kind': 'public', 'host': '203.0.113.10', 'port': 47812, 'priority': 50},
+        {
+          'kind': 'public',
+          'host': '203.0.113.10',
+          'port': 47812,
+          'priority': 50
+        },
       ],
       localHosts: ['172.20.10.2'],
     );
@@ -437,7 +449,8 @@ void main() {
 
     // A resolver asking for the instance's own host name (what Apple's
     // NWBrowser does after it found the service) is answered too.
-    final hostQuery = MeshBonjour.encodeQuery(service: 'someone.local', type: 1);
+    final hostQuery =
+        MeshBonjour.encodeQuery(service: 'someone.local', type: 1);
     expect(MeshBonjour.decodePacket(hostQuery)!.isQueryForService, isFalse);
     expect(
         MeshBonjour.decodePacket(hostQuery, ownHostName: 'someone.local')!
@@ -514,6 +527,9 @@ void main() {
         coordinatorRetryDelay: retryDelay,
         candidateStaggerDelay: const Duration(milliseconds: 250),
         unknownPeerRefreshCooldown: const Duration(milliseconds: 100),
+        // One tool per page: every catalogue read in this test has to be
+        // reassembled from pages.
+        toolsPageBytes: 1,
         interfaceProvider: () async => interfaces,
         clockSeconds: () => simulatedNow,
       );
@@ -694,6 +710,14 @@ void main() {
             .cast<JsonMap>()
             .singleWhere((d) => d['deviceId'] == bOffline.identity!.deviceId);
         expect(listedB['online'], isTrue);
+        expect(
+            (listedB['actions'] as List).cast<JsonMap>().map((a) => a['id']),
+            containsAll(<String>[
+              'download.echo',
+              'mesh.devices',
+              'mesh.invoke',
+              'mesh.invoke_destructive',
+            ]));
         // Offline: neither the join, the device list nor the route lookup
         // spent a single coordinator request on the roster or on addresses.
         expect(env.countFor('GET', '/mesh/v1/devices'), 0);
@@ -704,8 +728,7 @@ void main() {
         // certificate and refreshes the device list.
         for (final node in [aOffline, bOffline]) {
           final certFile = File('${node.root.path}/mesh-certificate.json');
-          final certJson =
-              jsonDecode(await certFile.readAsString()) as JsonMap;
+          final certJson = jsonDecode(await certFile.readAsString()) as JsonMap;
           (certJson['certificate'] as JsonMap)['not_after'] =
               (DateTime.now().millisecondsSinceEpoch ~/ 1000) + 3600;
           await certFile.writeAsString(jsonEncode(certJson), flush: true);
@@ -762,8 +785,10 @@ void main() {
 
         expect(aOffline.coordinatorSyncPending, isFalse);
         expect(bOffline.coordinatorSyncPending, isFalse);
-        expect(env.countFor('POST', '/mesh/v1/devices/renew'), greaterThanOrEqualTo(2));
-        expect(env.countFor('GET', '/mesh/v1/devices'), greaterThanOrEqualTo(2));
+        expect(env.countFor('POST', '/mesh/v1/devices/renew'),
+            greaterThanOrEqualTo(2));
+        expect(
+            env.countFor('GET', '/mesh/v1/devices'), greaterThanOrEqualTo(2));
 
         // Reset clock back to real time for subsequent operations.
         simulatedNow = DateTime.now().millisecondsSinceEpoch ~/ 1000;
@@ -869,6 +894,106 @@ void main() {
       }
     } finally {
       for (final node in activeNodes.reversed) {
+        await node.close();
+      }
+      await env.close();
+    }
+  });
+
+  test(
+      'Bonjour on the real mDNS port: two members in one process join the group without throwing',
+      () async {
+    final a = MeshBonjour(
+      deviceId: 'a' * 43,
+      port: 41001,
+      localAddresses: () async => const [],
+      onPeerDiscovered: (_, __, ___, ____) {},
+      allowInLabProfile: true,
+    );
+    final b = MeshBonjour(
+      deviceId: 'b' * 43,
+      port: 41002,
+      localAddresses: () async => const [],
+      onPeerDiscovered: (_, __, ___, ____) {},
+      allowInLabProfile: true,
+    );
+    try {
+      // `joinMulticast` fails with an OSError (EADDRINUSE on a second join of
+      // the same interface), which once escaped MeshBonjour.start and stopped
+      // the whole node from finishing its join.
+      await a.start();
+      await b.start();
+    } finally {
+      await a.close();
+      await b.close();
+    }
+  });
+
+  test(
+      'R2: a peer cannot spend the coordinator budget with change notices, and an offline peer costs no repeated address lookups',
+      () async {
+    final tempDir = await Directory.systemTemp.createTemp('mesh-lan-budget-');
+    final env = _ControllableCoordinator(tempDir, caDirectory);
+    await env.start();
+    final vault = _Vault();
+    final nodes = <MeshRuntime>[];
+    Future<MeshRuntime> join(String name) async {
+      final root = await Directory('${tempDir.path}/$name').create();
+      final runtime = MeshRuntime(
+        root: root,
+        vault: vault,
+        native: native,
+        authorize: (_, __) async => null,
+        token: () async => _jwt(424242),
+        interfaceProvider: () async => const [],
+      );
+      runtime.attach(Harness([_EchoCapability(), MeshCapability(runtime)]));
+      nodes.add(runtime);
+      await File('${root.path}/mesh.json')
+          .writeAsString(jsonEncode({'coordinator': env.gateUri.toString()}));
+      await runtime.join(
+        ca: caPem,
+        coordinator: MeshCoordinator(env.gateUri, () async => _jwt(424242)),
+        name: name,
+        broadcast: false,
+      );
+      await runtime.setManualAddresses([
+        {'kind': 'manual', 'host': '127.0.0.1', 'port': runtime.port}
+      ]);
+      await runtime.heartbeat(renew: false);
+      return runtime;
+    }
+
+    try {
+      final a = await join('budget-a');
+      final b = await join('budget-b');
+      final completed = await a.invoke(
+          b.identity!.deviceId, 'download.echo', {'value': 'x'},
+          destructive: false);
+      expect(completed, isA<Completed>());
+
+      // B floods A with "roster changed" notices that carry no new revocation.
+      env.resetCounts();
+      for (var i = 0; i < 20; i++) {
+        await b.rpc(a.identity!.deviceId, 'mesh/devices/changed',
+            {'reason': 'flood', 'revocationEpoch': 0});
+      }
+      expect(env.countFor('GET', '/mesh/v1/devices'), 0,
+          reason: 'notices inside the cooldown are merged, not forwarded');
+
+      // B goes away; A keeps calling it (the library does every few seconds).
+      final bId = b.identity!.deviceId;
+      await b.close();
+      nodes.remove(b);
+      env.resetCounts();
+      for (var i = 0; i < 6; i++) {
+        await expectLater(
+            a.rpc(bId, 'mesh/describe', {}), throwsA(isA<Failure>()));
+      }
+      expect(env.countFor('GET', '/mesh/v1/addresses'), 0,
+          reason: 'cached candidates are reused inside the lookup interval');
+    } finally {
+      for (final node in nodes.reversed) {
         await node.close();
       }
       await env.close();
