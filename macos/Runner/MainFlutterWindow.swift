@@ -89,6 +89,73 @@ class WebViewTransparencyPlugin: NSObject, FlutterPlugin {
     }
 }
 
+/// The app's own window as the window server composes it, native video under
+/// the transparent hole included: what `ui.capture` returns on macOS. Only
+/// this app's main window; an app may capture its own windows without the
+/// screen recording grant. CGWindowListCreateImage is closed to Swift by the
+/// current SDK but still exported.
+enum OwnWindowShot {
+    static func write(path: String, maxLongEdge: Int, nominal: Bool = false) -> (result: [String: Any]?, code: String, message: String) {
+        guard let window = NSApp.windows.first(where: { $0 is MainFlutterWindow }) else {
+            return (nil, "unavailable", "The main window is not there")
+        }
+        typealias CreateImage = @convention(c) (CGRect, UInt32, UInt32, UInt32) -> Unmanaged<CGImage>?
+        guard let symbol = dlsym(UnsafeMutableRawPointer(bitPattern: -2), "CGWindowListCreateImage") else {
+            return (nil, "unavailable", "CGWindowListCreateImage is not exported")
+        }
+        let create = unsafeBitCast(symbol, to: CreateImage.self)
+        // optionIncludingWindow (1 << 3); boundsIgnoreFraming | bestResolution (1 << 3) or nominalResolution (1 << 4)
+        guard var image = create(CGRect.null, 1 << 3, UInt32(window.windowNumber), 1 | (nominal ? 1 << 4 : 1 << 3))?.takeRetainedValue() else {
+            return (nil, "capture_failed", "The window could not be captured")
+        }
+        let originalWidth = image.width
+        let originalHeight = image.height
+        let longEdge = max(originalWidth, originalHeight)
+        if maxLongEdge > 0, longEdge > maxLongEdge {
+            let scale = Double(maxLongEdge) / Double(longEdge)
+            let width = max(1, Int((Double(originalWidth) * scale).rounded()))
+            let height = max(1, Int((Double(originalHeight) * scale).rounded()))
+            if let space = image.colorSpace ?? CGColorSpace(name: CGColorSpace.sRGB),
+               let context = CGContext(data: nil, width: width, height: height, bitsPerComponent: 8,
+                                       bytesPerRow: 0, space: space,
+                                       bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue) {
+                context.interpolationQuality = .high
+                context.draw(image, in: CGRect(x: 0, y: 0, width: width, height: height))
+                if let scaled = context.makeImage() { image = scaled }
+            }
+        }
+        let url = URL(fileURLWithPath: path)
+        guard let destination = CGImageDestinationCreateWithURL(url as CFURL, "public.png" as CFString, 1, nil) else {
+            return (nil, "write_failed", "Cannot write \(path)")
+        }
+        CGImageDestinationAddImage(destination, image, nil)
+        guard CGImageDestinationFinalize(destination) else {
+            return (nil, "write_failed", "Cannot write \(path)")
+        }
+        return (["path": path, "width": image.width, "height": image.height,
+                 "originalWidth": originalWidth, "originalHeight": originalHeight], "", "")
+    }
+}
+
+class OwnWindowShotPlugin: NSObject, FlutterPlugin {
+    static func register(with registrar: FlutterPluginRegistrar) {
+        let channel = FlutterMethodChannel(name: "nipaplay/window_shot", binaryMessenger: registrar.messenger)
+        registrar.addMethodCallDelegate(OwnWindowShotPlugin(), channel: channel)
+    }
+
+    func handle(_ call: FlutterMethodCall, result: @escaping FlutterResult) {
+        guard call.method == "shot",
+              let arguments = call.arguments as? [String: Any],
+              let path = arguments["path"] as? String else {
+            result(FlutterMethodNotImplemented)
+            return
+        }
+        let shot = OwnWindowShot.write(path: path, maxLongEdge: arguments["maxLongEdge"] as? Int ?? 0)
+        if let value = shot.result { result(value) }
+        else { result(FlutterError(code: shot.code, message: shot.message, details: nil)) }
+    }
+}
+
 class SecurityBookmarkPlugin: NSObject, FlutterPlugin {
     static func register(with registrar: FlutterPluginRegistrar) {
         let channel = FlutterMethodChannel(name: "security_bookmark", binaryMessenger: registrar.messenger)
@@ -102,37 +169,17 @@ class SecurityBookmarkPlugin: NSObject, FlutterPlugin {
             result(["name": LabProfile.name as Any, "root": LabProfile.root?.path as Any,
                     "writeSandbox": LabProfile.writeSandbox])
         case "labWindowShot":
-            // Lab instances only: the app's own window as the window server
-            // composes it (native video under the transparent hole included),
-            // for the one window and no other. CGWindowListCreateImage is
-            // closed to Swift by the current SDK but still exported, and an app
-            // may capture its own windows without the screen recording grant.
+            // Lab instances only (the lab driver's path); the product path is
+            // OwnWindowShotPlugin, which `ui.capture` uses.
             guard LabProfile.active,
                   let arguments = call.arguments as? [String: Any],
-                  let path = arguments["path"] as? String,
-                  let window = NSApp.windows.first(where: { $0 is MainFlutterWindow }) else {
+                  let path = arguments["path"] as? String else {
                 result(FlutterError(code: "invalid_reference", message: "Lab profile and a window required", details: nil))
                 return
             }
-            typealias CreateImage = @convention(c) (CGRect, UInt32, UInt32, UInt32) -> Unmanaged<CGImage>?
-            guard let symbol = dlsym(UnsafeMutableRawPointer(bitPattern: -2), "CGWindowListCreateImage") else {
-                result(FlutterError(code: "unavailable", message: "CGWindowListCreateImage is not exported", details: nil))
-                return
-            }
-            let create = unsafeBitCast(symbol, to: CreateImage.self)
-            // optionIncludingWindow (1 << 3); boundsIgnoreFraming | nominalResolution (1 | 1 << 4)
-            guard let image = create(CGRect.null, 1 << 3, UInt32(window.windowNumber), 1 | (1 << 4))?.takeRetainedValue() else {
-                result(FlutterError(code: "capture_failed", message: "The window could not be captured", details: nil))
-                return
-            }
-            let url = URL(fileURLWithPath: path)
-            guard let destination = CGImageDestinationCreateWithURL(url as CFURL, "public.png" as CFString, 1, nil) else {
-                result(FlutterError(code: "write_failed", message: "Cannot write \(path)", details: nil))
-                return
-            }
-            CGImageDestinationAddImage(destination, image, nil)
-            CGImageDestinationFinalize(destination)
-            result(["path": path, "width": image.width, "height": image.height])
+            let shot = OwnWindowShot.write(path: path, maxLongEdge: 0, nominal: true)
+            if let value = shot.result { result(value) }
+            else { result(FlutterError(code: shot.code, message: shot.message, details: nil)) }
         case "labVault":
             guard LabProfile.active, let arguments = call.arguments as? [String: Any] else {
                 result(FlutterError(code: "invalid_reference", message: "Lab profile required", details: nil))
@@ -1783,6 +1830,7 @@ class MainFlutterWindow: NSWindow {
     SecurityBookmarkPlugin.register(with: flutterViewController.registrar(forPlugin: "SecurityBookmarkPlugin"))
     PasswordInputModePlugin.register(with: flutterViewController.registrar(forPlugin: "PasswordInputModePlugin"))
     WebViewTransparencyPlugin.register(with: flutterViewController.registrar(forPlugin: "WebViewTransparencyPlugin"))
+    OwnWindowShotPlugin.register(with: flutterViewController.registrar(forPlugin: "OwnWindowShotPlugin"))
     SystemSharePlugin.register(with: flutterViewController.registrar(forPlugin: "SystemSharePlugin"))
     ClipboardImagePlugin.register(with: flutterViewController.registrar(forPlugin: "ClipboardImagePlugin"))
     MacOSNativeVideoPlugin.register(with: flutterViewController.registrar(forPlugin: "MacOSNativeVideoPlugin"))

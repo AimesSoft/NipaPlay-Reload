@@ -273,6 +273,60 @@ void main() {
       expect(playback.danmaku.timeline.segments, isEmpty);
     });
 
+    test('the Skip button is pushed at the edges of the segment, controls shown or not',
+        () async {
+      await playback.openItem(PlayableItem(videoPath: path));
+      await settle();
+      final id = playback.snapshot().sessionId;
+      await playback.inspection.inspect('playback.set_skip_segment',
+          {'sessionId': id, 'kind': 'opening', 'startMs': 500, 'endMs': 1000});
+      // What the interface is told: the kind at every push of the frame.
+      final told = <SkipSegmentKind?>[];
+      void listener() => told.add(playback.skippable);
+      playback.frame.addListener(listener);
+      addTearDown(() => playback.frame.removeListener(listener));
+
+      await playback.session!.seek(Duration.zero, origin: 'agent');
+      await Future<void>.delayed(const Duration(milliseconds: 50));
+      told.clear();
+      await playback.port.setPaused(false);
+      // In at 0.5 s.
+      await Future<void>.delayed(const Duration(milliseconds: 700));
+      expect(told, contains(SkipSegmentKind.opening),
+          reason: 'entering the segment is pushed');
+      // Out at 1.0 s.
+      await Future<void>.delayed(const Duration(milliseconds: 600));
+      expect(told.last, isNull, reason: 'leaving the segment is pushed');
+      expect(playback.skippable, isNull);
+    });
+
+    test('a seek into or out of the segment, and a new session, are pushed',
+        () async {
+      await playback.openItem(PlayableItem(videoPath: path));
+      await settle();
+      final id = playback.snapshot().sessionId;
+      await playback.inspection.inspect('playback.set_skip_segment',
+          {'sessionId': id, 'kind': 'opening', 'startMs': 5000, 'endMs': 90000});
+      final told = <SkipSegmentKind?>[];
+      void listener() => told.add(playback.skippable);
+      playback.frame.addListener(listener);
+      addTearDown(() => playback.frame.removeListener(listener));
+
+      await playback.session!.seek(const Duration(seconds: 30), origin: 'agent');
+      expect(told.last, SkipSegmentKind.opening);
+      await playback.session!.seek(const Duration(seconds: 200), origin: 'agent');
+      expect(told.last, isNull);
+      await playback.session!.seek(const Duration(seconds: 30), origin: 'agent');
+      expect(told.last, SkipSegmentKind.opening);
+
+      // Another file: its own session, nothing skippable until told.
+      final other = await episodeFile(f, 'ep13.mkv', '13', work: 'w2');
+      await playback.openItem(PlayableItem(videoPath: other));
+      await settle();
+      expect(told.last, isNull);
+      expect(playback.skippable, isNull);
+    });
+
     test('Nipa\'s segment outranks AniSkip\'s; the user\'s mark outranks hers',
         () async {
       await writeId(f, 'w', 'work', malProvider, '52991');

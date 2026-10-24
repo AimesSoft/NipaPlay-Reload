@@ -142,6 +142,8 @@ final class MediaKitDriver extends AdapterDriver
     }
     await _lengthAndTracksListed();
     queue.live();
+    _chapters = await _readChapters();
+    queue.live();
     await adapter.prepare();
     queue.live();
     if (start <= Duration.zero) return Duration.zero;
@@ -341,11 +343,53 @@ final class MediaKitDriver extends AdapterDriver
 
   double? _fps;
 
+  /// mpv's `chapter-list`, read once at the open: null when mpv would not
+  /// say, empty when the file has none.
+  List<ChapterFacts>? _chapters;
+
+  Future<List<ChapterFacts>?> _readChapters() async {
+    // The list is there once the file is loaded; mpv is asked again briefly
+    // if it has not answered yet.
+    for (var attempt = 0; attempt < 5; attempt++) {
+      final count = int.tryParse((await adapter
+                  .readMpvPropertiesChecked(['chapter-list/count']))[
+                      'chapter-list/count']
+              ?.value ??
+          '');
+      queue.live();
+      if (count == null) {
+        await Future<void>.delayed(const Duration(milliseconds: 200));
+        queue.live();
+        continue;
+      }
+      if (count <= 0) return const [];
+      final names = [
+        for (var i = 0; i < count; i++) ...['chapter-list/$i/time', 'chapter-list/$i/title']
+      ];
+      final read = await adapter.readMpvPropertiesChecked(names);
+      queue.live();
+      final starts = [
+        for (var i = 0; i < count; i++)
+          ((double.tryParse(read['chapter-list/$i/time']?.value ?? '') ?? 0) *
+                  1000)
+              .round()
+      ];
+      return [
+        for (var i = 0; i < count; i++)
+          ChapterFacts((read['chapter-list/$i/title']?.value ?? '').trim(),
+              starts[i],
+              endMs: i + 1 < count ? starts[i + 1] : null)
+      ];
+    }
+    return null;
+  }
+
   @override
   MediaFacts readMedia() => mediaFromInfo(adapter.mediaInfo,
       activeAudio: [if (_audio != null) _audio!],
       activeSubtitles: [if (_subtitle != null) _subtitle!],
-      frameRate: _fps);
+      frameRate: _fps,
+      chapters: _chapters);
 
   // ---- frames (design: the kernel's own primitives, in the queue) ----
 
