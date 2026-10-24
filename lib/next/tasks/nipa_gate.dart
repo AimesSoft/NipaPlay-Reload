@@ -22,10 +22,11 @@ final class NipaGate {
 }
 
 /// Task types that are Nipa's own work, or a question she has NipaPlay ask
-/// the person: a helper turn, a program she runs, a hook run, a deletion or
-/// setting she asked for.
+/// the person: a helper turn, a task handed to another device's Nipa, a
+/// program she runs, a hook run, a deletion or setting she asked for.
 const nipaTaskTypes = {
   'agent.helper',
+  'agent.delegate',
   'program',
   'harness.hook',
   'disk_deletion',

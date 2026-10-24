@@ -1313,15 +1313,29 @@ final class FakeHostSettings
                   self: true,
                   roles: const ['播放', '下载'],
                   remotePrograms: _programs),
-              const UiMeshDevice(
-                  name: '工作站',
-                  online: true,
-                  roles: ['下载', '存储'],
-                  remotePrograms: true),
-              const UiMeshDevice(name: '旧笔记本', roles: ['播放']),
+              for (final device in _others)
+                if (!_removed.contains(device.id)) device,
             ]
           : const [],
     );
+  }
+
+  static const _others = [
+    UiMeshDevice(
+        id: 'workstation',
+        name: '工作站',
+        online: true,
+        roles: ['下载', '存储'],
+        remotePrograms: true),
+    UiMeshDevice(id: 'old-laptop', name: '旧笔记本', roles: ['播放']),
+  ];
+  final _removed = <String>{};
+
+  @override
+  Future<void> removeMeshDevice(String deviceId) async {
+    await Future<void>.delayed(const Duration(milliseconds: 200));
+    _removed.add(deviceId);
+    changed();
   }
 
   @override

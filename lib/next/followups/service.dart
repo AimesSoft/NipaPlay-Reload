@@ -202,10 +202,25 @@ final class Followups {
     _wake = Timer(wait.isNegative ? Duration.zero : wait, _schedule);
   }
 
+  /// Told whenever the conversation host comes, goes or is replaced (what
+  /// else follows the host, such as delegated conversations).
+  final chatListeners = <Future<void> Function(ChatHost?)>[];
+
+  /// Why there is no conversation host, in a sentence; null while there is one.
+  String? get unavailableReason =>
+      _host != null && _host!.available ? null : _unavailable;
+
   Future<void> attach(ChatHost? host, {String? reason}) async {
     await _chatEvents?.cancel();
     _host = host;
     helpers?.attach(host);
+    for (final listener in chatListeners) {
+      try {
+        await listener(host);
+      } catch (_) {
+        // What follows the host never keeps the host from being attached.
+      }
+    }
     _unavailable = reason ?? 'Embedded chat host is not running.';
     _chatEvents = host?.events.listen((message) {
       if (message['method'] == 'turn/completed') {

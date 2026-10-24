@@ -62,6 +62,27 @@ void main() {
     expect(host.forgotten, ['tv']);
   });
 
+  testWidgets('another device is removed from the devices in two taps; this one has no removal',
+      (tester) async {
+    final host = _MeshHost();
+    await tester.pumpWidget(MaterialApp(
+      home: Material(
+          child: SingleChildScrollView(child: DevicesSection(host: host))),
+    ));
+    await tester.pumpAndSettle();
+    expect(find.text('这台电脑'), findsWidgets);
+    // One removal, on the one other device; none on this device's own card.
+    expect(find.text('移除'), findsOneWidget);
+    await tester.tap(find.text('移除'));
+    await tester.pump();
+    expect(host.removed, isEmpty, reason: 'the first tap only asks');
+    await tester.tap(find.text('确定移除'));
+    await tester.pumpAndSettle();
+    expect(host.removed, ['ipad-id']);
+    // The device is gone from the list once the host says so.
+    expect(find.text('iPad'), findsNothing);
+  });
+
   testWidgets('a host key: null keeps the other, empty clears it',
       (tester) async {
     final host = _RemoteHost();
@@ -532,6 +553,19 @@ final class _DeviceHost implements NextHostSettings {
   }
   @override
   dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
+}
+
+/// A host that is in the mesh with another device, recording removals.
+final class _MeshHost extends _DeviceHost {
+  final removed = <String>[];
+  @override
+  Future<UiMeshSetup> mesh() async => UiMeshSetup(joined: true, name: '这台电脑', devices: [
+        const UiMeshDevice(id: 'self-id', name: '这台电脑', online: true, self: true),
+        if (!removed.contains('ipad-id'))
+          const UiMeshDevice(id: 'ipad-id', name: 'iPad', online: true),
+      ]);
+  @override
+  Future<void> removeMeshDevice(String deviceId) async => removed.add(deviceId);
 }
 
 /// A host with Classic's remote access (stopped: it would not start) and

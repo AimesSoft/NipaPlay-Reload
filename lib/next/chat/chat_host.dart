@@ -11,6 +11,7 @@ import '../agent_endpoint.dart';
 import 'turn_boundaries.dart';
 import '../harness_redaction.dart';
 import 'chat_line_reader.dart';
+import 'delegation_chat.dart';
 import 'dsh_runtime.dart';
 import 'liveness.dart';
 import 'memory_stale.dart';
@@ -55,7 +56,7 @@ abstract interface class ConversationHistory {
   Future<ChatMessage> readThread(String id, {bool withProcess});
 }
 
-final class ChatHost implements ConversationHistory {
+final class ChatHost implements ConversationHistory, DelegationChat {
   ChatHost(
       {required this.endpoint,
       required this.repository,
@@ -123,8 +124,10 @@ final class ChatHost implements ConversationHistory {
   final _idleLiveness = ChatLiveness();
   ChatLiveness get liveness =>
       threadId == null ? _idleLiveness : livenessFor(threadId!);
+  @override
   ChatLiveness livenessFor(String id) =>
       threadLiveness.putIfAbsent(id, ChatLiveness.new);
+  @override
   bool busyFor(String id) =>
       const {'inProgress', 'starting'}.contains(livenessFor(id).status);
   @override
@@ -140,6 +143,7 @@ final class ChatHost implements ConversationHistory {
   final _questions = StreamController<ChatMessage>.broadcast();
 
   /// Redacted messages, preserving wire order, for non-UI consumers.
+  @override
   Stream<ChatMessage> get events => _events.stream;
 
   /// Reasoning is combined into at most one update per 100 ms per item.
@@ -165,7 +169,9 @@ final class ChatHost implements ConversationHistory {
   Future<void> _controls = Future.value();
   Future<void>? _closeFuture;
   int _nextId = 0;
-  String? threadId, model, provider;
+  String? threadId;
+  @override
+  String? model, provider;
   ChatMessage? thread;
   Map<String, String> launchEnvironment = {};
   TurnProcessStore? _processes;
@@ -186,6 +192,7 @@ final class ChatHost implements ConversationHistory {
     if (dsh != null) _memoryStale.changed();
   }
 
+  @override
   bool get available => _process != null && !_closing && !_transportClosed;
   int? get processId => _process?.pid;
   bool get busy =>
@@ -917,7 +924,12 @@ final class ChatHost implements ConversationHistory {
       ? 'helper-${origin.substring('harness_cli:helper:'.length)}'
       : origin.startsWith('codex_native:')
           ? 'native-${origin.substring('codex_native:'.length)}'
-          : sessionId;
+          // A delegation conversation is its own conversation: its calls are
+          // attributed to `harness_cli:chat:delegate-<token>`, which is not
+          // the conversation of the person at this device.
+          : origin.startsWith('harness_cli:chat:delegate-')
+              ? origin.substring('harness_cli:chat:'.length)
+              : sessionId;
 
   /// Does not select the foreground conversation or change its durable pointer.
   Future<String> helperThread(String helperId, String title,
@@ -947,6 +959,41 @@ final class ChatHost implements ConversationHistory {
         return id;
       });
 
+  /// A conversation another device's Nipa handed work to. Like a helper's
+  /// thread it does not select itself or move the durable pointer; unlike a
+  /// helper's it is a conversation of its own that the person can open, read
+  /// and speak in. Its calls are attributed to it from the first turn on.
+  @override
+  Future<String> delegationThread(String token, String title) =>
+      _control(() async {
+        final response = await _request('thread/start', {
+          ..._common,
+          'config': {
+            ...await _projectHookConfig(),
+            'shell_environment_policy.set.NIPAPLAY_CHAT': 'delegate-$token'
+          },
+        });
+        final history = Map<String, dynamic>.from(response['thread'] as Map);
+        final id = history['id'] as String;
+        await memory?.rememberThread(id);
+        threadOrigins[id] = 'harness_cli:chat:delegate-$token';
+        if ((history['turns'] as List).isEmpty) _freshThreads[id] = history;
+        await _request('thread/name/set', {'threadId': id, 'name': title});
+        return id;
+      });
+
+  @override
+  Future<int?> conversationCount() async {
+    try {
+      final listed = await listThreads(limit: 100)
+          .timeout(const Duration(seconds: 2));
+      return (listed['data'] as List?)?.length;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  @override
   Future<ChatMessage> startThreadTurn(String id, String text) =>
       _control(() => _startThreadTurn(id, text));
   Future<ChatMessage> _startThreadTurn(String id, String text) async {
@@ -1183,6 +1230,7 @@ final class ChatHost implements ConversationHistory {
         }
       });
 
+  @override
   Future<ChatMessage> interrupt({String? onThread}) async =>
       _public(await _request('turn/interrupt', {
         'threadId': onThread ?? threadId,

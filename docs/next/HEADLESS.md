@@ -195,7 +195,15 @@ python D:\nipaplay-next\headless-data\harness\nipa list
 
 `<data>/mesh.json` 的存在启用同账号 Mesh；coordinator、roles、storage、Agent
 目的设备、广播和签发者由宿主配置，不向 Agent 开放网络授权。
-`broadcastDiscovery` 默认 true，可设 false；无界面 Mesh 始终强制回环。
+`broadcastDiscovery` 默认 true，可设 false。
+
+**监听范围。** 无界面主机和桌面一样，默认监听所有网卡，并把网卡上的局域网地址（不含 docker、
+utun 等虚拟网卡）报给协调服务、通过 UDP 32124 广播和 mDNS（`_nipaplay-mesh._tcp`）让同一网络里的
+设备找到它：放在工作站或机柜里的主机要服务 iPad 和 MacBook，就必须能被它们连上。端口上没有
+明文服务，每个连接都要先通过双向 TLS 1.3（同账号设备证书，吊销立即生效）；没有证书的连接在握手时
+就被拒绝，读不到任何东西。要把它限制在本机，在 `<data>/mesh.json` 里写 `"loopbackOnly": true`
+（此时不报局域网地址，只能经 SSH 转发、手填地址等候选连接），修改后重启生效。固定端口用 `port`，
+不想广播用 `"broadcastDiscovery": false`。
 当前无界面开发构建显式接受 `NIPAPLAY_MESH_DEV_CA` 的公开证书，GUI Release
 仍仅接受内置正式 CA。不能从协调服务响应自动信任新 CA。
 
@@ -226,6 +234,8 @@ peer 地址数组 `peers`。配置在引擎首次初始化时固定，修改须�
 | `program.json` | 宿主的普通用户程序授权，默认关闭，`{"enabled":true}` 后须重启；没有 Agent 设置入口 |
 | `vault/`、`mesh-identity.json`、`mesh-certificate.json` | 私有凭据、Mesh 公钥身份和设备证书；不复制为第二个身份 |
 | `mesh-return-targets.json`、`mesh-replay.jsonl` | 已签发原会话回传票据与防重放记录 |
+| `mesh-delegations.json` | 别的设备交给本机 Nipa 的委托：每台发起设备的委托对话、每次委托的状态与回复 |
+| `mesh-known-devices.json` | 本机见过的同账号设备和第一次见到的时间（无界面主机只记录，不弹窗） |
 | `torrent-session/` | librqbit 会话、续传及 DHT 持久状态 |
 | `harness/`、`harness-seed/` | 用户脚本与公共上游 seed；升级遵循已有 seed 合并契约 |
 | `artwork/`、`downloads/`、`exports/`、`torrent_sources/` | 本宿主缓存、下载目标、弹幕导出与种子缓存 |
@@ -329,6 +339,15 @@ Nipa 在后台起，`app.runtime` 里 `conversationHost` 说明她现在是 `dis
 `starting`、`running` 还是 `failed`，`missing` 列出缺的（`model`、`key`、`runtime`、`agentAssets`），
 `reason` 给一句话。`mesh/describe` 的 `conversationHost` 和 `agent` 同样是实时的。
 agent 开关关掉时宿主停掉对话进程，所有对话入口都说明原因。
+
+**别的设备交来的任务。** 同账号设备上的 Nipa 可以用 `mesh.delegate` 把一件事交给这台主机上的
+Nipa（见 [Mesh README](../../lib/next/mesh/README.md) 的“委托”）。主机在本机 `<data>/harness` 里开一段
+对话，开头写明来自哪台设备上的 Nipa 的委托，用本机的工具做完，最后一条回复交回去；这段对话和
+别的对话一样在 `chat.session.list` 里，主机上的人可以用 `./nipa chat read/say` 读它、插话。Nipa
+没有运行（agent 开关关着、没设模型或密钥、没装运行环境）时，委托立即失败，原因就是上面
+`conversationHost.reason` 那句话。无界面主机上的 Nipa 同样可以把事交给别的设备。
+主机只记录有新设备加入（`mesh.devices` 每台设备的 `firstSeenAt`），不弹窗；要移除设备，在任何
+有屏幕的设备的设置里操作。
 
 **模型与密钥（只有主机上的人能设，Nipa 不能）。** 提供方、地址、模型名、接口（responses 或 chat）
 和思考强度存在 `<data>/model.json`（与桌面同一格式），密钥进 `<data>/vault`。

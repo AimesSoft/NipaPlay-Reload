@@ -72,6 +72,9 @@ import '../mesh/library.dart';
 import '../mesh/library_capability.dart';
 import '../mesh/capability.dart';
 import '../mesh/delivery.dart';
+import '../mesh/delegation.dart';
+import '../mesh/delegation_host.dart';
+import '../mesh/delegation_wiring.dart';
 import '../mesh/native.dart';
 import '../../security/credential_vault.dart';
 import '../chat/helpers.dart';
@@ -107,6 +110,8 @@ final class HeadlessCore {
   final int port;
   final String? nativeLibrary;
   late final MeshRuntime mesh;
+  late final MeshDelegations delegations;
+  late final AgentDelegations delegationHost;
   late final HeadlessVault vault;
   late final TaskEngine engine;
   late final MediaService media;
@@ -169,20 +174,26 @@ final class HeadlessCore {
         authorizedRoots: () => [...mediaRoots, '${root.path}/downloads']);
     final native =
         HeadlessNative(nativeLibrary ?? HeadlessNative.defaultLibrary());
+    // Listens on the LAN like any other device (mutual TLS guards it);
+    // `loopbackOnly` in mesh.json keeps it to this machine.
     mesh = MeshRuntime(
         root: root,
         vault: vault,
         token: () =>
             vault.read(const CredentialRef('preferences', 'dandanplay_token')),
-        forceLoopback: true,
         authorize: (_, __) async => null,
         native: MeshNative(bridge: native));
+    delegations = createMeshDelegations(mesh);
     mesh.describeSelf = () async => {
           'host': 'headless',
           // Live: whether Nipa runs on this host now (the agent switch is on
           // and the model, its key and the runtime are in place).
           'conversationHost': nipa.host != null,
-          'agent': nipa.facts(),
+          'agent': {
+            ...nipa.facts(),
+            if (await nipa.host?.conversationCount() case final count?)
+              'conversations': count,
+          },
           'mediaRoots': mediaRoots.toList(),
           'mediaReadOnlyScope': ['indexing', 'downloadDestination'],
           'fileOperations': 'processPermissions',
@@ -256,7 +267,8 @@ final class HeadlessCore {
         hooks,
         programs,
         downloadExecutor,
-        helpers
+        helpers,
+        delegations
       ])
         HeadlessExecutor(OriginExecutor(e, database))
     ]);
@@ -285,6 +297,7 @@ final class HeadlessCore {
     downloads.returnTarget = followups.downloadReturnTarget;
     programs.returnTarget = followups.downloadReturnTarget;
     attachMeshDelivery(mesh, followups);
+    delegationHost = attachMeshDelegation(mesh, delegations, engine, followups);
     hooks.observeEvent = followups.hookEvent;
     bodyEvents = BodyEvents(database);
     followups.eventCommitted = bodyEvents.changed;
@@ -359,6 +372,7 @@ final class HeadlessCore {
         programRepository,
         SubtitleCapability(subtitles),
         MeshCapability(mesh),
+        MeshDelegationCapability(delegations),
         HeadlessLibraryRoots(root, mediaRoots),
         MemoryCapability(memory),
         HeadlessChatCapability(nipa,

@@ -656,7 +656,9 @@ final class HostSettingsService implements NextHostSettings, NextHostDeviceSetti
         fileProxyPort: value['fileProxyPort'] as int?,
         devices: [
           for (final device in listed)
+            if (device['revoked'] != true)
             UiMeshDevice(
+                id: device['deviceId'] as String? ?? '',
                 name: device['name'] as String? ??
                     device['device_name'] as String? ??
                     '未命名设备',
@@ -670,6 +672,12 @@ final class HostSettingsService implements NextHostSettings, NextHostDeviceSetti
   static String _addressText(Map address) {
     final host = address['host'] as String;
     return '${host.contains(':') ? '[$host]' : host}:${address['port']}';
+  }
+
+  @override
+  Future<void> removeMeshDevice(String deviceId) async {
+    await meshRuntime.revoke(deviceId);
+    notify();
   }
 
   @override
@@ -835,6 +843,9 @@ final class PendingHostSettings implements NextHostSettings, NextHostDeviceSetti
   @override
   Future<void> setMesh(UiMeshChoice choice) async =>
       (await ready).setMesh(choice);
+  @override
+  Future<void> removeMeshDevice(String deviceId) async =>
+      (await ready).removeMeshDevice(deviceId);
   @override
   Future<bool> remotePrograms() async => (await ready).remotePrograms();
   @override

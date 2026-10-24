@@ -349,6 +349,10 @@ final class UnavailableHostSettings implements NextHostSettings {
       throw const Failure(FailureCode.unavailable, _problem);
 
   @override
+  Future<void> removeMeshDevice(String deviceId) async =>
+      throw const Failure(FailureCode.unavailable, _problem);
+
+  @override
   Future<bool> remotePrograms() async => false;
 
   @override

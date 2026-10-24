@@ -191,6 +191,10 @@ abstract interface class NextHostSettings {
   Future<UiMeshSetup> mesh();
   Future<void> setMesh(UiMeshChoice choice);
 
+  /// Removes another device from the account's devices: it loses access at
+  /// once, everywhere. Only the person at this device asks for it.
+  Future<void> removeMeshDevice(String deviceId);
+
   /// Whether Nipa may run programs on this device from another one.
   Future<bool> remotePrograms();
   Future<void> setRemotePrograms(bool allowed);
@@ -328,12 +332,15 @@ final class UiMeshSetup {
 
 final class UiMeshDevice {
   const UiMeshDevice({
+    this.id = '',
     required this.name,
     this.online = false,
     this.self = false,
     this.roles = const [],
     this.remotePrograms = false,
   });
+  /// The device's id, for removing it.
+  final String id;
   final String name;
   final bool online;
   final bool self;
