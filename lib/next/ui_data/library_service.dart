@@ -167,6 +167,7 @@ final class LibraryDataService implements NextLibraryData, NextLibraryActions {
 
   void register(StateCapability state) {
     state.views['library.catalogue'] = StateView(
+        background: true,
         name: 'library.catalogue',
         description:
             'Local X47 condition projection. Membership dimensions apply to the merged work as a whole. Rating is its first displayed rating; missing facts stay null. Updated by local/Mesh refresh, never by Nipa classification.',

@@ -89,8 +89,8 @@ extension DownloadReturns on Followups {
   }
 
   Future<void> _collectDownloadReturns(_Tasks tasks) async {
-    final jobs = await tasks.ofTypes(
-        const ['download'], (job) => job.input['returnTo'] != null);
+    final jobs = await tasks
+        .ofTypes(const ['download'], (job) => job.input['returnTo'] != null);
     final slice = _Slice();
     for (final chunk in _chunks(jobs, 200)) {
       // What these could report, and which of it is reported or published.
@@ -134,8 +134,8 @@ extension DownloadReturns on Followups {
     final target = job.input['returnTo'] as Map?;
     if (target == null) return;
     final facts = <JsonMap>[
-      for (final file in (job.checkpoint['completedFiles'] as List? ?? [])
-          .cast<JsonMap>())
+      for (final file
+          in (job.checkpoint['completedFiles'] as List? ?? []).cast<JsonMap>())
         if (file['isVideo'] == true &&
             file['imported'] == true &&
             file['verification'] == 'verified' &&
@@ -196,15 +196,16 @@ extension DownloadReturns on Followups {
           orderBy: 'rowid')))
         if (row['automatic'] == 'download') row
     ];
-    final pending = automatic.where((r) => r['state'] == 'ready' && r['remoteSealed'] != true).lastOrNull;
+    final pending = automatic
+        .where((r) => r['state'] == 'ready' && r['remoteSealed'] != true)
+        .lastOrNull;
     final now = DateTime.now().toUtc();
     final last = automatic.lastOrNull;
     // The first file is news: it can be watched. Later ones are progress
     // the download page already shows, so they wait and come together.
     final due = last == null
         ? now
-        : DateTime.parse(
-                (last['dispatchedAt'] ?? last['createdAt']) as String)
+        : DateTime.parse((last['dispatchedAt'] ?? last['createdAt']) as String)
             .add(const Duration(minutes: 10));
     final row = pending ??
         <String, Object?>{
@@ -228,7 +229,8 @@ extension DownloadReturns on Followups {
           'reason': null,
           'turnStatus': null,
           if (target['deviceId'] != null) 'remoteDeviceId': target['deviceId'],
-          if (target['returnTicket'] != null) 'returnTicket': target['returnTicket'],
+          if (target['returnTicket'] != null)
+            'returnTicket': target['returnTicket'],
           'trigger': {
             'kind': 'download.facts',
             'jobId': job.jobId,
@@ -248,11 +250,8 @@ extension DownloadReturns on Followups {
     final safe = redactHarnessJson(row) as JsonMap;
     if (pending == null) {
       await database.transaction((tx) async {
-        await tx.insert('followups', {
-          'id': safe['id'],
-          'state': 'ready',
-          'snapshot': jsonEncode(safe)
-        });
+        await tx.insert('followups',
+            {'id': safe['id'], 'state': 'ready', 'snapshot': jsonEncode(safe)});
         await _event(tx, safe, 'registered', target['origin'] as String,
             target['invocationId'] as String);
       });
@@ -265,50 +264,74 @@ extension DownloadReturns on Followups {
   /// An authenticated device delivers an immutable batch. Repeated delivery
   /// returns the original receipt, including after the conversation completed.
   Future<JsonMap> acceptMeshDelivery(String peer, JsonMap delivery,
-      {JsonMap? target}) => _serial(() async {
-    final remote = delivery['row'] as JsonMap;
-    final id = 'followup-mesh-$peer-${remote['id']}';
-    final existing = await database.query('followups', where: 'id=?', whereArgs: [id]);
-    if (existing.isNotEmpty) return {'id': id, 'accepted': true};
-    final wake = target == null;
-    final now = DateTime.now().toUtc().toIso8601String();
-    await location.ready;
-    final row = <String, Object?>{
-      ...remote, 'id': id, 'state': 'ready', 'turnId': null, 'turnStatus': null,
-      'repository': wake ? location.path : target['repository'],
-      'threadId': wake ? remote['threadId'] : target['threadId'],
-      'origin': 'mesh:$peer', 'createdAt': now, 'updatedAt': now,
-      'sourceDeviceId': peer, 'sourceFollowupId': remote['id'],
-      'reason': null, 'waitingFor': 'Waiting for an idle chat host.',
-    }..remove('remoteDeviceId')..remove('remoteRetryAt')..remove('remoteReceipt');
-    if (!wake) {
-      row['automatic'] = switch (remote['automatic']) {
-        'program' => 'meshProgram',
-        'subscription' => 'meshSubscription',
-        'userTask' => 'meshUserTask',
-        _ => 'meshDownload',
-      };
-      row['condition'] = {'kind': 'mesh.${remote['automatic']}.facts'};
-      row['trigger'] = {...remote['trigger'] as JsonMap, 'sourceDeviceId': peer};
-    }
-    final safe = redactHarnessJson(row) as JsonMap;
-    await database.transaction((tx) async {
-      if (!wake && remote['automatic'] != 'subscription') {
-        for (final fact in ((safe['trigger'] as Map)['facts'] as List).cast<JsonMap>()) {
-          final event = remote['automatic'] == 'download' && fact['event'] == 'task.terminal' && (fact['data'] as Map)['state'] == 'succeeded' ? 'download.completed' : fact['event'];
-          await tx.insert('followup_hook_events', {
-            'event': event,
-            'object_id': fact['objectId'], 'payload': jsonEncode(fact),
-          });
-          if (event == 'download.stalled') _stallRecorded(fact);
+          {JsonMap? target}) =>
+      _serial(() async {
+        final remote = delivery['row'] as JsonMap;
+        final id = 'followup-mesh-$peer-${remote['id']}';
+        final existing =
+            await database.query('followups', where: 'id=?', whereArgs: [id]);
+        if (existing.isNotEmpty) return {'id': id, 'accepted': true};
+        final wake = target == null;
+        final now = DateTime.now().toUtc().toIso8601String();
+        await location.ready;
+        final row = <String, Object?>{
+          ...remote,
+          'id': id,
+          'state': 'ready',
+          'turnId': null,
+          'turnStatus': null,
+          'repository': wake ? location.path : target['repository'],
+          'threadId': wake ? remote['threadId'] : target['threadId'],
+          'origin': 'mesh:$peer',
+          'createdAt': now,
+          'updatedAt': now,
+          'sourceDeviceId': peer,
+          'sourceFollowupId': remote['id'],
+          'reason': null,
+          'waitingFor': 'Waiting for an idle chat host.',
         }
-      }
-      await tx.insert('followups', {'id': id, 'state': 'ready', 'snapshot': jsonEncode(safe)});
-      await _event(tx, safe, 'received', 'mesh:$peer', remote['invocationId'] as String);
-    });
-    _schedule();
-    return {'id': id, 'accepted': true};
-  });
+          ..remove('remoteDeviceId')
+          ..remove('remoteRetryAt')
+          ..remove('remoteReceipt');
+        if (!wake) {
+          row['automatic'] = switch (remote['automatic']) {
+            'program' => 'meshProgram',
+            'subscription' => 'meshSubscription',
+            'userTask' => 'meshUserTask',
+            _ => 'meshDownload',
+          };
+          row['condition'] = {'kind': 'mesh.${remote['automatic']}.facts'};
+          row['trigger'] = {
+            ...remote['trigger'] as JsonMap,
+            'sourceDeviceId': peer
+          };
+        }
+        final safe = redactHarnessJson(row) as JsonMap;
+        await database.transaction((tx) async {
+          if (!wake && remote['automatic'] != 'subscription') {
+            for (final fact in ((safe['trigger'] as Map)['facts'] as List)
+                .cast<JsonMap>()) {
+              final event = remote['automatic'] == 'download' &&
+                      fact['event'] == 'task.terminal' &&
+                      (fact['data'] as Map)['state'] == 'succeeded'
+                  ? 'download.completed'
+                  : fact['event'];
+              await tx.insert('followup_hook_events', {
+                'event': event,
+                'object_id': fact['objectId'],
+                'payload': jsonEncode(fact),
+              });
+              if (event == 'download.stalled') _stallRecorded(fact);
+            }
+          }
+          await tx.insert('followups',
+              {'id': id, 'state': 'ready', 'snapshot': jsonEncode(safe)});
+          await _event(tx, safe, 'received', 'mesh:$peer',
+              remote['invocationId'] as String);
+        });
+        _schedule();
+        return {'id': id, 'accepted': true};
+      });
 
   Future<void> _filterDownloadReturn(JsonMap row) async {
     final trigger = row['trigger'] as Map;

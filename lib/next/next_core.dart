@@ -107,34 +107,42 @@ final class NextCore {
     Future<int?> Function(String) mediaDurationProbe = probeMediaDuration,
     Future<JsonMap> Function(String) mediaSubtitleProbe = probeMediaInfo,
     Duration downloadRefreshInterval = const Duration(seconds: 5),
-  }) : downloads = DownloadRuntime(
-            backend: downloadBackend,
-            library: downloadLibrary,
-            isEnabled: isDownloaderEnabled,
-            loadImportedKeys: loadImportedKeys,
-            refreshInterval: downloadRefreshInterval) {
+    void Function(String)? startupPhase,
+  })  : _startupPhase = startupPhase,
+        _downloadBackend = downloadBackend,
+        _downloadLibrary = downloadLibrary,
+        _isDownloaderEnabled = isDownloaderEnabled,
+        _loadImportedKeys = loadImportedKeys,
+        _downloadRefreshInterval = downloadRefreshInterval {
+    stateSources = StateSources();
     ready = _initialize(root, databaseFactory, classic, authorizedRoots,
-        mediaProviders, mediaDurationProbe, mediaSubtitleProbe);
+        mediaProviders, mediaDurationProbe, mediaSubtitleProbe, startupPhase);
   }
 
   late final Future<void> ready;
+  final void Function(String)? _startupPhase;
   late final Directory root;
   late final String deviceId;
   late final TaskEngine engine;
-  final jobOrigins = JobOrigins();
-  final diskDeletion = DiskDeletion();
+  late final JobOrigins jobOrigins;
+  late final DiskDeletion diskDeletion;
   late final SettingConsent settingConsent;
   late final AppRuntimeFacts appRuntime;
   late final AppRestart appRestart;
-  final hooks = HarnessHooks();
-  final harnessLocation = HarnessLocation();
-  final DownloadRuntime downloads;
+  late final HarnessHooks hooks;
+  late final HarnessLocation harnessLocation;
+  late final DownloadRuntime downloads;
+  final DownloadBackend _downloadBackend;
+  final DownloadLibrary _downloadLibrary;
+  final Future<bool> Function() _isDownloaderEnabled;
+  final Future<Set<String>> Function() _loadImportedKeys;
+  final Duration _downloadRefreshInterval;
   CredentialStore get credentials => CredentialStore.instance;
   CredentialVault get credentialVault => credentials.vault;
   late final MediaRuntime media;
   late final MediaSourcesService mediaSources;
   late final SyncService sync;
-  final accounts = AccountsService();
+  late final AccountsService accounts;
   late final DanmakuRuntime danmaku;
   late final SubtitleLibrary subtitles;
   late final ProgramRuntime programs;
@@ -142,7 +150,7 @@ final class NextCore {
   late final SettingsRegistry settings;
   late final MeshRuntime mesh;
   late final List<Capability> capabilities;
-  final StateSources stateSources = StateSources();
+  late final StateSources stateSources;
   late final StateCapability state;
   late final ChangeHistory changeHistory;
   late final ActivityInvocations activityInvocations;
@@ -157,7 +165,7 @@ final class NextCore {
   final classicScan = ClassicScanExecutor();
 
   /// Open while Next's interface is: Nipa's own work waits for it (D1).
-  final nipaGate = NipaGate();
+  late final NipaGate nipaGate;
   bool _nipa = false;
   late final TaskResources resources;
   late final BodyEvents events;
@@ -172,11 +180,11 @@ final class NextCore {
 
   /// Something that 动态 shows has just been recorded. Fires after the
   /// record is stored; the view itself stays the only reader of the facts.
-  final activityChanges = StreamController<void>.broadcast(sync: true);
+  late final StreamController<void> activityChanges;
 
   /// Each recorded settings change ({key, value, origin…}), for what
   /// applies a shared setting as it changes (the player).
-  final settingChanges = StreamController<JsonMap>.broadcast(sync: true);
+  late final StreamController<JsonMap> settingChanges;
   void activityChanged() {
     if (!activityChanges.isClosed) activityChanges.add(null);
   }
@@ -188,24 +196,65 @@ final class NextCore {
       Iterable<String> Function() authorizedRoots,
       Iterable<MetadataProvider>? mediaProviders,
       Future<int?> Function(String) mediaDurationProbe,
-      Future<JsonMap> Function(String) mediaSubtitleProbe) async {
+      Future<JsonMap> Function(String) mediaSubtitleProbe,
+      void Function(String)? onStartupPhase) async {
+    final startupWatch = Stopwatch()..start();
+    void phase(String name) {
+      onStartupPhase?.call('startup: $name');
+      if (Platform.environment['NIPAPLAY_STARTUP_PROFILE'] == '1') {
+        stderr.writeln('[startup] $name ${startupWatch.elapsedMicroseconds}us');
+      }
+      startupWatch.reset();
+    }
+
+    phase('initialize entered');
+    await Future<void>.delayed(Duration.zero);
+    jobOrigins = JobOrigins();
+    diskDeletion = DiskDeletion();
+    phase('core: task state');
+    await Future<void>.delayed(Duration.zero);
+    hooks = HarnessHooks();
+    harnessLocation = HarnessLocation();
+    accounts = AccountsService();
+    phase('core: services');
+    await Future<void>.delayed(Duration.zero);
+    nipaGate = NipaGate();
+    activityChanges = StreamController<void>.broadcast(sync: true);
+    settingChanges = StreamController<JsonMap>.broadcast(sync: true);
+    phase('core: streams');
+    await Future<void>.delayed(Duration.zero);
+    downloads = DownloadRuntime(
+        backend: _downloadBackend,
+        library: _downloadLibrary,
+        isEnabled: _isDownloaderEnabled,
+        loadImportedKeys: _loadImportedKeys,
+        refreshInterval: _downloadRefreshInterval);
+    phase('downloads runtime');
     await debugDandanplayClaimNames(credentialVault);
+    phase('debug claims');
     root = suppliedRoot ??
         Directory(
             '${(await StorageService.getAppStorageDirectory()).path}/next');
+    phase('root');
     deviceId = await loadDeviceIdentity(root);
+    phase('device identity');
     final database = await openNextDatabase(root, factory: databaseFactory);
+    phase('database open');
     final jobs = SqliteJobStore.fromDatabase(database);
     changeHistory = ChangeHistory(database);
     BodyChanges.attached = changeHistory;
     activityInvocations = ActivityInvocations(
         database, File('${root.path}/journal.jsonl'),
         changed: activityChanged);
+    phase('database wiring');
+    await Future<void>.delayed(Duration.zero);
     media = await MediaRuntime.create(root, jobs.database, deviceId,
         classic: classic,
         authorizedRoots: authorizedRoots,
         providers: mediaProviders,
         durationProbe: mediaDurationProbe);
+    phase('media runtime');
+    await Future<void>.delayed(Duration.zero);
     mediaSources = MediaSourcesService(media.service.store);
     sync = SyncService(mediaSources);
     for (final provider in ['dandanplay', 'bangumi']) {
@@ -218,15 +267,36 @@ final class NextCore {
         vault: credentialVault,
         token: () async => credentials.read(
             await SharedPreferences.getInstance(), 'dandanplay_token'));
-    settings = SettingsRegistry(database, [
-      NextUiPreference.setting(),
-      ...ApplicationSettings.entries(),
-      ...ClassicSettings.entries(),
-      ...DownloadSettings.entries(),
-      ...sync.settings(),
-      meshAddressSetting(mesh),
-      harnessLocation.setting
+    final nextUiEntry = NextUiPreference.setting();
+    phase('settings entries: next ui');
+    await Future<void>.delayed(Duration.zero);
+    final applicationEntries = await ApplicationSettings.entriesChunked();
+    phase('settings entries: application');
+    await Future<void>.delayed(Duration.zero);
+    final classicEntries = ClassicSettings.entries();
+    phase('settings entries: classic');
+    await Future<void>.delayed(Duration.zero);
+    final downloadEntries = DownloadSettings.entries();
+    phase('settings entries: download');
+    await Future<void>.delayed(Duration.zero);
+    final syncEntries = sync.settings();
+    phase('settings entries: sync');
+    await Future<void>.delayed(Duration.zero);
+    final meshEntry = meshAddressSetting(mesh);
+    final harnessEntry = harnessLocation.setting;
+    phase('settings entries: mesh harness');
+    settings = SettingsRegistry(database, const []);
+    await settings.registerChunked([
+      nextUiEntry,
+      ...applicationEntries,
+      ...classicEntries,
+      ...downloadEntries,
+      ...syncEntries,
+      meshEntry,
+      harnessEntry
     ]);
+    phase('settings registry');
+    await Future<void>.delayed(Duration.zero);
     SettingsAccess.registry = settings;
     settingConsent = SettingConsent(settings);
     ApplicationSettings.authorizePath = (path, {directory = false}) =>
@@ -236,9 +306,11 @@ final class NextCore {
     danmaku.service.exporter = DanmakuExporter(danmaku.service.store,
         (path) => media.service.authorizedPath(path, directory: true));
     subtitles = SubtitleLibrary(media.service, root, probe: mediaSubtitleProbe);
-    programs = ProgramRuntime(enabled: await loadProgramPermission(root),
-        location: harnessLocation);
+    programs = ProgramRuntime(
+        enabled: await loadProgramPermission(root), location: harnessLocation);
     programRepository = ProgramRepository(programs);
+    phase('danmaku subtitles programs');
+    await Future<void>.delayed(Duration.zero);
     final helpers = Helpers();
     final executors = [
       helpers,
@@ -255,15 +327,18 @@ final class NextCore {
       settingConsent,
       classicScan,
     ];
-    engine = TaskEngine(store: jobs, ownerDeviceId: deviceId,
-        originOf: jobOrigins.of, executors: [
-      for (final executor in executors)
-        OriginExecutor(
-            nipaTaskTypes.contains(executor.type)
-                ? NipaGatedExecutor(executor, nipaGate)
-                : executor,
-            database)
-    ]);
+    engine = TaskEngine(
+        store: jobs,
+        ownerDeviceId: deviceId,
+        originOf: jobOrigins.of,
+        executors: [
+          for (final executor in executors)
+            OriginExecutor(
+                nipaTaskTypes.contains(executor.type)
+                    ? NipaGatedExecutor(executor, nipaGate)
+                    : executor,
+                database)
+        ]);
     jobOrigins.lookup = engine.get;
     hooks.engine = engine;
     programs.engine = engine;
@@ -281,35 +356,47 @@ final class NextCore {
     attachMeshDelivery(mesh, followups);
     mesh.describeSelf = () async {
       await harnessLocation.ready;
-      return {'host': 'gui', 'conversationHost': true,
+      return {
+        'host': 'gui',
+        'conversationHost': true,
         'mediaRoots': media.service.authorizedRoots().toList(),
-        'programExecution': {'enabled': programs.enabled,
+        'programExecution': {
+          'enabled': programs.enabled,
           'workingDirectory': harnessLocation.path,
-          'defaultShell': Platform.isWindows ? 'cmd' : 'sh'}};
+          'defaultShell': Platform.isWindows ? 'cmd' : 'sh'
+        }
+      };
     };
     helpers.engine = engine;
     helpers.followups = followups;
     followups.helpers = helpers;
     sessions = SessionStore(database);
     hooks.scheduleError = (error) async {
-      await followups.discover({'title': '定时配置无效',
-        'source': 'hooks/schedules.json', 'facts': {'error': error}},
-        Invocation(origin: 'application'));
+      await followups.discover({
+        'title': '定时配置无效',
+        'source': 'hooks/schedules.json',
+        'facts': {'error': error}
+      }, Invocation(origin: 'application'));
     };
     downloads.attach(engine, root);
     resources = TaskResources(engine, downloads.downloads, helpers);
     await resources.load();
+    phase('engine resources');
+    await Future<void>.delayed(Duration.zero);
     classicScan.matchingConcurrency = () => resources.metadataConcurrency;
     automatic = SystemSettings(danmaku.sidecars, subtitles);
     settings.register([...resources.settings(), ...automatic.entries()]);
     await automatic.load();
+    phase('automatic settings');
+    await Future<void>.delayed(Duration.zero);
     followups.libraryEnabled = () => automatic.libraryNotifyEnabled;
     followups.describeLibraryFiles =
         (entries) => describeLibraryArrivals(media.service.store, entries);
     ScanService.startupRefreshAllowed = () async {
       final prefs = await SharedPreferences.getInstance();
       final nextOpen = NextUiPreference.interfaceOpen(
-          nextEnabled: prefs.getBool(SettingsKeys.labsEnableAgentEndpoint) == true,
+          nextEnabled:
+              prefs.getBool(SettingsKeys.labsEnableAgentEndpoint) == true,
           preference: prefs.getBool(NextUiPreference.key) == true);
       return !nextOpen || automatic.startupScanEnabled;
     };
@@ -324,11 +411,15 @@ final class NextCore {
     _followupEvents = events.committed.stream.listen((_) => activityChanged());
     changeHistory.onChanged = (collection, id, facts) async {
       final domain = collection.split(':').first;
-      if (domain == 'subtitle') await hooks.emit('media.assets.changed', id, {'kind': 'subtitle', ...facts});
-      if (domain == 'source' || domain == 'source_sort') await hooks.emit('media.sources.state_changed', id, facts);
+      if (domain == 'subtitle')
+        await hooks
+            .emit('media.assets.changed', id, {'kind': 'subtitle', ...facts});
+      if (domain == 'source' || domain == 'source_sort')
+        await hooks.emit('media.sources.state_changed', id, facts);
     };
     _networkEvents = NetworkObservations.changes.stream.listen((facts) {
-      unawaited(hooks.emit('network.state_changed', facts['id'] as String, facts));
+      unawaited(
+          hooks.emit('network.state_changed', facts['id'] as String, facts));
     });
     _bodyTasks = engine.changes.listen((job) {
       if (job.type == 'harness.hook') {
@@ -341,40 +432,62 @@ final class NextCore {
       activityChanged();
       unawaited(hooks.emit('task.state_changed', job.jobId, job.toJson()));
     });
+    phase('event wiring');
+    await Future<void>.delayed(Duration.zero);
     storage = SystemStorage(root, database, hooks);
     desktopSystem = DesktopSystem(media.service, root, hooks);
-    diagnostics = SystemDiagnostics(database, media.service, storage, automatic, settings);
+    diagnostics = SystemDiagnostics(
+        database, media.service, storage, automatic, settings);
     downloads.downloads.returnTarget = followups.downloadReturnTarget;
     media.attach(engine);
     mediaSources.engine = engine;
     accounts.attach(engine);
     danmaku.attach(engine);
-    state = StateCapability([...publicStateViews(
+    final activityView = ActivityView(media.service, settings,
+        activityInvocations, harnessLocation, changeHistory);
+    final publicViews = publicStateViews(
         media: media.service,
         settings: settings,
         danmaku: danmaku.service,
         mesh: mesh,
-        sources: stateSources), ActivityView(media.service, settings,
-            activityInvocations, harnessLocation,
-            changeHistory).view, followups.view]);
-    uiData = UiDataService(media.service, engine, state, stateSources, root, credentialVault);
+        sources: stateSources);
+    phase('state: public views');
+    await Future<void>.delayed(Duration.zero);
+    state = StateCapability([...publicViews, activityView.view, followups.view])
+      ..prepareActivity = activityView.prepare;
+    phase('state: capability');
+    await Future<void>.delayed(Duration.zero);
+    uiData = UiDataService(
+        media.service, engine, state, stateSources, root, credentialVault);
     uiData.subtitles = subtitles;
-    libraryData = LibraryDataService(uiData, port: ClassicLibrarySources(mediaSources, root));
+    phase('state: ui data');
+    await Future<void>.delayed(Duration.zero);
+    libraryData = LibraryDataService(uiData,
+        port: ClassicLibrarySources(mediaSources, root));
+    phase('state: library data');
+    await Future<void>.delayed(Duration.zero);
     final sourceImages = libraryData.port! as ClassicLibrarySources;
-    mediaSources.cachedPoster = (id, item) => sourceImages.cachedImage(id, item, 'Primary');
+    mediaSources.cachedPoster =
+        (id, item) => sourceImages.cachedImage(id, item, 'Primary');
     mediaSources.loadPoster = (id, itemId) async =>
-      sourceImages.image(id, await sourceImages.item(id, itemId), 'Primary');
+        sourceImages.image(id, await sourceImages.item(id, itemId), 'Primary');
     mediaSources.cachedArtwork = uiData.artwork.cached;
     uiData.libraryData = libraryData;
     libraryData.register(state);
     storage.libraryRoots = media.service.authorizedRoots;
     storage.artworkBusy = () => uiData.artwork.busy;
     uiData.meshLibrary = MeshLibrary(uiData, mesh);
+    phase('state: mesh library');
+    await Future<void>.delayed(Duration.zero);
+    activityView.workerRead = uiData.meshLibrary!.worker.activityRows;
+    phase('state ui mesh');
+    await Future<void>.delayed(Duration.zero);
     mediaSources.canonicalEntityId = (id) async {
       await uiData.meshLibrary!.prepareIndex();
       return uiData.meshLibrary!.resolvedId(id);
     };
-    stateSources.canonicalEntityId = (id) async => uiData.meshLibrary!.resolvedId(id);
+    stateSources.canonicalEntityId =
+        (id) async => uiData.meshLibrary!.resolvedId(id);
     stateSources.cachedArtwork = uiData.artwork.cached;
     registerMergedLibrary(state, uiData.meshLibrary!);
     settings.register([uiData.openingSetting]);
@@ -399,7 +512,7 @@ final class NextCore {
         quit: () => DesktopExitHandler.instance.quit(),
         beforeQuit: settings.drain,
         profileName: LabProfile.name);
-    capabilities = List.unmodifiable(diskDeletion.protect(settingConsent.protect([
+    final rawCapabilities = <Capability>[
       CredentialCapability(credentials),
       TaskCapability(engine),
       resources,
@@ -413,9 +526,13 @@ final class NextCore {
       FollowupCapability(followups),
       UiDataCapability(uiData),
       LibraryCapability(libraryData),
+    ];
+    phase('capabilities: first group');
+    await Future<void>.delayed(Duration.zero);
+    rawCapabilities.addAll([
       DbCapability(db),
       MeshLibraryCapability(uiData.meshLibrary!),
-        MeshFilesCapability(uiData.meshLibrary!.files),
+      MeshFilesCapability(uiData.meshLibrary!.files),
       downloads.capability,
       downloads.metadataCapability,
       media.capability,
@@ -424,6 +541,10 @@ final class NextCore {
       RemoteAdminCapability(mediaSources),
       AccountsCapability(accounts),
       danmaku.capability,
+    ]);
+    phase('capabilities: second group');
+    await Future<void>.delayed(Duration.zero);
+    rawCapabilities.addAll([
       SubtitleCapability(subtitles),
       SettingsCapability(settings),
       PrefsCapability(PrefsService(settings)),
@@ -432,8 +553,21 @@ final class NextCore {
       AppRuntimeCapability(appRuntime, appRestart),
       MeshCapability(mesh),
       state,
-    ])).map(InvocationScopeCapability.new));
+    ]);
+    phase('capabilities: values');
+    await Future<void>.delayed(Duration.zero);
+    final consentCapabilities = settingConsent.protect(rawCapabilities);
+    phase('capabilities: setting consent');
+    await Future<void>.delayed(Duration.zero);
+    final protectedCapabilities = diskDeletion.protect(consentCapabilities);
+    phase('capabilities: deletion consent');
+    await Future<void>.delayed(Duration.zero);
+    capabilities = List.unmodifiable(
+        protectedCapabilities.map(InvocationScopeCapability.new));
+    phase('capabilities');
+    await Future<void>.delayed(Duration.zero);
     final statusReader = Harness(capabilities);
+    await Future<void>.delayed(Duration.zero);
     Future<JsonMap> readStatus(String action) async {
       final outcome = await statusReader.invokeJson(
           action, {}, Invocation(origin: 'application'));
@@ -471,10 +605,17 @@ final class NextCore {
           ..update = (() => readStatus('app.update.status'))
           ..hooks = hooks.status
           ..downloadEngines = downloads.engineStatus);
+    phase('system views');
+    await Future<void>.delayed(Duration.zero);
     await engine.start();
+    phase('engine start');
+    await Future<void>.delayed(Duration.zero);
     await downloads.start();
+    phase('downloads start');
+    await Future<void>.delayed(Duration.zero);
     await media.start();
-    mesh.attach(Harness(capabilities));
+    phase('media start');
+    mesh.attach(statusReader);
     // Once, after an upgrade: the old journal into 动态's tables, off the
     // main isolate and after startup.
     unawaited(activityInvocations.backfill());
@@ -486,17 +627,24 @@ final class NextCore {
   /// followups take, and her own tasks. The data layer Classic shares
   /// (database, downloads, media, settings, tasks) runs regardless.
   Future<void> startNipa() async {
+    void phaseNipa(String name) => _startupPhase?.call(name);
     await ready;
     if (_nipa) return;
     _nipa = true;
     hooks.observeEvent = followups.hookEvent;
-    BodySignals.emit = (event, id, facts) async { await hooks.emit(event, id, facts); };
+    BodySignals.emit = (event, id, facts) async {
+      await hooks.emit(event, id, facts);
+    };
     await uiData.start();
+    phaseNipa('startup: Nipa ui data');
     await uiData.meshLibrary!.start();
+    phaseNipa('startup: Nipa mesh library');
     followups.start();
     danmaku.startIndexing();
     subtitles.start();
+    phaseNipa('startup: Nipa indexers');
     await mesh.startConfigured();
+    phaseNipa('startup: Nipa mesh');
     nipaGate.set(true);
   }
 
@@ -552,7 +700,8 @@ final class NextCore {
     await _followupEvents?.cancel();
     changeHistory.onChanged = null;
     changeHistory.onRecorded = null;
-    if (identical(BodyChanges.attached, changeHistory)) BodyChanges.attached = null;
+    if (identical(BodyChanges.attached, changeHistory))
+      BodyChanges.attached = null;
     await changeHistory.drain();
     await activityInvocations.close();
     await followups.close();

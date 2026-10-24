@@ -33,7 +33,8 @@ Future<List<({String path, int score})>> subtitleCandidates(
   final name = p.basenameWithoutExtension(video);
   final numbers = RegExp(r'\d+').allMatches(name).map((m) => m[0]!).toList();
   final candidates = <String, int>{};
-  await for (final entry in File(video).parent.list()) {
+  final siblings = await File(video).parent.list().toList();
+  for (final entry in siblings) {
     if (entry is! File ||
         !subtitleFormats.contains(p.extension(entry.path).toLowerCase()) ||
         !isVobSubPairComplete(entry.path)) {
@@ -50,7 +51,6 @@ Future<List<({String path, int score})>> subtitleCandidates(
         episodeNumber: pickLikelyEpisodeNumber(numbers));
   }
   // A language-only Subs folder belongs to the sole video beside it.
-  final siblings = await File(video).parent.list().toList();
   final videos = siblings.whereType<File>().where((f) => {
         '.mkv',
         '.mp4',

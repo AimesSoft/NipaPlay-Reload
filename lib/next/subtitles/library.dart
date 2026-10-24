@@ -20,6 +20,7 @@ import '../media/media_probe.dart';
 import '../media/file_identity_merge.dart';
 import '../state/change_history.dart';
 import '../public_url.dart';
+import '../util/slicer.dart';
 import '../player/next_playback.dart';
 import 'webvtt.dart';
 import 'operations.dart';
@@ -48,16 +49,24 @@ final class SubtitleLibrary implements SubtitleOperations {
   bool _closed = false;
   bool enabled = true;
   String? lastRun, lastError;
-  JsonMap get status => {'kind': 'subtitle.probe', 'enabled': enabled,
-    'running': _worker != null, 'queue': _pending.length, 'lastRun': lastRun,
-    'nextRun': enabled ? 'on file change or indexers.reconcile' : null, 'error': lastError};
+  JsonMap get status => {
+        'kind': 'subtitle.probe',
+        'enabled': enabled,
+        'running': _worker != null,
+        'queue': _pending.length,
+        'lastRun': lastRun,
+        'nextRun': enabled ? 'on file change or indexers.reconcile' : null,
+        'error': lastError
+      };
   Future<void> setEnabled(bool value) async {
     enabled = value;
     if (value) {
       await reconcile();
-      if (_pending.isNotEmpty && _worker == null) _worker = _drain().whenComplete(() => _worker = null);
+      if (_pending.isNotEmpty && _worker == null)
+        _worker = _drain().whenComplete(() => _worker = null);
     }
   }
+
   final _mutations = <String, Future<void>>{};
 
   Future<T> _serial<T>(String id, Future<T> Function() operation) async {
@@ -89,15 +98,21 @@ final class SubtitleLibrary implements SubtitleOperations {
         : decodeMediaJson(rows.single['facts']);
   }
 
-  Future<void> _save(String id, JsonMap facts) async {
-    final old = await this.facts(id);
-    facts['revision'] = (old['revision'] as int? ?? 0) + 1;
+  Future<void> _save(String id, JsonMap facts,
+      {bool initialEmpty = false}) async {
+    facts['revision'] = (facts['revision'] as int? ?? 0) + 1;
     await db.insert(
         'file_subtitles', {'file_id': id, 'facts': jsonEncode(facts)},
         conflictAlgorithm: ConflictAlgorithm.replace);
-    BodyChanges.observe('subtitle:$id', [
-      {'id': id, ...facts}
-    ]);
+    if (initialEmpty) {
+      BodyChanges.seed('subtitle:$id', [
+        {'id': id, ...facts}
+      ]);
+    } else {
+      BodyChanges.observe('subtitle:$id', [
+        {'id': id, ...facts}
+      ]);
+    }
   }
 
   void start() {
@@ -110,10 +125,13 @@ final class SubtitleLibrary implements SubtitleOperations {
 
   Future<void> reconcile() async {
     if (!enabled || _closed) return;
+    final slice = Slicer();
     for (final row in await db.query('media_locations',
+        columns: ['file_id', 'locator'],
         where: 'source=? AND owner_device_id=?',
         whereArgs: ['local', identities.ownerDeviceId])) {
       enqueue(row['file_id'] as String, row['locator'] as String);
+      await slice();
     }
   }
 
@@ -127,7 +145,9 @@ final class SubtitleLibrary implements SubtitleOperations {
   }
 
   Future<void> _drain() async {
+    final slice = Slicer();
     while (!_closed && enabled && _pending.isNotEmpty) {
+      await slice();
       final id = _pending.keys.first,
           path = _pending.remove(_pending.keys.first)!;
       try {
@@ -221,10 +241,11 @@ final class SubtitleLibrary implements SubtitleOperations {
       });
     }
     // Classic saved choices outside the media directory remain discoverable.
+    ({List<Map<String, dynamic>> subtitles, int? activeIndex})? classicPrefs;
     if (exists) {
-      for (final t
-          in (await SubtitleService().readExternalSubtitlePreferences(path))
-              .subtitles) {
+      classicPrefs = await SubtitleService()
+          .readExternalSubtitlePreferences(path, knownSize: before.size);
+      for (final t in classicPrefs.subtitles) {
         final subPath = t['path'] as String;
         if ((old['detachedPaths'] as List? ?? []).contains(subPath)) continue;
         if (updated
@@ -256,14 +277,22 @@ final class SubtitleLibrary implements SubtitleOperations {
               : 'unavailable',
       'tracks': updated
     };
-    value['selection'] = await _defaultSelection(path, value);
+    value['selection'] =
+        await _defaultSelection(path, value, preferences: classicPrefs);
     if (jsonEncode(old) != jsonEncode(value)) {
       value['checkedAt'] = DateTime.now().toUtc().toIso8601String();
-      await _save(id, value);
+      await _save(id, value,
+          initialEmpty: (old['revision'] as int? ?? 0) == 0 &&
+              updated.isEmpty &&
+              value['selection'] == null);
     }
   }
 
-  Future<JsonMap?> _defaultSelection(String path, JsonMap facts) async {
+  Future<JsonMap?> _defaultSelection(String path, JsonMap facts,
+      {({
+        List<Map<String, dynamic>> subtitles,
+        int? activeIndex
+      })? preferences}) async {
     final old = facts['selection'] as JsonMap?;
     final tracks = (facts['tracks'] as List)
         .cast<JsonMap>()
@@ -274,10 +303,11 @@ final class SubtitleLibrary implements SubtitleOperations {
             tracks.any((t) => t['id'] == old?['trackId']))) {
       return old;
     }
+    if (tracks.isEmpty) return null;
     final prefs = await SharedPreferences.getInstance();
     final mapping =
         jsonDecode(prefs.getString('video_subtitle_map') ?? '{}') as Map;
-    final preferences =
+    preferences ??=
         await SubtitleService().readExternalSubtitlePreferences(path);
     final classic = preferences.subtitles;
     final active = preferences.activeIndex;
@@ -292,7 +322,8 @@ final class SubtitleLibrary implements SubtitleOperations {
                 (t['path'] == classic[active]['path'] ||
                     t['playbackPath'] == classic[active]['path'])))
         .firstOrNull;
-    if (previous != null && facts['automaticSelection'] != true &&
+    if (previous != null &&
+        facts['automaticSelection'] != true &&
         !(old?['basis'] == 'language_preference' &&
             old?['trackId'] == previous['id'])) {
       return {'trackId': previous['id'], 'basis': 'classic_choice'};
@@ -434,7 +465,9 @@ final class SubtitleLibrary implements SubtitleOperations {
           .toList();
       value['tracks'] = [...tracks, track];
       value['detachedPaths'] = (value['detachedPaths'] as List? ?? [])
-          .where((path) => path != track['path'] && path != track['playbackPath']).toList();
+          .where(
+              (path) => path != track['path'] && path != track['playbackPath'])
+          .toList();
       value['selection'] = await _defaultSelection(target, value);
       await _save(id, value);
     });
@@ -465,11 +498,15 @@ final class SubtitleLibrary implements SubtitleOperations {
   }
 
   @override
-  Future<JsonMap> mutateFacts(String fileId, String operation, JsonMap input, Invocation invocation) async {
+  Future<JsonMap> mutateFacts(String fileId, String operation, JsonMap input,
+      Invocation invocation) async {
     final id = await canonicalFileId(db, fileId);
-    final path = (await media.readFile({'entityId':id}, includeDuration:false)).path;
-    final result = await _serial(id, () => mutateSubtitleFacts(this,id,operation,input,invocation,
-      defaultSelection:(value) => _defaultSelection(path,value)));
+    final path =
+        (await media.readFile({'entityId': id}, includeDuration: false)).path;
+    final result = await _serial(
+        id,
+        () => mutateSubtitleFacts(this, id, operation, input, invocation,
+            defaultSelection: (value) => _defaultSelection(path, value)));
     await _refreshPlayer(id);
     result['factsCommitted'] = true;
     result['playerApplied'] = _player?.path == path;
@@ -507,7 +544,8 @@ final class SubtitleLibrary implements SubtitleOperations {
   }
 
   @override
-  Future<({List<JsonMap> tracks, List<JsonMap> files})> episodeSubtitles(String id) =>
+  Future<({List<JsonMap> tracks, List<JsonMap> files})> episodeSubtitles(
+          String id) =>
       readEpisodeSubtitles(db, id);
 
   @override

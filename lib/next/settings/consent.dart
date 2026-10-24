@@ -5,6 +5,7 @@ import 'package:nipaplay/security/secret_redactor.dart';
 
 import '../media/identity_store.dart' show newMediaId;
 import '../tasks/user_consent.dart';
+import 'capability.dart';
 import 'registry.dart';
 
 /// A setting whose new value can send a key or traffic to another host. When
@@ -29,7 +30,8 @@ const settingConsentRules = <String, ConsentRule>{
   'danmaku.spoilerAiApiUrl': ConsentRule('防剧透 AI 地址', '防剧透 AI 的密钥和弹幕将发往这个地址：'),
   'network.httpProxy': ConsentRule('HTTP 代理', '应用和播放器的网络流量将经过这个代理：'),
   'plugins.githubProxyUrl': ConsentRule('GitHub 代理', '插件列表和插件文件将经过这个地址下载：'),
-  'network.bangumiServerUrl': ConsentRule('Bangumi 服务器', 'Bangumi 的登录令牌和请求将发往这个地址：'),
+  'network.bangumiServerUrl':
+      ConsentRule('Bangumi 服务器', 'Bangumi 的登录令牌和请求将发往这个地址：'),
   'network.allowInvalidCertificates':
       ConsentRule('自签名证书', '所有 HTTPS 连接都将接受无效或自签名的证书，通信可能被窃听或篡改。'),
 };
@@ -76,28 +78,38 @@ final class SettingConsent implements JobExecutor {
                 showUserConsent(title, message, '更改', stopped: stopped));
   final SettingsRegistry registry;
   final Future<bool> Function(String, String, Future<void>) prompt;
+  late final Iterable<Capability> _unprotected;
 
   /// The conversation behind a request, so the answer comes back to it.
   Future<JsonMap?> Function(Invocation)? returnTarget;
   late TaskEngine engine;
-  late Harness _execution;
+  late final Harness _execution = Harness(_unprotected);
   final _previews = <String, JsonMap>{};
   @override
   String get type => 'setting_consent';
 
   List<Capability> protect(List<Capability> capabilities) {
-    _execution = Harness(capabilities);
+    _unprotected = capabilities;
     return [
       _SettingConsentCapability([_RequestSettingChange(this)]),
       for (final capability in capabilities)
-        _SettingConsentCapability([
-          for (final action in capability.actions)
-            if (action.spec.id == 'settings.set')
-              _GuardedSet(this, action.spec)
-            else
-              action
-        ])
+        if (capability is SettingsCapability)
+          _SettingConsentCapability(_guardSettings(capability))
+        else
+          capability
     ];
+  }
+
+  List<Action> _guardSettings(SettingsCapability capability) {
+    final actions = <Action>[];
+    for (final action in capability.actions) {
+      if (action.spec.id == 'settings.set') {
+        actions.add(_GuardedSet(this, action.spec));
+      } else {
+        actions.add(action);
+      }
+    }
+    return actions;
   }
 
   /// What in this call needs the person's yes: null when nothing does (an
@@ -138,7 +150,8 @@ final class SettingConsent implements JobExecutor {
             SchemaViolation(
                 raw is List ? '/changes/$i${v.path}' : v.path, v.message),
           if (failure.violations.isEmpty)
-            SchemaViolation(raw is List ? '/changes/$i/value' : '/value', failure.message),
+            SchemaViolation(
+                raw is List ? '/changes/$i/value' : '/value', failure.message),
         ]);
         continue;
       }
@@ -167,7 +180,8 @@ final class SettingConsent implements JobExecutor {
   Future<void> recover(JobContext context) async {
     final applying = context.job.phase == 'applying';
     await context.fail(
-        Failure(FailureCode.conflict,
+        Failure(
+            FailureCode.conflict,
             applying
                 ? 'The application stopped while applying an approved change; read the settings to see which took effect.'
                 : 'The application restarted before the user answered; nothing was changed.'),
@@ -191,9 +205,10 @@ final class SettingConsent implements JobExecutor {
     await context.waitingUser();
     final input = context.job.input;
     final plan = (input['plan'] as Map).cast<String, Object?>();
-    final (title, message) = settingConsentWords(
-        [for (final c in (plan['changes'] as List)) (c as Map).cast<String, Object?>()],
-        others: plan['others'] as int? ?? 0);
+    final (title, message) = settingConsentWords([
+      for (final c in (plan['changes'] as List))
+        (c as Map).cast<String, Object?>()
+    ], others: plan['others'] as int? ?? 0);
     final approved = await prompt(title, message, context.stopRequested);
     final current = await context.snapshot();
     if (current.cancelRequestedAt != null) {
@@ -246,7 +261,8 @@ final class SettingConsent implements JobExecutor {
                 verification: VerificationLevel.verified,
                 details: {'changed': false, 'reason': 'change_failed'}));
       case NeedsDecision():
-        throw StateError('A settings change cannot delegate approval to an Agent.');
+        throw StateError(
+            'A settings change cannot delegate approval to an Agent.');
     }
   }
 }
@@ -306,8 +322,7 @@ final class _GuardedSet extends Action<_Json, _Json> {
       consent._previews.remove(consent._previews.keys.first);
     }
     return NeedsDecision(Decision(
-        prompt:
-            '这次修改会让密钥或网络流量去往别处，需要用户同意：${jsonEncode(plan)}',
+        prompt: '这次修改会让密钥或网络流量去往别处，需要用户同意：${jsonEncode(plan)}',
         options: [
           DecisionOption(
               label: '请求用户确认',
@@ -331,7 +346,8 @@ final class _RequestSettingChange extends Action<_Json, _Json> {
       effect: Effect.write,
       input: ObjectSchema({'previewId': StringSchema(minLength: 1)},
           required: ['previewId']),
-      output: ObjectSchema({'job': ObjectSchema({}, additionalProperties: true)},
+      output: ObjectSchema(
+          {'job': ObjectSchema({}, additionalProperties: true)},
           required: ['job']));
   @override
   _Json decodeInput(JsonMap json) => _Json(json);
@@ -345,11 +361,14 @@ final class _RequestSettingChange extends Action<_Json, _Json> {
     }
     consent._previews.remove(id);
     final target = await consent.returnTarget?.call(invocation);
-    final job = await consent.engine
-        .submit(type: consent.type, title: '修改设置', input: {
+    final job =
+        await consent.engine.submit(type: consent.type, title: '修改设置', input: {
       'arguments': plan['arguments'],
       'plan': plan['plan'],
-      'keys': [for (final c in (plan['plan'] as Map)['changes'] as List) (c as Map)['key']],
+      'keys': [
+        for (final c in (plan['plan'] as Map)['changes'] as List)
+          (c as Map)['key']
+      ],
       'origin': plan['origin'],
       'invocationId': plan['invocationId'],
       if (target != null) 'returnTo': target,

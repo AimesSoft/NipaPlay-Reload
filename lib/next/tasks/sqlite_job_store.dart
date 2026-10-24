@@ -6,6 +6,7 @@ import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
 import '../next_database.dart';
 import '../state/change_history.dart';
+import '../util/slicer.dart';
 
 final class SqliteJobStore implements JobStore {
   SqliteJobStore.fromDatabase(this._database);
@@ -43,11 +44,25 @@ final class SqliteJobStore implements JobStore {
       clauses.add('type = ?');
       arguments.add(type);
     }
-    final rows = await _database.query('jobs',
-        columns: ['job_id', 'revision'],
-        where: clauses.isEmpty ? null : clauses.join(' AND '),
-        whereArgs: arguments,
-        orderBy: 'created_at ASC, job_id ASC');
+    final where = clauses.isEmpty ? null : clauses.join(' AND ');
+    final count = (await _database.rawQuery(
+            'SELECT COUNT(*) AS n FROM jobs${where == null ? "" : " WHERE $where"}',
+            arguments))
+        .single['n'] as int;
+    final slice = Slicer();
+    final rows = <Map<String, Object?>>[];
+    for (var offset = 0; offset < count || offset == 0; offset += 250) {
+      final page = await _database.query('jobs',
+          columns: ['job_id', 'revision'],
+          where: where,
+          whereArgs: arguments,
+          orderBy: 'created_at ASC, job_id ASC',
+          limit: 250,
+          offset: offset);
+      rows.addAll(page);
+      await slice();
+      if (page.length < 250) break;
+    }
     final known = <String, Job>{};
     final stale = <String>[];
     for (final row in rows) {
@@ -60,12 +75,13 @@ final class SqliteJobStore implements JobStore {
     }
     // Only what changed since it was last decoded is read in full. A job
     // that moved on between the two reads is returned at its newer revision.
-    for (var start = 0; start < stale.length; start += 500) {
-      final ids = stale.sublist(start, (start + 500).clamp(0, stale.length));
+    for (var start = 0; start < stale.length; start += 64) {
+      final ids = stale.sublist(start, (start + 64).clamp(0, stale.length));
       for (final row in await _database.query('jobs',
           where: 'job_id IN (${List.filled(ids.length, '?').join(',')})',
           whereArgs: ids)) {
         known[row['job_id'] as String] = _decode(row);
+        await slice();
       }
     }
     return [
@@ -74,17 +90,56 @@ final class SqliteJobStore implements JobStore {
     ];
   }
 
+  /// Terminal download records whose backend session disappeared from the
+  /// current listing. This asks SQLite for the few fields needed to decide,
+  /// rather than decoding every historical download snapshot (whose
+  /// checkpoints grow with their completed files) on the UI isolate.
+  Future<List<String>> missingDownloadSessionIds({
+    required String backendKind,
+    required String? backendId,
+    required Set<String> presentHashes,
+  }) async {
+    const pageSize = 256;
+    final ids = <String>[];
+    final slice = Slicer();
+    for (var offset = 0;; offset += pageSize) {
+      final rows = await _database.rawQuery(r'''
+SELECT job_id, json_extract(snapshot, '$.input.infoHash') AS info_hash
+FROM jobs
+WHERE type = 'download'
+  AND state IN ('succeeded', 'failed', 'cancelled')
+  AND json_extract(snapshot, '$.sideEffectCommitted') = 1
+  AND json_extract(snapshot, '$.details.backend.kind') = ?
+  AND COALESCE(json_extract(snapshot, '$.details.backend.id'), '') = ?
+  AND COALESCE(
+        json_extract(snapshot, '$.receipt.details.sessionPresent'), 1) != 0
+ORDER BY created_at ASC, job_id ASC
+LIMIT ? OFFSET ?''', [backendKind, backendId ?? '', pageSize, offset]);
+      for (final row in rows) {
+        final hash = row['info_hash'];
+        if (hash is String && !presentHashes.contains(hash)) {
+          ids.add(row['job_id'] as String);
+        }
+      }
+      await slice();
+      if (rows.length < pageSize) break;
+    }
+    return ids;
+  }
+
   @override
   Future<void> commit(Job job, JobEvent event,
       {required int? expectedRevision}) async {
     if (event.jobId != job.jobId ||
         event.revision != job.revision ||
         event.at != job.updatedAt ||
-        jsonEncode(event.snapshot) != jsonEncode(job.toJson()) ||
+        (!identical(event.snapshot, job.toJson()) &&
+            jsonEncode(event.snapshot) != jsonEncode(job.toJson())) ||
         job.revision != (expectedRevision == null ? 0 : expectedRevision + 1)) {
       throw ArgumentError(
           'Snapshot and event must describe the same revision.');
     }
+    final encodedSnapshot = jsonEncode(job.toStorageJson());
     await _database.transaction((transaction) async {
       final values = {
         'job_id': job.jobId,
@@ -92,7 +147,7 @@ final class SqliteJobStore implements JobStore {
         'state': job.state.wireName,
         'revision': job.revision,
         'created_at': job.createdAt.toIso8601String(),
-        'snapshot': jsonEncode(job.toStorageJson())
+        'snapshot': encodedSnapshot
       };
       if (expectedRevision == null) {
         final existing = await transaction.query('jobs',
@@ -105,7 +160,8 @@ final class SqliteJobStore implements JobStore {
         await transaction.insert('task_origins', {
           'job_id': job.jobId,
           'origin': job.type == 'harness.hook'
-              ? 'hook:${job.details['event']}' : invocation?.origin ?? 'application',
+              ? 'hook:${job.details['event']}'
+              : invocation?.origin ?? 'application',
           'invocation_id': invocation?.id,
         });
       } else {
@@ -122,9 +178,16 @@ final class SqliteJobStore implements JobStore {
         'kind': event.kind,
         'at': event.at.toIso8601String(),
         'snapshot': jsonEncode(event.snapshot),
-        'origin': job.type == 'harness.hook' ? 'hook:${job.details['event']}' : BodyChanges.invocation?.origin,
+        'origin': job.type == 'harness.hook'
+            ? 'hook:${job.details['event']}'
+            : BodyChanges.invocation?.origin,
         'invocation_id': BodyChanges.invocation?.id,
       });
+    });
+    _decode({
+      'job_id': job.jobId,
+      'revision': job.revision,
+      'snapshot': encodedSnapshot
     });
   }
 

@@ -7,23 +7,46 @@ import '../media/identity_store.dart';
 /// Episode dates are facts; a weekly slot alone cannot establish a new episode.
 Future<List<JsonMap>> todayUpdates(
     IdentityStore store, Set<String> following, List<JsonMap> cached) async {
-  var calendar = [for (final row in cached) BangumiAnime.fromJson(Map<String, dynamic>.from(row))];
-  if (calendar.isEmpty && following.isNotEmpty && DandanplayService.isLoggedIn) {
-    calendar = await BangumiService.instance.getCalendar();
+  final boundRows = await store.database
+      .rawQuery("SELECT DISTINCT e.id, o.external_id FROM media_entities e "
+          "JOIN media_bindings b ON b.entity_id=e.id "
+          "JOIN media_external_objects o ON o.id=b.object_id "
+          "WHERE e.kind='work' AND b.status='accepted' "
+          "AND o.provider='dandanplay' AND o.object_type='anime'");
+  if (boundRows.isEmpty) return [];
+  final worksByAnime = <String, List<String>>{};
+  for (final row in boundRows) {
+    (worksByAnime[row['external_id'] as String] ??= [])
+        .add(row['id'] as String);
+  }
+  final List<BangumiAnime> calendar;
+  if (cached.isNotEmpty) {
+    calendar = [
+      for (final row in cached)
+        if (worksByAnime.containsKey('${row['id']}'))
+          BangumiAnime.fromJson(Map<String, dynamic>.from(row))
+    ];
+  } else if (following.isNotEmpty && DandanplayService.isLoggedIn) {
+    calendar = [
+      for (final anime in await BangumiService.instance.getCalendar())
+        if (worksByAnime.containsKey('${anime.id}')) anime
+    ];
+  } else {
+    return [];
   }
   if (calendar.isEmpty) return [];
   final now = DateTime.now();
   final result = <JsonMap>[];
   for (final anime in calendar) {
-    final works = await store.database.rawQuery(
-        "SELECT DISTINCT e.id FROM media_entities e JOIN media_bindings b ON b.entity_id=e.id JOIN media_external_objects o ON o.id=b.object_id WHERE e.kind='work' AND b.status='accepted' AND o.provider='dandanplay' AND o.object_type='anime' AND o.external_id=?",
-        ['${anime.id}']);
-    for (final work in works) {
-      final id = work['id'] as String;
+    final works = worksByAnime['${anime.id}'] ?? const <String>[];
+    for (final id in works) {
       if (!following.contains(id) && anime.isFavorited != true) continue;
-      final episodes = anime.episodeList ?? (DandanplayService.isLoggedIn
-          ? (await BangumiService.instance.getAnimeDetails(anime.id)).episodeList
-          : null) ?? [];
+      final episodes = anime.episodeList ??
+          (DandanplayService.isLoggedIn
+              ? (await BangumiService.instance.getAnimeDetails(anime.id))
+                  .episodeList
+              : null) ??
+          [];
       for (var index = 0; index < episodes.length; index++) {
         final episode = episodes[index];
         final raw = episode.airDate;

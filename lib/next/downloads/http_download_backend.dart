@@ -137,6 +137,7 @@ final class HttpDownloadBackend implements DownloadBackend {
       Future<void>? abort,
       String method = 'GET',
       String? range}) async {
+    await _ensureProxySettings();
     final client = _client();
     abort?.then((_) => client.close(force: true));
     try {
@@ -199,7 +200,8 @@ final class HttpDownloadBackend implements DownloadBackend {
       final rangeTotal = partial
           ? _contentRange(headers.value(HttpHeaders.contentRangeHeader))?.total
           : null;
-      final length = rangeTotal ?? (r.contentLength >= 0 ? r.contentLength : null);
+      final length =
+          rangeTotal ?? (r.contentLength >= 0 ? r.contentLength : null);
       final advertised =
           (headers.value(HttpHeaders.acceptRangesHeader) ?? '').toLowerCase();
       return {
@@ -237,7 +239,6 @@ final class HttpDownloadBackend implements DownloadBackend {
       throw const Failure(FailureCode.internal,
           'The http download backend has no state directory.');
     }
-    await _ensureProxySettings();
     if (!await directory.exists()) return;
     await for (final entry in directory.list()) {
       if (entry is! File || !entry.path.endsWith('.json')) continue;
@@ -335,10 +336,10 @@ final class HttpDownloadBackend implements DownloadBackend {
   DownloadSnapshot _snapshot(_Session s, {bool observe = true}) {
     final now = _now();
     final size = s.expectedSize;
-    final progressBase = s.lastProgress != null &&
-            s.lastProgress!.isAfter(s.idleSince)
-        ? s.lastProgress!
-        : s.idleSince;
+    final progressBase =
+        s.lastProgress != null && s.lastProgress!.isAfter(s.idleSince)
+            ? s.lastProgress!
+            : s.idleSince;
     final previousBytes = s.readBytes ?? s.bytes;
     final sampleSeconds = s.readAt == null
         ? 0.0
@@ -490,8 +491,9 @@ final class HttpDownloadBackend implements DownloadBackend {
           now: _now());
       session.finalUrl = opened.uri.toString();
       session.statusCode = status;
-      session.expectedSize =
-          opened.response.contentLength >= 0 ? opened.response.contentLength : null;
+      session.expectedSize = opened.response.contentLength >= 0
+          ? opened.response.contentLength
+          : null;
       session.contentType = headers.value(HttpHeaders.contentTypeHeader);
       session.etag = headers.value(HttpHeaders.etagHeader);
       session.lastModified = headers.value(HttpHeaders.lastModifiedHeader);
@@ -754,8 +756,7 @@ final class HttpDownloadBackend implements DownloadBackend {
         await _persist(s);
         return true;
       }
-      if (next == _Switch.single ||
-          (next == _Switch.replan && ++replans > 3)) {
+      if (next == _Switch.single || (next == _Switch.replan && ++replans > 3)) {
         s.connectionsUsed = 1;
         s.connectionsReason ??= 'range_ignored';
         s.segments = null;
@@ -836,8 +837,8 @@ final class HttpDownloadBackend implements DownloadBackend {
     s.lastError = s.segments?.where((x) => x.error != null).firstOrNull?.error;
   }
 
-  Future<_Outcome> _receiveSegment(_Session s, _Segment segment,
-      _Opened opened, Completer<void> halt, void Function(_Switch) leave) async {
+  Future<_Outcome> _receiveSegment(_Session s, _Segment segment, _Opened opened,
+      Completer<void> halt, void Function(_Switch) leave) async {
     final response = opened.response;
     final status = response.statusCode;
     final headers = response.headers;
@@ -845,7 +846,8 @@ final class HttpDownloadBackend implements DownloadBackend {
     if (status == HttpStatus.ok ||
         status == HttpStatus.requestedRangeNotSatisfiable) {
       // The range was not honoured, or the file under it changed (If-Range).
-      final length = response.contentLength >= 0 ? response.contentLength : null;
+      final length =
+          response.contentLength >= 0 ? response.contentLength : null;
       final etag = headers.value(HttpHeaders.etagHeader);
       final modified = headers.value(HttpHeaders.lastModifiedHeader);
       final changed = status == HttpStatus.ok &&
@@ -971,7 +973,8 @@ final class HttpDownloadBackend implements DownloadBackend {
     var start = offset;
     final headers = response.headers;
     if (status == 206) {
-      final range = _contentRange(headers.value(HttpHeaders.contentRangeHeader));
+      final range =
+          _contentRange(headers.value(HttpHeaders.contentRangeHeader));
       if (range == null || range.start != offset) {
         await _truncate(s);
         s.resume = 'rejected';
@@ -1012,14 +1015,11 @@ final class HttpDownloadBackend implements DownloadBackend {
       }, onError: (Object error, StackTrace stack) {
         if (!done.isCompleted) done.completeError(error, stack);
       });
-    },
-        onError: (Object error, StackTrace stack) {
-          if (!done.isCompleted) done.completeError(error, stack);
-        },
-        onDone: () {
-          if (!done.isCompleted) done.complete();
-        },
-        cancelOnError: true);
+    }, onError: (Object error, StackTrace stack) {
+      if (!done.isCompleted) done.completeError(error, stack);
+    }, onDone: () {
+      if (!done.isCompleted) done.complete();
+    }, cancelOnError: true);
     unawaited(stop.future.then((_) {
       aborted = true;
       opened.client.close(force: true);
@@ -1049,8 +1049,7 @@ final class HttpDownloadBackend implements DownloadBackend {
       final requested = s.checksumRequest;
       final algorithm = (requested?['algorithm'] as String?) ?? 'sha256';
       final path = s.partPath;
-      final actual =
-          await Isolate.run(() => _hashFile(path, algorithm));
+      final actual = await Isolate.run(() => _hashFile(path, algorithm));
       final expected = requested?['value'] as String?;
       final matched = expected == null ? null : expected == actual;
       s.checksum = {
@@ -1113,8 +1112,8 @@ final class HttpDownloadBackend implements DownloadBackend {
   // ---------------------------------------------------------------- naming
 
   static String _responseName(HttpHeaders headers, Uri finalUri) {
-    final raw = _sanitize(
-        _dispositionName(headers.value('content-disposition')) ?? '');
+    final raw =
+        _sanitize(_dispositionName(headers.value('content-disposition')) ?? '');
     if (raw.isNotEmpty) return raw;
     final fromUrl = _sanitize(_urlName(finalUri) ?? '');
     return fromUrl.isNotEmpty ? fromUrl : 'download';
@@ -1132,9 +1131,9 @@ final class HttpDownloadBackend implements DownloadBackend {
 
   static String? _dispositionName(String? header) {
     if (header == null) return null;
-    final extended = RegExp(r'(?:^|[;\s])filename\*\s*=\s*([^;]+)',
-            caseSensitive: false)
-        .firstMatch(header);
+    final extended =
+        RegExp(r'(?:^|[;\s])filename\*\s*=\s*([^;]+)', caseSensitive: false)
+            .firstMatch(header);
     if (extended != null) {
       final parts = extended.group(1)!.trim().split("'");
       if (parts.length >= 3) {
@@ -1143,7 +1142,8 @@ final class HttpDownloadBackend implements DownloadBackend {
         final bytes = <int>[];
         for (var i = 0; i < encoded.length; i++) {
           if (encoded[i] == '%' && i + 2 < encoded.length + 0) {
-            final value = int.tryParse(encoded.substring(i + 1, i + 3), radix: 16);
+            final value =
+                int.tryParse(encoded.substring(i + 1, i + 3), radix: 16);
             if (value != null) {
               bytes.add(value);
               i += 2;
@@ -1169,7 +1169,9 @@ final class HttpDownloadBackend implements DownloadBackend {
   /// A server-given name becomes one path component: directories dropped,
   /// control characters (and on Windows the characters it forbids) replaced.
   static String _sanitize(String name) {
-    var base = name.split(RegExp(r'[/\\]')).where((s) => s.isNotEmpty).lastOrNull ?? '';
+    var base =
+        name.split(RegExp(r'[/\\]')).where((s) => s.isNotEmpty).lastOrNull ??
+            '';
     base = base.replaceAll(RegExp(r'[\x00-\x1f\x7f]'), '_');
     if (Platform.isWindows) base = base.replaceAll(RegExp(r'[:*?"<>|]'), '_');
     base = base.trim();
@@ -1327,7 +1329,8 @@ final class _Session {
         outputDirectory: json['outputDirectory'] as String,
         fileName: json['fileName'] as String,
         createdFolder: json['createdFolder'] as bool,
-        checksumRequest: (json['checksumRequest'] as Map?)?.cast<String, Object?>(),
+        checksumRequest:
+            (json['checksumRequest'] as Map?)?.cast<String, Object?>(),
         now: now)
       ..expectedSize = json['expectedSize'] as int?
       ..finalUrl = json['finalUrl'] as String?
@@ -1345,8 +1348,7 @@ final class _Session {
         for (final row
             in ((json['connections'] as Map?)?['segments'] as List?) ??
                 const [])
-          _Segment((row as List)[0] as int, row[1] as int)
-            ..done = row[2] as int
+          _Segment((row as List)[0] as int, row[1] as int)..done = row[2] as int
       ]
       ..paused = json['paused'] as bool
       ..finished = json['finished'] as bool
@@ -1354,8 +1356,7 @@ final class _Session {
     if (s.segments!.isEmpty) s.segments = null;
     if (json['failure'] case final Map failure) {
       s.failure = Failure(
-          FailureCode.values.firstWhere(
-              (c) => c.wireName == failure['code'],
+          FailureCode.values.firstWhere((c) => c.wireName == failure['code'],
               orElse: () => FailureCode.unavailable),
           failure['message'] as String,
           details: s.checksum == null ? const {} : {'checksum': s.checksum});

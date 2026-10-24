@@ -1,4 +1,7 @@
 abstract final class CredentialKeyPolicy {
+  static final _secret = RegExp(
+      r'password|passwd|token|secret|api[\s_-]?key|cookie|authorization|密码|密碼|密钥|密鑰|令牌|憑證|凭证',
+      caseSensitive: false);
   static const scalarKeys = {
     'dandanplay_token',
     'dandanplay_app_secret',
@@ -22,7 +25,5 @@ abstract final class CredentialKeyPolicy {
       !key.startsWith('plugin_switch_setting_') &&
       (scalarKeys.contains(key) ||
           key.startsWith('credential_vault_') ||
-          RegExp(r'password|passwd|token|secret|api[\s_-]?key|cookie|authorization|密码|密碼|密钥|密鑰|令牌|憑證|凭证',
-                  caseSensitive: false)
-              .hasMatch(key));
+          _secret.hasMatch(key));
 }

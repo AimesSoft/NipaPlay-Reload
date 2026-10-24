@@ -114,8 +114,10 @@ abstract final class ApplicationSettings {
 
   static Schema dynamicSchema(String key, Schema fallback) => switch (key) {
         'seek.stepSeconds' => NumberSchema(
-            minimum: video?.seekStepMinSeconds ?? 1 / VideoPlayerState.defaultSeekStepFrameRate,
-            maximum: video?.seekStepMaxSeconds ?? VideoPlayerState.fallbackSeekStepMaxSeconds),
+            minimum: video?.seekStepMinSeconds ??
+                1 / VideoPlayerState.defaultSeekStepFrameRate,
+            maximum: video?.seekStepMaxSeconds ??
+                VideoPlayerState.fallbackSeekStepMaxSeconds),
         'player.kernel' => StringSchema(
             values: PlayerFactory.supportedKernelTypes
                 .where((v) => v != PlayerKernelType.erika || erikaVisible())
@@ -325,8 +327,28 @@ abstract final class ApplicationSettings {
   static Color parseSettingColor(String value) =>
       Color(int.parse(value.replaceFirst('#', ''), radix: 16));
 
-  static List<SettingEntry> entries() {
+  static List<SettingEntry> entries() => [
+        for (final build in _entryBuilders()) build(),
+      ];
+
+  /// Builds the large catalogue in small synchronous pieces. Next calls this
+  /// while it starts, so one pass over every definition never holds the UI
+  /// isolate for more than a few entries' worth of work.
+  static Future<List<SettingEntry>> entriesChunked({int chunkSize = 24}) async {
+    final builders = _entryBuilders();
     final entries = <SettingEntry>[];
+    for (var start = 0; start < builders.length; start += chunkSize) {
+      final end = (start + chunkSize).clamp(0, builders.length);
+      for (final build in builders.sublist(start, end)) {
+        entries.add(build());
+      }
+      if (end < builders.length) await Future<void>.delayed(Duration.zero);
+    }
+    return entries;
+  }
+
+  static List<SettingEntry Function()> _entryBuilders() {
+    final builders = <SettingEntry Function()>[];
     void add(
       String key,
       String title,
@@ -346,6 +368,7 @@ abstract final class ApplicationSettings {
       bool directory = false,
       Future<Object?> Function()? runtimeRead,
     }) {
+      builders.add(() {
       final displayTitle = _titles[key] ?? title;
       final entryApply =
           ['player.hwdecMode', 'player.softDecodePixelFormat'].contains(key)
@@ -357,7 +380,7 @@ abstract final class ApplicationSettings {
           : defaultValue;
       Object? decodeValue(Object? raw) =>
           decode == null ? raw ?? defaultForEntry() : decode(raw);
-      entries.add(SettingEntry(
+      return SettingEntry(
           key: key,
           title: displayTitle,
           description: describeWithApply(
@@ -435,7 +458,8 @@ abstract final class ApplicationSettings {
             } else {
               await write(value);
             }
-          }));
+          });
+      });
     }
 
     add(
@@ -576,9 +600,10 @@ abstract final class ApplicationSettings {
         const BooleanSchema(),
         false,
         'timeline_preview_enabled', (value) async {
-      if (value == true && !player.timelinePreviewEnabled &&
-          !await showUserConsent('开启警告',
-              '开启时间轴截图预览会在后台生成截图，可能导致播放卡顿或性能下降。要开启吗？', '开启')) {
+      if (value == true &&
+          !player.timelinePreviewEnabled &&
+          !await showUserConsent(
+              '开启警告', '开启时间轴截图预览会在后台生成截图，可能导致播放卡顿或性能下降。要开启吗？', '开启')) {
         throw const Failure(FailureCode.conflict, '用户没有同意开启时间轴截图预览');
       }
       await player.setTimelinePreviewEnabled(value as bool);
@@ -742,18 +767,28 @@ abstract final class ApplicationSettings {
         setter: 'setMinimalProgressBarColor',
         source:
             'lib/utils/video_player_state/video_player_state_preferences.dart');
-    add('player.volume', '播放音量',
-        const NumberSchema(minimum: 0, maximum: 1), 0.5,
+    add(
+        'player.volume',
+        '播放音量',
+        const NumberSchema(minimum: 0, maximum: 1),
+        0.5,
         globals.isMobilePlatform ? '@runtime:player.volume' : 'player_volume',
         (value) => player.setPlaybackVolume((value as num).toDouble()),
-        setter: 'setPlaybackVolume', scope: 'device',
+        setter: 'setPlaybackVolume',
+        scope: 'device',
         visible: () => video != null,
-        runtimeRead: globals.isMobilePlatform ? () async => player.currentSystemVolume : null);
-    add('player.brightness', '播放亮度',
-        const NumberSchema(minimum: 0, maximum: 1), 0.5,
+        runtimeRead: globals.isMobilePlatform
+            ? () async => player.currentSystemVolume
+            : null);
+    add(
+        'player.brightness',
+        '播放亮度',
+        const NumberSchema(minimum: 0, maximum: 1),
+        0.5,
         '@runtime:player.brightness',
         (value) => player.setPlaybackBrightness((value as num).toDouble()),
-        setter: 'setPlaybackBrightness', scope: 'device',
+        setter: 'setPlaybackBrightness',
+        scope: 'device',
         visible: () => video != null && globals.isMobilePlatform,
         runtimeRead: () async => player.currentScreenBrightness);
     add(
@@ -995,9 +1030,12 @@ abstract final class ApplicationSettings {
     add('player.externalPath', 'player.externalPath', const StringSchema(), '',
         'external_player_path', (value) async {
       final path = value as String;
-      if (path.isNotEmpty && (!p.isAbsolute(path) ||
-          await FileSystemEntity.type(path) == FileSystemEntityType.notFound)) {
-        throw const Failure(FailureCode.invalidInput, 'Use an existing absolute player executable or application bundle path.');
+      if (path.isNotEmpty &&
+          (!p.isAbsolute(path) ||
+              await FileSystemEntity.type(path) ==
+                  FileSystemEntityType.notFound)) {
+        throw const Failure(FailureCode.invalidInput,
+            'Use an existing absolute player executable or application bundle path.');
       }
       await preferences.setExternalPlayerPath(path);
     },
@@ -1234,8 +1272,8 @@ abstract final class ApplicationSettings {
     add(
         'danmaku.fontSize',
         '弹幕字体大小',
-        const NumberSchema(minimum: 0,
-            maximum: DanmakuStyle.maxDanmakuFontSize),
+        const NumberSchema(
+            minimum: 0, maximum: DanmakuStyle.maxDanmakuFontSize),
         0.0,
         'danmaku_font_size', (value) async {
       await player.setDanmakuFontSize((value as num).toDouble(), commit: true);
@@ -1401,11 +1439,7 @@ abstract final class ApplicationSettings {
             ? <String>[]
             : List<String>.from(jsonDecode(raw as String) as List),
         remote: {'label': '弹幕屏蔽词', 'type': 'string_list'});
-    add(
-        'danmaku.manualOffset',
-        '弹幕手动偏移',
-        const NumberSchema(),
-        0.0,
+    add('danmaku.manualOffset', '弹幕手动偏移', const NumberSchema(), 0.0,
         '@runtime:danmaku.manualOffset', (value) async {
       await setManualOffset((value as num).toDouble());
     },
@@ -2096,6 +2130,6 @@ abstract final class ApplicationSettings {
         path: true,
         directory: true,
         visible: () => !kIsWeb);
-    return entries;
+    return builders;
   }
 }

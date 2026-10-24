@@ -25,6 +25,7 @@ import 'ui_data.dart';
 import 'library_service.dart';
 import '../mesh/library.dart';
 import '../chat/turn_boundaries.dart';
+import '../util/slicer.dart';
 
 /// The `library.files` rows, found by episode and by file.
 final class LocalFiles {
@@ -39,7 +40,8 @@ final class LocalFiles {
   final _episodes = <Object?, Set<Object?>>{};
 
   /// The rows of an episode.
-  List<JsonMap> ofEpisode(Object? episodeId) => _byEpisode[episodeId] ?? const [];
+  List<JsonMap> ofEpisode(Object? episodeId) =>
+      _byEpisode[episodeId] ?? const [];
 
   /// The episodes a file is linked to.
   Set<Object?> episodesOf(Object? fileId) => _episodes[fileId] ?? const {};
@@ -48,7 +50,8 @@ final class LocalFiles {
 /// Application-owned projections. Stored presentations contain no task state.
 final class UiDataService implements NextUiData, NextNowPlaying {
   UiDataService(this.media, this.engine, this.state, this.sources,
-      Directory root, CredentialVault vault, {http.Client? artworkClient})
+      Directory root, CredentialVault vault,
+      {http.Client? artworkClient})
       : mediaRoot = root,
         artwork = ArtworkCache(media, root, vault, client: artworkClient),
         heat = EpisodeHeat(DanmakuStore(media.store));
@@ -62,22 +65,39 @@ final class UiDataService implements NextUiData, NextNowPlaying {
   MeshLibrary? meshLibrary;
   LibraryDataService? libraryData;
   void notifyLibraryChanged() => _changed();
-  Future<LocalFiles> localFiles() async => LocalFiles(await _view('library.files'));
+  Future<LocalFiles> localFiles() async =>
+      LocalFiles(await _view('library.files'));
   Database get db => media.store.database;
   static const _openingKey = 'preference:hero-opening-seconds';
   Future<int> _openingSeconds() async {
-    final rows = await db.query('ui_cache', where: 'id=?', whereArgs: [_openingKey]);
-    return rows.isEmpty ? 180 : jsonDecode(rows.single['payload'] as String) as int;
+    final rows =
+        await db.query('ui_cache', where: 'id=?', whereArgs: [_openingKey]);
+    return rows.isEmpty
+        ? 180
+        : jsonDecode(rows.single['payload'] as String) as int;
   }
+
   SettingEntry get openingSetting => SettingEntry(
-      key: 'next.heroOpeningSeconds', title: '开头弹幕时长',
+      key: 'next.heroOpeningSeconds',
+      title: '开头弹幕时长',
       description: '从每集开头多少秒里挑选首页弹幕。',
-      schema: const IntegerSchema(minimum: 30, maximum: 300), defaultValue: 180,
-      storageKey: _openingKey, storageKind: 'sqlite',
-      reader: 'UiDataService', writer: 'UiDataService',
-      read: _openingSeconds, decodeStorage: (value) => value ?? 180,
+      schema: const IntegerSchema(minimum: 30, maximum: 300),
+      defaultValue: 180,
+      storageKey: _openingKey,
+      storageKind: 'sqlite',
+      reader: 'UiDataService',
+      writer: 'UiDataService',
+      read: _openingSeconds,
+      decodeStorage: (value) => value ?? 180,
       write: (value) async {
-        await db.insert('ui_cache', {'id': _openingKey, 'fingerprint': 'preference', 'payload': jsonEncode(value)}, conflictAlgorithm: ConflictAlgorithm.replace);
+        await db.insert(
+            'ui_cache',
+            {
+              'id': _openingKey,
+              'fingerprint': 'preference',
+              'payload': jsonEncode(value)
+            },
+            conflictAlgorithm: ConflictAlgorithm.replace);
         _changed();
       });
   final _changes = StreamController<void>.broadcast();
@@ -167,7 +187,8 @@ final class UiDataService implements NextUiData, NextNowPlaying {
 
   @override
   Future<UiWork?> work(String workId) async {
-    if (workId.startsWith('source-work:')) return libraryData!.sourceWork(workId);
+    if (workId.startsWith('source-work:'))
+      return libraryData!.sourceWork(workId);
     if (meshLibrary != null) return meshLibrary!.work(workId);
     return localWork(workId);
   }
@@ -175,13 +196,15 @@ final class UiDataService implements NextUiData, NextNowPlaying {
   /// [files] ([localFiles]) and [episodes] ([localEpisodes]) may be given
   /// when the caller already holds them.
   Future<UiWork?> localWork(String workId,
-      {LocalFiles? files, List<UiEpisode>? episodes, LibraryReads? reads}) async {
+      {LocalFiles? files,
+      List<UiEpisode>? episodes,
+      LibraryReads? reads}) async {
     final rows = await db.query('media_entities',
         where: "id=? AND kind='work'", whereArgs: [workId]);
     if (rows.isEmpty) return null;
     final art = await artwork.load(workId, reads: reads);
-    final metadata = await (reads?.metadata(workId) ??
-        media.store.mergedMetadata(workId));
+    final metadata =
+        await (reads?.metadata(workId) ?? media.store.mergedMetadata(workId));
     final fields = metadata['fields'] as JsonMap;
     final attrs = decodeMediaJson(rows.single['attributes']);
     episodes ??= await localEpisodes(workId, files: files, reads: reads);
@@ -225,7 +248,9 @@ final class UiDataService implements NextUiData, NextNowPlaying {
         ],
         artwork: uiArtwork(art),
         next: next,
-        danmaku: await heat.comments([for (final e in episodes) (e.episodeId, e.runtime?.inMilliseconds)],
+        danmaku: await heat.comments([
+          for (final e in episodes) (e.episodeId, e.runtime?.inMilliseconds)
+        ],
             openingWindow: Duration(
                 seconds: await (reads?.once('opening', _openingSeconds) ??
                     _openingSeconds())),
@@ -234,8 +259,10 @@ final class UiDataService implements NextUiData, NextNowPlaying {
 
   @override
   Future<List<UiEpisode>> episodes(String workId, {int? season}) async {
-    if (workId.startsWith('source-work:')) return libraryData!.sourceEpisodes(workId, season: season);
-    if (meshLibrary != null) return meshLibrary!.episodes(workId, season: season);
+    if (workId.startsWith('source-work:'))
+      return libraryData!.sourceEpisodes(workId, season: season);
+    if (meshLibrary != null)
+      return meshLibrary!.episodes(workId, season: season);
     return localEpisodes(workId, season: season);
   }
 
@@ -270,8 +297,7 @@ final class UiDataService implements NextUiData, NextNowPlaying {
         if (timed) {
           duration ??= end != null
               ? positive(end - start)
-              : positive(fileAttrs['durationMs']) ??
-                  positive(p?['durationMs']);
+              : positive(fileAttrs['durationMs']) ?? positive(p?['durationMs']);
           if (p != null) {
             final d =
                 end != null ? end - start : (p['durationMs'] as num?)?.toInt();
@@ -325,11 +351,15 @@ final class UiDataService implements NextUiData, NextNowPlaying {
     return UiTask(
         taskId: job.jobId,
         type: job.type,
-        title: job.type == 'agent.helper' ? job.title :
-            job.state == JobState.waitingUser ? '等待你确认删除' :
-            name != null ? '${_taskVerb(job.type)}《$name》' :
-            job.type == 'download' ? _downloadTitle(job.title) :
-            _taskVerb(job.type),
+        title: job.type == 'agent.helper'
+            ? job.title
+            : job.state == JobState.waitingUser
+                ? '等待你确认删除'
+                : name != null
+                    ? '${_taskVerb(job.type)}《$name》'
+                    : job.type == 'download'
+                        ? _downloadTitle(job.title)
+                        : _taskVerb(job.type),
         workTitle: job.type == 'agent.helper' ? null : name,
         action: job.type == 'agent.helper' ? null : _taskVerb(job.type),
         state: switch (job.state) {
@@ -344,9 +374,12 @@ final class UiDataService implements NextUiData, NextNowPlaying {
           _ => UiTaskState.running,
         },
         artwork: art == null ? null : uiArtwork(art),
-        kind: job.type == 'agent.helper' ? UiTaskKind.helper : UiTaskKind.background,
-        startedAt: job.details['startedAt'] == null ? null :
-            DateTime.parse(job.details['startedAt'] as String),
+        kind: job.type == 'agent.helper'
+            ? UiTaskKind.helper
+            : UiTaskKind.background,
+        startedAt: job.details['startedAt'] == null
+            ? null
+            : DateTime.parse(job.details['startedAt'] as String),
         currentActivity: job.details['currentActivity'] as String?,
         summary: job.receipt?.details['summary'] as String?,
         threadId: job.details['threadId'] as String?,
@@ -379,7 +412,8 @@ final class UiDataService implements NextUiData, NextNowPlaying {
         ((await media.store.mergedMetadata(workId))['fields'] as Map)['title']);
     if (work == null) return null;
     final episodeId = rows.single['episode'] as String;
-    final fields = (await media.store.mergedMetadata(episodeId))['fields'] as Map;
+    final fields =
+        (await media.store.mergedMetadata(episodeId))['fields'] as Map;
     final attrs = (await media.store.entity(episodeId))['attributes'] as Map;
     // A film's episode goes without its number.
     final number = await media.store.workIsFilm(workId)
@@ -437,7 +471,45 @@ final class UiDataService implements NextUiData, NextNowPlaying {
   @override
   Future<List<UiWork>> library() async {
     if (meshLibrary != null) return meshLibrary!.library();
-    return [for (final row in await db.query('media_entities', where: "kind='work'", orderBy: 'rowid DESC')) (await localWork(row['id'] as String))!];
+    return [
+      for (final row in await db.query('media_entities',
+          where: "kind='work'", orderBy: 'rowid DESC'))
+        (await localWork(row['id'] as String))!
+    ];
+  }
+
+  Future<Map<String, ({String fileId, String workId, List<String> episodeIds})>>
+      _readLocatorLinks() async {
+    final slice = Slicer();
+    final byLocator =
+        <String, ({String fileId, String workId, List<String> episodeIds})>{};
+    for (var offset = 0;; offset += 250) {
+      final page = await db.rawQuery(
+          'SELECT l.locator, l.file_id AS fileId, fe.episode_id AS episodeId, r.parent_id AS workId '
+          'FROM media_locations l '
+          'JOIN media_file_episodes fe ON fe.file_id = l.file_id '
+          'JOIN media_entities e ON e.id = fe.episode_id '
+          'JOIN media_entities r ON r.id = e.parent_id '
+          'WHERE l.owner_device_id = ? '
+          'ORDER BY l.id, fe.ordinal LIMIT 250 OFFSET ?',
+          [media.store.ownerDeviceId, offset]);
+      for (final row in page) {
+        final locator = row['locator'] as String;
+        final existing = byLocator[locator];
+        if (existing == null) {
+          byLocator[locator] = (
+            fileId: row['fileId'] as String,
+            workId: row['workId'] as String,
+            episodeIds: [row['episodeId'] as String],
+          );
+        } else {
+          existing.episodeIds.add(row['episodeId'] as String);
+        }
+      }
+      await slice();
+      if (page.length < 250) break;
+    }
+    return byLocator;
   }
 
   @override
@@ -447,27 +519,45 @@ final class UiDataService implements NextUiData, NextNowPlaying {
     final seen = <String>{};
     if (meshLibrary != null) {
       for (final work in await library()) {
-        final ep = (await episodes(work.workId)).where((e) => (e.progress ?? 0) > 0 && (e.progress ?? 0) < 1).firstOrNull;
-        if (ep != null && seen.add(work.workId)) continuing.add(UiShelfItem(work, episode: ep, caption: _caption(work, ep)));
+        final ep = (await episodes(work.workId))
+            .where((e) => (e.progress ?? 0) > 0 && (e.progress ?? 0) < 1)
+            .firstOrNull;
+        if (ep != null && seen.add(work.workId))
+          continuing
+              .add(UiShelfItem(work, episode: ep, caption: _caption(work, ep)));
       }
     }
+    final byLocator =
+        (sources.continueWatching != null || sources.history != null)
+            ? await _readLocatorLinks()
+            : const <String,
+                ({String fileId, String workId, List<String> episodeIds})>{};
     if (sources.continueWatching != null) {
-      for (final row in await _view('history.continue_watching')) {
-        if (row['fileId'] is! String) continue;
-        final workId = await _parentWork(row['fileId'] as String);
-        if (workId == null || !seen.add(workId)) continue;
+      for (final row in sources.continueWatching!()) {
+        final path = row['filePath'] as String?;
+        if (path == null) continue;
+        var link = byLocator[path];
+        if (link == null && byLocator.isNotEmpty) {
+          final resolved = await visibleLocator(path, media);
+          if (resolved != null) link = byLocator[resolved];
+        }
+        if (link == null) continue;
+        final workId = meshLibrary == null
+            ? link.workId
+            : await meshLibrary!.canonical(link.workId);
+        if (!seen.add(workId)) continue;
         final work = (await this.work(workId))!;
-        final links = await db.query('media_file_episodes',
-            where: 'file_id=?', whereArgs: [row['fileId']]);
-        final linkedIds = <String>{for (final link in links)
-          await meshLibrary?.canonical(link['episode_id'] as String) ?? link['episode_id'] as String};
+        final linkedIds = <String>{
+          for (final id in link.episodeIds)
+            await meshLibrary?.canonical(id) ?? id
+        };
         final eps = await episodes(workId);
         final ep = eps
-            .where((e) =>
-                linkedIds.contains(e.episodeId) &&
-                (e.progress ?? 0) < 1)
+            .where(
+                (e) => linkedIds.contains(e.episodeId) && (e.progress ?? 0) < 1)
             .firstOrNull;
-        continuing.add(UiShelfItem(work, episode: ep, caption: _caption(work, ep)));
+        continuing
+            .add(UiShelfItem(work, episode: ep, caption: _caption(work, ep)));
       }
     }
     if (continuing.isNotEmpty) {
@@ -478,26 +568,54 @@ final class UiDataService implements NextUiData, NextNowPlaying {
           items: continuing));
     }
     final following = Set<String>.of(seen);
+    for (final link in byLocator.values) {
+      if (seen.contains(meshLibrary?.resolvedId(link.workId) ?? link.workId)) {
+        following.add(link.workId);
+      }
+    }
     for (final row in sources.history?.call() ?? <JsonMap>[]) {
       final progress = (row['watchProgress'] as num?)?.toDouble() ?? 0;
       if (progress <= 0 || progress >= .95) continue;
-      final fileId = await media.store.ensureFile(row['filePath'] as String);
-      final id = await _parentWork(fileId);
-      if (id != null) following.add(id);
+      final path = row['filePath'] as String?;
+      if (path == null) continue;
+      var link = byLocator[path];
+      if (link == null && byLocator.isNotEmpty) {
+        final resolved = await visibleLocator(path, media);
+        if (resolved != null) link = byLocator[resolved];
+      }
+      if (link != null) {
+        following.add(link.workId);
+        if (meshLibrary != null) {
+          following.add(meshLibrary!.resolvedId(link.workId));
+        }
+      }
     }
     final airing = <UiShelfItem>[];
-    for (final update in sources.calendar == null ? <JsonMap>[] :
-        await todayUpdates(media.store, following, await sources.calendar!())) {
+    for (final update in sources.calendar == null
+        ? <JsonMap>[]
+        : await todayUpdates(
+            media.store, following, await sources.calendar!())) {
       final work = (await this.work(update['workId'] as String))!;
       final matches = await db.rawQuery(
-        "SELECT b.entity_id FROM media_bindings b JOIN media_external_objects o ON o.id=b.object_id WHERE b.status='accepted' AND o.provider='dandanplay' AND o.object_type='episode' AND o.external_id=?",
-        [update['externalEpisodeId']]);
-      final matchingIds = <String>{for (final match in matches)
-        await meshLibrary?.canonical(match['entity_id'] as String) ?? match['entity_id'] as String};
-      final ep = (await episodes(work.workId)).where((e) => matchingIds.contains(e.episodeId)).firstOrNull;
-      airing.add(UiShelfItem(work, episode: ep, caption: update['caption'] as String));
+          "SELECT b.entity_id FROM media_bindings b JOIN media_external_objects o ON o.id=b.object_id WHERE b.status='accepted' AND o.provider='dandanplay' AND o.object_type='episode' AND o.external_id=?",
+          [update['externalEpisodeId']]);
+      final matchingIds = <String>{
+        for (final match in matches)
+          await meshLibrary?.canonical(match['entity_id'] as String) ??
+              match['entity_id'] as String
+      };
+      final ep = (await episodes(work.workId))
+          .where((e) => matchingIds.contains(e.episodeId))
+          .firstOrNull;
+      airing.add(
+          UiShelfItem(work, episode: ep, caption: update['caption'] as String));
     }
-    if (airing.isNotEmpty) shelves.add(UiShelf(id: 'airing', title: '今天更新', kind: UiShelfKind.airing, items: airing));
+    if (airing.isNotEmpty)
+      shelves.add(UiShelf(
+          id: 'airing',
+          title: '今天更新',
+          kind: UiShelfKind.airing,
+          items: airing));
     UiHero? hero;
     for (final row in await db.query('ui_shelves', orderBy: 'rowid')) {
       final shelf = decodeMediaJson(row['payload']);
@@ -523,8 +641,8 @@ final class UiDataService implements NextUiData, NextNowPlaying {
     }
     final recent = <UiShelfItem>[];
     for (final work in (await library()).take(20)) {
-      recent.add(
-          UiShelfItem(work, episode: work.next, caption: _caption(work, work.next)));
+      recent.add(UiShelfItem(work,
+          episode: work.next, caption: _caption(work, work.next)));
     }
     if (recent.isNotEmpty) {
       shelves.add(UiShelf(
@@ -534,9 +652,11 @@ final class UiDataService implements NextUiData, NextNowPlaying {
           items: recent));
     }
     if (hero == null) {
-      final jobs = await engine.list();
-      jobs.sort((a, b) => b.updatedAt.compareTo(a.updatedAt));
-      for (final job in jobs.where((j) => j.state == JobState.succeeded)) {
+      final jobs = await slicedSort(
+          await engine.list(state: JobState.succeeded),
+          (a, b) => b.updatedAt.compareTo(a.updatedAt),
+          Slicer());
+      for (final job in jobs) {
         final workId = await _jobWork(job);
         if (workId == null) continue;
         final work = await this.work(workId);
@@ -721,8 +841,13 @@ final class UiDataService implements NextUiData, NextNowPlaying {
       }
       for (final r in resolved) {
         if (r.facts case final facts?) {
-          await tx.insert('ui_cache',
-              {'id': r.key, 'fingerprint': 'found', 'payload': jsonEncode(facts)},
+          await tx.insert(
+              'ui_cache',
+              {
+                'id': r.key,
+                'fingerprint': 'found',
+                'payload': jsonEncode(facts)
+              },
               conflictAlgorithm: ConflictAlgorithm.replace);
         }
       }
@@ -741,8 +866,9 @@ final class UiDataService implements NextUiData, NextNowPlaying {
       'threadId': boundary['threadId'],
       'turnId': boundary['turnId'],
       'count': cards.length,
-      'conversation':
-          invocation.origin.startsWith('harness_cli:chat:') ? 'main' : 'subagent',
+      'conversation': invocation.origin.startsWith('harness_cli:chat:')
+          ? 'main'
+          : 'subagent',
       'cards': [
         for (var i = 0; i < cards.length; i++)
           {'index': i, 'alreadyShown': alreadyShown[i]}
@@ -891,15 +1017,20 @@ final class UiDataService implements NextUiData, NextNowPlaying {
       {String hint = ''}) async {
     if (id.startsWith('source-')) {
       final parent = await libraryData!.sourceParent(id);
-      if (parent != null && (kind != 'episode' && await work(id) != null ||
-          kind != 'work' && (await episodes(parent)).any((e) => e.episodeId == id))) return;
-      throw const Failure(FailureCode.invalidInput, 'Unknown source work or episode reference.');
+      if (parent != null &&
+          (kind != 'episode' && await work(id) != null ||
+              kind != 'work' &&
+                  (await episodes(parent)).any((e) => e.episodeId == id)))
+        return;
+      throw const Failure(FailureCode.invalidInput,
+          'Unknown source work or episode reference.');
     }
     if (meshLibrary != null) {
       final parent = await meshLibrary!.parent(id);
       if (parent != null) {
         if (kind != 'episode' && await work(id) != null) return;
-        if (kind != 'work' && (await episodes(parent)).any((e) => e.episodeId == id)) return;
+        if (kind != 'work' &&
+            (await episodes(parent)).any((e) => e.episodeId == id)) return;
       }
     }
     final rows =
@@ -1072,8 +1203,7 @@ final class UiDataService implements NextUiData, NextNowPlaying {
         });
     final kind = card['kind'];
     return switch (kind) {
-      'work' when card['ref'] is Map =>
-        'work:ref:${canonical(card['ref'])}',
+      'work' when card['ref'] is Map => 'work:ref:${canonical(card['ref'])}',
       'work' => 'work:id:${card['workId']}',
       'episode' => 'episode:${card['episodeId']}',
       'task' => 'task:${card['taskId']}',
@@ -1105,8 +1235,12 @@ final class UiDataService implements NextUiData, NextNowPlaying {
             final workId = (await _parentWork(card['episodeId'] as String))!;
             result.add(UiEpisodeCard(
                 (await work(workId))!,
-                (await episodes(workId))
-                    .singleWhere((e) => e.episodeId == (meshLibrary == null ? card['episodeId'] : meshLibrary!.resolvedId(card['episodeId'] as String)))));
+                (await episodes(workId)).singleWhere((e) =>
+                    e.episodeId ==
+                    (meshLibrary == null
+                        ? card['episodeId']
+                        : meshLibrary!
+                            .resolvedId(card['episodeId'] as String)))));
           case 'task':
             result.add(UiTaskCard(
                 await _task(await engine.get(card['taskId'] as String))));
@@ -1124,8 +1258,8 @@ final class UiDataService implements NextUiData, NextNowPlaying {
                   ? await _refWork(item['ref'] as Map)
                   : await work(item['workId'] as String);
               if (shown != null) {
-                items.add(
-                    UiCandidate(shown, reason: item['reason'] as String?));
+                items
+                    .add(UiCandidate(shown, reason: item['reason'] as String?));
               }
             }
             if (items.isNotEmpty) result.add(UiCandidatesCard(items));
@@ -1244,6 +1378,7 @@ String _downloadTitle(String title) {
       ? '下载'
       : '下载 $name';
 }
+
 /// A film's episode goes without its number.
 String? _caption(UiWork work, UiEpisode? e) {
   if (e == null) return null;

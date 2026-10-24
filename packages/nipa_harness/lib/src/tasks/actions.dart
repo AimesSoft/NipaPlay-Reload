@@ -35,7 +35,8 @@ final class _TaskAction extends Action<_TaskInput, _TaskOutput> {
         title: '${operation[0].toUpperCase()}${operation.substring(1)} task',
         description: switch (operation) {
           'list' =>
-            'List persisted task snapshots, optionally filtering by state or type. '
+            'List persisted task snapshots in pages of 50 by default, optionally filtering by state or type. '
+                'Pass limit and offset to read another page; nextOffset continues after the page. '
                 'origin, when present, records who submitted the task, taken from the call that created it.',
           'get' =>
             'Read the complete task snapshot. origin, when present, records who submitted the task. succeeded means verification finished; '
@@ -55,6 +56,8 @@ final class _TaskAction extends Action<_TaskInput, _TaskOutput> {
                 'state': StringSchema(
                     values: [for (final s in JobState.values) s.wireName]),
                 'type': const StringSchema(minLength: 1),
+                'limit': const IntegerSchema(minimum: 1, maximum: 1000),
+                'offset': const IntegerSchema(minimum: 0),
               })
             : ObjectSchema({
                 'jobId': const StringSchema(minLength: 1),
@@ -76,8 +79,12 @@ final class _TaskAction extends Action<_TaskInput, _TaskOutput> {
                       ]
                     : const []),
         output: operation == 'list'
-            ? ObjectSchema({'jobs': ArraySchema(jobSnapshotSchema)},
-                required: const ['jobs'])
+            ? ObjectSchema({
+                'jobs': ArraySchema(jobSnapshotSchema),
+                'nextOffset': IntegerSchema(minimum: 0, nullable: true),
+              }, required: const [
+                'jobs'
+              ])
             : ObjectSchema({
                 'job': jobSnapshotSchema,
                 if (operation == 'cancel')
@@ -122,8 +129,13 @@ final class _TaskAction extends Action<_TaskInput, _TaskOutput> {
           state: state == null
               ? null
               : JobState.values.singleWhere((s) => s.wireName == state));
+      final offset = json['offset'] as int? ?? 0;
+      final limit = json['limit'] as int? ?? 50;
+      final page = jobs.skip(offset).take(limit).toList();
       return Completed(_TaskOutput({
-        'jobs': [for (final job in jobs) job.toJson()]
+        'jobs': [for (final job in page) job.toJson()],
+        'nextOffset':
+            offset + page.length < jobs.length ? offset + page.length : null,
       }));
     }
     if (operation == 'cancel' && json.containsKey('jobIds')) {

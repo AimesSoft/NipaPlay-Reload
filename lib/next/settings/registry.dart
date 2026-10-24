@@ -69,37 +69,44 @@ final class SettingEntry {
   String get domain => key.split('.').first;
   JsonMap describe() {
     final row = <String, Object?>{
-        'key': key,
-        'title': title,
-        'description': description,
-        ...schema.toJsonSchema(),
-        'default': defaultValue,
-        'scope': scope,
-        'apply': apply,
-        'effect': writable ? 'write' : 'read',
-        'readOnly': !writable,
-        if (step != null || remote?['step'] != null)
-          'step': step ?? remote!['step'],
-        if (key == 'danmaku.supersample') 'enum': [0.0, 1.5, 2.0],
-        if (key == 'danmaku.outlineWidth') 'enum': [0.0, 1.0, 2.0],
-        if (key == 'player.minimalProgressBarColor')
-          'enum': [0xFFFF7274, 0xFF40C7FF, 0xFF6DFF69, 0xFF4CFFB1, 0xFFFFFFFF],
-        if (key == 'appearance.blurPower')
-          'enum': [0, 5, 15, 25, if ((_schema as NumberSchema).maximum! > 25) ...[50, 100]],
-        if (key.startsWith('subtitle.') && key.toLowerCase().endsWith('color'))
-          'pattern': r'^#[0-9A-Fa-f]{8}$',
-        'storage': {
-          'kind': storageKind ?? (storageKey.startsWith('@runtime:')
-              ? 'runtime'
-              : 'shared_preferences'),
-          'key': storageKey,
-          if (additionalStorageKeys.isNotEmpty) 'additionalKeys': additionalStorageKeys,
-          if (key == 'danmaku.supersample')
-            'legacyKeys': ['danmaku_supersample'],
-          'reader': reader,
-          'writer': writer,
-        },
-      };
+      'key': key,
+      'title': title,
+      'description': description,
+      ...schema.toJsonSchema(),
+      'default': defaultValue,
+      'scope': scope,
+      'apply': apply,
+      'effect': writable ? 'write' : 'read',
+      'readOnly': !writable,
+      if (step != null || remote?['step'] != null)
+        'step': step ?? remote!['step'],
+      if (key == 'danmaku.supersample') 'enum': [0.0, 1.5, 2.0],
+      if (key == 'danmaku.outlineWidth') 'enum': [0.0, 1.0, 2.0],
+      if (key == 'player.minimalProgressBarColor')
+        'enum': [0xFFFF7274, 0xFF40C7FF, 0xFF6DFF69, 0xFF4CFFB1, 0xFFFFFFFF],
+      if (key == 'appearance.blurPower')
+        'enum': [
+          0,
+          5,
+          15,
+          25,
+          if ((_schema as NumberSchema).maximum! > 25) ...[50, 100]
+        ],
+      if (key.startsWith('subtitle.') && key.toLowerCase().endsWith('color'))
+        'pattern': r'^#[0-9A-Fa-f]{8}$',
+      'storage': {
+        'kind': storageKind ??
+            (storageKey.startsWith('@runtime:')
+                ? 'runtime'
+                : 'shared_preferences'),
+        'key': storageKey,
+        if (additionalStorageKeys.isNotEmpty)
+          'additionalKeys': additionalStorageKeys,
+        if (key == 'danmaku.supersample') 'legacyKeys': ['danmaku_supersample'],
+        'reader': reader,
+        'writer': writer,
+      },
+    };
     return {...row, ...settingPresentation(key, row)};
   }
 }
@@ -132,8 +139,27 @@ final class SettingsRegistry {
   }
 
   void register(Iterable<SettingEntry> entries) {
-    entries = entries.toList();
-    _captureStartup(entries);
+    final added = entries.toList();
+    _captureStartup(added);
+    _register(added);
+  }
+
+  /// Registers a large initial catalogue without one synchronous pass over
+  /// every definition. The registry is not used until this future completes.
+  Future<void> registerChunked(Iterable<SettingEntry> entries,
+      {int chunkSize = 32}) async {
+    final added = entries.toList();
+    _captureStartup(added);
+    for (var start = 0; start < added.length; start += chunkSize) {
+      _register(
+          added.sublist(start, (start + chunkSize).clamp(0, added.length)));
+      if (start + chunkSize < added.length) {
+        await Future<void>.delayed(Duration.zero);
+      }
+    }
+  }
+
+  void _register(Iterable<SettingEntry> entries) {
     for (final entry in entries) {
       if (isSettingDenied(entry.key) || isSettingDenied(entry.storageKey)) {
         throw ArgumentError('Forbidden setting: ${entry.key}');
@@ -143,7 +169,8 @@ final class SettingsRegistry {
       }
       _entries[entry.key] = entry;
       for (final key in [entry.storageKey, ...entry.additionalStorageKeys]) {
-        if (isSettingDenied(key)) throw ArgumentError('Forbidden storage key: $key');
+        if (isSettingDenied(key))
+          throw ArgumentError('Forbidden storage key: $key');
         _storage.putIfAbsent(key, () => []).add(entry);
       }
     }
@@ -160,7 +187,8 @@ final class SettingsRegistry {
   bool contains(String key) => _entries[key]?.visible() ?? false;
 
   void replaceGroup(String prefix, Iterable<SettingEntry> entries) {
-    final removed = _entries.values.where((e) => e.key.startsWith(prefix)).toList();
+    final removed =
+        _entries.values.where((e) => e.key.startsWith(prefix)).toList();
     for (final entry in removed) {
       _entries.remove(entry.key);
       for (final key in [entry.storageKey, ...entry.additionalStorageKeys]) {
@@ -214,30 +242,43 @@ final class SettingsRegistry {
     try {
       await _startupCaptured;
       return await (entry.effective ?? baseEffective)(entry, stored,
-          startup: _startup,
-          readOther: (key) async => _entries[key]?.read());
+          startup: _startup, readOther: (key) async => _entries[key]?.read());
     } on Failure catch (failure) {
       return Effective.unknown('probe_failed', failure.message);
     } catch (error) {
-      return Effective.unknown(
-          'probe_failed', 'Reading the running value failed (${error.runtimeType}).');
+      return Effective.unknown('probe_failed',
+          'Reading the running value failed (${error.runtimeType}).');
     }
   }
 
   /// Current values and their latest provenance, rather than copied settings.
   Future<List<JsonMap>> preferences() async {
     await drain();
+    final latestRows = await database.rawQuery(
+        'SELECT s.* FROM settings_changes s '
+        'JOIN (SELECT key, MAX(revision) AS revision FROM settings_changes GROUP BY key) m '
+        'ON s.key = m.key AND s.revision = m.revision');
+    if (latestRows.isEmpty) return [];
+    final latestByKey = {
+      for (final row in latestRows) row['key'] as String: _decodeRow(row)
+    };
     final rows = <JsonMap>[];
-    for (final entry in entries.where((e) => e.visible() && e.scope == 'user' && e.apply != 'runtime')) {
-      final current = await get(entry.key);
-      final provenance = current['provenance'] as Map?;
-      if (provenance == null || provenance['changedBy'] == 'migration' ||
+    for (final entry in entries.where(
+        (e) => e.visible() && e.scope == 'user' && e.apply != 'runtime')) {
+      final provenance = latestByKey[entry.key];
+      if (provenance == null ||
+          provenance['changedBy'] == 'migration' ||
           provenance['origin'] == 'application') {
         continue;
       }
-      rows.add({'key': entry.key, 'title': entry.title, 'value': current['value'],
-        'changedAt': provenance['changedAt'], 'changedBy': provenance['changedBy'],
-        'reason': provenance['reason']});
+      rows.add({
+        'key': entry.key,
+        'title': entry.title,
+        'value': await entry.read(),
+        'changedAt': provenance['changedAt'],
+        'changedBy': provenance['changedBy'],
+        'reason': provenance['reason'],
+      });
     }
     return rows;
   }
@@ -254,7 +295,8 @@ final class SettingsRegistry {
         _entry(key);
       }
     }
-    final matched = entries.toList()
+    final matched = entries
+        .toList()
         .where((entry) =>
             entry.visible() &&
             (keys == null || keys.contains(entry.key)) &&
@@ -287,7 +329,8 @@ final class SettingsRegistry {
 
   void _validate(SettingEntry entry, Object? value) {
     if (!entry.writable) {
-      throw const Failure(FailureCode.invalidInput, 'This setting is a read-only fact.');
+      throw const Failure(
+          FailureCode.invalidInput, 'This setting is a read-only fact.');
     }
     final violations = entry.schema.validate(value);
     if (violations.isEmpty) {
@@ -363,7 +406,8 @@ final class SettingsRegistry {
       'gui' => 'user',
       'mcp' => 'agent',
       'migration' => 'migration',
-      _ when origin == 'harness_cli' || origin.startsWith('harness_cli:') => 'agent',
+      _ when origin == 'harness_cli' || origin.startsWith('harness_cli:') =>
+        'agent',
       _ => origin,
     };
     await database.insert('settings_changes', {
@@ -377,10 +421,17 @@ final class SettingsRegistry {
       'invocation_id': invocation.id,
       'revision': revision,
     });
-    await onChanged?.call({'key': entry.key, 'previousValue': previous,
-      'value': value, 'revision': revision, 'changedFields': ['value'],
-      'origin': invocation.origin, 'changedBy': changedBy,
-      'reason': reason, 'invocationId': invocation.id});
+    await onChanged?.call({
+      'key': entry.key,
+      'previousValue': previous,
+      'value': value,
+      'revision': revision,
+      'changedFields': ['value'],
+      'origin': invocation.origin,
+      'changedBy': changedBy,
+      'reason': reason,
+      'invocationId': invocation.id
+    });
   }
 
   Future<List<JsonMap>> history(
@@ -433,7 +484,9 @@ final class SettingsRegistry {
         'value': jsonDecode(row['value'] as String),
         'changedAt': row['changed_at'],
         'changedBy': (row['origin'] as String).startsWith('harness_cli:') ||
-            row['origin'] == 'harness_cli' ? 'agent' : row['changed_by'],
+                row['origin'] == 'harness_cli'
+            ? 'agent'
+            : row['changed_by'],
         'origin': row['origin'],
         'reason': row['reason'],
         'invocationId': row['invocation_id'],
@@ -463,7 +516,8 @@ abstract final class SettingsAccess {
           String key, Object? previous, Object? value) =>
       registry?.recordRuntime(key, previous, value) ?? Future.value();
 
-  static Future<void> recordRegisteredRuntime(String key, Object? previous, Object? value) =>
+  static Future<void> recordRegisteredRuntime(
+          String key, Object? previous, Object? value) =>
       registry?.contains(key) == true
           ? registry!.recordRuntime(key, previous, value)
           : Future.value();

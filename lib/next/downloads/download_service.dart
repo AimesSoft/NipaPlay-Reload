@@ -20,18 +20,30 @@ final class DownloadService {
   final DownloadLibrary library;
   Future<JsonMap?> Function(Invocation)? returnTarget;
   Future<JsonMap> bandwidth(JsonMap input) => _serial(() async {
-    for (final value in input.values.cast<int>()) {
-      if (value != 0 && (value < 16384 || value > 4294967295)) {
-        throw const Failure(FailureCode.invalidInput, 'Use 0 for unlimited, or 16384..4294967295 bytes/second.');
-      }
-    }
-    final backend = backends.resolve(const DownloadBackendRef.builtin());
-    final facts = backend is BandwidthDownloadBackend ? await (backend as BandwidthDownloadBackend).bandwidth(input)
-      : <String, Object?>{'supported': false, 'applied': false, 'reason': 'backend_has_no_bandwidth_control'};
-    return {...facts, 'scope': 'builtinSession', 'appliesTo': 'all builtin torrents',
-      'lifetime': 'current native session; new sessions default to unlimited',
-      'unit': 'bytes/second; 0 means unlimited', 'minimumPositive': 16384};
-  });
+        for (final value in input.values.cast<int>()) {
+          if (value != 0 && (value < 16384 || value > 4294967295)) {
+            throw const Failure(FailureCode.invalidInput,
+                'Use 0 for unlimited, or 16384..4294967295 bytes/second.');
+          }
+        }
+        final backend = backends.resolve(const DownloadBackendRef.builtin());
+        final facts = backend is BandwidthDownloadBackend
+            ? await (backend as BandwidthDownloadBackend).bandwidth(input)
+            : <String, Object?>{
+                'supported': false,
+                'applied': false,
+                'reason': 'backend_has_no_bandwidth_control'
+              };
+        return {
+          ...facts,
+          'scope': 'builtinSession',
+          'appliesTo': 'all builtin torrents',
+          'lifetime':
+              'current native session; new sessions default to unlimited',
+          'unit': 'bytes/second; 0 means unlimited',
+          'minimumPositive': 16384
+        };
+      });
   Future<void> _tail = Future.value();
 
   Future<T> _serial<T>(Future<T> Function() operation) async {
@@ -388,6 +400,7 @@ final class DownloadService {
         if (job.state == JobState.paused) return engine.resume(jobId);
         return engine.get(jobId);
       });
+
   /// Deletes the data of some files of a download and stops selecting them;
   /// the session, the other files and their seeding or downloading go on.
   /// Only these files, only inside the output directory, never a directory.
@@ -520,16 +533,23 @@ final class DownloadService {
   /// (Classic does that directly). [present] is the backend's listing; its
   /// receipt then says what is left on disk, found now. A running or paused
   /// job is the executor's to settle, an already amended one is left alone.
-  Future<void> observeMissingSessions(
-      DownloadBackend backend, List<DownloadSnapshot> present) async {
+  Future<bool> observeMissingSessions(
+      DownloadBackend backend, List<DownloadSnapshot> present,
+      {Iterable<Job>? listedJobs, Iterable<String>? candidateIds}) async {
     bool candidate(Job job) =>
         job.state.isTerminal &&
         job.sideEffectCommitted &&
         _ref(job).key == backend.reference.key &&
         job.receipt?.details['sessionPresent'] != false &&
         !present.any((task) => task.infoHash == job.input['infoHash']);
-    final jobs = (await engine.list(type: 'download')).where(candidate);
-    if (jobs.isEmpty) return;
+    final jobs = candidateIds == null
+        ? (listedJobs ?? await engine.list(type: 'download')).where(candidate)
+        : [
+            for (final id in candidateIds)
+              if (await engine.get(id) case final job when candidate(job)) job
+          ];
+    if (jobs.isEmpty) return false;
+    var amended = false;
     await _serial(() async {
       // The listing may be older than a removal or an add done meanwhile.
       final live = await backend.list();
@@ -538,9 +558,11 @@ final class DownloadService {
         if (candidate(job) &&
             !live.any((task) => task.infoHash == job.input['infoHash'])) {
           await _amendRemoved(job, backend, null);
+          amended = true;
         }
       }
     });
+    return amended;
   }
 
   /// [deleteData] is null when nobody here removed the session and who did,
@@ -563,8 +585,7 @@ final class DownloadService {
                 {
                   for (final entry in row.entries)
                     if (fresh['retained'] == true ||
-                        (entry.key != 'canonicalPath' &&
-                            entry.key != 'media'))
+                        (entry.key != 'canonicalPath' && entry.key != 'media'))
                       entry.key: entry.value,
                   'actualSize': fresh['actualSize'],
                   'retained': fresh['retained'],

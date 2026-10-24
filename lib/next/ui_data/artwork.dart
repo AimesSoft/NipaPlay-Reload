@@ -48,10 +48,10 @@ final class ArtworkCache {
 
   Future<JsonMap> load(String entityId, {LibraryReads? reads}) =>
       _pending.putIfAbsent(
-      entityId,
-      () => _load(entityId, reads).whenComplete(() {
-            _pending.remove(entityId);
-          }));
+          entityId,
+          () => _load(entityId, reads).whenComplete(() {
+                _pending.remove(entityId);
+              }));
 
   Future<List<JsonMap>> _identities(String id) => media.store.database.rawQuery(
       'SELECT o.*,b.entity_id FROM media_bindings b JOIN media_external_objects o ON o.id=b.object_id '
@@ -81,15 +81,20 @@ final class ArtworkCache {
         'url': url,
       })
     });
-    BodySignals.changed('media.assets.changed', object['id'] as String,
-        {'kind': 'artwork', 'changedFields': fields.keys.toList(), 'source': object['provider']});
+    BodySignals.changed('media.assets.changed', object['id'] as String, {
+      'kind': 'artwork',
+      'changedFields': fields.keys.toList(),
+      'source': object['provider']
+    });
   }
 
   Future<JsonMap> _load(String id, LibraryReads? reads) async {
-    final identities = await (reads?.once(('artwork identities', id), () => _identities(id)) ??
-        _identities(id));
+    final identities =
+        await (reads?.once(('artwork identities', id), () => _identities(id)) ??
+            _identities(id));
     final tmdb = identities.where((o) => o['provider'] == 'tmdb').firstOrNull;
-    final metadata = await (reads?.metadata(id) ?? media.store.mergedMetadata(id));
+    final metadata =
+        await (reads?.metadata(id) ?? media.store.mergedMetadata(id));
     final fields = metadata['fields'] as JsonMap;
     final fingerprint = jsonEncode([
       for (final o in identities) o['id'],
@@ -108,9 +113,16 @@ final class ArtworkCache {
     var urls = fields['artworkUrls'] is Map
         ? Map<String, Object?>.from(fields['artworkUrls'] as Map)
         : <String, Object?>{};
-    if (tmdb != null &&
-        (await vault.read(const CredentialRef('metadata', 'tmdb')) != null ||
-            BuiltInCredentials.hasTmdb)) {
+    var snapshotSaved = false;
+    final hasTmdb = BuiltInCredentials.hasTmdb ||
+        await (reads?.once((
+                  'vault',
+                  'metadata',
+                  'tmdb'
+                ), () => vault.read(const CredentialRef('metadata', 'tmdb'))) ??
+                vault.read(const CredentialRef('metadata', 'tmdb'))) !=
+            null;
+    if (tmdb != null && hasTmdb) {
       final provider = media.providers['tmdb']! as TmdbMetadataProvider;
       final type = tmdb['object_type'] as String;
       final path = type == 'episode' || type == 'season'
@@ -154,8 +166,11 @@ final class ArtworkCache {
           'logo': image(choose('logos', ['zh', 'ja', 'en', null]), 'original'),
           'still': image(row['still_path'], 'w780'),
         };
-        urls = {...urls, for (final entry in fetched.entries)
-          if (entry.value != null) entry.key: entry.value};
+        urls = {
+          ...urls,
+          for (final entry in fetched.entries)
+            if (entry.value != null) entry.key: entry.value
+        };
         await _snapshot(
             tmdb,
             {
@@ -180,6 +195,7 @@ final class ArtworkCache {
                 },
             },
             'https://api.themoviedb.org$path');
+        snapshotSaved = true;
       }
     }
     if (fields['imageUrl'] is String) {
@@ -199,21 +215,30 @@ final class ArtworkCache {
     if (result['backdrop'] ?? result['poster'] case final String path) {
       result['tint'] = await _tint(path);
     }
-    final updated = (await media.store.mergedMetadata(id))['fields'] as JsonMap;
-    await media.store.database.insert(
-        'ui_cache',
-        {
-          'id': cacheId,
-          'fingerprint': jsonEncode([
-            for (final o in identities) o['id'],
-            updated['imageUrl'],
-            updated['artworkUrls'],
-            for (final kind in ['backdrop', 'poster', 'logo', 'still'])
-              updated['artwork.$kind']
-          ]),
-          'payload': jsonEncode(result)
-        },
-        conflictAlgorithm: ConflictAlgorithm.replace);
+    final String finalFingerprint;
+    if (snapshotSaved) {
+      final updated =
+          (await media.store.mergedMetadata(id))['fields'] as JsonMap;
+      finalFingerprint = jsonEncode([
+        for (final o in identities) o['id'],
+        updated['imageUrl'],
+        updated['artworkUrls'],
+        for (final kind in ['backdrop', 'poster', 'logo', 'still'])
+          updated['artwork.$kind']
+      ]);
+    } else {
+      finalFingerprint = fingerprint;
+    }
+    if (result.isNotEmpty || snapshotSaved) {
+      await media.store.database.insert(
+          'ui_cache',
+          {
+            'id': cacheId,
+            'fingerprint': finalFingerprint,
+            'payload': jsonEncode(result)
+          },
+          conflictAlgorithm: ConflictAlgorithm.replace);
+    }
     return result;
   }
 
@@ -300,7 +325,8 @@ final class ArtworkCache {
     };
   }
 
-  Future<int> _tint(String path) async => rasterTint(await File(path).readAsBytes());
+  Future<int> _tint(String path) async =>
+      rasterTint(await File(path).readAsBytes());
 
   void close() => _client.close();
 }
