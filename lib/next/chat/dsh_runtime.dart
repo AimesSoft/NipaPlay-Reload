@@ -1,28 +1,26 @@
 import 'dart:convert';
 import 'dart:io';
 
-/// DeepSeek Harness (DSH) as Nipa's runtime instead of Codex.
-///
-/// Codex stays the default. `NIPAPLAY_AGENT_RUNTIME=dsh` selects DSH, with
-/// `NIPAPLAY_DSH_NODE` (a Node.js 24 executable) and `NIPAPLAY_DSH_ROOT` (an
-/// npm prefix holding `node_modules/@deepseek-ai/dsh`) or `NIPAPLAY_DSH_BIN`
-/// (its `lib/bin.js`). A lab profile may instead keep the same choice in
-/// `<lab root>/agent-runtime.json`: `{"runtime": "dsh", "node": ..., "root": ...}`.
-/// Environment values win over the file.
-final class DshRuntime {
-  const DshRuntime(
-      {required this.node, required this.bin, required this.version});
+/// Which runtime Nipa thinks in: DeepSeek Harness or Codex.
+enum AgentRuntimeKind { dsh, codex }
 
-  /// Node.js executable that runs DSH.
-  final String node;
+/// What the environment or a lab profile fixes about the runtime, if
+/// anything. `NIPAPLAY_AGENT_RUNTIME` (`dsh` or `codex`) wins over a lab's
+/// `<lab root>/agent-runtime.json` (`{"runtime": "dsh", "node": ..., "root": ...}`).
+/// With DSH, `NIPAPLAY_DSH_NODE` (a Node.js 24 executable) and
+/// `NIPAPLAY_DSH_ROOT` (an npm prefix holding `node_modules/@deepseek-ai/dsh`)
+/// or `NIPAPLAY_DSH_BIN` (its `lib/bin.js`) name an installation of your own;
+/// without them NipaPlay's own downloaded runtime is used. Nothing fixed
+/// leaves the choice to the person at this device (settings).
+final class AgentRuntimeFixed {
+  const AgentRuntimeFixed(this.kind, [this.dsh]);
 
-  /// `@deepseek-ai/dsh/lib/bin.js`.
-  final String bin;
+  final AgentRuntimeKind? kind;
 
-  /// The installed `@deepseek-ai/dsh` version.
-  final String version;
+  /// The installation named by the environment or the file, when it names one.
+  final DshRuntime? dsh;
 
-  static DshRuntime? select(Map<String, String> environment,
+  static AgentRuntimeFixed read(Map<String, String> environment,
       {Directory? labRoot}) {
     Map<String, Object?> file = const {};
     if (labRoot != null) {
@@ -37,8 +35,9 @@ final class DshRuntime {
       return text == null || text.isEmpty ? null : text;
     }
 
-    final runtime = value('NIPAPLAY_AGENT_RUNTIME', 'runtime') ?? 'codex';
-    if (runtime == 'codex') return null;
+    final runtime = value('NIPAPLAY_AGENT_RUNTIME', 'runtime');
+    if (runtime == null) return const AgentRuntimeFixed(null);
+    if (runtime == 'codex') return const AgentRuntimeFixed(AgentRuntimeKind.codex);
     if (runtime != 'dsh') {
       throw StateError('Unknown agent runtime "$runtime"; expected codex or dsh.');
     }
@@ -46,6 +45,9 @@ final class DshRuntime {
     final root = value('NIPAPLAY_DSH_ROOT', 'root');
     final bin = value('NIPAPLAY_DSH_BIN', 'bin') ??
         (root == null ? null : '$root/node_modules/@deepseek-ai/dsh/lib/bin.js');
+    if (node == null && bin == null) {
+      return const AgentRuntimeFixed(AgentRuntimeKind.dsh);
+    }
     if (node == null || bin == null) {
       throw StateError('DSH needs NIPAPLAY_DSH_NODE and NIPAPLAY_DSH_ROOT '
           '(or NIPAPLAY_DSH_BIN).');
@@ -56,13 +58,36 @@ final class DshRuntime {
     final version = package.existsSync()
         ? (jsonDecode(package.readAsStringSync()) as Map)['version'] as String?
         : null;
-    return DshRuntime(node: node, bin: bin, version: version ?? 'unknown');
+    return AgentRuntimeFixed(AgentRuntimeKind.dsh,
+        DshRuntime(node: node, bin: bin, version: version ?? 'unknown'));
   }
 }
 
-/// The model route DSH uses, read from the same Codex configuration a Codex
-/// launch would use. The key stays in memory and reaches DSH only as the
-/// environment value named by [keyVariable].
+/// DeepSeek Harness (DSH) as Nipa's runtime instead of Codex. See
+/// [AgentRuntimeFixed] for the environment and lab-file overrides.
+final class DshRuntime {
+  const DshRuntime(
+      {required this.node, required this.bin, required this.version});
+
+  /// Node.js executable that runs DSH.
+  final String node;
+
+  /// `@deepseek-ai/dsh/lib/bin.js`.
+  final String bin;
+
+  /// The installed `@deepseek-ai/dsh` version.
+  final String version;
+
+  /// The installation the environment or a lab file names; null when neither
+  /// selects DSH with its own paths.
+  static DshRuntime? select(Map<String, String> environment,
+          {Directory? labRoot}) =>
+      AgentRuntimeFixed.read(environment, labRoot: labRoot).dsh;
+}
+
+/// The model route DSH uses: what the person set up in NipaPlay's settings,
+/// or what a Codex configuration holds ([fromCodexConfig]). The key stays in
+/// memory and reaches DSH only as the environment value named by [keyVariable].
 final class DshRoute {
   const DshRoute(
       {required this.baseUrl,
@@ -72,7 +97,8 @@ final class DshRoute {
       this.reasoningEffort,
       this.contextWindow,
       this.maxRetries,
-      this.imageInput});
+      this.imageInput,
+      this.compat});
 
   static const keyVariable = 'NIPAPLAY_MODEL_API_KEY';
   static const provider = 'nipaplay';
@@ -80,6 +106,11 @@ final class DshRoute {
   final String baseUrl, model, key, api;
   final String? reasoningEffort;
   final int? contextWindow, maxRetries;
+
+  /// pi-ai wire-compatibility switches for the model, as a template or the
+  /// person set them (e.g. DeepSeek's `thinkingFormat`); never inferred from
+  /// the address.
+  final Map<String, Object?>? compat;
 
   /// Whether the model answered about an image it was shown
   /// ([probeDshImageInput]); null when that is not known. DSH's `read_image`
@@ -94,7 +125,8 @@ final class DshRoute {
       reasoningEffort: reasoningEffort,
       contextWindow: contextWindow,
       maxRetries: maxRetries,
-      imageInput: value);
+      imageInput: value,
+      compat: compat);
 
   /// [config] is a Codex `config.toml`. [model] and [provider] override its
   /// top-level choice, as a NipaPlay-managed launch does. The credential is
@@ -151,6 +183,7 @@ final class DshRoute {
                 if (imageInput != null)
                   'input': imageInput! ? ['text', 'image'] : ['text'],
                 if (contextWindow != null) 'contextWindow': contextWindow,
+                if (compat != null && compat!.isNotEmpty) 'compat': compat,
                 if (reasoningEffort != null)
                   'reasoningEfforts': {
                     for (final level in {'low', 'medium', 'high', reasoningEffort!})

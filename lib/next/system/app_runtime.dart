@@ -34,6 +34,7 @@ final class AppRuntimeFacts {
       required this.codexHome,
       this.remoteAccess,
       Map<String, String>? environment,
+      this.defaultRuntime = AgentRuntimeKind.codex,
       this.managedModelByDefault = true})
       : environment = environment ?? Platform.environment;
 
@@ -47,6 +48,9 @@ final class AppRuntimeFacts {
   final ChatHost? Function() chat;
   final Directory codexHome;
   final Map<String, String> environment;
+
+  /// The runtime when nothing fixed it and nothing was chosen in settings.
+  final AgentRuntimeKind defaultRuntime;
 
   /// Whether a model nobody has chosen yet is the one set up in NipaPlay
   /// (desktop) rather than the Codex configuration on the computer.
@@ -112,16 +116,61 @@ final class AppRuntimeFacts {
     };
   }
 
-  Future<JsonMap> _selected() async {
+  Future<({AgentRuntimeKind? kind, String? problem, DshRuntime? fixed})>
+      _kind() async {
     final lab = LabProfile.active ? Directory(LabProfile.root) : null;
     try {
-      final dsh = DshRuntime.select(environment, labRoot: lab);
-      return dsh == null
-          ? {'kind': 'codex'}
-          : {'kind': 'dsh', 'dshVersion': dsh.version};
+      final fixed = AgentRuntimeFixed.read(environment, labRoot: lab);
+      if (fixed.kind != null) {
+        return (kind: fixed.kind, problem: null, fixed: fixed.dsh);
+      }
+      final stored = (await _file('runtime.json'))['runtime'];
+      return (
+        kind: AgentRuntimeKind.values
+                .where((kind) => kind.name == stored)
+                .firstOrNull ??
+            defaultRuntime,
+        problem: null,
+        fixed: null
+      );
     } on StateError catch (error) {
-      return {'kind': null, 'problem': redactHarnessText(error.message)};
+      return (
+        kind: null,
+        problem: redactHarnessText(error.message),
+        fixed: null
+      );
     }
+  }
+
+  /// The downloaded DeepSeek Harness, if one is in place.
+  Future<JsonMap> _dsh() async {
+    final directory = Directory('${root.path}/dsh-runtime');
+    if (await directory.exists()) {
+      await for (final entry in directory.list(followLinks: false)) {
+        final marker = File('${entry.path}/installed.json');
+        if (entry is Directory && await marker.exists()) {
+          try {
+            final json = jsonDecode(await marker.readAsString()) as Map;
+            return {'installed': true, 'version': json['dsh']};
+          } on FormatException {
+            continue;
+          }
+        }
+      }
+    }
+    return {'installed': false, 'version': null};
+  }
+
+  Future<JsonMap> _selected() async {
+    final chosen = await _kind();
+    return switch (chosen.kind) {
+      null => {'kind': null, 'problem': chosen.problem},
+      AgentRuntimeKind.codex => {'kind': 'codex'},
+      AgentRuntimeKind.dsh => {
+          'kind': 'dsh',
+          'dshVersion': chosen.fixed?.version ?? (await _dsh())['version'],
+        },
+    };
   }
 
   Future<JsonMap> _codex() async {
@@ -146,7 +195,8 @@ final class AppRuntimeFacts {
 
   Future<JsonMap> _model() async {
     final value = await _file('model.json');
-    final managed = value['source'] == 'nipaplay' ||
+    final managed = (await _kind()).kind == AgentRuntimeKind.dsh ||
+        value['source'] == 'nipaplay' ||
         (value['source'] == null && managedModelByDefault);
     final config = File('${codexHome.path}/config.toml');
     final codexConfig = await config.exists();
@@ -184,6 +234,7 @@ final class AppRuntimeFacts {
         'provider': value['provider'],
         'baseUrl': value['baseUrl'] == null ? null : settingWords(value['baseUrl']),
         'model': value['model'],
+        'api': value['api'] == 'chat' ? 'chat' : 'responses',
         'keyConfigured': keyConfigured,
         if (keyUnknown != null) 'keyConfiguredReason': keyUnknown,
       } else ...{
@@ -223,6 +274,7 @@ final class AppRuntimeFacts {
         'selected': await _selected(),
         'running': _live(),
         'codex': await _codex(),
+        'dsh': await _dsh(),
       },
       'model': await _model(),
     };

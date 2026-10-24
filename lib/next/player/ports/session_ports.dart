@@ -164,7 +164,8 @@ final class SessionControls
 
   @override
   Future<JsonMap> inspect(String operation, JsonMap input) async {
-    if (const ['playback.retry', 'playback.navigate', 'playback.chapters'].contains(operation)) {
+    if (const ['playback.retry', 'playback.navigate', 'playback.chapters',
+        'playback.set_skip_segment'].contains(operation)) {
       _sameSession(input);
     }
     switch (operation) {
@@ -202,7 +203,10 @@ final class SessionControls
               }
           ],
           'activeSkipKind': _playback.activeSkipSegment?.kind.name,
+          'aniskip': _playback.aniskipFacts,
         };
+      case 'playback.set_skip_segment':
+        return _setSkipSegment(input);
       case 'playback.navigate':
         if (input['skipKind'] case final String kind) {
           final segment = kind == 'current'
@@ -226,6 +230,81 @@ final class SessionControls
         return _playback.danmaku.entries(input, _playback.position.inMilliseconds);
     }
     throw Failure(FailureCode.invalidInput, 'Unknown operation $operation.');
+  }
+
+  /// Sets or clears the opening or ending of the file that plays, for good:
+  /// the file remembers it, so the same episode opened again has it. It enters
+  /// the same slot every other source fills and wins by rank (Nipa's outranks
+  /// the automatic sources, the user's own mark outranks hers).
+  Future<JsonMap> _setSkipSegment(JsonMap input) async {
+    final s = _internal();
+    if (!s.phase.value.open) {
+      throw const Failure(FailureCode.unavailable, 'No open video session.');
+    }
+    final skip = _playback.skipSources;
+    if (skip == null) {
+      throw const Failure(FailureCode.unavailable,
+          'Playback has no media store to remember a skip segment in.');
+    }
+    final kind = SkipSegmentKind.values.byName(input['kind'] as String);
+    final clear = input['clear'] == true;
+    final startMs = input['startMs'] as int?, endMs = input['endMs'] as int?;
+    ({int startMs, int endMs})? range;
+    if (clear) {
+      if (startMs != null || endMs != null) {
+        throw const Failure(FailureCode.invalidInput,
+            'clear takes no startMs or endMs.');
+      }
+    } else {
+      if (startMs == null || endMs == null) {
+        throw const Failure(FailureCode.invalidInput,
+            'Give startMs and endMs, or clear true.');
+      }
+      if (endMs <= startMs) {
+        throw const Failure(FailureCode.invalidInput,
+            'endMs must be greater than startMs.');
+      }
+      final length = s.duration.inMilliseconds;
+      if (length > 0 && endMs > length) {
+        throw Failure(FailureCode.invalidInput,
+            'endMs is past the end of the video ($length ms).',
+            details: {'durationMs': length});
+      }
+      range = (startMs: startMs, endMs: endMs);
+    }
+    final segments = await skip.store.write(s.path, kind,
+        range: range, invocationId: BodyChanges.invocation?.id);
+    if (!identical(_playback.session, s) || s.phase.value.done) {
+      throw const Failure(FailureCode.conflict, 'Playback changed meanwhile.');
+    }
+    _playback.danmaku.setSkipSegments('agent', segments);
+    await _playback.danmaku.settled;
+    final merged = _playback.danmaku.timeline.segments
+        .where((x) => x.kind == kind)
+        .firstOrNull;
+    return {
+      'sessionId': s.id,
+      'kind': kind.name,
+      'cleared': clear,
+      'remembered': true,
+      // What the slot holds now, which another source may hold instead.
+      'inEffect': merged == null
+          ? null
+          : {
+              'source': merged.source.name,
+              'startMs': merged.start.inMilliseconds,
+              'endMs': merged.end.inMilliseconds,
+            },
+      'skipSegments': [
+        for (final x in _playback.danmaku.timeline.segments)
+          {
+            'kind': x.kind.name,
+            'source': x.source.name,
+            'startMs': x.start.inMilliseconds,
+            'endMs': x.end.inMilliseconds,
+          }
+      ],
+    };
   }
 
   void _sameSession(JsonMap input) {

@@ -4,6 +4,7 @@ import 'dart:math' as math;
 import 'package:crypto/crypto.dart';
 
 import 'package:nipaplay/constants/danmaku_color_presets.dart';
+import 'package:nipaplay/models/danmaku/danmaku_item.dart';
 import 'package:nipaplay/services/danmaku_density_analyzer.dart';
 import 'package:nipaplay/services/intro_skip/danmaku_intro_detector.dart';
 import 'package:nipaplay/services/intro_skip/skip_segment.dart';
@@ -50,7 +51,8 @@ DanmakuTimeline buildTimeline(Map<String, Map<String, dynamic>> tracks,
     Map<String, Object?> settings, int durationMs,
     List<Map<String, dynamic>> chapters,
     {Set<String> spoilerTexts = const {},
-    List<Map<String, dynamic>> externalSegments = const []}) {
+    List<Map<String, dynamic>> externalSegments = const [],
+    List<String> pluginBlockWords = const []}) {
   final watch = Stopwatch()..start();
   // Classic's rule format:
   // `name/expression/`; anything else is a literal. Each rule is compiled
@@ -58,7 +60,12 @@ DanmakuTimeline buildTimeline(Map<String, Map<String, dynamic>> tracks,
   final literals = <String>[];
   final regexps = <RegExp>[];
   final invalid = <String>[];
-  for (final rule in settings['danmaku.blockWords'] as List? ?? const []) {
+  // The user's own words, then those of the enabled plugins (`blockWords`),
+  // under the same rule format; a plugin's change reaches the next build.
+  for (final rule in [
+    ...settings['danmaku.blockWords'] as List? ?? const [],
+    ...pluginBlockWords,
+  ]) {
     final text = rule as String;
     final parts = text.split('/');
     if (parts.length >= 3 && parts.first.isNotEmpty && parts.last.isEmpty) {
@@ -321,4 +328,23 @@ List<Map<String, dynamic>> windowOf(
     return lo;
   }
   return timeline.entries.sublist(bound(from), bound(to));
+}
+
+
+/// The `load` message of a plugin's renderer for the comments between [from]
+/// and [to] seconds of list time, as the JSON text it is sent as: built here,
+/// on the worker, so the main isolate neither copies the comments nor encodes
+/// them (the cost grows with the window, not with the list). `window` tells
+/// the renderer that the list it gets is one window of the whole.
+String pluginLoadMessage(
+    DanmakuTimeline timeline, double from, double to, int version) {
+  return jsonEncode({
+    'type': 'load',
+    'version': version,
+    'items': [
+      for (final e in windowOf(timeline, from, to))
+        DanmakuItem.fromMap(e).toMap()
+    ],
+    'window': {'startSeconds': from, 'endSeconds': to},
+  });
 }

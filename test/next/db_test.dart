@@ -693,6 +693,7 @@ void main() {
         'media_projection_outbox': {'id': 'p', 'file_id': 'e1', 'file_revision': 0, 'binding_revision': 0, 'payload': '{}', 'state': 'pending'},
         'media_scan_items': {'job_id': 'j1', 'file_id': 'e1', 'file_revision': 0},
         'file_subtitles': {'file_id': 'e1', 'facts': '{}'},
+        'file_skip_segments': {'file_id': 'e1', 'kind': 'opening', 'start_ms': 0, 'end_ms': 1, 'set_at': 't'},
         'next_library_index': {'id': 'x', 'added': 1, 'payload': '{}', 'facts': '{}'},
         'ui_cache': {'id': 'c', 'fingerprint': 'f', 'payload': 'p'},
       };

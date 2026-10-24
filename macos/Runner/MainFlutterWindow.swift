@@ -3,6 +3,7 @@ import UserNotifications
 import FlutterMacOS
 import ObjectiveC.runtime
 import QuartzCore
+import WebKit
 import media_kit_video
 
 /// Flutter's macOS text input plugin does not select a Roman input source for
@@ -55,6 +56,36 @@ class PasswordInputModePlugin: NSObject, FlutterPlugin {
     deinit {
         NotificationCenter.default.removeObserver(self)
         restoreInputContext()
+    }
+}
+
+/// webview_flutter's macOS WKWebView has no way to turn its background off
+/// (`opaque is not implemented on macOS`), so a plugin's danmaku page would sit
+/// on an opaque white box over the video. This stops every WKWebView below the
+/// Flutter view drawing a background; only the plugin renderer hosts one.
+class WebViewTransparencyPlugin: NSObject, FlutterPlugin {
+    static func register(with registrar: FlutterPluginRegistrar) {
+        let channel = FlutterMethodChannel(
+            name: "nipaplay/webview_transparency", binaryMessenger: registrar.messenger)
+        let instance = WebViewTransparencyPlugin()
+        registrar.addMethodCallDelegate(instance, channel: channel)
+    }
+
+    func handle(_ call: FlutterMethodCall, result: @escaping FlutterResult) {
+        guard call.method == "clearBackgrounds" else {
+            result(FlutterMethodNotImplemented)
+            return
+        }
+        var found = 0
+        func visit(_ view: NSView) {
+            if let web = view as? WKWebView {
+                web.setValue(false, forKey: "drawsBackground")
+                found += 1
+            }
+            view.subviews.forEach(visit)
+        }
+        for window in NSApp.windows { if let root = window.contentView { visit(root) } }
+        result(found)
     }
 }
 
@@ -1751,6 +1782,7 @@ class MainFlutterWindow: NSWindow {
     // 注册自定义安全书签插件
     SecurityBookmarkPlugin.register(with: flutterViewController.registrar(forPlugin: "SecurityBookmarkPlugin"))
     PasswordInputModePlugin.register(with: flutterViewController.registrar(forPlugin: "PasswordInputModePlugin"))
+    WebViewTransparencyPlugin.register(with: flutterViewController.registrar(forPlugin: "WebViewTransparencyPlugin"))
     SystemSharePlugin.register(with: flutterViewController.registrar(forPlugin: "SystemSharePlugin"))
     ClipboardImagePlugin.register(with: flutterViewController.registrar(forPlugin: "ClipboardImagePlugin"))
     MacOSNativeVideoPlugin.register(with: flutterViewController.registrar(forPlugin: "MacOSNativeVideoPlugin"))

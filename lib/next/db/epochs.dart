@@ -66,6 +66,8 @@ const notCatalogueTables = [
   'media_scan_items',
   'danmaku_alignment_candidates',
   'danmaku_storage_state',
+  // Read when a file opens, not part of the library's layout.
+  'file_skip_segments',
   // Derived from the catalogue; writing it is what building does.
   'next_library_index',
   // The counter itself, and SQLite's own.

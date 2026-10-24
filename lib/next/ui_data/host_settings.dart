@@ -17,6 +17,27 @@ abstract interface class NextHostRuntimeSettings {
   /// Refuses while a chat process is using the runtime.
   Future<void> removeCodex();
   Future<void> setCodexRuntime(UiCodexRuntimeChoice choice);
+
+  /// Which runtime Nipa thinks in. DeepSeek Harness is the default; Codex is
+  /// the alternative.
+  Future<UiAgentRuntime> agentRuntime();
+  Future<void> setAgentRuntime(UiAgentRuntimeKind kind);
+
+  /// The Node.js and DeepSeek Harness NipaPlay fetches for itself.
+  Future<UiDshRuntime> dshRuntime();
+
+  /// Completes when installation ends. Subscribe to changes for byte progress.
+  /// Repeating after cancellation or a failure continues the partial downloads.
+  Future<void> installDsh();
+  Future<void> cancelDshInstall();
+
+  /// Refuses while a chat process is using the runtime.
+  Future<void> removeDsh();
+
+  /// Directories of the same layout as the npm registry and nodejs.org/dist;
+  /// every file is still checked against the pinned SHA-256. Null or empty
+  /// uses the official addresses.
+  Future<void> setDshMirrors({String? registry, String? node});
 }
 
 extension NextHostRuntimeAccess on NextHostSettings {
@@ -25,6 +46,48 @@ extension NextHostRuntimeAccess on NextHostSettings {
     if (host is NextHostRuntimeSettings) return host as NextHostRuntimeSettings;
     throw UnsupportedError('此宿主不支持运行包设置');
   }
+}
+
+enum UiAgentRuntimeKind { dsh, codex }
+
+final class UiAgentRuntime {
+  const UiAgentRuntime({required this.kind, this.fixed = false});
+  final UiAgentRuntimeKind kind;
+
+  /// The environment or a lab profile decides; the choice cannot be changed here.
+  final bool fixed;
+}
+
+enum UiDshStatus {
+  /// This platform has no traced runtime yet.
+  unsupported,
+  notInstalled,
+  downloading,
+  unpacking,
+  ready,
+  failed,
+}
+
+final class UiDshRuntime {
+  const UiDshRuntime(
+      {required this.status,
+      required this.version,
+      this.receivedBytes = 0,
+      this.totalBytes,
+      this.problem,
+      this.registryMirror,
+      this.nodeMirror,
+      this.fixed = false});
+  final UiDshStatus status;
+
+  /// The DeepSeek Harness version of the manifest.
+  final String version;
+  final int receivedBytes;
+  final int? totalBytes;
+  final String? problem, registryMirror, nodeMirror;
+
+  /// An installation named by the environment or a lab file is used instead.
+  final bool fixed;
 }
 
 enum UiCodexStatus { notInstalled, downloading, verifying, ready, failed }
@@ -112,6 +175,14 @@ abstract interface class NextHostSettings {
   /// Takes effect for the next conversation turn.
   Future<void> setModel(UiModelChoice choice);
 
+  /// What the Codex configuration on this computer holds (without its key),
+  /// or null when there is none to read.
+  Future<UiModelChoice?> codexModel();
+
+  /// Takes the provider, address, model and key from the Codex configuration
+  /// on this computer as this app's own model; the key goes to the vault.
+  Future<void> importCodexModel();
+
   /// For an endpoint set up here, sends one small Responses request requiring
   /// a harmless function call. Existing Codex configurations use a probe thread.
   /// Success verifies that call only, not every Codex tool or streaming feature.
@@ -146,8 +217,25 @@ final class UiModelSetup {
     this.hasKey = false,
     this.inUse,
     this.problem,
+    this.api = UiModelApi.responses,
+    this.reasoning,
+    this.compat,
+    this.runtime = UiAgentRuntimeKind.codex,
   });
   final UiModelSource source;
+
+  /// Which runtime reads this model.
+  final UiAgentRuntimeKind runtime;
+
+  /// The wire protocol of the address (DeepSeek Harness reads either; Codex
+  /// only Responses).
+  final UiModelApi api;
+
+  /// Thinking effort (`low`, `medium`, `high`), or null for none.
+  final String? reasoning;
+
+  /// pi-ai wire switches a template supplied; carried, never inferred.
+  final Map<String, Object?>? compat;
 
   /// Whether a Codex configuration exists to use.
   final bool codexAvailable;
@@ -170,6 +258,8 @@ final class UiModelSetup {
   final String? problem;
 }
 
+enum UiModelApi { responses, chat }
+
 final class UiModelChoice {
   const UiModelChoice({
     required this.source,
@@ -177,8 +267,14 @@ final class UiModelChoice {
     this.baseUrl,
     this.model,
     this.apiKey,
+    this.api,
+    this.reasoning,
+    this.compat,
   });
   final UiModelSource source;
+  final UiModelApi? api;
+  final String? reasoning;
+  final Map<String, Object?>? compat;
   final String? provider;
   final String? baseUrl;
   final String? model;

@@ -143,13 +143,17 @@ void _run(SendPort replies) {
               data['durationMs'] as int,
               data['chapters'] as List<Map<String, dynamic>>,
               spoilerTexts: Set<String>.of(data['spoilerTexts'] as List<String>),
-              externalSegments: (data['externalSegments'] as List).cast<Map<String, dynamic>>());
+              externalSegments: (data['externalSegments'] as List).cast<Map<String, dynamic>>(),
+              pluginBlockWords: (data['pluginBlockWords'] as List).cast<String>());
           version = data['version'] as int;
           result = snapshot.view();
         case 'dump':
           result = snapshot.entries;
         case 'window':
           result = windowOf(snapshot, data['from'] as double, data['to'] as double);
+        case 'window.plugin':
+          result = [version, pluginLoadMessage(snapshot,
+              data['from'] as double, data['to'] as double, version)];
         case 'page':
           if (data['version'] != version) {
             result = <String, dynamic>{'conflict': true};

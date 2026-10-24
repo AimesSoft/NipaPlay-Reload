@@ -67,6 +67,7 @@ import 'ui_data/library_sources.dart';
 import 'ui_data/library_capability.dart';
 import 'ui/shell/next_ui_preference.dart';
 import 'ui_data/capability.dart';
+import 'chat/dsh_runtime.dart' show AgentRuntimeKind;
 import 'chat/session_store.dart';
 import 'memory/service.dart';
 import 'memory/capability_changes.dart';
@@ -388,6 +389,10 @@ final class NextCore {
         codexHome: Directory(LabProfile.active
             ? '${LabProfile.root}/codex-home'
             : '${Platform.environment[Platform.isWindows ? 'USERPROFILE' : 'HOME']}/.codex'),
+        defaultRuntime: LabProfile.active &&
+                File('${LabProfile.root}/codex-home/config.toml').existsSync()
+            ? AgentRuntimeKind.codex
+            : AgentRuntimeKind.dsh,
         managedModelByDefault: !LabProfile.active &&
             (Platform.isMacOS || Platform.isWindows || Platform.isLinux));
     appRestart = AppRestart(
