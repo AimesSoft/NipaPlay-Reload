@@ -73,6 +73,11 @@ final class ErikaDriver extends AdapterDriver
   /// The state Erika last reported.
   ErikaPlaybackState? _erikaState;
 
+  /// A play Erika took whose Playing report has not come yet. Erika is
+  /// playing by then, but what it has reported still says otherwise; a
+  /// second play in that gap is refused by Erika for already playing.
+  bool _playTaken = false;
+
   bool _canPlay() => const {
         ErikaPlaybackState.ready,
         ErikaPlaybackState.paused,
@@ -86,6 +91,10 @@ final class ErikaDriver extends AdapterDriver
     switch (event.kind) {
       case ErikaEventKind.stateChanged:
         _erikaState = event.state;
+        if (event.state == ErikaPlaybackState.playing ||
+            event.state == ErikaPlaybackState.stopped) {
+          _playTaken = false;
+        }
         for (final (state, waiter) in [..._stateWaiters]) {
           if (!waiter.isCompleted && state()) waiter.complete();
         }
@@ -286,10 +295,16 @@ final class ErikaDriver extends AdapterDriver
 
   @override
   Future<void> pauseMedia(bool paused) async {
-    if (paused) return adapter.pauseDirectly();
+    if (paused) {
+      _playTaken = false;
+      return adapter.pauseDirectly();
+    }
     try {
       await adapter.playDirectly();
+      _playTaken = true;
     } on PlatformException catch (refused) {
+      // Taken a moment ago, not reported yet: what was asked for is so.
+      if (_playTaken) return;
       // Erika takes play from ready, paused or stopped only. A state it
       // has not reported yet (the open still settling) is waited for, once;
       // otherwise the state it is in is the answer.
@@ -310,6 +325,7 @@ final class ErikaDriver extends AdapterDriver
       }
       queue.live();
       await adapter.playDirectly();
+      _playTaken = true;
     }
   }
 

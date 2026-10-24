@@ -516,6 +516,7 @@ def accept_check(kernel):
     info = gui('playback.info', {})
     record('accept_danmaku', kernel=kernel, renderer=info.get('danmakuRenderer'))
     # The plugin renderer.
+    # (Erika draws danmaku natively: the plugin renderer setting is not offered there, and says not_found.)
     set_result = gui('settings.set', {'key': 'danmaku.pluginRenderer', 'value': 'plugin:lab.test_renderer/canvas', 'reason': '统一验收'})
     time.sleep(4.0)
     shot('%s-accept-plugin' % kernel)
