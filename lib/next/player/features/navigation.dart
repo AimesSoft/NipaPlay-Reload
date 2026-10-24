@@ -8,7 +8,8 @@ final class PlaybackNavigation {
   const PlaybackNavigation();
 
   JsonMap chapters(PlaybackSession session) {
-    final chapters = session.media.value?.chapters ?? const <ChapterFacts>[];
+    final provided = session.media.value?.chapters;
+    final chapters = provided ?? const <ChapterFacts>[];
     final at = session.position.inMilliseconds;
     // Binary search; capabilities and UI never scan a growing chapter list.
     var lo = 0, hi = chapters.length;
@@ -25,6 +26,9 @@ final class PlaybackNavigation {
       'items': [for (final c in chapters) c.toJson()],
       'index': lo - 1,
       'source': 'kernel',
+      // False: the kernel does not report chapters at all (an empty list
+      // with this true is a file without any).
+      'kernelProvidesChapters': provided != null,
       'skipSegments': const [],
       'activeSkipKind': null
     };

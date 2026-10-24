@@ -337,7 +337,7 @@ final class MediaFacts {
     this.subtitles = const [],
     this.activeAudio = const [],
     this.activeSubtitles = const [],
-    this.chapters = const [],
+    this.chapters,
   });
 
   final Duration duration;
@@ -354,7 +354,9 @@ final class MediaFacts {
   final List<int> activeAudio;
   final List<int> activeSubtitles;
   /// Chapter metadata captured by the driver, never queried by the UI.
-  final List<ChapterFacts> chapters;
+  /// Null: the kernel does not provide chapters (an empty list says the file
+  /// has none).
+  final List<ChapterFacts>? chapters;
 
   bool get hasVideo => width > 0 && height > 0;
   double get aspect => hasVideo ? width / height : 16 / 9;
@@ -371,7 +373,9 @@ final class MediaFacts {
         'subtitles': [for (final t in subtitles) t.toJson()],
         'activeAudio': activeAudio,
         'activeSubtitles': activeSubtitles,
-        'chapters': [for (final c in chapters) c.toJson()],
+        'chapters': chapters == null
+            ? null
+            : [for (final c in chapters!) c.toJson()],
       };
 }
 

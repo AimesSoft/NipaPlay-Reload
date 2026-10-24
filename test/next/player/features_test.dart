@@ -55,6 +55,21 @@ void main() {
     await temp.delete(recursive: true);
   });
 
+  test('a kernel that reports no chapters says so, not an empty list of them',
+      () async {
+    final plain = FakeHost();
+    final other = SessionPlayback(plain.host);
+    addTearDown(() async {
+      await other.close(reason: 'test');
+      await other.dispose();
+    });
+    await other.openItem(PlayableItem(videoPath: video));
+    final chapters = await other.inspection.inspect('playback.chapters', {});
+    expect(chapters['kernelProvidesChapters'], false);
+    expect(chapters['items'], isEmpty);
+    expect(other.session!.media.value!.toJson()['chapters'], isNull);
+  });
+
   test(
       'chapter seeks and bidirectional native frame steps use the current session',
       () async {
@@ -62,6 +77,7 @@ void main() {
     final id = playback.snapshot().sessionId;
     final chapters = await playback.inspection.inspect('playback.chapters', {});
     expect((chapters['items'] as List).length, 3);
+    expect(chapters['kernelProvidesChapters'], true);
     await playback.inspection
         .inspect('playback.navigate', {'sessionId': id, 'chapterIndex': 1});
     expect(playback.position.inMilliseconds, closeTo(60000, 100));

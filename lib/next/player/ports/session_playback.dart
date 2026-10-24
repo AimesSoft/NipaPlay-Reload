@@ -143,6 +143,8 @@ final class SessionPlayback implements NextPlayback, VideoStageHost {
   void _danmakuChanged() {
     _danmaku.value = danmaku.version;
     _frame.poke();
+    // The skip segments or the setting may have changed.
+    _armSkipEdge();
     // Skipping turned on while a file plays: AniSkip is asked then.
     final enabled = danmaku.settings['player.introSkipEnabled'] == true;
     final turnedOn = enabled && !_introSkipWas;
@@ -240,6 +242,7 @@ final class SessionPlayback implements NextPlayback, VideoStageHost {
       old.media.removeListener(_sync);
       old.surface.removeListener(_sync);
       old.clock.removeListener(_frame.clockChanged);
+      old.clock.removeListener(_armSkipEdge);
       old.subtitles.state.removeListener(_frame.poke);
       old.audio.removeListener(_frame.poke);
       old.subtitles.overlay.removeListener(_overlayChanged);
@@ -257,6 +260,7 @@ final class SessionPlayback implements NextPlayback, VideoStageHost {
       next.media.addListener(_sync);
       next.surface.addListener(_sync);
       next.clock.addListener(_frame.clockChanged);
+      next.clock.addListener(_armSkipEdge);
       // The menus' ticks follow the choices; the overlay its lines.
       next.subtitles.state.addListener(_frame.poke);
       next.audio.addListener(_frame.poke);
@@ -266,6 +270,7 @@ final class SessionPlayback implements NextPlayback, VideoStageHost {
     }
     _overlayChanged();
     _sync();
+    _armSkipEdge();
   }
 
   final _subtitleOverlay = ValueNotifier<OverlayFrame?>(null);
@@ -642,6 +647,51 @@ final class SessionPlayback implements NextPlayback, VideoStageHost {
 
   @override
   SkipSegmentKind? get skippable => activeSkipSegment?.kind;
+
+  // ---- the Skip button follows the position through the segments ----
+
+  Timer? _skipEdge;
+  SkipSegmentKind? _skipPushed;
+
+  /// Tells the controls when the position enters or leaves a skip segment,
+  /// whether or not they show: pushed at the edge, by the clock's own
+  /// arithmetic (one timer, set to the next edge of the segments; never a
+  /// per-frame check). Called again whenever the clock re-anchors (a seek,
+  /// play or pause, another rate, a drift), the segments or the setting
+  /// change, or the session does.
+  void _armSkipEdge() {
+    _skipEdge?.cancel();
+    _skipEdge = null;
+    final kind = skippable;
+    if (kind != _skipPushed) {
+      _skipPushed = kind;
+      _frame.poke();
+    }
+    final s = _session;
+    final clock = s?.clock;
+    if (s == null ||
+        s.phase.value.done ||
+        clock == null ||
+        !clock.advancing ||
+        danmaku.settings['player.introSkipEnabled'] != true) {
+      return;
+    }
+    final now = clock.now().inMicroseconds / 1e6;
+    double? edge;
+    for (final segment in danmaku.timeline.segments) {
+      for (final at in [segment.startSeconds, segment.endSeconds]) {
+        if (at > now && (edge == null || at < edge)) edge = at;
+      }
+    }
+    if (edge == null) return;
+    final rate = clock.rate <= 0 ? 1.0 : clock.rate;
+    // A little past the edge, so the clock has crossed it when asked.
+    final wait = Duration(microseconds: ((edge - now) / rate * 1e6).ceil() + 20000);
+    _skipEdge = Timer(wait, () {
+      _skipEdge = null;
+      PlayerPerf.span('facade.skipEdge', _armSkipEdge);
+    });
+  }
   SkipSegment? get activeSkipSegment {
     if (danmaku.settings['player.introSkipEnabled'] != true) return null;
     final seconds = position.inMicroseconds / 1e6;
@@ -1091,6 +1141,7 @@ final class SessionPlayback implements NextPlayback, VideoStageHost {
     sources.dispose();
     host.current.removeListener(_bind);
     _hide?.cancel();
+    _skipEdge?.cancel();
     _persistVolume?.cancel();
     if (_window case final watch?) windowManager.removeListener(watch);
     _frame.stop();
