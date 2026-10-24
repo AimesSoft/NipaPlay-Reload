@@ -110,6 +110,10 @@ def endpoint_file():
         marker = parent / "lab-profile.json"
         if marker.is_file():
             return Path(json.loads(marker.read_text())["endpointFile"])
+    # A headless host keeps endpoint.json beside headless.json; its harness is <data>/harness.
+    for parent in Path(__file__).resolve().parents:
+        if (parent / "headless.json").is_file():
+            return parent / "endpoint.json"
     profile = os.environ.get("NIPAPLAY_PROFILE")
     if profile is not None:
         if not re.fullmatch(r"[a-z0-9][a-z0-9_-]{0,63}", profile):
@@ -344,6 +348,68 @@ def task_summary(envelope):
             "activeTotal": len(active), "active": active[:10]}
 
 
+def chat_command(client, args):
+    """Talk to Nipa on a headless host. A turn runs in the host in the background;
+    these calls start it, wait for it and read it. Only the person at the host can
+    send or stop (Nipa's own calls are refused)."""
+    thread = {"threadId": args.thread} if getattr(args, "thread", None) else {}
+    def done(envelope):
+        if envelope.get("status") != "completed":
+            return envelope
+        return envelope["result"]
+    verb = args.chat_command
+    if verb in ("new", "main", "list"):
+        return done(client.call("chat.session." + verb, {}))
+    if verb == "switch":
+        return done(client.call("chat.session.switch", {"threadId": args.thread_id}))
+    if verb == "status":
+        return done(client.call("chat.status", dict(thread, waitSeconds=min(55, max(0, args.wait)))))
+    if verb == "read":
+        return done(client.call("chat.read", dict(thread, turns=args.turns)))
+    if verb == "stop":
+        return done(client.call("chat.stop", thread))
+    if verb == "process":
+        if not thread:
+            status = client.call("chat.status", {})
+            if status.get("status") != "completed":
+                return status
+            thread = {"threadId": status["result"]["threadId"]}
+        return done(client.call("chat.turn.process", dict(thread, turnId=args.turn_id)))
+    # say
+    text = sys.stdin.read() if args.text == "-" else json_text(args.text)
+    sent = client.call("chat.send", dict(thread, text=text))
+    if sent.get("status") != "completed" or args.wait <= 0:
+        return done(sent)
+    sent = sent["result"]
+    end = time.monotonic() + args.wait
+    status = None
+    while True:
+        remaining = end - time.monotonic()
+        status = client.call("chat.status", {"threadId": sent["threadId"],
+                                             "waitSeconds": int(min(55, max(0, remaining)))})
+        if status.get("status") != "completed":
+            return status
+        if not status["result"]["busy"] or time.monotonic() >= end:
+            break
+    result = {"sent": sent, "turn": status["result"]["turn"], "busy": status["result"]["busy"]}
+    if not result["busy"]:
+        read = client.call("chat.read", {"threadId": sent["threadId"], "turns": 1})
+        if read.get("status") == "completed" and read["result"]["turns"]:
+            items = read["result"]["turns"][-1]["items"]
+            result["reply"] = "\n".join(i["text"] for i in items if i["type"] == "agentMessage")
+            result["steps"] = [{"command": i["command"], "status": i["status"], "exitCode": i["exitCode"]}
+                               for i in items if i["type"] == "commandExecution"]
+    else:
+        result["next"] = "The turn is still running: ./nipa chat status --wait 55, then ./nipa chat read."
+    return result
+
+
+def json_text(text):
+    if text.startswith("@"):
+        return Path(text[1:]).expanduser().read_text(encoding="utf-8")
+    return text
+
+
 def main():
     parser = JsonArgumentParser(description=__doc__)
     parser.add_argument("--output-full", action="store_true", help="Bypass the 24 KiB terminal budget")
@@ -367,6 +433,26 @@ def main():
     sync = commands.add_parser("sync-repository", help="Transfer a committed Git revision as a bundle; no checkout/merge")
     sync.add_argument("--repository", default=".")
     sync.add_argument("--ref", default="HEAD")
+    chat = commands.add_parser("chat", help="Talk to Nipa on this headless host (the person's tool)")
+    chat_commands = chat.add_subparsers(dest="chat_command", required=True)
+    for name in ("new", "main", "list"):
+        chat_commands.add_parser(name)
+    chat_commands.add_parser("switch").add_argument("thread_id")
+    say = chat_commands.add_parser("say", help="Send TEXT (or @file, or - for standard input)")
+    say.add_argument("text")
+    say.add_argument("--thread")
+    say.add_argument("--wait", type=int, default=0, metavar="SECONDS",
+                     help="Wait up to SECONDS for the turn to end and print the reply and the commands she ran")
+    status = chat_commands.add_parser("status")
+    status.add_argument("--thread")
+    status.add_argument("--wait", type=int, default=0, metavar="0..55")
+    read = chat_commands.add_parser("read")
+    read.add_argument("--thread")
+    read.add_argument("--turns", type=int, default=3)
+    chat_commands.add_parser("stop").add_argument("--thread")
+    process = chat_commands.add_parser("process", help="Redacted commands and reasoning summaries of one turn")
+    process.add_argument("turn_id")
+    process.add_argument("--thread")
     for command_parser in commands.choices.values():
         command_parser.add_argument("--output-full", action="store_true", default=argparse.SUPPRESS,
                                     help="Bypass the 24 KiB terminal budget; results may be truncated by the caller")
@@ -397,6 +483,8 @@ def main():
             data = client.call(args.action, json_input(args.input), args.execute)
         elif args.command == "query":
             data = client.call("state.query", dict(json_input(args.input), view=args.view))
+        elif args.command == "chat":
+            data = chat_command(client, args)
         elif args.command == "sync-repository":
             data = client.sync_repository(args.repository, args.ref)
         else:

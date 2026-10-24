@@ -49,7 +49,7 @@ Windows/Linux x64 原生库及 AOT 已编译，X45 运行检查只在 Mac 本机
 工作站真机运行待主控执行，见 [X45_RUNBOOK.md](X45_RUNBOOK.md)。
 
 当前缺口：播放器、Classic 账号与历史、完整弹弹play账号宿主、
-Classic 更新日历、内嵌 Agent 对话。无界面只接受宿主从 stdin 登记的组网测试 token，
+Classic 更新日历。Nipa 的对话见下文“Nipa 在无界面主机上”。无界面只接受宿主从 stdin 登记的组网测试 token，
 没有登录密码 Action；未配置 Agent 目的设备的后续仍可到达 ready，不运行模型决定。
 
 X53 接入同一 `NipaplayServerRouter`、`DandanplayHttpClient` 和 provider/弹幕来源。
@@ -289,12 +289,11 @@ set NIPAPLAY_CODEX_EXECUTABLE=D:\nipaplay-next\x43-tools\codex\package\vendor\x8
 `CODEX_HOME` 内的 provider 配置和认证须由用户决定并在目标机器准备。实验宿主传
 `labRoot` 时，会强制使用该根内的 `codex-home/config.toml` 和 `temp`，不采用用户的
 `~/.codex`。X43 只用空配置验证 initialize/initialized 握手及关闭，没有 thread/turn、
-模型密钥或真实对话。无界面入口当前不创建 ChatHost；集成对话与自动执行后续是另一步。
+模型密钥或真实对话。无界面入口现在创建的是 DSH 的对话宿主（见“Nipa 在无界面主机上”），Windows 原生 Codex 的这条路径仍不接入无界面。
 
 ## Nipa 的运行环境（DeepSeek Harness）
 
-无界面宿主自己没有对话（描述里 `conversationHost: false`），但可以准备并验证 Nipa 将来要用
-的运行环境：与桌面版同一份清单（`assets/next/agent/dsh-runtime.json`，Linux x64、
+无界面宿主可以准备并验证 Nipa 用的运行环境（运行它见下一节）：与桌面版同一份清单（`assets/next/agent/dsh-runtime.json`，Linux x64、
 Windows x64、macOS arm64 已追踪），装在 `<data>/dsh-runtime/`，不动全局。
 
 ```sh
@@ -308,3 +307,68 @@ nipaplay_headless --dsh-check   --data DIR   # 带 NipaPlay 插件启动，开�
 否则用 `<data>/dsh-runtime/` 里装好的；`NIPAPLAY_AGENT_RUNTIME=codex` 在此宿主被拒绝。
 主程序暂时还不能编译（见交付说明），这三条命令也可不经主程序运行：
 `dart run scripts/next/dsh_runtime/headless_dsh.dart install|status|check --data DIR`。
+
+## Nipa 在无界面主机上
+
+无界面主机和有界面的桌面一样可以运行 Nipa：宿主创建 `ChatHost`，在本机装好的 DSH 上
+运行她，有自己的 harness（`<data>/harness`）、记忆、钩子和线程，各台设备上的 Nipa 各记各的。
+对话宿主与桌面共用同一份实现：同一套线程存储（`harness_sessions`，键为 `dsh:<harness>`）、
+回合过程存储（`<data>/turn-process/`）、后续与帮手；DSH 的数据在 `<data>/dsh-home`，
+NipaPlay 的 DSH 插件由每次启动从 `--agent-assets` 写到 `<data>/agent/dsh/`。
+
+**什么时候运行。** 同时满足才运行，缺哪一项都如实报告，不会半起：
+
+1. 这台主机的 agent 开关开着（`<data>/agent.json`，没有这个文件就是开）。
+2. 模型已设置，密钥在保险库里。
+3. DSH 运行环境已装（`--dsh-install`）或由环境变量指定。
+4. `--agent-assets` 指向的目录里有清单和 DSH 插件（默认当前目录的 `assets/next/agent`）。
+
+三个文件变化（`agent.json`、`model.json`、`dsh-runtime/`）由正在运行的宿主监听，改完立即生效，
+不需要重启；已在运行的宿主在下一回合开始时采用新的模型。宿主启动不等运行环境起来：
+Nipa 在后台起，`app.runtime` 里 `conversationHost` 说明她现在是 `disabled`、`missing`、
+`starting`、`running` 还是 `failed`，`missing` 列出缺的（`model`、`key`、`runtime`、`agentAssets`），
+`reason` 给一句话。`mesh/describe` 的 `conversationHost` 和 `agent` 同样是实时的。
+agent 开关关掉时宿主停掉对话进程，所有对话入口都说明原因。
+
+**模型与密钥（只有主机上的人能设，Nipa 不能）。** 提供方、地址、模型名、接口（responses 或 chat）
+和思考强度存在 `<data>/model.json`（与桌面同一格式），密钥进 `<data>/vault`。
+命令行一次录入，密钥只从标准输入读，不出现在参数、shell 历史、日志或任何事实里：
+
+```sh
+printf %s "$KEY" | ./nipaplay-headless --data DIR --model-set \
+  --provider NAME --base-url https://example/v1 --model NAME [--api responses|chat] \
+  [--reasoning low|medium|high] --key-stdin
+./nipaplay-headless --data DIR --model-status     # 提供方、地址、模型、有没有密钥；不含密钥
+./nipaplay-headless --data DIR --model-check      # 向模型发一次很小的请求，看地址和密钥能不能用
+./nipaplay-headless --data DIR --model-clear      # 删掉设置和密钥
+./nipaplay-headless --data DIR --agent-disable    # 或 --agent-enable、--agent-status
+```
+
+密钥与提供方、地址绑定（与桌面同一个保险库引用）：改了地址而没有重新录入，旧密钥不会被发到新地址，
+状态里 `missing` 会出现 `key`。
+
+**对话入口。** 在主机的 harness 目录里用 `./nipa chat`（harness 的 `nipa` 会在 `headless.json`
+旁找到 `endpoint.json`，不必设环境变量）：
+
+```sh
+./nipa chat say "告诉我这台机器的磁盘还剩多少" --wait 120   # 发话、等回合结束、打印回复和她执行的命令
+./nipa chat say "…"                                        # 只发起，回合在后台跑
+./nipa chat status --wait 55   # 回合状态（starting/inProgress/completed/failed/interrupted）；--wait 在宿主事件上等，不轮询
+./nipa chat read --turns 3     # 最近几个回合：你说的、她回的、她执行的命令
+./nipa chat process TURN_ID    # 一个回合的步骤：命令、退出码、输出、推理摘要（脱敏）
+./nipa chat stop               # 中止正在跑的回合
+./nipa chat new | main | list | switch THREAD_ID
+```
+
+它们是 Action：`chat.send`、`chat.status`、`chat.read`、`chat.stop`，加上桌面原有的
+`chat.session.main/new/list/switch` 与 `chat.turn.process`、`agent.dispatch`、`agent.wake`、
+`followup.*`（不再从无界面目录里过滤掉）。`chat.send` 和 `chat.stop` 是替主机上的人说话，
+所以来自 Nipa 自己、帮手、钩子或别的设备的调用被拒绝并说明（她要起一个回合用 `agent.dispatch`，
+稍后用 `agent.wake` 或 `followup.register`）。同一对话里已有回合时 `chat.send` 返回 `conflict`。
+无界面脚本和钩子的 `agent.wake` 在本机运行 Nipa 时送到本机的主对话；宿主配置了
+`agentDeviceId` 时仍按配置送到那台设备。
+
+**主线程。** 无界面只有一个主 isolate。运行环境每条消息的读取、拆行、解码、脱敏、
+回合过程的写入都在后台 isolate 里（与桌面共用的 `ChatLineReader`、`TurnProcessStore`），
+主 isolate 只收结果。`headless_nipa_host_test.dart` 在回合进行期间不断调用宿主，量到的最慢一次回应记在断言里。
+

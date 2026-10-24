@@ -14,11 +14,9 @@ import '../ui_data/host_settings.dart';
 /// one: DeepSeek Harness on the pinned Node.js, the same trimmed tree the
 /// desktop app downloads.
 ///
-/// The headless host has no conversation of its own yet (its description says
-/// `conversationHost: false`), so nothing here is started by [HeadlessCore];
-/// this is what the host's command line uses to prepare and prove a runtime
-/// (`--dsh-install`, `--dsh-status`, `--dsh-check`), and what a conversation
-/// host would ask for its [DshRuntime].
+/// This is what the host's command line uses to prepare and prove a runtime
+/// (`--dsh-install`, `--dsh-status`, `--dsh-check`), and what [HeadlessNipa]
+/// asks for the [DshRuntime] its conversation host runs Nipa on.
 ///
 /// Selection, in order:
 ///  1. `NIPAPLAY_AGENT_RUNTIME=dsh` with `NIPAPLAY_DSH_NODE` and

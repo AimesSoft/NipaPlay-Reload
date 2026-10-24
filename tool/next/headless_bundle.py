@@ -101,6 +101,12 @@ with zipfile.ZipFile(args.output, 'w', zipfile.ZIP_DEFLATED) as archive:
     for file in seed.rglob('*'):
         if file.is_file() and '.codex' not in file.relative_to(seed).parts:
             archive.write(file, file.relative_to(root))
+    # The runtime Nipa runs on: the DSH manifest and NipaPlay's plugins, read
+    # through --agent-assets (default assets/next/agent).
+    agent = root / 'assets/next/agent'
+    for file in agent.rglob('*'):
+        if file.is_file():
+            archive.write(file, file.relative_to(root))
     archive.writestr('.dart_tool/package_config.json', json.dumps({
         'configVersion': 2, 'packages': relocated}, indent=2))
 print(f'Wrote {args.output} ({args.output.stat().st_size} bytes)')
