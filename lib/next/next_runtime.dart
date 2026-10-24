@@ -12,6 +12,7 @@ import 'player/next_playback.dart';
 import 'player/perf/budget.dart';
 import 'player/ports/debug_player.dart';
 import 'player/ports/session_playback.dart';
+import 'player/skip/skip_sources.dart';
 import 'player/sources/resolver.dart';
 import 'player/ports/session_ports.dart' show NotInPlaybackLayer;
 import 'package:shared_preferences/shared_preferences.dart';
@@ -198,12 +199,18 @@ final class NextRuntime extends ChangeNotifier {
     );
     final nextPlayback = SessionPlayback(host,
         sourceResolver: NextSourceResolver(context: () => context),
+        skipSources: SessionSkipSources(() => core.media.service.store),
         externalHandoff: ExternalHandoff(enabled: () => settings.useExternalPlayer,
             playerPath: () => settings.externalPlayerPath,
             playerType: () => settings.externalPlayerType,
             userAgent: PlayerFactory.getCustomPlayerUA),
         localOperations: (settings, context, session) =>
             NextFeatureOperations(session, settings));
+    // The enabled plugins' block words filter the comments in the timeline
+    // build, as they do in Classic.
+    final plugins = context.read<PluginService>();
+    nextPlayback.danmaku
+        .followPluginBlockWords(plugins, () => plugins.activeDanmakuBlockWords);
     final history = ServiceProvider.watchHistoryProvider;
     final seriesDetail = BangumiService.instance.getAnimeDetailsFromMemory;
     final playback = PlaybackCapability(

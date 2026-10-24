@@ -5,6 +5,8 @@ import 'package:shared_preferences/shared_preferences.dart';
 /// Next owns these values while its interface is open. The shared preference
 /// keys are the data boundary; no Classic player object crosses it.
 abstract interface class NextDanmakuSettingsTarget {
+  /// Whether this target owns [key] (the shared danmaku keys, and Titan's).
+  bool handles(String key);
   Object? readSetting(String key);
   Future<void> writeSetting(String key, Object? value);
 }

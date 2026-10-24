@@ -24,6 +24,10 @@ enum SkipSegmentSource {
 
   /// 用户手动标记。
   manual,
+
+  /// Nipa 在 Next 里给这一集写下的区间（`playback.set_skip_segment`）。
+  /// 只在 Next 里出现；Classic 不产生也不读取它。
+  agent,
 }
 
 /// 来源可信度排序。用于多路信号合并时决定谁覆盖谁。
@@ -33,6 +37,10 @@ extension SkipSegmentSourceRank on SkipSegmentSource {
     switch (this) {
       case SkipSegmentSource.manual:
         return 100;
+      case SkipSegmentSource.agent:
+        // Nipa 看过这一集的画面才写下的区间，高于任何自动来源；
+        // 用户自己的手动标记仍在它之上。
+        return 90;
       case SkipSegmentSource.mediaServer:
         return 40;
       case SkipSegmentSource.aniskip:

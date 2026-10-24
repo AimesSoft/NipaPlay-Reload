@@ -34,6 +34,7 @@ import '../subtitles/controller.dart';
 import '../subtitles/look.dart';
 import '../sources/playback_sources.dart';
 import '../sources/resolver.dart';
+import '../skip/skip_sources.dart';
 import '../track_labels.dart';
 import '../features/capture.dart';
 import '../features/external_handoff.dart';
@@ -62,6 +63,7 @@ final class SessionPlayback implements NextPlayback, VideoStageHost {
       {LocalOperationsFactory? localOperations,
       NextSourceResolver? sourceResolver,
       this.externalHandoff,
+      this.skipSources,
       PlaybackWindows? windows,
       this.hideAfter = const Duration(seconds: 3)})
       : _localOperations = localOperations,
@@ -87,6 +89,10 @@ final class SessionPlayback implements NextPlayback, VideoStageHost {
   final LocalOperationsFactory? _localOperations;
   late final PlaybackSources sources;
   final ExternalHandoff? externalHandoff;
+
+  /// What Nipa set and AniSkip knows of the playing file; none in a rig that
+  /// has no media store.
+  final SessionSkipSources? skipSources;
   final PlaybackWindows windows;
   final capture = PlaybackCapture();
   final preview = TimelinePreview();
@@ -137,22 +143,90 @@ final class SessionPlayback implements NextPlayback, VideoStageHost {
   void _danmakuChanged() {
     _danmaku.value = danmaku.version;
     _frame.poke();
+    // Skipping turned on while a file plays: AniSkip is asked then.
+    final enabled = danmaku.settings['player.introSkipEnabled'] == true;
+    final turnedOn = enabled && !_introSkipWas;
+    _introSkipWas = enabled;
+    final s = _session;
+    if (turnedOn && s != null && s.phase.value.open && _skipSession == s.id) {
+      unawaited(_lookupAniSkip(s));
+    }
   }
 
-  JsonMap get danmakuRendererFacts => {
-    'id': danmaku.native ? 'player_native' : switch (DanmakuKernelFactory.getKernelType()) {
-      DanmakuRenderEngine.dfmPlus => 'dfm_plus',
-      DanmakuRenderEngine.nipaplayNext => 'nipaplay_next',
-      final engine => engine.name,
-    },
-    if (danmaku.native) 'kernel': _session?.driver?.kernel.id,
-    // A plugin's renderer chosen in the settings is not hosted by this layer:
-    // the engine above draws.
-    if (DanmakuKernelFactory.selectedPluginRendererId case final id?)
-      'pluginRenderer': {'selected': id, 'applied': false,
-        'reason': 'not_in_playback_layer'},
-    ...danmaku.facts(),
-  };
+  bool _introSkipWas = true;
+  String? _skipSession;
+
+  /// What AniSkip said for the playing file, or why it was not asked
+  /// (`playback.chapters` reports it as `aniskip`).
+  JsonMap aniskipFacts = const {'available': false, 'reason': 'not_asked'};
+
+  Future<void> _loadSkipSources(PlaybackSession s) async {
+    final sources = skipSources;
+    if (sources == null) return;
+    try {
+      final remembered = await sources.store.read(s.path);
+      if (!identical(_session, s) || s.phase.value.done) return;
+      if (remembered.isNotEmpty) danmaku.setSkipSegments('agent', remembered);
+    } catch (error) {
+      debugPrint('[NextSkip] remembered segments: $error');
+    }
+    await _lookupAniSkip(s);
+  }
+
+  Future<void> _lookupAniSkip(PlaybackSession s) async {
+    final sources = skipSources;
+    if (sources == null) return;
+    if (danmaku.settings['player.introSkipEnabled'] != true) {
+      aniskipFacts = const {'available': false, 'reason': 'intro_skip_disabled'};
+      return;
+    }
+    try {
+      final length = s.duration.inMicroseconds / 1e6;
+      final outcome = await sources.aniskip
+          .lookup(s.path, lengthSeconds: length > 0 ? length : null);
+      if (!identical(_session, s) || s.phase.value.done) return;
+      aniskipFacts = outcome.facts;
+      if (outcome.segments.isNotEmpty) {
+        danmaku.setSkipSegments('aniskip', outcome.segments);
+      }
+    } catch (error) {
+      aniskipFacts = {'available': false, 'reason': 'lookup_failed',
+        'error': error.toString()};
+      debugPrint('[NextSkip] AniSkip: $error');
+    }
+  }
+
+  JsonMap get danmakuRendererFacts {
+    final plugin = DanmakuKernelFactory.activePluginRenderer;
+    final selected = DanmakuKernelFactory.selectedPluginRendererId;
+    // What draws: the player kernel when it composites the comments, else a
+    // plugin's renderer chosen in the settings, else the engine chosen.
+    final drawing = danmaku.native
+        ? 'player_native'
+        : plugin?.selectionId ?? switch (DanmakuKernelFactory.getKernelType()) {
+            DanmakuRenderEngine.dfmPlus => 'dfm_plus',
+            DanmakuRenderEngine.nipaplayNext => 'nipaplay_next',
+            final engine => engine.name,
+          };
+    return {
+      'id': drawing,
+      if (danmaku.native) 'kernel': _session?.driver?.kernel.id,
+      if (selected != null)
+        'pluginRenderer': {
+          'selected': selected,
+          'drawing': !danmaku.native && plugin != null,
+          if (danmaku.native)
+            'reason': 'player_native_draws'
+          else if (plugin == null)
+            'reason': 'plugin_not_enabled_or_not_supported'
+          else ...{
+            'status': danmaku.pluginRendererStatus,
+            if (danmaku.pluginRendererError case final error?) 'error': error,
+          },
+        },
+      ...danmaku.facts(),
+    };
+  }
 
   // ---- following the host's session ----
 
@@ -171,6 +245,7 @@ final class SessionPlayback implements NextPlayback, VideoStageHost {
       old.subtitles.overlay.removeListener(_overlayChanged);
     }
     _session = next;
+    aniskipFacts = const {'available': false, 'reason': 'not_asked'};
     final driver = next?.driver;
     danmaku.bind(next?.id, sink: driver is SessionNativeDanmakuDriver
         ? (driver as SessionNativeDanmakuDriver).danmakuSink : null);
@@ -236,6 +311,11 @@ final class SessionPlayback implements NextPlayback, VideoStageHost {
           }
           danmaku.inputs(duration: s?.duration.inMilliseconds ?? 0,
               chapterFacts: s?.media.value?.chapters);
+          if (s != null && phase!.open && _skipSession != s.id && skipSources != null) {
+            _skipSession = s.id;
+            aniskipFacts = const {'available': false, 'reason': 'not_asked'};
+            unawaited(_loadSkipSources(s));
+          }
           if (s != null && phase!.open && _sidecarSession != s.id && _localDanmakuLoader != null) {
             _sidecarSession = s.id;
             unawaited(_loadSidecar(s.path));
@@ -890,14 +970,33 @@ final class SessionPlayback implements NextPlayback, VideoStageHost {
     }
   }
 
+  // While a plugin renderer that has settings of its own (Titan) draws, the
+  // opacity and size dials are those settings, as in Classic.
+  bool get _titan =>
+      !danmaku.native &&
+      DanmakuKernelFactory.activePluginRenderer?.usesTitanSettings == true;
+
   @override
-  PlayerDial get danmakuOpacity => PlayerDial(danmaku.number('danmaku.opacity'), 0, 1, 0.01, DialUnit.percent);
+  PlayerDial get danmakuOpacity => _titan
+      ? PlayerDial(danmaku.titan.opacity, 0.2, 1, 0.05, DialUnit.percent)
+      : PlayerDial(danmaku.number('danmaku.opacity'), 0, 1, 0.01, DialUnit.percent);
   @override
-  Future<void> setDanmakuOpacity(double value) => danmaku.writeSetting('danmaku.opacity', value);
+  Future<void> setDanmakuOpacity(double value) async {
+    if (_titan) {
+      danmaku.setTitan(danmaku.titan.copyWith(opacity: value));
+    } else {
+      await danmaku.writeSetting('danmaku.opacity', value);
+    }
+  }
   @override
-  PlayerDial get danmakuSize => PlayerDial(danmaku.fontSize, 12, 60, 0.5, DialUnit.points);
+  PlayerDial get danmakuSize => _titan
+      ? PlayerDial(danmaku.titan.fontSize, 0.5, 2, 0.05, DialUnit.times)
+      : PlayerDial(danmaku.fontSize, 12, 60, 0.5, DialUnit.points);
   @override
-  Future<void> setDanmakuSize(double value, {bool done = false}) => danmaku.writeSetting('danmaku.fontSize', value);
+  Future<void> setDanmakuSize(double value, {bool done = false}) async {
+    if (!_titan) return danmaku.writeSetting('danmaku.fontSize', value);
+    danmaku.setTitan(danmaku.titan.copyWith(fontSize: value), commit: done);
+  }
   @override
   double get danmakuArea => danmaku.number('danmaku.displayArea');
   @override

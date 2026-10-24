@@ -61,9 +61,26 @@ const _specs = <String, (String, Effect, ObjectSchema)>{
     ObjectSchema({})
   ),
   'playback.chapters': (
-    'Read container chapter markers, current index and all detected opening/ending segments with provenance. Empty list means no markers/segments, not permission to invent them.',
+    'Read container chapter markers, current index and all detected opening/ending segments with provenance (source: agent = set by playback.set_skip_segment, mediaServer, aniskip, danmaku, chapterHeuristic, manual). Empty list means no markers/segments, not permission to invent them. aniskip says whether AniSkip was asked and why not when it was not: available, reason (no_mal_id, no_episode_number, no_episode, several_episodes, file_unknown, intro_skip_disabled, anilist_has_no_mal_id, anilist_request_failed, no_segments_returned, not_asked), malId, episodeNumber, idFrom. AniSkip is asked only for an anime whose MyAnimeList ID (or AniList ID, which AniList turns into a MAL ID by id, never by title) you wrote on its episode, season or work, and whose episode has its number bound: use media.identity.bind_batch in direct mode with ref {provider "https://myanimelist.net" or "https://anilist.co", objectType "anime", externalId, scope ""} on that entity.',
     Effect.read,
     ObjectSchema({})
+  ),
+  'playback.set_skip_segment': (
+    'Set or clear the opening or ending of the file that plays now. kind is opening or ending; give startMs and endMs (endMs is where the Skip button jumps to; it must be within the video length), or clear true. It applies to this file only and is remembered: the same file opened again has it until you clear it. The segment enters the slot every source fills (chapters, danmaku, media server, AniSkip) under source agent and wins over them by rank; a segment the user marked themselves outranks it. The result reports remembered, inEffect (what the slot holds now, possibly another source) and skipSegments. The Skip button shows while the position is inside the segment, when player.introSkipEnabled is on. NipaPlay does not look at the picture for you: to place an opening, take frames of this file with media.frames around where it seems to begin and end, and judge from what you see; the segments playback.chapters lists (danmaku, chapter names) are hints, not answers.',
+    Effect.write,
+    ObjectSchema({
+      'sessionId': _session,
+      'kind': StringSchema(values: ['opening', 'ending']),
+      'startMs': IntegerSchema(minimum: 0),
+      'endMs': IntegerSchema(minimum: 1),
+      'clear': BooleanSchema()
+    }, required: [
+      'sessionId',
+      'kind'
+    ], oneOfRequired: [
+      ['startMs', 'endMs'],
+      ['clear']
+    ])
   ),
   'playback.navigate': (
     'Use exactly one chapterIndex, frameDelta (-1 or +1), or skipKind (current/opening/ending). Uses the active player session. Frame result reports a native frame step or an exact seek using the reported frame interval. Accepted command and observed position are distinct.',

@@ -19,6 +19,7 @@ import '../core/clock.dart';
 import '../perf/budget.dart';
 import '../ports/session_playback.dart';
 import 'controller.dart';
+import 'plugin_layer.dart';
 
 /// Next's own overlay: reused renderers, driven exclusively by the session
 /// clock. No Classic notifications, no native getters, no timeline traversal.
@@ -76,6 +77,7 @@ class _NextDanmakuLayerState extends State<NextDanmakuLayer>
   void _changed() {
     final active = widget.playback.hasVideo &&
         widget.playback.danmaku.visible && !widget.playback.danmaku.native &&
+        DanmakuKernelFactory.activePluginRenderer == null &&
         (_clock?.advancing ?? false);
     if (active && !_ticker.isActive) _ticker.start();
     if (!active && _ticker.isActive) _ticker.stop();
@@ -99,6 +101,17 @@ class _NextDanmakuLayerState extends State<NextDanmakuLayer>
     final p = widget.playback;
     final c = p.danmaku;
     if (!p.hasVideo || c.native) return const SizedBox.shrink();
+    // A plugin's renderer chosen in the settings draws in place of the
+    // engines (as in Classic), unless the player kernel draws the comments.
+    final plugin = DanmakuKernelFactory.activePluginRenderer;
+    if (plugin != null) {
+      return IgnorePointer(
+          child: RepaintBoundary(
+              child: NextPluginDanmakuLayer(
+                  key: ValueKey(plugin.selectionId),
+                  playback: p,
+                  renderer: plugin)));
+    }
     final engine = DanmakuKernelFactory.getKernelType();
     // The comments stay on the worker; the renderers that prepare layout take
     // their data from it (the version tells them when it changed).

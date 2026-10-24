@@ -6,6 +6,7 @@ import 'package:nipa_harness/nipa_harness.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:nipaplay/constants/settings_keys.dart';
+import 'package:nipaplay/plugins/danmaku/titan_danmaku_settings.dart';
 import 'package:nipaplay/security/credential_store.dart';
 import 'package:nipaplay/services/danmaku_spoiler_filter_service.dart';
 
@@ -87,12 +88,104 @@ final class SessionDanmakuController extends ChangeNotifier
       ? 30 : number('danmaku.fontSize');
   double get scrollSeconds => 10 / number('danmaku.speedMultiplier');
 
+  // ---- Titan's own settings, while a plugin renderer that uses them draws ----
+
+  TitanDanmakuSettings titan = const TitanDanmakuSettings();
+  Timer? _titanSave;
+  static const _titanPrefix = 'danmaku.titan.';
+
+  Future<void> _loadTitan() async {
+    final prefs = await SharedPreferences.getInstance();
+    final encoded = prefs.getString(SettingsKeys.titanDanmakuSettings);
+    if (encoded == null || encoded.isEmpty) return;
+    try {
+      titan = TitanDanmakuSettings.fromJson(
+          Map<String, dynamic>.from(jsonDecode(encoded) as Map));
+    } catch (error) {
+      debugPrint('[NextDanmaku] Titan settings: $error');
+    }
+  }
+
+  /// Takes Titan's settings; a drag is kept after a short quiet, a commit
+  /// at once (as Classic keeps them).
+  void setTitan(TitanDanmakuSettings next, {bool commit = false}) {
+    if (_closed) return;
+    titan = next;
+    notifyListeners();
+    _titanSave?.cancel();
+    Future<void> save() async {
+      final prefs = await SharedPreferences.getInstance();
+      await SettingsAccess.persist(SettingsKeys.titanDanmakuSettings,
+          () => prefs.setString(
+              SettingsKeys.titanDanmakuSettings, jsonEncode(titan.toJson())));
+    }
+    if (commit) {
+      _titanSave = null;
+      unawaited(save());
+    } else {
+      _titanSave = Timer(const Duration(milliseconds: 250), () {
+        _titanSave = null;
+        unawaited(save());
+      });
+    }
+  }
+
   Future<void> loadSettings() async {
     final loaded = await NextDanmakuSettings.load();
+    await _loadTitan();
     if (_closed) return;
     settings.addAll(loaded);
     notifyListeners();
     await rebuild();
+  }
+
+  // ---- the enabled plugins' block words ----
+
+  Listenable? _pluginSource;
+  List<String> Function()? _pluginWordsOf;
+  List<String> _pluginBlockWords = const [];
+
+  /// The block words the enabled plugins carry (`PluginService`'s
+  /// `activeDanmakuBlockWords`), told by [source] when plugins change. A
+  /// change of the words is a new build, as a change of the user's own words
+  /// is; enabling or disabling a plugin takes effect at the next one.
+  void followPluginBlockWords(Listenable source, List<String> Function() words) {
+    _pluginSource?.removeListener(_pluginWordsChanged);
+    _pluginSource = source;
+    _pluginWordsOf = words;
+    source.addListener(_pluginWordsChanged);
+    _pluginWordsChanged();
+  }
+
+  void _pluginWordsChanged() {
+    if (_closed) return;
+    final now = _pluginWordsOf!();
+    if (listEquals(now, _pluginBlockWords)) return;
+    _pluginBlockWords = List.of(now);
+    unawaited(rebuild());
+  }
+
+  List<String> get pluginBlockWords => _pluginBlockWords;
+
+  // ---- a plugin's renderer drawing the comments ----
+
+  /// What the plugin renderer hosted by the interface reports of itself:
+  /// null when none is hosted; `loading`, `ready` or `failed`.
+  String? pluginRendererStatus;
+  String? pluginRendererError;
+
+  final _echoes = StreamController<Map<String, dynamic>>.broadcast();
+
+  /// What the user just sent, for a renderer that adds it at once.
+  Stream<Map<String, dynamic>> get echoes => _echoes.stream;
+
+  /// The `load` message of a plugin renderer for the comments between [from]
+  /// and [to] seconds of list time, with the version of the list it was
+  /// taken from: JSON text made on the worker.
+  Future<(int, String)> pluginWindow(double from, double to) async {
+    final reply = await _worker.request<List>('window.plugin',
+        {'from': from, 'to': to});
+    return (reply[0] as int, reply[1] as String);
   }
 
   void bind(String? id, {SessionNativeDanmakuSink? sink}) {
@@ -174,6 +267,7 @@ final class SessionDanmakuController extends ChangeNotifier
     if (!comment.containsKey('time') || !comment.containsKey('content')) return;
     _enqueue(() => _worker.request<Object?>('echo', {'comment': comment}));
     unawaited(rebuild());
+    if (!_echoes.isClosed) _echoes.add(comment);
   }
 
   void update(String id, JsonMap binding) {
@@ -216,6 +310,7 @@ final class SessionDanmakuController extends ChangeNotifier
               'evidenceCount': x.evidenceCount}],
           'spoilerTexts': settings['danmaku.spoilerPreventionEnabled'] == true
               ? _spoilerTexts.toList() : <String>[],
+          'pluginBlockWords': _pluginBlockWords,
         });
         PlayerPerf.mark('danmaku.buildReply');
         if (_closed || generation != _generation || revision != _revision) {
@@ -379,11 +474,26 @@ final class SessionDanmakuController extends ChangeNotifier
       'Danmaku timeline changed; restart pagination.');
 
   @override
-  Object? readSetting(String key) => settings[key];
+  Object? readSetting(String key) => key.startsWith(_titanPrefix)
+      ? titan.toJson()[key.substring(_titanPrefix.length)]
+      : settings[key];
+
+  @override
+  bool handles(String key) =>
+      NextDanmakuSettings.keys.containsKey(key) || key.startsWith(_titanPrefix);
 
   @override
   Future<void> writeSetting(String key, Object? value) async {
     if (_closed) return;
+    if (key.startsWith(_titanPrefix)) {
+      setTitan(
+          TitanDanmakuSettings.fromJson({
+            ...titan.toJson(),
+            key.substring(_titanPrefix.length): value
+          }),
+          commit: true);
+      return;
+    }
     if (key == 'danmaku.spoilerPreventionEnabled' && value == true &&
         !await spoilerReady()) {
       throw const Failure(FailureCode.unavailable,
@@ -460,12 +570,19 @@ final class SessionDanmakuController extends ChangeNotifier
     'total': timeline.total, 'backgroundBuildUs': timeline.buildUs,
     'invalidRules': timeline.invalidRules, 'error': error,
     'native': native, 'visible': visible,
+    'pluginBlockWords': _pluginBlockWords.length,
     'opacity': settings['danmaku.opacity'], 'offsetSeconds': offset};
 
   @override
   void dispose() {
     _closed = true;
     _native = null;
+    _pluginSource?.removeListener(_pluginWordsChanged);
+    if (_titanSave != null) {
+      _titanSave!.cancel();
+      _titanSave = null;
+    }
+    unawaited(_echoes.close());
     _worker.close();
     super.dispose();
   }
