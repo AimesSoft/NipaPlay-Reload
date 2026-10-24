@@ -650,11 +650,19 @@ final class NextCore {
     await uiData.meshLibrary!.start();
     phaseNipa('startup: Nipa mesh library');
     followups.start();
-    danmaku.startIndexing();
-    subtitles.start();
+    // The first indexer pass is catalogue input. Finish the two passes one
+    // after the other before the worker builds the snapshot: their writes then
+    // do not rebuild it during the first home, and their peak allocation does
+    // not overlap.
+    await danmaku.startIndexing();
+    await subtitles.start();
     phaseNipa('startup: Nipa indexers');
     await mesh.startConfigured();
-    phaseNipa('startup: Nipa mesh');
+    phaseNipa('startup: Nipa mesh configured');
+    // One worker round now sees the complete startup input, including the
+    // account and peers chosen while joining Mesh.
+    await uiData.meshLibrary!.prepareIndex();
+    phaseNipa('startup: Nipa mesh prepared');
     nipaGate.set(true);
   }
 

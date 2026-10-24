@@ -77,6 +77,23 @@ final class _ExitWith {
   final Object? value;
 }
 
+final class LibraryBuildResult {
+  const LibraryBuildResult(this.stamp, this.builds);
+  final String stamp;
+  final int builds;
+}
+
+final class LibraryPrepareResult {
+  const LibraryPrepareResult(
+      this.snapshot, this.builtStamp, this.compositionStamp, this.builds,
+      {this.composed = false});
+  final LibrarySnapshot? snapshot;
+  final String builtStamp;
+  final String compositionStamp;
+  final int builds;
+  final bool composed;
+}
+
 /// One worker per catalogue lifetime. Only plugin/network primitives and live
 /// host observations cross back to the UI isolate; SQL and projections do not.
 final class LibraryWorker {
@@ -101,7 +118,10 @@ final class LibraryWorker {
   Map<String, JsonMap>? _lastPeers;
   Map<String, bool>? _lastOnline;
   String? _lastAccount;
+  int? _lastPeerRevision;
+  int? _lastOnlineRevision;
   bool _needsRestore = false;
+  bool _restartScheduled = false;
   Isolate? _redactorIsolate;
   ReceivePort? _redactorExit;
   Completer<void> _redactorExited = Completer<void>();
@@ -289,14 +309,70 @@ final class LibraryWorker {
         }
       });
 
+  /// Reads the catalogue stamp in the worker, then builds until the stamp it
+  /// built from is still current. The UI receives only the stamp and a count.
+  Future<LibraryBuildResult> buildCurrent(String owner) => _serial(() async {
+        if (_closed) throw StateError('Library worker is closed');
+        final target = await _worker();
+        await _syncSources(target);
+        final result =
+            await _ask(target, 'buildCurrent', owner) as LibraryBuildResult;
+        _runtimeBuiltStamp = result.stamp;
+        _lastBuiltStamp = result.stamp;
+        return result;
+      });
+
+  /// Prepares the complete index without reading SQL or encoding the catalogue
+  /// stamp on the UI isolate. A changed projection is transferred back by
+  /// [Isolate.exit]; the caller only replaces its published references.
+  Future<LibraryPrepareResult> prepare({
+    required String owner,
+    required Map<String, JsonMap> peers,
+    required int peerRevision,
+    required Map<String, bool> online,
+    required int onlineRevision,
+    required String? account,
+    required String? composedStamp,
+  }) =>
+      _serial(() async {
+        if (_closed) throw StateError('Library worker is closed');
+        final target = await _worker();
+        await _syncSources(target);
+        final reply = await _ask(target, 'prepare', (
+          owner,
+          _lastPeerRevision == peerRevision ? null : peers,
+          peerRevision,
+          _lastOnlineRevision == onlineRevision ? null : online,
+          onlineRevision,
+          account,
+          composedStamp
+        ));
+        final result = reply is LibrarySnapshot
+            ? LibraryPrepareResult(
+                reply, reply.builtStamp!, reply.compositionStamp!, reply.builds,
+                composed: true)
+            : reply as LibraryPrepareResult;
+        _runtimeBuiltStamp = result.builtStamp;
+        _lastBuiltStamp = result.builtStamp;
+        _lastPeerRevision = peerRevision;
+        _lastOnlineRevision = onlineRevision;
+        _lastPeers = peers;
+        _lastOnline = online;
+        _lastAccount = account;
+        if (result.composed) {
+          _forgetWorker(restore: true);
+          _restartWorker();
+        }
+        return result;
+      });
+
   Future<LibrarySnapshot> compose(Map<String, JsonMap> peers,
           Map<String, bool> online, String? account) =>
       _serial(() async {
         if (_closed) throw StateError('Library worker is closed');
         final target = await _worker();
-        final result =
-            await _ask(target, 'compose', (peers, online, account))
-                as LibrarySnapshot;
+        final result = await _ask(target, 'compose', (peers, online, account))
+            as LibrarySnapshot;
         _lastPeers = Map.of(peers);
         _lastOnline = Map.of(online);
         _lastAccount = account;
@@ -304,16 +380,28 @@ final class LibraryWorker {
         // Recreate the long-lived query worker while the UI returns to normal
         // work. Views such as activity otherwise fall back to main-isolate SQL
         // after the transfer worker exits.
-        unawaited(_serial(() async {
-          if (_closed) return;
-          try {
-            await _worker();
-          } on Object {
-            // The next request will retry and surface any persistent failure.
-          }
-        }));
+        _restartWorker();
         return result;
       });
+
+  void _restartWorker() {
+    if (_closed || _restartScheduled) return;
+    _restartScheduled = true;
+    // Isolate.spawn runs synchronously on the UI isolate. Queue it after the
+    // caller has received and published its result, rather than extending the
+    // prepare turn with worker startup.
+    Timer.run(() {
+      _restartScheduled = false;
+      if (_closed) return;
+      unawaited(_serial(() async {
+        try {
+          await _worker();
+        } on Object {
+          // The next request will retry and surface any persistent failure.
+        }
+      }));
+    });
+  }
 
   void _forgetWorker({required bool restore}) {
     _isolate = null;
@@ -528,6 +616,19 @@ Future<void> _serve((SendPort, SendPort, String, String, String) args) async {
       (id) async => projection.snapshot.aliases[id] ?? id;
   sources.cachedArtwork = ui.artwork.cached;
   var cachedDescriptors = <_View>[];
+  Future<LibraryBuildResult> buildCurrent(String projectionOwner) async {
+    var builds = 0;
+    for (var attempt = 0; attempt < 3; attempt++) {
+      final stamp = jsonEncode([projectionOwner, await ui.catalogueStamp()]);
+      if (projection.builtStamp == stamp) {
+        return LibraryBuildResult(stamp, builds);
+      }
+      await projection.build(stamp);
+      builds++;
+    }
+    return LibraryBuildResult(projection.builtStamp!, builds);
+  }
+
   ready.send(requests.sendPort);
   // Mutations and queries observe the previous completed operation. This queue
   // exists only in the worker; its lifetime is the catalogue's lifetime.
@@ -558,6 +659,56 @@ Future<void> _serve((SendPort, SendPort, String, String, String) args) async {
         case 'build':
           await projection.build(input as String);
           return null;
+        case 'buildCurrent':
+          return buildCurrent(input as String);
+        case 'prepare':
+          final (
+            projectionOwner,
+            peers,
+            peerRevision,
+            online,
+            onlineRevision,
+            account,
+            composedStamp
+          ) = input as (
+            String,
+            Map<String, JsonMap>?,
+            int,
+            Map<String, bool>?,
+            int,
+            String?,
+            String?
+          );
+          final built = await buildCurrent(projectionOwner);
+          final compositionStamp = jsonEncode([
+            projectionOwner,
+            built.stamp,
+            peerRevision,
+            onlineRevision,
+            account
+          ]);
+          if (composedStamp == compositionStamp) {
+            return LibraryPrepareResult(
+                null, built.stamp, compositionStamp, built.builds,
+                composed: false);
+          }
+          await projection.compose(
+              peers ?? projection.peers, online ?? projection.online, account);
+          final snapshot = projection.snapshot;
+          await releaseResources();
+          return _ExitWith(LibrarySnapshot(
+              snapshot.assets,
+              snapshot.works,
+              snapshot.episodes,
+              snapshot.aliases,
+              snapshot.locations,
+              snapshot.localTargets,
+              snapshot.orderedWorks,
+              snapshot.episodeParents,
+              builtStamp: built.stamp,
+              compositionStamp: compositionStamp,
+              builds: built.builds,
+              composed: true));
         case 'restore':
           final (peers, online, account) =
               input as (Map<String, JsonMap>, Map<String, bool>, String?);

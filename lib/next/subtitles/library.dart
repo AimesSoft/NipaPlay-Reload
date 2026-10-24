@@ -116,12 +116,12 @@ final class SubtitleLibrary implements SubtitleOperations {
     }
   }
 
-  void start() {
+  Future<void> start() async {
     _events = identities.fileChanges
         .listen((f) => enqueue(f['fileId'] as String, f['path'] as String));
     // Every file is looked at once now; after that a file is looked at when it
     // is registered or changes, and indexers.reconcile looks at all again.
-    unawaited(reconcile());
+    await reconcile();
   }
 
   Future<void> reconcile() async {
@@ -134,6 +134,8 @@ final class SubtitleLibrary implements SubtitleOperations {
       enqueue(row['file_id'] as String, row['locator'] as String);
       await slice();
     }
+    // The catalogue is built after the initial pass has stored what it saw.
+    await _worker;
   }
 
   void enqueue(String id, String path) {
@@ -576,7 +578,8 @@ final class SubtitleLibrary implements SubtitleOperations {
         track = await find();
       }
       if (track == null && index != -1) {
-        throw StateError('The subtitle library has no such track for this video.');
+        throw StateError(
+            'The subtitle library has no such track for this video.');
       }
       await select(id, track?['id'] as String?);
     };

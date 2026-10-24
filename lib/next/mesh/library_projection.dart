@@ -69,6 +69,9 @@ final class LibraryProjection {
   }
 
   Future<void> build(String stamp) => _buildLocal(stamp);
+  String? get builtStamp => _local['version'] as String?;
+  Map<String, JsonMap> get peers => _peers;
+  Map<String, bool> get online => _online;
   Future<bool> mergeProgress(Map<String, JsonMap> observations) async {
     var changed = false;
     for (final entry in observations.entries) {
@@ -921,21 +924,21 @@ final class LibraryProjection {
 }
 
 final class LibrarySnapshot {
-  const LibrarySnapshot(
-      this.assets,
-      this.works,
-      this.episodes,
-      this.aliases,
-      this.locations,
-      this.localTargets,
-      this.orderedWorks,
-      this.episodeParents);
+  const LibrarySnapshot(this.assets, this.works, this.episodes, this.aliases,
+      this.locations, this.localTargets, this.orderedWorks, this.episodeParents,
+      {this.builtStamp,
+      this.compositionStamp,
+      this.builds = 0,
+      this.composed = false});
   final Map<String, String> assets, aliases, localTargets;
   final Map<String, UiWork> works;
   final Map<String, List<UiEpisode>> episodes;
   final Map<String, List<JsonMap>> locations;
   final List<UiWork> orderedWorks;
   final Map<String, String> episodeParents;
+  final String? builtStamp, compositionStamp;
+  final int builds;
+  final bool composed;
 }
 
 final class LibraryProgress {
