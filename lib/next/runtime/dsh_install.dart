@@ -9,8 +9,25 @@ import 'package:path/path.dart' as p;
 
 import '../chat/dsh_runtime.dart';
 import '../ui_data/host_settings.dart';
-import 'codex_runtime.dart' show RuntimeInstallException;
+import 'runtime_install_exception.dart';
 import 'dsh_manifest.dart';
+
+/// Mirrors that stand in for the official addresses when those do not
+/// deliver a file: [node] replaces `https://nodejs.org/dist`, [registry] the
+/// npm registry, for manifest addresses whose host is in [hosts].
+final class DshFallback {
+  const DshFallback(
+      {required this.node, required this.registry, required this.hosts});
+
+  /// npmmirror: the same paths as nodejs.org/dist and the npm registry.
+  static const npmmirror = DshFallback(
+      node: 'https://npmmirror.com/mirrors/node',
+      registry: 'https://registry.npmmirror.com',
+      hosts: {'nodejs.org', 'registry.npmjs.org'});
+
+  final String node, registry;
+  final Set<String> hosts;
+}
 
 /// Fetches the Node.js and the trimmed DeepSeek Harness that run Nipa, into
 /// Next's own data root, from nodejs.org and the npm registry (or a mirror
@@ -31,6 +48,7 @@ final class DshInstall {
       required this.inUse,
       this.beforeInstall,
       this.verifySignature = true,
+      this.fallback = DshFallback.npmmirror,
       this.concurrency = 6});
 
   final Directory root;
@@ -48,6 +66,12 @@ final class DshInstall {
   /// On macOS the Node.js binary must carry its publisher's notarized
   /// signature. Tests with a stand-in binary turn this off.
   final bool verifySignature;
+
+  /// Where a file comes from when the official address does not deliver it.
+  /// Only used while the person has named no mirror of their own, and only
+  /// for manifest addresses on [DshFallback.hosts]. Bytes from it are held
+  /// to the same SHA-256 and size.
+  final DshFallback? fallback;
   final int concurrency;
 
   UiDshStatus _status = UiDshStatus.notInstalled;
@@ -55,6 +79,10 @@ final class DshInstall {
   int _received = 0;
   final _item = <String, int>{};
   bool _cancelled = false;
+
+  /// Hosts that failed to connect during this installation: later files try
+  /// their other source first instead of waiting for them again.
+  final _unreachable = <String>{};
   HttpClient? _client;
   Future<void>? _installing;
   DateTime _lastNotify = DateTime.fromMillisecondsSinceEpoch(0);
@@ -179,6 +207,7 @@ final class DshInstall {
   Future<void> _install() async {
     _cancelled = false;
     _item.clear();
+    _unreachable.clear();
     _received = 0;
     final staging = Directory('${installed.path}.pending');
     try {
@@ -194,20 +223,20 @@ final class DshInstall {
       final configured = await mirrors();
       final node = manifest.nodes[platform]!;
       final items = <_Item>[
-        _Item(
-            node.name,
-            _nodeUrl(node, configured.node),
-            node.sha256,
-            node.bytes),
+        _Item(node.name, node.sha256, node.bytes,
+            _sources(_nodeUrl(node, configured.node), configured.node == null
+                ? _fallbackNode(node) : null)),
         for (final package in {
           for (final package in manifest.packagesFor(platform!))
             package.sha256: package
         }.values)
           _Item(
               '${package.name.split('/').last}-${package.version}.tgz',
-              '${configured.registry ?? manifest.registry.replaceFirst(RegExp(r'/+$'), '')}/${package.url}',
               package.sha256,
-              package.bytes),
+              package.bytes,
+              _sources(
+                  '${configured.registry ?? manifest.registry.replaceFirst(RegExp(r'/+$'), '')}/${package.url}',
+                  configured.registry == null ? _fallbackPackage(package) : null)),
       ];
       await _downloads.create(recursive: true);
       await beforeInstall?.call();
@@ -255,6 +284,21 @@ final class DshInstall {
     }
   }
 
+  List<_Source> _sources(String primary, String? backup) => [
+        _Source(backup == null ? '' : '官方源', primary),
+        if (backup != null) _Source('备用源', backup),
+      ];
+
+  String? _fallbackNode(DshNodeAsset asset) => fallback != null &&
+          fallback!.hosts.contains(Uri.parse(asset.url).host)
+      ? _nodeUrl(asset, fallback!.node)
+      : null;
+
+  String? _fallbackPackage(DshPackage package) => fallback != null &&
+          fallback!.hosts.contains(Uri.parse(manifest.registry).host)
+      ? '${fallback!.registry}/${package.url}'
+      : null;
+
   String _nodeUrl(DshNodeAsset asset, String? mirror) {
     if (mirror == null) return asset.url;
     final marker = '/v${manifest.nodeVersion}/';
@@ -299,31 +343,64 @@ final class DshInstall {
       _count(item, item.bytes);
       return;
     }
+    // A host that did not answer earlier in this installation goes last.
+    final order = [
+      ...item.sources.where((s) => !_unreachable.contains(s.host)),
+      ...item.sources.where((s) => _unreachable.contains(s.host)),
+    ];
+    final failures = <_Source, _SourceFailure>{};
+    for (final source in order) {
+      try {
+        await _fetchFrom(item, source, hasOther: order.length > 1);
+        return;
+      } on _SourceFailure catch (failure) {
+        _checkCancelled();
+        if (failure.unreachable) _unreachable.add(source.host);
+        failures[source] = failure;
+      }
+    }
+    if (failures.length == 1) {
+      final MapEntry(key: source, value: failure) = failures.entries.single;
+      throw RuntimeInstallException(
+          '${item.name} 下载失败（${source.host}）：${failure.reason}');
+    }
+    throw RuntimeInstallException('${item.name} 下载失败，'
+        '${[for (final source in item.sources) '${source.role}（${source.host}）：${failures[source]!.reason}'].join('；')}');
+  }
+
+  /// One source for one file: transfers (continuing a partial file), then
+  /// holds the bytes to the manifest's SHA-256.
+  Future<void> _fetchFrom(_Item item, _Source source, {required bool hasOther}) async {
+    final file = _file(item);
     final part = File('${file.path}.part');
+    // With another source to turn to, a failing one is given up on sooner.
+    final attempts = hasOther ? 2 : 3;
     for (var attempt = 0;; attempt++) {
       try {
-        await _transfer(item, part);
+        await _transfer(item, source, part);
         break;
       } on _Retry catch (retry) {
-        if (attempt >= 2) throw RuntimeInstallException('${item.name} ${retry.fact}');
+        if (attempt >= attempts - 1) throw _SourceFailure(retry.fact);
         await Future<void>.delayed(Duration(milliseconds: 600 * (attempt + 1)));
       } on SocketException catch (error) {
         _checkCancelled();
-        if (attempt >= 2) {
-          throw RuntimeInstallException(
-              '${item.name} 连接中断：${error.osError?.message ?? error.message}');
+        final reason = '连接中断：${error.osError?.message ?? error.message}';
+        if (hasOther || attempt >= attempts - 1) {
+          throw _SourceFailure(reason, unreachable: true);
         }
         await Future<void>.delayed(Duration(milliseconds: 600 * (attempt + 1)));
       } on TimeoutException {
         _checkCancelled();
-        if (attempt >= 2) throw RuntimeInstallException('${item.name} 响应超时');
+        if (hasOther || attempt >= attempts - 1) {
+          throw const _SourceFailure('响应超时', unreachable: true);
+        }
       } on HttpException catch (error) {
         _checkCancelled();
-        if (attempt >= 2) {
-          throw RuntimeInstallException('${item.name} 连接中断：${error.message}');
+        if (attempt >= attempts - 1) {
+          throw _SourceFailure('连接中断：${error.message}', unreachable: hasOther);
         }
       } on TlsException {
-        throw RuntimeInstallException('${item.name} 的服务器证书无法验证');
+        throw const _SourceFailure('服务器证书无法验证', unreachable: true);
       }
     }
     _checkCancelled();
@@ -332,12 +409,12 @@ final class DshInstall {
     if (digest != item.digest) {
       await part.delete();
       _count(item, 0);
-      throw RuntimeInstallException('${item.name} 的 SHA-256 与预期不符，已删除');
+      throw const _SourceFailure('SHA-256 与预期不符，已删除');
     }
     await part.rename(file.path);
   }
 
-  Future<void> _transfer(_Item item, File part) async {
+  Future<void> _transfer(_Item item, _Source source, File part) async {
     var offset = await part.exists() ? await part.length() : 0;
     if (offset > item.bytes) {
       await part.delete();
@@ -345,14 +422,14 @@ final class DshInstall {
     }
     _count(item, offset);
     if (offset == item.bytes) return;
-    final request = await _client!.getUrl(Uri.parse(item.url));
+    final request = await _client!.getUrl(Uri.parse(source.url));
     request.headers.set(HttpHeaders.acceptEncodingHeader, 'identity');
     if (offset > 0) request.headers.set(HttpHeaders.rangeHeader, 'bytes=$offset-');
     final response = await request.close().timeout(const Duration(seconds: 30));
     if (response.statusCode == 416) {
       await response.drain<void>();
       await part.delete();
-      throw const _Retry('的续传位置无效，已重新开始');
+      throw const _Retry('续传位置无效，已重新开始');
     }
     if (response.statusCode == 200) {
       offset = 0;
@@ -361,15 +438,14 @@ final class DshInstall {
       if (range == null || !range.startsWith('bytes $offset-')) {
         await response.drain<void>();
         await part.delete();
-        throw const _Retry('的续传响应不正确，已重新开始');
+        throw const _Retry('续传响应不正确，已重新开始');
       }
     } else {
       await response.drain<void>();
       if (response.statusCode >= 500 || response.statusCode == 429) {
         throw _Retry('服务器暂时不可用（HTTP ${response.statusCode}）');
       }
-      throw RuntimeInstallException(
-          '${item.name} 下载失败：HTTP ${response.statusCode}（${Uri.parse(item.url).host}）');
+      throw _SourceFailure('HTTP ${response.statusCode}');
     }
     final output =
         part.openWrite(mode: offset == 0 ? FileMode.write : FileMode.append);
@@ -378,7 +454,7 @@ final class DshInstall {
         _checkCancelled();
         offset += chunk.length;
         if (offset > item.bytes) {
-          throw RuntimeInstallException('${item.name} 的长度超出预期');
+          throw const _SourceFailure('长度超出预期');
         }
         output.add(chunk);
         _count(item, offset);
@@ -436,8 +512,14 @@ final class DshInstall {
 
   Future<void> _tar(File archive, Directory target,
       {required int strip, List<String> members = const []}) async {
+    // Windows' own bsdtar: a GNU tar earlier in PATH (Git for Windows) reads
+    // the drive letter of `D:\...` as a remote host.
+    final windowsTar =
+        '${Platform.environment['SystemRoot'] ?? r'C:\Windows'}\\System32\\tar.exe';
     final tar = Platform.isWindows
-        ? 'tar.exe'
+        ? File(windowsTar).existsSync()
+            ? windowsTar
+            : 'tar.exe'
         : File('/usr/bin/tar').existsSync()
             ? '/usr/bin/tar'
             : 'tar';
@@ -501,9 +583,28 @@ final class DshInstall {
 }
 
 final class _Item {
-  const _Item(this.name, this.url, this.digest, this.bytes);
-  final String name, url, digest;
+  const _Item(this.name, this.digest, this.bytes, this.sources);
+  final String name, digest;
   final int bytes;
+
+  /// Where the file can be had, in the order they are tried.
+  final List<_Source> sources;
+}
+
+/// An address for a file. [role] names it in a failure when there is more
+/// than one ('官方源', '备用源').
+final class _Source {
+  const _Source(this.role, this.url);
+  final String role, url;
+  String get host => Uri.parse(url).host;
+}
+
+/// A source gave up: [reason] says how, without the file's name.
+/// [unreachable] when it did not connect or answer at all.
+final class _SourceFailure implements Exception {
+  const _SourceFailure(this.reason, {this.unreachable = false});
+  final String reason;
+  final bool unreachable;
 }
 
 final class _Retry implements Exception {

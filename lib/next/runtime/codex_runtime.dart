@@ -9,8 +9,11 @@ import 'package:nipaplay/services/app_http_proxy.dart';
 import 'package:nipaplay/services/system_proxy_service.dart';
 
 import '../ui_data/host_settings.dart';
+import 'runtime_install_exception.dart';
 import 'codex_manifest.dart';
 import 'codex_licenses.dart';
+
+export 'runtime_install_exception.dart';
 
 /// Installs only the application manifest version into Next's own data root.
 /// No PATH discovery and no user CODEX_HOME writes occur here.
@@ -334,11 +337,6 @@ final class CodexLicense {
   const CodexLicense(this.name, this.url, this.sha256, this.bytes);
   final String name, url, sha256;
   final int bytes;
-}
-
-final class RuntimeInstallException implements Exception {
-  const RuntimeInstallException(this.message);
-  final String message;
 }
 
 final class _Cancelled implements Exception {

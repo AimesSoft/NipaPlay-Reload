@@ -290,3 +290,21 @@ set NIPAPLAY_CODEX_EXECUTABLE=D:\nipaplay-next\x43-tools\codex\package\vendor\x8
 `labRoot` 时，会强制使用该根内的 `codex-home/config.toml` 和 `temp`，不采用用户的
 `~/.codex`。X43 只用空配置验证 initialize/initialized 握手及关闭，没有 thread/turn、
 模型密钥或真实对话。无界面入口当前不创建 ChatHost；集成对话与自动执行后续是另一步。
+
+## Nipa 的运行环境（DeepSeek Harness）
+
+无界面宿主自己没有对话（描述里 `conversationHost: false`），但可以准备并验证 Nipa 将来要用
+的运行环境：与桌面版同一份清单（`assets/next/agent/dsh-runtime.json`，Linux x64、
+Windows x64、macOS arm64 已追踪），装在 `<data>/dsh-runtime/`，不动全局。
+
+```sh
+nipaplay_headless --dsh-install --data DIR   # 下载 Node.js 与精简 DSH；官方源，连不上改 npmmirror
+nipaplay_headless --dsh-status  --data DIR   # 将要启动的是哪一份
+nipaplay_headless --dsh-check   --data DIR   # 带 NipaPlay 插件启动，开一个线程，不调用模型
+```
+
+默认在当前目录找 `assets/next/agent`，可用 `--agent-assets` 指定。选择顺序：环境
+`NIPAPLAY_AGENT_RUNTIME=dsh` 加 `NIPAPLAY_DSH_NODE` 与 `NIPAPLAY_DSH_ROOT`（自备安装）优先，
+否则用 `<data>/dsh-runtime/` 里装好的；`NIPAPLAY_AGENT_RUNTIME=codex` 在此宿主被拒绝。
+主程序暂时还不能编译（见交付说明），这三条命令也可不经主程序运行：
+`dart run scripts/next/dsh_runtime/headless_dsh.dart install|status|check --data DIR`。
