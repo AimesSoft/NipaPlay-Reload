@@ -33,13 +33,19 @@ class SubtitleService {
 
   /// Read persisted choices without pruning files or updating the Classic cache.
   Future<({List<Map<String, dynamic>> subtitles, int? activeIndex})>
-      readExternalSubtitlePreferences(String videoPath) async {
+      readExternalSubtitlePreferences(String videoPath,
+          {int? knownSize}) async {
     final prefs = await SharedPreferences.getInstance();
-    final key = _getVideoHashKey(videoPath);
+    final key = knownSize != null
+        ? '${p.basename(videoPath)}-$knownSize'
+        : _getVideoHashKey(videoPath);
     final stored = prefs.getString('external_subtitles_$key');
     return (
-      subtitles: stored == null ? <Map<String, dynamic>>[] :
-          (json.decode(stored) as List).map((s) => Map<String, dynamic>.from(s as Map)).toList(),
+      subtitles: stored == null
+          ? <Map<String, dynamic>>[]
+          : (json.decode(stored) as List)
+              .map((s) => Map<String, dynamic>.from(s as Map))
+              .toList(),
       activeIndex: prefs.getInt('last_active_subtitle_$key'),
     );
   }

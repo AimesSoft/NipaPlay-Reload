@@ -118,21 +118,32 @@ final class DownloadRuntime extends ChangeNotifier {
       _refreshing ??= _refresh().whenComplete(() => _refreshing = null);
   Future<void> _refresh() async {
     if (_closed) return;
+    List<Job>? downloadJobs;
     if (await _enabled()) {
       await _backend.initialize();
       final tasks = await _backend.list();
       for (final task in tasks) {
         await downloads.adopt(_backend, task);
       }
-      await downloads.observeMissingSessions(_backend, tasks);
+      downloadJobs = await engine.list(type: 'download');
+      if (await downloads.observeMissingSessions(_backend, tasks,
+          listedJobs: downloadJobs)) {
+        downloadJobs = null;
+      }
       // HTTP sessions are never adopted (they only exist because Next added
       // them); only a session that vanished is noticed.
       await http.initialize();
-      await downloads.observeMissingSessions(http, await http.list());
+      final httpTasks = await http.list();
+      downloadJobs ??= await engine.list(type: 'download');
+      if (await downloads.observeMissingSessions(http, httpTasks,
+          listedJobs: downloadJobs)) {
+        downloadJobs = null;
+      }
     }
     autoScannedKeys = Set.unmodifiable(await _loadImportedKeys());
+    downloadJobs ??= await engine.list(type: 'download');
     _jobsByHash = {
-      for (final job in await engine.list(type: 'download'))
+      for (final job in downloadJobs)
         if ((job.details['backend'] as JsonMap)['kind'] == 'builtin')
           job.input['infoHash'] as String: job
     };
@@ -204,8 +215,9 @@ final class DownloadRuntime extends ChangeNotifier {
         'total': mine.length,
         'downloadBytesPerSecond': down,
         'uploadBytesPerSecond': up,
-        'limitsSupported':
-            backend is BandwidthDownloadBackend ? (limits?['supported']) : false,
+        'limitsSupported': backend is BandwidthDownloadBackend
+            ? (limits?['supported'])
+            : false,
         'sessionInitialized': limits?['sessionInitialized'],
         'downloadLimitBytesPerSecond': actual?['downloadBytesPerSecond'],
         'uploadLimitBytesPerSecond': actual?['uploadBytesPerSecond'],
@@ -225,7 +237,8 @@ final class DownloadRuntime extends ChangeNotifier {
   }
 
   Future<void> _adoptNative(int id) async {
-    await BodyChanges.fromUser(() async => downloads.adopt(_backend, await _backend.read(id.toString())));
+    await BodyChanges.fromUser(() async =>
+        downloads.adopt(_backend, await _backend.read(id.toString())));
     await refresh();
   }
 
@@ -260,11 +273,13 @@ final class DownloadRuntime extends ChangeNotifier {
   }
 
   Future<void> pause(int id) async {
-    await BodyChanges.fromUser(() async => downloads.pause((await _job(id)).jobId));
+    await BodyChanges.fromUser(
+        () async => downloads.pause((await _job(id)).jobId));
   }
 
   Future<void> resume(int id) async {
-    await BodyChanges.fromUser(() async => downloads.resume((await _job(id)).jobId));
+    await BodyChanges.fromUser(
+        () async => downloads.resume((await _job(id)).jobId));
   }
 
   Future<void> forget(int id) async {

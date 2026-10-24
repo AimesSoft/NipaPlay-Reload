@@ -9,6 +9,7 @@ import '../ui_data/ui_data.dart';
 import '../ui_data/library_index.dart';
 import '../ui_data/library_search.dart';
 import '../media/library_reads.dart';
+import '../media/metadata_provider.dart';
 import '../harness_redaction.dart';
 import 'library_codec.dart';
 
@@ -881,18 +882,36 @@ final class LibraryProjection {
     await searchIndex.replace(indexRows);
   }
 
-  LibrarySnapshot get snapshot => LibrarySnapshot(
-      _assets,
-      _works,
-      _episodes,
-      _aliases,
-      _locations,
-      _localTargets,
-      _evidence,
-      _management,
-      searchIndex,
-      _orderedWorks,
-      _episodeParents);
+  JsonMap search(String query, int limit, int? episodeLimit) =>
+      searchIndex.search(query, limit: limit, episodeLimit: episodeLimit);
+
+  List<String?> searchWorkIds(List<ExternalRef> refs) =>
+      refs.map(searchIndex.workId).toList();
+
+  JsonMap managementTargets(List<String> ids) => {
+        'entries': [
+          for (final id in ids)
+            {
+              'workId': id,
+              'targets': _management[_aliases[id] ?? id] ?? [],
+              if (!_management.containsKey(_aliases[id] ?? id))
+                'error':
+                    const Failure(FailureCode.notFound, 'Unknown merged work.')
+                        .toJson()
+            }
+        ]
+      };
+
+  JsonMap evidence(String id) {
+    final result = _evidence[_aliases[id] ?? id];
+    if (result == null) {
+      throw const Failure(FailureCode.notFound, 'Unknown catalogue entity.');
+    }
+    return result;
+  }
+
+  LibrarySnapshot get snapshot => LibrarySnapshot(_assets, _works, _episodes,
+      _aliases, _locations, _localTargets, _orderedWorks, _episodeParents);
 }
 
 final class LibrarySnapshot {
@@ -903,17 +922,12 @@ final class LibrarySnapshot {
       this.aliases,
       this.locations,
       this.localTargets,
-      this.evidence,
-      this.management,
-      this.searchIndex,
       this.orderedWorks,
       this.episodeParents);
   final Map<String, String> assets, aliases, localTargets;
   final Map<String, UiWork> works;
   final Map<String, List<UiEpisode>> episodes;
-  final Map<String, List<JsonMap>> locations, management;
-  final Map<String, JsonMap> evidence;
-  final LibrarySearchIndex searchIndex;
+  final Map<String, List<JsonMap>> locations;
   final List<UiWork> orderedWorks;
   final Map<String, String> episodeParents;
 }

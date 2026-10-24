@@ -19,9 +19,9 @@ bool activityRecordsInvocation(String action, {required bool conflict}) =>
     localOperationTitles.containsKey(action);
 
 /// Whether a read's journal line keeps its result: those 动态 shows.
-bool activityKeepsResult(InvocationRecord record) => activityRecordsInvocation(
-    record.actionId,
-    conflict: record.failureCode == FailureCode.conflict);
+bool activityKeepsResult(InvocationRecord record) =>
+    activityRecordsInvocation(record.actionId,
+        conflict: record.failureCode == FailureCode.conflict);
 
 /// journal.jsonl as Next keeps it: every invocation; reads without their
 /// result unless 动态 shows them; rotated into archives past 32 MiB.
@@ -43,7 +43,8 @@ Future<void> migrateActivityInvocations(DatabaseExecutor db) async {
     invocation_id TEXT PRIMARY KEY, origin TEXT NOT NULL)''');
   // One row once the journal written before these tables has been read
   // into them.
-  await db.execute('CREATE TABLE IF NOT EXISTS activity_backfill (done INTEGER)');
+  await db
+      .execute('CREATE TABLE IF NOT EXISTS activity_backfill (done INTEGER)');
 }
 
 const _inputKeys = ['provider', 'sourceId', 'entityId', 'next', 'entries'];
@@ -118,7 +119,8 @@ Map<String, Object?> activityInvocationRecord(Map row) => {
       'startedAt': row['started_at'],
       'elapsedMs': row['elapsed_ms'],
       'input': jsonDecode(row['input'] as String),
-      'result': row['result'] == null ? null : jsonDecode(row['result'] as String),
+      'result':
+          row['result'] == null ? null : jsonDecode(row['result'] as String),
     };
 
 /// What 动态 needs of invocations, kept in next.db as they happen: the
@@ -168,7 +170,8 @@ final class ActivityInvocations implements InvocationObserver {
         changed?.call();
       }
     }();
-    unawaited(stored.then<void>((_) {}, onError: (Object error, StackTrace stack) {
+    unawaited(
+        stored.then<void>((_) {}, onError: (Object error, StackTrace stack) {
       if (database.isOpen) {
         reportNextError(error, stack, 'Next activity invocations');
       }
@@ -206,34 +209,10 @@ final class ActivityInvocations implements InvocationObserver {
         for (final file in await JournalAppender.segments(journal)) file.path
       ];
       if (segments.isEmpty) return;
-      final (rows, origins) = await _readJournalOffMain(segments);
-      // Sent to the database in small batches, so no single message is large.
-      Future<bool> insert(String table, List<Map<String, Object?>> values,
-          int Function(Map<String, Object?> row) size) async {
-        var batch = database.batch(), bytes = 0, count = 0;
-        for (final row in values) {
-          batch.insert(table, row, conflictAlgorithm: ConflictAlgorithm.ignore);
-          bytes += size(row);
-          if (++count >= 500 || bytes >= 256 << 10) {
-            if (_closed) return false;
-            await batch.commit(noResult: true);
-            batch = database.batch();
-            bytes = count = 0;
-          }
-        }
-        if (_closed) return false;
-        if (count > 0) await batch.commit(noResult: true);
-        return true;
-      }
-
-      if (!await insert('invocation_origins', origins, (_) => 64)) return;
-      if (!await insert(
-          'activity_invocations',
-          rows,
-          (row) =>
-              (row['input'] as String).length +
-              ((row['result'] as String?)?.length ?? 0))) {
-        return;
+      final statements = await _readJournalOffMain(segments);
+      for (final (sql, args) in statements) {
+        if (_closed) return;
+        await database.rawInsert(sql, args);
       }
       await database.insert('activity_backfill', {'done': 1});
       _backfilled = true;
@@ -259,9 +238,8 @@ final class ActivityInvocations implements InvocationObserver {
 Future<Map<String, Object?>?> _rowOffMain(InvocationRecord record) =>
     Isolate.run(() => activityInvocationRow(record.toJson()));
 
-Future<(List<Map<String, Object?>>, List<Map<String, Object?>>)>
-    _readJournalOffMain(List<String> paths) =>
-        Isolate.run(() => _readJournal(paths));
+Future<List<(String, List<Object?>)>> _readJournalOffMain(List<String> paths) =>
+    Isolate.run(() => _readJournal(paths));
 
 final _header = RegExp(
     r'^\{"invocationId":"((?:[^"\\]|\\.)*)","actionId":"((?:[^"\\]|\\.)*)",'
@@ -269,9 +247,9 @@ final _header = RegExp(
 
 /// On a background isolate: the rows of every shown invocation and the
 /// origin of every write in [paths], read in order (a later line with the
-/// same invocation ID replaces an earlier one, as 动态 composed them).
-Future<(List<Map<String, Object?>>, List<Map<String, Object?>>)> _readJournal(
-    List<String> paths) async {
+/// same invocation ID replaces an earlier one, as 动态 composed them) and
+/// packed into bounded multi-row INSERT statements.
+Future<List<(String, List<Object?>)>> _readJournal(List<String> paths) async {
   final shown = <String, Map<String, Object?>>{};
   final origins = <String, String>{};
   for (final path in paths) {
@@ -311,11 +289,47 @@ Future<(List<Map<String, Object?>>, List<Map<String, Object?>>)> _readJournal(
       }
     }
   }
-  return (
-    shown.values.toList(),
-    [
-      for (final MapEntry(:key, :value) in origins.entries)
-        {'invocation_id': key, 'origin': value}
-    ]
-  );
+  final statements = <(String, List<Object?>)>[];
+  final originEntries = origins.entries.toList();
+  for (var start = 0; start < originEntries.length; start += 250) {
+    final chunk = originEntries.sublist(
+        start, (start + 250).clamp(0, originEntries.length));
+    statements.add((
+      'INSERT OR IGNORE INTO invocation_origins (invocation_id, origin) VALUES '
+          '${List.filled(chunk.length, '(?,?)').join(',')}',
+      [
+        for (final entry in chunk) ...[entry.key, entry.value]
+      ]
+    ));
+  }
+  final rowList = shown.values.toList();
+  var index = 0;
+  while (index < rowList.length) {
+    final args = <Object?>[];
+    var count = 0, bytes = 0;
+    while (index < rowList.length && count < 80 && bytes < 256 << 10) {
+      final row = rowList[index++];
+      count++;
+      bytes += (row['input'] as String).length +
+          ((row['result'] as String?)?.length ?? 0);
+      args.addAll([
+        row['invocation_id'],
+        row['action_id'],
+        row['origin'],
+        row['status'],
+        row['failure_code'],
+        row['started_at'],
+        row['elapsed_ms'],
+        row['input'],
+        row['result']
+      ]);
+    }
+    statements.add((
+      'INSERT OR IGNORE INTO activity_invocations '
+          '(invocation_id, action_id, origin, status, failure_code, started_at, elapsed_ms, input, result) VALUES '
+          '${List.filled(count, '(?,?,?,?,?,?,?,?,?)').join(',')}',
+      args
+    ));
+  }
+  return statements;
 }

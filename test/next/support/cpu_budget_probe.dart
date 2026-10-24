@@ -15,6 +15,7 @@ final class _Timespec extends Struct {
 /// budget. A callback never migrates threads before returning to the event loop;
 /// each callback takes a fresh pair of readings. Nested zone calls count once.
 final class CpuBudgetProbe {
+  static const _trace = bool.fromEnvironment('NEXT_PERF_TRACE');
   final _wall = Stopwatch()..start();
   final _clock = _ThreadClock();
   final _phases = <(String, double, double)>[];
@@ -26,20 +27,26 @@ final class CpuBudgetProbe {
   R _measure<R>(R Function() callback) {
     if (_stopped || _depth > 0) return callback();
     _depth++;
+    final stack = _trace ? StackTrace.current : null;
     _start = _clock.now;
     try {
       return callback();
     } finally {
-      if (!_stopped) _record();
+      if (!_stopped) _record(stack);
       _depth--;
       if (_stopped && _depth == 0) _clock.close();
     }
   }
 
-  void _record() {
+  void _record([StackTrace? stack]) {
     final end = _clock.now;
     final elapsed = end - _start;
     _start = end;
+    if (_trace && stack != null && elapsed >= 4000) {
+      // ignore: avoid_print
+      print(
+          '[CPU probe stack] ${(elapsed / 1000).toStringAsFixed(3)} ms\n$stack');
+    }
     if (elapsed > _longest) _longest = elapsed;
     if (elapsed > 2000) _held += elapsed;
     _total += elapsed;

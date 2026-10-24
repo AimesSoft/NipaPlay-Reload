@@ -74,8 +74,7 @@ class _ConsentDialogState extends State<_ConsentDialog> {
           title: Text(widget.title),
           content: Text(widget.message),
           actions: [
-            TextButton(
-                onPressed: () => answer(false), child: const Text('取消')),
+            TextButton(onPressed: () => answer(false), child: const Text('取消')),
             FilledButton(
                 onPressed: () => answer(true), child: Text(widget.accept)),
           ],
@@ -158,57 +157,83 @@ class _ConsentWords extends StatelessWidget {
 final class DiskDeletion implements JobExecutor {
   DiskDeletion({Future<bool> Function(String, String, Future<void>)? prompt})
       : prompt = prompt ??
-            ((title, message, stopped) => showUserConsent(
-                title, message, '删除',
+            ((title, message, stopped) => showUserConsent(title, message, '删除',
                 stopped: stopped, destructive: true));
   final Future<bool> Function(String, String, Future<void>) prompt;
+  late final Iterable<Capability> _unprotected;
 
   /// The conversation behind a request, so the answer comes back to it.
   Future<JsonMap?> Function(Invocation)? returnTarget;
   late TaskEngine engine;
-  late Harness _execution;
+  late final Harness _execution = Harness(_unprotected);
   final _previews = <String, JsonMap>{};
   @override
   String get type => 'disk_deletion';
 
   List<Capability> protect(List<Capability> capabilities) {
-    _execution = Harness(capabilities);
+    _unprotected = capabilities;
     return [
       _ProtectedCapability([_RequestDownloadDeletion(this)]),
       for (final capability in capabilities)
-        _ProtectedCapability([
-          for (final action in capability.actions)
-            if (const {'download.delete', 'plugins.delete'}
-                .contains(action.spec.id))
-              _DeletionAction(this, action.spec)
-            else
-              action
-        ])
+        if (_protectDeletion(capability) case final protected?)
+          _ProtectedCapability(protected)
+        else
+          capability
     ];
+  }
+
+  List<Action>? _protectDeletion(Capability capability) {
+    var protected = false;
+    final actions = <Action>[];
+    for (final action in capability.actions) {
+      if (const {'download.delete', 'plugins.delete'}
+          .contains(action.spec.id)) {
+        protected = true;
+        actions.add(_DeletionAction(this, action.spec));
+      } else {
+        actions.add(action);
+      }
+    }
+    return protected ? actions : null;
   }
 
   Future<JsonMap> downloadPreview(JsonMap arguments) async {
     final wanted = (arguments['fileIndices'] as List?)?.cast<int>();
     if (wanted != null) return _filesPreview(arguments, wanted);
     final read = await _execution.invokeJson('download.read', arguments,
-      Invocation(origin: 'application:delete_preview'));
+        Invocation(origin: 'application:delete_preview'));
     if (read case Failed(:final failure)) throw failure;
-    if (read is! Completed) throw StateError('Download read needs a completed manifest.');
+    if (read is! Completed)
+      throw StateError('Download read needs a completed manifest.');
     JsonMap manifest(JsonMap result) {
       final task = result['task'] as JsonMap?;
-      return {'jobId': (result['job'] as Map?)?['jobId'],
-        'infoHash': task?['infoHash'], 'outputDirectory': task?['outputDirectory'],
-        'files': [for (final file in (task?['files'] as List? ?? []).cast<Map>())
-          {for (final key in ['path', 'local', 'expectedSize', 'included']) key: file[key]}]};
+      return {
+        'jobId': (result['job'] as Map?)?['jobId'],
+        'infoHash': task?['infoHash'],
+        'outputDirectory': task?['outputDirectory'],
+        'files': [
+          for (final file in (task?['files'] as List? ?? []).cast<Map>())
+            {
+              for (final key in ['path', 'local', 'expectedSize', 'included'])
+                key: file[key]
+            }
+        ]
+      };
     }
+
     final result = read.value.toJson();
     if (result['results'] case final List items) {
       if (items.any((item) => (item as Map)['status'] == 'failed')) {
-        throw const Failure(FailureCode.unavailable, 'Some downloads cannot be previewed; read each task before deleting.');
+        throw const Failure(FailureCode.unavailable,
+            'Some downloads cannot be previewed; read each task before deleting.');
       }
-      return {'downloads': [for (final item in items.cast<JsonMap>()) manifest(item)]};
+      return {
+        'downloads': [for (final item in items.cast<JsonMap>()) manifest(item)]
+      };
     }
-    return {'downloads': [manifest(result)]};
+    return {
+      'downloads': [manifest(result)]
+    };
   }
 
   /// Only the chosen files of one download: what the person is asked about,
@@ -226,7 +251,8 @@ final class DiskDeletion implements JobExecutor {
     final read = await _execution.invokeJson('download.read', {'jobId': jobId},
         Invocation(origin: 'application:delete_preview'));
     if (read case Failed(:final failure)) throw failure;
-    if (read is! Completed) throw StateError('Download read needs a completed manifest.');
+    if (read is! Completed)
+      throw StateError('Download read needs a completed manifest.');
     final result = read.value.toJson();
     final task = result['task'] as JsonMap?;
     final all = (task?['files'] as List? ?? []).cast<Map>();
@@ -306,10 +332,14 @@ final class DiskDeletion implements JobExecutor {
               details: {'deleted': false, 'reason': 'user_declined'}));
       return;
     }
-    if (action == 'download.delete' && context.job.input['expectedPlan'] != null) {
-      final current = await downloadPreview(context.job.input['arguments'] as JsonMap);
-      if (stableMediaId('delete-plan', current) != context.job.input['expectedPlan']) {
-        throw const Failure(FailureCode.conflict, 'Download targets changed after preview; preview again.');
+    if (action == 'download.delete' &&
+        context.job.input['expectedPlan'] != null) {
+      final current =
+          await downloadPreview(context.job.input['arguments'] as JsonMap);
+      if (stableMediaId('delete-plan', current) !=
+          context.job.input['expectedPlan']) {
+        throw const Failure(FailureCode.conflict,
+            'Download targets changed after preview; preview again.');
       }
     }
     await context.running(phase: 'deleting');
@@ -395,12 +425,21 @@ final class _DeletionAction extends Action<_Json, _Json> {
     if (original.id == 'download.delete') {
       final preview = await deletion.downloadPreview(input.value);
       final id = newMediaId('delete-preview');
-      deletion._previews[id] = {'arguments': input.value, 'preview': preview,
-        'origin': invocation.origin, 'invocationId': invocation.id};
+      deletion._previews[id] = {
+        'arguments': input.value,
+        'preview': preview,
+        'origin': invocation.origin,
+        'invocationId': invocation.id
+      };
       final partial = input.value['fileIndices'] != null;
       return NeedsDecision(Decision(
-        prompt: '${partial ? '删除这个下载里的这些文件' : '删除这些下载文件'}：${jsonEncode(preview)}',
-        options: [DecisionOption(label: '请求删除', call: ActionCall('download.delete.request', {'previewId': id}))]));
+          prompt:
+              '${partial ? '删除这个下载里的这些文件' : '删除这些下载文件'}：${jsonEncode(preview)}',
+          options: [
+            DecisionOption(
+                label: '请求删除',
+                call: ActionCall('download.delete.request', {'previewId': id}))
+          ]));
     }
     final target = await deletion.returnTarget?.call(invocation);
     final job = await deletion.engine
@@ -419,15 +458,20 @@ final class _RequestDownloadDeletion extends Action<_Json, _Json> {
   _RequestDownloadDeletion(this.deletion);
   final DiskDeletion deletion;
   @override
-  ActionSpec get spec => const ActionSpec(id: 'download.delete.request',
-    title: '请求删除预览中的下载文件',
-    description: 'Use the option returned by download.delete. The process-local preview is single-use and caller-bound. '
-      'Creates a persistent disk_deletion task, asks the user in NipaPlay, then checks the manifest again. '
-      'When the user answers (Delete, Cancel or closing the window) the outcome returns to the requesting conversation, queued while a turn is active; a followup you registered on the task jobId replaces that return. The facts carry state, whether it was deleted, and deletedFiles. '
-      'This action cannot approve deletion. Restart before requesting requires a new preview.',
-    effect: Effect.destructive,
-    input: ObjectSchema({'previewId': StringSchema(minLength: 1)}, required: ['previewId']),
-    output: ObjectSchema({'job': ObjectSchema({}, additionalProperties: true)}, required: ['job']));
+  ActionSpec get spec => const ActionSpec(
+      id: 'download.delete.request',
+      title: '请求删除预览中的下载文件',
+      description:
+          'Use the option returned by download.delete. The process-local preview is single-use and caller-bound. '
+          'Creates a persistent disk_deletion task, asks the user in NipaPlay, then checks the manifest again. '
+          'When the user answers (Delete, Cancel or closing the window) the outcome returns to the requesting conversation, queued while a turn is active; a followup you registered on the task jobId replaces that return. The facts carry state, whether it was deleted, and deletedFiles. '
+          'This action cannot approve deletion. Restart before requesting requires a new preview.',
+      effect: Effect.destructive,
+      input: ObjectSchema({'previewId': StringSchema(minLength: 1)},
+          required: ['previewId']),
+      output: ObjectSchema(
+          {'job': ObjectSchema({}, additionalProperties: true)},
+          required: ['job']));
   @override
   _Json decodeInput(JsonMap json) => _Json(json);
   @override
@@ -435,19 +479,26 @@ final class _RequestDownloadDeletion extends Action<_Json, _Json> {
     final id = input.value['previewId'] as String;
     final plan = deletion._previews[id];
     if (plan == null || plan['origin'] != invocation.origin) {
-      throw const Failure(FailureCode.conflict, 'Deletion preview is missing or belongs to another caller.');
+      throw const Failure(FailureCode.conflict,
+          'Deletion preview is missing or belongs to another caller.');
     }
-    final current = await deletion.downloadPreview(plan['arguments'] as JsonMap);
+    final current =
+        await deletion.downloadPreview(plan['arguments'] as JsonMap);
     final fingerprint = stableMediaId('delete-plan', plan['preview']!);
     if (stableMediaId('delete-plan', current) != fingerprint) {
-      throw const Failure(FailureCode.conflict, 'Download targets changed after preview; preview again.');
+      throw const Failure(FailureCode.conflict,
+          'Download targets changed after preview; preview again.');
     }
     deletion._previews.remove(id);
     final target = await deletion.returnTarget?.call(invocation);
-    final job = await deletion.engine.submit(type: deletion.type, title: '删除下载文件', input: {
-      'action': 'download.delete', 'arguments': plan['arguments'],
-      'origin': invocation.origin, 'invocationId': plan['invocationId'],
-      'expectedPlan': fingerprint, 'preview': plan['preview'],
+    final job = await deletion.engine
+        .submit(type: deletion.type, title: '删除下载文件', input: {
+      'action': 'download.delete',
+      'arguments': plan['arguments'],
+      'origin': invocation.origin,
+      'invocationId': plan['invocationId'],
+      'expectedPlan': fingerprint,
+      'preview': plan['preview'],
       if (target != null) 'returnTo': target,
     });
     return Completed(_Json({'job': job.toJson()}));
@@ -477,8 +528,8 @@ String downloadDeletionWords(Object? preview) {
     for (final f in files)
       if (name(f).isNotEmpty) name(f)
   ];
-  final bytes = files.fold<num>(
-      0, (sum, f) => sum + ((f['expectedSize'] as num?) ?? 0));
+  final bytes =
+      files.fold<num>(0, (sum, f) => sum + ((f['expectedSize'] as num?) ?? 0));
   String size(num b) => b >= 1 << 30
       ? '${(b / (1 << 30)).toStringAsFixed(1)} GB'
       : '${(b / (1 << 20)).toStringAsFixed(0)} MB';
@@ -489,9 +540,7 @@ String downloadDeletionWords(Object? preview) {
         : '将删除 ${downloads.length} 个下载留下的数据，无法恢复。');
   } else {
     lines.writeln(partial
-        ? (names.length == 1
-            ? '将删除这个下载里的这个文件，无法恢复：'
-            : '将删除这个下载里的这几个文件，无法恢复：')
+        ? (names.length == 1 ? '将删除这个下载里的这个文件，无法恢复：' : '将删除这个下载里的这几个文件，无法恢复：')
         : '将删除这些下载的文件，无法恢复：');
     for (final n in names.take(3)) {
       lines.writeln('· $n');

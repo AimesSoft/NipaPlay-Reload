@@ -50,8 +50,7 @@ final class MeshLibrary {
   Map<String, String> _aliases = {};
   Map<String, List<JsonMap>> _locations = {};
   Map<String, String> _localTargets = {};
-  Map<String, JsonMap> _evidence = {};
-  Map<String, List<JsonMap>> _management = {};
+
   Future<void>? _sync, _building;
   String? _builtStamp;
   String? _composedStamp;
@@ -235,9 +234,11 @@ final class MeshLibrary {
     for (final entry in update.orderedUpdates.entries) {
       _orderedWorks[entry.key] = entry.value;
     }
-    for (final work in update.works.values) {
-      searchIndex.updateProgress(workJson(work),
-          update.episodes[work.workId]!.map(episodeJson).toList());
+    if (searchIndex.ready) {
+      for (final work in update.works.values) {
+        searchIndex.updateProgress(workJson(work),
+            update.episodes[work.workId]!.map(episodeJson).toList());
+      }
     }
     _progressRevision++;
     ui.notifyLibraryChanged();
@@ -255,30 +256,23 @@ final class MeshLibrary {
 
   Future<JsonMap> search(String query,
       {int limit = 12, int? episodeLimit}) async {
-    if (!searchIndex.ready) await prepareIndex();
-    return searchIndex.search(query, limit: limit, episodeLimit: episodeLimit);
+    if (searchIndex.ready) {
+      return searchIndex.search(query,
+          limit: limit, episodeLimit: episodeLimit);
+    }
+    await prepareIndex();
+    return await worker.call('search', (query, limit, episodeLimit)) as JsonMap;
   }
 
   Future<List<String?>> searchWorkIds(List<ExternalRef> refs) async {
+    if (searchIndex.ready) return refs.map(searchIndex.workId).toList();
     await prepareIndex();
-    return refs.map(searchIndex.workId).toList();
+    return (await worker.call('searchWorkIds', refs) as List).cast<String?>();
   }
 
   Future<JsonMap> managementTargets(List<String> ids) async {
     await prepareIndex();
-    return {
-      'entries': [
-        for (final id in ids)
-          {
-            'workId': id,
-            'targets': _management[_aliases[id] ?? id] ?? [],
-            if (!_management.containsKey(_aliases[id] ?? id))
-              'error':
-                  const Failure(FailureCode.notFound, 'Unknown merged work.')
-                      .toJson()
-          }
-      ]
-    };
+    return await worker.call('managementTargets', ids) as JsonMap;
   }
 
   String? localEpisodeId(String id) => _localTargets[_aliases[id] ?? id];
@@ -310,10 +304,7 @@ final class MeshLibrary {
 
   Future<JsonMap> evidence(String id) async {
     await prepareIndex();
-    final result = _evidence[_aliases[id] ?? id];
-    if (result == null)
-      throw const Failure(FailureCode.notFound, 'Unknown catalogue entity.');
-    return result;
+    return await worker.call('evidence', id) as JsonMap;
   }
 
   Future<void>? _composing;
@@ -345,9 +336,6 @@ final class MeshLibrary {
     _aliases = result.aliases;
     _locations = result.locations;
     _localTargets = result.localTargets;
-    _evidence = result.evidence;
-    _management = result.management;
-    searchIndex = result.searchIndex;
   }
 
   Future<JsonMap> request(String method, JsonMap input, String peer) async {
@@ -389,9 +377,7 @@ final class MeshLibrary {
     if (input['path'] case final String path) return MeshFiles.absolute(path);
     if (input['assetId'] case final String id) {
       final path = _playAssets[id] ?? _assets[id];
-      if (path == null) {
-        await _build();
-      }
+      if (path == null) await prepareIndex();
       final found = _playAssets[id] ?? _assets[id];
       if (found == null)
         throw const Failure(FailureCode.notFound, 'Unknown library asset.');
