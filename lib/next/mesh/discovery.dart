@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:nipa_harness/nipa_harness.dart';
 import '../platform/lab_profile.dart';
 import 'bonjour.dart';
+import 'system_bonjour.dart';
 
 typedef NetworkInterfaceSnapshot = ({
   String name,
@@ -178,6 +179,7 @@ final class MeshDiscovery {
   StreamSubscription<RawSocketEvent>? _subscription;
   Timer? _broadcast;
   MeshBonjour? _bonjour;
+  SystemBonjour? _systemBonjour;
   final _hints = <String, List<({JsonMap address, DateTime expires})>>{};
   static const discoveryPort = 32124;
 
@@ -262,6 +264,27 @@ final class MeshDiscovery {
 
   Future<void> start() async {
     if (LabProfile.active && !allowInLabProfile) return;
+    if (SystemBonjour.available) {
+      // The system's Bonjour alone: no hand-written mDNS and no UDP
+      // broadcast (the latter needs a multicast entitlement Apple grants on
+      // request, and it fails with exceptions where it is not granted).
+      final system = _systemBonjour = SystemBonjour(
+        deviceId: deviceId,
+        port: port,
+        onPeerDiscovered: (peer, host, peerPort, ttlSeconds) {
+          recordHint(
+            peer,
+            host,
+            peerPort,
+            ttl: Duration(seconds: ttlSeconds),
+            priority: 220,
+            source: 'bonjour',
+          );
+        },
+      );
+      await system.start();
+      return;
+    }
     if (enableBonjour) {
       MeshBonjour.isVirtualInterface = isVirtualNetworkInterface;
       _bonjour = MeshBonjour(
@@ -345,5 +368,7 @@ final class MeshDiscovery {
     _socket = null;
     await _bonjour?.close();
     _bonjour = null;
+    await _systemBonjour?.close();
+    _systemBonjour = null;
   }
 }

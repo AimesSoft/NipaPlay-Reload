@@ -285,3 +285,20 @@ Agent 与 Mesh 端口由系统分配，连接地址从各自 endpoint.json / Mes
 自动集成测试通过手动触发心跳检验此时序，不缩短生产 15 分钟下限。
 两台实际设备则各自启动 App，配置可路由网卡、overlay 或公网候选；
 各 App 固定同一个公开开发 CA，协调服务依然只有控制面。
+
+## 有屏幕的设备：在场与 iPad 身体
+
+有界面的设备在前台、后台、切到另一套界面之间变化时，向其他设备推送 `mesh/presence
+{state, at, nowPlaying, progress}`（state 为 foreground / background / classic）。接收方把最后一条
+事实记在 `presence`，`mesh.devices` 的每台设备带 `presence`；`mesh/describe` 也带自己的。
+对 state 不是 foreground 的设备，`rpc` 立即失败，`Failure.details.reason` 为
+`device_not_present`，`lastPresence` 是最后的事实（进后台那一刻在放什么、放到哪），不发请求、不等超时。
+没有说过话的设备（桌面、无界面主机、旧版本）照常调用。被拒的调用会在后台向它问一次
+`mesh/describe`（至多每 30 秒），回来的通知丢了也会自己恢复。切到另一套界面关掉设备网前先推 classic。
+
+iPad 只启动“身体”（`lib/next/body/`）：能力目录里没有 window.*、program.*、chat.*、agent.*、
+memory.*、app.quit/restart；不启动本机代理端点和 ChatHost。保险库是钥匙串
+（`AfterFirstUnlockThisDeviceOnly`，不同步 iCloud），设备身份键名是随机安装号
+（`mesh-install-id`），钥匙串里的密钥丢失（备份恢复到另一台）就生成新身份。局域网发现只用系统
+Bonjour（`_nipaplay-mesh._tcp`，经 `nipaplay/mesh_bonjour` 平台通道），不开 UDP 广播。
+进后台时暂停播放并推送在场，回前台时按原端口重开监听、重报地址、再推在场（`BodyLifecycle`）。

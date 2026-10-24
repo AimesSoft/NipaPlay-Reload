@@ -12,15 +12,23 @@ final class MeshIdentity {
   final CredentialVault vault;
   final MeshNative native;
 
+  /// [installId] names the vault entry by a random installation number
+  /// instead of the installation path, and, with it, a vault that has lost the
+  /// key (an iPad restored from a backup: the key is `ThisDeviceOnly`) means a
+  /// new device, not an error: the old identity file is replaced.
   static Future<MeshIdentity> load(
-      Directory root, CredentialVault vault, MeshNative native) async {
+      Directory root, CredentialVault vault, MeshNative native,
+      {String? installId}) async {
     await root.create(recursive: true);
     // A distinct installation directory also gets a distinct Keychain entry.
     final ref = CredentialRef(
-        'mesh', sha256.convert(utf8.encode(root.absolute.path)).toString());
+        'mesh',
+        installId ??
+            sha256.convert(utf8.encode(root.absolute.path)).toString());
     var key = await vault.read(ref);
     if (key == null) {
-      if (await File('${root.path}/mesh-identity.json').exists()) {
+      if (installId == null &&
+          await File('${root.path}/mesh-identity.json').exists()) {
         throw StateError(
             'Mesh private key is missing; restore credentials before joining.');
       }
@@ -41,7 +49,7 @@ final class MeshIdentity {
     final file = File('${root.path}/mesh-identity.json');
     if (await file.exists()) {
       final previous = jsonDecode(await file.readAsString()) as Map;
-      if (previous['deviceId'] != id) {
+      if (previous['deviceId'] != id && installId == null) {
         throw StateError(
             'Mesh identity vault entry does not match installation.');
       }
