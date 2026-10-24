@@ -7,6 +7,7 @@ import 'package:nipaplay/next/player/core/arbiter.dart';
 import 'package:nipaplay/next/player/core/clock.dart';
 import 'package:nipaplay/next/player/core/host.dart';
 import 'package:nipaplay/next/player/core/session.dart';
+import 'package:nipaplay/next/player/features/kernel_features.dart';
 import 'package:nipaplay/next/player/kernel/driver.dart';
 import 'package:nipaplay/next/player/kernel/erika_driver.dart';
 import 'package:nipaplay/next/player/kernel/mdk_driver.dart';
@@ -56,6 +57,42 @@ void main() {
         await rig.host.open(request(start: const Duration(minutes: 7)));
     expect(rig.drivers.single.log, ['open 420000', 'seek 420000', 'play']);
     expect(session.position.inMilliseconds, closeTo(420000, 200));
+    await rig.host.close(reason: 'test');
+  });
+
+  test('late media facts replace the open snapshot, chapters included',
+      () async {
+    final rig = FakeHost();
+    final session = await rig.host.open(request(paused: true));
+    final driver = rig.drivers.single;
+    final chapters = [
+      for (final (index, title) in [
+        'Avant',
+        'Opening',
+        'A Part',
+        'Eye-catch',
+        'B Part',
+        'Ending',
+        'Post-Credit',
+      ].indexed)
+        ChapterFacts(title, index * 60000,
+            endMs: index == 6 ? null : (index + 1) * 60000),
+    ];
+    final media = MediaFacts(
+      duration: session.duration,
+      width: 1920,
+      height: 1080,
+      chapters: chapters,
+    );
+
+    expect(session.media.value!.chapters, isNull);
+    driver.emit(
+        (seq, at) => KernelMediaChanged(driver.instance, seq, at, media));
+    await pumpEventQueue();
+
+    expect(session.media.value!.chapters, hasLength(7));
+    expect(session.media.value!.chapters!.last.title, 'Post-Credit');
+    expect((session.media.value!.toJson()['chapters'] as List).length, 7);
     await rig.host.close(reason: 'test');
   });
 

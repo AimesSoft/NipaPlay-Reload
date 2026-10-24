@@ -413,6 +413,14 @@ final class KernelBuffering extends KernelEvent {
   final bool buffering;
 }
 
+/// The kernel reported media facts again after it had opened them (for
+/// example, chapters that were not ready with the first media report).
+/// [MediaFacts] replaces the session's snapshot; it never merges by guess.
+final class KernelMediaChanged extends KernelEvent {
+  KernelMediaChanged(super.instance, super.seq, super.at, this.media);
+  final MediaFacts media;
+}
+
 /// The media played to its end. [inferred]: the kernel said nothing; its
 /// position stood still at the end while it played.
 final class KernelEnded extends KernelEvent {
