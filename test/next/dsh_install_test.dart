@@ -41,6 +41,9 @@ void main() {
     expect(manifest.nodes.keys,
         containsAll(['macos-arm64', 'macos-x64', 'linux-x64', 'linux-arm64', 'windows-x64']));
     expect(manifest.supports('macos-arm64'), true);
+    expect(manifest.supports('linux-x64'), true);
+    expect(manifest.supports('windows-x64'), true);
+    expect(manifest.supports('linux-arm64'), false);
     for (final node in manifest.nodes.values) {
       expect(node.sha256, matches(RegExp(r'^[0-9a-f]{64}$')));
       expect(Uri.parse(node.url).host, 'nodejs.org');
@@ -57,6 +60,22 @@ void main() {
     expect(arm, contains('node_modules/@deepseek-ai/dsh'));
     expect(arm, contains('node_modules/@img/sharp-darwin-arm64'));
     expect(arm, isNot(contains('node_modules/@img/sharp-darwin-x64')));
+    // Each platform gets its own natives and the packages only it needed.
+    Set<String> of(String platform) =>
+        manifest.packagesFor(platform).map((p) => p.path.replaceFirst('node_modules/', '')).toSet();
+    final linux = of('linux-x64'), windows = of('windows-x64'), mac = of('macos-arm64');
+    expect(linux, containsAll(['@img/sharp-linux-x64', '@img/sharp-libvips-linux-x64', 'koffi', '@koromix/koffi-linux-x64']));
+    expect(linux, isNot(contains('@img/sharp-linuxmusl-x64')));
+    expect(linux, isNot(contains('@img/sharp-darwin-arm64')));
+    expect(linux, isNot(contains('@deepseek-ai/dsh-tool-pwsh')));
+    expect(windows, containsAll(['@img/sharp-win32-x64', '@deepseek-ai/dsh-tool-pwsh', 'koffi', '@koromix/koffi-win32-x64']));
+    expect(windows, isNot(contains('@img/sharp-linux-x64')));
+    // macOS keeps what it had: nothing of the others' arrived.
+    expect(mac, isNot(contains('koffi')));
+    expect(mac, isNot(contains('@deepseek-ai/dsh-tool-pwsh')));
+    expect(mac, isNot(contains('@img/sharp-linux-x64')));
+    expect(mac, isNot(contains('@img/sharp-win32-x64')));
+    expect(mac, isNot(contains('@deepseek-ai/node-addon-system-linux-x64')));
     // The disabled rows' packages stay out.
     final names = manifest.packages.map((p) => p.name).toSet();
     for (final out in [
@@ -77,7 +96,7 @@ void main() {
     late int changes;
     late _Fixture fixture;
 
-    DshInstall make({bool Function()? inUse}) {
+    DshInstall make({bool Function()? inUse, DshFallback? fallback}) {
       fixture = _Fixture.build(dir, platform!, server.base);
       server.files
         ..clear()
@@ -91,6 +110,7 @@ void main() {
           httpClient: HttpClient.new,
           inUse: inUse ?? () => false,
           verifySignature: false,
+          fallback: fallback ?? DshFallback.npmmirror,
           concurrency: 3);
     }
 
@@ -219,6 +239,93 @@ void main() {
       await install.remove();
       await install.configure(registryMirror: '', nodeMirror: '');
       expect((await install.mirrors()).registry, isNull);
+    }, skip: skip);
+
+    // The official addresses are the manifest's; npmmirror stands behind
+    // them. Here the "official" address is a local server and the mirror
+    // another (named localhost, so a failure can tell them apart).
+    Future<(_Server, DshFallback)> mirror() async {
+      final standIn = await _Server.start();
+      addTearDown(standIn.close);
+      final port = standIn.base.split(':').last;
+      return (
+        standIn,
+        DshFallback(
+            node: 'http://localhost:$port/mirrors/node',
+            registry: 'http://localhost:$port',
+            hosts: {'127.0.0.1'})
+      );
+    }
+
+    /// The mirror holds what the fixture serves (nodejs.org/dist/v24.22.0/...
+    /// is mirrors/node/v24.22.0/... there).
+    void fill(_Server standIn) {
+      for (final entry in fixture.served.entries) {
+        standIn.files[entry.key.startsWith('/v24.22.0/')
+            ? '/mirrors/node${entry.key}'
+            : entry.key] = entry.value;
+      }
+    }
+
+    test('when the official address does not answer, npmmirror delivers the same pinned bytes',
+        () async {
+      final (standIn, fallback) = await mirror();
+      make(fallback: fallback);
+      fill(standIn);
+      // Nothing listens at the official address any more.
+      await server.close();
+      await install.install();
+      expect((await install.state()).status, UiDshStatus.ready);
+      expect(standIn.requests, isNotEmpty);
+      final runtime = (await install.runtime())!;
+      expect(await File(runtime.bin).readAsString(), contains('dsh-bin'));
+    }, skip: skip);
+
+    test('a file the official address lacks comes from npmmirror; the rest stay official',
+        () async {
+      final (standIn, fallback) = await mirror();
+      make(fallback: fallback);
+      fill(standIn);
+      final target = fixture.manifest.packagesFor(platform!).first;
+      server.files.remove('/${target.url}');
+      await install.install();
+      expect((await install.state()).status, UiDshStatus.ready);
+      expect(standIn.requests, contains('/${target.url}'));
+      expect(standIn.requests.length, lessThan(fixture.served.length));
+      expect(server.requests, isNotEmpty);
+    }, skip: skip);
+
+    test('bytes from npmmirror are held to the manifest, and the failure tells both sources apart',
+        () async {
+      final (standIn, fallback) = await mirror();
+      make(fallback: fallback);
+      fill(standIn);
+      final target = fixture.manifest.packagesFor(platform!)[1];
+      server.files.remove('/${target.url}');
+      standIn.files['/${target.url}'] = utf8.encode('y' * target.bytes);
+      await install.install();
+      final state = await install.state();
+      expect(state.status, UiDshStatus.failed);
+      expect(state.problem, contains(target.url.split('/').last));
+      expect(state.problem, contains('官方源（127.0.0.1）：HTTP 404'));
+      expect(state.problem, contains('备用源（localhost）：SHA-256'));
+      expect(await install.runtime(), isNull);
+    }, skip: skip);
+
+    test('a mirror the person named is the only source: nothing falls back', () async {
+      final (standIn, fallback) = await mirror();
+      make(fallback: fallback);
+      fill(standIn);
+      final custom = await _Server.start();
+      addTearDown(custom.close);
+      await install.configure(registryMirror: custom.base, nodeMirror: custom.base);
+      await install.install();
+      final state = await install.state();
+      expect(state.status, UiDshStatus.failed);
+      expect(state.problem, contains('HTTP 404'));
+      expect(state.problem, isNot(contains('备用源')));
+      expect(standIn.requests, isEmpty);
+      expect(server.requests, isEmpty);
     }, skip: skip);
 
     test('removing refuses while a chat process uses it', () async {

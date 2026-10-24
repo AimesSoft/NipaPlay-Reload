@@ -292,7 +292,7 @@ trust_level = "trusted"
       expect(context, contains('INDEX_MARKER'));
       expect(context, contains('RECENT_FIXTURE for $thread'));
       final tools = [for (final tool in request['tools'] as List) tool['name']];
-      expect(tools, containsAll(['bash', 'read', 'read_image', 'write', 'web_fetch', 'subagent', 'subagent_fork',
+      expect(tools, containsAll([Platform.isWindows ? 'pwsh' : 'bash', 'read', 'read_image', 'write', 'web_fetch', 'subagent', 'subagent_fork',
           'send_message', 'interrupt_agent', 'list_agents', 'job_output', 'job_list', 'job_kill', 'todo_write']));
       // A question that holds the turn open keeps NipaPlay's facts out; she
       // asks with NipaPlay's choices card instead.
@@ -763,8 +763,17 @@ trust_level = "trusted"
 
 const _key = 'dsh-fixture-bearer-7f3c';
 
-Map<String, Object?> _bash(String command) =>
-    {'name': 'bash', 'args': {'description': 'fixture', 'command': command}};
+/// The shell tool of the platform: DSH offers `bash` on macOS and Linux and
+/// `pwsh` on Windows, where an environment variable reads `$env:NAME`.
+Map<String, Object?> _bash(String command) => {
+      'name': Platform.isWindows ? 'pwsh' : 'bash',
+      'args': {
+        'description': 'fixture',
+        'command': Platform.isWindows
+            ? command.replaceAll(r'$NIPAPLAY_CHAT', r'$env:NIPAPLAY_CHAT')
+            : command
+      }
+    };
 
 (DshRuntime?, String?) _locateDsh() {
   final home = Platform.environment['HOME'] ?? '';

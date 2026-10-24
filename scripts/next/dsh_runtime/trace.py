@@ -10,20 +10,28 @@ package set to download.
   DSH_INSTALL=<npm install dir>  DSH_NODE=<node 24>  TRACE_OUT=loaded.txt \
   TRACE_SCRIPT=<json, see run_trace.sh>  python3 trace.py
 
+TRACE_FETCH_URL replaces the page web_fetch is asked for where example.com cannot be reached (DSH refuses loopback addresses).
 TRACE=0 runs without the recorders. Run it again against the trimmed tree
 (DSH_INSTALL=<materialised lock>) to check that nothing is missing.
 """
-import asyncio, json, os, re, sys, threading, time, pathlib
+import asyncio, json, os, re, subprocess, sys, tempfile, threading, time, pathlib
 from http.server import ThreadingHTTPServer, BaseHTTPRequestHandler
 
-HERE = pathlib.Path(__file__).parent
+# What a tool answered may hold any character; a Windows console is not UTF-8.
+sys.stdout.reconfigure(encoding='utf-8', errors='replace')
+
+HERE = pathlib.Path(__file__).resolve().parent
 REPO = HERE.parents[2]
-WORK = pathlib.Path(os.environ.get('TRACE_WORK', '/tmp/nipa-next/dsh-trace'))
+WORK = pathlib.Path(os.environ.get('TRACE_WORK', str(pathlib.Path(tempfile.gettempdir()) / 'nipa-next' / 'dsh-trace')))
 INSTALL = pathlib.Path(os.environ['DSH_INSTALL'])
 NODE = os.environ.get('DSH_NODE', 'node')
-OUT = pathlib.Path(os.environ.get('TRACE_OUT', '/tmp/nipa-next/dsh-trace/loaded.txt'))
-SCRIPT = json.loads(os.environ['TRACE_SCRIPT']) if 'TRACE_SCRIPT' in os.environ else []
+OUT = pathlib.Path(os.environ.get('TRACE_OUT', str(WORK / 'loaded.txt')))
+# The tool sequence: TRACE_SCRIPT (JSON), else the file TRACE_SCRIPT_FILE,
+# else trace-script.json beside this file.
+SCRIPT = json.loads(os.environ['TRACE_SCRIPT']) if 'TRACE_SCRIPT' in os.environ else \
+    json.loads(pathlib.Path(os.environ.get('TRACE_SCRIPT_FILE', HERE / 'trace-script.json')).read_text())
 requests = []
+children = []
 
 class H(BaseHTTPRequestHandler):
     def log_message(self, *a): pass
@@ -40,8 +48,8 @@ class H(BaseHTTPRequestHandler):
         usage = {'input_tokens': 100, 'output_tokens': 10, 'total_tokens': 110, 'input_tokens_details': {'cached_tokens': 0}, 'output_tokens_details': {'reasoning_tokens': 0}}
         step = SCRIPT[n] if n < len(SCRIPT) else None
         if step:
-            text = json.dumps(step).replace('PORT', str(port))
-            job = re.findall(r'bash-[0-9a-f]{16}', json.dumps(body))
+            text = json.dumps(step).replace('PORT', str(port)).replace('https://example.com/', os.environ.get('TRACE_FETCH_URL', 'https://example.com/'))
+            job = re.findall(r'(?:bash|pwsh)-[0-9a-f]{16}', json.dumps(body))
             if job:
                 text = text.replace('JOBID', job[-1])
             step = json.loads(text)
@@ -75,11 +83,15 @@ async def main():
     (WORK / 'plugins').mkdir(exist_ok=True); (WORK / 'harness').mkdir(exist_ok=True)
     for f in (REPO / 'assets/next/agent/dsh').iterdir(): (WORK / 'plugins' / f.name).write_bytes(f.read_bytes())
     work = WORK / 'cwd'; work.mkdir(exist_ok=True)
-    (work / 'AGENTS.md').write_text('# test\n')
+    (work / 'AGENTS.md').write_text('# test\n', encoding='utf-8')
     (work / 'out.txt').unlink(missing_ok=True)
     (work / 'pic.png').write_bytes(__import__('base64').b64decode('iVBORw0KGgoAAAANSUhEUgAAAAgAAAAICAIAAABLbSncAAAAEklEQVR4nGP4z8CAFWEXHbQSACj/P8Fu7N9hAAAAAElFTkSuQmCC'))
     home = WORK / 'dsh-home'
-    if home.exists(): __import__('shutil').rmtree(home)
+    if home.exists():
+        # DSH stores attachments read-only, which Windows will not delete.
+        def writable(function, path, _):
+            os.chmod(path, 0o700); function(path)
+        __import__('shutil').rmtree(home, onerror=writable)
     home.mkdir()
     if OUT.exists(): OUT.unlink()
     env = dict(os.environ, DSH_HOME=str(home), DSH_AGENTS_HOME=str(home / 'agents'), DSH_PERMISSION_MODE='danger-full-access',
@@ -87,13 +99,16 @@ async def main():
     (home / 'agents').mkdir()
     patch = WORK / 'patch.json'
     dart = os.environ.get('DART', 'dart')
-    os.system('cd %s && NIPAPLAY_TRACE_URL=http://127.0.0.1:%d/v1 NIPAPLAY_TRACE_MODEL=m %s run scripts/next/dsh_runtime/patch.dart %s/plugins %s/harness %s' % (REPO, port, dart, WORK, WORK, patch))
+    subprocess.run([dart, 'run', 'scripts/next/dsh_runtime/patch.dart', str(WORK / 'plugins'), str(WORK / 'harness'), str(patch)],
+                   cwd=str(REPO), check=True,
+                   env=dict(os.environ, NIPAPLAY_TRACE_URL='http://127.0.0.1:%d/v1' % port, NIPAPLAY_TRACE_MODEL='m'))
     bin_js = INSTALL / 'node_modules/@deepseek-ai/dsh/lib/bin.js'
     args = [NODE]
     if os.environ.get('TRACE') != '0':
-        args += ['--require', str(HERE / 'trace-cjs.cjs'), '--import', str(HERE / 'trace-register.mjs')]
+        args += ['--require', str(HERE / 'trace-cjs.cjs'), '--import', (HERE / 'trace-register.mjs').as_uri()]
     args += [str(bin_js), '--profile', 'sdk', '--patch', str(patch)]
     p = await asyncio.create_subprocess_exec(*args, cwd=str(work), env=env, stdin=asyncio.subprocess.PIPE, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE, limit=1 << 24)
+    children.append(p)
     msgs = []; pending = {}; nid = [0]
     async def reader():
         while True:
@@ -129,6 +144,7 @@ async def main():
     print('turn status', c['params']['turn']['status'], 'requests', len(requests), flush=True)
     # What each tool answered: a missing module shows here, not in the status.
     names = {}
+    results = []
     for body in requests:
         for item in body.get('input', []):
             if item.get('type') == 'function_call':
@@ -137,14 +153,31 @@ async def main():
                 out = item['output'] if isinstance(item['output'], str) else json.dumps(item['output'])
                 names.setdefault('_seen', set()).add(item['call_id'])
                 print('  tool', names.get(item['call_id'], '?'), '->', out.replace('\n', ' ')[:110], flush=True)
+                results.append([names.get(item['call_id'], '?'), out])
     if os.environ.get('TRACE_TOOLS') == '1' and requests:
         print(json.dumps([t for t in requests[0].get('tools', []) if t.get('name') in (os.environ.get('TRACE_SHOW') or 'todo_write').split(',')], indent=1))
     if os.environ.get('TRACE_COMPACT') == '1':
-        r = await rpc('thread/compact/start', {'threadId': tid}, 120)
+        # The subagent may still be finishing; compaction wants an idle agent.
+        for _ in range(10):
+            r = await rpc('thread/compact/start', {'threadId': tid}, 120)
+            if 'error' not in r: break
+            await asyncio.sleep(3)
         print('compact', str(r)[:200], flush=True)
+        results.append(['compact', 'error' if 'error' in r else 'ok'])
         await asyncio.sleep(3)
+    # TRACE_RESULTS=<file>: what every tool answered, for comparing a run
+    # against the full install with one against the trimmed tree.
+    if os.environ.get('TRACE_RESULTS'):
+        pathlib.Path(os.environ['TRACE_RESULTS']).write_text(json.dumps(
+            {'status': c['params']['turn']['status'], 'results': results}, indent=1, ensure_ascii=False), encoding='utf-8')
     await rpc('shutdown', {}, 20) if False else None
     p.stdin.close()
     try: await asyncio.wait_for(p.wait(), 10)
     except Exception: p.kill()
-asyncio.run(main())
+try:
+    asyncio.run(main())
+finally:
+    # A failed run must not leave DSH holding its files (Windows cannot delete them).
+    for child in children:
+        if child.returncode is None:
+            child.kill()

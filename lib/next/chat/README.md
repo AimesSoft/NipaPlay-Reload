@@ -269,7 +269,10 @@ fetches. A wrong selection is reported as `chatError`.
 
 **The runtime NipaPlay fetches** (`lib/next/runtime/dsh_install.dart`, manifest
 `assets/next/agent/dsh-runtime.json`). Not bundled: Next is a Labs feature and
-the runtime is 73 MB to download (a Node.js archive of 51 MB and 220 npm tarballs of 22 MB) and 264 MB unpacked (Node.js 117 MB, packages 147 MB in 16 000 files), which would be added to
+the runtime is 77–118 MB to download and 208–279 MB unpacked (macOS arm64
+77 MB → 264 MB: Node.js archive 53 MB + 217 npm tarballs 24 MB; Linux x64
+83 MB → 279 MB; Windows x64 118 MB → 208 MB, whose `node.exe` alone is 94 MB),
+which would be added to
 every download, signature and notarisation of the app, and to every update,
 for people who never open Next. Codex is fetched the same way. The first time
 a model is saved with no runtime in place (or by the 下载 button) NipaPlay
@@ -277,7 +280,14 @@ downloads Node.js from `nodejs.org/dist` and the packages of the trimmed DSH
 from `registry.npmjs.org`; nothing goes through a NipaPlay server. Every file
 is pinned by SHA-256 and size in the manifest, so the optional mirrors in 更多
 (an npm registry and a Node.js dist directory) change where bytes come from but
-never what they must be. Downloads run six at a time, keep their `.part` files
+never what they must be. Without a mirror of the person's own, a file the
+official address does not deliver (no connection, a timeout, an HTTP error, bytes
+that fail the pin) is fetched from npmmirror instead
+(`npmmirror.com/mirrors/node/` and `registry.npmmirror.com`, the same paths;
+`DshFallback.npmmirror`); once an official host has not connected during an
+installation, later files try npmmirror first. A named mirror is the only
+source. A failure names both: `zod-4.4.3.tgz 下载失败，官方源（registry.npmjs.org）：连接中断：…；
+备用源（registry.npmmirror.com）：HTTP 404`. Downloads run six at a time, keep their `.part` files
 and continue with `Range` after a stop or a failure; a finished file is kept
 until the whole runtime is in place, which appears in one rename of
 `<Next root>/dsh-runtime/dsh-<dsh>-node-<node>/` (`node/`, `lib/node_modules/`).
@@ -303,10 +313,25 @@ where they are needed (the reference tree had `zod` 50 times). The manifest
 holds entries per install path with `os`/`cpu` as npm names them, a pinned Node
 archive for every platform (`tar.gz` for macOS and Linux, `node.exe` for
 Windows), and `platforms`, the platforms whose package list was traced and
-tested (macOS arm64). Another platform is added by tracing on it, listing it,
-and building the lock again; until then its state is `unsupported` and nothing
-is fetched. To update: install the new `@deepseek-ai/dsh` in a clean directory,
-trace it, run `build_lock.py`, run the trace again over the materialised lock.
+tested (macOS arm64, Linux x64, Windows x64). `build_lock.py` takes one trace per
+platform (`--trace macos-arm64=a.txt linux-x64=b.txt windows-x64=c.txt`); the
+first is the baseline, what it needed goes to every platform, and a package only
+another platform needed names those platforms in its own `platforms` (the
+macOS list is therefore the same with or without them). What differs: Linux
+adds `@img/sharp-linux-x64` and its libvips, `@koromix/koffi-linux-x64` with
+`koffi`, `node-addon-system-linux-x64` and `node-addon-require-builtin-linux-x64-gnu`
+(musl builds stay out; the pinned Node.js is glibc); Windows adds sharp and
+koffi for win32, `node-addon-require-builtin-win32-x64-msvc` and DSH's PowerShell
+tool (`dsh-tool-pwsh`, `dsh-pwsh-local`, `dsh-pwsh-sandbox`: the shell tool there is
+`pwsh`, which NipaPlay's app-server plugin treats like `bash`) and has no
+`node-addon-system`. Another platform is added by tracing on it (`run_trace.sh`
+or `trace.py`, which also runs on Windows; the shell tool's name is in
+`trace-script-windows.json`), listing it, and building the lock again; until
+then its state is `unsupported` and nothing is fetched. To update: install the
+new `@deepseek-ai/dsh` in a clean directory, trace it on each platform, run
+`build_lock.py`, run the trace again over the installed runtime
+(`TRACE=0 DSH_INSTALL=<runtime>/lib DSH_NODE=<runtime>/node/node TRACE_RESULTS=…`)
+and compare what every tool answered with the run over the full tree.
 
 **The model** comes from settings: provider, address, model, key (in the
 credential vault; never in a file, the patch, the process arguments or a log),

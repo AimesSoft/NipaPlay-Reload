@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'dart:io';
 import 'package:path/path.dart' as p;
 import 'package:nipaplay/next/headless/core.dart';
+import 'package:nipaplay/next/headless/dsh.dart';
 import 'package:nipaplay/next/media/media_probe_io.dart';
 import 'package:nipaplay/next/harness_redaction.dart';
 import 'package:nipaplay/next/headless/vault.dart';
@@ -24,6 +25,7 @@ Future<void> main(List<String> arguments) async {
   var stop = false;
   var enroll = false;
   var enrollCredential = false;
+  String? dshMode;
   for (var i = 0; i < arguments.length; i++) {
     final key = arguments[i];
     if (key == '--help') {
@@ -37,17 +39,27 @@ Future<void> main(List<String> arguments) async {
           '  --enroll-token-stdin --data DIR (host-only account enrollment)\n'
           '  --enroll-credential-stdin --credential-namespace NAME --credential-key KEY --data DIR (host-only vault enrollment)\n'
           '  Host files in data: mesh.json (trust/join), download.json (network configuration), network.json (gateway routing)\n'
-          '  --stop --data ABSOLUTE_DIR (stop that instance)');
+          '  --stop --data ABSOLUTE_DIR (stop that instance)\n'
+          '  The runtime Nipa runs on (DeepSeek Harness on the pinned Node.js), kept in data/dsh-runtime:\n'
+          '  --dsh-install --data DIR (download and unpack it; official sources, then npmmirror)\n'
+          '  --dsh-status --data DIR (which runtime would be launched)\n'
+          '  --dsh-check --data DIR (start it with NipaPlay plugins and open a thread, no model call)\n'
+          '  --agent-assets ABSOLUTE_DIR (default assets/next/agent: dsh-runtime.json and dsh/)\n'
+          '  NIPAPLAY_AGENT_RUNTIME=dsh with NIPAPLAY_DSH_NODE and NIPAPLAY_DSH_ROOT name an installation of your own');
       return;
     }
     if (key == '--enroll-token-stdin') { enroll = true; continue; }
     if (key == '--enroll-credential-stdin') { enrollCredential = true; continue; }
+    if (key == '--dsh-install' || key == '--dsh-status' || key == '--dsh-check') {
+      dshMode = key.substring(6);
+      continue;
+    }
     if (key == '--stop') {
       stop = true;
       continue;
     }
     if (!{'--data', '--media-root', '--port', '--seed', '--ffprobe', '--native-library',
-          '--credential-namespace', '--credential-key'}
+          '--credential-namespace', '--credential-key', '--agent-assets'}
             .contains(key) ||
         i + 1 == arguments.length) {
       stderr.writeln('Invalid option: $key');
@@ -68,6 +80,10 @@ Future<void> main(List<String> arguments) async {
     return;
   }
   final root = Directory(await _canonicalDirectory(p.normalize(data)));
+  if (dshMode != null) {
+    exitCode = await runHeadlessDshCommand(dshMode, root, assets: options['--agent-assets']);
+    return;
+  }
   if (enroll || enrollCredential) {
     final marker = File(p.join(root.path, 'headless.json'));
     if (!await marker.exists()) {

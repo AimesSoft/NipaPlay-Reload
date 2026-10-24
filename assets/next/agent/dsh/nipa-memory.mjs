@@ -52,7 +52,8 @@ function resident(root, path) {
 export function apply(ctx, config = {}) {
   const root = config.harness ?? process.cwd();
   const hook = join(root, config.hook ?? 'hooks/session_start.py');
-  const python = config.python ?? 'python3';
+  // Windows has no python3 on PATH (the Store alias only opens the Store).
+  const python = config.python ?? (process.platform === 'win32' ? 'python' : 'python3');
   const timeoutMs = config.timeoutMs ?? 15000;
   const states = new Map();
   const chatFor = (sessionId) => globalThis[Symbol.for('nipaplay.dsh.chatFor')]?.(sessionId) ?? process.env.NIPAPLAY_CHAT ?? '';
