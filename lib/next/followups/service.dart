@@ -1171,7 +1171,7 @@ final class _Tasks {
 /// Gives the event loop a turn once [budget] of work ran without one, so a
 /// long pass never holds the isolate for longer than about that.
 final class _Slice {
-  static const budget = Duration(milliseconds: 4);
+  static const budget = Duration(milliseconds: 2);
   final _clock = Stopwatch()..start();
   bool get due => _clock.elapsed >= budget;
   Future<void> breathe() async {
