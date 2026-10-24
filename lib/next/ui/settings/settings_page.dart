@@ -494,6 +494,9 @@ class _SettingsPageState extends State<SettingsPage> implements SettingsDebug {
     if (p['memory'] case final path?) {
       _nipa.currentState?.debugOpenMemory(path == 'none' ? null : path);
     }
+    if (p['importCodex'] == 'true') {
+      await _nipa.currentState?.debugImportCodex();
+    }
     if (p['check'] == 'true') await _nipa.currentState?.debugCheck();
     if (p['advanced'] case final on?) {
       _devices.currentState?.debugAdvanced(on == 'true');

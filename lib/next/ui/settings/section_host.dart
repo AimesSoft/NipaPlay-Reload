@@ -698,6 +698,9 @@ class NipaSectionState extends State<NipaSection> {
   List<String> get debugMemory => [for (final f in _files ?? []) f.path];
   Future<void> debugCheck() => _test();
 
+  /// 导入 Codex 配置, as the button does (debug).
+  Future<void> debugImportCodex() => _importCodex();
+
   Future<void> _setSource(UiModelSource source) async {
     setState(() {
       _error = null;
