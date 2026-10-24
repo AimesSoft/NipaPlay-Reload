@@ -151,6 +151,8 @@ final class _Port implements ChatPort {
   @override
   bool get available => false;
   @override
+  Future<String?> unavailableReason() async => null;
+  @override
   bool get busy => false;
   @override
   bool busyOn(String threadId) => false;

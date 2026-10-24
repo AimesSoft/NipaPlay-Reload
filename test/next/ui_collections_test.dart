@@ -447,8 +447,8 @@ void main() {
       expect(await collections.works(UiWatchStatus.doing), ['b', 'c']);
       w.calls.clear();
       expect(await collections.works(UiWatchStatus.wish), isEmpty);
-      expect(w.calls.where((c) => c.$1 == 'accounts.collections.list'),
-          isEmpty);
+      expect(
+          w.calls.where((c) => c.$1 == 'accounts.collections.list'), isEmpty);
     });
   });
 
@@ -600,6 +600,8 @@ final class _Data implements NextUiData {
 final class _Port implements ChatPort {
   @override
   bool get available => false;
+  @override
+  Future<String?> unavailableReason() async => null;
 
   @override
   bool get busy => false;

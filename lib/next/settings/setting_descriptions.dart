@@ -7,10 +7,8 @@ library;
 
 /// 把“什么时候生效”接在说明后面。`immediate` 不加字：即时生效是默认，
 /// 运行中的值与保存的值是否一致由 effective 给出。
-String describeWithApply(String description, String apply) =>
-    switch (apply) {
-      'reload_player' =>
-        '$description 生效方式：保存后不打断正在看的媒体，下次打开媒体时重建播放器再生效。',
+String describeWithApply(String description, String apply) => switch (apply) {
+      'reload_player' => '$description 生效方式：保存后不打断正在看的媒体，下次打开媒体时重建播放器再生效。',
       'restart_app' => '$description 生效方式：只保存偏好，重启应用后生效。',
       _ => description,
     };
@@ -20,26 +18,20 @@ const applicationSettingDescriptions = <String, String>{
   // ---- 音量、亮度 ----
   'player.volume':
       '普通播放音量，0–1；桌面控制播放器并保存 Classic 音量，移动端控制系统音量。与音量增强（player.volumeBoost）独立。',
-  'player.brightness':
-      '移动端应用亮度，0–1；即时生效，不保存为长期偏好。',
+  'player.brightness': '移动端应用亮度，0–1；即时生效，不保存为长期偏好。',
 
   // ---- 播放器界面 ----
-  'player.pauseOnBackground':
-      '应用切到后台或锁屏时自动暂停播放。只在手机上提供；移动平台默认开启。',
+  'player.pauseOnBackground': '应用切到后台或锁屏时自动暂停播放。只在手机上提供；移动平台默认开启。',
   'player.desktopHoverSettingsMenuEnabled':
       '鼠标移到播放器最右侧时弹出设置菜单。只在桌面端提供，默认关闭；关闭时已弹出的菜单会收起。',
-  'player.instantHidePlayerUiEnabled':
-      '鼠标移开后立即隐藏播放器的控制界面，不等待延时。只在桌面端提供，默认关闭。',
+  'player.instantHidePlayerUiEnabled': '鼠标移开后立即隐藏播放器的控制界面，不等待延时。只在桌面端提供，默认关闭。',
   'player.showMenuQuickControls':
       '在播放器菜单顶部显示倍速和音量增强的快捷选项。Classic 设置页名称：播放器菜单快捷调节。默认关闭。',
-  'player.topSendDanmakuButtonVisible':
-      '在播放器左上角显示“发弹幕”按钮。默认开启。',
+  'player.topSendDanmakuButtonVisible': '在播放器左上角显示“发弹幕”按钮。默认开启。',
   'player.topSkipButtonVisible':
       '在播放器左上角显示“跳过”按钮；按下后向前跳过 seek.skipSeconds 秒。默认关闭。',
-  'player.topResizeButtonVisible':
-      '在播放器左上角显示“窗口适配视频”按钮，把窗口调整到视频的比例。默认关闭。',
-  'player.topFrameStepButtonsVisible':
-      '在播放器左上角显示逐帧后退和逐帧前进两个按钮。默认关闭。',
+  'player.topResizeButtonVisible': '在播放器左上角显示“窗口适配视频”按钮，把窗口调整到视频的比例。默认关闭。',
+  'player.topFrameStepButtonsVisible': '在播放器左上角显示逐帧后退和逐帧前进两个按钮。默认关闭。',
   'player.chapterMarkersEnabled':
       '在进度条上画出 MKV 自带的章节分割线，悬停高亮、点击跳到该章节。只在 Media Kit（libmpv）内核下提供，默认开启。',
   'player.minimalProgressBarEnabled':
@@ -58,8 +50,7 @@ const applicationSettingDescriptions = <String, String>{
       '播放器内核：mdk（MDK）、videoPlayer（Video Player 官方播放器）、mediaKit（Libmpv，基于 mpv）、erika（Erika，Rust 编写的实验内核，在 Classic 里需先开启 labs.enableErikaPlayerKernel 才显示，电视和 HarmonyOS 默认显示）。可选值取决于平台。换内核会重建播放器。',
   'player.fastPlaybackStartup':
       '视频就绪后跳过“识别加载”界面，立即开始播放，再在后台识别番剧、加载弹幕。Classic 设置页名称：快速开始播放。默认关闭。',
-  'player.customUserAgent':
-      '播放器请求视频时使用的 User-Agent；空字符串使用内核默认值，下次打开视频生效。',
+  'player.customUserAgent': '播放器请求视频时使用的 User-Agent；空字符串使用内核默认值，下次打开视频生效。',
   'player.macosNativeVideoEnabled':
       '实验性 HDR 原生视频输出：开启后 macOS 使用原生视频层，关闭则回退到 Flutter 纹理路径。只在 macOS 提供（Classic 在 Media Kit 内核下的 macOS 与 Windows 显示），默认关闭。',
   'player.androidAudioOutput':
@@ -73,15 +64,14 @@ const applicationSettingDescriptions = <String, String>{
   'player.crtProfile':
       'CRT GLSL 着色器预设，模拟显示器质感，可与 Anime4K 叠加；只对 Media Kit（libmpv）内核生效。off 关闭；lite 轻量（扫描线加暗角）；standard 标准（再加曲面与栅格）；high 高质量（再加辉光与色散，开销最高）。',
   'player.erikaUpscalerMode':
-      'Erika 内核的实时超分辨率（ART-CNN）：off 关闭；erikaArtCnnC4F16 半精度，速度优先；erikaArtCnnC4F32 单精度，画质优先，GPU 压力更高；erikaArtCnnC4F16Ds 半精度去噪锐化，适合压缩痕迹明显的动画。只在 Erika 内核下提供。',
+      'Erika 内核的实时超分辨率（ART-CNN）：off 关闭；erikaArtCnnC4F16 半精度，速度优先；erikaArtCnnC4F32 单精度，画质优先，GPU 压力更高；erikaArtCnnC4F16Ds 半精度去噪锐化，适合压缩痕迹明显的动画。设置值与 Erika 内核属性一一对应：erikaArtCnnC4F16 ↔ artCnnC4F16，erikaArtCnnC4F32 ↔ artCnnC4F32，erikaArtCnnC4F16Ds ↔ artCnnC4F16Ds，off ↔ off。playback.set_kernel_properties 只改当前实例，不保存长期设置；要让下个媒体也使用，请用 settings.set 保存这里的值。只在 Erika 内核下提供。',
 
   // ---- 播放行为 ----
   'player.introSkipEnabled':
       '总开关：开启时结合 AniSkip 社区标注和弹幕报点，在片头、片尾区间显示跳过按钮；AniSkip 有数据时以它为准，没有才用弹幕分析的结果。关闭时清除已有的跳过区间。默认开启。',
   'player.timelinePreviewEnabled':
       '启用 MDK 时间轴截图预览：进度条悬停时显示缩略图，仅对本地、WebDAV、SMB、共享媒体库的视频生效。会创建后台播放器并增加解码与缓存开销；应用内先显示 Classic 性能警告，由用户选择。只在 MDK 内核下提供，默认关闭。',
-  'player.autoFullscreenEnabled':
-      '加载视频后自动进入全屏。只在桌面端提供，默认关闭。',
+  'player.autoFullscreenEnabled': '加载视频后自动进入全屏。只在桌面端提供，默认关闭。',
   'player.autoNextCountdownSeconds':
       '播放结束后，等待多少秒再自动播放下一话，范围 0–15；0 表示不倒计时，直接播放下一话。仅当 player.playbackEndAction 为 autoNext 时使用。',
   'player.playbackEndAction':
@@ -104,8 +94,7 @@ const applicationSettingDescriptions = <String, String>{
       '截图的文件格式：jpeg（体积较小，质量由 screenshotQuality 决定，默认）或 png（无损）。',
   'player.screenshotCropLetterbox':
       '截图时裁掉视频画面之外的上下、左右黑边，按播放器同一套适配布局计算可见区域。Erika 内核的截图本来就是不带黑边的原始视频帧。默认开启。',
-  'player.screenshotDirectory':
-      '截图保存目录；空字符串恢复应用的默认目录。路径须属于已授权的文件范围。',
+  'player.screenshotDirectory': '截图保存目录；空字符串恢复应用的默认目录。路径须属于已授权的文件范围。',
   'player.screenshotIncludeDanmaku':
       '截图时保留显示中的弹幕层；关闭则不叠加当前弹幕。Erika 原生弹幕不在截图中，即使开启此项也不包含；截图没有弹幕不能据此判断轨道未加载或屏幕上不可见。默认开启。',
   'player.screenshotIncludeSubtitles':
@@ -138,8 +127,7 @@ const applicationSettingDescriptions = <String, String>{
       '播放器左上角“跳过”按钮和对应快捷键向前跳过的秒数，范围 10–600，默认 90；Classic 界面以 10 秒为一档。',
 
   // ---- 弹幕：加载与匹配 ----
-  'danmaku.convertToSimplified':
-      '把繁体中文弹幕转换为简体显示。默认值随语言：系统语言不是繁体中文时默认开启。',
+  'danmaku.convertToSimplified': '把繁体中文弹幕转换为简体显示。默认值随语言：系统语言不是繁体中文时默认开启。',
   'danmaku.autoMatchFirstSearchResultOnHashFail':
       '文件哈希匹配弹幕失败时，默认用文件名搜索的第一个结果自动匹配；关闭后改为弹出搜索弹幕菜单让用户选。默认开启。',
   'danmaku.autoLoadStrategy':
@@ -162,14 +150,11 @@ const applicationSettingDescriptions = <String, String>{
   // ---- 弹幕：外观与布局 ----
   'danmaku.visible':
       '弹幕显示开关，也作用于 Erika 原生弹幕；值为 true 不代表当前时刻屏幕上已有弹幕。轨道加载、时间位置与过滤仍影响实际显示。',
-  'danmaku.showDensityChart':
-      '在播放器底部显示弹幕密度曲线。Classic 设置页名称：弹幕密度曲线（外观页）。默认关闭。',
-  'danmaku.randomColor':
-      '忽略弹幕原始颜色，按发送弹幕的预设色板随机分配颜色（同一条弹幕每次分配结果相同）。默认关闭。',
+  'danmaku.showDensityChart': '在播放器底部显示弹幕密度曲线。Classic 设置页名称：弹幕密度曲线（外观页）。默认关闭。',
+  'danmaku.randomColor': '忽略弹幕原始颜色，按发送弹幕的预设色板随机分配颜色（同一条弹幕每次分配结果相同）。默认关闭。',
   'danmaku.stacking':
       '允许多条弹幕重叠显示，适合弹幕密集场景。CPU、GPU、Canvas、Next2、DFM+、插件渲染器和 Erika 读取此值；NipaPlay Next 引擎固定不堆叠。Classic 只在 CPU、GPU 引擎和 Erika 内核下显示这个开关。默认关闭。',
-  'danmaku.merge':
-      '把内容相同的弹幕合并为一条显示。Classic 在 Canvas 引擎下不显示这个开关。默认关闭。',
+  'danmaku.merge': '把内容相同的弹幕合并为一条显示。Classic 在 Canvas 引擎下不显示这个开关。默认关闭。',
   'danmaku.blockTop': '不显示顶部固定弹幕。默认关闭。',
   'danmaku.blockBottom': '不显示底部固定弹幕。默认关闭。',
   'danmaku.blockScroll': '不显示从右向左滚动的弹幕。默认关闭。',
@@ -207,10 +192,8 @@ const applicationSettingDescriptions = <String, String>{
       '防剧透 AI 接口的 URL；格式由 danmaku.spoilerAiApiFormat 决定。',
   'danmaku.spoilerAiApiFormat':
       '防剧透 AI 接口的格式：openai 为 OpenAI 兼容接口，gemini 为 Gemini 接口。',
-  'danmaku.spoilerAiModel':
-      '防剧透 AI 使用的模型名，默认 gpt-5。',
-  'danmaku.spoilerAiTemperature':
-      '防剧透 AI 请求的采样温度，范围 0–2，默认 0.5；越大输出越随机，0 最确定。',
+  'danmaku.spoilerAiModel': '防剧透 AI 使用的模型名，默认 gpt-5。',
+  'danmaku.spoilerAiTemperature': '防剧透 AI 请求的采样温度，范围 0–2，默认 0.5；越大输出越随机，0 最确定。',
   'danmaku.spoilerAiDebugPrintResponse':
       '把防剧透 AI 的响应原文、提取出的文本和解析结果打印到调试日志（长度会被截断）。只影响日志，不影响屏蔽结果。默认关闭。',
 
@@ -231,24 +214,19 @@ const applicationSettingDescriptions = <String, String>{
       '内嵌和内核字幕距上下边缘的距离，单位像素，保存时取整。Classic 界面范围 0–200；mpv 的 sub-margin-y 在 Media Kit 下只接受 0–300。外挂叠层字幕不使用。',
   'subtitle.opacity':
       '内嵌和内核字幕的整体不透明度，0–1：0 完全透明，1 完全不透明（默认）。换算成 0–255 设给 mpv 的 sub-opacity。',
-  'subtitle.borderSize':
-      '内嵌和内核字幕的描边粗细（mpv 的 sub-border-size），0–10，默认 3；0 无描边。',
+  'subtitle.borderSize': '内嵌和内核字幕的描边粗细（mpv 的 sub-border-size），0–10，默认 3；0 无描边。',
   'subtitle.shadowOffset':
       '内嵌和内核字幕的阴影偏移（mpv 的 sub-shadow-offset），0–10，默认 0；0 无阴影。',
-  'subtitle.alignX':
-      '内嵌和内核字幕的水平对齐：left 左对齐、center 居中（默认）、right 右对齐。',
-  'subtitle.alignY':
-      '内嵌和内核字幕的垂直对齐：top 顶部、center 垂直居中、bottom 底部（默认）。',
+  'subtitle.alignX': '内嵌和内核字幕的水平对齐：left 左对齐、center 居中（默认）、right 右对齐。',
+  'subtitle.alignY': '内嵌和内核字幕的垂直对齐：top 顶部、center 垂直居中、bottom 底部（默认）。',
   'subtitle.overrideMode':
       'ASS 字幕自带样式的接管策略（mpv 的 sub-ass-override）：auto 自动，字幕缩放不是 1 时按 scale，否则保持原样；none 保持原样；scale 仅缩放；force 自定义样式（Classic 说明：外挂字幕应用所选字体，内嵌字幕强制覆盖 ASS 自带样式）。字体（subtitle.fontName、subtitle.fontDir）只在 force 下生效，其他模式会清空自定义字体目录。',
   'subtitle.bold': '内嵌和内核字幕使用粗体（mpv 的 sub-bold）。默认关闭。',
   'subtitle.italic': '内嵌和内核字幕使用斜体（mpv 的 sub-italic）。默认关闭。',
   'subtitle.color':
       '内嵌和内核字幕的文字颜色，#AARRGGBB 格式，默认 #FFFFFFFF（不透明白）。不影响外挂叠层字幕，它们用 subtitle.externalColor。',
-  'subtitle.borderColor':
-      '内嵌和内核字幕的描边颜色，#AARRGGBB 格式，默认 #FF000000（不透明黑）。',
-  'subtitle.shadowColor':
-      '内嵌和内核字幕的阴影颜色，#AARRGGBB 格式，默认 #FF000000（不透明黑）。',
+  'subtitle.borderColor': '内嵌和内核字幕的描边颜色，#AARRGGBB 格式，默认 #FF000000（不透明黑）。',
+  'subtitle.shadowColor': '内嵌和内核字幕的阴影颜色，#AARRGGBB 格式，默认 #FF000000（不透明黑）。',
   'subtitle.externalColor':
       '由应用叠层绘制的外挂字幕（SRT 等）的文字颜色，#AARRGGBB 格式，默认 #FFFFFFFF。不影响内嵌和内核字幕，它们用 subtitle.color。',
   'subtitle.fontName':
@@ -270,49 +248,32 @@ const applicationSettingDescriptions = <String, String>{
       'Titan 弹幕字体（CSS font-family 字符串）。Classic 提供黑体、简体系统字体、宋体、新宋体、仿宋、微软雅黑等预设；字体未安装时 WebView 会回退到简体中文系统字体。',
   'danmaku.titan.speedPlus':
       'Titan 滚动速度倍率（引擎的 speedPlus），0.25–3，默认 1；越大越快。不改变其他引擎的 danmaku.speedMultiplier。',
-  'danmaku.titan.density':
-      'Titan 弹幕密度，0.1–1，默认 1，限制同屏轨道占用的比例；越小弹幕越稀。',
-  'danmaku.titan.duration':
-      'Titan 基准时长，单位秒，2–12，默认 4.5，是滚动弹幕的基础存活时间。',
-  'danmaku.titan.limit':
-      'Titan 同屏弹幕上限，0–1000，默认 300；0 表示由引擎决定。',
+  'danmaku.titan.density': 'Titan 弹幕密度，0.1–1，默认 1，限制同屏轨道占用的比例；越小弹幕越稀。',
+  'danmaku.titan.duration': 'Titan 基准时长，单位秒，2–12，默认 4.5，是滚动弹幕的基础存活时间。',
+  'danmaku.titan.limit': 'Titan 同屏弹幕上限，0–1000，默认 300；0 表示由引擎决定。',
   'danmaku.titan.trackGap':
       'Titan 弹幕轨道间距，0–0.5，Classic 界面以百分比显示；默认手机 0.15，其他设备 0。增大减少重叠，减小同屏能显示更多弹幕。',
-  'danmaku.titan.preventShade':
-      'Titan 防挡字幕：避免弹幕覆盖画面底部的字幕区域。默认关闭。',
-  'danmaku.titan.offsetTop':
-      'Titan 顶部弹幕轨道的偏移，单位像素，-100–100，默认 3。',
-  'danmaku.titan.offsetBottom':
-      'Titan 底部弹幕轨道的偏移，单位像素，-100–100，默认 0。',
+  'danmaku.titan.preventShade': 'Titan 防挡字幕：避免弹幕覆盖画面底部的字幕区域。默认关闭。',
+  'danmaku.titan.offsetTop': 'Titan 顶部弹幕轨道的偏移，单位像素，-100–100，默认 3。',
+  'danmaku.titan.offsetBottom': 'Titan 底部弹幕轨道的偏移，单位像素，-100–100，默认 0。',
   'danmaku.titan.maxLength':
       'Titan 单条弹幕文字的最大长度，0–1000，默认 50；0 表示不限制。Classic 界面滑块范围 0–200。',
-  'danmaku.titan.isRecyclingDom':
-      'Titan 复用已经离屏的弹幕 DOM 节点，默认开启。',
-  'danmaku.titan.isRecyclingModel':
-      'Titan 复用引擎内部的弹幕模型，默认关闭。',
-  'danmaku.titan.forbidShrinkState':
-      'Titan 禁止缩小：轨道拥挤时不自动缩小弹幕文字，默认开启。',
+  'danmaku.titan.isRecyclingDom': 'Titan 复用已经离屏的弹幕 DOM 节点，默认开启。',
+  'danmaku.titan.isRecyclingModel': 'Titan 复用引擎内部的弹幕模型，默认关闭。',
+  'danmaku.titan.forbidShrinkState': 'Titan 禁止缩小：轨道拥挤时不自动缩小弹幕文字，默认开启。',
 };
 
 /// classic_settings.dart 里注册的设置（不含已在注册处写了说明的）。
 const classicSettingDescriptions = <String, String>{
   // ---- 外观 ----
-  'appearance.showAnimeCardSummary':
-      '番剧卡片上显示简介；关闭后只显示封面和标题。默认开启。',
-  'appearance.showQuarterlyAnimeReview':
-      '首页在季度末和下个月前 7 天显示“新番回顾”。默认开启。',
-  'appearance.showMediaLibraryNewBadge':
-      '在有新内容的番剧卡片上显示 NEW 标识。默认开启。',
-  'appearance.diffuseLowResolutionPosters':
-      '首页低分辨率的推荐海报强烈模糊，形成晕染效果。默认开启。',
-  'appearance.showHomeHeroBanner':
-      '主页顶部左侧的大幅推荐轮播横幅。默认开启。',
-  'appearance.showHomeHeroSideCardTop':
-      '主页顶部右上角的推荐小卡片，仅桌面和平板布局有。默认开启。',
-  'appearance.showHomeHeroSideCardBottom':
-      '主页顶部右下角的推荐小卡片，仅桌面和平板布局有。默认开启。',
-  'appearance.accentColor':
-      '应用界面的强调色预设：rose 绯红（默认）、blue 蓝色、green 荧绿。',
+  'appearance.showAnimeCardSummary': '番剧卡片上显示简介；关闭后只显示封面和标题。默认开启。',
+  'appearance.showQuarterlyAnimeReview': '首页在季度末和下个月前 7 天显示“新番回顾”。默认开启。',
+  'appearance.showMediaLibraryNewBadge': '在有新内容的番剧卡片上显示 NEW 标识。默认开启。',
+  'appearance.diffuseLowResolutionPosters': '首页低分辨率的推荐海报强烈模糊，形成晕染效果。默认开启。',
+  'appearance.showHomeHeroBanner': '主页顶部左侧的大幅推荐轮播横幅。默认开启。',
+  'appearance.showHomeHeroSideCardTop': '主页顶部右上角的推荐小卡片，仅桌面和平板布局有。默认开启。',
+  'appearance.showHomeHeroSideCardBottom': '主页顶部右下角的推荐小卡片，仅桌面和平板布局有。默认开启。',
+  'appearance.accentColor': '应用界面的强调色预设：rose 绯红（默认）、blue 蓝色、green 荧绿。',
   'appearance.folderNameDisplayMode':
       '媒体库管理里过长目录名的显示方式：ellipsis 省略号截断（默认）、multiline 多行完整显示。',
   'appearance.windowDisplayMode':
@@ -343,8 +304,7 @@ const classicSettingDescriptions = <String, String>{
       '应用界面语言：auto 跟随系统（默认）、simplified 简体中文、traditional 繁体中文、english 英文。',
   'general.desktopExitBehavior':
       '点击桌面窗口关闭按钮时的行为：askEveryTime 每次询问（默认）、minimizeToTrayOrTaskbar 最小化到系统托盘（或任务栏）、closePlayer 直接退出。只在桌面端提供。',
-  'general.startupWindowState':
-      '桌面端启动时的窗口状态：windowed 窗口化、maximized 最大化（默认）。',
+  'general.startupWindowState': '桌面端启动时的窗口状态：windowed 窗口化、maximized 最大化（默认）。',
   'general.startupWindowPosition':
       '桌面端窗口化启动时窗口在屏幕上的位置：topLeft 左上角、topRight 右上角、center 居中（默认）、bottomLeft 左下角、bottomRight 右下角。',
   'general.startupWindowWidth':
@@ -357,8 +317,7 @@ const classicSettingDescriptions = <String, String>{
       '后台自动检测应用更新；关闭后只能手动检测。默认开启。Classic 设置页名称：自动检测更新（关于页）。',
 
   // ---- 诊断与实验 ----
-  'diagnostics.showSystemResources':
-      '在界面右上角显示 CPU、内存和帧率信息。默认关闭。',
+  'diagnostics.showSystemResources': '在界面右上角显示 CPU、内存和帧率信息。默认关闭。',
   'diagnostics.collectLogs':
       '收集应用的所有打印输出，用于调试和问题诊断；开启时立即开始收集，关闭时立即停止。Classic 设置页名称：调试日志收集。默认开启。',
   'diagnostics.fileLog':
@@ -373,12 +332,10 @@ const classicSettingDescriptions = <String, String>{
       '在底部导航栏显示 WebDAV 快捷入口 Tab，用来快速访问 WebDAV 服务器里的视频文件。默认关闭。',
   'webdavQuick.defaultServerName':
       '点击 WebDAV Tab 时默认连接的服务器名称，是“远程媒体库”设置里已添加的 WebDAV 服务器之一；空字符串表示未指定。',
-  'webdavQuick.defaultDirectory':
-      '点击 WebDAV Tab 时直接打开的目录路径，默认 /（根目录）。',
+  'webdavQuick.defaultDirectory': '点击 WebDAV Tab 时直接打开的目录路径，默认 /（根目录）。',
   'webdavQuick.sortPreset':
       'WebDAV 文件排序：default 默认（文件夹在前，各自按名称 A-Z）；name_asc 名称 A-Z（所有项目混合排序）；name_desc 名称 Z-A；modified_desc 最新修改在前；modified_asc 最旧修改在前；size_desc 文件大小从大到小；size_asc 文件大小从小到大。',
-  'webdavQuick.showPathBreadcrumb':
-      '在 WebDAV 页面顶部显示可点击的路径面包屑导航。默认开启。',
+  'webdavQuick.showPathBreadcrumb': '在 WebDAV 页面顶部显示可点击的路径面包屑导航。默认开启。',
   'webdavQuick.autoEnterSeasonFolder':
       '打开文件夹时，自动进入名称匹配 webdavQuick.seasonFolderPattern 的子文件夹。默认关闭。',
   'webdavQuick.seasonFolderPattern':
@@ -393,20 +350,17 @@ const classicSettingDescriptions = <String, String>{
       '提取 tmdbId 的正则表达式，必须含捕获组，最后一个捕获组应为数字。默认 tmdb(id)?[=-](\\d+)，可匹配 tmdbid=123 或 tmdb-123。',
   'webdavQuick.episodeOffsetEnabled':
       '匹配弹幕时自动计算跨季剧集编号偏移，修复季内编号与弹幕库绝对编号对不上的问题。默认关闭。',
-  'webdavQuick.enableSearch':
-      '在 WebDAV 页面显示文件搜索按钮。默认开启。',
+  'webdavQuick.enableSearch': '在 WebDAV 页面显示文件搜索按钮。默认开启。',
   'webdavQuick.searchScope':
       'WebDAV 搜索范围：current_directory 仅当前目录；current_with_depth 当前目录加子目录，向下遍历 webdavQuick.searchDepthLimit 层（默认）；global 从根目录开始搜索全部。',
   'webdavQuick.searchDepthLimit':
       '搜索向下遍历的目录层数，1–10，默认 3；在搜索范围为“当前目录加子目录”或全局搜索时生效。',
   'webdavQuick.searchTargets':
       '搜索结果包含的类型，可选 folder（文件夹）和 video（视频文件），至少选一项，不重复。默认两者都包含。',
-  'webdavQuick.searchTimeout':
-      '搜索超时秒数，达到后停止搜索：只接受 10、30（默认）、60，0 表示无限制。',
+  'webdavQuick.searchTimeout': '搜索超时秒数，达到后停止搜索：只接受 10、30（默认）、60，0 表示无限制。',
   'webdavQuick.searchRequestInterval':
       '搜索时两次请求之间的间隔，单位毫秒，0–1000，默认 100；防止请求过快被服务器限制，0 表示无延迟。',
-  'webdavQuick.searchMaxResults':
-      '搜索结果的数量上限，50–2000，默认 500；达到上限时自动停止搜索。',
+  'webdavQuick.searchMaxResults': '搜索结果的数量上限，50–2000，默认 500；达到上限时自动停止搜索。',
 
   // ---- 首页 ----
   'appearance.quarterlyReviewSort':

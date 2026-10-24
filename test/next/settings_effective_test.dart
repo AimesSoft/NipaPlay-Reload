@@ -8,6 +8,8 @@ import 'package:nipaplay/next/danmaku/store.dart';
 import 'package:nipaplay/next/next_database.dart';
 import 'package:nipaplay/next/settings/application_settings.dart';
 import 'package:nipaplay/next/settings/capability.dart';
+import 'package:nipaplay/next/settings/effective.dart';
+import 'package:nipaplay/next/settings/effective_value.dart';
 import 'package:nipaplay/next/settings/registry.dart';
 import 'package:nipaplay/next/settings/system_settings.dart';
 import 'package:nipaplay/next/subtitles/library.dart';
@@ -104,13 +106,34 @@ void main() {
     expect(plain['effectiveState'], 'same');
     expect(plain['effectiveSource'], 'storage');
 
-    await registry.set('subtitle.opacity', 0.4, harness.Invocation(origin: 'mcp'));
+    await registry.set(
+        'subtitle.opacity', 0.4, harness.Invocation(origin: 'mcp'));
     final live = await registry.get('subtitle.opacity');
     expect(live['value'], 0.4);
     expect(live['effective'], 0.4);
     expect(live['effectiveState'], 'same');
     expect(live['effectiveSource'], 'live');
     expect(live['effectiveReason'], isNull);
+  });
+
+  test('an asynchronous session probe reports the running Erika upscaler',
+      () async {
+    final previous = EffectiveRules.sessionPlayer;
+    addTearDown(() => EffectiveRules.sessionPlayer = previous);
+    EffectiveRules.sessionPlayer = (entry, stored) async {
+      if (entry.key != 'player.erikaUpscalerMode') return null;
+      await Future<void>.delayed(Duration.zero);
+      return const Effective.differs('artCnnC4F32', 'runtime_adjusted',
+          '正在播放的 Erika 实例当前请求 artCnnC4F32；存储值 off 会用于新实例。');
+    };
+    final registry = await open([]);
+    final row = await registry.get('player.erikaUpscalerMode');
+    expect(row['value'], 'off');
+    expect(row['effective'], 'artCnnC4F32');
+    expect(row['effectiveState'], 'differs');
+    expect(row['effectiveSource'], 'live');
+    expect(row['effectiveReason'], 'runtime_adjusted');
+    expect(row['effectiveDetail'], contains('正在播放的 Erika 实例'));
   });
 
   test('a stored value the running player does not hold says so', () async {
@@ -139,7 +162,8 @@ void main() {
     expect(row['apply'], 'reload_player');
   });
 
-  test('a setting Next saved waits as reload_required and is same once a '
+  test(
+      'a setting Next saved waits as reload_required and is same once a '
       'player is built from it', () async {
     DeferredReloads.reset();
     await PlayerFactory.saveKernelType(PlayerKernelType.erika);
@@ -211,7 +235,8 @@ void main() {
     await prefs.setString('desktop_startup_window_state', 'maximized');
     final registry = await open([
       _fixed('general.startupWindowState', 'desktop_startup_window_state',
-          'restart_app', current: () => startupWindow),
+          'restart_app',
+          current: () => startupWindow),
       _fixed('diagnostics.fixturePage', 'fixture_page', 'restart_app',
           current: () => 'x'),
     ]);
@@ -261,7 +286,8 @@ void main() {
         'settings.set',
         {'key': 'danmaku.opacity', 'value': 0.5},
         harness.Invocation(origin: 'mcp'));
-    expect(outcome, isA<harness.Completed>(), reason: '${outcome.toEnvelope()}');
+    expect(outcome, isA<harness.Completed>(),
+        reason: '${outcome.toEnvelope()}');
     final set = (outcome as harness.Completed).value.toJson();
     expect(set['effective'], 0.5);
     expect(set['effectiveState'], 'same');
@@ -272,9 +298,9 @@ void main() {
           'fields': ['key', 'value', 'effective', 'effectiveState']
         },
         harness.Invocation(origin: 'mcp'));
-    final row = ((described as harness.Completed).value.toJson()['settings']
-            as List)
-        .single as Map;
+    final row =
+        ((described as harness.Completed).value.toJson()['settings'] as List)
+            .single as Map;
     expect(row, {
       'key': 'danmaku.opacity',
       'value': 0.5,
@@ -288,15 +314,17 @@ void main() {
     final byKey = {for (final e in registry.entries) e.key: e};
     expect(byKey['diagnostics.logViewerAutoScroll']!.defaultValue, false);
     expect(byKey['diagnostics.logViewerShowTimestamp']!.defaultValue, true);
-    expect(
-        (await registry.get('diagnostics.logViewerAutoScroll'))['value'], false);
+    expect((await registry.get('diagnostics.logViewerAutoScroll'))['value'],
+        false);
     expect((await registry.get('diagnostics.logViewerShowTimestamp'))['value'],
         true);
     final api = harness.Harness([SettingsCapability(registry)]);
     await registry.set('diagnostics.logViewerAutoScroll', true,
         harness.Invocation(origin: 'mcp'));
-    final reset = await api.invokeJson('settings.reset',
-        {'key': 'diagnostics.logViewerAutoScroll'}, harness.Invocation(origin: 'mcp'));
+    final reset = await api.invokeJson(
+        'settings.reset',
+        {'key': 'diagnostics.logViewerAutoScroll'},
+        harness.Invocation(origin: 'mcp'));
     expect((reset as harness.Completed).value.toJson()['value'], false);
   });
 }

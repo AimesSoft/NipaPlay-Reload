@@ -34,6 +34,12 @@ abstract final class DownloadSettings {
             _ => 'DownloaderSettingsProvider.setAutoScanCompletedTasks',
           },
           visible: () => globals.isDownloaderSupportedPlatform,
+          appliesTo: const {
+            'capabilities': ['downloader']
+          },
+          appliesNow: () => globals.isDownloaderSupportedPlatform,
+          appliesReason: () =>
+              globals.isDownloaderSupportedPlatform ? null : '当前平台不支持下载器。',
           decodeStorage: (value) => value ?? true,
           read: () => SettingsStorage.loadBool(storageKey, defaultValue: true),
           write: (value) async {
@@ -74,6 +80,12 @@ abstract final class DownloadSettings {
             'SettingsStorage.loadString / StorageService.getDownloadsDirectory',
         writer: 'TorrentDownloadService.setDownloadDirectory',
         visible: () => globals.isDownloaderSupportedPlatform,
+        appliesTo: const {
+          'capabilities': ['downloader']
+        },
+        appliesNow: () => globals.isDownloaderSupportedPlatform,
+        appliesReason: () =>
+            globals.isDownloaderSupportedPlatform ? null : '当前平台不支持下载器。',
         decodeStorage: (value) => value ?? '',
         read: () async {
           final saved = await SettingsStorage.loadString(

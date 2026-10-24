@@ -93,6 +93,19 @@ final class SystemSettings {
             writable: writable,
             scope: scope,
             visible: visible,
+            appliesTo: key == 'appearance.largeScreenLayout'
+                ? const {
+                    'platforms': ['desktop', 'tablet', 'television']
+                  }
+                : const <String, Object?>{},
+            appliesNow: key == 'appearance.largeScreenLayout'
+                ? () => globals.isDesktopOrTablet || globals.isTelevision
+                : null,
+            appliesReason: key == 'appearance.largeScreenLayout'
+                ? () => globals.isDesktopOrTablet || globals.isTelevision
+                    ? null
+                    : '此设置只适用于桌面、平板或电视。'
+                : null,
             dynamicDefaultValue: dynamicDefault,
             validateValue: validate,
             effective: EffectiveRules.resolve,
@@ -156,24 +169,18 @@ final class SystemSettings {
           decode: (v) => v == 'hongkong' ? 'hongKong' : v ?? 'auto',
           description:
               '可选择 auto/hongKong/china；custom 仅描述现有用户信任选择，不允许通过普通设置切换到第三方 origin。'),
-      entry(
-          'network.bangumiServerUrl',
-          'Bangumi API 服务器',
-          'bangumi_server_url',
-          const StringSchema(maxLength: 512),
-          '',
-          () async {
-            final server = await NetworkSettings.getBangumiServer();
-            return NetworkSettings.isCustomBangumiServer(server) ? server : '';
-          },
-          (v) async {
-            final text = (v as String).trim();
-            if (text.isEmpty) {
-              await NetworkSettings.resetBangumiServer();
-            } else {
-              await NetworkSettings.setBangumiServer(text);
-            }
-          },
+      entry('network.bangumiServerUrl', 'Bangumi API 服务器', 'bangumi_server_url',
+          const StringSchema(maxLength: 512), '', () async {
+        final server = await NetworkSettings.getBangumiServer();
+        return NetworkSettings.isCustomBangumiServer(server) ? server : '';
+      }, (v) async {
+        final text = (v as String).trim();
+        if (text.isEmpty) {
+          await NetworkSettings.resetBangumiServer();
+        } else {
+          await NetworkSettings.setBangumiServer(text);
+        }
+      },
           validate: validateBangumiServer,
           description:
               '自定义 Bangumi API 服务器地址；空串使用官方服务器（${NetworkSettings.bangumiDefaultServer}）。只接受 http/https 地址，不带用户信息、query 或 fragment；缺少协议时按 https 补全，末尾斜杠去掉。Bangumi 登录令牌随请求发往该地址。换地址时清除旧地址的图片与详情缓存。读到的值为空表示官方服务器，请求实际使用的完整地址在 effective。'),
@@ -185,22 +192,20 @@ final class SystemSettings {
           '',
           () async =>
               await MediaServerDeviceIdService.instance.getCustomDeviceId() ??
-              '',
-          (v) async {
-            final text = (v as String).trim();
-            await MediaServerDeviceIdService.instance
-                .setCustomDeviceId(text.isEmpty ? null : text);
-          },
-          validate: (v) {
-            final text = (v as String).trim();
-            return text.isEmpty ||
-                    MediaServerDeviceIdService.isValidCustomDeviceId(text)
-                ? []
-                : [
-                    const SchemaViolation('/value',
-                        'Use 1–128 characters without quotes or line breaks, or empty to use the generated ID.')
-                  ];
-          },
+              '', (v) async {
+        final text = (v as String).trim();
+        await MediaServerDeviceIdService.instance
+            .setCustomDeviceId(text.isEmpty ? null : text);
+      }, validate: (v) {
+        final text = (v as String).trim();
+        return text.isEmpty ||
+                MediaServerDeviceIdService.isValidCustomDeviceId(text)
+            ? []
+            : [
+                const SchemaViolation('/value',
+                    'Use 1–128 characters without quotes or line breaks, or empty to use the generated ID.')
+              ];
+      },
           description:
               'Jellyfin/Emby 登录请求里的 DeviceId；服务器按它区分会话。空串使用自动生成的 ID（应用名-平台-随机 UUID）。读到的是自定义值，空串表示没有自定义；请求实际使用的 ID 在 effective。'),
       entry(
@@ -222,21 +227,19 @@ final class SystemSettings {
           'Classic 本地文件夹排序',
           'library_sort_option',
           const StringSchema(values: localLibrarySortOptions),
-          'nameAscending',
-          () async {
-            final index = (await SharedPreferences.getInstance())
-                .getInt('library_sort_option');
-            return index != null &&
-                    index >= 0 &&
-                    index < localLibrarySortOptions.length
-                ? localLibrarySortOptions[index]
-                : 'nameAscending';
-          },
+          'nameAscending', () async {
+        final index = (await SharedPreferences.getInstance())
+            .getInt('library_sort_option');
+        return index != null &&
+                index >= 0 &&
+                index < localLibrarySortOptions.length
+            ? localLibrarySortOptions[index]
+            : 'nameAscending';
+      },
           (v) => SettingsStorage.saveInt('library_sort_option',
               localLibrarySortOptions.indexOf(v as String)),
           apply: 'restart_app',
-          description:
-              'Classic 本地媒体库文件夹视图的文件排序：文件名、修改时间或大小，升序或降序。页面创建时读取。'),
+          description: 'Classic 本地媒体库文件夹视图的文件排序：文件名、修改时间或大小，升序或降序。页面创建时读取。'),
       for (final source in collectionSortSources)
         entry(
             'appearance.collectionSort.$source',
@@ -244,7 +247,8 @@ final class SystemSettings {
             'library_collection_sort_v1_$source',
             const StringSchema(values: collectionSortOptions),
             'comprehensive',
-            () async => (await SharedPreferences.getInstance())
+            () async =>
+                (await SharedPreferences.getInstance())
                     .getString('library_collection_sort_v1_$source') ??
                 'comprehensive',
             (v) => SettingsStorage.saveString(
@@ -278,14 +282,14 @@ final class SystemSettings {
                 ? JellyfinTranscodeManager.instance.isTranscodingEnabled()
                 : EmbyTranscodeManager.instance.isTranscodingEnabled(),
             (v) async {
-              final ok = server == 'jellyfin'
-                  ? await (await _jellyfin()).setTranscodeEnabled(v as bool)
-                  : await (await _emby()).setTranscodeEnabled(v as bool);
-              if (!ok) {
-                throw const Failure(FailureCode.unavailable,
-                    'The transcoding preference could not be saved.');
-              }
-            },
+          final ok = server == 'jellyfin'
+              ? await (await _jellyfin()).setTranscodeEnabled(v as bool)
+              : await (await _emby()).setTranscodeEnabled(v as bool);
+          if (!ok) {
+            throw const Failure(FailureCode.unavailable,
+                'The transcoding preference could not be saved.');
+          }
+        },
             description:
                 '${server == 'jellyfin' ? 'Jellyfin' : 'Emby'} 播放是否请求服务器转码。关闭时 Classic 同时把默认画质设为 original。新打开的视频使用；已在播放的视频用 playback.select_stream 切换。'),
         entry(
@@ -301,29 +305,28 @@ final class SystemSettings {
                         .getDefaultVideoQuality()
                     : await EmbyTranscodeManager.instance
                         .getDefaultVideoQuality())
-                .name,
-            (v) async {
-              final quality = JellyfinVideoQuality.values.byName(v as String);
-              final bool ok;
-              if (server == 'jellyfin') {
-                final provider = await _jellyfin();
-                ok = await provider.setDefaultVideoQuality(quality);
-                // As Classic's quality menu does: a transcoded quality turns transcoding on.
-                if (ok && quality != JellyfinVideoQuality.original) {
-                  await provider.setTranscodeEnabled(true);
-                }
-              } else {
-                final provider = await _emby();
-                ok = await provider.setDefaultVideoQuality(quality);
-                if (ok && quality != JellyfinVideoQuality.original) {
-                  await provider.setTranscodeEnabled(true);
-                }
-              }
-              if (!ok) {
-                throw const Failure(FailureCode.unavailable,
-                    'The default quality could not be saved.');
-              }
-            },
+                .name, (v) async {
+          final quality = JellyfinVideoQuality.values.byName(v as String);
+          final bool ok;
+          if (server == 'jellyfin') {
+            final provider = await _jellyfin();
+            ok = await provider.setDefaultVideoQuality(quality);
+            // As Classic's quality menu does: a transcoded quality turns transcoding on.
+            if (ok && quality != JellyfinVideoQuality.original) {
+              await provider.setTranscodeEnabled(true);
+            }
+          } else {
+            final provider = await _emby();
+            ok = await provider.setDefaultVideoQuality(quality);
+            if (ok && quality != JellyfinVideoQuality.original) {
+              await provider.setTranscodeEnabled(true);
+            }
+          }
+          if (!ok) {
+            throw const Failure(FailureCode.unavailable,
+                'The default quality could not be saved.');
+          }
+        },
             description:
                 '${server == 'jellyfin' ? 'Jellyfin' : 'Emby'} 默认视频画质：auto 由服务器决定，bandwidth1m 至 bandwidth40m 为码率档，original 为原画（不转码）。选转码档时 Classic 同时打开转码。新打开的视频使用。'),
       ],
@@ -385,12 +388,11 @@ final class SystemSettings {
           'next_library_notify_enabled',
           const BooleanSchema(),
           true,
-          () async => libraryNotifyEnabled,
-          (v) async {
-            await SettingsStorage.saveBool(
-                'next_library_notify_enabled', v as bool);
-            libraryNotifyEnabled = v;
-          },
+          () async => libraryNotifyEnabled, (v) async {
+        await SettingsStorage.saveBool(
+            'next_library_notify_enabled', v as bool);
+        libraryNotifyEnabled = v;
+      },
           description:
               '开启时，新进片库的文件（用户添加的文件夹、Classic 扫描、媒体来源同步）合成一批，交给一个后台帮手，结果记在动态里，不进主会话；用户不在旁边时片库也会办好。Nipa 自己的操作带进来的文件回到她发起的会话。'
               '关闭后不再发送，关闭期间进来的文件之后不补发。已发出的不撤回。'),

@@ -19,7 +19,8 @@ import 'package:nipaplay/next/ui_data/ui_data.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {
-  test('an entry reads its row: names, progress, time, pictures and where it is',
+  test(
+      'an entry reads its row: names, progress, time, pictures and where it is',
       () {
     final at = DateTime.utc(2026, 10, 12, 13, 40);
     final e = UiHistoryEntry.from({
@@ -398,6 +399,8 @@ final class _Data implements NextUiData {
 final class _Port implements ChatPort {
   @override
   bool get available => false;
+  @override
+  Future<String?> unavailableReason() async => null;
 
   @override
   bool get busy => false;

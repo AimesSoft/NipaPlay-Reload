@@ -82,6 +82,13 @@ final class ReplyPart extends TurnPart {
   String text;
 }
 
+/// A short system explanation shown in the conversation. It is not part of
+/// Nipa's answer and never folds away with the turn's work.
+final class NoticePart extends TurnPart {
+  NoticePart(this.text);
+  final String text;
+}
+
 /// Work handed to a helper (Codex's own sub-agents): sent off, waited
 /// for, told more.
 final class HelperStep extends ActivityStep {
@@ -170,14 +177,19 @@ class ChatTurn {
   /// was done after it.
   ReplyPart? get answer {
     if (running) return null;
-    final last = parts.lastOrNull;
-    return last is ReplyPart && last.text.trim().isNotEmpty ? last : null;
+    for (final part in parts.reversed) {
+      if (part is NoticePart) continue;
+      return part is ReplyPart && part.text.trim().isNotEmpty ? part : null;
+    }
+    return null;
   }
 
   /// Folded away once the turn is over: everything but what you said and
   /// the answer, until the fold is opened.
   bool folded(TurnPart part) {
-    if (unfolded || running || part is SaidPart) return false;
+    if (unfolded || running || part is SaidPart || part is NoticePart) {
+      return false;
+    }
     return !identical(part, answer);
   }
 
@@ -185,7 +197,8 @@ class ChatTurn {
   bool get foldable {
     if (running) return false;
     final answer = this.answer;
-    return parts.any((p) => p is! SaidPart && !identical(p, answer));
+    return parts.any(
+        (p) => p is! SaidPart && p is! NoticePart && !identical(p, answer));
   }
 
   Iterable<ActivityStep> get steps =>

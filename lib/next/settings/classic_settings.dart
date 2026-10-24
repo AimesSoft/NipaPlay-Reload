@@ -40,8 +40,14 @@ List<SchemaViolation> validateGithubProxy(Object? value) {
   if (text.isEmpty) return [];
   final uri = Uri.tryParse(text);
   if ((!text.startsWith('http://') && !text.startsWith('https://')) ||
-      !text.endsWith('/') || uri == null || !uri.hasAuthority || uri.host.isEmpty) {
-    return [const SchemaViolation('/value', 'Use an HTTP(S) URL ending in /, or empty to disable.')];
+      !text.endsWith('/') ||
+      uri == null ||
+      !uri.hasAuthority ||
+      uri.host.isEmpty) {
+    return [
+      const SchemaViolation(
+          '/value', 'Use an HTTP(S) URL ending in /, or empty to disable.')
+    ];
   }
   return [];
 }
@@ -99,6 +105,43 @@ final class ClassicSettings {
     return _writers[key] ?? 'set${field[0].toUpperCase()}${field.substring(1)}';
   }
 
+  static ({JsonMap appliesTo, bool appliesNow, String? reason}) applicability(
+      String key) {
+    if (key == 'appearance.automaticUiScale') {
+      final now =
+          attached?.appearance.supportsAutomaticUiScale ?? globals.isAndroidTv;
+      return (
+        appliesTo: const {
+          'deviceFeatures': ['automaticUiScale']
+        },
+        appliesNow: now,
+        reason: now ? null : '当前设备不支持自动界面缩放。',
+      );
+    }
+    if (const {
+      'general.desktopExitBehavior',
+      'general.startupWindowState',
+      'general.startupWindowPosition',
+      'general.startupWindowWidth',
+      'general.startupWindowHeight',
+      'general.pictureInPicturePosition',
+      'network.httpProxy',
+    }.contains(key)) {
+      return (
+        appliesTo: const {
+          'platforms': ['desktop']
+        },
+        appliesNow: globals.isDesktop,
+        reason: globals.isDesktop ? null : '此设置只适用于桌面端。',
+      );
+    }
+    return (
+      appliesTo: const <String, Object?>{},
+      appliesNow: true,
+      reason: null
+    );
+  }
+
   Future<void> get ready async {
     await appearance.ready;
     await home.ready;
@@ -125,6 +168,7 @@ final class ClassicSettings {
       Object? decodeValue(Object? raw) => decode == null
           ? raw ?? dynamicDefault?.call() ?? fallback
           : decode(raw);
+      final facts = applicability(key);
       entries.add(SettingEntry(
         key: key,
         title: title,
@@ -152,6 +196,9 @@ final class ClassicSettings {
           await write(value);
         },
         visible: visible,
+        appliesTo: facts.appliesTo,
+        appliesNow: () => applicability(key).appliesNow,
+        appliesReason: () => applicability(key).reason,
         validateValue: validate,
         effective: EffectiveRules.resolve,
       ));
@@ -340,8 +387,18 @@ final class ClassicSettings {
         (v) =>
             ApplicationSettings.preferences.setBlurPower((v as num).toDouble()),
         source: 'lib/providers/settings_provider.dart',
-        validate: (v) => [0, 5, 15, 25, if (!globals.isTelevision) ...[50, 100]].contains(v)
-            ? [] : [const SchemaViolation('/value', 'Choose a Classic blur preset.')]);
+        validate: (v) => [
+              0,
+              5,
+              15,
+              25,
+              if (!globals.isTelevision) ...[50, 100]
+            ].contains(v)
+                ? []
+                : [
+                    const SchemaViolation(
+                        '/value', 'Choose a Classic blur preset.')
+                  ]);
     const homeSource = 'lib/providers/home_sections_settings_provider.dart';
     final sectionKeys =
         HomeSectionType.values.map((e) => e.storageKey).toList();
@@ -540,26 +597,26 @@ final class ClassicSettings {
         (v) => current.developer.setAllowInvalidCertsGlobal(v as bool),
         source: 'lib/providers/developer_options_provider.dart',
         setter: 'setAllowInvalidCertsGlobal',
-        description: '复用 Classic 全局证书信任开关，允许 Dart HTTP 请求接受无效或自签名证书。仅 IO 平台生效。');
-    add(
-        'plugins.githubProxyUrl',
-        'GitHub 代理',
-        const StringSchema(),
-        '',
-        SettingsKeys.githubProxyUrl,
-        (v) async {
-          final value = (v as String).trim();
-          if (value.isNotEmpty) {
-            final response = await http.get(Uri.parse('${value}https://raw.githubusercontent.com/AimesSoft/Nipaplay-plugins/refs/heads/main/plugins.json'))
-                .timeout(const Duration(seconds: 10));
-            if (response.statusCode != 200) {
-              throw Failure(FailureCode.unavailable, 'GitHub proxy connectivity check failed (${response.statusCode}); previous value retained.');
-            }
-          }
-          await ApplicationSettings.preferences.setGithubProxyUrl(value);
-        },
+        description:
+            '复用 Classic 全局证书信任开关，允许 Dart HTTP 请求接受无效或自签名证书。仅 IO 平台生效。');
+    add('plugins.githubProxyUrl', 'GitHub 代理', const StringSchema(), '',
+        SettingsKeys.githubProxyUrl, (v) async {
+      final value = (v as String).trim();
+      if (value.isNotEmpty) {
+        final response = await http
+            .get(Uri.parse(
+                '${value}https://raw.githubusercontent.com/AimesSoft/Nipaplay-plugins/refs/heads/main/plugins.json'))
+            .timeout(const Duration(seconds: 10));
+        if (response.statusCode != 200) {
+          throw Failure(FailureCode.unavailable,
+              'GitHub proxy connectivity check failed (${response.statusCode}); previous value retained.');
+        }
+      }
+      await ApplicationSettings.preferences.setGithubProxyUrl(value);
+    },
         source: 'lib/providers/settings_provider.dart',
-        description: '插件市场与更新使用的 GitHub 加速前缀；空字符串关闭加速。非空值须为 HTTP(S) 地址并以 / 结尾；沿用 Classic 请求插件索引测试，HTTP 200 才保存。',
+        description:
+            '插件市场与更新使用的 GitHub 加速前缀；空字符串关闭加速。非空值须为 HTTP(S) 地址并以 / 结尾；沿用 Classic 请求插件索引测试，HTTP 200 才保存。',
         validate: validateGithubProxy);
     const developerSource = 'lib/providers/developer_options_provider.dart';
     add(
@@ -614,16 +671,19 @@ final class ClassicSettings {
         if (HotkeyService().allShortcuts.isEmpty) {
           await HotkeyService().loadShortcuts();
         }
-        final conflict = HotkeyService().allShortcuts.entries.any(
-            (entry) => entry.key != shortcut.key && entry.value == v);
-        if (conflict && !await showUserConsent('快捷键冲突',
-            '这个快捷键已被其他操作使用，要替换吗？', '替换')) {
+        final conflict = HotkeyService()
+            .allShortcuts
+            .entries
+            .any((entry) => entry.key != shortcut.key && entry.value == v);
+        if (conflict &&
+            !await showUserConsent('快捷键冲突', '这个快捷键已被其他操作使用，要替换吗？', '替换')) {
           throw const Failure(FailureCode.conflict, '用户没有同意替换快捷键');
         }
         await HotkeyService().updateShortcut(shortcut.key, v as String);
       },
           source: 'lib/utils/hotkey_service.dart',
-          description: '沿用 Classic 快捷键格式与冲突提示；冲突时由用户在应用内选择替换或取消。替换与 Classic 一样只更新目标动作。',
+          description:
+              '沿用 Classic 快捷键格式与冲突提示；冲突时由用户在应用内选择替换或取消。替换与 Classic 一样只更新目标动作。',
           setter: 'updateShortcut',
           decode: (raw) => raw == null
               ? shortcut.value
@@ -784,16 +844,28 @@ final class ClassicSettings {
         500,
         'webdav_search_max_results',
         (p, v) => p.setSearchMaxResults(v as int));
-    add('appearance.quarterlyReviewSort', '季度回顾排序',
-        const StringSchema(values: ['airDate', 'commentNewest', 'commentOldest', 'ratingHigh', 'ratingLow']),
-        'airDate', 'quarterly_review_sort_v1', (value) async {
-          final home = classicHome();
-          if (home != null) {
-            await home.setReviewSort(value as String);
-          } else {
-            await (await SharedPreferences.getInstance()).setString('quarterly_review_sort_v1', value as String);
-          }
-        }, source: 'lib/themes/nipaplay/widgets/dashboard_home_page_quarterly_review_logic.dart',
+    add(
+        'appearance.quarterlyReviewSort',
+        '季度回顾排序',
+        const StringSchema(values: [
+          'airDate',
+          'commentNewest',
+          'commentOldest',
+          'ratingHigh',
+          'ratingLow'
+        ]),
+        'airDate',
+        'quarterly_review_sort_v1', (value) async {
+      final home = classicHome();
+      if (home != null) {
+        await home.setReviewSort(value as String);
+      } else {
+        await (await SharedPreferences.getInstance())
+            .setString('quarterly_review_sort_v1', value as String);
+      }
+    },
+        source:
+            'lib/themes/nipaplay/widgets/dashboard_home_page_quarterly_review_logic.dart',
         setter: '_setQuarterlyReviewSort');
     return entries;
   }

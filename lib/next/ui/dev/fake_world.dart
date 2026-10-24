@@ -29,8 +29,11 @@ final class FakeWorld implements NextUiData, NextUiActions, NextDiscoverData {
     if (tasks) {
       _tasks['fake-task-frieren'] = _FakeTask(
           'fake-task-frieren', '葬送的芙莉莲', sample('frieren').artwork, 0.47);
-      _helpers.add(_FakeHelper('fake-helper-dungeon', '补全《迷宫饭》的弹幕',
-          'fake-thread-weekend', DateTime.now().subtract(const Duration(minutes: 2))));
+      _helpers.add(_FakeHelper(
+          'fake-helper-dungeon',
+          '补全《迷宫饭》的弹幕',
+          'fake-thread-weekend',
+          DateTime.now().subtract(const Duration(minutes: 2))));
       _ticker = Timer.periodic(const Duration(seconds: 1), (_) => _tick());
     }
     _followupAfter = followupAfter;
@@ -243,9 +246,8 @@ final class FakeWorld implements NextUiData, NextUiActions, NextDiscoverData {
       genres: genres,
       episodeCount: (o['episodes'] as int?) ?? m['episodes'] as int?,
       film: m['kind'] == 'movie',
-      runtime: m['runtime'] == null
-          ? null
-          : Duration(minutes: m['runtime'] as int),
+      runtime:
+          m['runtime'] == null ? null : Duration(minutes: m['runtime'] as int),
       studio: m['studio'] as String?,
       overview: manage.textOf(key, UiTextField.overview,
           (o['overview'] as String?) ?? m['overview'] as String?),
@@ -687,18 +689,76 @@ final class FakeWorld implements NextUiData, NextUiActions, NextDiscoverData {
   };
 
   static const _rankings = [
-    ('弹弹play', '本周热播', ['dandadan', 'frieren', 'kusuriya', 'kaiju8',
-      'makeine', 'dungeon', 'oshinoko', 'ranma', 'girlsband', 'chainsaw']),
-    ('弹弹play', '本周飙升', ['shoshimin', 'ranma', 'bokuyaba', 'makeine',
-      'girlsband', 'kamuy', 'yurucamp', 'dandadan']),
-    ('弹弹play', '本季新番', ['dandadan', 'ranma', 'kaiju8', 'makeine',
-      'shoshimin', 'dungeon', 'kusuriya', 'girlsband']),
-    ('Bangumi', '高分', ['frieren', 'bocchi', 'violet', 'kimetsu', 'mushoku',
-      'jujutsu', 'bokuyaba', 'kamuy', 'chainsaw', 'changan']),
+    (
+      '弹弹play',
+      '本周热播',
+      [
+        'dandadan',
+        'frieren',
+        'kusuriya',
+        'kaiju8',
+        'makeine',
+        'dungeon',
+        'oshinoko',
+        'ranma',
+        'girlsband',
+        'chainsaw'
+      ]
+    ),
+    (
+      '弹弹play',
+      '本周飙升',
+      [
+        'shoshimin',
+        'ranma',
+        'bokuyaba',
+        'makeine',
+        'girlsband',
+        'kamuy',
+        'yurucamp',
+        'dandadan'
+      ]
+    ),
+    (
+      '弹弹play',
+      '本季新番',
+      [
+        'dandadan',
+        'ranma',
+        'kaiju8',
+        'makeine',
+        'shoshimin',
+        'dungeon',
+        'kusuriya',
+        'girlsband'
+      ]
+    ),
+    (
+      'Bangumi',
+      '高分',
+      [
+        'frieren',
+        'bocchi',
+        'violet',
+        'kimetsu',
+        'mushoku',
+        'jujutsu',
+        'bokuyaba',
+        'kamuy',
+        'chainsaw',
+        'changan'
+      ]
+    ),
   ];
 
-  static const _followed = {'kusuriya', 'oshinoko', 'dungeon', 'bocchi',
-    'edgerunners', 'frieren'};
+  static const _followed = {
+    'kusuriya',
+    'oshinoko',
+    'dungeon',
+    'bocchi',
+    'edgerunners',
+    'frieren'
+  };
 
   UiFound? _discovered(String key) {
     if (_has(key)) {
@@ -721,8 +781,7 @@ final class FakeWorld implements NextUiData, NextUiActions, NextDiscoverData {
   @override
   Future<UiDiscover> discover() async {
     await Future<void>.delayed(const Duration(milliseconds: 160));
-    List<UiFound> list(List<String> keys) =>
-        [
+    List<UiFound> list(List<String> keys) => [
           for (final k in keys)
             if (_discovered(k) case final found?) found
         ];
@@ -786,7 +845,6 @@ class _FakeTask {
         remaining: Duration(seconds: ((1 - progress) * 380).round()),
       );
 }
-
 
 /// One step of a scripted turn: a shell command, what it printed, how long
 /// it took and how it ended. A plain string in a script is a thought.
@@ -860,6 +918,9 @@ final class FakeChatPort implements ChatPort {
 
   @override
   bool get available => true;
+
+  @override
+  Future<String?> unavailableReason() async => null;
 
   @override
   bool get busy => _busy;
@@ -949,8 +1010,11 @@ final class FakeChatPort implements ChatPort {
     }
   }
 
-  static Map<String, dynamic> _thought(String id, String text) =>
-      {'id': id, 'type': 'reasoning', 'summary': [text]};
+  static Map<String, dynamic> _thought(String id, String text) => {
+        'id': id,
+        'type': 'reasoning',
+        'summary': [text]
+      };
 
   static Map<String, dynamic> _command(String id, _Run run,
           {bool done = true}) =>
@@ -958,7 +1022,8 @@ final class FakeChatPort implements ChatPort {
         'id': id,
         'type': 'commandExecution',
         'command': "/bin/zsh -lc '${run.command}'",
-        'status': done ? (run.exit == 0 ? 'completed' : 'failed') : 'inProgress',
+        'status':
+            done ? (run.exit == 0 ? 'completed' : 'failed') : 'inProgress',
         if (done) 'exitCode': run.exit,
         if (done) 'aggregatedOutput': run.output,
       };
@@ -994,8 +1059,8 @@ final class FakeChatPort implements ChatPort {
     // The main session: where everything goes.
     old(mainId, '迷宫饭更新了吗？', const Duration(days: 1, hours: 5),
         _updates('dungeon'));
-    old(mainId, '帮我准备一下《葬送的芙莉莲》，按平时的喜好来',
-        const Duration(minutes: 40), _prepareFrierenFirst());
+    old(mainId, '帮我准备一下《葬送的芙莉莲》，按平时的喜好来', const Duration(minutes: 40),
+        _prepareFrierenFirst());
   }
 
   @override
@@ -1050,8 +1115,7 @@ final class FakeChatPort implements ChatPort {
       'params': {
         'turnId': _turn,
         'status': _busy ? 'inProgress' : 'completed',
-        'lastEventAgoMs':
-            (now.difference(_lastEvent) + _stall).inMilliseconds,
+        'lastEventAgoMs': (now.difference(_lastEvent) + _stall).inMilliseconds,
       }
     });
   }
@@ -1181,7 +1245,8 @@ final class FakeChatPort implements ChatPort {
       return;
     }
     final end = _say(threadId, turn, msg, script.reply, worked + 400);
-    _at(end + 150, () => _end(threadId, turn, itemId: msg, reply: script.reply));
+    _at(end + 150,
+        () => _end(threadId, turn, itemId: msg, reply: script.reply));
   }
 
   @override
@@ -1203,8 +1268,7 @@ final class FakeChatPort implements ChatPort {
 
   // —— What Nipa does, by what you said ——
 
-  static bool _any(String text, List<String> words) =>
-      words.any(text.contains);
+  static bool _any(String text, List<String> words) => words.any(text.contains);
 
   static String _call(String action, [Map<String, Object?> args = const {}]) =>
       "./nipa call $action '${jsonEncode(args)}'";
@@ -1273,7 +1337,8 @@ final class FakeChatPort implements ChatPort {
     ];
     return _Script([
       '这句话不太像要看什么，先看看 NipaPlay 现在的情况，再问清楚',
-      const _Run('./nipa status', '{"ok":true,"library":48,"tasks":1}', ms: 700),
+      const _Run('./nipa status', '{"ok":true,"library":48,"tasks":1}',
+          ms: 700),
     ], replies[_fallbacks++ % replies.length]);
   }
 
@@ -1294,8 +1359,10 @@ final class FakeChatPort implements ChatPort {
     if (image != null) {
       return _Script([
         '一张截图，看看画面是哪部作品的哪一集',
-        _Run('python3 -c "from PIL import Image; print(Image.open(\'$image\').size)"',
-            '(1920, 1080)', ms: 500),
+        _Run(
+            'python3 -c "from PIL import Image; print(Image.open(\'$image\').size)"',
+            '(1920, 1080)',
+            ms: 500),
         _Run(_call('media.library.search', {'query': '芙莉莲'}),
             _ok({'total': 1, 'first': '葬送的芙莉莲'})),
         '是芙莉莲第 3 集的画面，你那集看到一半',
@@ -1322,22 +1389,22 @@ final class FakeChatPort implements ChatPort {
 
   _Script _updates(String? key) {
     if (key == null) {
-      return _Script([
-        '看看片库里最近进来的新一集，再对一下在追的',
-        _Run(_call('media.library.works', {'sort': 'updated', 'limit': 20}),
-            _ok({'total': 48, 'updated': 3})),
-        _Run(_call('history.continue_watching', {'limit': 10}),
-            _ok({'items': 5})),
-        '有三部在追的更新了，药屋还没看完上一集，提醒一下',
-        _present(['episode', 'episode', 'episode']),
-      ],
+      return _Script(
+          [
+            '看看片库里最近进来的新一集，再对一下在追的',
+            _Run(_call('media.library.works', {'sort': 'updated', 'limit': 20}),
+                _ok({'total': 48, 'updated': 3})),
+            _Run(_call('history.continue_watching', {'limit': 10}),
+                _ok({'items': 5})),
+            '有三部在追的更新了，药屋还没看完上一集，提醒一下',
+            _present(['episode', 'episode', 'episode']),
+          ],
           '这几天有三部更新：《药屋少女的呢喃》第 32 集今天早上出的，你第 31 集还剩 9 分钟；'
           '《迷宫饭》第 13 集是昨晚；【我推的孩子】第 15 集前天就有了。都在片库里。',
           cards: () => [
                 for (final k in _latest.keys)
                   UiEpisodeCard(
-                      world.sample(k,
-                          next: world._episode(k, _latest[k]!.$1)),
+                      world.sample(k, next: world._episode(k, _latest[k]!.$1)),
                       world._episode(k, _latest[k]!.$1)),
               ]);
     }
@@ -1350,21 +1417,22 @@ final class FakeChatPort implements ChatPort {
         _Run(_call('media.library.work', {'title': title}),
             _ok({'title': title, 'episodes': count, 'updated': null})),
         _present(['work']),
-      ],
-          '《$title》这阵子没有新的一集${count == null ? '' : '，片库里现有 $count 集'}。',
+      ], '《$title》这阵子没有新的一集${count == null ? '' : '，片库里现有 $count 集'}。',
           cards: () => [UiWorkCard(world.sample(key))]);
     }
     final (n, came) = latest;
     final (next, p) = FakeWorld._continueAt[key] ?? (n, null);
     final left = p == null ? null : (24 * (1 - p)).round();
-    return _Script([
-      '看看《$title》最近一集是什么时候进片库的，再对一下看到哪了',
-      _Run(_call('media.library.work', {'title': title}),
-          _ok({'title': title, 'latest': n, 'added': came})),
-      _Run(_call('history.read', {'title': title}),
-          _ok({'next': next, 'progress': p}), ms: 900),
-      _present(['episode']),
-    ],
+    return _Script(
+        [
+          '看看《$title》最近一集是什么时候进片库的，再对一下看到哪了',
+          _Run(_call('media.library.work', {'title': title}),
+              _ok({'title': title, 'latest': n, 'added': came})),
+          _Run(_call('history.read', {'title': title}),
+              _ok({'next': next, 'progress': p}),
+              ms: 900),
+          _present(['episode']),
+        ],
         next >= n
             ? '更新了，第 $n 集$came出的，已经在片库里，正好接着看。'
             : '更新了，第 $n 集$came出的，已经在片库里。你第 $next 集'
@@ -1386,35 +1454,36 @@ final class FakeChatPort implements ChatPort {
     // works, their page offers to prepare them). 摇曳露营 is on the
     // workstation already, so its card is the library's.
     if (_any(said, ['没看过', '片库里没有', '片库外', '没有的'])) {
-      return _Script([
-        '要片库外的，找轻松、一集二十分钟左右的',
-        _Run(
-            _call('media.metadata.search',
-                {'provider': 'bangumi', 'query': '日常 喜剧'}),
-            _ok({'results': 20}),
-            ms: 900),
-        '去掉片库里有的，留三部',
-        _Run(
-            _call('ui.present', {
-              'cards': [
-                {
-                  'kind': 'candidates',
-                  'items': [
+      return _Script(
+          [
+            '要片库外的，找轻松、一集二十分钟左右的',
+            _Run(
+                _call('media.metadata.search',
+                    {'provider': 'bangumi', 'query': '日常 喜剧'}),
+                _ok({'results': 20}),
+                ms: 900),
+            '去掉片库里有的，留三部',
+            _Run(
+                _call('ui.present', {
+                  'cards': [
                     {
-                      'ref': {
-                        'provider': 'bangumi',
-                        'objectType': 'subject',
-                        'externalId': '464376'
-                      }
-                    },
-                    {'ref': '…'},
-                    {'ref': '…'},
+                      'kind': 'candidates',
+                      'items': [
+                        {
+                          'ref': {
+                            'provider': 'bangumi',
+                            'objectType': 'subject',
+                            'externalId': '464376'
+                          }
+                        },
+                        {'ref': '…'},
+                        {'ref': '…'},
+                      ]
+                    }
                   ]
-                }
-              ]
-            }),
-            _ok({'count': 1})),
-      ],
+                }),
+                _ok({'count': 1})),
+          ],
           '片库外挑了三部：《败犬女主太多了！》吵吵闹闹，很下饭；'
           '《我心里危险的东西》很甜，不用动脑；《摇曳露营△》工作站上已经有了，现在就能看。'
           '前两部想看哪部，我去准备。',
@@ -1431,15 +1500,20 @@ final class FakeChatPort implements ChatPort {
               ]);
     }
     if (_any(said, ['周末', '一口气', '追完'])) {
-      return _Script([
-        '想一口气看完，找集数少、一个周末能看完的',
-        _Run(_call('media.library.works', {'maxEpisodes': 13, 'limit': 30}),
-            _ok({'total': 9})),
-        '去掉已经看过的，留节奏快的和好哭的各一部，再加一部很短的',
-        _Run(_call('history.read', {'works': ['lycoris', 'violet', 'edgerunners']}),
-            _ok({'watched': []}), ms: 800),
-        _present(['candidates']),
-      ],
+      return _Script(
+          [
+            '想一口气看完，找集数少、一个周末能看完的',
+            _Run(_call('media.library.works', {'maxEpisodes': 13, 'limit': 30}),
+                _ok({'total': 9})),
+            '去掉已经看过的，留节奏快的和好哭的各一部，再加一部很短的',
+            _Run(
+                _call('history.read', {
+                  'works': ['lycoris', 'violet', 'edgerunners']
+                }),
+                _ok({'watched': []}),
+                ms: 800),
+            _present(['candidates']),
+          ],
           '一个周末刚好的三部：《莉可丽丝》十三集，节奏快，每集结尾都想接着看；'
           '《紫罗兰永恒花园》也是十三集，慢一点，很好哭；'
           '《赛博朋克：边缘行者》只有十集，一个下午就够。',
@@ -1452,13 +1526,14 @@ final class FakeChatPort implements ChatPort {
               ]);
     }
     if (_any(said, ['安静', '治愈', '放松', '哭', '感动'])) {
-      return _Script([
-        '想安静一会儿，找节奏慢、画面好看的',
-        _Run(_call('media.library.works', {'genre': '剧情', 'limit': 30}),
-            _ok({'total': 14})),
-        '芙莉莲的第一集已经准备好了，正好',
-        _present(['candidates']),
-      ],
+      return _Script(
+          [
+            '想安静一会儿，找节奏慢、画面好看的',
+            _Run(_call('media.library.works', {'genre': '剧情', 'limit': 30}),
+                _ok({'total': 14})),
+            '芙莉莲的第一集已经准备好了，正好',
+            _present(['candidates']),
+          ],
           '想安静一会儿的话，《紫罗兰永恒花园》最合适，一集一个故事。'
           '《葬送的芙莉莲》也慢，第一集已经准备好了。',
           cards: () => [
@@ -1469,15 +1544,16 @@ final class FakeChatPort implements ChatPort {
               ]);
     }
     if (_any(said, ['燃', '刺激', '悬疑', '动作', '烧脑'])) {
-      return _Script([
-        '要刺激一点的，动作和悬疑都看看',
-        _Run(_call('media.library.works', {'genre': '悬疑', 'limit': 20}),
-            _ok({'total': 6})),
-        _Run(_call('media.library.works', {'genre': '动作冒险', 'limit': 20}),
-            _ok({'total': 17})),
-        '长安一集一个时辰最停不下来，边缘行者只有十集',
-        _present(['candidates']),
-      ],
+      return _Script(
+          [
+            '要刺激一点的，动作和悬疑都看看',
+            _Run(_call('media.library.works', {'genre': '悬疑', 'limit': 20}),
+                _ok({'total': 6})),
+            _Run(_call('media.library.works', {'genre': '动作冒险', 'limit': 20}),
+                _ok({'total': 17})),
+            '长安一集一个时辰最停不下来，边缘行者只有十集',
+            _present(['candidates']),
+          ],
           '要刺激的：《长安十二时辰》一集一个时辰，停不下来；'
           '《赛博朋克：边缘行者》节奏很猛，只有十集；《莉可丽丝》枪战多，但不压抑。',
           cards: () => [
@@ -1496,18 +1572,17 @@ final class FakeChatPort implements ChatPort {
         _Run(_call('history.continue_watching', {'limit': 10}),
             _ok({'items': 5})),
         _present(['candidates']),
-      ],
-          '这三部都很轻松，一集二十分钟出头。《孤独摇滚！》你还差最后四集，今晚正好看完。',
-          cards: world._picks);
+      ], '这三部都很轻松，一集二十分钟出头。《孤独摇滚！》你还差最后四集，今晚正好看完。', cards: world._picks);
     }
-    return _Script([
-      '没说想看什么，先看看在追的，再从片库里挑一部换换口味',
-      _Run(_call('history.continue_watching', {'limit': 10}),
-          _ok({'items': 5})),
-      _Run(_call('media.library.works', {'unwatched': true, 'limit': 30}),
-          _ok({'total': 21})),
-      _present(['candidates']),
-    ],
+    return _Script(
+        [
+          '没说想看什么，先看看在追的，再从片库里挑一部换换口味',
+          _Run(_call('history.continue_watching', {'limit': 10}),
+              _ok({'items': 5})),
+          _Run(_call('media.library.works', {'unwatched': true, 'limit': 30}),
+              _ok({'total': 21})),
+          _present(['candidates']),
+        ],
         '先把在追的看了？《药屋少女的呢喃》第 31 集还剩 9 分钟，'
         '【我推的孩子】看到第 14 集。想换口味的话，《间谍过家家》每集都能单独看。',
         cards: () => [
@@ -1525,11 +1600,12 @@ final class FakeChatPort implements ChatPort {
         _Run(_call('media.metadata.search', {'query': '葬送的芙莉莲'}),
             _ok({'title': '葬送的芙莉莲', 'year': 2023, 'episodes': 28})),
         _Run(_call('download.preview', {'query': '葬送的芙莉莲 1080p 简中内嵌'}),
-            _ok({'candidates': 3, 'picked': '简中内嵌 1080p'}), ms: 1800),
+            _ok({'candidates': 3, 'picked': '简中内嵌 1080p'}),
+            ms: 1800),
         _Run(_call('download.add', {'from': 'preview', 'pick': 0}),
             _ok({'task': '下载 葬送的芙莉莲'})),
-        _Run(_call('followup.register', {'when': 'download finished'}),
-            _ok({}), ms: 600),
+        _Run(_call('followup.register', {'when': 'download finished'}), _ok({}),
+            ms: 600),
         _present(['work', 'preparation']),
       ], '好，选了简中内嵌的 1080p，已经在下了。下好以后我再看看弹幕够不够，你先忙。',
           cards: () => world._preparation('frieren', world._frierenProgress));
@@ -1539,12 +1615,14 @@ final class FakeChatPort implements ChatPort {
     final busy = world._tasks['fake-task-$key'];
     if (busy != null) {
       final p = busy.progress;
-      return _Script([
-        '《$title》之前就在准备了，看看下到哪了',
-        _Run(_call('task.list', {'kind': 'download'}),
-            _ok({'items': 1, 'progress': (p * 100).round()}), ms: 800),
-        _present(['preparation']),
-      ],
+      return _Script(
+          [
+            '《$title》之前就在准备了，看看下到哪了',
+            _Run(_call('task.list', {'kind': 'download'}),
+                _ok({'items': 1, 'progress': (p * 100).round()}),
+                ms: 800),
+            _present(['preparation']),
+          ],
           p >= 1
               ? '《$title》已经下好了，在补弹幕，马上就能看。'
               : '《$title》已经在下了，${(p * 100).round()}%，'
@@ -1561,15 +1639,15 @@ final class FakeChatPort implements ChatPort {
           ms: 1600, exit: 1),
       '简中内嵌的没找到，放宽一点，繁中或者外挂字幕也行',
       _Run(_call('download.preview', {'query': '$title 1080p'}),
-          _ok({'candidates': 2, 'picked': '繁中内嵌 1080p'}), ms: 1800),
+          _ok({'candidates': 2, 'picked': '繁中内嵌 1080p'}),
+          ms: 1800),
       _Run(_call('download.add', {'from': 'preview', 'pick': 0}),
           _ok({'task': '下载 $title'}),
           ms: 2400, then: () => world._startTask(key)),
-      _Run(_call('followup.register', {'when': 'download finished'}),
-          _ok({}), ms: 600),
+      _Run(_call('followup.register', {'when': 'download finished'}), _ok({}),
+          ms: 600),
       _present(['work', 'preparation']),
-    ],
-        '简中内嵌的没找到，选了繁中内嵌的 1080p，已经在下了。下好以后我把弹幕补上，到时候叫你。',
+    ], '简中内嵌的没找到，选了繁中内嵌的 1080p，已经在下了。下好以后我把弹幕补上，到时候叫你。',
         cards: () => world._preparation(key, world._progressOf(task),
             version: '繁中内嵌 · 1080p'));
   }
@@ -1587,10 +1665,15 @@ final class FakeChatPort implements ChatPort {
         _Run(_call('download.preview', {'query': world.sample(key).title}),
             _ok({'candidates': 2})),
       ], '',
-          ask: _Ask('版本', '找到两个版本，要哪个？', const ['简中内嵌 1080p', '繁中外挂 4K'],
+          ask: _Ask(
+              '版本',
+              '找到两个版本，要哪个？',
+              const ['简中内嵌 1080p', '繁中外挂 4K'],
               (choice) => _Script([
                     '就按$choice，加下载',
-                    _Run(_call('download.add', {'from': 'preview', 'pick': choice}),
+                    _Run(
+                        _call('download.add',
+                            {'from': 'preview', 'pick': choice}),
                         _ok({'task': '下载'})),
                   ], '好，就要$choice。下好了叫你。')));
 
@@ -1598,12 +1681,13 @@ final class FakeChatPort implements ChatPort {
     final (n, p) = FakeWorld._continueAt[key] ?? (1, null);
     final title = world.sample(key).title;
     final left = p == null ? null : (24 * (1 - p)).round();
-    return _Script([
-      '想接着看《$title》，查一下看到第几集',
-      _Run(_call('history.continue_watching', {'title': title}),
-          _ok({'title': title, 'next': n, 'progress': p})),
-      _present(['episode']),
-    ],
+    return _Script(
+        [
+          '想接着看《$title》，查一下看到第几集',
+          _Run(_call('history.continue_watching', {'title': title}),
+              _ok({'title': title, 'next': n, 'progress': p})),
+          _present(['episode']),
+        ],
         left == null
             ? '好，《$title》第 $n 集，接着看。'
             : '好，《$title》第 $n 集，还剩 $left 分钟，从停下的地方接着放。',
@@ -1619,12 +1703,18 @@ final class FakeChatPort implements ChatPort {
     final rating = work.ratings.firstOrNull?.value;
     final overview = work.overview ?? '';
     final first = overview.split(RegExp('[。！？]')).first;
-    return _Script([
-      '说说《${work.title}》适不适合，看看资料和评分',
-      _Run(_call('media.metadata.search', {'query': work.title}),
-          _ok({'title': work.title, 'rating': rating, 'episodes': work.episodeCount})),
-      _present(['work']),
-    ],
+    return _Script(
+        [
+          '说说《${work.title}》适不适合，看看资料和评分',
+          _Run(
+              _call('media.metadata.search', {'query': work.title}),
+              _ok({
+                'title': work.title,
+                'rating': rating,
+                'episodes': work.episodeCount
+              })),
+          _present(['work']),
+        ],
         '《${work.title}》${rating == null ? '' : '评分 ${rating.toStringAsFixed(1)}，'}'
         '${work.episodeCount == null ? '' : '${work.episodeCount} 集。'}'
         '${first.isEmpty ? '' : '$first。'}想看的话我来准备。',
@@ -1638,12 +1728,13 @@ final class FakeChatPort implements ChatPort {
     if (_any(said, ['讲什么', '值得', '好看', '怎么样'])) return _opinion(key);
     final (n, p) = FakeWorld._continueAt[key] ?? (1, null);
     final work = world.sample(key);
-    return _Script([
-      '在《${work.title}》的页面上问的，看看这部的资料和看到哪了',
-      _Run(_call('media.library.work', {'title': work.title}),
-          _ok({'title': work.title, 'next': n})),
-      _present(['episode']),
-    ],
+    return _Script(
+        [
+          '在《${work.title}》的页面上问的，看看这部的资料和看到哪了',
+          _Run(_call('media.library.work', {'title': work.title}),
+              _ok({'title': work.title, 'next': n})),
+          _present(['episode']),
+        ],
         '《${work.title}》${work.episodeCount ?? 12} 集，节奏不快，适合慢慢看。'
         '想从第 $n 集接着看的话，点一下就行。',
         cards: () => [
@@ -1721,9 +1812,11 @@ final class FakeChatPort implements ChatPort {
         _Script([
           '芙莉莲下好了，按说好的补弹幕，先看看现有的够不够',
           _Run(_call('danmaku.search', {'title': '葬送的芙莉莲', 'episode': 1}),
-              _ok({'sources': 2, 'count': 1840}), ms: 2600),
+              _ok({'sources': 2, 'count': 1840}),
+              ms: 2600),
           _Run(_call('danmaku.fetch', {'episode': 1, 'sources': 'all'}),
-              _ok({'added': 3210}), ms: 4200),
+              _ok({'added': 3210}),
+              ms: 4200),
         ], '《葬送的芙莉莲》的弹幕补好了，第一集随时可以看。'),
         400);
   }

@@ -34,6 +34,243 @@ import 'package:nipaplay/services/file_picker_service.dart';
 import 'package:nipaplay/utils/mpv_utils.dart';
 
 abstract final class ApplicationSettings {
+  /// The kernel the playback layer is using now. Next replaces this with its
+  /// live session (and the configured kernel when nothing is open); Classic
+  /// keeps the factory value.
+  static String Function() currentKernel =
+      () => PlayerFactory.getKernelType().name;
+
+  static ({JsonMap appliesTo, bool appliesNow, String? reason}) applicability(
+      String key) {
+    final kernel = currentKernel();
+    final nativeDanmaku =
+        globals.isTvOS || kernel == PlayerKernelType.erika.name;
+    final renderer = DanmakuKernelFactory.getKernelType();
+    final plugin = DanmakuKernelFactory.activePluginRenderer;
+
+    String kernelLabel(String value) => switch (value) {
+          'mdk' => 'MDK',
+          'mediaKit' => 'Media Kit',
+          'videoPlayer' => 'Video Player',
+          'erika' => 'Erika',
+          _ => value,
+        };
+    ({JsonMap appliesTo, bool appliesNow, String? reason}) kernels(
+        List<String> names,
+        {bool Function()? extra,
+        String? extraReason}) {
+      final now = names.contains(kernel) && (extra?.call() ?? true);
+      return (
+        appliesTo: {'kernels': names},
+        appliesNow: now,
+        reason: now
+            ? null
+            : '当前内核是 ${kernelLabel(kernel)}；此设置只适用于 '
+                '${names.map(kernelLabel).join('、')}。${extraReason ?? ''}',
+      );
+    }
+
+    ({JsonMap appliesTo, bool appliesNow, String? reason}) platforms(
+            List<String> names, bool now, String reason) =>
+        (
+          appliesTo: {'platforms': names},
+          appliesNow: now,
+          reason: now ? null : reason,
+        );
+
+    if (key.startsWith('danmaku.titan.')) {
+      final now = plugin?.usesTitanSettings ?? false;
+      return (
+        appliesTo: const {
+          'danmakuPluginRenderers': ['titan']
+        },
+        appliesNow: now,
+        reason: now ? null : '当前弹幕渲染器没有使用 Titan 设置。',
+      );
+    }
+    if (key == 'danmaku.pluginRenderer') {
+      final now = !nativeDanmaku &&
+          DanmakuKernelFactory.availablePluginRenderers.isNotEmpty;
+      return (
+        appliesTo: const {
+          'danmakuRenderers': ['plugin']
+        },
+        appliesNow: now,
+        reason: now
+            ? null
+            : nativeDanmaku
+                ? '当前内核使用原生弹幕，不使用插件渲染器。'
+                : '还没有安装可用的插件弹幕渲染器。',
+      );
+    }
+    if (key == 'danmaku.renderEngine') {
+      return (
+        appliesTo: const {
+          'danmakuRenderers': ['nonNative']
+        },
+        appliesNow: !nativeDanmaku,
+        reason: nativeDanmaku ? '当前内核使用原生弹幕，不能选择弹幕渲染引擎。' : null,
+      );
+    }
+    if (key == 'danmaku.nextPlusPlusEnabled') {
+      final now = !nativeDanmaku &&
+          plugin == null &&
+          renderer == DanmakuRenderEngine.nipaplayNext;
+      return (
+        appliesTo: const {
+          'danmakuRenderers': ['nipaplayNext'],
+          'pluginRenderer': false
+        },
+        appliesNow: now,
+        reason: now
+            ? null
+            : nativeDanmaku
+                ? '当前内核使用原生弹幕，Next++ 不适用。'
+                : plugin != null
+                    ? '插件渲染器接管了弹幕，Next++ 不适用。'
+                    : '当前弹幕渲染引擎不是 Next++。',
+      );
+    }
+    if (key == 'danmaku.supersample') {
+      final now = !nativeDanmaku &&
+          plugin == null &&
+          (renderer == DanmakuRenderEngine.next2 ||
+              renderer == DanmakuRenderEngine.dfmPlus);
+      return (
+        appliesTo: const {
+          'danmakuRenderers': ['next2', 'dfmPlus'],
+          'pluginRenderer': false
+        },
+        appliesNow: now,
+        reason: now
+            ? null
+            : nativeDanmaku
+                ? '当前内核使用原生弹幕，超采样不适用。'
+                : plugin != null
+                    ? '插件渲染器接管了弹幕，超采样不适用。'
+                    : '当前弹幕渲染引擎不支持超采样。',
+      );
+    }
+    if (key == 'danmaku.manualOffset') {
+      final now = video != null;
+      return (
+        appliesTo: const {
+          'requires': ['openMedia']
+        },
+        appliesNow: now,
+        reason: now ? null : '需要正在打开的视频。',
+      );
+    }
+    if (key == 'player.timelinePreviewEnabled') {
+      final now = globals.nextShellHostsPlayer || kernel == 'mdk';
+      return (
+        appliesTo: const {
+          'kernels': ['mdk']
+        },
+        appliesNow: now,
+        reason: now ? null : '当前内核是 ${kernelLabel(kernel)}；此设置只适用于 MDK。',
+      );
+    }
+    if (key == 'player.precacheBufferDurationSeconds') {
+      return kernels(const ['mdk']);
+    }
+    if (const {
+      'player.chapterMarkersEnabled',
+      'player.precacheBufferSizeMb',
+      'player.anime4kProfile',
+      'player.crtProfile',
+      'player.doubleResolutionPlaybackEnabled',
+    }.contains(key)) {
+      return kernels(const ['mediaKit']);
+    }
+    if (key == 'player.erikaUpscalerMode') return kernels(const ['erika']);
+    if (key == 'player.useHardwareDecoder') {
+      return kernels(const ['mdk', 'mediaKit']);
+    }
+    if (key == 'player.pauseOnBackground') {
+      return platforms(const ['mobile'], globals.isPhone, '此设置只适用于手机。');
+    }
+    if (const {
+      'player.desktopHoverSettingsMenuEnabled',
+      'player.instantHidePlayerUiEnabled',
+      'player.autoFullscreenEnabled',
+    }.contains(key)) {
+      return platforms(const ['desktop'], globals.isDesktop, '此设置只适用于桌面端。');
+    }
+    if (key.startsWith('player.external')) {
+      return platforms(const ['desktop'], globals.isDesktop, '外部播放器只在桌面端提供。');
+    }
+    if (key == 'player.volumeBoost') {
+      final supported = video?.supportsVolumeBoost ?? false;
+      return (
+        appliesTo: const {
+          'mediaCapabilities': ['volumeBoost']
+        },
+        appliesNow: supported,
+        reason: supported
+            ? null
+            : video == null
+                ? '需要正在播放的视频。'
+                : '当前视频不支持音量增强。',
+      );
+    }
+    if (key == 'player.volume') {
+      final now = video != null;
+      return (
+        appliesTo: const {
+          'requires': ['openMedia']
+        },
+        appliesNow: now,
+        reason: now ? null : '需要正在打开的视频。',
+      );
+    }
+    if (key == 'player.brightness') {
+      final now = video != null && globals.isMobilePlatform;
+      return (
+        appliesTo: const {
+          'platforms': ['mobile'],
+          'requires': ['openMedia']
+        },
+        appliesNow: now,
+        reason: now
+            ? null
+            : !globals.isMobilePlatform
+                ? '此设置只适用于移动端。'
+                : '需要正在打开的视频。',
+      );
+    }
+    if (key == 'player.macosNativeVideoEnabled') {
+      final now = !kIsWeb && defaultTargetPlatform == TargetPlatform.macOS;
+      return platforms(const ['macos'], now, '此设置只适用于 macOS。');
+    }
+    if (key == 'player.androidAudioOutput' ||
+        key == 'player.erikaAndroidOutputMode') {
+      final now = !kIsWeb && defaultTargetPlatform == TargetPlatform.android;
+      return platforms(const ['android'], now, '此设置只适用于 Android。');
+    }
+    if (key == 'player.screenshotDirectory') {
+      return platforms(const ['desktop', 'mobile', 'television'], !kIsWeb,
+          'Web 平台没有本地截图目录。');
+    }
+    return (
+      appliesTo: const <String, Object?>{},
+      appliesNow: true,
+      reason: null
+    );
+  }
+
+  static bool _appliesNow(String key, bool Function()? visible) {
+    final facts = applicability(key);
+    return facts.appliesNow && (visible?.call() ?? true);
+  }
+
+  static String? _appliesReason(String key, bool Function()? visible) {
+    final facts = applicability(key);
+    if (!facts.appliesNow) return facts.reason;
+    if (!(visible?.call() ?? true)) return '当前界面状态不适用。';
+    return null;
+  }
+
   static const _titles = <String, String>{
     'player.pauseOnBackground': '进入后台暂停',
     'player.desktopHoverSettingsMenuEnabled': '桌面悬停设置菜单',
@@ -114,8 +351,10 @@ abstract final class ApplicationSettings {
 
   static Schema dynamicSchema(String key, Schema fallback) => switch (key) {
         'seek.stepSeconds' => NumberSchema(
-            minimum: video?.seekStepMinSeconds ?? 1 / VideoPlayerState.defaultSeekStepFrameRate,
-            maximum: video?.seekStepMaxSeconds ?? VideoPlayerState.fallbackSeekStepMaxSeconds),
+            minimum: video?.seekStepMinSeconds ??
+                1 / VideoPlayerState.defaultSeekStepFrameRate,
+            maximum: video?.seekStepMaxSeconds ??
+                VideoPlayerState.fallbackSeekStepMaxSeconds),
         'player.kernel' => StringSchema(
             values: PlayerFactory.supportedKernelTypes
                 .where((v) => v != PlayerKernelType.erika || erikaVisible())
@@ -162,7 +401,8 @@ abstract final class ApplicationSettings {
           (renderer == DanmakuRenderEngine.next2 ||
               renderer == DanmakuRenderEngine.dfmPlus);
     }
-    if (key == 'player.timelinePreviewEnabled' && globals.nextShellHostsPlayer) {
+    if (key == 'player.timelinePreviewEnabled' &&
+        globals.nextShellHostsPlayer) {
       return true;
     }
     if (key == 'player.timelinePreviewEnabled' ||
@@ -365,13 +605,21 @@ abstract final class ApplicationSettings {
           schema: schema,
           dynamicSchema: () => dynamicSchema(key, schema),
           validateValue: (value) {
-            if (key == 'danmaku.fontSize' && value != 0 &&
+            if (key == 'danmaku.fontSize' &&
+                value != 0 &&
                 (value as num) < DanmakuStyle.minDanmakuFontSize) {
-              return [const SchemaViolation('/value', 'Use 0 for automatic size or 12–60 pixels.')];
+              return [
+                const SchemaViolation(
+                    '/value', 'Use 0 for automatic size or 12–60 pixels.')
+              ];
             }
             if (key == 'player.minimalProgressBarColor' &&
-                ![0xFFFF7274, 0xFF40C7FF, 0xFF6DFF69, 0xFF4CFFB1, 0xFFFFFFFF].contains(value)) {
-              return [const SchemaViolation('/value', 'Choose a Classic preset color.')];
+                ![0xFFFF7274, 0xFF40C7FF, 0xFF6DFF69, 0xFF4CFFB1, 0xFFFFFFFF]
+                    .contains(value)) {
+              return [
+                const SchemaViolation(
+                    '/value', 'Choose a Classic preset color.')
+              ];
             }
             if (key == 'danmaku.supersample' &&
                 ![0.0, 1.5, 2.0].contains(value)) {
@@ -406,6 +654,9 @@ abstract final class ApplicationSettings {
           reader: source,
           writer: '$source#$setter',
           visible: () => locallyVisible(key) && (visible?.call() ?? true),
+          appliesToNow: () => applicability(key).appliesTo,
+          appliesNow: () => _appliesNow(key, visible),
+          appliesReason: () => _appliesReason(key, visible),
           effective: EffectiveRules.resolve,
           remote: remote,
           decodeStorage: decodeValue,
@@ -414,7 +665,9 @@ abstract final class ApplicationSettings {
             if (next != null && next.handles(key)) {
               return next.readSetting(key);
             }
-            return runtimeRead != null ? runtimeRead() : readPreference(key, storageKey, decodeValue);
+            return runtimeRead != null
+                ? runtimeRead()
+                : readPreference(key, storageKey, decodeValue);
           },
           write: (value) async {
             if (path && (value as String).isNotEmpty) {
@@ -576,9 +829,10 @@ abstract final class ApplicationSettings {
         const BooleanSchema(),
         false,
         'timeline_preview_enabled', (value) async {
-      if (value == true && !player.timelinePreviewEnabled &&
-          !await showUserConsent('开启警告',
-              '开启时间轴截图预览会在后台生成截图，可能导致播放卡顿或性能下降。要开启吗？', '开启')) {
+      if (value == true &&
+          !player.timelinePreviewEnabled &&
+          !await showUserConsent(
+              '开启警告', '开启时间轴截图预览会在后台生成截图，可能导致播放卡顿或性能下降。要开启吗？', '开启')) {
         throw const Failure(FailureCode.conflict, '用户没有同意开启时间轴截图预览');
       }
       await player.setTimelinePreviewEnabled(value as bool);
@@ -742,18 +996,28 @@ abstract final class ApplicationSettings {
         setter: 'setMinimalProgressBarColor',
         source:
             'lib/utils/video_player_state/video_player_state_preferences.dart');
-    add('player.volume', '播放音量',
-        const NumberSchema(minimum: 0, maximum: 1), 0.5,
+    add(
+        'player.volume',
+        '播放音量',
+        const NumberSchema(minimum: 0, maximum: 1),
+        0.5,
         globals.isMobilePlatform ? '@runtime:player.volume' : 'player_volume',
         (value) => player.setPlaybackVolume((value as num).toDouble()),
-        setter: 'setPlaybackVolume', scope: 'device',
+        setter: 'setPlaybackVolume',
+        scope: 'device',
         visible: () => video != null,
-        runtimeRead: globals.isMobilePlatform ? () async => player.currentSystemVolume : null);
-    add('player.brightness', '播放亮度',
-        const NumberSchema(minimum: 0, maximum: 1), 0.5,
+        runtimeRead: globals.isMobilePlatform
+            ? () async => player.currentSystemVolume
+            : null);
+    add(
+        'player.brightness',
+        '播放亮度',
+        const NumberSchema(minimum: 0, maximum: 1),
+        0.5,
         '@runtime:player.brightness',
         (value) => player.setPlaybackBrightness((value as num).toDouble()),
-        setter: 'setPlaybackBrightness', scope: 'device',
+        setter: 'setPlaybackBrightness',
+        scope: 'device',
         visible: () => video != null && globals.isMobilePlatform,
         runtimeRead: () async => player.currentScreenBrightness);
     add(
@@ -995,9 +1259,12 @@ abstract final class ApplicationSettings {
     add('player.externalPath', 'player.externalPath', const StringSchema(), '',
         'external_player_path', (value) async {
       final path = value as String;
-      if (path.isNotEmpty && (!p.isAbsolute(path) ||
-          await FileSystemEntity.type(path) == FileSystemEntityType.notFound)) {
-        throw const Failure(FailureCode.invalidInput, 'Use an existing absolute player executable or application bundle path.');
+      if (path.isNotEmpty &&
+          (!p.isAbsolute(path) ||
+              await FileSystemEntity.type(path) ==
+                  FileSystemEntityType.notFound)) {
+        throw const Failure(FailureCode.invalidInput,
+            'Use an existing absolute player executable or application bundle path.');
       }
       await preferences.setExternalPlayerPath(path);
     },
@@ -1234,8 +1501,8 @@ abstract final class ApplicationSettings {
     add(
         'danmaku.fontSize',
         '弹幕字体大小',
-        const NumberSchema(minimum: 0,
-            maximum: DanmakuStyle.maxDanmakuFontSize),
+        const NumberSchema(
+            minimum: 0, maximum: DanmakuStyle.maxDanmakuFontSize),
         0.0,
         'danmaku_font_size', (value) async {
       await player.setDanmakuFontSize((value as num).toDouble(), commit: true);
@@ -1401,11 +1668,7 @@ abstract final class ApplicationSettings {
             ? <String>[]
             : List<String>.from(jsonDecode(raw as String) as List),
         remote: {'label': '弹幕屏蔽词', 'type': 'string_list'});
-    add(
-        'danmaku.manualOffset',
-        '弹幕手动偏移',
-        const NumberSchema(),
-        0.0,
+    add('danmaku.manualOffset', '弹幕手动偏移', const NumberSchema(), 0.0,
         '@runtime:danmaku.manualOffset', (value) async {
       await setManualOffset((value as num).toDouble());
     },

@@ -301,7 +301,8 @@ abstract final class NextUiDebug {
           final px => double.parse(px).clamp(0.0, max),
         };
         await scroll.animateTo(to,
-            duration: const Duration(milliseconds: 300), curve: NextMotion.ease);
+            duration: const Duration(milliseconds: 300),
+            curve: NextMotion.ease);
         await Future<void>.delayed(const Duration(milliseconds: 200));
         return {
           'offset': scroll.offset,
@@ -330,9 +331,8 @@ abstract final class NextUiDebug {
           if (p['conflict'] case final c?) fake.conflict = c == 'true';
           if (p['stale'] case final c?) fake.stale = c == 'true';
         }
-        final result = await page.debugManage({...p}
-          ..removeWhere(
-              (k, _) => k == 'fail' || k == 'conflict' || k == 'stale'));
+        final result = await page.debugManage({...p}..removeWhere(
+            (k, _) => k == 'fail' || k == 'conflict' || k == 'stale'));
         await _settle();
         return {...result, ..._status(shell)};
       case 'detail':
@@ -441,8 +441,10 @@ abstract final class NextUiDebug {
           case 'fake':
             final stopped = Completer<void>();
             _fakeLoginStop = stopped;
-            unawaited(logins.request<Object>(p['platform'] ?? '弹弹play',
-                () => showAccountLogin({'provider': 'dandanplay'}, stopped.future),
+            unawaited(logins.request<Object>(
+                p['platform'] ?? '弹弹play',
+                () => showAccountLogin(
+                    {'provider': 'dandanplay'}, stopped.future),
                 stopped.future));
           case 'open':
             final first = logins.pending.firstOrNull;
@@ -497,15 +499,15 @@ abstract final class NextUiDebug {
         if (p['area'] == 'dialog' && !all.any(inDialog)) {
           throw StateError('No window open');
         }
-        final fields =
-            all.any(inDialog) ? all.where(inDialog).toList() : all;
+        final fields = all.any(inDialog) ? all.where(inDialog).toList() : all;
         final index = int.parse(p['index'] ?? '0');
         if (index >= fields.length) {
           throw StateError('${fields.length} fields on the front page');
         }
         final text = p['text'] ?? '';
         fields[index].widget.controller.value = TextEditingValue(
-            text: text, selection: TextSelection.collapsed(offset: text.length));
+            text: text,
+            selection: TextSelection.collapsed(offset: text.length));
         // As typing would: the field's owner hears of it.
         fields[index].widget.onChanged?.call(text);
         // Return, as the field handles it.
@@ -532,13 +534,19 @@ abstract final class NextUiDebug {
         // A key pressed and let go, as the keyboard would.
         final (physical, logical) = switch (p['key']) {
           'space' => (PhysicalKeyboardKey.space, LogicalKeyboardKey.space),
-          'left' => (PhysicalKeyboardKey.arrowLeft, LogicalKeyboardKey.arrowLeft),
-          'right' =>
-            (PhysicalKeyboardKey.arrowRight, LogicalKeyboardKey.arrowRight),
+          'left' => (
+              PhysicalKeyboardKey.arrowLeft,
+              LogicalKeyboardKey.arrowLeft
+            ),
+          'right' => (
+              PhysicalKeyboardKey.arrowRight,
+              LogicalKeyboardKey.arrowRight
+            ),
           'escape' => (PhysicalKeyboardKey.escape, LogicalKeyboardKey.escape),
           _ => throw ArgumentError('key: space, left, right or escape'),
         };
-        final stamp = Duration(milliseconds: DateTime.now().millisecondsSinceEpoch);
+        final stamp =
+            Duration(milliseconds: DateTime.now().millisecondsSinceEpoch);
         final handled = HardwareKeyboard.instance.handleKeyEvent(KeyDownEvent(
             physicalKey: physical, logicalKey: logical, timeStamp: stamp));
         HardwareKeyboard.instance.handleKeyEvent(KeyUpEvent(
@@ -706,8 +714,16 @@ abstract final class NextUiDebug {
       case 'settings':
         final settings = shell.services.settings;
         Map<String, Object?>? world;
-        if (const ['model', 'mesh', 'account', 'keys', 'remote', 'trusted',
-          'remember', 'codex'].any(p.containsKey)) {
+        if (const [
+          'model',
+          'mesh',
+          'account',
+          'keys',
+          'remote',
+          'trusted',
+          'remember',
+          'codex'
+        ].any(p.containsKey)) {
           if (settings is! FakeSettings) {
             throw StateError('model, mesh and account need the scripted world');
           }
@@ -842,8 +858,8 @@ abstract final class NextUiDebug {
         if (p['open'] == null) {
           if (_find<BatchSheetDebug>() case final sheet?) {
             await sheet.debug(p);
-            await Future<void>.delayed(Duration(
-                milliseconds: int.tryParse(p['wait'] ?? '') ?? 900));
+            await Future<void>.delayed(
+                Duration(milliseconds: int.tryParse(p['wait'] ?? '') ?? 900));
           }
         }
         await _settle();
@@ -904,6 +920,7 @@ abstract final class NextUiDebug {
       'over16ms': frames.where((f) => milli(f.totalSpan) > 16.7).length,
     };
   }
+
   static Completer<void>? _fakeLoginStop;
 
   static Map<String, Object?> _search(NextShellController shell) {
@@ -956,6 +973,7 @@ abstract final class NextUiDebug {
                 '${watched == null ? '' : ' (watching $watched)'}'
                 '${files.isEmpty ? '' : ' +files ${files.join(', ')}'}',
           ReplyPart(:final text) => 'nipa: $text',
+          NoticePart(:final text) => 'system: $text',
           StepsPart() => 'steps${p.open ? ' (open)' : ''}: '
               '${ChatTurn.summary(p)}',
         };

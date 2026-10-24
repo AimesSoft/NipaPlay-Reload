@@ -302,6 +302,7 @@ class _TurnViewState extends State<_TurnView> {
       if (turn.foldable &&
           !foldPlaced &&
           part is! SaidPart &&
+          part is! NoticePart &&
           !identical(part, answer)) {
         foldPlaced = true;
         children.add(_Fold(
@@ -322,6 +323,11 @@ class _TurnViewState extends State<_TurnView> {
             key: ObjectKey(part),
             text: part.text,
             style: widget.text,
+          ),
+        NoticePart() => Text(
+            key: ObjectKey(part),
+            part.text,
+            style: NextText.sans(13.5, color: NextColors.p2, height: 1.5),
           ),
         StepsPart() => _Steps(
             key: ObjectKey(part),

@@ -489,7 +489,14 @@ class NipaChat extends ChangeNotifier {
 
   Future<void> _start(ChatTurn turn) async {
     if (!port.available) {
-      _fail(turn, 'Nipa 现在不在，过一会儿再试试。');
+      String? why;
+      try {
+        why = await port.unavailableReason();
+      } catch (error) {
+        debugPrint('[NextUi] unavailable reason failed: $error');
+      }
+      if (port.available) return _start(turn);
+      _fail(turn, why ?? 'Nipa 现在还不能开始对话。请打开“设置 Nipa”检查模型和运行环境。');
       return;
     }
     final generation = _generation;
@@ -530,8 +537,10 @@ class NipaChat extends ChangeNotifier {
     turn
       ..status = 'failed'
       ..endedAt = DateTime.now();
+    if (turn.parts.whereType<NoticePart>().every((note) => note.text != why)) {
+      turn.parts.add(NoticePart(why));
+    }
     if (identical(_pending, turn)) _pending = null;
-    trouble = why;
     _notify();
   }
 

@@ -9,7 +9,8 @@ import 'player/core/host.dart';
 import 'player/core/session.dart' show PlayerLevels;
 import 'player/kernel/driver.dart' show KernelId;
 import 'player/kernel/player_settings.dart';
-import 'capabilities/kernel_facts.dart' show kernelIdOf;
+import 'player/kernel/native.dart' show ErikaNative;
+import 'capabilities/kernel_facts.dart' show erikaUpscalerName, kernelIdOf;
 import 'settings/effective.dart';
 import 'settings/effective_value.dart';
 import 'player/next_playback.dart';
@@ -118,19 +119,26 @@ final class NextRuntime extends ChangeNotifier {
     // interface is what shows, Next's layer plays it (D3, D5).
     globals.nextPlaybackRedirect = _redirect;
     ApplicationSettings.nextFeatureWrite = writeNextFeatureSetting;
-    PlayerRemoteControlBridge.instance.attachNext(playback, () => !_disposed && _nextOpen,
-        sendDanmaku: (input) async {
-          final color = input['color'];
-          await NextFeatureOperations(playback, ServiceProvider.nextCore.settings).sendDanmaku({
-            'text': input['comment']?.toString() ?? '',
-            'mode': switch (input['mode']) { 5 => 'top', 4 => 'bottom', _ => 'scroll' },
-            'color': color is int ? '#${(color & 0xFFFFFF).toRadixString(16).padLeft(6, '0')}' : color?.toString() ?? '#FFFFFF',
-          });
+    PlayerRemoteControlBridge.instance.attachNext(
+        playback, () => !_disposed && _nextOpen, sendDanmaku: (input) async {
+      final color = input['color'];
+      await NextFeatureOperations(playback, ServiceProvider.nextCore.settings)
+          .sendDanmaku({
+        'text': input['comment']?.toString() ?? '',
+        'mode': switch (input['mode']) {
+          5 => 'top',
+          4 => 'bottom',
+          _ => 'scroll'
         },
-        setParameter: (key, value) async {
-          await ServiceProvider.nextCore.settings.set(key, value, Invocation(origin: 'gui'),
-              reason: '通过遥控器调整 Next 播放设置');
-        });
+        'color': color is int
+            ? '#${(color & 0xFFFFFF).toRadixString(16).padLeft(6, '0')}'
+            : color?.toString() ?? '#FFFFFF',
+      });
+    }, setParameter: (key, value) async {
+      await ServiceProvider.nextCore.settings.set(
+          key, value, Invocation(origin: 'gui'),
+          reason: '通过遥控器调整 Next 播放设置');
+    });
     _operations = _initialize(capabilities);
   }
 
@@ -205,18 +213,46 @@ final class NextRuntime extends ChangeNotifier {
       levels: _playerLevels,
       usesExternalPlayer: () => settings.useExternalPlayer,
     );
+    String kernelSettingName(KernelId kernel) => switch (kernel) {
+          KernelId.mdk => 'mdk',
+          KernelId.mediaKit => 'mediaKit',
+          KernelId.erika => 'erika',
+          KernelId.videoPlayer => 'videoPlayer',
+        };
+    ApplicationSettings.currentKernel = () {
+      final session = host.current.value;
+      final kernel = session == null || session.phase.value.done
+          ? null
+          : session.driver?.kernel;
+      return kernel == null
+          ? PlayerFactory.getKernelType().name
+          : kernelSettingName(kernel);
+    };
     // The kernel settings' running value is what the kernel instance that
     // plays was made with; with nothing playing, the next open reads them.
-    EffectiveRules.sessionPlayer = (entry, stored) {
+    EffectiveRules.sessionPlayer = (entry, stored) async {
       if (!PlayerSettings.keys.contains(entry.key)) return null;
       final session = host.current.value;
-      final made = session == null || session.phase.value.done
-          ? null
-          : session.driver?.config;
-      if (made == null) {
+      final driver =
+          session == null || session.phase.value.done ? null : session.driver;
+      if (driver == null) {
         return Effective.same(stored,
             source: 'storage',
             detail: 'No media is open; the next one opens with this value.');
+      }
+      final made = driver.config;
+      final native = driver.native;
+      if (entry.key == 'player.erikaUpscalerMode' &&
+          made.kernel == KernelId.erika &&
+          native is ErikaNative) {
+        final erika = native;
+        final running = erikaUpscalerName(await erika.upscaler());
+        if (sameValue(stored, running)) {
+          return Effective.same(running,
+              detail: '正在播放的 Erika 实例当前请求 $running。');
+        }
+        return Effective.differs(running, 'runtime_adjusted',
+            '正在播放的 Erika 实例当前请求 $running；它由 playback.set_kernel_properties 或当前播放会话设置。存储值 $stored 会在下次打开媒体时用于新实例。');
       }
       final running = made.settings[entry.key];
       if (sameValue(stored, running)) return Effective.same(running);
@@ -230,7 +266,8 @@ final class NextRuntime extends ChangeNotifier {
     final nextPlayback = SessionPlayback(host,
         sourceResolver: NextSourceResolver(context: () => context),
         skipSources: SessionSkipSources(() => core.media.service.store),
-        externalHandoff: ExternalHandoff(enabled: () => settings.useExternalPlayer,
+        externalHandoff: ExternalHandoff(
+            enabled: () => settings.useExternalPlayer,
             playerPath: () => settings.externalPlayerPath,
             playerType: () => settings.externalPlayerType,
             userAgent: PlayerFactory.getCustomPlayerUA),
@@ -339,8 +376,9 @@ final class NextRuntime extends ChangeNotifier {
     };
     return NextRuntime._(
         labs, context.read<NextUiPreference>(), nextPlayback, classic, [
-      WatchedHistoryCapability(WatchedHistory(() => core.media.service,
-          () => WatchHistoryDatabase.instance.database, history.refresh),
+      WatchedHistoryCapability(
+          WatchedHistory(() => core.media.service,
+              () => WatchHistoryDatabase.instance.database, history.refresh),
           mergedLibrary: () => core.uiData.meshLibrary!),
       LibraryCapability(
         history: () => history.history,
@@ -353,26 +391,41 @@ final class NextRuntime extends ChangeNotifier {
       playback,
       DiscoverCapability(),
       UiCapability(
-        media: () => core.media.service,
-        resolveEntity: (id) async {
-          if (sourceEntityRef(id, 'work') != null) return {'workId': (await core.uiData.work(id))!.workId};
-          final episode = await core.libraryData.validatedSourceRef(id, 'episode');
-          if (episode != null) return {'sourcePlayback': await core.mediaSources.play(episode[0], episode[1], expectedServerId: episode.length == 3 ? episode[2] : null)};
-          final merged = id.startsWith('mesh-') ? await core.uiData.meshLibrary!.open(id) : null;
-          final source = merged?['sourceInfo'] as Map?;
-          if (source != null) return {'sourcePlayback': await core.mediaSources.play(source['sourceId'] as String, source['itemId'] as String,
-            expectedServerId: source['serverId'] as String?, startPositionMs: merged!['resumeMs'] as int?)};
-          return merged;
-        },
-        openPage: ClassicUiOpen().page,
-        openDetail: ClassicUiOpen().detail,
-        openWork: WorkDetailBridge.open,
-        openTarget: ClassicUiOpen(harnessPath: () async {
-          await core.harnessLocation.ready;
-          return core.harnessLocation.path;
-        }).target,
-        close: ClassicUiOpen().close,
-        play: (input, invocation) => playbackApi.invokeJson('playback.open', input, invocation)),
+          media: () => core.media.service,
+          resolveEntity: (id) async {
+            if (sourceEntityRef(id, 'work') != null)
+              return {'workId': (await core.uiData.work(id))!.workId};
+            final episode =
+                await core.libraryData.validatedSourceRef(id, 'episode');
+            if (episode != null)
+              return {
+                'sourcePlayback': await core.mediaSources.play(
+                    episode[0], episode[1],
+                    expectedServerId: episode.length == 3 ? episode[2] : null)
+              };
+            final merged = id.startsWith('mesh-')
+                ? await core.uiData.meshLibrary!.open(id)
+                : null;
+            final source = merged?['sourceInfo'] as Map?;
+            if (source != null)
+              return {
+                'sourcePlayback': await core.mediaSources.play(
+                    source['sourceId'] as String, source['itemId'] as String,
+                    expectedServerId: source['serverId'] as String?,
+                    startPositionMs: merged!['resumeMs'] as int?)
+              };
+            return merged;
+          },
+          openPage: ClassicUiOpen().page,
+          openDetail: ClassicUiOpen().detail,
+          openWork: WorkDetailBridge.open,
+          openTarget: ClassicUiOpen(harnessPath: () async {
+            await core.harnessLocation.ready;
+            return core.harnessLocation.path;
+          }).target,
+          close: ClassicUiOpen().close,
+          play: (input, invocation) =>
+              playbackApi.invokeJson('playback.open', input, invocation)),
     ]);
   }
 
@@ -396,6 +449,7 @@ final class NextRuntime extends ChangeNotifier {
       rate: (prefs.getDouble('playback_rate') ?? 1).clamp(0.01, 5.0),
     );
   }
+
   late final Harness _harness;
   late final AgentEndpoint _endpoint;
   late final TaskEngine _taskEngine;
@@ -418,7 +472,8 @@ final class NextRuntime extends ChangeNotifier {
   ChatHost? chat;
   String? chatError;
   final _hostReady = Completer<NextHostSettings>();
-  late final PendingHostSettings hostSettings = PendingHostSettings(_hostReady.future);
+  late final PendingHostSettings hostSettings =
+      PendingHostSettings(_hostReady.future);
   HostSettingsService? _hostSettings;
   StreamSubscription<ChatMessage>? _hostEvents;
   StreamSubscription<void>? _activityEvents;
@@ -428,7 +483,8 @@ final class NextRuntime extends ChangeNotifier {
     await _operations;
     // In Classic there is no conversation to close (D1).
     if (!_nipa && chat == null) return;
-    await ServiceProvider.nextCore.followups.attach(null, reason: 'Chat host was closed.');
+    await ServiceProvider.nextCore.followups
+        .attach(null, reason: 'Chat host was closed.');
     await chat?.close();
     chat = null;
     _hostSettings?.notify();
@@ -437,7 +493,8 @@ final class NextRuntime extends ChangeNotifier {
   void _syncPluginSettings() {
     final classic = _classicSettings!;
     ServiceProvider.nextCore.settings.replaceGroup('plugins.enabled.', []);
-    ServiceProvider.nextCore.settings.replaceGroup('plugins.settings.', classic.pluginEntries());
+    ServiceProvider.nextCore.settings
+        .replaceGroup('plugins.settings.', classic.pluginEntries());
   }
 
   StreamSubscription<void>? _calendarChanges;
@@ -459,9 +516,10 @@ final class NextRuntime extends ChangeNotifier {
     await _classicSettings!.plugins.ready;
     _syncPluginSettings();
     core.stateSources.calendar = () async => [
-      for (final anime in await BangumiService.instance.cachedCalendarDetails())
-        Map<String, Object?>.from(anime.toJson())
-    ];
+          for (final anime
+              in await BangumiService.instance.cachedCalendarDetails())
+            Map<String, Object?>.from(anime.toJson())
+        ];
     _classicSettings!.plugins.addListener(_syncPluginSettings);
     core.stateSources.history = () => [
           for (final item in ServiceProvider.watchHistoryProvider.history)
@@ -500,30 +558,37 @@ final class NextRuntime extends ChangeNotifier {
     final packageInfo = await PackageInfo.fromPlatform();
     final instanceFacts = InstanceFacts(packageInfo.version);
     FlutterPlayerPerfFrames.install();
-    final localPlayback = playback.localOperations(core.settings,
-        () => globals.navigatorKey.currentContext!);
+    final localPlayback = playback.localOperations(
+        core.settings, () => globals.navigatorKey.currentContext!);
     final localLibrary = _localLibrary = LocalLibraryOperations(
-        ServiceProvider.scanService, ServiceProvider.watchHistoryProvider, engine: core.engine);
+        ServiceProvider.scanService, ServiceProvider.watchHistoryProvider,
+        engine: core.engine);
     core.classicScan.scan = ServiceProvider.scanService;
     core.classicScan.history = ServiceProvider.watchHistoryProvider;
     core.storage.playbackActive = () => playback.hasVideo;
     core.storage.scanning = () => ServiceProvider.scanService.isScanning;
     core.diagnostics.playerFacts = playback.diagnostics;
     final uncaught = _uncaught = UncaughtErrors(
-        Directory('${root.path}/diagnostics'), appVersion: packageInfo.version)
+        Directory('${root.path}/diagnostics'),
+        appVersion: packageInfo.version)
       ..context = playback.errorContext;
     final kernelControl = KernelControl(playback.host, playback.kernelHost,
         harness: () => repositoryPath);
     _settingEvents = core.settingChanges.stream.listen((facts) {
       playback.host.settingChanged(facts['key'] as String, facts['value']);
-      unawaited(playback.featureSettingChanged(facts['key'] as String, facts['value']));
+      unawaited(playback.featureSettingChanged(
+          facts['key'] as String, facts['value']));
     });
     _harness = Harness(
       [
         FamilyDescriptionCapability(() => _harness.catalog),
-        AppCapabilities(host: 'gui', catalog: () => _harness.catalog,
-            media: core.media.service, danmaku: core.danmaku.service,
-            settings: core.settings, vault: core.credentialVault,
+        AppCapabilities(
+            host: 'gui',
+            catalog: () => _harness.catalog,
+            media: core.media.service,
+            danmaku: core.danmaku.service,
+            settings: core.settings,
+            vault: core.credentialVault,
             programEnabled: () => core.programs.enabled),
         InstanceCapability(instanceFacts),
         UiCaptureCapability(ClassicUiCapture(instanceFacts).capture),
@@ -536,14 +601,17 @@ final class NextRuntime extends ChangeNotifier {
             ]),
             outputRoot: () async => Directory(
                 '${(await getTemporaryDirectory()).path}/media-frames'),
-            episodePath: (animeId, episodeId) async => (await WatchHistoryManager
-                    .getHistoryItemByEpisode(animeId, episodeId))
-                ?.filePath),
+            episodePath: (animeId, episodeId) async =>
+                (await WatchHistoryManager.getHistoryItemByEpisode(
+                        animeId, episodeId))
+                    ?.filePath),
         for (final capability in capabilities)
-          InvocationScopeCapability(FileIndexingCapability(capability, core.media.service.store)),
+          InvocationScopeCapability(
+              FileIndexingCapability(capability, core.media.service.store)),
         // Scoped, so that a track chosen in the interface is told apart
         // from Nipa's.
-        InvocationScopeCapability(PlaybackControlsCapability(playback.controls)),
+        InvocationScopeCapability(
+            PlaybackControlsCapability(playback.controls)),
         KernelControlCapability(kernelControl),
         RuntimeDiagnosticsCapability(
             errors: uncaught,
@@ -558,8 +626,10 @@ final class NextRuntime extends ChangeNotifier {
             core.media.service.store),
         ...core.capabilities
       ],
-      observers: [nextJournal(File('${root.path}/journal.jsonl')),
-        core.activityInvocations],
+      observers: [
+        nextJournal(File('${root.path}/journal.jsonl')),
+        core.activityInvocations
+      ],
     );
     core.attachHarness(_harness);
     try {
@@ -574,74 +644,87 @@ final class NextRuntime extends ChangeNotifier {
     _endpoint = AgentEndpoint(
       harness: _harness,
       appVersion: packageInfo.version,
-      catalogChange: () async => (await core.catalogChanges.recent()).firstOrNull,
+      catalogChange: () async =>
+          (await core.catalogChanges.recent()).firstOrNull,
       instanceFacts: instanceFacts.read,
       nowPlaying: core.uiData.nowPlaying,
       seed: seed,
       seedRepository: Directory('${root.path}/harness-seed'),
-      port: LabProfile.active ? 0 : kDebugMode && Platform.environment['NIPAPLAY_AGENT_PORT'] != null
-          ? int.parse(Platform.environment['NIPAPLAY_AGENT_PORT']!)
-          : 47811,
+      port: LabProfile.active
+          ? 0
+          : kDebugMode && Platform.environment['NIPAPLAY_AGENT_PORT'] != null
+              ? int.parse(Platform.environment['NIPAPLAY_AGENT_PORT']!)
+              : 47811,
     );
     core.programs.credentialFile = _endpoint.credentialFile;
     final desktop = Platform.isMacOS || Platform.isWindows || Platform.isLinux;
     final labRoot = LabProfile.active ? Directory(LabProfile.root) : null;
-    _hostSettings = HostSettingsService(root: root,
-      dsh: !desktop ? null : DshInstall(
-        root: Directory('${root.path}/dsh-runtime'),
-        manifest: DshManifest.parse(
-            await rootBundle.loadString('assets/next/agent/dsh-runtime.json')),
-        platform: DshManifest.hostPlatform(),
-        notify: () => _hostSettings?.notify(),
-        inUse: () => chat?.available == true,
-        beforeInstall: SystemProxyService.instance.initialize,
-        httpClient: () => HttpClient()
-          ..findProxy = (uri) => uri.host == 'localhost' ||
-                  InternetAddress.tryParse(uri.host)?.isLoopback == true
-              ? 'DIRECT'
-              : AppHttpProxy.findProxy(
-                  uri, SystemProxyService.instance.findProxy)),
-      fixedRuntime: () => AgentRuntimeFixed.read(Platform.environment,
-          labRoot: labRoot),
-      // A lab profile prepared for Codex keeps using it until told otherwise.
-      defaultRuntime: labRoot != null &&
-              File('${labRoot.path}/codex-home/config.toml').existsSync()
-          ? AgentRuntimeKind.codex
-          : AgentRuntimeKind.dsh,
-      runtimeChanged: _restartChat,
-      codex: LabProfile.active || !desktop
-        ? null : CodexRuntime.desktop(
-        root: Directory('${root.path}/codex-runtime'),
-        notify: () => _hostSettings?.notify(),
-        inUse: () => chat?.available == true),
-      device: ClassicHostDeviceSettings(vault: core.credentialVault,
-        webServer: ServiceProvider.webServer,
-        spoilerChanged: playback.spoilerKeyChanged),
-      vault: LabProfile.active ? LabModelVault() : core.credentialVault,
-      meshRuntime: core.mesh, programs: core.programs, history: core.changeHistory,
-      chat: () => chat, chatProblem: () => chatError,
-      repository: () => repositoryPath,
-      codexHome: Directory(LabProfile.active ? '${LabProfile.root}/codex-home'
-        : '${Platform.environment[Platform.isWindows ? 'USERPROFILE' : 'HOME']}/.codex'),
-      checkCodex: _checkCodexModel, modelSaved: () async {
-        if (chat != null || _disposed || !_open) return;
-        _operations = _operations.then((_) async {
-          if (_endpointStatus case AgentEndpointRunning(:final repository)) {
-            await _startChat(repository);
-            notifyListeners();
-          }
+    _hostSettings = HostSettingsService(
+        root: root,
+        dsh: !desktop
+            ? null
+            : DshInstall(
+                root: Directory('${root.path}/dsh-runtime'),
+                manifest: DshManifest.parse(await rootBundle
+                    .loadString('assets/next/agent/dsh-runtime.json')),
+                platform: DshManifest.hostPlatform(),
+                notify: () => _hostSettings?.notify(),
+                inUse: () => chat?.available == true,
+                beforeInstall: SystemProxyService.instance.initialize,
+                httpClient: () => HttpClient()
+                  ..findProxy = (uri) => uri.host == 'localhost' ||
+                          InternetAddress.tryParse(uri.host)?.isLoopback == true
+                      ? 'DIRECT'
+                      : AppHttpProxy.findProxy(
+                          uri, SystemProxyService.instance.findProxy)),
+        fixedRuntime: () =>
+            AgentRuntimeFixed.read(Platform.environment, labRoot: labRoot),
+        // A lab profile prepared for Codex keeps using it until told otherwise.
+        defaultRuntime: labRoot != null &&
+                File('${labRoot.path}/codex-home/config.toml').existsSync()
+            ? AgentRuntimeKind.codex
+            : AgentRuntimeKind.dsh,
+        runtimeChanged: _restartChat,
+        codex: LabProfile.active || !desktop
+            ? null
+            : CodexRuntime.desktop(
+                root: Directory('${root.path}/codex-runtime'),
+                notify: () => _hostSettings?.notify(),
+                inUse: () => chat?.available == true),
+        device: ClassicHostDeviceSettings(
+            vault: core.credentialVault,
+            webServer: ServiceProvider.webServer,
+            spoilerChanged: playback.spoilerKeyChanged),
+        vault: LabProfile.active ? LabModelVault() : core.credentialVault,
+        meshRuntime: core.mesh,
+        programs: core.programs,
+        history: core.changeHistory,
+        chat: () => chat,
+        chatProblem: () => chatError,
+        repository: () => repositoryPath,
+        codexHome: Directory(LabProfile.active ? '${LabProfile.root}/codex-home' : '${Platform.environment[Platform.isWindows ? 'USERPROFILE' : 'HOME']}/.codex'),
+        checkCodex: _checkCodexModel,
+        modelSaved: () async {
+          if (chat != null || _disposed || !_open) return;
+          _operations = _operations.then((_) async {
+            if (_endpointStatus case AgentEndpointRunning(:final repository)) {
+              await _startChat(repository);
+              notifyListeners();
+            }
+          });
+          await _operations;
         });
-        await _operations;
-      });
     _hostReady.complete(_hostSettings);
     if (_disposed) return;
     if (kDebugMode && LabProfile.active) installDebugChat(() => chat);
     if (kDebugMode && LabProfile.active) installDebugHostSettings(hostSettings);
-    if (kDebugMode && LabProfile.active) installDebugUiData(ServiceProvider.nextCore);
+    if (kDebugMode && LabProfile.active)
+      installDebugUiData(ServiceProvider.nextCore);
     if (kDebugMode && LabProfile.active) {
       _classic.installDebug();
       installDebugPlayerHost(() => playback.host);
-      installDebugPlaybackFeatures(() => playback, catalog: () => harness.catalog);
+      installDebugPlaybackFeatures(() => playback,
+          catalog: () => harness.catalog);
     }
     _labs.addListener(_queueEndpointUpdate);
     _preference.addListener(_queueEndpointUpdate);
@@ -667,7 +750,8 @@ final class NextRuntime extends ChangeNotifier {
       // Between Next and Classic what plays closes, its progress saved; the
       // other side does not take it over (D2). At once, not behind work
       // still queued.
-      final reason = enabled ? 'next_interface_opened' : 'next_interface_closed';
+      final reason =
+          enabled ? 'next_interface_opened' : 'next_interface_closed';
       // Both sides: Next's own layer, and Classic's player if it played.
       final closing = Future.wait([
         playback.close(reason: reason),
@@ -718,7 +802,9 @@ final class NextRuntime extends ChangeNotifier {
     }
     await _detachHooks();
     await ServiceProvider.nextCore.followups.attach(null,
-        reason: enabled ? 'Chat host is restarting for the active harness.' : 'Next chat host is disabled.');
+        reason: enabled
+            ? 'Chat host is restarting for the active harness.'
+            : 'Next chat host is disabled.');
     await chat?.close();
     chat = null;
     chatError = null;
@@ -783,6 +869,7 @@ final class NextRuntime extends ChangeNotifier {
       await file.writeAsString(await rootBundle.loadString(asset), flush: true);
       return file;
     }
+
     // DSH keeps its own system prompt; Nipa is its persona (dsh/persona-*.md).
     final base = dsh == null
         ? await install('assets/next/agent/nipa-base.md', 'nipa-base.md')
@@ -797,33 +884,42 @@ final class NextRuntime extends ChangeNotifier {
         await install('assets/next/agent/dsh/$name', 'dsh/$name');
       }
     }
-    final host = chat = ChatHost(endpoint: _endpoint, repository: repository,
-      memory: ServiceProvider.nextCore.memory,
-      sessions: ServiceProvider.nextCore.sessions,
-      modelLaunch: _hostSettings!.launch,
-      labRoot: labRoot,
-      baseInstructions: base,
-      dsh: dsh,
-      dshPlugins: dsh == null ? null : Directory('$agent/dsh'));
+    final host = chat = ChatHost(
+        endpoint: _endpoint,
+        repository: repository,
+        memory: ServiceProvider.nextCore.memory,
+        sessions: ServiceProvider.nextCore.sessions,
+        modelLaunch: _hostSettings!.launch,
+        labRoot: labRoot,
+        baseInstructions: base,
+        dsh: dsh,
+        dshPlugins: dsh == null ? null : Directory('$agent/dsh'));
     final core = ServiceProvider.nextCore;
     core.jobOrigins.threadFor = host.threadForOrigin;
-    core.memory.recent = (current) async => recentMemoryFacts(host,
-      [for (final job in await core.engine.list())
-        if (!job.state.isTerminal) job.toJson()],
-      (await core.followups.list()).where((r) =>
-        !const {'completed', 'cancelled'}.contains(r['state'])).toList(),
-      (await core.state.views['activity']!.readAll!()).rows, current,
-      capabilityChanges: await core.catalogChanges.recent(),
-      finishedHelpers: [
-        for (final job in ((await core.engine.list(type: 'agent.helper'))
-                .where((job) => job.state.isTerminal)
-                .toList()
-              ..sort((a, b) => b.updatedAt.compareTo(a.updatedAt)))
-            .take(3))
-          job.toJson()
-      ]);
+    core.memory.recent = (current) async => recentMemoryFacts(
+        host,
+        [
+          for (final job in await core.engine.list())
+            if (!job.state.isTerminal) job.toJson()
+        ],
+        (await core.followups.list())
+            .where(
+                (r) => !const {'completed', 'cancelled'}.contains(r['state']))
+            .toList(),
+        (await core.state.views['activity']!.readAll!()).rows,
+        current,
+        capabilityChanges: await core.catalogChanges.recent(),
+        finishedHelpers: [
+          for (final job in ((await core.engine.list(type: 'agent.helper'))
+                  .where((job) => job.state.isTerminal)
+                  .toList()
+                ..sort((a, b) => b.updatedAt.compareTo(a.updatedAt)))
+              .take(3))
+            job.toJson()
+        ]);
     // DSH's memory block carries the latest 动态; tell it when that grows.
-    _activityEvents = core.activityChanges.stream.listen((_) => host.memoryChanged());
+    _activityEvents =
+        core.activityChanges.stream.listen((_) => host.memoryChanged());
     _hostEvents = host.events.listen((event) {
       if (const {'host/modelChanged', 'host/error', 'turn/completed', 'error'}
           .contains(event['method'])) {
@@ -863,21 +959,35 @@ final class NextRuntime extends ChangeNotifier {
   }
 
   Future<UiModelCheck> _checkCodexModel() async {
-    final host = ChatHost(endpoint: _endpoint, repository: Directory(repositoryPath),
-      codexExecutable: await _hostSettings!.codex?.executable(),
-      probe: true, labRoot: LabProfile.active ? Directory(LabProfile.root) : null);
+    final host = ChatHost(
+        endpoint: _endpoint,
+        repository: Directory(repositoryPath),
+        codexExecutable: await _hostSettings!.codex?.executable(),
+        probe: true,
+        labRoot: LabProfile.active ? Directory(LabProfile.root) : null);
     final watch = Stopwatch()..start();
     try {
       await host.start().timeout(const Duration(seconds: 15));
-      final ok = await host.checkSavedModel().timeout(const Duration(seconds: 30));
-      return UiModelCheck(ok: ok, message: ok ? '可以使用' :
-        modelFailureMessage(host.threadLiveness.values.firstOrNull?.latestError ?? ''),
-        latency: watch.elapsed);
+      final ok =
+          await host.checkSavedModel().timeout(const Duration(seconds: 30));
+      return UiModelCheck(
+          ok: ok,
+          message: ok
+              ? '可以使用'
+              : modelFailureMessage(
+                  host.threadLiveness.values.firstOrNull?.latestError ?? ''),
+          latency: watch.elapsed);
     } on TimeoutException {
-      return UiModelCheck(ok: false, message: '服务器响应超时', latency: watch.elapsed);
+      return UiModelCheck(
+          ok: false, message: '服务器响应超时', latency: watch.elapsed);
     } catch (error) {
-      return UiModelCheck(ok: false, message: modelFailureMessage('$error'), latency: watch.elapsed);
-    } finally { await host.close(); }
+      return UiModelCheck(
+          ok: false,
+          message: modelFailureMessage('$error'),
+          latency: watch.elapsed);
+    } finally {
+      await host.close();
+    }
   }
 
   void _queueHook(Future<void> Function() event) {
@@ -893,10 +1003,10 @@ final class NextRuntime extends ChangeNotifier {
         item.filePath,
     };
     final transport = playback.transport.value;
-    _startedPath = {PlaybackPhase.playing, PlaybackPhase.paused}
-            .contains(transport.phase)
-        ? playback.media.value.path
-        : null;
+    _startedPath =
+        {PlaybackPhase.playing, PlaybackPhase.paused}.contains(transport.phase)
+            ? playback.media.value.path
+            : null;
     _hooks.enable(repository, _endpoint.credentialFile);
     ServiceProvider.nextCore.desktopSystem.attach();
     _jobEvents = _taskEngine.changes.listen((job) {
@@ -927,8 +1037,8 @@ final class NextRuntime extends ChangeNotifier {
           final path = file['path'] as String;
           if (_libraryPaths.add(path)) {
             await _hooks.emit('library.file_added', path, file);
-            await _reportLibrary(
-                () => ServiceProvider.nextCore.followups.libraryFileAdded(file));
+            await _reportLibrary(() =>
+                ServiceProvider.nextCore.followups.libraryFileAdded(file));
           }
         }));
     ServiceProvider.watchHistoryProvider.addListener(_libraryChanged);
@@ -946,8 +1056,8 @@ final class NextRuntime extends ChangeNotifier {
     for (final entry in files.entries) {
       if (_libraryPaths.add(entry.key)) {
         await _hooks.emit('library.file_added', entry.key, entry.value);
-        await _reportLibrary(
-            () => ServiceProvider.nextCore.followups.libraryFileAdded(entry.value));
+        await _reportLibrary(() =>
+            ServiceProvider.nextCore.followups.libraryFileAdded(entry.value));
       }
     }
   }
@@ -973,9 +1083,11 @@ final class NextRuntime extends ChangeNotifier {
       _lastPlaybackStatus = status;
       _lastPlaybackPath = path;
       _queueHook(() => _hooks.emit('playback.state_changed', path ?? 'player', {
-        'status': status, 'previousStatus': previous, 'path': path,
-        'changedFields': ['status'],
-      }));
+            'status': status,
+            'previousStatus': previous,
+            'path': path,
+            'changedFields': ['status'],
+          }));
       // Classic sets its error text right after the status; read both once
       // the code that failed has returned.
       if (status == 'error') scheduleMicrotask(_recordFailure);
@@ -987,9 +1099,7 @@ final class NextRuntime extends ChangeNotifier {
       _startedPath = null;
       return;
     }
-    if (!transport.playing ||
-        path == null ||
-        path == _startedPath) {
+    if (!transport.playing || path == null || path == _startedPath) {
       return;
     }
     _startedPath = path;
@@ -1003,8 +1113,10 @@ final class NextRuntime extends ChangeNotifier {
     _queueHook(() async {
       try {
         final failure = await PlaybackFailures.instance.record(captured);
-        await _hooks.emit('playback.failed',
-            failure['path'] as String? ?? 'player', {...failure, 'status': 'error'});
+        await _hooks.emit(
+            'playback.failed',
+            failure['path'] as String? ?? 'player',
+            {...failure, 'status': 'error'});
       } catch (error, stack) {
         Zone.current.handleUncaughtError(error, stack);
       }
@@ -1062,7 +1174,8 @@ final class NextRuntime extends ChangeNotifier {
     ServiceProvider.watchHistoryProvider
         .removeListener(ServiceProvider.nextCore.stateSources.changed);
     unawaited(_calendarChanges?.cancel());
-    if (identical(ClassicSettings.attached, _classicSettings)) ClassicSettings.attached = null;
+    if (identical(ClassicSettings.attached, _classicSettings))
+      ClassicSettings.attached = null;
     _labs.removeListener(_queueEndpointUpdate);
     _preference.removeListener(_queueEndpointUpdate);
     _location?.removeListener(_queueEndpointUpdate);
@@ -1073,7 +1186,8 @@ final class NextRuntime extends ChangeNotifier {
       await PlayerNativeLog.instance.detach();
       await _meshPlayback?.close();
       await _detachHooks();
-      await ServiceProvider.nextCore.followups.attach(null, reason: 'NipaPlay is shutting down.');
+      await ServiceProvider.nextCore.followups
+          .attach(null, reason: 'NipaPlay is shutting down.');
       await chat?.close();
       await _hostEvents?.cancel();
       await _activityEvents?.cancel();
