@@ -2,10 +2,17 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'package:nipa_harness/nipa_harness.dart';
+import 'package:nipaplay/services/app_http_proxy.dart';
+import 'package:nipaplay/services/system_proxy_service.dart';
 import '../network/api_uri.dart';
 
 final class MeshCoordinator {
-  MeshCoordinator(this.base, this.token) {
+  MeshCoordinator(
+    this.base,
+    this.token, {
+    HttpClient? httpClient,
+    String Function(Uri)? findProxy,
+  }) : _client = httpClient ?? HttpClient() {
     if (base.scheme != 'https' &&
         !(base.scheme == 'http' &&
             ['127.0.0.1', '::1', 'localhost'].contains(base.host))) {
@@ -15,15 +22,24 @@ final class MeshCoordinator {
     if (base.userInfo.isNotEmpty || base.hasQuery || base.hasFragment) {
       throw const FormatException('Invalid Mesh coordinator URL.');
     }
-    _client.findProxy = (uri) =>
-        ['127.0.0.1', '::1', 'localhost'].contains(uri.host)
-            ? 'DIRECT'
-            : HttpClient.findProxyFromEnvironment(uri);
+    _client.findProxy = findProxy ?? resolveProxy;
     _client.connectionTimeout = const Duration(seconds: 10);
   }
   final Uri base;
   final Future<String?> Function() token;
-  final HttpClient _client = HttpClient();
+  final HttpClient _client;
+
+  static String resolveProxy(
+    Uri uri, {
+    String Function(Uri)? systemProxy,
+  }) {
+    if (['127.0.0.1', '::1', 'localhost'].contains(uri.host) ||
+        InternetAddress.tryParse(uri.host)?.isLoopback == true) {
+      return 'DIRECT';
+    }
+    return AppHttpProxy.findProxy(
+        uri, systemProxy ?? SystemProxyService.instance.findProxy);
+  }
 
   Future<JsonMap> request(String method, String path, [JsonMap? body]) async {
     final bearer = await token();
@@ -42,11 +58,17 @@ final class MeshCoordinator {
       throw const Failure(
           FailureCode.unavailable, 'Mesh coordinator is unreachable.',
           retryable: true);
+    } on FormatException {
+      // A captive portal or filtering proxy answers with a page, not JSON.
+      throw const Failure(FailureCode.unavailable,
+          'Mesh coordinator returned an unreadable response.',
+          retryable: true);
     }
   }
 
   Future<JsonMap> _request(
       String method, String path, JsonMap? body, String bearer) async {
+    await SystemProxyService.instance.initialize();
     final endpoint = Uri.parse(path);
     final uri = appendApiPath(base, endpoint.path)
         .replace(query: endpoint.hasQuery ? endpoint.query : null);
