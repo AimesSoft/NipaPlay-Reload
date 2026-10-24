@@ -3,7 +3,6 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:isolate';
 
-import 'package:flutter/foundation.dart' show visibleForTesting;
 import 'package:nipa_harness/nipa_harness.dart';
 import 'package:nipaplay/security/credential_vault.dart' show CredentialRef;
 import 'package:nipaplay/security/secret_redactor.dart';
@@ -148,7 +147,6 @@ final class LibraryWorker {
   }
 
   /// Ends the running worker the way a crash would, for tests of recovery.
-  @visibleForTesting
   void killWorkerForTest() => _isolate?.kill(priority: Isolate.immediate);
 
   /// A request that fails, instead of waiting for ever, if the worker ends.
