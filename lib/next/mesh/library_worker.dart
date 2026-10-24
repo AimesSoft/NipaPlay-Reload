@@ -9,11 +9,13 @@ import 'package:nipaplay/security/secret_redactor.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
 import '../danmaku/service.dart';
-import '../followups/service.dart';
+import '../danmaku/sidecar_index.dart';
 import '../danmaku/store.dart';
+import '../followups/service.dart';
 import '../headless/ports.dart';
 import '../harness_redaction.dart';
 import '../media/identity_store.dart';
+import '../media/media_probe.dart';
 import '../media/media_service.dart';
 import '../media/metadata_provider.dart';
 import '../media/provider_transport.dart';
@@ -24,6 +26,7 @@ import '../state/query.dart';
 import '../state/views.dart';
 import '../subtitles/episode_subtitles.dart';
 import '../subtitles/facts.dart';
+import '../subtitles/index_scan.dart';
 import '../tasks/sqlite_job_store.dart';
 import '../ui_data/library_service.dart';
 import '../ui_data/service.dart';
@@ -97,7 +100,10 @@ final class LibraryPrepareResult {
 /// One worker per catalogue lifetime. Only plugin/network primitives and live
 /// host observations cross back to the UI isolate; SQL and projections do not.
 final class LibraryWorker {
-  LibraryWorker(this.ui) {
+  LibraryWorker(
+    this.ui, {
+    Future<JsonMap> Function(String) subtitleProbe = probeMediaInfo,
+  }) : _subtitleProbe = subtitleProbe {
     // Spawn during core construction, so the first memory turn does not pay
     // for starting an isolate inside its 4 ms main-thread budget. This worker
     // stays independent of the catalogue worker, which ends after compose.
@@ -105,6 +111,7 @@ final class LibraryWorker {
   }
 
   final UiDataService ui;
+  final Future<JsonMap> Function(String) _subtitleProbe;
   Isolate? _isolate;
   ReceivePort? _host;
   ReceivePort? _exit;
@@ -200,7 +207,8 @@ final class LibraryWorker {
                 host.sendPort,
                 ui.db.path,
                 ui.mediaRoot.path,
-                ui.media.store.ownerDeviceId
+                ui.media.store.ownerDeviceId,
+                _subtitleProbe
               ),
               onExit: exited.sendPort,
               debugName: 'next-library');
@@ -232,6 +240,24 @@ final class LibraryWorker {
         if (_closed) return;
         final target = await _start();
         await _syncSources(target);
+      });
+
+  /// The first indexer pass is one worker request. Both directory walks, all
+  /// candidate comparisons, media/sidecar parsing and the final database writes
+  /// stay in the catalogue isolate; the UI receives only the two summaries.
+  Future<JsonMap> reconcileIndexers({
+    required bool danmaku,
+    required bool subtitles,
+    required JsonMap subtitlePreferences,
+  }) =>
+      _serial(() async {
+        if (_closed) throw StateError('Library worker is closed');
+        final target = await _worker();
+        return await _ask(target, 'indexers', (
+          danmaku,
+          subtitles,
+          SubtitleIndexPreferences.fromJson(subtitlePreferences),
+        )) as JsonMap;
       });
 
   Future<Object?> _hostRequest(String method, Object? input) async {
@@ -575,7 +601,15 @@ typedef _View = (
   bool
 );
 
-Future<void> _entry((SendPort, SendPort, String, String, String) args) async {
+Future<void> _entry(
+    (
+      SendPort,
+      SendPort,
+      String,
+      String,
+      String,
+      Future<JsonMap> Function(String)
+    ) args) async {
   try {
     await _serve(args);
   } catch (error) {
@@ -583,8 +617,16 @@ Future<void> _entry((SendPort, SendPort, String, String, String) args) async {
   }
 }
 
-Future<void> _serve((SendPort, SendPort, String, String, String) args) async {
-  final (ready, host, databasePath, rootPath, owner) = args;
+Future<void> _serve(
+    (
+      SendPort,
+      SendPort,
+      String,
+      String,
+      String,
+      Future<JsonMap> Function(String)
+    ) args) async {
+  final (ready, host, databasePath, rootPath, owner, subtitleProbe) = args;
   final requests = ReceivePort();
   // No migrations, cache pruning or business-service startup on this second
   // connection. Core owns the schema and creates it before the worker starts.
@@ -688,6 +730,30 @@ Future<void> _serve((SendPort, SendPort, String, String, String) args) async {
             peers[(row['id'] as String).substring(10)] = value;
           }
           return peers;
+        case 'indexers':
+          final (danmaku, subtitles, preferences) =
+              input as (bool, bool, SubtitleIndexPreferences);
+          final locations = await db.query('media_locations',
+              columns: ['file_id', 'locator'],
+              where: 'source=? AND owner_device_id=?',
+              whereArgs: ['local', owner]);
+          return {
+            'sidecars': danmaku
+                ? await reconcileSidecarIndex(
+                    store: DanmakuStore(media.store),
+                    db: db,
+                    locations: locations)
+                : null,
+            'subtitles': subtitles
+                ? await reconcileSubtitleIndex(
+                    db: db,
+                    identities: media.store,
+                    root: Directory(rootPath),
+                    locations: locations,
+                    probe: subtitleProbe,
+                    preferences: preferences)
+                : null,
+          };
         case 'sources':
           final (history, continuing, authorized) =
               input as (List<JsonMap>?, List<JsonMap>?, List<String>);

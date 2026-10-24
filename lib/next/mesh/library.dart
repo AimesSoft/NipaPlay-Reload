@@ -11,6 +11,7 @@ import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import '../ui_data/service.dart';
 import '../ui_data/ui_data.dart';
 import '../subtitles/companions.dart';
+import '../media/media_probe.dart';
 import '../danmaku/store.dart';
 import '../danmaku/sidecar.dart';
 import 'runtime.dart';
@@ -26,8 +27,12 @@ String _hash(Object value) =>
 
 /// A projection of each owner's catalogue, never a copy of its database.
 final class MeshLibrary {
-  MeshLibrary(this.ui, this.mesh) {
-    worker = LibraryWorker(ui);
+  MeshLibrary(
+    this.ui,
+    this.mesh, {
+    Future<JsonMap> Function(String) subtitleProbe = probeMediaInfo,
+  }) {
+    worker = LibraryWorker(ui, subtitleProbe: subtitleProbe);
     ui.state.queryWorker = worker.query;
     files = MeshFiles(mesh, fileReadable, ui.media.store.ownerDeviceId);
     mesh.libraryRequest = request;

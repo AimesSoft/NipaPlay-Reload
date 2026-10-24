@@ -22,6 +22,10 @@ Future<({JsonMap facts, List<DanmakuEntry> entries})> readSidecar(
 Future<JsonMap> readSidecarFacts(String path) =>
     Isolate.run(() async => (await _readSidecar(path)).facts);
 
+/// For callers that are already inside a worker isolate.
+Future<JsonMap> readSidecarFactsHere(String path) async =>
+    (await _readSidecar(path)).facts;
+
 Future<({JsonMap facts, List<DanmakuEntry> entries})> _readSidecar(
     String path) async {
   final watch = Stopwatch()..start();
@@ -93,13 +97,14 @@ final class SidecarIndexer {
   StreamSubscription<JsonMap>? _events;
   Timer? _timer;
   Future<void>? _worker;
+  bool _bulkRunning = false;
   bool _closed = false;
   bool enabled = true;
   String? lastRun, lastError;
   JsonMap get status => {
         'kind': 'danmaku.sidecar',
         'enabled': enabled,
-        'running': _worker != null,
+        'running': _worker != null || _bulkRunning,
         'queue': _pending.length,
         'lastRun': lastRun,
         'nextRun': enabled ? 'on file change or indexers.reconcile' : null,
@@ -109,17 +114,52 @@ final class SidecarIndexer {
     enabled = value;
     if (value) {
       await reconcile();
-      if (_pending.isNotEmpty && _worker == null) {
-        _worker = _drain().whenComplete(() => _worker = null);
-      }
+      _startPending();
     }
   }
 
+  /// Listens before the catalogue scan starts, so a file registered during the
+  /// scan is not lost. The scan itself is submitted separately to the library
+  /// worker.
+  void watch() {
+    _events ??= store.identities.fileChanges.listen(enqueue);
+  }
+
   Future<void> start() async {
-    _events = store.identities.fileChanges.listen(enqueue);
+    watch();
     // Every file is looked at once now; after that a file is looked at when it
     // is registered or changes, and indexers.reconcile looks at all again.
     await reconcile();
+  }
+
+  /// Claims the initial catalogue pass. Events arriving during it stay queued
+  /// until the worker has committed its result.
+  void beginBulk() {
+    if (!enabled || _closed) return;
+    _pending.clear();
+    _bulkRunning = true;
+  }
+
+  void finishBulk(JsonMap? summary, {Object? error}) {
+    _bulkRunning = false;
+    if (summary != null) {
+      lastRun = summary['lastRun'] as String?;
+      lastError = summary['error'] as String?;
+    } else if (error != null) {
+      lastError = error.runtimeType.toString();
+    }
+    _startPending();
+  }
+
+  void _startPending() {
+    if (_closed ||
+        !enabled ||
+        _bulkRunning ||
+        _pending.isEmpty ||
+        _worker != null) {
+      return;
+    }
+    _worker = _drain().whenComplete(() => _worker = null);
   }
 
   Future<void> reconcile() async {
@@ -139,7 +179,7 @@ final class SidecarIndexer {
     if (_closed || (file['path'] as String).contains('://')) return;
     _pending[file['fileId'] as String] = file;
     if (!enabled) return;
-    _worker ??= _drain().whenComplete(() => _worker = null);
+    _startPending();
   }
 
   Future<void> _drain() async {

@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:io';
+import 'dart:isolate';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:nipa_harness/nipa_harness.dart';
 import 'package:nipaplay/next/danmaku/service.dart';
@@ -16,6 +17,20 @@ import 'package:nipaplay/next/tasks/sqlite_job_store.dart';
 import 'package:nipaplay/next/ui_data/service.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import '../security/memory_vault.dart';
+
+Future<JsonMap> _probeInWorker(String path) async => {
+      'subtitles': [
+        {
+          'index': 0,
+          'streamIndex': 2,
+          'language': 'jpn',
+          'title': Isolate.current.debugName == 'next-library'
+              ? 'worker-probe'
+              : 'main-probe',
+          'format': 'ass'
+        }
+      ]
+    };
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -44,7 +59,7 @@ void main() {
         sources: sources));
     ui = UiDataService(media, TaskEngine(store: jobs, ownerDeviceId: 'owner'),
         state, sources, root, MemoryVault());
-    worker = LibraryWorker(ui);
+    worker = LibraryWorker(ui, subtitleProbe: _probeInWorker);
     state.queryWorker = worker.query;
     final db = jobs.database;
     await db.insert('media_entities', {
@@ -129,6 +144,76 @@ void main() {
             .progress,
         .4);
   });
+  test('startup indexers scan, parse and commit in the library worker',
+      () async {
+    await worker.warm();
+    final folder = await Directory('${root.path}/media').create();
+    final video = File('${folder.path}/episode.mkv');
+    await video.writeAsString('video');
+    await File('${folder.path}/episode.xml').writeAsString(
+        '<i><d p="1,1,25,16777215,1,0,s,1">sidecar text</d></i>');
+    await File('${folder.path}/episode.zh.srt')
+        .writeAsString('1\n00:00:00,000 --> 00:00:01,000\n字幕\n');
+    final db = jobs.database;
+    await db.insert('media_entities', {
+      'id': 'index-file',
+      'kind': 'file',
+      'attributes': jsonEncode({
+        'probe': {'durationMs': 1000}
+      })
+    });
+    await db.insert('media_locations', {
+      'id': 'index-location',
+      'file_id': 'index-file',
+      'source': 'local',
+      'owner_device_id': 'owner',
+      'locator': video.path,
+      'available': 1
+    });
+
+    final result = await worker.reconcileIndexers(
+      danmaku: true,
+      subtitles: true,
+      subtitlePreferences: const {
+        'videoSubtitleMap': '{}',
+        'languageMode': 'auto',
+        'traditional': false,
+        'values': <String, Object?>{},
+      },
+    );
+    expect((result['sidecars'] as Map)['changed'], 1);
+    expect((result['subtitles'] as Map)['changed'], 1);
+    final bindings = await db.query('danmaku_bindings');
+    expect(bindings, hasLength(1));
+    expect((jsonDecode(bindings.single['local_file'] as String) as Map)['path'],
+        '${folder.path}/episode.xml');
+    final subtitle =
+        jsonDecode((await db.query('file_subtitles')).single['facts'] as String)
+            as Map;
+    expect(
+        ((subtitle['tracks'] as List)
+                .firstWhere((track) => (track as Map)['origin'] == 'embedded')
+            as Map)['title'],
+        'worker-probe');
+    expect(
+        (subtitle['tracks'] as List)
+            .where((track) => (track as Map)['origin'] == 'sidecar'),
+        hasLength(1));
+
+    final unchanged = await worker.reconcileIndexers(
+      danmaku: true,
+      subtitles: true,
+      subtitlePreferences: const {
+        'videoSubtitleMap': '{}',
+        'languageMode': 'auto',
+        'traditional': false,
+        'values': <String, Object?>{},
+      },
+    );
+    expect((unchanged['sidecars'] as Map)['changed'], 0);
+    expect((unchanged['subtitles'] as Map)['changed'], 0);
+  });
+
   test('prepare runs the complete index loop in the worker', () async {
     final first = await worker.prepare(
         owner: 'owner',
