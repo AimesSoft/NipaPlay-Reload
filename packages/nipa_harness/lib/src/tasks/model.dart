@@ -308,6 +308,12 @@ final class JobEvent implements JsonEncodable {
 abstract interface class JobStore {
   Future<Job?> get(String jobId);
   Future<List<Job>> list({JobState? state, String? type});
+
+  /// A bounded page in reverse update order. Callers that need only the most
+  /// recent matching jobs must not decode the whole persisted task history.
+  Future<List<Job>> listRecent(
+      {JobState? state, String? type, int limit = 20, int offset = 0});
+
   Future<void> commit(Job job, JobEvent event,
       {required int? expectedRevision});
   Future<List<JobEvent>> events(String jobId, {int afterRevision = -1});

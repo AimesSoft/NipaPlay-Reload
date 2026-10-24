@@ -139,11 +139,6 @@ final class TaskEngine {
     if (capacity < 1) throw ArgumentError.value(capacity, 'capacity');
     _capacities[type] = capacity;
     _drain(type);
-    unawaited(list(type: type).then((jobs) {
-      for (final job in jobs) {
-        _schedule(job);
-      }
-    }));
   }
 
   int activeCount(String type) =>
@@ -252,6 +247,11 @@ final class TaskEngine {
 
   Future<List<Job>> list({JobState? state, String? type}) =>
       _serial(() => store.list(state: state, type: type));
+
+  Future<List<Job>> listRecent(
+          {JobState? state, String? type, int limit = 20, int offset = 0}) =>
+      _serial(() => store.listRecent(
+          state: state, type: type, limit: limit, offset: offset));
 
   Future<Job> _edit(String id, String kind, Job Function(Job) edit) =>
       _serial(() async {

@@ -487,6 +487,8 @@ final class NextCore {
     storage.libraryRoots = media.service.authorizedRoots;
     storage.artworkBusy = () => uiData.artwork.busy;
     uiData.meshLibrary = MeshLibrary(uiData, mesh);
+    memory.redact = uiData.meshLibrary!.worker.redactText;
+    hooks.redact = uiData.meshLibrary!.worker.redactJson;
     phase('state: mesh library');
     await Future<void>.delayed(Duration.zero);
     activityView.workerRead = uiData.meshLibrary!.worker.activityRows;

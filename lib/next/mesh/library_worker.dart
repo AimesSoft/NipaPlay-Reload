@@ -113,6 +113,10 @@ final class LibraryWorker {
   Future<void> _tail = Future<void>.value();
   bool _closed = false;
 
+  /// A mesh library may be closed before its owning UI service. Stamp polling
+  /// then falls back to the UI connection instead of surfacing an async error.
+  bool get isClosed => _closed;
+
   String? _runtimeBuiltStamp;
   String? _lastBuiltStamp;
   Map<String, JsonMap>? _lastPeers;
@@ -298,6 +302,10 @@ final class LibraryWorker {
         return _ask(target, method, input);
       });
 
+  /// Reads the catalogue epoch on the worker's own database connection. The
+  /// UI isolate still combines it with the source revision it owns.
+  Future<int> catalogueEpoch() async => await call('catalogueEpoch') as int;
+
   Future<void> build(String stamp) => _serial(() async {
         if (_closed) throw StateError('Library worker is closed');
         final target = await _worker(buildStamp: stamp);
@@ -417,8 +425,18 @@ final class LibraryWorker {
   }
 
   Future<PackedActivityRows?> activityRows(ActivityHostContext context) async {
-    if (_closed || _starting == null) return null;
-    return await call('activityRows', context) as PackedActivityRows;
+    if (_closed) return null;
+    try {
+      return await _serial(() async {
+        if (_closed) return null;
+        final target = await _worker();
+        return await _ask(target, 'activityRows', context)
+            as PackedActivityRows;
+      });
+    } on Object {
+      if (_closed) return null;
+      rethrow;
+    }
   }
 
   /// Memory context is capped, but its redaction regexes still exceed the main
@@ -433,6 +451,21 @@ final class LibraryWorker {
           exited: _redactorExited.future) as String;
     } on Object {
       return redactMemoryTextOffMain(value);
+    }
+  }
+
+  /// The same small worker handles a Hook payload without spawning another
+  /// isolate for every event. The UI isolate still has to hand the value to
+  /// the worker, but keeps the redaction regexes and result construction away.
+  Future<Object?> redactJson(Object? value) async {
+    if (_closed) return redactHarnessJsonOffMain(value);
+    try {
+      final target = await _startRedactor();
+      return await _request(
+          target, 'redactJson', (value, SecretRedactor.remembered()),
+          exited: _redactorExited.future);
+    } on Object {
+      return redactHarnessJsonOffMain(value);
     }
   }
 
@@ -515,6 +548,13 @@ Future<void> _redactionEntry(SendPort ready) async {
             SecretRedactor.remember(ref, secret);
           }
           return redactMemoryText(value);
+        case 'redactJson':
+          final (value, remembered) =
+              input as (Object?, Map<String, CredentialRef>);
+          for (final MapEntry(key: secret, value: ref) in remembered.entries) {
+            SecretRedactor.remember(ref, secret);
+          }
+          return redactHarnessJson(value);
         case 'close':
           return const _ExitWith(null);
         default:
@@ -659,6 +699,10 @@ Future<void> _serve((SendPort, SendPort, String, String, String) args) async {
         case 'build':
           await projection.build(input as String);
           return null;
+        case 'catalogueEpoch':
+          final row = await db.rawQuery(
+              "SELECT COALESCE((SELECT n FROM change_epochs WHERE name='catalogue'),0) AS n");
+          return row.single['n'] as int;
         case 'buildCurrent':
           return buildCurrent(input as String);
         case 'prepare':

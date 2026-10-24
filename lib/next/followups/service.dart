@@ -505,7 +505,7 @@ final class Followups {
         await database.insert('followup_hook_events', {
           'event': event,
           'object_id': objectId,
-          'payload': jsonEncode(redactHarnessJson(payload)),
+          'payload': await redactAndEncodeHarnessJsonOffMain(payload),
         });
         if (event == 'download.stalled') _stallRecorded(payload);
         eventCommitted?.call();

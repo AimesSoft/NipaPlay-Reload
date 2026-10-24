@@ -195,6 +195,17 @@ void main() {
     await worker.call('sources', (null, null, <String>[]));
     worker.killWorkerForTest();
     await Future<void>.delayed(const Duration(milliseconds: 300));
+    // A query must wait for and replace the exited worker instead of silently
+    // reading the same tables on the UI isolate.
+    final activity = await worker.activityRows((
+      '${root.path}/repo',
+      '${root.path}/journal.jsonl',
+      'owner',
+      const {},
+      const {}
+    )).timeout(const Duration(seconds: 20));
+    expect(activity, isNotNull);
+    expect(activity!.$4, contains('activity.journal_absent'));
     final update = await worker.call('progress', [
       {'episodeId': id, 'progress': 0.2, 'positionMs': 200, 'durationMs': 1000}
     ]).timeout(const Duration(seconds: 20)) as LibraryProgress;
