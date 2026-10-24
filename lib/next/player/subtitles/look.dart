@@ -106,6 +106,9 @@ final class SubtitleLook {
         'subtitle.color.outline': _rgba(borderColor),
         'subtitle.bold': bold ? '1' : '0',
         'subtitle.italic': italic ? '1' : '0',
+        // Seconds, later when positive; a kernel that cannot shift what it
+        // draws (MDK) leaves it.
+        'subtitle.delay': kernelDelaySeconds.toStringAsFixed(2),
       };
 
   JsonMap toJson() => {

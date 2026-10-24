@@ -47,12 +47,15 @@ final class NextPlayerHost {
     PlaybackRecords? records,
     KernelArbiter? arbiter,
     bool Function()? usesExternalPlayer,
-  })  : records = records ?? const SharedPlaybackRecords(),
+    Set<KernelId> Function()? supportedKernels,
+  })  : _supported = supportedKernels ?? (() => {...KernelId.values}),
+        records = records ?? const SharedPlaybackRecords(),
         arbiter = arbiter ?? KernelArbiter.instance,
         _usesExternalPlayer = usesExternalPlayer ?? (() => false);
 
-  /// The kernels this layer drives (P1: MDK).
-  static const supportedKernels = {KernelId.mdk};
+  /// The kernels this device can run.
+  Set<KernelId> get supportedKernels => _supported();
+  final Set<KernelId> Function() _supported;
   static const historyCapacity = 20;
 
   /// Kernel lifecycles kept for measurement (a few hundred bytes each).
@@ -168,9 +171,13 @@ final class NextPlayerHost {
     if (!supportedKernels.any((k) => k.id == kernel)) {
       throw OpenRefused(
           'kernel_not_supported',
-          'Next\'s playback layer runs on MDK only; the kernel setting is '
-              '$kernel.',
-          {'configured': kernel, 'supported': [for (final k in supportedKernels) k.id]});
+          KernelId.byId(kernel) == null
+              ? 'The kernel setting names no kernel NipaPlay knows: $kernel.'
+              : 'This device cannot run the $kernel kernel the kernel setting names.',
+          {
+            'configured': kernel,
+            'supported': [for (final k in supportedKernels) k.id]
+          });
     }
     if (_usesExternalPlayer()) {
       throw const OpenRefused('external_player',
@@ -211,7 +218,8 @@ final class NextPlayerHost {
           source,
           SessionDeps(
             arbiter: arbiter,
-            createDriver: (lease) => createDriver(KernelId.mdk, lease),
+            kernel: KernelId.byId(configuredKernel())!,
+            createDriver: createDriver,
             records: records,
             levels: initialLevels ?? playerLevels,
             cues: cues,
@@ -245,8 +253,9 @@ final class NextPlayerHost {
     while (_ended.length > historyCapacity) {
       _ended.removeFirst();
     }
-    if (kernel != null) {
-      _lifecycles.add(kernel);
+    // Every kernel instance the session had, the swapped-away ones too.
+    for (final lifecycle in session.retiredKernels) {
+      _lifecycles.add(lifecycle);
       while (_lifecycles.length > lifecycleCapacity) {
         _lifecycles.removeFirst();
       }

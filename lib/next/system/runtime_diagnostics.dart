@@ -1,10 +1,10 @@
 import 'dart:io';
 
 import 'package:nipa_harness/nipa_harness.dart';
-import 'package:nipaplay/player_abstraction/player_abstraction.dart';
 
 import '../capabilities/classic_action.dart';
-import '../capabilities/player_facts.dart';
+import '../player/kernel/driver.dart';
+import '../player/kernel/native.dart';
 import 'player_native_log.dart';
 import 'uncaught_errors.dart';
 
@@ -14,18 +14,19 @@ final class RuntimeDiagnosticsCapability implements Capability {
   RuntimeDiagnosticsCapability({
     required this.errors,
     required this.log,
-    required this.player,
+    required this.kernel,
     required this.logDirectory,
   });
 
   final UncaughtErrors errors;
   final PlayerNativeLog log;
-  final Player Function() player;
+  /// The kernel instance that plays now (null: nothing plays).
+  final KernelDriver? Function() kernel;
   final Directory logDirectory;
 
   JsonMap _kernel() {
-    final name = player().getPlayerKernelName();
-    return {'id': playerKernelId(name), 'name': name};
+    final driver = kernel();
+    return {'id': driver?.kernel.id, 'name': driver?.kernel.label};
   }
 
   Future<JsonMap> readLog(JsonMap input) async {
@@ -43,10 +44,14 @@ final class RuntimeDiagnosticsCapability implements Capability {
         'writing': log.file?.path == file.path,
       };
     }
-    final current = player();
-    if (playerKernelId(current.getPlayerKernelName()) == 'erika') {
-      await log.pullEngineLog(
-          'erika', (sinceSeq) => current.readEngineLog(sinceSeq: sinceSeq));
+    final driver = kernel();
+    if (driver?.native case final ErikaNative erika?) {
+      try {
+        await log.pullEngineLog(
+            'erika', (sinceSeq) => erika.engineLog(sinceSeq: sinceSeq));
+      } on KernelFenced {
+        // Erika went while it was read: what it had is in the ring already.
+      }
     }
     return {
       'kernel': _kernel(),
@@ -55,7 +60,7 @@ final class RuntimeDiagnosticsCapability implements Capability {
           levels: (input['levels'] as List?)?.cast<String>(),
           contains: input['contains'] as String?,
           limit: input['limit'] as int? ?? 200,
-          currentInstance: player().kernelInstance),
+          currentInstance: driver?.instance),
       'file': log.file?.path,
     };
   }
@@ -79,7 +84,9 @@ final class RuntimeDiagnosticsCapability implements Capability {
       throw const Failure(FailureCode.unavailable,
           'Player diagnostics are recorded only while Next is on.');
     }
-    final file = await log.startFile(player(), logDirectory);
+    final native = kernel()?.native;
+    final file = await log.startFile(
+        native is MpvNative ? native.logFile : null, logDirectory);
     if (file == null) {
       return {
         'kernel': _kernel(),

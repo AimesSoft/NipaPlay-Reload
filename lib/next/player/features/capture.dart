@@ -95,7 +95,10 @@ final class PlaybackCapture {
       KernelPicture? overlay;
       var source = 'displayed_scene';
       final replaceVideo = !subtitles && media.activeSubtitles.isNotEmpty;
-      if (mounted && !replaceVideo && session.surface.value is TextureSurface) {
+      if (mounted &&
+          !replaceVideo &&
+          (session.surface.value is TextureSurface ||
+              session.surface.value is WidgetSurface)) {
         picture = await _readBoundary(boundary, ratio);
       } else if (replaceVideo) {
         final decoder = await const ErikaFrameEngine().open(session.source.uri,
@@ -107,7 +110,7 @@ final class PlaybackCapture {
           await decoder.close();
         }
         source = 'independent_decoder_with_displayed_overlays';
-      } else if (session.driver case final KernelFrameFeatures frames) {
+      } else if (session.driver case final KernelPictureSnapshot frames) {
         picture = await frames.snapshotPicture();
         source = 'kernel_snapshot_with_displayed_overlays';
       } else {

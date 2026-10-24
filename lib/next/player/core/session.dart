@@ -8,6 +8,7 @@ import 'package:path/path.dart' as p;
 
 import '../../harness_redaction.dart';
 import '../kernel/driver.dart';
+import '../kernel/track_match.dart';
 import '../perf/budget.dart';
 import '../progress/records.dart';
 import '../subtitles/controller.dart';
@@ -22,6 +23,7 @@ enum SessionPhase {
   starting,
   loading,
   preparing,
+  swapping,
   active,
   failed,
   closing,
@@ -241,6 +243,7 @@ final class PlayerLevels {
 final class SessionDeps {
   SessionDeps({
     required this.arbiter,
+    required this.kernel,
     required this.createDriver,
     required this.records,
     required this.levels,
@@ -252,7 +255,13 @@ final class SessionDeps {
   })  : cues = cues ?? CueCache(),
         placementOf = placementOf ?? ((_) => const OverlayPlacement());
   final KernelArbiter arbiter;
-  final Future<KernelDriver> Function(KernelLease lease) createDriver;
+
+  /// The kernel the session opens on (the kernel setting when it opened).
+  final KernelId kernel;
+
+  /// A new kernel instance of [kernel] under the lease (I6).
+  final Future<KernelDriver> Function(KernelId kernel, KernelLease lease)
+      createDriver;
   final PlaybackRecords records;
   final PlayerLevels levels;
   final CueCache cues;
@@ -378,6 +387,184 @@ final class PlaybackSession {
   ValueListenable<VideoSurface?> get surface => _surface;
   Stream<PlaybackEvent> get events => _events.stream;
   KernelDriver? get driver => _driver;
+
+  /// How many kernel instances this session has been on (one more at every
+  /// swap).
+  int kernelGeneration = 1;
+
+  /// The lifecycles of the kernel instances this session has let go of.
+  final retiredKernels = <JsonMap>[];
+  Future<void> _swapTurn = Future.value();
+
+  /// Moves the session to a new instance of [kernel]: the media, its
+  /// position, whether it plays, the rate and volume, the tracks and the
+  /// mounted subtitle files carry over (player-core design §2.5). Only the
+  /// intent crosses the old instance's fence; the session, its lease and
+  /// its watch record stay. One swap at a time, in the order asked.
+  Future<JsonMap> swapKernel(KernelId kernel, {required String origin}) {
+    final result = _swapTurn.then((_) => _swapKernel(kernel, origin));
+    _swapTurn = result.then((_) {}, onError: (Object _) {});
+    return result;
+  }
+
+  Future<JsonMap> _swapKernel(KernelId kernel, String origin) async {
+    await opened;
+    if (_phase.value.done) {
+      return {'replaced': false, 'opened': false, 'reason': 'session_closed'};
+    }
+    final old = _driver;
+    final from = old?.kernel;
+    final intent = _transport.value;
+    // What the old instance listed and had on, before it goes.
+    final before = _media.value;
+    final audioFrom =
+        _audio.value.want ?? old?.tracks.audio ?? before?.activeAudio.firstOrNull;
+    final subtitleWas = subtitles.want;
+    final target = intent.seekTarget ?? clock.now();
+    _setPhase(SessionPhase.swapping);
+    _saver?.cancel();
+    _saver = null;
+    clock.anchor(target, advancing: false, source: 'swap_intent');
+    _setTransport(_transport.value
+        .copyWith(observed: KernelTransport.stopped, buffering: false));
+    final preserved = <String, Object?>{};
+    try {
+      await _detachDriver();
+      _check();
+      final lease = _lease;
+      if (lease == null || !lease.held) {
+        _lease = await _deps.arbiter
+            .acquire(KernelOwner.next, reason: 'session $id swap');
+        await _checkOrRelease();
+      }
+      final next = _driver = await _deps.createDriver(kernel, _lease!);
+      _kernelEvents = next.events.listen(_kernel);
+      next.surface.addListener(_surfaceChanged);
+      await _checkOrRelease();
+      // Opened at the position, paused, the subtitle as the new kernel draws
+      // it; the audio and an embedded subtitle wait for its own list.
+      final plan = subtitles.planForMove(next.capabilities);
+      _openPlan = plan;
+      final opened = await next.open(_source,
+          start: target,
+          volume: intent.volume * _boost,
+          rate: intent.rate,
+          tracks: plan);
+      _check();
+      _media.value = opened.media;
+      clock.limit = opened.media.duration;
+      _fault.value = null;
+      _tracksReported(opened.tracks);
+      // The tracks that were on, by what they are (design §2.5).
+      final now = opened.media;
+      final audio = before == null || audioFrom == null
+          ? (index: null, reason: null)
+          : matchTrack(before.audio, audioFrom, now.audio);
+      final subtitle = before == null
+          ? (index: null, reason: null)
+          : subtitleWas.index == null
+              ? (index: null, reason: null)
+              : matchTrack(before.subtitles, subtitleWas.index, now.subtitles);
+      final audioNow = next.tracks.audio ?? now.activeAudio.firstOrNull;
+      var audioApplied = false;
+      if (audio.index case final index? when index != audioNow) {
+        await next.selectAudio(index);
+        _check();
+        audioApplied = true;
+      }
+      if (audio.index != null || _audio.value.want != null) {
+        final a = _audio.value;
+        _audio.value = AudioTrackState(
+            want: audio.index ?? a.want,
+            selectedBy: a.selectedBy,
+            kernel: next.tracks.audio,
+            confirmed: next.tracks.audioConfirmed);
+      }
+      _setPhase(SessionPhase.preparing);
+      await subtitles.moved(next, now, remap: (index) => subtitle.index);
+      _check();
+      preserved['audioTrack'] = {
+        'before': before?.audio
+            .where((t) => t.index == audioFrom)
+            .firstOrNull
+            ?.toJson(),
+        'after': next.tracks.audio ?? now.activeAudio.firstOrNull,
+        'reapplied': audioApplied,
+        if (audio.reason != null) 'reason': audio.reason,
+      };
+      preserved['subtitleTrack'] = {
+        'before': subtitleWas.toJson(),
+        'after': subtitles.want.toJson(),
+        'shown': [for (final p in subtitles.state.value.presented) p.toJson()],
+        if (subtitle.reason != null) 'reason': subtitle.reason,
+      };
+      // The position last, after everything that can move it, then what was
+      // asked meanwhile: the intent now, not the one at the start.
+      final latest = _transport.value.seekTarget ?? target;
+      final landed = (await next.seek(latest)).landed ?? opened.landed;
+      _check();
+      _landed = landed;
+      clock.anchor(landed, advancing: false, source: 'swap_landed');
+      for (var attempt = 0; attempt < 3; attempt++) {
+        final want = _transport.value.playIntent;
+        if (want == (_transport.value.observed == KernelTransport.playing)) {
+          break;
+        }
+        await next.setPaused(!want);
+        _check();
+      }
+      if (!_transport.value.playIntent) {
+        await next.presentFrame();
+        _check();
+      }
+      kernelGeneration++;
+      _setTransport(_transport.value.copyWith(seekTarget: () => null));
+      _setPhase(SessionPhase.active);
+      _syncSaver();
+      final after = _transport.value;
+      preserved['positionMs'] = {
+        'before': target.inMilliseconds,
+        'after': clock.now().inMilliseconds
+      };
+      preserved['paused'] = {'before': !intent.playIntent, 'after': !after.playIntent};
+      preserved['rate'] = {'before': intent.rate, 'after': after.rate};
+      _emit('kernel_swapped',
+          {'from': from?.id, 'to': kernel.id, 'origin': origin, 'preserved': preserved});
+      return {
+        'replaced': true,
+        'opened': true,
+        'sessionId': id,
+        'from': from?.id,
+        'preserved': preserved,
+      };
+    } on _Closed {
+      await _detachDriver();
+      return {'replaced': false, 'opened': false, 'reason': 'session_closed'};
+    } on KernelFenced {
+      return {'replaced': false, 'opened': false, 'reason': 'session_closed'};
+    } on KernelOpenFailure catch (e) {
+      await _fail('swap:${e.stage}', e.message, code: e.code);
+      return {
+        'replaced': true,
+        'opened': false,
+        'sessionId': id,
+        'from': from?.id,
+        'failure': e.message,
+        'preserved': preserved,
+      };
+    } catch (error) {
+      await _fail('swap', '$error');
+      return {
+        'replaced': true,
+        'opened': false,
+        'sessionId': id,
+        'from': from?.id,
+        'failure': '$error',
+        'preserved': preserved,
+      };
+    }
+  }
+
   String get path => request.locator;
 
   /// What the watch record knows of the media when it opened.
@@ -479,7 +666,7 @@ final class PlaybackSession {
     _lease = await _deps.arbiter
         .acquire(KernelOwner.next, reason: 'session $id');
     await _checkOrRelease();
-    final driver = _driver = await _deps.createDriver(_lease!);
+    final driver = _driver = await _deps.createDriver(_deps.kernel, _lease!);
     _kernelEvents = driver.events.listen(_kernel);
     driver.surface.addListener(_surfaceChanged);
     await _checkOrRelease();
@@ -548,6 +735,9 @@ final class PlaybackSession {
 
   void _kernel(KernelEvent event) => PlayerPerf.span('session.kernel', () {
         if (_phase.value.done) return;
+        // I7: an event is of the instance that says it, not of whoever is
+        // current now.
+        if (event.instance != _driver?.instance) return;
         switch (event) {
           case KernelTransportChanged(:final transport):
             _setTransport(_transport.value.copyWith(
@@ -641,6 +831,9 @@ final class PlaybackSession {
     _emit('seek_requested',
         {'targetMs': target.inMilliseconds, 'origin': origin});
     final driver = _driver;
+    if (_phase.value == SessionPhase.swapping) {
+      return _receipt(seq, 'seek', 'pending', {'targetMs': target.inMilliseconds});
+    }
     if (!_phase.value.open || driver == null) {
       // Not open yet: the plan opens there.
       _start = target;
@@ -881,6 +1074,8 @@ final class PlaybackSession {
       _setPhase(SessionPhase.closing);
     }
     final watch = Stopwatch()..start();
+    await _detachDriver();
+    await _swapTurn;
     await _releaseKernel();
     final releaseMs = watch.elapsedMilliseconds;
     // The plan ends on the fence; anything it made after the release above
@@ -902,22 +1097,34 @@ final class PlaybackSession {
   /// The kernel instance, then the lease (I4 ⑥). Safe to call again: it
   /// releases what is there now.
   Future<void> _releaseKernel() async {
-    final driver = _driver;
     final lease = _lease;
+    await _detachDriver();
+    if (lease != null && lease.held) await lease.release();
+  }
+
+  Future<void> _detachDriver() async {
+    final driver = _driver;
     if (driver != null) {
       driver.surface.removeListener(_surfaceChanged);
       _surface.value = null;
+      final first = !_retired.contains(driver);
       await driver.release();
       await _kernelEvents?.cancel();
+      if (first) {
+        _retired.add(driver);
+        retiredKernels.add(driver.lifecycle);
+      }
     }
-    if (lease != null && lease.held) await lease.release();
   }
+
+  final _retired = <KernelDriver>{};
 
   // ---- facts ----
 
   /// O(1): what Nipa and the interface read of this session.
   JsonMap facts() => {
         'sessionId': id,
+        'kernelGeneration': kernelGeneration,
         'phase': _phase.value.name,
         'openedAt': openedAt.toIso8601String(),
         'phaseTimesMs': Map.of(_phaseTimes),

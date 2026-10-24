@@ -112,7 +112,7 @@ final class SessionPlayerPort implements PlayerPort {
       'category': recorded?['category'] ??
           playbackFailureCategory(
               stage: fault.stage, kernelMessage: fault.message),
-      'kernel': KernelId.mdk.id,
+      'kernel': s.driver?.kernel.id,
       'kernelRetryable': fault.retryable,
       'messages': {
         'player': null,
@@ -810,14 +810,15 @@ final class SessionControls
       };
 }
 
-/// Kernel control (playback.kernel and the rest) is not in the playback
-/// layer yet: the kernel is never handed out (I3).
+/// The playback as kernel control and Mesh see it: the snapshot and the
+/// failure facts. The kernel is never handed out (I3): what is read of it
+/// and changed in it goes through the instance's [KernelNative] handle.
 final class SessionKernelHost implements KernelHost {
   SessionKernelHost(this._playback);
   final SessionPlayback _playback;
 
   static const _message =
-      'Next\'s playback layer does not hand out its kernel; kernel reads and changes come later.';
+      'Next\'s playback layer does not hand out its kernel; kernel control reads and changes it through its own handle.';
 
   @override
   Player get player => notInPlaybackLayer('kernel_control', _message);

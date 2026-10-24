@@ -132,6 +132,7 @@ const _playerRebuilt = {
 /// Works out [Effective] for registry entries. Everything here reads state;
 /// nothing is written.
 abstract final class EffectiveRules {
+  static Effective? Function(SettingEntry entry, Object? stored)? sessionPlayer;
   static const _externalDependents = {
     'player.externalPath',
     'player.externalType',
@@ -149,6 +150,8 @@ abstract final class EffectiveRules {
   static Future<Effective> resolve(SettingEntry entry, Object? stored,
       {required Map<String, Object?> startup, required ReadOther readOther}) async {
     final key = entry.key;
+    final next = sessionPlayer?.call(entry, stored);
+    if (next != null) return next;
     final video = ApplicationSettings.video;
     final nextDanmaku = NextDanmakuSettings.active;
     if (nextDanmaku != null && NextDanmakuSettings.keys.containsKey(key)) {

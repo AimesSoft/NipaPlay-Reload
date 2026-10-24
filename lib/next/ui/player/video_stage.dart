@@ -9,6 +9,7 @@ import '../../player/ports/session_playback.dart';
 import 'subtitle_layer.dart';
 import 'package:nipaplay/utils/video_aspect_geometry.dart';
 import '../../player/features/capture.dart';
+import '../../player/kernel/driver.dart' show PlatformVideoSurface, WidgetSurface;
 
 /// The picture of Next's own playback layer: the kernel's surface, fitted
 /// and centred on black, with the subtitle file NipaPlay draws over it
@@ -65,41 +66,30 @@ class _NextVideoStageState extends State<NextVideoStage> {
           child: ValueListenableBuilder<VideoSurface?>(
             valueListenable: widget.host.surface,
             builder: (context, surface, _) => switch (surface) {
+              // The system draws it under the window: a hole for it.
+              PlatformVideoSurface(:final view) =>
+                CustomPaint(painter: const _NativeVideoHole(), child: view),
+              WidgetSurface(
+                :final view,
+                :final aspect,
+                :final width,
+                :final height
+              ) =>
+                _fitted(session, aspect, width, height, view),
               TextureSurface(
                 :final textureId,
                 :final aspect,
                 :final width,
                 :final height
               ) =>
-                session == null
-                    ? Center(
-                        child: AspectRatio(
-                            aspectRatio: aspect,
-                            child: RepaintBoundary(
-                                child: Texture(
-                                    textureId: textureId,
-                                    filterQuality: FilterQuality.low))))
-                    : ValueListenableBuilder<VideoAspectMode>(
-                        valueListenable: session.aspectMode,
-                        builder: (context, mode, _) =>
-                            LayoutBuilder(builder: (context, c) {
-                          final rect = VideoAspectGeometry.displayRect(
-                              mode: mode,
-                              viewport: c.biggest,
-                              sourceAspect: aspect,
-                              naturalSize:
-                                  Size(width.toDouble(), height.toDouble()));
-                          return ClipRect(
-                              child: Stack(children: [
-                            Positioned.fromRect(
-                                rect: rect,
-                                child: RepaintBoundary(
-                                    child: Texture(
-                                        textureId: textureId,
-                                        filterQuality: FilterQuality.low)))
-                          ]));
-                        }),
-                      ),
+                _fitted(
+                    session,
+                    aspect,
+                    width,
+                    height,
+                    Texture(
+                        textureId: textureId,
+                        filterQuality: FilterQuality.low)),
               _ => const SizedBox.expand(),
             },
           ),
@@ -135,4 +125,37 @@ class _NextVideoStageState extends State<NextVideoStage> {
           ...widget.overlays,
         ]);
   }
+
+  /// A picture the layer draws, laid out as the aspect setting says.
+  Widget _fitted(SessionPlayback? session, double aspect, int width,
+      int height, Widget picture) {
+    if (session == null) {
+      return Center(
+          child: AspectRatio(
+              aspectRatio: aspect, child: RepaintBoundary(child: picture)));
+    }
+    return ValueListenableBuilder<VideoAspectMode>(
+      valueListenable: session.aspectMode,
+      builder: (context, mode, _) => LayoutBuilder(builder: (context, c) {
+        final rect = VideoAspectGeometry.displayRect(
+            mode: mode,
+            viewport: c.biggest,
+            sourceAspect: aspect,
+            naturalSize: Size(width.toDouble(), height.toDouble()));
+        return ClipRect(
+            child: Stack(children: [
+          Positioned.fromRect(rect: rect, child: RepaintBoundary(child: picture))
+        ]));
+      }),
+    );
+  }
+}
+
+final class _NativeVideoHole extends CustomPainter {
+  const _NativeVideoHole();
+  @override
+  void paint(Canvas canvas, Size size) => canvas.drawRect(
+      Offset.zero & size, Paint()..blendMode = BlendMode.clear);
+  @override
+  bool shouldRepaint(_NativeVideoHole oldDelegate) => false;
 }

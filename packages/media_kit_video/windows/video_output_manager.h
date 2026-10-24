@@ -11,6 +11,8 @@
 
 #include <flutter/plugin_registrar_windows.h>
 
+#include <functional>
+
 #include <unordered_map>
 
 #include "thread_pool.h"
@@ -41,7 +43,7 @@ class VideoOutputManager {
                std::optional<int64_t> height);
 
   // Destroys the |VideoOutput| with given handle.
-  void Dispose(int64_t handle);
+  void Dispose(int64_t handle, std::function<void()> complete);
 
   ~VideoOutputManager();
 

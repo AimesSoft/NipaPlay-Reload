@@ -14,6 +14,8 @@ import '../core/clock.dart';
 import '../perf/budget.dart';
 import '../features/kernel_features.dart';
 import 'driver.dart';
+import 'instances.dart';
+import 'native.dart';
 import 'op_queue.dart';
 
 /// The MDK settings Classic and Next share (D3), read when a kernel
@@ -76,9 +78,9 @@ String _mdkDecoderFor(String mode) {
 /// Turning the subtitle off stops MDK drawing it (the `subtitle` property)
 /// and leaves the track decoding, so that off and back on deactivates
 /// nothing.
-final class MdkDriver implements KernelDriver, KernelFrameFeatures {
+final class MdkDriver implements KernelDriver, MdkNative, KernelFrameFeatures {
   MdkDriver(KernelLease lease, this.config, {mdk.Player Function()? create})
-      : instance = ++_instances {
+      : instance = nextKernelInstance() {
     // I1: only the lease holder makes a kernel.
     if (!lease.held || lease.owner != KernelOwner.next) {
       throw StateError('An MDK instance is made only under Next\'s lease.');
@@ -90,8 +92,6 @@ final class MdkDriver implements KernelDriver, KernelFrameFeatures {
     _player.onEvent(_event);
     _times['createUs'] = watch.elapsedMicroseconds;
   }
-
-  static int _instances = 0;
 
   /// How often the position is read while the kernel plays.
   static const sampleEvery = Duration(milliseconds: 250);
@@ -583,6 +583,7 @@ final class MdkDriver implements KernelDriver, KernelFrameFeatures {
   void _plan(KernelTrackPlan plan) {
     final p = _player;
     for (final e in plan.subtitleProperties.entries) {
+      if (_mdkCannot.contains(e.key)) continue;
       p.setProperty(e.key, e.value);
       _subtitleProperties[e.key] = e.value;
     }
@@ -781,10 +782,14 @@ final class MdkDriver implements KernelDriver, KernelFrameFeatures {
     _sample(at, advancing: playing);
   }
 
+  /// What the subtitle look asks that MDK cannot do: it has no subtitle delay.
+  static const _mdkCannot = {'subtitle.delay'};
+
   @override
   Future<void> setSubtitleProperties(Map<String, String> properties) =>
       _queue.run(() async {
         for (final e in properties.entries) {
+          if (_mdkCannot.contains(e.key)) continue;
           if (_subtitleProperties[e.key] == e.value) continue;
           _player.setProperty(e.key, e.value);
           _subtitleProperties[e.key] = e.value;
@@ -1039,6 +1044,37 @@ final class MdkDriver implements KernelDriver, KernelFrameFeatures {
           'lifecycle': lifecycle,
         };
       });
+
+  // ---- MdkNative: the handle kernel control gets ----
+
+  @override
+  KernelNative get native => this;
+
+  @override
+  Future<Object?> version() => _queue.run(() async => {'mdk': _version()});
+
+  @override
+  Future<Map<String, NativeRead>> read(List<String> names) => _queue.run(() async => {
+        for (final name in names)
+          name: (value: _player.getProperty(name), error: null)
+      });
+
+  @override
+  Future<void> write(String name, String value) =>
+      _queue.run(() async => _player.setProperty(name, value));
+
+  @override
+  Future<List<String>> decoders({required bool video}) => _queue.run(
+      () async => video ? _player.videoDecoders : _player.audioDecoders);
+
+  @override
+  Future<void> setDecoders(List<String> names, {required bool video}) =>
+      _queue.run(() async => _player.setDecoders(
+          video ? mdk.MediaType.video : mdk.MediaType.audio, names));
+
+  @override
+  Future<String?> activeDecoder({required bool video}) => _queue.run(() async =>
+      _seen[video ? 'decoder.video' : 'decoder.audio']?['detail'] as String?);
 
   static String? _version() {
     try {

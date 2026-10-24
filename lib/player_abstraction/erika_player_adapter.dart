@@ -227,12 +227,16 @@ class _NipaplayErikaWindowOverlayVideoView extends StatefulWidget {
     this.debugLabel,
     this.onPlatformViewIdChanged,
     this.onFrameRectChanged,
+    this.onRelease,
+    this.pollLayout = true,
   });
 
   final ErikaPlayer player;
   final String? debugLabel;
   final ValueChanged<int?>? onPlatformViewIdChanged;
   final ValueChanged<Rect?>? onFrameRectChanged;
+  final ValueChanged<Future<void>>? onRelease;
+  final bool pollLayout;
 
   @override
   State<_NipaplayErikaWindowOverlayVideoView> createState() =>
@@ -263,7 +267,7 @@ class _NipaplayErikaWindowOverlayVideoViewState
     WidgetsBinding.instance.addObserver(this);
     _surfaceGeneration = identityHashCode(this);
     widget.onPlatformViewIdChanged?.call(ErikaPlayer.windowOverlayViewId);
-    _startFrameTimer();
+    if (widget.pollLayout) _startFrameTimer();
     _scheduleAttach();
   }
 
@@ -314,7 +318,9 @@ class _NipaplayErikaWindowOverlayVideoViewState
         onFrameRectChanged(null);
       }
     });
-    unawaited(_releaseOverlaySurface());
+    final release = _releaseOverlaySurface();
+    widget.onRelease?.call(release);
+    unawaited(release);
     super.dispose();
   }
 
@@ -581,6 +587,7 @@ class ErikaPlayerAdapter
         BufferingAwarePlayer,
         GifExportCapablePlayer {
   ErikaPlayerAdapter({
+    this.sessionOwned = false,
     PlayerErikaAndroidOutputMode androidOutputMode =
         PlayerErikaAndroidOutputMode.sdr,
   }) : _player = ErikaPlayer(
@@ -597,6 +604,12 @@ class ErikaPlayerAdapter
   }
 
   final ErikaPlayer _player;
+  final bool sessionOwned;
+  Future<void> _surfaceRelease = Future.value();
+  /// Next's session driver hears each event once the adapter has taken it
+  /// in (its tracks, its duration, a position past the seek fence), so what
+  /// the driver reads of [mediaInfo] is already up to date.
+  void Function(ErikaPlayerEvent event)? onSessionEvent;
   final ValueNotifier<bool> _buffering = ValueNotifier<bool>(false);
 
   @override
@@ -769,6 +782,7 @@ class ErikaPlayerAdapter
 
   @override
   set volume(double value) {
+    if (_disposed) return;
     _volume = value.clamp(0.0, 1.0).toDouble();
     if (_isSupported) {
       unawaited(_player.setVolume(_volume));
@@ -788,6 +802,7 @@ class ErikaPlayerAdapter
 
   @override
   set state(PlayerPlaybackState value) {
+    if (_disposed) return;
     if (value == _state) {
       return;
     }
@@ -867,11 +882,44 @@ class ErikaPlayerAdapter
     }
   }
 
+  /// The frame rate Erika declares for the video it plays (null: none).
+  double? get videoFrameRate {
+    final track = _videoTrackInfos.firstOrNull;
+    if (track == null ||
+        track.frameRateNumerator <= 0 ||
+        track.frameRateDenominator <= 0) {
+      return null;
+    }
+    return track.frameRateNumerator / track.frameRateDenominator;
+  }
+
+  /// Turns tracks on and returns once Erika has taken the request (Next's
+  /// session driver; the setters above fire and forget). [audio] and
+  /// [subtitles] are indices of [mediaInfo]'s lists; an empty [subtitles]
+  /// turns the subtitle off.
+  Future<void> selectTracksForSession(
+      {int? audio, List<int>? subtitles}) async {
+    if (_disposed) return;
+    _ensureSupported();
+    if (audio != null && audio >= 0 && audio < _audioTrackInfos.length) {
+      await _player.selectAudioTrack(_audioTrackInfos[audio].id);
+    }
+    if (subtitles != null) {
+      final index = subtitles.firstOrNull;
+      if (index == null) {
+        await _player.selectSubtitleTrack(null);
+      } else if (index >= 0 && index < _subtitleTrackInfos.length) {
+        await _player.selectSubtitleTrack(_subtitleTrackInfos[index].id);
+      }
+    }
+  }
+
   @override
   List<int> get activeAudioTracks => _activeAudioTracks;
 
   @override
   set activeAudioTracks(List<int> value) {
+    if (_disposed) return;
     _activeAudioTracks = List<int>.from(value);
     if (!_isSupported) {
       return;
@@ -913,6 +961,7 @@ class ErikaPlayerAdapter
 
   @override
   void setMedia(String path, PlayerMediaType type) {
+    if (_disposed) return;
     if (type == PlayerMediaType.subtitle) {
       _subtitleTrace('setMedia subtitle path=${_describeSubtitlePath(path)}');
       _setExternalSubtitle(path);
@@ -978,6 +1027,7 @@ class ErikaPlayerAdapter
 
   @override
   Future<void> seekAndWait({required int position}) async {
+    if (_disposed) return;
     final clamped = position < 0 ? 0 : position;
     _lastPositionMs = clamped;
     _lastPositionUpdate = DateTime.now();
@@ -1025,6 +1075,7 @@ class ErikaPlayerAdapter
     StreamSubscription<ErikaPlayerEvent>? eventSubscription,
   ) async {
     try {
+      await _surfaceRelease;
       await eventSubscription?.cancel();
       // Erika's log outlives the player only in native memory; what Next
       // keeps is copied before the player that reads it goes away.
@@ -1121,8 +1172,10 @@ class ErikaPlayerAdapter
 
   @override
   Future<void> playDirectly() async {
+    if (_disposed) return;
     _ensureSupported();
     await _player.ensureCreated();
+    if (_disposed) return;
     await _player.play();
     _state = PlayerPlaybackState.playing;
     _lastPositionUpdate = DateTime.now();
@@ -1130,6 +1183,7 @@ class ErikaPlayerAdapter
 
   @override
   Future<void> pauseDirectly() async {
+    if (_disposed) return;
     _ensureSupported();
     if (_state != PlayerPlaybackState.playing) {
       return;
@@ -1152,6 +1206,7 @@ class ErikaPlayerAdapter
 
   @override
   void setPlaybackRate(double rate) {
+    if (_disposed) return;
     _playbackRate = rate <= 0 ? 1.0 : rate;
     if (_isSupported) {
       unawaited(_player.setPlaybackRate(_playbackRate));
@@ -1343,6 +1398,8 @@ class ErikaPlayerAdapter
     }
     return _NipaplayErikaWindowOverlayVideoView(
       player: _player,
+      pollLayout: !sessionOwned,
+      onRelease: (release) => _surfaceRelease = release,
       debugLabel: debugLabel,
       onPlatformViewIdChanged: onPlatformViewIdChanged,
       onFrameRectChanged: onFrameRectChanged,
@@ -2041,6 +2098,7 @@ class ErikaPlayerAdapter
       );
     }
     _mediaInfo = updatedInfo;
+    onSessionEvent?.call(event);
   }
 
   static String _formatPlaybackError(ErikaPlayerEvent event) {

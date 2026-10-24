@@ -10,6 +10,7 @@ export './abstract_player.dart'
         BufferingAwarePlayer,
         GifExportCapablePlayer,
         GifExportQuality,
+        PlatformVideoSurfaceTarget,
         GifExportRequest,
         GifExportResult,
         MediaLoadAwarePlayer,
@@ -45,7 +46,10 @@ enum MediaType { unknown, video, audio, subtitle }
 /// The main player class that client code (like VideoPlayerState) will interact with.
 /// It instantiates to `Player()` and delegates all operations to an internal `AbstractPlayer` instance
 /// obtained from the `PlayerFactory`.
-class Player implements core_player.AsyncExternalSubtitlePlayer {
+class Player
+    implements
+        core_player.AsyncExternalSubtitlePlayer,
+        core_player.PlatformVideoSurfaceTarget {
   static final ValueNotifier<bool> _noBuffering = ValueNotifier<bool>(false);
   final core_player.AbstractPlayer _delegate;
   Future<void>? _disposeFuture;
@@ -387,6 +391,7 @@ class Player implements core_player.AsyncExternalSubtitlePlayer {
   /// across that entire surface, including the letterbox/pillarbox area.
   bool get handlesVideoAspectFit => _delegate is ErikaPlayerAdapter;
 
+  @override
   bool get prefersPlatformVideoSurface {
     try {
       final dyn = _delegate as dynamic;
@@ -409,6 +414,7 @@ class Player implements core_player.AsyncExternalSubtitlePlayer {
     return false;
   }
 
+  @override
   Future<void> attachPlatformVideoSurface({
     required int viewHandle,
     int? windowHandle,
@@ -434,6 +440,7 @@ class Player implements core_player.AsyncExternalSubtitlePlayer {
     }
   }
 
+  @override
   Future<void> detachPlatformVideoSurface({int? platformViewId}) async {
     try {
       final dyn = _delegate as dynamic;

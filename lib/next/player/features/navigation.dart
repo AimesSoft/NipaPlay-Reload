@@ -58,8 +58,8 @@ final class PlaybackNavigation {
       await s.setPaused(true, origin: origin);
       if (s.phase.value.done) throw const KernelFenced();
       final driver = s.driver;
-      if (driver is KernelFrameFeatures) {
-        final outcome = await (driver as KernelFrameFeatures).stepFrame(delta);
+      if (driver is KernelFrameStep) {
+        final outcome = await (driver as KernelFrameStep).stepFrame(delta);
         if (s.phase.value.done) throw const KernelFenced();
         if (outcome.landed case final landed?) {
           s.clock.anchor(landed, advancing: false, source: 'native_frame_step');

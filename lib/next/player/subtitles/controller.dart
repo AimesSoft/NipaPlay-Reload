@@ -363,6 +363,44 @@ final class SubtitleController {
     await _schedule();
   }
 
+  /// The playback moves to another kernel instance (a swap): the open plan
+  /// for it. The new kernel opens drawing nothing; what is chosen stays
+  /// chosen and goes on once it is open ([moved]), a file as an embedded
+  /// track alike (a subtitle file in the open plan of a kernel that has not
+  /// read the media's own tracks yet is the plan most kernels are least sure
+  /// of; put on after the open, every kernel does it the way it does a
+  /// choice made in the menu).
+  KernelTrackPlan planForMove(KernelCapabilities capabilities, {int? audio}) {
+    _capabilities = capabilities;
+    return KernelTrackPlan(
+      audio: audio,
+      subtitle: KernelSubtitle.none,
+      subtitleProperties: _look.kernelProperties(),
+    );
+  }
+
+  /// The media opened on the new kernel instance [driver]: the choice goes
+  /// on as it was, an embedded track translated to the new kernel's own
+  /// list by [remap] (null: the new kernel has no such track, and nothing
+  /// is chosen then, with the reason said).
+  Future<void> moved(KernelDriver driver, MediaFacts media,
+      {required int? Function(int index) remap}) async {
+    _closed = false;
+    _driver = driver;
+    _capabilities = driver.capabilities;
+    _media = media;
+    if (want.index case final index?) {
+      final mapped = remap(index);
+      _state.value = _state.value.copyWith(
+          want: mapped == null
+              ? const SubtitleWant.off()
+              : SubtitleWant.embedded(mapped),
+          failure: () => mapped == null ? 'no_matching_track' : null);
+    }
+    _version++;
+    await _schedule();
+  }
+
   /// The kernel reported its tracks (an open, a change, a late decoder).
   void kernelReported(KernelTracks tracks) => _publishPresented();
 

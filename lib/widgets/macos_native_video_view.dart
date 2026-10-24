@@ -88,7 +88,7 @@ class MacOSNativeVideoView extends StatefulWidget {
     this.onPlatformViewIdChanged,
   });
 
-  final Player player;
+  final PlatformVideoSurfaceTarget player;
   final String? debugLabel;
   final ValueChanged<int?>? onPlatformViewIdChanged;
 
@@ -226,7 +226,7 @@ class MacOSWindowNativeVideoOverlaySurface extends StatefulWidget {
     this.onPointerActivity,
   });
 
-  final Player player;
+  final PlatformVideoSurfaceTarget player;
   final String? debugLabel;
   final ValueChanged<int?>? onPlatformViewIdChanged;
   final ValueChanged<Rect?>? onFrameRectChanged;

@@ -4,6 +4,9 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:fvp/mdk.dart' as mdk;
 import 'package:nipa_harness/nipa_harness.dart';
+import 'package:nipaplay/next/player/core/arbiter.dart';
+import 'package:nipaplay/next/player/kernel/driver.dart';
+import 'package:nipaplay/next/player/kernel/native.dart';
 import 'package:nipaplay/next/system/mdk_native_log.dart';
 import 'package:nipaplay/next/system/player_native_log.dart';
 import 'package:nipaplay/next/system/runtime_diagnostics.dart';
@@ -11,15 +14,32 @@ import 'package:nipaplay/next/system/uncaught_errors.dart';
 import 'package:nipaplay/player_abstraction/player_abstraction.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'player/fake_driver.dart';
 import 'player_test_support.dart';
 import 'test_support.dart';
 
-/// Classic's Media Kit kernel as a test double that records the log file
-/// mpv is told to write.
-class LoggingKernel extends ClassicKernel {
+/// mpv as a kernel instance's handle, recording the log file it is told to
+/// write.
+class LoggingMpv implements MpvNative {
   final logFiles = <String>[];
   @override
-  Future<void> setNativeLogFile(String path) async => logFiles.add(path);
+  Future<void> logFile(String path) async => logFiles.add(path);
+  @override
+  Future<Object?> version() async => null;
+  @override
+  Future<Map<String, NativeRead>> read(List<String> names) async => {};
+  @override
+  Future<String?> write(String name, String value) async => null;
+  @override
+  Future<NativeReply> command(List<String> args,
+          {Duration timeout = const Duration(seconds: 10)}) async =>
+      (result: null, error: null);
+}
+
+/// A Media Kit instance, as the session that plays holds it.
+Future<FakeDriver> mediaKitInstance() async {
+  final lease = await KernelArbiter().acquire(KernelOwner.next, reason: 'test');
+  return FakeDriver(lease, kernel: KernelId.mediaKit, native: LoggingMpv());
 }
 
 /// fvp's process-wide MDK log handler, held here.
@@ -83,10 +103,9 @@ void main() {
         () async {
       final directory = await Directory.systemTemp.createTemp('pf-log-');
       addTearDown(() => directory.delete(recursive: true));
-      final kernel = LoggingKernel();
-      final player = Player.withDelegate(kernel);
+      final kernel = LoggingMpv();
       final log = PlayerNativeLog()..attach();
-      final file = await log.startFile(player, directory);
+      final file = await log.startFile(kernel.logFile, directory);
       expect(file, isNotNull);
       expect(kernel.logFiles, [file!.path]);
       await file.writeAsString(
@@ -98,18 +117,19 @@ void main() {
       expect('$page', isNot(contains('SECRET')));
       await log.detach();
       expect(kernel.logFiles.last, '');
-      final without = Player.withDelegate(ClassicKernel());
-      expect(await PlayerNativeLog().startFile(without, directory), isNull);
+      // A kernel that keeps no such log gives nothing to write through.
+      expect(await PlayerNativeLog().startFile(null, directory), isNull);
     });
 
     test('the log file is refused while Next records nothing', () async {
       final directory = await Directory.systemTemp.createTemp('pf-cap-');
       addTearDown(() => directory.delete(recursive: true));
+      final driver = await mediaKitInstance();
       final harness = Harness([
         RuntimeDiagnosticsCapability(
             errors: UncaughtErrors(directory),
             log: PlayerNativeLog(),
-            player: () => Player.withDelegate(LoggingKernel()),
+            kernel: () => driver,
             logDirectory: directory)
       ]);
       await invokeFailed(harness, 'diagnostics.player_log_file',
@@ -241,11 +261,12 @@ void main() {
       await next.attach();
       addTearDown(next.detach);
       addTearDown(crashed.detach);
+      final driver = await mediaKitInstance();
       final harness = Harness([
         RuntimeDiagnosticsCapability(
             errors: next,
             log: PlayerNativeLog(),
-            player: () => Player.withDelegate(LoggingKernel()),
+            kernel: () => driver,
             logDirectory: directory)
       ]);
       Future<Map> summary() async =>
