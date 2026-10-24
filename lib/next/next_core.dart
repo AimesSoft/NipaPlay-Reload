@@ -46,6 +46,10 @@ import 'mesh/runtime.dart';
 import 'mesh/library.dart';
 import 'mesh/library_capability.dart';
 import 'mesh/delivery.dart';
+import 'mesh/join_prompt.dart';
+import 'mesh/delegation.dart';
+import 'mesh/delegation_host.dart';
+import 'mesh/delegation_wiring.dart';
 import 'mesh/capability.dart';
 import 'mesh/debug_claim_names.dart';
 import 'db/capability.dart';
@@ -157,6 +161,16 @@ final class NextCore {
   late final ProgramRepository programRepository;
   late final SettingsRegistry settings;
   late final MeshRuntime mesh;
+  late final MeshDelegations delegations;
+  late final AgentDelegations delegationHost;
+
+  /// Asks the person at this screen about a device that just joined
+  /// (true: not theirs; null: not answered). Tests replace it.
+  Future<bool?> Function(JsonMap device) meshJoinPrompt = (device) =>
+      showMeshJoinPrompt(device['name'] as String? ?? '未命名设备',
+          device['platform'] as String?);
+  StreamSubscription<JsonMap>? _joinNotices;
+  Future<void> _joinPrompts = Future.value();
   late final List<Capability> capabilities;
   late final StateSources stateSources;
   late final StateCapability state;
@@ -275,6 +289,11 @@ final class NextCore {
         vault: credentialVault,
         token: () async => credentials.read(
             await SharedPreferences.getInstance(), 'dandanplay_token'));
+    delegations = createMeshDelegations(mesh);
+    _joinNotices = mesh.joinNotices.listen((device) {
+      _joinPrompts = _joinPrompts.then((_) => _askAboutJoin(device)).catchError(
+          (Object _) {});
+    });
     final nextUiEntry = NextUiPreference.setting();
     phase('settings entries: next ui');
     await Future<void>.delayed(Duration.zero);
@@ -334,6 +353,7 @@ final class NextCore {
       diskDeletion,
       settingConsent,
       classicScan,
+      delegations,
     ];
     engine = TaskEngine(
         store: jobs,
@@ -362,11 +382,29 @@ final class NextCore {
     settingConsent.returnTarget = followups.downloadReturnTarget;
     mediaSources.returnTarget = followups.downloadReturnTarget;
     attachMeshDelivery(mesh, followups);
+    delegationHost = attachMeshDelegation(mesh, delegations, engine, followups);
     mesh.describeSelf = () async {
       await harnessLocation.ready;
+      final chat = followups.chatHost;
+      final running = chat != null && chat.available;
       return {
         'host': 'gui',
         'conversationHost': true,
+        // Live: whether Nipa runs on this device now (Next's interface is
+        // open, the agent is on and her runtime and model are in place).
+        'agent': {
+          'runs': running,
+          if (!running)
+            'reason': followups.unavailableReason ??
+                'Nipa is not running on this device.',
+          if (running) ...{
+            'model': chat.model,
+            'provider': chat.provider,
+            'busy': chat.threadLiveness.keys.any(chat.busyFor),
+            if (await chat.conversationCount() case final count?)
+              'conversations': count,
+          },
+        },
         'mediaRoots': media.service.authorizedRoots().toList(),
         'programExecution': {
           'enabled': programs.enabled,
@@ -567,6 +605,7 @@ final class NextCore {
       ClassicOperations(settings),
       AppRuntimeCapability(appRuntime, appRestart),
       MeshCapability(mesh),
+      MeshDelegationCapability(delegations),
       state,
     ]);
     phase('capabilities: values');
@@ -699,6 +738,14 @@ final class NextCore {
     nipaGate.set(true);
   }
 
+  /// A device joined that this one had not seen. The person is asked once
+  /// they are at a screen: theirs, or removed on the spot. No answer leaves it
+  /// to be asked again the next time.
+  Future<void> _askAboutJoin(JsonMap device) => answerJoin(device,
+      prompt: meshJoinPrompt,
+      remove: mesh.revoke,
+      acknowledge: mesh.acknowledgeJoin);
+
   /// Whether Nipa's services run, for lab observation.
   bool get nipaRunning => _nipa;
 
@@ -766,6 +813,8 @@ final class NextCore {
     hooks.observeEvent = null;
     await hooks.disable();
     harnessLocation.dispose();
+    await _joinNotices?.cancel();
+    await _joinPrompts;
     await mesh.close();
     await downloads.stop();
     await danmaku.stopRestoring();

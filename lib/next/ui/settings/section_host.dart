@@ -237,6 +237,17 @@ class DevicesSectionState extends State<DevicesSection> {
     await _load();
   }
 
+  /// Takes a device out of the account's devices; it loses access at once.
+  Future<void> _remove(UiMeshDevice d) async {
+    setState(() => _error = null);
+    try {
+      await widget.host.removeMeshDevice(d.id);
+    } catch (_) {
+      if (mounted) setState(() => _error = '没能移除');
+    }
+    await _load();
+  }
+
   Future<void> _setPrograms(bool allowed) async {
     setState(() => _programs = allowed);
     try {
@@ -290,7 +301,10 @@ class DevicesSectionState extends State<DevicesSection> {
         Padding(
           padding: const EdgeInsets.only(bottom: 28),
           child: Wrap(spacing: 14, runSpacing: 14, children: [
-            for (final d in m.devices) _DeviceCard(device: d),
+            for (final d in m.devices)
+              _DeviceCard(
+                  device: d,
+                  onRemove: d.self || d.id.isEmpty ? null : () => _remove(d)),
           ]),
         ),
       SettingsCard(children: [
@@ -377,8 +391,11 @@ class DevicesSectionState extends State<DevicesSection> {
 
 /// A device of the mesh: lit when it is there.
 class _DeviceCard extends StatelessWidget {
-  const _DeviceCard({required this.device});
+  const _DeviceCard({required this.device, this.onRemove});
   final UiMeshDevice device;
+
+  /// Null for this device itself: it is not removed from here.
+  final VoidCallback? onRemove;
 
   @override
   Widget build(BuildContext context) {
@@ -399,6 +416,10 @@ class _DeviceCard extends StatelessWidget {
           NextIcon(NextGlyph.device,
               size: 26, color: on ? NextColors.paper : NextColors.p4),
           const Spacer(),
+          if (onRemove != null) ...[
+            ConfirmPill(label: '移除', confirm: '确定移除', onConfirm: onRemove!),
+            const SizedBox(width: 10),
+          ],
           StateDot(on ? NextColors.mint : NextColors.p4, glow: on),
         ]),
         const Spacer(),

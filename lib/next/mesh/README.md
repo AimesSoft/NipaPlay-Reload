@@ -147,6 +147,44 @@ UDP 32124 每 30 秒广播 deviceId 和监听端口，同时在 mDNS（UDP 5353�
 均经过同样的双向 TLS；用户自有 TCP relay 只需要转发字节，
 协调服务从不转发任务或媒体数据。
 
+## 委托：把任务交给另一台设备上的 Nipa
+
+每台设备上的 Nipa 各记各的。要在别的设备上做的事，Nipa 可以自己用 `mesh.invoke` 远程调用那台设备
+的能力，也可以用 `mesh.delegate {deviceId, task, references?}` 把整件事交给那台设备上的 Nipa。
+用不用、交给谁、任务怎么写、要不要拆开，都由发起方的 Nipa 判断；没有自动委托，没有按任务类型路由。
+
+- **发起方**（`delegation.dart`）：`mesh.delegate` 先向目标设备发 `mesh/agent/turn`，对方接下才返回，
+  返回本地后台任务 `agent.delegate`（`jobId`）；对方没有运行 Nipa 时立即失败，原因是对方自己的话。
+  任务沿 `mesh/agent/wait` 跟着对方的回合：回合状态、步骤数、最后一句写进任务的 `details`
+  （`remoteState`、`steps`、`lastSentence`，也是 `currentActivity`），结束时回执给出对方最后的回复
+  （`summary`）、她在那里开出的任务（`startedTasks`）和那段对话（`threadId`，可用 `mesh.invoke`
+  在那台设备上 `chat.read` 看全文）。完成、失败、被取消都作为后续回到发起委托的对话
+  （`followup` 以 `when.jobId` 登记，和别的任务的终态一样）。取消任务向对方发 `mesh/agent/interrupt`
+  并等它停下，回执写明是否确认（`remoteStopped`）；对方连不上时任务进入重试（5 秒起倍增到 1 分钟），
+  不替用户放弃，用户或 Nipa 可以取消。
+- **接收方**（`delegation_host.dart`）：`mesh/agent/turn|wait|interrupt` 是宿主方法，不是 Action，所以
+  Nipa 不能直接调别人的宿主方法，`mesh.delegate` 也不在 `mesh.invoke` 的白名单里。只有同账号设备
+  到得了这里（双向 TLS 与设备名单），handler 仍要求发起者是名单里的有效设备，并且一次委托只有发起
+  它的设备能跟、能停。本机 Nipa 没有运行（桌面：Next 界面关着、agent 没开或模型没配；无界面：开关、
+  模型、运行环境缺哪项）时返回 `unavailable`，消息就是本机说的原因。
+- **对话归属**：每台发起设备一段委托对话（`mesh-delegations.json` 记着），标题“来自 <设备名> 的委托”，
+  第一条消息先写来源（“来自 <设备名> 上的 Nipa 的委托”），再是原文任务和引用（原样转交，未经核对）。
+  对话空闲时同一设备的下一次委托接着它，让对方带着前文做事；对话里有人在说话或有委托在进行时，
+  新委托另开一段，任务不会悄悄排在别的后面。委托对话出现在本机的对话列表里，里面 Nipa 的调用来源是
+  `harness_cli:chat:delegate-<token>`（不是本机用户那段对话），所以出现在动态里，人随时能读、能插话。
+  重启后对话仍归属于它自己；没结束的委托回合被说成 `interrupted`。
+- **进度**由接收方的对话宿主事件推出（一个步骤是一次命令、工具调用、文件修改等已完成的条目），
+  `wait` 是对宿主事件的等待（最长 55 秒），不是轮询数据库。回复最长 60000 字符。
+
+## 新设备与移除
+
+设备名单里出现本机从没见过的同账号设备时，记进 `mesh-known-devices.json`（第一次读到的名单是
+基线，不算新设备）。有屏幕的设备（桌面）弹一个提示：“有新设备加入：<名字>（平台）”，两个按钮：
+“是我”和“不是我”。“不是我”立即移除（`MeshRuntime.revoke`：协调服务吊销、本机马上关闭它的会话并拒绝
+它的新连接、通知其他设备）；没有回答（关掉窗口、窗口弹不出来）的设备下次启动再问。无界面主机不弹窗，
+只在 `mesh.devices` 里给每台设备 `firstSeenAt` 和 `acknowledged`。设置 → 设备里每台别的设备都有“移除”
+（点两下确认）。移除是宿主方法，没有 Action 能调用它。
+
 ## 宿主配置与正式 CA
 
 宿主在 AppStorage/next/mesh.json 配置：
@@ -165,8 +203,8 @@ UDP 32124 每 30 秒广播 deviceId 和监听端口，同时在 mDNS（UDP 5353�
 启用和信任配置由宿主管理，Agent 不能通过 Action 给自己开放网络权限或更换签发者。
 `broadcastDiscovery` 是宿主 JSON 中的布尔开关，默认 `true`；设为 `false` 不启动 UDP
 32124 的广播发现，续证重启监听时仍保留这个选择。`loopbackOnly:true` 使 Mesh 只监听
-`127.0.0.1`，也不上报网卡 LAN 地址。无界面宿主强制回环 Mesh 监听；候选可以是用户
-自有 SSH 转发端口，同样执行双向 TLS。加入本身不依赖广播。设备自我描述来自已认证
+`127.0.0.1`，也不上报网卡 LAN 地址；候选可以是用户自有 SSH 转发端口，同样执行双向 TLS。
+无界面宿主与桌面一样默认监听所有网卡并上报局域网地址（要限制在本机就写 `loopbackOnly`）。加入本身不依赖广播。设备自我描述来自已认证
 的 `mesh/describe`，不是协调服务代报的磁盘信息；角色与存储标签由宿主配置。
 地址可通过 settings.set {key:"mesh.addressCandidates", value:[...]} 修改，下个心跳上报。
 登录和退出由现有账号宿主处理；账号凭据仍只在保险库中。Mesh 每 30 秒在本地检查凭据变化，

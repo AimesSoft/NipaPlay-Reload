@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart' show immutable;
 
+import '../../chat/delegation_message.dart';
 import '../../ui_data/ui_data.dart';
 import '../data/discover.dart';
 
@@ -79,6 +80,7 @@ abstract final class ChatContext {
 
   /// What you said, without what the interface added.
   static String strip(String text) {
+    if (isDelegation(text)) return showDelegation(text);
     final marks = [text.indexOf(_mark), text.indexOf(_files), text.indexOf(_memory)]
         .where((i) => i >= 0);
     final at = marks.isEmpty ? -1 : marks.reduce((a, b) => a < b ? a : b);

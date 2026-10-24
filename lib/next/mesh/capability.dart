@@ -23,7 +23,7 @@ final class _MeshAction extends Action<MeshJson, JsonEncodable> {
       id: 'mesh.$operation',
       title: 'Mesh $operation',
       description: operation == 'devices'
-          ? 'List same-account devices, authenticated self-descriptions, reachability, and Action catalogs. Filter by deviceIds, or set includeCatalog:false to omit schemas for topology queries. Self-descriptions include host roles, storage paths, read-only media roots and the device hosting Nipa. Remote access is authorized by each host; JSON responses remain bounded by the 1 MiB Mesh frame.'
+          ? 'List same-account devices, authenticated self-descriptions, reachability, and Action catalogs. Filter by deviceIds, or set includeCatalog:false to omit schemas for topology queries. Self-descriptions include host roles, storage paths, read-only media roots and the device hosting Nipa. description.agent says whether Nipa runs on that device now (runs; reason when not; model, busy and conversations while she does), live on every call; firstSeenAt says when this device first saw a device. Remote access is authorized by each host; JSON responses remain bounded by the 1 MiB Mesh frame. mesh.delegate hands a task to the Nipa of another device.'
           : effect == Effect.destructive
               ? 'Invoke a destructive Action on an authorized device. Only disk-file deletion waits for the user in that device’s NipaPlay UI; other operations execute directly and are audited.'
               : 'Invoke a non-destructive Action on a same-account device authorized by its host. A download started from a conversation returns completion facts to that originating device and thread.',

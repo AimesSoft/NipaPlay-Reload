@@ -8,6 +8,7 @@ import 'package:nipa_harness/nipa_harness.dart';
 import 'package:nipaplay/security/credential_vault.dart';
 import '../platform/lab_profile.dart';
 import 'coordinator.dart';
+import 'delegation_host.dart' show delegationMethods;
 import 'device_source.dart';
 import 'discovery.dart';
 import 'host.dart';
@@ -65,7 +66,9 @@ bool meshActionAllowed(String id) =>
 
 String? meshActionRestriction(String id) => meshActionAllowed(id)
     ? null
-    : 'No remote contract is registered for this action; host credential enrollment stays local.';
+    : id == 'mesh.delegate'
+        ? 'Delegation starts on the device that hands the work over; another device cannot start it on this one.'
+        : 'No remote contract is registered for this action; host credential enrollment stays local.';
 
 /// Trust anchors are release inputs, never learned from the coordinator.
 const meshProductionIssuerPem = '';
@@ -76,7 +79,6 @@ final class MeshRuntime implements MeshDeviceSource {
     required this.vault,
     required this.token,
     this.authorize = authorizeMeshPeer,
-    this.forceLoopback = false,
     this.coordinatorRetryDelay = const Duration(seconds: 15),
     this.candidateStaggerDelay = const Duration(milliseconds: 250),
     this.unknownPeerRefreshCooldown = const Duration(seconds: 30),
@@ -94,7 +96,6 @@ final class MeshRuntime implements MeshDeviceSource {
   final Future<String?> Function() token;
   final MeshNative native;
   final Future<Failure?> Function(String, String) authorize;
-  final bool forceLoopback;
   final Duration coordinatorRetryDelay;
   final Duration candidateStaggerDelay;
   final Duration unknownPeerRefreshCooldown;
@@ -120,6 +121,11 @@ final class MeshRuntime implements MeshDeviceSource {
   Future<JsonMap> Function(String, JsonMap)? receiveDelivery;
   Future<JsonMap> Function()? describeSelf;
   Future<JsonMap> Function(String, JsonMap, String)? libraryRequest;
+
+  /// The host methods of delegation (`mesh/agent/*`): another device's Nipa
+  /// handing this device's Nipa a task. Not Actions, so Nipa cannot call them
+  /// on another device; the method, its params and the authenticated sender.
+  Future<JsonMap> Function(String, JsonMap, String)? agentRequest;
   Future<void> Function()? hostConfigurationChanged;
   JsonMap hostConfiguration = {};
   String _bindHost = '0.0.0.0';
@@ -235,6 +241,13 @@ final class MeshRuntime implements MeshDeviceSource {
     await startConfigured();
   }
 
+  /// Where the node listens for a host configuration (`mesh.json`): every
+  /// interface (mutual TLS is what guards it), or only this machine when it
+  /// says `loopbackOnly`. A headless host is no exception: the device that
+  /// serves the others from a closet must be reachable by them.
+  static String bindHostFor(JsonMap configuration) =>
+      configuration['loopbackOnly'] == true ? '127.0.0.1' : '0.0.0.0';
+
   /// Offline until [startConfigured] again: no listener, no login watch, no
   /// heartbeat.
   Future<void> stop() async {
@@ -295,8 +308,7 @@ final class MeshRuntime implements MeshDeviceSource {
       status = 'disabled';
       return;
     }
-    _bindHost =
-        forceLoopback || json['loopbackOnly'] == true ? '127.0.0.1' : '0.0.0.0';
+    _bindHost = bindHostFor(json);
     _broadcast = json['broadcastDiscovery'] as bool? ?? true;
     final caPath = Platform.environment['NIPAPLAY_MESH_DEV_CA'];
     final ca = meshDevelopmentHost && caPath != null
@@ -613,7 +625,6 @@ final class MeshRuntime implements MeshDeviceSource {
       throw StateError('Attach the Core Harness before joining Mesh.');
     }
     _ca = ca;
-    if (forceLoopback) _bindHost = '127.0.0.1';
     _broadcast = broadcast;
     _coordinator = coordinator;
     identity ??= await MeshIdentity.load(root, vault, native);
@@ -810,6 +821,9 @@ final class MeshRuntime implements MeshDeviceSource {
       throw const Failure(
           FailureCode.unavailable, 'This Mesh device has been revoked.');
     }
+    // Remembering who is new never delays or fails a roster refresh.
+    final roster = [for (final device in _devices) Map<String, Object?>.from(device)];
+    _joinWork = _joinWork.then((_) => _noteJoins(roster)).catchError((Object _) {});
     _hostChanges.add(null);
   }
 
@@ -921,11 +935,137 @@ final class MeshRuntime implements MeshDeviceSource {
     ]);
   }
 
+  /// Removes [deviceId] from the account's devices: it loses access at once
+  /// everywhere (this device closes its sessions and refuses its connections
+  /// before this returns; the others are told). Only the person at a host
+  /// asks for this; no Action reaches it.
   Future<void> revoke(String deviceId) async {
-    await _coordinator!.request(
+    if (deviceId == identity?.deviceId) {
+      throw const Failure(FailureCode.invalidInput,
+          'A device cannot remove itself; leave the mesh instead.');
+    }
+    final coordinator = _coordinator;
+    if (coordinator == null) {
+      throw const Failure(FailureCode.unavailable, 'Mesh is not configured.');
+    }
+    await coordinator.request(
         'POST', '/mesh/v1/devices/$deviceId/revoke', {'device_id': deviceId});
     await refreshDevices();
+    await acknowledgeJoin(deviceId);
     await notifyDevicesChanged(reason: 'revoked', targetDeviceId: deviceId);
+  }
+
+  /// The name of an active device of this account; null for any other.
+  String? deviceName(String deviceId) {
+    for (final device in _devices) {
+      if (device['device_id'] == deviceId && device['revoked'] == false) {
+        return device['device_name'] as String? ?? deviceId;
+      }
+    }
+    return null;
+  }
+
+  // Devices seen for the first time. A device that appears in the roster and
+  // was never seen here is announced once to the screens (a prompt with "not
+  // me") until someone answers; a host without a screen only records it.
+  final _joinNotices = StreamController<JsonMap>.broadcast();
+  Map<String, JsonMap>? _known;
+  final _announced = <String>{};
+  Future<void> _knownWrites = Future.value();
+  Future<void> _joinWork = Future.value();
+
+  /// Completes when the devices seen so far have been looked at for newcomers
+  /// (what was found has been announced and recorded).
+  Future<void> get joinsSettled => _joinWork;
+
+  /// A device that is new to this one and has not been answered for yet:
+  /// `deviceId`, `name`, `platform`, `firstSeenAt`.
+  Stream<JsonMap> get joinNotices => _joinNotices.stream;
+
+  File get _knownFile => File('${root.path}/mesh-known-devices.json');
+
+  Future<void> _loadKnown() async {
+    if (_known != null) return;
+    final known = <String, JsonMap>{};
+    var baseline = true;
+    if (await _knownFile.exists()) {
+      baseline = false;
+      try {
+        final saved = jsonDecode(await _knownFile.readAsString()) as JsonMap;
+        for (final entry in (saved['devices'] as Map? ?? {}).entries) {
+          known[entry.key as String] =
+              Map<String, Object?>.from(entry.value as Map);
+        }
+      } on FormatException {
+        baseline = true;
+      }
+    }
+    _known = known;
+    _knownBaseline = baseline;
+  }
+
+  bool _knownBaseline = false;
+
+  Future<void> _writeKnown() {
+    final snapshot = jsonEncode({'devices': _known});
+    return _knownWrites = _knownWrites.then((_) async {
+      final pending = File('${_knownFile.path}.pending');
+      await pending.writeAsString(snapshot, flush: true);
+      await pending.rename(_knownFile.path);
+    });
+  }
+
+  Future<void> _noteJoins(List<JsonMap> roster) async {
+    await _loadKnown();
+    final known = _known!;
+    final self = identity?.deviceId;
+    final now = DateTime.now().toUtc().toIso8601String();
+    var changed = false;
+    for (final device in roster) {
+      final id = device['device_id'] as String;
+      if (device['revoked'] == true || known.containsKey(id)) continue;
+      // The first roster this device ever reads is not news: everything in it
+      // was there before, as is this device itself.
+      known[id] = {
+        'name': device['device_name'],
+        'platform': device['platform'],
+        'firstSeenAt': now,
+        'acknowledged': _knownBaseline || id == self,
+      };
+      changed = true;
+    }
+    _knownBaseline = false;
+    if (changed) await _writeKnown();
+    for (final entry in known.entries) {
+      if (entry.value['acknowledged'] == true ||
+          entry.key == self ||
+          !_active.contains(entry.key) ||
+          !_announced.add(entry.key)) {
+        continue;
+      }
+      _joinNotices.add({'deviceId': entry.key, ...entry.value});
+    }
+  }
+
+  /// The person at a screen answered for [deviceId] (it is theirs, or it was
+  /// removed): it is not announced again.
+  Future<void> acknowledgeJoin(String deviceId) async {
+    await _joinWork;
+    await _loadKnown();
+    final entry = _known![deviceId];
+    if (entry == null || entry['acknowledged'] == true) return;
+    entry['acknowledged'] = true;
+    await _writeKnown();
+  }
+
+  /// What this device knows of when a device first appeared.
+  JsonMap _joinFacts(String deviceId) {
+    final entry = _known?[deviceId];
+    if (entry == null) return const {};
+    return {
+      'firstSeenAt': entry['firstSeenAt'],
+      'acknowledged': entry['acknowledged'] == true,
+    };
   }
 
   Future<void> setManualAddresses(Object? value) async {
@@ -955,13 +1095,17 @@ final class MeshRuntime implements MeshDeviceSource {
     // The roster is refreshed on heartbeats and on "devices changed" pushes,
     // never per call: reading it must not spend the coordinator's rate limit.
     if (_node == null) return {'status': status, 'devices': <Object?>[]};
+    await _joinWork;
     return {
       'status': status,
       if (discoveryNotice != null) 'discoveryNotice': discoveryNotice,
       'devices': [
         for (final device in _devices)
           if (deviceIds == null || deviceIds.contains(device['device_id']))
-            await _describe(device, includeCatalog: includeCatalog),
+            {
+              ...await _describe(device, includeCatalog: includeCatalog),
+              ..._joinFacts(device['device_id'] as String),
+            },
       ]
     };
   }
@@ -1549,6 +1693,33 @@ final class MeshRuntime implements MeshDeviceSource {
         await native.respond(node, event.requestId, jsonEncode(response));
         return;
       }
+      if (delegationMethods.contains(frame['method'])) {
+        final host = agentRequest;
+        if (host == null) {
+          throw const FormatException('No agent host.');
+        }
+        try {
+          final result = await host(frame['method'] as String,
+              (frame['params'] as JsonMap?) ?? const {}, event.deviceId);
+          response = {'jsonrpc': '2.0', 'id': frame['id'], 'result': result};
+        } on Failure catch (failure) {
+          // The reason travels: a Nipa that cannot take a task says why.
+          response = {
+            'jsonrpc': '2.0',
+            'id': frame['id'],
+            'error': {
+              'code': -32001,
+              'message': failure.message,
+              'data': {
+                'code': failure.code.wireName,
+                'message': failure.message,
+              }
+            }
+          };
+        }
+        await native.respond(node, event.requestId, jsonEncode(response));
+        return;
+      }
       if ((frame['method'] as String).startsWith('mesh/library/')) {
         if (libraryRequest == null) {
           throw const FormatException('No library host.');
@@ -1698,6 +1869,9 @@ final class MeshRuntime implements MeshDeviceSource {
     await _routeWrites;
     _coordinator?.close();
     await _hostChanges.close();
+    await _joinWork;
+    await _joinNotices.close();
+    await _knownWrites;
   }
 }
 

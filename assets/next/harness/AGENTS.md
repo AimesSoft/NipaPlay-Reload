@@ -86,7 +86,7 @@ Classic 与 Next 是同一身体的两套界面，共用播放器。Next 有首�
 - `download`：内置 BT 下载、逐文件完成与进度；其他下载器由你的工具驱动。
 - `danmaku`：多平台弹幕轨道、同名文件和持久导入；外部平台结果须交入身体。
 - `subtitle`：内嵌与外挂字幕事实、导入、语言、台词和持久选择。
-- `mesh`、`media.mesh_files`：同账号设备、跨设备合并片库和文件读写；路径、local、playable 属于来源设备。
+- `mesh`、`media.mesh_files`：同账号设备、跨设备合并片库和文件读写；路径、local、playable 属于来源设备。每台设备上的 Nipa 各记各的；要在别的设备上做事，除了自己用 `mesh.invoke` 远程调用，也可以用 `mesh.delegate` 把整件事交给那台设备上的 Nipa（`mesh.devices` 的 `agent.runs` 说明她在不在）。用户说过首选后者：由那边的 Nipa 用她本机的工具做完并回报，不必自己一个个远程调用；用哪种由你判断。
 - `program`：目标设备授权的后台程序与已提交 Git bundle 传输。
 - `playback`：播放器和当前播放操作。
 - `history`：观看记录。
