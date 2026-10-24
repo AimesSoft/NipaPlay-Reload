@@ -288,7 +288,8 @@ void main() {
     expect((await terminal).receipt!.verification, VerificationLevel.verified);
   });
 
-  test('task.list returns every task unless asked for a page', () async {
+  test('task.list reads a page of 50 and says where the next one starts',
+      () async {
     final harness = Harness([TaskCapability(engine)]);
     for (var i = 0; i < 60; i++) {
       await engine.submit(type: 'test', title: 'T$i');
@@ -298,7 +299,13 @@ void main() {
                 as Completed)
             .value
             .toJson());
-    final all = await list({});
+    final byDefault = await list({});
+    expect(byDefault['jobs'], hasLength(50));
+    expect(byDefault['nextOffset'], 50);
+    final rest = await list({'offset': 50});
+    expect(rest['jobs'], hasLength(10));
+    expect(rest['nextOffset'], isNull);
+    final all = await list({'limit': 1000});
     expect(all['jobs'], hasLength(60));
     expect(all['nextOffset'], isNull);
     final first = await list({'limit': 25});

@@ -35,8 +35,8 @@ final class _TaskAction extends Action<_TaskInput, _TaskOutput> {
         title: '${operation[0].toUpperCase()}${operation.substring(1)} task',
         description: switch (operation) {
           'list' =>
-            'List persisted task snapshots, optionally filtering by state or type. '
-                'Without limit every matching task is returned; pass limit (and offset) to read a page, and nextOffset, when present, continues after it. '
+            'List persisted task snapshots in pages of 50 by default (oldest first), optionally filtering by state or type. '
+                'Pass limit and offset to read another page; nextOffset, when present, continues after the page and is absent on the last one. '
                 'origin, when present, records who submitted the task, taken from the call that created it.',
           'get' =>
             'Read the complete task snapshot. origin, when present, records who submitted the task. succeeded means verification finished; '
@@ -130,8 +130,8 @@ final class _TaskAction extends Action<_TaskInput, _TaskOutput> {
               ? null
               : JobState.values.singleWhere((s) => s.wireName == state));
       final offset = json['offset'] as int? ?? 0;
-      final limit = json['limit'] as int?;
-      final page = jobs.skip(offset).take(limit ?? jobs.length).toList();
+      final limit = json['limit'] as int? ?? 50;
+      final page = jobs.skip(offset).take(limit).toList();
       return Completed(_TaskOutput({
         'jobs': [for (final job in page) job.toJson()],
         'nextOffset':
