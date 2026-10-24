@@ -65,18 +65,23 @@ const settingsDeniedPrefixes = <String>[
   'agent.permission',
 ];
 
+final _deniedKeys = {for (final key in settingsDenylist) key.toLowerCase()};
+final _deniedPrefixes = {
+  for (final prefix in settingsDeniedPrefixes) prefix.toLowerCase()
+};
+final _secretName = RegExp(
+    r'(^|[._])(password|passwd|token|secret|api_?key|credential)([._]|$)');
+final _camelCase = RegExp(r'([a-z])([A-Z])');
+
 bool isSettingDenied(String key) {
   final normalized = key.toLowerCase();
-  final segmented = key
-      .replaceAllMapped(RegExp(r'([a-z])([A-Z])'), (m) => '${m[1]}_${m[2]}')
-      .toLowerCase();
+  final segmented =
+      key.replaceAllMapped(_camelCase, (m) => '${m[1]}_${m[2]}').toLowerCase();
   return (CredentialKeyPolicy.isSecretKey(normalized) &&
           normalized != 'plugin_enabled_ids') ||
-      settingsDenylist.any((v) => v.toLowerCase() == normalized) ||
-      settingsDeniedPrefixes
-          .any((v) => normalized.startsWith(v.toLowerCase())) ||
-      RegExp(r'(^|[._])(password|passwd|token|secret|api_?key|credential)([._]|$)')
-          .hasMatch(segmented) ||
+      _deniedKeys.contains(normalized) ||
+      _deniedPrefixes.any(normalized.startsWith) ||
+      _secretName.hasMatch(segmented) ||
       normalized.endsWith('password') ||
       normalized.endsWith('token') ||
       normalized.endsWith('apikey');

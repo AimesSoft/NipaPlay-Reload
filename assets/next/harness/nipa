@@ -314,6 +314,20 @@ def catalog_summary(catalog):
                         for a in catalog["actions"]]}
 
 
+def all_tasks(client):
+    """Every task: task.list answers in pages (a device that predates paging answers whole)."""
+    jobs, offset = [], 0
+    while True:
+        page = client.call("task.list", {"limit": 500, "offset": offset})
+        if page.get("status") != "completed":
+            return client.call("task.list", {}) if offset == 0 else page
+        result = page["result"]
+        jobs.extend(result["jobs"])
+        offset = result.get("nextOffset")
+        if offset is None:
+            return {**page, "result": {k: v for k, v in result.items() if k != "nextOffset"} | {"jobs": jobs}}
+
+
 def task_summary(envelope):
     if envelope.get("status") != "completed":
         return envelope
@@ -364,7 +378,7 @@ def main():
             client.select_device(args.device)
         if args.command == "status":
             if client.device:
-                data = {"device": client.device, "tasks": client.call("task.list", {})}
+                data = {"device": client.device, "tasks": all_tasks(client)}
                 if not args.full:
                     data = {"device": {k: client.device.get(k) for k in
                                        ("deviceId", "device_name", "online")},

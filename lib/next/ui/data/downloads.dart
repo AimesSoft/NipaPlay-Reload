@@ -14,10 +14,15 @@ final class NextDownloads {
   /// Every download NipaPlay keeps, newest first; removed ones are gone
   /// (an ended one's receipt says its session is no longer there).
   Future<List<UiDownload>> list() async {
+    final all = <Map>[];
+    for (int? offset = 0; offset != null;) {
+      final page = await calls
+          .call('task.list', {'type': 'download', 'limit': 500, 'offset': offset});
+      all.addAll((page['jobs'] as List).cast<Map>());
+      offset = page['nextOffset'] as int?;
+    }
     final jobs = [
-      for (final job in ((await calls.call('task.list', {'type': 'download'}))[
-              'jobs'] as List)
-          .cast<Map>())
+      for (final job in all)
         if (job['state'] != 'cancelled' &&
             job['state'] != 'cancelling' &&
             ((job['receipt'] as Map?)?['details'] as Map?)?['sessionPresent'] !=

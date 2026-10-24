@@ -30,11 +30,16 @@ final class StateView {
       this.readAll,
       this.cursorKey,
       this.cursorOrder = const [],
+      this.background = false,
       this.relations = const {}});
   final String name, description;
   final ObjectSchema fields;
   final StateReader read;
   final Future<StateRows> Function()? readAll;
+
+  /// Reconstructed against the library worker's own database connection.
+  final bool background;
+
   /// Views whose rows can be removed use a value anchor instead of an offset.
   final String? cursorKey;
   final List<JsonMap> cursorOrder;
@@ -144,6 +149,8 @@ final class StateCapability implements Capability {
     actions = [_StateAction(this, false), _StateAction(this, true)];
   }
   final Map<String, StateView> views;
+  Future<JsonMap> Function(JsonMap)? queryWorker;
+  Future<Object?> Function()? prepareActivity;
   @override
   late final List<Action> actions;
 
@@ -185,10 +192,13 @@ final class StateCapability implements Capability {
           _invalid('invalid_filter', 'Unknown filter operator.');
         }
         final fieldSchema = view.fields.properties[e.key]!;
-        if (fieldSchema is ObjectSchema || fieldSchema is ArraySchema && predicate.key != 'contains') {
-          _invalid('invalid_filter', 'Objects cannot be filtered; arrays support contains only.');
+        if (fieldSchema is ObjectSchema ||
+            fieldSchema is ArraySchema && predicate.key != 'contains') {
+          _invalid('invalid_filter',
+              'Objects cannot be filtered; arrays support contains only.');
         }
-        final schema = fieldSchema is ArraySchema ? fieldSchema.items : fieldSchema;
+        final schema =
+            fieldSchema is ArraySchema ? fieldSchema.items : fieldSchema;
         if (predicate.key == 'in') {
           if (predicate.value is! List) {
             _invalid('invalid_filter', 'in expects an array.');
@@ -204,7 +214,8 @@ final class StateCapability implements Capability {
           _invalid(
               'invalid_filter', 'Filter value type differs from the field.');
         }
-        if (fieldSchema is! ArraySchema && predicate.key == 'contains' &&
+        if (fieldSchema is! ArraySchema &&
+            predicate.key == 'contains' &&
             (schema is! StringSchema || predicate.value == null)) {
           _invalid('invalid_filter', 'contains requires a text field.');
         }
@@ -232,6 +243,7 @@ final class StateCapability implements Capability {
   }
 
   Future<JsonMap> query(JsonMap input) async {
+    if (queryWorker case final worker?) return worker(input);
     final view = _view(input['view'] as String);
     _validate(view, input);
     if (utf8.encode(jsonEncode(input)).length > 64 * 1024) {
@@ -246,7 +258,8 @@ final class StateCapability implements Capability {
     final order = <JsonMap>[
       ...((input['orderBy'] as List?)?.cast<JsonMap>() ?? view.cursorOrder),
       if (view.cursorKey != null &&
-          !((input['orderBy'] as List?) ?? []).any((o) => (o as Map)['field'] == view.cursorKey))
+          !((input['orderBy'] as List?) ?? [])
+              .any((o) => (o as Map)['field'] == view.cursorKey))
         {'field': view.cursorKey, 'direction': 'asc'}
     ];
     if (input['cursor'] case final String cursor) {
@@ -263,15 +276,19 @@ final class StateCapability implements Capability {
         offset = decoded['offset'] as int;
         sourceOffset = decoded['sourceOffset'] as int;
         if (view.cursorKey != null) {
-          if (decoded['anchor'] != null && (decoded['anchor'] is! List ||
-              (decoded['anchor'] as List).length != order.length) ||
+          if (decoded['anchor'] != null &&
+                  (decoded['anchor'] is! List ||
+                      (decoded['anchor'] as List).length != order.length) ||
               sourceOffset != 0) {
             _invalid('invalid_cursor', 'Cursor needs a stable history anchor.');
           }
           anchor = (decoded['anchor'] as List?)?.cast<Object?>();
           for (var i = 0; i < (anchor?.length ?? 0); i++) {
             final value = anchor![i];
-            if (value != null && view.fields.properties[order[i]['field']]!.validate(value).isNotEmpty) {
+            if (value != null &&
+                view.fields.properties[order[i]['field']]!
+                    .validate(value)
+                    .isNotEmpty) {
               _invalid('invalid_cursor', 'Invalid anchor value.');
             }
           }
@@ -285,10 +302,8 @@ final class StateCapability implements Capability {
     }
     final context = _ReadContext(this, input['timeoutMs'] as int?);
     final source = await context.rows(view, startOffset: sourceOffset);
-    var matched = await _match(source, {
-      ...input,
-      if (view.cursorKey != null) 'orderBy': order
-    });
+    var matched = await _match(
+        source, {...input, if (view.cursorKey != null) 'orderBy': order});
     if (anchor != null) {
       matched = matched.where((row) {
         for (var i = 0; i < order.length; i++) {
@@ -328,12 +343,19 @@ final class StateCapability implements Capability {
       'nextCursor': more || hasScanContinuation
           ? base64Url.encode(utf8.encode(jsonEncode({
               'query': fingerprint,
-              if (view.cursorKey != null) 'anchor': index > 0
-                ? [for (final key in order) matched[index - 1][key['field']]]
-                : anchor,
+              if (view.cursorKey != null)
+                'anchor': index > 0
+                    ? [
+                        for (final key in order)
+                          matched[index - 1][key['field']]
+                      ]
+                    : anchor,
               'offset': more ? index : 0,
-              'sourceOffset': view.cursorKey != null ? 0 :
-                more ? sourceOffset : sourceOffset + source.length
+              'sourceOffset': view.cursorKey != null
+                  ? 0
+                  : more
+                      ? sourceOffset
+                      : sourceOffset + source.length
             })))
           : null,
       'truncated': more || context.warnings.isNotEmpty,
@@ -485,8 +507,13 @@ final class _ReadContext {
         rethrow;
       }
       throw Failure(failure.code, 'state_source_failed',
-          retryable: failure.retryable, details: {'source': view.name, 'stage': 'read',
-            'recoveryAction': 'Read state.describe for this view and diagnostics.status for host availability.'});
+          retryable: failure.retryable,
+          details: {
+            'source': view.name,
+            'stage': 'read',
+            'recoveryAction':
+                'Read state.describe for this view and diagnostics.status for host availability.'
+          });
     }
   }
 
@@ -496,9 +523,14 @@ final class _ReadContext {
         final Future<StateRows> pending;
         try {
           pending = view.readAll!();
-          final source = timeoutMs == null ? await pending : await pending.timeout(
-              Duration(milliseconds: (timeoutMs! - clock.elapsedMilliseconds).clamp(1, timeoutMs!)),
-              onTimeout: () => const StateRows([], warnings: ['time_limit']));
+          final source = timeoutMs == null
+              ? await pending
+              : await pending.timeout(
+                  Duration(
+                      milliseconds: (timeoutMs! - clock.elapsedMilliseconds)
+                          .clamp(1, timeoutMs!)),
+                  onTimeout: () =>
+                      const StateRows([], warnings: ['time_limit']));
           warnings.addAll(source.warnings);
           final slice = Slicer(), shown = <JsonMap>[];
           for (final row in source.rows) {
@@ -507,12 +539,18 @@ final class _ReadContext {
           }
           cache[view.name] = shown;
         } on Failure catch (failure) {
-          if (['history_unavailable', 'classic_library_unavailable'].contains(failure.message)) {
+          if (['history_unavailable', 'classic_library_unavailable']
+              .contains(failure.message)) {
             rethrow;
           }
-          throw Failure(failure.code, 'state_source_failed', retryable: failure.retryable,
-            details: {'source': view.name, 'stage': 'read',
-              'recoveryAction': 'Read state.describe for this view and diagnostics.status for host availability.'});
+          throw Failure(failure.code, 'state_source_failed',
+              retryable: failure.retryable,
+              details: {
+                'source': view.name,
+                'stage': 'read',
+                'recoveryAction':
+                    'Read state.describe for this view and diagnostics.status for host availability.'
+              });
         }
         observed[view.name] = DateTime.now().toUtc().toIso8601String();
       }
@@ -630,12 +668,18 @@ final class _StateAction extends Action<_StateJson, _StateJson> {
       try {
         return Completed(_StateJson(await capability.query(input.json)));
       } on Failure catch (failure) {
-        throw Failure(failure.code, failure.message, retryable: failure.retryable,
-          violations: failure.violations, details: {...failure.details, 'correlationId': invocation.id});
+        throw Failure(failure.code, failure.message,
+            retryable: failure.retryable,
+            violations: failure.violations,
+            details: {...failure.details, 'correlationId': invocation.id});
       } catch (_) {
         throw Failure(FailureCode.internal, 'state_read_failed', details: {
-          'source': input.json['view'], 'stage': 'query', 'correlationId': invocation.id,
-          'recoveryAction': 'Read diagnostics.status and the redacted logs; retry only after the source is available.'});
+          'source': input.json['view'],
+          'stage': 'query',
+          'correlationId': invocation.id,
+          'recoveryAction':
+              'Read diagnostics.status and the redacted logs; retry only after the source is available.'
+        });
       }
     }
     final views = input.json['view'] == null

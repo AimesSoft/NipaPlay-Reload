@@ -273,8 +273,3 @@ final class HarnessMemory implements MemoryData {
       };
 }
 
-/// Reject recognizable secrets on writes and redact them on reads/injection.
-String redactMemoryText(String value) => redactHarnessText(value).replaceAll(
-    RegExp(r'-----BEGIN (?:[A-Z ]*PRIVATE KEY)-----[\s\S]*?'
-        r'-----END (?:[A-Z ]*PRIVATE KEY)-----'),
-    '[redacted private key]');

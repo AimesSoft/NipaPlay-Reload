@@ -13,7 +13,9 @@ final class EpisodeHeat {
   final DanmakuStore store;
 
   Future<List<JsonMap>> tracks(String id, {LibraryReads? reads}) =>
-      reads == null ? _tracks(id) : reads.once(('tracks', id), () => _tracks(id));
+      reads == null
+          ? _tracks(id)
+          : reads.once(('tracks', id), () => _tracks(id));
 
   /// The danmaku tracks of an episode and of its files, in three queries:
   /// the files it is in, those entities' revisions, their bindings.
@@ -76,6 +78,7 @@ final class EpisodeHeat {
   Future<List<double>?> load(String id, int? runtimeMs,
       {LibraryReads? reads}) async {
     final tracks = await this.tracks(id, reads: reads);
+    if (tracks.isEmpty) return null;
     final chunks = <JsonMap>[];
     for (final key in tracks.map((b) => b['cache_key']).toSet()) {
       chunks.addAll(await store.db.query('danmaku_cache_chunks',
@@ -150,24 +153,45 @@ final class EpisodeHeat {
       final candidates = <({String text, int time})>[];
       for (final track in await tracks(id, reads: reads)) {
         final start = track['start'] as int, end = track['end'] as int?;
-        if (!seenTracks.add(jsonEncode([track['cache_key'], start, end, track['offset_ms']]))) continue;
+        if (!seenTracks.add(
+            jsonEncode([track['cache_key'], start, end, track['offset_ms']]))) {
+          continue;
+        }
         for (final entry in await store.entries(track['cache_key'] as String)) {
           final time = entry.sourceTimeMs + (track['offset_ms'] as int) - start;
-          if (time < 0 || time >= openingWindow.inMilliseconds ||
-              end != null && time >= end - start || duration != null && time >= duration) continue;
+          if (time < 0 ||
+              time >= openingWindow.inMilliseconds ||
+              end != null && time >= end - start ||
+              duration != null && time >= duration) {
+            continue;
+          }
           final text = entry.text.replaceAll(RegExp(r'\s+'), ' ').trim();
-          if (text.runes.length < 2 || text.runes.length > 18 ||
-              RegExp(r'(?:https?://|www\.|(?:[a-z0-9-]+\.)+[a-z]{2,24}\b|\b(?:\d{1,3}\.){3}\d{1,3}\b)', caseSensitive: false).hasMatch(text) ||
+          if (text.runes.length < 2 ||
+              text.runes.length > 18 ||
+              RegExp(r'(?:https?://|www\.|(?:[a-z0-9-]+\.)+[a-z]{2,24}\b|\b(?:\d{1,3}\.){3}\d{1,3}\b)',
+                      caseSensitive: false)
+                  .hasMatch(text) ||
               RegExp(r'(.)\1{3,}', unicode: true).hasMatch(text) ||
-              RegExp(r'[\x00-\x1f\x7f]').hasMatch(text)) continue;
-          final normalized = text.replaceAll(RegExp(r'[^\p{L}\p{N}]', unicode: true), '').toLowerCase();
-          if (normalized.runes.length < 2 || RegExp(r'^(.{1,3})\1{2,}$', unicode: true).hasMatch(normalized)) continue;
+              RegExp(r'[\x00-\x1f\x7f]').hasMatch(text)) {
+            continue;
+          }
+          final normalized = text
+              .replaceAll(RegExp(r'[^\p{L}\p{N}]', unicode: true), '')
+              .toLowerCase();
+          if (normalized.runes.length < 2 ||
+              RegExp(r'^(.{1,3})\1{2,}$', unicode: true).hasMatch(normalized)) {
+            continue;
+          }
           candidates.add((text: text, time: time));
         }
       }
-      candidates.sort((a, b) => a.time.compareTo(b.time) != 0 ? a.time.compareTo(b.time) : a.text.compareTo(b.text));
+      candidates.sort((a, b) => a.time.compareTo(b.time) != 0
+          ? a.time.compareTo(b.time)
+          : a.text.compareTo(b.text));
       for (final c in candidates) {
-        final normalized = c.text.replaceAll(RegExp(r'[^\p{L}\p{N}]', unicode: true), '').toLowerCase();
+        final normalized = c.text
+            .replaceAll(RegExp(r'[^\p{L}\p{N}]', unicode: true), '')
+            .toLowerCase();
         if (!seen.add(normalized)) continue;
         result.add(c.text);
         if (result.length == 6) return result;

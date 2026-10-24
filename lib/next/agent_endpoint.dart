@@ -588,9 +588,7 @@ final class AgentEndpoint {
     // Older seed clients expect the complete wire format.
     final full = decoded['full'] != false;
     if (operation == 'status') {
-      final tasks = (await _harness.invokeJson(
-              'task.list', {}, Invocation(origin: origin)))
-          .toEnvelope();
+      final tasks = await _allTasks(origin);
       return _response({
         'status': 'running',
         'instance': await _instanceFacts(),
@@ -680,6 +678,31 @@ final class AgentEndpoint {
         'availabilityReason', 'remoteCallable', 'requiredUserPresence', 'lifecycle', 'replacement'])
         if (raw.containsKey(key)) key: raw[key]
     }};
+  }
+
+  /// Every task, as the status counts them: task.list answers in pages.
+  Future<JsonMap> _allTasks(String origin) async {
+    final jobs = <Object?>[];
+    for (var offset = 0;;) {
+      final envelope = (await _harness.invokeJson(
+              'task.list',
+              {'limit': 100, 'offset': offset},
+              Invocation(origin: origin)))
+          .toEnvelope();
+      if (envelope['status'] != 'completed') return envelope;
+      final result = envelope['result'] as JsonMap;
+      jobs.addAll(result['jobs'] as List);
+      final next = result['nextOffset'] as int?;
+      if (next == null) {
+        return {
+          ...envelope,
+          'result': {...result, 'jobs': jobs}..remove('nextOffset')
+        };
+      }
+      offset = next;
+      // A page at a time, with the event loop turning between them.
+      await Future<void>.delayed(Duration.zero);
+    }
   }
 
   JsonMap _taskSummary(JsonMap envelope) {

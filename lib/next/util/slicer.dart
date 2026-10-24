@@ -3,6 +3,9 @@ import 'dart:async';
 /// Keeps long work on the main isolate in short pieces: [call] returns at
 /// once while the piece has run for less than [budget], and otherwise lets
 /// the event loop turn (frames, input, messages) before the next piece.
+/// A piece ends after its budget plus whatever the last item took, so the
+/// budget sits well under the 4 ms a single stretch of Next's work may hold
+/// the main isolate (the same on a slower or busier machine).
 ///
 /// ```dart
 /// final slice = Slicer();
@@ -12,7 +15,7 @@ import 'dart:async';
 /// }
 /// ```
 final class Slicer {
-  Slicer({this.budget = const Duration(milliseconds: 4)}) {
+  Slicer({this.budget = const Duration(milliseconds: 2)}) {
     _piece.start();
   }
 

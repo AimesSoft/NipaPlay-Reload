@@ -14,6 +14,12 @@ import 'package:nipaplay/utils/globals.dart' as globals;
 
 class WatchHistoryProvider extends ChangeNotifier {
   List<WatchHistoryItem> _history = [];
+  final _libraryCandidates =
+      StreamController<Iterable<WatchHistoryItem>>.broadcast(sync: true);
+  /// New entries, or a replaced snapshot after loading. Progress-only
+  /// notifications do not require library consumers to scan the history.
+  Stream<Iterable<WatchHistoryItem>> get libraryCandidates =>
+      _libraryCandidates.stream;
   bool _isLoading = false;
   bool _isLoaded = false;
   bool _disposed = false;
@@ -83,6 +89,7 @@ class WatchHistoryProvider extends ChangeNotifier {
   @override
   void dispose() {
     _disposed = true;
+    unawaited(_libraryCandidates.close());
     // 移除监听器
     if (_scanService != null) {
       _scanService!.removeListener(_onScanServiceStateChanged);
@@ -139,6 +146,7 @@ class WatchHistoryProvider extends ChangeNotifier {
 
           _isLoaded = true;
           _isLoading = false;
+          _libraryCandidates.add(_history);
           notifyListeners();
           return;
         }
@@ -152,6 +160,7 @@ class WatchHistoryProvider extends ChangeNotifier {
         final recent = await _database.getRecentWatchHistory(limit: 40);
         if (_disposed) return;
         _history = recent;
+        _libraryCandidates.add(recent);
         notifyListeners();
         await Future<void>.delayed(Duration.zero);
       }
@@ -161,6 +170,7 @@ class WatchHistoryProvider extends ChangeNotifier {
       if (_disposed) return;
       // Publish a usable snapshot before background path checks complete.
       _history = rawHistory;
+      _libraryCandidates.add(rawHistory);
       _isLoaded = true;
       notifyListeners();
       _history = await _validateFilePaths(rawHistory);
@@ -425,6 +435,7 @@ class WatchHistoryProvider extends ChangeNotifier {
       _history[index] = item;
     } else {
       _history.add(item);
+      _libraryCandidates.add([item]);
     }
 
     // 重新排序

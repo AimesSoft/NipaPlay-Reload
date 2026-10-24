@@ -1,6 +1,8 @@
+import 'dart:collection';
 import 'dart:convert';
 import 'dart:io';
 import 'dart:isolate';
+import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
 import 'package:nipa_harness/nipa_harness.dart';
 import 'package:nipaplay/security/credential_vault.dart' show CredentialRef;
@@ -55,17 +57,145 @@ String _actor(String? origin) => switch (origin) {
       _ => 'agent',
     };
 
+typedef ActivityHostContext = (
+  String repository,
+  String journalPath,
+  String ownerDeviceId,
+  Map<String, CredentialRef> remembered,
+  Map<String, (String, Schema)> settings,
+);
+
+typedef PackedActivityRows = (
+  List<JsonMap> head,
+  List<String> chunks,
+  int total,
+  List<String> warnings,
+);
+
+PackedActivityRows packActivityRows(
+    List<JsonMap> events, List<String> warnings) {
+  final head = events.take(20).toList();
+  final chunks = <String>[];
+  for (var start = 20; start < events.length; start += 64) {
+    chunks.add(jsonEncode(
+        events.sublist(start, (start + 64).clamp(20, events.length))));
+  }
+  return (head, chunks, events.length, warnings);
+}
+
+StateRows unpackActivityRows(PackedActivityRows packed) {
+  final (head, chunks, total, warnings) = packed;
+  return StateRows(_ChunkedJsonList(head, chunks, total), warnings: warnings);
+}
+
+final class _ChunkedJsonList extends ListBase<JsonMap> {
+  _ChunkedJsonList(this._head, this._chunks, this.length)
+      : _decoded = List<List<JsonMap>?>.filled(_chunks.length, null);
+  final List<JsonMap> _head;
+  final List<String> _chunks;
+  final List<List<JsonMap>?> _decoded;
+  @override
+  final int length;
+  @override
+  set length(int _) =>
+      throw UnsupportedError('Cannot modify unmodifiable activity rows.');
+  @override
+  JsonMap operator [](int index) {
+    RangeError.checkValidIndex(index, this);
+    if (index < _head.length) return _head[index];
+    final rel = index - _head.length;
+    final chunkIndex = rel ~/ 64;
+    final decoded = _decoded[chunkIndex] ??=
+        (jsonDecode(_chunks[chunkIndex]) as List).cast<JsonMap>();
+    return decoded[rel % 64];
+  }
+
+  @override
+  void operator []=(int index, JsonMap value) =>
+      throw UnsupportedError('Cannot modify unmodifiable activity rows.');
+}
+
+Future<(String?, List<String>)> _gitLogForRepository(String repository) async {
+  if (await Directory('$repository/.git').exists() ||
+      await File('$repository/.git').exists()) {
+    final result = await Process.run('git', [
+      '-C',
+      repository,
+      'log',
+      '--format=%H%x00%cI%x00%an%x00%aI%x00%s',
+      '-z'
+    ]);
+    return (
+      result.stdout as String,
+      [
+        if (result.exitCode != 0)
+          'activity.harness_git_log_failed:${result.exitCode}'
+      ]
+    );
+  }
+  return (null, ['activity.harness_no_repository']);
+}
+
+Future<_ActivitySources> _readActivitySources(
+    Database db, ActivityHostContext context,
+    {bool includeGit = true}) async {
+  final (repository, journalPath, ownerDeviceId, remembered, shown) = context;
+  Future<List<JsonMap>> rows(String table, {String? orderBy}) async => [
+        for (final row in await db.query(table, orderBy: orderBy))
+          Map<String, Object?>.of(row)
+      ];
+  Future<List<JsonMap>> raw(String sql) async =>
+      [for (final row in await db.rawQuery(sql)) Map<String, Object?>.of(row)];
+  return _ActivitySources(
+    journalPresent: await File(journalPath).exists(),
+    invocations: await rows('activity_invocations'),
+    invocationOrigins: await rows('invocation_origins'),
+    ownerDeviceId: ownerDeviceId,
+    remembered: remembered,
+    settings: shown,
+    discoveries: await rows('harness_discoveries'),
+    jobs: await rows('jobs'),
+    followupEvents: await rows('followup_events', orderBy: 'sequence'),
+    origins: await rows('task_origins'),
+    locations: await rows('media_locations'),
+    jobEvents: await rows('job_events', orderBy: 'at,job_id,revision'),
+    evidence: await raw('''SELECT e.*,b.entity_id,b.object_id,b.relation,
+      o.provider,o.external_id,o.object_type FROM media_evidence e
+      JOIN media_bindings b ON b.id=e.binding_id JOIN media_external_objects o ON o.id=b.object_id'''),
+    danmaku: await raw(
+        '''SELECT e.*,b.entity_id,b.video FROM danmaku_binding_events e
+      JOIN danmaku_bindings b ON b.id=e.binding_id'''),
+    snapshots:
+        await raw('''SELECT s.*,o.provider,o.external_id FROM media_snapshots s
+      JOIN media_external_objects o ON o.id=s.object_id'''),
+    bindings: await raw('SELECT object_id,entity_id FROM media_bindings'),
+    edits: await rows('media_metadata_edits'),
+    settingsChanges: await rows('settings_changes'),
+    bodyChanges: await rows('body_changes'),
+    repository: repository,
+    git: includeGit ? await _gitLogForRepository(repository) : (null, const []),
+  );
+}
+
+Future<(List<JsonMap>, List<String>)> readActivityFromDatabase(
+    Database db, ActivityHostContext context) async {
+  final sources = await _readActivitySources(db, context, includeGit: true);
+  return _compose(sources);
+}
+
 final class ActivityView {
-  const ActivityView(
+  ActivityView(
       this.media, this.settings, this.invocations, this.location, this.history);
   final MediaService media;
   final SettingsRegistry settings;
   final ActivityInvocations invocations;
   final RepositoryLocation location;
   final ChangeHistory history;
+  Future<PackedActivityRows?> Function(ActivityHostContext)? workerRead;
 
   StateView get view => StateView(
       name: 'activity',
+      background: true,
       description:
           'Newest-first body changes derived from domain histories, invocation journal and active harness git log. '
           'entityId matches the primary entity; entityIds lists all related entities. Unknown legacy provenance stays unknown. '
@@ -75,80 +205,39 @@ final class ActivityView {
       read: (offset, limit) async =>
           (await read()).rows.skip(offset).take(limit).toList());
 
-  /// The sources are read here (the queries themselves run on the
-  /// database's isolate); decoding, redacting and ordering every recorded
-  /// change grow with the history and run on a background isolate. The
-  /// invocations come from next.db too: journal.jsonl is not read.
-  Future<StateRows> read() async {
+  Future<ActivityHostContext> prepare() async {
     await history.drain();
     await invocations.settled();
-    final db = media.store.database;
-    Future<List<JsonMap>> rows(String table, {String? orderBy}) async => [
-          for (final row in await db.query(table, orderBy: orderBy))
-            Map<String, Object?>.of(row)
-        ];
-    Future<List<JsonMap>> raw(String sql) async => [
-          for (final row in await db.rawQuery(sql)) Map<String, Object?>.of(row)
-        ];
     await location.ready;
-    final shown = <String, (String, Schema)>{};
-    for (final s in settings.entries) {
-      if (s.visible() && !isSettingDenied(s.key)) {
-        shown.putIfAbsent(s.key, () => (s.title, s.schema));
-      }
-    }
-    final sources = _ActivitySources(
-      journalPresent: await invocations.journal.exists(),
-      invocations: await rows('activity_invocations'),
-      invocationOrigins: await rows('invocation_origins'),
-      ownerDeviceId: media.store.ownerDeviceId,
-      remembered: SecretRedactor.remembered(),
-      settings: shown,
-      discoveries: await rows('harness_discoveries'),
-      jobs: await rows('jobs'),
-      followupEvents: await rows('followup_events', orderBy: 'sequence'),
-      origins: await rows('task_origins'),
-      locations: await rows('media_locations'),
-      jobEvents: await rows('job_events', orderBy: 'at,job_id,revision'),
-      evidence: await raw('''SELECT e.*,b.entity_id,b.object_id,b.relation,
-        o.provider,o.external_id,o.object_type FROM media_evidence e
-        JOIN media_bindings b ON b.id=e.binding_id JOIN media_external_objects o ON o.id=b.object_id'''),
-      danmaku: await raw(
-          '''SELECT e.*,b.entity_id,b.video FROM danmaku_binding_events e
-        JOIN danmaku_bindings b ON b.id=e.binding_id'''),
-      snapshots: await raw(
-          '''SELECT s.*,o.provider,o.external_id FROM media_snapshots s
-        JOIN media_external_objects o ON o.id=s.object_id'''),
-      bindings: await raw('SELECT object_id,entity_id FROM media_bindings'),
-      edits: await rows('media_metadata_edits'),
-      settingsChanges: await rows('settings_changes'),
-      bodyChanges: await rows('body_changes'),
-      repository: location.path,
-      git: await _gitLog(),
+    // The worker already reads settings_changes from its own connection.
+    // Send the fixed registry metadata, not the changing database keys.
+    final shown = <String, (String, Schema)>{
+      for (final s in settings.entries)
+        if (!isSettingDenied(s.key) && s.visible()) s.key: (s.title, s.schema)
+    };
+    return (
+      location.path,
+      invocations.journal.path,
+      media.store.ownerDeviceId,
+      SecretRedactor.remembered(),
+      shown,
     );
-    final (events, warnings) = await _composeOffMain(sources);
-    return StateRows(events, warnings: warnings);
   }
 
-  Future<(String?, List<String>)> _gitLog() async {
-    if (await Directory('${location.path}/.git').exists() ||
-        await File('${location.path}/.git').exists()) {
-      final result = await Process.run('git', [
-        '-C',
-        location.path,
-        'log',
-        '--format=%H%x00%cI%x00%an%x00%aI%x00%s',
-        '-z'
-      ]);
-      return (
-        result.stdout as String,
-        [
-          if (result.exitCode != 0)
-            'activity.harness_git_log_failed:${result.exitCode}'
-        ]
-      );
+  /// When the library worker is running, SQL reads, git log and event
+  /// composition run on its persistent connection; otherwise composition and
+  /// git log run on a background isolate.
+  Future<StateRows> read() async {
+    final context = await prepare();
+    if (workerRead case final delegate?) {
+      if (await delegate(context) case final packed?) {
+        return unpackActivityRows(packed);
+      }
     }
-    return (null, ['activity.harness_no_repository']);
+    final sources = await _readActivitySources(media.store.database, context,
+        includeGit: false);
+    final packed = await _composeOffMain(sources);
+    return unpackActivityRows(packed);
   }
 }
 
@@ -202,9 +291,35 @@ final class _ActivitySources {
   final (String?, List<String>) git;
 }
 
-Future<(List<JsonMap>, List<String>)> _composeOffMain(
-        _ActivitySources sources) =>
-    Isolate.run(() => _compose(sources));
+Future<PackedActivityRows> _composeOffMain(_ActivitySources sources) =>
+    Isolate.run(() async {
+      final git = await _gitLogForRepository(sources.repository);
+      final withGit = _ActivitySources(
+        journalPresent: sources.journalPresent,
+        invocations: sources.invocations,
+        invocationOrigins: sources.invocationOrigins,
+        ownerDeviceId: sources.ownerDeviceId,
+        remembered: sources.remembered,
+        settings: sources.settings,
+        discoveries: sources.discoveries,
+        jobs: sources.jobs,
+        followupEvents: sources.followupEvents,
+        origins: sources.origins,
+        locations: sources.locations,
+        jobEvents: sources.jobEvents,
+        evidence: sources.evidence,
+        danmaku: sources.danmaku,
+        snapshots: sources.snapshots,
+        bindings: sources.bindings,
+        edits: sources.edits,
+        settingsChanges: sources.settingsChanges,
+        bodyChanges: sources.bodyChanges,
+        repository: sources.repository,
+        git: git,
+      );
+      final (events, warnings) = _compose(withGit);
+      return packActivityRows(events, warnings);
+    });
 
 (List<JsonMap>, List<String>) _compose(_ActivitySources sources) {
   for (final MapEntry(key: value, value: ref) in sources.remembered.entries) {

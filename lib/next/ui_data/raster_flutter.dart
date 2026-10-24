@@ -1,12 +1,15 @@
 import 'dart:typed_data';
 import 'dart:ui' as ui;
+import 'raster_io.dart' as background;
 
 Future<void> validateRaster(List<int> bytes) async {
+  if (ui.RootIsolateToken.instance == null) return background.validateRaster(bytes);
   final codec = await ui.instantiateImageCodec(Uint8List.fromList(bytes));
   codec.dispose();
 }
 
 Future<int> rasterTint(List<int> bytes) async {
+  if (ui.RootIsolateToken.instance == null) return background.rasterTint(bytes);
   final codec = await ui.instantiateImageCodec(Uint8List.fromList(bytes),
       targetWidth: 64);
   final frame = await codec.getNextFrame();

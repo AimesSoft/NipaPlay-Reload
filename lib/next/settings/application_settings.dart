@@ -565,8 +565,28 @@ abstract final class ApplicationSettings {
   static Color parseSettingColor(String value) =>
       Color(int.parse(value.replaceFirst('#', ''), radix: 16));
 
-  static List<SettingEntry> entries() {
+  static List<SettingEntry> entries() => [
+        for (final build in _entryBuilders()) build(),
+      ];
+
+  /// Builds the large catalogue in small synchronous pieces. Next calls this
+  /// while it starts, so one pass over every definition never holds the UI
+  /// isolate for more than a few entries' worth of work.
+  static Future<List<SettingEntry>> entriesChunked({int chunkSize = 24}) async {
+    final builders = _entryBuilders();
     final entries = <SettingEntry>[];
+    for (var start = 0; start < builders.length; start += chunkSize) {
+      final end = (start + chunkSize).clamp(0, builders.length);
+      for (final build in builders.sublist(start, end)) {
+        entries.add(build());
+      }
+      if (end < builders.length) await Future<void>.delayed(Duration.zero);
+    }
+    return entries;
+  }
+
+  static List<SettingEntry Function()> _entryBuilders() {
+    final builders = <SettingEntry Function()>[];
     void add(
       String key,
       String title,
@@ -586,6 +606,7 @@ abstract final class ApplicationSettings {
       bool directory = false,
       Future<Object?> Function()? runtimeRead,
     }) {
+      builders.add(() {
       final displayTitle = _titles[key] ?? title;
       final entryApply =
           ['player.hwdecMode', 'player.softDecodePixelFormat'].contains(key)
@@ -597,7 +618,7 @@ abstract final class ApplicationSettings {
           : defaultValue;
       Object? decodeValue(Object? raw) =>
           decode == null ? raw ?? defaultForEntry() : decode(raw);
-      entries.add(SettingEntry(
+      return SettingEntry(
           key: key,
           title: displayTitle,
           description: describeWithApply(
@@ -688,7 +709,8 @@ abstract final class ApplicationSettings {
             } else {
               await write(value);
             }
-          }));
+          });
+      });
     }
 
     add(
@@ -2359,6 +2381,6 @@ abstract final class ApplicationSettings {
         path: true,
         directory: true,
         visible: () => !kIsWeb);
-    return entries;
+    return builders;
   }
 }

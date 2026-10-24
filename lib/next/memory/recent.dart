@@ -1,3 +1,4 @@
+import 'dart:collection';
 import 'dart:convert';
 import 'package:nipa_harness/nipa_harness.dart';
 import '../chat/chat_host.dart';
@@ -5,13 +6,28 @@ import '../harness_redaction.dart';
 import 'capability_changes.dart';
 import 'service.dart';
 
+/// Reads only tasks that can still run. Listing every terminal task just to
+/// discard it made memory context grow with the whole task history.
+Future<List<JsonMap>> activeJobFacts(TaskEngine engine) async {
+  final jobs = <JsonMap>[];
+  for (final state in JobState.values.where((state) => !state.isTerminal)) {
+    for (final job in await engine.list(state: state)) {
+      jobs.add(job.toJson());
+    }
+  }
+  return jobs;
+}
+
 /// Field projections of existing facts, in their original order and wording.
 Future<JsonMap> recentMemoryFacts(ConversationHistory host, List<JsonMap> jobs,
     List<JsonMap> followups, List<JsonMap> activity, String? current,
     {List<JsonMap> finishedHelpers = const [],
-    List<JsonMap> capabilityChanges = const []}) async {
+    List<JsonMap> capabilityChanges = const [],
+    Future<String> Function(String)? redact}) async {
   String? source;
-  final messages = <JsonMap>[];
+  final messages = ListQueue<JsonMap>();
+  var olderMessagesOmitted = false;
+
   final sessions = await host.listThreads(limit: 30, sortKey: 'updated_at');
   final candidates = [
     ...sessions['data'] as List,
@@ -25,30 +41,43 @@ Future<JsonMap> recentMemoryFacts(ConversationHistory host, List<JsonMap> jobs,
     }
     final thread =
         await host.readThread(row['id'] as String, withProcess: false);
-    for (final turn in thread['turns'] as List) {
-      for (final item in turn['items'] as List) {
+    // Read back from the end and stop after the six lines that will be kept
+    // and one more, which only tells that older ones exist.
+    // The old code walked every turn of a long thread just to discard all but
+    // its tail; this work must not grow with the conversation.
+    final newestFirst = <JsonMap>[];
+    final turns = thread['turns'] as List;
+    outer:
+    for (var turnIndex = turns.length - 1; turnIndex >= 0; turnIndex--) {
+      final items = (turns[turnIndex]['items'] as List);
+      for (var itemIndex = items.length - 1; itemIndex >= 0; itemIndex--) {
+        final item = items[itemIndex];
         if (item['type'] == 'userMessage') {
-          for (final part in item['content'] as List) {
+          final content = item['content'] as List;
+          for (var partIndex = content.length - 1;
+              partIndex >= 0;
+              partIndex--) {
+            final part = content[partIndex];
             if (part['type'] == 'text') {
-              messages.add({'role': 'user', 'text': part['text']});
+              newestFirst.add({'role': 'user', 'text': part['text']});
+              if (newestFirst.length == 7) break outer;
             }
           }
         } else if (item['type'] == 'agentMessage') {
-          messages.add({'role': 'assistant', 'text': item['text']});
+          newestFirst.add({'role': 'assistant', 'text': item['text']});
+          if (newestFirst.length == 7) break outer;
         }
       }
     }
-    if (messages.isNotEmpty) {
+    if (newestFirst.isNotEmpty) {
+      olderMessagesOmitted = newestFirst.length == 7;
+      messages.addAll(newestFirst.take(6).toList().reversed);
       source = row['id'] as String;
       break;
     }
   }
   final sections = <(String, String, int)>[
-    (
-      '最近会话 ${source ?? '无'} 最后几句话',
-      jsonEncode(messages.reversed.take(6).toList().reversed.toList()),
-      1250
-    ),
+    ('最近会话 ${source ?? '无'} 最后几句话', jsonEncode(messages.toList()), 1250),
     (
       '未结束任务',
       jsonEncode(jobs
@@ -120,8 +149,15 @@ Future<JsonMap> recentMemoryFacts(ConversationHistory host, List<JsonMap> jobs,
   ];
   final omitted = <String>[];
   final output = <String>[];
-  for (final (label, raw, limit) in sections) {
-    final runes = redactMemoryText(raw).runes.toList();
+  // Redacted whole, before anything is cut, so a secret never straddles the
+  // cut; the regexes run off the UI isolate.
+  final redacted = [
+    for (final (_, raw, _) in sections)
+      redact?.call(raw) ?? redactMemoryTextOffMain(raw)
+  ];
+  for (var i = 0; i < sections.length; i++) {
+    final (label, _, limit) = sections[i];
+    final runes = (await redacted[i]).runes.toList();
     final cut = runes.length > limit;
     final tail = label.startsWith('最近会话');
     final side = tail ? '开头' : '尾部';
@@ -131,7 +167,9 @@ Future<JsonMap> recentMemoryFacts(ConversationHistory host, List<JsonMap> jobs,
     output.add('$label：\n${String.fromCharCodes(snippet)}'
         '${cut ? '\n[截断：此节$side ${runes.length - limit} 字符未注入]' : ''}');
   }
-  if (messages.length > 6) omitted.add('最近会话较早的 ${messages.length - 6} 句话');
+  if (olderMessagesOmitted) {
+    omitted.add('较早的会话只保留最后 6 句话');
+  }
   if (activity.length > 5) omitted.add('较早的 ${activity.length - 5} 条动态');
   if (sessions['nextCursor'] != null) {
     omitted.add('30 个会话之外的历史未扫描');
@@ -139,7 +177,7 @@ Future<JsonMap> recentMemoryFacts(ConversationHistory host, List<JsonMap> jobs,
   final text = output.join('\n');
   assert(text.runes.length <= HarnessMemory.recentCharacters);
   return {
-    'text': redactHarnessText(text),
+    'text': text,
     'sourceThreadId': source,
     'truncated': omitted.isNotEmpty,
     'omitted': omitted,

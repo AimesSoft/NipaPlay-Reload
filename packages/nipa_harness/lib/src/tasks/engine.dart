@@ -59,7 +59,8 @@ final class JobContext {
           checkpoint: checkpoint);
 
   Future<Job> succeed(JobReceipt receipt, {String? phase}) =>
-      _update('succeeded', state: JobState.succeeded, phase: phase, receipt: receipt);
+      _update('succeeded',
+          state: JobState.succeeded, phase: phase, receipt: receipt);
 
   Future<Job> fail(Failure error, JobReceipt receipt) =>
       _update('failed', state: JobState.failed, error: error, receipt: receipt);
@@ -131,11 +132,13 @@ final class TaskEngine {
   final Map<String, JobContext> _active = {};
   final Map<String, Timer> _retries = {};
   final Map<String, int> _capacities = {};
+  final Map<String, Job> _waiting = {};
 
   /// Limits newly admitted workers; changing a limit never interrupts work.
   void setCapacity(String type, int capacity) {
     if (capacity < 1) throw ArgumentError.value(capacity, 'capacity');
     _capacities[type] = capacity;
+    _drain(type);
     unawaited(list(type: type).then((jobs) {
       for (final job in jobs) {
         _schedule(job);
@@ -171,19 +174,35 @@ final class TaskEngine {
   }
 
   Future<void> start() async {
+    final jobs = <Job>[];
     await _serial(() async {
       if (_started) return;
-      for (final job in await store.list()) {
-        if (job.ownerDeviceId != ownerDeviceId) continue;
-        if (job.state == JobState.running || job.state == JobState.cancelling ||
-            job.state == JobState.waitingUser) {
-          await _commit(
-              _change(job, state: JobState.interrupted), job, 'interrupted');
+      for (final state in JobState.values.where((state) =>
+          !state.isTerminal &&
+          state != JobState.paused &&
+          state != JobState.needsDecision)) {
+        for (final job in await store.list(state: state)) {
+          if (job.ownerDeviceId != ownerDeviceId) continue;
+          if (state == JobState.running ||
+              state == JobState.cancelling ||
+              state == JobState.waitingUser) {
+            final interrupted = _change(job, state: JobState.interrupted);
+            await _commit(interrupted, job, 'interrupted');
+            jobs.add(interrupted);
+          } else {
+            jobs.add(job);
+          }
         }
       }
       _started = true;
     });
-    for (final job in await list()) {
+    // Admitted in submission order, as when every job was listed at once, so
+    // a capacity limit lets the same ones start first.
+    jobs.sort((a, b) {
+      final byTime = a.createdAt.compareTo(b.createdAt);
+      return byTime != 0 ? byTime : a.jobId.compareTo(b.jobId);
+    });
+    for (final job in jobs) {
       _schedule(job);
     }
   }
@@ -266,6 +285,10 @@ final class TaskEngine {
         context._retired = true;
       }
     }
+    if (_waiting.containsKey(job.jobId)) {
+      _waiting.remove(job.jobId);
+      if (_canRun(job.state)) _waiting[job.jobId] = job;
+    }
     _changes.add(job);
   }
 
@@ -276,7 +299,8 @@ final class TaskEngine {
           state: JobState.cancelling,
           cancelRequestedAt: DateTime.now().toUtc());
       // Only a never-started job has no external effects to reconcile.
-      if (job.state == JobState.queued && job.revision == 0 &&
+      if (job.state == JobState.queued &&
+          job.revision == 0 &&
           !job.sideEffectCommitted) {
         next = _change(next,
             state: JobState.cancelled,
@@ -305,11 +329,12 @@ final class TaskEngine {
       });
 
   Future<Job> pause(String jobId) async {
-    final job = await _edit(
-        jobId, 'paused', (job) {
+    final job = await _edit(jobId, 'paused', (job) {
       if (job.state == JobState.paused) return job;
-      if (job.state.isTerminal || job.cancelRequestedAt != null ||
-          job.state == JobState.needsDecision || job.state == JobState.waitingUser) {
+      if (job.state.isTerminal ||
+          job.cancelRequestedAt != null ||
+          job.state == JobState.needsDecision ||
+          job.state == JobState.waitingUser) {
         throw const Failure(FailureCode.conflict,
             'Only pending execution can be paused; receipts and decisions are retained.');
       }
@@ -430,14 +455,18 @@ final class TaskEngine {
   }
 
   void _schedule(Job job) {
+    _waiting.remove(job.jobId);
     _retries.remove(job.jobId)?.cancel();
     if (!_started ||
         _closed ||
         job.ownerDeviceId != ownerDeviceId ||
         _active.containsKey(job.jobId) ||
-        (_capacities.containsKey(job.type) &&
-            activeCount(job.type) >= _capacities[job.type]!) ||
         !_executors.containsKey(job.type)) {
+      return;
+    }
+    if (_capacities.containsKey(job.type) &&
+        activeCount(job.type) >= _capacities[job.type]!) {
+      if (_canRun(job.state)) _waiting[job.jobId] = job;
       return;
     }
     if (job.state == JobState.waitingRetry) {
@@ -445,9 +474,20 @@ final class TaskEngine {
           Timer(job.retryAt!.difference(DateTime.now().toUtc()), () {
         _launch(job, retry: true);
       });
-    } else if ({JobState.queued, JobState.interrupted, JobState.cancelling}
-        .contains(job.state)) {
+    } else if (_canRun(job.state)) {
       _launch(job);
+    }
+  }
+
+  static bool _canRun(JobState state) =>
+      state == JobState.queued ||
+      state == JobState.interrupted ||
+      state == JobState.cancelling ||
+      state == JobState.waitingRetry;
+
+  void _drain(String type) {
+    for (final job in List<Job>.of(_waiting.values)) {
+      if (job.type == type) _schedule(job);
     }
   }
 
@@ -455,6 +495,7 @@ final class TaskEngine {
     if (_closed || _active.containsKey(job.jobId)) return;
     if (_capacities.containsKey(job.type) &&
         activeCount(job.type) >= _capacities[job.type]!) {
+      if (_canRun(job.state)) _waiting[job.jobId] = job;
       return;
     }
     final context = JobContext._(this, job);
@@ -510,9 +551,7 @@ final class TaskEngine {
         }
         _active.remove(context.job.jobId);
         _schedule(await _get(context.job.jobId));
-        for (final pending in await store.list()) {
-          _schedule(pending);
-        }
+        _drain(context.job.type);
       } else {
         _active.remove(context.job.jobId);
       }
@@ -526,6 +565,7 @@ final class TaskEngine {
         timer.cancel();
       }
       _retries.clear();
+      _waiting.clear();
       for (final context in _active.values) {
         context._signal(retire: true);
       }

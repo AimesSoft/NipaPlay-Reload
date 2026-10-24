@@ -47,6 +47,29 @@ Object? publicHarnessFacts(Object? value) {
 String redactHarnessText(String value) =>
     _scrubLines(SecretRedactor.text(redactPrivateUrls(value)));
 
+/// Reject recognizable secrets on writes and redact them on reads/injection.
+String redactMemoryText(String value) => redactHarnessText(value).replaceAll(
+    RegExp(r'-----BEGIN (?:[A-Z ]*PRIVATE KEY)-----[\s\S]*?'
+        r'-----END (?:[A-Z ]*PRIVATE KEY)-----'),
+    '[redacted private key]');
+
+/// [redactMemoryText] on a background isolate, with the secrets this one
+/// remembers. Text from a long turn can otherwise do regex work on the UI
+/// isolate every time memory context is assembled.
+Future<String> redactMemoryTextOffMain(String value) async {
+  final remembered = SecretRedactor.remembered();
+  try {
+    return await Isolate.run(() {
+      for (final MapEntry(key: secret, value: ref) in remembered.entries) {
+        SecretRedactor.remember(ref, secret);
+      }
+      return redactMemoryText(value);
+    });
+  } on ArgumentError {
+    return redactMemoryText(value);
+  }
+}
+
 Object? redactHarnessJson(Object? value) {
   if (value is Map) {
     return <String, Object?>{

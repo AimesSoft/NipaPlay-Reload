@@ -38,7 +38,8 @@ enum JobState {
         paused => {queued, interrupted, cancelling}.contains(next),
         needsDecision =>
           {queued, interrupted, cancelling, failed}.contains(next),
-        waitingUser => {running, interrupted, cancelling, failed}.contains(next),
+        waitingUser =>
+          {running, interrupted, cancelling, failed}.contains(next),
         waitingRetry =>
           {queued, paused, interrupted, cancelling, failed}.contains(next),
         interrupted => {
@@ -231,34 +232,38 @@ final class Job implements JsonEncodable {
         sideEffectCommitted: json['sideEffectCommitted'] as bool,
       );
 
+  late final JsonMap _json = Map<String, Object?>.unmodifiable({
+    ...details,
+    'jobId': jobId,
+    'type': type,
+    'title': title,
+    'state': state.wireName,
+    'phase': phase,
+    'progress': _freezeJson(progress.toJson()),
+    'createdAt': createdAt.toIso8601String(),
+    'updatedAt': updatedAt.toIso8601String(),
+    'ownerDeviceId': ownerDeviceId,
+    'revision': revision,
+    if (origin != null) 'origin': origin,
+    if (error != null) 'error': _freezeJson(error!.toJson()),
+    if (decision != null) 'decision': _freezeJson(decision!.toJson()),
+    // The receipt's details were frozen when it was made; copying them again
+    // for every job's first toJson grows with a download's file list.
+    if (receipt != null)
+      'receipt': Map<String, Object?>.unmodifiable({
+        ...receipt!.toJson(),
+        if (cancelRequestedAt != null)
+          'cancellation': Map<String, Object?>.unmodifiable({
+            'requestedAt': cancelRequestedAt!.toIso8601String(),
+            'phase': cancelRequestedPhase,
+            'sideEffectCommitted': sideEffectCommitted,
+            'afterCommit': cancelAfterCommit,
+          }),
+      }),
+  });
+
   @override
-  JsonMap toJson() => {
-        ...details,
-        'jobId': jobId,
-        'type': type,
-        'title': title,
-        'state': state.wireName,
-        'phase': phase,
-        'progress': progress.toJson(),
-        'createdAt': createdAt.toIso8601String(),
-        'updatedAt': updatedAt.toIso8601String(),
-        'ownerDeviceId': ownerDeviceId,
-        'revision': revision,
-        if (origin != null) 'origin': origin,
-        if (error != null) 'error': error!.toJson(),
-        if (decision != null) 'decision': decision!.toJson(),
-        if (receipt != null)
-          'receipt': {
-            ...receipt!.toJson(),
-            if (cancelRequestedAt != null)
-              'cancellation': {
-                'requestedAt': cancelRequestedAt!.toIso8601String(),
-                'phase': cancelRequestedPhase,
-                'sideEffectCommitted': sideEffectCommitted,
-                'afterCommit': cancelAfterCommit,
-              },
-          },
-      };
+  JsonMap toJson() => _json;
 
   /// Storage-only data is kept out of task action results.
   JsonMap toStorageJson() => {
@@ -328,11 +333,16 @@ Decision _decodeDecision(JsonMap json) => Decision(
                 ActionCall(call['action'] as String, call['input'] as JsonMap));
       })),
     );
-JsonMap _freezeJson(JsonMap value) =>
-    _freezeValue(jsonDecode(jsonEncode(value))) as JsonMap;
+JsonMap _freezeJson(JsonMap value) => _freezeValue(value) as JsonMap;
 Object? _freezeValue(Object? value) => switch (value) {
-      Map<String, Object?>() => Map<String, Object?>.unmodifiable(
-          value.map((k, v) => MapEntry(k, _freezeValue(v)))),
-      List<Object?>() => List<Object?>.unmodifiable(value.map(_freezeValue)),
-      _ => value,
+      Map() when value.keys.every((k) => k is String) =>
+        Map<String, Object?>.unmodifiable({
+          for (final entry in value.entries)
+            entry.key as String: _freezeValue(entry.value)
+        }),
+      List() => List<Object?>.unmodifiable(
+          [for (final item in value) _freezeValue(item)]),
+      null || bool() || int() || String() => value,
+      double() when value.isFinite => value,
+      _ => _freezeValue(jsonDecode(jsonEncode(value))),
     };

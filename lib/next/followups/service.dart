@@ -110,6 +110,7 @@ final class Followups {
         File(database.path).parent, location.path, threadId, turnId);
     return {'found': saved != null, 'process': saved};
   }
+
   String _unavailable = 'Embedded chat host is not running.';
   late final StreamSubscription<Job> _jobs;
   StreamSubscription<ChatMessage>? _chatEvents;
@@ -196,8 +197,8 @@ final class Followups {
     }
     if (at == null) return;
     // A millisecond late, so the sweep it wakes finds the time passed.
-    final wait = at.difference(DateTime.now().toUtc()) +
-        const Duration(milliseconds: 1);
+    final wait =
+        at.difference(DateTime.now().toUtc()) + const Duration(milliseconds: 1);
     _wake = Timer(wait.isNegative ? Duration.zero : wait, _schedule);
   }
 
@@ -235,11 +236,18 @@ final class Followups {
     return jsonDecode(row['snapshot'] as String) as JsonMap;
   }
 
-  Future<List<JsonMap>> _read(Future<List<Map<String, Object?>>> rows) async =>
-      [for (final row in await rows) _decode(row)];
+  Future<List<JsonMap>> _read(Future<List<Map<String, Object?>>> rows) async {
+    final slice = _Slice();
+    final result = <JsonMap>[];
+    for (final row in await rows) {
+      if (slice.due) await slice.breathe();
+      result.add(_decode(row));
+    }
+    return result;
+  }
 
-  Future<List<JsonMap>> _rows() =>
-      _read(database.query('followups', columns: ['snapshot'], orderBy: 'rowid'));
+  Future<List<JsonMap>> _rows() => _read(
+      database.query('followups', columns: ['snapshot'], orderBy: 'rowid'));
 
   /// States a sweep acts on; the others are where a followup ends.
   static const _inPlay = ['waiting', 'ready', 'dispatching', 'started'];
@@ -268,30 +276,53 @@ final class Followups {
   Future<List<JsonMap>> forJob(String jobId) async =>
       [for (final row in await _forJob(jobId)) _public(row)];
 
-  Future<List<JsonMap>> _forJob(String jobId) => _read(database.query(
-      'followups',
-      columns: ['snapshot'],
-      where: "json_extract(snapshot, '\$.condition.jobId') = ?",
-      whereArgs: [jobId],
-      orderBy: 'rowid'));
+  Future<List<JsonMap>> _forJob(String jobId) =>
+      _read(database.query('followups',
+          columns: ['snapshot'],
+          where: "json_extract(snapshot, '\$.condition.jobId') = ?",
+          whereArgs: [jobId],
+          orderBy: 'rowid'));
 
-  StateView get view => StateView(
-        name: 'followups',
-        description:
-            'Durable one-shot Agent followups. waiting awaits condition; ready awaits an idle chat host. '
-            'execution_failed retains the delivery error; started/completed identify the actual thread and turn. '
-            'waitingFor and title are suitable for progress UI.',
-        fields: followupFields,
-        read: (offset, limit) async => [
-          for (final row in await _read(database.query('followups',
-              columns: ['snapshot'],
-              orderBy: 'rowid',
-              limit: limit,
-              offset: offset)))
-            _public(row)
-        ],
-        readAll: () async => StateRows(await list()),
-      );
+  static StateView viewForDatabase(Database database,
+      {Future<List<JsonMap>> Function(Future<List<Map<String, Object?>>>)?
+          decode}) {
+    Future<List<JsonMap>> readRows(Future<List<Map<String, Object?>>> rows) =>
+        decode != null
+            ? decode(rows)
+            : () async {
+                final slice = _Slice();
+                final result = <JsonMap>[];
+                for (final row in await rows) {
+                  if (slice.due) await slice.breathe();
+                  result.add(jsonDecode(row['snapshot'] as String) as JsonMap);
+                }
+                return result;
+              }();
+    return StateView(
+      name: 'followups',
+      background: true,
+      description:
+          'Durable one-shot Agent followups. waiting awaits condition; ready awaits an idle chat host. '
+          'execution_failed retains the delivery error; started/completed identify the actual thread and turn. '
+          'waitingFor and title are suitable for progress UI.',
+      fields: followupFields,
+      read: (offset, limit) async => [
+        for (final row in await readRows(database.query('followups',
+            columns: ['snapshot'],
+            orderBy: 'rowid',
+            limit: limit,
+            offset: offset)))
+          {...row}..remove('hookCursor')
+      ],
+      readAll: () async => StateRows([
+        for (final row in await readRows(database.query('followups',
+            columns: ['snapshot'], orderBy: 'rowid')))
+          {...row}..remove('hookCursor')
+      ]),
+    );
+  }
+
+  StateView get view => viewForDatabase(database, decode: _read);
 
   Future<JsonMap> register(JsonMap input, Invocation invocation) =>
       _register(input, invocation, false);
@@ -349,7 +380,8 @@ final class Followups {
         if (task != null) await engine.get(task);
         await location.ready;
         final returnTo = !immediate && invocation.origin.startsWith('mesh:')
-            ? await downloadReturnTarget(invocation) : null;
+            ? await downloadReturnTarget(invocation)
+            : null;
         String? threadId = input['threadId'] as String?;
         if (returnTo != null) {
           if (threadId != null && threadId != returnTo['threadId']) {
@@ -438,12 +470,14 @@ final class Followups {
         return _public(row);
       });
 
-  Future<void> consumeHelperResult(String jobId, JsonMap taken) => _serial(() async {
+  Future<void> consumeHelperResult(String jobId, JsonMap taken) =>
+      _serial(() async {
         for (final row in await _forJob(jobId)) {
           if ({'waiting', 'ready'}.contains(row['state'])) {
             row['consumedBy'] = taken;
             await _save(row, 'cancelled', 'consumed',
-                origin: 'codex_native:wait', reason: 'Parent collected this result with wait.');
+                origin: 'codex_native:wait',
+                reason: 'Parent collected this result with wait.');
           }
         }
       });
@@ -461,9 +495,11 @@ final class Followups {
       _serial(() async {
         if ((event == 'download.file_completed' ||
                 event == 'download.stalled') &&
-            (await database.query(
-            'followup_hook_events', where: 'event=? AND object_id=?',
-            whereArgs: [event, objectId], limit: 1)).isNotEmpty) {
+            (await database.query('followup_hook_events',
+                    where: 'event=? AND object_id=?',
+                    whereArgs: [event, objectId],
+                    limit: 1))
+                .isNotEmpty) {
           return;
         }
         await database.insert('followup_hook_events', {
@@ -593,17 +629,26 @@ final class Followups {
     if (event == 'download.file_completed') {
       for (final job in downloads) {
         if (slice.due) await slice.breathe();
-        for (final file in (job.checkpoint['completedFiles'] as List? ?? []).cast<JsonMap>()) {
+        for (final file in (job.checkpoint['completedFiles'] as List? ?? [])
+            .cast<JsonMap>()) {
           final objectId = file['objectId'] as String;
           if (file['verification'] != 'verified' ||
-              condition['objectId'] != null && condition['objectId'] != objectId ||
+              condition['objectId'] != null &&
+                  condition['objectId'] != objectId ||
               DateTime.parse(file['completedAt'] as String)
                   .isBefore(DateTime.parse(row['createdAt'] as String))) {
             continue;
           }
-          return {'event': 'download.file_completed', 'objectId': objectId,
+          return {
+            'event': 'download.file_completed',
+            'objectId': objectId,
             'occurredAt': file['completedAt'],
-            'data': {'jobId': file['jobId'], 'infoHash': job.input['infoHash'], 'file': file}};
+            'data': {
+              'jobId': file['jobId'],
+              'infoHash': job.input['infoHash'],
+              'file': file
+            }
+          };
         }
       }
     }
@@ -612,9 +657,10 @@ final class Followups {
       for (final job in downloads) {
         if (slice.due) await slice.breathe();
         if (job.state.isTerminal) continue;
-        for (final stall in (job.checkpoint['stalls'] as List? ?? [])
-            .cast<Map>()) {
-          final objectId = HarnessHooks.stallObjectId(job.jobId, stall['index']);
+        for (final stall
+            in (job.checkpoint['stalls'] as List? ?? []).cast<Map>()) {
+          final objectId =
+              HarnessHooks.stallObjectId(job.jobId, stall['index']);
           if (stall['resumedAt'] != null ||
               condition['objectId'] != null &&
                   condition['objectId'] != objectId &&
@@ -631,7 +677,9 @@ final class Followups {
               'jobId': job.jobId,
               'infoHash': job.input['infoHash'],
               'title': job.title,
-              ...Map<String, Object?>.from(stall)..remove('index')..remove('resumedAt'),
+              ...Map<String, Object?>.from(stall)
+                ..remove('index')
+                ..remove('resumedAt'),
             }
           };
         }
@@ -661,8 +709,10 @@ final class Followups {
 
   Future<void> _deliver(_Tasks tasks) async {
     final rows = await _active();
-    _checked.retainAll(
-        {for (final row in rows) if (row['state'] == 'waiting') row['id']});
+    _checked.retainAll({
+      for (final row in rows)
+        if (row['state'] == 'waiting') row['id']
+    });
     // Resolve one-shot subscriptions before deciding which facts they own.
     for (final row in [
       ...rows.where((row) => row['automatic'] != 'download'),
@@ -689,7 +739,8 @@ final class Followups {
           final due = DateTime.parse(row['deliverAfter'] as String);
           if (DateTime.now().toUtc().isBefore(due)) {
             _until(due);
-            final reason = 'Batching download facts until ${row['deliverAfter']}.';
+            final reason =
+                'Batching download facts until ${row['deliverAfter']}.';
             if (row['reason'] != reason) {
               await _save(row, 'ready', 'pending', reason: reason);
             }
@@ -698,7 +749,8 @@ final class Followups {
         }
         if (row['remoteDeviceId'] case final String peer) {
           final retryAt = row['remoteRetryAt'] as String?;
-          if (retryAt != null && DateTime.now().toUtc().isBefore(DateTime.parse(retryAt))) {
+          if (retryAt != null &&
+              DateTime.now().toUtc().isBefore(DateTime.parse(retryAt))) {
             _until(DateTime.parse(retryAt));
             continue;
           }
@@ -712,9 +764,12 @@ final class Followups {
             row['remoteReceipt'] = await deliver(peer, row);
             row['dispatchedAt'] = DateTime.now().toUtc().toIso8601String();
             row['deliveryState'] = 'forwarded';
-            await _save(row, 'completed', 'forwarded', reason: 'Destination durably accepted this delivery; its conversation state is owned there.');
+            await _save(row, 'completed', 'forwarded',
+                reason:
+                    'Destination durably accepted this delivery; its conversation state is owned there.');
           } on Failure catch (error) {
-            final retry = DateTime.now().toUtc().add(const Duration(seconds: 30));
+            final retry =
+                DateTime.now().toUtc().add(const Duration(seconds: 30));
             row['remoteRetryAt'] = retry.toIso8601String();
             _until(retry);
             await _save(row, 'ready', 'pending', reason: error.message);
@@ -736,7 +791,9 @@ final class Followups {
         if (reason != null) {
           // A running turn takes the facts at its next step instead of
           // making them wait for its end.
-          if (host != null && host.available && host.busy &&
+          if (host != null &&
+              host.available &&
+              host.busy &&
               host.repository.path == row['repository'] &&
               await _steerIntoTurn(row, host)) {
             continue;
@@ -756,7 +813,8 @@ final class Followups {
             if (taken != null) {
               row['consumedBy'] = taken;
               await _save(row, 'cancelled', 'consumed',
-                  origin: 'codex_native:wait', reason: 'Parent collected this result with wait.');
+                  origin: 'codex_native:wait',
+                  reason: 'Parent collected this result with wait.');
               continue;
             }
           }
@@ -776,8 +834,7 @@ final class Followups {
           if ((row['condition'] as Map)['jobId'] case final String jobId) {
             final job = await engine.get(jobId);
             if (job.type == 'agent.helper') {
-              await helpers?.shareCards(
-                  job, target, row['turnId'] as String);
+              await helpers?.shareCards(job, target, row['turnId'] as String);
             }
           }
           await _save(row, 'started', 'started',
@@ -915,7 +972,8 @@ final class Followups {
       final job = await engine.get(jobId);
       if (await helpers?.nativeResultTaken(job, host) != null) return false;
     }
-    final target = row['threadId'] as String? ?? host.mainThreadId ?? host.threadId;
+    final target =
+        row['threadId'] as String? ?? host.mainThreadId ?? host.threadId;
     if (target == null || !host.busyFor(target)) return false;
     final before = {
       for (final key in ['threadId', 'dispatchedAt']) key: row[key]
@@ -1006,7 +1064,8 @@ final class Followups {
 
   /// Of [objects], those some followup already reported as [kind]
   /// (see followup_objects).
-  Future<Set<String>> _reported(String kind, Iterable<String> objects) async => {
+  Future<Set<String>> _reported(String kind, Iterable<String> objects) async =>
+      {
         for (final chunk in _chunks(objects.toSet().toList()))
           for (final row in await database.rawQuery(
               'SELECT DISTINCT object FROM followup_objects '
@@ -1016,7 +1075,8 @@ final class Followups {
       };
 
   /// The followups that reported any of [objects] as [kind].
-  Future<List<JsonMap>> _reporting(String kind, Iterable<String> objects) async {
+  Future<List<JsonMap>> _reporting(
+      String kind, Iterable<String> objects) async {
     final rows = <String, JsonMap>{};
     for (final chunk in _chunks(objects.toSet().toList())) {
       for (final row in await _read(database.rawQuery(
@@ -1083,15 +1143,16 @@ final class _Tasks {
   Future<List<Job>> allDownloads() async =>
       _allDownloads ??= await engine.list(type: 'download');
 
-  Future<List<Job>> changedDownloads() async => _changedDownloads ??=
-      await changedWhere((job) => job.type == 'download');
+  Future<List<Job>> changedDownloads() async =>
+      _changedDownloads ??= await changedWhere((job) => job.type == 'download');
 
   /// Tasks of [types], in the order the engine lists them: every one when
   /// reconciling, else the changed ones.
-  Future<List<Job>> ofTypes(List<String> types, bool Function(Job) wanted) async {
+  Future<List<Job>> ofTypes(
+      List<String> types, bool Function(Job) wanted) async {
     if (!all) {
-      final jobs = await changedWhere(
-          (job) => types.contains(job.type) && wanted(job));
+      final jobs =
+          await changedWhere((job) => types.contains(job.type) && wanted(job));
       // The engine lists per type; within a type, by creation.
       return [
         for (final type in types) ...jobs.where((job) => job.type == type)
@@ -1110,7 +1171,7 @@ final class _Tasks {
 /// Gives the event loop a turn once [budget] of work ran without one, so a
 /// long pass never holds the isolate for longer than about that.
 final class _Slice {
-  static const budget = Duration(milliseconds: 4);
+  static const budget = Duration(milliseconds: 2);
   final _clock = Stopwatch()..start();
   bool get due => _clock.elapsed >= budget;
   Future<void> breathe() async {

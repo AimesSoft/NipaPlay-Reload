@@ -393,27 +393,30 @@ final class NextRuntime extends ChangeNotifier {
       UiCapability(
           media: () => core.media.service,
           resolveEntity: (id) async {
-            if (sourceEntityRef(id, 'work') != null)
+            if (sourceEntityRef(id, 'work') != null) {
               return {'workId': (await core.uiData.work(id))!.workId};
+            }
             final episode =
                 await core.libraryData.validatedSourceRef(id, 'episode');
-            if (episode != null)
+            if (episode != null) {
               return {
                 'sourcePlayback': await core.mediaSources.play(
                     episode[0], episode[1],
                     expectedServerId: episode.length == 3 ? episode[2] : null)
               };
+            }
             final merged = id.startsWith('mesh-')
                 ? await core.uiData.meshLibrary!.open(id)
                 : null;
             final source = merged?['sourceInfo'] as Map?;
-            if (source != null)
+            if (source != null) {
               return {
                 'sourcePlayback': await core.mediaSources.play(
                     source['sourceId'] as String, source['itemId'] as String,
                     expectedServerId: source['serverId'] as String?,
                     startPositionMs: merged!['resumeMs'] as int?)
               };
+            }
             return merged;
           },
           openPage: ClassicUiOpen().page,
@@ -458,6 +461,7 @@ final class NextRuntime extends ChangeNotifier {
   late final HarnessHooks _hooks;
   StreamSubscription<Job>? _jobEvents;
   StreamSubscription<JsonMap>? _fileEvents;
+  StreamSubscription<Iterable<WatchHistoryItem>>? _historyAdditions;
   Future<void> _hookEvents = Future.value();
   String? _lastPlaybackStatus, _lastPlaybackPath;
   Set<String> _libraryPaths = {};
@@ -718,8 +722,9 @@ final class NextRuntime extends ChangeNotifier {
     if (_disposed) return;
     if (kDebugMode && LabProfile.active) installDebugChat(() => chat);
     if (kDebugMode && LabProfile.active) installDebugHostSettings(hostSettings);
-    if (kDebugMode && LabProfile.active)
+    if (kDebugMode && LabProfile.active) {
       installDebugUiData(ServiceProvider.nextCore);
+    }
     if (kDebugMode && LabProfile.active) {
       _classic.installDebug();
       installDebugPlayerHost(() => playback.host);
@@ -897,26 +902,21 @@ final class NextRuntime extends ChangeNotifier {
     final core = ServiceProvider.nextCore;
     core.jobOrigins.threadFor = host.threadForOrigin;
     core.memory.recent = (current) async => recentMemoryFacts(
-        host,
-        [
-          for (final job in await core.engine.list())
-            if (!job.state.isTerminal) job.toJson()
-        ],
-        (await core.followups.list())
-            .where(
-                (r) => !const {'completed', 'cancelled'}.contains(r['state']))
-            .toList(),
-        (await core.state.views['activity']!.readAll!()).rows,
-        current,
-        capabilityChanges: await core.catalogChanges.recent(),
-        finishedHelpers: [
-          for (final job in ((await core.engine.list(type: 'agent.helper'))
-                  .where((job) => job.state.isTerminal)
-                  .toList()
-                ..sort((a, b) => b.updatedAt.compareTo(a.updatedAt)))
-              .take(3))
-            job.toJson()
-        ]);
+            host,
+            await activeJobFacts(core.engine),
+            await core.followups.activeList(),
+            (await core.state.views['activity']!.readAll!()).rows,
+            current,
+            capabilityChanges: await core.catalogChanges.recent(),
+            redact: core.uiData.meshLibrary!.worker.redactText,
+            finishedHelpers: [
+              for (final job in ((await core.engine.list(type: 'agent.helper'))
+                      .where((job) => job.state.isTerminal)
+                      .toList()
+                    ..sort((a, b) => b.updatedAt.compareTo(a.updatedAt)))
+                  .take(3))
+                job.toJson()
+            ]);
     // DSH's memory block carries the latest 动态; tell it when that grows.
     _activityEvents =
         core.activityChanges.stream.listen((_) => host.memoryChanged());
@@ -1041,23 +1041,22 @@ final class NextRuntime extends ChangeNotifier {
                 ServiceProvider.nextCore.followups.libraryFileAdded(file));
           }
         }));
-    ServiceProvider.watchHistoryProvider.addListener(_libraryChanged);
+    _historyAdditions = ServiceProvider.watchHistoryProvider.libraryCandidates
+        .listen(_observeLibrary);
     playback.media.addListener(_playbackChanged);
     playback.transport.addListener(_playbackChanged);
   }
 
-  void _libraryChanged() => _queueHook(_observeLibrary);
-  Future<void> _observeLibrary() async {
-    final files = {
-      for (final item in ServiceProvider.watchHistoryProvider.history)
-        if (!_libraryPaths.contains(item.filePath))
-          item.filePath: {'path': item.filePath, 'via': 'classic_history'},
-    };
-    for (final entry in files.entries) {
-      if (_libraryPaths.add(entry.key)) {
-        await _hooks.emit('library.file_added', entry.key, entry.value);
-        await _reportLibrary(() =>
-            ServiceProvider.nextCore.followups.libraryFileAdded(entry.value));
+  void _observeLibrary(Iterable<WatchHistoryItem> additions) {
+    for (final item in additions) {
+      final path = item.filePath;
+      if (_libraryPaths.add(path)) {
+        final facts = <String, Object?>{'path': path, 'via': 'classic_history'};
+        _queueHook(() async {
+          await _hooks.emit('library.file_added', path, facts);
+          await _reportLibrary(
+              () => ServiceProvider.nextCore.followups.libraryFileAdded(facts));
+        });
       }
     }
   }
@@ -1148,7 +1147,8 @@ final class NextRuntime extends ChangeNotifier {
     ServiceProvider.nextCore.desktopSystem.detach();
     playback.media.removeListener(_playbackChanged);
     playback.transport.removeListener(_playbackChanged);
-    ServiceProvider.watchHistoryProvider.removeListener(_libraryChanged);
+    await _historyAdditions?.cancel();
+    _historyAdditions = null;
     await _jobEvents?.cancel();
     await _fileEvents?.cancel();
     _jobEvents = null;
@@ -1174,8 +1174,9 @@ final class NextRuntime extends ChangeNotifier {
     ServiceProvider.watchHistoryProvider
         .removeListener(ServiceProvider.nextCore.stateSources.changed);
     unawaited(_calendarChanges?.cancel());
-    if (identical(ClassicSettings.attached, _classicSettings))
+    if (identical(ClassicSettings.attached, _classicSettings)) {
       ClassicSettings.attached = null;
+    }
     _labs.removeListener(_queueEndpointUpdate);
     _preference.removeListener(_queueEndpointUpdate);
     _location?.removeListener(_queueEndpointUpdate);

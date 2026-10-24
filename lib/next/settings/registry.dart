@@ -154,8 +154,27 @@ final class SettingsRegistry {
   }
 
   void register(Iterable<SettingEntry> entries) {
-    entries = entries.toList();
-    _captureStartup(entries);
+    final added = entries.toList();
+    _captureStartup(added);
+    _register(added);
+  }
+
+  /// Registers a large initial catalogue without one synchronous pass over
+  /// every definition. The registry is not used until this future completes.
+  Future<void> registerChunked(Iterable<SettingEntry> entries,
+      {int chunkSize = 32}) async {
+    final added = entries.toList();
+    _captureStartup(added);
+    for (var start = 0; start < added.length; start += chunkSize) {
+      _register(
+          added.sublist(start, (start + chunkSize).clamp(0, added.length)));
+      if (start + chunkSize < added.length) {
+        await Future<void>.delayed(Duration.zero);
+      }
+    }
+  }
+
+  void _register(Iterable<SettingEntry> entries) {
     for (final entry in entries) {
       if (isSettingDenied(entry.key) || isSettingDenied(entry.storageKey)) {
         throw ArgumentError('Forbidden setting: ${entry.key}');
@@ -165,8 +184,9 @@ final class SettingsRegistry {
       }
       _entries[entry.key] = entry;
       for (final key in [entry.storageKey, ...entry.additionalStorageKeys]) {
-        if (isSettingDenied(key))
+        if (isSettingDenied(key)) {
           throw ArgumentError('Forbidden storage key: $key');
+        }
         _storage.putIfAbsent(key, () => []).add(entry);
       }
     }
@@ -255,13 +275,20 @@ final class SettingsRegistry {
   /// Current values and their latest provenance, rather than copied settings.
   Future<List<JsonMap>> preferences() async {
     await drain();
+    final latestRows = await database.rawQuery(
+        'SELECT s.* FROM settings_changes s '
+        'JOIN (SELECT key, MAX(revision) AS revision FROM settings_changes GROUP BY key) m '
+        'ON s.key = m.key AND s.revision = m.revision');
+    if (latestRows.isEmpty) return [];
+    final latestByKey = {
+      for (final row in latestRows) row['key'] as String: _decodeRow(row)
+    };
     final rows = <JsonMap>[];
     for (final entry in entries.where((e) =>
         e.scope == 'user' &&
         e.apply != 'runtime' &&
         !e.storageKey.startsWith('@runtime:'))) {
-      final current = await get(entry.key);
-      final provenance = current['provenance'] as Map?;
+      final provenance = latestByKey[entry.key];
       if (provenance == null ||
           provenance['changedBy'] == 'migration' ||
           provenance['origin'] == 'application') {
@@ -270,10 +297,10 @@ final class SettingsRegistry {
       rows.add({
         'key': entry.key,
         'title': entry.title,
-        'value': current['value'],
+        'value': await entry.read(),
         'changedAt': provenance['changedAt'],
         'changedBy': provenance['changedBy'],
-        'reason': provenance['reason']
+        'reason': provenance['reason'],
       });
     }
     return rows;
