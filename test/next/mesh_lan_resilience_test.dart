@@ -990,8 +990,9 @@ void main() {
         await expectLater(
             a.rpc(bId, 'mesh/describe', {}), throwsA(isA<Failure>()));
       }
-      expect(env.countFor('GET', '/mesh/v1/addresses'), 0,
-          reason: 'cached candidates are reused inside the lookup interval');
+      expect(env.countFor('GET', '/mesh/v1/addresses'), lessThanOrEqualTo(1),
+          reason:
+              'one lookup for the failure after a success, none for the repeats');
     } finally {
       for (final node in nodes.reversed) {
         await node.close();

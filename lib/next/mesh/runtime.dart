@@ -81,6 +81,7 @@ final class MeshRuntime implements MeshDeviceSource {
     this.candidateStaggerDelay = const Duration(milliseconds: 250),
     this.unknownPeerRefreshCooldown = const Duration(seconds: 30),
     this.toolsPageBytes = 400 * 1024,
+    this.candidateLookupBase = const Duration(seconds: 30),
     this.candidateLookupInterval = const Duration(minutes: 10),
     this.interfaceProvider,
     MeshNative? native,
@@ -102,11 +103,15 @@ final class MeshRuntime implements MeshDeviceSource {
   /// interface registers hundreds of Actions whose schemas together exceed it.
   final int toolsPageBytes;
 
-  /// A peer's coordinator-reported addresses are asked for at most this often.
-  /// Peers re-report on their own heartbeat (>= 15 minutes), and the library
-  /// calls every peer every few seconds: without this an offline laptop would
-  /// cost one lookup per call and exhaust the account's 60 address requests
-  /// per hour within minutes.
+  /// Coordinator address lookups for one peer. The library calls every peer
+  /// every few seconds, so a peer that is offline would otherwise cost one
+  /// lookup per call and exhaust the account's 60 address requests per hour in
+  /// minutes. A lookup is allowed when nothing is cached, when the peer was
+  /// reached since the last lookup (its address probably changed: restart,
+  /// new IP), or when the gap since the last one has passed; the gap starts at
+  /// [candidateLookupBase] and doubles, up to [candidateLookupInterval], while
+  /// lookups keep returning the same answer.
+  final Duration candidateLookupBase;
   final Duration candidateLookupInterval;
   final Future<List<NetworkInterfaceSnapshot>> Function()? interfaceProvider;
   final int Function()? _clockSeconds;
@@ -152,6 +157,8 @@ final class MeshRuntime implements MeshDeviceSource {
   final _descriptions = <String, JsonMap>{};
   final _unknownPeerCheckedAt = <String, DateTime>{};
   final _candidateLookupAt = <String, DateTime>{};
+  final _candidateLookupGap = <String, Duration>{};
+  final _reachedSinceLookup = <String>{};
   bool _hostFactsLoaded = false;
   bool _routesLoaded = false;
   Future<void> _routeWrites = Future.value();
@@ -1120,7 +1127,9 @@ final class MeshRuntime implements MeshDeviceSource {
         _coordinatorSyncPending ||
         cached != null &&
             lookedUp != null &&
-            DateTime.now().difference(lookedUp) < candidateLookupInterval) {
+            !_reachedSinceLookup.contains(peer) &&
+            DateTime.now().difference(lookedUp) <
+                (_candidateLookupGap[peer] ?? candidateLookupBase)) {
       return cached ?? const [];
     }
     try {
@@ -1129,6 +1138,16 @@ final class MeshRuntime implements MeshDeviceSource {
       final list = (response['candidates'] as List)
           .map((e) => Map<String, Object?>.from(e as Map))
           .toList();
+      final unchanged =
+          cached != null && jsonEncode(cached) == jsonEncode(list);
+      final gap = _candidateLookupGap[peer] ?? candidateLookupBase;
+      _candidateLookupGap[peer] =
+          unchanged && !_reachedSinceLookup.contains(peer)
+              ? Duration(
+                  milliseconds: min(gap.inMilliseconds * 2,
+                      candidateLookupInterval.inMilliseconds))
+              : candidateLookupBase;
+      _reachedSinceLookup.remove(peer);
       _peerCandidates[peer] = list;
       _candidateLookupAt[peer] = DateTime.now();
       unawaited(_persistRoutes());
@@ -1222,6 +1241,7 @@ final class MeshRuntime implements MeshDeviceSource {
         candidates: candidates,
       );
       await _saveRoute(peer, winner.candidate);
+      _reachedSinceLookup.add(peer);
       return winner.result;
     } on Failure catch (failure) {
       if (remembered != null &&
