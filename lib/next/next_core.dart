@@ -486,7 +486,8 @@ final class NextCore {
     libraryData.register(state);
     storage.libraryRoots = media.service.authorizedRoots;
     storage.artworkBusy = () => uiData.artwork.busy;
-    uiData.meshLibrary = MeshLibrary(uiData, mesh);
+    uiData.meshLibrary =
+        MeshLibrary(uiData, mesh, subtitleProbe: mediaSubtitleProbe);
     memory.redact = uiData.meshLibrary!.worker.redactText;
     hooks.redact = uiData.meshLibrary!.worker.redactJson;
     phase('state: mesh library');
@@ -647,18 +648,48 @@ final class NextCore {
     BodySignals.emit = (event, id, facts) async {
       await hooks.emit(event, id, facts);
     };
-    await uiData.start();
-    phaseNipa('startup: Nipa ui data');
     await uiData.meshLibrary!.start();
     phaseNipa('startup: Nipa mesh library');
-    followups.start();
-    // The first indexer pass is catalogue input. Finish the two passes one
-    // after the other before the worker builds the snapshot: their writes then
-    // do not rebuild it during the first home, and their peak allocation does
-    // not overlap.
-    await danmaku.startIndexing();
-    await subtitles.start();
+    // The first pass over every local file is one library-worker request.
+    // Directory walks, candidate matching, parsing and the final writes all
+    // stay off the UI isolate; this turn only submits the pass, receives two
+    // small summaries and publishes one change.
+    final indexer = uiData.meshLibrary!.worker;
+    danmaku.sidecars.watch();
+    subtitles.watch();
+    danmaku.sidecars.beginBulk();
+    subtitles.beginBulk();
+    try {
+      final preferences = await subtitles.indexPreferences();
+      final indexed = await indexer.reconcileIndexers(
+        danmaku: danmaku.sidecars.enabled,
+        subtitles: subtitles.enabled,
+        subtitlePreferences: preferences,
+      );
+      final sidecars = indexed['sidecars'] as JsonMap?;
+      final subtitleFacts = indexed['subtitles'] as JsonMap?;
+      danmaku.sidecars.finishBulk(sidecars);
+      subtitles.finishBulk(subtitleFacts);
+      if ((sidecars?['changed'] as int? ?? 0) +
+              (subtitleFacts?['changed'] as int? ?? 0) >
+          0) {
+        uiData.notifyLibraryChanged();
+      }
+    } catch (error) {
+      danmaku.sidecars.finishBulk(null, error: error);
+      subtitles.finishBulk(null, error: error);
+      rethrow;
+    }
     phaseNipa('startup: Nipa indexers');
+    // Start the change poller only after the bulk pass has committed its
+    // input. Otherwise its worker reads overlap the wait for the catalogue
+    // scan and turn background indexing back into main-isolate work.
+    await uiData.start();
+    phaseNipa('startup: Nipa ui data');
+    // The first followup sweep also walks the complete durable input. Let it
+    // start after the catalogue scan instead of competing with it.
+    followups.start();
+    phaseNipa('startup: Nipa followups');
     await mesh.startConfigured();
     phaseNipa('startup: Nipa mesh configured');
     // One worker round now sees the complete startup input, including the

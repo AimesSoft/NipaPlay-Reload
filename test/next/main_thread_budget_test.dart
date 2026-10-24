@@ -357,6 +357,13 @@ void main() {
       for (final (name, longest, held) in probe.phases) name: (longest, held)
     };
 
+    // The first indexer pass is catalogue work, not UI work. Keep its own
+    // target separate from the general 4 ms ceiling so growing profiles cannot
+    // quietly consume almost the whole budget again.
+    expect(phases['startup: Nipa indexers']!.$1, lessThanOrEqualTo(1.0),
+        reason: 'startup: Nipa indexers held the main isolate '
+            '${phases['startup: Nipa indexers']!.$1.toStringAsFixed(3)} ms of CPU at once');
+
     // Everything Next does on the main isolate has the same hard ceiling.
     for (final MapEntry(key: name, value: (longest, _)) in phases.entries) {
       if (name == 'baseline' ||
