@@ -686,7 +686,7 @@ final class AgentEndpoint {
     for (var offset = 0;;) {
       final envelope = (await _harness.invokeJson(
               'task.list',
-              {'limit': 500, 'offset': offset},
+              {'limit': 100, 'offset': offset},
               Invocation(origin: origin)))
           .toEnvelope();
       if (envelope['status'] != 'completed') return envelope;
@@ -700,6 +700,8 @@ final class AgentEndpoint {
         };
       }
       offset = next;
+      // A page at a time, with the event loop turning between them.
+      await Future<void>.delayed(Duration.zero);
     }
   }
 
