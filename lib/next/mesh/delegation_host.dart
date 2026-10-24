@@ -109,6 +109,8 @@ final class AgentDelegations {
   Map<String, JsonMap>? _conversations, _delegations;
   Future<void> _serial = Future.value();
   final _tracked = <String, _Tracked>{};
+  // Completions still writing their record; [close] waits for them.
+  final _completing = <Future<void>>{};
   final _byThread = <String, _Tracked>{};
   DelegationChat? _listening;
   StreamSubscription<Map<String, dynamic>>? _events;
@@ -215,10 +217,12 @@ final class AgentDelegations {
         final turn = params['turn'] as Map;
         if (tracked.turnId != null && turn['id'] != tracked.turnId) return;
         tracked.completing = true;
-        unawaited(_complete(host, tracked, turn).catchError((Object error) {
+        late final Future<void> completing;
+        completing = _complete(host, tracked, turn).catchError((Object error) {
           tracked.finish('failed', redactHarnessText('$error'));
           _noteEnd(tracked);
-        }));
+        }).whenComplete(() => _completing.remove(completing));
+        _completing.add(completing);
     }
   }
 
@@ -264,6 +268,9 @@ final class AgentDelegations {
       }
     });
   }
+
+  /// Waits for the completions still writing their record (shutdown).
+  Future<void> close() => Future.wait(_completing.toList());
 
   /// A host method of the delegation protocol, from the authenticated
   /// device [peer].

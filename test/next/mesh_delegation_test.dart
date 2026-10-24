@@ -45,6 +45,7 @@ void main() {
   });
   tearDown(() async {
     await chat.close();
+    await receiver.close();
     await dir.delete(recursive: true);
   });
 
