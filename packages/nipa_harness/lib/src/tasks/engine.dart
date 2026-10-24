@@ -248,6 +248,8 @@ final class TaskEngine {
   Future<List<Job>> list({JobState? state, String? type}) =>
       _serial(() => store.list(state: state, type: type));
 
+  Future<List<Job>> listActive() => _serial(store.listActive);
+
   Future<List<Job>> listRecent(
           {JobState? state, String? type, int limit = 20, int offset = 0}) =>
       _serial(() => store.listRecent(

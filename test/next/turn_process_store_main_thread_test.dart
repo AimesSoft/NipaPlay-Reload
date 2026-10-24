@@ -121,10 +121,11 @@ void main() {
     final random = Random(2);
     final store = TurnProcessStore(Directory('${root.path}/facts'));
     await store.flush();
-    void event(String method, Map<String, dynamic> params) => store.observe(
-        {'method': method, 'params': {'threadId': 'one', ...params}},
-        'origin',
-        now);
+    void event(String method, Map<String, dynamic> params) =>
+        store.observeRedacted(
+            {'method': method, 'params': {'threadId': 'one', ...params}},
+            'origin',
+            now);
     Map<String, dynamic> command(int i, {String? out}) => {
           'id': 'c$i',
           'type': 'commandExecution',

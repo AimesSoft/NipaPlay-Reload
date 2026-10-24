@@ -641,7 +641,8 @@ final class ChatHost implements ConversationHistory {
           }
           livenessFor(eventThread).observe(message, DateTime.now());
           if (!probe)
-            processes.observe(message, originFor(eventThread), DateTime.now());
+            processes.observeRedacted(
+                message, originFor(eventThread), DateTime.now());
         }
         if (!probe &&
             (wireMethod == 'turn/started' || wireMethod == 'turn/completed')) {
