@@ -247,16 +247,18 @@ final class Job implements JsonEncodable {
     if (origin != null) 'origin': origin,
     if (error != null) 'error': _freezeJson(error!.toJson()),
     if (decision != null) 'decision': _freezeJson(decision!.toJson()),
+    // The receipt's details were frozen when it was made; copying them again
+    // for every job's first toJson grows with a download's file list.
     if (receipt != null)
-      'receipt': _freezeJson({
+      'receipt': Map<String, Object?>.unmodifiable({
         ...receipt!.toJson(),
         if (cancelRequestedAt != null)
-          'cancellation': {
+          'cancellation': Map<String, Object?>.unmodifiable({
             'requestedAt': cancelRequestedAt!.toIso8601String(),
             'phase': cancelRequestedPhase,
             'sideEffectCommitted': sideEffectCommitted,
             'afterCommit': cancelAfterCommit,
-          },
+          }),
       }),
   });
 

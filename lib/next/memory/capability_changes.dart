@@ -5,6 +5,7 @@ import 'package:crypto/crypto.dart';
 import 'package:nipa_harness/nipa_harness.dart';
 
 import '../capabilities/family_descriptions.dart';
+import '../util/slicer.dart';
 
 /// Facts about how the capability catalogue differs from the one the previous
 /// launch had. It states what changed; what to do about it is not its to say.
@@ -33,7 +34,7 @@ final class CapabilityCatalogChanges {
   /// the change record if there is one. The first launch only stores.
   Future<JsonMap?> observe(Iterable<ActionSpec> catalog,
       {String? appVersion, String? build}) async {
-    final snapshot = _snapshot(catalog);
+    final snapshot = await _snapshot(catalog);
     final fingerprint = _hash(jsonEncode(_sorted(snapshot)));
     final stored = await _read();
     final previous = stored?['families'];
@@ -123,9 +124,15 @@ final class CapabilityCatalogChanges {
       };
 
   /// {family: {description: hash, actions: {id: hash}}}
-  static Map<String, Object?> _snapshot(Iterable<ActionSpec> catalog) {
+  ///
+  /// Hashing every action's schema is a few hundred small pieces of work, done
+  /// in turns so the interface keeps drawing while it starts.
+  static Future<Map<String, Object?>> _snapshot(
+      Iterable<ActionSpec> catalog) async {
     final byFamily = <String, Map<String, String>>{};
+    final slice = Slicer();
     for (final spec in catalog) {
+      await slice();
       final family = spec.id.split('.').first;
       byFamily.putIfAbsent(family, () => {})[spec.id] = _hash(jsonEncode(_sorted({
         'id': spec.id,
