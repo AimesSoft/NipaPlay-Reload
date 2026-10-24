@@ -3,8 +3,11 @@ import 'dart:io';
 
 import 'package:meta/meta.dart';
 
-/// Pure Dart (the headless host uses this file), so no `debugPrint`.
-void _log(String message) => stderr.writeln(message);
+/// Pure Dart (the headless host uses this file), so no Flutter imports:
+/// Flutter's own `kIsWeb` test, and `print` where `debugPrint` was.
+const bool _isWeb = bool.fromEnvironment('dart.library.js_interop');
+// ignore: avoid_print
+void _log(String message) => print(message);
 
 /// 提供系统代理的解析结果，并用于 HttpClient.findProxy。
 class SystemProxyService {
@@ -24,6 +27,10 @@ class SystemProxyService {
       return;
     }
     _initialized = true;
+
+    if (_isWeb) {
+      return;
+    }
 
     try {
       final envConfig = _loadFromEnvironment();
