@@ -15,6 +15,35 @@ import 'driver.dart';
 import 'native.dart';
 import 'versions.dart';
 
+/// Reads container chapters from an Erika presenter that has just opened a
+/// media. `null` is "this Erika cannot tell us": an older method table, an
+/// unsupported library, or a failed read. An empty list is the kernel's own
+/// answer that the file has no chapters.
+Future<List<ChapterFacts>?> readErikaChapters(
+    Future<NativeInvokeReply> Function(String, JsonMap) invokeJson) async {
+  final reply = await invokeJson('chapters', const {});
+  if (!reply.supported || reply.error != null) return null;
+  final result = reply.result;
+  if (result is! Map) return null;
+  final raw = result['chapters'];
+  if (raw is! List) return null;
+  final chapters = <ChapterFacts>[];
+  for (final item in raw) {
+    if (item is! Map) return null;
+    final title = item['title'];
+    final startMs = item['startMs'];
+    final endMs = item['endMs'];
+    if (title is! String ||
+        startMs is! num ||
+        (endMs != null && endMs is! num)) {
+      return null;
+    }
+    chapters.add(
+        ChapterFacts(title, startMs.toInt(), endMs: (endMs as num?)?.toInt()));
+  }
+  return chapters;
+}
+
 /// Erika, our own kernel, as a [KernelDriver]. The media opens through
 /// Erika's adapter, paused, and seeks to its start position; Erika paints
 /// into a native view under the window (the picture is a
@@ -72,6 +101,9 @@ final class ErikaDriver extends AdapterDriver
 
   /// The state Erika last reported.
   ErikaPlaybackState? _erikaState;
+
+  /// Container chapters read once when the media opened.
+  List<ChapterFacts>? _chapters;
 
   /// A play Erika took whose Playing report has not come yet. Erika is
   /// playing by then, but what it has reported still says otherwise; a
@@ -184,6 +216,8 @@ final class ErikaDriver extends AdapterDriver
   Future<Duration> openMedia(ResolvedSource source, Duration start) async {
     adapter.setMedia(source.uri, PlayerMediaType.video);
     await adapter.prepare();
+    queue.live();
+    _chapters = await readErikaChapters(adapter.invokeNative);
     queue.live();
     // Duration and the tracks arrive as events once Erika has opened it.
     await _durationKnown.future;
@@ -336,7 +370,8 @@ final class ErikaDriver extends AdapterDriver
   MediaFacts readMedia() => mediaFromInfo(adapter.mediaInfo,
       activeAudio: adapter.activeAudioTracks,
       activeSubtitles: adapter.activeSubtitleTracks,
-      frameRate: adapter.videoFrameRate);
+      frameRate: adapter.videoFrameRate,
+      chapters: _chapters);
 
   /// Erika's own picture, with the subtitles it draws in it. It has no
   /// frame step of its own: stepping a frame is a seek by the declared
