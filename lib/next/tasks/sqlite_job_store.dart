@@ -44,6 +44,20 @@ final class SqliteJobStore implements JobStore {
       clauses.add('type = ?');
       arguments.add(type);
     }
+    return _listWhere(clauses, arguments);
+  }
+
+  @override
+  Future<List<Job>> listActive() => _listWhere([
+        'state NOT IN (?, ?, ?)'
+      ], [
+        JobState.succeeded.wireName,
+        JobState.failed.wireName,
+        JobState.cancelled.wireName,
+      ]);
+
+  Future<List<Job>> _listWhere(
+      List<String> clauses, List<Object?> arguments) async {
     final where = clauses.isEmpty ? null : clauses.join(' AND ');
     final count = (await _database.rawQuery(
             'SELECT COUNT(*) AS n FROM jobs${where == null ? "" : " WHERE $where"}',

@@ -223,7 +223,34 @@ class NipaChat extends ChangeNotifier {
 
   // —— The transcript ——
 
-  List<ChatTurn> turns = [];
+  List<ChatTurn> _turns = [];
+  final _turnsById = <String, ChatTurn>{};
+
+  /// Every turn kept for live state. The transcript only builds the latest
+  /// [historyTurns], the same window it reads when a session opens.
+  List<ChatTurn> get turns => _turns;
+  set turns(List<ChatTurn> value) {
+    _turns = value;
+    _turnsById.clear();
+    for (final turn in value) {
+      if (turn.id case final id?) _turnsById[id] = turn;
+    }
+  }
+
+  void _rememberTurnId(ChatTurn turn, String? id) {
+    final previous = turn.id;
+    if (previous != null && previous != id) {
+      if (identical(_turnsById[previous], turn)) _turnsById.remove(previous);
+    }
+    turn.id = id;
+    if (id != null) _turnsById[id] = turn;
+  }
+
+  /// The slice the transcript builds; older turns stay available to live
+  /// state without making every rebuild grow with the session's history.
+  List<ChatTurn> get visibleTurns => turns.length <= historyTurns
+      ? turns
+      : turns.sublist(turns.length - historyTurns);
   bool loading = false;
 
   /// Something went wrong that the conversation says once.
@@ -520,7 +547,7 @@ class NipaChat extends ChangeNotifier {
         final response = await port.startTurn(target, _pendingInput ?? '');
         if (response == null) continue;
         final id = turnIdOf(response);
-        if (id != null) turn.id = id;
+        if (id != null) _rememberTurnId(turn, id);
         break;
       }
     } catch (error) {
@@ -757,8 +784,18 @@ class NipaChat extends ChangeNotifier {
 
   ChatTurn? _turnById(String? id) {
     if (id == null) return null;
+    if (_turnsById[id] case final turn?) {
+      if (turn.id == id) return turn;
+      // The id moved without going through [_rememberTurnId] (for example an
+      // older caller mutating ChatTurn directly). Never deliver an event to
+      // that stale owner; fall back to the live list and repair the index.
+      _turnsById.remove(id);
+    }
     for (final t in turns.reversed) {
-      if (t.id == id) return t;
+      if (t.id == id) {
+        _turnsById[id] = t;
+        return t;
+      }
     }
     return null;
   }
@@ -776,7 +813,7 @@ class NipaChat extends ChangeNotifier {
           pending.id == null &&
           pending.status == 'inProgress') {
         // What you just said: its turn has started.
-        pending.id = id;
+        _rememberTurnId(pending, id);
         turn = pending;
       } else if (method == 'turn/started' || method.startsWith('item/')) {
         turn = ChatTurn(id: id);
@@ -792,7 +829,7 @@ class NipaChat extends ChangeNotifier {
         (params['item'] as Map)['type'] == 'userMessage' &&
         ChatTurn.saidOf(params['item'] as Map) == null) {
       final other = ChatTurn(id: turn.id)..followup = true;
-      turn.id = null;
+      _rememberTurnId(turn, null);
       turns = [
         for (final t in turns) ...[if (identical(t, turn)) other, t]
       ];

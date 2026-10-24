@@ -309,6 +309,10 @@ abstract interface class JobStore {
   Future<Job?> get(String jobId);
   Future<List<Job>> list({JobState? state, String? type});
 
+  /// Every job that has not settled. This is bounded by work actually under
+  /// way, unlike the complete task history used for audit and recovery.
+  Future<List<Job>> listActive();
+
   /// A bounded page in reverse update order. Callers that need only the most
   /// recent matching jobs must not decode the whole persisted task history.
   Future<List<Job>> listRecent(

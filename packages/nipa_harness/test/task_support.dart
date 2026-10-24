@@ -13,6 +13,9 @@ final class MemoryJobStore implements JobStore {
           (type == null || job.type == type))
       .toList();
   @override
+  Future<List<Job>> listActive() async =>
+      jobs.values.where((job) => !job.state.isTerminal).toList();
+  @override
   Future<List<Job>> listRecent(
       {JobState? state, String? type, int limit = 20, int offset = 0}) async {
     final matching = jobs.values

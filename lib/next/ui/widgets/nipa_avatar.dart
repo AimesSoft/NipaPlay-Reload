@@ -8,17 +8,15 @@ import 'package:flutter/widgets.dart';
 
 import '../theme/tokens.dart';
 
-/// Nipa's face, cropped at runtime from the key visual that already ships
-/// with the app (`assets/images/main_image.png`), so no new asset is needed.
-/// The crop matches the concept's `img/nipa-avatar.jpg`.
+/// Nipa's face, cropped once from the key visual to the 256 px that the
+/// largest avatar actually needs. Decoding and scaling the 3840 px key visual
+/// on the main isolate used to take several milliseconds during first paint.
 @immutable
 class NipaFaceImage extends ImageProvider<NipaFaceImage> {
   const NipaFaceImage();
 
-  static const asset = 'assets/images/main_image.png';
-  static const _left = 0.4958, _top = 0.1241, _side = 0.2604;
-  static const _decodeWidth = 1280;
-  static const _out = 256;
+  static const asset = 'assets/images/nipa_avatar_256.png';
+  static const size = 256;
 
   @override
   Future<NipaFaceImage> obtainKey(ImageConfiguration configuration) =>
@@ -35,27 +33,14 @@ class NipaFaceImage extends ImageProvider<NipaFaceImage> {
         await ui.ImmutableBuffer.fromUint8List(data.buffer.asUint8List());
     final descriptor = await ui.ImageDescriptor.encoded(buffer);
     final codec = await descriptor.instantiateCodec(
-        targetWidth: _decodeWidth,
-        targetHeight:
-            (descriptor.height * _decodeWidth / descriptor.width).round());
-    final source = (await codec.getNextFrame()).image;
-    final side = source.width * _side;
-    final rect =
-        Rect.fromLTWH(source.width * _left, source.height * _top, side, side);
-    final recorder = ui.PictureRecorder();
-    Canvas(recorder).drawImageRect(
-        source,
-        rect,
-        Rect.fromLTWH(0, 0, _out.toDouble(), _out.toDouble()),
-        Paint()..filterQuality = FilterQuality.high);
-    final picture = recorder.endRecording();
-    final face = await picture.toImage(_out, _out);
-    picture.dispose();
-    source.dispose();
-    codec.dispose();
-    descriptor.dispose();
-    buffer.dispose();
-    return ImageInfo(image: face);
+        targetWidth: size, targetHeight: size);
+    try {
+      return ImageInfo(image: (await codec.getNextFrame()).image);
+    } finally {
+      codec.dispose();
+      descriptor.dispose();
+      buffer.dispose();
+    }
   }
 
   @override
