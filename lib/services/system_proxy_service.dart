@@ -1,7 +1,10 @@
 import 'dart:async';
 import 'dart:io';
 
-import 'package:flutter/foundation.dart';
+import 'package:meta/meta.dart';
+
+/// Pure Dart (the headless host uses this file), so no `debugPrint`.
+void _log(String message) => stderr.writeln(message);
 
 /// 提供系统代理的解析结果，并用于 HttpClient.findProxy。
 class SystemProxyService {
@@ -22,10 +25,6 @@ class SystemProxyService {
     }
     _initialized = true;
 
-    if (kIsWeb) {
-      return;
-    }
-
     try {
       final envConfig = _loadFromEnvironment();
       if (envConfig != null) {
@@ -41,7 +40,7 @@ class SystemProxyService {
         // 其他平台暂时依赖环境变量，后续可按需补充。
       }
     } catch (e) {
-      debugPrint('SystemProxyService initialize error: $e');
+      _log('SystemProxyService initialize error: $e');
     }
   }
 
@@ -134,7 +133,7 @@ class SystemProxyService {
       );
 
       if (result.exitCode != 0) {
-        debugPrint(
+        _log(
             'SystemProxyService: failed to query registry, code=${result.exitCode}');
         return;
       }
@@ -182,7 +181,7 @@ class SystemProxyService {
         _applyConfig(config);
       }
     } catch (e) {
-      debugPrint('SystemProxyService: error loading windows proxy: $e');
+      _log('SystemProxyService: error loading windows proxy: $e');
     }
   }
 
@@ -190,7 +189,7 @@ class SystemProxyService {
     try {
       final result = await Process.run('/usr/sbin/scutil', ['--proxy']);
       if (result.exitCode != 0) {
-        debugPrint(
+        _log(
             'SystemProxyService: failed to query macOS proxy, code=${result.exitCode}');
         return;
       }
@@ -202,7 +201,7 @@ class SystemProxyService {
         _proxyEnabled = false;
       }
     } catch (e) {
-      debugPrint('SystemProxyService: error loading macOS proxy: $e');
+      _log('SystemProxyService: error loading macOS proxy: $e');
     }
   }
 

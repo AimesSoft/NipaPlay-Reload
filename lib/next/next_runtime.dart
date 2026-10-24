@@ -499,7 +499,7 @@ final class NextRuntime extends ChangeNotifier {
     }
     final packageInfo = await PackageInfo.fromPlatform();
     final instanceFacts = InstanceFacts(packageInfo.version);
-    PlayerPerf.install();
+    FlutterPlayerPerfFrames.install();
     final localPlayback = playback.localOperations(core.settings,
         () => globals.navigatorKey.currentContext!);
     final localLibrary = _localLibrary = LocalLibraryOperations(

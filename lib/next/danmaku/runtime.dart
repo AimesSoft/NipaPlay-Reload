@@ -16,7 +16,7 @@ import 'store.dart';
 import 'local_source.dart';
 import 'sidecar.dart';
 import '../player/next_playback.dart';
-import '../player/perf/budget.dart';
+import '../player/perf/counters.dart';
 
 /// Forwards track operations to what plays while Next is open.
 final class _HostPlayerPort implements PlaybackDanmakuPort {

@@ -9,7 +9,7 @@ import 'export.dart';
 import 'alignment.dart';
 import 'import.dart';
 import 'classic_cache.dart';
-import '../player/perf/budget.dart';
+import '../player/perf/counters.dart';
 import 'package:nipaplay/utils/danmaku_parser.dart';
 import 'package:nipaplay/utils/dandanplay_comments.dart';
 
