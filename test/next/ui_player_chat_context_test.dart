@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/services.dart';
@@ -151,6 +152,46 @@ void main() {
       expect(said.watched, '《寻龙记》');
       expect(said.about, isNull);
     });
+  });
+
+  test('a stale turn id cannot steal an event after the id moves', () async {
+    final port = _ScriptedPort();
+    final chat = NipaChat(port: port, data: _ChatData());
+    addTearDown(() {
+      chat.dispose();
+      port.dispose();
+    });
+    final turn = ChatTurn(id: 'old')..status = 'inProgress';
+    chat.thread = 'main';
+    chat.turns = [turn];
+    // A legacy/direct caller changes the field without the setter.
+    turn.id = 'new';
+    port.emit({
+      'method': 'item/agentMessage/delta',
+      'params': {
+        'threadId': 'main',
+        'turnId': 'new',
+        'itemId': 'answer',
+        'delta': '新的回答',
+      },
+    });
+    await Future<void>.delayed(Duration.zero);
+    port.emit({
+      'method': 'item/agentMessage/delta',
+      'params': {
+        'threadId': 'main',
+        'turnId': 'old',
+        'itemId': 'stale-answer',
+        'delta': '不能投给新回合',
+      },
+    });
+    await Future<void>.delayed(Duration.zero);
+
+    expect(chat.turns, hasLength(2));
+    expect(turn.id, 'new');
+    expect(turn.lastWords, '新的回答');
+    expect(chat.turns.last.id, 'old');
+    expect(chat.turns.last.lastWords, '不能投给新回合');
   });
 
   group('over the player', () {
@@ -315,7 +356,7 @@ void main() {
 }
 
 /// A host that is there and keeps what it is told.
-final class _Port implements ChatPort {
+class _Port implements ChatPort {
   final said = <String>[];
 
   @override
@@ -349,6 +390,21 @@ final class _Port implements ChatPort {
   void dispose() {}
   @override
   dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
+}
+
+final class _ScriptedPort extends _Port {
+  final _events = StreamController<ChatEvent>.broadcast();
+
+  @override
+  bool get available => false;
+
+  @override
+  Stream<ChatEvent> get display => _events.stream;
+
+  void emit(ChatEvent event) => _events.add(event);
+
+  @override
+  void dispose() => _events.close();
 }
 
 final class _UnavailablePort implements ChatPort {

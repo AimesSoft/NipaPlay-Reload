@@ -136,12 +136,13 @@ class _ChatTranscriptState extends State<ChatTranscript> {
     }
     _turns = chat.turns.length;
     final text = NextText.sans(widget.textSize, height: 1.7);
+    final shown = chat.visibleTurns;
     final children = <Widget>[
-      for (final (i, turn) in chat.turns.indexed)
+      for (final (i, turn) in shown.indexed)
         _TurnView(
           key: ObjectKey(turn),
           turn: turn,
-          last: i == chat.turns.length - 1,
+          last: i == shown.length - 1,
           chat: chat,
           callbacks: widget.callbacks,
           text: text,

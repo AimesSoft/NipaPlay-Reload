@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
@@ -115,6 +116,48 @@ void main() {
     await store.flush();
     for (final file in directory.listSync().whereType<File>()) {
       expect(file.readAsStringSync(), isNot(contains(secret)));
+    }
+  });
+
+  test('the live reader path and a direct caller both keep secrets out',
+      () async {
+    const secret = 'AKIAREALKEYSHAPE0123456789abcdef';
+    final directory = Directory('${root.path}/facts');
+    final store = TurnProcessStore(directory);
+    await store.flush();
+    Map<String, dynamic> event(String turn, String output) => {
+          'method': 'item/completed',
+          'params': {
+            'threadId': 'one',
+            'turnId': turn,
+            'item': {
+              'id': 'c',
+              'type': 'commandExecution',
+              'command': 'echo token=$secret',
+              'aggregatedOutput': 'api_key: $secret',
+            }
+          }
+        };
+    for (final turn in ['live', 'safe']) {
+      store.observe({
+        'method': 'turn/started',
+        'params': {
+          'threadId': 'one',
+          'turn': {'id': turn}
+        }
+      }, 'origin', now);
+    }
+    // The host publishes ChatLineReader's already-redacted map here.
+    store.observeRedacted(
+        Map<String, dynamic>.from(redactHarnessJson(event('live', '')) as Map),
+        'origin',
+        now);
+    // Other callers still get the defensive redaction in observe.
+    store.observe(event('safe', ''), 'origin', now);
+    await store.flush();
+    for (final turn in ['live', 'safe']) {
+      final saved = jsonEncode(await store.read('one', turn));
+      expect(saved, isNot(contains(secret)), reason: turn);
     }
   });
 

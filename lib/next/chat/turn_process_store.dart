@@ -70,7 +70,7 @@ final class TurnProcessStore {
   int _total = 0;
   int _nextSeq = 0;
   bool _ready = false, _unusable = false;
-  final _early = <(Map<String, dynamic>, String, DateTime)>[];
+  final _early = <(Map<String, dynamic>, String, DateTime, bool)>[];
   final _deletions = <int>[];
 
   /// Writes, reads and the opening run one at a time, in this order.
@@ -106,8 +106,8 @@ final class TurnProcessStore {
     _ready = true;
     final early = List.of(_early);
     _early.clear();
-    for (final (message, origin, now) in early) {
-      observe(message, origin, now);
+    for (final (message, origin, now, redacted) in early) {
+      _observe(message, origin, now, redacted: redacted);
     }
   }
 
@@ -207,8 +207,21 @@ final class TurnProcessStore {
 
   /// Costs the size of the item that changed, not of its turn.
   void observe(Map<String, dynamic> message, String origin, DateTime now) {
+    _observe(message, origin, now, redacted: false);
+  }
+
+  /// [message] has already passed [redactHarnessJson] off the main isolate,
+  /// as every line from [ChatLineReader] has. Only clipping and encoding are
+  /// left here.
+  void observeRedacted(
+      Map<String, dynamic> message, String origin, DateTime now) {
+    _observe(message, origin, now, redacted: true);
+  }
+
+  void _observe(Map<String, dynamic> message, String origin, DateTime now,
+      {required bool redacted}) {
     if (!_ready) {
-      _early.add((message, origin, now));
+      _early.add((message, origin, now, redacted));
       return;
     }
     if (_unusable) return;
@@ -281,9 +294,10 @@ final class TurnProcessStore {
       // the limit, the whole text is redacted as before.
       final window = 2 * limit + 16384;
       final over = raw.length > window;
-      var text = redactHarnessText(over ? raw.substring(0, window) : raw);
+      final source = over ? raw.substring(0, window) : raw;
+      var text = redacted ? source : redactHarnessText(source);
       if (over && text.runes.length < limit + 4096) {
-        text = redactHarnessText(raw);
+        text = redacted ? raw : redactHarnessText(raw);
       }
       if (text.runes.length <= limit) return text;
       cut = true;

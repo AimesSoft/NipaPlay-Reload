@@ -183,6 +183,8 @@ final class _DelayedReadStore implements JobStore {
   Future<List<Job>> list({JobState? state, String? type}) =>
       delegate.list(state: state, type: type);
   @override
+  Future<List<Job>> listActive() => delegate.listActive();
+  @override
   Future<List<Job>> listRecent(
           {JobState? state, String? type, int limit = 20, int offset = 0}) =>
       delegate.listRecent(

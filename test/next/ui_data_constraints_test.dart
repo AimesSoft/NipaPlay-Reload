@@ -178,6 +178,19 @@ void main() {
         reason: 'a download is not a work');
   });
 
+  test('the live task list decodes only a bounded recent window', () async {
+    final ids = <String>[];
+    for (var i = 0; i < 80; i++) {
+      final job = await engine.submit(type: 'download', title: 'window-$i');
+      ids.add(job.jobId);
+      await untilState(engine, job.jobId, JobState.succeeded);
+    }
+    final tasks = await service.tasks().first;
+    expect(tasks, hasLength(64));
+    expect(tasks.map((task) => task.taskId), contains(ids.last));
+    expect(tasks.map((task) => task.taskId), isNot(contains(ids.first)));
+  });
+
   test('helper cards and tasks retain thread, summary and unknown progress',
       () async {
     final job =
