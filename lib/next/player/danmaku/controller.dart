@@ -6,6 +6,7 @@ import 'package:nipa_harness/nipa_harness.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:nipaplay/constants/settings_keys.dart';
+import 'package:nipaplay/plugins/danmaku/titan_danmaku_settings.dart';
 import 'package:nipaplay/security/credential_store.dart';
 import 'package:nipaplay/services/danmaku_spoiler_filter_service.dart';
 
@@ -87,8 +88,51 @@ final class SessionDanmakuController extends ChangeNotifier
       ? 30 : number('danmaku.fontSize');
   double get scrollSeconds => 10 / number('danmaku.speedMultiplier');
 
+  // ---- Titan's own settings, while a plugin renderer that uses them draws ----
+
+  TitanDanmakuSettings titan = const TitanDanmakuSettings();
+  Timer? _titanSave;
+  static const _titanPrefix = 'danmaku.titan.';
+
+  Future<void> _loadTitan() async {
+    final prefs = await SharedPreferences.getInstance();
+    final encoded = prefs.getString(SettingsKeys.titanDanmakuSettings);
+    if (encoded == null || encoded.isEmpty) return;
+    try {
+      titan = TitanDanmakuSettings.fromJson(
+          Map<String, dynamic>.from(jsonDecode(encoded) as Map));
+    } catch (error) {
+      debugPrint('[NextDanmaku] Titan settings: $error');
+    }
+  }
+
+  /// Takes Titan's settings; a drag is kept after a short quiet, a commit
+  /// at once (as Classic keeps them).
+  void setTitan(TitanDanmakuSettings next, {bool commit = false}) {
+    if (_closed) return;
+    titan = next;
+    notifyListeners();
+    _titanSave?.cancel();
+    Future<void> save() async {
+      final prefs = await SharedPreferences.getInstance();
+      await SettingsAccess.persist(SettingsKeys.titanDanmakuSettings,
+          () => prefs.setString(
+              SettingsKeys.titanDanmakuSettings, jsonEncode(titan.toJson())));
+    }
+    if (commit) {
+      _titanSave = null;
+      unawaited(save());
+    } else {
+      _titanSave = Timer(const Duration(milliseconds: 250), () {
+        _titanSave = null;
+        unawaited(save());
+      });
+    }
+  }
+
   Future<void> loadSettings() async {
     final loaded = await NextDanmakuSettings.load();
+    await _loadTitan();
     if (_closed) return;
     settings.addAll(loaded);
     notifyListeners();
@@ -430,11 +474,26 @@ final class SessionDanmakuController extends ChangeNotifier
       'Danmaku timeline changed; restart pagination.');
 
   @override
-  Object? readSetting(String key) => settings[key];
+  Object? readSetting(String key) => key.startsWith(_titanPrefix)
+      ? titan.toJson()[key.substring(_titanPrefix.length)]
+      : settings[key];
+
+  @override
+  bool handles(String key) =>
+      NextDanmakuSettings.keys.containsKey(key) || key.startsWith(_titanPrefix);
 
   @override
   Future<void> writeSetting(String key, Object? value) async {
     if (_closed) return;
+    if (key.startsWith(_titanPrefix)) {
+      setTitan(
+          TitanDanmakuSettings.fromJson({
+            ...titan.toJson(),
+            key.substring(_titanPrefix.length): value
+          }),
+          commit: true);
+      return;
+    }
     if (key == 'danmaku.spoilerPreventionEnabled' && value == true &&
         !await spoilerReady()) {
       throw const Failure(FailureCode.unavailable,
@@ -519,6 +578,10 @@ final class SessionDanmakuController extends ChangeNotifier
     _closed = true;
     _native = null;
     _pluginSource?.removeListener(_pluginWordsChanged);
+    if (_titanSave != null) {
+      _titanSave!.cancel();
+      _titanSave = null;
+    }
     unawaited(_echoes.close());
     _worker.close();
     super.dispose();

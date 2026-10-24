@@ -970,14 +970,33 @@ final class SessionPlayback implements NextPlayback, VideoStageHost {
     }
   }
 
+  // While a plugin renderer that has settings of its own (Titan) draws, the
+  // opacity and size dials are those settings, as in Classic.
+  bool get _titan =>
+      !danmaku.native &&
+      DanmakuKernelFactory.activePluginRenderer?.usesTitanSettings == true;
+
   @override
-  PlayerDial get danmakuOpacity => PlayerDial(danmaku.number('danmaku.opacity'), 0, 1, 0.01, DialUnit.percent);
+  PlayerDial get danmakuOpacity => _titan
+      ? PlayerDial(danmaku.titan.opacity, 0.2, 1, 0.05, DialUnit.percent)
+      : PlayerDial(danmaku.number('danmaku.opacity'), 0, 1, 0.01, DialUnit.percent);
   @override
-  Future<void> setDanmakuOpacity(double value) => danmaku.writeSetting('danmaku.opacity', value);
+  Future<void> setDanmakuOpacity(double value) async {
+    if (_titan) {
+      danmaku.setTitan(danmaku.titan.copyWith(opacity: value));
+    } else {
+      await danmaku.writeSetting('danmaku.opacity', value);
+    }
+  }
   @override
-  PlayerDial get danmakuSize => PlayerDial(danmaku.fontSize, 12, 60, 0.5, DialUnit.points);
+  PlayerDial get danmakuSize => _titan
+      ? PlayerDial(danmaku.titan.fontSize, 0.5, 2, 0.05, DialUnit.times)
+      : PlayerDial(danmaku.fontSize, 12, 60, 0.5, DialUnit.points);
   @override
-  Future<void> setDanmakuSize(double value, {bool done = false}) => danmaku.writeSetting('danmaku.fontSize', value);
+  Future<void> setDanmakuSize(double value, {bool done = false}) async {
+    if (!_titan) return danmaku.writeSetting('danmaku.fontSize', value);
+    danmaku.setTitan(danmaku.titan.copyWith(fontSize: value), commit: done);
+  }
   @override
   double get danmakuArea => danmaku.number('danmaku.displayArea');
   @override

@@ -192,7 +192,6 @@ void main() {
   });
 
   group('in a playback session', () {
-    late Directory temp;
     late String path;
     late FakeHost rig;
     late SessionPlayback playback;

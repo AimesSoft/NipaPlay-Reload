@@ -158,6 +158,23 @@ void main() {
       expect(await texts(), ['hello', 'bad word', 'nice123']);
     });
 
+    test('Titan\'s settings are the controller\'s: written, kept, sent to the page',
+        () async {
+      final c = SessionDanmakuController();
+      addTearDown(c.dispose);
+      expect(c.handles('danmaku.titan.opacity'), true);
+      expect(c.handles('danmaku.opacity'), true);
+      expect(c.handles('player.volume'), false);
+      await c.writeSetting('danmaku.titan.opacity', 0.5);
+      expect(c.titan.opacity, 0.5);
+      expect(c.readSetting('danmaku.titan.opacity'), 0.5);
+      final prefs = await SharedPreferences.getInstance();
+      final stored = jsonDecode(prefs.getString('titan_danmaku_settings')!) as Map;
+      expect(stored['opacity'], 0.5);
+      c.setTitan(c.titan.copyWith(fontSize: 1.5));
+      expect(c.titan.fontSize, 1.5);
+    });
+
     test('a window for a plugin renderer holds the window\'s comments only, as text',
         () async {
       final c = SessionDanmakuController(

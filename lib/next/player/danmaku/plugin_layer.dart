@@ -2,12 +2,9 @@ import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 import 'package:webview_flutter/webview_flutter.dart';
 
-import 'package:nipaplay/constants/settings_keys.dart';
 import 'package:nipaplay/plugins/danmaku/plugin_external_script_cache.dart';
-import 'package:nipaplay/plugins/danmaku/titan_danmaku_settings.dart';
 import 'package:nipaplay/plugins/models/plugin_danmaku_renderer.dart';
 
 import '../core/clock.dart';
@@ -68,7 +65,6 @@ class _NextPluginDanmakuLayerState extends State<NextPluginDanmakuLayer> {
   Duration _anchorAt = Duration.zero;
   double _anchorRate = 1;
   bool _anchorAdvancing = false;
-  TitanDanmakuSettings _titan = const TitanDanmakuSettings();
 
   SessionPlayback get _p => widget.playback;
   PluginDanmakuRenderer get _renderer => widget.renderer;
@@ -175,16 +171,6 @@ class _NextPluginDanmakuLayerState extends State<NextPluginDanmakuLayer> {
     final generation = ++_generation;
     try {
       final pagePath = await PluginExternalScriptCache.prepareRendererPage(_renderer);
-      if (_renderer.usesTitanSettings) {
-        final encoded =
-            (await SharedPreferences.getInstance()).getString(SettingsKeys.titanDanmakuSettings);
-        if (encoded != null && encoded.isNotEmpty) {
-          try {
-            _titan = TitanDanmakuSettings.fromJson(
-                Map<String, dynamic>.from(jsonDecode(encoded) as Map));
-          } catch (_) {}
-        }
-      }
       if (!mounted || generation != _generation) return;
       final controller = WebViewController();
       await controller.setJavaScriptMode(JavaScriptMode.unrestricted);
@@ -285,7 +271,7 @@ class _NextPluginDanmakuLayerState extends State<NextPluginDanmakuLayer> {
 
   Map<String, dynamic> _settings() {
     final c = _p.danmaku;
-    final rendererSettings = _titan.toJson();
+    final rendererSettings = c.titan.toJson();
     return {
       'visible': _visible,
       // Linear, as everywhere in Next (D4).

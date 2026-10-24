@@ -411,7 +411,7 @@ abstract final class ApplicationSettings {
           decodeStorage: decodeValue,
           read: () async {
             final next = NextDanmakuSettings.active;
-            if (next != null && NextDanmakuSettings.keys.containsKey(key)) {
+            if (next != null && next.handles(key)) {
               return next.readSetting(key);
             }
             return runtimeRead != null ? runtimeRead() : readPreference(key, storageKey, decodeValue);
@@ -430,7 +430,7 @@ abstract final class ApplicationSettings {
               return;
             }
             final next = NextDanmakuSettings.active;
-            if (next != null && NextDanmakuSettings.keys.containsKey(key)) {
+            if (next != null && next.handles(key)) {
               await next.writeSetting(key, value);
             } else {
               await write(value);
