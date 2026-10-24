@@ -1,6 +1,5 @@
 import 'dart:io';
 
-import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:nipaplay/models/playable_item.dart';
 import 'package:nipaplay/next/player/next_playback.dart';

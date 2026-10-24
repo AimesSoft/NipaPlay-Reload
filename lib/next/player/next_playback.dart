@@ -211,9 +211,9 @@ abstract interface class VideoStageHost {
 }
 
 /// Next's playback: everything in Next that is not the player itself reads
-/// and drives what plays through this. From P1 Next's own layer plays
-/// ([SessionPlayback] over [NextPlayerHost]); [ClassicBackedPlayback], P0's
-/// seam over Classic's player, stays only until P6 removes it.
+/// and drives what plays through this: Next's own layer plays
+/// ([SessionPlayback] over [NextPlayerHost]). Classic's player meets it only
+/// at the lease (`classic/classic_boundary.dart`).
 ///
 /// What changes rarely is pushed ([media], [transport], [danmakuVersion]);
 /// nothing in Next listens to the player at the rate its time moves except

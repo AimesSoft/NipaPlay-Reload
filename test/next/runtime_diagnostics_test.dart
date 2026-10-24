@@ -15,7 +15,6 @@ import 'package:nipaplay/player_abstraction/player_abstraction.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'player/fake_driver.dart';
-import 'player_test_support.dart';
 import 'test_support.dart';
 
 /// mpv as a kernel instance's handle, recording the log file it is told to
