@@ -452,6 +452,13 @@ abstract class AdapterDriver implements KernelDriver {
     _emit((seq, at) => KernelTracksChanged(instance, seq, at, next));
   }
 
+  /// A fuller report of the opened media arrived after [open]'s snapshot
+  /// (for example, metadata that the kernel made available later).
+  @protected
+  void confirmMedia(MediaFacts next) {
+    _emit((seq, at) => KernelMediaChanged(instance, seq, at, next));
+  }
+
   Duration get _where => _samplePosition + _since;
 
   /// A track change that moved the position puts it back, unless a seek

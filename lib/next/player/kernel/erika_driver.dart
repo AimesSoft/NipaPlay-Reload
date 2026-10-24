@@ -44,6 +44,82 @@ Future<List<ChapterFacts>?> readErikaChapters(
   return chapters;
 }
 
+/// Reads chapters when Erika reports media information. A duration report can
+/// arrive before the presenter exposes the complete opened media, so an empty
+/// answer before [tracksReported] is provisional. [known] completes only with
+/// an answer made against the full tracks report (or after an already-full
+/// read). [onResolved] receives every answer kept as a fact.
+final class ErikaChapterReader {
+  ErikaChapterReader(this._invokeJson, {this.onResolved});
+
+  final Future<NativeInvokeReply> Function(String, JsonMap) _invokeJson;
+  final void Function(List<ChapterFacts>? chapters)? onResolved;
+  final _known = Completer<void>();
+  Future<void>? _read;
+  bool _completeReport = false;
+  bool _readWasComplete = false;
+  bool _readAgain = false;
+  bool _closed = false;
+  List<ChapterFacts>? _chapters;
+
+  /// The answer kept as a fact, or null when Erika cannot report chapters.
+  List<ChapterFacts>? get chapters => _chapters;
+
+  /// Completes when the first authoritative answer arrives.
+  Future<void> get known => _known.future;
+
+  /// Erika reported duration before its complete media report.
+  void durationReported() => _report();
+
+  /// Erika reported its complete opened-media tracks.
+  void tracksReported() {
+    _completeReport = true;
+    _report();
+  }
+
+  void _report() {
+    if (_closed || _known.isCompleted) return;
+    if (_read != null) {
+      // Only a report that became complete during a provisional read needs
+      // another read. A later duplicate event does not.
+      if (_completeReport && !_readWasComplete) _readAgain = true;
+      return;
+    }
+    _readWasComplete = _completeReport;
+    _read = _readOnce().whenComplete(() {
+      _read = null;
+      if (_readAgain && !_closed && !_known.isCompleted) {
+        _readAgain = false;
+        _report();
+      }
+    });
+  }
+
+  Future<void> _readOnce() async {
+    final completeReport = _completeReport;
+    List<ChapterFacts>? chapters;
+    try {
+      chapters = await readErikaChapters(_invokeJson);
+    } catch (error) {
+      debugPrint('[ErikaDriver] chapters: $error');
+      if (!completeReport) return;
+    }
+    if (_closed || _known.isCompleted) return;
+    if (chapters == null && !completeReport) return;
+    // Keep the presenter's early empty answer provisional until the report
+    // that carries the complete media has been seen.
+    if (chapters != null && chapters.isEmpty && !completeReport) return;
+    _chapters = chapters;
+    if (!_known.isCompleted) _known.complete();
+    onResolved?.call(chapters);
+  }
+
+  void close() {
+    _closed = true;
+    _readAgain = false;
+  }
+}
+
 /// Erika, our own kernel, as a [KernelDriver]. The media opens through
 /// Erika's adapter, paused, and seeks to its start position; Erika paints
 /// into a native view under the window (the picture is a
@@ -74,6 +150,11 @@ final class ErikaDriver extends AdapterDriver
 
   ErikaDriver._(KernelConfig config, this.adapter) : super(config) {
     adapter.onSessionEvent = _event;
+    _chapterReader =
+        ErikaChapterReader(adapter.invokeNative, onResolved: (chapters) {
+      if (fenced || !opened) return;
+      confirmMedia(readMedia());
+    });
   }
 
   final ErikaPlayerAdapter adapter;
@@ -96,14 +177,14 @@ final class ErikaDriver extends AdapterDriver
 
   final _tracksKnown = Completer<void>();
   final _durationKnown = Completer<void>();
+  final _mediaInfoKnown = Completer<void>();
   final _selectionWaiters = <(bool Function(), Completer<void>)>[];
   final _stateWaiters = <(bool Function(), Completer<void>)>[];
 
+  late final ErikaChapterReader _chapterReader;
+
   /// The state Erika last reported.
   ErikaPlaybackState? _erikaState;
-
-  /// Container chapters read once when the media opened.
-  List<ChapterFacts>? _chapters;
 
   /// A play Erika took whose Playing report has not come yet. Erika is
   /// playing by then, but what it has reported still says otherwise; a
@@ -164,6 +245,15 @@ final class ErikaDriver extends AdapterDriver
     if (adapter.mediaInfo.duration > 0 && !_durationKnown.isCompleted) {
       _durationKnown.complete();
     }
+    switch (event.kind) {
+      case ErikaEventKind.durationChanged:
+        _chapterReader.durationReported();
+      case ErikaEventKind.tracksChanged:
+        if (!_mediaInfoKnown.isCompleted) _mediaInfoKnown.complete();
+        _chapterReader.tracksReported();
+      default:
+        break;
+    }
     if (event.kind == ErikaEventKind.tracksChanged ||
         event.kind == ErikaEventKind.trackSelectionChanged) {
       for (final (done, waiter) in [..._selectionWaiters]) {
@@ -220,11 +310,16 @@ final class ErikaDriver extends AdapterDriver
     // Duration and the tracks arrive as events once Erika has opened it.
     await _durationKnown.future;
     queue.live();
-    // The chapters come with the same media information as the duration:
-    // asked for before it, Erika answers with none.
-    _chapters = await readErikaChapters(adapter.invokeNative);
+    // Chapters are part of the full media report. The duration event can be
+    // delivered first; the tracks event is the complete report and schedules
+    // the authoritative read. No timer and no polling are involved.
+    await _mediaInfoKnown.future
+        .timeout(const Duration(seconds: 2), onTimeout: () {});
     queue.live();
     await _tracksKnown.future
+        .timeout(const Duration(seconds: 2), onTimeout: () {});
+    queue.live();
+    await _chapterReader.known
         .timeout(const Duration(seconds: 2), onTimeout: () {});
     queue.live();
     if (start <= Duration.zero) return Duration.zero;
@@ -373,7 +468,7 @@ final class ErikaDriver extends AdapterDriver
       activeAudio: adapter.activeAudioTracks,
       activeSubtitles: adapter.activeSubtitleTracks,
       frameRate: adapter.videoFrameRate,
-      chapters: _chapters);
+      chapters: _chapterReader.chapters);
 
   /// Erika's own picture, with the subtitles it draws in it. It has no
   /// frame step of its own: stepping a frame is a seek by the declared
@@ -409,7 +504,10 @@ final class ErikaDriver extends AdapterDriver
       };
 
   @override
-  Future<void> disposeKernel() => adapter.disposeAsync();
+  Future<void> disposeKernel() {
+    _chapterReader.close();
+    return adapter.disposeAsync();
+  }
 
   // ---- ErikaNative: the handle kernel control gets ----
 

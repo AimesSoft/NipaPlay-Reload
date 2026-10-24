@@ -768,6 +768,10 @@ final class PlaybackSession {
                 advancing: advancing, rate: rate, source: 'kernel_sample');
           case KernelBuffering(:final buffering):
             _setTransport(_transport.value.copyWith(buffering: buffering));
+          case KernelMediaChanged(:final media):
+            _media.value = media;
+            clock.limit = media.duration;
+            _emit('media', media.toJson());
           case KernelEnded(:final inferred):
             clock.anchor(duration > Duration.zero ? duration : position,
                 advancing: false, source: 'kernel_ended');
