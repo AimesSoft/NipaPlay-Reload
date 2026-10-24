@@ -80,7 +80,7 @@ abstract final class ChatContext {
 
   /// What you said, without what the interface added.
   static String strip(String text) {
-    if (text.startsWith(delegationMarker)) return showDelegation(text);
+    if (isDelegation(text)) return showDelegation(text);
     final marks = [text.indexOf(_mark), text.indexOf(_files), text.indexOf(_memory)]
         .where((i) => i >= 0);
     final at = marks.isEmpty ? -1 : marks.reduce((a, b) => a < b ? a : b);

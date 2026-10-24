@@ -68,7 +68,7 @@ void main() {
       expect(answer['conversationContinued'], false);
       expect(chat.titles[thread], '来自 MacBook 的委托');
       final (_, text) = chat.started.single;
-      expect(text, startsWith('[NipaPlay 委托 delegation-0001]\n来自 MacBook 上的 Nipa 的委托。'));
+      expect(text, startsWith('来自 MacBook 上的 Nipa 的委托。 [NipaPlay 委托 delegation-0001]\n'));
       expect(text, contains('Make a list of what is in the library.'));
       expect(text, contains('"id":"work-1"'));
       // Its calls are attributed to it, not to the conversation of the person.
@@ -86,6 +86,11 @@ void main() {
           '来自 MacBook 上的 Nipa 的委托。\n\nMake a list.\n\n'
               '对方带来的引用（原样，未经核对）：\n- {"kind":"work","id":"work-1"}');
       expect(ChatContext.strip(message), isNot(contains('delegation-0001')));
+      // The runtime keeps only the first line as a conversation's preview; it
+      // still says where the task came from.
+      expect(ChatContext.strip(message.split('\n').first), '来自 MacBook 上的 Nipa 的委托。');
+      expect(isDelegation(message), true);
+      expect(isDelegation('来自 a 上的 Nipa 的委托。 but not marked'), false);
       expect(ChatContext.strip('plain words'), 'plain words');
     });
 
