@@ -5,19 +5,24 @@ import 'package:nipa_harness/nipa_harness.dart';
 import 'package:nipaplay/next/tasks/sqlite_job_store.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
-Job _job(String id, int revision, {String phase = 'queued', String? note}) {
+Job _job(String id, int revision,
+    {String phase = 'queued', String? note, JobState state = JobState.queued}) {
   final at = DateTime.utc(2026, 10, 23, 0, 0, revision);
   return Job(
       jobId: id,
       type: id.startsWith('d') ? 'download' : 'media.scan',
       title: 'Job $id',
-      state: JobState.queued,
+      state: state,
       phase: phase,
       progress: JobProgress(completed: 0, unit: 'items'),
       createdAt: DateTime.utc(2026, 10, 23),
       updatedAt: at,
       ownerDeviceId: 'device-test',
       revision: revision,
+      receipt: state.isTerminal
+          ? JobReceipt(
+              verification: VerificationLevel.verified, details: const {})
+          : null,
       input: {'n': revision, if (note != null) 'note': note});
 }
 
@@ -78,6 +83,15 @@ void main() {
     expect((await store.list(type: 'media.scan')).map((j) => j.jobId), ['s1']);
     expect((await store.list(state: JobState.running)), isEmpty);
     expect(await store.get('missing'), isNull);
+  });
+
+  test('active listing reads only jobs that have not settled', () async {
+    await _commit(store, _job('d1', 0));
+    await _commit(
+        store, _job('s1', 0, phase: 'done', state: JobState.succeeded));
+    await _commit(store, _job('d2', 0, phase: 'downloading'));
+    expect((await store.listActive()).map((j) => j.jobId), ['d1', 'd2']);
+    expect((await store.list()).map((j) => j.jobId), ['d1', 'd2', 's1']);
   });
 
   test('a job written by another store on the same database is read fresh',

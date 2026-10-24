@@ -344,8 +344,27 @@ final class UiDataService implements NextUiData, NextNowPlaying {
     return result;
   }
 
-  Future<List<UiTask>> _taskList() async =>
-      [for (final job in await engine.list()) await _task(job)];
+  /// What the shell can show: every task still under way, the latest tasks
+  /// for the background panel, and recent helper jobs whose threads belong to
+  /// the panel and session menu. Older settled history is audit data, not live
+  /// UI; decoding all of it on each subscription used to walk the whole task
+  /// table at startup.
+  Future<List<UiTask>> _taskList() async {
+    final jobs = <String, Job>{
+      for (final job in await engine.listActive()) job.jobId: job,
+    };
+    for (final job in await engine.listRecent(limit: _recentJobs)) {
+      jobs.putIfAbsent(job.jobId, () => job);
+    }
+    for (final job in await engine.listRecent(
+        type: 'agent.helper', limit: _recentHelperJobs)) {
+      jobs.putIfAbsent(job.jobId, () => job);
+    }
+    return [for (final job in jobs.values) await _task(job)];
+  }
+
+  static const _recentJobs = 64;
+  static const _recentHelperJobs = 64;
   Future<UiTask> _task(Job job) async {
     Map? title;
     JsonMap? art;

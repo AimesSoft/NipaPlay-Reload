@@ -375,30 +375,46 @@ final class IdentityStore {
                   language: 'und',
                   order: 'provider',
                   fetchedAt: at);
-              final workId = await _classicLocal(tx, 'work', work, null);
-              final releaseId =
-                  await _classicLocal(tx, 'release', work, workId);
-              final episodeLocalId =
-                  await _classicLocal(tx, 'episode', episode, releaseId);
+              // The same external object is touched by materialisation,
+              // binding and snapshot writes. Its canonical JSON and SHA-256
+              // are invariant through this import, so compute each once.
+              final objectIds =
+                  <(String, String, String, String), String>{};
+              String objectId(ExternalRef ref) => objectIds.putIfAbsent(
+                  (ref.provider, ref.objectType, ref.externalId, ref.scope),
+                  () => stableMediaId('object', ref.toJson()));
+              final workObjectId = objectId(work.ref);
+              final episodeObjectId = objectId(episode.ref);
+              final workId = await _classicLocal(tx, 'work', work, null,
+                  objectId: workObjectId);
+              final releaseId = await _classicLocal(
+                  tx, 'release', work, workId,
+                  objectId: workObjectId);
+              final episodeLocalId = await _classicLocal(
+                  tx, 'episode', episode, releaseId,
+                  objectId: episodeObjectId);
               for (final pair in [
                 (workId, work),
                 (releaseId, work),
                 (episodeLocalId, episode)
               ]) {
-                final objectId = await _object(tx, pair.$2.ref);
+                final boundObjectId = await _object(tx, pair.$2.ref,
+                    id: objectId(pair.$2.ref));
                 final existing = await tx.query('media_bindings',
                     where: 'entity_id=? AND object_id=? AND status=?',
-                    whereArgs: [pair.$1, objectId, 'accepted']);
+                    whereArgs: [pair.$1, boundObjectId, 'accepted']);
                 if (existing.isEmpty) {
                   await _classicBinding(
-                      tx, pair.$1, pair.$2, observationId, at);
+                      tx, pair.$1, pair.$2, observationId, at,
+                      objectId: objectId(pair.$2.ref));
                 }
               }
               for (final record in [work, episode]) {
                 await tx.insert('media_snapshots', {
                   'id': stableMediaId(
                       'classic-snapshot', [observationId, record.ref.toJson()]),
-                  'object_id': await _object(tx, record.ref),
+                  'object_id': await _object(tx, record.ref,
+                      id: objectId(record.ref)),
                   'language': record.language,
                   'fetched_at': at.toIso8601String(),
                   'fields': jsonEncode(
@@ -419,7 +435,8 @@ final class IdentityStore {
                   projected['episodeId'] == episodeId;
               if (!echo) {
                 bindingId = await _classicBinding(
-                    tx, fileId, episode, observationId, at);
+                    tx, fileId, episode, observationId, at,
+                    objectId: episodeObjectId);
                 await tx.insert(
                     'media_file_episodes',
                     {
@@ -531,11 +548,12 @@ final class IdentityStore {
     return result;
   }
 
-  Future<String> _classicLocal(DatabaseExecutor tx, String kind,
-      MetadataRecord record, String? parent) async {
+  Future<String> _classicLocal(
+      DatabaseExecutor tx, String kind, MetadataRecord record, String? parent,
+      {required String objectId}) async {
     final owners = await tx.rawQuery(
         'SELECT DISTINCT e.id FROM media_entities e JOIN media_bindings b ON b.entity_id=e.id WHERE e.kind=? AND b.object_id=? AND b.status=?',
-        [kind, stableMediaId('object', record.ref.toJson()), 'accepted']);
+        [kind, objectId, 'accepted']);
     if (owners.length > 1) {
       throw Failure(FailureCode.conflict,
           'Classic external object has multiple local $kind owners: ${owners.map((row) => row['id']).join(', ')}. No owner was selected.');
@@ -545,8 +563,9 @@ final class IdentityStore {
   }
 
   Future<String> _classicBinding(DatabaseExecutor tx, String entityId,
-      MetadataRecord record, String observationId, DateTime at) async {
-    final objectId = await _object(tx, record.ref);
+      MetadataRecord record, String observationId, DateTime at,
+      {required String objectId}) async {
+    await _object(tx, record.ref, id: objectId);
     final id = stableMediaId('classic-binding', [observationId, entityId]);
     await tx.insert('media_bindings', {
       'id': id,
@@ -585,8 +604,9 @@ final class IdentityStore {
         [fileId, fileId]);
   }
 
-  Future<String> _object(DatabaseExecutor tx, ExternalRef ref) async {
-    final id = stableMediaId('object', ref.toJson());
+  Future<String> _object(DatabaseExecutor tx, ExternalRef ref,
+      {String? id}) async {
+    id ??= stableMediaId('object', ref.toJson());
     await tx.insert(
         'media_external_objects',
         {
