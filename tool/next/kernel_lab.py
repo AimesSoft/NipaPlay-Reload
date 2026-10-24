@@ -425,43 +425,66 @@ def subtitles_check(kernel):
     gui('playback.close')
 
 
+def image_difference(first, second):
+    """两张窗口图的逐像素差（亮度均值，0 到 255）：同一时刻有无字幕，别的都一样。"""
+    out = subprocess.run(['ffmpeg', '-v', 'error', '-i', str(first), '-i', str(second), '-lavfi',
+                          'blend=all_mode=difference,format=gray,signalstats,metadata=print:file=-', '-f', 'null', '-'],
+                         capture_output=True, text=True, timeout=60)
+    match = re.search(r'lavfi.signalstats.YAVG=([0-9.]+)', out.stdout)
+    return float(match.group(1)) if match else None
+
+
+def srt_middles(path, after_ms, count):
+    text = Path(path).read_text(encoding='utf-8', errors='replace')
+    found = []
+    for m in re.finditer(r'(\d+):(\d+):(\d+)[,.](\d+)\s*-->\s*(\d+):(\d+):(\d+)[,.](\d+)', text):
+        g = [int(x) for x in m.groups()]
+        start = ((g[0] * 60 + g[1]) * 60 + g[2]) * 1000 + g[3]
+        end = ((g[4] * 60 + g[5]) * 60 + g[6]) * 1000 + g[7]
+        if start >= after_ms and end - start > 1500:
+            found.append((start + end) // 2)
+    return found[:count]
+
+
 def paused_subtitle_check(kernel):
-    """暂停拖动：字幕和画面同步出现。字幕选上之后在暂停中跳到有对白的时刻，再跳到另一句，比字幕条带与关掉字幕时的差别。"""
+    """暂停拖动：字幕和画面同步出现。每个字幕来源，暂停中依次跳到有对白的几处，各截一张；同样几处关掉字幕再截一张，两张的差就是字幕。"""
     use(kernel)
-    cases = [('sintel', 'english', 'embedded', [131500, 138000, 131500]),
-             ('episode12', 'ass0', 'embedded', [153200, 154600, 153200])]
-    for media, label, origin, targets in cases:
-        path = media_for(kernel, media)
-        host('open', path=str(path), paused='1', startMs=str(targets[0] - 4000))
+    middles = srt_middles(SINTEL_SRT, 130000, 4)
+    cases = [('sintel-embedded', 'sintel', middles, 'embedded'),
+             ('episode12-embedded', 'episode12', [153200, 154600, 153200], 'embedded'),
+             ('episode12-file', 'episode12', [153200, 160000, 153200], 'file')]
+    for label, media, targets, origin in cases:
+        host('open', path=str(media_for(kernel, media)), paused='1', startMs=str(max(targets[0] - 4000, 0)))
         time.sleep(1.5)
-        tracks = gui('playback.tracks')
-        embedded = [t for t in (tracks.get('tracks') or []) if t.get('kind') == 'subtitle' and t.get('origin') == origin]
-        pick = next((t for t in embedded if (t.get('language') or '') in ('eng', 'en')), None) if media == 'sintel' else (embedded[0] if embedded else None)
-        if pick is None:
-            record('psub_skipped', kernel=kernel, media=media, tracks=len(embedded))
-            gui('playback.close')
-            continue
-        reply = gui('playback.select_track', {'kind': 'subtitle', 'origin': origin, 'index': pick['index']})
+        pick = None
+        if origin == 'embedded':
+            tracks = gui('playback.tracks')
+            embedded = [t for t in (tracks.get('tracks') or []) if t.get('kind') == 'subtitle' and t.get('origin') == 'embedded']
+            pick = next((t for t in embedded if (t.get('language') or '') in ('eng', 'en') or 'nglish' in (t.get('title') or '')), None) if media == 'sintel' else (embedded[0] if embedded else None)
+            if pick is None:
+                record('psub_skipped', kernel=kernel, case=label, tracks=[(t.get('language'), t.get('title')) for t in embedded])
+                gui('playback.close')
+                continue
+        # What the library remembers of an earlier case is not part of this one.
+        gui('playback.select_track', {'kind': 'subtitle', 'origin': 'embedded', 'index': -1})
         time.sleep(0.6)
-        record('psub_selected', kernel=kernel, media=media, outcome=((reply.get('receipt') or {}).get('outcome')), status=state().get('status'))
+        shots = {}
+        for phase in ('off', 'on'):
+            if phase == 'on':
+                if origin == 'embedded':
+                    reply = gui('playback.select_track', {'kind': 'subtitle', 'origin': 'embedded', 'index': pick['index']})
+                else:
+                    reply = gui('playback.load_subtitle', {'path': str(EP_ASS)})
+                time.sleep(0.8)
+                record('psub_selected', kernel=kernel, case=label, receipt=(reply.get('receipt') or {}).get('outcome'), facts=subtitle_facts())
+            for i, target in enumerate(targets):
+                gui('playback.seek', {'positionMs': target}, strict=True)
+                time.sleep(1.2)
+                name = '%s-%s-psub-%s%d' % (kernel, label, phase, i)
+                shot(name)
+                shots[(phase, i)] = RUN / (name + '-window.png')
         for i, target in enumerate(targets):
-            gui('playback.seek', {'positionMs': target}, strict=True)
-            time.sleep(1.2)
-            st = state()
-            name = '%s-%s-psub%d' % (kernel, media, i)
-            shot(name)
-            on = strip(name)
-            record('psub', kernel=kernel, media=media, iteration=i, target=target, positionMs=st.get('positionMs'), status=st.get('status'),
-                   text=host('text', atMs=str(target)), stripOn=on)
-        # The same moments with the subtitle off: what the strip is without it.
-        gui('playback.select_track', {'kind': 'subtitle', 'origin': origin, 'index': -1})
-        time.sleep(0.6)
-        for i, target in enumerate(targets[:2]):
-            gui('playback.seek', {'positionMs': target}, strict=True)
-            time.sleep(1.2)
-            name = '%s-%s-psuboff%d' % (kernel, media, i)
-            shot(name)
-            record('psub_off', kernel=kernel, media=media, iteration=i, target=target, stripOff=strip(name))
+            record('psub', kernel=kernel, case=label, iteration=i, target=target, difference=image_difference(shots[('off', i)], shots[('on', i)]))
         gui('playback.close')
 
 

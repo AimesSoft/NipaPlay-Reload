@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:erika_flutter/erika_flutter.dart';
+import 'package:flutter/foundation.dart' show debugPrint;
 import 'package:flutter/services.dart' show PlatformException;
 import 'package:nipa_harness/nipa_harness.dart';
 import 'package:nipaplay/player_abstraction/erika_player_adapter.dart';
@@ -293,6 +294,8 @@ final class ErikaDriver extends AdapterDriver
       // has not reported yet (the open still settling) is waited for, once;
       // otherwise the state it is in is the answer.
       if (_canPlay()) rethrow;
+      debugPrint(
+          '[ErikaDriver] play refused in ${_erikaState?.name ?? 'no reported state'}; waiting for a state it can play from');
       final waiter = Completer<void>();
       _stateWaiters.add((_canPlay, waiter));
       try {
