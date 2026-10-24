@@ -247,6 +247,7 @@ flutter:
     - assets/next/harness/tools/
     - assets/next/agent/nipa-base.md
     - assets/next/agent/dsh/
+    - assets/next/agent/dsh-runtime.json
     - packages/adaptive_platform_ui/pubspec.yaml
     - packages/danmaku_canvas/pubspec.yaml
     - packages/nipaplay_smb2/pubspec.yaml

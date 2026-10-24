@@ -480,6 +480,17 @@ class NipaSectionState extends State<NipaSection> {
   Future<void>? _reading;
   bool _again = false;
 
+  // The runtime Nipa thinks in: DeepSeek Harness (fetched by NipaPlay) or Codex.
+  UiAgentRuntime? _agent;
+  UiDshRuntime? _dsh;
+  bool _dshMore = false, _dshDirty = false, _importing = false;
+  bool _advanced = false;
+  String _registryMirror = '', _nodeMirror = '';
+  String? _dshError;
+  UiModelApi _api = UiModelApi.responses;
+  String _reasoning = '';
+  Map<String, Object?>? _compat;
+
   // The Codex Nipa runs in: fetched by NipaPlay, or one already here.
   UiCodexRuntime? _runtime;
   bool _runtimeMore = false, _runtimeDirty = false;
@@ -498,10 +509,45 @@ class NipaSectionState extends State<NipaSection> {
   }
 
   /// Official addresses and model names, filled in for the viewer; any
-  /// address and model can be typed instead.
+  /// address and model can be typed instead. What a vendor's models need on
+  /// the wire comes with its template, never from the address.
   static const _templates = [
-    ('DeepSeek', 'https://api.deepseek.com/', 'deepseek-flash'),
-    ('智谱', 'https://open.bigmodel.cn/api/v1', 'glm-5.3-flash'),
+    _Template(
+        'DeepSeek',
+        'https://api.deepseek.com',
+        'deepseek-flash',
+        UiModelApi.chat,
+        'high',
+        {
+          'supportsStore': false,
+          'supportsDeveloperRole': false,
+          'maxTokensField': 'max_tokens',
+          'requiresReasoningContentOnAssistantMessages': true,
+          'thinkingFormat': 'deepseek',
+          'supportsStrictMode': true,
+        }),
+    _Template(
+        '智谱',
+        'https://open.bigmodel.cn/api/paas/v4',
+        'glm-5.3-flash',
+        UiModelApi.chat,
+        'high',
+        {
+          'supportsStore': false,
+          'supportsDeveloperRole': false,
+          'supportsReasoningEffort': true,
+          'maxTokensField': 'max_tokens',
+          'thinkingFormat': 'zai',
+          'supportsStrictMode': true,
+        }),
+  ];
+
+  /// Codex speaks only the Responses API.
+  static const _responsesTemplates = [
+    _Template('DeepSeek', 'https://api.deepseek.com/', 'deepseek-flash',
+        UiModelApi.responses, '', {}),
+    _Template('智谱', 'https://open.bigmodel.cn/api/v1', 'glm-5.3-flash',
+        UiModelApi.responses, '', {}),
   ];
 
   @override
@@ -528,6 +574,7 @@ class NipaSectionState extends State<NipaSection> {
 
   Future<void> _loadModel() async {
     unawaited(_loadRuntime());
+    unawaited(_loadDsh());
     final setup = await _host.model();
     if (!mounted) return;
     setState(() {
@@ -536,9 +583,33 @@ class NipaSectionState extends State<NipaSection> {
         _provider = setup.provider ?? '';
         _url = setup.baseUrl ?? '';
         _modelName = setup.model ?? '';
+        _api = setup.api;
+        _reasoning = setup.reasoning ?? '';
+        _compat = setup.compat;
         _key = '';
       }
     });
+  }
+
+  /// Which runtime is chosen and what DeepSeek Harness runs on; a host that
+  /// fetches neither has no such cards.
+  Future<void> _loadDsh() async {
+    final host = _runtimeHost;
+    if (host == null) return;
+    try {
+      final (agent, dsh) = await (host.agentRuntime(), host.dshRuntime()).wait;
+      if (!mounted) return;
+      setState(() {
+        _agent = agent;
+        _dsh = dsh;
+        if (!_dshDirty) {
+          _registryMirror = dsh.registryMirror ?? '';
+          _nodeMirror = dsh.nodeMirror ?? '';
+        }
+      });
+    } catch (_) {
+      if (mounted) setState(() => _dsh = null);
+    }
   }
 
   /// Separate from the model: the runtime may answer late, or not at all on
@@ -646,6 +717,7 @@ class NipaSectionState extends State<NipaSection> {
   }
 
   Future<void> _save() async {
+    var saved = false;
     setState(() {
       _saving = true;
       _error = null;
@@ -658,14 +730,85 @@ class NipaSectionState extends State<NipaSection> {
         baseUrl: _url.trim(),
         model: _modelName.trim(),
         apiKey: _key.isEmpty ? null : _key,
+        api: _api,
+        reasoning: _reasoning,
+        compat: _compat ?? const {},
       ));
       _dirty = false;
+      saved = true;
     } catch (_) {
       if (mounted) setState(() => _error = '没能保存');
     }
     if (mounted) setState(() => _saving = false);
     await _loadModel();
+    if (saved) unawaited(_prepare());
   }
+
+  /// A model is set and the runtime is not there: fetch it, as the person
+  /// has said they want Nipa.
+  Future<void> _prepare() async {
+    final host = _runtimeHost;
+    if (host == null) return;
+    try {
+      final agent = await host.agentRuntime();
+      if (agent.kind != UiAgentRuntimeKind.dsh) return;
+      final dsh = await host.dshRuntime();
+      if (dsh.status == UiDshStatus.notInstalled && !dsh.fixed) {
+        _runtimeDo((h) => h.installDsh());
+      }
+    } catch (_) {}
+  }
+
+  Future<void> _importCodex() async {
+    setState(() {
+      _importing = true;
+      _error = null;
+      _check = null;
+    });
+    var imported = false;
+    try {
+      await _host.importCodexModel();
+      _dirty = false;
+      imported = true;
+    } catch (_) {
+      if (mounted) setState(() => _error = '没能导入');
+    }
+    if (mounted) setState(() => _importing = false);
+    await _loadModel();
+    if (imported) unawaited(_prepare());
+  }
+
+  Future<void> _setAgent(UiAgentRuntimeKind kind) async {
+    final host = _runtimeHost;
+    if (host == null) return;
+    setState(() => _dshError = null);
+    try {
+      await host.setAgentRuntime(kind);
+      _dirty = false;
+    } catch (_) {
+      if (mounted) setState(() => _dshError = '没能切换');
+    }
+    await _loadModel();
+  }
+
+  Future<void> _saveDsh() async {
+    final host = _runtimeHost;
+    if (host == null) return;
+    try {
+      await host.setDshMirrors(
+          registry: _registryMirror.trim(), node: _nodeMirror.trim());
+      _dshDirty = false;
+      if (mounted) setState(() => _dshError = null);
+    } catch (_) {
+      if (mounted) setState(() => _dshError = '没能保存');
+    }
+    await _loadModel();
+  }
+
+  void _dshEdit(void Function() change) => setState(() {
+        change();
+        _dshDirty = true;
+      });
 
   Future<void> _test() async {
     setState(() {
@@ -687,41 +830,51 @@ class NipaSectionState extends State<NipaSection> {
         _check = null;
       });
 
+  Widget _field(String label, Widget child) => Padding(
+        padding: const EdgeInsets.only(bottom: 8),
+        child: Row(children: [
+          SizedBox(
+              width: 64,
+              child: Text(label,
+                  style: NextText.sans(12.5, color: NextColors.p3))),
+          child,
+        ]),
+      );
+
   Widget _modelCard(UiModelSetup s) {
-    final here = s.source == UiModelSource.nipaplay;
+    final dsh = s.runtime == UiAgentRuntimeKind.dsh;
+    final here = dsh || s.source == UiModelSource.nipaplay;
     final status =
         _error ?? s.problem ?? (s.inUse == null ? null : '正在用 ${s.inUse}');
-    Widget field(String label, Widget child) => Padding(
-          padding: const EdgeInsets.only(bottom: 8),
-          child: Row(children: [
-            SizedBox(
-                width: 64,
-                child: Text(label,
-                    style: NextText.sans(12.5, color: NextColors.p3))),
-            child,
-          ]),
-        );
+    final templates = dsh ? _templates : _responsesTemplates;
     return SettingsCard(title: '模型', children: [
       SettingsRow(
         leading: const NipaAvatar(size: 32),
-        title: here ? (s.provider ?? '在这里设置') : '已有配置',
+        title: here ? (s.provider ?? (dsh ? '设置模型' : '在这里设置')) : '已有配置',
         subtitle: status,
-        trailing: Segmented<UiModelSource>(
-          value: s.source,
-          options: [
-            (
-              UiModelSource.nipaplay,
-              '在这里设置',
-              (c) => Text('在这里设置', style: NextText.sans(12.5, color: c))
-            ),
-            (
-              UiModelSource.codex,
-              '已有配置',
-              (c) => Text('已有配置', style: NextText.sans(12.5, color: c))
-            ),
-          ],
-          onChanged: _setSource,
-        ),
+        trailing: dsh
+            ? (s.codexAvailable
+                ? PillButton(
+                    label: '导入 Codex 配置',
+                    busy: _importing,
+                    onTap: _importCodex)
+                : null)
+            : Segmented<UiModelSource>(
+                value: s.source,
+                options: [
+                  (
+                    UiModelSource.nipaplay,
+                    '在这里设置',
+                    (c) => Text('在这里设置', style: NextText.sans(12.5, color: c))
+                  ),
+                  (
+                    UiModelSource.codex,
+                    '已有配置',
+                    (c) => Text('已有配置', style: NextText.sans(12.5, color: c))
+                  ),
+                ],
+                onChanged: _setSource,
+              ),
         below:
             Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
           if (!here && !s.codexAvailable && s.problem == null)
@@ -736,39 +889,42 @@ class NipaSectionState extends State<NipaSection> {
               child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    field(
+                    _field(
                         '',
                         Wrap(spacing: 6, children: [
-                          for (final t in _templates)
+                          for (final t in templates)
                             PillButton(
-                                label: t.$1,
+                                label: t.name,
                                 onTap: () => _edit(() {
-                                      _provider = t.$1;
-                                      _url = t.$2;
-                                      _modelName = t.$3;
+                                      _provider = t.name;
+                                      _url = t.baseUrl;
+                                      _modelName = t.model;
+                                      _api = t.api;
+                                      _reasoning = t.reasoning;
+                                      _compat = t.compat;
                                     })),
                         ])),
-                    field(
+                    _field(
                         '提供方',
                         LiveTextField(
                             value: _provider,
                             hint: 'DeepSeek、智谱、中转…',
                             width: 300,
                             onChanged: (v) => _edit(() => _provider = v))),
-                    field(
+                    _field(
                         '地址',
                         LiveTextField(
                             value: _url,
                             hint: 'https://',
                             width: 300,
                             onChanged: (v) => _edit(() => _url = v))),
-                    field(
+                    _field(
                         '模型',
                         LiveTextField(
                             value: _modelName,
                             width: 300,
                             onChanged: (v) => _edit(() => _modelName = v))),
-                    field(
+                    _field(
                         'API key',
                         LiveTextField(
                             value: _key,
@@ -776,6 +932,46 @@ class NipaSectionState extends State<NipaSection> {
                             hint: s.hasKey ? '已保存' : null,
                             width: 300,
                             onChanged: (v) => _edit(() => _key = v))),
+                    if (dsh && _advanced) ...[
+                      _field(
+                          '接口',
+                          Segmented<UiModelApi>(
+                            value: _api,
+                            options: [
+                              for (final (v, t) in const [
+                                (UiModelApi.responses, 'Responses'),
+                                (UiModelApi.chat, 'Chat Completions'),
+                              ])
+                                (
+                                  v,
+                                  t,
+                                  (c) => Text(t,
+                                      style: NextText.sans(12.5, color: c))
+                                ),
+                            ],
+                            onChanged: (v) => _edit(() => _api = v),
+                          )),
+                      _field(
+                          '思考',
+                          Segmented<String>(
+                            value: _reasoning,
+                            options: [
+                              for (final (v, t) in const [
+                                ('', '关'),
+                                ('low', '低'),
+                                ('medium', '中'),
+                                ('high', '高'),
+                              ])
+                                (
+                                  v,
+                                  t,
+                                  (c) => Text(t,
+                                      style: NextText.sans(12.5, color: c))
+                                ),
+                            ],
+                            onChanged: (v) => _edit(() => _reasoning = v),
+                          )),
+                    ],
                   ]),
             ),
           Padding(
@@ -788,6 +984,12 @@ class NipaSectionState extends State<NipaSection> {
               ],
               PillButton(
                   label: '测试连接', busy: _checking, onTap: _dirty ? null : _test),
+              if (dsh) ...[
+                const SizedBox(width: 8),
+                PillButton(
+                    label: _advanced ? '收起' : '更多',
+                    onTap: () => setState(() => _advanced = !_advanced)),
+              ],
               if (_check case final check?) ...[
                 const SizedBox(width: 12),
                 StateDot(check.ok ? NextColors.mint : NextColors.accent),
@@ -805,6 +1007,143 @@ class NipaSectionState extends State<NipaSection> {
           ),
         ]),
       ),
+    ]);
+  }
+
+  /// Which runtime Nipa thinks in, when the person may choose.
+  Widget? _runtimeChoice() {
+    final agent = _agent;
+    if (agent == null || agent.fixed) return null;
+    // Without a Codex of its own the host offers no other runtime.
+    if (_runtime == null && agent.kind == UiAgentRuntimeKind.dsh) return null;
+    return _field(
+        '运行器',
+        Segmented<UiAgentRuntimeKind>(
+          value: agent.kind,
+          options: [
+            for (final (v, t) in const [
+              (UiAgentRuntimeKind.dsh, 'DeepSeek Harness'),
+              (UiAgentRuntimeKind.codex, 'Codex'),
+            ])
+              (v, t, (c) => Text(t, style: NextText.sans(12.5, color: c))),
+          ],
+          onChanged: _setAgent,
+        ));
+  }
+
+  Widget _dshCard(UiDshRuntime r) {
+    final total = r.totalBytes;
+    final String? subtitle = _dshError ??
+        switch (r.status) {
+          UiDshStatus.notInstalled => total == null ? null : _size(total),
+          UiDshStatus.downloading => total == null
+              ? _size(r.receivedBytes)
+              : '${_size(r.receivedBytes)} / ${_size(total)}',
+          UiDshStatus.unpacking => null,
+          UiDshStatus.ready => r.version,
+          UiDshStatus.failed => r.problem,
+          UiDshStatus.unsupported => null,
+        };
+    final title = r.fixed
+        ? '使用指定的运行环境'
+        : switch (r.status) {
+            UiDshStatus.notInstalled => '未下载',
+            UiDshStatus.downloading => '下载中',
+            UiDshStatus.unpacking => '正在安装',
+            UiDshStatus.ready => '已就绪',
+            UiDshStatus.failed => '没能下载',
+            UiDshStatus.unsupported => '这个平台暂时没有',
+          };
+    final Widget? action = r.fixed
+        ? null
+        : switch (r.status) {
+            UiDshStatus.notInstalled => PillButton(
+                label: '下载',
+                primary: true,
+                onTap: () => _runtimeDo((h) => h.installDsh())),
+            UiDshStatus.downloading => PillButton(
+                label: '取消',
+                onTap: () => _runtimeDo((h) => h.cancelDshInstall())),
+            UiDshStatus.failed => PillButton(
+                label: '重试',
+                primary: true,
+                onTap: () => _runtimeDo((h) => h.installDsh())),
+            _ => null,
+          };
+    final choice = _runtimeChoice();
+    return SettingsCard(title: '运行环境', children: [
+      SettingsRow(
+        title: title,
+        subtitle: subtitle,
+        mark: !r.fixed && r.status == UiDshStatus.ready
+            ? const StateDot(NextColors.mint)
+            : r.status == UiDshStatus.failed
+                ? const StateDot(NextColors.accent2)
+                : null,
+        trailing: action,
+        below: r.status == UiDshStatus.downloading && total != null
+            ? Padding(
+                padding: const EdgeInsets.fromLTRB(18, 0, 18, 14),
+                child: ThinBar(
+                    progress: r.receivedBytes / total, live: true, height: 3),
+              )
+            : null,
+      ),
+      if (choice != null || !r.fixed)
+        SettingsRow(
+          title: '更多',
+          dim: true,
+          trailing: AnimatedRotation(
+            turns: _dshMore ? 0.25 : 0,
+            duration: const Duration(milliseconds: 200),
+            curve: NextMotion.ease,
+            child: const NextIcon(NextGlyph.chevronRight,
+                size: 14, color: NextColors.p3),
+          ),
+          onTap: () => setState(() => _dshMore = !_dshMore),
+          below: !_dshMore
+              ? null
+              : Padding(
+                  padding: const EdgeInsets.fromLTRB(18, 2, 18, 14),
+                  child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        if (choice != null) choice,
+                        if (!r.fixed) ...[
+                          _field(
+                              'npm',
+                              LiveTextField(
+                                  value: _registryMirror,
+                                  hint: 'registry.npmjs.org',
+                                  width: 300,
+                                  mono: true,
+                                  onChanged: (v) =>
+                                      _dshEdit(() => _registryMirror = v))),
+                          _field(
+                              'Node',
+                              LiveTextField(
+                                  value: _nodeMirror,
+                                  hint: 'nodejs.org/dist',
+                                  width: 300,
+                                  mono: true,
+                                  onChanged: (v) =>
+                                      _dshEdit(() => _nodeMirror = v))),
+                        ],
+                        const SizedBox(height: 4),
+                        Wrap(spacing: 8, runSpacing: 8, children: [
+                          if (_dshDirty)
+                            PillButton(
+                                label: '保存', primary: true, onTap: _saveDsh),
+                          if (!r.fixed && r.status == UiDshStatus.ready)
+                            PillButton(
+                                label: '移除',
+                                danger: true,
+                                onTap: () =>
+                                    _runtimeDo((h) => h.removeDsh())),
+                        ]),
+                      ]),
+                ),
+        ),
     ]);
   }
 
@@ -895,6 +1234,7 @@ class NipaSectionState extends State<NipaSection> {
                 child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
+                      if (_runtimeChoice() case final choice?) choice,
                       field(
                           '使用',
                           Segmented<UiCodexSource>(
@@ -966,7 +1306,10 @@ class NipaSectionState extends State<NipaSection> {
     final runtime = _runtime;
     return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
       if (setup != null) _modelCard(setup),
-      if (runtime != null) _runtimeCard(runtime),
+      if (setup?.runtime == UiAgentRuntimeKind.dsh)
+        if (_dsh case final dsh?) _dshCard(dsh),
+      if (setup?.runtime != UiAgentRuntimeKind.dsh && runtime != null)
+        _runtimeCard(runtime),
       if (files != null)
         SettingsCard(title: 'Nipa 记得的事', children: [
           if (files.isEmpty) const SettingsRow(title: '还没有记下什么', dim: true),
@@ -1020,6 +1363,16 @@ class NipaSectionState extends State<NipaSection> {
       ),
     ]);
   }
+}
+
+/// A provider's fill-in: address, model, wire protocol and what its models
+/// need from it.
+class _Template {
+  const _Template(
+      this.name, this.baseUrl, this.model, this.api, this.reasoning, this.compat);
+  final String name, baseUrl, model, reasoning;
+  final UiModelApi api;
+  final Map<String, Object?> compat;
 }
 
 /// A memory note as it is written: change it and save, or forget it.

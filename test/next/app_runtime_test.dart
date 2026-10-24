@@ -227,6 +227,7 @@ void main() {
     AppRuntimeFacts facts(
             {Map<String, String> environment = const {},
             ChatHost? Function()? chat,
+            AgentRuntimeKind runtime = AgentRuntimeKind.codex,
             bool managed = true}) =>
         AppRuntimeFacts(
             root: root,
@@ -236,6 +237,7 @@ void main() {
             chat: chat ?? () => null,
             codexHome: Directory('${root.path}/codex-home'),
             environment: environment,
+            defaultRuntime: runtime,
             managedModelByDefault: managed,
             remoteAccess: () async => {
                   'serviceRunning': true,
@@ -334,16 +336,34 @@ void main() {
       expect(await File('${root.path}/model.json').exists(), false);
     });
 
-    test('the runtime is Codex unless the environment selects DSH', () async {
+    test('the runtime is what the environment fixes, else the choice in settings, else the default',
+        () async {
       final codex = (await facts().read())['runtime'] as Map;
       expect(codex['selected'], {'kind': 'codex'});
       expect(codex['running'], isNull);
       expect((codex['codex'] as Map)['source'], 'managed');
       expect((codex['codex'] as Map)['installed'], false);
-      final invalid = (await facts(environment: {'NIPAPLAY_AGENT_RUNTIME': 'dsh'})
+      expect(codex['dsh'], {'installed': false, 'version': null});
+      // Nothing chose: DeepSeek Harness, fetched by NipaPlay.
+      final fresh = (await facts(runtime: AgentRuntimeKind.dsh).read())['runtime']
+          as Map;
+      expect(fresh['selected'], {'kind': 'dsh', 'dshVersion': null});
+      // The person chose in settings.
+      await File('${root.path}/runtime.json')
+          .writeAsString('{"runtime":"codex"}');
+      expect(
+          ((await facts(runtime: AgentRuntimeKind.dsh).read())['runtime']
+              as Map)['selected'],
+          {'kind': 'codex'});
+      await File('${root.path}/runtime.json').delete();
+      // The environment wins over both; DSH alone means the fetched one.
+      final env = (await facts(environment: {'NIPAPLAY_AGENT_RUNTIME': 'dsh'})
+              .read())['runtime'] as Map;
+      expect(env['selected'], {'kind': 'dsh', 'dshVersion': null});
+      final invalid = (await facts(environment: {'NIPAPLAY_AGENT_RUNTIME': 'oops'})
               .read())['runtime'] as Map;
       expect((invalid['selected'] as Map)['kind'], isNull);
-      expect((invalid['selected'] as Map)['problem'], contains('DSH needs'));
+      expect((invalid['selected'] as Map)['problem'], contains('Unknown agent runtime'));
       final node = File('${root.path}/node')..writeAsStringSync('');
       final bin = File('${root.path}/dsh/node_modules/@deepseek-ai/dsh/lib/bin.js')
         ..createSync(recursive: true);
@@ -355,6 +375,14 @@ void main() {
         'NIPAPLAY_DSH_BIN': bin.path,
       }).read())['runtime'] as Map;
       expect(dsh['selected'], {'kind': 'dsh', 'dshVersion': '0.9.1'});
+      // What NipaPlay fetched is reported.
+      final installed = Directory('${root.path}/dsh-runtime/dsh-0.2.1-node-24')
+        ..createSync(recursive: true);
+      File('${installed.path}/installed.json')
+          .writeAsStringSync('{"dsh":"0.2.1"}');
+      expect(((await facts(runtime: AgentRuntimeKind.dsh).read())['runtime']
+              as Map)['dsh'],
+          {'installed': true, 'version': '0.2.1'});
     });
 
     test('a running host is described by its runtime and model, never its error text',

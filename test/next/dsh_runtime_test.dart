@@ -64,6 +64,76 @@ trust_level = "trusted"
         throwsStateError);
   });
 
+  group('which runtime is fixed', () {
+    late Directory dir;
+    setUp(() async => dir = await Directory.systemTemp.createTemp('fixed-'));
+    tearDown(() => dir.delete(recursive: true));
+
+    test('nothing fixed leaves it to settings; codex and a bare dsh name only the kind', () {
+      final none = AgentRuntimeFixed.read({});
+      expect((none.kind, none.dsh), (null, null));
+      expect(AgentRuntimeFixed.read({'NIPAPLAY_AGENT_RUNTIME': 'codex'}).kind,
+          AgentRuntimeKind.codex);
+      final bare = AgentRuntimeFixed.read({'NIPAPLAY_AGENT_RUNTIME': 'dsh'});
+      expect((bare.kind, bare.dsh), (AgentRuntimeKind.dsh, null));
+      expect(DshRuntime.select({'NIPAPLAY_AGENT_RUNTIME': 'dsh'}), isNull);
+      expect(() => AgentRuntimeFixed.read({'NIPAPLAY_AGENT_RUNTIME': 'pi'}),
+          throwsStateError);
+    });
+
+    test('paths name an installation of your own, checked to exist', () {
+      final node = File('${dir.path}/node')..writeAsStringSync('');
+      final bin = File('${dir.path}/dsh/node_modules/@deepseek-ai/dsh/lib/bin.js')
+        ..createSync(recursive: true);
+      File('${dir.path}/dsh/node_modules/@deepseek-ai/dsh/package.json')
+          .writeAsStringSync('{"version":"3.1.4"}');
+      final env = {
+        'NIPAPLAY_AGENT_RUNTIME': 'dsh',
+        'NIPAPLAY_DSH_NODE': node.path,
+        'NIPAPLAY_DSH_ROOT': '${dir.path}/dsh',
+      };
+      final fixed = AgentRuntimeFixed.read(env);
+      expect(fixed.dsh!.bin, bin.path);
+      expect(fixed.dsh!.version, '3.1.4');
+      expect(() => AgentRuntimeFixed.read({...env, 'NIPAPLAY_DSH_NODE': '${dir.path}/none'}),
+          throwsStateError);
+      expect(() => AgentRuntimeFixed.read({'NIPAPLAY_AGENT_RUNTIME': 'dsh', 'NIPAPLAY_DSH_NODE': node.path}),
+          throwsStateError);
+    });
+
+    test("a lab profile's agent-runtime.json counts, and the environment wins over it", () {
+      File('${dir.path}/agent-runtime.json')
+          .writeAsStringSync('{"runtime":"codex"}');
+      expect(AgentRuntimeFixed.read({}, labRoot: dir).kind, AgentRuntimeKind.codex);
+      expect(
+          AgentRuntimeFixed.read({'NIPAPLAY_AGENT_RUNTIME': 'dsh'}, labRoot: dir)
+              .kind,
+          AgentRuntimeKind.dsh);
+      expect(AgentRuntimeFixed.read({}, labRoot: Directory('${dir.path}/none')).kind,
+          isNull);
+    });
+  });
+
+  test('wire switches a template brought reach the model entry, and only then', () {
+    const plain = DshRoute(baseUrl: 'https://x/v1', model: 'm', key: 'k');
+    final bare = ((plain.piAiConfig['providers'] as Map)[DshRoute.provider]
+        as Map)['models'] as List;
+    expect((bare.single as Map).containsKey('compat'), false);
+    const route = DshRoute(
+        baseUrl: 'https://x',
+        model: 'm',
+        key: 'k',
+        api: 'openai-completions',
+        reasoningEffort: 'high',
+        compat: {'thinkingFormat': 'deepseek'});
+    final entry = (((route.piAiConfig['providers'] as Map)[DshRoute.provider]
+            as Map)['models'] as List)
+        .single as Map;
+    expect(entry['compat'], {'thinkingFormat': 'deepseek'});
+    expect(route.withImageInput(true).compat, {'thinkingFormat': 'deepseek'});
+    expect(jsonEncode(route.piAiConfig), isNot(contains('"k"')));
+  });
+
   group('image input probe', () {
     const route = DshRoute(
         baseUrl: 'https://models.example/v1', model: 'm', key: 'k');

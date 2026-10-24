@@ -10,10 +10,12 @@ import 'package:nipaplay/services/app_http_proxy.dart';
 import 'package:nipaplay/services/system_proxy_service.dart';
 
 import '../chat/chat_host.dart';
+import '../chat/dsh_runtime.dart';
 import '../chat/model_launch.dart';
 import '../mesh/runtime.dart';
 import '../programs/runtime.dart';
 import '../runtime/codex_runtime.dart';
+import '../runtime/dsh_install.dart';
 import '../state/change_history.dart';
 import '../ui_data/host_settings.dart';
 import 'responses_probe.dart';
@@ -33,11 +35,27 @@ final class HostSettingsService implements NextHostSettings, NextHostDeviceSetti
       required this.modelSaved,
       this.device,
       this.codex,
+      this.dsh,
+      this.fixedRuntime,
+      this.defaultRuntime = AgentRuntimeKind.codex,
+      this.runtimeChanged,
       this.httpClient = HttpClient.new}) {
     _meshEvents = meshRuntime.hostChanges.listen((_) => notify());
   }
   final Directory root, codexHome;
   final CodexRuntime? codex;
+
+  /// The Node.js and DeepSeek Harness NipaPlay fetches for itself.
+  final DshInstall? dsh;
+
+  /// What the environment or a lab file fixes about the runtime, if anything.
+  final AgentRuntimeFixed Function()? fixedRuntime;
+
+  /// The runtime when nothing fixed it and nothing was chosen here.
+  final AgentRuntimeKind defaultRuntime;
+
+  /// Called after the runtime choice changed: the running host is replaced.
+  final Future<void> Function()? runtimeChanged;
   CodexRuntime get _codex => codex ?? (throw UnsupportedError('实验配置沿用外部 Codex'));
   @override
   Future<UiCodexRuntime> codexRuntime() => _codex.state();
@@ -53,6 +71,82 @@ final class HostSettingsService implements NextHostSettings, NextHostDeviceSetti
   @override
   Future<void> setCodexRuntime(UiCodexRuntimeChoice choice) =>
       _write(() => _codex.configure(choice)).then((_) => modelSaved());
+  AgentRuntimeFixed _fixed() {
+    try {
+      return fixedRuntime?.call() ?? const AgentRuntimeFixed(null);
+    } on StateError {
+      return const AgentRuntimeFixed(null);
+    }
+  }
+
+  /// The runtime Nipa thinks in now: what is fixed, else what was chosen
+  /// here, else the default.
+  Future<AgentRuntimeKind> effectiveRuntime() async {
+    if (_fixed().kind case final kind?) return kind;
+    final stored = (await _read('runtime.json'))['runtime'];
+    for (final kind in AgentRuntimeKind.values) {
+      if (kind.name == stored) return kind;
+    }
+    return defaultRuntime;
+  }
+
+  @override
+  Future<UiAgentRuntime> agentRuntime() async => UiAgentRuntime(
+      kind: UiAgentRuntimeKind.values.byName((await effectiveRuntime()).name),
+      fixed: _fixed().kind != null);
+
+  @override
+  Future<void> setAgentRuntime(UiAgentRuntimeKind kind) => _write(() async {
+        if (_fixed().kind != null) throw StateError('运行器由启动环境决定');
+        if (kind == UiAgentRuntimeKind.codex && codex == null) {
+          throw UnsupportedError('此宿主没有 Codex');
+        }
+        final before = await _read('runtime.json');
+        final value = <String, Object?>{...before, 'runtime': kind.name};
+        await _save('runtime.json', value);
+        _record('runtime', before, value);
+        _checkProblem = null;
+        notify();
+      }).then((_) => runtimeChanged?.call());
+
+  DshInstall get _dsh => dsh ?? (throw UnsupportedError('此宿主不下载运行环境'));
+  @override
+  Future<UiDshRuntime> dshRuntime() async {
+    final state = await _dsh.state();
+    return UiDshRuntime(
+        status: state.status,
+        version: state.version,
+        receivedBytes: state.receivedBytes,
+        totalBytes: state.totalBytes,
+        problem: state.problem,
+        registryMirror: state.registryMirror,
+        nodeMirror: state.nodeMirror,
+        fixed: _fixed().dsh != null);
+  }
+
+  /// The runtime DeepSeek Harness runs on: an installation named by the
+  /// environment or a lab file, else the downloaded one (null until it is
+  /// there).
+  Future<DshRuntime?> dshLaunchRuntime() async =>
+      _fixed().dsh ?? await dsh?.runtime();
+
+  @override
+  Future<void> installDsh() async {
+    await _dsh.install();
+    if ((await _dsh.state()).status == UiDshStatus.ready) await modelSaved();
+  }
+
+  @override
+  Future<void> cancelDshInstall() => _dsh.cancel();
+  @override
+  Future<void> removeDsh() async {
+    await _dsh.remove();
+    notify();
+  }
+
+  @override
+  Future<void> setDshMirrors({String? registry, String? node}) => _write(
+      () => _dsh.configure(registryMirror: registry, nodeMirror: node));
   final CredentialVault vault;
   final MeshRuntime meshRuntime;
   final ProgramRuntime programs;
@@ -124,10 +218,12 @@ final class HostSettingsService implements NextHostSettings, NextHostDeviceSetti
               [root.absolute.path, value['provider'], value['baseUrl']])))
           .toString());
   CredentialRef _key(JsonMap value) => modelKey(root, value);
-  UiModelSource _source(JsonMap value) => value['source'] == 'nipaplay' ||
-      (value['source'] == null && codex != null)
-      ? UiModelSource.nipaplay
-      : UiModelSource.codex;
+  UiModelSource _source(JsonMap value, [AgentRuntimeKind? runtime]) =>
+      runtime == AgentRuntimeKind.dsh ||
+              value['source'] == 'nipaplay' ||
+              (value['source'] == null && codex != null)
+          ? UiModelSource.nipaplay
+          : UiModelSource.codex;
   Future<String?> _secret(JsonMap value) async {
     final key = await vault.read(_key(value));
     if (key != null) SecretRedactor.remember(_key(value), key);
@@ -162,10 +258,12 @@ final class HostSettingsService implements NextHostSettings, NextHostDeviceSetti
   Future<UiModelSetup> model() async {
     await _writes;
     final value = await _read('model.json');
-    final source = _source(value);
+    final runtime = await effectiveRuntime();
+    final source = _source(value, runtime);
     final exists = await File('${codexHome.path}/config.toml').exists();
     final key = source == UiModelSource.nipaplay ? await _secret(value) : null;
     final host = chat();
+    final api = value['api'] == 'chat' ? UiModelApi.chat : UiModelApi.responses;
     final missing = source == UiModelSource.codex
         ? exists
             ? null
@@ -174,13 +272,32 @@ final class HostSettingsService implements NextHostSettings, NextHostDeviceSetti
             ? '请先填写地址和模型名'
             : key == null || key.isEmpty
                 ? '请先填写密钥'
-                : null;
+                : runtime == AgentRuntimeKind.codex && api == UiModelApi.chat
+                    ? 'Codex 只能用 Responses 接口'
+                    : null;
+    final environment = runtime == AgentRuntimeKind.dsh &&
+            _fixed().dsh == null &&
+            dsh != null
+        ? switch ((await dsh!.state()).status) {
+            UiDshStatus.ready => null,
+            UiDshStatus.downloading ||
+            UiDshStatus.unpacking =>
+              '正在准备运行环境',
+            UiDshStatus.failed => (await dsh!.state()).problem ?? '运行环境没能安装',
+            UiDshStatus.unsupported => '这个平台暂时没有现成的运行环境',
+            UiDshStatus.notInstalled => '还没有运行环境',
+          }
+        : null;
     return UiModelSetup(
         source: source,
+        runtime: UiAgentRuntimeKind.values.byName(runtime.name),
         codexAvailable: exists,
         provider: value['provider'] as String?,
         baseUrl: value['baseUrl'] as String?,
         model: value['model'] as String?,
+        api: api,
+        reasoning: value['reasoning'] as String?,
+        compat: (value['compat'] as Map?)?.cast<String, Object?>(),
         hasKey: key != null && key.isNotEmpty,
         inUse: host?.available == true ? host!.model : null,
         problem: host?.available == true &&
@@ -188,6 +305,7 @@ final class HostSettingsService implements NextHostSettings, NextHostDeviceSetti
                 host.activeModelRevision != value['revision']
             ? null
             : missing ??
+                environment ??
                 _checkProblem ??
                 (chatProblem() == null ? _liveProblem(host) : '模型服务未能启动'));
   }
@@ -220,6 +338,24 @@ final class HostSettingsService implements NextHostSettings, NextHostDeviceSetti
           value['baseUrl'] =
               _url(choice.baseUrl).toString().replaceFirst(RegExp(r'/$'), '');
           value['model'] = _text(choice.model, '模型');
+          if (choice.api != null) value['api'] = choice.api!.name;
+          if (choice.reasoning != null) {
+            if (choice.reasoning!.isEmpty) {
+              value.remove('reasoning');
+            } else if (!const {'low', 'medium', 'high'}
+                .contains(choice.reasoning)) {
+              throw const FormatException('思考强度填写不正确');
+            } else {
+              value['reasoning'] = choice.reasoning;
+            }
+          }
+          if (choice.compat != null) {
+            if (choice.compat!.isEmpty) {
+              value.remove('compat');
+            } else {
+              value['compat'] = choice.compat;
+            }
+          }
           if (choice.apiKey case final key?) {
             if (key.contains(RegExp(r'[\x00-\x20]')) || key.length > 16384) {
               throw const FormatException('密钥填写不正确');
@@ -243,6 +379,7 @@ final class HostSettingsService implements NextHostSettings, NextHostDeviceSetti
       }).then((_) => modelSaved());
 
   Future<ModelLaunch> launch() async {
+    if (await effectiveRuntime() == AgentRuntimeKind.dsh) return _dshLaunch();
     // Installation can outlast a settings edit. Read the selected model only
     // after it completes so first-use input takes effect on this launch.
     final executable = await codex?.executable();
@@ -284,13 +421,99 @@ final class HostSettingsService implements NextHostSettings, NextHostDeviceSetti
         });
   }
 
+  /// DeepSeek Harness reads the model set up here, either wire protocol,
+  /// with the key from the vault. Nothing is written to disk for it.
+  Future<ModelLaunch> _dshLaunch() async {
+    await _writes;
+    final value = await _read('model.json');
+    final key = await _secret(value);
+    if (key == null || key.isEmpty) throw StateError('请先填写密钥');
+    _text(value['provider'] as String?, '提供方');
+    final model = _text(value['model'] as String?, '模型');
+    final chatApi = value['api'] == 'chat';
+    final url = chatApi
+        ? chatBase(_url(value['baseUrl'] as String?))
+        : responsesBase(_url(value['baseUrl'] as String?));
+    return ModelLaunch(
+        revision: value['revision'] as int? ?? 0,
+        model: model,
+        provider: DshRoute.provider,
+        route: DshRoute(
+            baseUrl: url.toString().replaceFirst(RegExp(r'/$'), ''),
+            model: model,
+            key: key,
+            api: chatApi ? 'openai-completions' : 'openai-responses',
+            reasoningEffort: value['reasoning'] as String?,
+            compat: (value['compat'] as Map?)?.cast<String, Object?>()));
+  }
+
+  /// The model the Codex configuration on this computer names, without its key.
+  Future<({DshRoute route, String provider})?> _codexRoute() async {
+    final config = File('${codexHome.path}/config.toml');
+    if (!await config.exists()) return null;
+    final text = await config.readAsString();
+    final auth = File('${codexHome.path}/auth.json');
+    try {
+      final toml = readCodexToml(text);
+      final chosen = toml['model_provider'] as String?;
+      final table = chosen == null
+          ? null
+          : (toml['model_providers'] as Map?)?[chosen] as Map?;
+      if (table == null) return null;
+      final route = DshRoute.fromCodexConfig(text,
+          environment: Platform.environment,
+          auth: await auth.exists()
+              ? Map<String, Object?>.from(
+                  jsonDecode(await auth.readAsString()) as Map)
+              : null);
+      return (route: route, provider: table['name'] as String? ?? chosen!);
+    } on StateError {
+      return null;
+    }
+  }
+
+  @override
+  Future<UiModelChoice?> codexModel() async {
+    final found = await _codexRoute();
+    if (found == null) return null;
+    return UiModelChoice(
+        source: UiModelSource.nipaplay,
+        provider: found.provider,
+        baseUrl: found.route.baseUrl,
+        model: found.route.model,
+        api: found.route.api == 'openai-completions'
+            ? UiModelApi.chat
+            : UiModelApi.responses,
+        reasoning: found.route.reasoningEffort);
+  }
+
+  @override
+  Future<void> importCodexModel() async {
+    final found = await _codexRoute();
+    if (found == null) throw StateError('这台电脑没有可用的 Codex 配置');
+    final route = found.route;
+    await setModel(UiModelChoice(
+        source: UiModelSource.nipaplay,
+        provider: found.provider,
+        baseUrl: route.baseUrl,
+        model: route.model,
+        apiKey: route.key,
+        api: route.api == 'openai-completions'
+            ? UiModelApi.chat
+            : UiModelApi.responses,
+        reasoning: const {'low', 'medium', 'high'}.contains(route.reasoningEffort)
+            ? route.reasoningEffort
+            : '',
+        compat: const {}));
+  }
+
   @override
   Future<UiModelCheck> checkModel() async {
     await _writes;
     final value = await _read('model.json');
     final watch = Stopwatch()..start();
     UiModelCheck result;
-    if (_source(value) == UiModelSource.codex) {
+    if (_source(value, await effectiveRuntime()) == UiModelSource.codex) {
       result = await checkCodex();
     } else {
       final key = await _secret(value);
@@ -304,9 +527,12 @@ final class HostSettingsService implements NextHostSettings, NextHostDeviceSetti
               InternetAddress.tryParse(uri.host)?.isLoopback == true ? 'DIRECT' :
               AppHttpProxy.findProxy(uri, SystemProxyService.instance.findProxy);
           client.connectionTimeout = const Duration(seconds: 15);
-          result = await probeResponses(client, _url(value['baseUrl'] as String?),
-              _text(value['model'] as String?, '模型'), key)
-              .timeout(const Duration(seconds: 30));
+          final base = _url(value['baseUrl'] as String?);
+          final model = _text(value['model'] as String?, '模型');
+          final probe = value['api'] == 'chat'
+              ? probeChatCompletions(client, base, model, key)
+              : probeResponses(client, base, model, key);
+          result = await probe.timeout(const Duration(seconds: 30));
         } on TimeoutException {
           result = const UiModelCheck(ok: false, message: '服务器响应超时');
         } on SocketException {
@@ -455,6 +681,7 @@ final class HostSettingsService implements NextHostSettings, NextHostDeviceSetti
 
   Future<void> close() async {
     await codex?.cancel();
+    await dsh?.cancel();
     await _writes;
     await _meshEvents?.cancel();
     await _changes.close();
@@ -511,12 +738,35 @@ final class PendingHostSettings implements NextHostSettings, NextHostDeviceSetti
   @override
   Future<void> setCodexRuntime(UiCodexRuntimeChoice choice) async =>
       (await ready).runtimeSettings.setCodexRuntime(choice);
+  @override
+  Future<UiAgentRuntime> agentRuntime() async =>
+      (await ready).runtimeSettings.agentRuntime();
+  @override
+  Future<void> setAgentRuntime(UiAgentRuntimeKind kind) async =>
+      (await ready).runtimeSettings.setAgentRuntime(kind);
+  @override
+  Future<UiDshRuntime> dshRuntime() async =>
+      (await ready).runtimeSettings.dshRuntime();
+  @override
+  Future<void> installDsh() async => (await ready).runtimeSettings.installDsh();
+  @override
+  Future<void> cancelDshInstall() async =>
+      (await ready).runtimeSettings.cancelDshInstall();
+  @override
+  Future<void> removeDsh() async => (await ready).runtimeSettings.removeDsh();
+  @override
+  Future<void> setDshMirrors({String? registry, String? node}) async =>
+      (await ready).runtimeSettings.setDshMirrors(registry: registry, node: node);
   final _changes = StreamController<void>.broadcast();
   StreamSubscription<void>? _subscription;
   @override
   Stream<void> get changes => _changes.stream;
   @override
   Future<UiModelSetup> model() async => (await ready).model();
+  @override
+  Future<UiModelChoice?> codexModel() async => (await ready).codexModel();
+  @override
+  Future<void> importCodexModel() async => (await ready).importCodexModel();
   @override
   Future<void> setModel(UiModelChoice choice) async =>
       (await ready).setModel(choice);

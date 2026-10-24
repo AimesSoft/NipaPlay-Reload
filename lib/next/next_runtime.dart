@@ -17,6 +17,8 @@ import 'player/ports/session_ports.dart' show NotInPlaybackLayer;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'ui/shell/next_ui_preference.dart';
 import 'runtime/codex_runtime.dart';
+import 'runtime/dsh_install.dart';
+import 'runtime/dsh_manifest.dart';
 import 'settings/classic_host_device_settings.dart';
 import 'package:nipaplay/utils/lab_profile.dart';
 import 'package:nipaplay/utils/media_source_utils.dart';
@@ -35,6 +37,8 @@ import 'package:nipaplay/providers/shared_remote_library_provider.dart';
 import 'package:nipaplay/providers/dandanplay_remote_provider.dart';
 import 'package:nipaplay/providers/jellyfin_provider.dart';
 import 'package:nipaplay/providers/emby_provider.dart';
+import 'package:nipaplay/services/app_http_proxy.dart';
+import 'package:nipaplay/services/system_proxy_service.dart';
 import 'package:nipaplay/services/bangumi_service.dart';
 import 'package:nipaplay/services/episode_file_selection_service.dart';
 import 'package:nipaplay/utils/globals.dart' as globals;
@@ -384,6 +388,7 @@ final class NextRuntime extends ChangeNotifier {
   StreamSubscription<void>? _activityEvents;
   Future<void> closeChat() async {
     await _hostSettings?.codex?.cancel();
+    await _hostSettings?.dsh?.cancel();
     await _operations;
     // In Classic there is no conversation to close (D1).
     if (!_nipa && chat == null) return;
@@ -550,8 +555,32 @@ final class NextRuntime extends ChangeNotifier {
           : 47811,
     );
     core.programs.credentialFile = _endpoint.credentialFile;
+    final desktop = Platform.isMacOS || Platform.isWindows || Platform.isLinux;
+    final labRoot = LabProfile.active ? Directory(LabProfile.root) : null;
     _hostSettings = HostSettingsService(root: root,
-      codex: LabProfile.active || !(Platform.isMacOS || Platform.isWindows || Platform.isLinux)
+      dsh: !desktop ? null : DshInstall(
+        root: Directory('${root.path}/dsh-runtime'),
+        manifest: DshManifest.parse(
+            await rootBundle.loadString('assets/next/agent/dsh-runtime.json')),
+        platform: DshManifest.hostPlatform(),
+        notify: () => _hostSettings?.notify(),
+        inUse: () => chat?.available == true,
+        beforeInstall: SystemProxyService.instance.initialize,
+        httpClient: () => HttpClient()
+          ..findProxy = (uri) => uri.host == 'localhost' ||
+                  InternetAddress.tryParse(uri.host)?.isLoopback == true
+              ? 'DIRECT'
+              : AppHttpProxy.findProxy(
+                  uri, SystemProxyService.instance.findProxy)),
+      fixedRuntime: () => AgentRuntimeFixed.read(Platform.environment,
+          labRoot: labRoot),
+      // A lab profile prepared for Codex keeps using it until told otherwise.
+      defaultRuntime: labRoot != null &&
+              File('${labRoot.path}/codex-home/config.toml').existsSync()
+          ? AgentRuntimeKind.codex
+          : AgentRuntimeKind.dsh,
+      runtimeChanged: _restartChat,
+      codex: LabProfile.active || !desktop
         ? null : CodexRuntime.desktop(
         root: Directory('${root.path}/codex-runtime'),
         notify: () => _hostSettings?.notify(),
@@ -620,6 +649,7 @@ final class NextRuntime extends ChangeNotifier {
     }
     if (!enabled) {
       unawaited(_hostSettings?.codex?.cancel());
+      unawaited(_hostSettings?.dsh?.cancel());
     }
     _operations = _operations.then((_) => _updateEndpoint(enabled));
   }
@@ -699,9 +729,19 @@ final class NextRuntime extends ChangeNotifier {
     await _hostEvents?.cancel();
     await _activityEvents?.cancel();
     final labRoot = LabProfile.active ? Directory(LabProfile.root) : null;
-    final DshRuntime? dsh;
+    DshRuntime? dsh;
     try {
-      dsh = DshRuntime.select(Platform.environment, labRoot: labRoot);
+      AgentRuntimeFixed.read(Platform.environment, labRoot: labRoot);
+      if (await _hostSettings!.effectiveRuntime() == AgentRuntimeKind.dsh) {
+        dsh = await _hostSettings!.dshLaunchRuntime();
+        if (dsh == null) {
+          // Nothing to start until the runtime is there; settings say so.
+          await ServiceProvider.nextCore.followups
+              .attach(null, reason: 'The runtime is not installed.');
+          _hostSettings!.notify();
+          return;
+        }
+      }
     } on StateError catch (error) {
       chatError = redactHarnessText(error.message);
       await ServiceProvider.nextCore.followups.attach(null, reason: chatError);
@@ -775,6 +815,24 @@ final class NextRuntime extends ChangeNotifier {
       await ServiceProvider.nextCore.followups.attach(null, reason: chatError);
     }
     _hostSettings!.notify();
+  }
+
+  /// The runtime was switched: the running host goes, the other one starts.
+  Future<void> _restartChat() async {
+    if (_disposed || !_open) return;
+    _operations = _operations.then((_) async {
+      if (_disposed || !_open) return;
+      if (_endpointStatus case AgentEndpointRunning(:final repository)) {
+        await ServiceProvider.nextCore.followups
+            .attach(null, reason: 'The Nipa runtime changed.');
+        await chat?.close();
+        chat = null;
+        chatError = null;
+        await _startChat(repository);
+        notifyListeners();
+      }
+    });
+    await _operations;
   }
 
   Future<UiModelCheck> _checkCodexModel() async {

@@ -23,8 +23,8 @@ final class AppRuntimeCapability implements Capability {
                     'remoteAccess: serviceRunning, port, autoStart, ipv6, receiverEnabled, trustedDeviceCount (a count, no identities or tokens), lastStartFailed. '
                     'mesh: joined, enabled, status, issuerAvailable, deviceName, coordinator (address without credentials), port, loopbackOnly, broadcastDiscovery, manualAddresses, fileProxyPort, remoteProgramsAllowed. '
                     'agent: endpointEnabled, programExecutionAllowed. '
-                    'runtime: selected (kind codex or dsh from the environment and lab profile, dshVersion; problem when the selection is invalid), running (null when no conversation host is running; otherwise available, runtime, model, provider, busy, problem as a short sentence), codex (source managed/path/specified, managed version and installed, mirror). '
-                    'model: source nipaplay (provider, baseUrl without credentials, model, keyConfigured) or codex (codexConfigPresent, and the model and provider its config names). '
+                    'runtime: selected (kind dsh or codex: the environment or lab profile, else the choice in settings, else dsh; dshVersion; problem when the selection named by the environment is invalid), running (null when no conversation host is running; otherwise available, runtime, model, provider, busy, problem as a short sentence), codex (source managed/path/specified, managed version and installed, mirror), dsh (whether NipaPlay has fetched DeepSeek Harness, and its version). '
+                    'model: source nipaplay (provider, baseUrl without credentials, model, api responses or chat, keyConfigured) or codex (codexConfigPresent, and the model and provider its config names). '
                     'Keys, tokens, trusted-device identities and credentials in addresses are never returned; none of these can be changed through Actions. '
                     'keyConfigured is null with keyConfiguredReason when the host cannot read it (a lab profile keeps the key in memory).',
                 effect: Effect.read,

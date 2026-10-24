@@ -254,14 +254,78 @@ the private VM service URI in the instance log. It is not a harness Action or
 MCP tool and is not registered outside Debug lab profiles. The lab event log is
 redacted and exists only inside the disposable profile.
 
-## DeepSeek Harness runtime (Y16)
+## DeepSeek Harness runtime (Y16, product in Y18)
 
-Codex stays the default. `NIPAPLAY_AGENT_RUNTIME=dsh` runs Nipa on DeepSeek
-Harness (DSH) instead, with `NIPAPLAY_DSH_NODE` (Node.js 24) and
-`NIPAPLAY_DSH_ROOT` (an npm prefix holding `node_modules/@deepseek-ai/dsh`, or
-`NIPAPLAY_DSH_BIN` for its `lib/bin.js`). A lab profile may keep the same choice
-in `<lab root>/agent-runtime.json` (`{"runtime":"dsh","node":…,"root":…}`);
-environment values win. A wrong selection is reported as `chatError`.
+DeepSeek Harness (DSH) is the runtime Nipa runs on; Codex is the alternative.
+Which one: `NIPAPLAY_AGENT_RUNTIME` (`dsh` or `codex`), else a lab profile's
+`<lab root>/agent-runtime.json` (`{"runtime":"dsh","node":…,"root":…}`), else
+the choice made in settings (`runtime.json` in Next's root, the “运行器” row
+under 更多 of the runtime card), else DSH. A lab profile that has its own
+`codex-home/config.toml` and no choice keeps Codex. The environment or file may
+also name an installation of its own: `NIPAPLAY_DSH_NODE` (Node.js 24) with
+`NIPAPLAY_DSH_ROOT` (an npm prefix holding `node_modules/@deepseek-ai/dsh`) or
+`NIPAPLAY_DSH_BIN` (its `lib/bin.js`); `dsh` alone means the runtime NipaPlay
+fetches. A wrong selection is reported as `chatError`.
+
+**The runtime NipaPlay fetches** (`lib/next/runtime/dsh_install.dart`, manifest
+`assets/next/agent/dsh-runtime.json`). Not bundled: Next is a Labs feature and
+the runtime is 73 MB to download (a Node.js archive of 51 MB and 220 npm tarballs of 22 MB) and 264 MB unpacked (Node.js 117 MB, packages 147 MB in 16 000 files), which would be added to
+every download, signature and notarisation of the app, and to every update,
+for people who never open Next. Codex is fetched the same way. The first time
+a model is saved with no runtime in place (or by the 下载 button) NipaPlay
+downloads Node.js from `nodejs.org/dist` and the packages of the trimmed DSH
+from `registry.npmjs.org`; nothing goes through a NipaPlay server. Every file
+is pinned by SHA-256 and size in the manifest, so the optional mirrors in 更多
+(an npm registry and a Node.js dist directory) change where bytes come from but
+never what they must be. Downloads run six at a time, keep their `.part` files
+and continue with `Range` after a stop or a failure; a finished file is kept
+until the whole runtime is in place, which appears in one rename of
+`<Next root>/dsh-runtime/dsh-<dsh>-node-<node>/` (`node/`, `lib/node_modules/`).
+A failure is a fact naming the file and the status (`zod-4.4.3.tgz 下载失败：HTTP 404
+（registry.npmjs.org）`, `… 的 SHA-256 与预期不符，已删除`, `… 连接中断：…`).
+On macOS the Node.js binary must pass `codesign --verify -R=notarized`
+(Node.js Foundation's signature, not altered) and must report its version.
+Removing is refused while a chat process uses it; an older runtime directory is
+deleted once a new one is in place.
+
+The package list is `scripts/next/dsh_runtime/build_lock.py` applied to a
+trace (`trace.py`): a real DSH with `patch.dart`'s overlay is driven through
+every tool Nipa has (bash, a background job, read, read_image, write, web_fetch,
+todo_write, list_agents, a subagent, compaction) while the recorders list every
+file loaded or read. A package is kept when something other than its
+`package.json` was used (DSH's plugin discovery reads every `package.json`),
+plus the third-party packages those declare; the rows `dshDisabledRows` turns
+off bring none of theirs (no office kit, workflow runtime, telemetry exporter,
+account sign-in, session upload) and neither do provider SDKs and the
+interactive terminal that `pi-ai` and `dsh-subprocess-local` list but Nipa never
+loads. Versions are hoisted to the most used one per name, the others nested
+where they are needed (the reference tree had `zod` 50 times). The manifest
+holds entries per install path with `os`/`cpu` as npm names them, a pinned Node
+archive for every platform (`tar.gz` for macOS and Linux, `node.exe` for
+Windows), and `platforms`, the platforms whose package list was traced and
+tested (macOS arm64). Another platform is added by tracing on it, listing it,
+and building the lock again; until then its state is `unsupported` and nothing
+is fetched. To update: install the new `@deepseek-ai/dsh` in a clean directory,
+trace it, run `build_lock.py`, run the trace again over the materialised lock.
+
+**The model** comes from settings: provider, address, model, key (in the
+credential vault; never in a file, the patch, the process arguments or a log),
+the wire (Responses or Chat Completions), thinking effort and the wire switches
+a template brought (`compat`, e.g. DeepSeek's `thinkingFormat`; never inferred
+from the address). `HostSettingsService.launch()` hands DSH a `DshRoute`
+(`ModelLaunch.route`); the key reaches DSH only as `NIPAPLAY_MODEL_API_KEY`.
+`importCodexModel` takes provider, address, model, effort and key from the
+Codex configuration on the computer into the app's own model. Without a model
+in settings (an environment or lab with its own `codex-home`) the route is read
+from that Codex configuration as before (`DshRoute.fromCodexConfig`).
+The `llm-pi-ai` route `nipaplay` has the address, the wire as `api`, and the
+model's `compat`; the model's image input is probed at launch and kept in
+`dsh/model-input.json`.
+
+Until a model and the runtime are in place the chat host does not start
+(settings say what is missing, first the model, then the runtime) and the
+conversation says Nipa is not there; the amber “设置 Nipa” chip (or “正在准备
+Nipa · 42%” while downloading) leads to the settings.
 
 `ChatHost` keeps its protocol: it starts `node <dsh>/lib/bin.js --profile sdk
 --patch <Next root>/dsh/nipa-patch.json` instead of `codex app-server`, and
@@ -276,15 +340,12 @@ pointers under `dsh:<harness path>`; switching runtime leaves the other
 runtime's main conversation in place for when it is switched back. Followups
 already bound to the other runtime's threads cannot be delivered meanwhile.
 
-The model route comes from the Codex configuration a Codex launch would use:
-the NipaPlay-managed `codex-home` for a NipaPlay model, otherwise the lab's
-`codex-home/config.toml` (or `CODEX_HOME`/`~/.codex`). Its provider's
-`base_url`, `wire_api`, `request_max_retries`, the model and
-`model_reasoning_effort` become the `llm-pi-ai` route `nipaplay`; the key
-(`experimental_bearer_token`, the `env_key` variable or auth.json's
-`OPENAI_API_KEY`) is held in memory and passed only as
-`NIPAPLAY_MODEL_API_KEY`. The overlay file and `launchEnvironment` carry no
-credential; DSH removes `*KEY*`/`*TOKEN*` variables from tool shells.
+The overlay file and `launchEnvironment` carry no credential; DSH removes
+`*KEY*`/`*TOKEN*` variables from tool shells. A route read from a Codex
+configuration maps its provider's `base_url`, `wire_api`,
+`request_max_retries`, the model and `model_reasoning_effort` onto the same
+route; its key (`experimental_bearer_token`, the `env_key` variable or
+auth.json's `OPENAI_API_KEY`) is held in memory.
 
 Protocol mapping: a DSH session is a thread (`thread/start`, `resume`, `read`,
 `list` with `cwd`/`sourceKinds`/cursor, `name/set`); a DSH turn is a turn with
