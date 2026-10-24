@@ -125,8 +125,16 @@ final class SubtitleState {
     this.presented = const [],
     this.files = const [],
     this.failure,
+    this.remembered,
   });
   final SubtitleWant want;
+
+  /// What the subtitle library holds for this media, as far as this
+  /// playback knows it: the person's or Nipa's remembered choice, or what
+  /// the library put on at the open. Null: the library holds no choice.
+  /// [want] is what shows now, which may be a temporary choice that is not
+  /// this.
+  final SubtitleWant? remembered;
 
   /// user, agent, library_selection, default (nothing was chosen).
   final String selectedBy;
@@ -146,6 +154,7 @@ final class SubtitleState {
     List<PresentedSubtitle>? presented,
     List<SubtitleFile>? files,
     String? Function()? failure,
+    SubtitleWant? Function()? remembered,
   }) =>
       SubtitleState(
         want: want ?? this.want,
@@ -154,8 +163,13 @@ final class SubtitleState {
         presented: presented ?? this.presented,
         files: files ?? this.files,
         failure: failure == null ? this.failure : failure(),
+        remembered: remembered == null ? this.remembered : remembered(),
       );
 }
+
+/// What a choice came to: the state after it, and whether the subtitle
+/// library recorded it.
+typedef SubtitleOutcome = ({SubtitleState state, bool remembered});
 
 /// What the overlay draws now: the line, how, where.
 @immutable
@@ -431,17 +445,22 @@ final class SubtitleController {
     _state.value = _state.value.copyWith(
         files: [for (final f in files) if (f.path != path) f]);
     if (showing) {
-      return choose(const SubtitleWant.off(), by: by);
+      return (await choose(const SubtitleWant.off(), by: by)).state;
     }
     return _state.value;
   }
 
   /// Puts [next] on screen (and nothing else). Completes once the kernel or
   /// the overlay reported it, or the wait is up. [record]: the choice is
-  /// told to the subtitle library (the person's and Nipa's are).
-  Future<SubtitleState> choose(SubtitleWant next,
-      {required String by, bool record = false, String? title}) async {
-    if (_closed) return _state.value;
+  /// told to the subtitle library, which keeps it for the next open; the
+  /// outcome says whether it did. [fromLibrary]: the choice is the
+  /// library's own record put on, so it is what is remembered.
+  Future<SubtitleOutcome> choose(SubtitleWant next,
+      {required String by,
+      bool record = false,
+      bool fromLibrary = false,
+      String? title}) async {
+    if (_closed) return (state: _state.value, remembered: false);
     if (next.path case final path?) {
       offer(path, title ?? p.basename(path),
           origin: by == 'library_selection' ? 'library' : by);
@@ -453,7 +472,8 @@ final class SubtitleController {
         want: next,
         selectedBy: by,
         selectedAt: DateTime.now().toUtc(),
-        failure: same ? null : () => null);
+        failure: same ? null : () => null,
+        remembered: fromLibrary ? () => next : null);
     final Future<void> applied;
     if (same) {
       applied = _applying;
@@ -461,29 +481,36 @@ final class SubtitleController {
       _version++;
       applied = _schedule();
     }
+    Future<bool>? recorded;
     if (record) {
       final recorder = recorderOf?.call();
       final index = next.index ?? (next.off ? -1 : null);
       if (recorder != null) {
-        unawaited(_recordChoice(recorder, index, next.path));
+        recorded = _recordChoice(recorder, index, next.path, next);
       }
     }
     await applied;
-    return _state.value;
+    final remembered = await (recorded ?? Future.value(false));
+    return (state: _state.value, remembered: remembered);
   }
 
   String? _mediaPath;
   set mediaPath(String path) => _mediaPath = path;
 
-  Future<void> _recordChoice(
-      SubtitleRecorder recorder, int? index, String? external) async {
+  Future<bool> _recordChoice(SubtitleRecorder recorder, int? index,
+      String? external, SubtitleWant want) async {
     final media = _mediaPath;
-    if (media == null) return;
+    if (media == null) return false;
     try {
       await recorder(media, index, external);
     } catch (error) {
       _note('record_failed', {'error': redactHarnessText('$error')});
+      return false;
     }
+    if (!_closed) {
+      _state.value = _state.value.copyWith(remembered: () => want);
+    }
+    return true;
   }
 
   // ---- putting it on (in order; a later choice overtakes) ----

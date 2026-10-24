@@ -933,13 +933,18 @@ final class PlaybackSession {
   }
 
   /// Puts [want] on screen and nothing else (the invariant). [record]: the
-  /// subtitle library records it as the person's or Nipa's choice.
+  /// subtitle library keeps it for the next open (the receipt says whether
+  /// it did); false: it holds for this playback only. [fromLibrary]: the
+  /// library's own record put on.
   Future<CommandReceipt> chooseSubtitle(SubtitleWant want,
-      {required String origin, bool record = true, String? title}) async {
+      {required String origin,
+      bool record = true,
+      bool fromLibrary = false,
+      String? title}) async {
     final seq = ++_commandSeq;
     if (_phase.value.done) return _receipt(seq, 'select_track', 'session_closed');
-    final state = await subtitles.choose(want,
-        by: origin, record: record, title: title);
+    final (:state, :remembered) = await subtitles.choose(want,
+        by: origin, record: record, fromLibrary: fromLibrary, title: title);
     if (_phase.value.done) return _receipt(seq, 'select_track', 'session_closed');
     final presented = state.presented;
     final String outcome;
@@ -962,6 +967,7 @@ final class PlaybackSession {
       'kind': 'subtitle',
       'selected': want.toJson(),
       'presented': [for (final p in presented) p.toJson()],
+      'remembered': remembered,
       if (state.failure != null) 'failure': state.failure,
     });
   }

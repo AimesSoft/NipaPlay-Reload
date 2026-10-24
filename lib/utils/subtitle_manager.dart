@@ -240,6 +240,23 @@ class SubtitleManager extends ChangeNotifier {
     return _textAtPath(path, positionMs);
   }
 
+  /// 所有 SRT/VTT 外挂字幕共用的时轴偏移（秒；设置项 `srt_subtitle_delay`）。
+  /// 由 VideoPlayerState 在读取/修改该设置时同步进来。
+  double srtDelaySeconds = 0.0;
+
+  /// 叠层里这条外挂字幕此刻的总偏移（毫秒；正值延后，负值提前）：
+  /// SRT/VTT 先加共用的 SRT 偏移，再加这条字幕自己的偏移；ASS/SSA 只有自己的偏移。
+  int overlayDelayMs(String path) {
+    final extension = p.extension(path).toLowerCase();
+    final shared =
+        extension == '.srt' || extension == '.vtt' ? srtDelaySeconds : 0.0;
+    return ((shared + pathDelaySeconds(path)) * 1000).round();
+  }
+
+  /// 叠层此刻给出的这条外挂字幕的那一行：播放位置减去总偏移后查表。
+  String overlayTextAt(String path, int playbackMs) =>
+      pathSubtitleTextAt(path, playbackMs - overlayDelayMs(path));
+
   // 获取当前活跃的外部字幕文件路径
   String? getActiveExternalSubtitlePath() {
     // 检查是否是外部字幕

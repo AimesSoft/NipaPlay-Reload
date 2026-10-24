@@ -30,12 +30,17 @@ final class PlaybackControlsCapability implements Capability {
               'playback.select_track',
               'Select a player track',
               'Select an embedded or server audio/subtitle track, or disable subtitles '
-                  'with index -1. Server selection reloads the current stream.',
+                  'with index -1. Server selection reloads the current stream. '
+                  'remember (default false): true also records a subtitle choice in the '
+                  'subtitle library, which puts it on the next time this video opens; '
+                  'false applies to the current playback only. The result reports '
+                  'remembered. Audio choices are not kept (remember true is rejected).',
               Effect.write,
               const ObjectSchema({
                 'kind': StringSchema(values: ['audio', 'subtitle']),
                 'origin': StringSchema(values: ['embedded', 'server']),
                 'index': IntegerSchema(minimum: -1),
+                'remember': BooleanSchema(),
               }, required: [
                 'kind',
                 'origin',
@@ -46,11 +51,16 @@ final class PlaybackControlsCapability implements Capability {
               'playback.load_subtitle',
               'Load an external subtitle',
               'Mount a local subtitle path or HTTP(S) subtitle URL using Classic subtitle '
-                  'cache and stack. Returns its local path; activate defaults to true.',
+                  'cache and stack. Returns its local path; activate defaults to true. '
+                  'remember (default false): true also keeps the file in the shared '
+                  'subtitle list and records the choice in the subtitle library, so the '
+                  'next open of this video uses it; false mounts it for the current '
+                  'playback only and writes nothing. The result reports remembered.',
               Effect.write,
               const ObjectSchema({
                 'path': StringSchema(minLength: 1),
                 'activate': BooleanSchema(),
+                'remember': BooleanSchema(),
               }, required: [
                 'path'
               ]),

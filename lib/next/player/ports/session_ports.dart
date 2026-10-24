@@ -486,6 +486,7 @@ final class SessionControls
             'selected': state.want == SubtitleWant.embedded(t.index),
             if (state.want == SubtitleWant.embedded(t.index))
               'selectedBy': state.selectedBy,
+            'remembered': state.remembered == SubtitleWant.embedded(t.index),
             'presented': shows(SubtitleWant.embedded(t.index)),
             if (shown(SubtitleWant.embedded(t.index)) case final p?)
               'confirmed': p.confirmed,
@@ -504,6 +505,7 @@ final class SessionControls
             'selected': state.want == SubtitleWant.file(f.path),
             if (state.want == SubtitleWant.file(f.path))
               'selectedBy': state.selectedBy,
+            'remembered': state.remembered == SubtitleWant.file(f.path),
             'presented': shows(SubtitleWant.file(f.path)),
             if (shown(SubtitleWant.file(f.path)) case final p?)
               'confirmed': p.confirmed,
@@ -512,6 +514,12 @@ final class SessionControls
       'subtitles': {
         'selected': state.want.toJson(),
         'selectedBy': state.selectedBy,
+        // What the subtitle library keeps for this video (the next open
+        // puts it on; null: it keeps no choice), against `selected`, what
+        // this playback has on now.
+        'remembered': state.remembered?.toJson(),
+        'rememberedIsSelected': (state.remembered ?? const SubtitleWant.off()) ==
+            state.want,
         'presented': [for (final p in state.presented) p.toJson()],
         'presentedIsSelected': subs.presentedIsSelected,
         if (state.failure != null) 'failure': state.failure,
@@ -544,6 +552,11 @@ final class SessionControls
       throw const Failure(
           FailureCode.notFound, 'The requested embedded track does not exist.');
     }
+    final remember = input['remember'] == true;
+    if (kind == 'audio' && remember) {
+      throw const Failure(FailureCode.invalidInput,
+          'Audio track choices are not kept; remember applies to subtitles.');
+    }
     final origin = commandOrigin();
     final receipt = kind == 'audio'
         ? await s.selectAudio(index, origin: origin)
@@ -551,8 +564,13 @@ final class SessionControls
             index < 0
                 ? const SubtitleWant.off()
                 : SubtitleWant.embedded(index),
-            origin: origin);
-    return {...trackFacts(s), 'receipt': receipt.toJson()};
+            origin: origin,
+            record: remember);
+    return {
+      ...trackFacts(s),
+      'remembered': receipt.detail?['remembered'] == true,
+      'receipt': receipt.toJson()
+    };
   }
 
   /// A local subtitle file or an HTTP(S) one (cached as Classic caches
@@ -585,18 +603,23 @@ final class SessionControls
           'Use an accessible absolute subtitle path or HTTP(S) URL.');
     }
     final origin = commandOrigin();
+    final remember = input['remember'] == true;
+    final activate = input['activate'] != false;
+    // Kept in the shared list first: the subtitle library reads its files
+    // from there, so the choice that follows finds this one.
+    if (remember) await rememberSubtitle(s.path, path, active: activate);
     CommandReceipt? receipt;
-    if (input['activate'] != false) {
+    if (activate) {
       receipt = await s.chooseSubtitle(SubtitleWant.file(path),
-          origin: origin, title: p.basename(path));
+          origin: origin, record: remember, title: p.basename(path));
     } else {
       s.subtitles.offer(path, p.basename(path), origin: origin);
     }
-    await rememberSubtitle(s.path, path,
-        active: s.subtitles.want == SubtitleWant.file(path));
     return {
       'path': path,
       'active': s.subtitles.want == SubtitleWant.file(path),
+      'remembered': remember &&
+          (receipt == null || receipt.detail?['remembered'] == true),
       'renderer': s.subtitles.rendererOf(path).name,
       if (receipt != null) 'receipt': receipt.toJson(),
     };
@@ -629,7 +652,8 @@ final class SessionControls
     final path = input['path'] as String;
     final showing = s.subtitles.want == SubtitleWant.file(path);
     if (showing) {
-      await s.chooseSubtitle(const SubtitleWant.off(), origin: commandOrigin());
+      await s.chooseSubtitle(const SubtitleWant.off(),
+          origin: commandOrigin(), record: false);
     }
     await s.subtitles.unmount(path, by: commandOrigin());
     final subtitles = await SubtitleService().loadExternalSubtitles(s.path);
@@ -788,18 +812,23 @@ final class SessionSubtitleTarget implements SubtitleTarget {
   Future<void> applyEmbedded(int index) async => _session?.chooseSubtitle(
       SubtitleWant.embedded(index),
       origin: 'library_selection',
-      record: false);
+      record: false,
+      fromLibrary: true);
 
   @override
   Future<void> applyExternal(String playbackPath, String title) async =>
       _session?.chooseSubtitle(SubtitleWant.file(playbackPath),
-          origin: 'library_selection', record: false, title: title);
+          origin: 'library_selection',
+          record: false,
+          fromLibrary: true,
+          title: title);
 
   @override
   Future<void> clear() async => _session?.chooseSubtitle(
       const SubtitleWant.off(),
       origin: 'library_selection',
-      record: false);
+      record: false,
+      fromLibrary: true);
 
   /// The library's record of the file changed (a subtitle.select, an
   /// import): its files are offered again and its choice put on.
@@ -833,6 +862,7 @@ final class SessionSubtitleTarget implements SubtitleTarget {
     await s.chooseSubtitle(want,
         origin: origin,
         record: false,
+        fromLibrary: true,
         title: selected?['title'] as String?);
   }
 

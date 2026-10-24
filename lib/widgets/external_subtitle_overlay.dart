@@ -47,8 +47,7 @@ class _ExternalSubtitleOverlayState extends State<ExternalSubtitleOverlay> {
     final position = state.playbackTimeMs.value.round();
     return {
       for (final path in state.activeExternalSubtitlePaths)
-        path: state.pathSubtitleTextAt(path,
-            position - (state.pathSubtitleDelaySeconds(path) * 1000).round()),
+        path: state.overlaySubtitleTextAt(path, position),
     };
   }
 
@@ -163,7 +162,7 @@ class _ExternalSubtitleOverlayState extends State<ExternalSubtitleOverlay> {
   /// 渲染单条外挂字幕块（占满整个舞台，内部按该条字幕的位置对齐）
   Widget _buildPathBlock(VideoPlayerState videoState, String path) {
     final subtitleTimeMs = videoState.playbackTimeMs.value.round() -
-        (videoState.pathSubtitleDelaySeconds(path) * 1000).round();
+        videoState.overlaySubtitleDelayMs(path);
     final subtitleText = _visibleTexts[path] ?? '';
 
     // 编辑期间字幕切换到下一句：自动收框——否则框随新文本缩到很小，
@@ -824,7 +823,7 @@ class _ExternalSubtitleOverlayState extends State<ExternalSubtitleOverlay> {
       'smooth=${videoState.playbackTimeMs.value.round()}ms '
       'raw=${videoState.player.position}ms '
       'lookup=${subtitleTimeMs}ms '
-      'delay=${videoState.pathSubtitleDelaySeconds(path).toStringAsFixed(1)}s '
+      'delay=${(videoState.overlaySubtitleDelayMs(path) / 1000).toStringAsFixed(1)}s '
       'file=${path.split('/').last} '
       'cue=${cueKey.length > 24 ? '${cueKey.substring(0, 24)}...' : cueKey}',
     );

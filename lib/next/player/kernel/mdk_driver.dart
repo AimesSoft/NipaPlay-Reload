@@ -70,7 +70,8 @@ String _mdkDecoderFor(String mode) {
 /// (I8), except the position read of the sampler; nothing does once the
 /// instance is fenced (I2). The media opens at its start position, paused
 /// (`prepare(position:)`), with its tracks set before (MDK resets them when
-/// the media is set, and draws its first subtitle track unless told).
+/// the media is set, and draws its first subtitle track unless told). A
+/// subtitle file is mounted after the open, never before it.
 ///
 /// Tracks change only while the media is open, never while MDK stops:
 /// deactivating a subtitle track while MDK stops is where MDK hung in P0.
@@ -558,19 +559,8 @@ final class MdkDriver implements KernelDriver, MdkNative, KernelFrameFeatures {
         // What MDK reported of the planned tracks while it opened; what it
         // has not yet is confirmed when its decoder reports.
         final audioSeen = _count('decoder.audio') > audioReports;
-        var subtitleSeen = _count('decoder.subtitle') > subtitleReports;
+        final subtitleSeen = _count('decoder.subtitle') > subtitleReports;
         final subtitle = _drawing ? _decoding : KernelSubtitle.none;
-        if (subtitle is FileKernelSubtitle && !subtitleSeen) {
-          if (tracks.subtitleProbe case final probe?) {
-            final text =
-                p.subtitleText(time: probe.inMicroseconds / 1e6).trim();
-            _trackLog.add({
-              'atMs': _now.inMilliseconds,
-              'probe': {'atMs': probe.inMilliseconds, 'text': text},
-            });
-            subtitleSeen = text.isNotEmpty;
-          }
-        }
         _awaitAudioDecoder = tracks.audio != null && !audioSeen;
         _awaitSubtitleDecoder = subtitle.drawn && !subtitleSeen;
         _tracks = KernelTracks(
@@ -600,6 +590,14 @@ final class MdkDriver implements KernelDriver, MdkNative, KernelFrameFeatures {
     if (plan.audio case final audio?) {
       _ffi('activeAudioTracks', () => p.activeAudioTracks = [audio]);
     }
+    // A subtitle file is not in the plan. With it set before `prepare`, a
+    // cold process failed the open with `invalid_media` (no stream yet) or
+    // crashed MDK in `ensureOverlayProducer` while the failed player was
+    // being deleted; it looks like MDK reports the open done when the
+    // file's media is, before the video's. The open ends without the file,
+    // and the subtitle controller mounts it as it mounts any later choice
+    // (`selectSubtitle`), before the media plays.
+    var deferred = false;
     switch (plan.subtitle) {
       case NoKernelSubtitle():
         _ffi('activeSubtitleTracks', () => p.activeSubtitleTracks = const []);
@@ -607,15 +605,16 @@ final class MdkDriver implements KernelDriver, MdkNative, KernelFrameFeatures {
       case EmbeddedKernelSubtitle(:final index):
         _ffi('activeSubtitleTracks', () => p.activeSubtitleTracks = [index]);
         _setDrawing(true);
-      case FileKernelSubtitle(:final path):
-        _ffi('setMedia.subtitle', () => p.setMedia(path, mdk.MediaType.subtitle));
-        _ffi('activeSubtitleTracks', () => p.activeSubtitleTracks = const [0]);
-        _setDrawing(true);
+      case FileKernelSubtitle():
+        deferred = true;
+        _ffi('activeSubtitleTracks', () => p.activeSubtitleTracks = const []);
+        _setDrawing(false);
     }
-    _decoding = plan.subtitle;
+    _decoding = deferred ? KernelSubtitle.none : plan.subtitle;
     _trackLog.add({
       'atMs': _now.inMilliseconds,
       'plan': plan.toJson(),
+      if (deferred) 'fileAfterOpen': true,
     });
   }
 
