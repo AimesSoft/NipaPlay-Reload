@@ -203,7 +203,7 @@ utun 等虚拟网卡）报给协调服务、通过 UDP 32124 广播和 mDNS（`_
 明文服务，每个连接都要先通过双向 TLS 1.3（同账号设备证书，吊销立即生效）；没有证书的连接在握手时
 就被拒绝，读不到任何东西。要把它限制在本机，在 `<data>/mesh.json` 里写 `"loopbackOnly": true`
 （此时不报局域网地址，只能经 SSH 转发、手填地址等候选连接），修改后重启生效。固定端口用 `port`，
-不想广播用 `"broadcastDiscovery": false`。
+不想广播用 `"broadcastDiscovery": false`。macOS 上开着“应用防火墙”时，系统会问是否允许这个程序接收传入连接；不允许的话，局域网里的连接会在 TLS 握手处超时（本机回环不受影响），需要在“系统设置 → 网络 → 防火墙”里放行。Linux 与 Windows 按各自防火墙放行监听端口（`mesh.json` 的 `port`，不写则每次随机，建议固定）。
 当前无界面开发构建显式接受 `NIPAPLAY_MESH_DEV_CA` 的公开证书，GUI Release
 仍仅接受内置正式 CA。不能从协调服务响应自动信任新 CA。
 
