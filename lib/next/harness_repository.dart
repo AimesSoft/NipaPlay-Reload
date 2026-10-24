@@ -4,9 +4,12 @@ import 'platform/lab_profile.dart';
 import 'package:path/path.dart' as p;
 
 /// HOME is the account home in the non-sandboxed Next host.
+///
+/// An iOS process may have no HOME in its environment: its application
+/// container (the parent of its temporary directory) is the home there.
 String get harnessHome => Platform.isWindows
     ? Platform.environment['USERPROFILE']!
-    : Platform.environment['HOME']!;
+    : Platform.environment['HOME'] ?? Directory.systemTemp.parent.path;
 String get defaultHarnessPath => LabProfile.active
     ? LabProfile.location('harness') : p.join(harnessHome, 'nipaplay-harness');
 File get defaultEndpointFile => LabProfile.active

@@ -6,6 +6,7 @@ import 'package:crypto/crypto.dart';
 import 'package:nipa_harness/mcp.dart';
 import 'package:nipa_harness/nipa_harness.dart';
 import 'package:nipaplay/security/credential_vault.dart';
+import '../body/next_body.dart';
 import '../platform/lab_profile.dart';
 import 'coordinator.dart';
 import 'delegation_host.dart' show delegationMethods;
@@ -13,8 +14,11 @@ import 'device_source.dart';
 import 'discovery.dart';
 import 'host.dart';
 import 'identity.dart';
+import 'install_id.dart';
 import 'message.dart';
 import 'native.dart';
+import 'presence.dart';
+import 'system_bonjour.dart';
 export 'host.dart' show authorizeMeshPeer;
 
 bool meshActionAllowed(String id) =>
@@ -82,6 +86,7 @@ final class MeshRuntime implements MeshDeviceSource {
     this.coordinatorRetryDelay = const Duration(seconds: 15),
     this.candidateStaggerDelay = const Duration(milliseconds: 250),
     this.unknownPeerRefreshCooldown = const Duration(seconds: 30),
+    this.presenceProbeInterval = const Duration(seconds: 30),
     this.toolsPageBytes = 400 * 1024,
     this.candidateLookupBase = const Duration(seconds: 30),
     this.candidateLookupInterval = const Duration(minutes: 10),
@@ -99,6 +104,11 @@ final class MeshRuntime implements MeshDeviceSource {
   final Duration coordinatorRetryDelay;
   final Duration candidateStaggerDelay;
   final Duration unknownPeerRefreshCooldown;
+
+  /// A device that said it is not in front is called again, once, this
+  /// rarely: the call that finds it absent also asks it, in the background,
+  /// where it is, so a lost "I am back" cannot keep it unreachable.
+  final Duration presenceProbeInterval;
 
   /// One `tools/list` page stays far below the 1 MiB Mesh frame: a Next
   /// interface registers hundreds of Actions whose schemas together exceed it.
@@ -128,6 +138,20 @@ final class MeshRuntime implements MeshDeviceSource {
   Future<JsonMap> Function(String, JsonMap, String)? agentRequest;
   Future<void> Function()? hostConfigurationChanged;
   JsonMap hostConfiguration = {};
+
+  /// Where the other devices said they are (in front, behind another
+  /// application, showing the other interface). Calls to a device that is not
+  /// in front fail at once with `device_not_present`.
+  final presence = MeshPresence();
+
+  /// What this device is playing, added to the presence it announces.
+  JsonMap Function()? presenceFacts;
+  String _ownState = PresenceState.foreground;
+  DateTime _ownStateAt = DateTime.now().toUtc();
+  bool _announcedAbsent = false;
+  Future<void> Function()? _loginCheck;
+  final _presenceProbeAt = <String, DateTime>{};
+  final _presenceProbing = <String>{};
   String _bindHost = '0.0.0.0';
   bool _broadcast = true;
   Harness? _harness;
@@ -310,7 +334,11 @@ final class MeshRuntime implements MeshDeviceSource {
     }
     _bindHost = bindHostFor(json);
     _broadcast = json['broadcastDiscovery'] as bool? ?? true;
-    final caPath = Platform.environment['NIPAPLAY_MESH_DEV_CA'];
+    // A development build takes its issuer from the environment, or, where a
+    // process cannot be given one (an iPad), from a file in the data directory.
+    final devFile = File('${root.path}/mesh-dev-ca.pem');
+    final caPath = Platform.environment['NIPAPLAY_MESH_DEV_CA'] ??
+        (meshDevelopmentHost && await devFile.exists() ? devFile.path : null);
     final ca = meshDevelopmentHost && caPath != null
         ? await File(caPath).readAsString()
         : meshProductionIssuerPem;
@@ -345,6 +373,7 @@ final class MeshRuntime implements MeshDeviceSource {
           broadcast: _broadcast);
     }
 
+    _loginCheck = checkLogin;
     await _queue(checkLogin);
     _loginWatch =
         Timer.periodic(const Duration(seconds: 30), (_) => _queue(checkLogin));
@@ -545,7 +574,7 @@ final class MeshRuntime implements MeshDeviceSource {
       actualPort,
       interfaces: interfaceProvider,
     );
-    if (broadcast) {
+    if (broadcast || SystemBonjour.available) {
       try {
         await _discovery!.start();
       } catch (_) {
@@ -627,7 +656,11 @@ final class MeshRuntime implements MeshDeviceSource {
     _ca = ca;
     _broadcast = broadcast;
     _coordinator = coordinator;
-    identity ??= await MeshIdentity.load(root, vault, native);
+    identity ??= await MeshIdentity.load(root, vault, native,
+        // A device that is only a body names its key by a random installation
+        // number, not by where it is installed, and starts a new identity when
+        // the vault has lost the key (a restored backup) instead of refusing.
+        installId: NextBody.bodyOnly ? await meshInstallId(root) : null);
     final own = identity!;
     await _loadRoutes();
     if (!_replayLoaded) {
@@ -661,6 +694,7 @@ final class MeshRuntime implements MeshDeviceSource {
       await _compactReplay();
       await _startNode(listenPort: listenPort, broadcast: broadcast);
       status = 'online';
+      _announceOnline();
       try {
         await heartbeat(renew: _needsCertificateRenewal);
         _coordinatorSyncPending = false;
@@ -703,6 +737,7 @@ final class MeshRuntime implements MeshDeviceSource {
     await _startNode(listenPort: listenPort, broadcast: broadcast);
     await _reportAddressesAndSyncEpoch();
     status = 'online';
+    _announceOnline();
     _coordinatorSyncPending = false;
     _retryAttempts = 0;
     coordinatorNotice = null;
@@ -809,6 +844,7 @@ final class MeshRuntime implements MeshDeviceSource {
     }
     _devices = devices;
     _epoch = epoch;
+    presence.retain({for (final d in devices) d['device_id'] as String});
     _lastDevicesRefresh = DateTime.now();
     _catalogs.removeWhere((id, _) => !_active.contains(id));
     if (_node case final node?) await native.update(node, _active);
@@ -1128,6 +1164,7 @@ final class MeshRuntime implements MeshDeviceSource {
       final tools = includeCatalog ? await _catalog(id) : null;
       _reachability[id] = true;
       final description = await rpc(id, 'mesh/describe', {});
+      presence.record(id, description['presence']);
       _descriptions[id] = {
         'roles': description['roles'] ??
             [
@@ -1145,6 +1182,7 @@ final class MeshRuntime implements MeshDeviceSource {
         ...device,
         'deviceId': id,
         'online': true,
+        if (presence.of(id) case final fact?) 'presence': fact.toJson(),
         if (includeCatalog) 'actions': tools,
         'description': description
       };
@@ -1154,6 +1192,7 @@ final class MeshRuntime implements MeshDeviceSource {
         ...device,
         'deviceId': id,
         'online': false,
+        if (presence.of(id) case final fact?) 'presence': fact.toJson(),
         if (includeCatalog) 'actions': _catalogs[id] ?? <Object?>[]
       };
     }
@@ -1324,10 +1363,14 @@ final class MeshRuntime implements MeshDeviceSource {
   }
 
   Future<JsonMap> rpc(String peer, String method, JsonMap params,
-      {JsonMap? replayFrame}) async {
+      {JsonMap? replayFrame, bool ungated = false}) async {
     final node = _node;
     if (node == null) {
       throw const Failure(FailureCode.unavailable, 'Mesh is offline.');
+    }
+    if (!ungated && peer != identity?.deviceId && presence.absent(peer)) {
+      _probePresence(peer);
+      throw _notPresent(peer);
     }
     if (!_active.contains(peer)) {
       final isKnownRevoked =
@@ -1383,7 +1426,8 @@ final class MeshRuntime implements MeshDeviceSource {
     if (candidates.isEmpty) {
       if (remembered != null) {
         await _removeRoute(peer);
-        return rpc(peer, method, params, replayFrame: frame);
+        return rpc(peer, method, params,
+            replayFrame: frame, ungated: ungated);
       }
       throw const Failure(FailureCode.unavailable,
           'No authenticated direct route to Mesh device.',
@@ -1406,7 +1450,8 @@ final class MeshRuntime implements MeshDeviceSource {
           failure.code == FailureCode.unavailable &&
           failure.message == 'No authenticated direct route to Mesh device.') {
         await _removeRoute(peer);
-        return rpc(peer, method, params, replayFrame: frame);
+        return rpc(peer, method, params,
+            replayFrame: frame, ungated: ungated);
       }
       rethrow;
     }
@@ -1654,6 +1699,7 @@ final class MeshRuntime implements MeshDeviceSource {
             'platform': Platform.operatingSystem,
             'agentDeviceId': hostConfiguration['agentDeviceId'],
             'roles': hostConfiguration['roles'] ?? <String>[],
+            'presence': ownPresence(),
             'storage': hostConfiguration['storage'] ?? <Object?>[],
             if (describeSelf != null) ...await describeSelf!(),
             if (_harness!.lookup('app.capabilities') != null)
@@ -1679,6 +1725,17 @@ final class MeshRuntime implements MeshDeviceSource {
             'accepted': true,
             'revocationEpoch': _epoch,
           }
+        };
+        await native.respond(node, event.requestId, jsonEncode(response));
+        return;
+      }
+      if (frame['method'] == 'mesh/presence') {
+        final accepted = presence.record(event.deviceId, frame['params']);
+        if (accepted) _hostChanges.add(null);
+        response = {
+          'jsonrpc': '2.0',
+          'id': frame['id'],
+          'result': {'accepted': accepted, 'presence': ownPresence()}
         };
         await native.respond(node, event.requestId, jsonEncode(response));
         return;
@@ -1845,6 +1902,120 @@ final class MeshRuntime implements MeshDeviceSource {
     });
     await _replayWrites;
   }
+
+  // ---- presence and the lifecycle of a device with a screen
+
+  /// This device's own presence, as it tells the others.
+  JsonMap ownPresence() => {
+        'state': _ownState,
+        'at': _ownStateAt.toIso8601String(),
+        ...?presenceFacts?.call(),
+      };
+
+  Failure _notPresent(String peer) {
+    final fact = presence.of(peer);
+    return Failure(
+        FailureCode.unavailable,
+        'device_not_present: the device is not in front, so nothing was sent.',
+        retryable: true,
+        details: {
+          'reason': 'device_not_present',
+          'deviceId': peer,
+          if (fact != null) 'lastPresence': fact.toJson(),
+        });
+  }
+
+  /// Tells every other device where this one is. A device that is itself
+  /// absent is still told: that is how it learns this one is back.
+  Future<void> announcePresence(String state) async {
+    assert(PresenceState.all.contains(state));
+    _ownState = state;
+    _ownStateAt = DateTime.now().toUtc();
+    _announcedAbsent = state != PresenceState.foreground;
+    final own = identity?.deviceId;
+    if (_node == null || own == null) return;
+    final params = ownPresence();
+    await Future.wait([
+      for (final peer in _active)
+        if (peer != own)
+          rpc(peer, 'mesh/presence', params, ungated: true)
+              .timeout(const Duration(seconds: 3))
+              .then<void>((_) {}, onError: (_) {}),
+    ]);
+  }
+
+  void _announceOnline() {
+    if (!_announcedAbsent && !NextBody.bodyOnly) return;
+    unawaited(announcePresence(PresenceState.foreground));
+  }
+
+  /// A device that said it is not in front may have come back without the
+  /// others hearing (the announcement is lost, or it was sent while they were
+  /// away). The call that was refused asks it once, without waiting.
+  void _probePresence(String peer) {
+    final now = DateTime.now();
+    final last = _presenceProbeAt[peer];
+    if (_presenceProbing.contains(peer) ||
+        (last != null && now.difference(last) < presenceProbeInterval)) {
+      return;
+    }
+    _presenceProbeAt[peer] = now;
+    _presenceProbing.add(peer);
+    unawaited(() async {
+      try {
+        final description = await rpc(peer, 'mesh/describe', {}, ungated: true)
+            .timeout(const Duration(seconds: 5));
+        final fact = description['presence'];
+        if (!presence.record(peer, fact) && fact == null) {
+          presence.record(peer, {
+            'state': PresenceState.foreground,
+            'at': DateTime.now().toUtc().toIso8601String(),
+          });
+        }
+        _hostChanges.add(null);
+      } catch (_) {
+        // Still away: the next refused call asks again.
+      } finally {
+        _presenceProbing.remove(peer);
+      }
+    }());
+  }
+
+  /// The application went behind another one, or the screen locked. The
+  /// system may now take the listening socket; the others are told first.
+  Future<void> enterBackground() => announcePresence(PresenceState.background);
+
+  /// Back in front: the listener may have been taken while away, so it is
+  /// opened again on the same port, the addresses are reported afresh (the
+  /// network may have changed), and the others are told.
+  Future<void> enterForeground() async {
+    _ownState = PresenceState.foreground;
+    _ownStateAt = DateTime.now().toUtc();
+    await resumeListening();
+    await announcePresence(PresenceState.foreground);
+  }
+
+  Future<void> resumeListening() => _queue(() async {
+        if (_closed || _coordinator == null) return;
+        if (_node == null) {
+          // Not joined yet (offline at launch): try now, not at the next tick.
+          _nextJoinAttempt = DateTime.fromMillisecondsSinceEpoch(0);
+          await _loginCheck?.call();
+          return;
+        }
+        final bindPort = port;
+        await _stopNode();
+        await _startNode(listenPort: bindPort, broadcast: _broadcast);
+        status = 'online';
+        try {
+          await heartbeat(renew: _needsCertificateRenewal);
+          _scheduleHeartbeat();
+        } catch (error) {
+          if (status == 'device_revoked') rethrow;
+          _heartbeat?.cancel();
+          _noteCoordinatorFailure(error);
+        }
+      });
 
   Future<void> _stopNode() async {
     _heartbeat?.cancel();

@@ -101,12 +101,15 @@ import 'chat/debug_chat.dart';
 import 'ui_data/debug_ui_data.dart';
 import 'ui_data/library_service.dart';
 import 'harness_redaction.dart';
+import 'body/body_lifecycle.dart';
+import 'body/next_body.dart';
 import 'state/activity.dart';
 import 'state/change_history.dart';
 import 'settings/host_settings_service.dart';
 import 'ui_data/host_settings.dart';
 import 'settings/debug_host_settings.dart';
 import 'player/features/external_handoff.dart';
+import 'player/features/ui_capture_layers.dart';
 import 'player/features/local_operations.dart';
 import 'player/features/debug_features.dart';
 import 'player/features/settings_adapter.dart';
@@ -584,7 +587,9 @@ final class NextRuntime extends ChangeNotifier {
           facts['key'] as String, facts['value']));
     });
     _harness = Harness(
-      [
+      // An iPad has only the capabilities it really has: no windows, no
+      // programs, no conversation, no quitting.
+      NextBody.filter([
         FamilyDescriptionCapability(() => _harness.catalog),
         AppCapabilities(
             host: 'gui',
@@ -593,9 +598,10 @@ final class NextRuntime extends ChangeNotifier {
             danmaku: core.danmaku.service,
             settings: core.settings,
             vault: core.credentialVault,
-            programEnabled: () => core.programs.enabled),
+            programEnabled: () => !NextBody.bodyOnly && core.programs.enabled),
         InstanceCapability(instanceFacts),
-        UiCaptureCapability(ClassicUiCapture(instanceFacts).capture),
+        UiCaptureCapability(ClassicUiCapture(instanceFacts,
+                videoLayer: () => exportVideoLayer(playback)).capture),
         MediaFramesCapability(
             engine: PreferredFrameEngine([
               if (PlayerFactory.supportedKernelTypes
@@ -629,7 +635,7 @@ final class NextRuntime extends ChangeNotifier {
                 core.downloads, (item) => playback.openItem(item)),
             core.media.service.store),
         ...core.capabilities
-      ],
+      ]),
       observers: [
         nextJournal(File('${root.path}/journal.jsonl')),
         core.activityInvocations
@@ -773,6 +779,26 @@ final class NextRuntime extends ChangeNotifier {
     _operations = _operations.then((_) => _updateEndpoint(enabled));
   }
 
+  BodyLifecycle? _bodyLifecycle;
+
+  /// What this device plays now, told to the other devices with where it is.
+  JsonMap _presenceFacts() {
+    final title = playback.workTitle;
+    final path = playback.path;
+    if (path == null || !playback.hasVideo) return const {};
+    return {
+      'nowPlaying': {
+        if (title != null) 'work': title,
+        if (playback.episodeTitle != null) 'episode': playback.episodeTitle,
+        'paused': playback.transport.value.phase == PlaybackPhase.paused,
+      },
+      'progress': {
+        'positionMs': playback.position.inMilliseconds,
+        'durationMs': playback.duration.inMilliseconds,
+      },
+    };
+  }
+
   /// Nipa's services and what Next hooks into the playback, only while
   /// Next's interface is open.
   bool _nipa = false;
@@ -785,8 +811,15 @@ final class NextRuntime extends ChangeNotifier {
       core.danmaku.startRestoring(_harness, playback);
       _meshPlayback = MeshPlayback(core, playback)..attach();
       core.media.service.currentPath = () => playback.path;
+      if (NextBody.bodyOnly) {
+        core.mesh.presenceFacts = _presenceFacts;
+        _bodyLifecycle = BodyLifecycle(core.mesh, playback)..attach();
+      }
       return;
     }
+    _bodyLifecycle?.detach();
+    _bodyLifecycle = null;
+    core.mesh.presenceFacts = null;
     await _meshPlayback?.close();
     _meshPlayback = null;
     await core.danmaku.stopRestoring();
@@ -822,10 +855,15 @@ final class NextRuntime extends ChangeNotifier {
       PlayerNativeLog.instance.attach();
       ServiceProvider.nextCore.subtitles.attachPlayer(playback.subtitleTarget);
       await _localLibrary.attachClassicHistory();
-      status = await _endpoint.start(Directory(repositoryPath));
-      if (status case AgentEndpointRunning(:final repository)) {
-        await _attachHooks(repository);
-        await _startChat(repository);
+      if (NextBody.bodyOnly) {
+        // The body only: no local agent endpoint and no conversation host.
+        status = const AgentEndpointStopped();
+      } else {
+        status = await _endpoint.start(Directory(repositoryPath));
+        if (status case AgentEndpointRunning(:final repository)) {
+          await _attachHooks(repository);
+          await _startChat(repository);
+        }
       }
     } else {
       await _uncaught?.detach();

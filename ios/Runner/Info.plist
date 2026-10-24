@@ -223,6 +223,7 @@
 	<array>
 		<string>_http._tcp.</string>
 		<string>_https._tcp.</string>
+		<string>_nipaplay-mesh._tcp</string>
 	</array>
 	<key>NSCameraUsageDescription</key>
 	<string>NipaPlay 需要使用相机拍摄远程访问二维码以连接共享媒体库和遥控器。</string>

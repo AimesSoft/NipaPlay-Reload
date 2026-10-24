@@ -22,6 +22,11 @@ import Photos
   ) -> Bool {
     GeneratedPluginRegistrant.register(with: self)
 
+    if let registrar = self.registrar(forPlugin: "NipaMeshBody") {
+      NipaKeychain.register(with: registrar.messenger())
+      NipaMeshBonjour.register(with: registrar.messenger())
+    }
+
     if let registrar = self.registrar(forPlugin: "AirPlayRoutePicker") {
       let factory = AirPlayRoutePickerFactory(messenger: registrar.messenger())
       registrar.register(factory, withId: "nipaplay/airplay_route_picker")

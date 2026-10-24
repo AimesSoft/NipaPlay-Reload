@@ -42,6 +42,7 @@ import 'settings/registry.dart';
 import 'settings/capability.dart';
 import 'settings/classic_settings.dart';
 import 'settings/operations.dart';
+import 'mesh/presence.dart';
 import 'mesh/runtime.dart';
 import 'mesh/library.dart';
 import 'mesh/library_capability.dart';
@@ -764,6 +765,9 @@ final class NextCore {
     await uiData.meshLibrary?.pause();
     await danmaku.pauseIndexing();
     await subtitles.pause();
+    // The others hear that this device now shows the other interface, so a
+    // call to it fails at once and says why, instead of waiting for a refusal.
+    await mesh.announcePresence(PresenceState.classic);
     await mesh.stop();
     // The disk space watches she asked for end with her.
     await storage.close();

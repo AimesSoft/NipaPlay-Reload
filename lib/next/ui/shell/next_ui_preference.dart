@@ -30,12 +30,13 @@ class NextUiPreference extends ChangeNotifier {
 
   static const key = 'labs_use_next_interface';
 
-  /// Next's interface is what shows: on a desktop, with NipaPlay Next on in
-  /// Labs ([nextEnabled]) and this [preference] on. Nipa runs only then;
-  /// Classic has no Nipa (D1).
+  /// Next's interface is what shows: on a desktop or an iPad, with NipaPlay
+  /// Next on in Labs ([nextEnabled]) and this [preference] on. Nipa runs only
+  /// then; Classic has no Nipa (D1). An iPad starts only the body: it cannot
+  /// host Nipa, and another device's Nipa serves it.
   static bool interfaceOpen(
           {required bool nextEnabled, required bool preference}) =>
-      globals.isDesktop && nextEnabled && preference;
+      (globals.isDesktop || globals.isIPad) && nextEnabled && preference;
 
   late final Future<void> ready;
   bool _enabled = false;
