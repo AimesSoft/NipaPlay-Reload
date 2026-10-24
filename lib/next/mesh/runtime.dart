@@ -1123,14 +1123,16 @@ final class MeshRuntime implements MeshDeviceSource {
     final coordinator = _coordinator;
     final cached = _peerCandidates[peer];
     final lookedUp = _candidateLookupAt[peer];
-    if (coordinator == null ||
-        _coordinatorSyncPending ||
-        cached != null &&
-            lookedUp != null &&
+    if (coordinator == null) return cached ?? const [];
+    // With something cached, a coordinator known to be unreachable and the
+    // backoff window both mean "use it"; without any answer yet, try anyway.
+    if (cached != null &&
+        lookedUp != null &&
+        (_coordinatorSyncPending ||
             !_reachedSinceLookup.contains(peer) &&
-            DateTime.now().difference(lookedUp) <
-                (_candidateLookupGap[peer] ?? candidateLookupBase)) {
-      return cached ?? const [];
+                DateTime.now().difference(lookedUp) <
+                    (_candidateLookupGap[peer] ?? candidateLookupBase))) {
+      return cached;
     }
     try {
       final response = await coordinator.request(
