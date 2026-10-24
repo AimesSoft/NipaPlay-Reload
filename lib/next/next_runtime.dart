@@ -902,22 +902,22 @@ final class NextRuntime extends ChangeNotifier {
         dshPlugins: dsh == null ? null : Directory('$agent/dsh'));
     final core = ServiceProvider.nextCore;
     core.jobOrigins.threadFor = host.threadForOrigin;
-    core.memory.recent = (current) async => recentMemoryFacts(
-            host,
-            await activeJobFacts(core.engine),
-            await core.followups.activeList(),
-            (await core.state.views['activity']!.readAll!()).rows,
-            current,
-            capabilityChanges: await core.catalogChanges.recent(),
-            redact: core.uiData.meshLibrary!.worker.redactText,
-            finishedHelpers: [
-              for (final job in ((await core.engine.list(type: 'agent.helper'))
-                      .where((job) => job.state.isTerminal)
-                      .toList()
-                    ..sort((a, b) => b.updatedAt.compareTo(a.updatedAt)))
-                  .take(3))
-                job.toJson()
-            ]);
+    core.memory.recent = (current) async {
+      final activity = await core.state.views['activity']!.readPage!(0, 5);
+      return recentMemoryFacts(host, await activeJobFacts(core.engine),
+          await core.followups.activeList(), activity.rows, current,
+          activityTotal: activity.total,
+          capabilityChanges: await core.catalogChanges.recent(),
+          redact: core.uiData.meshLibrary!.worker.redactText,
+          finishedHelpers: [
+            for (final job in ((await core.engine.list(type: 'agent.helper'))
+                    .where((job) => job.state.isTerminal)
+                    .toList()
+                  ..sort((a, b) => b.updatedAt.compareTo(a.updatedAt)))
+                .take(3))
+              job.toJson()
+          ]);
+    };
     // DSH's memory block carries the latest 动态; tell it when that grows.
     _activityEvents =
         core.activityChanges.stream.listen((_) => host.memoryChanged());

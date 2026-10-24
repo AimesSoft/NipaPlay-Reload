@@ -14,14 +14,17 @@ void main() {
   late Directory root;
   late SqliteJobStore store;
   late TaskEngine engine;
-  late FakeExecutor executor;
+  late FakeExecutor executor, otherExecutor;
   setUp(() async {
     sqfliteFfiInit();
     root = await Directory.systemTemp.createTemp('next-tasks-');
     store = await SqliteJobStore.open(root, factory: databaseFactoryFfi);
     executor = FakeExecutor();
+    otherExecutor = FakeExecutor(type: 'other');
     engine = TaskEngine(
-        store: store, ownerDeviceId: 'device-test', executors: [executor]);
+        store: store,
+        ownerDeviceId: 'device-test',
+        executors: [executor, otherExecutor]);
   });
   tearDown(() async {
     await engine.close();
@@ -40,16 +43,18 @@ void main() {
         phase: 'verifying',
         progress: JobProgress(completed: 4, total: 4, unit: 'bytes'),
         checkpoint: {'externalId': 7});
-    await context.succeed(verified(details: {
-      'files': [
-        {
-          'path': '/out/test.mkv',
-          'expectedSize': 4,
-          'actualSize': 4,
-          'imported': false
-        }
-      ]
-    }), phase: 'connected');
+    await context.succeed(
+        verified(details: {
+          'files': [
+            {
+              'path': '/out/test.mkv',
+              'expectedSize': 4,
+              'actualSize': 4,
+              'imported': false
+            }
+          ]
+        }),
+        phase: 'connected');
     final expected = await engine.get(job.jobId);
     expect(expected.phase, 'connected');
     await engine.close();
@@ -95,16 +100,46 @@ void main() {
     expect(await store.events(job.jobId), hasLength(1));
   });
 
+  test('live job counts aggregate in storage by type and state', () async {
+    await engine.submit(type: 'test', title: 'First');
+    await engine.submit(type: 'test', title: 'Second');
+    await engine.submit(type: 'other', title: 'Third');
+
+    expect(
+        await engine.countJobsByType(
+            states: const {JobState.queued, JobState.interrupted}),
+        {'test': 2, 'other': 1});
+    expect(await engine.countJobsByType(states: const {JobState.succeeded}),
+        isEmpty);
+  });
+
+  test('task listings page in storage while retaining creation order',
+      () async {
+    for (var i = 0; i < 12; i++) {
+      await engine.submit(type: 'test', title: 'T$i');
+      await Future<void>.delayed(const Duration(milliseconds: 1));
+    }
+    final newest =
+        await engine.listCreatedPage(limit: 5, offset: 0, newestFirst: true);
+    final oldest =
+        await engine.listCreatedPage(limit: 5, offset: 5, newestFirst: false);
+    expect(newest.total, 12);
+    expect(
+        newest.jobs.map((job) => job.title), ['T11', 'T10', 'T9', 'T8', 'T7']);
+    expect(oldest.jobs.map((job) => job.title), ['T5', 'T6', 'T7', 'T8', 'T9']);
+  });
+
   test('adopted effect cannot be cancelled as a never-started job', () async {
-    final job = await engine.submit(type: 'test', title: 'Native child',
-        sideEffectCommitted: true);
+    final job = await engine.submit(
+        type: 'test', title: 'Native child', sideEffectCommitted: true);
     final cancelled = await engine.cancel(job.jobId);
     expect(cancelled.state, JobState.cancelling);
     expect(cancelled.sideEffectCommitted, isTrue);
     expect(cancelled.receipt, isNull);
     await engine.start();
     final context = await executor.recovered.future;
-    await context.cancelled(JobReceipt(verification: VerificationLevel.unverified,
+    await context.cancelled(JobReceipt(
+        verification: VerificationLevel.unverified,
         details: {'turnStatus': 'interrupted'}));
     expect((await engine.get(job.jobId)).state, JobState.cancelled);
   });
@@ -288,8 +323,7 @@ void main() {
     expect((await terminal).receipt!.verification, VerificationLevel.verified);
   });
 
-  test('task.list defaults newest first and pages a filtered total',
-      () async {
+  test('task.list defaults newest first and pages a filtered total', () async {
     final harness = Harness([TaskCapability(engine)]);
     for (var i = 0; i < 60; i++) {
       await engine.submit(type: 'test', title: 'T$i');

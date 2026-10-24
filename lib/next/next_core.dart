@@ -486,21 +486,23 @@ final class NextCore {
     libraryData.register(state);
     storage.libraryRoots = media.service.authorizedRoots;
     storage.artworkBusy = () => uiData.artwork.busy;
-    uiData.meshLibrary =
-        MeshLibrary(uiData, mesh, subtitleProbe: mediaSubtitleProbe);
+    uiData.meshLibrary = MeshLibrary(uiData, mesh,
+        subtitleProbe: mediaSubtitleProbe, startupPhase: _startupPhase);
     memory.redact = uiData.meshLibrary!.worker.redactText;
     hooks.redact = uiData.meshLibrary!.worker.redactJson;
     phase('state: mesh library');
     await Future<void>.delayed(Duration.zero);
     activityView.workerRead = uiData.meshLibrary!.worker.activityRows;
+    activityView.workerReadPage = uiData.meshLibrary!.worker.activityRowsPage;
+    resources.queuedJobs = uiData.meshLibrary!.worker.countQueuedJobs;
     phase('state ui mesh');
     await Future<void>.delayed(Duration.zero);
     mediaSources.canonicalEntityId = (id) async {
       await uiData.meshLibrary!.prepareIndex();
-      return uiData.meshLibrary!.resolvedId(id);
+      return await uiData.meshLibrary!.resolvedId(id);
     };
     stateSources.canonicalEntityId =
-        (id) async => uiData.meshLibrary!.resolvedId(id);
+        (id) async => await uiData.meshLibrary!.resolvedId(id);
     stateSources.cachedArtwork = uiData.artwork.cached;
     registerMergedLibrary(state, uiData.meshLibrary!);
     settings.register([uiData.openingSetting]);
@@ -648,7 +650,7 @@ final class NextCore {
     BodySignals.emit = (event, id, facts) async {
       await hooks.emit(event, id, facts);
     };
-    await uiData.meshLibrary!.start();
+    await uiData.meshLibrary!.start(background: false);
     phaseNipa('startup: Nipa mesh library');
     // The first pass over every local file is one library-worker request.
     // Directory walks, candidate matching, parsing and the final writes all
@@ -681,21 +683,19 @@ final class NextCore {
       rethrow;
     }
     phaseNipa('startup: Nipa indexers');
-    // Start the change poller only after the bulk pass has committed its
-    // input. Otherwise its worker reads overlap the wait for the catalogue
-    // scan and turn background indexing back into main-isolate work.
-    await uiData.start();
-    phaseNipa('startup: Nipa ui data');
-    // The first followup sweep also walks the complete durable input. Let it
-    // start after the catalogue scan instead of competing with it.
-    followups.start();
-    phaseNipa('startup: Nipa followups');
     await mesh.startConfigured();
     phaseNipa('startup: Nipa mesh configured');
     // One worker round now sees the complete startup input, including the
-    // account and peers chosen while joining Mesh.
+    // account and peers chosen while joining Mesh. Polls and the full followup
+    // sweep stay behind it: both read the shared database on this isolate and
+    // otherwise make the worker wait look like main-thread catalogue work.
     await uiData.meshLibrary!.prepareIndex();
     phaseNipa('startup: Nipa mesh prepared');
+    await uiData.start();
+    phaseNipa('startup: Nipa ui data');
+    followups.start();
+    phaseNipa('startup: Nipa followups');
+    uiData.meshLibrary!.startPolling();
     nipaGate.set(true);
   }
 

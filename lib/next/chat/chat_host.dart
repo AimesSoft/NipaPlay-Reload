@@ -620,17 +620,19 @@ final class ChatHost implements ConversationHistory {
     // Splitting, decoding and redacting each line run on the reader's
     // isolate; lines arrive here in the order they were written.
     final reader = ChatLineReader.start(_process!.stdout,
-        rpc: true, streamDeltaMethods: _deltaMethods);
+        rpc: true, streamDeltaMethods: _deltaMethods, guardEndpointToken: true);
     try {
       await for (final line in reader.lines) {
-        await endpoint.inspectChatText(line.text);
+        if (line.exposesEndpointToken) {
+          await endpoint.inspectChatText(line.text);
+        }
         if (line.error case final error?) throw _UnreadableLine(error);
         final decoded = line.decoded!;
         final wireMethod = decoded['method'] as String? ?? '';
         final wireParams = decoded['params'] as Map?;
         // A stream delta is redacted by protectChatDelta below (together with
         // the held tail); the reader left its text out of the message.
-        final message = line.redacted!;
+        final message = line.redacted ?? decoded;
         if (!probe && modelLaunch != null && wireMethod == 'thread/started') {
           await _rememberRollout(wireParams!['thread'] as Map);
         }
@@ -813,10 +815,13 @@ final class ChatHost implements ConversationHistory {
   }
 
   Future<void> _readErrors() async {
-    final reader = ChatLineReader.start(_process!.stderr, rpc: false);
+    final reader = ChatLineReader.start(_process!.stderr,
+        rpc: false, guardEndpointToken: true);
     try {
       await for (final line in reader.lines) {
-        await endpoint.inspectChatText(line.text);
+        if (line.exposesEndpointToken) {
+          await endpoint.inspectChatText(line.text);
+        }
         if (line.error case final error?) throw _UnreadableLine(error);
         _events.add({
           'method': 'host/stderr',

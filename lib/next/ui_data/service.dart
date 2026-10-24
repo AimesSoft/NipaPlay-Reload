@@ -547,6 +547,10 @@ final class UiDataService implements NextUiData, NextNowPlaying {
 
   @override
   Future<UiHome> home() async {
+    final mesh = meshLibrary;
+    if (mesh != null) {
+      return mesh.home();
+    }
     final shelves = <UiShelf>[];
     final continuing = <UiShelfItem>[];
     final seen = <String>{};
@@ -569,9 +573,8 @@ final class UiDataService implements NextUiData, NextNowPlaying {
     }
     final continueRows = sources.continueWatching?.call() ?? const <JsonMap>[];
     final historyRows = sources.history?.call() ?? const <JsonMap>[];
-    final sourceRows = <JsonMap>[...continueRows, ...historyRows];
     final sourcePaths = <String>{
-      for (final row in sourceRows)
+      for (final row in <JsonMap>[...continueRows, ...historyRows])
         if (row['filePath'] case final String path) path
     };
     final byLocator = sourcePaths.isEmpty
@@ -601,15 +604,10 @@ final class UiDataService implements NextUiData, NextNowPlaying {
         if (path == null) continue;
         final linked = await link(path);
         if (linked == null) continue;
-        final workId = meshLibrary == null
-            ? linked.workId
-            : await meshLibrary!.canonical(linked.workId);
+        final workId = linked.workId;
         if (!seen.add(workId)) continue;
         final work = (await this.work(workId))!;
-        final linkedIds = <String>{
-          for (final id in linked.episodeIds)
-            await meshLibrary?.canonical(id) ?? id
-        };
+        final linkedIds = linked.episodeIds.toSet();
         final eps = await episodes(workId);
         final ep = eps
             .where(
@@ -628,9 +626,7 @@ final class UiDataService implements NextUiData, NextNowPlaying {
     }
     final following = Set<String>.of(seen);
     for (final link in byLocator.values) {
-      if (seen.contains(meshLibrary?.resolvedId(link.workId) ?? link.workId)) {
-        following.add(link.workId);
-      }
+      if (seen.contains(link.workId)) following.add(link.workId);
     }
     for (final row in historyRows) {
       final progress = (row['watchProgress'] as num?)?.toDouble() ?? 0;
@@ -640,9 +636,6 @@ final class UiDataService implements NextUiData, NextNowPlaying {
       final linked = await link(path);
       if (linked != null) {
         following.add(linked.workId);
-        if (meshLibrary != null) {
-          following.add(meshLibrary!.resolvedId(linked.workId));
-        }
       }
     }
     final airing = <UiShelfItem>[];
@@ -1292,15 +1285,15 @@ final class UiDataService implements NextUiData, NextNowPlaying {
                 : await work(card['workId'] as String);
             if (shown != null) result.add(UiWorkCard(shown));
           case 'episode':
-            final workId = (await _parentWork(card['episodeId'] as String))!;
+            final episodeId = card['episodeId'] as String;
+            final resolvedId = meshLibrary == null
+                ? episodeId
+                : await meshLibrary!.resolvedId(episodeId);
+            final workId = (await _parentWork(episodeId))!;
             result.add(UiEpisodeCard(
                 (await work(workId))!,
-                (await episodes(workId)).singleWhere((e) =>
-                    e.episodeId ==
-                    (meshLibrary == null
-                        ? card['episodeId']
-                        : meshLibrary!
-                            .resolvedId(card['episodeId'] as String)))));
+                (await episodes(workId))
+                    .singleWhere((e) => e.episodeId == resolvedId)));
           case 'task':
             result.add(UiTaskCard(
                 await _task(await engine.get(card['taskId'] as String))));

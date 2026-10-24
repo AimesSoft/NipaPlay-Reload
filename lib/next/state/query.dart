@@ -9,9 +9,10 @@ import '../util/slicer.dart';
 typedef StateReader = Future<List<JsonMap>> Function(int offset, int limit);
 
 final class StateRows {
-  const StateRows(this.rows, {this.warnings = const []});
+  const StateRows(this.rows, {this.warnings = const [], this.total});
   final List<JsonMap> rows;
   final List<String> warnings;
+  final int? total;
 }
 
 final class StateRelation {
@@ -28,6 +29,7 @@ final class StateView {
       required this.fields,
       required this.read,
       this.readAll,
+      this.readPage,
       this.cursorKey,
       this.cursorOrder = const [],
       this.background = false,
@@ -36,6 +38,10 @@ final class StateView {
   final ObjectSchema fields;
   final StateReader read;
   final Future<StateRows> Function()? readAll;
+
+  /// A bounded live page. The returned [StateRows.total] is the complete row
+  /// count when known, so callers never need to materialise that complete list.
+  final Future<StateRows> Function(int offset, int limit)? readPage;
 
   /// Reconstructed against the library worker's own database connection.
   final bool background;
@@ -252,6 +258,14 @@ final class StateCapability implements Capability {
     final fingerprint = sha256
         .convert(utf8.encode(jsonEncode({...input}..remove('cursor'))))
         .toString();
+    if (view.readPage != null &&
+        view.cursorKey == null &&
+        input['timeoutMs'] == null &&
+        (input['filter'] as Map? ?? const {}).isEmpty &&
+        (input['orderBy'] as List? ?? const []).isEmpty &&
+        (input['include'] as Map? ?? const {}).isEmpty) {
+      return _pagedQuery(view, input, fingerprint);
+    }
     var offset = 0;
     var sourceOffset = 0;
     List<Object?>? anchor;
@@ -360,6 +374,63 @@ final class StateCapability implements Capability {
           : null,
       'truncated': more || context.warnings.isNotEmpty,
       'warnings': context.warnings.toList(),
+    };
+  }
+
+  /// Reads only the requested window. This is the default path for growing
+  /// append-only views: SQL/scan/aggregation stays in the view's worker and
+  /// the UI isolate receives one bounded page.
+  Future<JsonMap> _pagedQuery(
+      StateView view, JsonMap input, String fingerprint) async {
+    var offset = 0;
+    if (input['cursor'] case final String cursor) {
+      try {
+        final decoded =
+            jsonDecode(utf8.decode(base64Url.decode(cursor))) as Map;
+        if (decoded['query'] != fingerprint ||
+            decoded['offset'] is! int ||
+            (decoded['offset'] as int) < 0 ||
+            decoded['livePage'] != true) {
+          _invalid('invalid_cursor', 'Cursor belongs to another query.');
+        }
+        offset = decoded['offset'] as int;
+      } on FormatException {
+        _invalid('invalid_cursor', 'Malformed continuation.');
+      } on TypeError {
+        _invalid('invalid_cursor', 'Malformed continuation.');
+      }
+    }
+    final limit = input['limit'] as int? ?? 50;
+    final page = await view.readPage!(offset, limit + 1);
+    final selected = (input['select'] as List?)?.cast<String>();
+    final rows = <JsonMap>[];
+    for (final row in page.rows.take(limit)) {
+      final value = publicValue(row, view.fields) as JsonMap;
+      rows.add(selected == null
+          ? value
+          : {for (final key in selected) key: value[key]});
+    }
+    final total = page.total;
+    final more = page.rows.length > limit ||
+        (total != null && offset + page.rows.length < total);
+    final warnings = page.warnings.toList();
+    return {
+      'schemaVersion': 1,
+      'snapshotId': null,
+      'observedAt': DateTime.now().toUtc().toIso8601String(),
+      'consistency':
+          'Per-source observations of live state; no global transaction snapshot. Cursors paginate live observations.',
+      'sources': {view.name: DateTime.now().toUtc().toIso8601String()},
+      'rows': rows,
+      'nextCursor': more
+          ? base64Url.encode(utf8.encode(jsonEncode({
+              'query': fingerprint,
+              'offset': offset + rows.length,
+              'livePage': true,
+            })))
+          : null,
+      'truncated': more || warnings.isNotEmpty,
+      'warnings': warnings,
     };
   }
 }

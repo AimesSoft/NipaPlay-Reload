@@ -31,6 +31,7 @@ final class MeshLibrary {
     this.ui,
     this.mesh, {
     Future<JsonMap> Function(String) subtitleProbe = probeMediaInfo,
+    this.startupPhase,
   }) {
     worker = LibraryWorker(ui, subtitleProbe: subtitleProbe);
     ui.state.queryWorker = worker.query;
@@ -44,16 +45,22 @@ final class MeshLibrary {
   late final LibraryWorker worker;
   final UiDataService ui;
   final MeshRuntime mesh;
+  final void Function(String)? startupPhase;
   final _peers = <String, JsonMap>{};
   final _online = <String, bool>{};
   Map<String, String> _assets = {};
   final _playAssets = <String, String>{};
   Map<String, UiWork> _works = {};
-  List<UiWork> _orderedWorks = [];
+  PackedWorks? _packedWorks;
+  UiHome? _home;
+  int? _homeEpoch;
+  Future<UiHome>? _homeLoading;
+  int? _homeLoadingEpoch;
+  List<String> _orderedWorkIds = const [];
   Map<String, String> _episodeParents = {};
   LibrarySearchIndex searchIndex = LibrarySearchIndex();
   Map<String, List<UiEpisode>> _episodes = {};
-  Map<String, String> _aliases = {};
+  final _resolvedIds = <String, String>{};
   Map<String, List<JsonMap>> _locations = {};
   Map<String, String> _localTargets = {};
 
@@ -84,12 +91,20 @@ final class MeshLibrary {
   Database get db => ui.db;
   String get own => mesh.identity?.deviceId ?? ui.media.store.ownerDeviceId;
 
-  Future<void> start() async {
+  Future<void> start({bool background = true}) async {
     await worker.warm();
     final peers = await worker.call('saved') as Map<String, JsonMap>;
     _peers.addAll(peers);
     _peersRevision++;
     _progressRevision++;
+    if (background) startPolling();
+  }
+
+  /// Starts catalogue refresh ticks after the first complete publication.
+  /// Starting the timer while the initial index is still running overlaps two
+  /// prepares and puts their result deliveries into the same startup turn.
+  void startPolling() {
+    if (_closed || _timer != null) return;
     _timer = Timer.periodic(const Duration(seconds: 5), (_) => _background());
   }
 
@@ -244,8 +259,10 @@ final class MeshLibrary {
     // union-find, title indexing or full-map serialization runs on the UI.
     _works.addAll(update.works);
     _episodes.addAll(update.episodes);
-    for (final entry in update.orderedUpdates.entries) {
-      _orderedWorks[entry.key] = entry.value;
+    if (_packedWorks == null) {
+      for (final entry in update.orderedUpdates.entries) {
+        _orderedWorkIds[entry.key] = entry.value.workId;
+      }
     }
     if (searchIndex.ready) {
       for (final work in update.works.values) {
@@ -259,12 +276,56 @@ final class MeshLibrary {
 
   Future<List<UiWork>> library() async {
     await prepareIndex();
-    return UnmodifiableListView(_orderedWorks);
+    await _ensurePackedWorks();
+    final packed = _packedWorks;
+    if (packed != null) {
+      return UnmodifiableListView(_LibraryWorks(packed, _works));
+    }
+    return UnmodifiableListView([
+      for (final id in _orderedWorkIds)
+        if (_readWork(id) case final work?) work,
+    ]);
+  }
+
+  Future<UiHome> home() async {
+    await prepareIndex();
+    final epoch = _indexEpoch;
+    final cached = _home;
+    if (cached != null && _homeEpoch == epoch) return cached;
+    final loading = _homeLoading;
+    if (loading != null && _homeLoadingEpoch == epoch) return loading;
+    final future = worker.homePlan();
+    _homeLoading = future;
+    _homeLoadingEpoch = epoch;
+    try {
+      final value = await future;
+      if (_homeLoadingEpoch == epoch) {
+        _home = value;
+        _homeEpoch = epoch;
+      }
+      return value;
+    } finally {
+      if (identical(_homeLoading, future)) {
+        _homeLoading = null;
+        _homeLoadingEpoch = null;
+      }
+    }
   }
 
   void invalidateIndex() {
     _indexPrepared = false;
     _indexEpoch++;
+    _home = null;
+    _homeEpoch = null;
+  }
+
+  Future<void> _ensurePackedWorks() async {
+    if (_packedWorks != null) return;
+    final packed = await worker.works();
+    // A work decoded from the previous packed publication is not a cache for
+    // this one: the same ID may now carry different device/online state.
+    _works.clear();
+    _packedWorks = packed;
   }
 
   bool get _indexIsCurrent =>
@@ -299,11 +360,17 @@ final class MeshLibrary {
           onlineRevision: onlineRevision,
           account: account,
           composedStamp: _composedStamp);
+      startupPhase?.call('startup: Nipa mesh received');
       builds += result.builds;
       _builtStamp = result.builtStamp;
-      if (result.snapshot case final snapshot?) {
+      if (result.composed) {
         compositions++;
-        _publish(snapshot);
+        if (result.snapshot case final snapshot?) {
+          _publish(snapshot);
+        } else {
+          _clearPublishedWorks();
+        }
+        startupPhase?.call('startup: Nipa mesh published');
         _composedStamp = result.compositionStamp;
       }
       if (epoch == _indexEpoch &&
@@ -318,6 +385,18 @@ final class MeshLibrary {
         return;
       }
     }
+  }
+
+  void _clearPublishedWorks() {
+    _assets.clear();
+    _works.clear();
+    _packedWorks = null;
+    _orderedWorkIds = const [];
+    _episodeParents.clear();
+    _episodes.clear();
+    _resolvedIds.clear();
+    _locations.clear();
+    _localTargets.clear();
   }
 
   Future<JsonMap> search(String query,
@@ -341,31 +420,59 @@ final class MeshLibrary {
     return await worker.call('managementTargets', ids) as JsonMap;
   }
 
-  String? localEpisodeId(String id) => _localTargets[_aliases[id] ?? id];
+  Future<String?> localEpisodeId(String id) async => await _localTarget(id);
+
+  UiWork? _readWork(String id) {
+    final cached = _works[id];
+    final packed = _packedWorks;
+    if (cached != null && (packed == null || packed.contains(id)))
+      return cached;
+    final record = packed?.record(id);
+    if (record == null) return null;
+    final work = transferredWorkValue(
+        (jsonDecode(record) as Map).cast<String, Object?>());
+    _works[id] = work;
+    return work;
+  }
+
+  Future<String?> _localTarget(String target) async {
+    final cached = _localTargets[target];
+    if (cached != null) return cached;
+    final found = await worker.localTarget(target);
+    if (found != null) _localTargets[target] = found;
+    return found;
+  }
 
   Future<UiWork?> work(String id) async {
     await prepareIndex();
-    return _works[_aliases[id] ?? id];
+    await _ensurePackedWorks();
+    return _readWork(id) ?? _readWork(await _canonical(id));
   }
 
   Future<String> canonical(String id) async {
     await prepareIndex();
-    return _aliases[id] ?? id;
+    return await _canonical(id);
   }
 
-  String resolvedId(String id) => _aliases[id] ?? id;
+  Future<String> resolvedId(String id) async {
+    await prepareIndex();
+    return await _canonical(id);
+  }
+
+  Future<String> _canonical(String id) async =>
+      _resolvedIds[id] ??= await worker.canonical(id);
   Future<List<UiEpisode>> episodes(String id, {int? season}) async {
     await prepareIndex();
-    return (_episodes[_aliases[id] ?? id] ?? [])
-        .where((e) => season == null || e.season == season)
-        .toList();
+    return worker.episodes(id, season: season);
   }
 
   Future<String?> parent(String id) async {
     await prepareIndex();
-    final target = _aliases[id] ?? id;
-    if (_works.containsKey(target)) return target;
-    return _episodeParents[target];
+    await _ensurePackedWorks();
+    if (_readWork(id) != null) return id;
+    final parent = await worker.parent(id);
+    if (parent != null) _episodeParents[id] = parent;
+    return parent;
   }
 
   Future<JsonMap> evidence(String id) async {
@@ -378,11 +485,16 @@ final class MeshLibrary {
   int compositions = 0;
   void _publish(LibrarySnapshot snapshot) {
     _assets = snapshot.assets;
-    _works = snapshot.works;
-    _orderedWorks = snapshot.orderedWorks;
+    _works = {...snapshot.works};
+    _packedWorks = snapshot.packedWorks;
+    _orderedWorkIds = snapshot.packedWorks != null
+        ? []
+        : (snapshot.orderedWorks.isEmpty
+            ? snapshot.works.keys.toList(growable: false)
+            : [for (final work in snapshot.orderedWorks) work.workId]);
     _episodeParents = snapshot.episodeParents;
     _episodes = snapshot.episodes;
-    _aliases = snapshot.aliases;
+    _resolvedIds.clear();
     _locations = snapshot.locations;
     _localTargets = snapshot.localTargets;
   }
@@ -427,9 +539,16 @@ final class MeshLibrary {
   Future<String> _source(JsonMap input) async {
     if (input['path'] case final String path) return MeshFiles.absolute(path);
     if (input['assetId'] case final String id) {
-      final path = _playAssets[id] ?? _assets[id];
-      if (path == null) await prepareIndex();
-      final found = _playAssets[id] ?? _assets[id];
+      var found = _playAssets[id] ?? _assets[id];
+      if (found == null) {
+        await prepareIndex();
+        found = _playAssets[id] ?? _assets[id];
+      }
+      if (found == null) {
+        final loaded = await worker.asset(id);
+        if (loaded != null) _assets[id] = loaded;
+        found = loaded;
+      }
       if (found == null) {
         throw const Failure(FailureCode.notFound, 'Unknown library asset.');
       }
@@ -555,13 +674,16 @@ final class MeshLibrary {
 
   Future<JsonMap> readable(String id) async {
     await prepareIndex();
-    final target = _aliases[id] ?? id;
-    final candidates = _locations[target];
-    if ((candidates == null || candidates.isEmpty) &&
-        _localTargets[target] != null) {
+    final target = await _canonical(id);
+    var candidates = _locations[target];
+    if (candidates == null) {
+      candidates = _locations[target] = await worker.episodeLocations(target);
+    }
+    final localTarget = await _localTarget(target);
+    if (candidates.isEmpty && localTarget != null) {
       final rows = await db.rawQuery(
           'SELECT l.locator,l.file_id AS fileId,f.attributes FROM media_locations l JOIN media_file_episodes e ON e.file_id=l.file_id JOIN media_entities f ON f.id=l.file_id WHERE e.episode_id=? AND l.owner_device_id=? AND l.available=1 ORDER BY l.id',
-          [_localTargets[target], ui.media.store.ownerDeviceId]);
+          [localTarget, ui.media.store.ownerDeviceId]);
       if (rows.isNotEmpty) {
         return {
           'episodeId': target,
@@ -572,7 +694,7 @@ final class MeshLibrary {
         };
       }
     }
-    if (candidates == null || candidates.isEmpty) {
+    if (candidates.isEmpty) {
       throw const Failure(
           FailureCode.notFound, 'No recorded native file for episode.');
     }
@@ -683,9 +805,13 @@ final class MeshLibrary {
 
   Future<JsonMap?> open(String id) async {
     await prepareIndex();
-    final target = _aliases[id] ?? id;
-    if (_works.containsKey(target)) return {'workId': target};
-    if (!_locations.containsKey(target)) return null;
+    final target = await _canonical(id);
+    await _ensurePackedWorks();
+    if (_readWork(target) != null) return {'workId': target};
+    if (await _localTarget(target) == null &&
+        await worker.parent(target) == null) {
+      return null;
+    }
     final result = await readable(target);
     if (result['url'] != null) {
       final bundle = await mesh.rpc(
@@ -695,9 +821,10 @@ final class MeshLibrary {
       result['bundle'] = bundle;
       playback[result['url'] as String] = result;
     }
-    final ep = _episodes.values
-        .expand((e) => e)
-        .singleWhere((e) => e.episodeId == target);
+    final ep = await worker.episode(target);
+    if (ep == null) {
+      throw const Failure(FailureCode.notFound, 'Unknown episode.');
+    }
     result['resumeMs'] = (result['startMs'] as int? ?? 0) +
         ((ep.progress ?? 0) < 1
             ? ((ep.progress ?? 0) * (ep.runtime?.inMilliseconds ?? 0)).round()
@@ -765,7 +892,15 @@ final class MeshLibrary {
     } on Object catch (error) {
       lastError =
           error is Failure ? error.message : error.runtimeType.toString();
-      response.detachSocket().then((socket) => socket.destroy());
+      // A client can disappear after headers are sent. Closing the response
+      // then fails too; detaching is best-effort and must not surface as an
+      // unhandled HTTP server error.
+      try {
+        final socket = await response.detachSocket();
+        socket.destroy();
+      } on Object {
+        // The response or socket is already gone.
+      }
     }
   }
 
@@ -800,6 +935,38 @@ final class MeshLibrary {
     mesh.libraryRequest = null;
     mesh.hostConfigurationChanged = null;
   }
+}
+
+/// A stable catalogue-sized list whose records are decoded only when a view
+/// reads that index. The worker's packed publication keeps startup from
+/// materialising every UiWork before the first frame.
+final class _LibraryWorks extends ListBase<UiWork> {
+  _LibraryWorks(this._packed, this._cache);
+  final PackedWorks _packed;
+  final Map<String, UiWork> _cache;
+
+  @override
+  int get length => _packed.length;
+
+  @override
+  set length(int value) => throw UnsupportedError('Cannot resize library view');
+
+  @override
+  UiWork operator [](int index) {
+    final id = _packed.idAt(index);
+    final cached = _cache[id];
+    if (cached != null) return cached;
+    final record = _packed.record(id);
+    if (record == null) throw StateError('Missing published work $id');
+    final work = transferredWorkValue(
+        (jsonDecode(record) as Map).cast<String, Object?>());
+    _cache[id] = work;
+    return work;
+  }
+
+  @override
+  void operator []=(int index, UiWork value) =>
+      throw UnsupportedError('Cannot replace library view entries');
 }
 
 (String, String) _encode(Object payload) {

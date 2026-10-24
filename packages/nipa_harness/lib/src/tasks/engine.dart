@@ -248,6 +248,51 @@ final class TaskEngine {
   Future<List<Job>> list({JobState? state, String? type}) =>
       _serial(() => store.list(state: state, type: type));
 
+  /// Counts matching jobs without materialising their immutable snapshots.
+  /// Stores without an aggregate implementation retain a portable fallback.
+  Future<Map<String, int>> countJobsByType({required Set<JobState> states}) =>
+      _serial(() async {
+        final counts = <String, int>{};
+        if (store is JobCountStore) {
+          for (final row in await (store as JobCountStore)
+              .countByStateAndType(states: states)) {
+            counts.update(row.type, (value) => value + row.count,
+                ifAbsent: () => row.count);
+          }
+          return counts;
+        }
+        for (final state in states) {
+          for (final job in await store.list(state: state)) {
+            counts.update(job.type, (value) => value + 1, ifAbsent: () => 1);
+          }
+        }
+        return counts;
+      });
+
+  Future<JobPage> listCreatedPage(
+          {JobState? state,
+          String? type,
+          required int limit,
+          required int offset,
+          required bool newestFirst}) =>
+      _serial(() async {
+        if (store is JobPageStore) {
+          return (store as JobPageStore).listCreated(
+              state: state,
+              type: type,
+              limit: limit,
+              offset: offset,
+              newestFirst: newestFirst);
+        }
+        final jobs = await store.list(state: state, type: type);
+        jobs.sort((a, b) {
+          final byTime = a.createdAt.compareTo(b.createdAt);
+          final oldestFirst = byTime != 0 ? byTime : a.jobId.compareTo(b.jobId);
+          return newestFirst ? -oldestFirst : oldestFirst;
+        });
+        return JobPage(jobs.skip(offset).take(limit).toList(), jobs.length);
+      });
+
   Future<List<Job>> listActive() => _serial(store.listActive);
 
   Future<List<Job>> listRecent(

@@ -302,7 +302,7 @@ final class HeadlessCore {
     final activity =
         ActivityInvocations(database, File('${root.path}/journal.jsonl'));
     final activityView = ActivityView(media, settings, activity,
-        HeadlessRepository(repository.path), history).view;
+        HeadlessRepository(repository.path), history);
     final state = StateCapability([
       ...publicStateViews(
           media: media,
@@ -311,7 +311,7 @@ final class HeadlessCore {
           mesh: mesh,
           sources: sources),
       followups.view,
-      activityView,
+      activityView.view,
     ]);
     registerSystemViews(state, SystemStatusSources()..hooks = hooks.status);
     uiData = UiDataService(media, engine, state, sources, root, vault);
@@ -337,7 +337,7 @@ final class HeadlessCore {
         jobOrigins: jobOrigins,
         memory: memory,
         sessions: SessionStore(database),
-        activityRows: () async => (await activityView.readAll!()).rows,
+        activityPage: activityView.readPage,
         staleSources: [bodyEvents.committed.stream],
         redact: uiData.meshLibrary!.worker.redactText,
         environment: environment);

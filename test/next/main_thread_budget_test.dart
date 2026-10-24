@@ -124,19 +124,43 @@ void main() {
       await warm.uiData.work(work.workId);
       await warm.uiData.episodes(work.workId);
     }
-    warm.memory.recent = (current) async => recentMemoryFacts(
-        _History(profile),
-        await activeJobFacts(warm.engine),
-        await warm.followups.activeList(),
-        (await warm.state.views['activity']!.readAll!()).rows,
-        current,
-        redact: warm.uiData.meshLibrary!.worker.redactText);
+    warm.memory.recent = (current) async {
+      final activity = await warm.state.views['activity']!.readPage!(0, 5);
+      return recentMemoryFacts(
+          _History(profile),
+          await activeJobFacts(warm.engine),
+          await warm.followups.activeList(),
+          activity.rows,
+          current,
+          activityTotal: activity.total,
+          redact: warm.uiData.meshLibrary!.worker.redactText);
+    };
     await warm.memory.context(null);
+    final warmHarness = Harness(warm.capabilities, observers: [
+      nextJournal(profile.journal),
+      warm.activityInvocations,
+    ]);
+    for (var i = 0; i < 3; i++) {
+      final warmActivity = await warmHarness.invokeJson(
+          'state.query',
+          {'view': 'activity', 'limit': 20},
+          Invocation(origin: 'perf:warm:activity:$i'));
+      expect(warmActivity, isA<Completed>());
+    }
+    for (var i = 0; i < 3; i++) {
+      final warmResources = await warmHarness.invokeJson(
+          'task.resources', {}, Invocation(origin: 'perf:warm:resources:$i'));
+      expect(warmResources, isA<Completed>());
+    }
     await encodeReply({'warm': true});
     await warm.close();
 
     final probe = CpuBudgetProbe()..verbose = true;
     final turnOutput = _chatOutputBytes(profile);
+    // The runtime output reader spawns its isolate and first reaches the
+    // transfer callbacks here; like the other first-use paths above, compile
+    // them before the recurring-work budget starts.
+    await _chatOutput(turnOutput);
     final replyPayload = {
       'rows': [
         for (var i = 0; i < 400; i++) {'id': 'perf-$i', 'text': '回答 $i ' * 500}
@@ -168,13 +192,13 @@ void main() {
       await core.startNipa();
       probe.mark('startup: Nipa services');
       final history = _History(profile);
-      core.memory.recent = (current) async => recentMemoryFacts(
-          history,
-          await activeJobFacts(core.engine),
-          await core.followups.activeList(),
-          (await core.state.views['activity']!.readAll!()).rows,
-          current,
-          redact: core.uiData.meshLibrary!.worker.redactText);
+      core.memory.recent = (current) async {
+        final activity = await core.state.views['activity']!.readPage!(0, 5);
+        return recentMemoryFacts(history, await activeJobFacts(core.engine),
+            await core.followups.activeList(), activity.rows, current,
+            activityTotal: activity.total,
+            redact: core.uiData.meshLibrary!.worker.redactText);
+      };
       final harness = Harness(core.capabilities, observers: [
         nextJournal(profile.journal),
         core.activityInvocations,
@@ -356,6 +380,9 @@ void main() {
     final phases = {
       for (final (name, longest, held) in probe.phases) name: (longest, held)
     };
+    double longestOf(String name) => probe.phases
+        .where((phase) => phase.$1 == name)
+        .fold(0.0, (longest, phase) => phase.$2 > longest ? phase.$2 : longest);
 
     // The first indexer pass is catalogue work, not UI work. Keep its own
     // target separate from the general 4 ms ceiling so growing profiles cannot
@@ -373,12 +400,31 @@ void main() {
           reason:
               '$name held the main isolate ${longest.toStringAsFixed(3)} ms of CPU at once');
     }
+    // These paths used to sit on the 4 ms ceiling. They carry the first home
+    // page and Nipa's recurring turns, so they keep the tighter PERF5 budget
+    // even while the rest of startup still has its older 4 ms limit.
+    const perfBudgetMs = 2.0;
+    for (final name in [
+      'startup: Nipa mesh received',
+      'startup: Nipa mesh published',
+      'startup: Nipa mesh prepared',
+      'first home: home',
+      'home refresh x3',
+      'turn: runtime output',
+      'turn: state.query activity',
+      'turn: task.resources',
+    ]) {
+      final longest = longestOf(name);
+      expect(longest, lessThanOrEqualTo(perfBudgetMs),
+          reason:
+              '$name held the main isolate ${longest.toStringAsFixed(3)} ms of CPU at once');
+    }
     // Library changes repeat: other work can overlap one round, so the best
     // complete round must still fit. A real regression is present in all three.
     final changes = [
       for (var i = 0; i < 3; i++) phases['library change $i']!.$1
     ].reduce((a, b) => a < b ? a : b);
-    expect(changes, lessThanOrEqualTo(nextBudgetMs),
+    expect(changes, lessThanOrEqualTo(perfBudgetMs),
         reason:
             'a library change held the main isolate ${changes.toStringAsFixed(3)} ms of CPU at once (best of 3)');
 

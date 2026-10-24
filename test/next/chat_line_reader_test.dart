@@ -55,6 +55,16 @@ void main() {
     await reader.close();
   });
 
+  test('a complete line is delivered while the output stays open', () async {
+    final output = StreamController<List<int>>();
+    final reader = ChatLineReader.start(output.stream, rpc: true);
+    output.add(utf8.encode('{"id":1}\n'));
+    final line = await reader.lines.first.timeout(const Duration(seconds: 1));
+    expect(line.decoded, {'id': 1});
+    await output.close();
+    await reader.close();
+  });
+
   test('a value remembered while reading is redacted from later output',
       () async {
     final output = StreamController<List<int>>();
@@ -73,9 +83,37 @@ void main() {
     expect(received.last.redactedText, contains('CredentialRef(test, later)'));
   });
 
+  test('endpoint-token guarding only transfers text that may contain it',
+      () async {
+    const token = 'endpoint-token-0123456789';
+    SecretRedactor.remember(const CredentialRef('agent', 'token'), token);
+    final ordinary = jsonEncode({
+      'id': 1,
+      'result': {'text': 'ordinary'}
+    });
+    final sensitive = jsonEncode({
+      'id': 2,
+      'result': {'url': 'http://127.0.0.1/?token=$token'}
+    });
+    final reader = ChatLineReader.start(
+        Stream.value(utf8.encode('$ordinary\n$sensitive\n')),
+        rpc: true,
+        guardEndpointToken: true);
+    final lines = await reader.lines.toList();
+    expect(lines, hasLength(2));
+    expect(lines.first.text, isEmpty);
+    expect(lines.first.redacted, isNull);
+    expect(lines.first.exposesEndpointToken, isFalse);
+    expect(lines.last.redacted, isNotNull);
+    expect(lines.last.text, sensitive);
+    expect(lines.last.exposesEndpointToken, isTrue);
+    await reader.close();
+  });
+
   test('nothing is read after a line that is not an RPC object', () async {
     final reader = ChatLineReader.start(
-        Stream.value(utf8.encode('{"id":1}\nnot json token=s3cr3t\n{"id":2}\n')),
+        Stream.value(
+            utf8.encode('{"id":1}\nnot json token=s3cr3t\n{"id":2}\n')),
         rpc: true);
     final lines = await reader.lines.toList();
     expect(lines, hasLength(2));
@@ -118,8 +156,7 @@ void main() {
     final timer = Timer.periodic(const Duration(milliseconds: 5), (_) {
       ticks.add(clock.elapsedMilliseconds);
     });
-    final reader =
-        ChatLineReader.start(_pieces('$big\n', 1 << 16), rpc: true);
+    final reader = ChatLineReader.start(_pieces('$big\n', 1 << 16), rpc: true);
     final line = (await reader.lines.toList()).single;
     timer.cancel();
     expect(line.error, isNull);

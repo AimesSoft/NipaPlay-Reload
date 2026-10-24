@@ -651,6 +651,49 @@ void main() {
       });
       expect((sorted['rows'] as List).single, {'id': 5004, 'title': 'row'});
     });
+    test('an unbounded view pages without materialising its full rows',
+        () async {
+      var completeReads = 0, pages = 0;
+      final bounded = StateView(
+          name: 'events',
+          description: 'fixture',
+          fields: const ObjectSchema(
+              {'id': IntegerSchema(), 'title': StringSchema()}),
+          readAll: () async {
+            completeReads++;
+            return StateRows(const []);
+          },
+          readPage: (offset, limit) async {
+            pages++;
+            return StateRows([
+              for (var i = offset; i < 72 && i < offset + limit; i++)
+                {'id': i, 'title': 'event $i'}
+            ], total: 72);
+          },
+          read: (_, __) => throw StateError('unbounded read used'));
+      final api = Harness([
+        StateCapability([bounded])
+      ]);
+      final first = await call(api, 'state.query', {
+        'view': 'events',
+        'limit': 20,
+        'select': ['id']
+      });
+      expect(first['rows'], [
+        for (var i = 0; i < 20; i++) {'id': i}
+      ]);
+      expect(first['truncated'], true);
+      final second = await call(api, 'state.query', {
+        'view': 'events',
+        'limit': 20,
+        'select': ['id'],
+        'cursor': first['nextCursor']
+      });
+      expect((second['rows'] as List).first, {'id': 20});
+      expect((second['rows'] as List).last, {'id': 39});
+      expect(completeReads, 0);
+      expect(pages, 2);
+    });
     test('relations page independently and public data is not silently cut',
         () async {
       final children = StateView(

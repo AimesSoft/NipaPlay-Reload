@@ -481,7 +481,8 @@ final class LibraryDataService implements NextLibraryData, NextLibraryActions {
       };
     } else {
       final id =
-          ui.meshLibrary?.localEpisodeId(next.episodeId) ?? next.episodeId;
+          await ui.meshLibrary?.localEpisodeId(next.episodeId) ??
+              next.episodeId;
       final rows = await db.rawQuery(
           'SELECT f.attributes FROM media_locations l JOIN media_file_episodes e ON e.file_id=l.file_id '
           'JOIN media_entities f ON f.id=l.file_id WHERE e.episode_id=? AND l.owner_device_id=? '

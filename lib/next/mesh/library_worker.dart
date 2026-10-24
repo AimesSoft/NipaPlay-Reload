@@ -2,9 +2,9 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'dart:isolate';
+import 'dart:typed_data';
 
 import 'package:nipa_harness/nipa_harness.dart';
-import 'package:nipaplay/security/credential_vault.dart' show CredentialRef;
 import 'package:nipaplay/security/secret_redactor.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
@@ -29,6 +29,8 @@ import '../subtitles/facts.dart';
 import '../subtitles/index_scan.dart';
 import '../tasks/sqlite_job_store.dart';
 import '../ui_data/library_service.dart';
+import '../ui_data/no_airing.dart' if (dart.library.ui) '../ui_data/airing.dart'
+    as airing;
 import '../ui_data/service.dart';
 import '../ui_data/ui_data.dart';
 import 'library_codec.dart';
@@ -37,11 +39,15 @@ import 'library_projection.dart';
 /// A request owns its reply port. Errors retain their typed Failure contract.
 Future<Object?> _request(SendPort target, String method, Object? input,
     {Future<void>? exited}) async {
-  final reply = ReceivePort();
+  final reply = RawReceivePort();
+  final first = Completer<Object?>();
+  reply.handler = (Object? response) {
+    if (!first.isCompleted) first.complete(response);
+  };
   try {
     target.send((method, input, reply.sendPort));
     final response = await Future.any([
-      reply.first,
+      first.future,
       if (exited != null)
         // A worker that ends by Isolate.exit sends its reply first; the exit
         // notice may still be handled before that reply is. Give it a turn.
@@ -67,6 +73,12 @@ Future<void> _answer(
   try {
     final value = await dispatch(method, input);
     if (value is _ExitWith) Isolate.exit(reply, (true, value.value));
+    if (value is _DetachedReply) {
+      // The relay exits with the value; the UI then takes ownership without
+      // walking and copying this large object graph in its message callback.
+      await Isolate.spawn(_detachedReply, (reply, value.value));
+      return;
+    }
     reply.send((true, value));
   } catch (error) {
     reply.send((false, error is Failure ? error : error.toString()));
@@ -78,6 +90,15 @@ Future<void> _answer(
 final class _ExitWith {
   const _ExitWith(this.value);
   final Object? value;
+}
+
+final class _DetachedReply {
+  const _DetachedReply(this.value);
+  final Object? value;
+}
+
+void _detachedReply((SendPort, Object?) args) {
+  Isolate.exit(args.$1, (true, args.$2));
 }
 
 final class LibraryBuildResult {
@@ -95,6 +116,14 @@ final class LibraryPrepareResult {
   final String compositionStamp;
   final int builds;
   final bool composed;
+}
+
+PackedWorks _packedWorks(LibrarySnapshot snapshot) {
+  final orderedIds = snapshot.orderedWorks.isEmpty
+      ? snapshot.works.keys.toList(growable: false)
+      : [for (final work in snapshot.orderedWorks) work.workId];
+  return PackedWorks.pack(orderedIds,
+      [for (final id in orderedIds) jsonEncode(workJson(snapshot.works[id]!))]);
 }
 
 /// One worker per catalogue lifetime. Only plugin/network primitives and live
@@ -321,6 +350,9 @@ final class LibraryWorker {
   }
 
   int? _sourceRevision;
+  int? _calendarRevision;
+  bool _activityContextSent = false;
+  ActivityHostContext? _activityContext;
 
   Future<Object?> call(String method, [Object? input]) => _serial(() async {
         if (_closed) throw StateError('Library worker is closed');
@@ -357,8 +389,8 @@ final class LibraryWorker {
       });
 
   /// Prepares the complete index without reading SQL or encoding the catalogue
-  /// stamp on the UI isolate. A changed projection is transferred back by
-  /// [Isolate.exit]; the caller only replaces its published references.
+  /// stamp on the UI isolate. Startup returns only stamps; the live worker
+  /// retains the projection and serves catalogue records on demand.
   Future<LibraryPrepareResult> prepare({
     required String owner,
     required Map<String, JsonMap> peers,
@@ -393,10 +425,6 @@ final class LibraryWorker {
         _lastPeers = peers;
         _lastOnline = online;
         _lastAccount = account;
-        if (result.composed) {
-          _forgetWorker(restore: true);
-          _restartWorker();
-        }
         return result;
       });
 
@@ -441,6 +469,9 @@ final class LibraryWorker {
     _isolate = null;
     _starting = null;
     _sourceRevision = null;
+    _calendarRevision = null;
+    _activityContextSent = false;
+    _activityContext = null;
     _syncedViews = null;
     _runtimeBuiltStamp = null;
     _needsRestore = restore;
@@ -451,19 +482,128 @@ final class LibraryWorker {
   }
 
   Future<PackedActivityRows?> activityRows(ActivityHostContext context) async {
+    _activityContext ??= context;
     if (_closed) return null;
     try {
       return await _serial(() async {
         if (_closed) return null;
         final target = await _worker();
-        return await _ask(target, 'activityRows', context)
+        final reply = await _ask(
+                target, 'activityRows', _activityContextSent ? null : context)
             as PackedActivityRows;
+        _activityContextSent = true;
+        return reply;
       });
     } on Object {
       if (_closed) return null;
       rethrow;
     }
   }
+
+  /// Counts live queue states on the worker's persistent database connection.
+  /// The UI isolate only receives four small integer fields.
+  Future<Map<String, int>> countQueuedJobs() => _serial(() async {
+        if (_closed) throw StateError('Library worker is closed');
+        final target = await _worker();
+        return (await _ask(target, 'jobCounts', null) as Map)
+            .cast<String, int>();
+      });
+
+  Future<StateRows?> activityRowsPage(
+      ActivityHostContext context, int offset, int limit) async {
+    _activityContext ??= context;
+    if (_closed) return null;
+    try {
+      return await _serial(() async {
+        if (_closed) return null;
+        final target = await _worker();
+        final reply = await _ask(target, 'activityPage', (
+          _activityContextSent ? null : context,
+          offset,
+          limit
+        )) as (String, int, List<String>);
+        _activityContextSent = true;
+        return StateRows((jsonDecode(reply.$1) as List).cast<JsonMap>(),
+            total: reply.$2, warnings: reply.$3);
+      });
+    } on Object {
+      if (_closed) return null;
+      rethrow;
+    }
+  }
+
+  /// Assembles and materialises the home page in the catalogue worker.
+  /// Calendar matching, bound episodes, saved shelves, the fallback hero scan
+  /// and work-record decoding all stay there; the UI receives the finished
+  /// value instead of walking or decoding catalogue-sized inputs.
+  Future<UiHome> homePlan() => _serial(() async {
+        if (_closed) throw StateError('Library worker is closed');
+        final target = await _worker();
+        await _syncSources(target);
+        final revision = ui.sources.revision;
+        if (_calendarRevision != revision) {
+          final rows = await ui.sources.calendar?.call();
+          await _ask(target, 'calendar', rows);
+          _calendarRevision = revision;
+        }
+        return await _ask(target, 'homePlan', null) as UiHome;
+      });
+
+  /// The complete compact catalogue, fetched after prepare has released the
+  /// main isolate. The record block is transferred without copying its bytes
+  /// and decoded one work at a time only when a view reads that work.
+  Future<PackedWorks> works() => _serial(() async {
+        if (_closed) throw StateError('Library worker is closed');
+        final target = await _worker();
+        return await _ask(target, 'works', null) as PackedWorks;
+      });
+
+  /// File locations stay in the worker catalogue and cross only when a caller
+  /// actually opens an episode.
+  Future<List<JsonMap>> episodeLocations(String episodeId) => _serial(() async {
+        if (_closed) throw StateError('Library worker is closed');
+        final target = await _worker();
+        return (await _ask(target, 'locations', episodeId) as List)
+            .cast<JsonMap>();
+      });
+
+  Future<String?> asset(String id) => _serial(() async {
+        if (_closed) throw StateError('Library worker is closed');
+        final target = await _worker();
+        return await _ask(target, 'asset', id) as String?;
+      });
+
+  Future<String?> localTarget(String episodeId) => _serial(() async {
+        if (_closed) throw StateError('Library worker is closed');
+        final target = await _worker();
+        return await _ask(target, 'localTarget', episodeId) as String?;
+      });
+
+  Future<String> canonical(String id) => _serial(() async {
+        if (_closed) throw StateError('Library worker is closed');
+        final target = await _worker();
+        return await _ask(target, 'canonical', id) as String;
+      });
+
+  Future<List<UiEpisode>> episodes(String workId, {int? season}) =>
+      _serial(() async {
+        if (_closed) throw StateError('Library worker is closed');
+        final target = await _worker();
+        return (await _ask(target, 'episodes', (workId, season)) as List)
+            .cast<UiEpisode>();
+      });
+
+  Future<UiEpisode?> episode(String episodeId) => _serial(() async {
+        if (_closed) throw StateError('Library worker is closed');
+        final target = await _worker();
+        return await _ask(target, 'episode', episodeId) as UiEpisode?;
+      });
+
+  Future<String?> parent(String id) => _serial(() async {
+        if (_closed) throw StateError('Library worker is closed');
+        final target = await _worker();
+        return await _ask(target, 'parent', id) as String?;
+      });
 
   /// Memory context is capped, but its redaction regexes still exceed the main
   /// isolate budget in JIT builds. Keep one small worker alive for this rather
@@ -495,18 +635,31 @@ final class LibraryWorker {
     }
   }
 
-  List<StateView>? _syncedViews;
-  Future<void> _syncViews(SendPort target) async {
-    final current = ui.state.views.values.toList(growable: false);
-    if (_syncedViews != null &&
-        _syncedViews!.length == current.length &&
-        Iterable<int>.generate(current.length)
-            .every((i) => identical(_syncedViews![i], current[i]))) {
-      return;
+  Map<String, StateView>? _syncedViews;
+  Future<void> _syncViews(SendPort target, JsonMap input) async {
+    final required = <String>{};
+    void include(String name) {
+      if (!required.add(name)) return;
+      final view = ui.state.views[name];
+      if (view == null) return;
+      for (final relation in view.relations.values) {
+        include(relation.view);
+      }
     }
-    // Descriptors contain schemas, never the closures that own GUI services.
-    final descriptors = [
-      for (final view in current)
+
+    include(input['view'] as String);
+    final synced = _syncedViews ??= {};
+    final pending = [
+      for (final name in required)
+        if (ui.state.views[name] case final view?
+            when !view.background && !identical(synced[name], view))
+          view
+    ];
+    if (pending.isEmpty) return;
+    // Background views already exist in the worker with the same registration.
+    // Only host-only schemas cross the isolate, and only those a query needs.
+    await _ask(target, 'views', [
+      for (final view in pending)
         (
           view.name,
           view.description,
@@ -517,9 +670,10 @@ final class LibraryWorker {
           view.background,
           view.readAll != null
         )
-    ];
-    await _ask(target, 'views', descriptors);
-    _syncedViews = current;
+    ]);
+    for (final view in pending) {
+      synced[view.name] = view;
+    }
   }
 
   Future<JsonMap> query(JsonMap input) async {
@@ -528,8 +682,29 @@ final class LibraryWorker {
       if (_closed) throw StateError('Library worker is closed');
       final target = await _worker();
       await _syncSources(target);
-      await _syncViews(target);
-      return await _ask(target, 'query', input) as JsonMap;
+      final isActivity = input['view'] == 'activity';
+      ActivityHostContext? activityContext;
+      if (isActivity && !_activityContextSent) {
+        var context = _activityContext;
+        if (context == null) {
+          final prepared = await ui.state.prepareActivity?.call();
+          if (prepared is ActivityHostContext) context = prepared;
+        }
+        if (context is! ActivityHostContext) {
+          throw StateError('Activity state is unavailable');
+        }
+        _activityContext = context;
+        activityContext = context;
+      }
+      await _syncViews(target, input);
+      final reply = isActivity
+          ? await _ask(target, 'queryActivity', (input, activityContext))
+          : await _ask(target, 'query', (input, null));
+      if (reply is Uint8List) {
+        if (isActivity) _activityContextSent = true;
+        return jsonDecode(utf8.decode(gzip.decode(reply))) as JsonMap;
+      }
+      return reply as JsonMap;
     });
   }
 
@@ -645,8 +820,9 @@ Future<void> _serve(
       providers: [TmdbMetadataProvider(_Transport(host))],
       classic: NoClassic(),
       authorizedRoots: () => roots);
+  ActivityHostContext? activityContext;
   Future<StateRows> readActivity() async {
-    final context =
+    final context = activityContext ??=
         await _request(host, 'activity', null) as ActivityHostContext?;
     if (context == null) {
       return await _request(host, 'read', ('activity', 0, 0, true))
@@ -673,6 +849,11 @@ Future<void> _serve(
         description: '',
         fields: activityFields,
         readAll: readActivity,
+        readPage: (offset, limit) async {
+          final rows = await readActivity();
+          return StateRows(rows.rows.skip(offset).take(limit).toList(),
+              warnings: rows.warnings, total: rows.rows.length);
+        },
         read: (offset, limit) async =>
             (await readActivity()).rows.skip(offset).take(limit).toList()),
   ]);
@@ -762,6 +943,10 @@ Future<void> _serve(
               continuing == null ? null : () => continuing;
           roots = authorized;
           return null;
+        case 'calendar':
+          final rows = input as List<JsonMap>?;
+          sources.calendar = rows == null ? null : () async => rows;
+          return null;
         case 'build':
           await projection.build(input as String);
           return null;
@@ -804,21 +989,9 @@ Future<void> _serve(
           }
           await projection.compose(
               peers ?? projection.peers, online ?? projection.online, account);
-          final snapshot = projection.snapshot;
-          await releaseResources();
-          return _ExitWith(LibrarySnapshot(
-              snapshot.assets,
-              snapshot.works,
-              snapshot.episodes,
-              snapshot.aliases,
-              snapshot.locations,
-              snapshot.localTargets,
-              snapshot.orderedWorks,
-              snapshot.episodeParents,
-              builtStamp: built.stamp,
-              compositionStamp: compositionStamp,
-              builds: built.builds,
-              composed: true));
+          return LibraryPrepareResult(
+              null, built.stamp, compositionStamp, built.builds,
+              composed: true);
         case 'restore':
           final (peers, online, account) =
               input as (Map<String, JsonMap>, Map<String, bool>, String?);
@@ -844,16 +1017,92 @@ Future<void> _serve(
         case 'evidence':
           return projection.evidence(input as String);
         case 'activityRows':
-          final (events, warnings) =
-              await readActivityFromDatabase(db, input as ActivityHostContext);
+          activityContext = (input as ActivityHostContext?) ?? activityContext;
+          final (events, warnings) = await readActivityFromDatabase(
+              db,
+              activityContext ??
+                  await _request(host, 'activity', null)
+                      as ActivityHostContext);
           return packActivityRows(events, warnings);
-        case 'views':
-          cachedDescriptors = input as List<_View>;
+        case 'activityPage':
+          final (context, offset, limit) =
+              input as (ActivityHostContext?, int, int);
+          activityContext = context ?? activityContext;
+          final (events, warnings) = await readActivityFromDatabase(
+              db,
+              activityContext ??
+                  await _request(host, 'activity', null)
+                      as ActivityHostContext);
+          return (
+            jsonEncode(events.skip(offset).take(limit).toList()),
+            events.length,
+            warnings
+          );
+        case 'jobCounts':
+          final rows = await db.rawQuery('SELECT type, COUNT(*) AS n FROM jobs '
+              "WHERE state IN ('queued', 'waiting_retry', 'interrupted') "
+              'GROUP BY type');
+          return <String, int>{
+            for (final row in rows) row['type'] as String: row['n'] as int
+          };
+        case 'homePlan':
+          return _DetachedReply(await _homePlan(
+              db, media, sources, ui.engine, projection.snapshot));
+        case 'works':
+          return _packedWorks(projection.snapshot);
+        case 'locations':
+          final id = input as String;
+          final target = projection.canonical(id);
+          return projection.snapshot.locations[target] ?? const <JsonMap>[];
+        case 'asset':
+          return projection.snapshot.assets[input as String];
+        case 'localTarget':
+          final id = input as String;
+          final target = projection.canonical(id);
+          return projection.snapshot.localTargets[target];
+        case 'canonical':
+          return projection.canonical(input as String);
+        case 'episodes':
+          final (workId, season) = input as (String, int?);
+          final target = projection.canonical(workId);
+          return [
+            for (final episode
+                in projection.snapshot.episodes[target] ?? const <UiEpisode>[])
+              if (season == null || episode.season == season) episode
+          ];
+        case 'episode':
+          final id = input as String;
+          final target = projection.canonical(id);
+          final workId = projection.snapshot.episodeParents[target];
+          if (workId == null) return null;
+          for (final episode
+              in projection.snapshot.episodes[workId] ?? const <UiEpisode>[]) {
+            if (episode.episodeId == target) return episode;
+          }
           return null;
+        case 'parent':
+          final id = input as String;
+          final target = projection.canonical(id);
+          if (projection.snapshot.works.containsKey(target)) return target;
+          final workId = projection.snapshot.episodeParents[target];
+          return workId == null ? null : projection.canonical(workId);
+        case 'views':
+          cachedDescriptors = [
+            ...cachedDescriptors,
+            ...(input as List<_View>),
+          ];
+          return null;
+        case 'queryActivity':
+          final (query, suppliedActivityContext) =
+              input as (JsonMap, ActivityHostContext?);
+          activityContext = suppliedActivityContext ?? activityContext;
+          final result = await state.query(query);
+          return Uint8List.fromList(
+              gzip.encode(utf8.encode(jsonEncode(result))));
         case 'query':
-          final query = input as JsonMap;
+          final (query, _) = input as (JsonMap, ActivityHostContext?);
           final descriptors = cachedDescriptors;
-          final views = <StateView>[];
+          final views = [...state.views.values];
           for (final descriptor in descriptors) {
             final (
               name,
@@ -890,6 +1139,8 @@ Future<void> _serve(
                       as List<JsonMap>;
             }
 
+            final page =
+                background && local?.readPage != null ? local!.readPage : null;
             views.add(StateView(
                 name: name,
                 description: description,
@@ -898,6 +1149,7 @@ Future<void> _serve(
                 cursorOrder: order,
                 relations: relations,
                 read: read,
+                readPage: page,
                 readAll: all
                     ? () async => background && local?.readAll != null
                         ? await local!.readAll!()
@@ -929,6 +1181,351 @@ final class _Vault implements CredentialVault {
   @override
   Future<void> delete(CredentialRef ref) =>
       throw UnsupportedError('Library reads credentials only');
+}
+
+typedef _HomeLink = ({String fileId, String workId, List<String> episodeIds});
+
+Future<JsonMap> _homeLinks(Database db, MediaService media,
+    StateSources sources, Map<String, String> aliases) async {
+  final continuing = sources.continueWatching?.call() ?? const <JsonMap>[];
+  final history = sources.history?.call() ?? const <JsonMap>[];
+  bool ongoing(JsonMap row) {
+    final progress = (row['watchProgress'] as num?)?.toDouble() ?? 0;
+    return progress > 0 && progress < .95;
+  }
+
+  final wanted = <String>{
+    for (final row in continuing)
+      if (row['filePath'] is String) row['filePath'] as String,
+    for (final row in history)
+      if (ongoing(row) && row['filePath'] is String) row['filePath'] as String,
+  };
+  final links = <String, _HomeLink>{};
+  final locators = wanted.toList(growable: false);
+  for (var start = 0; start < locators.length; start += 250) {
+    final page =
+        locators.sublist(start, (start + 250).clamp(0, locators.length));
+    final rows = await db.rawQuery(
+        'SELECT l.locator, l.file_id AS fileId, fe.episode_id AS episodeId, r.parent_id AS workId '
+        'FROM media_locations l '
+        'JOIN media_file_episodes fe ON fe.file_id = l.file_id '
+        'JOIN media_entities e ON e.id = fe.episode_id '
+        'JOIN media_entities r ON r.id = e.parent_id '
+        'WHERE l.owner_device_id = ? AND l.locator IN (${List.filled(page.length, '?').join(',')}) '
+        'ORDER BY l.id, fe.ordinal',
+        [media.store.ownerDeviceId, ...page]);
+    for (final row in rows) {
+      final locator = row['locator'] as String;
+      final existing = links[locator];
+      if (existing == null) {
+        links[locator] = (
+          fileId: row['fileId'] as String,
+          workId: row['workId'] as String,
+          episodeIds: [row['episodeId'] as String],
+        );
+      } else {
+        existing.episodeIds.add(row['episodeId'] as String);
+      }
+    }
+  }
+
+  String canonical(String id) => aliases[id] ?? id;
+  Future<_HomeLink?> link(String path) async {
+    var found = links[path];
+    if (found != null) return found;
+    final resolved = await visibleLocator(path, media);
+    if (resolved == null || resolved == path) return null;
+    found = links[resolved];
+    if (found != null) return found;
+    final rows = await db.rawQuery(
+        'SELECT l.locator, l.file_id AS fileId, fe.episode_id AS episodeId, r.parent_id AS workId '
+        'FROM media_locations l '
+        'JOIN media_file_episodes fe ON fe.file_id = l.file_id '
+        'JOIN media_entities e ON e.id = fe.episode_id '
+        'JOIN media_entities r ON r.id = e.parent_id '
+        'WHERE l.owner_device_id = ? AND l.locator=? '
+        'ORDER BY l.id, fe.ordinal',
+        [media.store.ownerDeviceId, resolved]);
+    for (final row in rows) {
+      final existing = links[resolved];
+      if (existing == null) {
+        links[resolved] = (
+          fileId: row['fileId'] as String,
+          workId: row['workId'] as String,
+          episodeIds: [row['episodeId'] as String],
+        );
+      } else {
+        existing.episodeIds.add(row['episodeId'] as String);
+      }
+    }
+    return links[resolved];
+  }
+
+  final continueLinks = <JsonMap?>[];
+  final following = <String>{}, followingRaw = <String>{};
+  for (final row in continuing) {
+    final path = row['filePath'] as String?;
+    final found = path == null ? null : await link(path);
+    if (found == null) {
+      continueLinks.add(null);
+      continue;
+    }
+    final workId = canonical(found.workId);
+    followingRaw.add(found.workId);
+    following.add(workId);
+    continueLinks.add({
+      'workId': workId,
+      'episodeIds': [for (final id in found.episodeIds) canonical(id)],
+    });
+  }
+  for (final row in history.where(ongoing)) {
+    final path = row['filePath'] as String?;
+    if (path == null) continue;
+    if (await link(path) case final found?) {
+      followingRaw.add(found.workId);
+      following.add(canonical(found.workId));
+    }
+  }
+  return {
+    'continue': continueLinks,
+    'following': following.toList(growable: false),
+    'followingRaw': followingRaw.toList(growable: false),
+  };
+}
+
+String? _homeCaption(UiWork work, UiEpisode? episode) {
+  if (episode == null) return null;
+  final left = episode.runtime != null &&
+          episode.progress != null &&
+          episode.progress! > 0 &&
+          episode.progress! < 1
+      ? (episode.runtime!.inMilliseconds * (1 - episode.progress!) / 60000)
+          .ceil()
+      : null;
+  if (work.film) return left == null ? null : '剩 $left 分钟';
+  final caption = [
+    if (episode.number case final number?) '第 $number 集',
+    if (left != null) '剩 $left 分钟',
+  ].join(' · ');
+  return caption.isEmpty ? null : caption;
+}
+
+UiShelfItem _homeItem(UiWork work, UiEpisode? episode,
+        {String? caption, String? badge}) =>
+    UiShelfItem(work, episode: episode, caption: caption, badge: badge);
+
+/// Resolves an entity or file mentioned by a job to a work in [snapshot].
+/// This mirrors the UI lookup without crossing back to the host for every id.
+Future<String?> _homeJobParent(Database db, LibrarySnapshot snapshot, String id,
+    [Set<String>? visited]) async {
+  visited ??= <String>{};
+  if (!visited.add(id)) return null;
+  final target = snapshot.aliases[id] ?? id;
+  if (snapshot.works.containsKey(target)) return target;
+  final episodeParent = snapshot.episodeParents[target];
+  if (episodeParent != null) {
+    return snapshot.aliases[episodeParent] ?? episodeParent;
+  }
+  final links = await db.query('media_file_episodes',
+      columns: ['episode_id'], where: 'file_id=?', whereArgs: [id], limit: 1);
+  if (links.isEmpty) return null;
+  return _homeJobParent(
+      db, snapshot, links.single['episode_id'] as String, visited);
+}
+
+Future<String?> _homeJobWork(
+    Database db, LibrarySnapshot snapshot, Job job) async {
+  final ids = [
+    job.input['workId'],
+    job.input['entityId'],
+    job.input['fileId'],
+    ...?job.receipt?.details['workIds'] as List?,
+    ...?job.receipt?.details['fileIds'] as List?,
+    for (final file in job.checkpoint['completedFiles'] as List? ?? [])
+      if (file is Map && file['media'] is Map) (file['media'] as Map)['fileId'],
+  ];
+  for (final id in ids.whereType<String>()) {
+    final work = await _homeJobParent(db, snapshot, id);
+    if (work != null) return work;
+  }
+  return null;
+}
+
+/// Builds and materialises the home page in the catalogue worker. Calendar
+/// matching, bound episodes, saved shelves and the fallback hero scan all walk
+/// catalogue-sized inputs, so none of that or its record decoding reaches the
+/// UI isolate.
+Future<UiHome> _homePlan(Database db, MediaService media, StateSources sources,
+    TaskEngine engine, LibrarySnapshot snapshot) async {
+  final works = snapshot.works;
+  final aliases = snapshot.aliases;
+  String canonical(String id) => aliases[id] ?? id;
+  UiWork? work(String id) => works[canonical(id)];
+  List<UiEpisode> episodes(String workId) =>
+      snapshot.episodes[canonical(workId)] ?? const <UiEpisode>[];
+
+  final shelves = <UiShelf>[];
+  final continuing = <UiShelfItem>[];
+  final continuingIds = <String>{};
+  final seen = <String>{};
+  final continueRows = sources.continueWatching?.call() ?? const <JsonMap>[];
+
+  // With no Classic history, the published progress is the only source of
+  // in-progress works. This remains a worker-side scan.
+  if (sources.continueWatching == null && sources.history == null) {
+    for (final work in snapshot.orderedWorks) {
+      final episode = episodes(work.workId)
+          .where((episode) =>
+              (episode.progress ?? 0) > 0 && (episode.progress ?? 0) < 1)
+          .firstOrNull;
+      if (episode != null && seen.add(work.workId)) {
+        continuing.add(
+            _homeItem(work, episode, caption: _homeCaption(work, episode)));
+        continuingIds.add(work.workId);
+      }
+    }
+  }
+
+  final links = await _homeLinks(db, media, sources, aliases);
+  final linkedRows = (links['continue'] as List? ?? const []).cast<JsonMap?>();
+  for (var index = 0; index < continueRows.length; index++) {
+    final path = continueRows[index]['filePath'];
+    if (path is! String) continue;
+    final linked = index < linkedRows.length ? linkedRows[index] : null;
+    if (linked == null) continue;
+    final workId = linked['workId'] as String;
+    if (!seen.add(workId)) continue;
+    final linkedIds = <String>{
+      for (final id
+          in (linked['episodeIds'] as List? ?? const []).whereType<String>())
+        canonical(id),
+    };
+    final itemWork = work(workId);
+    if (itemWork == null) continue;
+    final episode = episodes(itemWork.workId)
+        .where((episode) =>
+            linkedIds.contains(episode.episodeId) &&
+            (episode.progress ?? 0) < 1)
+        .firstOrNull;
+    continuing.add(
+        _homeItem(itemWork, episode, caption: _homeCaption(itemWork, episode)));
+    continuingIds.add(itemWork.workId);
+  }
+  if (continuing.isNotEmpty) {
+    shelves.add(UiShelf(
+        id: 'continue',
+        title: '继续观看',
+        kind: UiShelfKind.continueWatching,
+        items: continuing));
+  }
+
+  final following = <String>{
+    ...seen,
+    ...continuingIds,
+    ...(links['following'] as List? ?? const []).whereType<String>(),
+    ...(links['followingRaw'] as List? ?? const []).whereType<String>(),
+  };
+  final airingItems = <UiShelfItem>[];
+  if (sources.calendar != null) {
+    for (final update in await airing.todayUpdates(
+        media.store, following, await sources.calendar!())) {
+      final itemWork = work(update['workId'] as String);
+      if (itemWork == null) continue;
+      final matches = await db.rawQuery(
+          "SELECT b.entity_id FROM media_bindings b JOIN media_external_objects o ON o.id=b.object_id WHERE b.status='accepted' AND o.provider='dandanplay' AND o.object_type='episode' AND o.external_id=?",
+          [update['externalEpisodeId']]);
+      final matchingIds = <String>{
+        for (final match in matches) canonical(match['entity_id'] as String),
+      };
+      final episode = episodes(itemWork.workId)
+          .where((episode) => matchingIds.contains(episode.episodeId))
+          .firstOrNull;
+      airingItems.add(
+          _homeItem(itemWork, episode, caption: update['caption'] as String?));
+    }
+  }
+  if (airingItems.isNotEmpty) {
+    shelves.add(UiShelf(
+        id: 'airing',
+        title: '今天更新',
+        kind: UiShelfKind.airing,
+        items: airingItems));
+  }
+
+  UiHero? hero;
+  for (final row in await db.query('ui_shelves', orderBy: 'rowid')) {
+    final shelf = decodeMediaJson(row['payload']);
+    final items = <UiShelfItem>[];
+    for (final item in (shelf['items'] as List).cast<Map>()) {
+      final itemWork = work(item['workId'] as String);
+      if (itemWork == null) continue;
+      if (shelf['placement'] == 'hero') {
+        hero = UiHero(itemWork, note: shelf['note'] as String?);
+      } else {
+        items.add(_homeItem(itemWork, itemWork.next,
+            caption: item['note'] as String? ??
+                _homeCaption(itemWork, itemWork.next)));
+      }
+    }
+    if (shelf['placement'] == 'shelf') {
+      shelves.add(UiShelf(
+          id: row['id'] as String,
+          title: shelf['title'] as String,
+          kind: UiShelfKind.agent,
+          items: items));
+    }
+  }
+
+  final recent = [
+    for (final work in snapshot.orderedWorks.take(20))
+      _homeItem(work, work.next, caption: _homeCaption(work, work.next)),
+  ];
+  if (recent.isNotEmpty) {
+    shelves.add(UiShelf(
+        id: 'recent', title: '最近添加', kind: UiShelfKind.recent, items: recent));
+  }
+
+  if (hero == null) {
+    for (var offset = 0; hero == null; offset += 20) {
+      final jobs = await engine.listRecent(
+          state: JobState.succeeded, limit: 20, offset: offset);
+      if (jobs.isEmpty) break;
+      for (final job in jobs) {
+        final workId = await _homeJobWork(db, snapshot, job);
+        if (workId == null) continue;
+        final itemWork = work(workId);
+        if (itemWork?.next?.playable == true) {
+          hero = UiHero(itemWork!);
+          break;
+        }
+      }
+    }
+    if (hero == null) {
+      final ready = await db.rawQuery(
+          "SELECT r.parent_id AS work_id FROM media_locations l JOIN media_file_episodes fe ON fe.file_id=l.file_id JOIN media_entities e ON e.id=fe.episode_id JOIN media_entities r ON r.id=e.parent_id WHERE l.available=1 ORDER BY l.rowid DESC");
+      for (final row in ready) {
+        final itemWork = work(row['work_id'] as String);
+        if (itemWork?.next?.playable == true) {
+          hero = UiHero(itemWork!);
+          break;
+        }
+      }
+    }
+    if (hero == null) {
+      String? fallback;
+      for (final item in recent) {
+        final workId = item.work.workId;
+        if (continuingIds.contains(workId) &&
+            work(workId)?.next?.playable == true) {
+          fallback = workId;
+          break;
+        }
+      }
+      fallback ??= continuingIds.firstOrNull;
+      if (fallback != null) hero = UiHero(work(fallback)!);
+    }
+  }
+  return UiHome(hero: hero, shelves: shelves);
 }
 
 final class _Transport implements MetadataTransport {

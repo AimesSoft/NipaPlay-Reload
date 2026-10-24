@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:collection';
 import 'dart:convert';
 import 'dart:isolate';
 import 'dart:typed_data';
@@ -10,18 +11,54 @@ import '../harness_redaction.dart';
 
 /// One line a chat runtime wrote, as read on the reader's isolate.
 final class ChatLine {
-  const ChatLine(this.text,
-      {this.decoded, this.redacted, this.redactedText, this.error});
+  ChatLine(String text,
+      {Map<String, dynamic>? decoded,
+      Map<String, dynamic>? redacted,
+      this.redactedText,
+      this.exposesEndpointToken = false,
+      this.error})
+      : _text = text,
+        _decoded = decoded,
+        _redacted = redacted;
 
-  /// The line as written; the host inspects it for its own token.
-  final String text;
+  ChatLine.encoded(TransferableTypedData decoded,
+      {TransferableTypedData? redacted,
+      this.redactedText,
+      required bool exposeText,
+      this.error})
+      : _text = exposeText ? null : '',
+        _encodedDecoded = decoded,
+        _encodedRedacted = redacted,
+        _decoded = null,
+        _redacted = null,
+        exposesEndpointToken = exposeText;
+
+  String? _text;
+
+  /// The line as written when [exposesEndpointToken] is true, or when the
+  /// reader is used without endpoint-token guarding. The host inspects this
+  /// only when it may contain its own token. The encoded form stays in the
+  /// worker's transferable block until someone actually reads it.
+  String get text {
+    final cached = _text;
+    if (cached != null) return cached;
+    final encoded = _encodedDecoded;
+    if (encoded == null) return _text = '';
+    _encodedDecoded = null;
+    return _text = _decodeText(encoded);
+  }
 
   /// The RPC object, exact: replies to the host's requests stay exact.
-  final Map<String, dynamic>? decoded;
+  Map<String, dynamic>? _decoded;
 
-  /// The published form of [decoded]; a stream delta's text is left empty
-  /// here (the host redacts it together with the tail it holds back).
-  final Map<String, dynamic>? redacted;
+  /// The published form when redaction changed [decoded]; a stream delta's
+  /// text is left empty here (the host redacts it together with the tail it
+  /// holds back). Null when redaction changed nothing, so the isolate does not
+  /// copy an identical large catalogue object back to the host.
+  Map<String, dynamic>? _redacted;
+
+  TransferableTypedData? _encodedDecoded;
+  TransferableTypedData? _encodedRedacted;
 
   /// A plain-text line, redacted.
   final String? redactedText;
@@ -29,6 +66,38 @@ final class ChatLine {
   /// Redacted description of why the line is not an RPC object, or of a
   /// failure reading the output; nothing after it is read.
   final String? error;
+
+  /// Whether [text] may contain the local endpoint token. Ordinary runtime
+  /// output does not carry the raw line across isolates merely for a scan that
+  /// cannot match.
+  final bool exposesEndpointToken;
+
+  static String _decodeText(TransferableTypedData data) =>
+      utf8.decode(data.materialize().asUint8List());
+
+  static Map<String, dynamic> _decodeJson(String raw) =>
+      (jsonDecode(raw) as Map).cast<String, dynamic>();
+
+  Map<String, dynamic>? get decoded {
+    final cached = _decoded;
+    if (cached != null) return cached;
+    final encoded = _encodedDecoded;
+    if (encoded == null) {
+      final raw = _text;
+      return raw == null ? null : _decoded = _decodeJson(raw);
+    }
+    _encodedDecoded = null;
+    final raw = _decodeText(encoded);
+    if (exposesEndpointToken) _text ??= raw;
+    return _decoded = _decodeJson(raw);
+  }
+
+  Map<String, dynamic>? get redacted {
+    final encoded = _encodedRedacted;
+    if (encoded == null) return _redacted;
+    _encodedRedacted = null;
+    return _redacted = _decodeJson(_decodeText(encoded));
+  }
 }
 
 /// Reads a chat runtime's output on a background isolate: decoding, line
@@ -48,8 +117,10 @@ final class ChatLineReader {
   /// [streamDeltaMethods] name the stream deltas whose `params.delta` is left
   /// out of [ChatLine.redacted].
   static ChatLineReader start(Stream<List<int>> output,
-      {required bool rpc, Set<String> streamDeltaMethods = const {}}) {
-    final lines = StreamController<ChatLine>();
+      {required bool rpc,
+      Set<String> streamDeltaMethods = const {},
+      bool guardEndpointToken = false}) {
+    final lines = StreamController<ChatLine>(sync: true);
     final reader = ChatLineReader._(lines);
     final replies = ReceivePort(), failures = ReceivePort();
     reader._ports = [replies, failures];
@@ -61,9 +132,42 @@ final class ChatLineReader {
     reader._remember = remember;
     SecretRedactor.addListener(remember);
     final known = SecretRedactor.remembered();
-    void finish() {
+    final pendingLines = Queue<ChatLine>();
+    var draining = false, workerDone = false;
+    void finishIfDrained() {
+      if (!workerDone || draining || pendingLines.isNotEmpty) return;
       if (!lines.isClosed) unawaited(lines.close());
       reader._release();
+    }
+
+    void drain() {
+      if (draining) return;
+      draining = true;
+      scheduleMicrotask(() {
+        if (pendingLines.isEmpty) {
+          draining = false;
+          finishIfDrained();
+          return;
+        }
+        final line = pendingLines.removeFirst();
+        if (!lines.isClosed) lines.add(line);
+        if (line.error != null) {
+          workerDone = true;
+          pendingLines.clear();
+        }
+        draining = false;
+        if (pendingLines.isNotEmpty) {
+          drain();
+        } else {
+          finishIfDrained();
+        }
+      });
+    }
+
+    void accept(ChatLine line) {
+      if (lines.isClosed || workerDone) return;
+      pendingLines.add(line);
+      drain();
     }
 
     replies.listen((message) {
@@ -74,27 +178,41 @@ final class ChatLineReader {
         }
         pending.clear();
       } else if (message is ChatLine) {
-        if (!lines.isClosed) lines.add(message);
-        if (message.error != null) finish();
+        accept(message);
+      } else if (message is List) {
+        for (final line in message) {
+          if (line is ChatLine) accept(line);
+        }
       } else {
-        finish();
+        workerDone = true;
+        finishIfDrained();
       }
     });
     failures.listen((error) {
-      if (!lines.isClosed) {
-        lines.add(ChatLine('',
-            error: redactHarnessText('chat reader failed: $error')));
-      }
-      finish();
+      accept(
+          ChatLine('', error: redactHarnessText('chat reader failed: $error')));
+      workerDone = true;
+      finishIfDrained();
     });
     reader._output = output.listen(
-        (chunk) => forward(TransferableTypedData.fromList(
-            [chunk is TypedData ? chunk as TypedData : Uint8List.fromList(chunk)])),
+        (chunk) => forward(TransferableTypedData.fromList([
+              chunk is TypedData
+                  ? chunk as TypedData
+                  : Uint8List.fromList(chunk)
+            ])),
         onError: (Object error) => forward(_OutputError('$error')),
         onDone: () => forward(_end));
     unawaited(Isolate.spawn(
-            _read, (replies.sendPort, rpc, streamDeltaMethods, known),
-            onError: failures.sendPort, debugName: 'chat-line-reader')
+            _read,
+            (
+              replies.sendPort,
+              rpc,
+              streamDeltaMethods,
+              known,
+              guardEndpointToken
+            ),
+            onError: failures.sendPort,
+            debugName: 'chat-line-reader')
         .then((isolate) {
       if (reader._released) {
         isolate.kill();
@@ -102,11 +220,10 @@ final class ChatLineReader {
         reader._isolate = isolate;
       }
     }, onError: (Object error) {
-      if (!lines.isClosed) {
-        lines.add(ChatLine('',
-            error: redactHarnessText('chat reader failed: $error')));
-      }
-      finish();
+      accept(
+          ChatLine('', error: redactHarnessText('chat reader failed: $error')));
+      workerDone = true;
+      finishIfDrained();
     }));
     return reader;
   }
@@ -149,16 +266,33 @@ final class _OutputError {
 }
 
 void _read(
-    (SendPort, bool, Set<String>, Map<String, CredentialRef>) setup) {
-  final (main, rpc, deltas, known) = setup;
+    (SendPort, bool, Set<String>, Map<String, CredentialRef>, bool) setup) {
+  final (main, rpc, deltas, known, guardEndpointToken) = setup;
+  final endpointTokens = <String>{};
   for (final MapEntry(key: value, value: ref) in known.entries) {
     SecretRedactor.remember(ref, value);
+    if (_isEndpointToken(ref)) endpointTokens.add(value);
   }
   final port = ReceivePort();
   final input = StreamController<List<int>>();
-  var stopped = false;
+  final lines = <ChatLine>[];
+  var stopped = false, flushScheduled = false;
+  void flush() {
+    flushScheduled = false;
+    if (lines.isEmpty) return;
+    main.send(List<ChatLine>.of(lines));
+    lines.clear();
+  }
+
+  void scheduleFlush() {
+    if (flushScheduled) return;
+    flushScheduled = true;
+    scheduleMicrotask(flush);
+  }
+
   void stop(ChatLine last) {
     stopped = true;
+    flush();
     main.send(last);
     port.close();
     Isolate.exit();
@@ -167,11 +301,20 @@ void _read(
   input.stream.transform(utf8.decoder).transform(const LineSplitter()).listen(
       (line) {
     if (stopped) return;
-    final read = rpc ? _rpcLine(line, deltas) : _textLine(line);
+    final exposed =
+        guardEndpointToken && _hasEndpointToken(line, endpointTokens);
+    final read = rpc
+        ? _rpcLine(line, deltas, exposeText: !guardEndpointToken || exposed)
+        : _textLine(line, exposeText: !guardEndpointToken || exposed);
     if (read.error != null) {
       stop(read);
     } else {
-      main.send(read);
+      lines.add(read);
+      if (lines.length == 32) {
+        flush();
+      } else {
+        scheduleFlush();
+      }
     }
   }, onError: (Object error) {
     if (!stopped) {
@@ -180,6 +323,7 @@ void _read(
   }, onDone: () {
     if (stopped) return;
     stopped = true;
+    flush();
     port.close();
     Isolate.exit(main, _end);
   });
@@ -189,6 +333,7 @@ void _read(
         input.add(data.materialize().asUint8List());
       case (String value, CredentialRef ref):
         SecretRedactor.remember(ref, value);
+        if (_isEndpointToken(ref)) endpointTokens.add(value);
       case _OutputError error:
         input.addError(error);
       case _end:
@@ -198,10 +343,26 @@ void _read(
   main.send(port.sendPort);
 }
 
-ChatLine _textLine(String line) =>
-    ChatLine(line, redactedText: redactHarnessText(line));
+bool _isEndpointToken(CredentialRef ref) =>
+    ref.namespace == 'agent' && ref.key == 'token';
 
-ChatLine _rpcLine(String line, Set<String> deltas) {
+bool _hasEndpointToken(String text, Set<String> tokens) {
+  for (final token in tokens) {
+    if (text.contains(token) ||
+        text.contains(Uri.encodeComponent(token)) ||
+        text.contains(Uri.encodeQueryComponent(token))) {
+      return true;
+    }
+  }
+  return false;
+}
+
+ChatLine _textLine(String line, {required bool exposeText}) =>
+    ChatLine(exposeText ? line : '',
+        redactedText: redactHarnessText(line),
+        exposesEndpointToken: exposeText && line.isNotEmpty);
+
+ChatLine _rpcLine(String line, Set<String> deltas, {required bool exposeText}) {
   try {
     final decoded = jsonDecode(line);
     if (decoded is! Map<String, dynamic>) {
@@ -210,15 +371,41 @@ ChatLine _rpcLine(String line, Set<String> deltas) {
     final method = decoded['method'] as String? ?? '';
     final params = decoded['params'] as Map?;
     final delta = deltas.contains(method) && params?['delta'] is String;
-    return ChatLine(line,
-        decoded: decoded,
-        redacted: Map<String, dynamic>.from(redactHarnessJson(delta
-            ? {
-                ...decoded,
-                'params': {...params!, 'delta': ''}
-              }
-            : decoded) as Map));
+    final redacted = Map<String, dynamic>.from(redactHarnessJson(delta
+        ? {
+            ...decoded,
+            'params': {...params!, 'delta': ''}
+          }
+        : decoded) as Map);
+    return ChatLine.encoded(_packJson(line),
+        redacted: _sameJson(decoded, redacted) ? null : _packJson(redacted),
+        exposeText: exposeText);
   } catch (error) {
     return ChatLine(line, error: redactHarnessText(error.toString()));
   }
+}
+
+TransferableTypedData _packJson(Object json) => TransferableTypedData.fromList(
+    [utf8.encode(json is String ? json : jsonEncode(json))]);
+
+bool _sameJson(Object? left, Object? right) {
+  if (identical(left, right)) return true;
+  if (left is Map && right is Map) {
+    if (left.length != right.length) return false;
+    for (final entry in left.entries) {
+      if (!right.containsKey(entry.key) ||
+          !_sameJson(entry.value, right[entry.key])) {
+        return false;
+      }
+    }
+    return true;
+  }
+  if (left is List && right is List) {
+    if (left.length != right.length) return false;
+    for (var i = 0; i < left.length; i++) {
+      if (!_sameJson(left[i], right[i])) return false;
+    }
+    return true;
+  }
+  return left == right;
 }

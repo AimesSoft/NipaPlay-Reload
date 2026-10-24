@@ -19,6 +19,13 @@ final class DownloadService {
   final DownloadBackends backends;
   final DownloadLibrary library;
   Future<JsonMap?> Function(Invocation)? returnTarget;
+  JsonMap? _lastBandwidthFacts;
+
+  /// The latest facts returned by a bandwidth read or write. Resource probes
+  /// reuse this small result instead of entering native code on every hook
+  /// tick; download refresh and every explicit read/write keep it current.
+  JsonMap? get bandwidthFacts => _lastBandwidthFacts;
+
   Future<JsonMap> bandwidth(JsonMap input) => _serial(() async {
         for (final value in input.values.cast<int>()) {
           if (value != 0 && (value < 16384 || value > 4294967295)) {
@@ -34,7 +41,7 @@ final class DownloadService {
                 'applied': false,
                 'reason': 'backend_has_no_bandwidth_control'
               };
-        return {
+        return _lastBandwidthFacts = {
           ...facts,
           'scope': 'builtinSession',
           'appliesTo': 'all builtin torrents',
