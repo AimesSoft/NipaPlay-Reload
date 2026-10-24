@@ -80,21 +80,7 @@ final class AgentEndpoint {
       String previous, String delta) async {
     final text = '$previous$delta';
     await inspectChatText(text);
-    final safe = redactHarnessText(text);
-    var keep = 0;
-    for (final token in _chatTokens) {
-      for (var length = 1;
-          length < token.length && length <= safe.length;
-          length++) {
-        if (length > keep && safe.endsWith(token.substring(0, length))) {
-          keep = length;
-        }
-      }
-    }
-    return (
-      safe.substring(0, safe.length - keep),
-      safe.substring(safe.length - keep)
-    );
+    return protectChatDeltaOffMain(text, _chatTokens);
   }
 
   /// Inspect before publishing either user input or subprocess output.
@@ -680,7 +666,8 @@ final class AgentEndpoint {
     }};
   }
 
-  /// Every task, as the status counts them: task.list answers in pages.
+  /// Every task, as the status counts them: task.list answers newest first in
+  /// pages, and this preserves that order while reading all of them.
   Future<JsonMap> _allTasks(String origin) async {
     final jobs = <Object?>[];
     for (var offset = 0;;) {

@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
@@ -9,6 +10,7 @@ import 'package:nipaplay/app/app_display_surface.dart';
 import 'package:nipaplay/app/app_display_surface_scope.dart';
 import 'package:nipaplay/downloads/unified_torrent_page_model.dart';
 import 'package:nipaplay/models/torrent_task.dart';
+import 'package:nipaplay/next/downloads/download_runtime.dart';
 import 'package:nipaplay/pages/torrent_download_page.dart';
 import 'package:nipaplay/providers/appearance_settings_provider.dart';
 import 'package:nipaplay/providers/bottom_bar_provider.dart';
@@ -267,6 +269,35 @@ void main() {
     await tester.pump();
     await tester.tap(find.text('取消'));
     expect(cancelled, isTrue);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('download page waits for the Next runtime before using it',
+      (tester) async {
+    SharedPreferences.setMockInitialValues({
+      'torrent_download_directory': '/downloads',
+    });
+    final runtimeReady = Completer<DownloadRuntime>();
+    var waitRequested = false;
+
+    await tester.pumpWidget(MaterialApp(
+      home: AppDisplaySurfaceScope(
+        surface: AppDisplaySurface.desktopTablet,
+        child: Scaffold(
+          body: TorrentDownloadPage(
+            downloadsReady: () {
+              waitRequested = true;
+              return runtimeReady.future;
+            },
+          ),
+        ),
+      ),
+    ));
+    await tester.pump();
+    await tester.pump();
+
+    expect(waitRequested, isTrue);
+    expect(find.byType(CircularProgressIndicator), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 }

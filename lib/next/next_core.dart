@@ -132,6 +132,14 @@ final class NextCore {
   late final HarnessHooks hooks;
   late final HarnessLocation harnessLocation;
   late final DownloadRuntime downloads;
+
+  /// Waits for construction and download observation, so callers never touch
+  /// the late [downloads] field before the core has assigned it.
+  Future<DownloadRuntime> get downloadsReady async {
+    await ready;
+    return downloads;
+  }
+
   final DownloadBackend _downloadBackend;
   final DownloadLibrary _downloadLibrary;
   final Future<bool> Function() _isDownloaderEnabled;

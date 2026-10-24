@@ -1,11 +1,11 @@
 import 'dart:convert';
 import 'dart:io';
+import 'dart:isolate';
 
 import 'package:crypto/crypto.dart';
 import 'package:nipa_harness/nipa_harness.dart';
 
 import '../capabilities/family_descriptions.dart';
-import '../util/slicer.dart';
 
 /// Facts about how the capability catalogue differs from the one the previous
 /// launch had. It states what changed; what to do about it is not its to say.
@@ -125,14 +125,21 @@ final class CapabilityCatalogChanges {
 
   /// {family: {description: hash, actions: {id: hash}}}
   ///
-  /// Hashing every action's schema is a few hundred small pieces of work, done
-  /// in turns so the interface keeps drawing while it starts.
+  /// Hashing every action's schema is a few hundred small pieces of work. Run
+  /// the whole snapshot on a background isolate so startup only awaits it.
   static Future<Map<String, Object?>> _snapshot(
       Iterable<ActionSpec> catalog) async {
+    final specs = List<ActionSpec>.of(catalog);
+    try {
+      return await Isolate.run(() => _snapshotSync(specs));
+    } on ArgumentError {
+      return _snapshotSync(specs);
+    }
+  }
+
+  static Map<String, Object?> _snapshotSync(Iterable<ActionSpec> catalog) {
     final byFamily = <String, Map<String, String>>{};
-    final slice = Slicer();
     for (final spec in catalog) {
-      await slice();
       final family = spec.id.split('.').first;
       byFamily.putIfAbsent(family, () => {})[spec.id] = _hash(jsonEncode(_sorted({
         'id': spec.id,

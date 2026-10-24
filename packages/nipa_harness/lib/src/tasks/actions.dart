@@ -35,8 +35,9 @@ final class _TaskAction extends Action<_TaskInput, _TaskOutput> {
         title: '${operation[0].toUpperCase()}${operation.substring(1)} task',
         description: switch (operation) {
           'list' =>
-            'List persisted task snapshots in pages of 50 by default (oldest first), optionally filtering by state or type. '
-                'Pass limit and offset to read another page; nextOffset, when present, continues after the page and is absent on the last one. '
+            'List persisted task snapshots newest first in pages of 50 by default, optionally filtering by state or type. '
+                'total counts every matching task. Pass order=oldest for the opposite direction; limit and offset read another page. '
+                'nextOffset, when present, continues after the page and is absent on the last one. '
                 'origin, when present, records who submitted the task, taken from the call that created it.',
           'get' =>
             'Read the complete task snapshot. origin, when present, records who submitted the task. succeeded means verification finished; '
@@ -56,6 +57,7 @@ final class _TaskAction extends Action<_TaskInput, _TaskOutput> {
                 'state': StringSchema(
                     values: [for (final s in JobState.values) s.wireName]),
                 'type': const StringSchema(minLength: 1),
+                'order': const StringSchema(values: ['newest', 'oldest']),
                 'limit': const IntegerSchema(minimum: 1, maximum: 1000),
                 'offset': const IntegerSchema(minimum: 0),
               })
@@ -81,9 +83,11 @@ final class _TaskAction extends Action<_TaskInput, _TaskOutput> {
         output: operation == 'list'
             ? ObjectSchema({
                 'jobs': ArraySchema(jobSnapshotSchema),
+                'total': IntegerSchema(minimum: 0),
                 'nextOffset': IntegerSchema(minimum: 0, nullable: true),
               }, required: const [
-                'jobs'
+                'jobs',
+                'total'
               ])
             : ObjectSchema({
                 'job': jobSnapshotSchema,
@@ -129,11 +133,19 @@ final class _TaskAction extends Action<_TaskInput, _TaskOutput> {
           state: state == null
               ? null
               : JobState.values.singleWhere((s) => s.wireName == state));
+      final newestFirst = json['order'] != 'oldest';
+      jobs.sort((a, b) {
+        final byTime = a.createdAt.compareTo(b.createdAt);
+        final byIdentity = a.jobId.compareTo(b.jobId);
+        final oldestFirst = byTime != 0 ? byTime : byIdentity;
+        return newestFirst ? -oldestFirst : oldestFirst;
+      });
       final offset = json['offset'] as int? ?? 0;
       final limit = json['limit'] as int? ?? 50;
       final page = jobs.skip(offset).take(limit).toList();
       return Completed(_TaskOutput({
         'jobs': [for (final job in page) job.toJson()],
+        'total': jobs.length,
         'nextOffset':
             offset + page.length < jobs.length ? offset + page.length : null,
       }));

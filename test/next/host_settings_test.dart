@@ -338,7 +338,7 @@ void main() {
         modelSaved: () async {},
         dsh: install,
         codex: codex,
-        fixedRuntime: () => fixed,
+        fixedRuntime: () async => fixed,
         defaultRuntime: AgentRuntimeKind.dsh,
         runtimeChanged: () async => runtimeChanges++);
 
@@ -420,6 +420,7 @@ void main() {
         ..createSync(recursive: true);
       fixed = AgentRuntimeFixed(AgentRuntimeKind.dsh,
           DshRuntime(node: node.path, bin: bin.path, version: '9'));
+      await dshSettings.refreshFixedRuntime();
       expect((await dshSettings.model()).problem, '模型服务尚未启动');
       expect((await dshSettings.dshLaunchRuntime())!.version, '9');
       expect((await dshSettings.dshRuntime()).fixed, true);
@@ -446,11 +447,58 @@ void main() {
       await withCodex.setAgentRuntime(UiAgentRuntimeKind.dsh);
       expect((await withCodex.agentRuntime()).kind, UiAgentRuntimeKind.dsh);
       fixed = const AgentRuntimeFixed(AgentRuntimeKind.codex);
+      await withCodex.refreshFixedRuntime();
       final decided = await withCodex.agentRuntime();
       expect((decided.kind, decided.fixed), (UiAgentRuntimeKind.codex, true));
       await expectLater(
           withCodex.setAgentRuntime(UiAgentRuntimeKind.dsh), throwsStateError);
       expect(runtimeChanges, 2);
+    });
+
+    test('fixed runtime is read once and refreshed on demand', () async {
+      var reads = 0;
+      AgentRuntimeFixed current = const AgentRuntimeFixed(null);
+      final fixedWatch = await Directory('${lab.path}/fixed-watch').create();
+      final cached = HostSettingsService(
+          root: root,
+          vault: LabModelVault(),
+          meshRuntime: mesh,
+          programs: programs,
+          history: history,
+          chat: () => null,
+          chatProblem: () => null,
+          repository: () => repository.path,
+          codexHome: Directory('${lab.path}/codex-home'),
+          checkCodex: () async =>
+              const UiModelCheck(ok: false, message: '尚未配置'),
+          modelSaved: () async {},
+          fixedRuntime: () async {
+            reads++;
+            return current;
+          },
+          defaultRuntime: AgentRuntimeKind.dsh,
+          fixedRuntimeDirectory: fixedWatch);
+      addTearDown(cached.close);
+
+      expect((await cached.agentRuntime()).fixed, false);
+      expect(await cached.effectiveRuntime(), AgentRuntimeKind.dsh);
+      expect(reads, 1);
+
+      current = const AgentRuntimeFixed(AgentRuntimeKind.codex);
+      expect((await cached.agentRuntime()).fixed, false);
+      expect(reads, 1);
+      await cached.refreshFixedRuntime();
+      expect((await cached.agentRuntime()).fixed, true);
+      expect(await cached.effectiveRuntime(), AgentRuntimeKind.codex);
+      expect(reads, 2);
+
+      current = const AgentRuntimeFixed(null);
+      final changed = cached.changes.first;
+      await File('${fixedWatch.path}/agent-runtime.json')
+          .writeAsString('{"runtime":"codex"}');
+      await changed.timeout(const Duration(seconds: 3));
+      expect((await cached.agentRuntime()).fixed, false);
+      expect(reads, 3);
     });
 
     test('a Codex configuration is read, offered without its key, and imported into the vault',

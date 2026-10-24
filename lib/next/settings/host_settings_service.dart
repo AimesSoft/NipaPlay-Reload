@@ -37,10 +37,23 @@ final class HostSettingsService implements NextHostSettings, NextHostDeviceSetti
       this.codex,
       this.dsh,
       this.fixedRuntime,
+      this.fixedRuntimeDirectory,
       this.defaultRuntime = AgentRuntimeKind.codex,
       this.runtimeChanged,
       this.httpClient = HttpClient.new}) {
     _meshEvents = meshRuntime.hostChanges.listen((_) => notify());
+    if (fixedRuntimeDirectory case final directory?) {
+      _fixedEvents = directory.watch().listen((event) {
+        if (event.path.endsWith('/agent-runtime.json') ||
+            event.path.endsWith(r'\agent-runtime.json')) {
+          _fixedDebounce?.cancel();
+          _fixedDebounce = Timer(const Duration(milliseconds: 50), () {
+            unawaited(refreshFixedRuntime());
+          });
+        }
+      }, onError: (Object _) {});
+    }
+    unawaited(_fixed());
   }
   final Directory root, codexHome;
   final CodexRuntime? codex;
@@ -49,7 +62,11 @@ final class HostSettingsService implements NextHostSettings, NextHostDeviceSetti
   final DshInstall? dsh;
 
   /// What the environment or a lab file fixes about the runtime, if anything.
-  final AgentRuntimeFixed Function()? fixedRuntime;
+  final Future<AgentRuntimeFixed> Function()? fixedRuntime;
+
+  /// The lab profile directory whose `agent-runtime.json` invalidates the
+  /// cached [fixedRuntime] value when the file changes.
+  final Directory? fixedRuntimeDirectory;
 
   /// The runtime when nothing fixed it and nothing was chosen here.
   final AgentRuntimeKind defaultRuntime;
@@ -71,18 +88,42 @@ final class HostSettingsService implements NextHostSettings, NextHostDeviceSetti
   @override
   Future<void> setCodexRuntime(UiCodexRuntimeChoice choice) =>
       _write(() => _codex.configure(choice)).then((_) => modelSaved());
-  AgentRuntimeFixed _fixed() {
+  Future<AgentRuntimeFixed> _fixed({bool revealError = false}) async {
+    if (_fixedError case final error? when revealError) {
+      Error.throwWithStackTrace(error, _fixedStack ?? StackTrace.current);
+    }
+    _fixedLoad ??= (() async =>
+        await fixedRuntime?.call() ?? const AgentRuntimeFixed(null))();
     try {
-      return fixedRuntime?.call() ?? const AgentRuntimeFixed(null);
-    } on StateError {
+      _fixedValue = await _fixedLoad;
+      _fixedError = null;
+      _fixedStack = null;
+      return _fixedValue!;
+    } catch (error, stack) {
+      _fixedError = error;
+      _fixedStack = stack;
+      if (revealError) rethrow;
       return const AgentRuntimeFixed(null);
     }
   }
 
+  /// Re-reads environment/lab overrides after their file or a setting changed.
+  Future<void> refreshFixedRuntime() async {
+    _fixedLoad = null;
+    _fixedValue = null;
+    _fixedError = null;
+    _fixedStack = null;
+    await _fixed();
+    notify();
+  }
+
+  /// Exposes a malformed fixed-runtime configuration to the chat starter.
+  Future<void> validateFixedRuntime() => _fixed(revealError: true);
+
   /// The runtime Nipa thinks in now: what is fixed, else what was chosen
   /// here, else the default.
   Future<AgentRuntimeKind> effectiveRuntime() async {
-    if (_fixed().kind case final kind?) return kind;
+    if ((await _fixed()).kind case final kind?) return kind;
     final stored = (await _read('runtime.json'))['runtime'];
     for (final kind in AgentRuntimeKind.values) {
       if (kind.name == stored) return kind;
@@ -91,13 +132,17 @@ final class HostSettingsService implements NextHostSettings, NextHostDeviceSetti
   }
 
   @override
-  Future<UiAgentRuntime> agentRuntime() async => UiAgentRuntime(
-      kind: UiAgentRuntimeKind.values.byName((await effectiveRuntime()).name),
-      fixed: _fixed().kind != null);
+  Future<UiAgentRuntime> agentRuntime() async {
+    final fixed = await _fixed();
+    final kind = fixed.kind ?? await effectiveRuntime();
+    return UiAgentRuntime(
+        kind: UiAgentRuntimeKind.values.byName(kind.name),
+        fixed: fixed.kind != null);
+  }
 
   @override
   Future<void> setAgentRuntime(UiAgentRuntimeKind kind) => _write(() async {
-        if (_fixed().kind != null) throw StateError('运行器由启动环境决定');
+        if ((await _fixed()).kind != null) throw StateError('运行器由启动环境决定');
         if (kind == UiAgentRuntimeKind.codex && codex == null) {
           throw UnsupportedError('此宿主没有 Codex');
         }
@@ -112,6 +157,7 @@ final class HostSettingsService implements NextHostSettings, NextHostDeviceSetti
   DshInstall get _dsh => dsh ?? (throw UnsupportedError('此宿主不下载运行环境'));
   @override
   Future<UiDshRuntime> dshRuntime() async {
+    final fixed = await _fixed();
     final state = await _dsh.state();
     return UiDshRuntime(
         status: state.status,
@@ -121,14 +167,14 @@ final class HostSettingsService implements NextHostSettings, NextHostDeviceSetti
         problem: state.problem,
         registryMirror: state.registryMirror,
         nodeMirror: state.nodeMirror,
-        fixed: _fixed().dsh != null);
+        fixed: fixed.dsh != null);
   }
 
   /// The runtime DeepSeek Harness runs on: an installation named by the
   /// environment or a lab file, else the downloaded one (null until it is
   /// there).
   Future<DshRuntime?> dshLaunchRuntime() async =>
-      _fixed().dsh ?? await dsh?.runtime();
+      (await _fixed()).dsh ?? await dsh?.runtime();
 
   @override
   Future<void> installDsh() async {
@@ -183,6 +229,12 @@ final class HostSettingsService implements NextHostSettings, NextHostDeviceSetti
   Future<void> _writes = Future.value();
   String? _checkProblem;
   StreamSubscription<void>? _meshEvents;
+  StreamSubscription<FileSystemEvent>? _fixedEvents;
+  Timer? _fixedDebounce;
+  Future<AgentRuntimeFixed>? _fixedLoad;
+  AgentRuntimeFixed? _fixedValue;
+  Object? _fixedError;
+  StackTrace? _fixedStack;
   @override
   Stream<void> get changes => _changes.stream;
   void notify() {
@@ -192,7 +244,10 @@ final class HostSettingsService implements NextHostSettings, NextHostDeviceSetti
   Future<T> _write<T>(Future<T> Function() operation) {
     final next = _writes.then((_) => operation());
     _writes = next.then<void>((_) {}, onError: (Object _, StackTrace __) {});
-    return next;
+    return next.then<T>((value) {
+      unawaited(refreshFixedRuntime());
+      return value;
+    });
   }
 
   Future<JsonMap> _read(String name) async {
@@ -275,8 +330,9 @@ final class HostSettingsService implements NextHostSettings, NextHostDeviceSetti
                 : runtime == AgentRuntimeKind.codex && api == UiModelApi.chat
                     ? 'Codex 只能用 Responses 接口'
                     : null;
+    final fixed = await _fixed();
     final environment = runtime == AgentRuntimeKind.dsh &&
-            _fixed().dsh == null &&
+            fixed.dsh == null &&
             dsh != null
         ? switch ((await dsh!.state()).status) {
             UiDshStatus.ready => null,
@@ -684,6 +740,8 @@ final class HostSettingsService implements NextHostSettings, NextHostDeviceSetti
     await dsh?.cancel();
     await _writes;
     await _meshEvents?.cancel();
+    await _fixedEvents?.cancel();
+    _fixedDebounce?.cancel();
     await _changes.close();
   }
 }

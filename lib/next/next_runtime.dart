@@ -681,8 +681,9 @@ final class NextRuntime extends ChangeNotifier {
                       ? 'DIRECT'
                       : AppHttpProxy.findProxy(
                           uri, SystemProxyService.instance.findProxy)),
-        fixedRuntime: () =>
-            AgentRuntimeFixed.read(Platform.environment, labRoot: labRoot),
+        fixedRuntime: () => AgentRuntimeFixed.readAsync(
+            Platform.environment, labRoot: labRoot),
+        fixedRuntimeDirectory: labRoot,
         // A lab profile prepared for Codex keeps using it until told otherwise.
         defaultRuntime: labRoot != null &&
                 File('${labRoot.path}/codex-home/config.toml').existsSync()
@@ -849,7 +850,7 @@ final class NextRuntime extends ChangeNotifier {
     final labRoot = LabProfile.active ? Directory(LabProfile.root) : null;
     DshRuntime? dsh;
     try {
-      AgentRuntimeFixed.read(Platform.environment, labRoot: labRoot);
+      await _hostSettings!.validateFixedRuntime();
       if (await _hostSettings!.effectiveRuntime() == AgentRuntimeKind.dsh) {
         dsh = await _hostSettings!.dshLaunchRuntime();
         if (dsh == null) {
