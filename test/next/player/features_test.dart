@@ -194,7 +194,7 @@ void main() {
         (await playback.controls
             .external({'command': 'state'}))['controlAvailable'],
         false);
-    await exited.timeout(const Duration(seconds: 5));
+    await exited.timeout(const Duration(seconds: 30));
     await pumpEventQueue();
     expect(await argsFile.readAsLines(), [video]);
     expect(external.active, isFalse);

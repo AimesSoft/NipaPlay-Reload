@@ -89,8 +89,9 @@ final class LibraryProjection {
       final merged = {..._progress};
       for (final entry in observations.entries) {
         final old = merged[entry.key];
-        if (old == null || _newer(entry.value, old))
+        if (old == null || _newer(entry.value, old)) {
           merged[entry.key] = entry.value;
+        }
       }
       await _save('mesh:progress', merged);
       _progress = merged;
@@ -125,8 +126,9 @@ final class LibraryProjection {
     while (next < records.length && size < 262144) {
       final record = records[next];
       size += utf8.encode(jsonEncode(record)).length;
-      if (size > 524288)
+      if (size > 524288) {
         throw const FormatException('Catalogue record too large.');
+      }
       page.add(record);
       next++;
     }
@@ -157,8 +159,9 @@ final class LibraryProjection {
       final asked = entry['episodeId'] as String;
       final id = _aliases[asked] ?? asked;
       final keys = _episodeKeys[id];
-      if (keys == null)
+      if (keys == null) {
         throw const Failure(FailureCode.notFound, 'Unknown merged episode.');
+      }
       final value = <String, Object?>{
         'progress': fraction,
         'at': at,
@@ -321,8 +324,9 @@ final class LibraryProjection {
           files: files, episodes: episodes, reads: reads))!);
       work.remove('next');
       final art = work['artwork'] as JsonMap;
-      for (final kind in ['poster', 'backdrop', 'logo'])
+      for (final kind in ['poster', 'backdrop', 'logo']) {
         art[kind] = await _asset(art[kind] as String?);
+      }
       if (!_added.containsKey(id)) {
         final observed = await db.rawQuery(
             'WITH RECURSIVE children(id) AS (SELECT ? UNION ALL SELECT e.id FROM media_entities e JOIN children c ON e.parent_id=c.id) SELECT MIN(created_at) AS added FROM media_bindings WHERE entity_id IN (SELECT id FROM children)',
@@ -790,14 +794,16 @@ final class LibraryProjection {
         final attrs = member['attributes'] as Map;
         final fields = (member['metadata'] as Map)['fields'] as Map;
         final type = fields['type'] ?? attrs['type'] ?? attrs['workType'];
-        if (const {'anime', 'series', 'movie'}.contains(type))
+        if (const {'anime', 'series', 'movie'}.contains(type)) {
           types.add(type as String);
+        }
         for (final key in (member['keys'] as List).cast<String>()) {
           final identity = jsonDecode(key) as List;
           if (identity[1] == 'movie') types.add('movie');
           if (identity[1] == 'tv') types.add('series');
-          if (identity[0] == 'dandanplay' || identity[0] == 'bangumi')
+          if (identity[0] == 'dandanplay' || identity[0] == 'bangumi') {
             types.add('anime');
+          }
         }
       }
       indexRows.add({

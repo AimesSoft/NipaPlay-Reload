@@ -154,14 +154,17 @@ final class EpisodeHeat {
       for (final track in await tracks(id, reads: reads)) {
         final start = track['start'] as int, end = track['end'] as int?;
         if (!seenTracks.add(
-            jsonEncode([track['cache_key'], start, end, track['offset_ms']])))
+            jsonEncode([track['cache_key'], start, end, track['offset_ms']]))) {
           continue;
+        }
         for (final entry in await store.entries(track['cache_key'] as String)) {
           final time = entry.sourceTimeMs + (track['offset_ms'] as int) - start;
           if (time < 0 ||
               time >= openingWindow.inMilliseconds ||
               end != null && time >= end - start ||
-              duration != null && time >= duration) continue;
+              duration != null && time >= duration) {
+            continue;
+          }
           final text = entry.text.replaceAll(RegExp(r'\s+'), ' ').trim();
           if (text.runes.length < 2 ||
               text.runes.length > 18 ||
@@ -169,13 +172,16 @@ final class EpisodeHeat {
                       caseSensitive: false)
                   .hasMatch(text) ||
               RegExp(r'(.)\1{3,}', unicode: true).hasMatch(text) ||
-              RegExp(r'[\x00-\x1f\x7f]').hasMatch(text)) continue;
+              RegExp(r'[\x00-\x1f\x7f]').hasMatch(text)) {
+            continue;
+          }
           final normalized = text
               .replaceAll(RegExp(r'[^\p{L}\p{N}]', unicode: true), '')
               .toLowerCase();
           if (normalized.runes.length < 2 ||
-              RegExp(r'^(.{1,3})\1{2,}$', unicode: true).hasMatch(normalized))
+              RegExp(r'^(.{1,3})\1{2,}$', unicode: true).hasMatch(normalized)) {
             continue;
+          }
           candidates.add((text: text, time: time));
         }
       }

@@ -187,8 +187,9 @@ final class UiDataService implements NextUiData, NextNowPlaying {
 
   @override
   Future<UiWork?> work(String workId) async {
-    if (workId.startsWith('source-work:'))
+    if (workId.startsWith('source-work:')) {
       return libraryData!.sourceWork(workId);
+    }
     if (meshLibrary != null) return meshLibrary!.work(workId);
     return localWork(workId);
   }
@@ -259,10 +260,12 @@ final class UiDataService implements NextUiData, NextNowPlaying {
 
   @override
   Future<List<UiEpisode>> episodes(String workId, {int? season}) async {
-    if (workId.startsWith('source-work:'))
+    if (workId.startsWith('source-work:')) {
       return libraryData!.sourceEpisodes(workId, season: season);
-    if (meshLibrary != null)
+    }
+    if (meshLibrary != null) {
       return meshLibrary!.episodes(workId, season: season);
+    }
     return localEpisodes(workId, season: season);
   }
 
@@ -522,9 +525,10 @@ final class UiDataService implements NextUiData, NextNowPlaying {
         final ep = (await episodes(work.workId))
             .where((e) => (e.progress ?? 0) > 0 && (e.progress ?? 0) < 1)
             .firstOrNull;
-        if (ep != null && seen.add(work.workId))
+        if (ep != null && seen.add(work.workId)) {
           continuing
               .add(UiShelfItem(work, episode: ep, caption: _caption(work, ep)));
+        }
       }
     }
     final byLocator =
@@ -610,12 +614,13 @@ final class UiDataService implements NextUiData, NextNowPlaying {
       airing.add(
           UiShelfItem(work, episode: ep, caption: update['caption'] as String));
     }
-    if (airing.isNotEmpty)
+    if (airing.isNotEmpty) {
       shelves.add(UiShelf(
           id: 'airing',
           title: '今天更新',
           kind: UiShelfKind.airing,
           items: airing));
+    }
     UiHero? hero;
     for (final row in await db.query('ui_shelves', orderBy: 'rowid')) {
       final shelf = decodeMediaJson(row['payload']);
@@ -1020,8 +1025,9 @@ final class UiDataService implements NextUiData, NextNowPlaying {
       if (parent != null &&
           (kind != 'episode' && await work(id) != null ||
               kind != 'work' &&
-                  (await episodes(parent)).any((e) => e.episodeId == id)))
+                  (await episodes(parent)).any((e) => e.episodeId == id))) {
         return;
+      }
       throw const Failure(FailureCode.invalidInput,
           'Unknown source work or episode reference.');
     }
@@ -1030,7 +1036,9 @@ final class UiDataService implements NextUiData, NextNowPlaying {
       if (parent != null) {
         if (kind != 'episode' && await work(id) != null) return;
         if (kind != 'work' &&
-            (await episodes(parent)).any((e) => e.episodeId == id)) return;
+            (await episodes(parent)).any((e) => e.episodeId == id)) {
+          return;
+        }
       }
     }
     final rows =

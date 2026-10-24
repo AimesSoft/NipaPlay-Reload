@@ -288,6 +288,27 @@ void main() {
     expect((await terminal).receipt!.verification, VerificationLevel.verified);
   });
 
+  test('task.list returns every task unless asked for a page', () async {
+    final harness = Harness([TaskCapability(engine)]);
+    for (var i = 0; i < 60; i++) {
+      await engine.submit(type: 'test', title: 'T$i');
+    }
+    Future<JsonMap> list(JsonMap input) async =>
+        ((await harness.invokeJson('task.list', input, Invocation(origin: 't'))
+                as Completed)
+            .value
+            .toJson());
+    final all = await list({});
+    expect(all['jobs'], hasLength(60));
+    expect(all['nextOffset'], isNull);
+    final first = await list({'limit': 25});
+    expect(first['jobs'], hasLength(25));
+    expect(first['nextOffset'], 25);
+    final last = await list({'limit': 25, 'offset': 50});
+    expect(last['jobs'], hasLength(10));
+    expect(last['nextOffset'], isNull);
+  });
+
   test('task actions are listed and invoked through the real MCP endpoint',
       () async {
     final harness = Harness([TaskCapability(engine)]);

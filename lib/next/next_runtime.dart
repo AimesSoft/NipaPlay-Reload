@@ -356,27 +356,30 @@ final class NextRuntime extends ChangeNotifier {
       UiCapability(
           media: () => core.media.service,
           resolveEntity: (id) async {
-            if (sourceEntityRef(id, 'work') != null)
+            if (sourceEntityRef(id, 'work') != null) {
               return {'workId': (await core.uiData.work(id))!.workId};
+            }
             final episode =
                 await core.libraryData.validatedSourceRef(id, 'episode');
-            if (episode != null)
+            if (episode != null) {
               return {
                 'sourcePlayback': await core.mediaSources.play(
                     episode[0], episode[1],
                     expectedServerId: episode.length == 3 ? episode[2] : null)
               };
+            }
             final merged = id.startsWith('mesh-')
                 ? await core.uiData.meshLibrary!.open(id)
                 : null;
             final source = merged?['sourceInfo'] as Map?;
-            if (source != null)
+            if (source != null) {
               return {
                 'sourcePlayback': await core.mediaSources.play(
                     source['sourceId'] as String, source['itemId'] as String,
                     expectedServerId: source['serverId'] as String?,
                     startPositionMs: merged!['resumeMs'] as int?)
               };
+            }
             return merged;
           },
           openPage: ClassicUiOpen().page,
@@ -671,8 +674,9 @@ final class NextRuntime extends ChangeNotifier {
     if (_disposed) return;
     if (kDebugMode && LabProfile.active) installDebugChat(() => chat);
     if (kDebugMode && LabProfile.active) installDebugHostSettings(hostSettings);
-    if (kDebugMode && LabProfile.active)
+    if (kDebugMode && LabProfile.active) {
       installDebugUiData(ServiceProvider.nextCore);
+    }
     if (kDebugMode && LabProfile.active) {
       _classic.installDebug();
       installDebugPlayerHost(() => playback.host);
@@ -1121,8 +1125,9 @@ final class NextRuntime extends ChangeNotifier {
     ServiceProvider.watchHistoryProvider
         .removeListener(ServiceProvider.nextCore.stateSources.changed);
     unawaited(_calendarChanges?.cancel());
-    if (identical(ClassicSettings.attached, _classicSettings))
+    if (identical(ClassicSettings.attached, _classicSettings)) {
       ClassicSettings.attached = null;
+    }
     _labs.removeListener(_queueEndpointUpdate);
     _preference.removeListener(_queueEndpointUpdate);
     _location?.removeListener(_queueEndpointUpdate);

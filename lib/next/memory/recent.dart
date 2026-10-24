@@ -41,7 +41,8 @@ Future<JsonMap> recentMemoryFacts(ConversationHistory host, List<JsonMap> jobs,
     }
     final thread =
         await host.readThread(row['id'] as String, withProcess: false);
-    // Read back from the end and stop after the six lines that will be kept.
+    // Read back from the end and stop after the six lines that will be kept
+    // and one more, which only tells that older ones exist.
     // The old code walked every turn of a long thread just to discard all but
     // its tail; this work must not grow with the conversation.
     final newestFirst = <JsonMap>[];
@@ -59,18 +60,18 @@ Future<JsonMap> recentMemoryFacts(ConversationHistory host, List<JsonMap> jobs,
             final part = content[partIndex];
             if (part['type'] == 'text') {
               newestFirst.add({'role': 'user', 'text': part['text']});
-              if (newestFirst.length == 6) break outer;
+              if (newestFirst.length == 7) break outer;
             }
           }
         } else if (item['type'] == 'agentMessage') {
           newestFirst.add({'role': 'assistant', 'text': item['text']});
-          if (newestFirst.length == 6) break outer;
+          if (newestFirst.length == 7) break outer;
         }
       }
     }
     if (newestFirst.isNotEmpty) {
-      messages.addAll(newestFirst.reversed);
-      olderMessagesOmitted = newestFirst.length == 6;
+      olderMessagesOmitted = newestFirst.length == 7;
+      messages.addAll(newestFirst.take(6).toList().reversed);
       source = row['id'] as String;
       break;
     }
@@ -148,8 +149,15 @@ Future<JsonMap> recentMemoryFacts(ConversationHistory host, List<JsonMap> jobs,
   ];
   final omitted = <String>[];
   final output = <String>[];
-  for (final (label, raw, limit) in sections) {
-    final runes = raw.runes.toList();
+  // Redacted whole, before anything is cut, so a secret never straddles the
+  // cut; the regexes run off the UI isolate.
+  final redacted = [
+    for (final (_, raw, _) in sections)
+      redact?.call(raw) ?? redactMemoryTextOffMain(raw)
+  ];
+  for (var i = 0; i < sections.length; i++) {
+    final (label, _, limit) = sections[i];
+    final runes = (await redacted[i]).runes.toList();
     final cut = runes.length > limit;
     final tail = label.startsWith('最近会话');
     final side = tail ? '开头' : '尾部';
@@ -166,8 +174,7 @@ Future<JsonMap> recentMemoryFacts(ConversationHistory host, List<JsonMap> jobs,
   if (sessions['nextCursor'] != null) {
     omitted.add('30 个会话之外的历史未扫描');
   }
-  final text = await (redact?.call(output.join('\n')) ??
-      redactHarnessTextOffMain(output.join('\n')));
+  final text = output.join('\n');
   assert(text.runes.length <= HarnessMemory.recentCharacters);
   return {
     'text': text,

@@ -196,6 +196,12 @@ final class TaskEngine {
       }
       _started = true;
     });
+    // Admitted in submission order, as when every job was listed at once, so
+    // a capacity limit lets the same ones start first.
+    jobs.sort((a, b) {
+      final byTime = a.createdAt.compareTo(b.createdAt);
+      return byTime != 0 ? byTime : a.jobId.compareTo(b.jobId);
+    });
     for (final job in jobs) {
       _schedule(job);
     }

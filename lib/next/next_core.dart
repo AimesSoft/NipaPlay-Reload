@@ -411,11 +411,13 @@ final class NextCore {
     _followupEvents = events.committed.stream.listen((_) => activityChanged());
     changeHistory.onChanged = (collection, id, facts) async {
       final domain = collection.split(':').first;
-      if (domain == 'subtitle')
+      if (domain == 'subtitle') {
         await hooks
             .emit('media.assets.changed', id, {'kind': 'subtitle', ...facts});
-      if (domain == 'source' || domain == 'source_sort')
+      }
+      if (domain == 'source' || domain == 'source_sort') {
         await hooks.emit('media.sources.state_changed', id, facts);
+      }
     };
     _networkEvents = NetworkObservations.changes.stream.listen((facts) {
       unawaited(
@@ -700,8 +702,9 @@ final class NextCore {
     await _followupEvents?.cancel();
     changeHistory.onChanged = null;
     changeHistory.onRecorded = null;
-    if (identical(BodyChanges.attached, changeHistory))
+    if (identical(BodyChanges.attached, changeHistory)) {
       BodyChanges.attached = null;
+    }
     await changeHistory.drain();
     await activityInvocations.close();
     await followups.close();

@@ -169,8 +169,9 @@ final class SettingsRegistry {
       }
       _entries[entry.key] = entry;
       for (final key in [entry.storageKey, ...entry.additionalStorageKeys]) {
-        if (isSettingDenied(key))
+        if (isSettingDenied(key)) {
           throw ArgumentError('Forbidden storage key: $key');
+        }
         _storage.putIfAbsent(key, () => []).add(entry);
       }
     }

@@ -171,9 +171,10 @@ final class MeshLibrary {
             while (next != null) {
               final page = await mesh.rpc(id, 'mesh/library/snapshot',
                   {'offset': next, 'version': first['version']});
-              if (page['version'] != first['version'])
+              if (page['version'] != first['version']) {
                 throw const Failure(
                     FailureCode.conflict, 'Library changed during pagination.');
+              }
               records.addAll((page['records'] as List).cast<JsonMap>());
               next = page['next'] as int?;
             }
@@ -200,7 +201,9 @@ final class MeshLibrary {
         }
       }
     } else {
-      for (final id in _peers.keys) _online[id] = false;
+      for (final id in _peers.keys) {
+        _online[id] = false;
+      }
     }
     await _compose();
     if (before != _changeStamp()) ui.notifyLibraryChanged();
@@ -224,9 +227,10 @@ final class MeshLibrary {
 
   Future<void> recordProgressBatch(List<JsonMap> entries) async {
     await prepareIndex();
-    if (entries.isEmpty)
+    if (entries.isEmpty) {
       throw const Failure(
           FailureCode.invalidInput, 'Supply at least one episode observation.');
+    }
     final update = await worker.call('progress', entries) as LibraryProgress;
     // Only touched works and their episodes change. No catalogue composition,
     // union-find, title indexing or full-map serialization runs on the UI.
@@ -340,8 +344,9 @@ final class MeshLibrary {
   }
 
   Future<JsonMap> request(String method, JsonMap input, String peer) async {
-    if (method.startsWith('mesh/library/files/'))
+    if (method.startsWith('mesh/library/files/')) {
       return files.request(method.split('/').last, input, peer);
+    }
     switch (method) {
       case 'mesh/library/snapshot':
         await _build();
@@ -360,8 +365,9 @@ final class MeshLibrary {
             offset < 0 ||
             length < 0 ||
             length > 1048576 ||
-            offset + length > stat.size)
+            offset + length > stat.size) {
           throw const FormatException('Invalid or stale byte range.');
+        }
         return {
           '_meshFile': {'path': path, 'offset': offset, 'length': length}
         };
@@ -380,19 +386,22 @@ final class MeshLibrary {
       final path = _playAssets[id] ?? _assets[id];
       if (path == null) await prepareIndex();
       final found = _playAssets[id] ?? _assets[id];
-      if (found == null)
+      if (found == null) {
         throw const Failure(FailureCode.notFound, 'Unknown library asset.');
+      }
       return found;
     }
-    if (input['fileId'] is! String)
+    if (input['fileId'] is! String) {
       throw const FormatException('fileId or assetId required.');
+    }
     final rows = await db.query('media_locations',
         where:
             "file_id=? AND owner_device_id=? AND source='local' AND available=1",
         whereArgs: [input['fileId'], ui.media.store.ownerDeviceId]);
-    if (rows.isEmpty)
+    if (rows.isEmpty) {
       throw const Failure(
           FailureCode.notFound, 'File is not in this device library.');
+    }
     return rows.first['locator'] as String;
   }
 
@@ -402,8 +411,9 @@ final class MeshLibrary {
     final episodeId = input['episodeId'] as String;
     final links = await db.query('media_file_episodes',
         where: 'file_id=? AND episode_id=?', whereArgs: [fileId, episodeId]);
-    if (links.isEmpty)
+    if (links.isEmpty) {
       throw const FormatException('Episode is not in this file.');
+    }
     final tracks = <JsonMap>[];
     final store = DanmakuStore(ui.media.store);
     await SidecarIndexer(store, () async {}).inspect(fileId, path);
@@ -412,7 +422,9 @@ final class MeshLibrary {
       for (final binding in await store.bindings(entityId)) {
         if (binding['status'] != 'accepted' ||
             binding['entity_revision'] != entity['revision'] ||
-            binding['cache_key'] == null) continue;
+            binding['cache_key'] == null) {
+          continue;
+        }
         final entries = await store.entries(binding['cache_key'] as String);
         final bytes =
             utf8.encode(jsonEncode([for (final e in entries) e.toJson()]));
@@ -434,9 +446,10 @@ final class MeshLibrary {
       if (t['origin'] != 'embedded' && t['available'] == true) {
         t['assetId'] =
             await _asset(t['playbackPath'] as String? ?? t['path'] as String);
-        if (p.extension(t['path'] as String).toLowerCase() == '.idx')
+        if (p.extension(t['path'] as String).toLowerCase() == '.idx') {
           t['pairAssetId'] =
               await _asset(p.setExtension(t['path'] as String, '.sub'));
+        }
       }
     }
     return {
@@ -467,9 +480,10 @@ final class MeshLibrary {
     final size = info['size'] as int;
     final temporary = File('${file.path}.tmp'), output = temporary.openWrite();
     try {
-      for (var offset = 0; offset < size; offset += 1048576)
+      for (var offset = 0; offset < size; offset += 1048576) {
         output.add(await _bytes(peer, source, info['tag'] as String, offset,
             math.min(size - offset, 1048576)));
+      }
       await output.close();
       await temporary.rename(file.path);
       return file.path;
@@ -488,8 +502,9 @@ final class MeshLibrary {
       for (final key in record['kind'] == 'work'
           ? ['poster', 'backdrop', 'logo']
           : ['still']) {
-        if (paths[key] case final String asset)
+        if (paths[key] case final String asset) {
           paths[key] = await cacheAsset(peer, asset);
+        }
       }
     }
   }
@@ -503,7 +518,7 @@ final class MeshLibrary {
       final rows = await db.rawQuery(
           'SELECT l.locator,l.file_id AS fileId,f.attributes FROM media_locations l JOIN media_file_episodes e ON e.file_id=l.file_id JOIN media_entities f ON f.id=l.file_id WHERE e.episode_id=? AND l.owner_device_id=? AND l.available=1 ORDER BY l.id',
           [_localTargets[target], ui.media.store.ownerDeviceId]);
-      if (rows.isNotEmpty)
+      if (rows.isNotEmpty) {
         return {
           'episodeId': target,
           'path': rows.first['locator'],
@@ -511,19 +526,23 @@ final class MeshLibrary {
           'sourceInfo': (jsonDecode(rows.first['attributes'] as String)
               as Map)['remoteSource']
         };
+      }
     }
-    if (candidates == null || candidates.isEmpty)
+    if (candidates == null || candidates.isEmpty) {
       throw const Failure(
           FailureCode.notFound, 'No recorded native file for episode.');
+    }
     final location = candidates.where((l) => l['online'] == true).firstOrNull;
-    if (location == null)
+    if (location == null) {
       throw const Failure(FailureCode.unavailable, 'Source device is offline.');
-    if (location['local'] == true)
+    }
+    if (location['local'] == true) {
       return {
         'episodeId': target,
         'path': await _source(location),
         ...location
       };
+    }
     final peer = location['deviceId'] as String;
     final result = <String, Object?>{
       ...location,
@@ -535,13 +554,15 @@ final class MeshLibrary {
   }
 
   Future<JsonMap> fileReadable(String peer, JsonMap source) async {
-    if (_closed)
+    if (_closed) {
       throw const Failure(FailureCode.unavailable, 'File proxy is closed.');
+    }
     if (peer == own) return {'path': await _source(source)};
     final info = await mesh.rpc(peer, 'mesh/library/file', source);
     await _ensureHttp();
-    if (_closed)
+    if (_closed) {
       throw const Failure(FailureCode.unavailable, 'File proxy is closed.');
+    }
     final random = math.Random.secure();
     final token = base64Url
         .encode(List.generate(32, (_) => random.nextInt(256)))
@@ -563,8 +584,9 @@ final class MeshLibrary {
       };
 
   Future<void> _ensureHttp() async {
-    if (_closed)
+    if (_closed) {
       throw const Failure(FailureCode.unavailable, 'File proxy is closed.');
+    }
     if (_http != null) return;
     await (_httpBinding ??=
         _bindHttp().whenComplete(() => _httpBinding = null));
@@ -665,9 +687,9 @@ final class MeshLibrary {
         await response.close();
         return;
       }
-      if (match[1]!.isEmpty)
+      if (match[1]!.isEmpty) {
         start = math.max(0, size - int.parse(match[2]!));
-      else {
+      } else {
         start = int.parse(match[1]!);
         if (match[2]!.isNotEmpty) end = math.min(end, int.parse(match[2]!));
       }

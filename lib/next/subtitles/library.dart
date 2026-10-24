@@ -62,8 +62,9 @@ final class SubtitleLibrary implements SubtitleOperations {
     enabled = value;
     if (value) {
       await reconcile();
-      if (_pending.isNotEmpty && _worker == null)
+      if (_pending.isNotEmpty && _worker == null) {
         _worker = _drain().whenComplete(() => _worker = null);
+      }
     }
   }
 

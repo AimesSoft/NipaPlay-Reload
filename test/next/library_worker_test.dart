@@ -129,6 +129,26 @@ void main() {
             .progress,
         .4);
   });
+  test('a worker that ends on its own is replaced by the next request',
+      () async {
+    await worker.build('one');
+    final snapshot = await worker.compose({}, {}, null);
+    final id = snapshot.aliases['e1']!;
+    // The worker serving after compose is killed like a crash would.
+    await worker.call('sources', (null, null, <String>[]));
+    worker.killWorkerForTest();
+    await Future<void>.delayed(const Duration(milliseconds: 300));
+    final update = await worker
+        .call('progress', [
+          {'episodeId': id, 'progress': 0.2, 'positionMs': 200, 'durationMs': 1000}
+        ])
+        .timeout(const Duration(seconds: 20)) as LibraryProgress;
+    expect(
+        update.episodes.values.single
+            .singleWhere((e) => e.episodeId == id)
+            .progress,
+        .2);
+  });
   test('invalid batch is atomic and closed workers reject new requests',
       () async {
     await worker.build('one');

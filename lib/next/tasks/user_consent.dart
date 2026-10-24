@@ -203,8 +203,9 @@ final class DiskDeletion implements JobExecutor {
     final read = await _execution.invokeJson('download.read', arguments,
         Invocation(origin: 'application:delete_preview'));
     if (read case Failed(:final failure)) throw failure;
-    if (read is! Completed)
+    if (read is! Completed) {
       throw StateError('Download read needs a completed manifest.');
+    }
     JsonMap manifest(JsonMap result) {
       final task = result['task'] as JsonMap?;
       return {
@@ -251,8 +252,9 @@ final class DiskDeletion implements JobExecutor {
     final read = await _execution.invokeJson('download.read', {'jobId': jobId},
         Invocation(origin: 'application:delete_preview'));
     if (read case Failed(:final failure)) throw failure;
-    if (read is! Completed)
+    if (read is! Completed) {
       throw StateError('Download read needs a completed manifest.');
+    }
     final result = read.value.toJson();
     final task = result['task'] as JsonMap?;
     final all = (task?['files'] as List? ?? []).cast<Map>();

@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:isolate';
 
+import 'package:flutter/foundation.dart' show visibleForTesting;
 import 'package:nipa_harness/nipa_harness.dart';
 import 'package:nipaplay/security/credential_vault.dart' show CredentialRef;
 import 'package:nipaplay/security/secret_redactor.dart';
@@ -40,7 +41,12 @@ Future<Object?> _request(SendPort target, String method, Object? input,
     final response = await Future.any([
       reply.first,
       if (exited != null)
-        exited.then<Object?>((_) => throw StateError('Library worker exited'))
+        // A worker that ends by Isolate.exit sends its reply first; the exit
+        // notice may still be handled before that reply is. Give it a turn.
+        exited.then<Object?>((_) async {
+          await Future<void>.delayed(const Duration(milliseconds: 50));
+          throw StateError('Library worker exited');
+        })
     ]);
     final (ok, value) = response as (bool, Object?);
     if (!ok) {
@@ -141,13 +147,27 @@ final class LibraryWorker {
     })();
   }
 
+  /// Ends the running worker the way a crash would, for tests of recovery.
+  @visibleForTesting
+  void killWorkerForTest() => _isolate?.kill(priority: Isolate.immediate);
+
+  /// A request that fails, instead of waiting for ever, if the worker ends.
+  Future<Object?> _ask(SendPort target, String method, Object? input) =>
+      _request(target, method, input, exited: _exited.future);
+
   Future<SendPort> _start() => _starting ??= (() async {
-        _exited = Completer<void>();
+        final done = _exited = Completer<void>();
         final ready = ReceivePort();
         final host = _host = ReceivePort();
         final exited = _exit = ReceivePort();
         exited.listen((_) {
-          if (!_exited.isCompleted) _exited.complete();
+          if (!done.isCompleted) done.complete();
+          // Ending on its own (compose forgets its worker first, close sets
+          // _closed first): the next request starts a new one and restores
+          // the projection, rather than waiting on a worker that is gone.
+          if (!_closed && identical(_exit, exited)) {
+            _forgetWorker(restore: true);
+          }
         });
         host.listen((message) => unawaited(_answer(message, _hostRequest)));
         try {
@@ -164,12 +184,20 @@ final class LibraryWorker {
               debugName: 'next-library');
           final result = await Future.any([
             ready.first,
-            _exited.future.then<Object?>(
+            done.future.then<Object?>(
                 (_) => throw StateError('Library worker exited during startup'))
           ]);
           if (result is Failure) throw result;
           if (result is String) throw StateError(result);
           return result as SendPort;
+        } catch (_) {
+          // A start that failed must not stay as the answer to every later
+          // request: the next one tries again.
+          if (identical(_exit, exited)) {
+            _isolate?.kill(priority: Isolate.immediate);
+            _forgetWorker(restore: _needsRestore);
+          }
+          rethrow;
         } finally {
           ready.close();
         }
@@ -219,14 +247,14 @@ final class LibraryWorker {
     await _syncSources(target);
     final stamp = buildStamp ?? _lastBuiltStamp;
     if (stamp != null) {
-      await _request(target, 'build', stamp);
+      await _ask(target, 'build', stamp);
       _runtimeBuiltStamp = stamp;
       _lastBuiltStamp = stamp;
     }
     final peers = _lastPeers;
     final online = _lastOnline;
     if (peers != null && online != null) {
-      await _request(target, 'restore', (peers, online, _lastAccount));
+      await _ask(target, 'restore', (peers, online, _lastAccount));
     }
     _syncedViews = null;
     _needsRestore = false;
@@ -236,7 +264,7 @@ final class LibraryWorker {
   Future<void> _syncSources(SendPort target) async {
     if (_sourceRevision == ui.sources.revision) return;
     final revision = ui.sources.revision;
-    await _request(target, 'sources', (
+    await _ask(target, 'sources', (
       ui.sources.history?.call(),
       ui.sources.continueWatching?.call(),
       ui.media.authorizedRoots().toList(),
@@ -249,7 +277,7 @@ final class LibraryWorker {
   Future<Object?> call(String method, [Object? input]) => _serial(() async {
         if (_closed) throw StateError('Library worker is closed');
         final target = await _worker();
-        return _request(target, method, input, exited: _exited.future);
+        return _ask(target, method, input);
       });
 
   Future<void> build(String stamp) => _serial(() async {
@@ -257,7 +285,7 @@ final class LibraryWorker {
         final target = await _worker(buildStamp: stamp);
         await _syncSources(target);
         if (_runtimeBuiltStamp != stamp) {
-          await _request(target, 'build', stamp);
+          await _ask(target, 'build', stamp);
           _runtimeBuiltStamp = stamp;
           _lastBuiltStamp = stamp;
         }
@@ -269,7 +297,7 @@ final class LibraryWorker {
         if (_closed) throw StateError('Library worker is closed');
         final target = await _worker();
         final result =
-            await _request(target, 'compose', (peers, online, account))
+            await _ask(target, 'compose', (peers, online, account))
                 as LibrarySnapshot;
         _lastPeers = Map.of(peers);
         _lastOnline = Map.of(online);
@@ -311,14 +339,14 @@ final class LibraryWorker {
   /// isolate budget in JIT builds. Keep one small worker alive for this rather
   /// than spawn one per turn or rebuild the catalogue worker after compose.
   Future<String> redactText(String value) async {
-    if (_closed) return redactHarnessTextOffMain(value);
+    if (_closed) return redactMemoryTextOffMain(value);
     try {
       final target = await _startRedactor();
       return await _request(
           target, 'redact', (value, SecretRedactor.remembered()),
           exited: _redactorExited.future) as String;
     } on Object {
-      return redactHarnessTextOffMain(value);
+      return redactMemoryTextOffMain(value);
     }
   }
 
@@ -345,7 +373,7 @@ final class LibraryWorker {
           view.readAll != null
         )
     ];
-    await _request(target, 'views', descriptors);
+    await _ask(target, 'views', descriptors);
     _syncedViews = current;
   }
 
@@ -356,7 +384,7 @@ final class LibraryWorker {
       final target = await _worker();
       await _syncSources(target);
       await _syncViews(target);
-      return await _request(target, 'query', input) as JsonMap;
+      return await _ask(target, 'query', input) as JsonMap;
     });
   }
 
@@ -365,7 +393,7 @@ final class LibraryWorker {
         try {
           if (_starting != null) {
             final target = await _worker();
-            await _request(target, 'close', null, exited: _exited.future);
+            await _ask(target, 'close', null);
           }
         } finally {
           _closed = true;
@@ -400,7 +428,7 @@ Future<void> _redactionEntry(SendPort ready) async {
           for (final MapEntry(key: secret, value: ref) in remembered.entries) {
             SecretRedactor.remember(ref, secret);
           }
-          return redactHarnessText(value);
+          return redactMemoryText(value);
         case 'close':
           return const _ExitWith(null);
         default:
@@ -489,6 +517,13 @@ Future<void> _serve((SendPort, SendPort, String, String, String) args) async {
       _Vault(host));
   ui.subtitles = _Subtitles(db);
   LibraryDataService(ui).register(state);
+  Future<void> releaseResources() async {
+    ui.artwork.close();
+    await sources.close();
+    await media.store.closeEvents();
+    await db.close();
+  }
+
   final projection = LibraryProjection(ui, owner);
   await projection.initialize();
   sources.canonicalEntityId =
@@ -533,7 +568,11 @@ Future<void> _serve((SendPort, SendPort, String, String, String) args) async {
         case 'compose':
           final (peers, online, account) =
               input as (Map<String, JsonMap>, Map<String, bool>, String?);
-          return _ExitWith(await projection.compose(peers, online, account));
+          final snapshot = await projection.compose(peers, online, account);
+          // The worker ends right after this reply; its database connection
+          // and clients go with it now, not whenever the heap is collected.
+          await releaseResources();
+          return _ExitWith(snapshot);
         case 'progress':
           return projection.progress(input as List<JsonMap>);
         case 'search':
@@ -609,10 +648,7 @@ Future<void> _serve((SendPort, SendPort, String, String, String) args) async {
           }
           return StateCapability(views).query(query);
         case 'close':
-          ui.artwork.close();
-          await sources.close();
-          await media.store.closeEvents();
-          await db.close();
+          await releaseResources();
           requests.close();
           return null;
         default:
