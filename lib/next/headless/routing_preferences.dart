@@ -1,3 +1,4 @@
+import '../../services/app_http_proxy.dart';
 import 'dart:convert';
 import 'dart:io';
 
@@ -22,7 +23,8 @@ final class SharedPreferences {
       'nipaplay_auto_region',
       'nipaplay_auto_region_at',
       'nipaplay_failover_server',
-      'nipaplay_failover_until'
+      'nipaplay_failover_until',
+      'player_http_proxy'
     };
     if (values.keys.any((key) => !allowed.contains(key))) {
       throw const FormatException(
@@ -41,6 +43,8 @@ final class SharedPreferences {
             'Gateway must be an origin/path without credentials.');
       }
     }
+    final proxy = (values['player_http_proxy'] as String? ?? '').trim();
+    AppHttpProxy.set(proxy);
     _instance = SharedPreferences._(file, values);
   }
 

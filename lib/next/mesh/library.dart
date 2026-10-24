@@ -80,7 +80,6 @@ final class MeshLibrary {
   final playback = <String, JsonMap>{};
   bool _closed = false;
   String? lastError;
-  DateTime _deviceRead = DateTime.fromMillisecondsSinceEpoch(0);
   Database get db => ui.db;
   String get own => mesh.identity?.deviceId ?? ui.media.store.ownerDeviceId;
 
@@ -149,10 +148,6 @@ final class MeshLibrary {
     final before = _changeStamp();
     await _build();
     if (mesh.accountId != null) {
-      if (DateTime.now().difference(_deviceRead).inSeconds >= 30) {
-        await mesh.refreshDevices();
-        _deviceRead = DateTime.now();
-      }
       for (final peer
           in mesh.cachedDevices.where((d) => d['deviceId'] != own)) {
         final id = peer['deviceId'] as String;
