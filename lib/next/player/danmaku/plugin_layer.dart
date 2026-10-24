@@ -1,7 +1,11 @@
 import 'dart:async';
 import 'dart:convert';
 
+import 'dart:io' show Platform;
+
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:webview_flutter/webview_flutter.dart';
 
 import 'package:nipaplay/plugins/danmaku/plugin_external_script_cache.dart';
@@ -174,7 +178,12 @@ class _NextPluginDanmakuLayerState extends State<NextPluginDanmakuLayer> {
       if (!mounted || generation != _generation) return;
       final controller = WebViewController();
       await controller.setJavaScriptMode(JavaScriptMode.unrestricted);
-      await controller.setBackgroundColor(Colors.transparent);
+      try {
+        await controller.setBackgroundColor(Colors.transparent);
+      } on UnimplementedError {
+        // macOS's WKWebView has no opaque property; the page itself is
+        // transparent (see PluginExternalScriptCache.prepareRendererPage).
+      }
       await controller.addJavaScriptChannel('NipaDanmakuHost',
           onMessageReceived: (message) => _fromPage(message, generation));
       await controller.setNavigationDelegate(NavigationDelegate(
@@ -230,10 +239,24 @@ class _NextPluginDanmakuLayerState extends State<NextPluginDanmakuLayer> {
     await _sendClock(force: true);
     if (!mounted || generation != _generation) return;
     _initialSent = true;
+    await _clearMacBackground();
     _p.danmaku.pluginRendererStatus = 'ready';
     _p.danmaku.pluginRendererError = null;
     _syncTimer();
     _maybeLoad();
+  }
+
+  /// macOS: the WKWebView draws a white background of its own; the page's CSS
+  /// cannot remove it (see WebViewTransparencyPlugin in MainFlutterWindow.swift).
+  Future<void> _clearMacBackground() async {
+    if (kIsWeb || !Platform.isMacOS) return;
+    try {
+      final n = await const MethodChannel('nipaplay/webview_transparency')
+          .invokeMethod<int>('clearBackgrounds');
+      debugPrint('[PluginDanmaku:${_renderer.selectionId}] web views cleared: $n');
+    } on MissingPluginException {
+      // A host without the channel (tests).
+    }
   }
 
   /// The window in list time the page should hold: the clock plus the offset
