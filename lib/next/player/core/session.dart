@@ -335,6 +335,11 @@ final class PlaybackSession {
   final ResolvedSource _source;
   ResolvedSource get source => _source;
   final SessionDeps _deps;
+
+  /// The kernel this session plays on now: the one it opened on, or the
+  /// one it was last swapped to.
+  late KernelId _kernelId = _deps.kernel;
+  KernelId get kernelId => _kernelId;
   final DateTime openedAt;
   final PlaybackClock clock;
 
@@ -438,6 +443,7 @@ final class PlaybackSession {
         await _checkOrRelease();
       }
       final next = _driver = await _deps.createDriver(kernel, _lease!);
+      _kernelId = kernel;
       _kernelEvents = next.events.listen(_kernel);
       next.surface.addListener(_surfaceChanged);
       await _checkOrRelease();

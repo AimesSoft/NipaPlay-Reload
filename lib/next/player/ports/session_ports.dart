@@ -335,7 +335,9 @@ final class SessionControls
     final paused = !old.transport.value.playIntent;
     // A source that played through the sources layer (a media server's
     // version and tracks, the episode list) is opened again through it, so
-    // that what was chosen and the episode context stay.
+    // that what was chosen and the episode context stay. It is the same
+    // thing again, on the kernel the failed session was on: changing kernel
+    // is reopen_with_kernel's or the setting's.
     final plan = _playback.sources.plan;
     final next = plan != null
         ? await _playback.sources.open(plan.item,
@@ -343,6 +345,7 @@ final class SessionControls
             paused: paused,
             origin: commandOrigin(),
             selection: plan.selection,
+            kernel: old.kernelId,
             initialLevels: levels)
         : await _playback.host.open(
             MediaRequest(
@@ -354,6 +357,7 @@ final class SessionControls
                 episodeId: request.episodeId,
                 start: start,
                 paused: paused),
+            kernel: old.kernelId,
             initialLevels: levels);
     if (!identical(next, _playback.session) || next.phase.value.done) {
       throw const Failure(FailureCode.conflict, 'Playback changed while retrying.');

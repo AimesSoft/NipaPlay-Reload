@@ -1,6 +1,9 @@
 import 'dart:async';
 import 'dart:io';
 
+import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:flutter/services.dart' show PlatformException;
+
 import 'package:nipa_harness/nipa_harness.dart';
 import 'package:video_player/video_player.dart';
 
@@ -17,6 +20,10 @@ import 'versions.dart';
 ///
 /// The controller's disposal is awaited: the instance is gone when
 /// [release] completes.
+/// Containers AVFoundation does not open; video_player on macOS and iOS
+/// plays what it plays.
+const _avFoundationCannot = {'mkv', 'webm', 'avi', 'flv', 'wmv', 'rmvb', 'ogv'};
+
 final class VideoPlayerDriver extends AdapterDriver implements StateNative {
   factory VideoPlayerDriver(KernelLease lease, KernelConfig config) {
     requireLease(lease, 'video_player');
@@ -106,7 +113,26 @@ final class VideoPlayerDriver extends AdapterDriver implements StateNative {
         : VideoPlayerController.file(File(uri != null && uri.scheme == 'file'
             ? uri.toFilePath()
             : source.uri));
-    await controller.initialize();
+    try {
+      await controller.initialize();
+    } catch (error) {
+      // AVFoundation says "cannot open" and no more; when the file is of a
+      // container it does not play, that is the reason.
+      final name = source.uri.split('?').first;
+      final dot = name.lastIndexOf('.');
+      final container = dot < 0 ? '' : name.substring(dot + 1).toLowerCase();
+      final unsupported = !kIsWeb &&
+          (Platform.isMacOS || Platform.isIOS) &&
+          _avFoundationCannot.contains(container);
+      final said = error is PlatformException
+          ? (error.message ?? error.code)
+          : error.toString();
+      throw KernelOpenFailure(
+          'media_open',
+          unsupported
+              ? 'video_player cannot play the .$container container on this platform (AVFoundation does not open it): $said'
+              : 'video_player could not open the media: $said');
+    }
     queue.live();
     await controller.setVolume(_volume);
     await controller.setPlaybackSpeed(_speed);

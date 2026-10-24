@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart' show MaterialApp;
+import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:nipaplay/constants/settings_keys.dart';
@@ -11,7 +12,7 @@ import 'package:nipaplay/next/ui/data/search.dart';
 import 'package:nipaplay/next/ui/data/services.dart';
 import 'package:nipaplay/next/ui/data/ui_actions.dart';
 import 'package:nipaplay/next/ui/dev/fake_settings.dart';
-import 'package:nipaplay/next/player/classic/classic_backed_playback.dart';
+import 'package:nipaplay/next/player/next_playback.dart';
 import 'package:nipaplay/next/ui/player/playback.dart';
 import 'package:nipaplay/next/ui/shell/next_ui_gate.dart';
 import 'package:nipaplay/next/ui/shell/next_ui_preference.dart';
@@ -20,6 +21,7 @@ import 'package:nipaplay/next/ui_data/ui_data.dart';
 import 'package:nipaplay/player_abstraction/media_kit_player_adapter.dart';
 import 'package:nipaplay/player_abstraction/player_abstraction.dart';
 import 'package:nipaplay/providers/labs_settings_provider.dart';
+import 'package:nipaplay/services/danmaku_density_analyzer.dart';
 import 'package:nipaplay/services/intro_skip/skip_segment.dart';
 import 'package:nipaplay/utils/video_player_state.dart';
 import 'package:provider/provider.dart';
@@ -52,29 +54,6 @@ Future<PlayerRig> pumpPlayer(
       size: size,
       pixelRatio: pixelRatio);
   return PlayerRig(state, rig);
-}
-
-/// The gate with Next on over Classic's own [VideoPlayerState] (its
-/// settings, its setters, a player kernel that records what it is told):
-/// what Next's controls set is what Classic keeps.
-Future<ClassicRig> pumpClassicPlayer(
-  WidgetTester tester, {
-  ClassicPlayerState? state,
-  Widget classic = const Text('classic'),
-  Size size = const Size(1440, 900),
-  double pixelRatio = 1,
-  ClassicPlayback Function(ClassicPlayerState state)? playback,
-}) async {
-  state ??= ClassicPlayerState();
-  final rig = (playback ?? ClassicPlayback.new)(state);
-  await _pumpGate(tester,
-      next: true,
-      state: state,
-      playback: rig,
-      classic: classic,
-      size: size,
-      pixelRatio: pixelRatio);
-  return ClassicRig(state, rig);
 }
 
 Future<void> _pumpGate(
@@ -125,13 +104,6 @@ final class PlayerRig {
   PlayerRig(this.state, this.playback);
   final FakePlayerState state;
   final FakePlayback playback;
-}
-
-/// Classic's own state, and Next's playback over it.
-final class ClassicRig {
-  ClassicRig(this.state, this.playback);
-  final ClassicPlayerState state;
-  final ClassicPlayback playback;
 }
 
 /// The player kernel under Classic's state: the tracks of a file, and what
@@ -191,74 +163,6 @@ class ClassicKernel extends Fake implements MediaKitPlayerAdapter {
   void dispose() {}
   @override
   Future<void> disposeAsync() async {}
-}
-
-/// Classic's [VideoPlayerState] itself, as it is with a video open: only
-/// what the loading would have set (the status, the times, the names, the
-/// danmaku) is given.
-class ClassicPlayerState extends VideoPlayerState {
-  ClassicPlayerState([ClassicKernel? kernel])
-      : this._(kernel ?? ClassicKernel());
-  ClassicPlayerState._(this.kernel)
-      : super.forSettings(Player.withDelegate(kernel));
-  final ClassicKernel kernel;
-
-  PlayerStatus playing = PlayerStatus.playing;
-  Duration at = const Duration(minutes: 14, seconds: 32);
-  List<Map<String, dynamic>> comments = const [];
-
-  @override
-  PlayerStatus get status => playing;
-  @override
-  bool get hasVideo => const {
-        PlayerStatus.ready,
-        PlayerStatus.playing,
-        PlayerStatus.paused
-      }.contains(playing);
-  @override
-  bool get showControls => true;
-  @override
-  Duration get duration => const Duration(minutes: 24);
-  @override
-  Duration get position => at;
-  @override
-  String? get animeTitle => '葬送的芙莉莲';
-  @override
-  String? get episodeTitle => '第5话 死者的幻影';
-  @override
-  List<Map<String, dynamic>> get danmakuList => comments;
-}
-
-/// Next's own playback over Classic's state. Only what would leave the
-/// test (the hotkeys' timers, the window, the disk, the system) is
-/// recorded instead.
-class ClassicPlayback extends ClassicBackedPlayback {
-  ClassicPlayback(ClassicPlayerState super.state);
-  int holds = 0, screenshots = 0, pictureInPictures = 0;
-  final opened = <String>[];
-
-  /// What a screenshot gives: its file, or null when it could not be taken.
-  String? still = '/tmp/nipa-next/player-more-still.png';
-
-  @override
-  void holdHotkeys() => holds++;
-  @override
-  void releaseHotkeys() => holds--;
-  @override
-  void hover(bool over) {}
-  @override
-  Future<String?> screenshot() async {
-    screenshots++;
-    return still;
-  }
-
-  @override
-  Future<void> open(String path) async => opened.add(path);
-  @override
-  bool get canPictureInPicture => true;
-  @override
-  Future<void> pictureInPicture(BuildContext context) async =>
-      pictureInPictures++;
 }
 
 /// Classic's player state, as much of it as the layer reads.
@@ -349,9 +253,211 @@ class FakePlayerState extends ChangeNotifier implements VideoPlayerState {
   dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
 }
 
-/// The layer's asks of the player, recorded.
-class FakePlayback extends ClassicBackedPlayback {
-  FakePlayback(FakePlayerState super.state);
+/// The layer's asks of the player, recorded. A playback over
+/// [FakePlayerState] that answers what the controls read and records what
+/// they ask; anything else the controls never touch throws.
+class FakePlayback extends Fake implements NextPlayback {
+  FakePlayback(this.state) {
+    state.addListener(_sync);
+    _sync();
+  }
+
+  final FakePlayerState state;
+  final _media = ValueNotifier(PlaybackMedia.none);
+  final _transport = ValueNotifier(PlaybackTransport.idle);
+  final _danmaku = ValueNotifier(0);
+
+  static PlaybackPhase _phase(PlayerStatus status) => switch (status) {
+        PlayerStatus.idle => PlaybackPhase.idle,
+        PlayerStatus.loading || PlayerStatus.recognizing =>
+          PlaybackPhase.opening,
+        PlayerStatus.ready => PlaybackPhase.ready,
+        PlayerStatus.playing => PlaybackPhase.playing,
+        PlayerStatus.paused => PlaybackPhase.paused,
+        PlayerStatus.error => PlaybackPhase.failed,
+        PlayerStatus.disposed => PlaybackPhase.closed,
+      };
+
+  void _sync() {
+    _media.value = PlaybackMedia(
+      path: state.currentVideoPath,
+      generation: state.playbackGeneration,
+      requestGeneration: state.playbackRequestGeneration,
+      request: state.lastPlaybackRequest,
+      durationKnown: state.duration > Duration.zero,
+      kernel: state.player,
+    );
+    _transport.value = PlaybackTransport(
+      status: state.status.name,
+      phase: _phase(state.status),
+      hasVideo: state.hasVideo,
+      systemDrawn: state.player.prefersPlatformVideoSurface,
+    );
+    _danmaku.value = state.danmakuListVersion;
+  }
+
+  @override
+  ValueListenable<PlaybackMedia> get media => _media;
+  @override
+  ValueListenable<PlaybackTransport> get transport => _transport;
+  @override
+  ValueListenable<int> get danmakuVersion => _danmaku;
+  @override
+  Listenable get frame => state;
+  @override
+  bool get hasVideo => state.hasVideo;
+  @override
+  bool get showControls => state.showControls;
+  @override
+  String? get path => state.currentVideoPath;
+  @override
+  String? get workTitle => state.animeTitle;
+  @override
+  String? get episodeTitle => state.episodeTitle;
+  @override
+  Duration get position => state.position;
+  @override
+  Duration get duration => state.duration;
+  @override
+  Duration get buffered => Duration(milliseconds: state.bufferedPosition);
+  @override
+  bool get danmakuVisible => state.danmakuVisible;
+  @override
+  bool get fullscreen => state.isFullscreen;
+  @override
+  double get volume => state.currentSystemVolume;
+  @override
+  bool get canPlayNext => state.canPlayNextEpisode;
+  @override
+  bool get playIntent => state.status == PlayerStatus.playing;
+  @override
+  bool get offersDanmaku => true;
+  @override
+  bool get offersSubtitles => true;
+  @override
+  bool get offersScreenshot => true;
+  @override
+  double get rate => state.playbackRate;
+  @override
+  Future<void> setRate(double rate) async {
+    state.playbackRate = rate;
+    state.notify();
+  }
+
+  @override
+  Future<void> setVolume(double value) => state.setPlaybackVolume(value);
+
+  @override
+  List<double>? heat() {
+    final seconds = state.duration.inSeconds;
+    final list = state.danmakuList;
+    if (list.isEmpty || seconds <= 0) return null;
+    final points = DanmakuDensityAnalyzer.analyzeDensity(
+      danmakuList: list,
+      videoDurationSeconds: seconds,
+      segmentCount: 120,
+    );
+    var peak = 0;
+    for (final point in points) {
+      if (point.count > peak) peak = point.count;
+    }
+    if (peak == 0) return null;
+    return [for (final point in points) point.count / peak];
+  }
+
+  @override
+  Future<bool> addSubtitleFile() async => false;
+  @override
+  List<AudioChoice> audio() => const [];
+  @override
+  Future<void> chooseAudio(AudioChoice choice) async {}
+  @override
+  bool get canFit => state.supportsVideoAspectModes;
+  @override
+  VideoAspectMode get fit => state.videoAspectMode;
+  @override
+  Future<void> setFit(VideoAspectMode mode) => state.setVideoAspectMode(mode);
+  @override
+  PlayerDial get danmakuOpacity =>
+      PlayerDial(state.danmakuOpacity, 0, 1, 0.01, DialUnit.percent);
+  @override
+  Future<void> setDanmakuOpacity(double value) =>
+      state.setDanmakuOpacity(value);
+  @override
+  PlayerDial get danmakuSize => PlayerDial(
+      state.danmakuFontSize <= 0
+          ? state.actualDanmakuFontSize
+          : state.danmakuFontSize,
+      12,
+      60,
+      1,
+      DialUnit.points);
+  @override
+  Future<void> setDanmakuSize(double value, {bool done = false}) =>
+      state.setDanmakuFontSize(value, commit: done);
+  @override
+  double get danmakuArea {
+    final area = state.danmakuDisplayArea;
+    return NextPlayback.danmakuAreas
+        .reduce((a, b) => (area - a).abs() <= (area - b).abs() ? a : b);
+  }
+
+  @override
+  Future<void> setDanmakuArea(double area) => state.setDanmakuDisplayArea(area);
+  @override
+  bool blocked(DanmakuLane lane) => switch (lane) {
+        DanmakuLane.top => state.blockTopDanmaku,
+        DanmakuLane.bottom => state.blockBottomDanmaku,
+        DanmakuLane.scroll => state.blockScrollDanmaku,
+      };
+  @override
+  Future<void> block(DanmakuLane lane, bool on) => switch (lane) {
+        DanmakuLane.top => state.setBlockTopDanmaku(on),
+        DanmakuLane.bottom => state.setBlockBottomDanmaku(on),
+        DanmakuLane.scroll => state.setBlockScrollDanmaku(on),
+      };
+  @override
+  PlayerDial get danmakuOffset =>
+      PlayerDial(state.manualDanmakuOffset, -600, 600, 0.5, DialUnit.seconds);
+  @override
+  void setDanmakuOffset(double seconds) =>
+      state.setManualDanmakuOffset(seconds);
+  @override
+  bool canDelaySubtitles(SubtitleChoice? on) => true;
+  @override
+  PlayerDial subtitleDelay(SubtitleChoice? on) {
+    final limit = state.subtitleDelayCustomLimitSeconds;
+    return PlayerDial(state.subtitleDelaySeconds, -limit, limit,
+        VideoPlayerState.subtitleDelayStep, DialUnit.seconds);
+  }
+
+  @override
+  bool canScaleSubtitles(SubtitleChoice? on) => true;
+  @override
+  PlayerDial subtitleScale(SubtitleChoice? on) => PlayerDial(
+      state.subtitleScale,
+      VideoPlayerState.minSubtitleScale,
+      VideoPlayerState.maxSubtitleScale,
+      0.05,
+      DialUnit.percent);
+
+  int screenshots = 0, pictureInPictures = 0;
+  final opened = <String>[];
+  String? still = '/tmp/nipa-next/player-more-still.png';
+  @override
+  Future<String?> screenshot() async {
+    screenshots++;
+    return still;
+  }
+
+  @override
+  Future<void> open(String path) async => opened.add(path);
+  @override
+  bool get canPictureInPicture => true;
+  @override
+  Future<void> pictureInPicture(BuildContext context) async =>
+      pictureInPictures++;
+
   int left = 0, holds = 0;
   final chosen = <SubtitleChoice>[];
   final played = <EpisodeChoice>[];
@@ -359,7 +465,7 @@ class FakePlayback extends ClassicBackedPlayback {
   @override
   Future<void> leave() async {
     left++;
-    final s = state as FakePlayerState;
+    final s = state;
     s.status = PlayerStatus.idle;
     s.notify();
   }
@@ -414,7 +520,7 @@ class FakePlayback extends ClassicBackedPlayback {
   @override
   Future<void> play(EpisodeChoice episode) async => played.add(episode);
 
-  FakePlayerState get _s => state as FakePlayerState;
+  FakePlayerState get _s => state;
 
   @override
   void togglePlay() {

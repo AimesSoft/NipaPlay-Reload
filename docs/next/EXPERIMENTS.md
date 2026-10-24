@@ -570,3 +570,21 @@ MDK 的事实（实测）：
 - 意外：video_player 在 macOS 打不开 MKV（用 MP4 重封装）；它只在播放时才绘制，暂停画面要先静默播放一下；MDK 冷启动挂外挂 ASS 会崩（P2 后续在打开后挂文件，K 的互换也按此做）。
 
 限制：Erika 与 MDK 在暂停后的 seek 画面上不绘制字幕；Erika 的版本只能读锁文件；重试用当前设置的内核；Windows 的 media_kit_video 释放顺序修复没有编译验证。
+
+## 2026-10-24 · player-core K2：内核线收尾
+
+假设：K 留下的五个缺口（Erika 偶发 play 失败、暂停 seek 不画字幕、重试用错内核、video_player 打不开 MKV 不说原因、Classic 适配层过厚）都能在新层内收口，不留过渡。
+
+做了什么：
+- Erika 驱动记住“已被 Erika 接受、Playing 报告还没到”的 play（`_playTaken`）。根因是换内核的恢复循环最多 3 次 `setPaused`，第一次 play 成功后 Erika 的 Playing 事件还没到 Dart，`observed` 仍是暂停，第二次 play 被 Erika 当作 Playing→Playing 拒绝（ErikaStatus 3）；驱动凭事件里的状态判断“可以 play”，于是原样抛出。现在这种拒绝视为已完成。
+- Erika 本身：`~/.nipa-next/erika-wt/paused-frame`（分支 feat/paused-frame-export，基于 230666b，含 2451070 暂停时送出字幕、读回 seek 关键帧跳过的那条字幕，和 4f99a2f 让 erika_play 的追踪写出失败原因）。MDK 暂停 seek 不画字幕的一半由 P2 的挂载顺序一并解决，实测与 Erika 都画。
+- 重试用失败会话的内核；video_player 打开失败如实写“容器不受支持”；`lib/next/player/classic/` 只剩 `classic_boundary.dart`（租约另一端、切换时关 Classic 会话）和 `debug_local_operations.dart`。
+
+观察（同一个最终构建 app-r8，数据在 ~/.nipa-next/player-core-k-runs/r3）：
+- F 脚本四个内核各一遍全部通过（video_player 用 MP4），无 main isolate blocked。
+- kernel_lab 缩短版：play 每内核 3 次、swap（Sintel 外挂 SRT 12 次、第 12 集 ASS 30 次）、setting、facts、rapid（Erika、mpv 各 25 次）全部 0 失败；另有第 12 集 100 次互换 0 失败。
+- 暂停拖动：Erika、MDK、mpv 每个片源每个时刻“有字幕/无字幕”的窗口画面都有差异（0.12 到 0.95），截图里字幕与画面同时出现。
+- 弹幕、插件渲染器（mpv、MDK、video_player 叠在视频上，Erika 用原生弹幕，插件设置按设计对 Erika 不开放）、内封 ASS、外挂 SRT、跳过区间（130 s 到 171 s）四个内核都过。
+- video_player 开 MKV：状态 error，message 为 “video_player cannot play the .mkv container on this platform (AVFoundation does not open it)…”，retryable，recoveryAction playback.open。
+
+限制：偶发失败原本约十次一遇，修复后 220 次互换没有再出现；因修复前同样的 120 次也没有失败，修复的证据主要是对竞态的推理，不是失败率的对比。

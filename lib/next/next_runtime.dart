@@ -3,7 +3,7 @@ import 'dart:io';
 import 'followups/service.dart';
 import 'platform/background_activity.dart';
 import 'platform/loop_lag.dart';
-import 'player/classic/classic_backed_playback.dart';
+import 'player/classic/classic_boundary.dart';
 import 'player/core/arbiter.dart';
 import 'player/core/host.dart';
 import 'player/core/session.dart' show PlayerLevels;
@@ -191,7 +191,7 @@ final class NextRuntime extends ChangeNotifier {
     final settings = context.read<SettingsProvider>();
     // Classic's player stays as the lease's other side, and for the lab's
     // observations; Next plays in its own layer (D3, D5).
-    final classic = ClassicBackedPlayback.of(context);
+    final classic = ClassicBoundary.of(context);
     classic.registerEvictor(KernelArbiter.instance);
     final host = NextPlayerHost(
       createDriver: (kernel, lease) async =>
@@ -383,7 +383,7 @@ final class NextRuntime extends ChangeNotifier {
   final SessionPlayback playback;
 
   /// Classic's player: the lease's other side, and the lab's observations.
-  final ClassicBackedPlayback _classic;
+  final ClassicBoundary _classic;
   StreamSubscription<JsonMap>? _settingEvents;
 
   /// The shared levels a session opens with (D3): the desktop player's

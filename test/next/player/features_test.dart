@@ -110,6 +110,27 @@ void main() {
     expect(playback.position, Duration.zero);
   });
 
+  test('retry is the same again: on the kernel the session was on, not the setting',
+      () async {
+    final rig = FakeHost(
+        supported: {KernelId.mdk, KernelId.erika},
+        driver: (kernel, lease) => _FrameDriver(lease, kernel: kernel));
+    final playback = SessionPlayback(rig.host);
+    addTearDown(() async {
+      await playback.close(reason: 'test');
+      await playback.dispose();
+    });
+    await playback.openItem(PlayableItem(videoPath: video));
+    final first = playback.session!;
+    expect(first.kernelId, KernelId.mdk);
+    await first.swapKernel(KernelId.erika, origin: 'test');
+    expect(first.kernelId, KernelId.erika);
+    await playback.inspection.inspect('playback.retry', {'sessionId': first.id});
+    expect(playback.session!.id, isNot(first.id));
+    expect(playback.session!.kernelId, KernelId.erika);
+    expect(rig.drivers.last.kernel, KernelId.erika);
+  });
+
   test('remote bridge pauses and seeks Next, and enforces receiver permission',
       () async {
     await playback.openItem(PlayableItem(videoPath: video),
@@ -398,7 +419,7 @@ void main() {
 }
 
 class _FrameDriver extends FakeDriver implements KernelFrameFeatures {
-  _FrameDriver(super.lease) : super(mediaFacts: _media);
+  _FrameDriver(super.lease, {super.kernel}) : super(mediaFacts: _media);
   @override
   Future<SeekOutcome> stepFrame(int delta) async {
     if (fenced) throw const KernelFenced();
