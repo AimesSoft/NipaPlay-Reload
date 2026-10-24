@@ -135,7 +135,7 @@ final class NextPlayerHost {
   Stream<PlaybackEvent> get events => _events.stream;
 
   /// What [request] would be opened from, or why it cannot be.
-  ResolvedSource resolve(MediaRequest request) {
+  ResolvedSource resolve(MediaRequest request, {KernelId? kernel}) {
     final locator = request.locator;
     final drive = RegExp(r'^[A-Za-z]:[\\/]').hasMatch(locator);
     final uri = drive ? null : Uri.tryParse(locator);
@@ -167,15 +167,15 @@ final class NextPlayerHost {
               'does not identify a playable source.',
           {'source': scheme.isEmpty ? 'relative_path' : scheme});
     }
-    final kernel = configuredKernel();
-    if (!supportedKernels.any((k) => k.id == kernel)) {
+    final kernelId = kernel?.id ?? configuredKernel();
+    if (!supportedKernels.any((k) => k.id == kernelId)) {
       throw OpenRefused(
           'kernel_not_supported',
-          KernelId.byId(kernel) == null
-              ? 'The kernel setting names no kernel NipaPlay knows: $kernel.'
-              : 'This device cannot run the $kernel kernel the kernel setting names.',
+          KernelId.byId(kernelId) == null
+              ? 'The kernel setting names no kernel NipaPlay knows: $kernelId.'
+              : 'This device cannot run the $kernelId kernel the kernel setting names.',
           {
-            'configured': kernel,
+            'configured': kernelId,
             'supported': [for (final k in supportedKernels) k.id]
           });
     }
@@ -189,7 +189,8 @@ final class NextPlayerHost {
         kind: scheme.isEmpty || scheme == 'file' ? 'local' : scheme);
   }
 
-  /// Opens [request] after closing what plays. Completes once the open
+  /// Opens [request] after closing what plays, on the kernel setting's
+  /// kernel or on [kernel] when one is asked for. Completes once the open
   /// plan ended: the session is active, failed or (closed meanwhile)
   /// closed. Throws [OpenRefused] before anything closes.
   Future<PlaybackSession> open(
@@ -197,10 +198,11 @@ final class NextPlayerHost {
     ResolvedSource? resolvedSource,
     void Function(PlaybackSession session)? onCreated,
     PlayerLevels? initialLevels,
+    KernelId? kernel,
   }) async {
     final ResolvedSource source;
     try {
-      final checked = resolve(request);
+      final checked = resolve(request, kernel: kernel);
       source = resolvedSource ?? checked;
     } on OpenRefused catch (refused) {
       _refused(request, refused);
@@ -218,7 +220,7 @@ final class NextPlayerHost {
           source,
           SessionDeps(
             arbiter: arbiter,
-            kernel: KernelId.byId(configuredKernel())!,
+            kernel: kernel ?? KernelId.byId(configuredKernel())!,
             createDriver: createDriver,
             records: records,
             levels: initialLevels ?? playerLevels,

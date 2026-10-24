@@ -13,6 +13,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../../harness_redaction.dart';
 import '../core/host.dart';
 import '../core/session.dart';
+import '../kernel/driver.dart' show KernelId;
 import 'progress.dart';
 import 'resolver.dart';
 
@@ -84,10 +85,12 @@ final class PlaybackSources extends ChangeNotifier {
       String origin = 'gui',
       JsonMap selection = const {},
       bool direct = false,
+      KernelId? kernel,
       PlayerLevels? initialLevels}) async {
     final ticket = ++_ticket;
     cancelAutoNext();
-    host.resolve(MediaRequest(locator: item.videoPath, origin: origin));
+    host.resolve(MediaRequest(locator: item.videoPath, origin: origin),
+        kernel: kernel);
     final effectiveStart = start ??
         Duration(milliseconds: await host.records.resumeAt(item.videoPath));
     final SourcePlan prepared;
@@ -123,6 +126,7 @@ final class PlaybackSources extends ChangeNotifier {
             start: effectiveStart,
             paused: paused),
         initialLevels: initialLevels,
+        kernel: kernel,
         resolvedSource: prepared.source, onCreated: (session) {
       if (_disposed || ticket != _ticket) {
         throw const Failure(FailureCode.conflict,
