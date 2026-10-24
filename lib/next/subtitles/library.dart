@@ -27,6 +27,7 @@ import 'operations.dart';
 import 'detection.dart';
 import 'mutations.dart';
 import 'storage_lock.dart';
+import 'index_scan.dart';
 
 export 'detection.dart';
 
@@ -44,6 +45,7 @@ final class SubtitleLibrary implements SubtitleOperations {
   StreamSubscription<JsonMap>? _events;
   Timer? _timer;
   Future<void>? _worker;
+  bool _bulkRunning = false;
   SubtitleTarget? _player;
   Future<bool> Function(SubtitleTarget, String)? remoteLoader;
   bool _closed = false;
@@ -52,7 +54,7 @@ final class SubtitleLibrary implements SubtitleOperations {
   JsonMap get status => {
         'kind': 'subtitle.probe',
         'enabled': enabled,
-        'running': _worker != null,
+        'running': _worker != null || _bulkRunning,
         'queue': _pending.length,
         'lastRun': lastRun,
         'nextRun': enabled ? 'on file change or indexers.reconcile' : null,
@@ -62,9 +64,7 @@ final class SubtitleLibrary implements SubtitleOperations {
     enabled = value;
     if (value) {
       await reconcile();
-      if (_pending.isNotEmpty && _worker == null) {
-        _worker = _drain().whenComplete(() => _worker = null);
-      }
+      _startPending();
     }
   }
 
@@ -116,12 +116,75 @@ final class SubtitleLibrary implements SubtitleOperations {
     }
   }
 
-  Future<void> start() async {
-    _events = identities.fileChanges
+  /// Listens before the catalogue scan starts, so a file registered during the
+  /// scan is not lost. The scan itself is submitted to the library worker.
+  void watch() {
+    _events ??= identities.fileChanges
         .listen((f) => enqueue(f['fileId'] as String, f['path'] as String));
+  }
+
+  Future<void> start() async {
+    watch();
     // Every file is looked at once now; after that a file is looked at when it
     // is registered or changes, and indexers.reconcile looks at all again.
     await reconcile();
+  }
+
+  /// Captures the small set of Classic choices once. The worker cannot call
+  /// SharedPreferences, and doing this per file would put the catalogue loop
+  /// back in the UI isolate.
+  Future<JsonMap> indexPreferences() async {
+    final prefs = await SharedPreferences.getInstance();
+    final values = <String, Object?>{};
+    for (final key in prefs.getKeys()) {
+      if (key.startsWith('external_subtitles_') ||
+          key.startsWith('last_active_subtitle_')) {
+        values[key] = prefs.get(key);
+      }
+    }
+    final mode = prefs.getString(SettingsKeys.appLanguageMode) ?? 'auto';
+    final locale = PlatformDispatcher.instance.locale;
+    final traditional = mode == 'traditional' ||
+        mode == 'auto' &&
+            locale.languageCode == 'zh' &&
+            (locale.scriptCode == 'Hant' ||
+                {'TW', 'HK', 'MO'}.contains(locale.countryCode));
+    return SubtitleIndexPreferences(
+      videoSubtitleMap: prefs.getString('video_subtitle_map') ?? '{}',
+      languageMode: mode,
+      traditional: traditional,
+      values: values,
+    ).toJson();
+  }
+
+  void beginBulk() {
+    if (!enabled || _closed) return;
+    _pending.clear();
+    _bulkRunning = true;
+  }
+
+  void finishBulk(JsonMap? summary, {Object? error}) {
+    _bulkRunning = false;
+    if (summary != null) {
+      lastRun = summary['lastRun'] as String?;
+      lastError = summary['error'] as String?;
+    } else if (error != null) {
+      lastError = error.runtimeType.toString();
+    }
+    _startPending();
+  }
+
+  void _startPending() {
+    if (_closed ||
+        !enabled ||
+        _bulkRunning ||
+        _pending.isEmpty ||
+        _worker != null) {
+      return;
+    }
+    _worker = _drain().whenComplete(() {
+      _worker = null;
+    });
   }
 
   Future<void> reconcile() async {
@@ -142,9 +205,7 @@ final class SubtitleLibrary implements SubtitleOperations {
     if (_closed || path.contains('://')) return;
     _pending[id] = path;
     if (!enabled) return;
-    _worker ??= _drain().whenComplete(() {
-      _worker = null;
-    });
+    _startPending();
   }
 
   Future<void> _drain() async {

@@ -21,6 +21,11 @@ final class HarnessHooks implements JobExecutor {
   final Duration scheduledTimeout;
   late final HarnessSchedules schedules;
   Future<void> Function(String error)? scheduleError;
+
+  /// A live off-main redactor supplied by the host. Hook payloads can be much
+  /// larger than one reply, so avoid starting an isolate for every event when
+  /// the catalogue worker already has one.
+  Future<Object?> Function(Object?)? redact;
   late TaskEngine engine;
   Future<void> Function(String event, String objectId, JsonMap payload)?
       observeEvent;
@@ -37,10 +42,19 @@ final class HarnessHooks implements JobExecutor {
     'download.stalled',
     'library.file_added',
     'playback.started',
-    'playback.ended', 'playback.failed', 'playback.state_changed', 'playback.seek_requested',
-    'settings.changed', 'media.assets.changed', 'media.sources.state_changed',
-    'media.scan.completed', 'task.state_changed', 'network.state_changed',
-    'cache.pruned', 'window.bounds_changed', 'storage.space_changed'
+    'playback.ended',
+    'playback.failed',
+    'playback.state_changed',
+    'playback.seek_requested',
+    'settings.changed',
+    'media.assets.changed',
+    'media.sources.state_changed',
+    'media.scan.completed',
+    'task.state_changed',
+    'network.state_changed',
+    'cache.pruned',
+    'window.bounds_changed',
+    'storage.space_changed'
   };
 
   void enable(Directory repository, File credentialFile) {
@@ -63,9 +77,13 @@ final class HarnessHooks implements JobExecutor {
     if (job.type == 'download' && job.state == JobState.succeeded) {
       await emit('download.completed', job.jobId, job.toJson());
     }
-    if (const {'media.scan', 'media.scan_classic'}.contains(job.type) && job.state.isTerminal) {
-      await emit('media.scan.completed', job.jobId,
-          {'revision': job.revision, 'state': job.state.wireName, 'receipt': job.receipt?.toJson()});
+    if (const {'media.scan', 'media.scan_classic'}.contains(job.type) &&
+        job.state.isTerminal) {
+      await emit('media.scan.completed', job.jobId, {
+        'revision': job.revision,
+        'state': job.state.wireName,
+        'receipt': job.receipt?.toJson()
+      });
     }
   }
 
@@ -91,8 +109,7 @@ final class HarnessHooks implements JobExecutor {
   /// is over when a byte is seen again; a finished download has none.
   Future<void> stallOpened(Job job) async {
     if (job.type != 'download' || job.state.isTerminal) return;
-    for (final stall
-        in (job.checkpoint['stalls'] as List? ?? []).cast<Map>()) {
+    for (final stall in (job.checkpoint['stalls'] as List? ?? []).cast<Map>()) {
       if (stall['resumedAt'] != null) continue;
       final objectId = stallObjectId(job.jobId, stall['index']);
       if (!_stallOccurrences.add(objectId)) continue;
@@ -221,7 +238,9 @@ final class HarnessHooks implements JobExecutor {
         final others = <String>[];
         await for (final entry in directory.list(followLinks: false)) {
           final name = p.basename(entry.path);
-          if (entry is File && name != 'schedules.json' && !known.contains(name)) {
+          if (entry is File &&
+              name != 'schedules.json' &&
+              !known.contains(name)) {
             others.add(name);
           }
         }
@@ -259,7 +278,7 @@ final class HarnessHooks implements JobExecutor {
     _submissions = done.future;
     await previous;
     try {
-      final payload = redactHarnessJson({
+      final raw = {
         'eventId': '${DateTime.now().microsecondsSinceEpoch}-${_generation}',
         'event': event,
         'objectId': objectId,
@@ -273,7 +292,9 @@ final class HarnessHooks implements JobExecutor {
                 ? data['at']
                 : DateTime.now().toUtc().toIso8601String(),
         'data': data,
-      }) as JsonMap;
+      };
+      final payload =
+          await (redact?.call(raw) ?? redactHarnessJsonOffMain(raw)) as JsonMap;
       await observeEvent?.call(event, objectId, payload);
       final repository = _repository;
       final credentialFile = _credentialFile;
@@ -290,10 +311,20 @@ final class HarnessHooks implements JobExecutor {
         }
       }
       if (program == null) return null;
-      final eventKey =
-          sha256.convert(utf8.encode(jsonEncode([event, objectId,
-            if (!const {'download.completed', 'download.file_completed', 'download.stalled', 'library.file_added', 'playback.started'}.contains(event))
-              payload['eventId']]))).toString();
+      final eventKey = sha256
+          .convert(utf8.encode(jsonEncode([
+            event,
+            objectId,
+            if (!const {
+              'download.completed',
+              'download.file_completed',
+              'download.stalled',
+              'library.file_added',
+              'playback.started'
+            }.contains(event))
+              payload['eventId']
+          ])))
+          .toString();
       final jobs = await engine.list(type: type);
       for (final job in jobs) {
         if ((!job.state.isTerminal ||
@@ -413,7 +444,17 @@ final class HarnessHooks implements JobExecutor {
         }
         try {
           process.stdin.add(utf8.encode(jsonEncode({
-            for (final key in ['eventId', 'event', 'objectId', 'entityId', 'occurredAt', 'revision', 'changedFields', 'facts', 'data'])
+            for (final key in [
+              'eventId',
+              'event',
+              'objectId',
+              'entityId',
+              'occurredAt',
+              'revision',
+              'changedFields',
+              'facts',
+              'data'
+            ])
               key: input[key]
           })));
           // A hook is allowed to exit without consuming all of stdin.

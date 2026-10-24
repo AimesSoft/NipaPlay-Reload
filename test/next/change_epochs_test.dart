@@ -35,6 +35,7 @@ void main() {
     'media_snapshots': {'fields': '{}'},
     'media_entities': {'attributes': '{}', 'kind': 'work'},
     'file_skip_segments': {'end_ms': 2},
+    'jobs': {'snapshot': '{}'},
   };
 
   /// A row of [table] with every required column filled.

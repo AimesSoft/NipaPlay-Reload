@@ -25,7 +25,8 @@ void main() {
     addTearDown(() => root.delete(recursive: true));
     final db = await openNextDatabase(root, factory: databaseFactoryFfi);
     addTearDown(db.close);
-    expect((await db.rawQuery('PRAGMA journal_mode')).single.values.single, 'wal');
+    expect(
+        (await db.rawQuery('PRAGMA journal_mode')).single.values.single, 'wal');
     await db.execute('CREATE TABLE probe (n INTEGER)');
     // A second connection, as a shell or a backup would open, holds a read.
     final reader = await databaseFactoryFfi.openDatabase('${root.path}/next.db',
@@ -80,7 +81,25 @@ void main() {
     expect(((metadata['provenance'] as Map)['title'] as Map)['invocationId'],
         'legacy-invocation');
   });
-  for (final oldVersion in [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16]) {
+  for (final oldVersion in [
+    0,
+    1,
+    2,
+    3,
+    4,
+    5,
+    6,
+    7,
+    8,
+    9,
+    10,
+    11,
+    12,
+    13,
+    14,
+    15,
+    16
+  ]) {
     test('database v$oldVersion upgrades to the complete shared schema',
         () async {
       final root = await Directory.systemTemp.createTemp('next-migration-');
@@ -118,7 +137,7 @@ void main() {
       }
       var db = await openNextDatabase(root, factory: databaseFactoryFfi);
       addTearDown(() => db.close());
-      expect(await db.getVersion(), 22);
+      expect(await db.getVersion(), 23);
       for (final table in [
         'harness_sessions',
         'file_subtitles',
@@ -162,6 +181,18 @@ void main() {
       });
       expect((await db.query('settings_changes')).single['value'], '0.5');
       expect(await db.rawQuery('PRAGMA foreign_key_check'), isEmpty);
+      expect(
+          (await db.rawQuery("SELECT sql FROM sqlite_master WHERE type='index' "
+                  "AND name='jobs_state_updated'"))
+              .single['sql'],
+          contains('json_extract(snapshot'));
+      final plan = await db.rawQuery(
+          r"EXPLAIN QUERY PLAN SELECT * FROM jobs WHERE state=? "
+          r"ORDER BY json_extract(snapshot, '$.updatedAt') DESC, job_id DESC "
+          r"LIMIT 20",
+          ['succeeded']);
+      expect(plan.map((row) => row['detail']).join('\n'),
+          contains('jobs_state_updated'));
       await db.close();
       db = await openNextDatabase(root, factory: databaseFactoryFfi);
       expect((await db.query('settings_changes')).single['revision'], 1);
@@ -281,8 +312,16 @@ void main() {
       expect(
           await upgraded
               .rawQuery('SELECT * FROM "${entry.key}" ORDER BY rowid'),
-          [for (final row in entry.value) {...row,
-            if (entry.key == 'job_events') ...{'origin': null, 'invocation_id': null}}],
+          [
+            for (final row in entry.value)
+              {
+                ...row,
+                if (entry.key == 'job_events') ...{
+                  'origin': null,
+                  'invocation_id': null
+                }
+              }
+          ],
           reason: entry.key);
     }
     expect(await upgraded.rawQuery('PRAGMA foreign_key_check'), isEmpty);

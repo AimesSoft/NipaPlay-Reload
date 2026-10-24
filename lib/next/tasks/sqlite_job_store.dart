@@ -90,6 +90,54 @@ final class SqliteJobStore implements JobStore {
     ];
   }
 
+  @override
+  Future<List<Job>> listRecent(
+      {JobState? state, String? type, int limit = 20, int offset = 0}) async {
+    if (limit < 1 || limit > 500 || offset < 0) {
+      throw ArgumentError('Recent job pages require 1..500 rows.');
+    }
+    final clauses = <String>[], arguments = <Object?>[];
+    if (state != null) {
+      clauses.add('state = ?');
+      arguments.add(state.wireName);
+    }
+    if (type != null) {
+      clauses.add('type = ?');
+      arguments.add(type);
+    }
+    final where = clauses.isEmpty ? null : clauses.join(' AND ');
+    final rows = await _database.query('jobs',
+        columns: ['job_id', 'revision'],
+        where: where,
+        whereArgs: arguments,
+        orderBy: r"json_extract(snapshot, '$.updatedAt') DESC, job_id DESC",
+        limit: limit,
+        offset: offset);
+    final stale = <String>[];
+    final known = <String, Job>{};
+    for (final row in rows) {
+      final cached = _decoded[row['job_id'] as String];
+      if (cached != null && cached.revision == row['revision']) {
+        known[cached.jobId] = cached;
+      } else {
+        stale.add(row['job_id'] as String);
+      }
+    }
+    for (var start = 0; start < stale.length; start += 64) {
+      final ids = stale.sublist(start, (start + 64).clamp(0, stale.length));
+      for (final row in await _database.query('jobs',
+          where: 'job_id IN (${List.filled(ids.length, '?').join(',')})',
+          whereArgs: ids)) {
+        final job = _decode(row);
+        known[job.jobId] = job;
+      }
+    }
+    return [
+      for (final row in rows)
+        if (known[row['job_id']] case final job?) job
+    ];
+  }
+
   /// Terminal download records whose backend session disappeared from the
   /// current listing. This asks SQLite for the few fields needed to decide,
   /// rather than decoding every historical download snapshot (whose

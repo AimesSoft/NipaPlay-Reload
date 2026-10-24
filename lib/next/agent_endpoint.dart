@@ -237,7 +237,10 @@ final class AgentEndpoint {
               : '${envelope['status']}',
         };
       } catch (error) {
-        return {'unavailable': action, 'reason': {'message': _short('$error')}};
+        return {
+          'unavailable': action,
+          'reason': {'message': _short('$error')}
+        };
       }
     }
 
@@ -250,8 +253,8 @@ final class AgentEndpoint {
         });
     int count(List<Map> rows, bool Function(Map) test) =>
         rows.where(test).length;
-    int sum(List<Map> rows, String field) => rows.fold<int>(
-        0, (n, row) => n + ((row[field] as num?)?.toInt() ?? 0));
+    int sum(List<Map> rows, String field) =>
+        rows.fold<int>(0, (n, row) => n + ((row[field] as num?)?.toInt() ?? 0));
 
     // The library's name for the playing file, when this body has one.
     UiNowPlaying? known;
@@ -327,19 +330,23 @@ final class AgentEndpoint {
       // diagnostics.errors has not returned yet.
       'diagnostics':
           await read('diagnostics.errors', {'summaryOnly': true}, (r) {
-          final run = r['thisRun'] as Map? ?? const {};
-          final exits = r['uncleanExits'] as Map? ?? const {};
-          return {
-            'recording': r['recording'],
-            'uncaughtErrors': run['errors'],
-            'uncaughtOccurrences': run['occurrences'],
-            'uncleanExitUnread': ((exits['unread'] as num?) ?? 0) > 0,
-            'uncleanExitsUnread': exits['unread'],
-            'latestUncleanExitAt': exits['latestDetectedAt'],
-          };
-        }),
-      'library': await read(
-          'state.query', {'view': 'library.merged', 'limit': sample}, (r) {
+        final run = r['thisRun'] as Map? ?? const {};
+        final exits = r['uncleanExits'] as Map? ?? const {};
+        return {
+          'recording': r['recording'],
+          'uncaughtErrors': run['errors'],
+          'uncaughtOccurrences': run['occurrences'],
+          'uncleanExitUnread': ((exits['unread'] as num?) ?? 0) > 0,
+          'uncleanExitsUnread': exits['unread'],
+          'latestUncleanExitAt': exits['latestDetectedAt'],
+        };
+      }),
+      'library': await read('state.query', {
+        'view': 'library.merged',
+        'limit': sample,
+        // The body needs counts, not every title, artwork and device list.
+        'select': ['episodes'],
+      }, (r) {
         final rows = (r['rows'] as List? ?? const []).cast<Map>();
         final episodes = [
           for (final row in rows) ...(row['episodes'] as List? ?? const [])
@@ -348,13 +355,18 @@ final class AgentEndpoint {
           'works': rows.length,
           if (r['nextCursor'] != null) 'more': true,
           'episodes': episodes.length,
-          'playableEpisodes': episodes.where((e) => e['playable'] == true).length,
+          'playableEpisodes':
+              episodes.where((e) => e['playable'] == true).length,
         };
       }),
-      'accounts': await read('accounts.status', {}, (r) => {
-            for (final a in (r['accounts'] as List? ?? const []).cast<Map>())
-              '${a['provider']}': a['loggedIn'] == true,
-          }),
+      'accounts': await read(
+          'accounts.status',
+          {},
+          (r) => {
+                for (final a
+                    in (r['accounts'] as List? ?? const []).cast<Map>())
+                  '${a['provider']}': a['loggedIn'] == true,
+              }),
       'sources': await view(
           'media.sources',
           (rows) => {
@@ -443,24 +455,23 @@ final class AgentEndpoint {
   /// The default directory with what the engines are doing: tasks running
   /// and queued, the total rate, and whether downloads are enabled.
   Future<Object?> _downloadsSummary(
-      Future<Object?> Function(String, JsonMap, Object? Function(JsonMap))
-          read,
-      Future<Object?> Function(String, Object? Function(List<Map>),
-              {int limit})
+      Future<Object?> Function(String, JsonMap, Object? Function(JsonMap)) read,
+      Future<Object?> Function(String, Object? Function(List<Map>), {int limit})
           view) async {
     final directory = await read('download.directories', {},
         (r) => {'directory': r['defaultDirectory']});
     final engines = await view('downloads.engine', (rows) {
       int sum(String field) => rows.fold<int>(
           0, (n, row) => n + ((row[field] as num?)?.toInt() ?? 0));
-      final unreadable = rows.any((r) => r['enabled'] == true &&
-          r['downloadBytesPerSecond'] == null);
+      final unreadable = rows.any(
+          (r) => r['enabled'] == true && r['downloadBytesPerSecond'] == null);
       return {
         'enabled': rows.isEmpty ? null : rows.first['enabled'],
         'running': sum('running'),
         'queued': sum('queued'),
         'paused': sum('paused'),
-        'downloadBytesPerSecond': unreadable ? null : sum('downloadBytesPerSecond'),
+        'downloadBytesPerSecond':
+            unreadable ? null : sum('downloadBytesPerSecond'),
         'uploadBytesPerSecond': unreadable ? null : sum('uploadBytesPerSecond'),
       };
     });
@@ -476,8 +487,7 @@ final class AgentEndpoint {
   /// Hook programs and schedules: what exists, what is ignored and what
   /// was skipped.
   Future<Object?> _hooksSummary(
-      Future<Object?> Function(String, Object? Function(List<Map>),
-              {int limit})
+      Future<Object?> Function(String, Object? Function(List<Map>), {int limit})
           view,
       int Function(List<Map>, bool Function(Map)) count,
       int Function(List<Map>, String) sum) async {
@@ -485,7 +495,8 @@ final class AgentEndpoint {
         'harness.hooks',
         (rows) => {
               'ready': count(rows, (r) => r['state'] == 'ready'),
-              'notExecutable': count(rows, (r) => r['state'] == 'not_executable'),
+              'notExecutable':
+                  count(rows, (r) => r['state'] == 'not_executable'),
               'unrecognized': count(rows, (r) => r['state'] == 'unrecognized'),
               'failedLastRun': count(rows, (r) => r['lastState'] == 'failed'),
             });
@@ -563,11 +574,13 @@ final class AgentEndpoint {
     }
     // `native-<thread>` is a runtime-native helper's own shell (DSH subagents
     // carry it); it is attributed like that helper's task.
-    final origin = chat == null ? 'harness_cli' : chat.startsWith('helper-')
-        ? 'harness_cli:helper:${chat.substring(7)}'
-        : chat.startsWith('native-')
-            ? 'codex_native:${chat.substring(7)}'
-            : 'harness_cli:chat:$chat';
+    final origin = chat == null
+        ? 'harness_cli'
+        : chat.startsWith('helper-')
+            ? 'harness_cli:helper:${chat.substring(7)}'
+            : chat.startsWith('native-')
+                ? 'codex_native:${chat.substring(7)}'
+                : 'harness_cli:chat:$chat';
     if (decoded.containsKey('full') && decoded['full'] is! bool) {
       return _response({'error': 'Expected boolean full.'}, 400);
     }
@@ -604,8 +617,12 @@ final class AgentEndpoint {
             if (full)
               {..._describe(spec), ...?availability[spec.id]}
             else
-              {'id': spec.id, 'effect': spec.effect.name, 'title': spec.title,
-                ...?availability[spec.id]}
+              {
+                'id': spec.id,
+                'effect': spec.effect.name,
+                'title': spec.title,
+                ...?availability[spec.id]
+              }
         ]
       }, 200, false);
     }
@@ -633,13 +650,16 @@ final class AgentEndpoint {
           if (spec.id.split('.').last == verb) spec.id
       ];
       return _response({
-        'error': 'Unknown Action: $name. Run ./nipa list; then ./nipa describe ACTION.',
+        'error':
+            'Unknown Action: $name. Run ./nipa list; then ./nipa describe ACTION.',
         if (near.isNotEmpty && near.length <= 8) 'similar': near,
       }, 404);
     }
     if (operation == 'describe') {
-      return _response({..._describe(action.spec),
-          ...?(await _capabilityFacts())[action.spec.id]}, 200, false);
+      return _response({
+        ..._describe(action.spec),
+        ...?(await _capabilityFacts())[action.spec.id]
+      }, 200, false);
     }
     final input = decoded['input'] ?? <String, Object?>{};
     if (input is! Map<String, Object?> ||
@@ -648,22 +668,37 @@ final class AgentEndpoint {
           {'error': 'Expected object input and boolean execute.'}, 400);
     }
     return _response((await _harness.invokeJson(
-            action.spec.id, input, Invocation(origin: request.headers['x-nipa-hook'] == null
-                ? origin : 'hook:${request.headers['x-nipa-hook']}')))
+            action.spec.id,
+            input,
+            Invocation(
+                origin: request.headers['x-nipa-hook'] == null
+                    ? origin
+                    : 'hook:${request.headers['x-nipa-hook']}')))
         .toEnvelope());
   }
 
   Future<Map<String, JsonMap>> _capabilityFacts() async {
     if (_harness.lookup('app.capabilities') == null) return {};
-    final outcome = await _harness.invokeJson('app.capabilities', {},
-        Invocation(origin: 'application:catalog'));
+    final outcome = await _harness.invokeJson(
+        'app.capabilities', {}, Invocation(origin: 'application:catalog'));
     if (outcome is! Completed) return {};
     final rows = outcome.value.toJson()['actions'] as List;
-    return {for (final raw in rows) (raw as JsonMap)['id'] as String: {
-      for (final key in ['available', 'availabilityScope', 'requiredHostSetup',
-        'availabilityReason', 'remoteCallable', 'requiredUserPresence', 'lifecycle', 'replacement'])
-        if (raw.containsKey(key)) key: raw[key]
-    }};
+    return {
+      for (final raw in rows)
+        (raw as JsonMap)['id'] as String: {
+          for (final key in [
+            'available',
+            'availabilityScope',
+            'requiredHostSetup',
+            'availabilityReason',
+            'remoteCallable',
+            'requiredUserPresence',
+            'lifecycle',
+            'replacement'
+          ])
+            if (raw.containsKey(key)) key: raw[key]
+        }
+    };
   }
 
   /// Every task, as the status counts them: task.list answers newest first in
@@ -671,10 +706,8 @@ final class AgentEndpoint {
   Future<JsonMap> _allTasks(String origin) async {
     final jobs = <Object?>[];
     for (var offset = 0;;) {
-      final envelope = (await _harness.invokeJson(
-              'task.list',
-              {'limit': 100, 'offset': offset},
-              Invocation(origin: origin)))
+      final envelope = (await _harness.invokeJson('task.list',
+              {'limit': 100, 'offset': offset}, Invocation(origin: origin)))
           .toEnvelope();
       if (envelope['status'] != 'completed') return envelope;
       final result = envelope['result'] as JsonMap;

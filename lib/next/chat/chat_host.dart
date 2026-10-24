@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'dart:isolate';
 import 'dart:math';
 
 import 'package:nipaplay/security/credential_vault.dart' show CredentialRef;
@@ -19,6 +20,14 @@ import '../memory/service.dart';
 import 'model_launch.dart';
 
 typedef ChatMessage = Map<String, dynamic>;
+
+Future<void> _writeDshPatch(
+    String path, List<Map<String, Object?>> rows) async {
+  final file = File(path);
+  await file.parent.create(recursive: true);
+  await file.writeAsString(const JsonEncoder.withIndent('  ').convert(rows),
+      flush: true);
+}
 
 /// A runtime line that is not an RPC object, or output that could not be
 /// read; [text] is already redacted.
@@ -99,7 +108,8 @@ final class ChatHost implements ConversationHistory {
   final _loaded = <String>{};
   Future<void> _rolloutWrites = Future.value();
   ChatMessage _modelDefaults = {};
-  File get _rolloutFile => File('${endpoint.seedRepository.parent.path}/chat-rollouts.json');
+  File get _rolloutFile =>
+      File('${endpoint.seedRepository.parent.path}/chat-rollouts.json');
   @override
   String? mainThreadId;
   final String sessionId;
@@ -197,7 +207,8 @@ final class ChatHost implements ConversationHistory {
     }
     if (_launch?.home case final home?) clean['CODEX_HOME'] = home.path;
     clean.addAll(_launch?.environment ?? {});
-    final executable = codexExecutable ?? _launch?.executable ??
+    final executable = codexExecutable ??
+        _launch?.executable ??
         Platform.environment['NIPAPLAY_CODEX_EXECUTABLE'] ??
         'codex.exe';
     if (!executable.toLowerCase().endsWith('.exe')) {
@@ -221,10 +232,15 @@ final class ChatHost implements ConversationHistory {
         executable,
         [
           'app-server',
-          if (modelLaunch != null || probe) ...['-c', 'features.shell_snapshot=false'],
+          if (modelLaunch != null || probe) ...[
+            '-c',
+            'features.shell_snapshot=false'
+          ],
           if (_launch?.model != null) ...[
-            '-c', 'model=${jsonEncode(_launch!.model)}',
-            '-c', 'model_provider=${jsonEncode(_launch!.provider)}',
+            '-c',
+            'model=${jsonEncode(_launch!.model)}',
+            '-c',
+            'model_provider=${jsonEncode(_launch!.provider)}',
           ],
           '-c',
           await _trustOverride(),
@@ -249,7 +265,9 @@ final class ChatHost implements ConversationHistory {
 
   Future<ChatMessage> _projectHookConfig() async {
     final root = await repository.resolveSymbolicLinks();
-    final listed = await _request('hooks/list', {'cwds': [repository.path]});
+    final listed = await _request('hooks/list', {
+      'cwds': [repository.path]
+    });
     final states = <String, Object?>{};
     for (final entry in listed['data'] as List) {
       for (final hook in entry['hooks'] as List) {
@@ -265,7 +283,11 @@ final class ChatHost implements ConversationHistory {
     }
     // Hook hashes are a separate gate from project trust. Approve only this
     // harness's enabled declarations in memory; leave user/global hooks alone.
-    return states.isEmpty ? {} : {'hooks': {'state': states}};
+    return states.isEmpty
+        ? {}
+        : {
+            'hooks': {'state': states}
+          };
   }
 
   Future<void> start() async {
@@ -281,8 +303,7 @@ final class ChatHost implements ConversationHistory {
   /// The user's login-shell environment, as a terminal would start it.
   Future<Map<String, String>> _loginEnvironment(
       String shell, Map<String, String> inherited) async {
-    final login = await Process.run(
-        shell, ['-l', '-c', 'exec /usr/bin/env -0'],
+    final login = await Process.run(shell, ['-l', '-c', 'exec /usr/bin/env -0'],
         environment: inherited,
         includeParentEnvironment: false,
         stdoutEncoding: null,
@@ -311,7 +332,8 @@ final class ChatHost implements ConversationHistory {
                 '${clean['HOME'] ?? Platform.environment['HOME']}/.codex'));
     final config = File('${codexHome.path}/config.toml');
     if (!await config.exists()) {
-      throw StateError('DSH reads its model from ${config.path}; it is missing.');
+      throw StateError(
+          'DSH reads its model from ${config.path}; it is missing.');
     }
     final authFile = File('${codexHome.path}/auth.json');
     return DshRoute.fromCodexConfig(await config.readAsString(),
@@ -336,7 +358,8 @@ final class ChatHost implements ConversationHistory {
             Platform.environment['SHELL'] ?? '/bin/zsh', inherited));
     clean['NIPAPLAY_CHAT'] = sessionId;
     final next = endpoint.seedRepository.parent;
-    final home = await Directory('${next.path}/dsh-home').create(recursive: true);
+    final home =
+        await Directory('${next.path}/dsh-home').create(recursive: true);
     final route = _launch?.route ?? await _routeFromCodex(clean);
     SecretRedactor.remember(
         const CredentialRef('next_model', 'dsh'), route.key);
@@ -344,21 +367,21 @@ final class ChatHost implements ConversationHistory {
     final imageInput = await probeDshImageInput(
         route, File('${next.path}/dsh/model-input.json'));
     final patch = File('${next.path}/dsh/nipa-patch.json');
-    await patch.parent.create(recursive: true);
-    await patch.writeAsString(
-        const JsonEncoder.withIndent('  ').convert(dshPatch(
-            route: route.withImageInput(imageInput),
-            plugins: dshPlugins!,
-            personaPrefix:
-                (await File('${dshPlugins!.path}/persona-prefix.md').readAsString())
-                    .trim(),
-            personaSuffix:
-                (await File('${dshPlugins!.path}/persona-suffix.md').readAsString())
-                    .trim(),
-            harness: repository.path,
-            version: runtime.version,
-            webSearch: (clean['DEEPSEEK_API_KEY'] ?? '').isNotEmpty)),
-        flush: true);
+    final persona = await Future.wait([
+      File('${dshPlugins!.path}/persona-prefix.md').readAsString(),
+      File('${dshPlugins!.path}/persona-suffix.md').readAsString(),
+    ]);
+    final rows = dshPatch(
+        route: route.withImageInput(imageInput),
+        plugins: dshPlugins!,
+        personaPrefix: persona[0].trim(),
+        personaSuffix: persona[1].trim(),
+        harness: repository.path,
+        version: runtime.version,
+        webSearch: (clean['DEEPSEEK_API_KEY'] ?? '').isNotEmpty);
+    // The patch carries both persona files. Formatting and writing it can grow
+    // with their text, so only the ready process facts return to this isolate.
+    await Isolate.run(() => _writeDshPatch(patch.path, rows));
     if (labRoot case final root?) {
       clean['TMPDIR'] =
           (await Directory('${root.path}/temp').create(recursive: true)).path;
@@ -464,8 +487,12 @@ final class ChatHost implements ConversationHistory {
             sessionId,
             clean['CODEX_HOME'] ?? '',
             clean['TMPDIR'] ?? '',
-            codexExecutable ?? _launch?.executable ??
-                (labRoot != null ? Platform.environment['NIPAPLAY_CODEX_EXECUTABLE'] : null) ?? 'codex',
+            codexExecutable ??
+                _launch?.executable ??
+                (labRoot != null
+                    ? Platform.environment['NIPAPLAY_CODEX_EXECUTABLE']
+                    : null) ??
+                'codex',
             await _trustOverride(),
             'model=${jsonEncode(_launch?.model)}',
             'model_provider=${jsonEncode(_launch?.provider)}',
@@ -499,26 +526,31 @@ final class ChatHost implements ConversationHistory {
       String? defaultModel = _launch?.model ?? config['model'] as String?;
       if (defaultModel == null) {
         final models = await _request('model/list', {});
-        defaultModel = (models['data'] as List).cast<Map>()
+        defaultModel = (models['data'] as List)
+            .cast<Map>()
             .firstWhere((item) => item['isDefault'] == true)['model'] as String;
       }
       _modelDefaults = {
         'model': defaultModel,
-        'modelProvider': _launch?.provider ?? config['model_provider'] ?? 'openai',
+        'modelProvider':
+            _launch?.provider ?? config['model_provider'] ?? 'openai',
       };
     }
   }
 
   Future<void> _applyModel() async {
     var next = await modelLaunch?.call();
-    if (next == null || next.revision == _launch?.revision &&
-        next.executable == _launch?.executable && available) {
+    if (next == null ||
+        next.revision == _launch?.revision &&
+            next.executable == _launch?.executable &&
+            available) {
       return;
     }
     // A helper may still be running when the foreground is idle. Preserve it.
     while (threadLiveness.keys.any(busyFor)) {
       if (!available) break;
-      await events.firstWhere((event) => event['method'] == 'turn/completed' ||
+      await events.firstWhere((event) =>
+          event['method'] == 'turn/completed' ||
           event['method'] == 'host/error');
       if (!available) break;
     }
@@ -549,9 +581,14 @@ final class ChatHost implements ConversationHistory {
     _flush?.cancel();
     if (_process case final process?) {
       process.kill();
-      final exited = await Future.any<Object>([process.exitCode,
-        Future.delayed(const Duration(seconds: 3), () => 'timeout')]);
-      if (exited == 'timeout') { process.kill(ProcessSignal.sigkill); await process.exitCode; }
+      final exited = await Future.any<Object>([
+        process.exitCode,
+        Future.delayed(const Duration(seconds: 3), () => 'timeout')
+      ]);
+      if (exited == 'timeout') {
+        process.kill(ProcessSignal.sigkill);
+        await process.exitCode;
+      }
       await _reader;
       await _stderr;
     }
@@ -603,9 +640,11 @@ final class ChatHost implements ConversationHistory {
                 .catchError((Object _) {}));
           }
           livenessFor(eventThread).observe(message, DateTime.now());
-          if (!probe) processes.observe(message, originFor(eventThread), DateTime.now());
+          if (!probe)
+            processes.observe(message, originFor(eventThread), DateTime.now());
         }
-        if (!probe && (wireMethod == 'turn/started' || wireMethod == 'turn/completed')) {
+        if (!probe &&
+            (wireMethod == 'turn/started' || wireMethod == 'turn/completed')) {
           // Known in memory at once (ui.present asks there); appended in
           // order with the invocations by the journal's one writer.
           unawaited(TurnBoundaries.write(
@@ -698,7 +737,8 @@ final class ChatHost implements ConversationHistory {
           if (_knownDisplay(message)) _display.add(message);
         }
       }
-      if (!_closing && !_restarting) _transportError('app-server stdout closed');
+      if (!_closing && !_restarting)
+        _transportError('app-server stdout closed');
     } catch (error) {
       if (!_restarting) {
         _transportError(error is _UnreadableLine
@@ -811,8 +851,11 @@ final class ChatHost implements ConversationHistory {
   Future<ChatMessage> _request(String method, ChatMessage params) async {
     if (modelLaunch != null && method == 'thread/resume') {
       final id = params['threadId'] as String;
-      params = {...params, ..._modelDefaults,
-        if (_rollouts[id] != null) 'path': _rollouts[id]};
+      params = {
+        ...params,
+        ..._modelDefaults,
+        if (_rollouts[id] != null) 'path': _rollouts[id]
+      };
     }
     await endpoint.inspectChatText(jsonEncode(params));
     if (!available) {
@@ -865,30 +908,31 @@ final class ChatHost implements ConversationHistory {
 
   /// Does not select the foreground conversation or change its durable pointer.
   Future<String> helperThread(String helperId, String title,
-      {String? resumeId}) => _control(() async {
-    final origin = 'harness_cli:helper:$helperId';
-    final response =
-        await _request(resumeId == null ? 'thread/start' : 'thread/resume', {
-      ..._common,
-      if (resumeId != null) 'threadId': resumeId,
-      'config': {
-        ...await _projectHookConfig(),
-        'shell_environment_policy.set.NIPAPLAY_CHAT': 'helper-$helperId'
-      },
-    });
-    final history = Map<String, dynamic>.from(response['thread'] as Map);
-    final id = history['id'] as String;
-    await memory?.rememberThread(id);
-    threadOrigins[id] = origin;
-    if ((history['turns'] as List).isEmpty) _freshThreads[id] = history;
-    if (resumeId == null) {
-      await _request('thread/name/set', {
-        'threadId': id,
-        'name': title,
+          {String? resumeId}) =>
+      _control(() async {
+        final origin = 'harness_cli:helper:$helperId';
+        final response = await _request(
+            resumeId == null ? 'thread/start' : 'thread/resume', {
+          ..._common,
+          if (resumeId != null) 'threadId': resumeId,
+          'config': {
+            ...await _projectHookConfig(),
+            'shell_environment_policy.set.NIPAPLAY_CHAT': 'helper-$helperId'
+          },
+        });
+        final history = Map<String, dynamic>.from(response['thread'] as Map);
+        final id = history['id'] as String;
+        await memory?.rememberThread(id);
+        threadOrigins[id] = origin;
+        if ((history['turns'] as List).isEmpty) _freshThreads[id] = history;
+        if (resumeId == null) {
+          await _request('thread/name/set', {
+            'threadId': id,
+            'name': title,
+          });
+        }
+        return id;
       });
-    }
-    return id;
-  });
 
   Future<ChatMessage> startThreadTurn(String id, String text) =>
       _control(() => _startThreadTurn(id, text));
@@ -911,9 +955,10 @@ final class ChatHost implements ConversationHistory {
     _freshThreads.remove(id);
     try {
       final change = await memory?.changesFor(id);
-      return _public(await _request(
-          'turn/start', {'threadId': id, 'input': _input(
-            change == null ? text : '$text\n\n$change')}));
+      return _public(await _request('turn/start', {
+        'threadId': id,
+        'input': _input(change == null ? text : '$text\n\n$change')
+      }));
     } catch (error) {
       live.status = 'startFailed';
       live.endedAt = DateTime.now();
@@ -998,8 +1043,11 @@ final class ChatHost implements ConversationHistory {
   }
 
   @override
-  Future<ChatMessage> listThreads({String? cursor, int limit = 30,
-      List<String>? sourceKinds, String? sortKey}) async =>
+  Future<ChatMessage> listThreads(
+          {String? cursor,
+          int limit = 30,
+          List<String>? sourceKinds,
+          String? sortKey}) async =>
       _public(await _request('thread/list', {
         'cwd': repository.path,
         'modelProviders': [],
@@ -1034,7 +1082,9 @@ final class ChatHost implements ConversationHistory {
   /// into the turns; without it the items are the runtime's own.
   @override
   Future<ChatMessage> readThread(String id, {bool withProcess = true}) async {
-    if (modelLaunch != null && !_loaded.contains(id) && _rollouts.containsKey(id)) {
+    if (modelLaunch != null &&
+        !_loaded.contains(id) &&
+        _rollouts.containsKey(id)) {
       await _request('thread/resume', {
         ..._common,
         'threadId': id,
@@ -1053,15 +1103,15 @@ final class ChatHost implements ConversationHistory {
   /// Puts NipaPlay's saved display copy of the process back into the turns
   /// of [history], a thread read with `withProcess: false`; every turn is
   /// read and decoded at once, off the main isolate.
-  Future<void> restoreProcess(String id, ChatMessage history) =>
-      processes.restoreAll(
-          id, (history['turns'] as List? ?? const []).cast<Map>());
+  Future<void> restoreProcess(String id, ChatMessage history) => processes
+      .restoreAll(id, (history['turns'] as List? ?? const []).cast<Map>());
 
   Future<ChatMessage> compactThread(String id) =>
       _request('thread/compact/start', {'threadId': id});
 
-  Future<ChatMessage> listHooks() =>
-      _request('hooks/list', {'cwds': [repository.path]});
+  Future<ChatMessage> listHooks() => _request('hooks/list', {
+        'cwds': [repository.path]
+      });
 
   /// Serialize with UI selection/start. Wait while the host has an active turn.
   Future<String?> prepareFollowup(String? id) => _control(() async {
@@ -1156,14 +1206,18 @@ final class ChatHost implements ConversationHistory {
   /// Call only on a separate probe host; no transcript, process or journal facts.
   Future<bool> checkSavedModel() async {
     if (!probe) throw StateError('Model checks require an isolated probe host');
-    final response = await _request('thread/start', {..._common,
-      'ephemeral': true, 'baseInstructions': 'Reply OK. Do not use tools.',
-      'developerInstructions': ''});
+    final response = await _request('thread/start', {
+      ..._common,
+      'ephemeral': true,
+      'baseInstructions': 'Reply OK. Do not use tools.',
+      'developerInstructions': ''
+    });
     final id = response['thread']['id'] as String;
     final completion = events.firstWhere((event) =>
-      event['method'] == 'turn/completed' && event['params']['threadId'] == id);
-    await _request('turn/start', {'threadId': id,
-      'input': _input('Reply OK.')});
+        event['method'] == 'turn/completed' &&
+        event['params']['threadId'] == id);
+    await _request(
+        'turn/start', {'threadId': id, 'input': _input('Reply OK.')});
     final event = await completion;
     return event['params']['turn']['status'] == 'completed';
   }

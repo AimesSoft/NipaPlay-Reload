@@ -81,7 +81,14 @@ final class TaskResources implements Capability {
                 input: ObjectSchema({}),
                 output: ObjectSchema({}, additionalProperties: true)),
             (_, __) async {
-          final jobs = await engine.list();
+          // Capacity reports count only jobs that still occupy a queue. Reading
+          // and decoding every terminal job makes this cheap probe grow with
+          // the complete history; ask the store for the three live states.
+          final queued = [
+            ...await engine.list(state: JobState.queued),
+            ...await engine.list(state: JobState.waitingRetry),
+            ...await engine.list(state: JobState.interrupted),
+          ];
           return {
             'pools': [
               for (final type in [
@@ -98,16 +105,7 @@ final class TaskResources implements Capability {
                   'active': type == 'agent.helper'
                       ? helpers.activeCount
                       : engine.activeCount(type),
-                  'queued': jobs
-                      .where((j) =>
-                          j.type == type &&
-                          !j.state.isTerminal &&
-                          {
-                            JobState.queued,
-                            JobState.waitingRetry,
-                            JobState.interrupted
-                          }.contains(j.state))
-                      .length
+                  'queued': queued.where((job) => job.type == type).length
                 },
             ],
             'classicMatching': {

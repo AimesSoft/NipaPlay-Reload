@@ -116,9 +116,17 @@ final class UiDataService implements NextUiData, NextNowPlaying {
   /// triggers on the tables they read, whoever writes them, see
   /// `db/epochs.dart`) and Classic's state pushed through [StateSources].
   Future<String> catalogueStamp() async {
+    final library = meshLibrary;
+    final epoch = library == null || library.worker.isClosed
+        ? await _catalogueEpoch()
+        : await library.worker.catalogueEpoch();
+    return '$epoch:${sources.revision}';
+  }
+
+  Future<int> _catalogueEpoch() async {
     final epoch = await db.rawQuery(
         "SELECT COALESCE((SELECT n FROM change_epochs WHERE name='catalogue'),0) AS n");
-    return '${epoch.single['n']}:${sources.revision}';
+    return epoch.single['n'] as int;
   }
 
   Future<void> start() async {
@@ -482,21 +490,25 @@ final class UiDataService implements NextUiData, NextNowPlaying {
   }
 
   Future<Map<String, ({String fileId, String workId, List<String> episodeIds})>>
-      _readLocatorLinks() async {
+      _readLocatorLinks(Set<String> wanted) async {
+    if (wanted.isEmpty) return const {};
     final slice = Slicer();
     final byLocator =
         <String, ({String fileId, String workId, List<String> episodeIds})>{};
-    for (var offset = 0;; offset += 250) {
-      final page = await db.rawQuery(
+    final locators = wanted.toList(growable: false);
+    for (var start = 0; start < locators.length; start += 250) {
+      final wantedPage =
+          locators.sublist(start, (start + 250).clamp(0, locators.length));
+      final rows = await db.rawQuery(
           'SELECT l.locator, l.file_id AS fileId, fe.episode_id AS episodeId, r.parent_id AS workId '
           'FROM media_locations l '
           'JOIN media_file_episodes fe ON fe.file_id = l.file_id '
           'JOIN media_entities e ON e.id = fe.episode_id '
           'JOIN media_entities r ON r.id = e.parent_id '
-          'WHERE l.owner_device_id = ? '
-          'ORDER BY l.id, fe.ordinal LIMIT 250 OFFSET ?',
-          [media.store.ownerDeviceId, offset]);
-      for (final row in page) {
+          'WHERE l.owner_device_id = ? AND l.locator IN (${List.filled(wantedPage.length, '?').join(',')}) '
+          'ORDER BY l.id, fe.ordinal',
+          [media.store.ownerDeviceId, ...wantedPage]);
+      for (final row in rows) {
         final locator = row['locator'] as String;
         final existing = byLocator[locator];
         if (existing == null) {
@@ -510,7 +522,6 @@ final class UiDataService implements NextUiData, NextNowPlaying {
         }
       }
       await slice();
-      if (page.length < 250) break;
     }
     return byLocator;
   }
@@ -520,7 +531,13 @@ final class UiDataService implements NextUiData, NextNowPlaying {
     final shelves = <UiShelf>[];
     final continuing = <UiShelfItem>[];
     final seen = <String>{};
-    if (meshLibrary != null) {
+    // Classic's watch history already carries both in-progress items and the
+    // work each one maps to. Walking every work and rebuilding every episode
+    // here duplicates that answer on the UI isolate; keep the catalogue scan
+    // only for hosts with no Classic state.
+    if (meshLibrary != null &&
+        sources.continueWatching == null &&
+        sources.history == null) {
       for (final work in await library()) {
         final ep = (await episodes(work.workId))
             .where((e) => (e.progress ?? 0) > 0 && (e.progress ?? 0) < 1)
@@ -531,28 +548,47 @@ final class UiDataService implements NextUiData, NextNowPlaying {
         }
       }
     }
-    final byLocator =
-        (sources.continueWatching != null || sources.history != null)
-            ? await _readLocatorLinks()
-            : const <String,
-                ({String fileId, String workId, List<String> episodeIds})>{};
-    if (sources.continueWatching != null) {
-      for (final row in sources.continueWatching!()) {
+    final continueRows = sources.continueWatching?.call() ?? const <JsonMap>[];
+    final historyRows = sources.history?.call() ?? const <JsonMap>[];
+    final sourceRows = <JsonMap>[...continueRows, ...historyRows];
+    final sourcePaths = <String>{
+      for (final row in sourceRows)
+        if (row['filePath'] case final String path) path
+    };
+    final byLocator = sourcePaths.isEmpty
+        ? const <String,
+            ({String fileId, String workId, List<String> episodeIds})>{}
+        : await _readLocatorLinks(sourcePaths);
+    Future<({String fileId, String workId, List<String> episodeIds})?> link(
+        String path) async {
+      var found = byLocator[path];
+      if (found == null && byLocator.isNotEmpty) {
+        final resolved = await visibleLocator(path, media);
+        if (resolved != null && resolved != path) {
+          found = byLocator[resolved];
+          if (found == null) {
+            final extra = await _readLocatorLinks({resolved});
+            byLocator.addAll(extra);
+            found = extra[resolved];
+          }
+        }
+      }
+      return found;
+    }
+
+    if (continueRows.isNotEmpty) {
+      for (final row in continueRows) {
         final path = row['filePath'] as String?;
         if (path == null) continue;
-        var link = byLocator[path];
-        if (link == null && byLocator.isNotEmpty) {
-          final resolved = await visibleLocator(path, media);
-          if (resolved != null) link = byLocator[resolved];
-        }
-        if (link == null) continue;
+        final linked = await link(path);
+        if (linked == null) continue;
         final workId = meshLibrary == null
-            ? link.workId
-            : await meshLibrary!.canonical(link.workId);
+            ? linked.workId
+            : await meshLibrary!.canonical(linked.workId);
         if (!seen.add(workId)) continue;
         final work = (await this.work(workId))!;
         final linkedIds = <String>{
-          for (final id in link.episodeIds)
+          for (final id in linked.episodeIds)
             await meshLibrary?.canonical(id) ?? id
         };
         final eps = await episodes(workId);
@@ -577,20 +613,16 @@ final class UiDataService implements NextUiData, NextNowPlaying {
         following.add(link.workId);
       }
     }
-    for (final row in sources.history?.call() ?? <JsonMap>[]) {
+    for (final row in historyRows) {
       final progress = (row['watchProgress'] as num?)?.toDouble() ?? 0;
       if (progress <= 0 || progress >= .95) continue;
       final path = row['filePath'] as String?;
       if (path == null) continue;
-      var link = byLocator[path];
-      if (link == null && byLocator.isNotEmpty) {
-        final resolved = await visibleLocator(path, media);
-        if (resolved != null) link = byLocator[resolved];
-      }
-      if (link != null) {
-        following.add(link.workId);
+      final linked = await link(path);
+      if (linked != null) {
+        following.add(linked.workId);
         if (meshLibrary != null) {
-          following.add(meshLibrary!.resolvedId(link.workId));
+          following.add(meshLibrary!.resolvedId(linked.workId));
         }
       }
     }
@@ -657,17 +689,18 @@ final class UiDataService implements NextUiData, NextNowPlaying {
           items: recent));
     }
     if (hero == null) {
-      final jobs = await slicedSort(
-          await engine.list(state: JobState.succeeded),
-          (a, b) => b.updatedAt.compareTo(a.updatedAt),
-          Slicer());
-      for (final job in jobs) {
-        final workId = await _jobWork(job);
-        if (workId == null) continue;
-        final work = await this.work(workId);
-        if (work?.next?.playable == true) {
-          hero = UiHero(work!);
-          break;
+      for (var offset = 0; hero == null; offset += 20) {
+        final jobs = await engine.listRecent(
+            state: JobState.succeeded, limit: 20, offset: offset);
+        if (jobs.isEmpty) break;
+        for (final job in jobs) {
+          final workId = await _jobWork(job);
+          if (workId == null) continue;
+          final work = await this.work(workId);
+          if (work?.next?.playable == true) {
+            hero = UiHero(work!);
+            break;
+          }
         }
       }
       if (hero == null) {

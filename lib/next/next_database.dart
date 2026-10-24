@@ -9,6 +9,7 @@ import 'media/primitives_migration.dart';
 import 'media/metadata_edit_migration.dart';
 import 'media/classic_match_migration.dart';
 import 'tasks/job_migration.dart';
+import 'tasks/job_recent_migration.dart';
 import 'settings/migration.dart';
 import 'state/change_history.dart';
 import 'followups/migration.dart';
@@ -46,6 +47,7 @@ const _migrations = [
   migrateActivityInvocations,
   migrateChangeEpochs,
   migrateSkipSegments,
+  migrateJobRecentIndex,
 ];
 
 Future<void> _migrate(Database db, int oldVersion, int newVersion) async {
