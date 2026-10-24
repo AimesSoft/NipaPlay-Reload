@@ -741,9 +741,13 @@ final class MeshRuntime implements MeshDeviceSource {
       final wait = unknownPeerRefreshCooldown -
           DateTime.now().difference(_lastDevicesRefresh);
       if (wait > Duration.zero) {
+        final noticedAt = DateTime.now();
         _deferredRefresh ??= Timer(wait, () {
           _deferredRefresh = null;
           if (_closed || _node == null) return;
+          // A refresh that happened after the notice (a heartbeat, a stranger's
+          // verification) already carries what the notice announced.
+          if (_lastDevicesRefresh.isAfter(noticedAt)) return;
           unawaited(refreshDevices().catchError(_noteCoordinatorFailure));
         });
         return;
