@@ -15,48 +15,56 @@ import '../util/slicer.dart';
 
 Future<({JsonMap facts, List<DanmakuEntry> entries})> readSidecar(
         String path) =>
-    Isolate.run(() async {
-      final watch = Stopwatch()..start();
-      final file = File(path), before = await File(path).stat();
-      final data = parseLocalDanmakuBytes(await file.readAsBytes());
-      final rows = parseDanmakuListInBackground(data['comments'] as List);
-      if (rows.isEmpty) throw const FormatException('No playable comments');
-      final platform = data['platform'] as String;
-      final videoId = data['platformVideoId'] as String?;
-      final entries = [
-        for (var i = 0; i < rows.length; i++)
-          classicDanmakuEntry(rows[i], i, 'local', path,
-              platform: platform == 'unknown'
-                  ? rows[i]['source'] as String? ?? 'unknown'
-                  : platform,
-              originVideoId: videoId ?? rows[i]['platformVideoId'] as String?,
-              preserveDeclaredOrigin: true)
-      ];
-      final after = await file.stat();
-      if (before.size != after.size || before.modified != after.modified) {
-        throw const FileSystemException('Danmaku changed while reading');
-      }
-      final times = <String, int>{};
-      for (final e in entries) {
-        final t = e.sourceTimeMs.toString();
-        times[t] = (times[t] ?? 0) + 1;
-      }
-      return (
-        facts: <String, Object?>{
-          'path': path,
-          'available': true,
-          'platform': platform,
-          'platformVideoId': videoId,
-          'size': after.size,
-          'modifiedAt': after.modified.toUtc().toIso8601String(),
-          'readAt': DateTime.now().toUtc().toIso8601String(),
-          'readMs': watch.elapsedMilliseconds,
-          'count': entries.length,
-          'timeCounts': times,
-        },
-        entries: entries
-      );
-    });
+    Isolate.run(() => _readSidecar(path));
+
+/// Indexing stores [facts] only. Keeping parsed entries inside the isolate
+/// avoids copying a whole track through the main isolate for every file.
+Future<JsonMap> readSidecarFacts(String path) =>
+    Isolate.run(() async => (await _readSidecar(path)).facts);
+
+Future<({JsonMap facts, List<DanmakuEntry> entries})> _readSidecar(
+    String path) async {
+  final watch = Stopwatch()..start();
+  final file = File(path), before = await File(path).stat();
+  final data = parseLocalDanmakuBytes(await file.readAsBytes());
+  final rows = parseDanmakuListInBackground(data['comments'] as List);
+  if (rows.isEmpty) throw const FormatException('No playable comments');
+  final platform = data['platform'] as String;
+  final videoId = data['platformVideoId'] as String?;
+  final entries = [
+    for (var i = 0; i < rows.length; i++)
+      classicDanmakuEntry(rows[i], i, 'local', path,
+          platform: platform == 'unknown'
+              ? rows[i]['source'] as String? ?? 'unknown'
+              : platform,
+          originVideoId: videoId ?? rows[i]['platformVideoId'] as String?,
+          preserveDeclaredOrigin: true)
+  ];
+  final after = await file.stat();
+  if (before.size != after.size || before.modified != after.modified) {
+    throw const FileSystemException('Danmaku changed while reading');
+  }
+  final times = <String, int>{};
+  for (final e in entries) {
+    final t = e.sourceTimeMs.toString();
+    times[t] = (times[t] ?? 0) + 1;
+  }
+  return (
+    facts: <String, Object?>{
+      'path': path,
+      'available': true,
+      'platform': platform,
+      'platformVideoId': videoId,
+      'size': after.size,
+      'modifiedAt': after.modified.toUtc().toIso8601String(),
+      'readAt': DateTime.now().toUtc().toIso8601String(),
+      'readMs': watch.elapsedMilliseconds,
+      'count': entries.length,
+      'timeCounts': times,
+    },
+    entries: entries
+  );
+}
 
 final _entryCache =
     <String, ({int size, DateTime modified, List<DanmakuEntry> entries})>{};
@@ -183,8 +191,8 @@ final class SidecarIndexer {
         return true;
       }
       try {
-        final read = await readSidecar(candidate);
-        await store.recordSidecar(id, read.facts);
+        final facts = await readSidecarFacts(candidate);
+        await store.recordSidecar(id, facts);
         await onChanged();
         return true;
       } on FormatException catch (error) {

@@ -11,6 +11,11 @@ final class HeadlessJobStore implements JobStore {
   Future<List<Job>> list({JobState? state, String? type}) =>
       delegate.list(state: state, type: type);
   @override
+  Future<List<Job>> listRecent(
+          {JobState? state, String? type, int limit = 20, int offset = 0}) =>
+      delegate.listRecent(
+          state: state, type: type, limit: limit, offset: offset);
+  @override
   Future<void> commit(Job job, JobEvent event,
           {required int? expectedRevision}) =>
       delegate.commit(job, event, expectedRevision: expectedRevision);

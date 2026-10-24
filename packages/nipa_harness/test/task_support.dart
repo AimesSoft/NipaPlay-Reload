@@ -13,6 +13,21 @@ final class MemoryJobStore implements JobStore {
           (type == null || job.type == type))
       .toList();
   @override
+  Future<List<Job>> listRecent(
+      {JobState? state, String? type, int limit = 20, int offset = 0}) async {
+    final matching = jobs.values
+        .where((job) =>
+            (state == null || job.state == state) &&
+            (type == null || job.type == type))
+        .toList()
+      ..sort((a, b) {
+        final byUpdate = b.updatedAt.compareTo(a.updatedAt);
+        return byUpdate != 0 ? byUpdate : b.jobId.compareTo(a.jobId);
+      });
+    return matching.skip(offset).take(limit).toList();
+  }
+
+  @override
   Future<void> commit(Job job, JobEvent event,
       {required int? expectedRevision}) async {
     if (jobs[job.jobId]?.revision != expectedRevision) {

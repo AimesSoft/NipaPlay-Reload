@@ -5,6 +5,7 @@ import 'dart:io';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:nipa_harness/nipa_harness.dart';
+import 'package:nipaplay/next/agent_endpoint.dart';
 import 'package:nipaplay/next/chat/chat_host.dart';
 import 'package:nipaplay/next/chat/chat_line_reader.dart';
 import 'package:nipaplay/next/memory/recent.dart';
@@ -131,10 +132,17 @@ void main() {
         current,
         redact: warm.uiData.meshLibrary!.worker.redactText);
     await warm.memory.context(null);
+    await encodeReply({'warm': true});
     await warm.close();
 
     final probe = CpuBudgetProbe()..verbose = true;
     final turnOutput = _chatOutputBytes(profile);
+    final replyPayload = {
+      'rows': [
+        for (var i = 0; i < 400; i++) {'id': 'perf-$i', 'text': '回答 $i ' * 500}
+      ]
+    };
+    final hookPayload = {'text': 'hook output ' * 12000};
     await probe.run(() async {
       // What the machine does to an empty process, for the idle limits.
       await Future<void>.delayed(const Duration(seconds: 5));
@@ -217,6 +225,17 @@ void main() {
       // memory for the turn put together.
       await _chatOutput(turnOutput);
       probe.mark('turn: runtime output');
+      await core.memory.rememberThread('thread-perf-0');
+      probe.mark('turn: memory remember');
+      await core.memory.changesFor('thread-perf-0');
+      probe.mark('turn: memory changes');
+      await core.memory.changesFor('thread-perf-0');
+      probe.mark('turn: memory unchanged');
+      final encoded = await encodeReply(replyPayload);
+      expect(encoded.length, greaterThan(500000));
+      probe.mark('turn: encode reply');
+      await core.hooks.emit('network.state_changed', 'perf-hook', hookPayload);
+      probe.mark('turn: hook redaction');
       Future<JsonMap> call(String action, JsonMap input,
           {String origin = 'harness_cli:chat:perf'}) async {
         final outcome =
