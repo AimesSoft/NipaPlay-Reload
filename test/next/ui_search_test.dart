@@ -774,6 +774,8 @@ final class _Data implements NextUiData {
 final class _Port implements ChatPort {
   @override
   bool get available => false;
+  @override
+  Future<String?> unavailableReason() async => null;
 
   @override
   bool get busy => false;
@@ -1017,9 +1019,8 @@ final class _Sources implements h.Capability {
     }),
     _SourceAction(
         'media.sources.artwork',
-        (input) => {
-              'poster': input['itemId'] == 'e3' ? '/cache/e3.jpg' : null
-            }),
+        (input) =>
+            {'poster': input['itemId'] == 'e3' ? '/cache/e3.jpg' : null}),
   ];
 }
 
@@ -1037,20 +1038,20 @@ final class _SourceAction extends h.Action<_Json, _Json> {
         input: id == 'media.sources.list'
             ? const h.ObjectSchema({})
             : id == 'media.sources.artwork'
-            ? const h.ObjectSchema({
-                'sourceId': h.StringSchema(minLength: 1),
-                'itemId': h.StringSchema(minLength: 1),
-              }, required: [
-                'sourceId',
-                'itemId'
-              ])
-            : const h.ObjectSchema({
-                'query': h.StringSchema(minLength: 1),
-                'sourceIds': h.ArraySchema(h.StringSchema(minLength: 1)),
-                'limit': h.IntegerSchema(minimum: 1, maximum: 100),
-              }, required: [
-                'query'
-              ]),
+                ? const h.ObjectSchema({
+                    'sourceId': h.StringSchema(minLength: 1),
+                    'itemId': h.StringSchema(minLength: 1),
+                  }, required: [
+                    'sourceId',
+                    'itemId'
+                  ])
+                : const h.ObjectSchema({
+                    'query': h.StringSchema(minLength: 1),
+                    'sourceIds': h.ArraySchema(h.StringSchema(minLength: 1)),
+                    'limit': h.IntegerSchema(minimum: 1, maximum: 100),
+                  }, required: [
+                    'query'
+                  ]),
         output: const h.ObjectSchema({}, additionalProperties: true),
       );
 

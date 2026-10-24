@@ -28,6 +28,34 @@ void main() {
   const mark = '[NipaPlay 界面]';
 
   group('the words', () {
+    test('a missing model leaves a system explanation in the turn', () async {
+      final port = _UnavailablePort('还没有设置 Nipa 的模型。请打开“设置 Nipa”填写地址和模型名。');
+      final chat = NipaChat(port: port, data: _ChatData());
+      addTearDown(chat.dispose);
+
+      await chat.say('你好');
+
+      final turn = chat.turns.single;
+      final notice = turn.parts.whereType<NoticePart>().single;
+      expect(turn.status, 'failed');
+      expect(notice.text, contains('还没有设置 Nipa 的模型'));
+      expect(notice.text, contains('设置 Nipa'));
+      expect(turn.answer, isNull);
+      expect(turn.lastWords, isEmpty);
+      expect(turn.folded(notice), false);
+      expect(turn.foldable, false);
+      expect(chat.trouble, isNull, reason: 'the notice is not repeated below');
+    });
+
+    test('setup problems point to the right part of 设置 Nipa', () {
+      expect(chatUnavailableReason('请先填写地址和模型名'), contains('填写地址和模型名'));
+      expect(chatUnavailableReason('请先填写密钥'), contains('填写密钥'));
+      expect(chatUnavailableReason('还没有运行环境'), contains('安装运行环境'));
+      expect(chatUnavailableReason('正在准备运行环境'), contains('请稍后再试'));
+      expect(chatUnavailableReason('模型服务已断开'), contains('模型服务没有启动'));
+      expect(chatUnavailableReason(null), contains('检查模型和运行环境'));
+    });
+
     test('an episode, paused: the work, the episode, where, the pause', () {
       final sent = ChatContext.watching(
           '这个人是谁？',
@@ -174,7 +202,8 @@ void main() {
       p.state.position = const Duration(minutes: 11);
       await saying;
       await tester.pump();
-      expect(port.said.single,
+      expect(
+          port.said.single,
           '这个人是谁？\n\n$mark 这句话是在播放《寻龙记》第 3 集时说的'
           '（作品 ID：w-dragon；剧集 ID：e-dragon-3；位置 10:21 / 14:48；暂停中）。');
 
@@ -203,14 +232,15 @@ void main() {
 
     testWidgets('a film goes without an episode; playing says no pause',
         (tester) async {
-      playerTestLibrary['/v/Dune.mkv'] = const UiNowPlaying(
-          workId: 'w-dune', work: '沙丘', episodeId: 'e-dune');
+      playerTestLibrary['/v/Dune.mkv'] =
+          const UiNowPlaying(workId: 'w-dune', work: '沙丘', episodeId: 'e-dune');
       final (_, shell) = await watch(tester, '/v/Dune.mkv',
           at: const Duration(hours: 1, minutes: 2, seconds: 3),
           length: const Duration(hours: 2, minutes: 35));
       await shell.chat.say('这是哪一年拍的？');
       await tester.pump();
-      expect(port.said.single,
+      expect(
+          port.said.single,
           '这是哪一年拍的？\n\n$mark 这句话是在播放《沙丘》时说的'
           '（作品 ID：w-dune；剧集 ID：e-dune；位置 1:02:03 / 2:35:00）。');
     });
@@ -222,7 +252,8 @@ void main() {
       expect(shell.chat.watched, '「[Group] Show - 07 [1080p].mkv」');
       await shell.chat.say('这是第几集？');
       await tester.pump();
-      expect(port.said.single,
+      expect(
+          port.said.single,
           '这是第几集？\n\n$mark 这句话是在播放「[Group] Show - 07 [1080p].mkv」'
           '时说的（位置 10:21 / 14:48）。');
       expect(find.text('这是第几集？'), findsOneWidget);
@@ -270,7 +301,8 @@ void main() {
     final history = await fake.readThread(chat.thread!);
     final turn = (history['turns'] as List).cast<Map>().last;
     final item = (turn['items'] as List).cast<Map>().first;
-    expect((item['content'] as List).single['text'],
+    expect(
+        (item['content'] as List).single['text'],
         '刚才那个魔法叫什么？\n\n$mark 这句话是在播放《葬送的芙莉莲》第 5 集 死者的幻影时说的'
         '（作品 ID：fake:frieren；剧集 ID：fake:frieren:5；位置 12:03 / 24:00；暂停中）。');
     final said = ChatTurn.fromHistory(turn).parts.whereType<SaidPart>().first;
@@ -288,6 +320,8 @@ final class _Port implements ChatPort {
 
   @override
   bool get available => true;
+  @override
+  Future<String?> unavailableReason() async => null;
   @override
   bool get busy => false;
   @override
@@ -315,4 +349,46 @@ final class _Port implements ChatPort {
   void dispose() {}
   @override
   dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
+}
+
+final class _UnavailablePort implements ChatPort {
+  _UnavailablePort(this.reason);
+  final String reason;
+
+  @override
+  bool get available => false;
+  @override
+  Future<String?> unavailableReason() async => reason;
+  @override
+  bool get busy => false;
+  @override
+  bool busyOn(String threadId) => false;
+  @override
+  Stream<ChatEvent> get display => const Stream.empty();
+  @override
+  Stream<ChatEvent> get questions => const Stream.empty();
+  @override
+  void dispose() {}
+  @override
+  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
+}
+
+final class _ChatData implements NextUiData {
+  @override
+  Future<UiHome> home() async => const UiHome();
+  @override
+  Stream<List<UiTask>> tasks() => Stream.value(const []);
+  @override
+  Stream<void> get changes => const Stream.empty();
+  @override
+  Future<UiWork?> work(String workId) async => null;
+  @override
+  Future<List<UiEpisode>> episodes(String workId, {int? season}) async =>
+      const [];
+  @override
+  Future<List<UiWork>> library() async => const [];
+  @override
+  Future<List<UiCard>> cards(
+          {required String threadId, String? turnId}) async =>
+      const [];
 }

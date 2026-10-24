@@ -142,6 +142,11 @@ void main() {
     return value;
   }
 
+  test('preferences skip values that only exist inside a running player',
+      () async {
+    expect(await registry.preferences(), isEmpty);
+  });
+
   test(
       'one call edits multiple Classic settings with independent revisions and failures',
       () async {
@@ -329,8 +334,12 @@ void main() {
       'next/endpoint.json',
     };
     final exposed = (await registry.describe()).map((entry) => entry['key']);
-    for (final key in ['plugin_enabled_ids', 'plugin_downloader_override',
-      'plugin_text_setting_fixture::label', 'plugin_fixture_custom_value']) {
+    for (final key in [
+      'plugin_enabled_ids',
+      'plugin_downloader_override',
+      'plugin_text_setting_fixture::label',
+      'plugin_fixture_custom_value'
+    ]) {
       expect(isSettingDenied(key), false, reason: key);
     }
     for (final key in denied) {
@@ -422,7 +431,8 @@ void main() {
     SettingsAccess.registry = registry;
     api = harness.Harness([SettingsCapability(registry)]);
     for (final entry in registry.entries) {
-      if (entry.key == 'player.brightness' && !globals.isMobilePlatform) continue;
+      if (entry.key == 'player.brightness' && !globals.isMobilePlatform)
+        continue;
       final initial = await call('settings.get', {'key': entry.key});
       expect(entry.schema.validate(initial['value']), isEmpty,
           reason: entry.key);
@@ -436,19 +446,21 @@ void main() {
         'player.timelinePreviewEnabled' || 'player.externalEnabled' => false,
         'player.minimalProgressBarColor' => 0xFF40C7FF,
         _ => switch (entry.schema) {
-        harness.BooleanSchema() => !(initial['value'] as bool),
-        harness.StringSchema(:final values) when values != null =>
-          values.firstWhere((v) => v != initial['value'],
-              orElse: () => values.first),
-        harness.IntegerSchema(:final minimum, :final maximum) =>
-          (minimum ?? 0) == initial['value'] ? (maximum ?? 1) : (minimum ?? 0),
-        harness.NumberSchema(:final minimum, :final maximum) =>
-          (minimum ?? 0.0) == initial['value']
-              ? (maximum ?? 1.0)
-              : (minimum ?? 0.0),
-        harness.ArraySchema() => ['screen this word'],
-        _ => entry.defaultValue,
-        },
+            harness.BooleanSchema() => !(initial['value'] as bool),
+            harness.StringSchema(:final values) when values != null =>
+              values.firstWhere((v) => v != initial['value'],
+                  orElse: () => values.first),
+            harness.IntegerSchema(:final minimum, :final maximum) =>
+              (minimum ?? 0) == initial['value']
+                  ? (maximum ?? 1)
+                  : (minimum ?? 0),
+            harness.NumberSchema(:final minimum, :final maximum) =>
+              (minimum ?? 0.0) == initial['value']
+                  ? (maximum ?? 1.0)
+                  : (minimum ?? 0.0),
+            harness.ArraySchema() => ['screen this word'],
+            _ => entry.defaultValue,
+          },
       };
       // Enabling spoiler analysis requires a user-supplied secret configuration.
       if (entry.key == 'danmaku.spoilerPreventionEnabled') {
@@ -488,43 +500,61 @@ void main() {
     expect((await registry.get('danmaku.opacity'))['value'], 0.7);
   });
 
-  test('CLI settings retain attribution and emit only committed revisions', () async {
+  test('CLI settings retain attribution and emit only committed revisions',
+      () async {
     final events = <Map<String, Object?>>[];
     registry.onChanged = (facts) async {
-      expect((await registry.get(facts['key'] as String))['revision'], facts['revision']);
+      expect((await registry.get(facts['key'] as String))['revision'],
+          facts['revision']);
       events.add(facts);
     };
     final origin = harness.Invocation(origin: 'harness_cli:chat:fixture');
-    await registry.set('danmaku.opacity', 0.5, origin, reason: '用户偏好', expectedRevision: 0);
-    await expectLater(registry.set('danmaku.opacity', 0.7, origin, expectedRevision: 0),
+    await registry.set('danmaku.opacity', 0.5, origin,
+        reason: '用户偏好', expectedRevision: 0);
+    await expectLater(
+        registry.set('danmaku.opacity', 0.7, origin, expectedRevision: 0),
         throwsA(isA<harness.Failure>()));
     expect(events, hasLength(1));
     expect(events.single['changedBy'], 'agent');
     expect(events.single['reason'], '用户偏好');
-    await registry.set('danmaku.opacity', 0.8, harness.Invocation(origin: 'gui'));
+    await registry.set(
+        'danmaku.opacity', 0.8, harness.Invocation(origin: 'gui'));
     expect(events.last['changedBy'], 'user');
     expect((await registry.get('danmaku.opacity'))['value'], 0.8);
     // Older CLI rows gain the same display attribution without rewriting history.
     await db.update('settings_changes', {'changed_by': origin.origin},
         where: 'origin=?', whereArgs: [origin.origin]);
-    expect((await registry.history(key: 'danmaku.opacity')).last['changedBy'], 'agent');
-    expect((await db.query('settings_changes', where: 'origin=?',
-        whereArgs: [origin.origin])).single['changed_by'], origin.origin);
+    expect((await registry.history(key: 'danmaku.opacity')).last['changedBy'],
+        'agent');
+    expect(
+        (await db.query('settings_changes',
+                where: 'origin=?', whereArgs: [origin.origin]))
+            .single['changed_by'],
+        origin.origin);
   });
 
-  test('describe exposes enum names and file/directory types for generated settings', () async {
-    final rows = await registry.describe(keys: ['player.kernel', 'player.externalPath',
-      'subtitle.fontDir', 'player.screenshotDirectory']);
+  test(
+      'describe exposes enum names and file/directory types for generated settings',
+      () async {
+    final rows = await registry.describe(keys: [
+      'player.kernel',
+      'player.externalPath',
+      'subtitle.fontDir',
+      'player.screenshotDirectory'
+    ]);
     final byKey = {for (final row in rows) row['key']: row};
     final kernel = byKey['player.kernel']!;
     expect(kernel['enumNames'], hasLength((kernel['enum'] as List).length));
-    final names = Map.fromIterables(kernel['enum'] as List, kernel['enumNames'] as List);
+    final names =
+        Map.fromIterables(kernel['enum'] as List, kernel['enumNames'] as List);
     expect(names['mediaKit'], 'mpv');
     expect(byKey['player.externalPath']!['format'], 'file');
     expect(byKey['subtitle.fontDir']!['format'], 'directory');
     expect(byKey['player.screenshotDirectory']!['format'], 'directory');
-    final result = await call('settings.describe', {'keys': ['player.externalPath'],
-      'fields': ['key', 'format']});
+    final result = await call('settings.describe', {
+      'keys': ['player.externalPath'],
+      'fields': ['key', 'format']
+    });
     expect((result['settings'] as List).single['format'], 'file');
   });
 
@@ -718,5 +748,38 @@ void main() {
     expect(output['apply'], 'reload_player');
     expect(broadcasts, isEmpty);
     await subscription.cancel();
+  });
+
+  test('settings for another kernel stay listed with applicability facts',
+      () async {
+    final previousKernel = ApplicationSettings.currentKernel;
+    ApplicationSettings.currentKernel = () => PlayerKernelType.mediaKit.name;
+    addTearDown(() => ApplicationSettings.currentKernel = previousKernel);
+
+    final described = await call('settings.describe', {
+      'keys': ['player.erikaUpscalerMode'],
+      'fields': ['key', 'value', 'appliesTo', 'appliesNow', 'reason'],
+    });
+    final row = (described['settings'] as List).single as Map;
+    expect(row['key'], 'player.erikaUpscalerMode');
+    expect(row['appliesTo'], {
+      'kernels': ['erika']
+    });
+    expect(row['appliesNow'], false);
+    expect(row['reason'], contains('Media Kit'));
+    expect(row.keys.toSet(),
+        {'key', 'value', 'appliesTo', 'appliesNow', 'reason'});
+
+    final stored = await call('settings.get', {
+      'key': 'player.erikaUpscalerMode',
+    });
+    expect(stored['appliesNow'], false);
+    expect(stored['reason'], contains('Erika'));
+
+    final saved = await call('settings.set', {
+      'key': 'player.erikaUpscalerMode',
+      'value': 'erikaArtCnnC4F32',
+    });
+    expect(saved['value'], 'erikaArtCnnC4F32');
   });
 }

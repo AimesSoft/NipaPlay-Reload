@@ -217,7 +217,8 @@ void main() {
       expect(ended.progress, 1);
     });
 
-    test('the list: newest first, removed ones left out, a missing session kept',
+    test(
+        'the list: newest first, removed ones left out, a missing session kept',
         () async {
       final script = _Script({
         'task.list': (_) => {
@@ -233,7 +234,12 @@ void main() {
           expect(input['jobIds'], ['new', 'old']);
           return {
             'results': [
-              {'index': 0, 'status': 'completed', 'job': _job('new', 'running'), 'task': _task()},
+              {
+                'index': 0,
+                'status': 'completed',
+                'job': _job('new', 'running'),
+                'task': _task()
+              },
               {
                 'index': 1,
                 'status': 'failed',
@@ -256,14 +262,15 @@ void main() {
                 {
                   'index': 0,
                   'status': 'failed',
-                  'error':
-                      const Failure(FailureCode.conflict, 'busy').toJson()
+                  'error': const Failure(FailureCode.conflict, 'busy').toJson()
                 }
               ]
             },
       });
-      await expectLater(NextDownloads(script.gui).setPaused(['a'], true),
-          throwsA(isA<Failure>().having((f) => f.code, 'code', FailureCode.conflict)));
+      await expectLater(
+          NextDownloads(script.gui).setPaused(['a'], true),
+          throwsA(isA<Failure>()
+              .having((f) => f.code, 'code', FailureCode.conflict)));
     });
 
     test('limits read back what the downloader does', () async {
@@ -312,15 +319,21 @@ void main() {
         'https://example.org/Frieren.torrent',
       ]) {
         final preview = await downloads.preview(source);
-        expect([script.calls.last.$1, script.calls.last.$2],
-            ['download.preview', {'source': source}]);
+        expect([
+          script.calls.last.$1,
+          script.calls.last.$2
+        ], [
+          'download.preview',
+          {'source': source}
+        ]);
         expect(preview.size, 1000);
         expect([for (final f in preview.files) (f.name, f.size, f.video)],
             [('01.mkv', 600, true), ('Fonts.7z', 400, false)]);
       }
     });
 
-    test('removing keeps the files; deleting them asks first, its option '
+    test(
+        'removing keeps the files; deleting them asks first, its option '
         'as it is', () async {
       final script = _Script({
         'download.remove': (_) => {'job': _job('a', 'cancelled')},
@@ -328,20 +341,30 @@ void main() {
       });
       final downloads = NextDownloads(script.gui);
       await downloads.remove('a', files: false);
-      expect([script.calls.single.$1, script.calls.single.$2],
-          ['download.remove', {'jobId': 'a'}]);
+      expect([
+        script.calls.single.$1,
+        script.calls.single.$2
+      ], [
+        'download.remove',
+        {'jobId': 'a'}
+      ]);
 
       await expectLater(
           downloads.remove('a', files: true),
           throwsA(isA<DeletionNeeded>()
               .having((d) => d.prompt, 'prompt', '删除 2 个文件')
-              .having((d) => d.items, 'items', ['Frieren'])
-              .having((d) => d.options.single.call.toJson(), 'call', {
+              .having((d) => d.items, 'items', ['Frieren']).having(
+                  (d) => d.options.single.call.toJson(), 'call', {
             'action': 'download.delete.request',
             'input': {'previewId': 'p1'}
           })));
-      expect([script.calls.last.$1, script.calls.last.$2],
-          ['download.delete', {'jobId': 'a'}]);
+      expect([
+        script.calls.last.$1,
+        script.calls.last.$2
+      ], [
+        'download.delete',
+        {'jobId': 'a'}
+      ]);
     });
   });
 
@@ -352,9 +375,24 @@ void main() {
         'task.resources': (_) => {
               'pools': [
                 {'type': 'media.scan', 'capacity': 2, 'active': 1, 'queued': 0},
-                {'type': 'media.scan_classic', 'capacity': 1, 'active': 1, 'queued': 3},
-                {'type': 'media.metadata.refresh', 'capacity': 4, 'active': 0, 'queued': 0},
-                {'type': 'agent.helper', 'capacity': 2, 'active': 1, 'queued': 0},
+                {
+                  'type': 'media.scan_classic',
+                  'capacity': 1,
+                  'active': 1,
+                  'queued': 3
+                },
+                {
+                  'type': 'media.metadata.refresh',
+                  'capacity': 4,
+                  'active': 0,
+                  'queued': 0
+                },
+                {
+                  'type': 'agent.helper',
+                  'capacity': 2,
+                  'active': 1,
+                  'queued': 0
+                },
               ]
             },
         'settings.set': (input) => input,
@@ -374,7 +412,8 @@ void main() {
       final script = _Script({
         'task.control': (input) => {
               'results': [
-                for (final (i, e) in (input['entries'] as List).cast<Map>().indexed)
+                for (final (i, e)
+                    in (input['entries'] as List).cast<Map>().indexed)
                   {
                     'index': i,
                     'jobId': e['jobId'],
@@ -431,8 +470,7 @@ void main() {
             for (final f in (task['files'] as List).cast<Map>())
               {
                 ...f,
-                'included':
-                    (input['fileIndices'] as List).contains(f['index'])
+                'included': (input['fileIndices'] as List).contains(f['index'])
               }
           ]
         };
@@ -475,8 +513,11 @@ void main() {
     await tester.tap(_pressable('选择 Fonts.7z'));
     await tester.pump(const Duration(milliseconds: 800));
     await tester.pump(const Duration(milliseconds: 100));
-    expect(script.calls.where((c) => c.$1 == 'download.select_files').single.$2,
-        {'jobId': 'a', 'fileIndices': [0, 1]});
+    expect(
+        script.calls.where((c) => c.$1 == 'download.select_files').single.$2, {
+      'jobId': 'a',
+      'fileIndices': [0, 1]
+    });
 
     await tester.tap(_pressable('删除'));
     await tester.pump(const Duration(milliseconds: 400));
@@ -491,8 +532,14 @@ void main() {
       for (final c in script.calls)
         if (c.$1.startsWith('download.delete')) [c.$1, c.$2]
     ], [
-      ['download.delete', {'jobId': 'a'}],
-      ['download.delete.request', {'previewId': 'p1'}],
+      [
+        'download.delete',
+        {'jobId': 'a'}
+      ],
+      [
+        'download.delete.request',
+        {'previewId': 'p1'}
+      ],
     ]);
     expect(script.calls.map((c) => c.$1), isNot(contains('download.remove')));
     // The deletion is a task of its own, never read as a download.
@@ -515,7 +562,9 @@ void main() {
                   progress: _files,
                   receipt: _removed),
               _job('kept', 'succeeded',
-                  title: '[ANi] Frieren', created: '2026-10-02', progress: _files),
+                  title: '[ANi] Frieren',
+                  created: '2026-10-02',
+                  progress: _files),
               _job('paused', 'paused',
                   title: '[ANi] Dungeon Meshi', created: '2026-10-01'),
             ]
@@ -550,8 +599,9 @@ void main() {
     ));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 100));
-    expect(script.calls.firstWhere((c) => c.$1 == 'download.read').$2,
-        {'jobIds': ['kept', 'paused']});
+    expect(script.calls.firstWhere((c) => c.$1 == 'download.read').$2, {
+      'jobIds': ['kept', 'paused']
+    });
     expect(find.text('[ANi] Lycoris Recoil'), findsNothing);
     expect(find.text('[ANi] Frieren'), findsOneWidget);
     expect(find.text('完成'), findsOneWidget);
@@ -562,7 +612,8 @@ void main() {
     shell.dispose();
   });
 
-  testWidgets('a question marks the option whose Action destroys, whatever '
+  testWidgets(
+      'a question marks the option whose Action destroys, whatever '
       'its words', (tester) async {
     final script = _Script({
       'subtitle.cleanup': (input) => input['confirm'] == true
@@ -587,8 +638,7 @@ void main() {
       ),
     ));
     final calls = script.gui;
-    final done =
-        withDecisions(calls, () => calls.call('subtitle.cleanup', {}));
+    final done = withDecisions(calls, () => calls.call('subtitle.cleanup', {}));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 400));
     Color? color(String label) =>
@@ -598,8 +648,13 @@ void main() {
     await tester.tap(find.text('Delete copies'));
     await tester.pump(const Duration(milliseconds: 400));
     expect(await done, {'deleted': 2});
-    expect([script.calls.last.$1, script.calls.last.$2],
-        ['subtitle.cleanup', {'confirm': true}]);
+    expect([
+      script.calls.last.$1,
+      script.calls.last.$2
+    ], [
+      'subtitle.cleanup',
+      {'confirm': true}
+    ]);
     await tester.pumpWidget(const SizedBox());
   });
 }
@@ -649,6 +704,8 @@ final class _Data implements NextUiData {
 final class _Port implements ChatPort {
   @override
   bool get available => false;
+  @override
+  Future<String?> unavailableReason() async => null;
 
   @override
   bool get busy => false;

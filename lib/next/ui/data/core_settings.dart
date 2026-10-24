@@ -51,7 +51,7 @@ final class CoreSettingsData implements NextSettingsData {
           await _call('settings.describe', {'offset': offset, 'limit': 500});
       rows.addAll([
         for (final row in (page['settings'] as List).cast<Map>())
-          UiSetting.fromRow(row)
+          if (row['appliesNow'] != false) UiSetting.fromRow(row)
       ]);
       offset = (page['nextOffset'] as num?)?.toInt();
     }
@@ -286,8 +286,8 @@ final class CoreSettingsData implements NextSettingsData {
   /// Nipa's memory writes are recorded in the same database the UI data
   /// watches.
   @override
-  Stream<void> get memoryChanges => Stream.fromFuture(core.ready)
-      .asyncExpand((_) => core.uiData.changes);
+  Stream<void> get memoryChanges =>
+      Stream.fromFuture(core.ready).asyncExpand((_) => core.uiData.changes);
 
   // —— 关于 ——
 

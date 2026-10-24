@@ -12,6 +12,10 @@ abstract interface class ChatPort {
   /// A host is running and can take a turn.
   bool get available;
 
+  /// Why the host cannot take a turn now, in a short sentence for the
+  /// conversation; null when there is nothing more specific to say.
+  Future<String?> unavailableReason();
+
   /// The host's current session has a turn running (ours or a
   /// follow-up's); a turn on another session waits for it.
   bool get busy;
@@ -91,6 +95,16 @@ final class ChatHostPort implements ChatPort {
 
   @override
   bool get available => _current?.available ?? false;
+
+  @override
+  Future<String?> unavailableReason() async {
+    try {
+      final setup = await runtime.hostSettings.model();
+      return chatUnavailableReason(setup.problem);
+    } catch (_) {
+      return chatUnavailableReason(null);
+    }
+  }
 
   @override
   bool get busy => _current?.busy ?? false;
@@ -177,6 +191,37 @@ final class ChatHostPort implements ChatPort {
     _display.close();
     _questions.close();
   }
+}
+
+/// What to tell the person when Nipa cannot start a turn. The host's setup
+/// problem is a short fact; this turns it into where to fix it.
+String chatUnavailableReason(String? problem) {
+  final text = problem?.trim() ?? '';
+  if (text.contains('正在准备') || text.contains('正在下载') || text.contains('正在解包')) {
+    return '正在准备 Nipa 的运行环境，请稍后再试。';
+  }
+  if (text.contains('运行环境') ||
+      text.contains('DeepSeek Harness') ||
+      text.contains('DSH')) {
+    return '还没有准备好 Nipa 的运行环境。请打开“设置 Nipa”安装运行环境。';
+  }
+  if (text.contains('密钥')) {
+    return '还没有设置 Nipa 的模型密钥。请打开“设置 Nipa”填写密钥。';
+  }
+  if (text.contains('地址') ||
+      text.contains('模型名') ||
+      text.contains('模型') && !text.contains('模型服务') ||
+      text.contains('Codex 配置') ||
+      text.contains('接口')) {
+    return '还没有设置 Nipa 的模型。请打开“设置 Nipa”填写地址和模型名。';
+  }
+  if (text.contains('模型服务') ||
+      text.contains('服务') ||
+      text.contains('断开') ||
+      text.contains('启动')) {
+    return 'Nipa 的模型服务没有启动。请打开“设置 Nipa”检查模型设置。';
+  }
+  return 'Nipa 现在还不能开始对话。请打开“设置 Nipa”检查模型和运行环境。';
 }
 
 /// Reads the turn ID from a `turn/start` response.

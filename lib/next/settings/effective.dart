@@ -45,20 +45,24 @@ String _argb(Object color) {
 /// registry stores.
 final Map<String, _Live> _live = {
   'player.pauseOnBackground': (v) => v.pauseOnBackground,
-  'player.desktopHoverSettingsMenuEnabled': (v) => v.desktopHoverSettingsMenuEnabled,
+  'player.desktopHoverSettingsMenuEnabled': (v) =>
+      v.desktopHoverSettingsMenuEnabled,
   'player.instantHidePlayerUiEnabled': (v) => v.instantHidePlayerUiEnabled,
   'player.showMenuQuickControls': (v) => v.showPlayerMenuQuickControls,
-  'player.topSendDanmakuButtonVisible': (v) => v.playerTopSendDanmakuButtonVisible,
+  'player.topSendDanmakuButtonVisible': (v) =>
+      v.playerTopSendDanmakuButtonVisible,
   'player.topSkipButtonVisible': (v) => v.playerTopSkipButtonVisible,
   'player.topResizeButtonVisible': (v) => v.playerTopResizeButtonVisible,
-  'player.topFrameStepButtonsVisible': (v) => v.playerTopFrameStepButtonsVisible,
+  'player.topFrameStepButtonsVisible': (v) =>
+      v.playerTopFrameStepButtonsVisible,
   'player.chapterMarkersEnabled': (v) => v.chapterMarkersEnabled,
   'player.minimalProgressBarEnabled': (v) => v.minimalProgressBarEnabled,
   'player.useHardwareDecoder': (v) => v.useHardwareDecoder,
   'player.introSkipEnabled': (v) => v.introSkipEnabled,
   'player.timelinePreviewEnabled': (v) => v.timelinePreviewEnabled,
   'player.autoFullscreenEnabled': (v) => v.autoFullscreenEnabled,
-  'player.doubleResolutionPlaybackEnabled': (v) => v.doubleResolutionPlaybackEnabled,
+  'player.doubleResolutionPlaybackEnabled': (v) =>
+      v.doubleResolutionPlaybackEnabled,
   'player.screenshotCropLetterbox': (v) => v.screenshotCropLetterbox,
   'player.playbackEndAction': (v) => v.playbackEndAction.name,
   'player.videoAspectMode': (v) => v.videoAspectMode.name,
@@ -69,7 +73,8 @@ final Map<String, _Live> _live = {
   'player.erikaUpscalerMode': (v) => v.erikaUpscalerMode.name,
   'player.autoNextCountdownSeconds': (v) => v.autoNextCountdownSeconds,
   'player.precacheBufferSizeMb': (v) => v.precacheBufferSizeMb,
-  'player.precacheBufferDurationSeconds': (v) => v.precacheBufferDurationSeconds,
+  'player.precacheBufferDurationSeconds': (v) =>
+      v.precacheBufferDurationSeconds,
   'player.volumeBoost': (v) => v.volumeBoost,
   'seek.stepSeconds': (v) => v.seekStepSeconds,
   'seek.speedBoostRate': (v) => v.speedBoostRate,
@@ -132,7 +137,8 @@ const _playerRebuilt = {
 /// Works out [Effective] for registry entries. Everything here reads state;
 /// nothing is written.
 abstract final class EffectiveRules {
-  static Effective? Function(SettingEntry entry, Object? stored)? sessionPlayer;
+  static Future<Effective?> Function(SettingEntry entry, Object? stored)?
+      sessionPlayer;
   static const _externalDependents = {
     'player.externalPath',
     'player.externalType',
@@ -148,15 +154,16 @@ abstract final class EffectiveRules {
   };
 
   static Future<Effective> resolve(SettingEntry entry, Object? stored,
-      {required Map<String, Object?> startup, required ReadOther readOther}) async {
+      {required Map<String, Object?> startup,
+      required ReadOther readOther}) async {
     final key = entry.key;
-    final next = sessionPlayer?.call(entry, stored);
+    final next = await sessionPlayer?.call(entry, stored);
     if (next != null) return next;
     final video = ApplicationSettings.video;
     final nextDanmaku = NextDanmakuSettings.active;
     if (nextDanmaku != null && NextDanmakuSettings.keys.containsKey(key)) {
-      return compareEffective(entry, stored, nextDanmaku.readSetting(key),
-          'Next 播放会话的弹幕设置。');
+      return compareEffective(
+          entry, stored, nextDanmaku.readSetting(key), 'Next 播放会话的弹幕设置。');
     }
 
     // Settings another setting or the platform switches off.
@@ -165,7 +172,9 @@ abstract final class EffectiveRules {
       return const Effective.inactive('inactive_dependency',
           'player.externalEnabled is false, so the external player is not used.');
     }
-    if (key == 'player.hwdecMode' && video != null && !video.useHardwareDecoder) {
+    if (key == 'player.hwdecMode' &&
+        video != null &&
+        !video.useHardwareDecoder) {
       return const Effective.inactive('overridden',
           'player.useHardwareDecoder is false; the hardware decoding mode is not used.');
     }
@@ -176,7 +185,8 @@ abstract final class EffectiveRules {
     }
     final titan = _titanCounterparts[key];
     if (titan != null &&
-        (DanmakuKernelFactory.activePluginRenderer?.usesTitanSettings ?? false)) {
+        (DanmakuKernelFactory.activePluginRenderer?.usesTitanSettings ??
+            false)) {
       return Effective.inactive('overridden',
           'The active plugin danmaku renderer reads $titan instead of $key.');
     }
@@ -192,14 +202,15 @@ abstract final class EffectiveRules {
       if (video == null) return _noPlayer;
       final running = _kernelNames[video.player.getPlayerKernelName()];
       if (running == null) {
-        return const Effective.unknown('no_runtime_probe',
-            'The running player kernel has no known name.');
+        return const Effective.unknown(
+            'no_runtime_probe', 'The running player kernel has no known name.');
       }
       return compareEffective(entry, stored, running,
           'The current player instance runs the $running kernel and the media being watched is not interrupted. When media is next opened, it opens and is then reopened once on a new player on the stored kernel.');
     }
     if (_playerRebuilt.contains(key)) {
-      final waiting = DeferredReloads.runningOf(key, PlayerFactory.getKernelType());
+      final waiting =
+          DeferredReloads.runningOf(key, PlayerFactory.getKernelType());
       if (waiting.waiting) {
         return Effective.differs(
             waiting.running,

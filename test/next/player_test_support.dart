@@ -230,6 +230,7 @@ class FakePlayerState extends ChangeNotifier implements VideoPlayerState {
   PlayableItem? get lastPlaybackRequest => null;
   @override
   int get bufferedPosition => 4 * 60 * 1000;
+
   /// Classic offers a next episode (as it does for any Jellyfin or Emby
   /// stream, films too).
   @override
@@ -269,7 +270,8 @@ class FakePlayback extends Fake implements NextPlayback {
 
   static PlaybackPhase _phase(PlayerStatus status) => switch (status) {
         PlayerStatus.idle => PlaybackPhase.idle,
-        PlayerStatus.loading || PlayerStatus.recognizing =>
+        PlayerStatus.loading ||
+        PlayerStatus.recognizing =>
           PlaybackPhase.opening,
         PlayerStatus.ready => PlaybackPhase.ready,
         PlayerStatus.playing => PlaybackPhase.playing,
@@ -639,6 +641,8 @@ final class _Data implements NextUiData, NextNowPlaying {
 final class _Port implements ChatPort {
   @override
   bool get available => false;
+  @override
+  Future<String?> unavailableReason() async => null;
   @override
   bool get busy => false;
   @override

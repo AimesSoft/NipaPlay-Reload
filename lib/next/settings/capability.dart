@@ -63,6 +63,9 @@ const _descriptionFields = [
   'effectiveSource',
   'effectiveReason',
   'effectiveDetail',
+  'appliesTo',
+  'appliesNow',
+  'reason',
 ];
 const _historyFields = [
   'key',
@@ -139,7 +142,7 @@ final class _SettingsAction extends Action<_Json, _Json> {
         title: 'Settings $verb',
         description: switch (verb) {
           'describe' =>
-            'List locally visible setting contracts and values, each with the stored value and the effective value (fields as in get). Supports keys, domain, keyword, fields and offset/limit pagination.',
+            'List every registered setting contract and value, including settings that do not apply now, each with the stored value and the effective value (fields as in get). appliesTo says which kernels, platforms, capabilities or runtime requirements the setting belongs to; appliesNow says whether it applies under the current conditions, and reason says why not when it does not. Supports keys, domain, keyword, fields and offset/limit pagination.',
           'get' =>
             'Read key or keys with values, revisions, apply modes and latest provenance. value is the stored value. effective is the value in use while the application runs: effectiveState same, differs, inactive or unknown; effectiveSource live (read from the running component), startup (the stored value as the application started, for settings read only at start) or storage (no separate running value is observable; the setter that saves it is the one the running component uses). When state is differs, effectiveReason and effectiveDetail say why: restart_required, reload_required or runtime_adjusted (the player adjusted the value), speed_boost_active. inactive means the stored value is not in use and effective is null: overridden, inactive_dependency or kernel_unsupported, naming the other setting or kernel. unknown means the running value cannot be read and effective is null: applies_at_next_open, loaded_when_page_created, player_not_attached, no_runtime_probe or probe_failed. Batch results preserve input order and individual failures.',
           'set' =>
