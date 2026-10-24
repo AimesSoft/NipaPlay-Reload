@@ -73,7 +73,10 @@ revision and the exact JSON call, independent of object key ordering, and
 persists the choice before invoking recovery. Repeated or stale calls fail
 with `conflict`; no extra generic `task.resolve` Action is introduced.
 
-`task.list` accepts optional `state` and `type` filters and returns `jobs`.
+`task.list` accepts optional `state` and `type` filters and returns `jobs`
+newest first by default, plus `total` for every matching task. Pass
+`order: "oldest"` for ascending creation order; `limit` and `offset` page the
+same ordered set.
 `task.get`, `task.cancel` and `task.wait` accept `jobId` and return `job`.
 `task.wait` additionally accepts `afterRevision`, `timeoutMs` (0–60000,
 default 60000), and `includeProgress` (default false). By default only changes

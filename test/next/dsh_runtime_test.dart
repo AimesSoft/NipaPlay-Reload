@@ -101,15 +101,27 @@ trust_level = "trusted"
           throwsStateError);
     });
 
-    test("a lab profile's agent-runtime.json counts, and the environment wins over it", () {
+    test("a lab profile's agent-runtime.json counts, and the environment wins over it", () async {
       File('${dir.path}/agent-runtime.json')
           .writeAsStringSync('{"runtime":"codex"}');
       expect(AgentRuntimeFixed.read({}, labRoot: dir).kind, AgentRuntimeKind.codex);
+      expect((await AgentRuntimeFixed.readAsync({}, labRoot: dir)).kind,
+          AgentRuntimeKind.codex);
       expect(
           AgentRuntimeFixed.read({'NIPAPLAY_AGENT_RUNTIME': 'dsh'}, labRoot: dir)
               .kind,
           AgentRuntimeKind.dsh);
+      expect(
+          (await AgentRuntimeFixed.readAsync(
+                  {'NIPAPLAY_AGENT_RUNTIME': 'dsh'}, labRoot: dir))
+              .kind,
+          AgentRuntimeKind.dsh);
       expect(AgentRuntimeFixed.read({}, labRoot: Directory('${dir.path}/none')).kind,
+          isNull);
+      expect(
+          (await AgentRuntimeFixed.readAsync({},
+                  labRoot: Directory('${dir.path}/none')))
+              .kind,
           isNull);
     });
   });

@@ -61,6 +61,56 @@ final class AgentRuntimeFixed {
     return AgentRuntimeFixed(AgentRuntimeKind.dsh,
         DshRuntime(node: node, bin: bin, version: version ?? 'unknown'));
   }
+
+  /// Asynchronous counterpart used by the UI host, so startup configuration
+  /// reads never block the main isolate.
+  static Future<AgentRuntimeFixed> readAsync(Map<String, String> environment,
+      {Directory? labRoot}) async {
+    Map<String, Object?> file = const {};
+    if (labRoot != null) {
+      final config = File('${labRoot.path}/agent-runtime.json');
+      if (await config.exists()) {
+        file = Map<String, Object?>.from(
+            jsonDecode(await config.readAsString()) as Map);
+      }
+    }
+    String? value(String key, String fileKey) {
+      final text = environment[key] ?? file[fileKey] as String?;
+      return text == null || text.isEmpty ? null : text;
+    }
+
+    final runtime = value('NIPAPLAY_AGENT_RUNTIME', 'runtime');
+    if (runtime == null) return const AgentRuntimeFixed(null);
+    if (runtime == 'codex') {
+      return const AgentRuntimeFixed(AgentRuntimeKind.codex);
+    }
+    if (runtime != 'dsh') {
+      throw StateError(
+          'Unknown agent runtime "$runtime"; expected codex or dsh.');
+    }
+    final node = value('NIPAPLAY_DSH_NODE', 'node');
+    final root = value('NIPAPLAY_DSH_ROOT', 'root');
+    final bin = value('NIPAPLAY_DSH_BIN', 'bin') ??
+        (root == null
+            ? null
+            : '$root/node_modules/@deepseek-ai/dsh/lib/bin.js');
+    if (node == null && bin == null) {
+      return const AgentRuntimeFixed(AgentRuntimeKind.dsh);
+    }
+    if (node == null || bin == null) {
+      throw StateError('DSH needs NIPAPLAY_DSH_NODE and NIPAPLAY_DSH_ROOT '
+          '(or NIPAPLAY_DSH_BIN).');
+    }
+    if (!await File(node).exists()) throw StateError('No Node.js at $node.');
+    if (!await File(bin).exists()) throw StateError('No DSH launcher at $bin.');
+    final package = File('${File(bin).parent.parent.path}/package.json');
+    final version = await package.exists()
+        ? (jsonDecode(await package.readAsString()) as Map)['version']
+            as String?
+        : null;
+    return AgentRuntimeFixed(AgentRuntimeKind.dsh,
+        DshRuntime(node: node, bin: bin, version: version ?? 'unknown'));
+  }
 }
 
 /// DeepSeek Harness (DSH) as Nipa's runtime instead of Codex. See

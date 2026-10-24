@@ -99,3 +99,40 @@ Future<Object?> redactHarnessJsonOffMain(Object? value) async {
     return redactHarnessJson(value);
   }
 }
+
+/// Redacts one chat delta and holds back a trailing prefix of a known token.
+/// The caller supplies the previous held tail and keeps calls serialized, so
+/// the published fragments retain stream order and no token half escapes.
+Future<(String, String)> protectChatDeltaOffMain(
+    String text, Iterable<String> tokens) async {
+  final remembered = SecretRedactor.remembered();
+  final holdbacks = List<String>.of(tokens);
+  try {
+    return await Isolate.run(() {
+      for (final MapEntry(key: secret, value: ref) in remembered.entries) {
+        SecretRedactor.remember(ref, secret);
+      }
+      return _protectChatDelta(text, holdbacks);
+    });
+  } on ArgumentError {
+    return _protectChatDelta(text, holdbacks);
+  }
+}
+
+(String, String) _protectChatDelta(String text, Iterable<String> tokens) {
+  final safe = redactHarnessText(text);
+  var keep = 0;
+  for (final token in tokens) {
+    for (var length = 1;
+        length < token.length && length <= safe.length;
+        length++) {
+      if (length > keep && safe.endsWith(token.substring(0, length))) {
+        keep = length;
+      }
+    }
+  }
+  return (
+    safe.substring(0, safe.length - keep),
+    safe.substring(safe.length - keep)
+  );
+}

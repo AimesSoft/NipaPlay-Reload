@@ -288,32 +288,57 @@ void main() {
     expect((await terminal).receipt!.verification, VerificationLevel.verified);
   });
 
-  test('task.list reads a page of 50 and says where the next one starts',
+  test('task.list defaults newest first and pages a filtered total',
       () async {
     final harness = Harness([TaskCapability(engine)]);
     for (var i = 0; i < 60; i++) {
       await engine.submit(type: 'test', title: 'T$i');
+      await Future<void>.delayed(const Duration(milliseconds: 1));
     }
     Future<JsonMap> list(JsonMap input) async =>
         ((await harness.invokeJson('task.list', input, Invocation(origin: 't'))
                 as Completed)
             .value
             .toJson());
+    List<String> titles(JsonMap result) => [
+          for (final job in result['jobs'] as List)
+            (job as JsonMap)['title'] as String
+        ];
     final byDefault = await list({});
     expect(byDefault['jobs'], hasLength(50));
+    expect(byDefault['total'], 60);
+    expect(titles(byDefault).take(2), ['T59', 'T58']);
     expect(byDefault['nextOffset'], 50);
     final rest = await list({'offset': 50});
     expect(rest['jobs'], hasLength(10));
+    expect(titles(rest).take(2), ['T9', 'T8']);
     expect(rest['nextOffset'], isNull);
+    final oldest = await list({'order': 'oldest'});
+    expect(oldest['total'], 60);
+    expect(titles(oldest).take(2), ['T0', 'T1']);
+    expect(oldest['nextOffset'], 50);
+    final oldestRest = await list({'order': 'oldest', 'offset': 50});
+    expect(titles(oldestRest).last, 'T59');
+    expect(oldestRest['nextOffset'], isNull);
     final all = await list({'limit': 1000});
     expect(all['jobs'], hasLength(60));
+    expect(all['total'], 60);
     expect(all['nextOffset'], isNull);
     final first = await list({'limit': 25});
     expect(first['jobs'], hasLength(25));
+    expect(titles(first).first, 'T59');
     expect(first['nextOffset'], 25);
     final last = await list({'limit': 25, 'offset': 50});
     expect(last['jobs'], hasLength(10));
     expect(last['nextOffset'], isNull);
+    final queued = await list({'state': 'queued', 'type': 'test', 'limit': 10});
+    expect(queued['total'], 60);
+    expect(queued['jobs'], hasLength(10));
+    expect(queued['nextOffset'], 10);
+    final failed = await list({'state': 'failed', 'type': 'test'});
+    expect(failed['total'], 0);
+    expect(failed['jobs'], isEmpty);
+    expect(failed['nextOffset'], isNull);
   });
 
   test('task actions are listed and invoked through the real MCP endpoint',

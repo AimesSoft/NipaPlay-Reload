@@ -16,10 +16,11 @@ class WatchHistoryProvider extends ChangeNotifier {
   List<WatchHistoryItem> _history = [];
   final _libraryCandidates =
       StreamController<Iterable<WatchHistoryItem>>.broadcast(sync: true);
-  /// New entries, or a replaced snapshot after loading. Progress-only
-  /// notifications do not require library consumers to scan the history.
+  /// Paths that genuinely entered the library after the startup baseline.
+  /// Progress-only updates, removals and the initial history load stay silent.
   Stream<Iterable<WatchHistoryItem>> get libraryCandidates =>
       _libraryCandidates.stream;
+  final Set<String> _knownLibraryPaths = {};
   bool _isLoading = false;
   bool _isLoaded = false;
   bool _disposed = false;
@@ -144,9 +145,9 @@ class WatchHistoryProvider extends ChangeNotifier {
           // 排序
           _history.sort((a, b) => b.lastWatchTime.compareTo(a.lastWatchTime));
 
+          _publishHistorySnapshot(_history, emitAdditions: _isLoaded);
           _isLoaded = true;
           _isLoading = false;
-          _libraryCandidates.add(_history);
           notifyListeners();
           return;
         }
@@ -160,7 +161,6 @@ class WatchHistoryProvider extends ChangeNotifier {
         final recent = await _database.getRecentWatchHistory(limit: 40);
         if (_disposed) return;
         _history = recent;
-        _libraryCandidates.add(recent);
         notifyListeners();
         await Future<void>.delayed(Duration.zero);
       }
@@ -170,7 +170,7 @@ class WatchHistoryProvider extends ChangeNotifier {
       if (_disposed) return;
       // Publish a usable snapshot before background path checks complete.
       _history = rawHistory;
-      _libraryCandidates.add(rawHistory);
+      _publishHistorySnapshot(rawHistory, emitAdditions: _isLoaded);
       _isLoaded = true;
       notifyListeners();
       _history = await _validateFilePaths(rawHistory);
@@ -190,6 +190,22 @@ class WatchHistoryProvider extends ChangeNotifier {
       _reloadQueued = false;
       unawaited(loadHistory());
     }
+  }
+
+  void _publishHistorySnapshot(Iterable<WatchHistoryItem> items,
+      {required bool emitAdditions}) {
+    final currentPaths = <String>{};
+    final additions = <WatchHistoryItem>[];
+    for (final item in items) {
+      currentPaths.add(item.filePath);
+      if (emitAdditions && !_knownLibraryPaths.contains(item.filePath)) {
+        additions.add(item);
+      }
+    }
+    _knownLibraryPaths
+      ..clear()
+      ..addAll(currentPaths);
+    if (additions.isNotEmpty) _libraryCandidates.add(additions);
   }
 
   // 验证文件路径并修复iOS路径问题
@@ -433,9 +449,12 @@ class WatchHistoryProvider extends ChangeNotifier {
         _history.indexWhere((element) => element.filePath == item.filePath);
     if (index != -1) {
       _history[index] = item;
+      _knownLibraryPaths.add(item.filePath);
     } else {
       _history.add(item);
-      _libraryCandidates.add([item]);
+      if (_knownLibraryPaths.add(item.filePath)) {
+        _libraryCandidates.add([item]);
+      }
     }
 
     // 重新排序
@@ -454,6 +473,7 @@ class WatchHistoryProvider extends ChangeNotifier {
   Future<void> removeHistory(String filePath) async {
     await _database.deleteHistory(filePath);
     _history.removeWhere((item) => item.filePath == filePath);
+    _knownLibraryPaths.remove(filePath);
     notifyListeners();
     _scheduleIncrementalSyncAfterChange();
   }
@@ -463,6 +483,7 @@ class WatchHistoryProvider extends ChangeNotifier {
     final count = await _database.deleteHistoryByPathPrefix(pathPrefix);
     if (count > 0) {
       _history.removeWhere((item) => item.filePath.startsWith(pathPrefix));
+      _knownLibraryPaths.removeWhere((path) => path.startsWith(pathPrefix));
       notifyListeners();
       _scheduleIncrementalSyncAfterChange();
     }
@@ -472,6 +493,7 @@ class WatchHistoryProvider extends ChangeNotifier {
   Future<void> clearAllHistory() async {
     await _database.clearAllHistory();
     _history.clear();
+    _knownLibraryPaths.clear();
     notifyListeners();
     _scheduleIncrementalSyncAfterChange();
   }

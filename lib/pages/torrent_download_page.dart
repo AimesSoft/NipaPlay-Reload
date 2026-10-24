@@ -20,6 +20,7 @@ import 'package:nipaplay/services/file_picker_service.dart';
 import 'package:nipaplay/services/folder_opener.dart';
 import 'package:nipaplay/services/playback_service.dart';
 import 'package:nipaplay/services/torrent_download_service.dart';
+import 'package:nipaplay/next/downloads/download_runtime.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_dropdown.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_snackbar.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/fluent_settings_switch.dart';
@@ -44,7 +45,11 @@ import 'package:nipaplay/themes/cupertino/widgets/cupertino_page_actions_scope.d
 part '../themes/cupertino/widgets/cupertino_torrent_download_controls.dart';
 
 class TorrentDownloadPage extends StatefulWidget {
-  const TorrentDownloadPage({super.key});
+  const TorrentDownloadPage({super.key, this.downloadsReady});
+
+  /// Test seam for waiting on the Next download runtime without requiring a
+  /// globally initialized [ServiceProvider]. Production uses the Next core.
+  final Future<DownloadRuntime> Function()? downloadsReady;
 
   @override
   State<TorrentDownloadPage> createState() => _TorrentDownloadPageState();
@@ -53,7 +58,7 @@ class TorrentDownloadPage extends StatefulWidget {
 class _TorrentDownloadPageState extends State<TorrentDownloadPage>
     with PageActivityMixin {
   final TorrentDownloadService _service = TorrentDownloadService.instance;
-  final _downloads = ServiceProvider.nextCore.downloads;
+  DownloadRuntime? _downloads;
   final TextEditingController _searchController = TextEditingController();
   Timer? _refreshTimer;
   late final TorrentTaskController _taskController;
@@ -95,7 +100,6 @@ class _TorrentDownloadPageState extends State<TorrentDownloadPage>
     super.initState();
     _taskController = TorrentTaskController(loadTasks: _service.listTasks);
     _taskController.addListener(_onTasksChanged);
-    _downloads.addListener(_onDownloadStatusChanged);
     _initialize();
   }
 
@@ -104,7 +108,7 @@ class _TorrentDownloadPageState extends State<TorrentDownloadPage>
     _refreshTimer?.cancel();
     _taskController.removeListener(_onTasksChanged);
     _taskController.dispose();
-    _downloads.removeListener(_onDownloadStatusChanged);
+    _downloads?.removeListener(_onDownloadStatusChanged);
     _searchController.dispose();
     super.dispose();
   }
@@ -131,7 +135,12 @@ class _TorrentDownloadPageState extends State<TorrentDownloadPage>
   Future<void> _initialize() async {
     try {
       final directory = await _service.getDownloadDirectory();
-      await _downloads.ready;
+      final downloads = await (widget.downloadsReady?.call() ??
+          ServiceProvider.nextCore.downloadsReady);
+      if (!mounted) return;
+      _downloads = downloads;
+      downloads.addListener(_onDownloadStatusChanged);
+      await downloads.ready;
       await _service.initialize();
       await _taskController.refresh();
       if (!mounted) return;
@@ -162,11 +171,14 @@ class _TorrentDownloadPageState extends State<TorrentDownloadPage>
   }
 
   void _onDownloadStatusChanged() {
-    if (!mounted) return;
-    final changed = !setEquals(_displayedImportedKeys, _downloads.autoScannedKeys);
-    setState(() => _displayedImportedKeys = Set.of(_downloads.autoScannedKeys));
+    final downloads = _downloads;
+    if (!mounted || downloads == null) return;
+    final changed =
+        !setEquals(_displayedImportedKeys, downloads.autoScannedKeys);
+    setState(() => _displayedImportedKeys = Set.of(downloads.autoScannedKeys));
     if (changed) {
-      unawaited(_loadScanSummariesForTasks(_tasks, force: true).catchError((Object error) {
+      unawaited(_loadScanSummariesForTasks(_tasks, force: true)
+          .catchError((Object error) {
         debugPrint('读取下载任务入库结果失败: $error');
       }));
     }
@@ -182,6 +194,8 @@ class _TorrentDownloadPageState extends State<TorrentDownloadPage>
   }
 
   Future<void> _showAddMagnetDialog() async {
+    final downloads = _downloads;
+    if (downloads == null) return;
     final downloaderSettings = context.read<DownloaderSettingsProvider>();
     final initialDirectory = _downloadDirectory.isEmpty
         ? await _service.getDownloadDirectory()
@@ -215,7 +229,7 @@ class _TorrentDownloadPageState extends State<TorrentDownloadPage>
           );
         }
         try {
-          addResult = await _downloads.addMagnet(
+          addResult = await downloads.addMagnet(
             result.magnetUri,
             previewId: result.preview.requestId,
             downloadDirectory: result.downloadDirectory,
@@ -258,6 +272,8 @@ class _TorrentDownloadPageState extends State<TorrentDownloadPage>
       );
 
   Future<void> _pickTorrentFile() async {
+    final downloads = _downloads;
+    if (downloads == null) return;
     final file = await openFile(
       acceptedTypeGroups: const [
         XTypeGroup(
@@ -285,7 +301,7 @@ class _TorrentDownloadPageState extends State<TorrentDownloadPage>
     await _runBusyAction(
       action: () async {
         await _service.setDownloadDirectory(downloadDirectory);
-        addResult = await _downloads.addTorrentFile(
+        addResult = await downloads.addTorrentFile(
           file.path,
           downloadDirectory: downloadDirectory,
           createFolderForTask: downloaderSettings.createFolderForTask,
@@ -331,30 +347,36 @@ class _TorrentDownloadPageState extends State<TorrentDownloadPage>
   }
 
   Future<void> _toggleTask(TorrentTask task) async {
+    final downloads = _downloads;
+    if (downloads == null) return;
     await _runBusyAction(
       action: () =>
-          task.canResume ? _downloads.resume(task.id) : _downloads.pause(task.id),
+          task.canResume ? downloads.resume(task.id) : downloads.pause(task.id),
       taskId: task.id,
       successMessage: () => task.canResume ? '已恢复任务' : '已暂停任务',
     );
   }
 
   Future<void> _forgetTask(TorrentTask task) async {
+    final downloads = _downloads;
+    if (downloads == null) return;
     await _runBusyAction(
-      action: () => _downloads.forget(task.id),
+      action: () => downloads.forget(task.id),
       taskId: task.id,
       successMessage: () => '已移除下载任务',
     );
   }
 
   Future<void> _deleteTask(TorrentTask task) async {
+    final downloads = _downloads;
+    if (downloads == null) return;
     final confirm = await AdaptiveTorrentDownloadDialogs.confirmDelete(
       context,
       TorrentDeleteDialogViewModel(task: task),
     );
     if (!confirm) return;
     await _runBusyAction(
-      action: () => _downloads.delete(task.id),
+      action: () => downloads.delete(task.id),
       taskId: task.id,
       successMessage: () => '已删除任务和文件',
     );
@@ -447,7 +469,7 @@ class _TorrentDownloadPageState extends State<TorrentDownloadPage>
     final items = await _service.listCompletedFileScanHistoryItems(task);
     final summary = TorrentTaskScanSummary.fromHistoryItems(items);
     if (summary.hasItems ||
-        _downloads.autoScannedKeys.contains(task.autoScanKey)) {
+        (_downloads?.autoScannedKeys.contains(task.autoScanKey) ?? false)) {
       return summary;
     }
     return null;
@@ -470,8 +492,10 @@ class _TorrentDownloadPageState extends State<TorrentDownloadPage>
           : await _showPlayableFilesDialog(files);
       if (selected == null || !mounted) return;
       if (!task.finished && task.isPaused) {
+        final downloads = _downloads;
+        if (downloads == null) return;
         if (!await _taskController.run(
-            task.id, () => _downloads.resume(task.id))) {
+            task.id, () => downloads.resume(task.id))) {
           return;
         }
         if (!mounted) return;
@@ -547,8 +571,9 @@ class _TorrentDownloadPageState extends State<TorrentDownloadPage>
     return UnifiedTorrentTaskItemViewModel(
       task: task,
       scanSummary: _scanSummaries[task.autoScanKey],
-      isAutoScanning: _downloads.isImporting(task),
-      isAutoScanned: _downloads.autoScannedKeys.contains(task.autoScanKey),
+      isAutoScanning: _downloads?.isImporting(task) ?? false,
+      isAutoScanned:
+          _downloads?.autoScannedKeys.contains(task.autoScanKey) ?? false,
       actions: [
         if (task.canPlay)
           action(

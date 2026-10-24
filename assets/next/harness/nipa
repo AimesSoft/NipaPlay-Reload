@@ -315,7 +315,7 @@ def catalog_summary(catalog):
 
 
 def all_tasks(client):
-    """Every task: task.list answers in pages (a device that predates paging answers whole)."""
+    """Every task, newest first: task.list answers in pages (an older device answers whole)."""
     jobs, offset = [], 0
     while True:
         page = client.call("task.list", {"limit": 500, "offset": offset})

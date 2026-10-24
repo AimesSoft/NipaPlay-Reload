@@ -8,7 +8,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
   test(
-      'bounded recent snapshot, concurrent reads, and offline history retention',
+      'startup history is a silent baseline and only later additions are candidates',
       () async {
     SharedPreferences.setMockInitialValues({});
     final root = await Directory.systemTemp.createTemp('history-startup-');
@@ -67,7 +67,8 @@ void main() {
     expect(publishedCounts, contains(40));
     expect(publishedCounts, contains(1001));
     expect(await database.getHistoryByFilePath(offline), isNotNull);
-    expect(candidates, contains(offline));
+    expect(candidates, isEmpty,
+        reason: 'loading existing history must not report files as newly added');
     candidates.clear();
     final existing = provider.history.first;
     await provider.addOrUpdateHistory(existing.copyWith(lastPosition: 600));

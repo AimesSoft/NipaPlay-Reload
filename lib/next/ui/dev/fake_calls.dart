@@ -1175,11 +1175,27 @@ final class FakeCalls {
       // Background work.
       a('task.list', (input) {
         final type = input['type'];
+        final newestFirst = input['order'] != 'oldest';
+        final jobs = <JsonMap>[
+          for (final id in _ids)
+            if (type == null || _job(id)['type'] == type) _job(id)
+        ];
+        jobs.sort((a, b) {
+          final byTime =
+              (a['createdAt'] as String).compareTo(b['createdAt'] as String);
+          final byIdentity =
+              (a['jobId'] as String).compareTo(b['jobId'] as String);
+          final oldestFirst = byTime != 0 ? byTime : byIdentity;
+          return newestFirst ? -oldestFirst : oldestFirst;
+        });
+        final offset = input['offset'] as int? ?? 0;
+        final limit = input['limit'] as int? ?? 50;
+        final page = jobs.skip(offset).take(limit).toList(growable: false);
         return {
-          'jobs': [
-            for (final id in _ids)
-              if (type == null || _job(id)['type'] == type) _job(id)
-          ]
+          'jobs': page,
+          'total': jobs.length,
+          'nextOffset':
+              offset + page.length < jobs.length ? offset + page.length : null,
         };
       }),
       a('task.get', (input) => {'job': _job(input['jobId'] as String)}),

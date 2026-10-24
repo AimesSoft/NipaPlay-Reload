@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
@@ -105,6 +106,34 @@ void main() {
     await File('${dir.path}/c.json').writeAsString('{nope');
     expect(await changes.observe([spec('a.one')]), isNull);
     expect(await changes.observe([spec('a.one'), spec('a.two')]), isNotNull);
+  });
+
+  test('a large catalogue snapshot leaves the main isolate responsive',
+      () async {
+    final catalog = [
+      for (var i = 0; i < 2000; i++)
+        spec('family${i % 20}.action$i', input: {
+          'value': StringSchema(description: 'field $i'),
+          'count': IntegerSchema(minimum: 0, maximum: i + 1),
+        })
+    ];
+    final ticks = <int>[];
+    final clock = Stopwatch()..start();
+    final timer = Timer.periodic(const Duration(milliseconds: 2), (_) {
+      ticks.add(clock.elapsedMilliseconds);
+    });
+    await changes.observe(catalog);
+    timer.cancel();
+    var longest = 0;
+    for (var i = 1; i < ticks.length; i++) {
+      final gap = ticks[i] - ticks[i - 1];
+      if (gap > longest) longest = gap;
+    }
+    // ignore: avoid_print
+    print('2000 catalogue actions in ${clock.elapsedMilliseconds} ms; '
+        'longest main-isolate gap $longest ms');
+    expect(ticks, isNotEmpty);
+    expect(longest, lessThan(250));
   });
 
   test('the memory block lists them with a length limit', () async {
