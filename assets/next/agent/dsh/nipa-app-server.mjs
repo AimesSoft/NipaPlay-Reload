@@ -52,7 +52,7 @@ function textOf(content) {
   return (content ?? []).filter((block) => block?.type === 'text').map((block) => block.text).join('\n');
 }
 
-/** The `[exit code: N]` / `[killed by signal: X]` markers DSH's bash tool appends. */
+/** The `[exit code: N]` / `[killed by signal: X]` markers DSH's shell tools append. */
 function exitStatus(text) {
   const signal = /\n?\[killed by signal: ([^\]\n]+)\]$/.exec(text);
   if (signal) return { body: text.slice(0, signal.index), exitCode: null };
@@ -113,7 +113,9 @@ function toolItem(threadId, call, cwd) {
     prompt: prompt ?? null, model: null, reasoningEffort: null, agentsStates: {},
   });
   switch (call.name) {
+    // The shell tool: `bash`, or `pwsh` on Windows. Both are command executions.
     case 'bash':
+    case 'pwsh':
       return {
         type: 'commandExecution', id, command: String(args.command ?? ''), commandActions: [], cwd: args.workdir ?? cwd,
         status: 'inProgress', aggregatedOutput: null, exitCode: null, durationMs: null, processId: null,
@@ -777,7 +779,7 @@ export function apply(ctx, config = {}) {
         break;
       }
       case 'job/registered':
-        if (data.kind === 'bash' && data.toolCall?.callId !== undefined) {
+        if ((data.kind === 'bash' || data.kind === 'pwsh') && data.toolCall?.callId !== undefined) {
           jobCalls.set(String(data.jobId), { threadId, callId: String(data.toolCall.callId), owner: data.owner, cursor: 0 });
         }
         break;

@@ -51,13 +51,15 @@ final class DshManifest {
   bool supports(String platform) =>
       platforms.contains(platform) && nodes.containsKey(platform);
 
-  /// The packages installed on [platform] (`os`/`cpu` as npm names them).
+  /// The packages installed on [platform]: those npm's `os`/`cpu` admit and,
+  /// where a package names the platforms that needed it, those among them.
   List<DshPackage> packagesFor(String platform) {
     final (os, cpu) = npmPlatform(platform);
     return [
       for (final p in packages)
         if ((p.os == null || p.os!.contains(os)) &&
-            (p.cpu == null || p.cpu!.contains(cpu)))
+            (p.cpu == null || p.cpu!.contains(cpu)) &&
+            (p.platforms == null || p.platforms!.contains(platform)))
           p
     ];
   }
@@ -111,7 +113,8 @@ final class DshPackage {
         sha256 = json['sha256'] as String,
         bytes = json['bytes'] as int,
         os = (json['os'] as List?)?.cast<String>(),
-        cpu = (json['cpu'] as List?)?.cast<String>();
+        cpu = (json['cpu'] as List?)?.cast<String>(),
+        platforms = (json['platforms'] as List?)?.cast<String>();
 
   /// Relative to the install prefix: `node_modules/<name>` or nested.
   final String path;
@@ -122,4 +125,8 @@ final class DshPackage {
   final String sha256;
   final int bytes;
   final List<String>? os, cpu;
+
+  /// The traced platforms that needed this package, when not all of them did
+  /// (platform keys); null means it is installed everywhere `os`/`cpu` allow.
+  final List<String>? platforms;
 }

@@ -6,11 +6,16 @@ Inputs
   --source  an ordinary `npm install @deepseek-ai/dsh@<version>` directory
             (with its package-lock.json). It is the reference tree the
             package versions and their resolution come from.
-  --trace   files listing every module a running Nipa loaded (trace.py), one
-            file:// URL per line. Only packages that were loaded, plus the
-            third-party packages they declare, are kept; packages that exist
-            for rows `dshDisabledRows` turns off, and SDKs of providers Nipa
-            never talks to, stay out.
+  --trace   PLATFORM=FILE, once per platform that was traced: the files
+            listing every module a running Nipa loaded on it (trace.py), one
+            file:// URL per line (macos-arm64=mac.txt linux-x64=linux.txt
+            windows-x64=windows.txt). Only packages that were loaded, plus
+            the third-party packages they declare, are kept; packages that
+            exist for rows `dshDisabledRows` turns off, and SDKs of providers
+            Nipa never talks to, stay out. The trace of a platform decides
+            its own package list. The first platform is the baseline: what it
+            needed is installed on every platform; a package only other
+            platforms needed carries `platforms`, the ones that did.
   --cache   where registry tarballs are kept between runs.
 
 Output: one entry per install path (a package hoisted to the most common
@@ -33,6 +38,10 @@ EXCLUDE = [
 ]
 
 
+OS_OF = {'macos-arm64': 'darwin', 'macos-x64': 'darwin', 'linux-x64': 'linux', 'linux-arm64': 'linux',
+         'windows-x64': 'win32', 'windows-arm64': 'win32'}
+
+
 def name_of(path):
     return path.rsplit('node_modules/', 1)[-1]
 
@@ -40,15 +49,10 @@ def name_of(path):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument('--source', required=True)
-    ap.add_argument('--trace', required=True, nargs='+')
+    ap.add_argument('--trace', required=True, nargs='+', metavar='PLATFORM=FILE')
     ap.add_argument('--cache', required=True)
     ap.add_argument('--out', required=True)
     ap.add_argument('--shasums')
-    ap.add_argument('--platforms', nargs='+', default=['macos-arm64'],
-                    help='the platform keys whose package list was traced and tested')
-    ap.add_argument('--os', nargs='+', default=['darwin'],
-                    help="npm os names whose optional native packages are kept (darwin, linux, win32); "
-                         "trace each of them and pass every trace file")
     args = ap.parse_args()
     src = pathlib.Path(args.source).expanduser()
     lock = json.load(open(src / 'package-lock.json'))['packages']
@@ -63,51 +67,78 @@ def main():
             i = loc.rfind('/node_modules/')
             loc = loc[:i] if i >= 0 else ''
 
-    def platform_ok(e):
-        o, c = e.get('os'), e.get('cpu')
-        return (not o or bool(set(args.os) & set(o))) and (not c or bool({'arm64', 'x64'} & set(c)))
+    def platform_ok(e, os_name):
+        # Either 64-bit architecture of the traced OS is kept (npm's os/cpu on
+        # each entry decide which one a machine installs); musl builds are
+        # not, since the pinned Node.js is the glibc one.
+        o, c, libc = e.get('os'), e.get('cpu'), e.get('libc')
+        return (not o or os_name in o) and (not c or bool({'arm64', 'x64'} & set(c))) \
+            and (not libc or 'musl' not in libc)
 
-    # Packages that were used: something other than package.json was loaded or
-    # read. DSH's plugin discovery reads every installed package.json, which
-    # says nothing about whether the package is needed.
-    touched = collections.defaultdict(set)
-    for t in args.trace:
-        for line in open(t):
-            line = line.strip()
-            if not line.startswith('file://'):
-                continue
-            path = line[7:]
-            ms = list(re.finditer(r'node_modules/((?:@[^/]+/)?[^/]+)', path))
-            if not ms:
-                continue
-            rel = os.path.relpath(path[:ms[-1].end()], str(src))
-            if rel in lock:
-                touched[rel].add(path[ms[-1].end() + 1:])
-    traced = {k for k, files in touched.items() if files - {'package.json'}}
     root = 'node_modules/@deepseek-ai/dsh'
-    traced.add(root)
     excluded = [re.compile(p) for p in EXCLUDE]
 
     def is_excluded(path):
         n = name_of(path)
         return any(r.search(n) for r in excluded)
 
-    # Selected packages = traced + third-party dependencies of what is kept.
-    selected = set(traced)
-    queue = list(traced)
-    while queue:
-        k = queue.pop()
-        if k == root:
-            continue
-        e = lock[k]
-        deps = list(e.get('dependencies', {})) + list(e.get('optionalDependencies', {}))
-        for n in deps:
-            t = lookup(k, n)
-            if t is None or not platform_ok(lock[t]) or t in selected:
+    def traced_by(files):
+        # Packages that were used: something other than package.json was
+        # loaded or read. DSH's plugin discovery reads every installed
+        # package.json, which says nothing about whether the package is needed.
+        touched = collections.defaultdict(set)
+        for t in files:
+            for line in open(t):
+                line = line.strip()
+                if not line.startswith('file://'):
+                    continue
+                path = line[7:]
+                # The reference tree is wherever the trace ran; what matters is
+                # the path below its first node_modules.
+                first = path.find('node_modules/')
+                ms = list(re.finditer(r'node_modules/((?:@[^/]+/)?[^/]+)', path))
+                if first < 0 or not ms:
+                    continue
+                rel = path[first:ms[-1].end()]
+                if rel in lock:
+                    touched[rel].add(path[ms[-1].end() + 1:])
+        traced = {k for k, files in touched.items() if files - {'package.json'}}
+        traced.add(root)
+        return traced
+
+    # Selected packages = traced + third-party dependencies of what is kept,
+    # for each traced platform on its own.
+    def select(traced, os_name):
+        def ok(e):
+            return platform_ok(e, os_name)
+        selected = set(traced)
+        queue = list(traced)
+        while queue:
+            k = queue.pop()
+            if k == root:
                 continue
-            if t in traced or (not n.startswith('@deepseek-ai/') and not is_excluded(t)):
-                selected.add(t)
-                queue.append(t)
+            e = lock[k]
+            deps = list(e.get('dependencies', {})) + list(e.get('optionalDependencies', {}))
+            for n in deps:
+                t = lookup(k, n)
+                if t is None or not ok(lock[t]) or t in selected:
+                    continue
+                if t in traced or (not n.startswith('@deepseek-ai/') and not is_excluded(t)):
+                    selected.add(t)
+                    queue.append(t)
+        return selected
+
+    by_platform = {}  # key -> (traced paths, selected paths)
+    for item in args.trace:
+        key, _, file = item.partition('=')
+        if key not in OS_OF or not file:
+            raise SystemExit(f'--trace wants PLATFORM=FILE with PLATFORM one of {sorted(OS_OF)}: {item}')
+        by_platform.setdefault(key, []).append(file)
+    platforms = list(by_platform)
+    by_platform = {key: (lambda tr: (tr, select(tr, OS_OF[key])))(traced_by(files))
+                   for key, files in by_platform.items()}
+    traced = set().union(*(t for t, _ in by_platform.values()))
+    selected = set().union(*(s for _, s in by_platform.values()))
 
     # Nodes are (name, version); edges are what each node's package.json asks
     # for, answered the way the reference tree answered them.
@@ -208,6 +239,7 @@ def main():
                        'bytes': len(data), 'license': e.get('license')}
         return infos[node]
 
+    nodes_of = {key: {node_of(k) for k in chosen} for key, (_, chosen) in by_platform.items()}
     packages = []
     for path in sorted(placed):
         n, v = placed[path]
@@ -218,6 +250,13 @@ def main():
             entry['os'] = e['os']
         if e.get('cpu'):
             entry['cpu'] = e['cpu']
+        # What the first (baseline) platform needed goes to every platform.
+        # A package only the others needed says which; an os-specific one
+        # already says it through `os`.
+        needed = [key for key in platforms if (n, v) in nodes_of[key]]
+        admitted = [key for key in platforms if not e.get('os') or OS_OF[key] in e['os']]
+        if platforms[0] not in needed and needed != admitted:
+            entry['platforms'] = needed
         packages.append(entry)
 
     # Node.js.
@@ -248,9 +287,9 @@ def main():
         'dsh': dsh_version,
         'node': {'version': NODE_VERSION, 'assets': nodes},
         'registry': REGISTRY,
-        # The packages above were traced on macOS; the others have no entry
-        # until they are traced and tested on that platform.
-        'platforms': args.platforms,
+        # The platforms whose package list was traced and tested; the others
+        # have no entry until they are.
+        'platforms': platforms,
         'packages': packages,
     }
     pathlib.Path(args.out).write_text(json.dumps(out, indent=1, ensure_ascii=False) + '\n')

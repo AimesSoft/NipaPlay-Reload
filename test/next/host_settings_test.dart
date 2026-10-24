@@ -533,7 +533,13 @@ void main() {
   test(
       'real Codex switches only between turns and resumes same rollout across homes',
       () async {
-    final version = await Process.run('codex', ['--version']);
+    final ProcessResult version;
+    try {
+      version = await Process.run('codex', ['--version']);
+    } on ProcessException {
+      markTestSkipped('No codex on this machine.');
+      return;
+    }
     expect(version.exitCode, 0);
     final firstRequest = Completer<void>(), release = Completer<void>();
     final helperRequest = Completer<void>(), releaseHelper = Completer<void>();

@@ -50,7 +50,9 @@
  },
  "registry": "https://registry.npmjs.org",
  "platforms": [
-  "macos-arm64"
+  "macos-arm64",
+  "linux-x64",
+  "windows-x64"
  ],
  "packages": [
   {
@@ -510,6 +512,28 @@
    "bytes": 120076
   },
   {
+   "path": "node_modules/@deepseek-ai/dsh-pwsh-local",
+   "name": "@deepseek-ai/dsh-pwsh-local",
+   "version": "0.2.1-rc.2",
+   "url": "@deepseek-ai/dsh-pwsh-local/-/dsh-pwsh-local-0.2.1-rc.2.tgz",
+   "sha256": "6ff31b77b7c69367fab15fcfa18a0a15f14a644d7c93211c30d18d9422148d77",
+   "bytes": 20078,
+   "platforms": [
+    "windows-x64"
+   ]
+  },
+  {
+   "path": "node_modules/@deepseek-ai/dsh-pwsh-sandbox",
+   "name": "@deepseek-ai/dsh-pwsh-sandbox",
+   "version": "0.2.1-rc.2",
+   "url": "@deepseek-ai/dsh-pwsh-sandbox/-/dsh-pwsh-sandbox-0.2.1-rc.2.tgz",
+   "sha256": "662624862c685fa1310627339b44ca81cfbdd966eb2730accfd8e69e0eec4524",
+   "bytes": 15307,
+   "platforms": [
+    "windows-x64"
+   ]
+  },
+  {
    "path": "node_modules/@deepseek-ai/dsh-repeat-tool-reminder",
    "name": "@deepseek-ai/dsh-repeat-tool-reminder",
    "version": "0.2.1-rc.2",
@@ -862,6 +886,17 @@
    "bytes": 20499
   },
   {
+   "path": "node_modules/@deepseek-ai/dsh-tool-pwsh",
+   "name": "@deepseek-ai/dsh-tool-pwsh",
+   "version": "0.2.1-rc.2",
+   "url": "@deepseek-ai/dsh-tool-pwsh/-/dsh-tool-pwsh-0.2.1-rc.2.tgz",
+   "sha256": "47321213e24c3f10de16c4c78a176df4fa60fd8f84fe779bbc7bc9d81b7bf687",
+   "bytes": 26250,
+   "platforms": [
+    "windows-x64"
+   ]
+  },
+  {
    "path": "node_modules/@deepseek-ai/dsh-tool-subagent",
    "name": "@deepseek-ai/dsh-tool-subagent",
    "version": "0.2.1-rc.2",
@@ -1060,6 +1095,20 @@
    ]
   },
   {
+   "path": "node_modules/@deepseek-ai/node-addon-system-linux-x64",
+   "name": "@deepseek-ai/node-addon-system-linux-x64",
+   "version": "0.1.2",
+   "url": "@deepseek-ai/node-addon-system-linux-x64/-/node-addon-system-linux-x64-0.1.2.tgz",
+   "sha256": "77fb771bee2133c3ffd1f96c7b9435ddb1ccaee72b6814f6f4391343a611cc20",
+   "bytes": 25758,
+   "os": [
+    "linux"
+   ],
+   "cpu": [
+    "x64"
+   ]
+  },
+  {
    "path": "node_modules/@deepseek-ai/schemastery",
    "name": "@deepseek-ai/schemastery",
    "version": "3.18.5",
@@ -1156,6 +1205,90 @@
    ]
   },
   {
+   "path": "node_modules/@img/sharp-libvips-linux-arm64",
+   "name": "@img/sharp-libvips-linux-arm64",
+   "version": "1.3.4",
+   "url": "@img/sharp-libvips-linux-arm64/-/sharp-libvips-linux-arm64-1.3.4.tgz",
+   "sha256": "495e6c63c797c6b080a9dbd827a8cc0790b77f8f7d5d82f1764dadfc5068a845",
+   "bytes": 8485392,
+   "os": [
+    "linux"
+   ],
+   "cpu": [
+    "arm64"
+   ]
+  },
+  {
+   "path": "node_modules/@img/sharp-libvips-linux-x64",
+   "name": "@img/sharp-libvips-linux-x64",
+   "version": "1.3.4",
+   "url": "@img/sharp-libvips-linux-x64/-/sharp-libvips-linux-x64-1.3.4.tgz",
+   "sha256": "e371cb713fc8822c96a0d3fb60a3d092799d0aefab6d7f1fb3b72d8d75f1d109",
+   "bytes": 8219515,
+   "os": [
+    "linux"
+   ],
+   "cpu": [
+    "x64"
+   ]
+  },
+  {
+   "path": "node_modules/@img/sharp-linux-arm64",
+   "name": "@img/sharp-linux-arm64",
+   "version": "0.35.5",
+   "url": "@img/sharp-linux-arm64/-/sharp-linux-arm64-0.35.5.tgz",
+   "sha256": "2ba164e9d4d2f56bfc2a1b8badff07f49d1c98c061dde23efbf97617d23be07d",
+   "bytes": 174710,
+   "os": [
+    "linux"
+   ],
+   "cpu": [
+    "arm64"
+   ]
+  },
+  {
+   "path": "node_modules/@img/sharp-linux-x64",
+   "name": "@img/sharp-linux-x64",
+   "version": "0.35.5",
+   "url": "@img/sharp-linux-x64/-/sharp-linux-x64-0.35.5.tgz",
+   "sha256": "556787285d3244c07686a355de5b5a4c4d0019a12785bf24764e756a96ea3334",
+   "bytes": 186507,
+   "os": [
+    "linux"
+   ],
+   "cpu": [
+    "x64"
+   ]
+  },
+  {
+   "path": "node_modules/@img/sharp-win32-arm64",
+   "name": "@img/sharp-win32-arm64",
+   "version": "0.35.5",
+   "url": "@img/sharp-win32-arm64/-/sharp-win32-arm64-0.35.5.tgz",
+   "sha256": "7a8e306ca14032a49efa5e0d3d5bb6af4da0c4bb18c7e070ee0a5253d40e5603",
+   "bytes": 7895045,
+   "os": [
+    "win32"
+   ],
+   "cpu": [
+    "arm64"
+   ]
+  },
+  {
+   "path": "node_modules/@img/sharp-win32-x64",
+   "name": "@img/sharp-win32-x64",
+   "version": "0.35.5",
+   "url": "@img/sharp-win32-x64/-/sharp-win32-x64-0.35.5.tgz",
+   "sha256": "16a804181ddd258ca6fe7079b2faa0c0356654c9db3d93ab0a80ec5e5161c3d4",
+   "bytes": 8575353,
+   "os": [
+    "win32"
+   ],
+   "cpu": [
+    "x64"
+   ]
+  },
+  {
    "path": "node_modules/@joplin/turndown-plugin-gfm",
    "name": "@joplin/turndown-plugin-gfm",
    "version": "1.0.68",
@@ -1170,6 +1303,34 @@
    "url": "@keyv/serialize/-/serialize-1.1.1.tgz",
    "sha256": "5730adf7d1edef7c84a7ce658c3a2915386529b4d795523265c30a2e94f91366",
    "bytes": 2937
+  },
+  {
+   "path": "node_modules/@koromix/koffi-linux-x64",
+   "name": "@koromix/koffi-linux-x64",
+   "version": "3.1.1",
+   "url": "@koromix/koffi-linux-x64/-/koffi-linux-x64-3.1.1.tgz",
+   "sha256": "0b4038a46282a354aab77d6d05059ac8a8fccb0dfd231b4c18acb8623953d1fe",
+   "bytes": 614185,
+   "os": [
+    "linux"
+   ],
+   "cpu": [
+    "x64"
+   ]
+  },
+  {
+   "path": "node_modules/@koromix/koffi-win32-x64",
+   "name": "@koromix/koffi-win32-x64",
+   "version": "3.1.1",
+   "url": "@koromix/koffi-win32-x64/-/koffi-win32-x64-3.1.1.tgz",
+   "sha256": "b0be9b6a916b9f5de5b97fb5de844efe1121f7ed44cafb481a1479c7c90aec9b",
+   "bytes": 399006,
+   "os": [
+    "win32"
+   ],
+   "cpu": [
+    "x64"
+   ]
   },
   {
    "path": "node_modules/@mixmark-io/domino",
@@ -1548,6 +1709,18 @@
    "bytes": 25027
   },
   {
+   "path": "node_modules/koffi",
+   "name": "koffi",
+   "version": "3.1.1",
+   "url": "koffi/-/koffi-3.1.1.tgz",
+   "sha256": "d6e3cb95f5d155d16cfe40f39ce09be18568c7f84dfb0b0722820a0da9e03b17",
+   "bytes": 302173,
+   "platforms": [
+    "linux-x64",
+    "windows-x64"
+   ]
+  },
+  {
    "path": "node_modules/lowercase-keys",
    "name": "lowercase-keys",
    "version": "3.0.0",
@@ -1610,6 +1783,62 @@
    "bytes": 48465,
    "os": [
     "darwin"
+   ],
+   "cpu": [
+    "x64"
+   ]
+  },
+  {
+   "path": "node_modules/node-addon-require-builtin-linux-arm64-gnu",
+   "name": "node-addon-require-builtin-linux-arm64-gnu",
+   "version": "0.1.9",
+   "url": "node-addon-require-builtin-linux-arm64-gnu/-/node-addon-require-builtin-linux-arm64-gnu-0.1.9.tgz",
+   "sha256": "eea714afc4f726afac01db4e22ed9dd33c92a545346d6ad4e49f68ac55f73260",
+   "bytes": 76767,
+   "os": [
+    "linux"
+   ],
+   "cpu": [
+    "arm64"
+   ]
+  },
+  {
+   "path": "node_modules/node-addon-require-builtin-linux-x64-gnu",
+   "name": "node-addon-require-builtin-linux-x64-gnu",
+   "version": "0.1.9",
+   "url": "node-addon-require-builtin-linux-x64-gnu/-/node-addon-require-builtin-linux-x64-gnu-0.1.9.tgz",
+   "sha256": "78ac5477c14508edc1fb2b188a5214cedbc9519bbb17f162d3145483e1661766",
+   "bytes": 76425,
+   "os": [
+    "linux"
+   ],
+   "cpu": [
+    "x64"
+   ]
+  },
+  {
+   "path": "node_modules/node-addon-require-builtin-win32-arm64-msvc",
+   "name": "node-addon-require-builtin-win32-arm64-msvc",
+   "version": "0.1.9",
+   "url": "node-addon-require-builtin-win32-arm64-msvc/-/node-addon-require-builtin-win32-arm64-msvc-0.1.9.tgz",
+   "sha256": "faa029d06f7ff9692c33174394885f4fa091541434b2f316d8889419f8ae5555",
+   "bytes": 143121,
+   "os": [
+    "win32"
+   ],
+   "cpu": [
+    "arm64"
+   ]
+  },
+  {
+   "path": "node_modules/node-addon-require-builtin-win32-x64-msvc",
+   "name": "node-addon-require-builtin-win32-x64-msvc",
+   "version": "0.1.9",
+   "url": "node-addon-require-builtin-win32-x64-msvc/-/node-addon-require-builtin-win32-x64-msvc-0.1.9.tgz",
+   "sha256": "b25a18758b16d01b0ca9dd8c198d8a626a1283018dc97c825c9938be06f3c5f3",
+   "bytes": 172834,
+   "os": [
+    "win32"
    ],
    "cpu": [
     "x64"
