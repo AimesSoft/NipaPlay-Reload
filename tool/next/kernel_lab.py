@@ -28,7 +28,8 @@ import urllib.request
 
 HOME = Path.home()
 ROOT = Path(__file__).resolve().parents[2]
-PROFILE = HOME / 'Library/Application Support/NipaPlay/LabProfiles/core-lab-k'
+PROFILE_NAME = os.environ.get('KERNEL_LAB_PROFILE') or 'core-lab-k'
+PROFILE = HOME / 'Library/Application Support/NipaPlay/LabProfiles' / PROFILE_NAME
 MEDIA = HOME / 'Library/Application Support/NipaPlay/LabProfiles/e2e42b/data/downloads'
 SINTEL = MEDIA / 'sintel-4k-official/Sintel.2010.2160p.mkv'
 SINTEL_SRT = next((MEDIA / 'sintel-4k-official').glob('*.srt'), None)
@@ -488,6 +489,72 @@ def paused_subtitle_check(kernel):
         gui('playback.close')
 
 
+def accept_check(kernel):
+    """统一验收（第 12 集）：弹幕、插件渲染器、内封 ASS、外挂 SRT、跳过区间，每样各取一张窗口画面。"""
+    use(kernel)
+    episode = media_for(kernel, 'episode12')
+    gui('playback.open', {'path': str(episode), 'startPositionMs': 110000})
+    s = wait_playing()
+    session = s['sessionId']
+    record('accept_open', kernel=kernel, state=s, plugin=gui('settings.get', {'key': 'danmaku.pluginRenderer'}))
+    # Skip segment: set, be inside it, ask to skip; the position jumps to its end.
+    reply = gui('playback.set_skip_segment', {'sessionId': session, 'kind': 'opening', 'startMs': 100000, 'endMs': 170000})
+    record('accept_skip_set', kernel=kernel, reply={k: reply.get(k) for k in ('remembered', 'inEffect', 'skipSegments')})
+    gui('playback.seek', {'positionMs': 130000}, strict=True)
+    time.sleep(1.0)
+    before = state()
+    jump = gui('playback.navigate', {'sessionId': session, 'skipKind': 'opening'})
+    time.sleep(1.5)
+    after = state()
+    record('accept_skip', kernel=kernel, beforeMs=before.get('positionMs'), afterMs=after.get('positionMs'), status=after.get('status'),
+           reply={k: jump.get(k) for k in ('method', 'commandStatus', 'receipt')})
+    gui('playback.set_skip_segment', {'sessionId': session, 'kind': 'opening', 'clear': True})
+    # Danmaku over the picture, the built-in renderer.
+    gui('playback.seek', {'positionMs': 125000}, strict=True)
+    time.sleep(2.0)
+    shot('%s-accept-danmaku' % kernel)
+    info = gui('playback.info', {})
+    record('accept_danmaku', kernel=kernel, renderer=info.get('danmakuRenderer'))
+    # The plugin renderer.
+    set_result = gui('settings.set', {'key': 'danmaku.pluginRenderer', 'value': 'plugin:lab.test_renderer/canvas', 'reason': '统一验收'})
+    time.sleep(4.0)
+    shot('%s-accept-plugin' % kernel)
+    info = gui('playback.info', {})
+    record('accept_plugin', kernel=kernel, set=set_result, renderer=info.get('danmakuRenderer'))
+    gui('settings.set', {'key': 'danmaku.pluginRenderer', 'value': '', 'reason': '统一验收'})
+    time.sleep(1.0)
+    if kernel != 'video_player':
+        gui('playback.seek', {'positionMs': 151000}, strict=True)
+        reply = gui('playback.select_track', {'kind': 'subtitle', 'origin': 'embedded', 'index': 0})
+        wait_position(153400)
+        record('accept_ass', kernel=kernel, outcome=((reply.get('receipt') or {}).get('outcome')), facts=subtitle_facts())
+        shot('%s-accept-ass' % kernel)
+    gui('playback.close')
+    # An external SRT over Sintel.
+    sintel = media_for(kernel, 'sintel')
+    gui('playback.open', {'path': str(sintel), 'startPositionMs': 120000})
+    wait_playing()
+    reply = gui('playback.load_subtitle', {'path': str(SINTEL_SRT)})
+    wait_position(124500)
+    record('accept_srt', kernel=kernel, facts=subtitle_facts())
+    shot('%s-accept-srt' % kernel)
+    gui('playback.close')
+
+
+def open_mkv_on_video_player():
+    """video_player 打不开 MKV：事实里如实写原因（容器不受支持），界面照现有失败呈现。"""
+    use('video_player')
+    try:
+        reply = gui('playback.open', {'path': str(SINTEL), 'startPositionMs': 0})
+    except RuntimeError as error:
+        reply = {'error': str(error)}
+    time.sleep(1.0)
+    record('mkv_on_video_player', reply=reply, state=state(), host={k: v for k, v in (host().get('current') or {}).items() if k in ('phase', 'fault')},
+           recent=[(r.get('phase'), r.get('fault')) for r in (host().get('recent') or [])[:1]])
+    shot('video_player-mkv-failed')
+    gui('playback.close')
+
+
 def erika_subtitle_probe():
     """Erika：内嵌英语字幕选上之后，播放中与暂停中各画不画。"""
     use('erika')
@@ -568,7 +635,7 @@ def facts_check():
         gui('playback.close')
 
 
-env = dict(os.environ, NIPAPLAY_LAB_DHT='0', NIPAPLAY_PROFILE='core-lab-k',
+env = dict(os.environ, NIPAPLAY_LAB_DHT='0', NIPAPLAY_PROFILE=PROFILE_NAME,
            CODEX_CA_CERTIFICATE=str(PROFILE / 'system-ca.pem'), SSL_CERT_FILE=str(PROFILE / 'system-ca.pem'))
 with log.open('w') as output:
     process = subprocess.Popen([str(app)], cwd=PROFILE, env=env, stdout=output, stderr=subprocess.STDOUT)
@@ -601,6 +668,11 @@ try:
     elif MODE == 'psub':
         for kernel in sys.argv[3:]:
             paused_subtitle_check(kernel)
+    elif MODE == 'accept':
+        for kernel in ARGS or SETTING:
+            accept_check(kernel)
+    elif MODE == 'mkvfail':
+        open_mkv_on_video_player()
     elif MODE == 'erikasub':
         erika_subtitle_probe()
     elif MODE == 'subtitles':

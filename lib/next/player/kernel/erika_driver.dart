@@ -294,6 +294,8 @@ final class ErikaDriver extends AdapterDriver
       // has not reported yet (the open still settling) is waited for, once;
       // otherwise the state it is in is the answer.
       if (_canPlay()) rethrow;
+      // Already playing: what was asked for is so.
+      if (_erikaState == ErikaPlaybackState.playing) return;
       debugPrint(
           '[ErikaDriver] play refused in ${_erikaState?.name ?? 'no reported state'}; waiting for a state it can play from');
       final waiter = Completer<void>();
