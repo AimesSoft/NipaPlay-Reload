@@ -21,6 +21,7 @@
 #include <unordered_map>
 #include <epoxy/gl.h>
 
+#include "../lib/src/callbacks.h"
 #include "mdk/RenderAPI.h"
 #include "mdk/Player.h"
 
@@ -76,6 +77,7 @@ public:
     : mdk::Player(reinterpret_cast<mdkPlayerAPI*>(handle))
     , width(w)
     , height(h)
+    , handle_(handle)
     , texReg(texRegistrar)
     , flTex(tex)
   {
@@ -108,7 +110,9 @@ public:
   int64_t textureId;
   int width;
   int height;
+  int64_t handle() const { return handle_; }
 private:
+  int64_t handle_ = 0;
   FlTextureRegistrar* texReg;
   PlayerTexture* flTex; // hold ref
 };
@@ -322,9 +326,15 @@ static void fvp_plugin_handle_method_call(
   } else if (strcmp(method, "ReleaseRT") == 0) {
     const auto args = fl_method_call_get_args(method_call);
     const auto texId = fl_value_get_int(fl_value_lookup_string(args, "texture"));
+    int64_t handle = 0;
     if (auto it = self->players.find(texId); it != self->players.cend()) {
+        handle = it->second->handle();
         self->players.erase(it);
     }
+    // Destroying the texture's wrapper reset every callback on the native
+    // player; the player lives on and its Dart side still needs them.
+    if (handle)
+        MdkCallbacksRearm(handle);
     g_autoptr(FlValue) result = fl_value_new_null();
     response = FL_METHOD_RESPONSE(fl_method_success_response_new(result));
   } else if (strcmp(method, "MixWithOthers") == 0) {
