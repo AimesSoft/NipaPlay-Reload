@@ -217,10 +217,12 @@ final class ErikaDriver extends AdapterDriver
     adapter.setMedia(source.uri, PlayerMediaType.video);
     await adapter.prepare();
     queue.live();
-    _chapters = await readErikaChapters(adapter.invokeNative);
-    queue.live();
     // Duration and the tracks arrive as events once Erika has opened it.
     await _durationKnown.future;
+    queue.live();
+    // The chapters come with the same media information as the duration:
+    // asked for before it, Erika answers with none.
+    _chapters = await readErikaChapters(adapter.invokeNative);
     queue.live();
     await _tracksKnown.future
         .timeout(const Duration(seconds: 2), onTimeout: () {});
