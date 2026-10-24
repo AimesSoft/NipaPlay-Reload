@@ -126,7 +126,11 @@ List<JsonMap> rankMeshCandidates(
   for (final raw in candidates) {
     final host = raw['host'];
     final port = raw['port'];
-    if (host is! String || host.isEmpty || port is! int || port < 1 || port > 65535) {
+    if (host is! String ||
+        host.isEmpty ||
+        port is! int ||
+        port < 1 ||
+        port > 65535) {
       continue;
     }
     final basePriority = (raw['priority'] as int?) ?? 0;
@@ -255,6 +259,7 @@ final class MeshDiscovery {
   Future<void> start() async {
     if (LabProfile.active && !allowInLabProfile) return;
     if (enableBonjour) {
+      MeshBonjour.isVirtualInterface = isVirtualNetworkInterface;
       _bonjour = MeshBonjour(
         deviceId: deviceId,
         port: port,
@@ -324,8 +329,7 @@ final class MeshDiscovery {
     }
 
     announce();
-    _broadcast =
-        Timer.periodic(const Duration(seconds: 30), (_) => announce());
+    _broadcast = Timer.periodic(const Duration(seconds: 30), (_) => announce());
   }
 
   Future<void> close() async {

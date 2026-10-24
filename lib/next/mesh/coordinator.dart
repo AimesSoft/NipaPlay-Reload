@@ -58,6 +58,11 @@ final class MeshCoordinator {
       throw const Failure(
           FailureCode.unavailable, 'Mesh coordinator is unreachable.',
           retryable: true);
+    } on FormatException {
+      // A captive portal or filtering proxy answers with a page, not JSON.
+      throw const Failure(FailureCode.unavailable,
+          'Mesh coordinator returned an unreadable response.',
+          retryable: true);
     }
   }
 

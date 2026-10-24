@@ -28,8 +28,11 @@ final class DecodedBonjourPacket {
   final List<BonjourPeerAnnouncement> announcements;
 }
 
-/// DNS-SD / mDNS (_nipaplay-mesh._tcp.local.) broadcaster and listener for
-/// desktop and headless hosts, with optional macOS dns-sd daemon registration.
+/// DNS-SD / mDNS (_nipaplay-mesh._tcp.local.) responder and browser for desktop
+/// and headless hosts. One code path everywhere: it shares UDP 5353 with the
+/// system responder (mDNSResponder, avahi) through SO_REUSEPORT and needs no
+/// helper process, so there is nothing to orphan when the app is killed and no
+/// second owner of the same service name for the system responder to rename.
 final class MeshBonjour {
   MeshBonjour({
     required this.deviceId,
@@ -38,7 +41,6 @@ final class MeshBonjour {
     required this.onPeerDiscovered,
     this.mdnsPort = defaultMdnsPort,
     InternetAddress? multicastAddress,
-    this.enableSystemDaemon = true,
     this.allowInLabProfile = false,
   }) : multicastAddress = multicastAddress ?? InternetAddress(defaultMdnsGroup);
 
@@ -63,13 +65,12 @@ final class MeshBonjour {
       onPeerDiscovered;
   final int mdnsPort;
   final InternetAddress multicastAddress;
-  final bool enableSystemDaemon;
   final bool allowInLabProfile;
 
   RawDatagramSocket? _socket;
   StreamSubscription<RawSocketEvent>? _subscription;
   Timer? _timer;
-  Process? _daemon;
+  DateTime _lastMulticastAnswer = DateTime.fromMillisecondsSinceEpoch(0);
   bool _closed = false;
 
   int get boundPort => _socket?.port ?? 0;
@@ -77,12 +78,6 @@ final class MeshBonjour {
   Future<void> start() async {
     if (LabProfile.active && !allowInLabProfile) return;
     _closed = false;
-    if (enableSystemDaemon &&
-        !LabProfile.active &&
-        Platform.isMacOS &&
-        mdnsPort == defaultMdnsPort) {
-      await _startMacOsDaemon();
-    }
     RawDatagramSocket? socket;
     try {
       socket = await RawDatagramSocket.bind(
@@ -109,12 +104,12 @@ final class MeshBonjour {
     _socket = socket;
     try {
       socket.multicastLoopback = true;
-      if (multicastAddress.rawAddress[0] >= 224 &&
-          multicastAddress.rawAddress[0] <= 239) {
-        socket.joinMulticast(multicastAddress);
-      }
     } on SocketException {
-      // Multicast group join may fail on isolated or loopback-only interfaces.
+      // Loopback delivery is a nicety (same-host instances), not a need.
+    }
+    if (multicastAddress.rawAddress[0] >= 224 &&
+        multicastAddress.rawAddress[0] <= 239) {
+      await _joinGroup(socket);
     }
     _subscription = socket.listen(_onSocketEvent);
     await announce();
@@ -124,32 +119,29 @@ final class MeshBonjour {
     });
   }
 
-  Future<void> _startMacOsDaemon() async {
-    final binary = File('/usr/bin/dns-sd');
-    if (!await binary.exists()) return;
+  /// Joins the group on the default interface and on every non-virtual
+  /// interface that has an IPv4 address, so a multi-homed host hears peers on
+  /// all its real networks. Interfaces that refuse are skipped.
+  Future<void> _joinGroup(RawDatagramSocket socket) async {
     try {
-      final proc = await Process.start(
-        binary.path,
-        [
-          '-R',
-          deviceId,
-          serviceType,
-          'local',
-          '$port',
-          'mesh=1',
-          'deviceId=$deviceId',
-          'port=$port',
-        ],
+      socket.joinMulticast(multicastAddress);
+    } on SocketException {
+      // Isolated or loopback-only hosts have no default multicast interface.
+    }
+    try {
+      final interfaces = await NetworkInterface.list(
+        type: InternetAddressType.IPv4,
       );
-      if (_closed) {
-        proc.kill();
-        return;
+      for (final interface in interfaces) {
+        if (isVirtualInterface(interface.name)) continue;
+        try {
+          socket.joinMulticast(multicastAddress, interface);
+        } on SocketException {
+          // Already joined through the default interface, or not multicast.
+        }
       }
-      _daemon = proc;
-      proc.stdout.drain<void>().ignore();
-      proc.stderr.drain<void>().ignore();
-    } on ProcessException {
-      // System daemon registration is optional when mDNS socket is active.
+    } on SocketException {
+      // Interface listing can fail in sandboxes; the default join stands.
     }
   }
 
@@ -161,17 +153,28 @@ final class MeshBonjour {
       final datagram = socket.receive();
       if (datagram == null) break;
       if (datagram.data.isEmpty || datagram.data.length > 9000) continue;
-      final decoded = decodePacket(datagram.data, sender: datagram.address);
+      final decoded = decodePacket(
+        datagram.data,
+        sender: datagram.address,
+        ownHostName: '$deviceId.local',
+      );
       if (decoded == null) continue;
       if (decoded.isQueryForService) {
-        unawaited(
-          announce(
-            targetAddress: datagram.address,
-            targetPort: datagram.port == defaultMdnsPort
-                ? defaultMdnsPort
-                : datagram.port,
-          ),
-        );
+        if (datagram.port == defaultMdnsPort || datagram.port == mdnsPort) {
+          // A real mDNS querier listens on the group: answer once per second
+          // at most, however many peers ask at the same time.
+          final now = DateTime.now();
+          if (now.difference(_lastMulticastAnswer) >=
+              const Duration(seconds: 1)) {
+            _lastMulticastAnswer = now;
+            unawaited(announce());
+          }
+        } else {
+          // Legacy one-shot resolvers query from an ephemeral port and expect
+          // the answer back there.
+          unawaited(announce(
+              targetAddress: datagram.address, targetPort: datagram.port));
+        }
       }
       for (final item in decoded.announcements) {
         if (item.deviceId == deviceId) continue;
@@ -246,14 +249,12 @@ final class MeshBonjour {
     _subscription = null;
     _socket?.close();
     _socket = null;
-    final daemon = _daemon;
-    _daemon = null;
-    if (daemon != null) {
-      daemon.kill();
-    }
   }
 
-  static Uint8List encodeQuery({String service = serviceDomain}) {
+  static Uint8List encodeQuery({
+    String service = serviceDomain,
+    int type = _typePtr,
+  }) {
     final builder = BytesBuilder(copy: false);
     final header = ByteData(12);
     header.setUint16(0, 0); // ID
@@ -265,7 +266,7 @@ final class MeshBonjour {
     builder.add(header.buffer.asUint8List());
     builder.add(_encodeDomainName(service));
     final qTail = ByteData(4);
-    qTail.setUint16(0, _typePtr);
+    qTail.setUint16(0, type);
     qTail.setUint16(2, _classIn);
     builder.add(qTail.buffer.asUint8List());
     return builder.toBytes();
@@ -361,9 +362,15 @@ final class MeshBonjour {
     return builder.toBytes();
   }
 
+  /// The same virtual-adapter test discovery.dart uses for candidate
+  /// addresses; set by [MeshDiscovery] so the two never disagree.
+  static bool Function(String name) isVirtualInterface =
+      (name) => name.startsWith('lo');
+
   static DecodedBonjourPacket? decodePacket(
     Uint8List packet, {
     InternetAddress? sender,
+    String? ownHostName,
   }) {
     if (packet.length < 12) return null;
     final view = ByteData.sublistView(packet);
@@ -385,6 +392,12 @@ final class MeshBonjour {
       final qType = view.getUint16(offset);
       offset += 4;
       final lower = qName.name.toLowerCase();
+      if (!isResponse &&
+          ownHostName != null &&
+          lower == ownHostName.toLowerCase() &&
+          (qType == _typeA || qType == _typeAaaa || qType == _typeAny)) {
+        isQueryForService = true;
+      }
       if (!isResponse &&
           (lower == serviceDomain || lower.endsWith('.$serviceDomain')) &&
           (qType == _typePtr ||
@@ -486,8 +499,7 @@ final class MeshBonjour {
       final srv = srvByInstance[instance];
       final id = txt?['deviceId'] ?? prefix;
       if (!deviceIdPattern.hasMatch(id)) continue;
-      final resolvedPort =
-          srv?.port ?? int.tryParse(txt?['port'] ?? '') ?? 0;
+      final resolvedPort = srv?.port ?? int.tryParse(txt?['port'] ?? '') ?? 0;
       final ttl = srv?.ttl ?? ptrInstances[instance] ?? 120;
       if (ttl > 0 && (resolvedPort < 1 || resolvedPort > 65535)) continue;
       final targetHost = srv?.target ?? '${id.toLowerCase()}.local';

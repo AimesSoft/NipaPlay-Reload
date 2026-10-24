@@ -155,12 +155,15 @@ final class MeshRuntime implements MeshDeviceSource {
   int get port => _discovery?.port ?? 0;
   String? get accountId => _account;
   bool get coordinatorSyncPending => _coordinatorSyncPending;
-  Map<String, JsonMap> get rememberedRoutes =>
-      {for (final e in _routes.entries) e.key: Map<String, Object?>.from(e.value)};
+  Map<String, JsonMap> get rememberedRoutes => {
+        for (final e in _routes.entries)
+          e.key: Map<String, Object?>.from(e.value)
+      };
 
   bool get issuerAvailable =>
       meshProductionIssuerPem.isNotEmpty ||
-      meshDevelopmentHost && Platform.environment['NIPAPLAY_MESH_DEV_CA'] != null;
+      meshDevelopmentHost &&
+          Platform.environment['NIPAPLAY_MESH_DEV_CA'] != null;
 
   bool get _needsCertificateRenewal {
     final cert = _certificate;
@@ -216,6 +219,8 @@ final class MeshRuntime implements MeshDeviceSource {
   Future<void> stop() async {
     _loginWatch?.cancel();
     _heartbeat?.cancel();
+    _deferredRefresh?.cancel();
+    _deferredRefresh = null;
     await _operations;
     await _stopNode();
     await _routeWrites;
@@ -293,8 +298,7 @@ final class MeshRuntime implements MeshDeviceSource {
         return;
       }
       _loginIdentity = marker;
-      _nextJoinAttempt =
-          DateTime.now().add(coordinatorRetryDelay);
+      _nextJoinAttempt = DateTime.now().add(coordinatorRetryDelay);
       if (_node != null) await _stopNode();
       if (value == null) {
         status = 'sign_in_required';
@@ -324,15 +328,16 @@ final class MeshRuntime implements MeshDeviceSource {
       try {
         await operation();
       } on Failure catch (failure) {
-        if (_node != null && failure.retryable) {
-          coordinatorNotice = failure.message;
-          _coordinatorSyncPending = true;
+        if (_node != null) {
+          _noteCoordinatorFailure(failure);
         } else {
           status = failure.message;
         }
       } catch (error) {
         if (_node == null) {
           status = 'mesh_error:${error.runtimeType}';
+        } else {
+          _noteCoordinatorFailure(error);
         }
       }
     });
@@ -348,7 +353,8 @@ final class MeshRuntime implements MeshDeviceSource {
     try {
       final decoded = jsonDecode(await file.readAsString());
       if (decoded is! Map) return;
-      final routes = decoded['routes'] is Map ? decoded['routes'] as Map : decoded;
+      final routes =
+          decoded['routes'] is Map ? decoded['routes'] as Map : decoded;
       for (final entry in routes.entries) {
         final peer = entry.key;
         final route = entry.value;
@@ -379,6 +385,14 @@ final class MeshRuntime implements MeshDeviceSource {
     } catch (_) {
       // Corrupted route cache is ignored and rebuilt on next successful route.
     }
+  }
+
+  /// R1 starts from these two files, so a crash while writing must leave the
+  /// previous copy intact rather than a truncated one.
+  Future<void> _writeAtomic(String name, String content) async {
+    final tmp = File('${root.path}/$name.tmp');
+    await tmp.writeAsString(content, flush: true);
+    await tmp.rename('${root.path}/$name');
   }
 
   Future<void> _persistRoutes() {
@@ -497,7 +511,6 @@ final class MeshRuntime implements MeshDeviceSource {
       own.deviceId,
       actualPort,
       interfaces: interfaceProvider,
-      onPeerHint: _onPeerHintDiscovered,
     );
     if (broadcast) {
       try {
@@ -507,21 +520,6 @@ final class MeshRuntime implements MeshDeviceSource {
             'LAN broadcast unavailable; coordinator candidates remain available.';
       }
     }
-  }
-
-  void _onPeerHintDiscovered(String peerDeviceId) {
-    if (_closed || _node == null || _coordinator == null) return;
-    final known = _devices.any((d) => d['device_id'] == peerDeviceId);
-    if (known) return;
-    final now = DateTime.now();
-    final last = _unknownPeerCheckedAt[peerDeviceId];
-    if (last != null && now.difference(last) < unknownPeerRefreshCooldown) {
-      return;
-    }
-    _unknownPeerCheckedAt[peerDeviceId] = now;
-    unawaited(
-      refreshDevices().catchError((_) {}),
-    );
   }
 
   Future<JsonMap> _enrollOrRenew({
@@ -578,8 +576,7 @@ final class MeshRuntime implements MeshDeviceSource {
     _certificate = cert;
     _interval =
         max(900, registration['heartbeat_interval_seconds'] as int? ?? 900);
-    await File('${root.path}/mesh-certificate.json')
-        .writeAsString(jsonEncode(registration), flush: true);
+    await _writeAtomic('mesh-certificate.json', jsonEncode(registration));
   }
 
   Future<void> join({
@@ -636,15 +633,13 @@ final class MeshRuntime implements MeshDeviceSource {
         _retryAttempts = 0;
         coordinatorNotice = null;
         _scheduleHeartbeat();
-      } on Failure catch (failure) {
-        if (status == 'device_revoked' || !failure.retryable) {
-          rethrow;
-        }
-        // R1: Coordinator is unreachable or rate-limited; keep working on LAN
-        // with cached certificate and device roster, and retry in background.
-        coordinatorNotice = failure.message;
-        _coordinatorSyncPending = true;
-        _scheduleHeartbeat(retry: true);
+      } catch (error) {
+        if (status == 'device_revoked') rethrow;
+        // R1: the coordinator is unreachable, rate-limited or answering
+        // nonsense (captive portal); keep working on the LAN with the cached
+        // certificate and roster and retry in the background.
+        _heartbeat?.cancel();
+        _noteCoordinatorFailure(error);
       }
       return;
     }
@@ -710,6 +705,42 @@ final class MeshRuntime implements MeshDeviceSource {
     return operation;
   }
 
+  Timer? _deferredRefresh;
+  int _claimedEpochHandled = -1;
+
+  /// A peer says the roster changed. A revocation we have not seen (its epoch
+  /// is ahead of ours and of any claim already acted on) is fetched at once:
+  /// that is what makes a revoked device lose access everywhere immediately.
+  /// Any other notice is limited to one refresh per
+  /// [unknownPeerRefreshCooldown]; inside that window a single deferred
+  /// refresh is left behind (a timer that exists only because a push arrived),
+  /// so a chatty or confused peer cannot spend the coordinator's rate limit.
+  Future<void> _refreshForPeerNotice({required int? claimedEpoch}) async {
+    final revocation = claimedEpoch != null &&
+        claimedEpoch > _epoch &&
+        claimedEpoch > _claimedEpochHandled;
+    if (revocation) {
+      _claimedEpochHandled = claimedEpoch;
+    } else {
+      final wait = unknownPeerRefreshCooldown -
+          DateTime.now().difference(_lastDevicesRefresh);
+      if (wait > Duration.zero) {
+        _deferredRefresh ??= Timer(wait, () {
+          _deferredRefresh = null;
+          if (_closed || _node == null) return;
+          unawaited(refreshDevices().catchError(_noteCoordinatorFailure));
+        });
+        return;
+      }
+    }
+    try {
+      await refreshDevices();
+    } catch (error) {
+      if (status == 'device_revoked') rethrow;
+      _noteCoordinatorFailure(error);
+    }
+  }
+
   Future<void> _doRefreshDevices() async {
     final coordinator = _coordinator;
     if (coordinator == null) {
@@ -733,8 +764,7 @@ final class MeshRuntime implements MeshDeviceSource {
     if (_node case final node?) await native.update(node, _active);
     final revokedSelf =
         identity != null && !_active.contains(identity!.deviceId);
-    await File('${root.path}/mesh-devices.json')
-        .writeAsString(jsonEncode(response), flush: true);
+    await _writeAtomic('mesh-devices.json', jsonEncode(response));
     if (revokedSelf) {
       await _stopNode();
       status = 'device_revoked';
@@ -759,8 +789,10 @@ final class MeshRuntime implements MeshDeviceSource {
     } catch (error) {
       addressError = error;
     }
-    // A revoked device cannot report addresses but must still learn its revocation.
-    await refreshDevices();
+    // A revoked device cannot report addresses but must still learn its
+    // revocation; an unreachable coordinator would only fail a second time.
+    final unreachable = addressError is Failure && addressError.retryable;
+    if (!unreachable) await refreshDevices();
     if (addressError != null) {
       Error.throwWithStackTrace(addressError, StackTrace.current);
     }
@@ -786,13 +818,23 @@ final class MeshRuntime implements MeshDeviceSource {
       final bindPort = port;
       await _stopNode();
       _certificate = renewed['certificate'] as JsonMap;
-      await File('${root.path}/mesh-certificate.json')
-          .writeAsString(jsonEncode(renewed), flush: true);
+      await _writeAtomic('mesh-certificate.json', jsonEncode(renewed));
       await _startNode(listenPort: bindPort, broadcast: _broadcast);
     }
     _coordinatorSyncPending = false;
     _retryAttempts = 0;
     coordinatorNotice = null;
+  }
+
+  /// A coordinator call failed while the LAN node keeps running: remember it
+  /// and make sure one retry is pending. Never resets a pending timer, so
+  /// frequent callers cannot starve the heartbeat or inflate its back-off.
+  void _noteCoordinatorFailure(Object error) {
+    coordinatorNotice = error is Failure
+        ? error.message
+        : 'Mesh coordinator returned an unexpected response.';
+    _coordinatorSyncPending = true;
+    if (_heartbeat?.isActive != true) _scheduleHeartbeat(retry: true);
   }
 
   void _scheduleHeartbeat({bool retry = false}) {
@@ -871,15 +913,9 @@ final class MeshRuntime implements MeshDeviceSource {
     List<String>? deviceIds,
     bool includeCatalog = true,
   }) async {
+    // The roster is refreshed on heartbeats and on "devices changed" pushes,
+    // never per call: reading it must not spend the coordinator's rate limit.
     if (_node == null) return {'status': status, 'devices': <Object?>[]};
-    try {
-      await refreshDevices();
-    } on Failure catch (failure) {
-      if (status == 'device_revoked' || !failure.retryable) rethrow;
-      coordinatorNotice = failure.message;
-      _coordinatorSyncPending = true;
-      _scheduleHeartbeat(retry: true);
-    }
     return {
       'status': status,
       if (discoveryNotice != null) 'discoveryNotice': discoveryNotice,
@@ -1046,10 +1082,12 @@ final class MeshRuntime implements MeshDeviceSource {
 
   Future<List<JsonMap>> _coordinatorCandidatesFor(String peer) async {
     final coordinator = _coordinator;
-    if (coordinator == null) return _peerCandidates[peer] ?? const [];
+    if (coordinator == null || _coordinatorSyncPending) {
+      return _peerCandidates[peer] ?? const [];
+    }
     try {
-      final response =
-          await coordinator.request('GET', '/mesh/v1/addresses?device_id=$peer');
+      final response = await coordinator.request(
+          'GET', '/mesh/v1/addresses?device_id=$peer');
       final list = (response['candidates'] as List)
           .map((e) => Map<String, Object?>.from(e as Map))
           .toList();
@@ -1058,9 +1096,7 @@ final class MeshRuntime implements MeshDeviceSource {
       return list;
     } on Failure catch (failure) {
       if (!failure.retryable) rethrow;
-      coordinatorNotice = failure.message;
-      _coordinatorSyncPending = true;
-      _scheduleHeartbeat(retry: true);
+      _noteCoordinatorFailure(failure);
       return _peerCandidates[peer] ?? const [];
     }
   }
@@ -1078,8 +1114,8 @@ final class MeshRuntime implements MeshDeviceSource {
       throw const Failure(FailureCode.unavailable, 'Mesh is offline.');
     }
     if (!_active.contains(peer)) {
-      final isKnownRevoked = _devices
-          .any((d) => d['device_id'] == peer && d['revoked'] == true);
+      final isKnownRevoked =
+          _devices.any((d) => d['device_id'] == peer && d['revoked'] == true);
       final now = DateTime.now();
       final lastCheck = _unknownPeerCheckedAt[peer];
       if (!isKnownRevoked &&
@@ -1111,16 +1147,20 @@ final class MeshRuntime implements MeshDeviceSource {
         };
     await _loadRoutes();
     final remembered = _routes[peer];
-    final localAddresses =
-        await (_discovery?.localLanAddresses() ?? Future.value(const <InternetAddress>[]));
+    final localAddresses = await (_discovery?.localLanAddresses() ??
+        Future.value(const <InternetAddress>[]));
     final localHosts = [for (final addr in localAddresses) addr.address];
     final rawCandidates = <JsonMap>[
       if (remembered != null) {...remembered, 'priority': 1000},
       if (peer == identity!.deviceId)
         {'kind': 'lan', 'host': '127.0.0.1', 'port': port, 'priority': 2000},
       ...(_discovery?.hints(peer) ?? const <JsonMap>[]),
-      if (remembered == null && peer != identity!.deviceId)
-        ...await _coordinatorCandidatesFor(peer),
+      if (peer != identity!.deviceId)
+        // A remembered route never waits on the coordinator; its other cached
+        // candidates are the fallback if the route went stale.
+        ...(remembered == null
+            ? await _coordinatorCandidatesFor(peer)
+            : _peerCandidates[peer] ?? const <JsonMap>[]),
     ];
     final candidates =
         rankMeshCandidates(rawCandidates, localHosts: localHosts);
@@ -1314,7 +1354,7 @@ final class MeshRuntime implements MeshDeviceSource {
   }
 
   Future<void> _dispatch(int node, MeshMessage event) async {
-    if (event.body == ' mesh-verify-peer') {
+    if (event.body == '\u0000mesh-verify-peer') {
       final knownRevoked = _devices
           .any((d) => d['device_id'] == event.deviceId && d['revoked'] == true);
       final now = DateTime.now();
@@ -1332,7 +1372,9 @@ final class MeshRuntime implements MeshDeviceSource {
         await native.respond(
           node,
           event.requestId,
-          jsonEncode({'result': {'allowed': _active.contains(event.deviceId)}}),
+          jsonEncode({
+            'result': {'allowed': _active.contains(event.deviceId)}
+          }),
         );
       } catch (_) {}
       return;
@@ -1398,8 +1440,8 @@ final class MeshRuntime implements MeshDeviceSource {
             'storage': hostConfiguration['storage'] ?? <Object?>[],
             if (describeSelf != null) ...await describeSelf!(),
             if (_harness!.lookup('app.capabilities') != null)
-              'capabilities': (await _harness!.invokeJson(
-                      'app.capabilities', {}, Invocation(origin: 'mesh:describe')))
+              'capabilities': (await _harness!.invokeJson('app.capabilities',
+                      {}, Invocation(origin: 'mesh:describe')))
                   .toEnvelope(),
           }
         };
@@ -1410,19 +1452,9 @@ final class MeshRuntime implements MeshDeviceSource {
         final params = frame['params'] is JsonMap
             ? frame['params'] as JsonMap
             : const <String, Object?>{};
-        final reportedEpoch = params['revocationEpoch'] as int?;
-        final shouldRefresh = (reportedEpoch != null && reportedEpoch > _epoch) ||
-            DateTime.now().difference(_lastDevicesRefresh).inMilliseconds >= 500;
-        if (shouldRefresh) {
-          try {
-            await refreshDevices();
-          } on Failure catch (failure) {
-            if (status == 'device_revoked') rethrow;
-            coordinatorNotice = failure.message;
-            _coordinatorSyncPending = true;
-            _scheduleHeartbeat(retry: true);
-          }
-        }
+        final reportedEpoch = params['revocationEpoch'];
+        await _refreshForPeerNotice(
+            claimedEpoch: reportedEpoch is int ? reportedEpoch : null);
         response = {
           'jsonrpc': '2.0',
           'id': frame['id'],
@@ -1438,8 +1470,8 @@ final class MeshRuntime implements MeshDeviceSource {
         if (receiveDelivery == null) {
           throw const FormatException('No delivery host.');
         }
-        final result = await receiveDelivery!(
-            event.deviceId, frame['params'] as JsonMap);
+        final result =
+            await receiveDelivery!(event.deviceId, frame['params'] as JsonMap);
         response = {'jsonrpc': '2.0', 'id': frame['id'], 'result': result};
         await native.respond(node, event.requestId, jsonEncode(response));
         return;
@@ -1470,8 +1502,8 @@ final class MeshRuntime implements MeshDeviceSource {
           includeActionIds: true,
           authorize: (spec, params) => (spec.effect == Effect.destructive) !=
                   (params['meshDestructive'] == true)
-              ? const Failure(
-                  FailureCode.invalidInput, 'Mesh effect authorization mismatch.')
+              ? const Failure(FailureCode.invalidInput,
+                  'Mesh effect authorization mismatch.')
               : null);
       response = await runZoned(
               () => rpc.handle(
@@ -1517,10 +1549,9 @@ final class MeshRuntime implements MeshDeviceSource {
       .encode(List.generate(24, (_) => _random.nextInt(256)))
       .replaceAll('=', '');
 
-  int get _nowSeconds =>
-      _clockSeconds != null
-          ? _clockSeconds()
-          : DateTime.now().millisecondsSinceEpoch ~/ 1000;
+  int get _nowSeconds => _clockSeconds != null
+      ? _clockSeconds()
+      : DateTime.now().millisecondsSinceEpoch ~/ 1000;
 
   Future<void> _compactReplay() async {
     _seen.removeWhere(
@@ -1556,6 +1587,7 @@ final class MeshRuntime implements MeshDeviceSource {
     _closed = true;
     _loginWatch?.cancel();
     _heartbeat?.cancel();
+    _deferredRefresh?.cancel();
     await _operations;
     await _stopNode();
     await _replayWrites;

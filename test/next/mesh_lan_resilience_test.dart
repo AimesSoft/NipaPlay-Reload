@@ -435,6 +435,15 @@ void main() {
     expect(decodedQuery, isNotNull);
     expect(decodedQuery!.isQueryForService, isTrue);
 
+    // A resolver asking for the instance's own host name (what Apple's
+    // NWBrowser does after it found the service) is answered too.
+    final hostQuery = MeshBonjour.encodeQuery(service: 'someone.local', type: 1);
+    expect(MeshBonjour.decodePacket(hostQuery)!.isQueryForService, isFalse);
+    expect(
+        MeshBonjour.decodePacket(hostQuery, ownHostName: 'someone.local')!
+            .isQueryForService,
+        isTrue);
+
     // Live socket exchange between two MeshBonjour instances on loopback.
     final discoveredByA = Completer<(String, String, int)>();
     final bonjourA = MeshBonjour(
@@ -443,7 +452,6 @@ void main() {
       localAddresses: () async => [InternetAddress('192.168.1.11')],
       mdnsPort: 0,
       multicastAddress: InternetAddress.loopbackIPv4,
-      enableSystemDaemon: false,
       allowInLabProfile: true,
       onPeerDiscovered: (peer, host, port, ttl) {
         if (!discoveredByA.isCompleted) {
@@ -457,7 +465,6 @@ void main() {
       localAddresses: () async => [InternetAddress('192.168.1.22')],
       mdnsPort: 0,
       multicastAddress: InternetAddress.loopbackIPv4,
-      enableSystemDaemon: false,
       allowInLabProfile: true,
       onPeerDiscovered: (_, __, ___, ____) {},
     );
@@ -687,6 +694,10 @@ void main() {
             .cast<JsonMap>()
             .singleWhere((d) => d['deviceId'] == bOffline.identity!.deviceId);
         expect(listedB['online'], isTrue);
+        // Offline: neither the join, the device list nor the route lookup
+        // spent a single coordinator request on the roster or on addresses.
+        expect(env.countFor('GET', '/mesh/v1/devices'), 0);
+        expect(env.countFor('GET', '/mesh/v1/addresses'), 0);
 
         // 4. Simulate certificate having <1 day (< 86400s) left before bringing
         // coordinator back online, and verify background recovery renews the
