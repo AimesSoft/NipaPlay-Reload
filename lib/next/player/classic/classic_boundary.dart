@@ -1,7 +1,6 @@
 import 'package:flutter/widgets.dart';
 import 'package:nipaplay/services/auto_next_episode_service.dart';
 import 'package:nipaplay/utils/video_player_state.dart';
-import 'package:nipaplay/player_abstraction/player_abstraction.dart';
 import 'package:provider/provider.dart';
 
 import '../core/arbiter.dart';
