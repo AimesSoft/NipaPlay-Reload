@@ -1,3 +1,5 @@
+import 'windows_disk_space_stub.dart'
+    if (dart.library.ffi) 'windows_disk_space_native.dart';
 import 'dart:convert';
 import 'dart:async';
 import 'dart:io';
@@ -168,6 +170,16 @@ final class SystemStorage implements Capability {
           'availableBytes': int.parse(columns[3]) * 1024,
           'totalBytes': int.parse(columns[1]) * 1024
         };
+      }
+      if (Platform.isWindows) {
+        final space = windowsDiskSpace(path);
+        return space == null
+            ? {'path': path, 'availableBytes': null, 'error': 'stat_failed'}
+            : {
+                'path': path,
+                'availableBytes': space.available,
+                'totalBytes': space.total
+              };
       }
       return {
         'path': path,
