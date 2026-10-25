@@ -6,7 +6,7 @@ import 'package:nipaplay/next/player/kernel/versions.dart';
 /// The versions a kernel cannot report itself are the ones the build locks:
 /// bump a dependency and this says to bump them in versions.dart too.
 void main() {
-  final lock = File('pubspec.lock').readAsStringSync();
+  final lock = File('pubspec.lock').readAsStringSync().replaceAll('\r\n', '\n');
 
   String? field(String package, String key) {
     final block =

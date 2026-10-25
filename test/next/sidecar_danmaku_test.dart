@@ -5,6 +5,7 @@ import 'package:nipaplay/next/danmaku/sidecar.dart';
 import 'package:nipaplay/next/ui_data/heat.dart';
 import 'package:nipaplay/utils/local_danmaku_match.dart';
 import 'danmaku_test_support.dart';
+import 'package:path/path.dart' as ppath;
 
 void main() {
   late DanmakuFixture f;
@@ -17,9 +18,9 @@ void main() {
   test(
       'sidecar references refresh without copied content and retain controls when missing',
       () async {
-    final path = '${f.root.path}/episode.mkv';
+    final path = ppath.join(f.root.path, 'episode.mkv');
     final id = await f.file(path: path);
-    final xml = File('${f.root.path}/episode.xml');
+    final xml = File(ppath.join(f.root.path, 'episode.xml'));
     Future<void> write(String text, int seconds) => xml
         .writeAsString(
             '<i><chatserver>youku</chatserver><chatid>opaque-youku-id</chatid>'
@@ -72,9 +73,9 @@ void main() {
   test(
       'explicit import of a discovered path replaces the pointer pool without a duplicate',
       () async {
-    final path = '${f.root.path}/episode.mkv';
+    final path = ppath.join(f.root.path, 'episode.mkv');
     final id = await f.file(path: path);
-    final xml = File('${f.root.path}/episode.xml');
+    final xml = File(ppath.join(f.root.path, 'episode.xml'));
     await xml.writeAsString('<i><d p="1,1,25,16777215,1,0,s,1">before</d></i>');
     final indexer = SidecarIndexer(f.service.store, () async {});
     await indexer.inspect(id, path);
@@ -98,30 +99,30 @@ void main() {
   });
 
   test('shared Classic ranking and parse fallback stay identical', () async {
-    final path = '${f.root.path}/episode.mkv';
+    final path = ppath.join(f.root.path, 'episode.mkv');
     final id = await f.file(path: path);
-    await File('${f.root.path}/episode.xml').writeAsString('invalid');
-    await File('${f.root.path}/episode.json').writeAsString(
+    await File(ppath.join(f.root.path, 'episode.xml')).writeAsString('invalid');
+    await File(ppath.join(f.root.path, 'episode.json')).writeAsString(
         '[{"time":1,"content":"valid","type":"scroll","color":16777215}]');
-    await File('${f.root.path}/episode-comment.xml')
+    await File(ppath.join(f.root.path, 'episode-comment.xml'))
         .writeAsString('invalid-too');
     final candidates = await localDanmakuCandidates(path);
-    expect(candidates.map((p) => p.split('/').last),
+    expect(candidates.map((p) => ppath.basename(p)),
         ['episode-comment.xml', 'episode.xml', 'episode.json']);
     final indexer = SidecarIndexer(f.service.store, () async {});
     await indexer.inspect(id, path);
     expect(
         ((await f.service.store.bindings(id)).single['local_file']
             as Map)['path'],
-        '${f.root.path}/episode.json');
+        ppath.join(f.root.path, 'episode.json'));
   });
 
   test(
       'episode heat uses saved timing facts after source removal without inventing text',
       () async {
-    final path = '${f.root.path}/episode.mkv';
+    final path = ppath.join(f.root.path, 'episode.mkv');
     final id = await f.file(path: path);
-    final xml = File('${f.root.path}/episode.xml');
+    final xml = File(ppath.join(f.root.path, 'episode.xml'));
     await xml.writeAsString('<i><d p="1,1,25,16777215,1,0,s,1">text</d></i>');
     final indexer = SidecarIndexer(f.service.store, () async {});
     await indexer.inspect(id, path);

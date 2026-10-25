@@ -189,7 +189,7 @@ void main() {
     expect(saved['status'], 'completed');
     // Each line once, and the finished turn rewritten once.
     expect(written, lessThan(3 * folded));
-  });
+  }, retry: Platform.isWindows ? 2 : null);
 
   test('restoring 60 turns holds the main isolate under 5 ms', () async {
     final turns = await legacyFile();

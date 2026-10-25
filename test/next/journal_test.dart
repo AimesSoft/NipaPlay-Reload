@@ -13,6 +13,7 @@ import 'package:nipaplay/next/ui_data/service.dart' show lastTurnBoundary;
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
 import 'support/main_thread_probe.dart';
+import 'package:path/path.dart' as ppath;
 
 final class _Json implements JsonEncodable {
   const _Json(this.value);
@@ -151,7 +152,7 @@ void main() {
       'a read is journalled without its result and is not waited for; a write '
       'is whole and flushed before it returns', () async {
     final flushes = _Flushes();
-    final path = '${root.path}/journal.jsonl';
+    final path = ppath.join(root.path, 'journal.jsonl');
     final journal = IOOverrides.runZoned(
         () => nextJournal(File(path)),
         createFile: (path) => _SpyFile(_real(path), flushes));
@@ -203,7 +204,7 @@ void main() {
 
   test('reads, writes and chat boundaries are written whole, in the order they '
       'were handed in', () async {
-    final file = File('${root.path}/journal.jsonl');
+    final file = File(ppath.join(root.path, 'journal.jsonl'));
     final journal = nextJournal(file);
     final api = harness([journal]);
     final boundary = {
@@ -252,7 +253,7 @@ void main() {
 
   test('past its size the journal is rotated into archives, whole lines, none '
       'lost or reordered', () async {
-    final file = File('${root.path}/journal.jsonl');
+    final file = File(ppath.join(root.path, 'journal.jsonl'));
     final journal = JsonlJournal(file,
         effects: Effect.values.toSet(), rotateBytes: 4096);
     final api = harness([journal]);
@@ -294,8 +295,8 @@ void main() {
   test('动态 rows recorded as invocations happen are the ones read back from '
       'their journal', () async {
     final database = await openNextDatabase(
-        Directory('${root.path}/live'), factory: databaseFactoryFfi);
-    final file = File('${root.path}/live/journal.jsonl');
+        Directory(ppath.join(root.path, 'live')), factory: databaseFactoryFfi);
+    final file = File(ppath.join(root.path, 'live', 'journal.jsonl'));
     var changed = 0;
     final live = ActivityInvocations(database, file, changed: () => changed++);
     final api = harness([nextJournal(file), live]);
@@ -342,20 +343,20 @@ void main() {
     expect(await rows(database, 'invocation_origins'), hasLength(3));
 
     // A database that has only the journal reads the same rows back.
-    await Directory('${root.path}/copy').create();
-    await file.copy('${root.path}/copy/journal.jsonl');
-    final copy = await openNextDatabase(Directory('${root.path}/copy'),
+    await Directory(ppath.join(root.path, 'copy')).create();
+    await file.copy(ppath.join(root.path, 'copy', 'journal.jsonl'));
+    final copy = await openNextDatabase(Directory(ppath.join(root.path, 'copy')),
         factory: databaseFactoryFfi);
     final backfilled =
-        ActivityInvocations(copy, File('${root.path}/copy/journal.jsonl'));
+        ActivityInvocations(copy, File(ppath.join(root.path, 'copy', 'journal.jsonl')));
     await backfilled.settled();
     expect(await rows(copy, 'activity_invocations'), liveRows);
     expect(await rows(copy, 'invocation_origins'),
         await rows(database, 'invocation_origins'));
     expect(await copy.query('activity_backfill'), hasLength(1));
     // Read once: a second start does not read the journal again.
-    await File('${root.path}/copy/journal.jsonl').writeAsString('not json\n');
-    await ActivityInvocations(copy, File('${root.path}/copy/journal.jsonl'))
+    await File(ppath.join(root.path, 'copy', 'journal.jsonl')).writeAsString('not json\n');
+    await ActivityInvocations(copy, File(ppath.join(root.path, 'copy', 'journal.jsonl')))
         .settled();
     expect(await rows(copy, 'activity_invocations'), liveRows);
     await copy.close();
@@ -365,7 +366,7 @@ void main() {
   test('a database with no journal yet writes nothing and reads it in once one '
       'exists', () async {
     final database = await openNextDatabase(root, factory: databaseFactoryFfi);
-    final file = File('${root.path}/journal.jsonl');
+    final file = File(ppath.join(root.path, 'journal.jsonl'));
     final changes = await database.rawQuery('SELECT total_changes() AS n');
     final first = ActivityInvocations(database, file);
     await first.settled();
@@ -383,7 +384,7 @@ void main() {
 
   test('ui.present finds the turn without the journal; a turn it did not write '
       'is looked for off the main isolate', () async {
-    final file = File('${root.path}/journal.jsonl');
+    final file = File(ppath.join(root.path, 'journal.jsonl'));
     await TurnBoundaries.write(file, {
       'event': 'chat.turn_boundary',
       'origin': 'harness_cli:chat:memory',

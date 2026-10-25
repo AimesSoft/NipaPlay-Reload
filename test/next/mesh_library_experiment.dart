@@ -7,7 +7,7 @@ Future<void> x47LibraryExperiment(_Rig rig) async {
   sqfliteFfiInit();
   final a = await x47Data(rig, mac), b = await x47Data(rig, source);
   final video = File('${source.root.path}/X47 CC0 S01E04.mp4');
-  final encoded = await Process.run('/opt/homebrew/bin/ffmpeg', [
+  final encoded = await Process.run(ffmpegExecutable, [
     '-v',
     'error',
     '-f',
@@ -177,7 +177,7 @@ Future<void> x47LibraryExperiment(_Rig rig) async {
   } finally {
     client.close(force: true);
   }
-  final probed = await Process.run('/opt/homebrew/bin/ffprobe', [
+  final probed = await Process.run(ffprobeExecutable, [
     '-v',
     'error',
     '-show_entries',
@@ -192,7 +192,7 @@ Future<void> x47LibraryExperiment(_Rig rig) async {
     'no_proxy': '127.0.0.1,localhost'
   });
   expect(probed.exitCode, 0, reason: probed.stderr.toString());
-  final sought = await Process.run('/opt/homebrew/bin/ffmpeg', [
+  final sought = await Process.run(ffmpegExecutable, [
     '-v',
     'error',
     '-ss',
@@ -211,7 +211,7 @@ Future<void> x47LibraryExperiment(_Rig rig) async {
     'no_proxy': '127.0.0.1,localhost'
   });
   expect(sought.exitCode, 0, reason: sought.stderr.toString());
-  final local = await Process.run('/opt/homebrew/bin/ffmpeg', [
+  final local = await Process.run(ffmpegExecutable, [
     '-v',
     'error',
     '-ss',

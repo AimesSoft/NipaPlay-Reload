@@ -18,6 +18,7 @@ import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'download_test_support.dart';
 import 'media_test_support.dart';
 import 'test_support.dart';
+import 'package:path/path.dart' as ppath;
 
 Future<JsonMap> call(Harness api, String id, JsonMap input) async {
   final outcome = await api.invokeJson(id, input, Invocation(origin: 'mcp'));
@@ -54,7 +55,7 @@ void main() {
           mediaProviders: [TmdbMetadataProvider(tmdb)],
           mediaDurationProbe: (_) async => 10000);
       await core.ready;
-      await core.harnessLocation.setPath('${root.path}/harness');
+      await core.harnessLocation.setPath(ppath.join(root.path, 'harness'));
       history = [];
       core.stateSources.history = () => history;
       core.stateSources.continueWatching = () => history;
@@ -70,7 +71,7 @@ void main() {
     test(
         'activity preserves revocation evidence and setting provenance without writes',
         () async {
-      final path = '${root.path}/fact.mkv';
+      final path = ppath.join(root.path, 'fact.mkv');
       await File(path).writeAsString('offline');
       final id = await core.media.service.index(path);
       final result = await call(api, 'media.identity.bind_batch', {
@@ -86,7 +87,7 @@ void main() {
           {'entityId': workId, 'reason': 'withdraw'}
         ]
       });
-      await core.settings.set('next.harnessPath', '${root.path}/new-harness',
+      await core.settings.set('next.harnessPath', ppath.join(root.path, 'new-harness'),
           Invocation(origin: 'mesh:peer', id: 'remote-edit'));
       final db = core.media.service.store.database;
       final before = await db.rawQuery('SELECT total_changes() AS n');
@@ -113,7 +114,7 @@ void main() {
       final edit = changes.single;
       expect(edit['originDeviceId'], 'peer');
       expect(edit['invocationId'], 'remote-edit');
-      expect(edit['facts']['after'], '${root.path}/new-harness');
+      expect(edit['facts']['after'], ppath.join(root.path, 'new-harness'));
       expect(await db.rawQuery('SELECT total_changes() AS n'), before);
       expect(await db.query('media_bindings'), bindingRows);
       expect(await db.query('media_evidence'), evidenceRows);
@@ -259,7 +260,7 @@ void main() {
           hasLength(2));
       // A file Classic only scanned is recorded too, as never played.
       history.add({
-        'filePath': '${root.path}/episode3.mkv',
+        'filePath': ppath.join(root.path, 'episode3.mkv'),
         'animeName': '长安十二时辰',
         'lastPosition': 0,
         'duration': 0,
@@ -441,7 +442,7 @@ void main() {
     test(
         'history joins use recorded file IDs and unavailable history is explicit',
         () async {
-      final path = '${root.path}/history.mkv';
+      final path = ppath.join(root.path, 'history.mkv');
       await File(path).writeAsString('fixture');
       final id = await core.media.service.index(path);
       history.add({

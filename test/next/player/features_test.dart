@@ -184,11 +184,19 @@ void main() {
   test(
       'external handoff passes one literal media argument and reports no invented telemetry',
       () async {
-    final script = File('${temp.path}/fake-player');
+    final script = File(
+        '${temp.path}/fake-player${Platform.isWindows ? '.cmd' : ''}');
     final argsFile = File('${temp.path}/args.txt');
-    await script.writeAsString(
-        '#!/bin/sh\nprintf "%s\\n" "\u0024@" > "${argsFile.path}"\nsleep 1\n');
-    await Process.run('/bin/chmod', ['+x', script.path]);
+    if (Platform.isWindows) {
+      await script.writeAsString('@echo off\r\n'
+          'chcp 65001 >nul\r\n'
+          '>"${argsFile.path.replaceAll('/', r'\')}" echo %~1\r\n'
+          'ping -n 2 127.0.0.1 >nul\r\n');
+    } else {
+      await script.writeAsString(
+          '#!/bin/sh\nprintf "%s\\n" "\u0024@" > "${argsFile.path}"\nsleep 1\n');
+      await Process.run('/bin/chmod', ['+x', script.path]);
+    }
     final external = ExternalHandoff(
         enabled: () => true,
         playerPath: () => script.path,

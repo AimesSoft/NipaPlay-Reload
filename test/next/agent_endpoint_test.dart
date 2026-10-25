@@ -8,6 +8,8 @@ import 'package:nipaplay/next/capabilities/classic_action.dart';
 import 'package:nipaplay/next/ui_data/ui_data.dart' show UiNowPlaying;
 
 import 'test_support.dart';
+import 'support/platform.dart';
+import 'package:path/path.dart' as ppath;
 
 void main() {
   late Directory root, repository;
@@ -467,7 +469,7 @@ void main() {
         workingDirectory: endpoint.seedRepository.path);
     expect(commit.exitCode, 0, reason: commit.stderr.toString());
     final result = await Process.run(
-        'python3', ['${repository.path}/nipa', 'status'],
+        pythonCommand, [ppath.join(repository.path, 'nipa'), 'status'],
         workingDirectory: repository.path,
         environment: {'NIPAPLAY_ENDPOINT_FILE': credentials.path});
     expect(result.exitCode, 0, reason: result.stderr.toString());

@@ -9,6 +9,7 @@ import 'package:nipa_harness/nipa_harness.dart';
 import 'package:nipaplay/next/capabilities/family_descriptions.dart';
 import 'package:nipaplay/next/capabilities/media_frames.dart';
 import 'package:nipaplay/next/capabilities/media_frames_erika.dart';
+import 'package:path/path.dart' as ppath;
 
 void main() {
   late Directory root;
@@ -19,7 +20,7 @@ void main() {
   setUp(() async {
     root = await Directory.systemTemp.createTemp('media-frames-test');
     media = await Directory.systemTemp.createTemp('media-frames-media');
-    file = '${media.path}/ep.mkv';
+    file = ppath.join(media.path, 'ep.mkv');
     await File(file).writeAsBytes([0]);
     engine = _FakeEngine();
   });
@@ -35,7 +36,7 @@ void main() {
       Harness([
         MediaFramesCapability(
             engine: engine,
-            outputRoot: () async => Directory('${root.path}/media-frames'),
+            outputRoot: () async => Directory(ppath.join(root.path, 'media-frames')),
             episodePath: episode,
             frameTimeout: frameTimeout)
       ]);
@@ -96,7 +97,7 @@ void main() {
     Harness preferred(FrameEngine first) => Harness([
           MediaFramesCapability(
               engine: PreferredFrameEngine([first, engine]),
-              outputRoot: () async => Directory('${root.path}/media-frames'))
+              outputRoot: () async => Directory(ppath.join(root.path, 'media-frames')))
         ]);
 
     test('the Erika engine writes the PNG Erika encoded and names itself',
@@ -256,7 +257,7 @@ void main() {
   test('a file that is not there, a relative path and a bad scheme fail',
       () async {
     final h = harness();
-    for (final path in ['${media.path}/missing.mkv', 'ep.mkv', 'smb://x/y.mkv']) {
+    for (final path in [ppath.join(media.path, 'missing.mkv'), 'ep.mkv', 'smb://x/y.mkv']) {
       expect(
           await call(h, {
             'path': path,
@@ -403,10 +404,10 @@ void main() {
   });
 
   test('files older than a day are pruned, newer ones stay', () async {
-    final frames = Directory('${root.path}/media-frames');
-    final old = await Directory('${frames.path}/old').create(recursive: true);
-    final recent = await Directory('${frames.path}/recent').create();
-    await File('${old.path}/a.jpg').writeAsBytes([1]);
+    final frames = Directory(ppath.join(root.path, 'media-frames'));
+    final old = await Directory(ppath.join(frames.path, 'old')).create(recursive: true);
+    final recent = await Directory(ppath.join(frames.path, 'recent')).create();
+    await File(ppath.join(old.path, 'a.jpg')).writeAsBytes([1]);
     final clock = DateTime.now().add(const Duration(days: 2));
     final h = Harness([
       MediaFramesCapability(
@@ -422,7 +423,7 @@ void main() {
     final again = Harness([
       MediaFramesCapability(engine: engine, outputRoot: () async => frames)
     ]);
-    final kept = await Directory('${frames.path}/kept').create();
+    final kept = await Directory(ppath.join(frames.path, 'kept')).create();
     result(await call(again, {'path': file, 'atMs': [1]}));
     expect(await kept.exists(), true);
   });

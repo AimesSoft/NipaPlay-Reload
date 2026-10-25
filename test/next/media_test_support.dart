@@ -14,6 +14,7 @@ import 'package:nipaplay/next/media/provider_transport.dart';
 import 'package:nipaplay/next/media/providers.dart';
 import 'package:nipaplay/next/tasks/sqlite_job_store.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
+import 'package:path/path.dart' as ppath;
 
 final class FixtureTransport implements MetadataTransport {
   FixtureTransport(String provider)
@@ -89,7 +90,7 @@ final class MediaFixture {
   Future<void> open({List<String> sources = const ['tmdb']}) async {
     sqfliteFfiInit();
     root = await Directory.systemTemp.createTemp('next-media-');
-    media = await Directory('${root.path}/media').create();
+    media = await Directory(ppath.join(root.path, 'media')).create();
     await _connect(sources);
   }
 

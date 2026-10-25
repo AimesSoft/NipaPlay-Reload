@@ -3,6 +3,7 @@ import 'dart:io';
 
 import 'package:nipa_harness/nipa_harness.dart';
 import 'package:nipaplay/next/downloads/download_backend.dart';
+import 'package:path/path.dart' as ppath;
 
 const testHash = '0123456789abcdef0123456789abcdef01234567';
 const testRequest = DownloadRequest(
@@ -54,7 +55,7 @@ final class FakeDownloadBackend
 
   DownloadFile get video => DownloadFile(
       location:
-          DownloadLocation(path: '${root.path}/episode.mkv', isLocal: local),
+          DownloadLocation(path: ppath.join(root.path, 'episode.mkv'), isLocal: local),
       expectedSize: total,
       isVideo: true);
   DownloadSnapshot get snapshot => DownloadSnapshot(

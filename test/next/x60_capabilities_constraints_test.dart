@@ -11,6 +11,7 @@ import 'package:nipaplay/next/state/query.dart';
 import 'package:nipaplay/models/torrent_magnet_preview.dart';
 import 'package:nipaplay/services/torrent_download_service.dart';
 import 'media_test_support.dart';
+import 'package:path/path.dart' as ppath;
 
 class _Direct extends HttpOverrides {
   @override
@@ -121,7 +122,7 @@ void main() {
     final torrent = Uint8List.fromList(ascii.encode(
         'd4:infod5:filesld6:lengthi4e4:pathl5:a.mkveed6:lengthi6e4:pathl5:b.mkveee4:name6:series12:piece lengthi16e6:pieces20:${'p' * 20}ee'));
     final local =
-        await File('${root.path}/sample.torrent').writeAsBytes(torrent);
+        await File(ppath.join(root.path, 'sample.torrent')).writeAsBytes(torrent);
     final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
     server.listen((request) async {
       request.response.add(torrent);
@@ -131,7 +132,7 @@ void main() {
       await server.close(force: true);
       await root.delete(recursive: true);
     });
-    final sources = DownloadSources(Directory('${root.path}/cache'),
+    final sources = DownloadSources(Directory(ppath.join(root.path, 'cache')),
         clientFactory: () => HttpClient()..findProxy = (_) => 'DIRECT');
     final api =
         Harness([DownloadMetadataCapability(sources, () async => true)]);
@@ -152,7 +153,7 @@ void main() {
       if (previous != null) expect(result, previous);
       previous = result;
     }
-    expect(await root.list().map((f) => f.path.split('/').last).toList(),
+    expect(await root.list().map((f) => ppath.basename(f.path)).toList(),
         containsAll(['sample.torrent', 'cache']));
     final hostile = Uint8List.fromList(ascii.encode(
         'd4:infod6:lengthi4e4:name2:..12:piece lengthi16e6:pieces20:${'p' * 20}ee'));
@@ -166,7 +167,7 @@ void main() {
     final requests = <TorrentPreviewRequest>[];
     final api = Harness([
       DownloadMetadataCapability(
-          DownloadSources(Directory('${root.path}/cache')), () async => true,
+          DownloadSources(Directory(ppath.join(root.path, 'cache'))), () async => true,
           previewMagnet: (source, {downloadDirectory, required request}) {
         requests.add(request);
         // Peers answer only for the second magnet; the first has none.
