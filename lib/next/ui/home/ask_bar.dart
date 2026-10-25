@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart' show InputDecoration, TextField;
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
@@ -108,7 +110,9 @@ class _AskBarState extends State<AskBar> {
   @override
   Widget build(BuildContext context) {
     final empty = _text.text.isEmpty && widget.attachments.isEmpty;
-    const fieldWidth = 640.0;
+    // The field is 640 wide, or what the page leaves it (an iPad held upright).
+    final fieldWidth =
+        widget.maxWidth.isFinite ? math.min(640.0, widget.maxWidth) : 640.0;
     final glass = Glass(
       radius: BorderRadius.circular(28),
       color: const Color(0x9916161C),
@@ -215,21 +219,29 @@ class _AskBarState extends State<AskBar> {
                     onRemove: (p) => widget.onDetach?.call(p)),
               ),
             ),
-          Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              field,
-              if (widget.aside case final aside?)
-                Padding(padding: const EdgeInsets.only(left: 14), child: aside)
-              else if (chips.isNotEmpty && empty)
-                Flexible(
-                  child: Padding(
-                    padding: const EdgeInsets.only(left: 14),
-                    child: _FittingChips(chips: chips, onTap: _send),
+          if (widget.aside case final aside?)
+            // Beside the field when there is room, under it when there is not
+            // (a narrow window, an iPad held upright).
+            Wrap(
+              crossAxisAlignment: WrapCrossAlignment.center,
+              spacing: 14,
+              runSpacing: 12,
+              children: [field, aside],
+            )
+          else
+            Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                field,
+                if (chips.isNotEmpty && empty)
+                  Flexible(
+                    child: Padding(
+                      padding: const EdgeInsets.only(left: 14),
+                      child: _FittingChips(chips: chips, onTap: _send),
+                    ),
                   ),
-                ),
-            ],
-          ),
+              ],
+            ),
         ],
       ),
     );

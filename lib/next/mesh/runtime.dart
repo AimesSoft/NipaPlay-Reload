@@ -9,6 +9,7 @@ import 'package:nipaplay/security/credential_vault.dart';
 import '../body/next_body.dart';
 import '../platform/lab_profile.dart';
 import 'coordinator.dart';
+import 'chat_guest_host.dart' show chatGuestMethods;
 import 'delegation_host.dart' show delegationMethods;
 import 'device_source.dart';
 import 'discovery.dart';
@@ -136,6 +137,10 @@ final class MeshRuntime implements MeshDeviceSource {
   /// handing this device's Nipa a task. Not Actions, so Nipa cannot call them
   /// on another device; the method, its params and the authenticated sender.
   Future<JsonMap> Function(String, JsonMap, String)? agentRequest;
+
+  /// The host methods of guest conversations (`mesh/chat/*`): a device that
+  /// cannot run Nipa speaking with the Nipa of this one.
+  Future<JsonMap> Function(String, JsonMap, String)? chatRequest;
   Future<void> Function()? hostConfigurationChanged;
   JsonMap hostConfiguration = {};
 
@@ -224,18 +229,21 @@ final class MeshRuntime implements MeshDeviceSource {
     return notAfter - _nowSeconds < 86400;
   }
 
-  Future<List<JsonMap>> settingsDevices() async {
-    if (!_hostFactsLoaded) {
-      final file = File('${root.path}/mesh-host-facts.json');
-      if (await file.exists()) {
-        final facts = jsonDecode(await file.readAsString()) as JsonMap;
-        for (final entry in facts.entries) {
-          _descriptions[entry.key] =
-              Map<String, Object?>.from(entry.value as Map);
-        }
+  Future<void> _loadHostFacts() async {
+    if (_hostFactsLoaded) return;
+    final file = File('${root.path}/mesh-host-facts.json');
+    if (await file.exists()) {
+      final facts = jsonDecode(await file.readAsString()) as JsonMap;
+      for (final entry in facts.entries) {
+        _descriptions[entry.key] =
+            Map<String, Object?>.from(entry.value as Map);
       }
-      _hostFactsLoaded = true;
     }
+    _hostFactsLoaded = true;
+  }
+
+  Future<List<JsonMap>> settingsDevices() async {
+    await _loadHostFacts();
     if (_devices.isEmpty) {
       final file = File('${root.path}/mesh-devices.json');
       if (await file.exists()) {
@@ -1124,6 +1132,27 @@ final class MeshRuntime implements MeshDeviceSource {
         (jsonDecode(await file.readAsString()) as JsonMap)['addresses'] ?? []);
   }
 
+  /// The other devices of the account and whether Nipa runs on each: live
+  /// for a device that answers, as last seen for one that does not.
+  /// `{deviceId, name, online, agent: {runs, busy, model, reason?}?}`.
+  Future<List<JsonMap>> agentDevices() async {
+    final listed = await devices(includeCatalog: false);
+    await _loadHostFacts();
+    final self = identity?.deviceId;
+    return [
+      for (final device in (listed['devices'] as List).cast<JsonMap>())
+        if (device['device_id'] != self && device['revoked'] != true)
+          {
+            'deviceId': device['device_id'],
+            'name': device['device_name'],
+            'online': device['online'] == true,
+            'agent': device['online'] == true
+                ? ((device['description'] as Map?)?['agent'])
+                : (_descriptions[device['device_id']]?['agent']),
+          }
+    ];
+  }
+
   Future<JsonMap> devices({
     List<String>? deviceIds,
     bool includeCatalog = true,
@@ -1175,6 +1204,9 @@ final class MeshRuntime implements MeshDeviceSource {
           'enabled':
               (description['programExecution'] as Map?)?['enabled'] == true
         },
+        // Kept for a device that is away: whether Nipa ran there when it was
+        // last seen.
+        if (description['agent'] is Map) 'agent': description['agent'],
       };
       await File('${root.path}/mesh-host-facts.json')
           .writeAsString(jsonEncode(_descriptions), flush: true);
@@ -1429,9 +1461,7 @@ final class MeshRuntime implements MeshDeviceSource {
         return rpc(peer, method, params,
             replayFrame: frame, ungated: ungated);
       }
-      throw const Failure(FailureCode.unavailable,
-          'No authenticated direct route to Mesh device.',
-          retryable: true);
+      throw meshNotDelivered(peer, 'no known address');
     }
 
     try {
@@ -1448,7 +1478,9 @@ final class MeshRuntime implements MeshDeviceSource {
     } on Failure catch (failure) {
       if (remembered != null &&
           failure.code == FailureCode.unavailable &&
-          failure.message == 'No authenticated direct route to Mesh device.') {
+          failure.retryable &&
+          const {'not_delivered', 'outcome_unknown'}
+              .contains(failure.details['reason'])) {
         await _removeRoute(peer);
         return rpc(peer, method, params,
             replayFrame: frame, ungated: ungated);
@@ -1470,6 +1502,8 @@ final class MeshRuntime implements MeshDeviceSource {
     var active = 0;
     var finished = false;
     var hadPostConnectFailure = false;
+    // What stopped each candidate before the request left this device.
+    String? connectCause;
     Failure? rpcFailure;
     FormatException? formatError;
     Timer? staggerTimer;
@@ -1507,13 +1541,12 @@ final class MeshRuntime implements MeshDeviceSource {
           finishWithError(formatError!);
         } else if (rpcFailure != null) {
           finishWithError(rpcFailure!);
-        } else if (method == 'tools/call' && hadPostConnectFailure) {
-          finishWithError(const Failure(FailureCode.unavailable,
-              'Remote call outcome is unknown; query its task before retrying.'));
+        } else if (hadPostConnectFailure) {
+          // The request was on the wire when the connection broke: the other
+          // device may have acted on it.
+          finishWithError(meshOutcomeUnknown(peer, method));
         } else {
-          finishWithError(const Failure(FailureCode.unavailable,
-              'No authenticated direct route to Mesh device.',
-              retryable: true));
+          finishWithError(meshNotDelivered(peer, connectCause));
         }
       }
     }
@@ -1578,6 +1611,8 @@ final class MeshRuntime implements MeshDeviceSource {
           if (finished) return;
           if (!_isConnectStageError(error)) {
             hadPostConnectFailure = true;
+          } else {
+            connectCause ??= meshConnectCause(error);
           }
         } finally {
           active--;
@@ -1750,8 +1785,11 @@ final class MeshRuntime implements MeshDeviceSource {
         await native.respond(node, event.requestId, jsonEncode(response));
         return;
       }
-      if (delegationMethods.contains(frame['method'])) {
-        final host = agentRequest;
+      if (delegationMethods.contains(frame['method']) ||
+          chatGuestMethods.contains(frame['method'])) {
+        final host = delegationMethods.contains(frame['method'])
+            ? agentRequest
+            : chatRequest;
         if (host == null) {
           throw const FormatException('No agent host.');
         }
@@ -1992,6 +2030,9 @@ final class MeshRuntime implements MeshDeviceSource {
     _ownState = PresenceState.foreground;
     _ownStateAt = DateTime.now().toUtc();
     await resumeListening();
+    // What waits on the mesh (a conversation with another device's Nipa)
+    // looks again: the system may have cut its connections while behind.
+    if (!_hostChanges.isClosed) _hostChanges.add(null);
     await announcePresence(PresenceState.foreground);
   }
 
@@ -2088,4 +2129,41 @@ final class MeshJson implements JsonEncodable {
   final JsonMap json;
   @override
   JsonMap toJson() => json;
+}
+
+/// The request never left this device: the connection or the handshake failed
+/// first, so the other device did nothing. [cause] says what stopped it.
+Failure meshNotDelivered(String peer, String? cause) => Failure(
+        FailureCode.unavailable,
+        'not_delivered: the request was not sent'
+        '${cause == null ? '' : ' ($cause)'}.',
+        retryable: true,
+        details: {
+          'reason': 'not_delivered',
+          'deviceId': peer,
+          'stage': 'connect',
+          if (cause != null) 'cause': cause,
+        });
+
+/// The request was sent and the connection broke before an answer came: the
+/// other device may or may not have done it. A call that changes something
+/// ([method] `tools/call`) is not repeated blindly.
+Failure meshOutcomeUnknown(String peer, String method) => Failure(
+        FailureCode.unavailable,
+        'outcome_unknown: the request was sent and no answer came back; '
+        'the device may have done it. Ask it what happened before repeating.',
+        retryable: method != 'tools/call',
+        details: {
+          'reason': 'outcome_unknown',
+          'deviceId': peer,
+          'stage': 'after_send',
+        });
+
+/// A short, address-free reason for a connect-stage error.
+String meshConnectCause(Object error) {
+  var text = '$error';
+  final at = text.indexOf('connect:');
+  if (at >= 0) text = text.substring(at + 'connect:'.length);
+  text = text.trim().split('\n').first;
+  return text.length > 120 ? '${text.substring(0, 120)}…' : text;
 }

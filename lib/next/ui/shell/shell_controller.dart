@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/widgets.dart';
 
 import '../../ui_data/ui_data.dart';
+import '../conversation/mesh_chat_port.dart';
 import '../conversation/nipa_chat.dart';
 import '../data/search.dart';
 import '../data/services.dart';
@@ -24,7 +25,13 @@ enum NextPopover { none, tasks, nipa }
 /// conversation and tasks are listened to where they are shown.
 class NextShellController extends ChangeNotifier {
   NextShellController(this.services, {required this.onLeave}) {
-    chat = NipaChat(port: services.chat, data: services.data);
+    chat = NipaChat(
+        port: services.chat,
+        data: services.data,
+        namesGuests: services.chat is! MeshChatPort);
+    if (services.chat case final MeshChatPort port) {
+      port.page = _pageName;
+    }
     // A login card must be seen: the conversation comes up for it. Not over
     // a video: the player tells of it, and the conversation comes up when
     // the video is left.
@@ -42,6 +49,18 @@ class NextShellController extends ChangeNotifier {
   }
 
   final NextUiServices services;
+
+  /// The page the person is on, as the conversation tells Nipa.
+  String _pageName() => _playing
+      ? '播放'
+      : _settingsOpen
+          ? '设置'
+          : switch (section) {
+              NextSection.home => '首页',
+              NextSection.discover => '发现',
+              NextSection.library => '片库',
+              NextSection.activity => '动态',
+            };
 
   /// Leaves Next for Classic (turns the preference off).
   final VoidCallback onLeave;
@@ -74,7 +93,11 @@ class NextShellController extends ChangeNotifier {
   final scrolled = ValueNotifier<bool>(false);
 
   /// Whether Nipa has a model yet (the rest of Next works either way).
-  late final nipaSetup = NipaSetup(services.settings.host);
+  late final nipaSetup = NipaSetup(services.settings.host,
+      peers: services.peers,
+      port: services.chat is MeshChatPort
+          ? services.chat as MeshChatPort
+          : null);
 
   /// The search panel (⌘F, the top bar's search).
   late final search =

@@ -1,12 +1,12 @@
 import 'dart:async';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:nipaplay/next/chat/delegation_chat.dart';
+import 'package:nipaplay/next/chat/guest_chat.dart';
 import 'package:nipaplay/next/chat/liveness.dart';
 
 /// A conversation host that does what the real one reports and nothing else:
 /// threads, turns, and the wire events a turn produces.
-final class FakeChat implements DelegationChat {
+final class FakeChat implements GuestChat {
   @override
   bool available = true;
   @override
@@ -16,6 +16,51 @@ final class FakeChat implements DelegationChat {
   final _events = StreamController<Map<String, dynamic>>.broadcast();
   @override
   Stream<Map<String, dynamic>> get events => _events.stream;
+  @override
+  Stream<Map<String, dynamic>> get threadDisplay => _events.stream;
+  final _questions = StreamController<Map<String, dynamic>>.broadcast();
+  @override
+  Stream<Map<String, dynamic>> get userInputRequests => _questions.stream;
+  final steered = <(String, String)>[];
+  final answered = <(Object, Map<String, List<String>>)>[];
+
+  @override
+  Future<Map<String, dynamic>> steer(String text, {String? onThread}) async {
+    steered.add((onThread!, text));
+    return {};
+  }
+
+  @override
+  Future<void> answerUserInput(
+      Object id, Map<String, List<String>> answers) async {
+    answered.add((id, answers));
+  }
+
+  @override
+  Future<void> restoreProcess(String id, Map<String, dynamic> history) async {}
+
+  @override
+  Future<Map<String, dynamic>> listSessions(
+          {String? cursor, int limit = 30}) async =>
+      {
+        'data': [
+          for (final id in threads.keys)
+            {
+              'id': id,
+              'preview': (threads[id]!.firstOrNull?['items'] as List?)
+                  ?.map((i) => ((i['content'] as List).first as Map)['text'])
+                  .firstOrNull,
+              'updatedAt': 1,
+            }
+        ],
+      };
+
+  void ask(String thread, Object id) => _questions.add({
+        'id': id,
+        'method': 'item/tool/requestUserInput',
+        'params': {'threadId': thread, 'questions': []}
+      });
+
   final busy = <String>{};
   final threads = <String, List<Map<String, dynamic>>>{};
   final titles = <String, String>{};
@@ -117,7 +162,10 @@ final class FakeChat implements DelegationChat {
     });
   }
 
-  Future<void> close() => _events.close();
+  Future<void> close() async {
+    await _events.close();
+    await _questions.close();
+  }
 }
 
 Future<void> until(Future<bool> Function() test, String what) async {

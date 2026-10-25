@@ -3,10 +3,13 @@ import 'package:flutter/widgets.dart';
 import 'package:nipaplay/providers/service_provider.dart';
 import 'package:provider/provider.dart';
 
+import '../../body/next_body.dart';
+import '../../mesh/nipa_peers.dart';
 import '../../next_runtime.dart';
 import '../../ui_data/library.dart';
 import '../../ui_data/ui_data.dart';
 import '../conversation/chat_port.dart';
+import '../conversation/mesh_chat_port.dart';
 import '../dev/dev_services.dart';
 import 'core_connect.dart';
 import 'core_manage.dart';
@@ -38,6 +41,7 @@ final class NextUiServices {
     required this.settings,
     LoginRequests? logins,
     this.manage,
+    this.peers,
     GuiCalls? calls,
     this.onDispose,
   })  : logins = logins ?? LoginRequests(),
@@ -67,6 +71,10 @@ final class NextUiServices {
   /// Managing a work and its episodes from the detail page; none where
   /// the shell is shown without it (tests).
   final NextWorkManage? manage;
+
+  /// Where Nipa comes from on a device that cannot run her (an iPad): the
+  /// device chosen in its settings. Null where Nipa runs on the device.
+  final NipaPeers? peers;
   /// Actions the pages call as the person, and what reads them.
   final GuiCalls calls;
   late final downloads = NextDownloads(calls);
@@ -102,10 +110,21 @@ final class NextUiServices {
     final settings =
         CoreSettingsData(core, runtime, logins, host: runtime.hostSettings);
     final detach = attachCoreLogins(core, logins);
+    final peers = NextBody.bodyOnly ? NipaPeers(
+            root: core.mesh.root,
+            devices: core.mesh.agentDevices,
+            hostChanges: core.mesh.hostChanges) : null;
     return NextUiServices(
       data: data,
       actions: coreUiActions(core, runtime),
-      chat: ChatHostPort(runtime),
+      chat: peers == null
+          ? ChatHostPort(runtime)
+          : MeshChatPort(
+              call: core.mesh.rpc,
+              hostChanges: core.mesh.hostChanges,
+              peers: peers,
+              playback: runtime.playbackFacts),
+      peers: peers,
       discover: CoreDiscover(runtime),
       library: library,
       libraryActions: library,

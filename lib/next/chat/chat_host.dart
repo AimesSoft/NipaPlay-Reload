@@ -12,6 +12,7 @@ import 'turn_boundaries.dart';
 import '../harness_redaction.dart';
 import 'chat_line_reader.dart';
 import 'delegation_chat.dart';
+import 'guest_chat.dart';
 import 'dsh_runtime.dart';
 import 'liveness.dart';
 import 'memory_stale.dart';
@@ -56,7 +57,7 @@ abstract interface class ConversationHistory {
   Future<ChatMessage> readThread(String id, {bool withProcess});
 }
 
-final class ChatHost implements ConversationHistory, DelegationChat {
+final class ChatHost implements ConversationHistory, DelegationChat, GuestChat {
   ChatHost(
       {required this.endpoint,
       required this.repository,
@@ -153,7 +154,9 @@ final class ChatHost implements ConversationHistory, DelegationChat {
 
   /// Every thread, including background helpers. All thread-local host messages
   /// carry params.threadId; the legacy display selects foreground host updates.
+  @override
   Stream<ChatMessage> get threadDisplay => _display.stream;
+  @override
   Stream<ChatMessage> get userInputRequests => _questions.stream;
   final _pending = <int, Completer<ChatMessage>>{};
   final _requestThreads = <int, String>{};
@@ -1050,6 +1053,7 @@ final class ChatHost implements ConversationHistory, DelegationChat {
 
   Future<ChatMessage> newConversation() => startThread();
   Future<ChatMessage> switchSession(String id) => resumeThread(id);
+  @override
   Future<ChatMessage> listSessions({String? cursor, int limit = 30}) async {
     final result = await listThreads(cursor: cursor, limit: limit);
     final main = mainThreadId ?? await sessions?.main(_sessionKey);
@@ -1136,6 +1140,7 @@ final class ChatHost implements ConversationHistory, DelegationChat {
     return _startThreadTurn(threadId!, text);
   }
 
+  @override
   Future<ChatMessage> steer(String text, {String? onThread}) async =>
       _public(await _request('turn/steer', {
         'threadId': onThread ?? threadId,
@@ -1168,6 +1173,7 @@ final class ChatHost implements ConversationHistory, DelegationChat {
   /// Puts NipaPlay's saved display copy of the process back into the turns
   /// of [history], a thread read with `withProcess: false`; every turn is
   /// read and decoded at once, off the main isolate.
+  @override
   Future<void> restoreProcess(String id, ChatMessage history) => processes
       .restoreAll(id, (history['turns'] as List? ?? const []).cast<Map>());
 
@@ -1241,6 +1247,7 @@ final class ChatHost implements ConversationHistory, DelegationChat {
         'threadId': onThread ?? threadId,
         'turnId': livenessFor(onThread ?? threadId!).turnId
       }));
+  @override
   Future<void> answerUserInput(
       Object id, Map<String, List<String>> answers) async {
     if (!_inputRequests.containsKey(id)) {

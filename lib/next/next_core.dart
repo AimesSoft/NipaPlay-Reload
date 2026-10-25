@@ -3,6 +3,7 @@ import 'platform/lab_profile.dart';
 import 'system/app_restart.dart';
 import 'system/app_runtime.dart';
 import '../services/desktop_exit_handler.dart';
+import 'body/next_body.dart';
 import 'mesh/files.dart';
 import 'dart:io';
 
@@ -49,6 +50,7 @@ import 'mesh/library_capability.dart';
 import 'mesh/delivery.dart';
 import 'mesh/join_prompt.dart';
 import 'mesh/delegation.dart';
+import 'mesh/chat_guest_host.dart';
 import 'mesh/delegation_host.dart';
 import 'mesh/delegation_wiring.dart';
 import 'mesh/capability.dart';
@@ -164,6 +166,7 @@ final class NextCore {
   late final MeshRuntime mesh;
   late final MeshDelegations delegations;
   late final AgentDelegations delegationHost;
+  late final ChatGuests chatGuests;
 
   /// Asks the person at this screen about a device that just joined
   /// (true: not theirs; null: not answered). Tests replace it.
@@ -384,6 +387,7 @@ final class NextCore {
     mediaSources.returnTarget = followups.downloadReturnTarget;
     attachMeshDelivery(mesh, followups);
     delegationHost = attachMeshDelegation(mesh, delegations, engine, followups);
+    chatGuests = attachMeshChatGuests(mesh, followups);
     mesh.describeSelf = () async {
       await harnessLocation.ready;
       final chat = followups.chatHost;
@@ -396,8 +400,10 @@ final class NextCore {
         'agent': {
           'runs': running,
           if (!running)
-            'reason': followups.unavailableReason ??
-                'Nipa is not running on this device.',
+            'reason': NextBody.bodyOnly
+                ? 'This device does not run Nipa; it speaks with the Nipa of another device.'
+                : followups.unavailableReason ??
+                    'Nipa is not running on this device.',
           if (running) ...{
             'model': chat.model,
             'provider': chat.provider,

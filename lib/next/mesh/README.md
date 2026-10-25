@@ -340,3 +340,43 @@ memory.*、app.quit/restart；不启动本机代理端点和 ChatHost。保险�
 （`mesh-install-id`），钥匙串里的密钥丢失（备份恢复到另一台）就生成新身份。局域网发现只用系统
 Bonjour（`_nipaplay-mesh._tcp`，经 `nipaplay/mesh_bonjour` 平台通道），不开 UDP 广播。
 进后台时暂停播放并推送在场，回前台时按原端口重开监听、重报地址、再推在场（`BodyLifecycle`）。
+
+## 没发出，还是结果未知
+
+`rpc` 失败有两种，调用方必须分得清：
+
+- **`not_delivered`**：连接或握手阶段就失败了（Rust 传输层给这类错误加 `connect:` 前缀：TCP 连不上、
+  TLS 握手超时或被拒、对方证书不对），请求根本没离开本机，对方什么也没做。`Failure.details`:
+  `reason: not_delivered, stage: connect, cause`（简短原因，不含地址）；可重试。没有任何已知地址时
+  也是它（`cause: no known address`）。iPad 被系统挂起、来不及推在场事实时，调用方走到这里，
+  不再是含糊的“无直连路由”。
+- **`outcome_unknown`**：请求已发出，连接在回答之前断了，对方也许做了。`tools/call` 不可重试；
+  只读和幂等的宿主方法可重试（委托带 `delegationId`，重发拿到原来的结果）。
+
+在场事实还新鲜时，不在前台的设备仍是 `device_not_present`（不发请求）；两者互补。
+
+## 没有 Nipa 的设备：用另一台设备上的 Nipa 说话（`mesh/chat/*`）
+
+iPad 不跑 Nipa。它的设置里选一台 `agent.runs` 为真的设备（`NipaPeers`，选择存在本机的
+`nipa-peer.json`，不记在账号上），对话面板（`MeshChatPort`，一个 `ChatPort`）就是那台设备上 Nipa 的一段对话。
+没有复用委托协议：委托是“一件任务、一个回复”，没有过程流、续话、插话和多段对话；对话要的是
+一段长期的对话、每个回合的过程、`steer`、停止、回答她的提问。所以单独一族宿主方法（不是 Action，
+Nipa 调不了别的设备的宿主方法）：
+
+| 方法 | 作用 |
+|---|---|
+| `mesh/chat/state` | Nipa 是否在这里运行，`epoch` 与当前 `sequence` |
+| `mesh/chat/threads` | 这台设备（发话方）的对话 |
+| `mesh/chat/open {new?}` | 它的主对话，或另开一段（`delegationThread`，名为“来自 iPad 的对话”） |
+| `mesh/chat/read {threadId, turns?}` | 对话与回合过程（重放存下的过程，整回合截到帧限以下） |
+| `mesh/chat/turn {threadId, text, context}` | 开回合；`context` 是 iPad 报告的页面、在播什么、位置 |
+| `mesh/chat/steer`、`interrupt`、`answer` | 补充、停止、回答提问 |
+| `mesh/chat/events {after, epoch, waitSeconds≤55}` | **长等待**：有事就返回，没事等到时限再空返回 |
+
+过程和回复不靠轮询数据库：宿主订阅 ChatHost 的显示流，按“发话设备”记入环形缓冲（4000 条，带序号），
+`events` 在有新事件时立刻返回；iPad 从上次的序号接着问。宿主重启（`epoch` 变）或错过的事件已被
+挤出缓冲时返回 `reset`，iPad 重读这段对话。对话归这台设备：出现在它的对话列表里（标题“来自 iPad：…”）、
+动态里（“iPad 开了一段对话”），人随时能读、能插话。每句话后面带一行界面事实
+（`[NipaPlay 界面] 这句话是在「iPad」的对话面板里说的（页面；在播放什么；位置）。设备 ID：…`），
+显示时和别的界面事实一样被去掉；Nipa 要操作 iPad，用 `mesh.invoke` 调那个设备 ID（iPad 在前台才可用）。
+一台设备只能读写自己开的对话。对话的卡片（`ui.present`）留在宿主设备上，iPad 面板里只有文字和过程。
