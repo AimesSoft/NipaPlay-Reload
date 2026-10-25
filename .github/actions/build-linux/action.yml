@@ -237,6 +237,8 @@ runs:
         APP_NAME="NipaPlay"
         APP_NAME_LOWER="nipaplay"
         VERSION="${{ inputs.app-version }}"
+        # deb/rpm 的版本号里 "-" 另有含义（rpm 直接拒绝）；预发布写成 "~"，排在正式版之前，如 2.0.0~alpha.1
+        PKG_VERSION="${VERSION//-/~}"
         ARCH="${{ inputs.arch }}"
         FLUTTER_ARCH_DIR="x64"
         RPM_ARCH_DIR="x86_64"
@@ -343,7 +345,7 @@ runs:
         
         # Create DEBIAN/control from template
         echo "Creating DEBIAN/control"
-        sed -e "s/VERSION_PLACEHOLDER/${VERSION}/g" \
+        sed -e "s/VERSION_PLACEHOLDER/${PKG_VERSION}/g" \
             -e "s/ARCH_PLACEHOLDER/${ARCH}/g" \
             "${ASSETS_LINUX_DIR}/DEBIAN/control.template" | \
           sed '${/^[[:space:]]*$/d;}' > "${DEB_ROOT}/DEBIAN/control"
@@ -643,7 +645,7 @@ runs:
         
         # Prepare spec file
         echo "Preparing RPM spec file..."
-        sed -e "s/VERSION_PLACEHOLDER/${VERSION}/g" \
+        sed -e "s/VERSION_PLACEHOLDER/${PKG_VERSION}/g" \
             "${RPM_SPEC_TEMPLATE}" > "${RPM_BUILD_ROOT}/SPECS/${RPM_SPEC_FILE}"
         
         # Build RPM
@@ -652,7 +654,7 @@ runs:
         
         # Move the generated RPM to the final artifact directory
         echo "Moving RPM package..."
-        GENERATED_RPM_PATH=$(find "${RPM_BUILD_ROOT}/RPMS/${RPM_ARCH_DIR}/" -name "nipaplay-${VERSION}*.rpm" -print -quit)
+        GENERATED_RPM_PATH=$(find "${RPM_BUILD_ROOT}/RPMS/${RPM_ARCH_DIR}/" -name "nipaplay-${PKG_VERSION}*.rpm" -print -quit)
         DESIRED_RPM_NAME="NipaPlay-${VERSION}-Linux-${ARCH}.rpm"
         if [ -n "${GENERATED_RPM_PATH}" ]; then
           mv "${GENERATED_RPM_PATH}" "${LINUX_BUILD_DIR}/${DESIRED_RPM_NAME}"
