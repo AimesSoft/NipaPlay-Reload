@@ -42,11 +42,13 @@ class _NetworkSettingsContentState extends State<NetworkSettingsContent> {
 
   String _currentServer = '';
   String _currentBangumiServer = '';
+  String _currentTmdbImageServer = '';
   DandanplayServerMode _currentMode = DandanplayServerMode.auto;
   ServerRoutingSnapshot? _routing;
   bool _isLoading = true;
   bool _isSavingCustom = false;
   bool _isSavingBangumiCustom = false;
+  bool _isSavingTmdbCustom = false;
 
   /// 下拉菜单里代表「自动选择」的哨兵值（不是合法 URL）。
   static const String _autoOptionValue = '__nipaplay_auto_server__';
@@ -113,6 +115,19 @@ class _NetworkSettingsContentState extends State<NetworkSettingsContent> {
               phoneIcon: cupertino.CupertinoIcons.book,
               enabled: !_isSavingBangumiCustom,
               onTap: _editBangumiServer,
+            ),
+            AdaptiveSettingsTile<void>.card(
+              title: _text(
+                context,
+                '自定义 TMDB 图片代理',
+                '自訂 TMDB 圖片代理',
+                'Custom TMDB Image Proxy',
+              ),
+              subtitle: _tmdbImageSubtitle(context),
+              icon: Ionicons.image_outline,
+              phoneIcon: cupertino.CupertinoIcons.photo,
+              enabled: !_isSavingTmdbCustom,
+              onTap: _editTmdbImageServer,
             ),
           ],
         ),
@@ -240,11 +255,13 @@ class _NetworkSettingsContentState extends State<NetworkSettingsContent> {
     // 自动模式下顺带刷新一次判定，让界面能显示真实选中的线路。
     final server = await NipaplayServerRouter.instance.effectiveServer();
     final bangumiServer = await NetworkSettings.getBangumiServer();
+    final tmdbImageServer = await NetworkSettings.getTmdbImageServer();
     if (!mounted) return;
     setState(() {
       _currentMode = mode;
       _currentServer = server;
       _currentBangumiServer = bangumiServer;
+      _currentTmdbImageServer = tmdbImageServer;
       _routing = NipaplayServerRouter.instance.snapshot;
       _isLoading = false;
     });
@@ -500,6 +517,88 @@ class _NetworkSettingsContentState extends State<NetworkSettingsContent> {
         });
       }
     }
+  }
+
+  Future<void> _editTmdbImageServer() async {
+    final initialValue = _currentTmdbImageServer;
+    final title = _text(
+      context,
+      '自定义 TMDB 图片代理',
+      '自訂 TMDB 圖片代理',
+      'Custom TMDB Image Proxy',
+    );
+    final inputHint = _text(
+      context,
+      '输入反向代理 image.tmdb.org 的镜像地址（按原路径代理），留空恢复直连。'
+      '弹弹play 的电影/剧集封面指向 image.tmdb.org，该域在部分网络下不可达。',
+      '輸入反向代理 image.tmdb.org 的鏡像地址（按原路徑代理），留空恢復直連。'
+      '彈彈play 的電影/劇集封面指向 image.tmdb.org，該域在部分網路下不可達。',
+      'Enter a reverse-proxy mirror that serves image.tmdb.org by original path. '
+      'Leave empty to connect directly. Movie/series covers from DanDanPlay '
+      'point to image.tmdb.org, which is unreachable on some networks.',
+    );
+    final invalidMessage = context.l10n.invalidServerAddress;
+    final savedMessage = _text(
+      context,
+      'TMDB 图片代理已保存并立即生效',
+      'TMDB 圖片代理已儲存並立即生效',
+      'TMDB image proxy saved and applied.',
+    );
+    final input = await _showServerInputDialog(
+      title: title,
+      message: inputHint,
+      initialValue: initialValue,
+    );
+    if (!mounted) return;
+    if (input == null) return;
+
+    if (input.isNotEmpty && !NetworkSettings.isValidServerUrl(input)) {
+      AdaptiveSnackBar.show(
+        context,
+        message: invalidMessage,
+        type: AdaptiveSnackBarType.error,
+      );
+      return;
+    }
+
+    setState(() {
+      _isSavingTmdbCustom = true;
+    });
+    try {
+      await NetworkSettings.setTmdbImageServer(input);
+      final server = await NetworkSettings.getTmdbImageServer();
+      if (!mounted) return;
+      setState(() {
+        _currentTmdbImageServer = server;
+      });
+      AdaptiveSnackBar.show(
+        context,
+        message: server.isEmpty
+            ? _text(context, 'TMDB 图片已恢复直连', 'TMDB 圖片已恢復直連',
+                'TMDB images restored to direct connection.')
+            : savedMessage,
+        type: AdaptiveSnackBarType.success,
+      );
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isSavingTmdbCustom = false;
+        });
+      }
+    }
+  }
+
+  String _tmdbImageSubtitle(BuildContext context) {
+    if (NetworkSettings.isCustomTmdbImageServer(_currentTmdbImageServer)) {
+      return _currentTmdbImageServer;
+    }
+    return _text(
+      context,
+      '未设置（直连官方图床：${NetworkSettings.tmdbImageDefaultServer}）',
+      '未設定（直連官方圖床：${NetworkSettings.tmdbImageDefaultServer}）',
+      'Not set (direct to the official image host: '
+      '${NetworkSettings.tmdbImageDefaultServer})',
+    );
   }
 
   String _persistentUASubtitle(BuildContext context) {

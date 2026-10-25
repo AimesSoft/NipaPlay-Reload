@@ -134,6 +134,42 @@ Future<Uri> _bangumiMirrorUri(Uri original) async {
   }
 }
 
+/// 判断封面 URL 是否落在 TMDB 官方图床上。
+///
+/// 弹弹play 的电影/剧集条目（imageUrl）直接给 image.tmdb.org 地址，该域
+/// 在国内/受限网络下 TLS 握手即被重置（Connection reset by peer），表现为
+/// 整片封面裂图。这里把官方域识别出来，好让下载时优先改走用户配置的镜像。
+bool _isTmdbOfficialImageUri(Uri uri) {
+  final host = uri.host.toLowerCase();
+  if (host.isEmpty) return false;
+  // image.tmdb.org 是唯一图床域；themoviedb.org 的 www/media 子域对 /t/p/
+  // 路径只做 301 重定向，最终仍落回 image.tmdb.org，改写它们没有意义。
+  return host == 'image.tmdb.org' || host.endsWith('.tmdb.org');
+}
+
+/// 把 TMDB 官方图床的封面 URL 重写到用户配置的镜像域。
+///
+/// 镜像按原路径反向代理图床（如自建 Cloudflare Pages/Worker），所以只需
+/// 换 host（保留端口与 path+query）即可。
+Future<Uri> _tmdbMirrorUri(Uri original) async {
+  try {
+    final server = await NetworkSettings.getTmdbImageServer();
+    if (server.isEmpty) return original;
+    final mirror = Uri.tryParse(server);
+    if (mirror == null || mirror.host.isEmpty) return original;
+    if (mirror.host.toLowerCase() == original.host.toLowerCase()) {
+      return original;
+    }
+    return original.replace(
+      scheme: mirror.scheme,
+      host: mirror.host,
+      port: mirror.hasPort ? mirror.port : null,
+    );
+  } catch (_) {
+    return original;
+  }
+}
+
 Future<Uint8List> _loadNetworkImageBytesUncapped(Uri originalUri) async {
   final requestUri = WebRemoteAccessService.proxyUri(originalUri);
   if (isMediaServerImageUri(originalUri)) {
@@ -153,6 +189,22 @@ Future<Uint8List> _loadNetworkImageBytesUncapped(Uri originalUri) async {
       } catch (e) {
         debugPrint(
             '[ImageLoader] 镜像取图失败，回退原地址: $mirrorUri -> $originalUri ($e)');
+      }
+    }
+  }
+
+  // TMDB 官方图床同策略：镜像优先，失败回落原地址（TLS 重置虽快，但持续
+  // 打一个被封的域没有意义，且每次都占一个并发槽）。
+  final bool canUseTmdbMirror =
+      _isTmdbOfficialImageUri(originalUri) && !kIsWeb;
+  if (canUseTmdbMirror) {
+    final mirrorUri = await _tmdbMirrorUri(originalUri);
+    if (mirrorUri != originalUri) {
+      try {
+        return await _fetchImageBytes(mirrorUri);
+      } catch (e) {
+        debugPrint(
+            '[ImageLoader] TMDB镜像取图失败，回退原地址: $mirrorUri -> $originalUri ($e)');
       }
     }
   }

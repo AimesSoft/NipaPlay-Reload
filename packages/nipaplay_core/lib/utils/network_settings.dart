@@ -48,6 +48,10 @@ class NetworkSettings {
   // Bangumi 服务器常量
   static const String bangumiDefaultServer = 'https://api.bgm.tv';
 
+  // TMDB 官方图床常量
+  static const String _tmdbImageServerKey = 'tmdb_image_server_url';
+  static const String tmdbImageDefaultServer = 'https://image.tmdb.org';
+
   /// Recognize the provider by origin, never just by its compatible API path.
   static bool isDandanplayServiceUri(Uri uri) {
     final host = uri.host.toLowerCase();
@@ -233,6 +237,40 @@ class NetworkSettings {
     }
     final normalized = _normalizeServerUrl(serverUrl);
     return normalized != bangumiDefaultServer;
+  }
+
+  /// 获取自定义 TMDB 图片代理地址（未设置时返回空串，表示直连官方图床）。
+  ///
+  /// 弹弹play 的电影/剧集条目封面直接给 image.tmdb.org 地址，该域在国内/
+  /// 受限网络下 TLS 握手即被重置；用户需要配置一个反向代理镜像
+  /// （如自建的 Cloudflare Pages/Worker），镜像按原路径代理图床。
+  static Future<String> getTmdbImageServer() async {
+    final prefs = await SharedPreferences.getInstance();
+    final stored = prefs.getString(_tmdbImageServerKey) ?? '';
+    return stored.trim().isEmpty ? '' : _normalizeServerUrl(stored);
+  }
+
+  /// 设置自定义 TMDB 图片代理地址（传空串清除，恢复直连）。
+  static Future<void> setTmdbImageServer(String serverUrl) async {
+    final prefs = await SharedPreferences.getInstance();
+    final normalized = serverUrl.trim();
+    if (normalized.isEmpty) {
+      await prefs.remove(_tmdbImageServerKey);
+      print('[网络设置] TMDB图片代理已清除，恢复直连官方图床');
+      return;
+    }
+    await prefs.setString(_tmdbImageServerKey, _normalizeServerUrl(normalized));
+    print('[网络设置] TMDB图片代理已设置为: ${_normalizeServerUrl(normalized)}');
+  }
+
+  /// 重置 TMDB 图片代理为直连官方图床
+  static Future<void> resetTmdbImageServer() async {
+    await setTmdbImageServer('');
+  }
+
+  /// 检查是否配置了自定义 TMDB 图片代理
+  static bool isCustomTmdbImageServer(String serverUrl) {
+    return serverUrl.trim().isNotEmpty;
   }
 
   /// 重置弹弹play为默认（自动选择）模式
