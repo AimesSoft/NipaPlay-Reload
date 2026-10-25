@@ -11,7 +11,7 @@
 - 系统自带的 SQLite 动态库（Debian/Ubuntu：`libsqlite3-0`；缺了会在启动时报找不到 `libsqlite3.so`）
 - 系统根证书（Debian/Ubuntu：`ca-certificates`）
 - `python3`（3.9 以上）：只有用 `nipaplay-headless nipa …` 与 Nipa 对话、调用动作时需要
-- 运行 Nipa 另需网络下载一次运行环境（见“Nipa”）
+- 运行 Nipa 另需网络下载一次运行环境（见“首次设置”的第 2 步；目前只有 x86_64 的 Linux 有现成的运行环境）
 
 ## 安装
 
@@ -121,10 +121,15 @@ systemctl --user restart nipaplay-headless
 **运行环境**（Node.js 加精简的 DeepSeek Harness，装在数据目录里，不动系统；官方源连不上会换 npmmirror）：
 
 ```sh
-nipaplay-headless --dsh-install     # 下载并解压，约 60 MB
+nipaplay-headless --dsh-install     # 下载并解压，约 80 MB
 nipaplay-headless --dsh-status      # 将要启动的是哪一份
 nipaplay-headless --dsh-check       # 启动一次并开一个线程，不调用模型
 ```
+
+> **arm64 的限制。** Nipa 的运行环境目前只提供 Linux x86_64（还有 macOS arm64、Windows x64）。arm64 的 Linux 上
+> 主机本身照常工作（设备网、媒体库、下载），`--dsh-install` 会报告不支持，Nipa 不会在这台机器上运行；
+> 自己装好 Node.js 与 DSH 的话，用 `systemctl --user edit nipaplay-headless` 加上
+> `Environment=NIPAPLAY_AGENT_RUNTIME=dsh NIPAPLAY_DSH_NODE=/路径/node NIPAPLAY_DSH_ROOT=/路径/dsh` 即可（升级不会覆盖它）。
 
 **模型**。key 从标准输入读（下面的 `read -s` 不回显、不进历史）：
 
@@ -151,7 +156,7 @@ nipaplay-headless --agent-enable    # 开
 ```
 
 模型、开关、运行环境的变化由正在运行的服务自己发现，立即生效，不用重启（已在跑的回合下一回合起采用新设置）。
-`nipaplay-headless nipa app.runtime` 里的 `conversationHost` 说明 Nipa 现在是 `running`、`disabled`、
+`nipaplay-headless nipa call app.runtime '{}'` 里的 `conversationHost` 说明 Nipa 现在是 `running`、`disabled`、
 `missing`（并列出缺什么）还是 `failed`。
 
 ### 3. 和 Nipa 对话
