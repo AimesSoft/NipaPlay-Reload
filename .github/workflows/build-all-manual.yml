@@ -65,6 +65,10 @@ jobs:
     secrets:
       NIPAPLAY_TMDB_TOKEN: ${{ secrets.NIPAPLAY_TMDB_TOKEN }}
 
+  Build-Headless:
+    name: Build headless Linux packages
+    uses: ./.github/workflows/build-headless.yml
+
   Build-HarmonyOS:
     name: Build HarmonyOS sideload package
     uses: ./.github/workflows/build-ohos.yml
