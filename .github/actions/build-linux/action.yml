@@ -232,14 +232,19 @@ runs:
     - name: Linux packaging and cleanup
       id: package
       shell: bash
+      # Inputs come in through env so the script holds no ${{ }} expression; a script with one is
+      # evaluated as a single expression, which GitHub caps at 21000 characters.
+      env:
+        APP_VERSION: ${{ inputs.app-version }}
+        APP_ARCH: ${{ inputs.arch }}
       run: |
         # Define variables
         APP_NAME="NipaPlay"
         APP_NAME_LOWER="nipaplay"
-        VERSION="${{ inputs.app-version }}"
+        VERSION="${APP_VERSION}"
         # deb/rpm 的版本号里 "-" 另有含义（rpm 直接拒绝）；预发布写成 "~"，排在正式版之前，如 2.0.0~alpha.1
         PKG_VERSION="${VERSION//-/~}"
-        ARCH="${{ inputs.arch }}"
+        ARCH="${APP_ARCH}"
         FLUTTER_ARCH_DIR="x64"
         RPM_ARCH_DIR="x86_64"
         BUILD_APPIMAGE=true
