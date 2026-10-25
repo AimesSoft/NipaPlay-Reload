@@ -292,6 +292,7 @@ final class UiMediaSource {
     this.username = '',
     this.state = UiSourceState.unverified,
     this.selected = const [],
+    this.needsPassword = false,
   });
   final String sourceId;
 
@@ -301,6 +302,9 @@ final class UiMediaSource {
   final String url;
   final String username;
   final UiSourceState state;
+
+  /// The saved password is gone and has to be typed again.
+  final bool needsPassword;
 
   /// The libraries shown and synced.
   final List<String> selected;
@@ -349,6 +353,9 @@ final class UiMediaSource {
           for (final id in (row['selectedLibraries'] as List?) ?? const [])
             '$id'
         ],
+        needsPassword: ((row['type'] == 'smb' || row['type'] == 'webdav') &&
+            ((row['username'] as String?) ?? '').isNotEmpty &&
+            (row['credential'] as Map?)?['state'] == 'missing'),
       );
 }
 

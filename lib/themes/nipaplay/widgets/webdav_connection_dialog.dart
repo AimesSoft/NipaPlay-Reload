@@ -284,7 +284,9 @@ class _WebDAVFormState extends State<_WebDAVForm> {
                   style: TextStyle(color: textColor),
                   decoration: buildDecoration(
                     label: '密码',
-                    hint: widget.editConnection?.passwordIsResolved == false
+                    hint: widget.editConnection?.passwordMissing == true
+                        ? '需要重新输入密码'
+                        : widget.editConnection?.passwordIsResolved == false
                         ? '已保存密码；留空保留，输入新密码可替换'
                         : '可选，如果服务器需要认证',
                     suffixIcon: IconButton(

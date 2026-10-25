@@ -1,3 +1,4 @@
+import 'package:nipa_harness/nipa_harness.dart' show JsonMap;
 import 'package:nipaplay/next/settings/registry.dart';
 import 'dart:convert';
 import 'package:crypto/crypto.dart';
@@ -22,8 +23,28 @@ final class CredentialStore {
   late final SessionCredentialVault vault;
   final bool desktop;
   final TargetPlatform platform;
+  /// Lines of the app-wide banner. Only the vault as a whole belongs here; an
+  /// entry that is simply gone is [missing] and shows where it is used.
   final ValueNotifier<List<String>> notices = ValueNotifier(const []);
+
+  /// Banner lines the user closed during this run.
+  final ValueNotifier<Set<String>> dismissed = ValueNotifier(const {});
+
+  /// Entries a reference points at that the vault no longer holds. Each belongs
+  /// to one connection or account, which asks for the secret again.
+  final ValueNotifier<Set<CredentialRef>> missing = ValueNotifier(const {});
   final Map<CredentialRef, String> failures = {};
+
+  /// Failures that mean the vault cannot be used at all, not one entry.
+  static const _vaultWide = {
+    'system_vault_unavailable',
+    'unsupported_platform',
+    'file_permissions_failed',
+    'vault_operation_failed',
+    'storage_access_denied',
+    'storage_authorization_cancelled',
+    'storage_interaction_required',
+  };
   static const scalarKeys = CredentialKeyPolicy.scalarKeys;
   static const compositeKeys = CredentialKeyPolicy.compositeKeys;
   static bool isSecretKey(String key) => CredentialKeyPolicy.isSecretKey(key);
@@ -62,6 +83,13 @@ final class CredentialStore {
     };
     final reason =
         error is StateError ? error.message.toString() : error.toString();
+    if (reason == 'credential_missing') {
+      if (missing.value.contains(ref)) return;
+      missing.value = {...missing.value, ref};
+      debugPrint('[CredentialVault] $ref: credential_missing');
+      _refreshNotices();
+      return;
+    }
     failures[ref] =
         codes.contains(reason) ? reason : error.runtimeType.toString();
     debugPrint('[CredentialVault] $ref: ${failures[ref]}');
@@ -69,30 +97,84 @@ final class CredentialStore {
   }
 
   void _recovered(CredentialRef ref) {
-    if (failures.remove(ref) != null) _refreshNotices();
+    final hadMissing = missing.value.contains(ref);
+    if (hadMissing) missing.value = {...missing.value}..remove(ref);
+    if (failures.remove(ref) != null || hadMissing) _refreshNotices();
+  }
+
+  /// Closes the banner as it reads now; a different problem shows it again.
+  void dismiss() => dismissed.value = {...dismissed.value, ...notices.value};
+
+  /// Asks again for every entry the vault refused or could not reach.
+  Future<void> retryVault() async {
+    for (final entry in failures.entries.toList()) {
+      if (!_vaultWide.contains(entry.value) && entry.key.namespace != 'vault') {
+        continue;
+      }
+      try {
+        await retry(entry.key);
+      } catch (_) {
+        // The store publishes the new outcome.
+      }
+    }
   }
 
   void _refreshNotices() {
-    final guidance = switch (platform) {
-      TargetPlatform.macOS => '请在 macOS 钥匙串访问中检查此条目的访问权限。',
-      TargetPlatform.linux => '请启动并解锁 Secret Service（GNOME Keyring/KWallet）。',
-      TargetPlatform.windows => '请检查 Windows 凭据管理器的访问权限。',
-      _ => '请检查系统凭据存储的访问权限。',
-    };
+    final wide = failures.entries.any((entry) =>
+        _vaultWide.contains(entry.value) || entry.key.namespace == 'vault');
     notices.value = [
-      if (failures.isNotEmpty)
-        LabProfile.active
-            ? '实验凭据文件访问或迁移失败。请检查实验目录内保险库文件的权限；现有测试凭据已保留。'
-            : '凭据访问或迁移失败。$guidance 现有凭据已保留；未回落到明文存储。',
-      for (final entry in failures.entries)
-        vault.blocked.containsKey(entry.key)
-            ? '${entry.key}: ${switch (entry.value) {
-                'storage_authorization_cancelled' => '授权已取消',
-                'storage_interaction_required' => '系统禁止授权交互',
-                _ => '访问被拒绝',
-              }}；本次运行已停止自动重试，可主动重试。'
-            : '${entry.key}: ${entry.value}',
+      if (wide)
+        if (LabProfile.active)
+          '无法访问实验凭据文件。'
+        else
+          switch (platform) {
+            TargetPlatform.macOS => '无法访问钥匙串，已保存的密码暂时不能使用。',
+            TargetPlatform.linux => '系统密钥环未解锁，已保存的密码暂时不能使用。',
+            TargetPlatform.windows => '无法访问 Windows 凭据管理器，已保存的密码暂时不能使用。',
+            _ => '无法访问系统凭据存储，已保存的密码暂时不能使用。',
+          },
     ];
+  }
+
+  static String _kindLabel(CredentialRef ref, Map? item) =>
+      switch (ref.namespace) {
+        'smb_connections' => 'SMB 连接',
+        'webdav_connections' => 'WebDAV 连接',
+        'server_profiles' =>
+          item?['serverType'] == 'emby' ? 'Emby 服务器' : 'Jellyfin 服务器',
+        'shared_remote_hosts' => '共享媒体库',
+        _ => '账号',
+      };
+
+  /// What is missing, in words and with the owner's name; never a secret.
+  Future<List<JsonMap>> missingEntries(SharedPreferences prefs) async {
+    final result = <JsonMap>[];
+    for (final ref in missing.value) {
+      Map? owner;
+      if (compositeKeys.containsKey(ref.namespace)) {
+        final raw = prefs.getString(ref.namespace);
+        if (raw != null) {
+          try {
+            for (final item in (jsonDecode(raw) as List).cast<Map>()) {
+              if (itemRef(ref.namespace, item) == ref) owner = item;
+            }
+          } on FormatException {
+            // An unreadable list has no owner to name.
+          }
+        }
+      }
+      final name = owner?['name'] as String?;
+      final kind = _kindLabel(ref, owner);
+      result.add({
+        'reference': ref.toJson(),
+        'kind': kind,
+        'name': name,
+        'notice': name == null || name.isEmpty
+            ? '$kind需要重新输入密码'
+            : '$kind「$name」需要重新输入密码',
+      });
+    }
+    return result;
   }
 
   /// Explicit UI/Agent operation; it never exports the resolved secret.

@@ -334,7 +334,7 @@ void main() {
     await store.checkAvailability();
     await tester.pumpWidget(
         const MaterialApp(home: CredentialNotice(child: SizedBox())));
-    expect(find.textContaining('Secret Service'), findsOneWidget);
+    expect(find.textContaining('密钥环'), findsOneWidget);
     expect(store.failures.values, contains('system_vault_unavailable'));
   });
 }

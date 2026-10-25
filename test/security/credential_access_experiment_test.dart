@@ -109,8 +109,9 @@ void main() {
     }
     await tester.pumpWidget(
         const MaterialApp(home: CredentialNotice(child: SizedBox())));
-    expect(find.textContaining('访问被拒绝'), findsOneWidget);
-    expect(find.textContaining('Secret Service'), findsNothing);
+    expect(find.textContaining('钥匙串'), findsOneWidget);
+    expect(find.textContaining('CredentialRef'), findsNothing);
+    expect(find.text('重试'), findsOneWidget);
     final refused = (await api.invokeJson(
             'credentials.status', {}, harness.Invocation(origin: 'experiment')))
         .toEnvelope();
@@ -138,12 +139,12 @@ void main() {
         [embyRef, jellyRef]);
     expect(vault.reads[otherSmbRef], isNull);
     vault.denied = null;
-    await tester.tap(find.text('重试 $smbRef'));
+    await tester.tap(find.text('重试'));
     await tester.pump();
     await connection.resolvePassword();
     expect(connection.password, 'fixture-password');
     expect(store.failures, isEmpty);
-    expect(find.textContaining('访问被拒绝'), findsNothing);
+    expect(find.textContaining('钥匙串'), findsNothing);
     final edit = SMBConnection(
         id: connection.id,
         name: connection.name,

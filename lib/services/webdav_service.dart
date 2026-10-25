@@ -38,6 +38,7 @@ class WebDAVConnection {
   final StoredCredential _password;
   String get password => _password.value ?? '';
   Future<bool> hasPassword() => _password.exists();
+  bool get passwordMissing => _password.missing;
   bool get passwordIsResolved => _password.ref == null || _password.value != null;
   StoredCredential? retainPassword(String edited, {required String original}) =>
       edited == original ? _password : null;
