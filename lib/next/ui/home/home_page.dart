@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math' as math;
 
 import 'package:flutter/widgets.dart';
 
@@ -8,6 +9,7 @@ import '../chat/chat_frame.dart';
 import '../conversation/nipa_chat.dart';
 import '../shell/nipa_setup.dart';
 import '../shell/shell_controller.dart';
+import '../theme/layout.dart';
 import '../theme/tokens.dart';
 import '../settings/section_accounts.dart' show SourcesSection;
 import '../settings/settings_layout.dart' show SettingsSection;
@@ -239,6 +241,7 @@ class _NextHomePageState extends State<NextHomePage> {
         builder: (context, _) {
           final open = shell.homeChatOpen.value;
           final reduced = NextMotion.reduced(context);
+          final compact = NextLayout.compact(context);
           final hero = _heroWork();
           final preview = open ? null : _preview(hero, reduced: reduced);
           final backdropWork = open
@@ -249,9 +252,15 @@ class _NextHomePageState extends State<NextHomePage> {
             RepaintBoundary(
               child: HeroBackdrop(
                 workId: backdropWork?.workId,
-                image: backdropWork?.artwork.backdrop ??
-                    backdropWork?.artwork.poster,
+                // A phone stands the poster up; a window spreads the
+                // backdrop.
+                image: compact
+                    ? backdropWork?.artwork.poster ??
+                        backdropWork?.artwork.backdrop
+                    : backdropWork?.artwork.backdrop ??
+                        backdropWork?.artwork.poster,
                 soft: backdropWork != null &&
+                    !compact &&
                     backdropWork.artwork.backdrop == null,
                 tint: backdropWork?.artwork.tint,
                 staged: open,
@@ -273,7 +282,7 @@ class _NextHomePageState extends State<NextHomePage> {
                       slivers: [
                         SliverToBoxAdapter(child: _region(size, hero, preview)),
                         SliverToBoxAdapter(child: _shelvesWidget()),
-                        const SliverToBoxAdapter(child: SizedBox(height: 64)),
+                        SliverToBoxAdapter(child: SizedBox(height: 64 + NextLayout.foot(context))),
                       ],
                     ),
             ),
@@ -339,8 +348,8 @@ class _NextHomePageState extends State<NextHomePage> {
       child: Align(
         alignment: Alignment.bottomLeft,
         child: Padding(
-          padding: const EdgeInsets.only(
-              left: NextMetrics.gutter, top: NextMetrics.topBar + 40),
+          padding: EdgeInsets.only(
+              left: NextLayout.gutter(context), top: NextLayout.underBar(context) + 40),
           child: hero == null
               ? (_isEmpty ? _EmptyStart(shell: shell) : const SizedBox.shrink())
               : ValueListenableBuilder(
@@ -386,7 +395,7 @@ class _NextHomePageState extends State<NextHomePage> {
         top,
         const SizedBox(height: 32),
         Padding(
-          padding: const EdgeInsets.only(left: NextMetrics.gutter),
+          padding: EdgeInsets.only(left: NextLayout.gutter(context)),
           child: ListenableBuilder(
             listenable: shell.nipaSetup,
             builder: (context, _) => AskBar(
@@ -398,7 +407,7 @@ class _NextHomePageState extends State<NextHomePage> {
                 hint: c.running ? '补充，或者改主意' : '今天想看什么？',
                 suggestions: _suggestions(),
                 aside: shell.nipaSetup.needsModel ? const NipaSetupChip() : null,
-                maxWidth: size.width - NextMetrics.gutter - 32,
+                maxWidth: size.width - NextLayout.gutter(context) - 32,
                 attachments: c.attachments,
                 onAttach: c.attach,
                 onDetach: c.detach,
@@ -424,6 +433,7 @@ class _HomeChat extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final shell = NextShellScope.of(context);
+    final compact = NextLayout.compact(context);
     return NextDropZone(
       onDrop: shell.chat.attach,
       builder: (context, over) => Stack(fit: StackFit.expand, children: [
@@ -439,13 +449,17 @@ class _HomeChat extends StatelessWidget {
           ),
         ),
         Padding(
-          padding: const EdgeInsets.only(top: NextMetrics.topBar + 6),
+          // On a phone: clear of the sections' bar, and of the keyboard.
+          padding: EdgeInsets.only(
+              top: NextLayout.underBar(context) + 6,
+              bottom: math.max(MediaQuery.viewInsetsOf(context).bottom,
+                  NextLayout.foot(context))),
           child: ChatFrame(
             focusNode: shell.homeChatFocus,
             columnWidth: 780,
             textSize: 15.5,
-            posterWidth: 168,
-            sidePadding: 40,
+            posterWidth: compact ? 120 : 168,
+            sidePadding: compact ? 16 : 40,
             callbacks: page._chatCallbacks,
             trailing: FrameButton(
               glyph: NextGlyph.chevronRight,

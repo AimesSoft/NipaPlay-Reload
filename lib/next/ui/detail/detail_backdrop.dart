@@ -29,7 +29,16 @@ class DetailBackdrop extends StatelessWidget {
     required this.source,
     required this.parallax,
     this.soft = false,
+    this.compact = false,
   });
+
+  /// A phone: the picture (a poster) stands at the top of the page, a
+  /// little taller than wide, and goes into ink below it.
+  final bool compact;
+
+  /// How tall a phone's picture is in a page of [size].
+  static double compactHeight(Size size) =>
+      math.min(size.width * 1.3, size.height * 0.72);
 
   final String? image;
 
@@ -64,7 +73,8 @@ class DetailBackdrop extends StatelessWidget {
         final from = moving ? source() : null;
         final offset =
             parallax && scroll.hasClients ? math.max(0.0, scroll.offset) : 0.0;
-        final dest = Rect.fromLTWH(0, -0.3 * offset, size.width, size.height);
+        final dest = Rect.fromLTWH(0, -0.3 * offset, size.width,
+            compact ? compactHeight(size) : size.height);
         var rect = dest, clip = dest, radius = 0.0;
         var align = alignment;
         if (from != null) {
@@ -131,7 +141,8 @@ class DetailBackdrop extends StatelessWidget {
                   else
                     Opacity(
                         opacity: from == null ? 1 : e,
-                        child: ShadeLayers(detailShade)),
+                        child: ShadeLayers(
+                            compact ? detailShadeCompact : detailShade)),
                 ]),
               ),
             ),
@@ -224,6 +235,23 @@ final detailShade = <Gradient>[
     end: Alignment.bottomCenter,
     colors: [_a(.55), _a(0)],
     stops: const [0, .2],
+  ),
+];
+
+/// A phone's picture: ink rising into the words over its lower part, a
+/// little under the status bar.
+final detailShadeCompact = <Gradient>[
+  LinearGradient(
+    begin: Alignment.bottomCenter,
+    end: Alignment.topCenter,
+    colors: [NextColors.ink, _a(.88), _a(.35), _a(0)],
+    stops: const [0, .3, .55, .8],
+  ),
+  LinearGradient(
+    begin: Alignment.topCenter,
+    end: Alignment.bottomCenter,
+    colors: [_a(.5), _a(0)],
+    stops: const [0, .18],
   ),
 ];
 

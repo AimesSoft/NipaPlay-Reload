@@ -3,6 +3,7 @@ import 'dart:math' as math;
 import 'package:flutter/widgets.dart';
 
 import '../../ui_data/ui_data.dart';
+import '../theme/layout.dart';
 import '../theme/tokens.dart';
 import '../widgets/buttons.dart';
 import '../widgets/cards.dart';
@@ -84,7 +85,7 @@ class _EpisodeRowState extends State<EpisodeRow> {
     final at =
         widget.episodes.indexWhere((e) => e.episodeId == widget.currentId);
     const step = EpisodeRow.tileWidth + EpisodeRow.gap;
-    final right = NextMetrics.gutter + at * step + EpisodeRow.tileWidth;
+    final right = NextLayout.gutter(context) + at * step + EpisodeRow.tileWidth;
     return ScrollController(
         initialScrollOffset:
             at > 0 && right > width - 56 ? (at - 1) * step : 0);
@@ -103,7 +104,7 @@ class _EpisodeRowState extends State<EpisodeRow> {
           controller: _scroll ??= _controller(MediaQuery.sizeOf(context).width),
           scrollDirection: Axis.horizontal,
           clipBehavior: Clip.none,
-          padding: const EdgeInsets.only(left: NextMetrics.gutter, right: 56),
+          padding: EdgeInsets.only(left: NextLayout.gutter(context), right: NextLayout.end(context)),
           itemCount: widget.episodes.length,
           separatorBuilder: (_, __) => const SizedBox(width: EpisodeRow.gap),
           itemBuilder: (context, i) {

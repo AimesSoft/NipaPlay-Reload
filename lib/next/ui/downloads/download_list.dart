@@ -8,6 +8,7 @@ import '../data/gui_calls.dart';
 import '../settings/controls.dart' show PillButton;
 import '../settings/settings_layout.dart';
 import '../shell/shell_controller.dart';
+import '../theme/layout.dart';
 import '../theme/tokens.dart';
 import '../widgets/artwork.dart';
 import '../widgets/buttons.dart';
@@ -141,7 +142,7 @@ class DownloadListState extends State<DownloadList>
         child: ListView(
           key: const PageStorageKey('activity/downloads'),
           padding: EdgeInsets.fromLTRB(
-              NextMetrics.gutter, widget.top, 56, 64),
+              NextLayout.gutter(context), widget.top, NextLayout.end(context), 64),
           children: [
             _header(list),
             const SizedBox(height: 22),

@@ -4,6 +4,7 @@ import 'dart:math' as math;
 
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
+import 'package:nipaplay/utils/globals.dart' as globals;
 import 'package:window_manager/window_manager.dart';
 
 import '../../player/perf/budget.dart';
@@ -22,11 +23,13 @@ import '../widgets/buttons.dart';
 import '../widgets/icons.dart';
 import '../widgets/nipa_avatar.dart';
 import '../widgets/progress.dart';
+import 'menu_controls.dart' show PlayerMenuSheet;
 import 'player_menus.dart';
 import 'player_more.dart';
 import 'playback.dart';
 import 'stage.dart';
 import 'timeline.dart';
+import 'touch_surface.dart';
 
 enum _Menu { subtitles, episodes, more }
 
@@ -50,6 +53,12 @@ enum _Menu { subtitles, episodes, more }
 class NextPlayerLayer extends StatefulWidget {
   const NextPlayerLayer({super.key});
 
+  /// Tests: drive the layer as under a finger, or as a phone, on any host.
+  @visibleForTesting
+  static bool? debugTouch;
+  @visibleForTesting
+  static bool? debugPhone;
+
   @override
   State<NextPlayerLayer> createState() => _NextPlayerLayerState();
 }
@@ -60,6 +69,16 @@ class _NextPlayerLayerState extends State<NextPlayerLayer> {
   _Watch? _watch;
   bool _overChrome = false;
   bool _scrubbing = false;
+
+  /// Under a finger (a phone, a tablet): the picture takes taps, drags and
+  /// double taps ([PlayerTouchSurface]), the menus are sheets, and a tap
+  /// hides the controls until the next one.
+  final bool _touch = NextPlayerLayer.debugTouch ?? globals.isTouch;
+  bool _tapHidden = false;
+
+  /// A phone turns sideways for full screen ([PhoneOrientation]).
+  final bool _phone =
+      NextPlayerLayer.debugPhone ?? (!globals.isDesktop && globals.isPhone);
   _Menu? _menu;
   bool _holding = false;
   final _menuFocus = FocusNode(debugLabel: 'next.player.menu');
@@ -75,6 +94,7 @@ class _NextPlayerLayerState extends State<NextPlayerLayer> {
   void initState() {
     super.initState();
     HardwareKeyboard.instance.addHandler(_onKey);
+    if (_phone) unawaited(PhoneOrientation.video());
   }
 
   @override
@@ -101,6 +121,7 @@ class _NextPlayerLayerState extends State<NextPlayerLayer> {
   @override
   void dispose() {
     HardwareKeyboard.instance.removeHandler(_onKey);
+    if (_phone) unawaited(PhoneOrientation.pages());
     _shell?.panelOpen.removeListener(_panelChanged);
     _release();
     _watch?.dispose();
@@ -212,6 +233,20 @@ class _NextPlayerLayerState extends State<NextPlayerLayer> {
 
   void _scrub(bool on) => setState(() => _scrubbing = on);
 
+  /// A tap on the picture: the controls go if they are up, else they come.
+  void _tapPicture(bool shown) {
+    if (_menu != null) return _closeMenu();
+    if (shown) {
+      setState(() => _tapHidden = true);
+    } else {
+      setState(() => _tapHidden = false);
+      // Up, and away again after the usual rest.
+      _playback!
+        ..hover(true)
+        ..hover(false);
+    }
+  }
+
   Future<void> _back() async {
     _closeMenu();
     _shell?.closePanel();
@@ -247,8 +282,13 @@ class _NextPlayerLayerState extends State<NextPlayerLayer> {
       builder: (context, frame, _) {
         final (hasVideo, loading, controls) = frame;
         final pinned = _overChrome || _scrubbing || _menu != null;
-        final shown = hasVideo && (controls || pinned);
+        final shown = hasVideo && !_tapHidden && (controls || pinned);
         return Stack(fit: StackFit.expand, children: [
+          if (_touch && hasVideo)
+            Positioned.fill(
+              child: PlayerTouchSurface(
+                  playback: playback, onTap: () => _tapPicture(shown)),
+            ),
           if (playback case final SessionPlayback sessionPlayback)
             AutoNextOverlay(sources: sessionPlayback.sources),
           if (loading && !hasVideo) const Positioned.fill(child: _Loading()),
@@ -295,6 +335,8 @@ class _NextPlayerLayerState extends State<NextPlayerLayer> {
                     menu: _menu,
                     onMenu: _toggleMenu,
                     onScrub: _scrub,
+                    touch: _touch,
+                    phone: _phone,
                   ),
                 ),
               ),
@@ -332,6 +374,31 @@ class _NextPlayerLayerState extends State<NextPlayerLayer> {
                   onTap: _closeMenu,
                 ),
               ),
+              // Under a finger: a sheet at the foot.
+              if (_touch)
+                Positioned(
+                  left: 0,
+                  right: 0,
+                  bottom: MediaQuery.paddingOf(context).bottom + 8,
+                  child: Center(
+                    child: PlayerMenuSheet(
+                      child: switch (_menu!) {
+                        _Menu.subtitles => SubtitleMenu(
+                            playback: playback, onDone: _closeMenu),
+                        _Menu.episodes => EpisodeMenu(
+                            playback: playback,
+                            shell: shell,
+                            onDone: _closeMenu),
+                        _Menu.more => MoreMenu(
+                            key: _more,
+                            playback: playback,
+                            onScreenshot: () => unawaited(_screenshot()),
+                            onPictureInPicture: _pictureInPicture),
+                      },
+                    ),
+                  ),
+                )
+              else
               // Under its button, wherever the bar's width put it.
               Positioned.fill(
                 child: LayoutBuilder(
@@ -526,21 +593,27 @@ class _TopBar extends StatelessWidget {
       : math.max(NextMetrics.chromeEdge, chrome.leading + 14);
 
   @override
-  Widget build(BuildContext context) => SizedBox(
-        height: NextMetrics.topBar,
+  Widget build(BuildContext context) {
+    // A phone or a tablet: under the status bar, clear of the island.
+    final safe = MediaQuery.paddingOf(context);
+    return SizedBox(
+        height: safe.top + NextMetrics.topBar,
         child: Stack(children: [
-          Positioned.fill(
-            child: GestureDetector(
-              behavior: HitTestBehavior.opaque,
-              onPanStart: (_) => unawaited(windowManager.startDragging()),
+          if (globals.isDesktop)
+            Positioned.fill(
+              child: GestureDetector(
+                behavior: HitTestBehavior.opaque,
+                onPanStart: (_) => unawaited(windowManager.startDragging()),
+              ),
             ),
-          ),
           Positioned.fill(
+            top: safe.top,
             child: ValueListenableBuilder(
               valueListenable: NextWindowChrome.layout,
               builder: (context, chrome, row) => Padding(
                 padding: EdgeInsets.only(
-                    left: _left(chrome), right: NextMetrics.chromeEdge),
+                    left: math.max(_left(chrome), safe.left + 12),
+                    right: math.max(NextMetrics.chromeEdge, safe.right + 12)),
                 child: row,
               ),
               // Beside the conversation the bar is the video's narrow part,
@@ -563,6 +636,7 @@ class _TopBar extends StatelessWidget {
           ),
         ]),
       );
+  }
 }
 
 /// The names of what plays: the library's work and episode when it knows the
@@ -690,12 +764,20 @@ class _BottomBar extends StatelessWidget {
     required this.menu,
     required this.onMenu,
     required this.onScrub,
+    this.touch = false,
+    this.phone = false,
   });
   final NextPlayback playback;
   final NextShellController shell;
   final _Menu? menu;
   final void Function(_Menu which) onMenu;
   final ValueChanged<bool> onScrub;
+
+  /// Under a finger the volume is a drag on the picture, not a slider.
+  final bool touch;
+
+  /// Full screen is the phone turned sideways.
+  final bool phone;
 
   static const _side = 40.0;
   static const _button = 40.0;
@@ -705,6 +787,9 @@ class _BottomBar extends StatelessWidget {
   /// The row of controls at its widest: an hour-long time, a speed, the
   /// volume's slider open.
   static const _row = 640.0;
+
+  /// The same without the volume's slider (under a finger).
+  static const _touchRow = 400.0;
 
   /// How much smaller the row is drawn in a room [width] wide.
   static double scale(double width) =>
@@ -729,7 +814,13 @@ class _BottomBar extends StatelessWidget {
       behavior: HitTestBehavior.opaque,
       onTap: () {},
       child: Padding(
-        padding: const EdgeInsets.fromLTRB(_side, 0, _side, 24),
+        padding: touch
+            ? EdgeInsets.fromLTRB(
+                math.max(16, MediaQuery.paddingOf(context).left + 8),
+                0,
+                math.max(16, MediaQuery.paddingOf(context).right + 8),
+                math.max(16, MediaQuery.paddingOf(context).bottom + 4))
+            : const EdgeInsets.fromLTRB(_side, 0, _side, 24),
         child: Column(mainAxisSize: MainAxisSize.min, children: [
           // What is watched moves by painting, not rebuilding: the line
           // reads the position each time the frame asks for a redraw.
@@ -764,7 +855,7 @@ class _BottomBar extends StatelessWidget {
               fit: BoxFit.scaleDown,
               alignment: Alignment.centerLeft,
               child: SizedBox(
-                width: math.max(room.maxWidth, _row),
+                width: math.max(room.maxWidth, touch ? _touchRow : _row),
                 height: _button,
                 child: Row(children: [
                   // The intent: the button answers the click at once.
@@ -810,8 +901,10 @@ class _BottomBar extends StatelessWidget {
                           ),
                   ),
                   const Spacer(),
-                  _Volume(playback: playback),
-                  const SizedBox(width: _gap),
+                  if (!touch) ...[
+                    _Volume(playback: playback),
+                    const SizedBox(width: _gap),
+                  ],
                   if (playback.offersDanmaku) ...[
                     PlaybackSelector<bool>(
                       playback: playback,
@@ -848,6 +941,21 @@ class _BottomBar extends StatelessWidget {
                     onTap: () => onMenu(_Menu.more),
                   ),
                   const SizedBox(width: _gap),
+                  if (phone)
+                    Builder(builder: (context) {
+                      final full = MediaQuery.orientationOf(context) ==
+                          Orientation.landscape;
+                      return _BarButton(
+                        glyph: full
+                            ? NextGlyph.exitFullscreen
+                            : NextGlyph.fullscreen,
+                        label: full ? '退出全屏' : '全屏',
+                        size: 19,
+                        onTap: () =>
+                            unawaited(PhoneOrientation.fullScreen(!full)),
+                      );
+                    })
+                  else
                   PlaybackSelector<bool>(
                     playback: playback,
                     selector: (s) => s.fullscreen,

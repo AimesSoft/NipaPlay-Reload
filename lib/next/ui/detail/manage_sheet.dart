@@ -7,6 +7,7 @@ import 'package:flutter/widgets.dart';
 import '../../ui_data/ui_data.dart';
 import '../data/work_manage.dart';
 import '../settings/controls.dart';
+import '../theme/layout.dart';
 import '../theme/tokens.dart';
 import '../widgets/artwork.dart';
 import '../widgets/buttons.dart';
@@ -67,10 +68,12 @@ class _ManageLayerState extends State<ManageLayer>
             ),
           ),
           Positioned(
-            top: NextMetrics.topBar + 4,
+            top: NextLayout.underBar(context) + 4,
             right: 12,
-            bottom: 12,
-            width: ManageLayer.width,
+            bottom: 12 + MediaQuery.paddingOf(context).bottom,
+            // A phone: as wide as it is, less the margins.
+            left: NextLayout.compact(context) ? 12 : null,
+            width: NextLayout.compact(context) ? null : ManageLayer.width,
             child: Opacity(
               opacity: t.value,
               child: Transform.translate(

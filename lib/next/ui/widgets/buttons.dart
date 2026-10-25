@@ -1,5 +1,6 @@
 import 'package:flutter/widgets.dart';
 
+import '../theme/layout.dart';
 import '../theme/tokens.dart';
 import 'icons.dart';
 
@@ -260,13 +261,15 @@ class SuggestionChip extends StatelessWidget {
       );
 }
 
-/// `.kbd`: a keyboard hint.
+/// `.kbd`: a keyboard hint. A phone has no keyboard to hint at.
 class KeyHint extends StatelessWidget {
   const KeyHint(this.text, {super.key});
   final String text;
 
   @override
-  Widget build(BuildContext context) => Container(
+  Widget build(BuildContext context) => NextLayout.compact(context)
+      ? const SizedBox.shrink()
+      : Container(
         padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
         decoration: BoxDecoration(
           border: Border.all(color: NextColors.line2),

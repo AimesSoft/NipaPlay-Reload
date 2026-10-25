@@ -16,6 +16,7 @@ import '../library/status_view.dart';
 import '../settings/section_accounts.dart';
 import '../settings/settings_layout.dart';
 import '../shell/shell_controller.dart';
+import '../theme/layout.dart';
 import '../theme/tokens.dart';
 import '../widgets/buttons.dart';
 import '../widgets/icons.dart';
@@ -283,8 +284,8 @@ class _LibraryPageState extends State<LibraryPage>
           controller: _scroll,
           slivers: [
             SliverPadding(
-              padding: const EdgeInsets.fromLTRB(
-                  NextMetrics.gutter, NextMetrics.topBar + 40, 56, 28),
+              padding: EdgeInsets.fromLTRB(
+                  NextLayout.gutter(context), NextLayout.underBar(context) + 40, NextLayout.end(context), 28),
               sliver: SliverToBoxAdapter(child: _header()),
             ),
             if (_status case final status?)
@@ -309,9 +310,7 @@ class _LibraryPageState extends State<LibraryPage>
     final only = page != null && page.categories.length == 1
         ? page.categories.single
         : null;
-    return SizedBox(
-      height: 40,
-      child: Row(children: [
+    final lead = <Widget>[
         CompositedTransformTarget(
           link: _sourceLink,
           child: SourceTitle(
@@ -324,7 +323,8 @@ class _LibraryPageState extends State<LibraryPage>
           const SizedBox(width: 14),
           Text('$count', style: NextText.num(18, color: NextColors.p3)),
         ],
-        const Spacer(),
+    ];
+    final tail = <Widget>[
         if (page != null && page.hasArrangement) ...[
           Segmented<bool>(
             value: page.arranged,
@@ -382,7 +382,26 @@ class _LibraryPageState extends State<LibraryPage>
                       weight: FontWeight.w600, color: NextColors.paper)),
             ),
           ),
-      ]),
+    ];
+    // A phone: the source on its own line, what changes the view under it.
+    if (NextLayout.compact(context)) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          SizedBox(height: 40, child: Row(children: lead)),
+          const SizedBox(height: 14),
+          SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            clipBehavior: Clip.none,
+            child: Row(children: tail),
+          ),
+        ],
+      );
+    }
+    return SizedBox(
+      height: 40,
+      child: Row(children: [...lead, const Spacer(), ...tail]),
     );
   }
 
@@ -395,7 +414,7 @@ class _LibraryPageState extends State<LibraryPage>
     if (page.categories.isEmpty) {
       return [
         SliverPadding(
-          padding: const EdgeInsets.only(left: NextMetrics.gutter),
+          padding: EdgeInsets.only(left: NextLayout.gutter(context)),
           sliver: SliverToBoxAdapter(
             child: Text('这里还空着。',
                 style: NextText.sans(14.5, color: NextColors.p3)),
@@ -406,8 +425,8 @@ class _LibraryPageState extends State<LibraryPage>
     if (_single case final items?) {
       return [
         SliverPadding(
-          padding: const EdgeInsets.fromLTRB(
-              NextMetrics.gutter, 0, 56, batchBarRoom),
+          padding: EdgeInsets.fromLTRB(
+              NextLayout.gutter(context), 0, NextLayout.end(context), batchBarRoom),
           sliver: CategoryGrid(items: items, on: _on, deviceLine: _deviceLine),
         ),
       ];
@@ -434,7 +453,7 @@ class _LibraryPageState extends State<LibraryPage>
         ],
       UiLibraryForm.cards => [
           SliverPadding(
-            padding: const EdgeInsets.fromLTRB(NextMetrics.gutter, 0, 56, 64),
+            padding: EdgeInsets.fromLTRB(NextLayout.gutter(context), 0, NextLayout.end(context), 64 + NextLayout.foot(context)),
             sliver: SliverLayoutBuilder(builder: (context, constraints) {
               const gap = 24.0;
               final width = constraints.crossAxisExtent;
@@ -592,7 +611,7 @@ class _CategoryShelf extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Padding(
-          padding: const EdgeInsets.only(left: NextMetrics.gutter),
+          padding: EdgeInsets.only(left: NextLayout.gutter(context)),
           child: Pressable(
             onTap: onOpen,
             semanticLabel: category.title,
@@ -623,7 +642,7 @@ class _CategoryShelf extends StatelessWidget {
             key: PageStorageKey('shelf/${category.categoryId}'),
             scrollDirection: Axis.horizontal,
             clipBehavior: Clip.none,
-            padding: const EdgeInsets.only(left: NextMetrics.gutter, right: 56),
+            padding: EdgeInsets.only(left: NextLayout.gutter(context), right: NextLayout.end(context)),
             itemCount: preview.length,
             separatorBuilder: (_, __) => const SizedBox(width: 18),
             itemBuilder: (context, i) => libraryTile(preview[i], _tile, on,

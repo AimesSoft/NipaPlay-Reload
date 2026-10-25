@@ -9,6 +9,7 @@ import '../cards/card_views.dart';
 import '../chat/chat_frame.dart';
 import '../player/stage.dart';
 import '../shell/shell_controller.dart';
+import '../theme/layout.dart';
 import '../theme/tokens.dart';
 import '../widgets/attachments.dart';
 import '../widgets/drop_zone.dart';
@@ -85,7 +86,12 @@ class _ChatPanelLayerState extends State<ChatPanelLayer>
 
   /// The picture follows the panel, from the controller's tick (before the
   /// frame lays out), never from a build.
-  void _publish() => _stage?.value = _c.isDismissed ? 0 : _slide;
+  void _publish() =>
+      _stage?.value = _c.isDismissed || _compact ? 0 : _slide;
+
+  /// A phone: the conversation rises from the foot as a sheet, over the
+  /// page or under the video, which keeps its place.
+  bool _compact = false;
 
   @override
   void dispose() {
@@ -106,6 +112,8 @@ class _ChatPanelLayerState extends State<ChatPanelLayer>
         ? NextStage.panelWidth(MediaQuery.sizeOf(context).width)
         : NextStage.panelMax;
     final sheet = RepaintBoundary(child: _Sheet(docked: docked));
+    _compact = NextLayout.compact(context);
+    if (_compact) return _phone(shell, docked, sheet);
     return AnimatedBuilder(
       animation: _c,
       builder: (context, _) {
@@ -134,6 +142,50 @@ class _ChatPanelLayerState extends State<ChatPanelLayer>
               child: Transform.translate(
                 offset: Offset((1 - slide) * NextStage.travel(width), 0),
                 child: sheet,
+              ),
+            ),
+          ),
+        ]);
+      },
+    );
+  }
+}
+
+extension on _ChatPanelLayerState {
+  Widget _phone(NextShellController shell, bool docked, Widget sheet) {
+    final size = MediaQuery.sizeOf(context);
+    final bottom = math.max(MediaQuery.viewInsetsOf(context).bottom,
+        MediaQuery.paddingOf(context).bottom);
+    // Over a video the picture stays in sight above the sheet.
+    final top = docked
+        ? size.width * 9 / 16 + NextLayout.barTop(context) + 24
+        : NextLayout.barTop(context) + 8;
+    return AnimatedBuilder(
+      animation: _c,
+      builder: (context, _) {
+        if (_c.isDismissed) return const SizedBox.shrink();
+        final t = _c.value;
+        return Stack(children: [
+          Positioned.fill(
+            child: GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onTap: shell.closePanel,
+              child: _Dim(t),
+            ),
+          ),
+          Positioned(
+            left: 6,
+            right: 6,
+            top: top,
+            bottom: 0,
+            child: Opacity(
+              opacity: _reduced ? t : math.min(1, t * 3),
+              child: Transform.translate(
+                offset: Offset(0, (1 - _slide) * (size.height - top)),
+                child: Padding(
+                  padding: EdgeInsets.only(bottom: bottom),
+                  child: sheet,
+                ),
               ),
             ),
           ),

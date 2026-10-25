@@ -4,6 +4,7 @@ import 'package:flutter/widgets.dart';
 
 import '../../ui_data/ui_data.dart';
 import '../data/search.dart';
+import '../theme/layout.dart';
 import '../theme/tokens.dart';
 import '../widgets/artwork.dart';
 import '../widgets/buttons.dart';
@@ -141,7 +142,7 @@ class _SearchLayerState extends State<SearchLayer>
       builder: (context, _) {
         if (_show.isDismissed) return const SizedBox.shrink();
         final size = MediaQuery.sizeOf(context);
-        const top = NextMetrics.topBar + 36;
+        final top = NextLayout.underBar(context) + 36;
         final reduced = NextMotion.reduced(context);
         final t = _curve.value;
         return Stack(children: [

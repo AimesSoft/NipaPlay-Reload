@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/widgets.dart';
+import 'package:nipaplay/utils/globals.dart' as globals;
 
 import '../../ui_data/ui_data.dart';
 import '../conversation/mesh_chat_port.dart';
@@ -220,11 +221,16 @@ class NextShellController extends ChangeNotifier {
     if (about != null) chat.setAbout(about);
     if (onHome) {
       homeChatOpen.value = true;
-      WidgetsBinding.instance
-          .addPostFrameCallback((_) => homeChatFocus.requestFocus());
+      if (!globals.isPhone) {
+        WidgetsBinding.instance
+            .addPostFrameCallback((_) => homeChatFocus.requestFocus());
+      }
       return;
     }
     panelOpen.value = true;
+    // A phone's keyboard would cover the conversation: it comes when the
+    // field is tapped.
+    if (globals.isPhone) return;
     WidgetsBinding.instance
         .addPostFrameCallback((_) => panelFocus.requestFocus());
   }

@@ -5,6 +5,7 @@ import 'package:flutter/widgets.dart';
 
 import '../../ui_data/library.dart';
 import '../shell/shell_controller.dart';
+import '../theme/layout.dart';
 import '../theme/tokens.dart';
 import '../widgets/buttons.dart';
 import '../widgets/cards.dart';
@@ -164,10 +165,10 @@ class _CategoryPageState extends State<CategoryPage>
               ),
             ),
             child: Padding(
-              padding: const EdgeInsets.only(
-                  left: NextMetrics.gutter + 30,
+              padding: EdgeInsets.only(
+                  left: NextLayout.gutter(context) + 30,
                   right: 56,
-                  top: NextMetrics.topBar + 8),
+                  top: NextLayout.underBar(context) + 8),
               child: Align(
                 alignment: Alignment.topLeft,
                 child: SizedBox(
@@ -203,8 +204,8 @@ class _CategoryPageState extends State<CategoryPage>
               controller: _scroll,
               slivers: [
                 SliverPadding(
-                  padding: const EdgeInsets.fromLTRB(
-                      NextMetrics.gutter, NextMetrics.topBar + 56, 56, 28),
+                  padding: EdgeInsets.fromLTRB(
+                      NextLayout.gutter(context), NextLayout.underBar(context) + 56, NextLayout.end(context), 28),
                   sliver: SliverToBoxAdapter(
                     child: Row(
                       crossAxisAlignment: CrossAxisAlignment.center,
@@ -240,8 +241,8 @@ class _CategoryPageState extends State<CategoryPage>
                   ),
                 ),
                 SliverPadding(
-                  padding: const EdgeInsets.fromLTRB(
-                      NextMetrics.gutter, 0, 56, batchBarRoom),
+                  padding: EdgeInsets.fromLTRB(
+                      NextLayout.gutter(context), 0, NextLayout.end(context), batchBarRoom),
                   sliver: CategoryGrid(
                       items: _items!, on: _on, deviceLine: widget.deviceLine),
                 ),
@@ -251,12 +252,12 @@ class _CategoryPageState extends State<CategoryPage>
               left: 0,
               right: 0,
               top: 0,
-              height: NextMetrics.topBar + 76,
+              height: NextLayout.underBar(context) + 76,
               child: IgnorePointer(child: _bar(count)),
             ),
             Positioned(
-              left: NextMetrics.gutter - 9,
-              top: NextMetrics.topBar + 8,
+              left: NextLayout.gutter(context) - 9,
+              top: NextLayout.underBar(context) + 8,
               child: NextIconButton(
                 glyph: NextGlyph.chevronLeft,
                 label: '返回',

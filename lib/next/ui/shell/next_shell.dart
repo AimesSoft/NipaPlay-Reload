@@ -1,8 +1,11 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart'
     show Material, MaterialType, TextSelectionThemeData, Theme, ThemeData;
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
+import 'package:nipaplay/utils/globals.dart' as globals;
 
 import '../data/services.dart';
 import '../../work_detail_bridge.dart';
@@ -14,8 +17,10 @@ import '../pages/discover_page.dart';
 import '../pages/library_page.dart';
 import '../panel/chat_panel.dart';
 import '../player/player_layer.dart';
+import '../player/touch_surface.dart' show PhoneOrientation;
 import '../search/search_overlay.dart';
 import '../settings/settings_page.dart';
+import '../theme/layout.dart';
 import '../theme/tokens.dart';
 import '../widgets/art_origin.dart';
 import '../widgets/grain.dart';
@@ -71,6 +76,10 @@ class _NextShellState extends State<NextShell> {
     super.initState();
     _shown = this;
     if (kDebugMode) NextUiDebug.attach(_shell, context);
+    // A phone's pages stand upright; a video may turn it.
+    if (!globals.isDesktop && globals.isPhone) {
+      unawaited(PhoneOrientation.pages());
+    }
   }
 
   @override
@@ -129,7 +138,10 @@ class _NextShellState extends State<NextShell> {
       return true;
     });
     final base = Theme.of(context);
-    return Theme(
+    // Next is dark: the status bar's words are light over it.
+    return AnnotatedRegion<SystemUiOverlayStyle>(
+      value: SystemUiOverlayStyle.light,
+      child: Theme(
       data: ThemeData(
         brightness: Brightness.dark,
         useMaterial3: true,
@@ -184,7 +196,7 @@ class _NextShellState extends State<NextShell> {
                             left: 0,
                             right: 0,
                             top: 0,
-                            height: 96,
+                            height: NextLayout.barTop(context) + 96,
                             child: IgnorePointer(
                               child: ValueListenableBuilder(
                                 valueListenable: _shell.scrolled,
@@ -240,7 +252,7 @@ class _NextShellState extends State<NextShell> {
           ),
         ),
       ),
-    );
+    ));
   }
 }
 
@@ -347,5 +359,9 @@ class _SectionsState extends State<_Sections>
                     _page(s)),
               ),
             ),
+        // A phone's sections are at its foot, over the pages; a page pushed
+        // over them (a work, settings) covers them.
+        if (NextLayout.compact(context))
+          const Positioned(left: 0, right: 0, bottom: 0, child: NextTabBar()),
       ]);
 }

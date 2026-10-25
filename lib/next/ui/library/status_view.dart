@@ -8,6 +8,7 @@ import '../data/collections.dart';
 import '../data/gui_calls.dart';
 import '../settings/controls.dart' show PillButton;
 import '../shell/shell_controller.dart';
+import '../theme/layout.dart';
 import '../theme/tokens.dart';
 import 'batch_bar.dart' show batchBarRoom;
 import 'category_grid.dart';
@@ -111,7 +112,7 @@ class _StatusViewState extends State<StatusView> {
   Widget build(BuildContext context) {
     if (_signedOut) {
       return SliverPadding(
-        padding: const EdgeInsets.only(left: NextMetrics.gutter),
+        padding: EdgeInsets.only(left: NextLayout.gutter(context)),
         sliver: SliverToBoxAdapter(
           child: Row(children: [
             for (final (provider, name) in const [
@@ -138,7 +139,7 @@ class _StatusViewState extends State<StatusView> {
       duration: const Duration(milliseconds: 280),
       sliver: switch ((said, works)) {
         (final said?, _) => SliverPadding(
-            padding: const EdgeInsets.only(left: NextMetrics.gutter),
+            padding: EdgeInsets.only(left: NextLayout.gutter(context)),
             sliver: SliverToBoxAdapter(
               child:
                   Text(said, style: NextText.sans(14.5, color: NextColors.p3)),
@@ -153,8 +154,8 @@ class _StatusViewState extends State<StatusView> {
   Widget _grid(List<UiWork> works) {
     final deviceLine = works.any((w) => w.devices.isNotEmpty);
     return SliverPadding(
-      padding: const EdgeInsets.fromLTRB(
-          NextMetrics.gutter, 0, 56, batchBarRoom),
+      padding: EdgeInsets.fromLTRB(
+          NextLayout.gutter(context), 0, NextLayout.end(context), batchBarRoom),
       sliver: SliverLayoutBuilder(builder: (context, constraints) {
         const gap = CategoryGrid.gap;
         final width = constraints.crossAxisExtent;

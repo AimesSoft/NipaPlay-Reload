@@ -10,6 +10,7 @@ import '../data/discover.dart';
 import '../data/work_manage.dart';
 import '../settings/settings_layout.dart' show SettingsSection;
 import '../shell/shell_controller.dart';
+import '../theme/layout.dart';
 import '../theme/tokens.dart';
 import '../widgets/art_origin.dart';
 import '../widgets/artwork.dart';
@@ -522,7 +523,12 @@ class _WorkDetailPageState extends State<WorkDetailPage>
       },
       child: LayoutBuilder(builder: (context, constraints) {
         final size = constraints.biggest;
-        final copyTop = (size.height / 6).clamp(120.0, 160.0);
+        // A phone: the poster stands at the top, the words begin over its
+        // lower part.
+        final compact = NextLayout.compact(context);
+        final copyTop = compact
+            ? DetailBackdrop.compactHeight(size) * 0.62
+            : (size.height / 6).clamp(120.0, 160.0);
         final column = _column(size);
         final titleTop = copyTop +
             (_original == null ? 0 : 18) +
@@ -530,8 +536,11 @@ class _WorkDetailPageState extends State<WorkDetailPage>
         return Stack(fit: StackFit.expand, children: [
           RepaintBoundary(
             child: DetailBackdrop(
-              image: _work.artwork.backdrop ?? _work.artwork.poster,
-              soft: _work.artwork.backdrop == null,
+              image: compact
+                  ? _work.artwork.poster ?? _work.artwork.backdrop
+                  : _work.artwork.backdrop ?? _work.artwork.poster,
+              soft: !compact && _work.artwork.backdrop == null,
+              compact: compact,
               tint: _work.artwork.tint,
               size: size,
               scroll: _scroll,
@@ -556,7 +565,7 @@ class _WorkDetailPageState extends State<WorkDetailPage>
                   SliverToBoxAdapter(
                     child: Padding(
                       padding: EdgeInsets.only(
-                          left: NextMetrics.gutter, top: copyTop),
+                          left: NextLayout.gutter(context), top: copyTop),
                       // Loose, so the column is its own width and the title
                       // wraps here as it does where it is painted.
                       child: Align(
@@ -570,7 +579,9 @@ class _WorkDetailPageState extends State<WorkDetailPage>
                     child: Align(
                       alignment: Alignment.bottomLeft,
                       child: Padding(
-                        padding: const EdgeInsets.only(top: 48, bottom: 30),
+                        padding: EdgeInsets.only(
+                            top: compact ? 32 : 48,
+                            bottom: 30 + MediaQuery.paddingOf(context).bottom),
                         child: _episodesBlock(),
                       ),
                     ),
@@ -589,8 +600,11 @@ class _WorkDetailPageState extends State<WorkDetailPage>
                 child: _bar(size, column, titleTop, reduced)),
           ),
           Positioned(
-            left: NextMetrics.gutter - 9,
-            top: NextMetrics.topBar + 8,
+            left: NextLayout.gutter(context) - 9,
+            // On a phone, in the bar's row (its left is free).
+            top: compact
+                ? NextLayout.barTop(context) + 10
+                : NextLayout.underBar(context) + 8,
             child: FadeTransition(
               opacity: content,
               child: NextIconButton(
@@ -624,7 +638,7 @@ class _WorkDetailPageState extends State<WorkDetailPage>
     if (_work.artwork.backdrop != null || poster == null) return null;
     final height = math.min(size.height * 0.56, 480.0);
     final width = height * 2 / 3;
-    final room = size.width - NextMetrics.gutter - 600 - 64;
+    final room = size.width - NextLayout.gutter(context) - 600 - 64;
     if (room < width + 56) return null;
     final content = _flies ? _content : kAlwaysCompleteAnimation;
     return Positioned(
@@ -667,8 +681,8 @@ class _WorkDetailPageState extends State<WorkDetailPage>
 
   /// The words' column: 600 wide, narrower in a narrow window. The title
   /// is painted apart from the column, so both are given this width.
-  static double _column(Size size) =>
-      math.max(0.0, math.min(600.0, size.width - NextMetrics.gutter * 2));
+  double _column(Size size) =>
+      math.max(0.0, math.min(600.0, size.width - NextLayout.gutter(context) * 2));
 
   /// The bar scrim and the docking title (not interactive).
   Widget _bar(Size size, double column, double titleTop, bool reduced) =>
@@ -677,7 +691,7 @@ class _WorkDetailPageState extends State<WorkDetailPage>
           left: 0,
           right: 0,
           top: 0,
-          height: 96,
+          height: NextLayout.barTop(context) + 96,
           child: FadeTransition(
             opacity: _docked,
             child: const DecoratedBox(
@@ -692,7 +706,7 @@ class _WorkDetailPageState extends State<WorkDetailPage>
           ),
         ),
         Positioned(
-          left: NextMetrics.gutter,
+          left: NextLayout.gutter(context),
           top: 0,
           child: ConstrainedBox(
             constraints: BoxConstraints(maxWidth: column),
@@ -700,7 +714,7 @@ class _WorkDetailPageState extends State<WorkDetailPage>
               scroll: _scroll,
               dock: _docked,
               top: titleTop,
-              left: NextMetrics.gutter,
+              left: NextLayout.gutter(context),
               viewWidth: size.width,
               reduced: reduced,
               child: WorkTitle(work: _work, margins: false),
@@ -710,14 +724,19 @@ class _WorkDetailPageState extends State<WorkDetailPage>
         Positioned(
           left: 0,
           right: 0,
-          top: 0,
+          top: NextLayout.barTop(context),
           height: NextMetrics.topBar,
-          child: Center(
+          child: NextLayout.compact(context)
+              ? const SizedBox.shrink()
+              : Center(
             child: FadeTransition(
               opacity: _barTitle,
               child: ConstrainedBox(
-                constraints:
-                    BoxConstraints(maxWidth: math.max(0, size.width - 640)),
+                constraints: BoxConstraints(
+                    maxWidth: math.max(
+                        0,
+                        size.width -
+                            (NextLayout.compact(context) ? 200 : 640))),
                 child: Text(_work.title,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
@@ -791,7 +810,9 @@ class _WorkDetailPageState extends State<WorkDetailPage>
             ? episodes.any((e) => (e.progress ?? 0) > 0)
             : (next?.progress ?? 0) > 0;
     final menu = [..._menuItems, ..._manageItems];
-    final row = Row(children: [
+    // A phone's column is narrow: the buttons go on as many lines as needed.
+    final compact = NextLayout.compact(context);
+    final lead = <Widget>[
       if (_found) ...[
         NextButton(label: '让 Nipa 准备', onTap: _prepare),
         const SizedBox(width: 12),
@@ -807,6 +828,8 @@ class _WorkDetailPageState extends State<WorkDetailPage>
         ),
         const SizedBox(width: 12),
       ],
+    ];
+    final rest = <Widget>[
       NextButton.ghost(
         label: '问 Nipa',
         leading: const NipaAvatar(size: 20),
@@ -826,7 +849,25 @@ class _WorkDetailPageState extends State<WorkDetailPage>
           ),
         ),
       ],
-    ]);
+    ];
+    // A phone: play on its own line, the rest under it.
+    final row = compact
+        ? Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              if (lead.isNotEmpty) ...[
+                Row(mainAxisSize: MainAxisSize.min, children: lead),
+                const SizedBox(height: 12),
+              ],
+              SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                clipBehavior: Clip.none,
+                child: Row(children: rest),
+              ),
+            ],
+          )
+        : Row(children: [...lead, ...rest]);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       mainAxisSize: MainAxisSize.min,
@@ -999,7 +1040,7 @@ class _WorkDetailPageState extends State<WorkDetailPage>
       mainAxisSize: MainAxisSize.min,
       children: [
         Padding(
-          padding: const EdgeInsets.only(left: NextMetrics.gutter),
+          padding: EdgeInsets.only(left: NextLayout.gutter(context)),
           child: CompositedTransformTarget(
             link: _seasonLink,
             child: SeasonHeader(

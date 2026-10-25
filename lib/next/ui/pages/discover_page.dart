@@ -4,6 +4,7 @@ import 'package:flutter/widgets.dart';
 
 import '../data/discover.dart';
 import '../shell/shell_controller.dart';
+import '../theme/layout.dart';
 import '../theme/tokens.dart';
 import '../widgets/buttons.dart';
 import '../widgets/cards.dart';
@@ -133,8 +134,8 @@ class _DiscoverPageState extends State<DiscoverPage> implements DiscoverDebug {
       key: const PageStorageKey('discover'),
       slivers: [
         SliverPadding(
-          padding: const EdgeInsets.fromLTRB(
-              NextMetrics.gutter, NextMetrics.topBar + 40, 56, 32),
+          padding: EdgeInsets.fromLTRB(
+              NextLayout.gutter(context), NextLayout.underBar(context) + 40, NextLayout.end(context), 32),
           sliver: SliverToBoxAdapter(
             child:
                 Text('发现', style: NextText.sans(28, weight: FontWeight.w600)),
@@ -157,7 +158,7 @@ class _DiscoverPageState extends State<DiscoverPage> implements DiscoverDebug {
           const SliverToBoxAdapter(child: SizedBox(height: 44)),
           if (_ranking() != null)
             SliverToBoxAdapter(child: _rankingShelf(_ranking()!)),
-          const SliverToBoxAdapter(child: SizedBox(height: 64)),
+          SliverToBoxAdapter(child: SizedBox(height: 64 + NextLayout.foot(context))),
         ],
       ],
     );
@@ -170,7 +171,7 @@ class _DiscoverPageState extends State<DiscoverPage> implements DiscoverDebug {
   }
 
   Widget _note(String text, {required Widget action}) => SliverPadding(
-        padding: const EdgeInsets.only(left: NextMetrics.gutter),
+        padding: EdgeInsets.only(left: NextLayout.gutter(context)),
         sliver: SliverToBoxAdapter(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -326,7 +327,7 @@ class _Switching extends StatelessWidget {
                         itemCount: 0,
                         itemBuilder: builder),
                     Padding(
-                      padding: const EdgeInsets.only(left: NextMetrics.gutter),
+                      padding: EdgeInsets.only(left: NextLayout.gutter(context)),
                       child: SizedBox(
                         height: height - 16,
                         child: Text(emptyText,

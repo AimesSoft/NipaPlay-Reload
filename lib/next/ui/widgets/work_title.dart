@@ -3,6 +3,7 @@ import 'dart:ui' show ImageFilter;
 import 'package:flutter/widgets.dart';
 
 import '../../ui_data/ui_data.dart';
+import '../theme/layout.dart';
 import '../theme/tokens.dart';
 import 'artwork.dart';
 
@@ -28,14 +29,17 @@ class WorkTitle extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final title = _bare();
+    final title = _bare(NextLayout.compact(context));
     return margins ? Padding(padding: marginsOf(work), child: title) : title;
   }
 
-  Widget _bare() {
+  /// On a phone the title is drawn for its narrow column: smaller, so a
+  /// long one still fits in two lines.
+  Widget _bare(bool compact) {
     final logo = work.artwork.logo;
+    final logoHeight = compact ? 72.0 : 96.0;
     if (logo == null) {
-      final size = serifSize(work.title);
+      final size = serifSize(work.title) * (compact ? 0.6 : 1);
       return Text(work.title,
           maxLines: 2,
           overflow: TextOverflow.ellipsis,
@@ -45,9 +49,10 @@ class WorkTitle extends StatelessWidget {
     return Transform.translate(
       offset: const Offset(-6, 0),
       child: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 460, maxHeight: 96),
+        constraints: BoxConstraints(
+            maxWidth: compact ? 300 : 460, maxHeight: logoHeight),
         child: SizedBox(
-          height: 96,
+          height: logoHeight,
           child: Stack(clipBehavior: Clip.none, children: [
             // drop-shadow(0 6px 24px rgba(0,0,0,.45)), one small layer.
             Positioned.fill(
