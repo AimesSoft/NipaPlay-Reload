@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:erika_flutter/erika_flutter.dart';
 import 'package:flutter/foundation.dart' show debugPrint;
@@ -386,7 +387,8 @@ final class ErikaDriver extends AdapterDriver
             frame.bytes.length != frame.width * frame.height * 4) {
           throw StateError('Erika returned no complete RGBA picture.');
         }
-        return KernelPicture(frame.width, frame.height, frame.bytes);
+        return KernelPicture(frame.width, frame.height, frame.bytes,
+            subtitlesDrawn: !Platform.isWindows);
       });
 
   @override
