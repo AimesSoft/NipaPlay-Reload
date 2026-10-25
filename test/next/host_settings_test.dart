@@ -225,7 +225,7 @@ void main() {
   });
 
   test(
-      'mesh leaves config intact when unavailable, and remembers known devices',
+      'mesh leaves config intact when it cannot join, and remembers known devices',
       () async {
     await File('${root.path}/mesh-devices.json').writeAsString(jsonEncode({
       'devices': [
@@ -246,9 +246,11 @@ void main() {
         addresses: ['127.0.0.1:47812', '[::1]:47812'],
         fileProxyPort: 54321));
     final value = await settings.mesh();
-    expect(value.available, false);
+    // The build carries the production roots; without a dandanplay login the
+    // device stays out and never contacts the coordinator.
+    expect(value.available, true);
     expect(value.joined, false);
-    expect(value.problem, contains('签发者'));
+    expect(value.problem, '请先登录弹弹play账号');
     expect(value.devices.single.name, '另一台');
     expect(value.devices.single.remotePrograms, true);
     expect(value.devices.single.roles, ['headless']);
