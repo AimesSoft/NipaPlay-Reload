@@ -543,15 +543,22 @@ class _TopBar extends StatelessWidget {
                     left: _left(chrome), right: NextMetrics.chromeEdge),
                 child: row,
               ),
-              child: Row(children: [
-                NextIconButton(
-                    glyph: NextGlyph.chevronLeft, label: '返回', onTap: onBack),
-                const SizedBox(width: 8),
-                const Expanded(child: _Title()),
-                const SizedBox(width: 16),
-                _Nipa(shell: shell),
-                if (NextWindowButtons.wanted) const NextWindowButtons(),
-              ]),
+              // Beside the conversation the bar is the video's narrow part,
+              // which has no room for the window's buttons.
+              child: LayoutBuilder(
+                builder: (context, box) => Row(children: [
+                  NextIconButton(
+                      glyph: NextGlyph.chevronLeft,
+                      label: '返回',
+                      onTap: onBack),
+                  const SizedBox(width: 8),
+                  const Expanded(child: _Title()),
+                  const SizedBox(width: 16),
+                  _Nipa(shell: shell),
+                  if (NextWindowButtons.wanted && box.maxWidth >= 520)
+                    const NextWindowButtons(),
+                ]),
+              ),
             ),
           ),
         ]),

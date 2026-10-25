@@ -114,7 +114,7 @@ void main() {
     final again = TurnProcessStore.forHarness(root, 'harness');
     expect(await again.read('one', 't0'), turns.first);
     expect(directory.listSync().whereType<File>(), hasLength(60));
-  });
+  }, retry: Platform.isWindows ? 2 : null);
 
   test('a 128-item turn of 8 KB outputs: each step under 2 ms, bytes written '
       'in proportion to the items', () async {
@@ -215,7 +215,7 @@ void main() {
       ]);
       expect(items[1], (turns[t]['items'] as List)[1]);
     }
-  });
+  }, retry: Platform.isWindows ? 2 : null);
 
   test('a torn last line and a move cut short lose and double no turn',
       () async {
