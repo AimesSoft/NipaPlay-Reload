@@ -41,16 +41,36 @@ Map<String, String> programEnvironment() => {
           'localappdata',
         }.contains(entry.key.toLowerCase()))
           entry.key: entry.value,
+      // Python on Windows reads and writes pipes in the console code page
+      // (GBK, ...); the scripts Nipa runs speak UTF-8 (tools/README.md).
+      if (Platform.isWindows) ...{
+        'PYTHONUTF8': '1',
+        'PYTHONIOENCODING': 'utf-8',
+      },
     };
 
-({String executable, List<String> arguments}) programCommand(
-    String command, String shell,
-    {required bool windows}) {
+/// What to start for [command], and the environment values it needs.
+///
+/// Dart quotes each argument for the Windows command line with backslash
+/// escapes, which cmd.exe does not read: a command with a double quote in it
+/// (a path with spaces, nearly any real command) reached `cmd /c` broken. The
+/// command therefore travels in an environment variable that cmd expands
+/// itself, so it parses exactly the text Nipa wrote.
+({String executable, List<String> arguments, Map<String, String> environment})
+    programCommand(String command, String shell, {required bool windows}) {
   if (shell == 'default') shell = windows ? 'cmd' : 'sh';
   if (windows && shell == 'cmd') {
-    return (executable: 'cmd.exe', arguments: ['/d', '/s', '/c', command]);
+    return (
+      executable: 'cmd.exe',
+      // chcp makes cmd's own output UTF-8, which is what is read back.
+      arguments: ['/d', '/s', '/c', 'chcp 65001>nul&%$programCommandVariable%'],
+      environment: {programCommandVariable: command},
+    );
   }
   if (windows && shell == 'powershell') {
+    // Windows PowerShell writes a pipe in the console code page unless told.
+    const utf8 = r'[Console]::OutputEncoding = New-Object System.Text.UTF8Encoding $false; '
+        r'$OutputEncoding = [Console]::OutputEncoding; ';
     return (
       executable: 'powershell.exe',
       arguments: [
@@ -59,16 +79,24 @@ Map<String, String> programEnvironment() => {
         '-NonInteractive',
         '-EncodedCommand',
         base64Encode(
-            command.codeUnits.expand((u) => [u & 255, u >> 8]).toList())
-      ]
+            (utf8 + command).codeUnits.expand((u) => [u & 255, u >> 8]).toList())
+      ],
+      environment: const {},
     );
   }
   if (!windows && shell == 'sh') {
-    return (executable: '/bin/sh', arguments: ['-c', command]);
+    return (
+      executable: '/bin/sh',
+      arguments: ['-c', command],
+      environment: const {},
+    );
   }
   throw const Failure(FailureCode.invalidInput,
       'Windows supports cmd/powershell; POSIX hosts support sh.');
 }
+
+/// The variable a Windows cmd command is handed to the shell in.
+const programCommandVariable = 'NIPAPLAY_PROGRAM_COMMAND';
 
 final class ProgramRuntime implements JobExecutor {
   ProgramRuntime({required this.enabled, required this.location});
@@ -177,6 +205,7 @@ final class ProgramRuntime implements JobExecutor {
         workingDirectory: input['repository'] as String,
         environment: {
           ...programEnvironment(),
+          ...command.environment,
           if (credentialFile != null)
             'NIPAPLAY_ENDPOINT_FILE': credentialFile!.path
         },
@@ -316,6 +345,12 @@ Future<JsonMap?> stopProgramTree(Process process,
   var exited = false;
   unawaited(process.exitCode.then((_) => exited = true));
   if (Platform.isWindows) {
+    // Nothing of it left to stop: as on POSIX, no termination to report.
+    if (await process.exitCode
+        .then((_) => true)
+        .timeout(const Duration(milliseconds: 5), onTimeout: () => false)) {
+      return null;
+    }
     Future<void> taskkill(bool force) => Process.run('taskkill.exe',
         ['/PID', '${process.pid}', '/T', if (force) '/F'],
         environment: programEnvironment(), includeParentEnvironment: false);
