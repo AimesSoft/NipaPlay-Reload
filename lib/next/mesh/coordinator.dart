@@ -6,6 +6,21 @@ import 'package:nipaplay/services/app_http_proxy.dart';
 import 'package:nipaplay/services/system_proxy_service.dart';
 import '../network/api_uri.dart';
 
+/// The URL of a coordinator API [path] (`/mesh/v1/...`) under [base].
+///
+/// The API lives under `/mesh/` on the server. A base that is the server's
+/// origin (`https://host`) simply gets that path; a base that already ends in
+/// `/mesh` (the built-in default, `https://host/mesh`) shares the prefix
+/// instead of repeating it. Any other prefix is kept in front, as for a
+/// gateway mounted at a sub-path.
+Uri meshEndpoint(Uri base, String path) {
+  final prefix = base.path.replaceFirst(RegExp(r'/+$'), '');
+  if (prefix.endsWith('/mesh') && path.startsWith('/mesh/')) {
+    return appendApiPath(base, path.substring('/mesh'.length));
+  }
+  return appendApiPath(base, path);
+}
+
 final class MeshCoordinator {
   MeshCoordinator(
     this.base,
@@ -41,11 +56,18 @@ final class MeshCoordinator {
         uri, systemProxy ?? SystemProxyService.instance.findProxy);
   }
 
-  Future<JsonMap> request(String method, String path, [JsonMap? body]) async {
-    final bearer = await token();
-    if (bearer == null || bearer.isEmpty) {
-      throw const Failure(
-          FailureCode.unavailable, 'Sign in to Dandanplay to join Mesh.');
+  /// [authenticated] false is for the one call the device key alone may make
+  /// (renewing its certificate): no account token is read or sent, so a
+  /// device whose token has expired keeps its place in the mesh.
+  Future<JsonMap> request(String method, String path,
+      [JsonMap? body, bool authenticated = true]) async {
+    String? bearer;
+    if (authenticated) {
+      bearer = await token();
+      if (bearer == null || bearer.isEmpty) {
+        throw const Failure(
+            FailureCode.unavailable, 'Sign in to Dandanplay to join Mesh.');
+      }
     }
     try {
       return await _request(method, path, body, bearer)
@@ -67,14 +89,16 @@ final class MeshCoordinator {
   }
 
   Future<JsonMap> _request(
-      String method, String path, JsonMap? body, String bearer) async {
+      String method, String path, JsonMap? body, String? bearer) async {
     await SystemProxyService.instance.initialize();
     final endpoint = Uri.parse(path);
-    final uri = appendApiPath(base, endpoint.path)
+    final uri = meshEndpoint(base, endpoint.path)
         .replace(query: endpoint.hasQuery ? endpoint.query : null);
     final request = await _client.openUrl(method, uri);
     request.followRedirects = false;
-    request.headers.set(HttpHeaders.authorizationHeader, 'Bearer $bearer');
+    if (bearer != null) {
+      request.headers.set(HttpHeaders.authorizationHeader, 'Bearer $bearer');
+    }
     if (body != null) {
       request.headers.contentType = ContentType.json;
       request.write(jsonEncode(body));

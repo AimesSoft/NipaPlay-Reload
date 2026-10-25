@@ -645,7 +645,7 @@ final class HostSettingsService implements NextHostSettings, NextHostDeviceSetti
                 _ => '暂时无法加入组网',
               },
         name: value['name'] as String?,
-        coordinator: value['coordinator'] as String?,
+        coordinator: value['coordinator'] as String? ?? meshDefaultCoordinator,
         port: value['port'] as int?,
         loopbackOnly: value['loopbackOnly'] == true,
         broadcastDiscovery: value['broadcastDiscovery'] as bool? ?? true,
@@ -727,8 +727,9 @@ final class HostSettingsService implements NextHostSettings, NextHostDeviceSetti
           'addresses': addresses,
           'fileProxyPort': choice.fileProxyPort ?? 0
         };
-        if (choice.joined && value['coordinator'] == null) {
-          throw const FormatException('请填写协调服务地址');
+        // The default address is not written down: a later release may move it.
+        if (value['coordinator'] == meshDefaultCoordinator) {
+          value.remove('coordinator');
         }
         await _save('mesh.json', value);
         _record('mesh', before, value);

@@ -20,7 +20,10 @@ import 'message.dart';
 import 'native.dart';
 import 'presence.dart';
 import 'system_bonjour.dart';
+import 'trust.dart';
 export 'host.dart' show authorizeMeshPeer;
+export 'trust.dart'
+    show meshDefaultCoordinator, meshProductionIssuerPem, inspectMeshTrust;
 
 bool meshActionAllowed(String id) =>
     [
@@ -74,9 +77,6 @@ String? meshActionRestriction(String id) => meshActionAllowed(id)
     : id == 'mesh.delegate'
         ? 'Delegation starts on the device that hands the work over; another device cannot start it on this one.'
         : 'No remote contract is registered for this action; host credential enrollment stays local.';
-
-/// Trust anchors are release inputs, never learned from the coordinator.
-const meshProductionIssuerPem = '';
 
 final class MeshRuntime implements MeshDeviceSource {
   MeshRuntime({
@@ -193,6 +193,10 @@ final class MeshRuntime implements MeshDeviceSource {
   final _unknownPeerCheckedAt = <String, DateTime>{};
   final _candidateLookupAt = <String, DateTime>{};
   final _candidateLookupGap = <String, Duration>{};
+  // A lookup the coordinator refused (an expired account token answers 401):
+  // when it was, and how long to leave the coordinator alone about this peer.
+  final _candidateLookupRefusedAt = <String, DateTime>{};
+  final _candidateLookupRefusedGap = <String, Duration>{};
   final _reachedSinceLookup = <String>{};
   bool _hostFactsLoaded = false;
   bool _routesLoaded = false;
@@ -217,9 +221,13 @@ final class MeshRuntime implements MeshDeviceSource {
       };
 
   bool get issuerAvailable =>
-      meshProductionIssuerPem.isNotEmpty ||
+      _builtInTrust.ok ||
       meshDevelopmentHost &&
           Platform.environment['NIPAPLAY_MESH_DEV_CA'] != null;
+
+  /// The built-in roots, inspected once. A release refuses to start with
+  /// roots that are missing, unreadable or not CAs; it never half-trusts.
+  static final _builtInTrust = inspectMeshTrust(meshProductionIssuerPem);
 
   bool get _needsCertificateRenewal {
     final cert = _certificate;
@@ -331,9 +339,12 @@ final class MeshRuntime implements MeshDeviceSource {
 
   /// Only the host configures trust and enables remote access.
   Future<void> startConfigured() async {
+    // Mesh is on by default: `mesh.json` exists only once the user changed an
+    // advanced setting, and then it says what differs from the defaults.
     final config = File('${root.path}/mesh.json');
-    if (!await config.exists()) return;
-    final json = jsonDecode(await config.readAsString()) as JsonMap;
+    final json = await config.exists()
+        ? jsonDecode(await config.readAsString()) as JsonMap
+        : <String, Object?>{};
     hostConfiguration = json;
     await hostConfigurationChanged?.call();
     if (json['enabled'] == false) {
@@ -350,14 +361,23 @@ final class MeshRuntime implements MeshDeviceSource {
     final ca = meshDevelopmentHost && caPath != null
         ? await File(caPath).readAsString()
         : meshProductionIssuerPem;
-    if (ca.isEmpty) {
+    if (caPath == null || !meshDevelopmentHost) {
+      if (!_builtInTrust.ok) {
+        status = 'issuer_not_configured';
+        return;
+      }
+    } else if (ca.isEmpty) {
       status = 'issuer_not_configured';
       return;
     }
     _ca = ca;
     _manual = _addresses(json['addresses'] ?? []);
-    _coordinator =
-        MeshCoordinator(Uri.parse(json['coordinator'] as String), token);
+    final configured = json['coordinator'];
+    _coordinator = MeshCoordinator(
+        Uri.parse(configured is String && configured.trim().isNotEmpty
+            ? configured.trim()
+            : meshDefaultCoordinator),
+        token);
     Future<void> checkLogin() async {
       final value = await token();
       // Keep the token only inside its request; this marker is not a credential.
@@ -609,13 +629,12 @@ final class MeshRuntime implements MeshDeviceSource {
     ];
     if (hasCertificateFile) {
       try {
-        return await coordinator.request('POST', '/mesh/v1/devices/renew', {
-          'device_id': own.deviceId,
-          'device_public_key': own.publicKey,
-          'proof': await own.proof(
-              ['renew', own.publicKey, own.deviceId], _nonce(), _nowSeconds),
-        });
+        return await _renewRequest(coordinator, own);
       } on Failure catch (e) {
+        if (e.message.contains('device_revoked')) {
+          await _markRevoked();
+          throw _revokedFailure;
+        }
         if (!e.message.contains('device_not_found')) rethrow;
       }
     }
@@ -626,6 +645,29 @@ final class MeshRuntime implements MeshDeviceSource {
       'app_version': '1',
       'proof': await own.proof(registerFields, _nonce(), _nowSeconds),
     });
+  }
+
+  /// Renewal is proved by the device key alone (no account token), so it keeps
+  /// working after the token has expired. Only the first join needs the token.
+  Future<JsonMap> _renewRequest(MeshCoordinator coordinator, MeshIdentity own) async =>
+      coordinator.request(
+          'POST',
+          '/mesh/v1/devices/renew',
+          {
+            'device_id': own.deviceId,
+            'device_public_key': own.publicKey,
+            'proof': await own.proof(
+                ['renew', own.publicKey, own.deviceId], _nonce(), _nowSeconds),
+          },
+          false);
+
+  static const _revokedFailure = Failure(
+      FailureCode.unavailable, 'This Mesh device has been revoked.');
+
+  /// The coordinator refused this device because it was removed: stop serving.
+  Future<void> _markRevoked() async {
+    status = 'device_revoked';
+    await _stopNode();
   }
 
   Future<void> _applyRegistration(
@@ -691,7 +733,23 @@ final class MeshRuntime implements MeshDeviceSource {
 
     final cacheFile = File('${root.path}/mesh-certificate.json');
     final hasCertificateFile = await cacheFile.exists();
-    final cached = await _loadCachedState(ca, own);
+    var cached = await _loadCachedState(ca, own);
+
+    var newlyEnrolled = false;
+    if (!cached.hasValidCert) {
+      newlyEnrolled = !hasCertificateFile;
+      final registration = await _enrollOrRenew(
+        coordinator: coordinator,
+        own: own,
+        name: name,
+        hasCertificateFile: hasCertificateFile,
+      );
+      await _applyRegistration(ca, own, registration);
+      // A renewal (needs no account token) leaves the roster this device last
+      // knew usable: it can serve the LAN at once instead of waiting for a
+      // token that may have expired.
+      if (!newlyEnrolled) cached = await _loadCachedState(ca, own);
+    }
 
     if (cached.hasValidCert && cached.hasCachedDevices) {
       if (!_active.contains(own.deviceId)) {
@@ -720,17 +778,7 @@ final class MeshRuntime implements MeshDeviceSource {
       return;
     }
 
-    var newlyEnrolled = false;
-    if (!cached.hasValidCert) {
-      newlyEnrolled = !hasCertificateFile;
-      final registration = await _enrollOrRenew(
-        coordinator: coordinator,
-        own: own,
-        name: name,
-        hasCertificateFile: hasCertificateFile,
-      );
-      await _applyRegistration(ca, own, registration);
-    } else if (_needsCertificateRenewal) {
+    if (cached.hasValidCert && _needsCertificateRenewal) {
       final renewed = await _enrollOrRenew(
         coordinator: coordinator,
         own: own,
@@ -873,6 +921,18 @@ final class MeshRuntime implements MeshDeviceSource {
 
   Future<void> heartbeat({bool renew = true}) async {
     final own = identity!;
+    // The certificate is renewed first and by the device key alone: an account
+    // token that has expired must not leave the device to drop out of the mesh
+    // when its certificate runs out.
+    Object? renewError;
+    if (renew && _needsCertificateRenewal) {
+      try {
+        await _renewCertificate(own);
+      } catch (error) {
+        if (status == 'device_revoked') rethrow;
+        renewError = error;
+      }
+    }
     JsonMap? response;
     Object? addressError;
     try {
@@ -889,38 +949,54 @@ final class MeshRuntime implements MeshDeviceSource {
     // A revoked device cannot report addresses but must still learn its
     // revocation; an unreachable coordinator would only fail a second time.
     final unreachable = addressError is Failure && addressError.retryable;
-    if (!unreachable) await refreshDevices();
+    if (!unreachable && status != 'device_revoked') {
+      try {
+        await refreshDevices();
+      } catch (error) {
+        if (status == 'device_revoked') rethrow;
+        // With an expired token the roster cannot be read; the renewal above
+        // does not depend on it, and its own failure (if any) is reported.
+        addressError ??= error;
+      }
+    }
+    if (renewError != null) {
+      Error.throwWithStackTrace(renewError, StackTrace.current);
+    }
     if (addressError != null) {
       Error.throwWithStackTrace(addressError, StackTrace.current);
     }
     _interval =
         max(900, response!['heartbeat_interval_seconds'] as int? ?? _interval);
-    if (renew && _needsCertificateRenewal) {
-      final renewed =
-          await _coordinator!.request('POST', '/mesh/v1/devices/renew', {
-        'device_id': own.deviceId,
-        'device_public_key': own.publicKey,
-        'proof': await own.proof(
-            ['renew', own.publicKey, own.deviceId], _nonce(), _nowSeconds),
-      });
-      if (renewed['account_id'] != _account ||
-          renewed['device_id'] != own.deviceId) {
-        throw const FormatException('Renewed Mesh identity mismatch.');
-      }
-      await native.validate(
-          _ca!,
-          (renewed['certificate'] as JsonMap)['pem'] as String,
-          await own.privateKey(),
-          _account!);
-      final bindPort = port;
-      await _stopNode();
-      _certificate = renewed['certificate'] as JsonMap;
-      await _writeAtomic('mesh-certificate.json', jsonEncode(renewed));
-      await _startNode(listenPort: bindPort, broadcast: _broadcast);
-    }
     _coordinatorSyncPending = false;
     _retryAttempts = 0;
     coordinatorNotice = null;
+  }
+
+  Future<void> _renewCertificate(MeshIdentity own) async {
+    final JsonMap renewed;
+    try {
+      renewed = await _renewRequest(_coordinator!, own);
+    } on Failure catch (failure) {
+      if (failure.message.contains('device_revoked')) {
+        await _markRevoked();
+        throw _revokedFailure;
+      }
+      rethrow;
+    }
+    if (renewed['account_id'] != _account ||
+        renewed['device_id'] != own.deviceId) {
+      throw const FormatException('Renewed Mesh identity mismatch.');
+    }
+    await native.validate(
+        _ca!,
+        (renewed['certificate'] as JsonMap)['pem'] as String,
+        await own.privateKey(),
+        _account!);
+    final bindPort = port;
+    await _stopNode();
+    _certificate = renewed['certificate'] as JsonMap;
+    await _writeAtomic('mesh-certificate.json', jsonEncode(renewed));
+    await _startNode(listenPort: bindPort, broadcast: _broadcast);
   }
 
   /// A coordinator call failed while the LAN node keeps running: remember it
@@ -1351,6 +1427,12 @@ final class MeshRuntime implements MeshDeviceSource {
     final cached = _peerCandidates[peer];
     final lookedUp = _candidateLookupAt[peer];
     if (coordinator == null) return cached ?? const [];
+    final refusedAt = _candidateLookupRefusedAt[peer];
+    if (refusedAt != null &&
+        DateTime.now().difference(refusedAt) <
+            (_candidateLookupRefusedGap[peer] ?? candidateLookupBase)) {
+      return cached ?? const [];
+    }
     // With something cached, a coordinator known to be unreachable and the
     // backoff window both mean "use it"; without any answer yet, try anyway.
     if (cached != null &&
@@ -1377,12 +1459,25 @@ final class MeshRuntime implements MeshDeviceSource {
                       candidateLookupInterval.inMilliseconds))
               : candidateLookupBase;
       _reachedSinceLookup.remove(peer);
+      _candidateLookupRefusedAt.remove(peer);
+      _candidateLookupRefusedGap.remove(peer);
       _peerCandidates[peer] = list;
       _candidateLookupAt[peer] = DateTime.now();
       unawaited(_persistRoutes());
       return list;
     } on Failure catch (failure) {
-      if (!failure.retryable) rethrow;
+      if (!failure.retryable) {
+        // The coordinator answered and said no (an account token that has
+        // expired, a device it no longer knows). Retrying every few seconds
+        // would only spend its rate limit: leave it alone for a while, longer
+        // each time, and let the call go on with what is known (the other
+        // routes, the remembered one).
+        final gap = _candidateLookupRefusedGap[peer] ?? candidateLookupBase;
+        _candidateLookupRefusedAt[peer] = DateTime.now();
+        _candidateLookupRefusedGap[peer] = Duration(
+            milliseconds:
+                min(gap.inMilliseconds * 2, candidateLookupInterval.inMilliseconds));
+      }
       _noteCoordinatorFailure(failure);
       return _peerCandidates[peer] ?? const [];
     }

@@ -97,13 +97,13 @@ final class AppRuntimeFacts {
     final coordinator = file['coordinator'];
     return {
       'joined': mesh.status == 'online',
-      'enabled': file['enabled'] == true,
+      'enabled': file['enabled'] != false,
       'status': mesh.status,
       'issuerAvailable': mesh.issuerAvailable,
       'deviceName': file['name'],
-      'coordinator': coordinator is String && coordinator.isNotEmpty
-          ? settingWords(coordinator)
-          : null,
+      'coordinator': settingWords(coordinator is String && coordinator.isNotEmpty
+          ? coordinator
+          : meshDefaultCoordinator),
       'port': file['port'],
       'loopbackOnly': file['loopbackOnly'] == true,
       'broadcastDiscovery': file['broadcastDiscovery'] as bool? ?? true,
