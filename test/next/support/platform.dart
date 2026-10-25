@@ -4,19 +4,26 @@ import 'dart:io';
 /// its `python3` is at best a Store stub.
 final String pythonCommand = Platform.isWindows ? 'python' : 'python3';
 
-/// Removes a test directory. Windows refuses to delete a file another handle
-/// still has open (a SQLite file a killed worker isolate never closed); the
-/// directory is in the system temp area and the next reboot clears it.
+/// Removes a test directory, again when a process was still writing into it.
+/// Windows refuses to delete a file another handle still has open (a SQLite
+/// file a killed worker isolate never closed): the directory is in the system
+/// temp area, so there it is left to the next cleaning after the last attempt.
 Future<void> deleteTestDirectory(Directory directory) async {
   for (var attempt = 1;; attempt++) {
     try {
       await directory.delete(recursive: true);
       return;
+    } on PathNotFoundException {
+      if (!directory.existsSync()) return; // already gone
     } on FileSystemException {
-      if (!Platform.isWindows) rethrow;
-      if (attempt == 5) return;
-      await Future<void>.delayed(const Duration(milliseconds: 200));
+      // try again
     }
+    if (attempt == 5) {
+      if (Platform.isWindows) return;
+      await directory.delete(recursive: true);
+      return;
+    }
+    await Future<void>.delayed(const Duration(milliseconds: 200));
   }
 }
 
