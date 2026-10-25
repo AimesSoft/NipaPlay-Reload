@@ -81,7 +81,9 @@ export function apply(ctx, config = {}) {
     return new Promise((resolve) => {
       const child = spawn(python, [hook], {
         cwd: root,
-        env: { ...process.env, NIPAPLAY_CHAT: chatFor(sessionId) },
+        // UTF-8 both ways: Python on Windows reads and writes pipes in the
+        // console code page (GBK, ...) unless told.
+        env: { ...process.env, PYTHONUTF8: '1', PYTHONIOENCODING: 'utf-8', NIPAPLAY_CHAT: chatFor(sessionId) },
         stdio: ['pipe', 'pipe', 'pipe'],
       });
       let stdout = '';
