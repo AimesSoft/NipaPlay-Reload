@@ -1,0 +1,47 @@
+#!/usr/bin/env bash
+# NipaPlay 无界面版的命令行入口：把安装时选定的数据目录补给程序。
+#
+#   nipaplay-headless --model-status          程序的各个命令，不必再写 --data
+#   nipaplay-headless nipa chat say "…"       用这台主机的 nipa 客户端（harness/nipa）
+#   nipaplay-headless                         前台运行（没有 systemd 的机器；服务已在运行时会提示实例锁被占用）
+#
+# 数据目录来自环境变量 NIPAPLAY_HEADLESS_DATA，否则是安装时记下的那个；命令行里自己写
+# --data 会覆盖它。
+set -euo pipefail
+
+self=$(readlink -f "${BASH_SOURCE[0]}")
+app=$(cd "$(dirname "$self")/.." && pwd -P)
+data=${NIPAPLAY_HEADLESS_DATA:-}
+if [ -z "$data" ] && [ -f "$app/data-dir" ]; then
+  data=$(head -n 1 "$app/data-dir")
+fi
+if [ -z "$data" ]; then
+  echo "没有数据目录：请设置 NIPAPLAY_HEADLESS_DATA，或在命令行写 --data 绝对路径。" >&2
+  exit 64
+fi
+
+if [ "${1:-}" = nipa ]; then
+  shift
+  harness=$data/harness
+  [ -f "$harness/nipa" ] || {
+    echo "还没有 $harness/nipa：主机至少要启动过一次（服务启动后即有）。" >&2
+    exit 1
+  }
+  command -v python3 >/dev/null 2>&1 || { echo "nipa 客户端需要 python3。" >&2; exit 1; }
+  cd "$harness"
+  exec python3 ./nipa "$@"
+fi
+
+# 数据目录属于别的用户（系统级安装）时，直接动它会出错；说明该怎么做。
+if [ -d "$data" ] && [ ! -w "$data" ]; then
+  owner=$(stat -c %U "$data" 2>/dev/null || echo "数据目录的所有者")
+  case " $* " in
+    *" --help "*|*" --version "*) ;;
+    *)
+      echo "数据目录 $data 属于 $owner，当前用户不能写。请用：sudo -u $owner $self $*" >&2
+      exit 77
+      ;;
+  esac
+fi
+
+exec "$app/libexec/nipaplay-headless-host" --data "$data" "$@"

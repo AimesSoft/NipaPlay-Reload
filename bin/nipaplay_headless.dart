@@ -3,6 +3,9 @@ import 'dart:convert';
 import 'dart:io';
 import 'package:path/path.dart' as p;
 import 'package:nipaplay/next/headless/agent_cli.dart';
+import 'package:nipaplay/next/headless/dandanplay_login.dart';
+import 'package:nipaplay/next/headless/host_marker.dart';
+import 'package:nipaplay/next/headless/package_layout.dart';
 import 'package:nipaplay/next/headless/core.dart';
 import 'package:nipaplay/next/headless/dsh.dart';
 import 'package:nipaplay/next/media/media_probe_io.dart';
@@ -26,19 +29,25 @@ Future<void> main(List<String> arguments) async {
   var stop = false;
   var enroll = false;
   var enrollCredential = false;
+  var loginDandanplay = false;
   String? dshMode, agentMode;
   var keyStdin = false;
   for (var i = 0; i < arguments.length; i++) {
     final key = arguments[i];
+    if (key == '--version') {
+      stdout.writeln('nipaplay-headless $headlessVersion');
+      return;
+    }
     if (key == '--help') {
-      stdout.writeln('NipaPlay headless\n'
+      stdout.writeln('NipaPlay headless $headlessVersion\n'
           '  --data ABSOLUTE_DIR (required; independent of GUI data)\n'
           '  --media-root ABSOLUTE_DIR (repeatable; indexing/download destinations are read-only)\n'
           '  --port NUMBER (default 0; IPv4 loopback only)\n'
-          '  --seed ABSOLUTE_DIR (default assets/next/harness)\n'
+          '  --seed ABSOLUTE_DIR (default: assets/next/harness of the installed package, else of the working directory)\n'
           '  --ffprobe ABSOLUTE_EXECUTABLE (optional duration probe)\n'
           '  --native-library ABSOLUTE_LIBRARY (default beside executable)\n'
           '  --enroll-token-stdin --data DIR (host-only account enrollment)\n'
+          '  --login-dandanplay --data DIR (sign in to Dandanplay: account name, a line break, then the password on standard input; the token goes to the host vault)\n'
           '  --enroll-credential-stdin --credential-namespace NAME --credential-key KEY --data DIR (host-only vault enrollment)\n'
           '  Host files in data: mesh.json (trust/join), download.json (network configuration), network.json (gateway routing)\n'
           '  --stop --data ABSOLUTE_DIR (stop that instance)\n'
@@ -46,7 +55,7 @@ Future<void> main(List<String> arguments) async {
           '  --dsh-install --data DIR (download and unpack it; official sources, then npmmirror)\n'
           '  --dsh-status --data DIR (which runtime would be launched)\n'
           '  --dsh-check --data DIR (start it with NipaPlay plugins and open a thread, no model call)\n'
-          '  --agent-assets ABSOLUTE_DIR (default assets/next/agent: dsh-runtime.json and dsh/)\n'
+          '  --agent-assets ABSOLUTE_DIR (default: assets/next/agent of the installed package, else of the working directory: dsh-runtime.json and dsh/)\n'
           '  NIPAPLAY_AGENT_RUNTIME=dsh with NIPAPLAY_DSH_NODE and NIPAPLAY_DSH_ROOT name an installation of your own\n'
           '  Nipa on this host (the person at the host sets these; Nipa cannot):\n'
           '  --model-set --base-url URL --model NAME [--provider NAME] [--api responses|chat] [--reasoning low|medium|high] [--key-stdin] --data DIR\n'
@@ -58,6 +67,7 @@ Future<void> main(List<String> arguments) async {
     }
     if (key == '--enroll-token-stdin') { enroll = true; continue; }
     if (key == '--enroll-credential-stdin') { enrollCredential = true; continue; }
+    if (key == '--login-dandanplay') { loginDandanplay = true; continue; }
     if (key == '--dsh-install' || key == '--dsh-status' || key == '--dsh-check') {
       dshMode = key.substring(6);
       continue;
@@ -97,8 +107,9 @@ Future<void> main(List<String> arguments) async {
     return;
   }
   final root = Directory(await _canonicalDirectory(p.normalize(data)));
+  final agentAssets = options['--agent-assets'] ?? headlessAssetPath('agent');
   if (dshMode != null) {
-    exitCode = await runHeadlessDshCommand(dshMode, root, assets: options['--agent-assets']);
+    exitCode = await runHeadlessDshCommand(dshMode, root, assets: agentAssets);
     return;
   }
   if (agentMode != null) {
@@ -112,11 +123,13 @@ Future<void> main(List<String> arguments) async {
     exitCode = 64;
     return;
   }
+  if (loginDandanplay) {
+    exitCode = await runHeadlessDandanplayLogin(root);
+    return;
+  }
   if (enroll || enrollCredential) {
+    await ensureHeadlessMarker(root);
     final marker = File(p.join(root.path, 'headless.json'));
-    if (!await marker.exists()) {
-      throw StateError('Initialize the isolated headless data directory before enrollment.');
-    }
     final configuration = jsonDecode(await marker.readAsString()) as Map;
     if (configuration['format'] != 1 || configuration['host'] != 'nipaplay-headless') {
       throw StateError('Unrecognized headless data directory.');
@@ -141,6 +154,11 @@ Future<void> main(List<String> arguments) async {
   final running = File(p.join(root.path, 'running.json'));
   final stopRequest = File(p.join(root.path, 'stop.request'));
   if (stop) {
+    if (!await running.exists()) {
+      stderr.writeln('No instance is running on ${root.path}.');
+      exitCode = 1;
+      return;
+    }
     final facts = jsonDecode(await running.readAsString()) as Map;
     await stopRequest.writeAsString('${facts['pid']}', flush: true);
     stdout.writeln('Stop requested for PID ${facts['pid']}.');
@@ -192,7 +210,15 @@ Future<void> main(List<String> arguments) async {
   }
   final lock = await File(p.join(root.path, 'instance.lock'))
       .open(mode: FileMode.append);
-  await lock.lock();
+  try {
+    await lock.lock();
+  } on FileSystemException {
+    await lock.close();
+    stderr.writeln('Another instance is using ${root.path}. '
+        'Stop it first (--stop), or choose another --data.');
+    exitCode = 1;
+    return;
+  }
   HeadlessCore? core;
   final subscriptions = <StreamSubscription<ProcessSignal>>[];
   Timer? stopTimer;
@@ -208,8 +234,8 @@ Future<void> main(List<String> arguments) async {
         flush: true);
     await pendingConfig.rename(marker.path);
     if (await stopRequest.exists()) await stopRequest.delete();
-    final seedRoot = Directory(options['--seed'] ??
-        p.join(Directory.current.path, 'assets', 'next', 'harness'));
+    final seedRoot =
+        Directory(options['--seed'] ?? headlessAssetPath('harness'));
     final seed = <String, List<int>>{};
     await for (final file
         in seedRoot.list(recursive: true, followLinks: false)) {
@@ -223,8 +249,7 @@ Future<void> main(List<String> arguments) async {
         repository: Directory(p.join(root.path, 'harness')),
         mediaRoots: roots,
         seed: seed,
-        agentAssets: Directory(options['--agent-assets'] ??
-            p.join(Directory.current.path, 'assets', 'next', 'agent')),
+        agentAssets: Directory(agentAssets),
         nativeLibrary: options['--native-library'],
         port: port);
     final status = await core.start();
