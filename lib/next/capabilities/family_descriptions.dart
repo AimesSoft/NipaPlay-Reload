@@ -52,7 +52,7 @@ const appFamilyDescription =
     'credential references and required host setup, settings keys, action effects '
     'and remote policy. supported means an implementation exists; available means '
     'its declared host prerequisites are met, not a successful network probe. '
-    'app.runtime reads the non-secret facts of remote access, the mesh, the model and the runtime; app.restart relaunches the application on macOS. '
+    'app.runtime reads the non-secret facts of remote access, the mesh, the model and the runtime; app.restart relaunches the application on macOS and Windows. '
     'No secrets are accepted or returned. Remote writes follow local semantics; '
     'disk deletion/overwrite keep their existing NeedsDecision contract. '
     'On headless hosts indexing and download destinations treat media roots as '
@@ -236,7 +236,7 @@ NipaPlay 自己会做一部分：作品有 TMDB 身份时取图，同步 Classic
   'app':
       appFamilyDescription + r'''update.check 立即复用 Classic 发布检查；失败时 hasUpdate/latestVersion 为 null，错误与检查时间保留。update.status 读取上次检查；update.open 打开已核对公开发布页。没有应用内更新安装或下载能力。instance 读取当前进程事实。
 - `app.runtime` 读取这台设备上只有用户能改的设置的非秘密事实：`remoteAccess`（服务是否在运行、端口、自启动、IPv6、接收端是否开启、受信任设备数量，没有设备身份和令牌）、`mesh`（是否加入、状态、设备名、协调服务地址（不含凭据）、端口、仅本机、局域网发现、手动地址、文件代理端口、是否允许远程运行程序）、`agent`（Agent 端点开关）、`runtime`（`selected` 按环境和实验配置选中的是 codex 还是 dsh；`running` 当前对话宿主的运行时、模型、提供方，没有宿主时为 null；`codex` 的来源、版本与是否已安装）、`model`（NipaPlay 里设置的提供方、不含凭据的地址、模型名和 `keyConfigured`，或沿用的 Codex 配置里写的模型）。密钥不返回；这些设置不能通过 Action 修改。
-- `app.restart`（仅 macOS）：先启动一个脱离的辅助进程，一秒后与 `app.quit` 一样正常退出；辅助进程最多等 60 秒让本进程退出，然后用同一个可执行文件、同样的启动参数和环境（实验配置的环境变量原样带回）再启动一次，本进程没有退出就什么都不启动。结束的是连接着你的这个实例及其端点，新进程有新的进程号并自行启动端点，重连后用 `app.instance` 确认。回执只表示已安排，不证明新进程已启动。`apply` 为 `restart_app` 的设置在新进程里生效。其他平台返回 unavailable，读不到启动参数或启动不了辅助进程时也返回 unavailable，并且什么都不重启。
+- `app.restart`（仅 macOS 与 Windows）：先启动一个脱离的辅助进程，一秒后与 `app.quit` 一样正常退出；辅助进程最多等 60 秒让本进程退出，然后用同一个可执行文件、同样的启动参数和环境（实验配置的环境变量原样带回）再启动一次，本进程没有退出就什么都不启动。结束的是连接着你的这个实例及其端点，新进程有新的进程号并自行启动端点，重连后用 `app.instance` 确认。回执只表示已安排，不证明新进程已启动。`apply` 为 `restart_app` 的设置在新进程里生效。其他平台返回 unavailable，读不到启动参数或启动不了辅助进程时也返回 unavailable，并且什么都不重启。
 这台机器上可能装着多个 NipaPlay（正式版、开发构建、实验副本）；按应用名或 bundle id 打开的未必是 `nipa` 连接的那个实例。`nipa status` 的实例事实和 `ui.*` 的界面操作、截图来自当前连接的实例。
 - `./nipa status` 的 `body.playback` 给当前播放的事实：`state`（播放器状态，没有视频也没有错误时为 `idle`）、`positionMs`、`durationMs`、`path`；当前有错误时带 `error`（`stage`、`category`、`failureId`）；本进程有过播放失败时带 `lastFailure`（最近一条的 `failureId`、`at`、`category`、`stage`、`kernel`、`path`）；资料库认得该文件时再有 `workId`、`work`、`episodeId`、`episode`（如“第 3 集 标题”，电影不带集号）。不认得就只有播放器自己的事实，不猜作品。`body.diagnostics` 给本进程未捕获错误的种数与次数（`uncaughtErrors`、`uncaughtOccurrences`）、是否有还没被 `diagnostics.errors` 返回过的异常退出（`uncleanExitUnread`、`uncleanExitsUnread`、`latestUncleanExitAt`）和是否在记录（`recording`）。
 - `./nipa status` 的 `body` 对各部分各给一个简短摘要，细节在 `body.views` 指向的视图里：`sources`（数量、已连接、失败、不可达地址、凭据被拒绝/缺失、同步失败/进行中）、`downloads`（默认目录、是否启用、进行/排队/暂停任务数、总上下行速率）、`space`（首个卷的可用与总量，`volumes` 是所有卷）、`scan`（是否在扫描、目录数、识别失败文件数）、`network`（本进程观察到的来源数与失败数）、`updates`（是否检查过，检查过则带时间、最新版本、是否有更新、错误码）、`hooks`（可运行、因无执行位被忽略、不认识的文件数，以及 `schedules` 的文件状态、条目数、无效数、跳过次数）、`mesh`（设备数与在线数）。读取失败的部分是 `{unavailable, reason}`，`reason` 带错误码与信息，不影响其他部分。
