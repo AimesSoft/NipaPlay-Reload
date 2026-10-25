@@ -174,6 +174,60 @@ Function .onInitARM64
   !insertmacro MUI_LANGDLL_DISPLAY
 FunctionEnd
 
+; 防火墙放行规则
+; 规则名固定为 NipaPlay（TCP 和 UDP 各一条），只放行域和专用网络，不放行公用网络。
+; 失败不会让安装失败，只在安装详情和 %TEMP%\NipaPlay_Setup_firewall.log 里留记录。
+!define FW_RULE_NAME "NipaPlay"
+!define FW_LOG "$TEMP\NipaPlay_Setup_firewall.log"
+
+!macro FwLog TEXT
+  DetailPrint "${TEXT}"
+  FileOpen $9 "${FW_LOG}" a
+  FileSeek $9 0 END
+  FileWrite $9 "${TEXT}$\r$\n"
+  FileClose $9
+!macroend
+
+Function InstallFirewallRules
+  ; 32 位安装器在 64 位系统上要关掉文件系统重定向，才能调到 64 位的 netsh 和 PowerShell
+  ${DisableX64FSRedirection}
+
+  ; 先删同名且指向这个安装路径的规则（重复安装或升级时不累积；装在别处的另一份不受影响），再加
+  nsExec::ExecToLog '"$SYSDIR\netsh.exe" advfirewall firewall delete rule name="${FW_RULE_NAME}" program="$INSTDIR\NipaPlay.exe"'
+  Pop $0
+
+  nsExec::ExecToLog '"$SYSDIR\netsh.exe" advfirewall firewall add rule name="${FW_RULE_NAME}" dir=in action=allow program="$INSTDIR\NipaPlay.exe" enable=yes profile=domain,private protocol=TCP'
+  Pop $0
+  ${If} $0 != 0
+    !insertmacro FwLog "防火墙：添加 TCP 放行规则失败（netsh 返回 $0）"
+  ${EndIf}
+  nsExec::ExecToLog '"$SYSDIR\netsh.exe" advfirewall firewall add rule name="${FW_RULE_NAME}" dir=in action=allow program="$INSTDIR\NipaPlay.exe" enable=yes profile=domain,private protocol=UDP'
+  Pop $1
+  ${If} $1 != 0
+    !insertmacro FwLog "防火墙：添加 UDP 放行规则失败（netsh 返回 $1）"
+  ${EndIf}
+
+  ; 清掉旧安装留下的、指向同一路径的系统自动生成的入站 Block 规则
+  InitPluginsDir
+  File "/oname=$PLUGINSDIR\nipaplay_firewall.ps1" "nipaplay_firewall.ps1"
+  nsExec::ExecToLog '"$SYSDIR\WindowsPowerShell\v1.0\powershell.exe" -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "$PLUGINSDIR\nipaplay_firewall.ps1" -Path "$INSTDIR\NipaPlay.exe"'
+  Pop $2
+  ${If} $2 != 0
+    !insertmacro FwLog "防火墙：清理旧的 Block 规则失败（返回 $2）"
+  ${EndIf}
+
+  ${EnableX64FSRedirection}
+FunctionEnd
+
+Function un.RemoveFirewallRules
+  ${DisableX64FSRedirection}
+  ; 只删指向这个安装路径的同名规则
+  nsExec::ExecToLog '"$SYSDIR\netsh.exe" advfirewall firewall delete rule name="${FW_RULE_NAME}" program="$INSTDIR\NipaPlay.exe"'
+  Pop $0
+  ; 没有同名规则时 netsh 返回 1，不算失败
+  ${EnableX64FSRedirection}
+FunctionEnd
+
 ; 安装部分
 Section "NipaPlay 主程序" SecMain
   SectionIn RO  ; 必须安装
@@ -195,7 +249,10 @@ Section "NipaPlay 主程序" SecMain
   WriteRegStr HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\NipaPlay" "Publisher" "MCDFSteve"
   WriteRegStr HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\NipaPlay" "DisplayIcon" "$INSTDIR\NipaPlay.exe"
   WriteRegStr HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\NipaPlay" "URLInfoAbout" "https://github.com/AimesSoft/NipaPlay-Reload"
-  
+
+  ; 防火墙放行规则（域和专用网络）
+  Call InstallFirewallRules
+
 SectionEnd
 
 Section "创建桌面快捷方式" SecDesktop
@@ -249,6 +306,9 @@ LangString DESC_SecFileAssoc ${LANG_ENGLISH} "Associate video file formats with 
 
 ; 卸载部分
 Section "Uninstall"
+  ; 删除防火墙放行规则
+  Call un.RemoveFirewallRules
+
   ; 删除程序文件
   Delete "$INSTDIR\NipaPlay.exe"
   Delete "$INSTDIR\*.dll"
