@@ -17,6 +17,12 @@ class LabsSettingsContent extends StatelessWidget {
 
   final VoidCallback onOpenWebDavQuickSettings;
 
+  /// Which kind of device this is for NipaPlay Next: a desktop runs Nipa, an
+  /// iPad only hosts Next's interface and body. Tests set it.
+  @visibleForTesting
+  static ({bool desktop, bool iPad}) Function() device =
+      () => (desktop: globals.isDesktop, iPad: globals.isIPad);
+
   @override
   Widget build(BuildContext context) {
     return Consumer<LabsSettingsProvider>(
@@ -87,13 +93,15 @@ class LabsSettingsContent extends StatelessWidget {
             ),
             // The way into NipaPlay Next, and nothing of it: Nipa, her
             // endpoint and her settings live in Next's own interface and run
-            // only while it is open (D1).
-            if (globals.isDesktop)
+            // only while it is open (D1). An iPad gets Next's interface and
+            // body; Nipa runs on the user's other devices.
+            if (device().desktop || device().iPad)
               AdaptiveSettingsSection(
                 children: [
                   AdaptiveSettingsTile.toggle(
                     title: 'NipaPlay Next',
-                    subtitle: labsSettings.isLoaded && !labsSettings.nextAvailable
+                    subtitle: labsSettings.isLoaded &&
+                            !labsSettings.nextAvailable
                         ? _text(
                             context,
                             '此 macOS 应用处于 App Sandbox 中，无法提供 NipaPlay Next。请使用 GitHub 完整版。',
@@ -136,6 +144,27 @@ class LabsSettingsContent extends StatelessWidget {
     );
   }
 
+  /// An iPad does not run Nipa: the Nipa on the user's other devices (same
+  /// account, same local network) can operate NipaPlay here.
+  String _iPadConsent(BuildContext context) => _text(
+        context,
+        '开启后，你同一账号下其他设备上的 AI Agent 可以在同一局域网内操作这台 iPad 上的 NipaPlay：播放、改设置、读片库和观看记录、截取 NipaPlay 的画面。删除文件、登录账号仍要你在这台 iPad 上亲手确认。\n\n'
+            'Agent 会犯错，也可能被网页、文件名、简介里的恶意内容误导，做出你没有要求的事。\n\n'
+            '你在这里的对话以及 Agent 读到的内容，会发送给那台设备所选的模型服务商。\n\n'
+            '这是实验功能，行为和数据随时可能变化，不保证兼容。\n\n'
+            '只在你信任的设备和模型服务上开启。',
+        '開啟後，你同一帳號下其他裝置上的 AI Agent 可以在同一區域網路內操作這台 iPad 上的 NipaPlay：播放、改設定、讀片庫和觀看紀錄、擷取 NipaPlay 的畫面。刪除檔案、登入帳號仍要你在這台 iPad 上親手確認。\n\n'
+            'Agent 會犯錯，也可能被網頁、檔案名稱、簡介裡的惡意內容誤導，做出你沒有要求的事。\n\n'
+            '你在這裡的對話以及 Agent 讀到的內容，會傳送給那台裝置所選的模型服務商。\n\n'
+            '這是實驗功能，行為和資料隨時可能變化，不保證相容。\n\n'
+            '只在你信任的裝置和模型服務上開啟。',
+        'Once enabled, the AI Agent on your other devices signed in to the same account can operate NipaPlay on this iPad over the local network: play, change settings, read the library and watch history, and capture NipaPlay\'s screen. Deleting files and signing in to accounts still need you to confirm on this iPad.\n\n'
+            'The Agent makes mistakes and may be misled by malicious content in webpages, filenames or descriptions into doing things you did not request.\n\n'
+            'Your conversations here and the content the Agent reads will be sent to the model provider chosen on that device.\n\n'
+            'This is an experimental feature. Its behavior and data may change at any time, with no guarantee of compatibility.\n\n'
+            'Enable it only on devices and a model service you trust.',
+      );
+
   Future<bool> _confirmNext(BuildContext context) async =>
       await showDialog<bool>(
         context: context,
@@ -144,24 +173,26 @@ class LabsSettingsContent extends StatelessWidget {
               '開啟 NipaPlay Next（實驗）', 'Enable NipaPlay Next (Experimental)')),
           content: SingleChildScrollView(
             child: Text(
-              _text(
-                context,
-                '开启后，AI Agent 将以你的身份使用这台电脑：读写和删除文件、联网、运行程序、使用你浏览器中各网站的登录状态。\n\n'
-                    'Agent 会犯错，也可能被网页、文件名、简介里的恶意内容误导，做出你没有要求的事。\n\n'
-                    '你的对话以及 Agent 读到的内容，会发送给你所选的模型服务商。\n\n'
-                    '这是实验功能，行为和数据随时可能变化，不保证兼容。\n\n'
-                    '只在你信任的电脑和模型服务上开启。',
-                '開啟後，AI Agent 將以你的身分使用這台電腦：讀寫和刪除檔案、連網、執行程式、使用你瀏覽器中各網站的登入狀態。\n\n'
-                    'Agent 會犯錯，也可能被網頁、檔案名稱、簡介裡的惡意內容誤導，做出你沒有要求的事。\n\n'
-                    '你的對話以及 Agent 讀到的內容，會傳送給你所選的模型服務商。\n\n'
-                    '這是實驗功能，行為和資料隨時可能變化，不保證相容。\n\n'
-                    '只在你信任的電腦和模型服務上開啟。',
-                'Once enabled, the AI Agent will use this computer as you: read, write and delete files, access the network, run programs, and use your signed-in sessions on websites in your browser.\n\n'
-                    'The Agent makes mistakes and may be misled by malicious content in webpages, filenames or descriptions into doing things you did not request.\n\n'
-                    'Your conversations and the content the Agent reads will be sent to your chosen model provider.\n\n'
-                    'This is an experimental feature. Its behavior and data may change at any time, with no guarantee of compatibility.\n\n'
-                    'Enable it only on a computer and model service you trust.',
-              ),
+              device().iPad
+                  ? _iPadConsent(context)
+                  : _text(
+                      context,
+                      '开启后，AI Agent 将以你的身份使用这台电脑：读写和删除文件、联网、运行程序、使用你浏览器中各网站的登录状态。\n\n'
+                          'Agent 会犯错，也可能被网页、文件名、简介里的恶意内容误导，做出你没有要求的事。\n\n'
+                          '你的对话以及 Agent 读到的内容，会发送给你所选的模型服务商。\n\n'
+                          '这是实验功能，行为和数据随时可能变化，不保证兼容。\n\n'
+                          '只在你信任的电脑和模型服务上开启。',
+                      '開啟後，AI Agent 將以你的身分使用這台電腦：讀寫和刪除檔案、連網、執行程式、使用你瀏覽器中各網站的登入狀態。\n\n'
+                          'Agent 會犯錯，也可能被網頁、檔案名稱、簡介裡的惡意內容誤導，做出你沒有要求的事。\n\n'
+                          '你的對話以及 Agent 讀到的內容，會傳送給你所選的模型服務商。\n\n'
+                          '這是實驗功能，行為和資料隨時可能變化，不保證相容。\n\n'
+                          '只在你信任的電腦和模型服務上開啟。',
+                      'Once enabled, the AI Agent will use this computer as you: read, write and delete files, access the network, run programs, and use your signed-in sessions on websites in your browser.\n\n'
+                          'The Agent makes mistakes and may be misled by malicious content in webpages, filenames or descriptions into doing things you did not request.\n\n'
+                          'Your conversations and the content the Agent reads will be sent to your chosen model provider.\n\n'
+                          'This is an experimental feature. Its behavior and data may change at any time, with no guarantee of compatibility.\n\n'
+                          'Enable it only on a computer and model service you trust.',
+                    ),
               style: const TextStyle(color: Colors.red),
             ),
           ),
