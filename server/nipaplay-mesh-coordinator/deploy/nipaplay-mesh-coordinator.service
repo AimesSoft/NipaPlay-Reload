@@ -11,10 +11,25 @@ EnvironmentFile=/etc/nipaplay-mesh-coordinator.env
 ExecStart=/opt/nipaplay-mesh-coordinator/nipaplay-mesh-coordinator
 Restart=always
 RestartSec=3
+
+# A small neighbour on a shared 2 GB host: bounded memory and tasks, nothing
+# the process does not need (it only listens on loopback and talks HTTP).
+MemoryMax=256M
+TasksMax=64
+LimitNOFILE=4096
 NoNewPrivileges=true
+CapabilityBoundingSet=
 PrivateTmp=true
+PrivateDevices=true
 ProtectHome=true
 ProtectSystem=strict
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+RestrictNamespaces=true
+LockPersonality=true
+UMask=0077
 ReadWritePaths=/var/lib/nipaplay-mesh-coordinator
 
 [Install]
