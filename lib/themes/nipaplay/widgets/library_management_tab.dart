@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/cupertino.dart' as cupertino;
 import 'package:flutter/material.dart';
+import 'package:nipaplay/security/credential_store.dart';
 import 'package:nipaplay/media_library/pick_local_media_directory.dart';
 import 'package:nipaplay/services/harmony_local_media_service.dart';
 import 'package:nipaplay/utils/platform_identity.dart' as platformIdentity;
@@ -57,6 +58,10 @@ import 'package:nipaplay/app/app_display_surface_scope.dart';
 enum LibraryManagementSection { local, webdav, smb }
 
 enum _MountedLibraryType { local, webdav, smb }
+
+/// 连接状态文字；密码不见了就直接说需要重新输入。
+String _connectionStatus(bool connected, bool passwordMissing) =>
+    passwordMissing ? '需要重新输入密码' : (connected ? '已连接' : '未连接');
 
 /// 地址是否可达；`null` 表示尚未检测过。
 LibraryManagementAddressStatus _addressStatus(bool? reachable) {
@@ -313,6 +318,7 @@ class _LibraryManagementTabState extends State<LibraryManagementTab> {
 
     // 启动阶段的可达性检测完成后刷新地址行的连通性状态。
     MediaLibraryReachabilityService.instance.addListener(_onReachabilityUpdated);
+    CredentialStore.instance.missing.addListener(_onReachabilityUpdated);
 
     // 延迟初始化，确保挂载完成
     if (widget.section == LibraryManagementSection.local) {
@@ -594,6 +600,7 @@ class _LibraryManagementTabState extends State<LibraryManagementTab> {
     }
     MediaLibraryReachabilityService.instance
         .removeListener(_onReachabilityUpdated);
+    CredentialStore.instance.missing.removeListener(_onReachabilityUpdated);
     _searchController.dispose();
     _listScrollController.dispose();
     _webdavScrollController.dispose();
@@ -2688,7 +2695,8 @@ class _LibraryManagementTabState extends State<LibraryManagementTab> {
               title: connection.name,
               subtitle: _webdavAddressLabel(connection),
               addressLines: _webdavAddressLines(connection),
-              status: connection.isConnected ? '已连接' : '未连接',
+              status: _connectionStatus(
+                  connection.isConnected, connection.passwordMissing),
               icon: LibraryManagementIcon.cloud,
               onOpen: !isRemoteMode && connection.isConnected
                   ? () => _openWebDAVMount(connection)
@@ -2739,7 +2747,8 @@ class _LibraryManagementTabState extends State<LibraryManagementTab> {
               title: connection.name,
               subtitle: _smbAddressLabel(connection),
               addressLines: _smbAddressLines(connection),
-              status: connection.isConnected ? '已连接' : '未连接',
+              status: _connectionStatus(
+                  connection.isConnected, connection.passwordMissing),
               icon: LibraryManagementIcon.server,
               onOpen: !isRemoteMode && connection.isConnected
                   ? () => _openSMBMount(connection)
@@ -3976,6 +3985,7 @@ class _LibraryManagementTabState extends State<LibraryManagementTab> {
       title: connection.name,
       subtitle: _webdavAddressLabel(connection),
       connected: connection.isConnected,
+      passwordMissing: connection.passwordMissing,
       selected: selected,
       autofocus: autofocus,
       onActivate: () => _selectLargeScreenWebDAVConnection(connection),
@@ -4111,6 +4121,7 @@ class _LibraryManagementTabState extends State<LibraryManagementTab> {
       title: connection.name,
       subtitle: hostLabel,
       connected: connection.isConnected,
+      passwordMissing: connection.passwordMissing,
       selected: selected,
       autofocus: autofocus,
       onActivate: () => _selectLargeScreenSMBConnection(connection),
@@ -4177,6 +4188,7 @@ class _LibraryManagementTabState extends State<LibraryManagementTab> {
     required String title,
     required String subtitle,
     required bool connected,
+    bool passwordMissing = false,
     required bool selected,
     required bool autofocus,
     required VoidCallback onActivate,
@@ -4220,7 +4232,8 @@ class _LibraryManagementTabState extends State<LibraryManagementTab> {
                 ),
               ),
               const SizedBox(width: 8),
-              _buildLargeScreenConnectionBadge(connected),
+              _buildLargeScreenConnectionBadge(connected,
+                  passwordMissing: passwordMissing),
             ],
           ),
           const SizedBox(height: 8),
@@ -4241,8 +4254,11 @@ class _LibraryManagementTabState extends State<LibraryManagementTab> {
     );
   }
 
-  Widget _buildLargeScreenConnectionBadge(bool connected) {
-    final color = connected ? Colors.lightGreenAccent : Colors.orangeAccent;
+  Widget _buildLargeScreenConnectionBadge(bool connected,
+      {bool passwordMissing = false}) {
+    final color = connected && !passwordMissing
+        ? Colors.lightGreenAccent
+        : Colors.orangeAccent;
     return DecoratedBox(
       decoration: BoxDecoration(
         color: color.withValues(alpha: 0.15),
@@ -4252,7 +4268,7 @@ class _LibraryManagementTabState extends State<LibraryManagementTab> {
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
         child: Text(
-          connected ? '已连接' : '未连接',
+          _connectionStatus(connected, passwordMissing),
           style: TextStyle(
             color: color,
             fontSize: 11,
@@ -5276,7 +5292,7 @@ class _LibraryManagementTabState extends State<LibraryManagementTab> {
                 borderRadius: BorderRadius.circular(8),
               ),
               child: Text(
-                connection.isConnected ? '已连接' : '未连接',
+                _connectionStatus(connection.isConnected, connection.passwordMissing),
                 style: TextStyle(color: textColor, fontSize: 10),
               ),
             ),
@@ -5370,7 +5386,7 @@ class _LibraryManagementTabState extends State<LibraryManagementTab> {
                 borderRadius: BorderRadius.circular(8),
               ),
               child: Text(
-                connection.isConnected ? '已连接' : '未连接',
+                _connectionStatus(connection.isConnected, connection.passwordMissing),
                 style: TextStyle(color: textColor, fontSize: 10),
               ),
             ),

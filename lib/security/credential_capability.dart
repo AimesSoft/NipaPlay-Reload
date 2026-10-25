@@ -1,4 +1,5 @@
 import 'package:nipa_harness/nipa_harness.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:nipaplay/utils/lab_profile.dart';
 import 'credential_store.dart';
 import 'credential_vault.dart';
@@ -17,7 +18,8 @@ final class _Status extends Action<NoInput, _StatusResult> {
   ActionSpec get spec => const ActionSpec(
         id: 'credentials.status',
         title: '凭据保险库状态',
-        description: '读取本次运行已观察到的凭据失败与授权拒绝；不访问保险库，不返回秘密。',
+        description:
+            '读取本次运行已观察到的凭据失败与授权拒绝，以及哪些连接或账号的密码不见了（missing，需要用户重新输入）；不访问保险库，不返回秘密。',
         effect: Effect.read,
         input: ObjectSchema({}),
         output: ObjectSchema({
@@ -33,30 +35,50 @@ final class _Status extends Action<NoInput, _StatusResult> {
             'reference',
             'reason',
             'automaticRetryBlocked'
+          ])),
+          'missing': ArraySchema(ObjectSchema({
+            'reference': ObjectSchema(
+                {'namespace': StringSchema(), 'key': StringSchema()},
+                required: ['namespace', 'key']),
+            'kind': StringSchema(),
+            'name': StringSchema(),
+            'notice': StringSchema(),
+          }, required: [
+            'reference',
+            'kind',
+            'notice'
           ]))
         }, required: [
           'backend',
           'notices',
-          'failures'
+          'failures',
+          'missing'
         ]),
       );
   @override
   NoInput decodeInput(JsonMap json) => const NoInput();
   @override
   Future<Outcome<_StatusResult>> run(
-          NoInput input, Invocation invocation) async =>
-      Completed(_StatusResult(store));
+      NoInput input, Invocation invocation) async {
+    final missing =
+        await store.missingEntries(await SharedPreferences.getInstance());
+    return Completed(_StatusResult(store, missing));
+  }
 }
 
 final class _StatusResult implements JsonEncodable {
-  _StatusResult(this.store);
+  _StatusResult(this.store, this.missing);
   final CredentialStore store;
+  final List<JsonMap> missing;
   @override
   JsonMap toJson() => {
         'backend': LabProfile.active
             ? 'labFile'
             : (store.desktop ? 'system' : 'legacy'),
-        'notices': store.notices.value,
+        'notices': [
+          ...store.notices.value,
+          for (final entry in missing) entry['notice'] as String,
+        ],
         'failures': [
           for (final entry in store.failures.entries)
             {
@@ -66,6 +88,7 @@ final class _StatusResult implements JsonEncodable {
                   store.vault.blocked.containsKey(entry.key),
             }
         ],
+        'missing': missing,
       };
 }
 

@@ -343,7 +343,9 @@ class _CupertinoWebDAVConnectionSheetState
                     context,
                     label: context.l10n.passwordOptional,
                     controller: _passwordController,
-                    placeholder: widget.editConnection?.passwordIsResolved == false
+                    placeholder: widget.editConnection?.passwordMissing == true
+                        ? '需要重新输入密码'
+                        : widget.editConnection?.passwordIsResolved == false
                         ? '已保存密码；留空保留，输入新密码可替换'
                         : context.l10n.canBeEmpty,
                     obscureText: true,

@@ -728,9 +728,14 @@ class SharedRemoteLibraryProvider extends ChangeNotifier {
         if (origin != null && origin != uri.origin) {
           throw StateError('credential_origin_changed');
         }
-        final password = await CredentialStore.instance.vault
-            .read(CredentialRef('shared_remote_hosts', 'basic:${host.id}'));
-        if (password == null) throw StateError('credential_missing');
+        final passwordRef =
+            CredentialRef('shared_remote_hosts', 'basic:${host.id}');
+        final password = await CredentialStore.instance.vault.read(passwordRef);
+        if (password == null) {
+          final error = StateError('credential_missing');
+          CredentialStore.instance.report(passwordRef, error);
+          throw error;
+        }
         return 'Basic ${base64Encode(utf8.encode('$username:$password'))}';
       }
       return null;

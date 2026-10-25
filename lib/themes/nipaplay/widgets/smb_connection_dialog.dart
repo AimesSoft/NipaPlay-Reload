@@ -232,7 +232,8 @@ class _SMBConnectionFormState extends State<_SMBConnectionForm> {
                 controller: _usernameController,
                 fieldId: 'username',
                 label: '用户名（可选）',
-                hint: widget.editConnection?.passwordIsResolved == false
+                hint: widget.editConnection?.passwordIsResolved == false &&
+                        widget.editConnection?.passwordMissing != true
                     ? '已保存密码；留空保留，输入新密码可替换'
                     : '留空将使用匿名访问',
               ),
@@ -241,7 +242,9 @@ class _SMBConnectionFormState extends State<_SMBConnectionForm> {
                 controller: _passwordController,
                 fieldId: 'password',
                 label: '密码（可选）',
-                hint: '留空将使用匿名访问',
+                hint: widget.editConnection?.passwordMissing == true
+                    ? '需要重新输入密码'
+                    : '留空将使用匿名访问',
                 obscureText: !_passwordVisible,
                 suffixIcon: IconButton(
                   icon: Icon(

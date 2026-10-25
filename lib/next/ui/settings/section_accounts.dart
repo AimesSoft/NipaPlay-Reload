@@ -897,15 +897,18 @@ class _SourceRowState extends State<_SourceRow> {
       UiSourceState.unverified => NextColors.p4,
       UiSourceState.failed => NextColors.accent,
     };
+    final dot = s.needsPassword ? NextColors.accent : state;
     return SettingsRow(
       leading: ServiceMark(mark, color, square: true),
       title: s.name,
       subtitle: [
         UiMediaSource.typeName(s.type),
-        if (s.place.isNotEmpty) s.place
+        if (s.place.isNotEmpty) s.place,
+        if (s.needsPassword) '需要重新输入密码',
       ].join(' · '),
       trailing: Row(mainAxisSize: MainAxisSize.min, children: [
-        StateDot(state, glow: s.state != UiSourceState.unverified),
+        StateDot(dot,
+            glow: s.needsPassword || s.state != UiSourceState.unverified),
         const SizedBox(width: 14),
         AnimatedRotation(
           turns: widget.open ? 0.25 : 0,
