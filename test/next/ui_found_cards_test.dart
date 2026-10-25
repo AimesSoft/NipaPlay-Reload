@@ -27,6 +27,7 @@ import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import '../../packages/nipa_harness/test/task_support.dart';
 import '../security/memory_vault.dart';
 import 'media_test_support.dart';
+import 'package:path/path.dart' as ppath;
 
 /// A provider that answers from [records] (`objectType/externalId`) and
 /// counts what it was asked.
@@ -265,7 +266,7 @@ void main() {
       expect(work.overview, '长安十二时辰 的简介。');
       expect(work.next, isNull);
       expect(await File(work.artwork.poster!).exists(), isTrue);
-      expect(work.artwork.poster, startsWith('${root.path}/artwork/'));
+      expect(work.artwork.poster, startsWith(ppath.join(root.path, 'artwork') + ppath.separator));
       expect(work.artwork.tint, 0xff884422);
       final items = (cards.last as UiCandidatesCard).items;
       expect(items.map((i) => i.work.workId),

@@ -5,6 +5,7 @@ import 'raster_io.dart' if (dart.library.ui) 'raster_flutter.dart';
 import 'package:crypto/crypto.dart';
 import 'package:http/http.dart' as http;
 import 'package:nipa_harness/nipa_harness.dart';
+import 'package:path/path.dart' as p;
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
 import '../../security/built_in_credentials.dart';
@@ -265,8 +266,8 @@ final class ArtworkCache {
       throw const Failure(FailureCode.invalidInput,
           'Artwork must use an HTTP(S) URL without credentials.');
     }
-    final file = File(
-        '${root.path}/artwork/${sha256.convert(utf8.encode(url))}${uri.path.endsWith('.png') ? '.png' : '.jpg'}');
+    final file = File(p.join(root.path, 'artwork',
+        '${sha256.convert(utf8.encode(url))}${uri.path.endsWith('.png') ? '.png' : '.jpg'}'));
     if (await file.exists()) return file.path;
     final response =
         await _client.get(uri).timeout(const Duration(seconds: 30));
@@ -311,7 +312,8 @@ final class ArtworkCache {
     }
     final bytes = await File(file).readAsBytes();
     await validateRaster(bytes);
-    final target = File('${root.path}/artwork/${sha256.convert(bytes)}.png');
+    final target =
+        File(p.join(root.path, 'artwork', '${sha256.convert(bytes)}.png'));
     await target.parent.create(recursive: true);
     if (!await target.exists()) {
       final staging = File('${target.path}.pending');

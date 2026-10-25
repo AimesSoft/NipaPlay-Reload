@@ -20,6 +20,7 @@ import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import '../../packages/nipa_harness/test/task_support.dart';
 import '../security/memory_vault.dart';
 import 'media_test_support.dart';
+import 'package:path/path.dart' as ppath;
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -69,7 +70,7 @@ void main() {
         'kind': 'work',
         'attributes': jsonEncode({'title': id == 'w1' ? '葬送的芙莉莲' : '孤独摇滚！'})
       });
-    await File('${root.path}/journal.jsonl').writeAsString('${jsonEncode({
+    await File(ppath.join(root.path, 'journal.jsonl')).writeAsString('${jsonEncode({
           'event': 'chat.turn_boundary',
           'origin': 'harness_cli:chat:fixture',
           'threadId': 'thread',
@@ -86,7 +87,7 @@ void main() {
       action, input, Invocation(origin: 'harness_cli:chat:fixture'));
 
   test('home resolves only the Classic locators it was given', () async {
-    final locator = '${root.path}/media/Classic episode.mkv';
+    final locator = ppath.join(root.path, 'media', 'Classic episode.mkv');
     await store.database.insert('media_entities', {
       'id': 'release-home',
       'kind': 'release',
@@ -212,7 +213,7 @@ void main() {
     expect(task.parentThreadId, 'parent');
     expect(task.currentActivity, '正在整理弹幕');
     expect(task.progress, isNull);
-    await File('${root.path}/journal.jsonl').writeAsString(
+    await File(ppath.join(root.path, 'journal.jsonl')).writeAsString(
         '${jsonEncode({
               'event': 'chat.turn_boundary',
               'origin': 'harness_cli:helper:${job.jobId}',
@@ -250,7 +251,7 @@ void main() {
     final picture = recorder.endRecording();
     final image = await picture.toImage(32, 48);
     final bytes = (await image.toByteData(format: ui.ImageByteFormat.png))!;
-    final file = File('${root.path}/input.png');
+    final file = File(ppath.join(root.path, 'input.png'));
     await file.writeAsBytes(bytes.buffer.asUint8List());
     image.dispose();
     picture.dispose();
@@ -385,7 +386,7 @@ void main() {
 
   test('ui.present takes the current turn from the chat host, not the journal',
       () async {
-    final journal = File('${root.path}/journal.jsonl');
+    final journal = File(ppath.join(root.path, 'journal.jsonl'));
     Map<String, Object?> boundary(String phase) => {
           'event': 'chat.turn_boundary',
           'origin': 'harness_cli:chat:memory',
@@ -445,7 +446,7 @@ void main() {
         },
         Invocation(origin: 'harness_cli'));
     expect(external, isA<Failed>());
-    await File('${root.path}/journal.jsonl').writeAsString(
+    await File(ppath.join(root.path, 'journal.jsonl')).writeAsString(
         '${jsonEncode({
               'event': 'chat.turn_boundary',
               'origin': 'harness_cli:chat:fixture',
@@ -617,7 +618,7 @@ void main() {
         hasLength(2));
 
     // The same work in another turn is shown there.
-    await File('${root.path}/journal.jsonl').writeAsString(
+    await File(ppath.join(root.path, 'journal.jsonl')).writeAsString(
         '${jsonEncode({
               'event': 'chat.turn_boundary',
               'origin': 'harness_cli:chat:fixture',
@@ -651,7 +652,7 @@ void main() {
       'harness_cli:helper:${job.jobId}',
       'codex_native:helper-thread'
     ]) {
-      await File('${root.path}/journal.jsonl').writeAsString(
+      await File(ppath.join(root.path, 'journal.jsonl')).writeAsString(
           '${jsonEncode({
                 'event': 'chat.turn_boundary',
                 'origin': origin,
