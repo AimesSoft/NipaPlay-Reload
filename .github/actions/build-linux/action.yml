@@ -243,7 +243,7 @@ runs:
         APP_NAME_LOWER="nipaplay"
         VERSION="${APP_VERSION}"
         # deb/rpm 的版本号里 "-" 另有含义（rpm 直接拒绝）；预发布写成 "~"，排在正式版之前，如 2.0.0~alpha.1
-        PKG_VERSION="${VERSION//-/~}"
+        PKG_VERSION="$(printf %s "$VERSION" | tr - "~")"
         ARCH="${APP_ARCH}"
         FLUTTER_ARCH_DIR="x64"
         RPM_ARCH_DIR="x86_64"
