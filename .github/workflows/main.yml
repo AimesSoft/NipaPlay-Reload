@@ -35,11 +35,13 @@ jobs:
     outputs:
       triggered: ${{ steps.check.outputs.triggered }}
       release_title: ${{ steps.check.outputs.release_title }}
+      prerelease: ${{ steps.check.outputs.prerelease }}
     steps:
       - name: Check release title
         id: check
         env:
           RELEASE_TITLE: ${{ inputs.release_title }}
+          REF_NAME: ${{ github.ref_name }}
         run: |
           if [[ "$RELEASE_TITLE" =~ ^[0-9]{4}\.[0-9]{4}$ ]]; then
             echo "✅ Release title accepted."
@@ -48,6 +50,16 @@ jobs:
           else
             echo "🛑 release_title must match YYYY.MMDD, for example 2026.0430."
             exit 1
+          fi
+          # A release built from any branch but main (NipaPlay Next is released from
+          # next) is a prerelease: never "latest", so the in-app update check
+          # (releases/latest) and Homebrew keep offering the stable line, and it is
+          # not sent to App Store review nor bumps main's version.
+          if [[ "$REF_NAME" == "main" ]]; then
+            echo "prerelease=false" >> $GITHUB_OUTPUT
+          else
+            echo "📦 Releasing from $REF_NAME: this is a prerelease."
+            echo "prerelease=true" >> $GITHUB_OUTPUT
           fi
 
   # 并行构建所有平台，支持fail-fast: false策略
@@ -68,7 +80,7 @@ jobs:
     if: needs.Gatekeeper.outputs.triggered == 'true'
     uses: ./.github/workflows/build-ios.yml
     with:
-      upload-to-app-store: true
+      upload-to-app-store: ${{ needs.Gatekeeper.outputs.prerelease != 'true' }}
     secrets:
       IOS_DISTRIBUTION_CERTIFICATE_BASE64: ${{ secrets.IOS_DISTRIBUTION_CERTIFICATE_BASE64 }}
       IOS_DISTRIBUTION_CERTIFICATE_PASSWORD: ${{ secrets.IOS_DISTRIBUTION_CERTIFICATE_PASSWORD }}
@@ -424,6 +436,9 @@ jobs:
           tag: v${{ needs.Build-Android.outputs.version }}
           name: Release v${{ needs.Build-Android.outputs.version }}
           bodyFile: "release_notes.md"
+          commit: ${{ github.sha }}
+          prerelease: ${{ needs.Gatekeeper.outputs.prerelease == 'true' }}
+          makeLatest: ${{ needs.Gatekeeper.outputs.prerelease == 'true' && 'false' || 'legacy' }}
           allowUpdates: true
           artifacts: /tmp/artifacts/release-Android/*.apk,/tmp/artifacts/release-iOS/*.ipa,/tmp/artifacts/release-macOS-*/*.dmg,/tmp/artifacts/release-macOS-*/*.zip,/tmp/artifacts/release-macOS-*/*.pkg,/tmp/artifacts/release-Windows-x64/*.zip,/tmp/artifacts/release-Windows-x64/*.exe,/tmp/artifacts/release-Windows-x64/*.msix,/tmp/artifacts/release-Linux-amd64/*.deb,/tmp/artifacts/release-Linux-amd64/*.AppImage,/tmp/artifacts/release-Linux-amd64/*.tar.gz,/tmp/artifacts/release-Linux-amd64/*.rpm,/tmp/artifacts/release-Linux-arm64/*.deb,/tmp/artifacts/release-Linux-arm64/*.tar.gz,/tmp/artifacts/release-Linux-arm64/*.rpm,/tmp/artifacts/release-HarmonyOS-signed/*.hap,/tmp/artifacts/release-tvOS-sideload/*.ipa
           artifactErrorsFailBuild: true
@@ -432,8 +447,8 @@ jobs:
 
   Publish-iOS-App-Store:
     name: Publish iOS to App Store Connect
-    needs: [Publish, Build-iOS]
-    if: success()
+    needs: [Gatekeeper, Publish, Build-iOS]
+    if: success() && needs.Gatekeeper.outputs.prerelease != 'true'
     runs-on: macos-26
     timeout-minutes: 120
     permissions:
@@ -870,7 +885,8 @@ jobs:
 
   UpdateVersion:
     needs: [Publish]
-    if: success() # This job runs only if Publish job succeeds
+    # Only after a stable release from main: it bumps main's version.
+    if: success() && github.ref_name == 'main'
     runs-on: ubuntu-latest
     steps:
       - name: Create release bot token
@@ -924,8 +940,8 @@ jobs:
 
   UpdateHomebrewTap:
     name: Update Homebrew Tap
-    needs: [Publish, Build-macOS]
-    if: success()
+    needs: [Gatekeeper, Publish, Build-macOS]
+    if: success() && needs.Gatekeeper.outputs.prerelease != 'true'
     runs-on: ubuntu-latest
 
     steps:

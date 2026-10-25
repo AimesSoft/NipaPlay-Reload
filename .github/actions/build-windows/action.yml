@@ -649,6 +649,10 @@ runs:
         if ($appVersion -match '\+') {
           $appVersion = $appVersion -split '\+' | Select-Object -First 1
         }
+        # 预发布版本（如 2.0.0-alpha.1）：MSIX 只认四段数字，取前三段，第四段用预发布序号
+        if ($appVersion -match '^(\d+)\.(\d+)\.(\d+)-[0-9A-Za-z.-]*?(\d+)?$') {
+          $appVersion = "$($Matches[1]).$($Matches[2]).$($Matches[3]).$(if ($Matches[4]) { $Matches[4] } else { '0' })"
+        }
         # 分割版本号部分
         $versionParts = $appVersion -split '\.'
         # 确保有4个部分
