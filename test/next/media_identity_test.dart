@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:nipa_harness/nipa_harness.dart';
 import 'package:nipaplay/next/tasks/sqlite_job_store.dart';
+import 'package:path/path.dart' as ppath;
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
 import 'media_test_support.dart';
@@ -545,6 +546,27 @@ void main() {
     expect(f.dandanplay.requests, isEmpty);
     expect(await f.jobs.database.query('media_bindings'), isEmpty);
   });
+
+  test('scan leaves out a directory Windows cannot list and says so', () async {
+    // A path beyond 259 characters is made with the extended prefix; without
+    // the system's long path setting a plain path to it cannot be listed.
+    var deep = f.media.path;
+    for (var i = 0; i < 9; i++) {
+      deep = ppath.join(deep, 'a-directory-name-of-some-length-$i-${'x' * 20}');
+    }
+    await Directory(r'\\?\' + deep).create(recursive: true);
+    await File(r'\\?\' + ppath.join(deep, 'deep.mkv')).writeAsString('video');
+    await File(ppath.join(f.media.path, 'near.mp4')).writeAsString('video');
+    final scan = await f.call('media.library.scan',
+        {'root': f.media.path, 'requestId': 'unreadable'});
+    final job = await waitForJob(
+        f.engine, (scan['job'] as Map)['jobId'], JobState.succeeded);
+    expect(job.receipt!.details['indexed'], 1);
+    final unreadable = job.receipt!.details['unreadableDirectories'] as Map;
+    expect(unreadable['count'], greaterThanOrEqualTo(1));
+    expect(unreadable['examples'], isNotEmpty);
+    expect(unreadable['reason'], contains('os error 3'));
+  }, skip: Platform.isWindows ? null : 'A Windows path length limit');
 
   test(
       'same content with richer duration probe does not revoke existing bindings',

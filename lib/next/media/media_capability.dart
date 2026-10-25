@@ -349,7 +349,7 @@ final _specs = [
           required: ['imported'])),
   _spec(
       'media.library.scan',
-      'Index video files under an authorized native root: enumeration, probe, head hash and file locations only. Does not search providers, infer episodes or create identification tasks. requestId deduplicates submission.',
+      'Index video files under an authorized native root: enumeration, probe, head hash and file locations only. Does not search providers, infer episodes or create identification tasks. A directory that cannot be listed (on Windows one deeper than 259 characters, unless the system allows long paths) is left out and the receipt says which: unreadableDirectories {count, examples, reason}. requestId deduplicates submission.',
       Effect.write,
       const ObjectSchema({'root': _text, 'requestId': _text},
           required: ['root', 'requestId']),
