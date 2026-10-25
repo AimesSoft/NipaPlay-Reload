@@ -13,21 +13,15 @@ use std::{
 
 use base64::{engine::general_purpose::URL_SAFE_NO_PAD as B64URL, Engine as _};
 use rcgen::{
-    BasicConstraints, CertificateParams, CustomExtension, DistinguishedName, DnType,
-    ExtendedKeyUsagePurpose, IsCa, Issuer, KeyPair, KeyUsagePurpose, PublicKeyData, SanType,
-    SerialNumber, SigningKey, SubjectPublicKeyInfo,
+    BasicConstraints, CertificateParams, DistinguishedName, DnType, ExtendedKeyUsagePurpose, IsCa,
+    Issuer, KeyPair, KeyUsagePurpose, PublicKeyData, SanType, SerialNumber, SigningKey,
+    SubjectPublicKeyInfo,
 };
 use ring::rand::{SecureRandom, SystemRandom};
 use sha2::{Digest, Sha256};
 use time::{Duration, OffsetDateTime};
 #[cfg(test)]
 use x509_parser::prelude::FromDer;
-
-/// Private extension carrying the structured device metadata.
-///
-/// OID `1.3.6.1.4.1.61086.1.1` (unregistered NipaPlay private arc). Content is a
-/// DER `UTF8String` holding the JSON document described in the README.
-pub const DEVICE_METADATA_OID: &[u64] = &[1, 3, 6, 1, 4, 1, 61086, 1, 1];
 
 /// Length of a raw Ed25519 public key.
 pub const ED25519_PUBLIC_KEY_LEN: usize = 32;
@@ -245,19 +239,6 @@ impl CertificateAuthority {
             .try_into()
             .map_err(|e| format!("invalid device DNS name: {e}"))?,
         ));
-        let metadata = serde_json::json!({
-            "v": 1,
-            "accountId": account_id,
-            "deviceId": device_id,
-            "publicKey": B64URL.encode(device_public_key),
-        });
-        params
-            .custom_extensions
-            .push(CustomExtension::from_oid_content(
-                DEVICE_METADATA_OID,
-                der_utf8_string(metadata.to_string().as_bytes()),
-            ));
-
         let certificate = params
             .signed_by(&device_spki, self.issuer())
             .map_err(|error| format!("failed to sign device certificate: {error}"))?;
@@ -298,23 +279,6 @@ pub fn decode_device_public_key(encoded: &str) -> Result<Vec<u8>, String> {
     Ok(bytes)
 }
 
-/// Decodes a DER `UTF8String` (tag 0x0c) with short or long form length.
-#[cfg(test)]
-fn decode_utf8_string(der: &[u8]) -> String {
-    assert_eq!(der[0], 0x0c, "expected a DER UTF8String");
-    let (length, offset) = if der[1] & 0x80 == 0 {
-        (der[1] as usize, 2)
-    } else {
-        let count = (der[1] & 0x7f) as usize;
-        let mut length = 0usize;
-        for byte in &der[2..2 + count] {
-            length = (length << 8) | *byte as usize;
-        }
-        (length, 2 + count)
-    };
-    String::from_utf8(der[offset..offset + length].to_vec()).unwrap()
-}
-
 fn ed25519_spki(public_key: &[u8]) -> Result<SubjectPublicKeyInfo, String> {
     if public_key.len() != ED25519_PUBLIC_KEY_LEN {
         return Err(format!(
@@ -338,26 +302,6 @@ fn random_serial() -> Result<SerialNumber, String> {
         bytes[0] = 1;
     }
     Ok(SerialNumber::from_slice(&bytes))
-}
-
-fn der_utf8_string(value: &[u8]) -> Vec<u8> {
-    let mut out = Vec::with_capacity(value.len() + 4);
-    out.push(0x0c);
-    if value.len() < 128 {
-        out.push(value.len() as u8);
-    } else {
-        let mut length = value.len();
-        let mut length_bytes = Vec::new();
-        while length > 0 {
-            length_bytes.push((length & 0xff) as u8);
-            length >>= 8;
-        }
-        length_bytes.reverse();
-        out.push(0x80 | length_bytes.len() as u8);
-        out.extend_from_slice(&length_bytes);
-    }
-    out.extend_from_slice(value);
-    out
 }
 
 fn pem_certificate_der(pem: &str) -> Result<Vec<u8>, String> {
@@ -469,22 +413,12 @@ mod tests {
             Some(format!("nipaplay-mesh://device?account=acct-1&device={device_id}").as_str())
         );
 
-        let metadata = cert
+        // Identity lives only in the standard SAN: every extension is a
+        // standard X.509 (2.5.29.*) one, nothing from a private arc.
+        assert!(cert
             .extensions()
             .iter()
-            .find(|ext| {
-                ext.oid
-                    .iter()
-                    .map(|components| components.collect::<Vec<_>>())
-                    .is_some_and(|components| components == DEVICE_METADATA_OID)
-            })
-            .expect("metadata extension present");
-        assert!(!metadata.critical);
-        let payload: serde_json::Value =
-            serde_json::from_str(&decode_utf8_string(metadata.value)).unwrap();
-        assert_eq!(payload["accountId"], "acct-1");
-        assert_eq!(payload["deviceId"], device_id);
-        assert_eq!(payload["publicKey"], B64URL.encode(&raw));
+            .all(|ext| ext.oid.to_id_string().starts_with("2.5.29.")));
 
         assert!(!cert.is_ca());
         assert_eq!(cert.public_key().subject_public_key.data.as_ref(), raw);

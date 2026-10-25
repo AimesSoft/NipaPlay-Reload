@@ -50,6 +50,8 @@ pub struct AppState {
 pub fn router(state: AppState) -> Router {
     Router::new()
         .route("/healthz", get(health))
+        // The same check as seen through the reverse proxy, which keeps `/mesh/`.
+        .route("/mesh/healthz", get(health))
         .route("/mesh/v1/server-info", get(server_info))
         .route("/mesh/v1/devices/register", post(register))
         .route("/mesh/v1/devices/renew", post(renew))
@@ -278,18 +280,17 @@ struct RenewRequest {
     proof: Option<PossessionProof>,
 }
 
+/// Renewal is authorised by the device key alone: the first join needs the
+/// Dandanplay token (it binds the device to an account), later renewals do not.
+/// A signed, fresh, single-use proof from the registered key is the credential,
+/// so a headless device keeps working after its account token expires. Any
+/// `Authorization` header is ignored and the upstream is never contacted.
 async fn renew(
     State(state): State<AppState>,
-    ConnectInfo(peer): ConnectInfo<SocketAddr>,
-    headers: HeaderMap,
     body: Result<Json<RenewRequest>, JsonRejection>,
 ) -> Response {
     let body = match input_json(body) {
         Ok(body) => body,
-        Err(error) => return error.into_response(),
-    };
-    let auth = match authenticate(&state, &headers, peer, RateKind::Renew).await {
-        Ok(auth) => auth,
         Err(error) => return error.into_response(),
     };
 
@@ -305,6 +306,8 @@ async fn renew(
         return ApiError::new(ErrorCode::InvalidInput, "device_id 与公钥不匹配").into_response();
     }
 
+    // Unknown devices are rejected before anything is stored, so unauthenticated
+    // callers cannot grow the proof table with arbitrary keys.
     let device = match state.store.device(&device_id) {
         Ok(Some(device)) => device,
         Ok(None) => return ApiError::new(ErrorCode::DeviceNotFound, "设备未注册").into_response(),
@@ -312,15 +315,17 @@ async fn renew(
             return ApiError::internal(format!("读取设备失败：{error}")).into_response();
         }
     };
-    if device.account_id != auth.account_id {
-        return ApiError::new(ErrorCode::DeviceNotFound, "设备未注册").into_response();
-    }
-    if device.revoked_at.is_some() {
-        return ApiError::new(ErrorCode::DeviceRevoked, "设备已被吊销").into_response();
-    }
     if device.public_key != public_key {
         return ApiError::new(ErrorCode::InvalidInput, "device_public_key 与注册时不一致")
             .into_response();
+    }
+    let device_key = format!("device:{device_id}:renew");
+    if !state.limiter.check_window(
+        Duration::from_secs(3600),
+        &[(&device_key, state.config.renew_per_hour)],
+    ) {
+        warn!(device_id = %device_id, "mesh rate limit exceeded (device renew)");
+        return ApiError::new(ErrorCode::RateLimited, "请求过于频繁，请稍后再试").into_response();
     }
     if let Err(error) = verify_proof(
         &state,
@@ -334,40 +339,45 @@ async fn renew(
     ) {
         return error.into_response();
     }
+    if device.revoked_at.is_some() {
+        return ApiError::new(ErrorCode::DeviceRevoked, "设备已被吊销").into_response();
+    }
+    let account_id = device.account_id;
 
     let now = nipaplay_auth::unix_timestamp();
     let validity = TimeDuration::seconds(effective_certificate_validity(&state.config));
     let issued =
         match state
             .ca
-            .issue_device_certificate(&auth.account_id, &device_id, &public_key, validity)
+            .issue_device_certificate(&account_id, &device_id, &public_key, validity)
         {
             Ok(issued) => issued,
             Err(error) => return ApiError::internal(error).into_response(),
         };
 
-    if let Err(error) =
-        state
-            .store
-            .record_renewal(&auth.account_id, &device_id, now, issued.not_after)
+    if let Err(error) = state
+        .store
+        .record_renewal(&account_id, &device_id, now, issued.not_after)
     {
         return error.into_response();
     }
 
-    let epoch = match state.store.revocation_epoch(&auth.account_id) {
+    let epoch = match state.store.revocation_epoch(&account_id) {
         Ok(epoch) => epoch,
         Err(error) => return ApiError::internal(error).into_response(),
     };
     Json(json!({
         "success": true,
-        "account_id": auth.account_id,
+        "account_id": account_id,
         "device_id": device_id,
         "certificate": {
             "pem": issued.pem,
             "not_before": issued.not_before,
             "not_after": issued.not_after,
         },
+        "server_public_key": state.ca.public_key_base64url(),
         "revocation_epoch": epoch,
+        "heartbeat_interval_seconds": state.config.heartbeat_interval_seconds,
     }))
     .into_response()
 }
@@ -669,7 +679,6 @@ async fn not_found() -> Response {
 #[derive(Clone, Copy)]
 enum RateKind {
     Register,
-    Renew,
     Devices,
     Addresses,
 }
@@ -678,7 +687,6 @@ impl RateKind {
     fn account_limit(self, config: &Config) -> u32 {
         match self {
             RateKind::Register => config.register_per_hour,
-            RateKind::Renew => config.renew_per_hour,
             RateKind::Devices => config.devices_per_hour,
             RateKind::Addresses => config.addresses_per_hour,
         }
@@ -781,7 +789,6 @@ async fn admission(State(state): State<AppState>, request: Request, next: Next) 
 fn rate_kind_name(kind: RateKind) -> &'static str {
     match kind {
         RateKind::Register => "register",
-        RateKind::Renew => "renew",
         RateKind::Devices => "devices",
         RateKind::Addresses => "addresses",
     }
