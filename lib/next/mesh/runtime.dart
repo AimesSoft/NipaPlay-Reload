@@ -1513,6 +1513,14 @@ final class MeshRuntime implements MeshDeviceSource {
         } on Failure {
           // Offline coordinator fallback preserves existing roster.
         }
+      } else if (_refreshingDevices case final inFlight?) {
+        // The peer was checked moments ago (it just connected and is being
+        // verified): that refresh decides, not the roster from before it.
+        try {
+          await inFlight;
+        } on Failure {
+          // Offline coordinator fallback preserves existing roster.
+        }
       }
       if (!_active.contains(peer)) {
         throw const Failure(
