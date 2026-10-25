@@ -1,6 +1,7 @@
 import 'package:nipa_harness/nipa_harness.dart';
 
 import '../followups/service.dart';
+import 'chat_guest_host.dart';
 import 'delegation.dart';
 import 'delegation_host.dart';
 import 'runtime.dart';
@@ -46,4 +47,25 @@ AgentDelegations attachMeshDelegation(MeshRuntime mesh,
   mesh.agentRequest = receiver.handle;
   followups.chatListeners.add(receiver.attach);
   return receiver;
+}
+
+/// The receiving side of guest conversations: a device that cannot run Nipa
+/// (an iPad) speaks with the Nipa that runs here.
+ChatGuests attachMeshChatGuests(MeshRuntime mesh, Followups followups) {
+  final guests = ChatGuests(
+      root: mesh.root,
+      chat: () {
+        final host = followups.chatHost;
+        return host != null && host.available ? host : null;
+      },
+      unavailableReason: () => followups.unavailableReason,
+      deviceName: mesh.deviceName,
+      record: (peer, title, facts) => followups.discover({
+            'title': title,
+            'source': 'mesh/chat',
+            'facts': facts,
+          }, Invocation(origin: 'mesh:$peer')));
+  mesh.chatRequest = guests.handle;
+  followups.chatListeners.add(guests.attach);
+  return guests;
 }

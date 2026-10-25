@@ -78,6 +78,19 @@ abstract final class ChatContext {
     return RegExp(r'《(.+?)》的页面上问的').firstMatch(text.substring(at))?.group(1);
   }
 
+  /// The device [text] was said on, when it came from another one.
+  static String? guestOf(String text) {
+    final at = text.indexOf(_mark);
+    if (at < 0) return null;
+    return RegExp(r'这句话是在「(.+?)」的对话面板里说的')
+        .firstMatch(text.substring(at))
+        ?.group(1);
+  }
+
+  /// The device a conversation was named for (“来自 iPad 的对话”).
+  static String? guestNamed(String name) =>
+      RegExp(r'^来自 (.+) 的对话$').firstMatch(name)?.group(1);
+
   /// What you said, without what the interface added.
   static String strip(String text) {
     if (isDelegation(text)) return showDelegation(text);

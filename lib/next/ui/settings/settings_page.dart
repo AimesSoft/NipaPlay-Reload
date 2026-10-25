@@ -15,6 +15,7 @@ import 'registry_rows.dart';
 import 'section_accounts.dart';
 import 'section_host.dart';
 import 'section_misc.dart';
+import 'section_peer.dart';
 import 'section_more.dart';
 import 'settings_layout.dart';
 
@@ -235,6 +236,8 @@ class _SettingsPageState extends State<SettingsPage> implements SettingsDebug {
           folders: shell.services.folders,
           open: _openSource),
       SettingsSection.devices => DevicesSection(key: _devices, host: data.host),
+      SettingsSection.nipa when shell.services.peers != null =>
+        NipaPeerSection(peers: shell.services.peers!),
       SettingsSection.nipa => NipaSection(
           key: _nipa,
           data: data,

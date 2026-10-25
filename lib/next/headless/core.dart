@@ -72,6 +72,7 @@ import '../mesh/library.dart';
 import '../mesh/library_capability.dart';
 import '../mesh/capability.dart';
 import '../mesh/delivery.dart';
+import '../mesh/chat_guest_host.dart';
 import '../mesh/delegation.dart';
 import '../mesh/delegation_host.dart';
 import '../mesh/delegation_wiring.dart';
@@ -112,6 +113,7 @@ final class HeadlessCore {
   late final MeshRuntime mesh;
   late final MeshDelegations delegations;
   late final AgentDelegations delegationHost;
+  late final ChatGuests chatGuests;
   late final HeadlessVault vault;
   late final TaskEngine engine;
   late final MediaService media;
@@ -298,6 +300,7 @@ final class HeadlessCore {
     programs.returnTarget = followups.downloadReturnTarget;
     attachMeshDelivery(mesh, followups);
     delegationHost = attachMeshDelegation(mesh, delegations, engine, followups);
+    chatGuests = attachMeshChatGuests(mesh, followups);
     hooks.observeEvent = followups.hookEvent;
     bodyEvents = BodyEvents(database);
     followups.eventCommitted = bodyEvents.changed;

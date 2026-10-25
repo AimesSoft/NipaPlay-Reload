@@ -6,6 +6,15 @@ import '../../next_runtime.dart';
 
 typedef ChatEvent = Map<String, dynamic>;
 
+/// Nipa cannot be spoken with now, and [message] says so as it is shown in
+/// the conversation (no host here, or the device that serves it is away).
+final class ChatUnavailable implements Exception {
+  const ChatUnavailable(this.message);
+  final String message;
+  @override
+  String toString() => message;
+}
+
 /// What the interface needs from a chat host. The production port wraps
 /// `NextRuntime.chat` (X23); development experiments may script one.
 abstract interface class ChatPort {

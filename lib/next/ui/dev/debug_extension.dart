@@ -1,15 +1,18 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:developer';
+import 'dart:io' show Platform;
 import 'dart:ui' as ui;
 
 import 'package:flutter/gestures.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter/foundation.dart' show kDebugMode, kIsWeb;
 import 'package:flutter/widgets.dart';
 import 'package:nipa_harness/nipa_harness.dart' show Failure;
 import 'package:provider/provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:window_manager/window_manager.dart';
 
 import '../../accounts/login_dialog.dart';
@@ -164,8 +167,28 @@ abstract final class NextUiDebug {
   static bool _pointerAdded = false;
   static const _device = 7701;
 
+  /// The preference that turns the extension on in a Debug build of the iOS
+  /// simulator (an iPad has neither lab profiles nor environment variables:
+  /// its Dart process sees none).
+  static const simulatorPreference = 'dev_next_debug_extension';
+
   static void attach(NextShellController shell, BuildContext context) {
-    if (!NextUiDev.enabled) return;
+    if (NextUiDev.enabled) return _install(shell, context);
+    if (kDebugMode && !kIsWeb && Platform.isIOS) {
+      unawaited(SharedPreferences.getInstance().then((preferences) {
+        if (preferences.getBool(simulatorPreference) == true &&
+            context.mounted &&
+            identical(shell, _pending)) {
+          _install(shell, context);
+        }
+      }));
+      _pending = shell;
+    }
+  }
+
+  static NextShellController? _pending;
+
+  static void _install(NextShellController shell, BuildContext context) {
     _shell = shell;
     _context = context;
     _preference = context.read<NextUiPreference>();
@@ -183,6 +206,7 @@ abstract final class NextUiDebug {
   }
 
   static void detach(NextShellController shell) {
+    if (identical(_pending, shell)) _pending = null;
     if (identical(_shell, shell)) {
       _shell = null;
       _context = null;

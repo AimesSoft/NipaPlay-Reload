@@ -38,7 +38,7 @@ final class ChatSession {
 /// in their own session like any other; the home tells about those
 /// running elsewhere.
 class NipaChat extends ChangeNotifier {
-  NipaChat({required this.port, required this.data}) {
+  NipaChat({required this.port, required this.data, this.namesGuests = true}) {
     _subs = [
       port.display.listen(_onEvent),
       port.questions.listen(_onQuestion),
@@ -50,6 +50,10 @@ class NipaChat extends ChangeNotifier {
 
   final ChatPort port;
   final NextUiData data;
+
+  /// A conversation another device began is listed with that device's name
+  /// (not on the device that began it).
+  final bool namesGuests;
   late final List<StreamSubscription<Object?>> _subs;
   bool _disposed = false;
 
@@ -131,7 +135,7 @@ class NipaChat extends ChangeNotifier {
       sessions = [
         for (final t in list)
           if (t['id'] is String && !_helpers.containsKey(t['id']))
-            ChatSession(t['id'] as String, _title(t['preview']),
+            ChatSession(t['id'] as String, _title(t['preview'], t['name']),
                 _time(t['updatedAt'] ?? t['createdAt'])),
       ]..sort((a, b) => rank(a) != rank(b)
           ? rank(a) - rank(b)
@@ -142,11 +146,16 @@ class NipaChat extends ChangeNotifier {
     }
   }
 
-  static String _title(Object? preview) {
+  String _title(Object? preview, [Object? name]) {
     final text = preview is String ? preview.trim() : '';
     if (ChatContext.isFollowup(text)) return 'Nipa 后来说的';
     final said = ChatContext.strip(text);
-    return said.isEmpty ? '新的对话' : Words.firstSentence(said);
+    final title = said.isEmpty ? '新的对话' : Words.firstSentence(said);
+    // A conversation another device began says which: by the name it was
+    // given, and by what the sentence itself says.
+    final guest = ChatContext.guestOf(text) ??
+        (name is String ? ChatContext.guestNamed(name) : null);
+    return guest == null || !namesGuests ? title : '来自 $guest：$title';
   }
 
   static DateTime? _time(Object? value) => switch (value) {
@@ -550,6 +559,9 @@ class NipaChat extends ChangeNotifier {
         if (id != null) _rememberTurnId(turn, id);
         break;
       }
+    } on ChatUnavailable catch (error) {
+      // Nipa is somewhere that cannot be reached now: the conversation says so.
+      _fail(turn, error.message);
     } catch (error) {
       debugPrint('[NextUi] turn did not start: $error');
       _fail(turn, '这次没接上，再说一次试试？');
@@ -747,6 +759,10 @@ class NipaChat extends ChangeNotifier {
       case 'host/liveness':
         if (about != null && about != thread) return;
         return _liveness(params);
+      case 'host/resync':
+        // What happened meanwhile was not kept: read the session again.
+        if (thread case final id? when !loading) unawaited(_open(id));
+        return;
       case 'host/error':
         if (live case final turn? when !turn.queued) {
           _fail(turn, 'Nipa 现在不在，过一会儿再试试。');

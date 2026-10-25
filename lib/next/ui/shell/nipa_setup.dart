@@ -2,6 +2,8 @@ import 'dart:async';
 
 import 'package:flutter/widgets.dart';
 
+import '../../mesh/nipa_peers.dart';
+import '../conversation/mesh_chat_port.dart';
 import '../../ui_data/host_settings.dart';
 import '../settings/settings_layout.dart';
 import '../theme/tokens.dart';
@@ -13,13 +15,33 @@ import 'shell_controller.dart';
 /// (her avatar, the conversation's input) shows the way to set one up,
 /// never in the way.
 class NipaSetup extends ChangeNotifier {
-  NipaSetup(this.host) {
+  NipaSetup(this.host, {this.peers, this.port}) {
     _load();
     _changes = host.changes.listen((_) => _load());
+    _peerChanges = peers?.changes.listen((_) => _load());
+    _noteChanges = port?.noteChanges.listen((_) => _load());
+    if (peers != null) unawaited(peers!.load());
   }
 
   final NextHostSettings host;
+
+  /// On a device that cannot run Nipa: which device's Nipa serves it. What
+  /// is missing is then a choice of device, not a model.
+  final NipaPeers? peers;
+
+  /// The conversation with that device's Nipa, which says when it cannot be
+  /// spoken with.
+  final MeshChatPort? port;
+  StreamSubscription<void>? _noteChanges;
+
+  /// What the chip says on such a device: where Nipa is not, or the choice to
+  /// make.
+  String? get note => port?.note;
   late final StreamSubscription<void> _changes;
+  StreamSubscription<void>? _peerChanges;
+
+  /// What is missing is a device to take Nipa from.
+  bool get picksDevice => peers != null;
   bool _needsModel = false;
   double? _preparing;
   bool _isPreparing = false;
@@ -32,6 +54,11 @@ class NipaSetup extends ChangeNotifier {
   double? get progress => _preparing;
 
   Future<void> _load() async {
+    if (peers case final peers?) {
+      await peers.load();
+      _set(peers.chosen == null || port?.note != null);
+      return;
+    }
     try {
       // Reading the model touches the vault; a download reports often, and
       // its progress is all that changes while it runs.
@@ -76,6 +103,8 @@ class NipaSetup extends ChangeNotifier {
   @override
   void dispose() {
     _changes.cancel();
+    _peerChanges?.cancel();
+    _noteChanges?.cancel();
     super.dispose();
   }
 }
@@ -115,7 +144,9 @@ class NipaSetupChip extends StatelessWidget {
                   const NipaSetupDot(),
                   const SizedBox(width: 8),
                   Text(
-                      shell.nipaSetup.preparing
+                      shell.nipaSetup.picksDevice
+                          ? shell.nipaSetup.note ?? '选择 Nipa'
+                          : shell.nipaSetup.preparing
                           ? shell.nipaSetup.progress == null
                               ? '正在准备 Nipa'
                               : '正在准备 Nipa · ${(shell.nipaSetup.progress! * 100).floor()}%'

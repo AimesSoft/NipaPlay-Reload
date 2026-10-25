@@ -994,8 +994,14 @@ void main() {
       nodes.remove(b);
       env.resetCounts();
       for (var i = 0; i < 6; i++) {
+        // Nothing listens there: the connection fails first, the request never
+        // left, and the failure says so (not "unknown").
         await expectLater(
-            a.rpc(bId, 'mesh/describe', {}), throwsA(isA<Failure>()));
+            a.rpc(bId, 'mesh/describe', {}),
+            throwsA(isA<Failure>()
+                .having((f) => f.details['reason'], 'reason', 'not_delivered')
+                .having((f) => f.details['stage'], 'stage', 'connect')
+                .having((f) => f.retryable, 'retryable', true)));
       }
       expect(env.countFor('GET', '/mesh/v1/addresses'), lessThanOrEqualTo(1),
           reason:

@@ -781,6 +781,9 @@ final class NextRuntime extends ChangeNotifier {
 
   BodyLifecycle? _bodyLifecycle;
 
+  /// What this device plays now and where (for what it says to Nipa).
+  JsonMap playbackFacts() => _presenceFacts();
+
   /// What this device plays now, told to the other devices with where it is.
   JsonMap _presenceFacts() {
     final title = playback.workTitle;
