@@ -73,6 +73,41 @@ String classifyFailure(Object? error) {
     }
   }
   if (error is HandshakeException || error is TlsException) return 'tls_failed';
+  // The error number says what happened on every system; the message text is
+  // in the system's language (Windows reports it in the user's).
+  if (error is SocketException && error.osError != null) {
+    final code = error.osError!.errorCode;
+    if (Platform.isWindows) {
+      switch (code) {
+        case 10061 || 1225:
+          return 'connection_refused';
+        case 10060 || 121:
+          return 'timeout';
+        case 10051 || 10065 || 1231 || 1232:
+          return 'network_unreachable';
+        case 11001 || 11004:
+          return 'dns_failed';
+      }
+    } else if (Platform.isMacOS || Platform.isIOS) {
+      switch (code) {
+        case 61:
+          return 'connection_refused';
+        case 60:
+          return 'timeout';
+        case 51 || 65:
+          return 'network_unreachable';
+      }
+    } else {
+      switch (code) {
+        case 111:
+          return 'connection_refused';
+        case 110:
+          return 'timeout';
+        case 101 || 113:
+          return 'network_unreachable';
+      }
+    }
+  }
   final text = error.toString().toLowerCase();
   if (text.contains('credential_missing')) return 'credential_missing';
   if (text.contains('credential_origin_changed')) {
