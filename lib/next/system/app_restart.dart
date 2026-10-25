@@ -225,9 +225,19 @@ final class AppRestart {
     }
   }
 
-  static Future<void> _spawnDetached(String command, List<String> arguments) =>
-      Process.start(command, arguments, mode: ProcessStartMode.detached)
-          .then((_) {});
+  static Future<void> _spawnDetached(
+      String command, List<String> arguments) async {
+    if (Platform.isWindows) {
+      // PowerShell started detached never runs its script on Windows (checked
+      // on Windows 11); an ordinary child does, and outlives its parent.
+      final helper = await Process.start(command, arguments);
+      await helper.stdin.close();
+      unawaited(helper.stdout.drain<void>());
+      unawaited(helper.stderr.drain<void>());
+      return;
+    }
+    await Process.start(command, arguments, mode: ProcessStartMode.detached);
+  }
 
   Future<JsonMap> restart() async {
     if (!macos && !windows) {

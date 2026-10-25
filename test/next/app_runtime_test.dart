@@ -199,6 +199,38 @@ void main() {
       expect(await readWindowsArguments(), everyElement(isA<String>()));
     }, skip: Platform.isWindows ? null : 'Windows command line');
 
+    test('Windows: the real helper outlives the restart call and starts the program',
+        () async {
+      // The helper is an ordinary PowerShell child: started detached it never
+      // runs its script on Windows.
+      final old = await Process.start('cmd.exe', ['/c', 'exit 0']);
+      await old.exitCode;
+      final out = File(
+          '${Directory.systemTemp.path}\\nipa-restart-real-${DateTime.now().microsecondsSinceEpoch}.txt');
+      var quit = false;
+      final restart = AppRestart(
+          macos: false,
+          windows: true,
+          processId: old.pid,
+          executable:
+              r'C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe',
+          delay: Duration.zero,
+          readWindowsArgumentList: () async => [
+                '-NoProfile',
+                '-Command',
+                "Set-Content -Path '${out.path}' -Value started",
+              ],
+          beforeQuit: () async {},
+          quit: () async => quit = true);
+      await restart.restart();
+      for (var i = 0; i < 100 && !out.existsSync(); i++) {
+        await Future<void>.delayed(const Duration(milliseconds: 100));
+      }
+      expect(out.existsSync(), true);
+      expect(quit, true);
+      await out.delete();
+    }, skip: Platform.isWindows ? null : 'Windows relaunch');
+
     test('Windows: restart reads the command line, drains, starts the helper, then quits',
         () async {
       final order = <String>[];
