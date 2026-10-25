@@ -15,6 +15,7 @@ import '../conversation/nipa_chat.dart';
 import '../data/login_requests.dart';
 import '../shell/nipa_setup.dart';
 import '../shell/shell_controller.dart';
+import '../shell/window_buttons.dart';
 import '../shell/window_chrome.dart';
 import '../theme/tokens.dart';
 import '../widgets/buttons.dart';
@@ -549,6 +550,7 @@ class _TopBar extends StatelessWidget {
                 const Expanded(child: _Title()),
                 const SizedBox(width: 16),
                 _Nipa(shell: shell),
+                if (NextWindowButtons.wanted) const NextWindowButtons(),
               ]),
             ),
           ),
