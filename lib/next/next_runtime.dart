@@ -522,11 +522,7 @@ final class NextRuntime extends ChangeNotifier {
     await _classicSettings!.ready;
     await _classicSettings!.plugins.ready;
     _syncPluginSettings();
-    core.stateSources.calendar = () async => [
-          for (final anime
-              in await BangumiService.instance.cachedCalendarDetails())
-            Map<String, Object?>.from(anime.toJson())
-        ];
+    core.stateSources.calendar = BangumiService.instance.calendarMaterial;
     _classicSettings!.plugins.addListener(_syncPluginSettings);
     core.stateSources.history = () => [
           for (final item in ServiceProvider.watchHistoryProvider.history)

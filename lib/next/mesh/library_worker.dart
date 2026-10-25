@@ -22,6 +22,7 @@ import '../media/provider_transport.dart';
 import '../media/providers.dart';
 import '../settings/registry.dart';
 import '../state/activity.dart';
+import '../state/calendar_material.dart';
 import '../state/query.dart';
 import '../state/views.dart';
 import '../subtitles/episode_subtitles.dart';
@@ -542,8 +543,8 @@ final class LibraryWorker {
         await _syncSources(target);
         final revision = ui.sources.revision;
         if (_calendarRevision != revision) {
-          final rows = await ui.sources.calendar?.call();
-          await _ask(target, 'calendar', rows);
+          final material = await ui.sources.calendar?.call();
+          await _ask(target, 'calendar', material);
           _calendarRevision = revision;
         }
         return await _ask(target, 'homePlan', null) as UiHome;
@@ -944,8 +945,8 @@ Future<void> _serve(
           roots = authorized;
           return null;
         case 'calendar':
-          final rows = input as List<JsonMap>?;
-          sources.calendar = rows == null ? null : () async => rows;
+          final material = input as CalendarMaterial?;
+          sources.calendar = material == null ? null : () async => material;
           return null;
         case 'build':
           await projection.build(input as String);
@@ -1428,7 +1429,7 @@ Future<UiHome> _homePlan(Database db, MediaService media, StateSources sources,
   final airingItems = <UiShelfItem>[];
   if (sources.calendar != null) {
     for (final update in await airing.todayUpdates(
-        media.store, following, await sources.calendar!())) {
+        media.store, following, (await sources.calendar!())?.rows() ?? const [])) {
       final itemWork = work(update['workId'] as String);
       if (itemWork == null) continue;
       final matches = await db.rawQuery(

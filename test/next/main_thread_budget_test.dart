@@ -11,6 +11,7 @@ import 'package:nipaplay/next/chat/chat_line_reader.dart';
 import 'package:nipaplay/next/memory/recent.dart';
 import 'package:nipaplay/next/next_core.dart';
 import 'package:nipaplay/next/state/activity_invocations.dart';
+import 'package:nipaplay/next/state/calendar_material.dart';
 import 'package:nipaplay/next/settings/classic_settings.dart';
 import 'package:nipaplay/plugins/plugin_service.dart';
 import 'package:nipaplay/providers/app_language_provider.dart';
@@ -154,6 +155,36 @@ void main() {
           'task.resources', {}, Invocation(origin: 'perf:warm:resources:$i'));
       expect(warmResources, isA<Completed>());
     }
+    // A change to the library (she renames a work) is a first-use path too:
+    // the first rename of a process compiles the override, change-announcing
+    // and recomposition code, which showed as the one round that held the
+    // isolate for 2-4 ms while the later rounds stayed under 1.2 ms.
+    {
+      final work = profile.workIds[30];
+      const name = 'warm-up name';
+      final changed = warm.uiData.changes.first;
+      final renamed = await warmHarness.invokeJson(
+          'media.metadata.override_batch',
+          {
+            'entries': [
+              {
+                'entityId': work,
+                'field': 'title',
+                'value': name,
+                'mode': 'persistent'
+              }
+            ]
+          },
+          Invocation(origin: 'perf:warm:rename'));
+      expect(renamed, isA<Completed>());
+      await changed.timeout(const Duration(seconds: 10));
+      final deadline = DateTime.now().add(const Duration(seconds: 15));
+      while ((await warm.uiData.work(work))?.title != name) {
+        if (DateTime.now().isAfter(deadline)) fail('the warm-up rename never arrived');
+        await Future<void>.delayed(const Duration(milliseconds: 50));
+      }
+      await warm.uiData.home();
+    }
     await encodeReply({'warm': true});
     await warm.close();
 
@@ -183,9 +214,8 @@ void main() {
             for (final row in profile.history.take(40))
               Map<String, Object?>.of(row)
           ];
-      core.stateSources.calendar = () async =>
-          (jsonDecode(profile.calendarJson) as List)
-              .cast<Map<String, Object?>>();
+      core.stateSources.calendar =
+          () async => CalendarMaterial.encoded(profile.calendarJson);
       addTearDown(() => core.close());
       await core.ready;
       probe.mark('startup: core ready');
