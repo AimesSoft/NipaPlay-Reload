@@ -22,6 +22,11 @@ Uri chatBase(Uri uri) {
   return uri.replace(path: path);
 }
 
+/// An account out of balance or quota fails every request; it is not a
+/// refusal of the model, the endpoint or tools.
+final _balance = RegExp(
+    r'insufficient.(balance|quota|funds)|quota.exceeded|exceeded.*quota|billing|余额不足|欠费');
+
 /// One bounded, non-streaming chat-completions request: a few tokens of
 /// answer, with one harmless tool declared so that an endpoint refusing
 /// tools says so. Upstream bodies are inspected for classification only.
@@ -74,6 +79,8 @@ Future<UiModelCheck> probeChatCompletions(
     final String message;
     if (response.statusCode == 401 || response.statusCode == 403) {
       message = '密钥无效或没有权限';
+    } else if (response.statusCode == 402 || _balance.hasMatch(description)) {
+      message = '账户余额不足或额度已用完';
     } else if (RegExp(
             r'model_not_found|unknown.model|invalid.model|model.*(not exist|not found|does not exist)|模型.*(不存在|未找到)')
         .hasMatch(description)) {
@@ -100,10 +107,19 @@ Future<UiModelCheck> probeChatCompletions(
 }
 
 /// One bounded, non-streaming Responses request with a forced harmless tool.
-/// Upstream bodies are inspected for classification only and never returned.
+/// Some upstreams accept tools but refuse naming the one to call; then the
+/// tool is offered once more without forcing it, and only a model that calls
+/// it passes. Upstream bodies are inspected for classification only and never
+/// returned.
 Future<UiModelCheck> probeResponses(
     HttpClient client, Uri base, String model, String key) async {
   base = responsesBase(base);
+  return _probeResponses(client, base, model, key, forced: true);
+}
+
+Future<UiModelCheck> _probeResponses(
+    HttpClient client, Uri base, String model, String key,
+    {required bool forced}) async {
   final request =
       await client.postUrl(base.replace(path: '${base.path}/responses'));
   request.followRedirects = false;
@@ -125,7 +141,9 @@ Future<UiModelCheck> probeResponses(
         }
       }
     ],
-    'tool_choice': {'type': 'function', 'name': 'nipaplay_connection_check'},
+    'tool_choice': forced
+        ? {'type': 'function', 'name': 'nipaplay_connection_check'}
+        : 'auto',
     'max_output_tokens': 256,
     'store': false
   }));
@@ -152,10 +170,14 @@ Future<UiModelCheck> probeResponses(
     final String message;
     if (response.statusCode == 401 || response.statusCode == 403) {
       message = '密钥无效或没有权限';
+    } else if (response.statusCode == 402 || _balance.hasMatch(description)) {
+      message = '账户余额不足或额度已用完';
     } else if (RegExp(
             r'model_not_found|unknown.model|invalid.model|model.*(not exist|not found|does not exist)|模型.*(不存在|未找到)')
         .hasMatch(description)) {
       message = '模型名不存在';
+    } else if (forced && description.contains('tool_choice')) {
+      return _probeResponses(client, base, model, key, forced: false);
     } else if (description.contains('tool') &&
         RegExp(r'unsupported|not.support|not.allowed|invalid|unknown')
             .hasMatch(description)) {
