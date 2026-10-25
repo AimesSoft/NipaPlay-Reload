@@ -14,6 +14,7 @@ import '../mesh/device_source.dart';
 import '../settings/denylist.dart';
 import '../settings/registry.dart';
 import '../util/slicer.dart';
+import 'calendar_material.dart';
 import 'query.dart';
 
 Future<String?> visibleLocator(String? locator, MediaService media) async {
@@ -217,7 +218,7 @@ JsonMap publicTaskFacts(JsonMap snapshot) => publicValue({
 final class StateSources {
   List<JsonMap> Function()? _history, _continueWatching;
   List<JsonMap>? _historyRows, _continueRows;
-  Future<List<JsonMap>> Function()? calendar;
+  Future<CalendarMaterial?> Function()? calendar;
   List<StateView>? classicLibrary;
   Future<String> Function(String)? canonicalEntityId;
   Future<JsonMap> Function(String)? cachedArtwork;

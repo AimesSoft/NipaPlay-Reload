@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:nipaplay/services/dandanplay_http_client.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:nipaplay/models/bangumi_model.dart';
+import 'package:nipaplay/next/state/calendar_material.dart';
 import 'package:nipaplay/services/quarterly_review_cache.dart';
 import './dandanplay_service.dart';
 import 'package:nipaplay/services/web_remote_access_service.dart';
@@ -113,24 +114,21 @@ class BangumiService {
     return null;
   }
 
-  /// Read the calendar and its episode dates already fetched by discovery.
-  Future<List<BangumiAnime>> cachedCalendarDetails() async {
+  /// The calendar and its episode dates already fetched by discovery, as
+  /// stored: nothing is parsed here (see [CalendarMaterial]).
+  Future<CalendarMaterial> calendarMaterial() async {
     final prefs = await SharedPreferences.getInstance();
-    final raw = prefs.getString(_cacheKey);
-    if (raw == null) return [];
-    final cache = jsonDecode(raw) as Map;
-    final result = <BangumiAnime>[];
-    for (final row in (cache['animes'] as List).cast<Map>()) {
-      final intro = BangumiAnime.fromJson(Map<String, dynamic>.from(row));
-      final saved = prefs.getString('$_detailsCacheKeyPrefix${intro.id}');
-      final memory = getAnimeDetailsFromMemory(intro.id);
-      final detail = memory ?? (saved == null ? null :
-          BangumiAnime.fromDandanplayDetail(Map<String, dynamic>.from(
-              (jsonDecode(saved) as Map)['animeDetail'] as Map)));
-      result.add(intro.copyWith(episodeList: detail?.episodeList,
-          isFavorited: detail?.isFavorited ?? intro.isFavorited));
+    final saved = <int, String>{};
+    for (final key in prefs.getKeys()) {
+      if (!key.startsWith(_detailsCacheKeyPrefix)) continue;
+      final id = int.tryParse(key.substring(_detailsCacheKeyPrefix.length));
+      final text = prefs.getString(key);
+      if (id != null && text != null) saved[id] = text;
     }
-    return result;
+    return CalendarMaterial(
+        cache: prefs.getString(_cacheKey),
+        saved: saved,
+        memory: _detailsCache.values.toList());
   }
 
   String _customBackgroundKey(int animeId) =>

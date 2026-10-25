@@ -642,7 +642,7 @@ final class UiDataService implements NextUiData, NextNowPlaying {
     for (final update in sources.calendar == null
         ? <JsonMap>[]
         : await todayUpdates(
-            media.store, following, await sources.calendar!())) {
+            media.store, following, (await sources.calendar!())?.rows() ?? const [])) {
       final work = (await this.work(update['workId'] as String))!;
       final matches = await db.rawQuery(
           "SELECT b.entity_id FROM media_bindings b JOIN media_external_objects o ON o.id=b.object_id WHERE b.status='accepted' AND o.provider='dandanplay' AND o.object_type='episode' AND o.external_id=?",

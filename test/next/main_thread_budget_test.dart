@@ -11,6 +11,7 @@ import 'package:nipaplay/next/chat/chat_line_reader.dart';
 import 'package:nipaplay/next/memory/recent.dart';
 import 'package:nipaplay/next/next_core.dart';
 import 'package:nipaplay/next/state/activity_invocations.dart';
+import 'package:nipaplay/next/state/calendar_material.dart';
 import 'package:nipaplay/next/settings/classic_settings.dart';
 import 'package:nipaplay/plugins/plugin_service.dart';
 import 'package:nipaplay/providers/app_language_provider.dart';
@@ -154,6 +155,36 @@ void main() {
           'task.resources', {}, Invocation(origin: 'perf:warm:resources:$i'));
       expect(warmResources, isA<Completed>());
     }
+    // A change to the library (she renames a work) is a first-use path too:
+    // the first rename of a process compiles the override, change-announcing
+    // and recomposition code, which showed as the one round that held the
+    // isolate for 2-4 ms while the later rounds stayed under 1.2 ms.
+    {
+      final work = profile.workIds[30];
+      const name = 'warm-up name';
+      final changed = warm.uiData.changes.first;
+      final renamed = await warmHarness.invokeJson(
+          'media.metadata.override_batch',
+          {
+            'entries': [
+              {
+                'entityId': work,
+                'field': 'title',
+                'value': name,
+                'mode': 'persistent'
+              }
+            ]
+          },
+          Invocation(origin: 'perf:warm:rename'));
+      expect(renamed, isA<Completed>());
+      await changed.timeout(const Duration(seconds: 10));
+      final deadline = DateTime.now().add(const Duration(seconds: 15));
+      while ((await warm.uiData.work(work))?.title != name) {
+        if (DateTime.now().isAfter(deadline)) fail('the warm-up rename never arrived');
+        await Future<void>.delayed(const Duration(milliseconds: 50));
+      }
+      await warm.uiData.home();
+    }
     await encodeReply({'warm': true});
     await warm.close();
 
@@ -173,7 +204,13 @@ void main() {
       // What the machine does to an empty process, for the idle limits.
       await Future<void>.delayed(const Duration(seconds: 5));
       probe.mark('baseline');
-      core = newCore(profile.root, startupPhase: probe.mark);
+      // The library announces its own steps through the same callback while it
+      // is rebuilt after a change; those belong to that change's round (the
+      // best of three, below), not to startup.
+      int? changeRound;
+      core = newCore(profile.root,
+          startupPhase: (name) => probe.mark(
+              changeRound == null ? name : 'library change $changeRound: $name'));
       probe.mark('startup: core constructed');
       // What the GUI supplies from Classic: its watch history, and the
       // calendar it keeps encoded in its preferences.
@@ -183,9 +220,8 @@ void main() {
             for (final row in profile.history.take(40))
               Map<String, Object?>.of(row)
           ];
-      core.stateSources.calendar = () async =>
-          (jsonDecode(profile.calendarJson) as List)
-              .cast<Map<String, Object?>>();
+      core.stateSources.calendar =
+          () async => CalendarMaterial.encoded(profile.calendarJson);
       addTearDown(() => core.close());
       await core.ready;
       probe.mark('startup: core ready');
@@ -339,6 +375,7 @@ void main() {
       // The library changes: she renames a work, three times over. The new
       // title reaches the library without anyone asking for a refresh.
       for (var round = 0; round < 3; round++) {
+        changeRound = round;
         final work = profile.workIds[5 + round];
         final name = '改过的名字 $round';
         final changed = data.changes.first;
@@ -368,6 +405,7 @@ void main() {
                 'a change to the library builds it once (or again for what the build wrote)');
       }
 
+      changeRound = null;
       await Future<void>.delayed(const Duration(seconds: 6));
       probe.mark('idle after');
     });
@@ -424,7 +462,12 @@ void main() {
     // Library changes repeat: other work can overlap one round, so the best
     // complete round must still fit. A real regression is present in all three.
     final changes = [
-      for (var i = 0; i < 3; i++) phases['library change $i']!.$1
+      for (var i = 0; i < 3; i++)
+        probe.phases
+            .where((phase) =>
+                phase.$1 == 'library change $i' ||
+                phase.$1.startsWith('library change $i: '))
+            .fold(0.0, (longest, phase) => phase.$2 > longest ? phase.$2 : longest)
     ].reduce((a, b) => a < b ? a : b);
     expect(changes, lessThanOrEqualTo(perfBudgetMs),
         reason:
