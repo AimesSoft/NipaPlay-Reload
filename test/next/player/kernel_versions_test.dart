@@ -18,7 +18,8 @@ void main() {
 
   test('the Erika and video_player versions are the locked ones', () {
     expect(field('erika_flutter', 'version'), erikaFlutterVersion);
-    expect(field('erika_flutter', 'resolved-ref'), liberikaRef);
+    expect(field('erika_flutter', 'source'), 'hosted');
+    expect(liberikaRef, 'v$erikaFlutterVersion');
     expect(field('video_player', 'version'), videoPlayerVersion);
     expect(field('video_player_avfoundation', 'version'),
         videoPlayerAvfoundationVersion);
