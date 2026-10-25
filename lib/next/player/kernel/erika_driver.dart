@@ -383,7 +383,7 @@ final class ErikaDriver extends AdapterDriver
             await adapter.snapshot(width: facts.width, height: facts.height);
         queue.live();
         if (frame == null ||
-            frame.bytes.length != facts.width * facts.height * 4) {
+            frame.bytes.length != frame.width * frame.height * 4) {
           throw StateError('Erika returned no complete RGBA picture.');
         }
         return KernelPicture(frame.width, frame.height, frame.bytes);

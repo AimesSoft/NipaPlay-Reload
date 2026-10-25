@@ -1092,6 +1092,10 @@ class ErikaPlayerAdapter
     if (!_isSupported) {
       return null;
     }
+    // The Windows plugin draws into a window of its own and has no picture to
+    // hand back: the frame comes from liberika's headless frame export, at
+    // the position the player is at (without the subtitles Erika draws).
+    if (!kIsWeb && Platform.isWindows) return _exportedFrame(width, height);
     try {
       final captureWidth = width > 0 ? width : null;
       final captureHeight = height > 0 ? height : null;
@@ -1122,6 +1126,26 @@ class ErikaPlayerAdapter
       );
     } catch (error) {
       debugPrint('Erika: screenshot failed: $error');
+      return null;
+    }
+  }
+
+  Future<PlayerFrame?> _exportedFrame(int width, int height) async {
+    final at = position;
+    if (_media.isEmpty || at < 0) return null;
+    try {
+      final frame = await ErikaPlayer.exportFrame(
+        _media,
+        position: Duration(milliseconds: at),
+        width: width,
+        height: height,
+        format: ErikaFrameFormat.rgba,
+        httpHeaders: _userAgent.isEmpty ? const {} : {'User-Agent': _userAgent},
+      );
+      return PlayerFrame(
+          width: frame.width, height: frame.height, bytes: frame.bytes);
+    } catch (error) {
+      debugPrint('Erika: frame export failed: $error');
       return null;
     }
   }
