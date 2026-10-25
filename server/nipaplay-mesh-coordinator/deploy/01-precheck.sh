@@ -12,8 +12,8 @@ check() { # check <description> <command...>
 }
 
 say "Host"
-uname -srm; ldd --version | head -1; free -m | sed -n 1,2p
-systemctl --version | head -1
+uname -srm; { ldd --version | head -1; } || true; free -m | sed -n 1,2p
+{ systemctl --version | head -1; } || true
 echo "cgroup filesystem: $(stat -fc %T /sys/fs/cgroup) (cgroup2fs = v2; tmpfs = v1/hybrid, where MemoryMax= in the unit may not be enforced; the service is tiny, so this is only an extra guard)"
 say "Disk (the mesh needs well under 100 MB; refuse to start with less than 300 MB free)"
 df -h / | sed -n 1,2p
@@ -38,7 +38,7 @@ check "site file exists ($NGINX_VHOST)" test -f "$NGINX_VHOST"
 check "site file has the /dandanplay/ location" grep -q 'location \^~ /dandanplay/' "$NGINX_VHOST"
 check "site file has no /mesh/ location yet" bash -c "! grep -q 'location \\^~ /mesh/' '$NGINX_VHOST'"
 check "the current nginx configuration is valid" "$NGINX_BIN" -t
-"$NGINX_BIN" -v 2>&1 | head -1
+{ "$NGINX_BIN" -v 2>&1 | head -1; } || true
 
 say "Snapshot of the running host, for comparison after the change"
 ss -ltnp > "$STATE_DIR/listeners.before"

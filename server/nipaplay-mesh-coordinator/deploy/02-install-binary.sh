@@ -29,6 +29,6 @@ if [ -e "$target" ]; then
   echo "previous binary kept as $target.prev ($old)"
 fi
 install -o root -g root -m 755 "$binary" "$target"
-"$target" --help | head -3
+{ "$target" --help | head -3; } || true
 ls -l "$MESH_OPT" "$MESH_ETC" "$MESH_VAR" | sed 's/^/  /'
 say "Step 2 done"
