@@ -139,7 +139,7 @@ dependencies:
     path: packages/media_kit_video
   media_kit_libs_video:
     path: third_party/media-kit-upstream/libs/universal/media_kit_libs_video
-  erika_flutter: 0.2.1
+  erika_flutter: 0.3.0
   qr_flutter: ^4.1.0  # 用于生成二维码
   mobile_scanner: ^7.2.0
   flutter_svg: ^2.0.14  # 用于显示SVG图标
@@ -357,21 +357,6 @@ dependency_overrides:
     path: third_party/kmbal_ionicons
   volume_controller:
     path: third_party/volume_controller
-  # erika_flutter 0.3.0 (liberika v0.3.0: diagnostics, invokeJson, frame
-  # export, chapters, paused-seek subtitles, the iOS/tvOS optional entry
-  # points) is released on GitHub but not yet on pub.dev, so it is pinned to
-  # its release tag erika_flutter-v0.3.0. Without ERIKA_MACOS_CAPI_DYLIB the
-  # macOS pod uses that release's prebuilt artifacts; with it, the pod
-  # bundles that dylib instead, e.g. one built by
-  # `ERIKA_NATIVE_PROFILE=lgpl cargo build -p erika_capi --release` in a
-  # liberika checkout. Replace with the pub.dev version once published.
-  erika_flutter:
-    git:
-      url: https://github.com/AimesSoft/liberika.git
-      ref: 031a04e68d87c1586254170cf5c21ccb35b31e43
-      path: packages/erika_flutter
-
-
 
 msix_config:
   store: true

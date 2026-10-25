@@ -353,11 +353,10 @@ packages:
   erika_flutter:
     dependency: "direct main"
     description:
-      path: "packages/erika_flutter"
-      ref: "031a04e68d87c1586254170cf5c21ccb35b31e43"
-      resolved-ref: "031a04e68d87c1586254170cf5c21ccb35b31e43"
-      url: "https://github.com/AimesSoft/liberika.git"
-    source: git
+      name: erika_flutter
+      sha256: fa71bfaea3047318e80b8fbb7b59ad32872f193d3b89c336f36a86bf7cae7c8e
+      url: "https://pub.dev"
+    source: hosted
     version: "0.3.0"
   fake_async:
     dependency: transitive
