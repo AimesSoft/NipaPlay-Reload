@@ -4,8 +4,8 @@ import 'package:flutter/foundation.dart';
 /// version: Erika's plugin and the liberika commit its git dependency is
 /// locked to, and video_player with the platform backend that plays. They
 /// are the locked versions in `pubspec.lock`; a test holds them to it.
-const erikaFlutterVersion = '0.2.1';
-const liberikaRef = 'f2541a95dcef301a9d1b3bbd24779451b059ef00';
+const erikaFlutterVersion = '0.3.0';
+const liberikaRef = '031a04e68d87c1586254170cf5c21ccb35b31e43';
 const videoPlayerVersion = '2.9.5';
 const videoPlayerAvfoundationVersion = '2.8.9';
 

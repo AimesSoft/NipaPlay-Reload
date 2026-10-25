@@ -40,9 +40,9 @@ dependency_overrides:
     path: third_party/kmbal_ionicons
   volume_controller:
     path: third_party/volume_controller
-  # Same pinned liberika as pubspec.yaml until the next erika_flutter release.
+  # Same erika_flutter 0.3.0 release tag as pubspec.yaml until it is on pub.dev.
   erika_flutter:
     git:
       url: https://github.com/AimesSoft/liberika.git
-      ref: 230666bc58981847af611a3addf3d372904151c0
+      ref: 031a04e68d87c1586254170cf5c21ccb35b31e43
       path: packages/erika_flutter

@@ -357,19 +357,18 @@ dependency_overrides:
     path: third_party/kmbal_ionicons
   volume_controller:
     path: third_party/volume_controller
-  # Until the next erika_flutter release: liberika PRs #165 and #166
-  # (diagnostics, invokeJson, exportFrame, truthful hardware fallback) and the
-  # frame export session, tone-mapped HDR export and threaded software decoding
-  # on top of them, pinned
-  # to a commit. Without ERIKA_MACOS_CAPI_DYLIB the macOS pod builds erika_capi
-  # from this checkout's source (needs Rust; slow); with it, the pod bundles
-  # that prebuilt dylib instead, e.g. one built by
+  # erika_flutter 0.3.0 (liberika v0.3.0: diagnostics, invokeJson, frame
+  # export, chapters, paused-seek subtitles, the iOS/tvOS optional entry
+  # points) is released on GitHub but not yet on pub.dev, so it is pinned to
+  # its release tag erika_flutter-v0.3.0. Without ERIKA_MACOS_CAPI_DYLIB the
+  # macOS pod uses that release's prebuilt artifacts; with it, the pod
+  # bundles that dylib instead, e.g. one built by
   # `ERIKA_NATIVE_PROFILE=lgpl cargo build -p erika_capi --release` in a
-  # liberika checkout. Replace with the published version once released.
+  # liberika checkout. Replace with the pub.dev version once published.
   erika_flutter:
     git:
       url: https://github.com/AimesSoft/liberika.git
-      ref: f2541a95dcef301a9d1b3bbd24779451b059ef00
+      ref: 031a04e68d87c1586254170cf5c21ccb35b31e43
       path: packages/erika_flutter
 
 
