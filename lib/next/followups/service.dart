@@ -661,6 +661,7 @@ final class Followups {
             'data': {
               'jobId': file['jobId'],
               'infoHash': job.input['infoHash'],
+              'backend': job.details['backend'],
               'file': file
             }
           };

@@ -473,6 +473,21 @@ final class AgentEndpoint {
         'downloadBytesPerSecond':
             unreadable ? null : sum('downloadBytesPerSecond'),
         'uploadBytesPerSecond': unreadable ? null : sum('uploadBytesPerSecond'),
+        // The qBittorrents the person added: what each is and whether it
+        // answered just now (use the id as download.add backend {kind:
+        // "qbittorrent", id}; local false: its paths are on another machine).
+        if (rows.any((r) => r['backend'] == 'qbittorrent'))
+          'qbittorrent': [
+            for (final r in rows)
+              if (r['backend'] == 'qbittorrent')
+                {
+                  'id': r['id'],
+                  'name': r['name'],
+                  'online': r['online'],
+                  'local': r['local'],
+                  'version': r['version'],
+                }
+          ],
       };
     });
     if (directory is Map && directory.containsKey('unavailable')) {

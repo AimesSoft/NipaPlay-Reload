@@ -344,7 +344,7 @@ void main() {
       addTearDown(scan.dispose);
       core.classicScan.scan = scan;
       final description = await call(api, 'state.describe', {});
-      expect((description['views'] as List).length, 38);
+      expect((description['views'] as List).length, 39);
       final before = await db.rawQuery('SELECT total_changes() AS changes');
       for (final view in core.state.views.values) {
         final result = await call(api, 'state.query', {'view': view.name});

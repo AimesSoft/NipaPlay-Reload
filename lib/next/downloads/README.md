@@ -284,3 +284,57 @@ created.
 is null while the size is unknown. A finished file is a video when its extension
 is one the torrent backend also treats as video; otherwise it is reported as
 `not_video` and left alone.
+
+## qBittorrent backend
+
+`QbittorrentDownloadBackend` (plain Dart, `dart:io` only, so the headless host
+uses it too) drives a qBittorrent WebUI (API v2). Several can be configured:
+each has an `id`, a name, an address and a `local` flag, kept in
+`DATA/qbittorrent.json` by `QbittorrentHub`; the user name and password are one
+JSON secret in the credential vault (`CredentialRef('qbittorrent', id)`), typed
+in 设置 › 下载 and never read back or exposed to any Action. The backend
+reference is `{kind: "qbittorrent", id}`; `download.add`, `download.limits.*`
+take it as the optional `backend`. `download.add` also takes an optional
+`category`.
+
+Identity: handle is qBittorrent's `hash`, `infoHash` is `infohash_v1` (else the
+hash). Sessions are the user's: Next tracks only torrents named by
+`download.add` (the same hash is recognised, not added twice) and never adopts
+what is already in a qBittorrent. A torrent that vanished from the list is
+noticed like any other backend.
+
+Login: cookie session; a 403 signs in again once; a rejected login is not
+retried for 30 s (qBittorrent bans an address after repeated failures). With no
+login saved the client works against a qBittorrent that lets it in. Origin and
+Referer are sent (qBittorrent's CSRF check). No proxy is used. Unreachable,
+timeouts, 5xx and refused logins are `unavailable, retryable: true`.
+
+Versions: pause/resume (WebAPI < 2.11) and stop/start (>= 2.11) are chosen from
+`app/webapiVersion`; without it stop is tried first and the 404 answer falls
+back, and the working pair is remembered.
+
+Paths and `local`: reported as qBittorrent reports them. `local: true` (it runs
+on this computer): paths are local, sizes are read from disk, files are
+scanned/imported/played like any download, deletion is bounded to the save
+path. `local: false` (another machine): paths carry `local: false`, are never
+opened or imported, `readSize` asks qBittorrent (`torrents/files` progress),
+the receipt says `requires_transfer`, and nothing is copied. How the files get
+back is the agent's tool, hung on `download.file_completed` /
+`download.completed`, whose data carries `backend`.
+
+Selection: `fileIndices` are file priorities (0 and normal; other priorities
+the owner set are kept). A `.torrent` is added stopped, selected, then run. A
+magnet cannot fetch its metadata while stopped, so it runs and the selection is
+made as soon as metadata arrives (a few pieces of unwanted files can already be
+there); if no metadata comes within `metadataWait` the torrent that was added
+for a selection is removed and the add fails retryably. Without a selection a
+magnet waits the same time for its file list but is left in qBittorrent.
+`FileDeletingDownloadBackend`: the WebUI has no per-file delete, so on a
+`local` qBittorrent the (already unselected) files are deleted from disk inside
+the save path; for a remote one it is refused.
+
+Limits: `transfer/*Limit` (global, 0 unlimited); `alternativeLimitsActive` says
+whether qBittorrent's alternative limits are the ones in force.
+
+`downloads.engine` has one row per qBittorrent (id, name, address, local,
+online, version, apiVersion); `online` is asked live with a short timeout.

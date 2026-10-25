@@ -16,6 +16,9 @@ import 'download_executor.dart';
 import 'download_service.dart';
 import 'download_source.dart';
 import 'http_download_backend.dart';
+import 'qbittorrent_download_backend.dart';
+import 'qbittorrent_hub.dart';
+import '../../security/credential_vault.dart';
 
 final class DownloadRuntime extends ChangeNotifier {
   DownloadRuntime(
@@ -49,6 +52,11 @@ final class DownloadRuntime extends ChangeNotifier {
 
   /// Only Next registers this backend; Classic's page never lists it.
   final HttpDownloadBackend http;
+
+  /// The qBittorrents the person added in settings. Null until [attach] is
+  /// given a credential vault. Only Next knows them; Classic never lists them.
+  QbittorrentHub? qbittorrent;
+  final _qbittorrentErrors = <String, Failure>{};
   final DownloadLibrary _library;
   late final DownloadBackends _backends;
   final Future<bool> Function() _enabled;
@@ -62,9 +70,21 @@ final class DownloadRuntime extends ChangeNotifier {
   Future<void>? _refreshing;
   bool _closed = false;
 
-  void attach(TaskEngine engine, Directory root) {
+  void attach(TaskEngine engine, Directory root, {CredentialVault? vault}) {
     this.engine = engine;
     http.stateDirectory ??= Directory('${root.path}/http_downloads');
+    if (vault != null) {
+      qbittorrent = QbittorrentHub(
+          file: File('${root.path}/qbittorrent.json'), vault: vault)
+        ..onRegistered = ((QbittorrentDownloadBackend backend) {
+          _backends.register(backend);
+          _qbittorrentErrors.remove(backend.reference.key);
+        })
+        ..onRemoved = ((DownloadBackendRef ref) {
+          _backends.unregister(ref);
+          _qbittorrentErrors.remove(ref.key);
+        });
+    }
     executor.engine = engine;
     downloads = DownloadService(
         engine: engine,
@@ -86,6 +106,13 @@ final class DownloadRuntime extends ChangeNotifier {
   }
 
   Future<void> _startObservation() async {
+    final hub = qbittorrent;
+    if (hub != null) {
+      await hub.load();
+      for (final backend in hub.backends) {
+        _backends.register(backend);
+      }
+    }
     await _observeSession();
     _scheduleRefresh();
   }
@@ -135,11 +162,34 @@ final class DownloadRuntime extends ChangeNotifier {
       final httpTasks = await http.list();
       await downloads.observeMissingSessions(http, httpTasks,
           candidateIds: await _missingSessionIds(http, httpTasks));
+      // A qBittorrent is asked independently: one that is off does not stop
+      // the others, and its torrents are never adopted (it holds what its
+      // owner put there, not only what Next added).
+      await Future.wait([
+        for (final backend in _backends.values)
+          if (backend is QbittorrentDownloadBackend) _refreshQbittorrent(backend)
+      ]);
     }
     autoScannedKeys = Set.unmodifiable(await _loadImportedKeys());
     _jobsByHash = Map.unmodifiable(jobsByHash);
     lastSessionError = null;
     if (!_closed) notifyListeners();
+  }
+
+  Future<void> _refreshQbittorrent(QbittorrentDownloadBackend backend) async {
+    final key = backend.reference.key;
+    try {
+      await backend.initialize();
+      final tasks = await backend.list();
+      await downloads.observeMissingSessions(backend, tasks,
+          candidateIds: await _missingSessionIds(backend, tasks));
+      _qbittorrentErrors.remove(key);
+    } on Failure catch (failure) {
+      _qbittorrentErrors[key] = failure;
+    } catch (error) {
+      _qbittorrentErrors[key] =
+          const Failure(FailureCode.unavailable, 'qBittorrent failed.', retryable: true);
+    }
   }
 
   /// The SQL store can identify vanished sessions without decoding the
@@ -164,8 +214,16 @@ final class DownloadRuntime extends ChangeNotifier {
     final jobs = await engine.list(type: 'download');
     final observedAt = DateTime.now().toUtc().toIso8601String();
     final rows = <JsonMap>[];
-    for (final backend in [_backend, http]) {
+    final others = [
+      for (final backend in _backends.values)
+        if (backend is QbittorrentDownloadBackend) backend
+    ];
+    for (final backend in [_backend, http, ...others]) {
       final key = backend.reference.key;
+      JsonMap? facts;
+      if (backend is QbittorrentDownloadBackend) {
+        facts = enabled ? await backend.status() : backend.identity;
+      }
       final mine = [
         for (final job in jobs)
           // A task without a recorded backend belongs to no engine.
@@ -177,7 +235,9 @@ final class DownloadRuntime extends ChangeNotifier {
           mine.where((job) => match(job.state)).length;
       int? down, up;
       String? error;
-      if (enabled) {
+      if (enabled && facts != null && facts['online'] == false) {
+        error = facts['error'] as String? ?? 'unavailable';
+      } else if (enabled) {
         try {
           down = 0;
           up = 0;
@@ -195,9 +255,11 @@ final class DownloadRuntime extends ChangeNotifier {
         }
       }
       JsonMap? limits;
-      if (enabled && backend is BandwidthDownloadBackend) {
+      if (enabled &&
+          backend is BandwidthDownloadBackend &&
+          !(facts != null && facts['online'] == false)) {
         try {
-          limits = await downloads.bandwidth({});
+          limits = await downloads.bandwidth({}, ref: backend.reference);
         } catch (_) {
           limits = null;
         }
@@ -205,6 +267,15 @@ final class DownloadRuntime extends ChangeNotifier {
       final actual = (limits?['actual'] as Map?)?.cast<String, Object?>();
       rows.add({
         'backend': backend.reference.kind,
+        if (facts != null) ...{
+          'id': facts['id'],
+          'name': facts['name'],
+          'address': facts['address'],
+          'local': facts['local'],
+          'online': facts['online'],
+          'version': facts['version'],
+          'apiVersion': facts['apiVersion'],
+        },
         'enabled': enabled,
         'running': count((s) => s == JobState.running),
         'queued': count((s) => s == JobState.queued),
@@ -229,6 +300,52 @@ final class DownloadRuntime extends ChangeNotifier {
             (backend == _backend ? lastSessionError?.code.wireName : null),
         'observedAt': observedAt,
       });
+    }
+    return rows;
+  }
+
+  /// What every online qBittorrent holds, asked now: its own torrents, not
+  /// only the ones Next tracks. `jobId` is the download task that follows a
+  /// torrent (null when none does); naming a torrent in `download.add` makes
+  /// one. A qBittorrent that does not answer contributes no rows (its state is
+  /// in [engineStatus]); nothing is started.
+  Future<List<JsonMap>> qbittorrentTorrents() async {
+    if (!await _enabled()) return const [];
+    final jobs = await engine.list(type: 'download');
+    final tracked = <String, String>{};
+    for (final job in jobs) {
+      final recorded = job.details['backend'];
+      if (recorded is! Map || job.input['infoHash'] is! String) continue;
+      if (job.receipt?.details['sessionPresent'] == false) continue;
+      tracked['${DownloadBackendRef.fromJson(recorded.cast<String, Object?>()).key}|${job.input['infoHash']}'] =
+          job.jobId;
+    }
+    final rows = <JsonMap>[];
+    for (final backend in _backends.values) {
+      if (backend is! QbittorrentDownloadBackend) continue;
+      try {
+        for (final task in await backend.list()) {
+          rows.add({
+            'id': backend.id,
+            'name': backend.name,
+            'local': backend.local,
+            'infoHash': task.infoHash,
+            'title': task.title,
+            'state': task.state,
+            'paused': task.paused,
+            'finished': task.finished,
+            'completedBytes': task.completed,
+            'totalBytes': task.total,
+            'downloadBytesPerSecond': task.downloadSpeedBytesPerSecond,
+            'uploadBytesPerSecond': task.uploadSpeedBytesPerSecond,
+            'savePath': task.output.path,
+            'category': (task.health?['qbittorrent'] as Map?)?['category'],
+            'jobId': tracked['${backend.reference.key}|${task.infoHash}'],
+          });
+        }
+      } on Failure {
+        continue;
+      }
     }
     return rows;
   }

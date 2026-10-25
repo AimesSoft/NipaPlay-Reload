@@ -13,6 +13,7 @@ import 'controls.dart';
 import 'host_keys.dart';
 import 'registry_rows.dart';
 import 'section_accounts.dart';
+import 'section_downloaders.dart';
 import 'section_host.dart';
 import 'section_misc.dart';
 import 'section_peer.dart';
@@ -75,6 +76,7 @@ class _SettingsPageState extends State<SettingsPage> implements SettingsDebug {
   final _about = GlobalKey<AboutSectionState>();
   final _sync = GlobalKey<SyncSectionState>();
   final _plugins = GlobalKey<PluginsSectionState>();
+  final _downloaders = GlobalKey<DownloadersSectionState>();
 
   /// A source to show opened, or `new` for one being added.
   String? _openSource;
@@ -84,6 +86,7 @@ class _SettingsPageState extends State<SettingsPage> implements SettingsDebug {
     SettingsSection.sources: '媒体来源 服务器 jellyfin emby smb webdav nas 网盘 库 共享 '
         '本机 文件夹 扫描 附近 nipaplay',
     SettingsSection.devices: '设备 组网 本机名 运行程序 远程 局域网 远程访问 信任 遥控 ipv6',
+    SettingsSection.downloads: '下载 下载器 qbittorrent 种子 磁力 seedbox 做种 远端',
     SettingsSection.sync: '同步 多端 webdav 坚果云 nextcloud 服务器 备份 记录',
     SettingsSection.nipa: 'nipa 模型 codex api key 密钥 记忆 记得 提供方',
     SettingsSection.storage: '存储 缓存 清理 截图 空间 磁盘 缩略图',
@@ -235,6 +238,17 @@ class _SettingsPageState extends State<SettingsPage> implements SettingsDebug {
           data: data,
           folders: shell.services.folders,
           open: _openSource),
+      SettingsSection.downloads =>
+        Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+          RegistryGroups(
+              section: section,
+              model: model,
+              more: _isMore(section),
+              onMore: () => _toggleMore(section),
+              highlight: _highlight),
+          if (shell.services.downloaders case final downloaders?)
+            DownloadersSection(key: _downloaders, downloaders: downloaders),
+        ]),
       SettingsSection.devices => DevicesSection(key: _devices, host: data.host),
       SettingsSection.nipa when shell.services.peers != null =>
         NipaPeerSection(peers: shell.services.peers!),
@@ -462,6 +476,11 @@ class _SettingsPageState extends State<SettingsPage> implements SettingsDebug {
         await _sources.currentState?.debugScan();
       case 'nearby':
         _addSource(type: 'nipaplay');
+    }
+    if (p['downloader'] == 'add') {
+      _go(SettingsSection.downloads);
+      await Future<void>.delayed(const Duration(milliseconds: 400));
+      await _downloaders.currentState?.debugAdd(p);
     }
     if (p['plugins'] == 'market') {
       _go(SettingsSection.plugins);

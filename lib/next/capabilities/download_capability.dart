@@ -5,6 +5,7 @@ import '../downloads/download_service.dart';
 import '../downloads/download_source.dart';
 import '../downloads/download_paths.dart';
 import '../downloads/http_download_backend.dart';
+import '../downloads/qbittorrent_download_backend.dart';
 import 'classic_action.dart';
 
 final _downloadJobSchema = ObjectSchema({
@@ -91,16 +92,23 @@ final class DownloadCapability implements Capability {
       : actions = [
           for (final operation in ['get', 'set'])
             ClassicAction(ActionSpec(id: 'download.limits.$operation', title: '下载会话限速 $operation',
-              description: '真实原生内置会话的上传/下载字节预算。0 移除限制，正值至少 16384 字节/秒；省略方向保持现值。返回原生读回值。尚未初始化会话时 applied=false；不自动启动下载器，不改变网关限流。会话重建恢复无限制。',
+              description: '真实原生内置会话的上传/下载字节预算。0 移除限制，正值至少 16384 字节/秒；省略方向保持现值。返回原生读回值。尚未初始化会话时 applied=false；不自动启动下载器，不改变网关限流。会话重建恢复无限制。可选 backend {kind: "qbittorrent", id} 改为读写那个 qBittorrent 的全局限速（0 不限速，正值任意字节/秒；它开着备用限速时实际生效的是备用值，alternativeLimitsActive 会说明）。',
               effect: operation == 'get' ? Effect.read : Effect.write,
-              input: operation == 'get' ? const ObjectSchema({}) : const ObjectSchema({
-                'downloadBytesPerSecond': IntegerSchema(minimum: 0, maximum: 4294967295),
-                'uploadBytesPerSecond': IntegerSchema(minimum: 0, maximum: 4294967295)}),
+              input: ObjectSchema({
+                'backend': _backendSchema,
+                if (operation == 'set') ...const {
+                  'downloadBytesPerSecond': IntegerSchema(minimum: 0, maximum: 4294967295),
+                  'uploadBytesPerSecond': IntegerSchema(minimum: 0, maximum: 4294967295)},
+              }),
               output: const ObjectSchema({}, additionalProperties: true)), (input, _) async {
-                if (operation == 'set' && input.isEmpty) {
+                final ref = input['backend'] == null
+                    ? const DownloadBackendRef.builtin()
+                    : DownloadBackendRef.fromJson(input['backend'] as JsonMap);
+                final limits = {...input}..remove('backend');
+                if (operation == 'set' && limits.isEmpty) {
                   throw const Failure(FailureCode.invalidInput, 'Provide at least one bandwidth direction.');
                 }
-                return downloads.bandwidth(input);
+                return downloads.bandwidth(limits, ref: _resolveRef(downloads, ref));
               }),
           for (final operation in [
             'add',
@@ -127,6 +135,23 @@ final class _DownloadJson implements JsonEncodable {
   JsonMap toJson() => json;
 }
 
+/// A reference that names a configured backend. A qBittorrent is told apart
+/// by its id; without one the answer lists the ids there are.
+DownloadBackendRef _resolveRef(DownloadService downloads, DownloadBackendRef ref) {
+  if (ref.kind == QbittorrentDownloadBackend.kind && ref.id == null) {
+    final ids = [
+      for (final backend in downloads.backends.values)
+        if (backend is QbittorrentDownloadBackend) backend.id
+    ];
+    throw Failure(
+        FailureCode.invalidInput,
+        ids.isEmpty
+            ? 'No qBittorrent is configured.'
+            : 'Say which qBittorrent: backend {kind: "qbittorrent", id} with id one of ${ids.join(', ')}.');
+  }
+  return ref;
+}
+
 final class _DownloadAction extends Action<_DownloadJson, _DownloadJson> {
   _DownloadAction(
       this.downloads, this.sources, this.operation, InvocationObserver? audit)
@@ -143,7 +168,7 @@ final class _DownloadAction extends Action<_DownloadJson, _DownloadJson> {
         title: '$operation download',
         description: switch (operation) {
           'add' =>
-            'Accept source or sources: magnet URIs, HTTP(S) torrent URLs or local .torrent paths. Optional downloadDirectory and createFolderForTask override defaults for these new tasks without changing settings. Returns queued jobs after metadata validation, deduplicated by backend and infoHash; an existing task keeps its original directory. Batch results preserve input order and individual failures. With backend {kind: "http"} the source is instead an http:// or https:// address of one file, downloaded as it is (no torrent, no unpacking, no guessing what it is): the file lands in downloadDirectory or the download directory setting (inside a folder named after the file only when createFolderForTask is true) under the name the server gives (Content-Disposition filename, else the last path segment of the final URL), never over an existing file (a taken name gets " (1)", " (2)" ...). The data is written to NAME.nipaplay-part and renamed when complete, so a partial file is never in the library. Pause, resume, cancel and restart continue with a Range request when the server honours it, otherwise from the start. Optional connections (integer 1-8, default 1) splits the file into that many byte ranges fetched in parallel over separate connections into the same NAME.nipaplay-part; only when the server sends Accept-Ranges: bytes and a Content-Length, otherwise one connection is used. health.http.connections always says {requested, used, reason} (reason null when used equals requested; no_range, unknown_length, too_small or range_ignored otherwise) and, when more than one connection is used, the start, end and completedBytes of each segment. completedBytes is the sum of the segments, a stall means no segment received a byte, and a failing segment is retried on its own; resume after pause, cancel or restart continues every segment from the bytes it already holds. Optional checksum {algorithm: md5|sha1|sha256, value} is compared after the last byte; a mismatch fails the task and the receipt and failure carry expected and actual values (the data stays as NAME.nipaplay-part); without checksum the receipt still records the computed sha256 with matched null. Connection failures and 5xx/408/429 answers are retried and count as no progress (download.stalled applies); other 4xx answers fail the task. The task identity infoHash is "http-" plus the SHA-1 of the normalized URL (fragment removed). Video files are registered like any download; other files (a zip) are reported as not_video and left as they are. Other schemes are refused.',
+            'Accept source or sources: magnet URIs, HTTP(S) torrent URLs or local .torrent paths. Optional downloadDirectory and createFolderForTask override defaults for these new tasks without changing settings. Returns queued jobs after metadata validation, deduplicated by backend and infoHash; an existing task keeps its original directory. Batch results preserve input order and individual failures. With backend {kind: "http"} the source is instead an http:// or https:// address of one file, downloaded as it is (no torrent, no unpacking, no guessing what it is): the file lands in downloadDirectory or the download directory setting (inside a folder named after the file only when createFolderForTask is true) under the name the server gives (Content-Disposition filename, else the last path segment of the final URL), never over an existing file (a taken name gets " (1)", " (2)" ...). The data is written to NAME.nipaplay-part and renamed when complete, so a partial file is never in the library. Pause, resume, cancel and restart continue with a Range request when the server honours it, otherwise from the start. Optional connections (integer 1-8, default 1) splits the file into that many byte ranges fetched in parallel over separate connections into the same NAME.nipaplay-part; only when the server sends Accept-Ranges: bytes and a Content-Length, otherwise one connection is used. health.http.connections always says {requested, used, reason} (reason null when used equals requested; no_range, unknown_length, too_small or range_ignored otherwise) and, when more than one connection is used, the start, end and completedBytes of each segment. completedBytes is the sum of the segments, a stall means no segment received a byte, and a failing segment is retried on its own; resume after pause, cancel or restart continues every segment from the bytes it already holds. Optional checksum {algorithm: md5|sha1|sha256, value} is compared after the last byte; a mismatch fails the task and the receipt and failure carry expected and actual values (the data stays as NAME.nipaplay-part); without checksum the receipt still records the computed sha256 with matched null. Connection failures and 5xx/408/429 answers are retried and count as no progress (download.stalled applies); other 4xx answers fail the task. The task identity infoHash is "http-" plus the SHA-1 of the normalized URL (fragment removed). Video files are registered like any download; other files (a zip) are reported as not_video and left as they are. Other schemes are refused. With backend {kind: "qbittorrent", id} the torrent (a magnet, or a .torrent path or address as for the builtin engine) is added to that configured qBittorrent instead (the state view downloads.engine lists them: id, name, online, local, version); the id is required. downloadDirectory is the save path on the machine qBittorrent runs on (omitted: its own default; for a remote one it is a path there and is not checked here), createFolderForTask becomes its content layout (Subfolder or NoSubfolder), the optional category is the qBittorrent category, fileIndices are applied as file priorities (0 or normal) and, for a magnet, as soon as its metadata arrives. qBittorrent keeps and seeds the torrent; pause, resume, remove and delete act on it there. Paths in the task are qBittorrent\'s own: for a qBittorrent on this computer they are local files and are scanned and imported like any download; for another machine they carry local false, are never opened or imported here, and the files stay where they are until something else brings them (receipt reason requires_transfer). download.completed and download.file_completed still fire, with the backend in their data. The task is only tracked, never adopted: torrents already in a qBittorrent are not tracked until download.add names them (the same magnet or file is recognised by its hash and not added twice).',
           'set_paused' =>
             'Set paused for jobId or jobIds, including downloading and seeding. Returns persisted jobs and individual batch failures.',
           'pause' =>
@@ -175,6 +200,7 @@ final class _DownloadAction extends Action<_DownloadJson, _DownloadJson> {
                 'createFolderForTask': BooleanSchema(),
                 'fileIndices': ArraySchema(IntegerSchema(minimum: 0)),
                 'connections': IntegerSchema(minimum: 1, maximum: 8),
+                'category': _idSchema,
                 'checksum': ObjectSchema({
                   'algorithm':
                       StringSchema(values: HttpDownloadBackend.checksumAlgorithms),
@@ -258,9 +284,16 @@ final class _DownloadAction extends Action<_DownloadJson, _DownloadJson> {
     }
     final Job job;
     if (operation == 'add') {
-      final ref = json['backend'] == null
-          ? const DownloadBackendRef.builtin()
-          : DownloadBackendRef.fromJson(json['backend'] as JsonMap);
+      final ref = _resolveRef(
+          downloads,
+          json['backend'] == null
+              ? const DownloadBackendRef.builtin()
+              : DownloadBackendRef.fromJson(json['backend'] as JsonMap));
+      if (ref.kind != QbittorrentDownloadBackend.kind &&
+          json['category'] != null) {
+        throw const Failure(FailureCode.invalidInput,
+            'category is only supported by the qbittorrent backend.');
+      }
       if (ref.kind != HttpDownloadBackend.kind && json['checksum'] != null) {
         throw const Failure(FailureCode.invalidInput,
             'checksum is only supported by the http backend.');
@@ -269,12 +302,23 @@ final class _DownloadAction extends Action<_DownloadJson, _DownloadJson> {
         throw const Failure(FailureCode.invalidInput,
             'connections is only supported by the http backend.');
       }
-      downloads.backends.resolve(ref);
+      final chosen = downloads.backends.resolve(ref);
       if (!await downloads.executor.isEnabled()) {
         throw const Failure(FailureCode.unavailable, 'Downloader is disabled.');
       }
       final directory = json['downloadDirectory'] as String?;
-      if (directory != null) validateDownloadDirectory(directory);
+      if (directory != null) {
+        // A directory on another machine is that machine's path: only its
+        // qBittorrent can say whether it is valid.
+        if (chosen is QbittorrentDownloadBackend && !chosen.local) {
+          if (directory.trim().isEmpty || directory != directory.trim()) {
+            throw const Failure(FailureCode.invalidInput,
+                'Use a directory without surrounding whitespace.');
+          }
+        } else {
+          validateDownloadDirectory(directory);
+        }
+      }
       final isHttp = ref.kind == HttpDownloadBackend.kind;
       if (isHttp && json['fileIndices'] != null) {
         throw const Failure(FailureCode.invalidInput,
@@ -299,6 +343,7 @@ final class _DownloadAction extends Action<_DownloadJson, _DownloadJson> {
             fileIndices: (json['fileIndices'] as List?)?.cast<int>(),
             checksum: prepared.checksum,
             connections: isHttp ? json['connections'] as int? : null,
+            category: json['category'] as String?,
           ),
           backend: ref,
           invocation: invocation);

@@ -226,6 +226,13 @@ peer 地址数组 `peers`。配置在引擎首次初始化时固定，修改须�
 目录与空的 recentDirectories（本宿主不维护 Classic 最近目录）。
 无界面不提供播放器和磁盘删除 Action；保留任务取消、会话移除与已下载文件。
 
+`<data>/qbittorrent.json` 列出本宿主可用的 qBittorrent 后端：
+`{"entries":[{"id":"seedbox","name":"Seedbox","address":"http://host:8080","local":false,"hasLogin":true}]}`；
+`local` 为 true 表示 qBittorrent 与本宿主在同一台机器上，路径可直接读取。登录（用户名和密码）
+以 JSON `{"username":…,"password":…}` 经 `--enroll-credential` 写入 vault，
+命名空间 `qbittorrent`、键为条目 id。`download.add` 带 `backend: {kind: "qbittorrent", id}` 使用；
+实现不依赖 Flutter（见 `lib/next/downloads/README.md`）。
+
 ## 数据、hooks 与停止
 
 所有持久文件都位于 `--data`：

@@ -137,7 +137,9 @@ extension DownloadReturns on Followups {
       for (final file
           in (job.checkpoint['completedFiles'] as List? ?? []).cast<JsonMap>())
         if (file['isVideo'] == true &&
-            file['imported'] == true &&
+            // A file on another machine is never imported here; that it
+            // finished there is the news.
+            (file['imported'] == true || file['local'] == false) &&
             file['verification'] == 'verified' &&
             !covered.contains(file['objectId']))
           {
@@ -148,6 +150,7 @@ extension DownloadReturns on Followups {
               'jobId': file['jobId'],
               'infoHash': job.input['infoHash'],
               'title': job.title,
+              'backend': job.details['backend'],
               'file': {
                 ...file,
                 'playable': file['local'] == true && file['complete'] == true

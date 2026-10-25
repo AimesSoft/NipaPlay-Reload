@@ -18,6 +18,7 @@ import 'background.dart';
 import 'batch_manage.dart';
 import 'collections.dart';
 import 'discover.dart';
+import 'downloaders.dart';
 import 'downloads.dart';
 import 'gui_calls.dart';
 import 'history.dart';
@@ -42,6 +43,7 @@ final class NextUiServices {
     LoginRequests? logins,
     this.manage,
     this.peers,
+    this.downloaders,
     GuiCalls? calls,
     this.onDispose,
   })  : logins = logins ?? LoginRequests(),
@@ -75,6 +77,11 @@ final class NextUiServices {
   /// Where Nipa comes from on a device that cannot run her (an iPad): the
   /// device chosen in its settings. Null where Nipa runs on the device.
   final NipaPeers? peers;
+
+  /// The qBittorrents of 设置 › 下载; none where downloads are not run on
+  /// this device or the shell is shown without them (tests).
+  final NextDownloaders? downloaders;
+
   /// Actions the pages call as the person, and what reads them.
   final GuiCalls calls;
   late final downloads = NextDownloads(calls);
@@ -125,6 +132,7 @@ final class NextUiServices {
               peers: peers,
               playback: runtime.playbackFacts),
       peers: peers,
+      downloaders: NextBody.bodyOnly ? null : CoreDownloaders(core),
       discover: CoreDiscover(runtime),
       library: library,
       libraryActions: library,
