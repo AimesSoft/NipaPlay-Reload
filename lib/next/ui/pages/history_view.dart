@@ -6,6 +6,7 @@ import '../data/gui_calls.dart';
 import '../data/history.dart';
 import '../settings/controls.dart' show PillButton;
 import '../shell/shell_controller.dart';
+import '../theme/layout.dart';
 import '../theme/tokens.dart';
 import '../widgets/buttons.dart';
 import '../widgets/cards.dart';
@@ -392,7 +393,7 @@ class _HistoryViewState extends State<HistoryView> implements HistoryDebug {
         // Rows carry 14 of their own on each side, so their text lines up
         // with the page's edge.
         padding: EdgeInsets.fromLTRB(
-            NextMetrics.gutter - 14, widget.top, 56 - 14, 64),
+            NextLayout.gutter(context) - 14, widget.top, NextLayout.end(context) - 14, 64 + NextLayout.foot(context)),
         itemCount: children.length,
         itemBuilder: (context, i) => Align(
           alignment: Alignment.centerLeft,

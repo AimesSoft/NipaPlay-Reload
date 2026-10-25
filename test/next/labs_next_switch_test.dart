@@ -10,8 +10,9 @@ import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 /// The Labs switch into NipaPlay Next: on a desktop it says what the Agent
-/// does on this computer; on an iPad, which runs no Agent, it says what the
-/// Agent on the user's other devices can do here.
+/// does on this computer; on an iPad or an iPhone, which run no Agent, it
+/// says what the Agent on the user's other devices can do here. Android has
+/// no switch.
 void main() {
   final original = LabsSettingsContent.device;
   tearDown(() => LabsSettingsContent.device = original);
@@ -19,8 +20,10 @@ void main() {
   Future<void> pumpLabs(WidgetTester tester,
       {required bool desktop,
       required bool iPad,
+      bool iPhone = false,
       Map<String, Object>? prefs}) async {
-    LabsSettingsContent.device = () => (desktop: desktop, iPad: iPad);
+    LabsSettingsContent.device =
+        () => (desktop: desktop, iPad: iPad, iPhone: iPhone);
     SharedPreferences.setMockInitialValues(prefs ?? {});
     final labs = LabsSettingsProvider(sandboxStatus: () async => false);
     final preference = NextUiPreference();
@@ -73,7 +76,19 @@ void main() {
     expect(find.text('使用 Next 界面'), findsOneWidget);
   });
 
-  testWidgets('a phone has no switch', (tester) async {
+  testWidgets(
+      'an iPhone has the switch, and its consent speaks of this iPhone',
+      (tester) async {
+    await pumpLabs(tester, desktop: false, iPad: false, iPhone: true);
+    expect(find.text('NipaPlay Next'), findsOneWidget);
+    await tester.tap(find.text('NipaPlay Next'));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('这台 iPhone 上的 NipaPlay'), findsOneWidget);
+    expect(find.textContaining('iPad'), findsNothing);
+    expect(find.textContaining('使用这台电脑'), findsNothing);
+  });
+
+  testWidgets('an Android phone has no switch', (tester) async {
     await pumpLabs(tester, desktop: false, iPad: false);
     expect(find.text('NipaPlay Next'), findsNothing);
   });

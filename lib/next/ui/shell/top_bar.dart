@@ -1,10 +1,13 @@
 import 'dart:math' as math;
 
 import 'package:flutter/widgets.dart';
+import 'package:nipaplay/utils/globals.dart' as globals;
 import 'package:window_manager/window_manager.dart';
 
+import '../theme/layout.dart';
 import '../theme/tokens.dart';
 import '../widgets/buttons.dart';
+import '../widgets/glass.dart';
 import '../widgets/icons.dart';
 import '../widgets/menu.dart';
 import '../widgets/nipa_avatar.dart';
@@ -47,6 +50,70 @@ class NextTopBar extends StatelessWidget {
       ? NextMetrics.gutter
       : math.max(NextMetrics.gutter, chrome.leading + _afterLights);
 
+
+  /// Background work, search and Nipa, on the right of either bar.
+  static List<Widget> _trailing(NextShellController shell) => [
+            ValueListenableBuilder(
+              valueListenable: shell.tasks,
+              builder: (context, _, __) {
+                final active = shell.activeTasks;
+                return AnimatedSwitcher(
+                  duration: const Duration(milliseconds: 240),
+                  child: active.isEmpty
+                      ? const SizedBox.shrink()
+                      : Padding(
+                          key: const ValueKey('tasks'),
+                          padding: const EdgeInsets.only(right: _gap),
+                          child: BackgroundEntry(
+                            onTap: () =>
+                                shell.togglePopover(NextPopover.tasks),
+                          ),
+                        ),
+                );
+              },
+            ),
+            NextIconButton(
+                glyph: NextGlyph.search,
+                label: '搜索',
+                size: _search,
+                onTap: shell.openSearch),
+            const SizedBox(width: _gap),
+            ListenableBuilder(
+              listenable: Listenable.merge([shell.chat, shell.nipaSetup]),
+              builder: (context, _) {
+                final c = shell.chat;
+                final unset = shell.nipaSetup.needsModel;
+                // Click: the conversation; right click or long press:
+                // the menu (settings, back to Classic).
+                return GestureDetector(
+                  onSecondaryTap: () =>
+                      shell.togglePopover(NextPopover.nipa),
+                  onLongPress: () => shell.togglePopover(NextPopover.nipa),
+                  child: Pressable(
+                    onTap: shell.toggleChat,
+                    semanticLabel: 'Nipa',
+                    pressScale: 0.94,
+                    builder: (context, hovered) => Stack(
+                      clipBehavior: Clip.none,
+                      children: [
+                        NipaAvatar(
+                          size: _avatar,
+                          mood: c.mood,
+                          hasNews: c.unseen,
+                          sentence: c.moodSentence ??
+                              (unset ? '还没有模型' : null),
+                        ),
+                        if (unset)
+                          const Positioned(
+                              right: -1, bottom: -1, child: NipaSetupDot()),
+                      ],
+                    ),
+                  ),
+                );
+              },
+            ),
+      ];
+
   Future<void> _zoom() async {
     if (await windowManager.isMaximized()) {
       await windowManager.unmaximize();
@@ -58,17 +125,24 @@ class NextTopBar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final shell = NextShellScope.of(context);
+    // A phone: the sections are at its foot ([NextTabBar]); the bar keeps
+    // what is always at hand, under the status bar.
+    if (NextLayout.compact(context)) return _CompactBar(shell: shell);
+    final top = NextLayout.barTop(context);
     return SizedBox(
-      height: NextMetrics.topBar,
+      height: top + NextMetrics.topBar,
       child: Stack(children: [
-        Positioned.fill(
-          child: GestureDetector(
-            behavior: HitTestBehavior.opaque,
-            onPanStart: (_) => windowManager.startDragging(),
-            onDoubleTap: _zoom,
+        // Only a desktop window is dragged and zoomed by its bar.
+        if (globals.isDesktop)
+          Positioned.fill(
+            child: GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onPanStart: (_) => windowManager.startDragging(),
+              onDoubleTap: _zoom,
+            ),
           ),
-        ),
         Positioned.fill(
+          top: top,
           child: ValueListenableBuilder(
             valueListenable: NextWindowChrome.layout,
             builder: (context, chrome, row) => AnimatedPadding(
@@ -90,65 +164,7 @@ class NextTopBar extends StatelessWidget {
                   ),
                 ],
                 const Spacer(),
-                ValueListenableBuilder(
-                  valueListenable: shell.tasks,
-                  builder: (context, _, __) {
-                    final active = shell.activeTasks;
-                    return AnimatedSwitcher(
-                      duration: const Duration(milliseconds: 240),
-                      child: active.isEmpty
-                          ? const SizedBox.shrink()
-                          : Padding(
-                              key: const ValueKey('tasks'),
-                              padding: const EdgeInsets.only(right: _gap),
-                              child: BackgroundEntry(
-                                onTap: () =>
-                                    shell.togglePopover(NextPopover.tasks),
-                              ),
-                            ),
-                    );
-                  },
-                ),
-                NextIconButton(
-                    glyph: NextGlyph.search,
-                    label: '搜索',
-                    size: _search,
-                    onTap: shell.openSearch),
-                const SizedBox(width: _gap),
-                ListenableBuilder(
-                  listenable: Listenable.merge([shell.chat, shell.nipaSetup]),
-                  builder: (context, _) {
-                    final c = shell.chat;
-                    final unset = shell.nipaSetup.needsModel;
-                    // Click: the conversation; right click or long press:
-                    // the menu (settings, back to Classic).
-                    return GestureDetector(
-                      onSecondaryTap: () =>
-                          shell.togglePopover(NextPopover.nipa),
-                      onLongPress: () => shell.togglePopover(NextPopover.nipa),
-                      child: Pressable(
-                        onTap: shell.toggleChat,
-                        semanticLabel: 'Nipa',
-                        pressScale: 0.94,
-                        builder: (context, hovered) => Stack(
-                          clipBehavior: Clip.none,
-                          children: [
-                            NipaAvatar(
-                              size: _avatar,
-                              mood: c.mood,
-                              hasNews: c.unseen,
-                              sentence: c.moodSentence ??
-                                  (unset ? '还没有模型' : null),
-                            ),
-                            if (unset)
-                              const Positioned(
-                                  right: -1, bottom: -1, child: NipaSetupDot()),
-                          ],
-                        ),
-                      ),
-                    );
-                  },
-                ),
+                ..._trailing(shell),
                 if (NextWindowButtons.wanted) const NextWindowButtons(),
               ]),
             ),
@@ -164,10 +180,16 @@ class NextTopBar extends StatelessWidget {
 /// height is the target.
 class _NavItem extends StatelessWidget {
   const _NavItem(
-      {required this.label, required this.active, required this.onTap});
+      {required this.label,
+      required this.active,
+      required this.onTap,
+      this.height = NextMetrics.topBar,
+      this.size = 14});
   final String label;
   final bool active;
   final VoidCallback onTap;
+  final double height;
+  final double size;
 
   @override
   Widget build(BuildContext context) => Pressable(
@@ -175,7 +197,7 @@ class _NavItem extends StatelessWidget {
         semanticLabel: label,
         pressScale: 0.96,
         builder: (context, hovered) => SizedBox(
-          height: NextMetrics.topBar,
+          height: height,
           child: Center(
             child: Stack(
               clipBehavior: Clip.none,
@@ -183,10 +205,10 @@ class _NavItem extends StatelessWidget {
               children: [
                 AnimatedDefaultTextStyle(
                   duration: const Duration(milliseconds: 180),
-                  style: NextText.sans(14,
+                  style: NextText.sans(size,
                       weight: FontWeight.w500,
                       letterSpacing: 0.28,
-                      height: 20 / 14,
+                      height: 20 / size,
                       color:
                           active || hovered ? NextColors.paper : NextColors.p3),
                   child: Text(label),
@@ -236,10 +258,13 @@ class NextPopovers extends StatelessWidget {
               ),
             ),
           Positioned(
-            top: NextMetrics.topBar + 4,
-            right: which == NextPopover.tasks
-                ? NextTopBar.tasksRight - 14
-                : NextTopBar.avatarRight - 8,
+            top: NextLayout.underBar(context) + 4,
+            right: (which == NextPopover.tasks
+                    ? NextTopBar.tasksRight - 14
+                    : NextTopBar.avatarRight - 8) -
+                (NextLayout.compact(context)
+                    ? NextMetrics.chromeEdge - NextLayout.compactGutter
+                    : 0),
             child: AnimatedSwitcher(
               duration: const Duration(milliseconds: 180),
               transitionBuilder: (child, animation) => FadeTransition(
@@ -270,6 +295,8 @@ class _NipaMenu extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final shell = NextShellScope.of(context);
+    // A phone has no keyboard to hint at.
+    final keys = !NextLayout.compact(context);
     return MenuPanel(children: [
       if (shell.nipaSetup.needsModel)
         MenuItem(
@@ -279,12 +306,12 @@ class _NipaMenu extends StatelessWidget {
         ),
       MenuItem(
         label: '问 Nipa',
-        trailing: const KeyHint('⌘ K'),
+        trailing: keys ? const KeyHint('⌘ K') : null,
         onTap: shell.openChat,
       ),
       MenuItem(
         label: '设置',
-        trailing: const KeyHint('⌘ ,'),
+        trailing: keys ? const KeyHint('⌘ ,') : null,
         onTap: shell.openSettings,
       ),
       MenuItem(
@@ -295,5 +322,81 @@ class _NipaMenu extends StatelessWidget {
         },
       ),
     ]);
+  }
+}
+
+/// A phone's top bar, under the status bar: background work, search, the
+/// menu (settings, back to Classic) and Nipa on the right. The page's own
+/// words start under it.
+class _CompactBar extends StatelessWidget {
+  const _CompactBar({required this.shell});
+  final NextShellController shell;
+
+  @override
+  Widget build(BuildContext context) => Padding(
+        padding: EdgeInsets.only(
+            top: NextLayout.barTop(context),
+            left: NextLayout.compactGutter,
+            right: NextLayout.compactGutter),
+        child: SizedBox(
+          height: NextMetrics.topBar,
+          child: Row(children: [
+            const Spacer(),
+            ...NextTopBar._trailing(shell).take(3),
+            NextIconButton(
+                glyph: NextGlyph.more,
+                label: '菜单',
+                size: NextTopBar._search,
+                onTap: () => shell.togglePopover(NextPopover.nipa)),
+            const SizedBox(width: NextTopBar._gap),
+            NextTopBar._trailing(shell).last,
+          ]),
+        ),
+      );
+}
+
+/// A phone's sections, at its foot over the page: the same four words as
+/// the window's bar, the current one in paper with the crimson dot, on
+/// frosted glass above the home indicator.
+class NextTabBar extends StatelessWidget {
+  const NextTabBar({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    final shell = NextShellScope.of(context);
+    final bottom = MediaQuery.paddingOf(context).bottom;
+    return Glass(
+      radius: BorderRadius.zero,
+      blur: 24,
+      color: const Color(0xB30C0C10),
+      borderColor: null,
+      highlight: false,
+      child: DecoratedBox(
+        decoration: const BoxDecoration(
+          border: Border(top: BorderSide(color: Color(0x14FFFFFF))),
+        ),
+        child: Padding(
+          padding: EdgeInsets.only(bottom: bottom),
+          child: SizedBox(
+            height: NextLayout.tabBar,
+            child: ListenableBuilder(
+              listenable: shell,
+              builder: (context, _) => Row(children: [
+                for (final (section, label) in NextTopBar._sections)
+                  Expanded(
+                    child: _NavItem(
+                      label: label,
+                      active: shell.section == section,
+                      onTap: () => shell.go(section),
+                      height: NextLayout.tabBar,
+                      size: 15,
+                    ),
+                  ),
+              ]),
+            ),
+          ),
+        ),
+      ),
+    );
   }
 }

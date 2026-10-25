@@ -1,3 +1,5 @@
+import 'dart:io' show Platform;
+
 import 'package:flutter/foundation.dart';
 import 'package:nipaplay/utils/settings_storage.dart';
 import 'package:nipaplay/utils/globals.dart' as globals;
@@ -30,13 +32,20 @@ class NextUiPreference extends ChangeNotifier {
 
   static const key = 'labs_use_next_interface';
 
-  /// Next's interface is what shows: on a desktop or an iPad, with NipaPlay
-  /// Next on in Labs ([nextEnabled]) and this [preference] on. Nipa runs only
-  /// then; Classic has no Nipa (D1). An iPad starts only the body: it cannot
-  /// host Nipa, and another device's Nipa serves it.
+  /// Next's interface is what shows: on a desktop, an iPad or an iPhone, with
+  /// NipaPlay Next on in Labs ([nextEnabled]) and this [preference] on. Nipa
+  /// runs only then; Classic has no Nipa (D1). An iPad or an iPhone starts
+  /// only the body: it cannot host Nipa, and another device's Nipa serves it.
+  /// Android has no Next.
   static bool interfaceOpen(
           {required bool nextEnabled, required bool preference}) =>
-      (globals.isDesktop || globals.isIPad) && nextEnabled && preference;
+      deviceHasNext() && nextEnabled && preference;
+
+  /// Whether this kind of device has Next at all. Tests replace it.
+  @visibleForTesting
+  static bool Function() deviceHasNext = () =>
+      globals.isDesktop ||
+      (!kIsWeb && Platform.isIOS && !globals.isTvOS);
 
   late final Future<void> ready;
   bool _enabled = false;

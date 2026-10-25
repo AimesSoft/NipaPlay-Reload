@@ -8,6 +8,18 @@ import '../widgets/glass.dart';
 import '../widgets/icons.dart';
 import 'playback.dart';
 
+/// Under a finger the player's menus rise from the foot as sheets, as wide
+/// as the screen allows, instead of hanging over their buttons.
+class PlayerMenuSheet extends InheritedWidget {
+  const PlayerMenuSheet({super.key, required super.child});
+
+  static bool of(BuildContext context) =>
+      context.dependOnInheritedWidgetOfExactType<PlayerMenuSheet>() != null;
+
+  @override
+  bool updateShouldNotify(PlayerMenuSheet old) => false;
+}
+
 /// The frosted surface the player's menus sit on, as the shell's popovers.
 class PlayerMenuSurface extends StatelessWidget {
   const PlayerMenuSurface(
@@ -16,18 +28,24 @@ class PlayerMenuSurface extends StatelessWidget {
   final Widget child;
 
   @override
-  Widget build(BuildContext context) => Glass(
+  Widget build(BuildContext context) {
+    final sheet = PlayerMenuSheet.of(context);
+    final room = MediaQuery.sizeOf(context).width - 16;
+    return Glass(
         blur: 30,
         color: const Color(0xD1121218),
         borderColor: const Color(0x1AFFFFFF),
-        radius: BorderRadius.circular(16),
+        radius: BorderRadius.circular(sheet ? 22 : 16),
         shadows: const [
           BoxShadow(
               color: Color(0x66000000), blurRadius: 40, offset: Offset(0, 12))
         ],
-        padding: const EdgeInsets.all(6),
-        child: SizedBox(width: width, child: child),
+        padding: EdgeInsets.all(sheet ? 10 : 6),
+        child: SizedBox(
+            width: sheet ? (room < 520 ? room - 20 : 500) : width,
+            child: child),
       );
+  }
 }
 
 class PlayerMenuHeading extends StatelessWidget {

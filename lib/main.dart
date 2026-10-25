@@ -1243,9 +1243,16 @@ class _NipaPlayAppState extends State<NipaPlayApp> with WidgetsBindingObserver {
                           launchFilePath: widget.launchFilePath,
                         ),
                       )
-                    : CupertinoMainPage(
-                        launchFilePath: widget.launchFilePath,
-                      ),
+                    // An iPhone can show Next; Android stays Classic alone.
+                    : Platform.isIOS
+                        ? NextUiGate(
+                            classic: CupertinoMainPage(
+                              launchFilePath: widget.launchFilePath,
+                            ),
+                          )
+                        : CupertinoMainPage(
+                            launchFilePath: widget.launchFilePath,
+                          ),
                 // Temporary compatibility renderer. A dedicated television
                 // shell can replace this entry without changing page data.
                 AppDisplaySurface.television: () =>

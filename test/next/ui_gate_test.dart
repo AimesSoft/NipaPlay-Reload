@@ -73,4 +73,16 @@ void main() {
     await pumpGate(tester, {NextUiPreference.key: true});
     await expectClassicOnly(tester);
   });
+
+  testWidgets('both on, on a device without Next (Android): Classic only',
+      (tester) async {
+    final original = NextUiPreference.deviceHasNext;
+    NextUiPreference.deviceHasNext = () => false;
+    addTearDown(() => NextUiPreference.deviceHasNext = original);
+    await pumpGate(tester, {
+      SettingsKeys.labsEnableAgentEndpoint: true,
+      NextUiPreference.key: true,
+    });
+    await expectClassicOnly(tester);
+  });
 }

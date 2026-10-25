@@ -11,6 +11,7 @@ import '../downloads/limits_sheet.dart';
 import '../downloads/task_open.dart';
 import '../settings/controls.dart' show PillButton;
 import '../shell/shell_controller.dart';
+import '../theme/layout.dart';
 import '../theme/tokens.dart';
 import '../widgets/buttons.dart';
 import '../widgets/icons.dart';
@@ -110,8 +111,8 @@ class _ActivityPageState extends State<ActivityPage>
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         Padding(
-          padding: const EdgeInsets.fromLTRB(
-              NextMetrics.gutter, NextMetrics.topBar + 40, 56, 26),
+          padding: EdgeInsets.fromLTRB(
+              NextLayout.gutter(context), NextLayout.underBar(context) + 40, NextLayout.end(context), 26),
           child: ValueListenableBuilder(
             valueListenable: shell.tasks,
             builder: (context, _, __) => Row(
@@ -162,7 +163,7 @@ class _ActivityPageState extends State<ActivityPage>
           );
           return ListView(
             key: const PageStorageKey('activity/now'),
-            padding: const EdgeInsets.fromLTRB(NextMetrics.gutter, 0, 56, 64),
+            padding: EdgeInsets.fromLTRB(NextLayout.gutter(context), 0, NextLayout.end(context), 64 + NextLayout.foot(context)),
             children: [
               if (line != null) ...[
                 Row(children: [

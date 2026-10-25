@@ -2,6 +2,7 @@ import 'dart:math' as math;
 
 import 'package:flutter/widgets.dart';
 
+import '../theme/layout.dart';
 import '../theme/tokens.dart';
 import '../widgets/art_origin.dart';
 import '../widgets/artwork.dart';
@@ -121,11 +122,14 @@ class _HeroBackdropState extends State<HeroBackdrop>
     _syncMotion();
     final view = widget.viewport;
     final hA = HeroBackdrop.heroHeight(view.height);
-    final (sA, tA) = _aFraming(view);
+    // A phone's hero is a poster standing over the words, framed the same
+    // in A and B; the words are under it, so it is shaded from below.
+    final compact = view.width < NextLayout.compactWidth;
+    final (sA, tA) = compact ? (1.0, Offset.zero) : _aFraming(view);
 
     // The artwork at its full B size (16:9 cover of the viewport), not
     // clipped to the viewport, so A's smaller scale still covers the width.
-    final b = _bRect(view);
+    final b = compact ? Rect.fromLTWH(0, 0, view.width, hA) : _bRect(view);
     final art = SizedBox(
       width: view.width,
       height: view.height,
@@ -167,7 +171,7 @@ class _HeroBackdropState extends State<HeroBackdrop>
               right: 0,
               top: 0,
               height: hA,
-              child: ShadeLayers(heroShadeA)),
+              child: ShadeLayers(compact ? heroShadeCompact : heroShadeA)),
           Positioned(
               left: 0,
               right: 0,
@@ -176,7 +180,9 @@ class _HeroBackdropState extends State<HeroBackdrop>
               child: const ColoredBox(color: NextColors.ink)),
         ]),
       ),
-      FadeTransition(opacity: _stageT, child: ShadeLayers(heroShadeB)),
+      FadeTransition(
+          opacity: _stageT,
+          child: ShadeLayers(compact ? heroShadeCompact : heroShadeB)),
     ]);
 
     return ClipRect(
@@ -264,6 +270,23 @@ final heroShadeA = <Gradient>[
     end: Alignment.bottomCenter,
     colors: [_a(.55), _a(0)],
     stops: const [0, .18],
+  ),
+];
+
+/// A phone's hero: ink rising from under the words, a little under the
+/// status bar.
+final heroShadeCompact = <Gradient>[
+  LinearGradient(
+    begin: Alignment.bottomCenter,
+    end: Alignment.topCenter,
+    colors: [_ink, _a(.82), _a(.3), _a(0)],
+    stops: const [0, .3, .55, .75],
+  ),
+  LinearGradient(
+    begin: Alignment.topCenter,
+    end: Alignment.bottomCenter,
+    colors: [_a(.5), _a(0)],
+    stops: const [0, .16],
   ),
 ];
 

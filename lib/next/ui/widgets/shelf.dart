@@ -1,5 +1,6 @@
 import 'package:flutter/widgets.dart';
 
+import '../theme/layout.dart';
 import '../theme/tokens.dart';
 
 /// A titled, horizontally scrolling row (`.shelf`). Cards may scale and
@@ -11,7 +12,7 @@ class Shelf extends StatelessWidget {
     required this.height,
     required this.itemCount,
     required this.itemBuilder,
-    this.gutter = NextMetrics.gutter,
+    this.gutter,
     this.gap = 16,
     this.storageKey,
     this.trailing,
@@ -21,7 +22,8 @@ class Shelf extends StatelessWidget {
   final double height;
   final int itemCount;
   final IndexedWidgetBuilder itemBuilder;
-  final double gutter;
+  /// The left edge; the layout's ([NextLayout.gutter]) unless given.
+  final double? gutter;
   final double gap;
 
   /// Keeps the horizontal position when coming back to the page.
@@ -31,7 +33,9 @@ class Shelf extends StatelessWidget {
   final Widget? trailing;
 
   @override
-  Widget build(BuildContext context) => Column(
+  Widget build(BuildContext context) {
+    final gutter = this.gutter ?? NextLayout.gutter(context);
+    return Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         mainAxisSize: MainAxisSize.min,
         children: [
@@ -58,7 +62,8 @@ class Shelf extends StatelessWidget {
               key: storageKey == null ? null : PageStorageKey(storageKey),
               scrollDirection: Axis.horizontal,
               clipBehavior: Clip.none,
-              padding: EdgeInsets.only(left: gutter, right: 56),
+              padding: EdgeInsets.only(
+                  left: gutter, right: NextLayout.end(context)),
               itemCount: itemCount,
               separatorBuilder: (_, __) => SizedBox(width: gap),
               itemBuilder: itemBuilder,
@@ -66,4 +71,5 @@ class Shelf extends StatelessWidget {
           ),
         ],
       );
+  }
 }

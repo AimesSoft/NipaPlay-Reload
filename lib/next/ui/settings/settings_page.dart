@@ -5,6 +5,7 @@ import 'package:flutter/widgets.dart';
 
 import '../data/settings_data.dart';
 import '../shell/shell_controller.dart';
+import '../theme/layout.dart';
 import '../theme/tokens.dart';
 import '../widgets/buttons.dart';
 import '../widgets/icons.dart';
@@ -355,58 +356,14 @@ class _SettingsPageState extends State<SettingsPage> implements SettingsDebug {
     ]);
   }
 
-  @override
-  Widget build(BuildContext context) {
-    final model = _model!;
-    final query = _search.text.trim();
-    return ColoredBox(
-      color: NextColors.ink,
-      child: Stack(children: [
-        // A faint warmth from the top left, where the rail begins.
-        const Positioned(
-          left: -240,
-          top: -280,
-          width: 900,
-          height: 760,
-          child: IgnorePointer(
-            child: DecoratedBox(
-              decoration: BoxDecoration(
-                gradient: RadialGradient(colors: [
-                  Color(0x14FF2E55),
-                  Color(0x00FF2E55),
-                ]),
-              ),
-            ),
-          ),
-        ),
-        Positioned.fill(
-          top: NextMetrics.topBar,
-          child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            const SizedBox(width: NextMetrics.gutter),
-            SizedBox(
-              width: 176,
-              child: Padding(
-                padding: const EdgeInsets.only(top: 34),
-                child: _Rail(
-                  current: query.isEmpty ? _section : null,
-                  search: _search,
-                  searchFocus: _searchFocus,
-                  onSearch: () {
-                    setState(() {});
-                    if (_scroll.hasClients) _scroll.jumpTo(0);
-                  },
-                  onTap: _go,
-                ),
-              ),
-            ),
-            const SizedBox(width: 56),
-            Expanded(
-              child: ListenableBuilder(
+
+  /// The section (or the search's results), scrolling, inside [padding].
+  Widget _content(SettingsModel model, String query, EdgeInsets padding) =>
+      ListenableBuilder(
                 listenable: Listenable.merge([model, _keys]),
                 builder: (context, _) => SingleChildScrollView(
                   controller: _scroll,
-                  padding:
-                      const EdgeInsets.only(top: 28, bottom: 96, right: 64),
+                  padding: padding,
                   child: Align(
                     alignment: Alignment.topLeft,
                     child: ConstrainedBox(
@@ -442,7 +399,120 @@ class _SettingsPageState extends State<SettingsPage> implements SettingsDebug {
                     ),
                   ),
                 ),
+              );
+
+  /// A phone: back and the search on the bar's row, the sections in a row
+  /// that scrolls sideways, the section under them in one column.
+  Widget _phone(SettingsModel model, String query) {
+    const gutter = NextLayout.compactGutter;
+    return ColoredBox(
+      color: NextColors.ink,
+      child: Padding(
+        padding: EdgeInsets.only(top: NextLayout.barTop(context)),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+          // Back on the bar's row (its right holds the shell's own).
+          SizedBox(
+            height: NextMetrics.topBar,
+            child: Padding(
+              padding: const EdgeInsets.only(left: gutter - 9),
+              child: Align(
+                alignment: Alignment.centerLeft,
+                child: NextIconButton(
+                    glyph: NextGlyph.chevronLeft,
+                    label: '返回',
+                    onTap: () => Navigator.of(context).maybePop()),
               ),
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(gutter, 6, gutter, 6),
+            child: _SearchField(
+                search: _search,
+                searchFocus: _searchFocus,
+                onSearch: () {
+                  setState(() {});
+                  if (_scroll.hasClients) _scroll.jumpTo(0);
+                }),
+          ),
+          SizedBox(
+            height: 44,
+            child: ListView(
+              scrollDirection: Axis.horizontal,
+              padding: EdgeInsets.symmetric(horizontal: gutter),
+              children: [
+                for (final s in SettingsSection.rail.expand((g) => g))
+                  Padding(
+                    padding: const EdgeInsets.only(right: 22),
+                    child: _RailItem(
+                        label: s.title,
+                        active: query.isEmpty && s == _section,
+                        onTap: () => _go(s),
+                        under: true),
+                  ),
+              ],
+            ),
+          ),
+          Expanded(
+            child: _content(
+                model,
+                query,
+                EdgeInsets.fromLTRB(gutter, 18, gutter,
+                    64 + MediaQuery.paddingOf(context).bottom)),
+          ),
+        ]),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final model = _model!;
+    final query = _search.text.trim();
+    if (NextLayout.compact(context)) return _phone(model, query);
+    return ColoredBox(
+      color: NextColors.ink,
+      child: Stack(children: [
+        // A faint warmth from the top left, where the rail begins.
+        const Positioned(
+          left: -240,
+          top: -280,
+          width: 900,
+          height: 760,
+          child: IgnorePointer(
+            child: DecoratedBox(
+              decoration: BoxDecoration(
+                gradient: RadialGradient(colors: [
+                  Color(0x14FF2E55),
+                  Color(0x00FF2E55),
+                ]),
+              ),
+            ),
+          ),
+        ),
+        Positioned.fill(
+          top: NextLayout.underBar(context),
+          child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            const SizedBox(width: NextMetrics.gutter),
+            SizedBox(
+              width: 176,
+              child: Padding(
+                padding: const EdgeInsets.only(top: 34),
+                child: _Rail(
+                  current: query.isEmpty ? _section : null,
+                  search: _search,
+                  searchFocus: _searchFocus,
+                  onSearch: () {
+                    setState(() {});
+                    if (_scroll.hasClients) _scroll.jumpTo(0);
+                  },
+                  onTap: _go,
+                ),
+              ),
+            ),
+            const SizedBox(width: 56),
+            Expanded(
+              child: _content(model, query,
+                  const EdgeInsets.only(top: 28, bottom: 96, right: 64)),
             ),
           ]),
         ),
@@ -568,6 +638,30 @@ class _Rail extends StatelessWidget {
   @override
   Widget build(BuildContext context) =>
       Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        _SearchField(
+            search: search, searchFocus: searchFocus, onSearch: onSearch),
+        const SizedBox(height: 22),
+        for (final (i, group) in SettingsSection.rail.indexed) ...[
+          if (i > 0) const SizedBox(height: 14),
+          for (final s in group)
+            _RailItem(
+                label: s.title, active: s == current, onTap: () => onTap(s)),
+        ],
+      ]);
+}
+
+/// The settings' search, on the rail or a phone's bar.
+class _SearchField extends StatelessWidget {
+  const _SearchField(
+      {required this.search,
+      required this.searchFocus,
+      required this.onSearch});
+  final TextEditingController search;
+  final FocusNode searchFocus;
+  final VoidCallback onSearch;
+
+  @override
+  Widget build(BuildContext context) =>
         ListenableBuilder(
           listenable: searchFocus,
           builder: (context, _) => AnimatedContainer(
@@ -603,23 +697,21 @@ class _Rail extends StatelessWidget {
               ),
             ]),
           ),
-        ),
-        const SizedBox(height: 22),
-        for (final (i, group) in SettingsSection.rail.indexed) ...[
-          if (i > 0) const SizedBox(height: 14),
-          for (final s in group)
-            _RailItem(
-                label: s.title, active: s == current, onTap: () => onTap(s)),
-        ],
-      ]);
+        );
 }
 
 class _RailItem extends StatelessWidget {
   const _RailItem(
-      {required this.label, required this.active, required this.onTap});
+      {required this.label,
+      required this.active,
+      required this.onTap,
+      this.under = false});
   final String label;
   final bool active;
   final VoidCallback onTap;
+
+  /// The dot under the word (a phone's row of sections), not left of it.
+  final bool under;
 
   @override
   Widget build(BuildContext context) => Pressable(
@@ -630,8 +722,10 @@ class _RailItem extends StatelessWidget {
           height: 34,
           child: Stack(clipBehavior: Clip.none, children: [
             Positioned(
-              left: -16,
-              top: 15,
+              left: under ? null : -16,
+              top: under ? null : 15,
+              bottom: under ? 0 : null,
+              right: null,
               child: AnimatedOpacity(
                 opacity: active ? 1 : 0,
                 duration: const Duration(milliseconds: 220),

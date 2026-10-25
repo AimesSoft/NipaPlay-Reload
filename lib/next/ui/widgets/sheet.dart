@@ -111,7 +111,9 @@ class _NextSheetLayerState extends State<NextSheetLayer> {
                 child: ConstrainedBox(
                   constraints: BoxConstraints(
                     maxWidth: sheet.width,
-                    maxHeight: size.height - NextMetrics.topBar * 2,
+                    maxHeight: size.height -
+                        NextMetrics.topBar * 2 -
+                        MediaQuery.paddingOf(context).vertical,
                   ),
                   child: Builder(
                       builder: (context) => sheet.builder(

@@ -26,13 +26,28 @@ import 'fake_world.dart';
 abstract final class NextUiDev {
   static bool get enabled => kDebugMode && LabProfile.active;
 
+  /// The iOS simulator has no lab profile and its Dart process sees no
+  /// environment: a Debug build there takes the scripted world's directory
+  /// from a file `next-ui-fake` in the application's temporary directory,
+  /// relative to it (the container moves when the app is installed again).
+  static String? _simulatorFake() {
+    if (!kDebugMode || !Platform.isIOS) return null;
+    final tmp = Directory.systemTemp.path;
+    final file = File('$tmp/next-ui-fake');
+    if (!file.existsSync()) return null;
+    final dir = file.readAsStringSync().trim();
+    if (dir.isEmpty) return null;
+    return dir.startsWith('/') ? dir : '$tmp/$dir';
+  }
+
   static NextUiServices? services(BuildContext context) {
-    if (!enabled) return null;
+    final simulator = _simulatorFake();
+    if (!enabled && simulator == null) return null;
     final env = Platform.environment;
     if (env['NIPAPLAY_NEXT_UI_REDUCE_MOTION'] == '1') {
       NextMotion.forceReduced = true;
     }
-    final dir = env['NIPAPLAY_NEXT_UI_FAKE'];
+    final dir = simulator ?? env['NIPAPLAY_NEXT_UI_FAKE'];
     if (dir == null || dir.isEmpty) return null;
     final world = FakeWorld.load(
       dir,
@@ -41,7 +56,8 @@ abstract final class NextUiDev {
     );
     if (world == null) return null;
     final runtime = context.read<NextRuntime>();
-    final ChatPort chat = env['NIPAPLAY_NEXT_UI_FAKE_CHAT'] == '1'
+    final ChatPort chat = simulator != null ||
+            env['NIPAPLAY_NEXT_UI_FAKE_CHAT'] == '1'
         ? FakeChatPort(world)
         : ChatHostPort(runtime);
     // The registry's real contracts, read only; values stay in the script.

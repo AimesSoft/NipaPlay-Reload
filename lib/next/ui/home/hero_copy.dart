@@ -1,9 +1,12 @@
+import 'dart:math' as math;
+
 import 'package:flutter/widgets.dart';
 
 import '../../ui_data/ui_data.dart';
 import '../cards/card_views.dart';
 import '../chat/transcript.dart' show Shimmer;
 import '../shell/shell_controller.dart';
+import '../theme/layout.dart';
 import '../theme/tokens.dart';
 import '../widgets/artwork.dart';
 import '../widgets/buttons.dart';
@@ -45,8 +48,11 @@ class HeroCopy extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final overview = work.overview;
+    // 600 wide, or a phone's column.
+    final width = math.min(600.0,
+        MediaQuery.sizeOf(context).width - 2 * NextLayout.gutter(context));
     return SizedBox(
-      width: 600,
+      width: width,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         mainAxisSize: MainAxisSize.min,
@@ -62,7 +68,7 @@ class HeroCopy extends StatelessWidget {
                 children: [...previous, if (current != null) current],
               ),
               child: line == null || line!.isEmpty
-                  ? const SizedBox(key: ValueKey('none'), width: 600)
+                  ? SizedBox(key: const ValueKey('none'), width: width)
                   : Padding(
                       key: ValueKey(line),
                       padding: const EdgeInsets.only(bottom: 6),
@@ -108,7 +114,7 @@ class HeroCopy extends StatelessWidget {
               ),
             ),
           const SizedBox(height: 26),
-          Row(children: [
+          Wrap(runSpacing: 12, children: [
             if (work.next?.playable ?? false) ...[
               PlayButton(label: Words.play(work), onTap: onPlay),
               const SizedBox(width: 12),
@@ -140,6 +146,7 @@ class _PreparingLineState extends State<PreparingLine> {
     final task = widget.tasks.firstWhere((t) => t.state == UiTaskState.running,
         orElse: () => widget.tasks.first);
     final prep = widget.preparation;
+    final compact = NextLayout.compact(context);
     return Padding(
       padding: const EdgeInsets.only(left: 40, top: 4, bottom: 4),
       child: AnimatedSize(
@@ -157,6 +164,34 @@ class _PreparingLineState extends State<PreparingLine> {
               builder: (context, hovered) => Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
+                  // A phone: the name and the bar share what is left.
+                  if (compact) ...[
+                  Container(
+                    width: 22,
+                    height: 32,
+                    decoration:
+                        BoxDecoration(borderRadius: BorderRadius.circular(4)),
+                    clipBehavior: Clip.antiAlias,
+                    child: NextImage(
+                        task.artwork?.poster ?? task.artwork?.backdrop,
+                        shape: ArtShape.poster,
+                        tint: task.artwork?.tint),
+                  ),
+                  const SizedBox(width: 12),
+                  Text('正在准备',
+                      style: NextText.sans(12.5,
+                          weight: FontWeight.w600, color: NextColors.accent2)),
+                  const SizedBox(width: 10),
+                  Flexible(
+                    child: ThinBar(
+                        progress: task.progress ?? 0,
+                        width: 72,
+                        live: task.state == UiTaskState.running),
+                  ),
+                  const SizedBox(width: 10),
+                  NumText(Words.task(task),
+                      style: NextText.sans(12.5, color: NextColors.p2)),
+                  ] else ...[
                   Container(
                     width: 22,
                     height: 32,
@@ -189,6 +224,7 @@ class _PreparingLineState extends State<PreparingLine> {
                   const SizedBox(width: 12),
                   NumText(Words.task(task),
                       style: NextText.sans(12.5, color: NextColors.p2)),
+                  ],
                 ],
               ),
             ),
@@ -196,7 +232,11 @@ class _PreparingLineState extends State<PreparingLine> {
               Padding(
                 padding: const EdgeInsets.only(top: 10),
                 child: SizedBox(
-                  width: 420,
+                  width: compact
+                      ? MediaQuery.sizeOf(context).width -
+                          2 * NextLayout.gutter(context) -
+                          40
+                      : 420,
                   child: prep != null
                       ? PreparationCardView(card: prep)
                       : CardSurface(
