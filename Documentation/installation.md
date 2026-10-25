@@ -6,6 +6,7 @@
 
 - 前往 [GitHub Release 页面](https://github.com/AimesSoft/NipaPlay-Reload/releases) 下载安装包（或压缩包）；执行安装或解压后运行。
 - 首次启动被 Defender 拦截时，点击"更多信息→仍要运行"。
+- 安装版会按“允许局域网里的其他设备连接”任务（默认勾选）放行防火墙；压缩包（便携版）不会改防火墙，首次运行会弹出 Windows 防火墙窗，请点“允许”。
 
 ## macOS
 

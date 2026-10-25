@@ -549,6 +549,12 @@ runs:
         }
         $licensePath = (Resolve-Path $licensePath).Path
 
+        $firewallScript = "windows\nipaplay_firewall.ps1"
+        if (-not (Test-Path $firewallScript)) {
+          throw "未找到防火墙辅助脚本：$firewallScript"
+        }
+        $firewallScript = (Resolve-Path $firewallScript).Path
+
         $installerScript = Join-Path $env:RUNNER_TEMP "NipaPlayInstaller.iss"
         $outputBaseName = "NipaPlay_${version}_Windows_${arch}_Setup"
 
@@ -567,7 +573,7 @@ runs:
         AppName={#MyAppName}
         AppVersion={#MyAppVersion}
         AppPublisher={#MyAppPublisher}
-        DefaultDirName={code:GetAppDir}
+        DefaultDirName={autopf}\NipaPlay
         DefaultGroupName={#MyAppName}
         OutputDir="$artifactDir"
         OutputBaseFilename="$outputBaseName"
@@ -579,9 +585,7 @@ runs:
         ArchitecturesInstallIn64BitMode=x64
         DisableWelcomePage=yes
         WizardStyle=modern
-        PrivilegesRequired=lowest
-        PrivilegesRequiredOverridesAllowed=dialog
-        UsePreviousPrivileges=yes
+        PrivilegesRequired=admin
         LicenseFile="$licensePath"
 
         [Languages]
@@ -591,9 +595,11 @@ runs:
         [Tasks]
         Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}"; Flags: unchecked
         Name: "fileassoc"; Description: "将常见视频格式与 NipaPlay 关联"; Flags: unchecked
+        Name: "firewall"; Description: "允许局域网里的其他设备连接"
 
         [Files]
         Source: "$buildDir\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
+        Source: "$firewallScript"; DestDir: "{tmp}"; Flags: dontcopy
 
         [Icons]
         Name: "{autoprograms}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"
@@ -618,12 +624,93 @@ runs:
         Filename: "{app}\{#MyAppExeName}"; Description: "启动 NipaPlay"; Flags: nowait postinstall skipifsilent
 
         [Code]
-        function GetAppDir(Default: string): string;
+        { 安装只在管理员模式进行，这一次提升之后应用运行时不再需要提升（可变数据都在用户的 Documents 和 AppData 里）。 }
+
+        { 以前按“只为我安装”装过的用户：HKCU 里有同一个 AppId 的卸载项，装在 %LOCALAPPDATA%\Programs\NipaPlay。
+          先静默卸载旧的程序文件（卸载器只删它自己装的文件，不碰 Documents 和 AppData 里的用户数据），避免装出两份。
+          失败不让安装失败，只写进安装日志（/LOG）。 }
+        procedure RemovePerUserInstall;
+        var
+          UninstallKey, Command, UninstallExe: string;
+          ResultCode, I: Integer;
         begin
-          if IsAdminInstallMode then
-            Result := ExpandConstant('{pf}\NipaPlay')
+          UninstallKey := 'Software\Microsoft\Windows\CurrentVersion\Uninstall\' + ExpandConstant('{#SetupSetting("AppId")}') + '_is1';
+          if not RegQueryStringValue(HKCU, UninstallKey, 'UninstallString', Command) then
+            Exit;
+          UninstallExe := RemoveQuotes(Command);
+          if not FileExists(UninstallExe) then
+          begin
+            Log('Migration: per-user uninstall entry points to a missing file: ' + UninstallExe);
+            Exit;
+          end;
+          Log('Migration: removing the per-user install with ' + UninstallExe);
+          if not Exec(UninstallExe, '/VERYSILENT /SUPPRESSMSGBOXES /NORESTART', '', SW_HIDE, ewWaitUntilTerminated, ResultCode) then
+          begin
+            Log('Migration: could not start the old uninstaller, error ' + IntToStr(ResultCode));
+            Exit;
+          end;
+          { 卸载器会把自己复制到临时目录再运行，第一个进程可能先退出；等到卸载项消失 }
+          for I := 1 to 120 do
+          begin
+            if not RegKeyExists(HKCU, UninstallKey) then
+              Break;
+            Sleep(500);
+          end;
+          if RegKeyExists(HKCU, UninstallKey) then
+            Log('Migration: the per-user uninstall entry is still there')
           else
-            Result := ExpandConstant('{localappdata}\Programs\NipaPlay');
+            Log('Migration: the per-user install is removed');
+        end;
+
+        { 防火墙放行规则（任务 firewall，默认勾选）。
+          规则名固定为 NipaPlay，TCP 和 UDP 各一条，只放行域和专用网络（不含公用网络），并删掉指向同一个 exe 的入站 Block 规则。
+          失败不让安装失败，只写进安装日志（/LOG）。 }
+        procedure InstallFirewallRules;
+        var
+          Lines: TArrayOfString;
+          ResultCode, I: Integer;
+          LogFile, Params: string;
+        begin
+          ExtractTemporaryFile('nipaplay_firewall.ps1');
+          LogFile := ExpandConstant('{tmp}\nipaplay_firewall.log');
+          Params := '-NoProfile -NonInteractive -ExecutionPolicy Bypass -File "' + ExpandConstant('{tmp}\nipaplay_firewall.ps1') +
+            '" -Action Install -Path "' + ExpandConstant('{app}\{#MyAppExeName}') + '" -LogFile "' + LogFile + '"';
+          Log('Firewall: powershell.exe ' + Params);
+          if not Exec(ExpandConstant('{sys}\WindowsPowerShell\v1.0\powershell.exe'), Params, '', SW_HIDE, ewWaitUntilTerminated, ResultCode) then
+            Log('Firewall: could not start PowerShell, error ' + IntToStr(ResultCode))
+          else
+          begin
+            if LoadStringsFromFile(LogFile, Lines) then
+              for I := 0 to GetArrayLength(Lines) - 1 do
+                Log('Firewall: ' + Lines[I]);
+            if ResultCode <> 0 then
+              Log('Firewall: failed, result ' + IntToStr(ResultCode));
+          end;
+        end;
+
+        procedure CurStepChanged(CurStep: TSetupStep);
+        begin
+          if CurStep = ssInstall then
+            RemovePerUserInstall;
+          if (CurStep = ssPostInstall) and WizardIsTaskSelected('firewall') then
+            InstallFirewallRules;
+        end;
+
+        procedure CurUninstallStepChanged(CurUninstallStep: TUninstallStep);
+        var
+          ResultCode: Integer;
+          Params: string;
+        begin
+          if CurUninstallStep = usUninstall then
+          begin
+            { 只删指向这个 exe 的同名规则；没有规则时 netsh 返回 1，不算失败 }
+            Params := 'advfirewall firewall delete rule name="NipaPlay" program="' + ExpandConstant('{app}\{#MyAppExeName}') + '"';
+            Log('Firewall: netsh.exe ' + Params);
+            if not Exec(ExpandConstant('{sys}\netsh.exe'), Params, '', SW_HIDE, ewWaitUntilTerminated, ResultCode) then
+              Log('Firewall: could not start netsh, error ' + IntToStr(ResultCode))
+            else
+              Log('Firewall: netsh returned ' + IntToStr(ResultCode));
+          end;
         end;
         "@ | Set-Content -Path $installerScript -Encoding utf8BOM
 
