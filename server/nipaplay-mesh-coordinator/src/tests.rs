@@ -667,6 +667,161 @@ async fn renewal_issues_a_fresh_certificate() {
         .starts_with("-----BEGIN CERTIFICATE-----"));
 }
 
+async fn renew_request(harness: &Harness, key: &[u8], bearer: Option<&str>) -> reqwest::Response {
+    let device_id = cert::device_id_from_public_key(key);
+    let mut request = harness.client.post(harness.url("/mesh/v1/devices/renew"));
+    if let Some(token) = bearer {
+        request = request.bearer_auth(token);
+    }
+    request
+        .json(&json!({
+            "device_id": device_id,
+            "device_public_key": base64url(key),
+            "proof": possession(key, vec!["renew".into(), base64url(key), device_id.clone()]),
+        }))
+        .send()
+        .await
+        .unwrap()
+}
+
+#[tokio::test]
+async fn renewal_needs_only_the_device_key_and_never_contacts_the_upstream() {
+    let harness = start_harness("renew-keyonly", |_| {}).await;
+    let key = new_device_key();
+    harness.register(VALID_TOKEN, &key, "Mac").await;
+    let before = harness.validation_calls.load(Ordering::SeqCst);
+
+    // No token at all, an expired/garbage token, and a token of another account
+    // all renew the same device: the proof from its own key is the credential.
+    for bearer in [None, Some("expired-or-garbage"), Some(SECOND_TOKEN)] {
+        let response = renew_request(&harness, &key, bearer.map(test_token).as_deref()).await;
+        assert_eq!(response.status(), StatusCode::OK, "{bearer:?}");
+        let body: Value = response.json().await.unwrap();
+        assert_eq!(body["account_id"], ACCOUNT_ID.to_string());
+        assert!(body["server_public_key"].as_str().unwrap().len() > 10);
+        assert!(body["certificate"]["pem"]
+            .as_str()
+            .unwrap()
+            .starts_with("-----BEGIN CERTIFICATE-----"));
+    }
+    assert_eq!(harness.validation_calls.load(Ordering::SeqCst), before);
+    assert_eq!(harness.lookup_calls.load(Ordering::SeqCst), 0);
+}
+
+#[tokio::test]
+async fn renewal_rejects_unknown_forged_replayed_foreign_and_revoked_devices() {
+    let harness = start_harness("renew-reject", |_| {}).await;
+    let key = new_device_key();
+    let device_id = cert::device_id_from_public_key(&key);
+    harness.register(VALID_TOKEN, &key, "Mac").await;
+    let renew = |body: Value| {
+        let harness = &harness;
+        async move {
+            harness
+                .client
+                .post(harness.url("/mesh/v1/devices/renew"))
+                .json(&body)
+                .send()
+                .await
+                .unwrap()
+                .status()
+        }
+    };
+
+    // Never registered.
+    let stranger = new_device_key();
+    assert_eq!(
+        renew_request(&harness, &stranger, None).await.status(),
+        StatusCode::NOT_FOUND
+    );
+    // Proof signed by a different key.
+    let other = new_device_key();
+    let forged = possession(
+        &other,
+        vec!["renew".into(), base64url(&key), device_id.clone()],
+    );
+    assert_eq!(
+        renew(json!({"device_id":device_id,"device_public_key":base64url(&key),"proof":forged}))
+            .await,
+        StatusCode::BAD_REQUEST
+    );
+    // Missing proof.
+    assert_eq!(
+        renew(json!({"device_id":device_id,"device_public_key":base64url(&key)})).await,
+        StatusCode::BAD_REQUEST
+    );
+    // Replay of a valid proof.
+    let proof = possession(
+        &key,
+        vec!["renew".into(), base64url(&key), device_id.clone()],
+    );
+    let body = json!({"device_id":device_id,"device_public_key":base64url(&key),"proof":proof});
+    assert_eq!(renew(body.clone()).await, StatusCode::OK);
+    assert_eq!(renew(body).await, StatusCode::BAD_REQUEST);
+    // A register-purpose proof cannot be reused as a renewal.
+    let wrong_purpose = possession(
+        &key,
+        vec![
+            "register".into(),
+            base64url(&key),
+            "Mac".into(),
+            "macos".into(),
+            "1".into(),
+        ],
+    );
+    assert_eq!(
+        renew(
+            json!({"device_id":device_id,"device_public_key":base64url(&key),"proof":wrong_purpose})
+        )
+        .await,
+        StatusCode::BAD_REQUEST
+    );
+
+    // Revoked devices are refused, and only with a valid proof.
+    harness
+        .client
+        .post(harness.url(&format!("/mesh/v1/devices/{device_id}/revoke")))
+        .bearer_auth(test_token(VALID_TOKEN))
+        .json(&json!({ "device_id": device_id }))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(
+        renew_request(&harness, &key, None).await.status(),
+        StatusCode::FORBIDDEN
+    );
+    let forged = possession(
+        &other,
+        vec!["renew".into(), base64url(&key), device_id.clone()],
+    );
+    assert_eq!(
+        renew(json!({"device_id":device_id,"device_public_key":base64url(&key),"proof":forged}))
+            .await,
+        StatusCode::BAD_REQUEST,
+        "an unauthenticated caller learns nothing about revocation"
+    );
+}
+
+#[tokio::test]
+async fn renewal_is_rate_limited_per_device() {
+    let harness = start_harness("renew-limit", |config| config.renew_per_hour = 2).await;
+    let key = new_device_key();
+    harness.register(VALID_TOKEN, &key, "Mac").await;
+    let other = new_device_key();
+    harness.register(VALID_TOKEN, &other, "Other").await;
+    for expected in [
+        StatusCode::OK,
+        StatusCode::OK,
+        StatusCode::TOO_MANY_REQUESTS,
+    ] {
+        assert_eq!(renew_request(&harness, &key, None).await.status(), expected);
+    }
+    assert_eq!(
+        renew_request(&harness, &other, None).await.status(),
+        StatusCode::OK
+    );
+}
+
 #[tokio::test]
 async fn addresses_round_trip_and_are_visible_to_the_account() {
     let harness = start_harness("addresses", config_with_mock_upstream("addresses")).await;
@@ -800,17 +955,19 @@ async fn per_account_register_limit_returns_429() {
 #[tokio::test]
 async fn health_reports_the_service_name() {
     let harness = start_harness("health", config_with_mock_upstream("health")).await;
-    let body: Value = harness
-        .client
-        .get(harness.url("/healthz"))
-        .send()
-        .await
-        .unwrap()
-        .json()
-        .await
-        .unwrap();
-    assert_eq!(body["service"], "nipaplay-mesh-coordinator");
-    assert_eq!(body["ok"], true);
+    for path in ["/healthz", "/mesh/healthz"] {
+        let body: Value = harness
+            .client
+            .get(harness.url(path))
+            .send()
+            .await
+            .unwrap()
+            .json()
+            .await
+            .unwrap();
+        assert_eq!(body["service"], "nipaplay-mesh-coordinator", "{path}");
+        assert_eq!(body["ok"], true, "{path}");
+    }
 }
 
 #[tokio::test]
@@ -871,10 +1028,6 @@ async fn account_is_verified_and_cross_account_operations_are_rejected() {
         StatusCode::FORBIDDEN
     );
     for (path, body) in [
-        (
-            "/mesh/v1/devices/renew".to_owned(),
-            json!({"device_id":id,"device_public_key":base64url(&key)}),
-        ),
         (
             format!("/mesh/v1/devices/{id}/revoke"),
             json!({"device_id":id}),

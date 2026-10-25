@@ -6,15 +6,16 @@ Mesh 的控制面服务：验证弹弹play 账号、登记设备公钥、签发�
 - 独立 Rust 二进制，SQLite 存储；令牌验证与限流复用共享 crate `server/nipaplay-auth`。
 - 账号身份（`accountId`）由服务向上游核实，取弹弹play 稳定的数字 `userId`，**不信任客户端自报**。
 - 设备证书为 X.509（Ed25519 签名），有效期短（默认 7 天），随续期接口轮换。
+- 第一次加入需要弹弹play 令牌；之后续证只凭设备私钥证明，令牌过期不影响续证。
 - 按账号与按 IP 限流；心跳间隔不小于 15 分钟。
 
 ## 运行
 
 ```bash
-# 1) 生成开发用 CA（生产请用同一命令生成后妥善保管私钥）
+# 1) 生成 CA（开发和正式用同一个命令；旧名 --generate-dev-ca 仍可用）
 mkdir -p /tmp/mesh
 cargo run --manifest-path server/nipaplay-mesh-coordinator/Cargo.toml -- \
-  --generate-dev-ca /tmp/mesh/ca.crt.pem /tmp/mesh/ca.key.pem
+  --generate-ca /tmp/mesh/ca.crt.pem /tmp/mesh/ca.key.pem
 
 # 2) 启动服务
 MESH_CA_CERT_FILE=/tmp/mesh/ca.crt.pem \
@@ -24,7 +25,7 @@ DANDANPLAY_GATEWAY_BASE=http://127.0.0.1:18081 \
 cargo run --manifest-path server/nipaplay-mesh-coordinator/Cargo.toml
 ```
 
-`--generate-dev-ca` 以排他创建写入新文件，私钥从创建时即为 `0600`。Unix 上加载私钥时拒绝
+`--generate-ca` 以排他创建写入新文件，私钥从创建时即为 `0600`。Unix 上加载私钥时拒绝
 组或其他用户可访问的文件；仅接受普通文件。签发者必须是当前有效、具有 `keyCertSign`
 的自签名 Ed25519 CA，密钥必须与证书匹配，否则启动失败。生产部署模板见 `deploy/`。
 
@@ -41,7 +42,7 @@ cargo run --manifest-path server/nipaplay-mesh-coordinator/Cargo.toml
 | `MESH_ADDRESS_DEFAULT_TTL_SECONDS` | `3600` | 地址候选未指定有效期时的默认值 |
 | `MESH_ADDRESS_MAX_TTL_SECONDS` | `7200` | 夹到 60–7200 秒；默认 TTL 同样夹到范围内 |
 | `MESH_REGISTER_PER_HOUR` | `10` | 每账号每小时注册次数 |
-| `MESH_RENEW_PER_HOUR` | `24` | 每账号每小时续期次数 |
+| `MESH_RENEW_PER_HOUR` | `24` | 每设备每小时续期次数（续期不带令牌，按设备计） |
 | `MESH_ADDRESSES_PER_HOUR` | `60` | 每账号每小时地址请求次数 |
 | `MESH_DEVICES_PER_HOUR` | `120` | 每账号每小时设备/吊销请求次数 |
 | `MESH_IP_REQUESTS_PER_MINUTE` | `300` | 每 IP 每分钟请求上限，包括匿名、无效输入和公开接口 |
@@ -57,7 +58,7 @@ AppSecret 与上游签名仍由网关负责，网关部署与行为保持原样�
 
 ## 认证
 
-所有 `/mesh/v1/*` 接口（`server-info` 除外）都要求：
+所有 `/mesh/v1/*` 接口（`server-info` 与 `devices/renew` 除外）都要求：
 
 ```
 Authorization: Bearer <弹弹play token>
@@ -108,7 +109,7 @@ HTTP JSON 请求体最多 32 KiB；畸形 JSON 返回 `400 invalid_input`，超�
 | `rate_limited` | 429 | 触发按账号或按 IP 限流 |
 | `internal_error` | 500 | 服务内部错误 |
 
-### `GET /healthz`
+### `GET /healthz`（经 nginx 反代为 `GET /mesh/healthz`，内容相同）
 
 ```json
 { "ok": true, "service": "nipaplay-mesh-coordinator" }
@@ -176,8 +177,13 @@ timestamp 与服务器时间差不得超过 300 秒。nonce 为 22–128 字符 
   "proof": { "timestamp": 1760000000, "nonce": "<base64url>", "signature": "<base64url>" } }
 ```
 
-公钥必须与注册时一致；已吊销设备返回 `device_revoked`。响应与 `register` 的
-`certificate`/`revocation_epoch` 字段一致。
+**不需要 `Authorization`**（带了也忽略，也不会请求弹弹play）：凭证是已注册设备私钥对一次性、新鲜
+（±300 秒）、不可重放的证明的签名。账号取自注册时记录的设备所属账号。
+公钥必须与注册时一致；设备未注册返回 `device_not_found`；证明无效（含伪造、过期、重放）返回
+`invalid_input`，与设备是否被吊销无关——**证明有效之后**才会对已吊销设备返回 `device_revoked`，
+所以没有私钥的人无法探测吊销状态。每个设备每小时最多续期 `MESH_RENEW_PER_HOUR` 次。
+响应与 `register` 的 `account_id`/`certificate`/`server_public_key`/`revocation_epoch`/
+`heartbeat_interval_seconds` 字段一致。
 续期签名数组为 `["nipaplay-mesh-possession-v1", timestamp字符串, nonce, "renew", device_public_key, device_id]`。
 
 ### `GET /mesh/v1/devices`
@@ -253,7 +259,7 @@ timestamp 与服务器时间差不得超过 300 秒。nonce 为 22–128 字符 
 | `extendedKeyUsage` | `clientAuth`、`serverAuth` |
 | `subjectAltName` | 身份 URI `nipaplay-mesh://device?account=<accountId>&device=<deviceId>`；DNS `d-<SHA256公钥摘要十六进制前32字符>.<后32字符>.mesh.nipaplay.invalid` 供标准 TLS 验证器核对目标设备（不解析 DNS） |
 | `authorityKeyIdentifier` | 由 CA 公钥派生 |
-| 私有扩展 `1.3.6.1.4.1.61086.1.1` | DER `UTF8String`，内容为 `{"v":1,"accountId":...,"deviceId":...,"publicKey":...}`。**该 OID 使用的 PEN 归属尚未核实，正式发布前由主控确定合法的 OID。阶段 M 使用标准 SAN 验证身份，不依赖这个私有 OID。** |
+| 私有扩展 | **没有。** 证书只含标准扩展，身份只靠上面的 SAN（用户 2026-10-25 决定去掉原先的私有 OID 扩展）。 |
 | 有效期 | `not_before = 签发时刻 - 5 分钟`，`not_after = 签发时刻 + MESH_CERT_VALIDITY_SECONDS`，两端均限制在 CA 有效期内 |
 
 客户端以 **App 内置的签发者证书**为信任根，校验链、`accountId` 与自身一致、公钥与
@@ -292,37 +298,14 @@ SQLite（WAL）单文件：
 
 ## 部署
 
-```bash
-sudo useradd --system --home /var/lib/nipaplay-mesh-coordinator nipaplay-mesh
-sudo install -d -o nipaplay-mesh -g nipaplay-mesh /var/lib/nipaplay-mesh-coordinator
-sudo install -d -o root -g nipaplay-mesh -m 750 /etc/nipaplay-mesh-coordinator
-sudo install -d -o root -g root -m 755 /opt/nipaplay-mesh-coordinator
-
-cargo build --release --manifest-path server/nipaplay-mesh-coordinator/Cargo.toml
-sudo install -m 755 server/nipaplay-mesh-coordinator/target/release/nipaplay-mesh-coordinator \
-  /opt/nipaplay-mesh-coordinator/
-
-# 生成到当前用户可写的暂存目录，然后安装到服务目录（只生成一次）
-mesh_ca_stage=$(mktemp -d)
-server/nipaplay-mesh-coordinator/target/release/nipaplay-mesh-coordinator \
-  --generate-dev-ca "$mesh_ca_stage/ca.crt.pem" "$mesh_ca_stage/ca.key.pem"
-sudo install -o root -g root -m 644 "$mesh_ca_stage/ca.crt.pem" /opt/nipaplay-mesh-coordinator/ca.crt.pem
-sudo install -o nipaplay-mesh -g nipaplay-mesh -m 600 "$mesh_ca_stage/ca.key.pem" /etc/nipaplay-mesh-coordinator/ca.key.pem
-rm "$mesh_ca_stage/ca.crt.pem" "$mesh_ca_stage/ca.key.pem"
-rmdir "$mesh_ca_stage"
-
-sudo install -o root -g root -m 644 server/nipaplay-mesh-coordinator/deploy/nipaplay-mesh-coordinator.service /etc/systemd/system/
-sudo install -o root -g nipaplay-mesh -m 640 server/nipaplay-mesh-coordinator/deploy/nipaplay-mesh-coordinator.env.example \
-  /etc/nipaplay-mesh-coordinator.env
-# 编辑 /etc/nipaplay-mesh-coordinator.env 配置网关地址和稳定用户声明 Pointer
-sudo systemctl daemon-reload && sudo systemctl enable --now nipaplay-mesh-coordinator
-```
-
-nginx 站点里加入 `deploy/nginx-location.conf`。自检：
+正式部署（宝塔 nginx 共存、增量安装、备用根、回滚）见 [`deploy/RUNBOOK.md`](deploy/RUNBOOK.md)。
+`deploy/` 下是 systemd 单元、env 模板和 nginx location 模板。nginx 站点里加入
+`deploy/nginx-location.conf` 后自检：
 
 ```bash
-curl -s http://127.0.0.1:18082/healthz
-curl -s http://127.0.0.1:18082/mesh/v1/server-info
+curl -s http://127.0.0.1:18082/healthz           # 服务本身
+curl -s https://<站点>/mesh/healthz               # 经 nginx
+curl -s https://<站点>/mesh/v1/server-info
 ```
 
 ## 测试

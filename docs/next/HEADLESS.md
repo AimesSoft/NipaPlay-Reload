@@ -193,8 +193,10 @@ python D:\nipaplay-next\headless-data\harness\nipa list
 
 ## Mesh 与下载宿主配置
 
-`<data>/mesh.json` 的存在启用同账号 Mesh；coordinator、roles、storage、Agent
-目的设备、广播和签发者由宿主配置，不向 Agent 开放网络授权。
+同账号 Mesh 默认启用，协调服务地址内置为 `https://nipaplay.aimes-soft.com/mesh`；
+只有宿主改过高级设置才有 `<data>/mesh.json`，里面写不同于默认的部分（`"enabled": false` 关闭）。
+coordinator、roles、storage、Agent 目的设备、广播由宿主配置，不向 Agent 开放网络授权。
+登录弹弹play 之前不会加入。
 `broadcastDiscovery` 默认 true，可设 false。
 
 **监听范围。** 无界面主机和桌面一样，默认监听所有网卡，并把网卡上的局域网地址（不含 docker、
@@ -204,8 +206,10 @@ utun 等虚拟网卡）报给协调服务、通过 UDP 32124 广播和 mDNS（`_
 就被拒绝，读不到任何东西。要把它限制在本机，在 `<data>/mesh.json` 里写 `"loopbackOnly": true`
 （此时不报局域网地址，只能经 SSH 转发、手填地址等候选连接），修改后重启生效。固定端口用 `port`，
 不想广播用 `"broadcastDiscovery": false`。macOS 上开着“应用防火墙”时，系统会问是否允许这个程序接收传入连接；不允许的话，局域网里的连接会在 TLS 握手处超时（本机回环不受影响），需要在“系统设置 → 网络 → 防火墙”里放行。Linux 与 Windows 按各自防火墙放行监听端口（`mesh.json` 的 `port`，不写则每次随机，建议固定）。
-当前无界面开发构建显式接受 `NIPAPLAY_MESH_DEV_CA` 的公开证书，GUI Release
-仍仅接受内置正式 CA。不能从协调服务响应自动信任新 CA。
+无界面版和 GUI 一样读内置的信任根（主根加备用根两段 PEM，`lib/next/mesh/trust.dart`）；
+只有设置了 `NIPAPLAY_MESH_DEV_CA` 的无界面构建才改用那份开发证书。不能从协调服务响应自动信任新 CA。
+证书到期前一天起，设备只凭设备私钥向协调服务续证；弹弹play 令牌过期的无界面主机不会因此在 7 天后掉线，
+只是在令牌更新前读不到新的设备名单。
 
 宿主可在启动前初始化 headless.json 标记，用
 `--enroll-token-stdin --data <独立目录>` 从 stdin 登记已登录测试账号 token。

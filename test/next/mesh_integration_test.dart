@@ -137,6 +137,7 @@ final class _Rig {
   final waitStarted = Completer<void>(), waitRelease = Completer<void>();
   final logs = <String>[];
   int renewCalls = 0;
+  int? _port;
   Future<void> start() async {
     upstream = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
     upstream.listen((request) async {
@@ -157,9 +158,22 @@ final class _Rig {
       await request.response.close();
     });
     final socket = await ServerSocket.bind(InternetAddress.loopbackIPv4, 0);
-    final port = socket.port;
+    final port = _port = socket.port;
     await socket.close();
     base = Uri.parse('http://127.0.0.1:$port');
+    await _spawnCoordinator();
+  }
+
+  /// Stops the coordinator and starts it again on the same address and
+  /// database, with [environment] added to its configuration.
+  Future<void> restartCoordinator([Map<String, String> environment = const {}]) async {
+    coordinator.kill();
+    await coordinator.exitCode;
+    await _spawnCoordinator(environment);
+  }
+
+  Future<void> _spawnCoordinator([Map<String, String> extra = const {}]) async {
+    final port = _port!;
     coordinator = await Process.start(
         'server/nipaplay-mesh-coordinator/target/debug/nipaplay-mesh-coordinator',
         [],
@@ -176,6 +190,7 @@ final class _Rig {
           'HTTP_PROXY': '',
           'HTTPS_PROXY': '',
           'ALL_PROXY': '',
+          ...extra,
         });
     coordinator.stdout.transform(utf8.decoder).listen(logs.add);
     coordinator.stderr.transform(utf8.decoder).listen(logs.add);
@@ -197,14 +212,15 @@ final class _Rig {
     client.close(force: true);
   }
 
-  Future<MeshRuntime> node(String name, {int account = 424242, Future<Failure?> Function(String, String)? authorize}) async {
+  Future<MeshRuntime> node(String name, {int account = 424242, Future<Failure?> Function(String, String)? authorize, Future<String?> Function()? token}) async {
     final root = await Directory('${directory.path}/$name').create();
+    token ??= () async => _jwt(account);
     final mesh = MeshRuntime(
         root: root,
         vault: vault,
         native: native,
         authorize: authorize ?? authorizeMeshPeer,
-        token: () async => _jwt(account));
+        token: token);
     final harness = Harness(
         [_Actions(waitStarted, waitRelease), MeshCapability(mesh)],
         observers: [observer]);
@@ -212,7 +228,7 @@ final class _Rig {
     nodes.add(mesh);
     await mesh.join(
         ca: await File('${caDirectory.path}/ca.pem').readAsString(),
-        coordinator: MeshCoordinator(base, () async => _jwt(account)),
+        coordinator: MeshCoordinator(base, token),
         name: name,
         broadcast: false);
     await RemoteControlSettings.addTrustedDevice({
@@ -543,5 +559,119 @@ void main() {
     } finally {
       await native.stop(node);
     }
+  });
+  test('a certificate from the standby root is accepted next to the primary root and nowhere else',
+      () async {
+    final a = await rig.node('a');
+    final standby = await Directory('${rig.directory.path}/standby').create();
+    final generated = await Process.run(
+        'server/nipaplay-mesh-coordinator/target/debug/nipaplay-mesh-coordinator',
+        ['--generate-ca', '${standby.path}/ca.pem', '${standby.path}/ca.key']);
+    expect(generated.exitCode, 0, reason: generated.stderr.toString());
+    final primaryPem = await File('${caDirectory.path}/ca.pem').readAsString();
+    final standbyPem = await File('${standby.path}/ca.pem').readAsString();
+    final key = await a.identity!.privateKey();
+    final fromPrimary = await rig.issue(a.identity!);
+    final fromStandby = await rig.issue(a.identity!, issuer: standby);
+    // The two roots have the same subject name; the right one must be found
+    // by its key, whichever order the bundle lists them in.
+    for (final bundle in ['$primaryPem\n$standbyPem', '$standbyPem\n$primaryPem']) {
+      await native.validate(bundle, fromPrimary, key, '424242');
+      await native.validate(bundle, fromStandby, key, '424242');
+    }
+    await expectLater(native.validate(primaryPem, fromStandby, key, '424242'), throwsA(anything));
+    await expectLater(native.validate(standbyPem, fromPrimary, key, '424242'), throwsA(anything));
+  });
+
+  test('a device renews with its key alone after its account token has expired',
+      () async {
+    await rig.restartCoordinator({'MESH_CERT_VALIDITY_SECONDS': '900'});
+    var token = _jwt(424242);
+    final a = await rig.node('a', token: () async => token);
+    final before = await File('${a.root.path}/mesh-certificate.json').readAsString();
+    // The upstream no longer accepts the token (expired): everything that
+    // needs the account fails, but the certificate is renewed by the key.
+    token = 'expired.token.value';
+    await Future<void>.delayed(const Duration(seconds: 1));
+    await expectLater(a.heartbeat(renew: true), throwsA(isA<Failure>()));
+    final after = await File('${a.root.path}/mesh-certificate.json').readAsString();
+    expect(((jsonDecode(after) as JsonMap)['certificate'] as JsonMap)['pem'],
+        isNot(((jsonDecode(before) as JsonMap)['certificate'] as JsonMap)['pem']));
+    expect(a.status, 'online');
+    // Still serving on the LAN with the renewed certificate.
+    final b = await rig.node('b');
+    await b.refreshDevices();
+    expect(b.cachedDevices.where((d) => d['deviceId'] == a.identity!.deviceId), isNotEmpty);
+  });
+
+  test('a device whose certificate ran out while its token expired rejoins from its cache by key',
+      () async {
+    final first = await rig.node('a');
+    final root = first.root;
+    final identity = first.identity!;
+    await first.close();
+    // The certificate it holds ran out two seconds after it was issued.
+    final short = await rig.issue(identity, validity: 2);
+    final saved = jsonDecode(await File('${root.path}/mesh-certificate.json').readAsString()) as JsonMap;
+    final notAfter = DateTime.now().millisecondsSinceEpoch ~/ 1000 + 2;
+    await File('${root.path}/mesh-certificate.json').writeAsString(jsonEncode({
+      ...saved,
+      'certificate': {'pem': short, 'not_before': notAfter - 100, 'not_after': notAfter},
+    }));
+    await Future<void>.delayed(const Duration(seconds: 3));
+    final mesh = MeshRuntime(
+        root: root,
+        vault: rig.vault,
+        native: native,
+        token: () async => 'expired.token.value');
+    mesh.attach(Harness([_Actions(rig.waitStarted, rig.waitRelease), MeshCapability(mesh)]));
+    rig.nodes.add(mesh);
+    await mesh.join(
+        ca: await File('${caDirectory.path}/ca.pem').readAsString(),
+        coordinator: MeshCoordinator(rig.base, () async => 'expired.token.value'),
+        name: 'a',
+        broadcast: false);
+    expect(mesh.status, 'online');
+    expect(mesh.port, greaterThan(0));
+    final renewed = jsonDecode(await File('${root.path}/mesh-certificate.json').readAsString()) as JsonMap;
+    expect((renewed['certificate'] as JsonMap)['not_after'], greaterThan(DateTime.now().millisecondsSinceEpoch ~/ 1000 + 3600));
+    expect(mesh.cachedDevices, isNotEmpty);
+  });
+
+  test('a removed device learns it from the coordinator when it renews and stops serving',
+      () async {
+    await rig.restartCoordinator({'MESH_CERT_VALIDITY_SECONDS': '900'});
+    final a = await rig.node('a');
+    final admin = MeshCoordinator(rig.base, () async => _jwt(424242));
+    await admin.request('POST', '/mesh/v1/devices/${a.identity!.deviceId}/revoke',
+        {'device_id': a.identity!.deviceId});
+    admin.close();
+    await expectLater(a.heartbeat(renew: true), throwsA(isA<Failure>()));
+    expect(a.status, 'device_revoked');
+    expect(a.port, 0);
+  });
+  test('a refused address lookup (expired token) is not repeated on every call',
+      () async {
+    await rig.restartCoordinator({'RUST_LOG': 'tower_http=debug,info', 'NO_COLOR': '1'});
+    var token = _jwt(424242);
+    final a = await rig.node('a', token: () async => token);
+    final b = await rig.node('b');
+    await a.refreshDevices();
+    token = 'expired.token.value';
+    rig.logs.clear();
+    for (var i = 0; i < 4; i++) {
+      await expectLater(
+          a.invoke(b.identity!.deviceId, 'download.echo', {'value': 'x'},
+              destructive: false),
+          throwsA(isA<Failure>()));
+    }
+    final lookups = rig.logs
+        .join()
+        .split('\n')
+        .where((line) =>
+            line.contains('method=GET path="/mesh/v1/addresses"') &&
+            line.contains('finished processing request'))
+        .length;
+    expect(lookups, 1, reason: rig.logs.join());
   });
 }

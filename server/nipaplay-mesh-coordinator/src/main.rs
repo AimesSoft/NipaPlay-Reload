@@ -36,9 +36,10 @@ use crate::{
     about = "NipaPlay Mesh control plane"
 )]
 struct Cli {
-    /// Generate a development CA at the given certificate/key paths and exit.
-    #[arg(long, num_args = 2, value_names = ["CERT_PEM", "KEY_PEM"])]
-    generate_dev_ca: Option<Vec<PathBuf>>,
+    /// Generate a CA (production root or development CA) at the given
+    /// certificate/key paths and exit. The key file is created 0600, exclusively.
+    #[arg(long, alias = "generate-dev-ca", num_args = 2, value_names = ["CERT_PEM", "KEY_PEM"])]
+    generate_ca: Option<Vec<PathBuf>>,
     /// Read a token from stdin, validate it, print only JWT claim JSON pointers.
     #[arg(long)]
     inspect_account_claim_names: bool,
@@ -51,12 +52,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .init();
 
     let cli = Cli::parse();
-    if let Some(paths) = cli.generate_dev_ca {
+    if let Some(paths) = cli.generate_ca {
         let cert_path = &paths[0];
         let key_path = &paths[1];
         cert::generate_ca(cert_path, key_path).map_err(std::io::Error::other)?;
         println!(
-            "wrote development CA certificate to {} and key to {}",
+            "wrote CA certificate to {} and key to {}",
             cert_path.display(),
             key_path.display()
         );

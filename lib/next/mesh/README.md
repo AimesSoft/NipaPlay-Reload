@@ -187,7 +187,9 @@ UDP 32124 每 30 秒广播 deviceId 和监听端口，同时在 mDNS（UDP 5353�
 
 ## 宿主配置与正式 CA
 
-宿主在 AppStorage/next/mesh.json 配置：
+Mesh 默认启用：协调服务地址内置为 `https://nipaplay.aimes-soft.com/mesh`（`lib/next/mesh/trust.dart`），
+登录弹弹play 后自动加入。只有改过高级设置的宿主才有 AppStorage/next/mesh.json，里面只写与默认不同的
+部分，`"enabled": false` 关闭。例如：
 
 ~~~json
 {
@@ -211,11 +213,19 @@ UDP 32124 每 30 秒广播 deviceId 和监听端口，同时在 mDNS（UDP 5353�
 变化时关闭旧会话；失败的加入尝试至少隔 15 分钟再试。
 
 开发构建使用 NIPAPLAY_MESH_DEV_CA=/absolute/path/to/public-ca.pem。
-Release 忽略该变量，仅使用 meshProductionIssuerPem 内置常量；目前常量为空，
-显示 issuer_not_configured 并拒绝启用，等待主控确定正式 CA。
-主控确认后将公开 CA PEM 写入该常量并随 App 发布（不含签发者私钥）。
-轮换需由主控决定新的信任集合与旧证书过渡，再更新内置数据；
+Release 忽略该变量，仅使用内置信任常量 meshProductionIssuerPem：主根和备用根两段公开证书 PEM
+（不含私钥，写在 `lib/next/mesh/trust.dart` 的 `_builtInIssuerPem`）。两根都信任，所以协调服务改用备用根签发后，
+设备在下一次续证时换成备用根签的证书，彼此仍然互通；只信任主根的旧版应用认不得备用根的证书，
+因此双根必须从第一版就在。常量为空、解析失败、任何一张不是自签名的 Ed25519 CA、
+已过期、或不足两张不同的根时，应用显示 issuer_not_configured 并拒绝加入。
+发布前运行 `dart run tool/next/check_mesh_trust.dart`（带上与构建相同的 --dart-define），
+不通过就不要构建。演练构建可用 `--dart-define=NIPAPLAY_MESH_ISSUER_PEM_B64=<PEM 的 base64>` 和
+`--dart-define=NIPAPLAY_MESH_COORDINATOR=https://host/mesh` 换成一次性测试根和演练地址。
 不得以首次下载 server-info 响应建立信任，server_public_key 也不替代内置 CA。
+
+续证只凭设备私钥证明：第一次加入需要弹弹play 令牌（把设备绑定到账号），之后证书剩不到一天时
+`POST /mesh/v1/devices/renew` 不带令牌，令牌过期不会让设备掉线。设备证书只用标准 SAN 表达身份，
+没有私有扩展。
 
 ## 主控本机端到端验收
 
@@ -225,7 +235,7 @@ Release 忽略该变量，仅使用 meshProductionIssuerPem 内置常量；目�
 ~/development/flutter-3.44.6/bin/flutter test --no-pub test/next/mesh_integration_test.dart
 ~~~
 
-此测试构建 Rust 库和协调服务，调用协调服务 --generate-dev-ca，在同一进程启动两个节点，
+此测试构建 Rust 库和协调服务，调用协调服务 --generate-ca（旧名 --generate-dev-ca 仍可用），在同一进程启动两个节点，
 并连接真实协调服务进程与本机模拟网关。协调服务启动环境不继承宿主环境、无需 AppSecret；
 模拟网关检查 `/dandanplay` 前缀与无应用签名头。没有真实令牌或线上请求。
 
