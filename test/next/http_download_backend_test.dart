@@ -16,6 +16,7 @@ import 'package:nipaplay/next/downloads/http_download_backend.dart';
 
 import '../../packages/nipa_harness/test/task_support.dart';
 import 'download_test_support.dart';
+import 'package:path/path.dart' as ppath;
 
 Uint8List bytesOf(int n) =>
     Uint8List.fromList([for (var i = 0; i < n; i++) (i * 31 + 7) & 0xff]);
@@ -174,7 +175,7 @@ void main() {
 
   HttpDownloadBackend newBackend() => HttpDownloadBackend(
       defaultDirectory: () async => downloadsDirectory.path,
-      stateDirectory: Directory('${root.path}/state'),
+      stateDirectory: Directory(ppath.join(root.path, 'state')),
       clientFactory: () => HttpClient()..findProxy = (_) => 'DIRECT',
       clock: () => DateTime.now().toUtc().add(skew),
       retryDelay: (_) => const Duration(milliseconds: 20),
@@ -203,9 +204,9 @@ void main() {
       TaskCapability(engine),
       DownloadCapability(
           downloads: downloads,
-          sources: DownloadSources(Directory('${root.path}/metadata'))),
+          sources: DownloadSources(Directory(ppath.join(root.path, 'metadata')))),
       DownloadMetadataCapability(
-          DownloadSources(Directory('${root.path}/metadata')),
+          DownloadSources(Directory(ppath.join(root.path, 'metadata'))),
           () async => true,
           httpBackend: http),
     ]);
@@ -214,7 +215,7 @@ void main() {
 
   setUp(() async {
     root = await Directory.systemTemp.createTemp('next-http-download-');
-    downloadsDirectory = await Directory('${root.path}/downloads').create();
+    downloadsDirectory = await Directory(ppath.join(root.path, 'downloads')).create();
     server = TestServer();
     await server.start();
     http = newBackend();
@@ -274,7 +275,7 @@ void main() {
     server.resources['/media/Sintel.mkv'] = Resource(data);
     final jobId = await add('/media/Sintel.mkv');
     final done = await untilState(engine, jobId, JobState.succeeded);
-    final file = File('${downloadsDirectory.path}/Sintel.mkv');
+    final file = File(ppath.join(downloadsDirectory.path, 'Sintel.mkv'));
     expect(await file.readAsBytes(), data);
     expect(File('${file.path}.nipaplay-part').existsSync(), false);
     expect(library.scans.single, [file.path]);
@@ -310,7 +311,7 @@ void main() {
     expect(row['imported'], false);
     expect(row['reason'], 'not_video');
     expect(library.scans, isEmpty);
-    expect(downloadsDirectory.listSync().map((e) => e.path.split('/').last),
+    expect(downloadsDirectory.listSync().map((e) => ppath.basename(e.path)),
         ['Sintel.2010.4k.mkv.zip']);
   });
 
@@ -319,22 +320,22 @@ void main() {
     server.resources['/get'] = Resource(bytesOf(10))
       ..disposition = 'attachment; filename="ignored.bin"; filename*=UTF-8\'\'%E5%8F%B2.mkv';
     server.resources['/a%20b.bin'] = Resource(bytesOf(20));
-    final existing = File('${downloadsDirectory.path}/a b.bin');
+    final existing = File(ppath.join(downloadsDirectory.path, 'a b.bin'));
     await existing.writeAsString('mine');
     final first = await add('/get?id=1');
     final second = await add('/a%20b.bin');
     await untilState(engine, first, JobState.succeeded);
     await untilState(engine, second, JobState.succeeded);
-    expect(File('${downloadsDirectory.path}/史.mkv').existsSync(), true);
+    expect(File(ppath.join(downloadsDirectory.path, '史.mkv')).existsSync(), true);
     expect(await existing.readAsString(), 'mine');
-    expect((await File('${downloadsDirectory.path}/a b (1).bin').readAsBytes()),
+    expect((await File(ppath.join(downloadsDirectory.path, 'a b (1).bin')).readAsBytes()),
         bytesOf(20));
     // Path traversal in the server's name is cut down to one component.
     server.resources['/x'] = Resource(bytesOf(3))
       ..disposition = 'attachment; filename="../../evil.bin"';
     await untilState(engine, await add('/x'), JobState.succeeded);
-    expect(File('${downloadsDirectory.path}/evil.bin').existsSync(), true);
-    expect(File('${root.path}/evil.bin').existsSync(), false);
+    expect(File(ppath.join(downloadsDirectory.path, 'evil.bin')).existsSync(), true);
+    expect(File(ppath.join(root.path, 'evil.bin')).existsSync(), false);
   });
 
   test('a dropped connection resumes with Range from where it stopped',
@@ -345,7 +346,7 @@ void main() {
       ..etag = '"v1"';
     final jobId = await add('/big.mkv');
     final done = await untilState(engine, jobId, JobState.succeeded);
-    expect(await File('${downloadsDirectory.path}/big.mkv').readAsBytes(), data);
+    expect(await File(ppath.join(downloadsDirectory.path, 'big.mkv')).readAsBytes(), data);
     final gets = server.requests.where((r) => r.method == 'GET').toList();
     expect(gets.length, greaterThanOrEqualTo(2));
     expect(gets.first.range, isNull);
@@ -366,7 +367,7 @@ void main() {
     final jobId = await add('/plain.mkv');
     await untilState(engine, jobId, JobState.succeeded);
     expect(
-        await File('${downloadsDirectory.path}/plain.mkv').readAsBytes(), data);
+        await File(ppath.join(downloadsDirectory.path, 'plain.mkv')).readAsBytes(), data);
     final task = (await call('download.read', {'jobId': jobId}))['task'] as Map;
     final facts = (task['health'] as Map)['http'] as Map;
     expect(facts['acceptRanges'], isNull);
@@ -409,8 +410,8 @@ void main() {
     expect(checksum['matched'], false);
     expect(failed.error!.message, contains(wrong));
     expect(failed.error!.message, contains(sha256.convert(data).toString()));
-    expect(File('${downloadsDirectory.path}/bad.mkv').existsSync(), false);
-    expect(File('${downloadsDirectory.path}/bad.mkv.nipaplay-part').existsSync(),
+    expect(File(ppath.join(downloadsDirectory.path, 'bad.mkv')).existsSync(), false);
+    expect(File(ppath.join(downloadsDirectory.path, 'bad.mkv.nipaplay-part')).existsSync(),
         true);
     expect(library.scans, isEmpty);
   });
@@ -480,7 +481,7 @@ void main() {
         reason: 'no bytes arrive while paused');
     await call('download.set_paused', {'jobId': jobId, 'paused': false});
     final done = await untilState(engine, jobId, JobState.succeeded);
-    expect(await File('${downloadsDirectory.path}/p.mkv').readAsBytes(), data);
+    expect(await File(ppath.join(downloadsDirectory.path, 'p.mkv')).readAsBytes(), data);
     final gets = server.requests.where((r) => r.method == 'GET').toList();
     expect(gets.last.range, 'bytes=${paused.completed}-');
     expect(done.receipt!.details['downloadComplete'], true);
@@ -494,13 +495,13 @@ void main() {
     final cancelled = await untilState(engine, jobId, JobState.cancelled);
     expect(cancelled.receipt!.details['reason'], 'cancelled_incomplete');
     expect(
-        File('${downloadsDirectory.path}/c.mkv.nipaplay-part').existsSync(), true);
-    expect(File('${downloadsDirectory.path}/c.mkv').existsSync(), false);
+        File(ppath.join(downloadsDirectory.path, 'c.mkv.nipaplay-part')).existsSync(), true);
+    expect(File(ppath.join(downloadsDirectory.path, 'c.mkv')).existsSync(), false);
     expect(library.scans, isEmpty);
     await call('download.remove', {'jobId': jobId});
     expect(await http.list(), isEmpty);
     expect(
-        File('${downloadsDirectory.path}/c.mkv.nipaplay-part').existsSync(), true);
+        File(ppath.join(downloadsDirectory.path, 'c.mkv.nipaplay-part')).existsSync(), true);
   });
 
   test('delete removes the session, the file and its partial data', () async {
@@ -589,7 +590,7 @@ void main() {
     http = newBackend();
     await connect();
     final done = await untilState(engine, jobId, JobState.succeeded);
-    expect(await File('${downloadsDirectory.path}/r.mkv').readAsBytes(), data);
+    expect(await File(ppath.join(downloadsDirectory.path, 'r.mkv')).readAsBytes(), data);
     final gets = server.requests.where((r) => r.method == 'GET').toList();
     expect(gets.last.range, matches(RegExp(r'^bytes=\d+-$')));
     expect(int.parse(gets.last.range!.substring(6, gets.last.range!.length - 1)),
@@ -653,15 +654,15 @@ void main() {
 
   test('createFolderForTask and downloadDirectory place the file', () async {
     server.resources['/folder.mkv'] = Resource(bytesOf(100));
-    final elsewhere = await Directory('${root.path}/elsewhere').create();
+    final elsewhere = await Directory(ppath.join(root.path, 'elsewhere')).create();
     final jobId = await add('/folder.mkv', extra: {
       'downloadDirectory': elsewhere.path,
       'createFolderForTask': true
     });
     await untilState(engine, jobId, JobState.succeeded);
-    expect(File('${elsewhere.path}/folder/folder.mkv').existsSync(), true);
+    expect(File(ppath.join(elsewhere.path, 'folder', 'folder.mkv')).existsSync(), true);
     await downloads.remove(jobId, deleteData: true);
-    expect(Directory('${elsewhere.path}/folder').existsSync(), false);
+    expect(Directory(ppath.join(elsewhere.path, 'folder')).existsSync(), false);
   });
 
   // ------------------------------------------------------------ connections
@@ -688,8 +689,8 @@ void main() {
       }
     });
     final done = await untilState(engine, jobId, JobState.succeeded);
-    expect(await File('${downloadsDirectory.path}/par.mkv').readAsBytes(), data);
-    expect(File('${downloadsDirectory.path}/par.mkv.nipaplay-part').existsSync(),
+    expect(await File(ppath.join(downloadsDirectory.path, 'par.mkv')).readAsBytes(), data);
+    expect(File(ppath.join(downloadsDirectory.path, 'par.mkv.nipaplay-part')).existsSync(),
         false);
     expect((done.receipt!.details['checksum'] as Map)['matched'], true);
     final ranged = server.requests
@@ -718,7 +719,7 @@ void main() {
       ..dropAt[100000] = 30000;
     final jobId = await add('/drop.mkv', extra: {'connections': 4});
     await untilState(engine, jobId, JobState.succeeded);
-    expect(await File('${downloadsDirectory.path}/drop.mkv').readAsBytes(), data);
+    expect(await File(ppath.join(downloadsDirectory.path, 'drop.mkv')).readAsBytes(), data);
     final starts = rangeStarts(server.requests
         .where((r) => r.method == 'GET')
         .map((r) => r.range));
@@ -747,7 +748,7 @@ void main() {
     expect((await snapshot(jobId)).completed, paused.completed);
     await call('download.set_paused', {'jobId': jobId, 'paused': false});
     await untilState(engine, jobId, JobState.succeeded);
-    expect(await File('${downloadsDirectory.path}/pp.mkv').readAsBytes(), data);
+    expect(await File(ppath.join(downloadsDirectory.path, 'pp.mkv')).readAsBytes(), data);
     final later = rangeStarts(
         server.requests.skip(before).where((r) => r.method == 'GET').map((r) => r.range));
     expect(later, isNotEmpty);
@@ -772,7 +773,7 @@ void main() {
     http = newBackend();
     await connect();
     await untilState(engine, jobId, JobState.succeeded);
-    expect(await File('${downloadsDirectory.path}/rs.mkv').readAsBytes(), data);
+    expect(await File(ppath.join(downloadsDirectory.path, 'rs.mkv')).readAsBytes(), data);
     final later = rangeStarts(
         server.requests.skip(before).where((r) => r.method == 'GET').map((r) => r.range));
     expect(later, isNotEmpty);
@@ -785,7 +786,7 @@ void main() {
     server.resources['/nr.mkv'] = Resource(data)..ranges = false;
     final jobId = await add('/nr.mkv', extra: {'connections': 8});
     await untilState(engine, jobId, JobState.succeeded);
-    expect(await File('${downloadsDirectory.path}/nr.mkv').readAsBytes(), data);
+    expect(await File(ppath.join(downloadsDirectory.path, 'nr.mkv')).readAsBytes(), data);
     expect(server.requests.every((r) => r.range == null), true);
     final connections = (await httpFacts(jobId))['connections'] as Map;
     expect(connections['requested'], 8);
@@ -864,7 +865,7 @@ void main() {
     resource.release!.complete();
     await call('download.set_paused', {'jobId': jobId, 'paused': false});
     await untilState(engine, jobId, JobState.succeeded);
-    expect(await File('${downloadsDirectory.path}/chg.mkv').readAsBytes(), changed);
+    expect(await File(ppath.join(downloadsDirectory.path, 'chg.mkv')).readAsBytes(), changed);
     final facts = await httpFacts(jobId);
     expect(facts['resume'], 'ignored');
     expect(facts['etag'], '"v2"');

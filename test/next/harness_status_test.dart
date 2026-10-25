@@ -49,7 +49,9 @@ void main() {
     final file = File('${repository.path}/$name');
     await file.parent.create(recursive: true);
     await file.writeAsString(text);
-    expect((await Process.run('chmod', [mode, file.path])).exitCode, 0);
+    if (!Platform.isWindows) {
+      expect((await Process.run('chmod', [mode, file.path])).exitCode, 0);
+    }
   }
 
   Future<Map<String, Map>> hookRows() async => {

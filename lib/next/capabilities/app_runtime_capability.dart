@@ -36,12 +36,12 @@ final class AppRuntimeCapability implements Capability {
                 id: 'app.restart',
                 title: 'Restart the connected application',
                 description:
-                    'macOS only. Starts a detached helper, then schedules Classic application shutdown one second after returning a receipt (as app.quit does). '
+                    'macOS and Windows only. Starts a detached helper (on Windows PowerShell, with the arguments read from the command line), then schedules Classic application shutdown one second after returning a receipt (as app.quit does). '
                     'The helper waits up to 60 seconds for this process to exit, then starts the same executable with the arguments this process was started with and its environment (a lab profile NIPAPLAY_PROFILE comes back as itself); if this process has not exited by then nothing is started. '
                     'This ends the exact instance serving this Agent connection, including its endpoint; subsequent calls fail until the new process is up. The new process has a new processId and starts its own endpoint; reconnect and read app.instance. '
                     'Playback progress and Classic exit cleanup run normally. The receipt (scheduled, processId, delayMs, executablePath, arguments) is journaled before shutdown and is not proof that the new process started. '
                     'Settings whose apply is restart_app take effect in the new process. '
-                    'Other platforms fail with unavailable: no relaunch is known to start this installation. A failure to read the arguments of this process or to start the helper also fails with unavailable and restarts nothing. No user confirmation is needed.',
+                    'Other platforms (Linux, mobile) fail with unavailable: no relaunch is known to start this installation. A failure to read the arguments of this process or to start the helper also fails with unavailable and restarts nothing. No user confirmation is needed.',
                 effect: Effect.write,
                 input: ObjectSchema({}),
                 output: _output),

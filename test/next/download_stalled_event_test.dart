@@ -25,10 +25,17 @@ void main() {
     sqfliteFfiInit();
     root = await Directory.systemTemp.createTemp('download-stalled-');
     await Directory('${root.path}/hooks').create();
-    final program = File('${root.path}/hooks/download.stalled');
-    await program
-        .writeAsString('#!/bin/sh\ncat >> stalls.jsonl\necho >> stalls.jsonl\n');
-    expect((await Process.run('chmod', ['755', program.path])).exitCode, 0);
+    if (Platform.isWindows) {
+      // No shebang and no execute bit: the hook is a Python script by extension.
+      await File('${root.path}/hooks/download.stalled.py').writeAsString(
+          'import sys\n'
+          'open("stalls.jsonl", "ab").write(sys.stdin.buffer.read() + b"\\n")\n');
+    } else {
+      final program = File('${root.path}/hooks/download.stalled');
+      await program.writeAsString(
+          '#!/bin/sh\ncat >> stalls.jsonl\necho >> stalls.jsonl\n');
+      expect((await Process.run('chmod', ['755', program.path])).exitCode, 0);
+    }
     SharedPreferences.setMockInitialValues(
         {HarnessLocation.storageKey: root.path});
     location = HarnessLocation();

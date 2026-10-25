@@ -1,8 +1,10 @@
 # 事件程序
 
 把同名可执行程序放在这个目录中；不存在的程序不会运行。macOS/Linux 需
-`chmod +x hooks/事件名` 并提供 shebang。Windows 使用同名 `.exe`、`.cmd`、
-`.bat` 或 `.py`（Python 需已安装），例如 `hooks/playback.started.py`。
+`chmod +x hooks/事件名` 并提供 shebang。Windows 没有 shebang 也没有可执行位，按扩展名运行：
+同名 `.exe`（直接运行）、`.cmd`、`.bat`（经 cmd.exe）或 `.py`（用 PATH 里的 `python` 运行，需已安装），
+例如 `hooks/playback.started.py`；定时程序在 `schedules.json` 的 `program` 里写带扩展名的路径。
+Windows 上 NipaPlay 为程序设置 `PYTHONUTF8=1`，Python 读标准输入、写标准输出都是 UTF-8。
 
 | 程序名 | 触发时机 | data 内容 |
 | --- | --- | --- |

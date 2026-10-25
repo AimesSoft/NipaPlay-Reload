@@ -169,7 +169,7 @@ final class PlaybackCapture {
         'danmakuRequested': danmaku,
         'danmakuIncluded': danmaku && (!replaceScene || overlay != null),
         'subtitlesRequested': subtitles,
-        'subtitlesIncluded': subtitles,
+        'subtitlesIncluded': subtitles && picture.subtitlesDrawn,
         'source': source
       };
     } finally {

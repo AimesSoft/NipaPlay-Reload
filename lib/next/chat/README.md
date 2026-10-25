@@ -161,8 +161,13 @@ Lab profiles require `<root>/codex-home/config.toml` prepared before launch,
 credential files copied with their original permissions, and a read-only skills
 link. The host reapplies CODEX_HOME/TMPDIR after login-shell startup. Production
 leaves the user's CODEX_HOME, model, provider and proxy configuration intact.
-Launch is implemented for POSIX login shells; Windows reports an explicit host
-error without disabling the NipaPlay endpoint.
+Launch goes through the user's login shell on POSIX hosts; Windows has no login
+shell and starts DSH (its `pwsh` tool is PowerShell: `powershell.exe` when
+PowerShell 7 is not installed) or the native `codex.exe` directly, with Python
+told to use UTF-8 (`PYTHONUTF8=1`) because a Windows pipe carries the console
+code page. Windows PowerShell 5.1 drops the double quotes inside a native
+command's argument, so the seed AGENTS.md tells Nipa to pass JSON to `python nipa`
+as `@file` or on standard input.
 
 In macOS lab profiles, blocking Keychain access also prevents Codex's default
 TLS trust loading. X23 used a public `/etc/ssl/cert.pem` copy in the profile and

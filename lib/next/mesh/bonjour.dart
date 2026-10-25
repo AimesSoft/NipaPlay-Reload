@@ -68,6 +68,12 @@ final class MeshBonjour {
   final bool allowInLabProfile;
 
   RawDatagramSocket? _socket;
+
+  /// Addresses of the interfaces the group was joined on. Windows picks the
+  /// outgoing interface of an unconnected multicast sender by itself, and on a
+  /// host with Hyper-V or WSL that is often a virtual adapter nobody listens
+  /// on: there each multicast datagram is sent once per joined interface.
+  List<InternetAddress> _groupInterfaces = const [];
   StreamSubscription<RawSocketEvent>? _subscription;
   Timer? _timer;
   DateTime _lastMulticastAnswer = DateTime.fromMillisecondsSinceEpoch(0);
@@ -126,22 +132,34 @@ final class MeshBonjour {
   /// interface is EADDRINUSE, so every join is allowed to fail on its own.
   Future<void> _joinGroup(RawDatagramSocket socket) async {
     var joined = false;
+    final members = <InternetAddress>[];
+    final before = {for (final a in _groupInterfaces) a.address};
     try {
       final interfaces = await NetworkInterface.list(
         type: InternetAddressType.IPv4,
       );
       for (final interface in interfaces) {
         if (isVirtualInterface(interface.name)) continue;
+        final addresses = interface.addresses
+            .where((address) => address.type == InternetAddressType.IPv4)
+            .toList();
         try {
           socket.joinMulticast(multicastAddress, interface);
           joined = true;
+          members.addAll(addresses);
         } catch (_) {
-          // Not multicast capable, or already a member through this interface.
+          // Not multicast capable, or already a member through this interface
+          // (then it stays one).
+          if (addresses.any((address) => before.contains(address.address))) {
+            joined = true;
+            members.addAll(addresses);
+          }
         }
       }
     } catch (_) {
       // Interface listing can fail in sandboxes; the default join follows.
     }
+    _groupInterfaces = members;
     if (joined) return;
     try {
       socket.joinMulticast(multicastAddress);
@@ -190,12 +208,34 @@ final class MeshBonjour {
     }
   }
 
+  /// Sends [packet]; to the group on Windows once per interface the group was
+  /// joined on (IP_MULTICAST_IF, option 9 at level IPPROTO_IP), elsewhere once.
+  void _send(RawDatagramSocket socket, List<int> packet,
+      InternetAddress target, int port) {
+    if (!Platform.isWindows || !target.isMulticast || _groupInterfaces.isEmpty) {
+      socket.send(packet, target, port);
+      return;
+    }
+    for (final address in _groupInterfaces) {
+      try {
+        socket.setRawOption(RawSocketOption(
+            RawSocketOption.levelIPv4, 9, Uint8List.fromList(address.rawAddress)));
+      } on SocketException {
+        continue;
+      } on OSError {
+        continue;
+      }
+      socket.send(packet, target, port);
+    }
+  }
+
   void sendQuery({InternetAddress? targetAddress, int? targetPort}) {
     final socket = _socket;
     if (socket == null || _closed) return;
     final packet = encodeQuery();
     try {
-      socket.send(
+      _send(
+        socket,
         packet,
         targetAddress ?? multicastAddress,
         targetPort ?? (mdnsPort == 0 ? defaultMdnsPort : mdnsPort),
@@ -213,6 +253,8 @@ final class MeshBonjour {
     final socket = _socket;
     if (socket == null || _closed) return;
     final addresses = await localAddresses();
+    // A network that came up since the last time gets the group too.
+    if (Platform.isWindows && !_closed) await _joinGroup(socket);
     final packet = encodeAnnouncement(
       deviceId: deviceId,
       port: port,
@@ -220,7 +262,8 @@ final class MeshBonjour {
       ttlSeconds: ttlSeconds,
     );
     try {
-      socket.send(
+      _send(
+        socket,
         packet,
         targetAddress ?? multicastAddress,
         targetPort ?? (mdnsPort == 0 ? defaultMdnsPort : mdnsPort),
@@ -243,7 +286,8 @@ final class MeshBonjour {
           addresses: const [],
           ttlSeconds: 0,
         );
-        _socket!.send(
+        _send(
+          _socket!,
           packet,
           multicastAddress,
           mdnsPort == 0 ? defaultMdnsPort : mdnsPort,

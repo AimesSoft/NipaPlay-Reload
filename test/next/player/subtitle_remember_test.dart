@@ -11,6 +11,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../media_test_support.dart';
 import 'fake_driver.dart';
+import 'package:path/path.dart' as ppath;
 
 /// `remember` on playback.select_track and playback.load_subtitle: false
 /// holds for the current playback only; true is written to the subtitle
@@ -47,11 +48,11 @@ void main() {
     final name = 'Sintel${n++}';
     video = '${f.media.path}/$name.mkv';
     await f.file('$name.mkv');
-    sidecar = '${f.media.path}/$name.zh-Hans.srt';
+    sidecar = ppath.join(f.media.path, '$name.zh-Hans.srt');
     await File(sidecar).writeAsString(srt);
     // A file the library cannot find next to the video.
     final other = await Directory.systemTemp.createTemp('remember-other-');
-    elsewhere = '${other.path}/mine.srt';
+    elsewhere = ppath.join(other.path, 'mine.srt');
     await File(elsewhere).writeAsString(srt);
     id = await f.identities.ensureFile(video);
     await library.inspect(id, video);

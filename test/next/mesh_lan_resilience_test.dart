@@ -35,6 +35,7 @@ import 'package:nipaplay/src/rust/frb_generated.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'media_test_support.dart';
+import 'support/platform.dart';
 
 final class _Vault implements CredentialVault {
   final values = <CredentialRef, String>{};
@@ -118,10 +119,11 @@ final class _ControllableCoordinator {
     coordinatorUri = Uri.parse('http://127.0.0.1:$coordPort');
 
     coordinator = await Process.start(
-      'server/nipaplay-mesh-coordinator/target/debug/nipaplay-mesh-coordinator',
+      meshCoordinatorPath,
       [],
       includeParentEnvironment: false,
       environment: {
+          ...windowsSystemEnvironment,
         'MESH_LISTEN_ADDR': '127.0.0.1:$coordPort',
         'MESH_DATABASE_PATH': '${directory.path}/coordinator.db',
         'MESH_CA_CERT_FILE': '${caDirectory.path}/ca.pem',
@@ -205,7 +207,7 @@ final class _ControllableCoordinator {
     coordinator.kill();
     await coordinator.exitCode;
     await upstream.close(force: true);
-    await directory.delete(recursive: true);
+    await deleteTestDirectory(directory);
   }
 }
 
@@ -227,7 +229,7 @@ void main() {
       initialize: () => initialized ??= RustLib.init(
         externalLibrary: ExternalLibrary.open(
           File(bundledLibrary ??
-                  'rust/target/debug/librust_lib_nipaplay.${Platform.isMacOS ? 'dylib' : 'so'}')
+                  meshNativeLibraryPath)
               .absolute
               .path,
         ),
@@ -235,7 +237,7 @@ void main() {
     );
     await native.ready();
     final ca = await Process.run(
-      'server/nipaplay-mesh-coordinator/target/debug/nipaplay-mesh-coordinator',
+      meshCoordinatorPath,
       [
         '--generate-dev-ca',
         '${caDirectory.path}/ca.pem',

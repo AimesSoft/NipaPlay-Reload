@@ -69,6 +69,7 @@ void main() {
     SettingsAccess.registry = null;
     await subtitles.close();
     await media.close();
+    await jobs.database.close();
     await root.delete(recursive: true);
   });
 

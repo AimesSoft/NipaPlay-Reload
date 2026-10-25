@@ -11,6 +11,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../packages/nipa_harness/test/task_support.dart';
 import 'download_test_support.dart';
+import 'package:path/path.dart' as ppath;
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -21,8 +22,8 @@ void main() {
     SharedPreferences.setMockInitialValues({});
     StorageService.debugAppStorageDirectoryOverride = root;
     addTearDown(() => StorageService.debugAppStorageDirectoryOverride = null);
-    final output = await Directory('${root.path}/downloads').create();
-    final first = File('${output.path}/first.mp4');
+    final output = await Directory(ppath.join(root.path, 'downloads')).create();
+    final first = File(ppath.join(output.path, 'first.mp4'));
     await first.writeAsString('data');
     final backend = FakeDownloadBackend(output)
       ..present = true
@@ -35,7 +36,7 @@ void main() {
           isVideo: true),
       DownloadFile(
           location: DownloadLocation(
-              path: '${output.path}/second.mp4', isLocal: true),
+              path: ppath.join(output.path, 'second.mp4'), isLocal: true),
           expectedSize: 4,
           completedBytes: 0,
           isVideo: true)
@@ -85,7 +86,7 @@ void main() {
                 as List)
             .first['playable'],
         false);
-    final outside = File('${root.path}/outside.mp4');
+    final outside = File(ppath.join(root.path, 'outside.mp4'));
     await outside.writeAsString('data');
     await first.delete();
     await Link(first.path).create(outside.path);

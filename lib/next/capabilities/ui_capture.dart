@@ -188,6 +188,8 @@ final class ClassicUiCapture {
             'The video is a Flutter texture inside the scene, as the kernel renders it; platform views outside the scene are not included.'
           else
             'Native video overlays and platform views outside the Flutter scene are not included: where a native layer draws the picture, it is missing here.',
+          if (videoPicture != null && !videoPicture.picture.subtitlesDrawn)
+            'The exported picture has no subtitles: the kernel draws them in its own window, which is not in this capture, so the selected subtitle track does not show here.',
           'The OS window frame, other windows and external players are not included.',
         ],
       };

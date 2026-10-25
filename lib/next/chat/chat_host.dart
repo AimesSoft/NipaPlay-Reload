@@ -405,8 +405,15 @@ final class ChatHost implements ConversationHistory, DelegationChat, GuestChat {
     if (labRoot case final root?) {
       clean['TMPDIR'] =
           (await Directory('${root.path}/temp').create(recursive: true)).path;
+      if (Platform.isWindows) clean['TEMP'] = clean['TMP'] = clean['TMPDIR']!;
     }
     clean.addAll({
+      // Windows pipes carry the console code page unless Python is told;
+      // the harness tools and hooks speak UTF-8.
+      if (Platform.isWindows) ...{
+        'PYTHONUTF8': '1',
+        'PYTHONIOENCODING': 'utf-8',
+      },
       'DSH_HOME': home.path,
       // DSH would otherwise also read ~/.agents/AGENTS.md, written for coding agents.
       'DSH_AGENTS_HOME':

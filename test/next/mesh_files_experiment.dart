@@ -94,7 +94,7 @@ Future<void> x47ProxyReview(_Rig rig) async {
     await occupied.close();
   }
   await a.meshLibrary!.close();
-  final external = await Process.start('python3', [
+  final external = await Process.start(pythonCommand, [
     '-c',
     'import socket, sys\ns=socket.socket()\ns.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)\ns.bind(("127.0.0.1", $fixed))\ns.listen()\nprint(s.getsockname()[1], flush=True)\nsys.stdin.read()'
   ]);

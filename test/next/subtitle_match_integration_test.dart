@@ -9,6 +9,7 @@ import 'package:nipaplay/next/ui_data/service.dart';
 import 'package:nipaplay/utils/subtitle_file_utils.dart';
 import '../security/memory_vault.dart';
 import 'media_test_support.dart';
+import 'package:path/path.dart' as ppath;
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -23,11 +24,11 @@ void main() {
         ['作品 01', '作品 01.简中'],
         ['Show 01', '[字幕组] Show 01.eng'],
       ];
-      final input = await File('${temporary.path}/cases.json').writeAsString(jsonEncode(cases));
+      final input = await File(ppath.join(temporary.path, 'cases.json')).writeAsString(jsonEncode(cases));
       final config = jsonDecode(await File('.dart_tool/package_config.json').readAsString()) as Map;
       final flutter = (config['packages'] as List).singleWhere((p) => p['name'] == 'flutter') as Map;
       final sdk = Directory.fromUri(Uri.parse(flutter['rootUri'] as String)).parent.parent;
-      final process = await Process.run('${sdk.path}/bin/cache/dart-sdk/bin/dart',
+      final process = await Process.run(ppath.join(sdk.path, 'bin', 'cache', 'dart-sdk', 'bin', 'dart'),
           ['--packages=.dart_tool/package_config.json',
            'test/next/fixtures/subtitle_match_probe.dart', input.path]);
       expect(process.exitCode, 0, reason: '${process.stderr}');
@@ -50,15 +51,15 @@ void main() {
     final ui = UiDataService(f.service, f.engine, StateCapability([]), StateSources(), f.root, MemoryVault());
     try {
       final id = await f.file('Show S01E01.mkv');
-      final base = '${f.media.path}/Show S01E01';
+      final base = ppath.join(f.media.path, 'Show S01E01');
       await File('$base.chs.srt').writeAsString('subtitle');
       await File('$base.eng.vtt').writeAsString('WEBVTT');
       await File('$base.bitmap.IDX').writeAsString('VobSub index');
       await File('$base.bitmap.SUB').writeAsBytes([0, 0, 1, 0xba, 1]);
       await File('$base.text.sub').writeAsString('{1}{25}text');
       await File('$base.orphan.idx').writeAsString('index');
-      await File('${f.media.path}/Show S01E02.chs.srt').writeAsString('other');
-      await File('${f.media.path}/Other S01E01.srt').writeAsString('other');
+      await File(ppath.join(f.media.path, 'Show S01E02.chs.srt')).writeAsString('other');
+      await File(ppath.join(f.media.path, 'Other S01E01.srt')).writeAsString('other');
       final tracks = await subtitleCompanions(ui, id, '$base.mkv');
       final paths = tracks.map((t) => t['path']).toSet();
       expect(paths, {'$base.chs.srt', '$base.eng.vtt', '$base.bitmap.IDX', '$base.text.sub'});

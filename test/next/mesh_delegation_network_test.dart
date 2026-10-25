@@ -25,6 +25,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
 import 'mesh_delegation_support.dart';
+import 'support/platform.dart';
 
 final class _Vault implements CredentialVault {
   final values = <CredentialRef, String>{};
@@ -116,14 +117,14 @@ void main() {
     native = MeshNative(
       initialize: () => initialized ??= RustLib.init(
         externalLibrary: ExternalLibrary.open(File(bundled ??
-                'rust/target/debug/librust_lib_nipaplay.${Platform.isMacOS ? 'dylib' : 'so'}')
+                meshNativeLibraryPath)
             .absolute
             .path),
       ),
     );
     await native.ready();
     final ca = await Process.run(
-        'server/nipaplay-mesh-coordinator/target/debug/nipaplay-mesh-coordinator',
+        meshCoordinatorPath,
         [
           '--generate-dev-ca',
           '${caDirectory.path}/ca.pem',
@@ -152,10 +153,11 @@ void main() {
     await socket.close();
     base = Uri.parse('http://127.0.0.1:$port');
     coordinator = await Process.start(
-        'server/nipaplay-mesh-coordinator/target/debug/nipaplay-mesh-coordinator',
+        meshCoordinatorPath,
         [],
         includeParentEnvironment: false,
         environment: {
+          ...windowsSystemEnvironment,
           'MESH_LISTEN_ADDR': '127.0.0.1:$port',
           'MESH_DATABASE_PATH': '${directory.path}/coordinator.db',
           'MESH_CA_CERT_FILE': '${caDirectory.path}/ca.pem',

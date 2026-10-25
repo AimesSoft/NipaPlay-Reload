@@ -17,12 +17,12 @@ void main() {
           .listSync(recursive: true)
           .whereType<File>()
           .where((f) => f.path.endsWith('.dart')))
-        if (!file.path.startsWith('lib/next/player/classic/') &&
-            !allowed.contains(file.path) &&
+        if (!file.path.replaceAll('\\', '/').startsWith('lib/next/player/classic/') &&
+            !allowed.contains(file.path.replaceAll('\\', '/')) &&
             RegExp(r'video_player_state|VideoPlayerState\b')
                 .hasMatch(file.readAsStringSync()
                     .replaceAll(RegExp(r'^\s*///.*$', multiLine: true), '')))
-          file.path
+          file.path.replaceAll('\\', '/')
     ];
     expect(offenders, isEmpty);
   });

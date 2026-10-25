@@ -38,6 +38,7 @@ import 'package:nipaplay/next/subtitles/library.dart';
 import 'package:nipaplay/next/tasks/sqlite_job_store.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'media_test_support.dart';
+import 'support/platform.dart';
 
 part 'mesh_library_experiment.dart';
 part 'mesh_files_experiment.dart';
@@ -175,10 +176,11 @@ final class _Rig {
   Future<void> _spawnCoordinator([Map<String, String> extra = const {}]) async {
     final port = _port!;
     coordinator = await Process.start(
-        'server/nipaplay-mesh-coordinator/target/debug/nipaplay-mesh-coordinator',
+        meshCoordinatorPath,
         [],
         includeParentEnvironment: false,
         environment: {
+          ...windowsSystemEnvironment,
           'MESH_LISTEN_ADDR': '127.0.0.1:$port',
           'MESH_DATABASE_PATH': '${directory.path}/coordinator.db',
           'MESH_CA_CERT_FILE': '${caDirectory.path}/ca.pem',
@@ -252,7 +254,7 @@ final class _Rig {
       Directory? issuer}) async {
     final ca = issuer ?? caDirectory;
     final process =
-        await Process.start('rust/mesh/target/debug/examples/issue', []);
+        await Process.start(meshIssueExamplePath, []);
     process.stdin.write(jsonEncode({
       'ca': '${ca.path}/ca.pem',
       'key': '${ca.path}/ca.key',
@@ -315,12 +317,12 @@ void main() {
     native = MeshNative(
         initialize: () => initialized ??= RustLib.init(
             externalLibrary: ExternalLibrary.open(File(bundledLibrary ??
-                    'rust/target/debug/librust_lib_nipaplay.${Platform.isMacOS ? 'dylib' : 'so'}')
+                    meshNativeLibraryPath)
                 .absolute
                 .path)));
     await native.ready();
     final ca = await Process.run(
-        'server/nipaplay-mesh-coordinator/target/debug/nipaplay-mesh-coordinator',
+        meshCoordinatorPath,
         [
           '--generate-dev-ca',
           '${caDirectory.path}/ca.pem',
@@ -540,7 +542,7 @@ void main() {
     final a = await rig.node('a'), b = await rig.node('b');
     final rogue = await Directory('${rig.directory.path}/rogue').create();
     final ca = await Process.run(
-        'server/nipaplay-mesh-coordinator/target/debug/nipaplay-mesh-coordinator',
+        meshCoordinatorPath,
         ['--generate-dev-ca', '${rogue.path}/ca.pem', '${rogue.path}/ca.key']);
     expect(ca.exitCode, 0);
     final leaf = await rig.issue(a.identity!, issuer: rogue);

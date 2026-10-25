@@ -16,6 +16,9 @@ import 'package:shared_preferences_platform_interface/shared_preferences_platfor
 // ignore: depend_on_referenced_packages
 import 'package:shared_preferences_platform_interface/types.dart';
 
+import 'lab_window_stub.dart'
+    if (dart.library.ffi) 'lab_window_native.dart';
+
 /// A debug process profile. Never reads or migrates the normal instance's state.
 abstract final class LabProfile {
   static final String? name = parseName(
@@ -30,8 +33,15 @@ abstract final class LabProfile {
 
   /// window_manager's macOS show() always activates the app, so a quiet
   /// instance shows its window natively, behind everything.
-  static Future<void> showBehind() =>
-      const MethodChannel('nipaplay/instance').invokeMethod('showBehind');
+  static Future<void> showBehind() async {
+    if (!Platform.isWindows) {
+      return const MethodChannel('nipaplay/instance')
+          .invokeMethod('showBehind');
+    }
+    // The Windows runner has no native channel, and window_manager's show()
+    // takes the foreground.
+    showWindowWithoutActivating(title('NipaPlay'));
+  }
 
   /// A quiet instance's window is on no screen, so macOS reports the app
   /// hidden and Flutter would stop drawing; it keeps drawing, for the tools
@@ -54,15 +64,29 @@ abstract final class LabProfile {
 
   static Future<void> initialize() async {
     if (!active) return;
-    if (!Platform.isMacOS) {
-      throw UnsupportedError('Lab profiles require the macOS write sandbox.');
+    if (Platform.isWindows) {
+      // No native write sandbox here: the profile lives under the directory
+      // named by NIPAPLAY_LAB_ROOT, and every path the app asks for is
+      // redirected into it (the launcher also points APPDATA and
+      // LOCALAPPDATA there). External files are not enforced read-only.
+      final base = Platform.environment['NIPAPLAY_LAB_ROOT'];
+      if (base == null || !p.isAbsolute(base)) {
+        throw StateError(
+            'NIPAPLAY_LAB_ROOT must name an absolute directory for lab profiles on Windows.');
+      }
+      _root = p.join(base, name!);
+      await Directory(_root!).create(recursive: true);
+    } else {
+      if (!Platform.isMacOS) {
+        throw UnsupportedError('Lab profiles require the macOS write sandbox.');
+      }
+      final info = await const MethodChannel('security_bookmark')
+          .invokeMapMethod<String, Object?>('labProfileInfo');
+      if (info?['name'] != name || info?['writeSandbox'] != true) {
+        throw StateError('Native lab profile isolation was not installed.');
+      }
+      _root = info!['root'] as String;
     }
-    final info = await const MethodChannel('security_bookmark')
-        .invokeMapMethod<String, Object?>('labProfileInfo');
-    if (info?['name'] != name || info?['writeSandbox'] != true) {
-      throw StateError('Native lab profile isolation was not installed.');
-    }
-    _root = info!['root'] as String;
     await File(location('lab-profile.json')).writeAsString(
         jsonEncode({
           'profile': name,

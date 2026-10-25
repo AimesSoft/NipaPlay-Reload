@@ -111,6 +111,10 @@ final class CpuBudgetProbe {
 }
 
 final class _ThreadClock {
+  _ThreadClock() {
+    if (Platform.isWindows) _cyclesPerMicrosecond; // calibrate off the clock
+  }
+
   final _time = calloc<_Timespec>();
   final _windowsTimes = calloc<Uint64>(4);
   late final _gettime = DynamicLibrary.process().lookupFunction<
@@ -119,20 +123,39 @@ final class _ThreadClock {
   late final _kernel = DynamicLibrary.open('kernel32.dll');
   late final _thread = _kernel
       .lookupFunction<IntPtr Function(), int Function()>('GetCurrentThread');
-  late final _times = _kernel.lookupFunction<
-      Int32 Function(IntPtr, Pointer<Uint64>, Pointer<Uint64>, Pointer<Uint64>,
-          Pointer<Uint64>),
-      int Function(int, Pointer<Uint64>, Pointer<Uint64>, Pointer<Uint64>,
-          Pointer<Uint64>)>('GetThreadTimes');
+  // GetThreadTimes advances in scheduler quanta (15.625 ms): a 20 microsecond
+  // callback can read as a whole quantum. The thread's cycle count has no
+  // such step; cycles are turned into time with the rate this thread shows
+  // against the wall clock (the best of a few spins, as descheduling only
+  // ever makes the rate look slower).
+  late final _cycles = _kernel.lookupFunction<
+      Int32 Function(IntPtr, Pointer<Uint64>),
+      int Function(int, Pointer<Uint64>)>('QueryThreadCycleTime');
+  late final double _cyclesPerMicrosecond = _calibrate();
+
+  int _threadCycles() {
+    if (_cycles(_thread(), _windowsTimes) == 0) {
+      throw StateError('QueryThreadCycleTime failed');
+    }
+    return _windowsTimes[0];
+  }
+
+  double _calibrate() {
+    var best = 0.0;
+    for (var round = 0; round < 5; round++) {
+      final wall = Stopwatch()..start();
+      final first = _threadCycles();
+      while (wall.elapsedMicroseconds < 4000) {}
+      final rate = (_threadCycles() - first) / wall.elapsedMicroseconds;
+      if (rate > best) best = rate;
+    }
+    return best;
+  }
 
   int get now {
     if (Platform.isWindows) {
-      if (_times(_thread(), _windowsTimes, _windowsTimes + 1, _windowsTimes + 2,
-              _windowsTimes + 3) ==
-          0) {
-        throw StateError('GetThreadTimes failed');
-      }
-      return (_windowsTimes[2] + _windowsTimes[3]) ~/ 10;
+      final rate = _cyclesPerMicrosecond; // calibrates on first use
+      return _threadCycles() ~/ rate;
     }
     if (_gettime(Platform.isMacOS ? 16 : 3, _time) != 0) {
       throw StateError('Thread CPU clock unavailable');

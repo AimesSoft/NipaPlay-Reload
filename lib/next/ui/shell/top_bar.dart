@@ -12,6 +12,7 @@ import '../settings/settings_layout.dart';
 import 'background.dart';
 import 'nipa_setup.dart';
 import 'shell_controller.dart';
+import 'window_buttons.dart';
 import 'window_chrome.dart';
 
 /// `.chrome`: navigation left, background work / search / Nipa right, all
@@ -35,9 +36,10 @@ class NextTopBar extends StatelessWidget {
   static const _gap = 12.0;
 
   /// Right edges of the popovers' anchors, from the window's right edge.
-  static const avatarRight = NextMetrics.chromeEdge;
-  static const tasksRight =
-      NextMetrics.chromeEdge + _avatar + _gap + _search + _gap;
+  static double get avatarRight =>
+      NextMetrics.chromeEdge + NextWindowButtons.width;
+  static double get tasksRight =>
+      avatarRight + _avatar + _gap + _search + _gap;
 
   /// Sections line up with the content column, past the traffic lights
   /// when they would reach it; in full screen there are none.
@@ -147,6 +149,7 @@ class NextTopBar extends StatelessWidget {
                     );
                   },
                 ),
+                if (NextWindowButtons.wanted) const NextWindowButtons(),
               ]),
             ),
           ),

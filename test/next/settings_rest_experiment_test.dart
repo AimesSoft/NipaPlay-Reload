@@ -39,6 +39,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import '../security/memory_vault.dart';
 import 'package:nipaplay/next/settings/application_settings.dart';
+import 'package:path/path.dart' as ppath;
 
 class _DirectHttp extends HttpOverrides {
   @override
@@ -91,7 +92,7 @@ void main() {
         final resolved = await (directory
             ? Directory(path).resolveSymbolicLinks()
             : File(path).resolveSymbolicLinks());
-        if (!resolved.startsWith('${root.path}/') && resolved != root.path) {
+        if (!ppath.isWithin(root.path, resolved) && resolved != root.path) {
           throw const h.Failure(
               h.FailureCode.unavailable, 'Outside experiment root.');
         }
@@ -143,7 +144,7 @@ void main() {
         AppHttpProxy.clear();
         await root.delete(recursive: true);
       });
-      final png = File('${root.path}/background.png');
+      final png = File(ppath.join(root.path, 'background.png'));
       await png.writeAsBytes([137, 80, 78, 71]);
       final overrides = <String, Object?>{
         'appearance.quarterlyReviewSort': 'ratingHigh',
@@ -316,7 +317,7 @@ void main() {
         expect(rejected, isA<h.Failed>());
       }
       // Use a real harmless JS plugin, Classic storage and runtime.
-      final script = File('${root.path}/fixture.js');
+      final script = File(ppath.join(root.path, 'fixture.js'));
       await script.writeAsString("""
 var pluginManifest = {id:'x18.fixture',name:'X18 fixture',version:'1.0.0',minHostVersion:'1.0.0',description:'isolated experiment',author:'NipaPlay'};
 var pluginUIEntries = [
@@ -420,27 +421,27 @@ function pluginHandleUIAction(actionId) { return {type:'text',title:'Fixture',co
       print(
           'X18 market/install: file field resolved; Classic proxy requests=${jsonEncode(marketPaths)}');
       logs.addLog('X18 diagnosis', tag: 'X18');
-      final logPath = '${root.path}/diagnostics.txt';
+      final logPath = ppath.join(root.path, 'diagnostics.txt');
       await call('diagnostics.export', {'path': logPath});
       expect(await File(logPath).readAsString(), contains('X18 diagnosis'));
       final batch = await call('diagnostics.export', {
         'operations': [
           {'path': logPath},
-          {'path': '${root.path}/diagnostics-2.txt'}
+          {'path': ppath.join(root.path, 'diagnostics-2.txt')}
         ]
       });
       expect((batch['results'] as List).map((e) => e['status']),
           ['failed', 'completed']);
-      final linkedDestination = Link('${root.path}/broken-link.txt');
-      await linkedDestination.create('${root.path}/missing-target.txt');
+      final linkedDestination = Link(ppath.join(root.path, 'broken-link.txt'));
+      await linkedDestination.create(ppath.join(root.path, 'missing-target.txt'));
       final linkAttempt = await api.invokeJson('diagnostics.export',
           {'path': linkedDestination.path}, h.Invocation(origin: 'mcp'));
       expect(linkAttempt, isA<h.Failed>());
-      expect(await File('${root.path}/missing-target.txt').exists(), false);
+      expect(await File(ppath.join(root.path, 'missing-target.txt')).exists(), false);
       print(
           'X18 diagnostics export: text preserved; batch=[failed(conflict),completed]');
       // Roundtrip the Classic .npb format with preferences, history and matches.
-      final video = File('${root.path}/episode.mkv');
+      final video = File(ppath.join(root.path, 'episode.mkv'));
       await video.writeAsString('fixture');
       final history = WatchHistoryDatabase.instance;
       final historyDb = await history.database;
@@ -473,7 +474,7 @@ function pluginHandleUIAction(actionId) { return {type:'text',title:'Fixture',co
             }
           ]));
       final selected = BackupCategory.values.map((e) => e.name).toList();
-      final path = '${root.path}/roundtrip.npb';
+      final path = ppath.join(root.path, 'roundtrip.npb');
       await call('backup.export', {'path': path, 'categories': selected});
       final preview = await call('backup.preview', {'path': path});
       final beforeData = await FullBackupService()
@@ -511,7 +512,7 @@ function pluginHandleUIAction(actionId) { return {type:'text',title:'Fixture',co
       print('X18 backup preview: ${jsonEncode(preview)}');
       print(
           'X18 backup roundtrip: ${jsonEncode(restored)} all five categories=exact; position=123000; provenance=agent/X18 restore roundtrip');
-      final oldFormat = '${root.path}/history.nph';
+      final oldFormat = ppath.join(root.path, 'history.nph');
       await call('backup.history_export', {'path': oldFormat});
       await historyDb
           .update('watch_history', {'last_position': 0, 'watch_progress': 0.0});
@@ -533,7 +534,7 @@ function pluginHandleUIAction(actionId) { return {type:'text',title:'Fixture',co
         'value': true,
         'reason': 'X18 Classic backup classification probe'
       });
-      final probe = '${root.path}/plugin-state.npb';
+      final probe = ppath.join(root.path, 'plugin-state.npb');
       await call('backup.export', {
         'path': probe,
         'categories': ['preferences']

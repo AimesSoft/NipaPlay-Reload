@@ -20,10 +20,16 @@ abstract interface class KernelPictureSnapshot {
 }
 
 final class KernelPicture {
-  const KernelPicture(this.width, this.height, this.rgba);
+  const KernelPicture(this.width, this.height, this.rgba,
+      {this.subtitlesDrawn = true});
   final int width;
   final int height;
   final Uint8List rgba;
+
+  /// Whether the picture has the subtitles the kernel draws in it. Erika on
+  /// Windows has no picture of its own window: its frame comes from the
+  /// frame export, which draws none.
+  final bool subtitlesDrawn;
 }
 
 final class ChapterFacts {

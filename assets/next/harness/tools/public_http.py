@@ -86,6 +86,9 @@ def sanitize(value):
 
 
 def cli(main):
+    # Windows pipes use the console code page (GBK, ...); the output is UTF-8.
+    for stream in (sys.stdout, sys.stderr):
+        stream.reconfigure(encoding="utf-8")
     try:
         print(json.dumps(sanitize(main()), ensure_ascii=False, indent=2))
     except (ValueError, RuntimeError, OSError, ET.ParseError) as exc:

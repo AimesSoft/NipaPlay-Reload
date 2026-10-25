@@ -8,6 +8,7 @@ import 'package:nipaplay/next/harness_redaction.dart';
 import 'package:nipaplay/next/state/query.dart';
 import 'package:nipaplay/security/secret_redactor.dart';
 import 'package:nipaplay/security/credential_vault.dart';
+import 'support/platform.dart';
 
 void main() {
   test('server and seed retain public URLs and exclude private locators/known secrets', () async {
@@ -36,7 +37,8 @@ module=runpy.run_path("assets/next/harness/nipa")
 data=json.loads(sys.stdin.read())
 print(json.dumps(module["redact"](data, ["x34-known+/ secret"])))
 ''';
-    final process = await Process.start('python3', ['-c', code]);
+    final process = await Process.start(pythonCommand, ['-c', code],
+        environment: {'PYTHONUTF8': '1'});
     process.stdin.write(jsonEncode(input));
     await process.stdin.close();
     final stdout = await process.stdout.transform(utf8.decoder).join();

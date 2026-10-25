@@ -19,6 +19,8 @@ import 'package:nipaplay/next/ui_data/ui_data.dart';
 import 'package:nipaplay/next/ui_data/service.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import '../security/memory_vault.dart';
+import 'package:path/path.dart' as ppath;
+import 'support/platform.dart';
 
 Future<JsonMap> _probeInWorker(String path) async => {
       'subtitles': [
@@ -90,7 +92,7 @@ void main() {
     await ui.close();
     await ui.sources.close();
     await jobs.database.close();
-    await root.delete(recursive: true);
+    await deleteTestDirectory(root);
   });
   test('background build, SQL query, live host relations and progress persist',
       () async {
@@ -154,12 +156,12 @@ void main() {
   test('startup indexers scan, parse and commit in the library worker',
       () async {
     await worker.warm();
-    final folder = await Directory('${root.path}/media').create();
-    final video = File('${folder.path}/episode.mkv');
+    final folder = await Directory(ppath.join(root.path, 'media')).create();
+    final video = File(ppath.join(folder.path, 'episode.mkv'));
     await video.writeAsString('video');
-    await File('${folder.path}/episode.xml').writeAsString(
+    await File(ppath.join(folder.path, 'episode.xml')).writeAsString(
         '<i><d p="1,1,25,16777215,1,0,s,1">sidecar text</d></i>');
-    await File('${folder.path}/episode.zh.srt')
+    await File(ppath.join(folder.path, 'episode.zh.srt'))
         .writeAsString('1\n00:00:00,000 --> 00:00:01,000\n字幕\n');
     final db = jobs.database;
     await db.insert('media_entities', {
@@ -193,7 +195,7 @@ void main() {
     final bindings = await db.query('danmaku_bindings');
     expect(bindings, hasLength(1));
     expect((jsonDecode(bindings.single['local_file'] as String) as Map)['path'],
-        '${folder.path}/episode.xml');
+        ppath.join(folder.path, 'episode.xml'));
     final subtitle =
         jsonDecode((await db.query('file_subtitles')).single['facts'] as String)
             as Map;
@@ -293,8 +295,8 @@ void main() {
     // A query must wait for and replace the exited worker instead of silently
     // reading the same tables on the UI isolate.
     final activity = await worker.activityRows((
-      '${root.path}/repo',
-      '${root.path}/journal.jsonl',
+      ppath.join(root.path, 'repo'),
+      ppath.join(root.path, 'journal.jsonl'),
       'owner',
       const {},
       const {}

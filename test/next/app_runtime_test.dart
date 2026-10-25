@@ -106,6 +106,7 @@ void main() {
       List<String>? helper;
       final restart = AppRestart(
           macos: true,
+          windows: false,
           processId: 4242,
           executable: '/Apps/NipaPlay.app/Contents/MacOS/NipaPlay',
           profileName: 'lab',
@@ -144,10 +145,127 @@ void main() {
       expect(order.where((e) => e == 'spawn'), hasLength(1));
     });
 
+    test('Windows: an argument reaches the command line as CommandLineToArgv reads it',
+        () {
+      expect(windowsArgument(r'C:\v\ep.mkv'), r'C:\v\ep.mkv');
+      expect(windowsArgument(r'C:\v\a b.mkv'), r'"C:\v\a b.mkv"');
+      expect(windowsArgument('say "hi"'), r'"say \"hi\""');
+      expect(windowsArgument(r'dir with\'), r'"dir with\\"');
+      expect(windowsArgument(''), '""');
+    });
+
+    test('Windows: the helper waits for the old process, then starts the program with its arguments and environment',
+        () async {
+      final old = await Process.start('cmd.exe', ['/c', 'ping -n 3 127.0.0.1 >nul']);
+      final out = File(
+          '${Directory.systemTemp.path}\\nipa-restart-${DateTime.now().microsecondsSinceEpoch}.txt');
+      // PowerShell is the program: it reads its arguments as the command line
+      // carries them, and shows the environment the new process got.
+      final (command, arguments) = relaunchCommandWindows(
+          old.pid,
+          r'C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe', [
+        '-NoProfile',
+        '-Command',
+        "Set-Content -Path '${out.path}' -Value \$env:NIPA_RESTART_PROFILE",
+      ]);
+      final watch = Stopwatch()..start();
+      final result = await Process.run(command, arguments,
+          environment: {'NIPA_RESTART_PROFILE': 'lab-one'});
+      expect(result.exitCode, 0, reason: '${result.stderr}');
+      expect(watch.elapsedMilliseconds, greaterThan(1000));
+      // The started program is detached from the helper; wait for its file.
+      for (var i = 0; i < 50 && !out.existsSync(); i++) {
+        await Future<void>.delayed(const Duration(milliseconds: 100));
+      }
+      expect((await out.readAsString()).trim(), 'lab-one');
+      await out.delete();
+      await old.exitCode;
+    }, skip: Platform.isWindows ? null : 'Windows relaunch');
+
+    test('Windows: the helper starts nothing while the old process is still alive after the wait',
+        () async {
+      final old = await Process.start('cmd.exe', ['/c', 'ping -n 8 127.0.0.1 >nul']);
+      final (command, arguments) = relaunchCommandWindows(
+          old.pid, r'C:\Windows\System32\cmd.exe', ['/c', 'echo started'],
+          waitSeconds: 1);
+      final result = await Process.run(command, arguments);
+      expect(result.exitCode, 1);
+      expect((result.stdout as String).trim(), isEmpty);
+      old.kill();
+    }, skip: Platform.isWindows ? null : 'Windows relaunch');
+
+    test('Windows: this very process\'s arguments are readable through the command line',
+        () async {
+      expect(await readWindowsArguments(), everyElement(isA<String>()));
+    }, skip: Platform.isWindows ? null : 'Windows command line');
+
+    test('Windows: the real helper outlives the restart call and starts the program',
+        () async {
+      // The helper is an ordinary PowerShell child: started detached it never
+      // runs its script on Windows.
+      final old = await Process.start('cmd.exe', ['/c', 'exit 0']);
+      await old.exitCode;
+      final out = File(
+          '${Directory.systemTemp.path}\\nipa-restart-real-${DateTime.now().microsecondsSinceEpoch}.txt');
+      var quit = false;
+      final restart = AppRestart(
+          macos: false,
+          windows: true,
+          processId: old.pid,
+          executable:
+              r'C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe',
+          delay: Duration.zero,
+          readWindowsArgumentList: () async => [
+                '-NoProfile',
+                '-Command',
+                "Set-Content -Path '${out.path}' -Value started",
+              ],
+          beforeQuit: () async {},
+          quit: () async => quit = true);
+      await restart.restart();
+      for (var i = 0; i < 100 && !out.existsSync(); i++) {
+        await Future<void>.delayed(const Duration(milliseconds: 100));
+      }
+      expect(out.existsSync(), true);
+      expect(quit, true);
+      await out.delete();
+    }, skip: Platform.isWindows ? null : 'Windows relaunch');
+
+    test('Windows: restart reads the command line, drains, starts the helper, then quits',
+        () async {
+      final order = <String>[];
+      List<String>? helper;
+      final restart = AppRestart(
+          macos: false,
+          windows: true,
+          processId: 4242,
+          executable: r'C:\Apps\NipaPlay\NipaPlay.exe',
+          delay: Duration.zero,
+          readWindowsArgumentList: () async {
+            order.add('read');
+            return [r'D:\v\ep 1.mkv'];
+          },
+          beforeQuit: () async => order.add('drain'),
+          spawn: (command, arguments) async {
+            order.add('spawn');
+            helper = [command, ...arguments];
+          },
+          quit: () async => order.add('quit'));
+      final receipt = await restart.restart();
+      expect(order, ['read', 'drain', 'spawn']);
+      await Future<void>.delayed(const Duration(milliseconds: 20));
+      expect(order.last, 'quit');
+      expect(helper!.first, 'powershell.exe');
+      expect(helper!, contains('-EncodedCommand'));
+      expect(receipt['arguments'], [r'D:\v\ep 1.mkv']);
+      expect(receipt['processId'], 4242);
+    });
+
     test('other platforms report it unavailable and restart nothing', () async {
       var touched = false;
       final restart = AppRestart(
           macos: false,
+          windows: false,
           readArguments: (_) async {
             touched = true;
             return [];
@@ -159,7 +277,7 @@ void main() {
           restart.restart(),
           throwsA(isA<Failure>()
               .having((f) => f.code, 'code', FailureCode.unavailable)
-              .having((f) => f.message, 'message', contains('macOS only'))));
+              .having((f) => f.message, 'message', contains('macOS and Windows only'))));
       expect(touched, false);
     });
 
@@ -168,6 +286,7 @@ void main() {
       var quit = false;
       final unreadable = AppRestart(
           macos: true,
+          windows: false,
           delay: Duration.zero,
           readArguments: (_) async => throw const FormatException('x'),
           beforeQuit: () async {},
@@ -177,6 +296,7 @@ void main() {
           throwsA(isA<Failure>().having((f) => f.code, 'code', FailureCode.unavailable)));
       final broken = AppRestart(
           macos: true,
+          windows: false,
           delay: Duration.zero,
           readArguments: (_) async => procArgs('/bin/app', ['/bin/app']),
           beforeQuit: () async {},

@@ -38,6 +38,10 @@ void main() {
     });
 
     test('a file URL resolves to the same local history identity', () async {
+      // A drive-letter path on Windows; a POSIX path has no file URL there.
+      if (Platform.isWindows) {
+        fixture = PlaybackFixture(rows: [watchItem(r'C:\media\episode.mkv')]);
+      }
       final row = fixture.rows.single;
       await invokeCompleted(fixture.harness, 'playback.open', {'path': Uri.file(row.filePath).toString()});
       expect(fixture.started.single.videoPath, row.filePath);

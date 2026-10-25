@@ -20,7 +20,7 @@ def main(argv=None):
     url = urllib.parse.urlunsplit(p._replace(query=query))
     payload = None
     if args.json_file:
-        payload = json.dumps(json.loads(Path(args.json_file).read_text(encoding="utf-8"))).encode()
+        payload = json.dumps(json.loads(Path(args.json_file).read_text(encoding="utf-8-sig"))).encode()
     body, final = request(url, payload=payload)
     return {"source_url": final, "notice": NOTICE, "data": json.loads(body.decode("utf-8-sig"))}
 

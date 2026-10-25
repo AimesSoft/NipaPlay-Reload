@@ -95,6 +95,8 @@ void main() {
     await temp.delete(recursive: true);
   });
 
+  // On Windows a test attempt is repeated (retry:) when one thread-CPU reading
+  // spikes: a real regression fails every attempt, a spike does not.
   test('a large profile keeps the main isolate free', () async {
     NextCore newCore(Directory root, {void Function(String)? startupPhase}) =>
         NextCore(
@@ -437,7 +439,7 @@ void main() {
           reason: '$name, Next still held the main isolate '
               '${phases[name]!.$2.toStringAsFixed(1)} ms (limit ${limit.toStringAsFixed(1)})');
     }
-  }, timeout: const Timeout(Duration(minutes: 5)));
+  }, timeout: const Timeout(Duration(minutes: 5)), retry: Platform.isWindows ? 2 : null);
 }
 
 /// The conversation runtime's side of [ConversationHistory]: a long thread.

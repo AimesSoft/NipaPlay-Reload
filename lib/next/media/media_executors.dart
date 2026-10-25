@@ -93,9 +93,24 @@ final class _ScanExecutor implements JobExecutor {
     final db = service.store.database;
     var discovered = (await db.query('media_scan_items',
         where: 'job_id = ?', whereArgs: [context.job.jobId])).length;
+    // A directory that cannot be listed (on Windows one deeper than 259
+    // characters, without the system's long path setting) is left out and
+    // reported; the rest of the folder is still scanned.
+    final unreadable = <String>[];
+    var unreadableCount = 0;
+    String? unreadableReason;
     if (context.job.checkpoint['enumerated'] != true) {
-      await for (final entry
-          in Directory(root).list(recursive: true, followLinks: false)) {
+      await for (final entry in Directory(root)
+          .list(recursive: true, followLinks: false)
+          .handleError((Object error) {
+        error as FileSystemException;
+        unreadableCount++;
+        if (unreadable.length < 5 && error.path != null) {
+          unreadable.add(error.path!);
+        }
+        unreadableReason ??=
+            'os error ${error.osError?.errorCode}: ${error.osError?.message ?? error.message}';
+      }, test: (error) => error is FileSystemException)) {
         if (await control
             .stop({'discovered': discovered, 'indexed': discovered})) {
           return;
@@ -134,7 +149,13 @@ final class _ScanExecutor implements JobExecutor {
     await context
         .succeed(JobReceipt(verification: VerificationLevel.verified, details: {
       'indexed': items.length,
-      'fileIds': [for (final row in items) row['file_id']]
+      'fileIds': [for (final row in items) row['file_id']],
+      if (unreadableCount > 0)
+        'unreadableDirectories': {
+          'count': unreadableCount,
+          'examples': unreadable,
+          'reason': unreadableReason,
+        },
     }));
   }
 }

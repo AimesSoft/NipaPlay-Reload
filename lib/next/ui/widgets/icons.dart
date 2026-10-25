@@ -15,6 +15,10 @@ enum NextGlyph {
   plus,
   minus,
 
+  /// The window's maximize and restore buttons (Windows).
+  maximize,
+  restore,
+
   /// ⋯: what is folded away.
   more,
 
@@ -134,6 +138,24 @@ class _GlyphPainter extends CustomPainter {
         canvas.drawLine(const Offset(5, 12), const Offset(19, 12), line);
       case NextGlyph.minus:
         canvas.drawLine(const Offset(5, 12), const Offset(19, 12), line);
+      case NextGlyph.maximize:
+        canvas.drawRRect(
+            RRect.fromRectAndRadius(
+                const Rect.fromLTWH(5.5, 5.5, 13, 13), const Radius.circular(1.5)),
+            line);
+      case NextGlyph.restore:
+        canvas.drawRRect(
+            RRect.fromRectAndRadius(
+                const Rect.fromLTWH(4.5, 8.5, 11, 11), const Radius.circular(1.5)),
+            line);
+        canvas.drawPath(
+            Path()
+              ..moveTo(8.5, 8.5)
+              ..lineTo(8.5, 5.5)
+              ..lineTo(18.5, 5.5)
+              ..lineTo(18.5, 15.5)
+              ..lineTo(15.5, 15.5),
+            line);
       case NextGlyph.more:
         for (final x in const [5.0, 12.0, 19.0]) {
           canvas.drawCircle(Offset(x, 12), 1.9, fill);
