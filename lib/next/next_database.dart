@@ -2,6 +2,7 @@ import 'dart:io';
 
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
+import 'sqlite_library.dart';
 import 'danmaku/migration.dart';
 import 'danmaku/files.dart';
 import 'media/media_migration.dart';
@@ -56,13 +57,18 @@ Future<void> _migrate(Database db, int oldVersion, int newVersion) async {
   }
 }
 
+final DatabaseFactory _linuxFactory =
+    createDatabaseFactoryFfi(ffiInit: ensureSqliteLibrary);
+
 Future<Database> openNextDatabase(Directory root,
     {DatabaseFactory? factory}) async {
   await root.create(recursive: true);
   if (factory == null) {
     if (Platform.isWindows || Platform.isLinux || Platform.isMacOS) {
       sqfliteFfiInit();
-      factory = databaseFactoryFfi;
+      // On Linux the factory's own isolate also needs the runtime-only SQLite
+      // library name (a server without the development package).
+      factory = Platform.isLinux ? _linuxFactory : databaseFactoryFfi;
     } else {
       factory = databaseFactory;
     }

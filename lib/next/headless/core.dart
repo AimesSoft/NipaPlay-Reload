@@ -86,6 +86,7 @@ import '../memory/service.dart';
 import 'chat_capability.dart';
 import 'model.dart';
 import 'nipa.dart';
+import 'package_layout.dart';
 
 /// Composes the same domain services without attaching Classic or a widget tree.
 final class HeadlessCore {
@@ -375,7 +376,7 @@ final class HeadlessCore {
             media: media, danmaku: danmaku, settings: settings, vault: vault,
             programEnabled: () => programs.enabled,
             subtitleProbeReady: () => headlessFfprobe != null),
-        InstanceCapability(const InstanceFacts('1.11.10-headless')),
+        InstanceCapability(const InstanceFacts(headlessAppVersion)),
         bodyEvents,
         TaskCapability(engine),
         programs.capability,
@@ -411,7 +412,7 @@ final class HeadlessCore {
     endpoint = AgentEndpoint(
         harness: harness,
         seed: seed,
-        appVersion: '1.11.10-headless',
+        appVersion: headlessAppVersion,
         nowPlaying: uiData.nowPlaying,
         port: port,
         credentialFile: File('${root.path}/endpoint.json'),

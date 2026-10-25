@@ -33,6 +33,7 @@ import '../ui_data/no_airing.dart' if (dart.library.ui) '../ui_data/airing.dart'
     as airing;
 import '../ui_data/service.dart';
 import '../ui_data/ui_data.dart';
+import '../sqlite_library.dart';
 import 'library_codec.dart';
 import 'library_projection.dart';
 
@@ -806,6 +807,7 @@ Future<void> _serve(
   // No migrations, cache pruning or business-service startup on this second
   // connection. Core owns the schema and creates it before the worker starts.
   sqfliteFfiInit();
+  ensureSqliteLibrary();
   final db = await databaseFactoryFfiNoIsolate.openDatabase(databasePath,
       options: OpenDatabaseOptions(
           singleInstance: false,

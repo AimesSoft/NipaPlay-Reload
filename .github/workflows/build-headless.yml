@@ -1,0 +1,51 @@
+name: Build Headless
+
+on:
+  workflow_dispatch:
+  workflow_call:
+    outputs:
+      version:
+        description: '应用版本号'
+        value: ${{ jobs.build.outputs.version }}
+
+jobs:
+  build:
+    name: Build Headless Package (${{ matrix.arch }})
+    # 在 Ubuntu 22.04 上构建，包只要求 glibc 2.35（Ubuntu 22.04、Debian 12 及更新）。
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: amd64
+            runner: ubuntu-22.04
+          - arch: arm64
+            runner: ubuntu-22.04-arm
+    outputs:
+      version: ${{ steps.setup.outputs.version }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          token: ${{ github.token }}
+          fetch-depth: 0
+          submodules: recursive
+
+      - name: Setup Flutter Environment
+        id: setup
+        uses: ./.github/actions/setup-flutter
+
+      - name: Build headless package
+        id: headless
+        uses: ./.github/actions/build-headless
+        with:
+          app-version: ${{ steps.setup.outputs.version }}
+          arch: ${{ matrix.arch }}
+
+      - name: Upload headless package
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-Headless-${{ matrix.arch }}
+          path: build/headless-package/NipaPlay-Headless_*_Linux_${{ matrix.arch }}.tar.gz
+          if-no-files-found: error

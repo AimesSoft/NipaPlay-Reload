@@ -1,0 +1,69 @@
+name: 'Build Headless Package'
+description: '构建 Linux 无界面 NipaPlay 安装包（NipaPlay-Headless_<版本>_Linux_<架构>.tar.gz）'
+inputs:
+  app-version:
+    description: '应用版本号（pubspec 版本）'
+    required: true
+  arch:
+    description: '目标架构：amd64 或 arm64（必须与运行器架构一致，原生库在本机编译）'
+    required: true
+outputs:
+  archive-path:
+    description: '生成的 tar.gz 路径'
+    value: ${{ steps.package.outputs.archive_path }}
+runs:
+  using: 'composite'
+  steps:
+    - name: Setup Rust for the headless native library
+      uses: dtolnay/rust-toolchain@d0befba8b9ddf874327619e84c39b094edd58b66
+      with:
+        toolchain: 1.93.0
+
+    - name: Cache Cargo registry and headless build
+      uses: actions/cache@v4
+      with:
+        path: |
+          ~/.cargo/registry
+          ~/.cargo/git
+          rust/headless/target
+        key: headless-cargo-${{ inputs.arch }}-${{ hashFiles('rust/headless/Cargo.lock', 'rust/headless/Cargo.toml', 'rust/mesh/**', 'rust/src/**') }}
+        restore-keys: |
+          headless-cargo-${{ inputs.arch }}-
+
+    - name: Package headless host
+      id: package
+      shell: bash
+      env:
+        APP_VERSION: ${{ inputs.app-version }}
+        ARCH: ${{ inputs.arch }}
+      run: |
+        set -euo pipefail
+        runner_arch="$(uname -m | sed 's/x86_64/amd64/;s/aarch64/arm64/')"
+        if [ "$runner_arch" != "$ARCH" ]; then
+          echo "Runner is $runner_arch but the package is $ARCH; the native library is built on the target architecture." >&2
+          exit 1
+        fi
+        # Use the Dart that ships with the Flutter that resolved the packages.
+        flutter_bin="$(dirname "$(readlink -f "$(command -v flutter)")")"
+        export DART="$flutter_bin/cache/dart-sdk/bin/dart"
+        bash scripts/next/headless/package.sh "$ARCH" "$APP_VERSION"
+
+    - name: Verify the package starts
+      shell: bash
+      env:
+        APP_VERSION: ${{ inputs.app-version }}
+        ARCH: ${{ inputs.arch }}
+      run: |
+        set -euo pipefail
+        archive="build/headless-package/NipaPlay-Headless_${APP_VERSION}_Linux_${ARCH}.tar.gz"
+        test -f "$archive"
+        check="$(mktemp -d)"
+        tar -xzf "$archive" -C "$check"
+        reported="$("$check/nipaplay-headless/libexec/nipaplay-headless-host" --version)"
+        echo "$reported"
+        test "$reported" = "nipaplay-headless ${APP_VERSION}"
+        if ldd "$check/nipaplay-headless/libexec/libnipaplay_headless_native.so" | grep "not found"; then
+          echo "native library has unresolved dependencies" >&2
+          exit 1
+        fi
+        rm -rf "$check"
