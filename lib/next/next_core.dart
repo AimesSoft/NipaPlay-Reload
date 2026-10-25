@@ -431,7 +431,7 @@ final class NextCore {
         'facts': {'error': error}
       }, Invocation(origin: 'application'));
     };
-    downloads.attach(engine, root);
+    downloads.attach(engine, root, vault: credentialVault);
     resources = TaskResources(engine, downloads.downloads, helpers);
     await resources.load();
     phase('engine resources');
@@ -665,7 +665,8 @@ final class NextCore {
           })
           ..update = (() => readStatus('app.update.status'))
           ..hooks = hooks.status
-          ..downloadEngines = downloads.engineStatus);
+          ..downloadEngines = downloads.engineStatus
+          ..downloadTorrents = downloads.qbittorrentTorrents);
     phase('system views');
     await Future<void>.delayed(Duration.zero);
     await engine.start();

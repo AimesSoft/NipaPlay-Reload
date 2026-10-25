@@ -26,14 +26,22 @@ final class DownloadService {
   /// tick; download refresh and every explicit read/write keep it current.
   JsonMap? get bandwidthFacts => _lastBandwidthFacts;
 
-  Future<JsonMap> bandwidth(JsonMap input) => _serial(() async {
+  Future<JsonMap> bandwidth(JsonMap input,
+          {DownloadBackendRef ref = const DownloadBackendRef.builtin()}) =>
+      _serial(() async {
+        final builtin = ref.key == const DownloadBackendRef.builtin().key;
         for (final value in input.values.cast<int>()) {
-          if (value != 0 && (value < 16384 || value > 4294967295)) {
-            throw const Failure(FailureCode.invalidInput,
-                'Use 0 for unlimited, or 16384..4294967295 bytes/second.');
+          if (builtin
+              ? (value != 0 && (value < 16384 || value > 4294967295))
+              : (value < 0 || value > 4294967295)) {
+            throw Failure(
+                FailureCode.invalidInput,
+                builtin
+                    ? 'Use 0 for unlimited, or 16384..4294967295 bytes/second.'
+                    : 'Use 0 for unlimited, or 1..4294967295 bytes/second.');
           }
         }
-        final backend = backends.resolve(const DownloadBackendRef.builtin());
+        final backend = backends.resolve(ref);
         final facts = backend is BandwidthDownloadBackend
             ? await (backend as BandwidthDownloadBackend).bandwidth(input)
             : <String, Object?>{
@@ -41,15 +49,19 @@ final class DownloadService {
                 'applied': false,
                 'reason': 'backend_has_no_bandwidth_control'
               };
-        return _lastBandwidthFacts = {
+        final result = {
           ...facts,
-          'scope': 'builtinSession',
-          'appliesTo': 'all builtin torrents',
-          'lifetime':
-              'current native session; new sessions default to unlimited',
+          'scope': builtin ? 'builtinSession' : 'backendSession',
+          if (!builtin) 'backend': ref.toJson(),
+          'appliesTo':
+              builtin ? 'all builtin torrents' : 'all torrents of this backend',
+          'lifetime': builtin
+              ? 'current native session; new sessions default to unlimited'
+              : 'kept by the backend until changed there or here',
           'unit': 'bytes/second; 0 means unlimited',
-          'minimumPositive': 16384
+          if (builtin) 'minimumPositive': 16384
         };
+        return builtin ? _lastBandwidthFacts = result : result;
       });
   Future<void> _tail = Future.value();
 

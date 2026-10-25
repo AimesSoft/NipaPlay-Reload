@@ -22,6 +22,9 @@ final class SystemStatusSources {
 
   /// `DownloadRuntime.engineStatus()`.
   Future<List<JsonMap>> Function()? downloadEngines;
+
+  /// `DownloadRuntime.qbittorrentTorrents()`.
+  Future<List<JsonMap>> Function()? downloadTorrents;
 }
 
 StringSchema _text(String description) =>
@@ -427,9 +430,16 @@ List<StateView> systemStateViews(SystemStatusSources s) {
     if (s.downloadEngines != null)
       _view(
           'downloads.engine',
-          'The download backends: builtin (torrent engine) and http. enabled is the download.enabled setting; while it is off the backends are not asked and rates are null. The counts are tasks in each state; the rates are the sum reported by the backend over tasks that are neither finished nor paused. limits are the session limits read back from the native engine (0 = unlimited; null = not readable: no session, or the backend has no limit control).',
+          'The download backends: builtin (torrent engine), http, and one row per qBittorrent the person added in settings (backend qbittorrent; use its id in download.add backend {kind: "qbittorrent", id}). For a qBittorrent: name, address (no login), local (it runs on this computer, so its paths are paths here; false: they are paths on the machine it runs on, never opened here), online (asked just now), version and apiVersion (null while offline). A qBittorrent that is off is reported with online false and the error code; its logins are not part of the facts. enabled is the download.enabled setting; while it is off the backends are not asked and rates are null. The counts are tasks in each state; the rates are the sum reported by the backend over tasks that are neither finished nor paused. limits are the session limits read back from the native engine (0 = unlimited; null = not readable: no session, or the backend has no limit control).',
           {
-            'backend': _text('builtin or http.'),
+            'backend': _text('builtin, http or qbittorrent.'),
+            'id': _text('qbittorrent only: the id to name it in download.add.'),
+            'name': _text('qbittorrent only: the name the person gave it.'),
+            'address': _text('qbittorrent only: where its WebUI is, without credentials.'),
+            'local': _bool('qbittorrent only: it runs on this computer.'),
+            'online': _bool('qbittorrent only: it answered just now; null while downloads are off (not asked).'),
+            'version': _text('qbittorrent only: its version, as it said.'),
+            'apiVersion': _text('qbittorrent only: its WebUI API version.'),
             'enabled': _bool('Downloads are enabled.'),
             'running': _int('Tasks downloading.'),
             'queued': _int('Tasks waiting to start.'),
@@ -447,6 +457,28 @@ List<StateView> systemStateViews(SystemStatusSources s) {
             'observedAt': _time,
           },
           () async => await s.downloadEngines!()),
+    if (s.downloadTorrents != null)
+      _view(
+          'downloads.torrents',
+          'The torrents inside each qBittorrent the person added, asked from it just now (its own list, not only what Next follows). One row per torrent: id and name of the qBittorrent, local (its paths are paths on this computer; false: on its machine), infoHash (what download.add recognises; the same magnet or file is not added twice), title, state (qBittorrent\'s own word), paused, finished, completedBytes and totalBytes of the wanted files, rates, savePath, category, and jobId: the download task following it, null when none does. A qBittorrent that does not answer has no rows (see downloads.engine); downloads off: no rows. To follow one, download.add with backend {kind: "qbittorrent", id} and a magnet:?xt=urn:btih:INFOHASH for it.',
+          {
+            'id': _text('The qBittorrent id (download.add backend id).'),
+            'name': _text('Its name.'),
+            'local': _bool('It runs on this computer.'),
+            'infoHash': _text('The torrent\'s info hash.'),
+            'title': _text('The torrent name as qBittorrent shows it.'),
+            'state': _text('qBittorrent\'s state word (downloading, stalledUP, stoppedUP, pausedDL, ...).'),
+            'paused': _bool('Paused or stopped.'),
+            'finished': _bool('All wanted files complete.'),
+            'completedBytes': _int('Bytes done of the wanted files.'),
+            'totalBytes': _int('Bytes of the wanted files.'),
+            'downloadBytesPerSecond': _int('Download rate.'),
+            'uploadBytesPerSecond': _int('Upload rate.'),
+            'savePath': _text('Where qBittorrent saves it, on its machine.'),
+            'category': _text('Its qBittorrent category; empty for none.'),
+            'jobId': _text('The download task that follows it; null when none.'),
+          },
+          () async => await s.downloadTorrents!()),
   ];
 }
 

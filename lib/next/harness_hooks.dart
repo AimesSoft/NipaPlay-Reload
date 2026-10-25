@@ -97,6 +97,9 @@ final class HarnessHooks implements JobExecutor {
           await emit('download.file_completed', objectId, {
             'jobId': row['jobId'],
             'infoHash': job.input['infoHash'],
+            // Which downloader holds the file; with `file.local` false the
+            // path is on that downloader's machine.
+            'backend': job.details['backend'],
             'file': row,
           });
           _fileOccurrences.add(objectId);

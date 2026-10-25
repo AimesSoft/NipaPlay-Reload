@@ -66,6 +66,7 @@ import 'downloads.dart';
 import 'job_lifecycle.dart';
 import 'native.dart';
 import 'vault.dart';
+import '../downloads/qbittorrent_hub.dart';
 import 'library_roots.dart';
 import '../mesh/runtime.dart';
 import '../mesh/library.dart';
@@ -259,7 +260,13 @@ final class HeadlessCore {
             ? jsonDecode(await downloadConfig.readAsString()) as JsonMap
             : const {});
     final library = HeadlessDownloadLibrary(media);
-    final backends = DownloadBackends([backend]);
+    // The qBittorrents written in qbittorrent.json (logins enrolled in the
+    // vault under namespace qbittorrent, key = id). They are tracked when a
+    // download names them, never adopted.
+    final qbittorrent = QbittorrentHub(
+        file: File(p.join(root.path, 'qbittorrent.json')), vault: vault);
+    await qbittorrent.load();
+    final backends = DownloadBackends([backend, ...qbittorrent.backends]);
     downloadExecutor = DownloadExecutor(
         backends: backends, library: library, isEnabled: () async => true);
     _executors.addAll([
