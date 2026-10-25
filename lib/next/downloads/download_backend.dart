@@ -128,8 +128,13 @@ final class DownloadRequest implements JsonEncodable {
       this.fileIndices,
       this.createFolderForTask,
       this.checksum,
-      this.connections});
+      this.connections,
+      this.category});
   final String source, infoHash, title;
+
+  /// The category a qBittorrent files the torrent under (other backends
+  /// refuse it).
+  final String? category;
 
   /// Parallel connections an HTTP download asks for (1-8); the backend reports
   /// how many it actually used.
@@ -148,7 +153,8 @@ final class DownloadRequest implements JsonEncodable {
       fileIndices: (json['fileIndices'] as List?)?.cast<int>(),
       createFolderForTask: json['createFolderForTask'] as bool?,
       checksum: json['checksum'] as JsonMap?,
-      connections: json['connections'] as int?);
+      connections: json['connections'] as int?,
+      category: json['category'] as String?);
   @override
   JsonMap toJson() => {
         'source': source,
@@ -160,6 +166,7 @@ final class DownloadRequest implements JsonEncodable {
           'createFolderForTask': createFolderForTask,
         if (checksum != null) 'checksum': checksum,
         if (connections != null) 'connections': connections,
+        if (category != null) 'category': category,
       };
 }
 
@@ -207,6 +214,15 @@ final class DownloadBackends {
         };
   final Map<String, DownloadBackend> _backends;
   Iterable<DownloadBackend> get values => _backends.values;
+
+  /// Adds or replaces the backend with the same reference (a configured
+  /// downloader appearing or changing).
+  void register(DownloadBackend backend) =>
+      _backends[backend.reference.key] = backend;
+
+  /// Forgets a backend whose configuration was removed.
+  void unregister(DownloadBackendRef ref) => _backends.remove(ref.key);
+
   DownloadBackend resolve(DownloadBackendRef ref) =>
       _backends[ref.key] ??
       (throw Failure(FailureCode.unavailable,
