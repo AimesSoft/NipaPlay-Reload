@@ -73,6 +73,19 @@ X46 补充 `subtitle.tracks/import/select`、旁路字幕索引和 activity 视�
 观看记录能力没有注册：这个独立数据库没有 Classic 历史，也没有播放器产生进度，
 不会将空的 Next 记录冒充用户历史。
 
+## Linux 安装包
+
+发布附件里有 `NipaPlay-Headless_<版本>_Linux_<amd64|arm64>.tar.gz`（`scripts/next/headless/package.sh <arch> <version>`
+构建，CI 在 Ubuntu 22.04 上出包，要求 glibc 2.35 以上）。包内：`libexec/` 里是编译好的主机和 Rust C ABI 库，
+`assets/next/harness`（`--seed` 的默认值）和 `assets/next/agent`（`--agent-assets` 的默认值）是运行时读的种子资源，
+`bin/nipaplay-headless` 是把安装时的数据目录补给程序的入口，另有 `install.sh`、`uninstall.sh` 和中文 README。
+主机按“可执行文件旁的 `../assets/next`、`assets/next`、当前目录的 `assets/next`”的顺序找这些资源，所以从源码运行不受影响。
+`install.sh` 默认建 systemd 用户服务（`--system` 建系统服务），升级只替换程序目录，卸载默认保留数据。
+`--version` 打印 `nipaplay-headless <应用版本>`，版本由构建时的 `-DNIPAPLAY_VERSION` 传入，不传就是 `dev`。
+`--login-dandanplay` 是主机上的人登录弹弹play：账号名一行、密码一行从标准输入读，令牌进保险库，不是 Action。
+只有 `libsqlite3.so.0`（没有开发包的 `libsqlite3.so`）的服务器也能运行（`lib/next/sqlite_library.dart`）。
+Nipa 的运行环境清单目前不含 Linux arm64，arm64 包上的主机照常工作，Nipa 需要自备运行环境。
+
 ## 准备程序
 
 在依赖已经解析的本 worktree 操作；不要在主仓库构建，不运行 `pub get`。
@@ -288,7 +301,7 @@ Windows 使用同一个 `.exe --stop --data D:\nipaplay-next\headless-data`。
 5. 若需回退程序而数据库已迁移，停止后使用升级前的整目录备份；不要用旧程序直接
    打开较新数据库，也不要单独替换 `device.json`。
 
-不用创建系统服务、计划任务或改防火墙。X43 实验用的数据目录已清理，留下的源码和
+源码运行不创建系统服务、计划任务或改防火墙（安装包的 `install.sh` 才建服务）。X43 实验用的数据目录已清理，留下的源码和
 工具不会自行运行。
 
 ## Windows 对话宿主
