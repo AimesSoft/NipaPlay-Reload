@@ -204,7 +204,13 @@ void main() {
       // What the machine does to an empty process, for the idle limits.
       await Future<void>.delayed(const Duration(seconds: 5));
       probe.mark('baseline');
-      core = newCore(profile.root, startupPhase: probe.mark);
+      // The library announces its own steps through the same callback while it
+      // is rebuilt after a change; those belong to that change's round (the
+      // best of three, below), not to startup.
+      int? changeRound;
+      core = newCore(profile.root,
+          startupPhase: (name) => probe.mark(
+              changeRound == null ? name : 'library change $changeRound: $name'));
       probe.mark('startup: core constructed');
       // What the GUI supplies from Classic: its watch history, and the
       // calendar it keeps encoded in its preferences.
@@ -369,6 +375,7 @@ void main() {
       // The library changes: she renames a work, three times over. The new
       // title reaches the library without anyone asking for a refresh.
       for (var round = 0; round < 3; round++) {
+        changeRound = round;
         final work = profile.workIds[5 + round];
         final name = '改过的名字 $round';
         final changed = data.changes.first;
@@ -398,6 +405,7 @@ void main() {
                 'a change to the library builds it once (or again for what the build wrote)');
       }
 
+      changeRound = null;
       await Future<void>.delayed(const Duration(seconds: 6));
       probe.mark('idle after');
     });
@@ -454,7 +462,12 @@ void main() {
     // Library changes repeat: other work can overlap one round, so the best
     // complete round must still fit. A real regression is present in all three.
     final changes = [
-      for (var i = 0; i < 3; i++) phases['library change $i']!.$1
+      for (var i = 0; i < 3; i++)
+        probe.phases
+            .where((phase) =>
+                phase.$1 == 'library change $i' ||
+                phase.$1.startsWith('library change $i: '))
+            .fold(0.0, (longest, phase) => phase.$2 > longest ? phase.$2 : longest)
     ].reduce((a, b) => a < b ? a : b);
     expect(changes, lessThanOrEqualTo(perfBudgetMs),
         reason:
