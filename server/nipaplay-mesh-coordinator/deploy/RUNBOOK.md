@@ -11,7 +11,8 @@
   xray、frp 和任何别的站点。每个脚本在动手前先检查，不满足就停，不会硬做。
 - **磁盘 95% 满，只剩约 2.6 GB。** 本部署占用不到 20 MB（二进制 8 MB，SQLite 数据库初期不到 1 MB），
   日志走 journald、很少。第 1 步会在可用空间小于 300 MB 时拒绝继续。见第 9 节。
-- **根的私钥只在生成它的服务器上。** 主根在香港主服务器，备用根在南非备用服务器。
+- **根的私钥只在生成它的服务器上。** 主根在香港主服务器，备用根在备用服务器（GCP 俄勒冈，
+  主控 SSH 别名 `gcp-us-vps`）。
   不下载、不备份到别处、不进仓库、不进日志；只取回公钥证书（`ca.crt.pem`）。
 - 所有脚本要 root（`sudo -i` 之后运行，或前面加 `sudo`）。
 - 路径里的 `<server>` 是主服务器的 SSH 地址。下面的 `deploy/` 指仓库
@@ -194,16 +195,24 @@ curl -sI https://nipaplay.aimes-soft.com/ | head -1
 curl -s https://nipaplay.aimes-soft.com/dandanplay/healthz
 ```
 
-## 8. 备用服务器（南非）：只生成备用根
+## 8. 备用服务器（GCP 俄勒冈，`gcp-us-vps`）：只生成备用根
 
 备用服务器**不跑**协调服务、不装用户、不动 nginx。只做一件事：生成并保管备用根的私钥。
+那台机器登录的是普通用户、免密 sudo，`/root` 对它不可读，所以证书用 `sudo cat` 取回：
 
 ```sh
-scp <仓库>/server/nipaplay-mesh-coordinator/deploy/standby-generate-root.sh root@<备用>:/root/
-scp ~/.nipa-next/coord-deploy/nipaplay-mesh-coordinator root@<备用>:/root/
-ssh root@<备用> /root/standby-generate-root.sh /root/nipaplay-mesh-coordinator <sha256>
-scp root@<备用>:/root/mesh-standby-root/ca.crt.pem ~/.nipa-next/coord-deploy/standby-root.crt.pem
+ssh gcp-us-vps 'mkdir -p ~/mesh-standby-upload && chmod 700 ~/mesh-standby-upload'
+scp ~/.nipa-next/coord-deploy/nipaplay-mesh-coordinator <仓库>/server/nipaplay-mesh-coordinator/deploy/standby-generate-root.sh gcp-us-vps:mesh-standby-upload/
+ssh gcp-us-vps 'sudo -n bash ~/mesh-standby-upload/standby-generate-root.sh ~/mesh-standby-upload/nipaplay-mesh-coordinator <sha256>; rm -rf ~/mesh-standby-upload'
+ssh gcp-us-vps 'sudo -n cat /root/mesh-standby-root/ca.crt.pem' > ~/.nipa-next/coord-deploy/standby-root.crt.pem
 ```
+
+2026-10-25 上线时生成的两张根（公开指纹，SHA-256）：
+
+| 根 | 保管处 | 指纹 |
+|---|---|---|
+| 主根 | `nipaplay-prod`：`/etc/nipaplay-mesh-coordinator/ca.key.pem` | `9C:AF:8B:A9:E0:5E:CF:E2:AC:ED:52:A2:1A:2A:DD:5C:DC:95:B4:D3:40:37:87:C3:CC:52:C9:C2:D5:A1:7A:04` |
+| 备用根 | `gcp-us-vps`：`/root/mesh-standby-root/ca.key.pem` | `67:8A:B8:66:DF:70:BC:3D:CA:91:00:0E:81:08:C3:5A:8E:21:D6:93:07:B9:EA:92:CB:F2:B8:83:2C:EF:28:0E` |
 
 脚本核对 sha256、在 `/root/mesh-standby-root/`（700）里生成根，私钥 `ca.key.pem` 留在那里（root 0600），
 打印指纹。已有就拒绝覆盖。需要 `openssl`（没有就先装；它缺失时脚本在生成之前就停）。

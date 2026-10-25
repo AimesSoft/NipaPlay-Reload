@@ -15,7 +15,29 @@ const meshDefaultCoordinator = String.fromEnvironment(
 /// nothing until the primary is replaced) second. Both are public certificates;
 /// the private keys never leave their servers. Filled in by the maintainer
 /// right after the roots are generated.
-const _builtInIssuerPem = '';
+const _builtInIssuerPem = '''-----BEGIN CERTIFICATE-----
+MIIBgTCCATOgAwIBAgIQFUECnZay5oYFaR7u5NeLWzAFBgMrZXAwPzElMCMGA1UE
+AwwcTmlwYVBsYXkgTWVzaCBDb29yZGluYXRvciBDQTEWMBQGA1UECgwNTmlwYVBs
+YXkgTWVzaDAeFw0yNjEwMjUxMDQ0NTBaFw0zNjEwMjIxMDQ5NTBaMD8xJTAjBgNV
+BAMMHE5pcGFQbGF5IE1lc2ggQ29vcmRpbmF0b3IgQ0ExFjAUBgNVBAoMDU5pcGFQ
+bGF5IE1lc2gwKjAFBgMrZXADIQBuPSXQOpskv1rRfsWKYzVdj6lOczSSzITJj5jX
+msEAPaNFMEMwDgYDVR0PAQH/BAQDAgGGMB0GA1UdDgQWBBRtbb3/NxDdt9+Dd4+C
+/a82fj90KDASBgNVHRMBAf8ECDAGAQH/AgEAMAUGAytlcANBAJOJ0QEZ8HcNDtRz
+Nhkn0L8e94pgdhTS3AsV7CzT2I+zpj7d4pFsVbbTTe8Jhtlkjo2TolEaNxRRVWxw
+ya7Cnwc=
+-----END CERTIFICATE-----
+-----BEGIN CERTIFICATE-----
+MIIBgTCCATOgAwIBAgIQP56Qix+StPB1OcazUTqnqjAFBgMrZXAwPzElMCMGA1UE
+AwwcTmlwYVBsYXkgTWVzaCBDb29yZGluYXRvciBDQTEWMBQGA1UECgwNTmlwYVBs
+YXkgTWVzaDAeFw0yNjEwMjUxMDU0MDVaFw0zNjEwMjIxMDU5MDVaMD8xJTAjBgNV
+BAMMHE5pcGFQbGF5IE1lc2ggQ29vcmRpbmF0b3IgQ0ExFjAUBgNVBAoMDU5pcGFQ
+bGF5IE1lc2gwKjAFBgMrZXADIQBSZAkuDG7eGiPuwvdd1yZmducThClg2P8m1bnf
+6CdvtKNFMEMwDgYDVR0PAQH/BAQDAgGGMB0GA1UdDgQWBBQo1HC0B/HMx3L2MC6y
+FGUTmoR2HzASBgNVHRMBAf8ECDAGAQH/AgEAMAUGAytlcANBAPtrwRrj2uSE8NJf
++xznRWkavPu/TreVyaw1yU9FZng3wCDRX2k8r+/Q8aa4bvoc8oX7xcC4cvJ82uxA
+TUJQ2wI=
+-----END CERTIFICATE-----
+''';
 
 /// A build made for a rehearsal carries its own throw-away roots as the
 /// base64 of the PEM bundle: `--dart-define=NIPAPLAY_MESH_ISSUER_PEM_B64=...`.
