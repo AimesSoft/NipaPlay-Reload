@@ -396,7 +396,13 @@ final class HarnessHooks implements JobExecutor {
         final Process process;
         final environment = {
           'NIPAPLAY_HOOK': context.job.jobId,
-          'NIPAPLAY_ENDPOINT_FILE': input['credentialFile'] as String
+          'NIPAPLAY_ENDPOINT_FILE': input['credentialFile'] as String,
+          // The event arrives on stdin as UTF-8; Python on Windows would read
+          // a pipe in the console code page (GBK, ...) unless told.
+          if (Platform.isWindows) ...{
+            'PYTHONUTF8': '1',
+            'PYTHONIOENCODING': 'utf-8',
+          },
         };
         if (Platform.isWindows && p.extension(program) == '.py') {
           process = await Process.start('python', [program],

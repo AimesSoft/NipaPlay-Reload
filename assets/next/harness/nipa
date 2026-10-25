@@ -109,7 +109,7 @@ def endpoint_file():
     for parent in Path(__file__).resolve().parents:
         marker = parent / "lab-profile.json"
         if marker.is_file():
-            return Path(json.loads(marker.read_text())["endpointFile"])
+            return Path(json.loads(marker.read_text(encoding="utf-8"))["endpointFile"])
     # A headless host keeps endpoint.json beside headless.json; its harness is <data>/harness.
     for parent in Path(__file__).resolve().parents:
         if (parent / "headless.json").is_file():
@@ -161,9 +161,17 @@ def redact(value, secrets=()):
 
 
 def json_input(text):
-    if text.startswith("@"):
-        text = Path(text[1:]).expanduser().read_text(encoding="utf-8")
-    value = json.loads(text)
+    if text == "-":
+        text = sys.stdin.read()
+    elif text.startswith("@"):
+        # utf-8-sig: Windows PowerShell writes UTF-8 files with a byte order mark.
+        text = Path(text[1:]).expanduser().read_text(encoding="utf-8-sig")
+    try:
+        value = json.loads(text.lstrip("\ufeff"))
+    except ValueError as error:
+        raise ValueError(
+            "Action input is not valid JSON (%s). Windows PowerShell 5.1 drops the double quotes "
+            "inside an argument; pass @input.json (UTF-8) or - with the JSON on standard input." % error)
     if not isinstance(value, dict):
         raise ValueError("Action input must be a JSON object")
     return value
@@ -406,7 +414,7 @@ def chat_command(client, args):
 
 def json_text(text):
     if text.startswith("@"):
-        return Path(text[1:]).expanduser().read_text(encoding="utf-8")
+        return Path(text[1:]).expanduser().read_text(encoding="utf-8-sig")
     return text
 
 
@@ -422,7 +430,7 @@ def main():
     commands.add_parser("describe").add_argument("action")
     call = commands.add_parser("call")
     call.add_argument("action")
-    call.add_argument("input", nargs="?", default="{}", help="JSON object or @file")
+    call.add_argument("input", nargs="?", default="{}", help="JSON object, @file, or - for standard input")
     call.add_argument("--execute", action="store_true")
     query = commands.add_parser("query")
     query.add_argument("view")
@@ -497,5 +505,7 @@ def main():
 
 
 if __name__ == "__main__":
-    sys.stdout.reconfigure(encoding="utf-8")
+    # Windows pipes use the console code page (GBK, ...); this program speaks UTF-8.
+    for stream in (sys.stdin, sys.stdout, sys.stderr):
+        stream.reconfigure(encoding="utf-8")
     sys.exit(main())

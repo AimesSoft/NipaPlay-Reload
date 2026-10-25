@@ -53,7 +53,7 @@
 
 ## nipa
 
-`./nipa` 连接本机正在运行且开启 Next 的 NipaPlay；连不上时检查这两点。Windows 用 `python nipa`。能力以实时目录为准；NipaPlay 更新后目录有变化时，记忆块的“NipaPlay 更新”和 `./nipa status` 的 `catalogChange` 记着变化的能力族和动作：
+`./nipa` 连接本机正在运行且开启 Next 的 NipaPlay；连不上时检查这两点。Windows 没有 shebang，一律写 `python nipa …`（后文的 `./nipa` 在 Windows 上都读作 `python nipa`）；Windows PowerShell 5.1 会吃掉参数里的双引号，`'{"key":"value"}'` 到达 nipa 时已不是 JSON，所以 Windows 上带 JSON 的调用把 JSON 写进 UTF-8 文件用 `@input.json`（带不带 BOM 都行），或把 JSON 放在标准输入、参数写 `-`。能力以实时目录为准；NipaPlay 更新后目录有变化时，记忆块的“NipaPlay 更新”和 `./nipa status` 的 `catalogChange` 记着变化的能力族和动作：
 
 ```bash
 ./nipa status

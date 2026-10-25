@@ -2,7 +2,7 @@
 
 这些脚本是起点，可以修改、添加来源或换掉。需要 Python 3.9+，仅用标准库；macOS/Linux 用
 `python3 tools/工具.py`，Windows 用 `python tools/工具.py`。每个脚本的 `--help` 给出参数。
-输出 UTF-8 JSON；错误输出到 stderr，退出码非零。使用系统的 Python HTTPS 信任和代理设置，
+输出 UTF-8 JSON；错误输出到 stderr，退出码非零。Windows PowerShell 5.1 会吃掉参数里的双引号：带 JSON 的参数（如 `api.py --params`）改为把查询写进 URL，或把 JSON 放进文件用 `--json-file`。使用系统的 Python HTTPS 信任和代理设置，
 不读取 NipaPlay 或个人 harness 的配置、登录态、主机列表、钥匙串。
 
 | 工具 | 事实与输出 |
