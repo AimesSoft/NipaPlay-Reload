@@ -1,6 +1,7 @@
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:nipaplay/widgets/media_server_network_image.dart';
 import 'dart:async';
+import 'dart:typed_data';
 import 'dart:ui' as ui;
 import 'package:flutter/rendering.dart';
 import 'package:path_provider/path_provider.dart'
@@ -23,6 +24,36 @@ class ImageCacheManager {
   /// 必须串行读写同一个磁盘缓存文件，否则并发 writeAsBytes 会互相破坏，
   /// 导致读取到半截文件、解码失败（表现为背景图闪黑/不显示）。
   final Map<String, Future<void>> _diskWrites = {};
+  final Map<(String, bool, bool), Future<Uint8List>> _byteLoads = {};
+
+  Future<Uint8List> _loadBytes(
+      String url, bool forceRefresh, bool cacheOnDisk) async {
+    final key = (url, forceRefresh, cacheOnDisk);
+    final existing = _byteLoads[key];
+    if (existing != null) return existing;
+    final future = _readOrDownloadBytes(url, forceRefresh, cacheOnDisk);
+    _byteLoads[key] = future;
+    try {
+      return await future;
+    } finally {
+      if (identical(_byteLoads[key], future)) _byteLoads.remove(key);
+    }
+  }
+
+  Future<Uint8List> _readOrDownloadBytes(
+      String url, bool forceRefresh, bool cacheOnDisk) async {
+    if (cacheOnDisk && !forceRefresh && !kIsWeb) {
+      await _awaitDiskWrite(url);
+      final file = await _getCacheFile(url);
+      if (await file.exists()) return file.readAsBytes();
+    }
+    final bytes = await loadNetworkImageBytes(Uri.parse(url));
+    if (cacheOnDisk && !kIsWeb) {
+      final file = await _getCacheFile(url);
+      await _chainDiskWrite(url, () => file.writeAsBytes(bytes));
+    }
+    return bytes;
+  }
 
   /// 每张缓存图片的估算字节数，以及总量。
   /// 解码后的 ui.Image 像素位于 native/external 内存，不受 Dart GC 管理，
@@ -46,6 +77,13 @@ class ImageCacheManager {
 
   /// 当前内存预算，测试可覆盖。
   static int maxBytes = _defaultMaxBytes;
+
+  /// 生命周期代际：缓存里的句柄被主动释放、或 App 回到前台时自增。
+  ///
+  /// [CachedNetworkImageWidget] 监听它。收到通知时看当前生命周期：
+  /// 不在前台，说明自己手里的句柄已经被释放，必须同步放下引用，否则回前台
+  /// 会画出空白；已回到前台，则重新加载一次（磁盘缓存兜底，不产生网络请求）。
+  final ValueNotifier<int> lifecycleGeneration = ValueNotifier<int>(0);
 
   static const Duration _maxCacheAge = Duration(minutes: 10); // 最大缓存时间
   static const Duration _evictionProtectionWindow = Duration(seconds: 2);
@@ -129,11 +167,14 @@ class ImageCacheManager {
     final previous = _diskWrites[url] ?? Future<void>.value();
     final next = previous.then((_) => write());
     _diskWrites[url] = next;
-    next.whenComplete(() {
+    void removeWrite() {
       if (identical(_diskWrites[url], next)) {
         _diskWrites.remove(url);
       }
-    });
+    }
+
+    next.then((_) => removeWrite(),
+        onError: (Object _, StackTrace __) => removeWrite());
     return next;
   }
 
@@ -146,11 +187,25 @@ class ImageCacheManager {
     return cachedImage;
   }
 
+  /// 标记某张图片"此刻正在被显示"。
+  ///
+  /// 由 [CachedNetworkImageWidget] 在 build 时调用。LRU 淘汰只看
+  /// [_lastAccessed]，而它只在缓存命中或新存入时更新 —— 静止显示在屏幕上的
+  /// 图片不会再走命中路径，于是会慢慢变成"最久未访问"并被淘汰，
+  /// 释放掉一个正在绘制的句柄。每帧标记一次，"看得见的"就永远比"滚出去的"新。
+  void touch(String url, {int? targetWidth, int? targetHeight}) {
+    final cacheKey = _getCacheKeyWithDimensions(url, targetWidth, targetHeight);
+    if (_lastAccessed.containsKey(cacheKey)) {
+      _lastAccessed[cacheKey] = DateTime.now();
+    }
+  }
+
   Future<ui.Image> loadImage(
     String url, {
     int? targetWidth,
     int? targetHeight,
     bool forceRefresh = false,
+    bool cacheOnDisk = true,
   }) async {
     if (!_isInitialized && !kIsWeb) {
       await _initCacheDir();
@@ -177,54 +232,19 @@ class ImageCacheManager {
     // 使用一个异步的IIFE（立即执行的函数表达式）来执行加载逻辑
     () async {
       try {
-        // 检查本地缓存 (本地缓存文件本身不区分尺寸，只存原图数据)
-        // 我们从本地读取原图数据，然后按需解码
-        if (!forceRefresh && !kIsWeb) {
-          await _awaitDiskWrite(url);
-          final cacheFile = await _getCacheFile(url); // 文件名只跟URL有关
-          if (await cacheFile.exists()) {
-            final bytes = await cacheFile.readAsBytes();
-            final codec = await ui.instantiateImageCodec(
-              bytes,
-              targetWidth: targetWidth,
-              targetHeight: targetHeight,
-            );
-            final frame = await codec.getNextFrame();
-            final image = frame.image;
-
-            _store(cacheKey, image);
-            completer.complete(image);
-            return; // 加载成功，退出IIFE
-          }
-        }
-
-        // 从网络下载
-        final downloadedBytes = await loadNetworkImageBytes(Uri.parse(url));
-
-        // 保存到本地缓存 (只保存原图数据)
-        //
-        // 注意：这里曾经先用 package:image 在 compute isolate 里完整解码一次，
-        // 目的只是"校验图片"，然后丢弃结果、原样返回原始字节。纯 Dart 解码一张
-        // 1080p JPEG 在低端设备上要几百毫秒并产生一次整图 RGBA 分配，加上
-        // isolate 启动和字节缓冲跨 isolate 拷贝，产出为零。真正的解码由下面
-        // instantiateImageCodec 完成，它本身就是流式的，也能做降采样。
-        if (!kIsWeb) {
-          final cacheFile = await _getCacheFile(url);
-          // 同一 URL 的写入串行执行，防止并发写坏磁盘缓存文件。
-          await _chainDiskWrite(
-            url,
-            () => cacheFile.writeAsBytes(downloadedBytes),
-          );
-        }
-
-        // 解码图片数据
+        // Different decoded sizes share only the in-flight original bytes.
+        final bytes = await _loadBytes(url, forceRefresh, cacheOnDisk);
         final codec = await ui.instantiateImageCodec(
-          downloadedBytes,
+          bytes,
           targetWidth: targetWidth,
           targetHeight: targetHeight,
         );
-        final frame = await codec.getNextFrame();
-        final uiImage = frame.image;
+        late final ui.Image uiImage;
+        try {
+          uiImage = (await codec.getNextFrame()).image;
+        } finally {
+          codec.dispose();
+        }
 
         // 存入内存缓存
         _store(cacheKey, uiImage);
@@ -274,15 +294,17 @@ class ImageCacheManager {
     }
   }
 
-  /// 真正释放一张图片，同步清理所有索引。
+  /// 从缓存索引里移除一张图片。
   ///
-  /// 只有在确认没有 widget 仍持有该句柄时才可调用（例如字节预算淘汰时）。
-  void _disposeEntry(String cacheKey) {
+  /// [disposeImage] 为 true 时才释放句柄。调用方必须确认没有 widget 仍持有它：
+  /// 字节预算淘汰和前台内存警告都会碰到"屏幕上看不见但组件还没销毁"的图片，
+  /// 这种情况只能丢索引，让 Dart GC 在最后一个引用消失后回收 native 像素。
+  void _disposeEntry(String cacheKey, {bool disposeImage = true}) {
     final image = _cache.remove(cacheKey);
     _dropBytes(cacheKey);
     _refCount.remove(cacheKey);
     _lastAccessed.remove(cacheKey);
-    if (image != null) {
+    if (disposeImage && image != null) {
       try {
         image.dispose();
       } catch (_) {
@@ -330,14 +352,21 @@ class ImageCacheManager {
     final target = (budget * 0.8).round();
     for (final key in candidates) {
       if (_totalBytes <= target) break;
-      _disposeEntry(key);
+      // 只丢索引：这些图片可能仍在屏幕上显示，句柄交给 GC 回收。
+      _disposeEntry(key, disposeImage: false);
     }
   }
 
   /// 系统内存压力下的紧急释放：只保留最近仍在使用的少量图片。
   ///
   /// 由 App 生命周期（didHaveMemoryPressure / onTrimMemory）调用。
-  void handleMemoryPressure() {
+  ///
+  /// [releaseHandles] 区分两种场景：
+  /// - false（前台收到内存警告）：只清缓存索引。屏幕上的图片仍握着自己的句柄，
+  ///   画面不会突然变白，省下的是下一次加载才需要的内存。
+  /// - true（退到后台）：连句柄一起释放，并通知图片组件放下引用 —— 用户看不见，
+  ///   这时把像素真正还给系统才是安全的；回前台由组件自己重新加载。
+  void handleMemoryPressure({bool releaseHandles = false}) {
     if (kIsWeb) return;
     final now = DateTime.now();
     final evictable = <String>[];
@@ -348,7 +377,11 @@ class ImageCacheManager {
       if (!isRecentlyUsed) evictable.add(key);
     }
     for (final key in evictable) {
-      _disposeEntry(key);
+      _disposeEntry(key, disposeImage: releaseHandles);
+    }
+    if (releaseHandles && evictable.isNotEmpty) {
+      // 句柄已经失效，通知组件放下引用。
+      lifecycleGeneration.value++;
     }
   }
 
@@ -543,6 +576,8 @@ class ImageCacheManager {
     _lastAccessed.clear();
     _bytes.clear();
     _totalBytes = 0;
+    // 句柄全部释放了，通知组件放下引用，否则它们会一直画空白。
+    lifecycleGeneration.value++;
     _cleanupTimer?.cancel();
     _cleanupTimer = null;
   }

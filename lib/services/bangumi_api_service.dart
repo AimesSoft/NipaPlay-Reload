@@ -6,6 +6,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:nipaplay_core/services/web_remote_access_service.dart';
 import 'package:nipaplay/services/dandanplay_service.dart';
 import 'package:nipaplay_core/utils/network_settings.dart';
+import 'package:nipaplay/services/quarterly_review_cache.dart';
 
 /// Bangumi API服务
 ///
@@ -442,10 +443,26 @@ class BangumiApiService {
 
     if (result['success']) {
       debugPrint('[Bangumi API] 收藏状态获取成功');
+      if (actualUsername != '-') {
+        await QuarterlyReviewCache.instance
+            .recordCollection(
+              subjectId,
+              actualUsername,
+              result['data'] is Map
+                  ? Map<String, dynamic>.from(result['data'] as Map)
+                  : null,
+            )
+            .catchError((Object _) {});
+      }
       return result;
     } else {
       // 404表示未收藏，这是正常情况
       if (result['statusCode'] == 404) {
+        if (actualUsername != '-') {
+          await QuarterlyReviewCache.instance
+              .recordCollection(subjectId, actualUsername, null)
+              .catchError((Object _) {});
+        }
         return {
           'success': true,
           'data': null, // 表示未收藏
@@ -486,6 +503,10 @@ class BangumiApiService {
 
     if (result['success']) {
       debugPrint('[Bangumi API] 收藏添加成功');
+      unawaited(QuarterlyReviewCache.instance.recordCollectionPatch(
+        subjectId, _userInfo?['username']?.toString() ?? '',
+        rating: rate, comment: comment,
+      ).catchError((Object _) {}));
     } else {
       debugPrint('[Bangumi API] 收藏添加失败: ${result['message']}');
     }
@@ -508,6 +529,7 @@ class BangumiApiService {
     bool? private,
   }) async {
     debugPrint('[Bangumi API] 更新收藏状态: subjectId=$subjectId, type=$type');
+    final username = _userInfo?['username']?.toString() ?? '';
 
     final body = <String, dynamic>{};
 
@@ -524,6 +546,10 @@ class BangumiApiService {
 
     if (result['success']) {
       debugPrint('[Bangumi API] 收藏状态更新成功');
+      await QuarterlyReviewCache.instance.recordCollectionPatch(
+        subjectId, username,
+        rating: rate, comment: comment,
+      ).catchError((Object _) {});
     } else {
       debugPrint('[Bangumi API] 收藏状态更新失败: ${result['message']}');
     }

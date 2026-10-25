@@ -99,6 +99,34 @@ impl MotionClock {
     }
 }
 
+/// Native display links (iOS) own both cadence and presentation timestamps.
+/// Coalesce queued ticks: after a stall render the newest display frame once,
+/// without replaying missed frames or racing an independent fallback timer.
+#[derive(Default)]
+pub(super) struct DisplayLinkPacer {
+    connected: bool,
+    pending_target: Option<Instant>,
+    last_target: Option<Instant>,
+}
+impl DisplayLinkPacer {
+    pub fn tick(&mut self, target: Instant) {
+        self.connected = true;
+        if self.last_target.is_some_and(|old| target <= old) {
+            return;
+        }
+        self.last_target = Some(target);
+        self.pending_target = Some(target);
+    }
+
+    pub fn is_connected(&self) -> bool {
+        self.connected
+    }
+
+    pub fn take_target(&mut self) -> Option<Instant> {
+        self.pending_target.take()
+    }
+}
+
 /// Advance the absolute deadline, dropping missed slots rather than producing
 /// a burst or accumulating draw/submit overhead into every frame period.
 pub(super) fn next_deadline(deadline: Instant, period: Duration, now: Instant) -> Instant {
@@ -217,6 +245,57 @@ pub(super) fn sample_x(
 mod tests {
     use super::*;
     #[test]
+    fn display_positions_ignore_worker_jitter_at_60_and_120_hz() {
+        for hz in [60.0, 120.0] {
+            let start = Instant::now();
+            let mut clock = MotionClock::new(start);
+            clock.anchor(start, 1, 10.0, 0.0, 1.0, true, hz, 20.0);
+            let mut pacer = DisplayLinkPacer::default();
+            let mut positions = Vec::new();
+            for (frame, delay_ms) in [0, 3, 1, 5, 0, 2].iter().enumerate() {
+                let target = start + Duration::from_secs_f64((frame + 1) as f64 / hz);
+                // Command parsing/GPU preparation may complete at different
+                // times; it must not move the position sampled for this frame.
+                let worker_time = target + Duration::from_millis(*delay_ms);
+                pacer.tick(target);
+                let sample_time = pacer.take_target().unwrap();
+                assert!(sample_time <= worker_time);
+                positions.push(sample_x(1000.0, -200.0, 10.0,
+                    clock.media_at(sample_time), None, None).unwrap());
+                // No timer-produced frame may overwrite this slot.
+                assert!(pacer.is_connected());
+                assert_eq!(pacer.take_target(), None);
+            }
+            for pair in positions.windows(2) {
+                assert!((pair[0] - pair[1] - 200.0 / hz).abs() < 0.000001);
+            }
+        }
+    }
+
+    #[test]
+    fn display_stall_skips_old_frames_and_pause_stays_still() {
+        let start = Instant::now();
+        let mut clock = MotionClock::new(start);
+        clock.anchor(start, 1, 10.0, 0.0, 2.0, true, 120.0, 20.0);
+        let mut pacer = DisplayLinkPacer::default();
+        for ms in [8, 16, 25] { pacer.tick(start + Duration::from_millis(ms)); }
+        let target = pacer.take_target().unwrap();
+        assert_eq!(target, start + Duration::from_millis(25));
+        assert!((clock.media_at(target) - 10.05).abs() < 1e-9);
+        assert_eq!(pacer.take_target(), None);
+        pacer.tick(target);
+        pacer.tick(start + Duration::from_millis(16));
+        assert_eq!(pacer.take_target(), None);
+        clock.anchor(target, 1, 10.05, 0.0, 2.0, false, 120.0, 20.0);
+        pacer.tick(start + Duration::from_millis(100));
+        assert!((clock.media_at(pacer.take_target().unwrap()) - 10.05).abs() < 1e-9);
+        // Seek/rate changes still use the explicit media epoch.
+        clock.anchor(target, 2, 40.0, 0.0, 1.0, true, 120.0, 41.0);
+        pacer.tick(target + Duration::from_millis(100));
+        assert!((clock.media_at(pacer.take_target().unwrap()) - 40.1).abs() < 1e-9);
+    }
+
+    #[test]
     fn slow_submission_does_not_immediately_render_a_second_frame() {
         let start = Instant::now();
         let period = Duration::from_millis(5);
@@ -327,6 +406,39 @@ mod tests {
         assert_eq!(before, clock.media_at(now));
         assert!(clock.active(now));
     }
+    #[test]
+    fn buffering_reanchors_a_clock_that_ran_ahead_of_the_frozen_video() {
+        let start = Instant::now();
+        let mut clock = MotionClock::new(start);
+        clock.anchor(start, 1, 10.0, 0.0, 1.0, true, 120.0, 11.0);
+        let stopped_at = start + Duration::from_millis(450);
+        assert!(clock.media_at(stopped_at) > 10.4);
+
+        // The decoder stopped at 10.03 while native motion was extrapolating.
+        // Freeze must reset the epoch so scene membership and sampled x use
+        // the same time, including an item near its lifetime boundary.
+        clock.anchor(stopped_at, 2, 10.03, 0.0, 1.0, false, 120.0, 10.28);
+        let frozen_x = sample_x(
+            20.0, -100.0, 10.03, clock.media_at(stopped_at), Some(9.0), Some(10.2),
+        );
+        assert_eq!(frozen_x, Some(20.0));
+        let recovered_at = stopped_at + Duration::from_secs(2);
+        assert_eq!(clock.media_at(recovered_at), 10.03);
+        assert_eq!(
+            sample_x(
+                20.0, -100.0, 10.03, clock.media_at(recovered_at), Some(9.0), Some(10.2),
+            ),
+            frozen_x,
+        );
+        assert!(!clock.active(recovered_at));
+
+        clock.anchor(recovered_at, 3, 10.04, 0.0, 1.0, true, 120.0, 10.29);
+        assert_eq!(clock.media_at(recovered_at), 10.04);
+        let after = recovered_at + Duration::from_millis(50);
+        assert!((clock.media_at(after) - 10.09).abs() < 1e-9);
+        assert!(clock.active(after));
+    }
+
     #[test]
     fn pause_rate_seek_and_expiration_are_explicit() {
         let start = Instant::now();

@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:collection';
 import 'dart:io';
 
 import 'package:flutter/foundation.dart';
@@ -8,7 +9,15 @@ import 'package:path/path.dart' as path;
 import 'package:url_launcher/url_launcher.dart';
 
 class FileLogService {
-  FileLogService._internal();
+  FileLogService._internal() : _logService = DebugLogService();
+
+  @visibleForTesting
+  FileLogService.forTesting(DebugLogService logService, Directory directory)
+      : _logService = logService,
+        _logDirectory = directory,
+        _initialized = true;
+
+  final DebugLogService _logService;
 
   static final FileLogService _instance = FileLogService._internal();
 
@@ -19,12 +28,15 @@ class FileLogService {
 
   bool _initialized = false;
   bool _isRunning = false;
-  bool _isFlushing = false;
+  Future<void>? _activeFlush;
+  Future<void> _lifecycle = Future.value();
+  StreamSubscription<LogEntry>? _subscription;
+  Queue<LogEntry> _pending = Queue();
+  static const int _maxPendingEntries = 5000;
+  int _droppedEntries = 0;
   Timer? _timer;
   Directory? _logDirectory;
   File? _currentLogFile;
-  String? _lastWrittenKey;
-  int? _lastWrittenTimestampMs;
 
   bool get isRunning => _isRunning;
 
@@ -45,25 +57,61 @@ class FileLogService {
     }
   }
 
-  Future<void> start() async {
+  Future<void> _enqueueLifecycle(Future<void> Function() action) {
+    final operation = _lifecycle.then((_) => action(),
+        onError: (Object _, StackTrace __) => action());
+    _lifecycle = operation;
+    return operation;
+  }
+
+  Future<void> start() => _enqueueLifecycle(_start);
+
+  Future<void> _start() async {
     if (_isRunning) return;
     await initialize();
     if (_logDirectory == null) return;
-
     await _prepareCurrentLogFile();
     _isRunning = true;
-    _timer = Timer.periodic(_flushInterval, (_) {
-      _flushLogs();
+    // Snapshot once, then consume only newly appended entries.
+    _pending = Queue.of(_logService.logEntries);
+    _subscription = _logService.entries.listen((entry) {
+      _pending.add(entry);
+      _boundPending();
+      _scheduleFlush();
     });
-    await _flushLogs(force: true);
+    await _flushLogs();
+    _scheduleFlush();
   }
 
-  Future<void> stop() async {
+  void _boundPending() {
+    final excess = _pending.length - _maxPendingEntries;
+    if (excess <= 0) return;
+    for (var i = 0; i < excess; i++) {
+      _pending.removeFirst();
+    }
+    _droppedEntries += excess;
+  }
+
+  void _scheduleFlush() {
+    if (!_isRunning || _timer != null || _pending.isEmpty) return;
+    _timer = Timer(_flushInterval, () async {
+      _timer = null;
+      await _flushLogs();
+      _scheduleFlush();
+    });
+  }
+
+  Future<void> stop() => _enqueueLifecycle(_stop);
+
+  Future<void> _stop() async {
     if (!_isRunning) return;
     _isRunning = false;
+    await _subscription?.cancel();
+    _subscription = null;
     _timer?.cancel();
     _timer = null;
-    await _flushLogs(force: true);
+    await _activeFlush;
+    await _flushLogs();
   }
 
   Future<String?> getLogDirectoryPath() async {
@@ -102,65 +150,47 @@ class FileLogService {
       await logFile.create(recursive: true);
     }
     _currentLogFile = logFile;
-    _lastWrittenKey = null;
-    _lastWrittenTimestampMs = null;
+    _droppedEntries = 0;
     await _cleanupOldLogs();
   }
 
-  Future<void> _flushLogs({bool force = false}) async {
-    if ((!_isRunning && !force) || _isFlushing || _currentLogFile == null) {
-      return;
-    }
-
-    _isFlushing = true;
+  Future<void> _flushLogs() async {
+    if (_activeFlush != null) return _activeFlush;
+    if (_currentLogFile == null || _pending.isEmpty) return;
+    final batch = _pending;
+    _pending = Queue();
+    final dropped = _droppedEntries;
+    _droppedEntries = 0;
+    final flush = _writeBatch(batch, dropped);
+    _activeFlush = flush;
     try {
-      final entries = DebugLogService().logEntries;
-      if (entries.isEmpty) return;
+      await flush;
+    } finally {
+      _activeFlush = null;
+    }
+  }
 
-      int startIndex = 0;
-      if (_lastWrittenKey != null) {
-        final lastIndex = entries.lastIndexWhere(
-          (entry) => _entryKey(entry) == _lastWrittenKey,
-        );
-        if (lastIndex >= 0) {
-          startIndex = lastIndex + 1;
-        } else if (_lastWrittenTimestampMs != null) {
-          final newerIndex = entries.indexWhere(
-            (entry) =>
-                entry.timestamp.millisecondsSinceEpoch >
-                _lastWrittenTimestampMs!,
-          );
-          if (newerIndex < 0) return;
-          startIndex = newerIndex;
-        }
-      }
-
-      if (startIndex >= entries.length) return;
-
+  Future<void> _writeBatch(Queue<LogEntry> batch, int dropped) async {
+    try {
       final buffer = StringBuffer();
-      for (var i = startIndex; i < entries.length; i++) {
-        buffer.writeln(entries[i].toFormattedString());
+      if (dropped > 0) {
+        buffer.writeln('[FileLogService] 待写队列溢出，丢弃 $dropped 条旧日志');
       }
-
-      if (buffer.isEmpty) return;
-
+      for (final entry in batch) {
+        buffer.writeln(entry.toFormattedString());
+      }
       await _currentLogFile!.writeAsString(
         buffer.toString(),
         mode: FileMode.append,
         flush: true,
       );
-      final lastEntry = entries.last;
-      _lastWrittenKey = _entryKey(lastEntry);
-      _lastWrittenTimestampMs = lastEntry.timestamp.millisecondsSinceEpoch;
     } catch (e) {
-      debugPrint('[FileLogService] 写入日志失败: $e');
-    } finally {
-      _isFlushing = false;
+      _pending = Queue.of([...batch, ..._pending]);
+      _droppedEntries += dropped;
+      _boundPending();
+      // Do not feed a disk failure back into the queue being retried.
+      debugPrintSynchronously('[FileLogService] 写入日志失败: $e');
     }
-  }
-
-  String _entryKey(LogEntry entry) {
-    return '${entry.timestamp.millisecondsSinceEpoch}|${entry.level}|${entry.tag}|${entry.message}';
   }
 
   Future<void> _cleanupOldLogs() async {

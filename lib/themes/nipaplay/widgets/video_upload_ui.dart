@@ -273,11 +273,11 @@ class _VideoUploadUIState extends State<VideoUploadUI>
           context: context,
           title: '选择来源',
           content: '请选择视频来源',
-          actions: [
+          actionsBuilder: (dialogContext) => [
             AdaptiveMediaActionButton(
               label: '相册',
               onPressed: () {
-                Navigator.of(context).pop('album');
+                Navigator.of(dialogContext).pop('album');
               },
               desktopIcon: Icons.photo_library_outlined,
               phoneIcon: cupertino.CupertinoIcons.photo_on_rectangle,
@@ -285,7 +285,7 @@ class _VideoUploadUIState extends State<VideoUploadUI>
             AdaptiveMediaActionButton(
               label: '文件管理器',
               onPressed: () {
-                Navigator.of(context).pop('file'); // 先 pop
+                Navigator.of(dialogContext).pop('file'); // 先 pop
               },
               desktopIcon: Icons.folder_open_rounded,
               phoneIcon: cupertino.CupertinoIcons.folder_open,
@@ -328,11 +328,11 @@ class _VideoUploadUIState extends State<VideoUploadUI>
                   context: context,
                   title: '权限被永久拒绝',
                   content: '您已永久拒绝相关权限。请前往系统设置手动为NipaPlay开启所需权限。',
-                  actions: [
+                  actionsBuilder: (dialogContext) => [
                     AdaptiveMediaActionButton(
                       label: '前往设置',
                       onPressed: () {
-                        Navigator.of(context).pop();
+                        Navigator.of(dialogContext).pop();
                         openAppSettings();
                       },
                       desktopIcon: Icons.settings_outlined,
@@ -341,7 +341,7 @@ class _VideoUploadUIState extends State<VideoUploadUI>
                     ),
                     AdaptiveMediaActionButton(
                       label: '取消',
-                      onPressed: () => Navigator.of(context).pop(),
+                      onPressed: () => Navigator.of(dialogContext).pop(),
                     ),
                   ],
                 );

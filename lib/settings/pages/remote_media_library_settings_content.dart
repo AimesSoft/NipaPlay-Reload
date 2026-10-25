@@ -127,7 +127,6 @@ class _RemoteMediaLibrarySettingsContentState
                 (library) => library.name,
               ),
               disconnectedDescription: l10n.jellyfinDisconnectedDescription,
-              icon: Ionicons.tv_outline,
             ),
             const SizedBox(height: 16),
             _buildNetworkServerSection(
@@ -149,7 +148,6 @@ class _RemoteMediaLibrarySettingsContentState
                 (library) => library.name,
               ),
               disconnectedDescription: l10n.embyDisconnectedDescription,
-              icon: Ionicons.play_circle_outline,
             ),
             const SizedBox(height: 16),
             _buildDandanplaySection(context, dandanProvider),
@@ -197,7 +195,6 @@ class _RemoteMediaLibrarySettingsContentState
     required int mediaItemCount,
     required List<String> selectedLibraries,
     required String disconnectedDescription,
-    required IconData icon,
   }) {
     final l10n = context.l10n;
     final status = isLoading
@@ -221,7 +218,6 @@ class _RemoteMediaLibrarySettingsContentState
         title: title,
         status: status,
         summary: summary,
-        icon: icon,
         active: isConnected,
         loading: isLoading,
         hasError: hasError,
@@ -294,7 +290,6 @@ class _RemoteMediaLibrarySettingsContentState
         title: l10n.dandanRemoteCardTitle,
         status: status,
         summary: summary,
-        icon: Ionicons.chatbubbles_outline,
         active: isConnected,
         loading: isLoading,
         hasError: hasError,
@@ -340,7 +335,6 @@ class _RemoteMediaLibrarySettingsContentState
     required String title,
     required String status,
     required String summary,
-    required IconData icon,
     required bool active,
     required bool loading,
     required bool hasError,
@@ -349,12 +343,6 @@ class _RemoteMediaLibrarySettingsContentState
     required List<Widget> actions,
   }) {
     final colorScheme = Theme.of(context).colorScheme;
-    final statusColor = _serverStatusColor(
-      context,
-      active: active,
-      loading: loading,
-      hasError: hasError,
-    );
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -362,16 +350,6 @@ class _RemoteMediaLibrarySettingsContentState
         Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Container(
-              width: 44,
-              height: 44,
-              decoration: BoxDecoration(
-                color: statusColor.withValues(alpha: 0.12),
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: Icon(icon, color: statusColor),
-            ),
-            const SizedBox(width: 12),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -1249,15 +1227,15 @@ class _RemoteMediaLibrarySettingsContentState
             ],
           ),
         ),
-        actions: [
+        actionsBuilder: (dialogContext) => [
           HoverScaleTextButton(
             text: context.l10n.cancel,
-            onPressed: () => Navigator.of(context).pop(),
+            onPressed: () => Navigator.of(dialogContext).pop(),
           ),
           HoverScaleTextButton(
             text: context.l10n.save,
             onPressed: () {
-              Navigator.of(context).pop(
+              Navigator.of(dialogContext).pop(
                 _SharedHostEditResult(
                   displayName: nameController.text,
                   baseUrl: urlController.text,
@@ -1362,14 +1340,14 @@ class _RemoteMediaLibrarySettingsContentState
               Text(l10n.deviceIdDialogValidationHint),
             ],
           ),
-          actions: [
+          actionsBuilder: (dialogContext) => [
             HoverScaleTextButton(
               text: l10n.cancel,
-              onPressed: () => Navigator.of(context).pop(),
+              onPressed: () => Navigator.of(dialogContext).pop(),
             ),
             HoverScaleTextButton(
               text: l10n.save,
-              onPressed: () => Navigator.of(context).pop(controller.text),
+              onPressed: () => Navigator.of(dialogContext).pop(controller.text),
             ),
           ],
         );
@@ -1435,13 +1413,13 @@ class _RemoteMediaLibrarySettingsContentState
       context: context,
       title: title,
       content: content,
-      actions: [
+      actionsBuilder: (dialogContext) => [
         HoverScaleTextButton(
-          onPressed: () => Navigator.of(context).pop(false),
+          onPressed: () => Navigator.of(dialogContext).pop(false),
           child: Text(context.l10n.cancel),
         ),
         HoverScaleTextButton(
-          onPressed: () => Navigator.of(context).pop(true),
+          onPressed: () => Navigator.of(dialogContext).pop(true),
           child: Text(
             destructiveText,
             style: const TextStyle(color: Colors.red),

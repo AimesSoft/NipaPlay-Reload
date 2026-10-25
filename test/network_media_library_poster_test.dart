@@ -298,8 +298,23 @@ class _PosterFixture {
     if (path == '/Users/user/Items/library') {
       return http.Response(jsonEncode({'CollectionType': 'tvshows'}), 200);
     }
-    if (path == '/Items') {
-      return http.Response(jsonEncode({'Items': items}), 200);
+    final itemsPath = server == NetworkMediaServerType.emby
+        ? '/Users/user/Items'
+        : '/Items';
+    if (path == itemsPath) {
+      final query = request.url.queryParameters;
+      expect(query['ParentId'], 'library');
+      expect(query['IncludeItemTypes'], 'Series');
+      // Page like a real Jellyfin/Emby server: honour StartIndex/Limit and
+      // report the total, so the client's paginated loader can finish.
+      final start = int.parse(query['StartIndex'] ?? '0');
+      final limit = int.parse(query['Limit'] ?? '${items.length}');
+      return http.Response(
+          jsonEncode({
+            'Items': items.skip(start).take(limit).toList(),
+            'TotalRecordCount': items.length,
+          }),
+          200);
     }
     throw StateError('Unexpected request: ${request.url}');
   }

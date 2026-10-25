@@ -137,9 +137,9 @@ class StartupNotificationController {
           ),
         ),
       ),
-      actions: [
+      actionsBuilder: (dialogContext) => [
         HoverScaleTextButton(
-          onPressed: () => Navigator.of(context).pop(),
+          onPressed: () => Navigator.of(dialogContext).pop(),
           child: Text(
             '关闭',
             style: TextStyle(color: colorScheme.onSurface),

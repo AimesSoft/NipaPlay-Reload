@@ -1,10 +1,31 @@
 import Flutter
 import UIKit
 
+private final class TabBarContainerView: UIView {
+    var onLayout: (() -> Void)?
+
+    override func layoutSubviews() {
+        super.layoutSubviews()
+        onLayout?()
+    }
+
+    override func safeAreaInsetsDidChange() {
+        super.safeAreaInsetsDidChange()
+        setNeedsLayout()
+    }
+
+    override func didMoveToWindow() {
+        super.didMoveToWindow()
+        setNeedsLayout()
+    }
+}
+
 class iOS26TabBarPlatformView: NSObject, FlutterPlatformView, UITabBarDelegate {
     private let channel: FlutterMethodChannel
-    private let container: UIView
+    private let container: TabBarContainerView
     private var tabBar: UITabBar?
+    private var sizeReportQueued = false
+    private var lastReportedHeight: CGFloat?
     private var minimizeBehavior: Int = 3 // automatic
     private var currentLabels: [String] = []
     private var currentSymbols: [String] = []
@@ -16,7 +37,7 @@ class iOS26TabBarPlatformView: NSObject, FlutterPlatformView, UITabBarDelegate {
             name: "adaptive_platform_ui/ios26_tab_bar_\(viewId)",
             binaryMessenger: messenger
         )
-        self.container = UIView(frame: frame)
+        self.container = TabBarContainerView(frame: frame)
 
         var labels: [String] = []
         var symbols: [String] = []
@@ -216,6 +237,9 @@ class iOS26TabBarPlatformView: NSObject, FlutterPlatformView, UITabBarDelegate {
             bar.topAnchor.constraint(equalTo: container.topAnchor),
             bar.bottomAnchor.constraint(equalTo: container.bottomAnchor),
         ])
+        container.onLayout = { [weak self] in
+            self?.scheduleIntrinsicSizeReport()
+        }
 
         self.minimizeBehavior = minimize
         self.currentLabels = labels
@@ -230,6 +254,36 @@ class iOS26TabBarPlatformView: NSObject, FlutterPlatformView, UITabBarDelegate {
         channel.setMethodCallHandler { [weak self] call, result in
             guard let self = self else { result(nil); return }
             self.handleMethodCall(call, result: result)
+        }
+    }
+
+    private func intrinsicSize() -> CGSize? {
+        guard let bar = tabBar, bar.window != nil, bar.bounds.width > 0 else {
+            return nil
+        }
+        // Measure with the actual width and UIKit safe-area/trait state. The
+        // landscape height cannot be reused after returning to portrait.
+        let size = bar.sizeThatFits(CGSize(
+            width: bar.bounds.width,
+            height: CGFloat.greatestFiniteMagnitude
+        ))
+        guard size.height.isFinite, size.height > 0 else { return nil }
+        return size
+    }
+
+    private func scheduleIntrinsicSizeReport() {
+        guard !sizeReportQueued else { return }
+        sizeReportQueued = true
+        // Safe-area propagation and Auto Layout must finish before measuring.
+        DispatchQueue.main.async { [weak self] in
+            guard let self = self else { return }
+            self.sizeReportQueued = false
+            guard let size = self.intrinsicSize(),
+                  self.lastReportedHeight != size.height else { return }
+            self.lastReportedHeight = size.height
+            self.channel.invokeMethod("intrinsicSizeChanged", arguments: [
+                "height": Double(size.height)
+            ])
         }
     }
 
@@ -248,8 +302,7 @@ class iOS26TabBarPlatformView: NSObject, FlutterPlatformView, UITabBarDelegate {
     private func handleMethodCall(_ call: FlutterMethodCall, result: @escaping FlutterResult) {
         switch call.method {
         case "getIntrinsicSize":
-            if let bar = self.tabBar {
-                let size = bar.sizeThatFits(CGSize(width: CGFloat.greatestFiniteMagnitude, height: CGFloat.greatestFiniteMagnitude))
+            if let size = intrinsicSize() {
                 result(["width": Double(size.width), "height": Double(size.height)])
             } else {
                 result(["width": Double(self.container.bounds.width), "height": 50.0])

@@ -124,15 +124,18 @@ class _DesktopManagementItem extends material.StatelessWidget {
                             ),
                           ),
                           const material.SizedBox(height: 3),
-                          material.Text(
-                            item.subtitle,
-                            maxLines: 1,
-                            overflow: material.TextOverflow.ellipsis,
-                            style: material.TextStyle(
-                              fontSize: 12,
-                              color: secondary,
+                          if (item.addressLines?.isNotEmpty ?? false)
+                            ..._buildAddressLines(item.addressLines!, secondary)
+                          else
+                            material.Text(
+                              item.subtitle,
+                              maxLines: 1,
+                              overflow: material.TextOverflow.ellipsis,
+                              style: material.TextStyle(
+                                fontSize: 12,
+                                color: secondary,
+                              ),
                             ),
-                          ),
                           if (item.matchSubtitle != null) ...[
                             const material.SizedBox(height: 2),
                             material.Text(
@@ -187,6 +190,60 @@ class _DesktopManagementItem extends material.StatelessWidget {
       ),
     );
   }
+}
+
+/// 将多地址明细渲染为「每行一个地址 + 最近一次连通性」。
+List<material.Widget> _buildAddressLines(
+  List<LibraryManagementAddressLine> lines,
+  material.Color secondary,
+) {
+  return [
+    for (final line in lines)
+      material.Padding(
+        padding: const material.EdgeInsets.only(top: 2),
+        child: material.Row(
+          crossAxisAlignment: material.CrossAxisAlignment.start,
+          children: [
+            material.Text(
+              '${line.label} ',
+              style: material.TextStyle(
+                fontSize: 12,
+                fontWeight: material.FontWeight.w600,
+                color: secondary,
+              ),
+            ),
+            material.Expanded(
+              child: material.Text(
+                line.address,
+                maxLines: 1,
+                overflow: material.TextOverflow.ellipsis,
+                style: material.TextStyle(fontSize: 12, color: secondary),
+              ),
+            ),
+            if (libraryManagementAddressStatusText(line.status).isNotEmpty) ...[
+              const material.SizedBox(width: 8),
+              material.Text(
+                libraryManagementAddressStatusText(line.status),
+                style: material.TextStyle(
+                  fontSize: 11,
+                  color: _addressStatusColor(line.status),
+                ),
+              ),
+            ],
+          ],
+        ),
+      ),
+  ];
+}
+
+material.Color _addressStatusColor(LibraryManagementAddressStatus status) {
+  return switch (status) {
+    LibraryManagementAddressStatus.reachable =>
+      const material.Color(0xFF4CAF50),
+    LibraryManagementAddressStatus.unreachable =>
+      const material.Color(0xFFE53935),
+    LibraryManagementAddressStatus.unknown => const material.Color(0xFF9E9E9E),
+  };
 }
 
 material.IconData _desktopIcon(LibraryManagementIcon icon) {

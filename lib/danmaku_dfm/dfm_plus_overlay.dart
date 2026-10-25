@@ -14,6 +14,8 @@ import 'dfm_plus_layout_bridge.dart';
 class DfmPlusOverlay extends StatefulWidget {
   const DfmPlusOverlay({
     super.key,
+    this.layoutBridge,
+    this.textureBridge,
     required this.danmakuList,
     required this.danmakuListVersion,
     required this.playbackTimeMs,
@@ -36,10 +38,18 @@ class DfmPlusOverlay extends StatefulWidget {
     this.blockWords = const [],
     this.onLayoutCalculated,
     this.startupGateToken = 0,
+    this.seekRevision = 0,
+    this.clockRevision = 0,
     this.onStartupReady,
     required this.isPlaying,
     required this.playbackRate,
   });
+
+  /// Injected bridges are owned and disposed by this overlay, like defaults.
+  @visibleForTesting
+  final DfmPlusLayoutBridge? layoutBridge;
+  @visibleForTesting
+  final Next2TextureBridge? textureBridge;
 
   final List<Map<String, dynamic>> danmakuList;
   final int danmakuListVersion;
@@ -63,6 +73,12 @@ class DfmPlusOverlay extends StatefulWidget {
   final List<String> blockWords;
   final ValueChanged<List<PositionedDanmakuItem>>? onLayoutCalculated;
   final int startupGateToken;
+
+  /// Explicit player seeks must reset the clock even below the drift threshold.
+  final int seekRevision;
+
+  /// Buffer transitions can happen twice between Flutter builds.
+  final int clockRevision;
   final ValueChanged<int>? onStartupReady;
   final bool isPlaying;
   final double playbackRate;
@@ -73,8 +89,8 @@ class DfmPlusOverlay extends StatefulWidget {
 
 class _DfmPlusOverlayState extends State<DfmPlusOverlay>
     with SingleTickerProviderStateMixin {
-  final DfmPlusLayoutBridge _bridge = DfmPlusLayoutBridge();
-  final Next2TextureBridge _textureBridge = Next2TextureBridge();
+  late final DfmPlusLayoutBridge _bridge;
+  late final Next2TextureBridge _textureBridge;
   final Next2EmojiPipeline _emojiPipeline = Next2EmojiPipeline();
 
   Size _layoutSize = Size.zero;
@@ -206,6 +222,8 @@ class _DfmPlusOverlayState extends State<DfmPlusOverlay>
   @override
   void initState() {
     super.initState();
+    _bridge = widget.layoutBridge ?? DfmPlusLayoutBridge();
+    _textureBridge = widget.textureBridge ?? Next2TextureBridge();
     _surfaceId = 'dfm-${identityHashCode(this)}';
     _lastTextureSurfaceId = _surfaceId;
 
@@ -281,8 +299,20 @@ class _DfmPlusOverlayState extends State<DfmPlusOverlay>
       _queueUpdate();
     }
 
+    if (oldWidget.seekRevision != widget.seekRevision ||
+        oldWidget.clockRevision != widget.clockRevision) {
+      _resetDisplayTimeToMedia();
+      _lastMotionSubmitWallUs = -_motionSubmitIntervalUs;
+      _queueUpdate();
+    }
+
     if (oldWidget.startupGateToken != widget.startupGateToken) {
       _queueUpdate();
+    }
+
+    if (widget.isVisible && !oldWidget.isVisible) {
+      // Also restore while paused: no ticker restart will re-anchor that case.
+      _resetDisplayTimeToMedia();
     }
 
     // ── Ticker lifecycle ──
@@ -311,9 +341,9 @@ class _DfmPlusOverlayState extends State<DfmPlusOverlay>
 
     // ── isPlaying transition: reset wall dt baseline ──
     if (oldWidget.isPlaying != widget.isPlaying) {
-      if (widget.isPlaying) {
-        _resetDisplayTimeToMedia();
-      }
+      // Freeze and resume both need an explicit epoch. Otherwise native keeps
+      // its extrapolated position while the replacement scene uses media time.
+      _resetDisplayTimeToMedia();
     }
   }
 
@@ -332,88 +362,87 @@ class _DfmPlusOverlayState extends State<DfmPlusOverlay>
 
   @override
   Widget build(BuildContext context) {
-    if (!widget.isVisible) {
-      return const SizedBox.shrink();
-    }
+    return Visibility(
+      visible: widget.isVisible,
+      maintainState: true,
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final constrainedSize = Size(
+            constraints.maxWidth.isFinite
+                ? constraints.maxWidth
+                : constraints.minWidth,
+            constraints.maxHeight.isFinite
+                ? constraints.maxHeight
+                : constraints.minHeight,
+          );
+          final layoutSize = Next2OverlayViewport.resolveLayoutSize(
+            context,
+            constraints,
+          );
+          if (layoutSize.isEmpty) {
+            return const SizedBox.expand();
+          }
 
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final constrainedSize = Size(
-          constraints.maxWidth.isFinite
-              ? constraints.maxWidth
-              : constraints.minWidth,
-          constraints.maxHeight.isFinite
-              ? constraints.maxHeight
-              : constraints.minHeight,
-        );
-        final layoutSize = Next2OverlayViewport.resolveLayoutSize(
-          context,
-          constraints,
-        );
-        if (layoutSize.isEmpty) {
-          return const SizedBox.expand();
-        }
+          if (_layoutSize != layoutSize) {
+            final oldSize = _layoutSize;
+            _layoutSize = layoutSize;
+            _queueUpdate();
+            // Sub-pixel jitter (e.g. Windows focus-loss) should not trigger
+            // the async configure() pipeline. Only force re-prepare when the
+            // layout size change is meaningful (>= 1 logical pixel) or this
+            // is the initial layout.
+            if (oldSize.isEmpty ||
+                (oldSize.width - layoutSize.width).abs() >= 2.0 ||
+                (oldSize.height - layoutSize.height).abs() >= 2.0) {
+              _forceLayout = true;
+              _motionCommandVersion++;
+            }
+          }
 
-        if (_layoutSize != layoutSize) {
-          final oldSize = _layoutSize;
-          _layoutSize = layoutSize;
-          _queueUpdate();
-          // Sub-pixel jitter (e.g. Windows focus-loss) should not trigger
-          // the async configure() pipeline. Only force re-prepare when the
-          // layout size change is meaningful (>= 1 logical pixel) or this
-          // is the initial layout.
-          if (oldSize.isEmpty ||
-              (oldSize.width - layoutSize.width).abs() >= 2.0 ||
-              (oldSize.height - layoutSize.height).abs() >= 2.0) {
+          final dpr = MediaQuery.maybeOf(context)?.devicePixelRatio ??
+              View.of(context).devicePixelRatio;
+          _displayRefreshRate = View.of(context).display.refreshRate;
+          final supersample =
+              context.watch<SettingsProvider>().danmakuSupersample;
+          final locale = Localizations.maybeLocaleOf(context);
+
+          if (_danmakuSupersample != supersample) {
+            _danmakuSupersample = supersample;
+            _queueUpdate();
+          }
+          if (_danmakuLocale != locale) {
+            _danmakuLocale = locale;
             _forceLayout = true;
             _motionCommandVersion++;
+            _queueUpdate();
           }
-        }
 
-        final dpr = MediaQuery.maybeOf(context)?.devicePixelRatio ??
-            View.of(context).devicePixelRatio;
-        _displayRefreshRate = View.of(context).display.refreshRate;
-        final supersample =
-            context.watch<SettingsProvider>().danmakuSupersample;
-        final locale = Localizations.maybeLocaleOf(context);
+          // DPR can micro-jitter on Windows when the window loses focus or the
+          // user clicks the taskbar (didChangeMetrics fires with a slightly
+          // different value). DPR only affects the texture's pixel size, not the
+          // danmaku layout (layout uses logical pixels). So we update the cached
+          // DPR for the next texture-acquire path, but we do NOT trigger
+          // _forceLayout — the texture path will pick up the new DPR on its own
+          // and re-acquire a different-sized texture if needed. Re-running
+          // prepareLayout here would re-execute overwriteInsert and cause
+          // visible flicker.
+          if ((_lastDevicePixelRatio - dpr).abs() > 0.001) {
+            _lastDevicePixelRatio = dpr;
+            // DPR change may affect pixelWidth/pixelHeight → needsNewTexture.
+            // Queue an update so the texture size is re-evaluated, but do NOT
+            // set _forceLayout (that would re-run configure/overwriteInsert).
+            _queueUpdate();
+          }
 
-        if (_danmakuSupersample != supersample) {
-          _danmakuSupersample = supersample;
-          _queueUpdate();
-        }
-        if (_danmakuLocale != locale) {
-          _danmakuLocale = locale;
-          _forceLayout = true;
-          _motionCommandVersion++;
-          _queueUpdate();
-        }
+          final hasTexture = _textureReady &&
+              _textureId != null &&
+              Next2TextureBridge.isSupported;
 
-        // DPR can micro-jitter on Windows when the window loses focus or the
-        // user clicks the taskbar (didChangeMetrics fires with a slightly
-        // different value). DPR only affects the texture's pixel size, not the
-        // danmaku layout (layout uses logical pixels). So we update the cached
-        // DPR for the next texture-acquire path, but we do NOT trigger
-        // _forceLayout — the texture path will pick up the new DPR on its own
-        // and re-acquire a different-sized texture if needed. Re-running
-        // prepareLayout here would re-execute overwriteInsert and cause
-        // visible flicker.
-        if ((_lastDevicePixelRatio - dpr).abs() > 0.001) {
-          _lastDevicePixelRatio = dpr;
-          // DPR change may affect pixelWidth/pixelHeight → needsNewTexture.
-          // Queue an update so the texture size is re-evaluated, but do NOT
-          // set _forceLayout (that would re-run configure/overwriteInsert).
-          _queueUpdate();
-        }
-
-        final hasTexture = _textureReady &&
-            _textureId != null &&
-            Next2TextureBridge.isSupported;
-
-        final filterQuality =
-            supersample > 0.0 ? FilterQuality.low : FilterQuality.none;
-        final Widget content = hasTexture
-            ? Texture(textureId: _textureId!, filterQuality: filterQuality)
-            : const SizedBox.expand();
+          final filterQuality =
+              supersample > 0.0 ? FilterQuality.low : FilterQuality.none;
+          final Widget content = hasTexture
+              ? Texture(textureId: _textureId!, filterQuality: filterQuality)
+              : const SizedBox.expand();
 
         return Next2OverlayViewport.buildLayer(
           layoutSize: layoutSize,
@@ -428,6 +457,7 @@ class _DfmPlusOverlayState extends State<DfmPlusOverlay>
                 ),
         );
       },
+        ),
     );
   }
 
@@ -444,6 +474,7 @@ class _DfmPlusOverlayState extends State<DfmPlusOverlay>
   }
 
   void _onPlaybackTimeChanged() {
+    if (!widget.isVisible) return;
     // Seek packets should bypass the normal 50ms scene refresh interval.
     final mediaTime = widget.playbackTimeMs.value / 1000.0;
     final jump = _lastMediaTimeSec.isFinite &&
@@ -478,6 +509,20 @@ class _DfmPlusOverlayState extends State<DfmPlusOverlay>
         _updateQueued = false;
 
         if (_layoutSize.isEmpty) {
+          continue;
+        }
+
+        if (!widget.isVisible) {
+          // Clear/freeze once, retaining the native surface and glyph atlas.
+          // Leave pending configuration intact until the overlay is shown.
+          if (_textureReady && !_sceneCleared) {
+            await _tryUpdateTexture(
+              const <PositionedDanmakuItem>[],
+              mediaSeconds:
+                  widget.playbackTimeMs.value / 1000 + widget.timeOffset,
+              snapshotWallUs: _timingClock.elapsedMicroseconds,
+            );
+          }
           continue;
         }
 
@@ -583,6 +628,10 @@ class _DfmPlusOverlayState extends State<DfmPlusOverlay>
           }
         }
 
+        if (!widget.isVisible) {
+          _updateQueued = true;
+          continue;
+        }
         // Include future items so native activation does not wait for Dart.
         final frame = _bridge.layout(interpolatedTime,
             lookaheadSeconds: _motionLookaheadSec * widget.playbackRate);

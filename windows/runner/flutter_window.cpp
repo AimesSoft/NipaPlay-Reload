@@ -2,6 +2,7 @@
 
 #include <optional>
 
+#include "clipboard_image.h"
 #include "flutter/generated_plugin_registrant.h"
 
 FlutterWindow::FlutterWindow(const flutter::DartProject& project)
@@ -25,6 +26,7 @@ bool FlutterWindow::OnCreate() {
     return false;
   }
   RegisterPlugins(flutter_controller_->engine());
+  RegisterClipboardImageChannel(flutter_controller_->engine()->messenger());
   HWND flutter_view = flutter_controller_->view()->GetNativeWindow();
   SetChildContent(flutter_view);
   windows_native_video_plugin_ = std::make_unique<WindowsNativeVideoPlugin>(

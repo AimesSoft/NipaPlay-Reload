@@ -154,19 +154,6 @@ class CustomMediaInfoDialog {
                   if (!isPhone) ...[
                     Row(
                       children: [
-                        Container(
-                          padding: const EdgeInsets.all(10),
-                          decoration: BoxDecoration(
-                            color: _accentColor.withOpacity(0.18),
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                          child: Icon(
-                            Icons.edit_note,
-                            color: _accentColor,
-                            size: 20,
-                          ),
-                        ),
-                        SizedBox(width: 12),
                         Expanded(
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
@@ -1152,20 +1139,6 @@ class _Step2Dialog extends StatefulWidget {
                 if (!isPhone) ...[
                   Row(
                     children: [
-                      Container(
-                        padding: const EdgeInsets.all(10),
-                        decoration: BoxDecoration(
-                          color: CustomMediaInfoDialog._accentColor
-                              .withOpacity(0.18),
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        child: Icon(
-                          Icons.playlist_add_check,
-                          color: CustomMediaInfoDialog._accentColor,
-                          size: 20,
-                        ),
-                      ),
-                      SizedBox(width: 12),
                       Expanded(
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,

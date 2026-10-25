@@ -161,14 +161,14 @@ class _MediaServerConnectionUserAgentSettingState
           ),
         ],
       ),
-      actions: [
+      actionsBuilder: (dialogContext) => [
         HoverScaleTextButton(
           text: context.l10n.cancel,
-          onPressed: () => Navigator.of(context).pop(),
+          onPressed: () => Navigator.of(dialogContext).pop(),
         ),
         HoverScaleTextButton(
           text: context.l10n.save,
-          onPressed: () => Navigator.of(context).pop(inputValue),
+          onPressed: () => Navigator.of(dialogContext).pop(inputValue),
         ),
       ],
     );

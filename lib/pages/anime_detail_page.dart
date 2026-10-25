@@ -1,8 +1,11 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:nipaplay/services/bangumi_service.dart';
 import 'package:nipaplay/services/bangumi_api_service.dart';
+import 'package:nipaplay/services/quarterly_review_cache.dart';
 import 'package:nipaplay_core/models/bangumi_model.dart';
 import 'package:nipaplay_core/models/shared_remote_library.dart';
 import 'package:nipaplay/models/watch_history_model.dart';
@@ -17,7 +20,6 @@ import 'package:nipaplay/themes/nipaplay/widgets/blur_dialog.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/hover_scale_text_button.dart';
 import 'package:provider/provider.dart'; // 重新添加
 // import 'package:nipaplay/utils/video_player_state.dart'; // Removed from here
-import 'dart:io'; // Added for File operations
 // import 'package:nipaplay/utils/tab_change_notifier.dart'; // Removed from here
 import 'package:nipaplay/themes/nipaplay/widgets/tag_search_widget.dart'; // 添加标签搜索组件
 import 'package:nipaplay/themes/nipaplay/widgets/rating_dialog.dart'; // 添加评分对话框
@@ -37,6 +39,7 @@ import 'package:nipaplay/utils/globals.dart' as globals;
 import 'package:nipaplay/utils/media_source_utils.dart';
 import 'package:nipaplay_core/utils/network_settings.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/anime_detail_shell.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/anime_detail_metadata_sliver.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/large_screen_anime_detail_page.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/large_screen_focusable_action.dart';
 import 'package:nipaplay_ui_common/themes/nipaplay/widgets/large_screen_mode_scope.dart';
@@ -50,6 +53,7 @@ import 'package:nipaplay/utils/app_accent_color.dart';
 import 'package:nipaplay/utils/app_theme.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/bangumi_comments_widget.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/adaptive_media_detail_action.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/blur_dropdown.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/immersive_anime_detail_scaffold.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/immersive_episode_rail.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/immersive_media_detail_route.dart';
@@ -250,6 +254,7 @@ class _AnimeDetailPageState extends State<AnimeDetailPage>
   // 标题颜色/按钮高亮，走 setState 会重建整个 4000+ 行的详情页。
   final ValueNotifier<int?> _hoveredEpisodeTileId = ValueNotifier(null);
   final ValueNotifier<int?> _hoveredWatchToggleEpisodeId = ValueNotifier(null);
+  final GlobalKey _immersiveMoreDropdownKey = GlobalKey();
   final FocusNode _largeScreenDetailsFocusNode = FocusNode(
     debugLabel: 'large_screen_anime_detail_content_focus',
   );
@@ -598,6 +603,7 @@ class _AnimeDetailPageState extends State<AnimeDetailPage>
 
   void _dismissDetailIfNeeded() {
     if (!mounted || widget.embeddedInPlayback) return;
+    if (ModalRoute.of(context)?.isCurrent == false) return;
     final navigator = Navigator.of(context);
     if (navigator.canPop()) {
       navigator.pop();
@@ -715,6 +721,9 @@ class _AnimeDetailPageState extends State<AnimeDetailPage>
 
       if (mounted) {
         final mergedAnime = _mergePlaybackDetail(anime);
+        unawaited(QuarterlyReviewCache.instance
+            .recordAnime(mergedAnime)
+            .catchError((Object _) {}));
         setState(() {
           _detailedAnime = mergedAnime;
           _isLoading = false;
@@ -1028,8 +1037,9 @@ class _AnimeDetailPageState extends State<AnimeDetailPage>
     required PlayableItem? sourcePlayable,
   }) async {
     if (sourcePlayableAvailable && sourcePlayable != null) {
-      await PlaybackService().play(sourcePlayable);
-      _dismissDetailIfNeeded();
+      if (await PlaybackService().play(sourcePlayable)) {
+        _dismissDetailIfNeeded();
+      }
       return;
     }
 
@@ -1037,61 +1047,17 @@ class _AnimeDetailPageState extends State<AnimeDetailPage>
         historyItem != null &&
         historyItem.filePath.isNotEmpty) {
       final filePath = historyItem.filePath;
-      final lowerPath = filePath.toLowerCase();
-      final bool isRemoteSource = historyItem.isDandanplayRemote ||
-          lowerPath.startsWith('http://') ||
-          lowerPath.startsWith('https://') ||
-          lowerPath.startsWith('jellyfin://') ||
-          lowerPath.startsWith('emby://') ||
-          MediaSourceUtils.isWebDavPath(filePath) ||
-          MediaSourceUtils.isSmbPath(filePath);
-
-      if (isRemoteSource) {
-        final playableItem = PlayableItem(
-          videoPath: filePath,
-          title: anime.nameCn,
-          subtitle: episode.title,
-          animeId: anime.id,
-          episodeId: episode.id,
-          historyItem: historyItem,
-        );
-        await PlaybackService().play(playableItem);
-        if (mounted && !widget.embeddedInPlayback) {
-          // PlaybackService.play() 内部已通过 AnimeDetailPage.popIfOpen() 关闭了详情页。
-          // 这里作为兜底再 pop 一次，但必须用 canPop() 守卫：详情页退出动画期间
-          // mounted 仍为 true，若不守卫会连根路由一起 pop 空，触发
-          // Navigator '_history.isNotEmpty' 断言并使整个窗口渲染崩溃（窗口变透明）。
-          final nav = Navigator.of(context);
-          if (nav.canPop()) {
-            nav.pop();
-          }
-        }
-        return;
-      }
-
-      final file = File(filePath);
-      if (await file.exists()) {
-        final playableItem = PlayableItem(
-          videoPath: filePath,
-          title: anime.nameCn,
-          subtitle: episode.title,
-          animeId: anime.id,
-          episodeId: episode.id,
-          historyItem: historyItem,
-        );
-        await PlaybackService().play(playableItem);
-        if (mounted && !widget.embeddedInPlayback) {
-          // PlaybackService.play() 内部已通过 AnimeDetailPage.popIfOpen() 关闭了详情页。
-          // 这里作为兜底再 pop 一次，但必须用 canPop() 守卫：详情页退出动画期间
-          // mounted 仍为 true，若不守卫会连根路由一起 pop 空，触发
-          // Navigator '_history.isNotEmpty' 断言并使整个窗口渲染崩溃（窗口变透明）。
-          final nav = Navigator.of(context);
-          if (nav.canPop()) {
-            nav.pop();
-          }
-        }
-      } else if (mounted) {
-        BlurSnackBar.show(context, '文件已不存在于: ${historyItem.filePath}');
+      // Choose among all matches before checking any single file's availability.
+      final playableItem = PlayableItem(
+        videoPath: filePath,
+        title: anime.nameCn,
+        subtitle: episode.title,
+        animeId: anime.id,
+        episodeId: episode.id,
+        historyItem: historyItem,
+      );
+      if (await PlaybackService().play(playableItem)) {
+        _dismissDetailIfNeeded();
       }
       return;
     }
@@ -1454,61 +1420,6 @@ class _AnimeDetailPageState extends State<AnimeDetailPage>
               decorationColor: Colors.transparent,
             );
 
-    List<Widget> metadataWidgets = [];
-    if (anime.metadata != null && anime.metadata!.isNotEmpty) {
-      metadataWidgets.add(SizedBox(height: 8));
-      metadataWidgets.add(Text('制作信息:', style: sectionTitleStyle));
-      for (String item in anime.metadata!) {
-        if (item.trim().startsWith('别名:') || item.trim().startsWith('别名：')) {
-          continue;
-        }
-        var parts = item.split(RegExp(r'[:：]'));
-        if (parts.length == 2) {
-          metadataWidgets.add(Padding(
-              padding: const EdgeInsets.only(top: 2.0),
-              child: RichText(
-                  text: TextSpan(
-                      style: valueStyle.copyWith(height: 1.3),
-                      children: [
-                    TextSpan(
-                        text: '${parts[0].trim()}: ',
-                        style: boldWhiteKeyStyle.copyWith(
-                            fontWeight: FontWeight.w600)),
-                    TextSpan(text: parts[1].trim())
-                  ]))));
-        } else {
-          metadataWidgets
-              .add(Text(item, style: valueStyle.copyWith(height: 1.3)));
-        }
-      }
-    }
-
-    List<Widget> titlesWidgets = [];
-    if (anime.titles != null && anime.titles!.isNotEmpty) {
-      titlesWidgets.add(SizedBox(height: 8));
-      titlesWidgets.add(Text('其他标题:', style: sectionTitleStyle));
-      titlesWidgets.add(SizedBox(height: 4));
-      TextStyle aliasTextStyle = valueStyle.copyWith(
-        color: secondaryTextColor,
-        fontSize: 12,
-        fontWeight: FontWeight.normal,
-      );
-      for (var titleEntry in anime.titles!) {
-        String titleText = titleEntry['title'] ?? '未知标题';
-        String languageText = '';
-        if (titleEntry['language'] != null &&
-            titleEntry['language']!.isNotEmpty) {
-          languageText = ' (${titleEntry['language']})';
-        }
-        titlesWidgets.add(Padding(
-            padding: const EdgeInsets.only(top: 3.0, left: 8.0),
-            child: Text(
-              '$titleText$languageText',
-              style: aliasTextStyle,
-            )));
-      }
-    }
-
     return NotificationListener<ScrollNotification>(
       onNotification: (notification) {
         if (_detailTabController?.index == 1 &&
@@ -1520,161 +1431,180 @@ class _AnimeDetailPageState extends State<AnimeDetailPage>
         }
         return false;
       },
-      child: SingleChildScrollView(
-        padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 12.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: <Widget>[
-            if (anime.name != anime.nameCn)
-              Padding(
-                  padding: const EdgeInsets.only(bottom: 8.0),
-                  child: Text(anime.name,
-                      style: valueStyle.copyWith(
-                          fontSize: 14, fontStyle: FontStyle.italic))),
-            Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              if (coverImageUrl.isNotEmpty)
-                Padding(
-                    padding: const EdgeInsets.only(right: 16.0, bottom: 8.0),
-                    child: ClipRRect(
-                        borderRadius: BorderRadius.circular(8),
-                        child: CachedNetworkImageWidget(
-                            imageUrl: coverImageUrl, // 使用处理后的URL
-                            width: 130,
-                            height: 195,
-                            fit: BoxFit.cover,
-                            loadMode: CachedImageLoadMode
-                                .legacy))), // 番剧详情页面统一使用legacy模式，避免海报突然切换
-              Expanded(
-                child: SizedBox(
-                  height: 195,
-                  child: SingleChildScrollView(
-                    padding: const EdgeInsets.only(right: 8.0),
-                    child: Text(summaryText, style: valueStyle),
-                  ),
-                ),
-              ),
-            ]),
-            SizedBox(height: 16),
-            Divider(color: textColor.withOpacity(0.15)),
-            SizedBox(height: 8),
-
-            // 详情 / 评论 切换导航栏
-            AnimatedBuilder(
-              animation: _detailTabController!,
-              builder: (context, _) {
-                return Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    NipaplayMainTabBar(
-                      controller: _detailTabController!,
-                      showLeadingLogoOnMobile: false,
-                      preferredHeight: 34,
-                      labelPadding: const EdgeInsets.only(
-                        left: 2,
-                        right: 14,
-                        bottom: 7,
+      child: CustomScrollView(
+        slivers: [
+          SliverPadding(
+            padding:
+                const EdgeInsets.symmetric(horizontal: 16.0, vertical: 12.0),
+            sliver: SliverMainAxisGroup(slivers: [
+              SliverToBoxAdapter(
+                  child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: <Widget>[
+                  if (anime.name != anime.nameCn)
+                    Padding(
+                        padding: const EdgeInsets.only(bottom: 8.0),
+                        child: Text(anime.name,
+                            style: valueStyle.copyWith(
+                                fontSize: 14, fontStyle: FontStyle.italic))),
+                  Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                    if (coverImageUrl.isNotEmpty)
+                      Padding(
+                          padding:
+                              const EdgeInsets.only(right: 16.0, bottom: 8.0),
+                          child: ClipRRect(
+                              borderRadius: BorderRadius.circular(8),
+                              child: CachedNetworkImageWidget(
+                                  imageUrl: coverImageUrl, // 使用处理后的URL
+                                  width: 130,
+                                  height: 195,
+                                  fit: BoxFit.cover,
+                                  loadMode: CachedImageLoadMode
+                                      .legacy))), // 番剧详情页面统一使用legacy模式，避免海报突然切换
+                    Expanded(
+                      child: SizedBox(
+                        height: 195,
+                        child: SingleChildScrollView(
+                          padding: const EdgeInsets.only(right: 8.0),
+                          child: Text(summaryText, style: valueStyle),
+                        ),
                       ),
-                      tabs: const [
-                        HoverZoomTab(
-                          text: '详情',
-                          fontSize: 14,
-                          fontWeight: FontWeight.w600,
+                    ),
+                  ]),
+                  SizedBox(height: 16),
+                  Divider(color: textColor.withOpacity(0.15)),
+                  SizedBox(height: 8),
+                ],
+              )),
+              // 详情 / 评论 切换导航栏
+              AnimatedBuilder(
+                animation: _detailTabController!,
+                builder: (context, _) {
+                  return SliverMainAxisGroup(
+                    slivers: [
+                      SliverToBoxAdapter(
+                          child: NipaplayMainTabBar(
+                        controller: _detailTabController!,
+                        showLeadingLogoOnMobile: false,
+                        preferredHeight: 34,
+                        labelPadding: const EdgeInsets.only(
+                          left: 2,
+                          right: 14,
+                          bottom: 7,
                         ),
-                        HoverZoomTab(
-                          text: '评论',
-                          fontSize: 14,
-                          fontWeight: FontWeight.w600,
+                        tabs: const [
+                          HoverZoomTab(
+                            text: '详情',
+                            fontSize: 14,
+                            fontWeight: FontWeight.w600,
+                          ),
+                          HoverZoomTab(
+                            text: '评论',
+                            fontSize: 14,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ],
+                      )),
+                      const SliverToBoxAdapter(child: SizedBox(height: 12)),
+                      if (_detailTabController!.index == 0) ...[
+                        SliverToBoxAdapter(
+                            child: _buildDetailContent(
+                                anime,
+                                valueStyle,
+                                boldWhiteKeyStyle,
+                                sectionTitleStyle,
+                                textColor,
+                                secondaryTextColor,
+                                bangumiRatingValue,
+                                bangumiEvaluationText)),
+                        AnimeDetailMetadataSliver(
+                          metadata: anime.metadata ?? const [],
+                          titles: anime.titles ?? const [],
+                          valueStyle: valueStyle,
+                          keyStyle: boldWhiteKeyStyle,
+                          sectionTitleStyle: sectionTitleStyle,
+                          secondaryTextColor: secondaryTextColor,
                         ),
+                        SliverToBoxAdapter(
+                            child: _buildDetailTags(
+                                anime, sectionTitleStyle, secondaryTextColor)),
                       ],
-                    ),
-                    const SizedBox(height: 12),
-                    Visibility(
-                      visible: _detailTabController!.index == 0,
-                      maintainState: true,
-                      child: _buildDetailContent(
-                          anime,
-                          valueStyle,
-                          boldWhiteKeyStyle,
-                          sectionTitleStyle,
-                          textColor,
-                          secondaryTextColor,
-                          bangumiRatingValue,
-                          bangumiEvaluationText,
-                          metadataWidgets,
-                          titlesWidgets),
-                    ),
-                    if (_hasOpenedCommentsTab)
-                      Visibility(
-                        visible: _detailTabController!.index == 1,
-                        maintainState: true,
-                        child: Builder(builder: (context) {
-                          debugPrint(
-                              '[AnimeDetail] 评论tab: _bangumiSubjectId=$_bangumiSubjectId, anime.id=${anime.id}');
-                          final userInfo = BangumiApiService.userInfo;
-                          final int currentUserId = userInfo != null
-                              ? (userInfo['id'] as int? ?? 0)
-                              : 0;
-                          String userAvatar = '';
-                          if (userInfo != null) {
-                            final raw = userInfo['avatar'];
-                            if (raw is String) {
-                              userAvatar = raw;
-                            } else if (raw is Map<String, dynamic>) {
-                              userAvatar = (raw['large'] as String?) ??
-                                  (raw['medium'] as String?) ??
-                                  '';
-                            }
-                          }
-                          final String userNickname = userInfo != null
-                              ? ((userInfo['nickname'] as String?) ??
-                                  (userInfo['username'] as String?) ??
-                                  '')
-                              : '';
-                          final BangumiMyCommentData? myComment =
-                              BangumiApiService.isLoggedIn
-                                  ? BangumiMyCommentData(
-                                      nickname: userNickname,
-                                      avatarUrl: userAvatar,
-                                      rate: _bangumiUserRating,
-                                      comment: _bangumiComment ?? '',
-                                      updatedAt: _myCommentTimestamp > 0
-                                          ? _myCommentTimestamp
-                                          : DateTime.now()
-                                                  .millisecondsSinceEpoch ~/
-                                              1000,
-                                    )
-                                  : null;
-                          return BangumiCommentsWidget(
-                            key: _commentsWidgetKey,
-                            subjectId: _bangumiSubjectId,
-                            dandanplayId: anime.id,
-                            onEditRating: BangumiApiService.isLoggedIn
-                                ? _showCommentDialog
-                                : null,
-                            myComment: myComment,
-                            currentUserId: currentUserId,
-                            commentsVersion: _commentsVersion,
-                            onMyCommentTimestamp: (timestamp) {
-                              if (mounted && timestamp != _myCommentTimestamp) {
-                                setState(() {
-                                  _myCommentTimestamp = timestamp;
-                                });
-                                if (_bangumiSubjectId != null) {
-                                  _saveCommentTimestamp(
-                                      _bangumiSubjectId!, timestamp);
-                                }
+                      if (_hasOpenedCommentsTab)
+                        SliverVisibility(
+                          key: const ValueKey('anime-detail-comments'),
+                          visible: _detailTabController!.index == 1,
+                          maintainState: true,
+                          sliver: SliverToBoxAdapter(
+                              child: Builder(builder: (context) {
+                            debugPrint(
+                                '[AnimeDetail] 评论tab: _bangumiSubjectId=$_bangumiSubjectId, anime.id=${anime.id}');
+                            final userInfo = BangumiApiService.userInfo;
+                            final int currentUserId = userInfo != null
+                                ? (userInfo['id'] as int? ?? 0)
+                                : 0;
+                            String userAvatar = '';
+                            if (userInfo != null) {
+                              final raw = userInfo['avatar'];
+                              if (raw is String) {
+                                userAvatar = raw;
+                              } else if (raw is Map<String, dynamic>) {
+                                userAvatar = (raw['large'] as String?) ??
+                                    (raw['medium'] as String?) ??
+                                    '';
                               }
-                            },
-                          );
-                        }),
-                      ),
-                  ],
-                );
-              },
-            ),
-            SizedBox(height: 20),
-          ],
-        ),
+                            }
+                            final String userNickname = userInfo != null
+                                ? ((userInfo['nickname'] as String?) ??
+                                    (userInfo['username'] as String?) ??
+                                    '')
+                                : '';
+                            final BangumiMyCommentData? myComment =
+                                BangumiApiService.isLoggedIn
+                                    ? BangumiMyCommentData(
+                                        nickname: userNickname,
+                                        avatarUrl: userAvatar,
+                                        rate: _bangumiUserRating,
+                                        comment: _bangumiComment ?? '',
+                                        updatedAt: _myCommentTimestamp > 0
+                                            ? _myCommentTimestamp
+                                            : DateTime.now()
+                                                    .millisecondsSinceEpoch ~/
+                                                1000,
+                                      )
+                                    : null;
+                            return BangumiCommentsWidget(
+                              key: _commentsWidgetKey,
+                              subjectId: _bangumiSubjectId,
+                              dandanplayId: anime.id,
+                              onEditRating: BangumiApiService.isLoggedIn
+                                  ? _showCommentDialog
+                                  : null,
+                              myComment: myComment,
+                              currentUserId: currentUserId,
+                              commentsVersion: _commentsVersion,
+                              onMyCommentTimestamp: (timestamp) {
+                                if (mounted &&
+                                    timestamp != _myCommentTimestamp) {
+                                  setState(() {
+                                    _myCommentTimestamp = timestamp;
+                                  });
+                                  if (_bangumiSubjectId != null) {
+                                    _saveCommentTimestamp(
+                                        _bangumiSubjectId!, timestamp);
+                                  }
+                                }
+                              },
+                            );
+                          })),
+                        ),
+                    ],
+                  );
+                },
+              ),
+              const SliverToBoxAdapter(child: SizedBox(height: 20)),
+            ]),
+          ),
+        ],
       ),
     );
   }
@@ -1688,8 +1618,6 @@ class _AnimeDetailPageState extends State<AnimeDetailPage>
     Color secondaryTextColor,
     dynamic bangumiRatingValue,
     String bangumiEvaluationText,
-    List<Widget> metadataWidgets,
-    List<Widget> titlesWidgets,
   ) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -1994,8 +1922,15 @@ class _AnimeDetailPageState extends State<AnimeDetailPage>
                   style: TextStyle(color: Colors.redAccent.withOpacity(0.85)))
             ])),
           ),
-        ...metadataWidgets,
-        ...titlesWidgets,
+      ],
+    );
+  }
+
+  Widget _buildDetailTags(BangumiAnime anime, TextStyle? sectionTitleStyle,
+      Color secondaryTextColor) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
         if (anime.tags != null && anime.tags!.isNotEmpty) ...[
           SizedBox(height: 16),
           Row(
@@ -3229,40 +3164,41 @@ class _AnimeDetailPageState extends State<AnimeDetailPage>
           label: '评论',
           onPressed: _openImmersiveComments,
         ),
-        PopupMenuButton<_ImmersiveMoreAction>(
-          tooltip: '更多',
-          color: const Color(0xFF20222B),
-          onSelected: (action) => _handleImmersiveMoreAction(action, anime),
-          itemBuilder: (context) => [
-            const PopupMenuItem(
+        BlurDropdown<_ImmersiveMoreAction>(
+          dropdownKey: _immersiveMoreDropdownKey,
+          onItemSelected: (action) => _handleImmersiveMoreAction(action, anime),
+          // 纯动作菜单，没有“当前选中项”，不预先高亮第一行。
+          highlightInitialItem: false,
+          items: [
+            DropdownMenuItemData<_ImmersiveMoreAction>(
+              title: '修改背景图',
               value: _ImmersiveMoreAction.changeBackdrop,
-              child: Text('修改背景图'),
             ),
             if (DandanplayService.isLoggedIn && anime.id > 0)
-              PopupMenuItem(
+              DropdownMenuItemData<_ImmersiveMoreAction>(
+                title: _isFavorited ? '取消收藏' : '收藏',
                 value: _ImmersiveMoreAction.toggleFavorite,
-                child: Text(_isFavorited ? '取消收藏' : '收藏'),
               ),
             if (BangumiApiService.isLoggedIn)
-              const PopupMenuItem(
+              DropdownMenuItemData<_ImmersiveMoreAction>(
+                title: '编辑 Bangumi 评分与收藏',
                 value: _ImmersiveMoreAction.editBangumiRating,
-                child: Text('编辑 Bangumi 评分与收藏'),
               ),
             if (anime.tags?.isNotEmpty == true)
-              const PopupMenuItem(
+              DropdownMenuItemData<_ImmersiveMoreAction>(
+                title: '浏览标签',
                 value: _ImmersiveMoreAction.searchTags,
-                child: Text('浏览标签'),
               ),
-            PopupMenuItem(
+            DropdownMenuItemData<_ImmersiveMoreAction>(
+              title: _isEpisodeListReversed ? '剧集正序' : '剧集倒序',
               value: _ImmersiveMoreAction.reverseEpisodes,
-              child: Text(_isEpisodeListReversed ? '剧集正序' : '剧集倒序'),
             ),
-            const PopupMenuItem(
+            DropdownMenuItemData<_ImmersiveMoreAction>(
+              title: '清理本地记录',
               value: _ImmersiveMoreAction.clearHistory,
-              child: Text('清理本地记录'),
             ),
           ],
-          child: IgnorePointer(
+          controlBuilder: (context, selectedLabel) => IgnorePointer(
             child: AdaptiveMediaDetailActionButton(
               icon: Ionicons.ellipsis_horizontal,
               label: '更多',
@@ -3286,8 +3222,13 @@ class _AnimeDetailPageState extends State<AnimeDetailPage>
         ),
       );
     }
+    final targetEpisode = _resolveImmersivePrimary(episodes).episode;
     return ImmersiveEpisodeRail(
+      key: ValueKey('immersive-episode-rail-${anime.id}'),
       episodeCount: displayed.length,
+      targetEpisodeIndex: displayed.indexWhere(
+        (episode) => episode.id == targetEpisode.id,
+      ),
       onSelectEpisodes: () => _showImmersiveEpisodeSelector(anime),
       itemBuilder: (context, index) {
         final episode = displayed[index];
@@ -3688,11 +3629,11 @@ class _AnimeDetailPageState extends State<AnimeDetailPage>
       title: '清理本地记录',
       content:
           '将对《$displayName》的本地记录进行批量处理：\n\n• 清除所有匹配信息：移除匹配显示信息（含扫描与手动匹配），保留观看进度。重新匹配同一番剧时可自动迁移进度。\n• 批量删除观看记录：移除该番剧的所有观看记录（不可恢复）。',
-      actions: [
+      actionsBuilder: (dialogContext) => [
         HoverScaleTextButton(
           child: const Text('清除所有匹配信息', locale: Locale('zh-Hans', 'zh')),
           onPressed: () {
-            Navigator.of(context).pop(_EpisodeCleanupAction.clearMatchInfo);
+            Navigator.of(dialogContext).pop(_EpisodeCleanupAction.clearMatchInfo);
           },
         ),
         HoverScaleTextButton(
@@ -3702,7 +3643,7 @@ class _AnimeDetailPageState extends State<AnimeDetailPage>
             style: TextStyle(color: Colors.redAccent),
           ),
           onPressed: () {
-            Navigator.of(context).pop(_EpisodeCleanupAction.deleteWatchHistory);
+            Navigator.of(dialogContext).pop(_EpisodeCleanupAction.deleteWatchHistory);
           },
         ),
         HoverScaleTextButton(
@@ -3712,7 +3653,7 @@ class _AnimeDetailPageState extends State<AnimeDetailPage>
             style: TextStyle(color: Colors.white70),
           ),
           onPressed: () {
-            Navigator.of(context).pop();
+            Navigator.of(dialogContext).pop();
           },
         ),
       ],

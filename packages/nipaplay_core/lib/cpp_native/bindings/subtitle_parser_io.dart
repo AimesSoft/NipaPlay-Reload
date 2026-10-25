@@ -32,9 +32,9 @@ class NativeSubtitleParser {
   };
 
   /// 输出应用内日志 — 三通道（Release 模式也可见）：
-  ///   1. debugPrint → 控制台回显 + DebugLogService 自动拦截收集到应用内日志查看器
-  ///   2. developer.log → DevTools 日志面板
-  ///   3. DanmakuNextLog.d → 弹幕引擎日志面板（节流防刷屏）
+  ///   1. debugPrint  控制台回显 + DebugLogService 自动拦截收集到应用内日志查看器
+  ///   2. developer.log  DevTools 日志面板
+  ///   3. DanmakuNextLog.d  弹幕引擎日志面板（节流防刷屏）
   /// 与 NipaPlayNextEngine 日志风格一致
   /// 注意: 不显式调用 DebugLogService().addLog()，因为 DebugLogService.initialize()
   /// 已替换 debugPrint 为拦截器，会自动收集，显式调用会导致双重收集。

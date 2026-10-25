@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'package:nipaplay/models/emby_model.dart';
+import 'package:nipaplay/models/media_library_sort_settings.dart';
 import 'package:nipaplay/services/emby_service.dart';
 import 'package:nipaplay/models/watch_history_model.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -21,6 +22,8 @@ class EmbyProvider extends ChangeNotifier {
   Map<String, EmbyMovieInfo> _movieDetailsCache = {};
   Timer? _notifyTimer;
   bool _disposed = false;
+  int _mediaLoadRevision = 0;
+  int _movieLoadRevision = 0;
   
   // Provider 级 ready：首次媒体/电影列表加载完成后触发
   bool _isReady = false;
@@ -55,10 +58,11 @@ class EmbyProvider extends ChangeNotifier {
   
   // 获取特定媒体库的排序设置
   Map<String, String> getLibrarySortSettings(String libraryId) {
-    return _librarySpecificSortSettings[libraryId] ?? {
-      'sortBy': _currentSortBy,
-      'sortOrder': _currentSortOrder,
-    };
+    return resolveMediaLibrarySortSettings(
+      _librarySpecificSortSettings[libraryId],
+      defaultSortBy: _currentSortBy,
+      defaultSortOrder: _currentSortOrder,
+    );
   }
   
   // 设置特定媒体库的排序设置
@@ -84,6 +88,7 @@ class EmbyProvider extends ChangeNotifier {
   @override
   void dispose() {
     _disposed = true;
+    _embyService.removeConnectionStateListener(_onConnectionStateChanged);
     _notifyTimer?.cancel();
     super.dispose();
   }
@@ -171,6 +176,14 @@ class EmbyProvider extends ChangeNotifier {
   
   /// 连接状态变化回调
   void _onConnectionStateChanged(bool isConnected) {
+    _mediaLoadRevision++;
+    _movieLoadRevision++;
+    _isLoading = false;
+    _mediaDetailsCache.clear();
+    _movieDetailsCache.clear();
+    _mediaItems = [];
+    _movieItems = [];
+
     print('EmbyProvider: 连接状态变化 - isConnected: $isConnected');
     
     // 连接状态变化需要立即通知UI，不能延迟
@@ -192,6 +205,8 @@ class EmbyProvider extends ChangeNotifier {
   
   // 加载Emby媒体项
   Future<void> loadMediaItems() async {
+    final revision = ++_mediaLoadRevision;
+    bool current() => !_disposed && revision == _mediaLoadRevision;
     if (!_embyService.isConnected) return;
     
     _isLoading = true;
@@ -200,39 +215,52 @@ class EmbyProvider extends ChangeNotifier {
     _notifyCoalesced();
     
     try {
-      _mediaItems = await _embyService.getLatestMediaItems(
+      final items = await _embyService.getLatestMediaItems(
+        isCurrent: current,
         sortBy: _currentSortBy,
         sortOrder: _currentSortOrder,
       );
+      if (!current()) return;
+      _mediaItems = items;
     } catch (e) {
+      if (!current()) return;
       _hasError = true;
       _errorMessage = e.toString();
       _mediaItems = [];
     } finally {
-      _isLoading = false;
-      _notifyCoalesced();
-      if (_initializingAfterConnect) {
-        _initialPendingParts = (_initialPendingParts - 1).clamp(0, 2);
-        _maybeMarkReady();
+      if (current()) {
+        _isLoading = false;
+        _notifyCoalesced();
+        if (_initializingAfterConnect) {
+          _initialPendingParts = (_initialPendingParts - 1).clamp(0, 2);
+          _maybeMarkReady();
+        }
       }
     }
   }
   
   // 加载Emby电影项
   Future<void> loadMovieItems() async {
+    final revision = ++_movieLoadRevision;
+    bool current() => !_disposed && revision == _movieLoadRevision;
     if (!_embyService.isConnected) return;
     
     try {
-      _movieItems = await _embyService.getLatestMovies();
+      final items = await _embyService.getLatestMovies(isCurrent: current);
+      if (!current()) return;
+      _movieItems = items;
     } catch (e) {
+      if (!current()) return;
       _hasError = true;
       _errorMessage = e.toString();
       _movieItems = [];
     } finally {
-      _notifyCoalesced();
-      if (_initializingAfterConnect) {
-        _initialPendingParts = (_initialPendingParts - 1).clamp(0, 2);
-        _maybeMarkReady();
+      if (current()) {
+        _notifyCoalesced();
+        if (_initializingAfterConnect) {
+          _initialPendingParts = (_initialPendingParts - 1).clamp(0, 2);
+          _maybeMarkReady();
+        }
       }
     }
   }
@@ -312,14 +340,19 @@ class EmbyProvider extends ChangeNotifier {
   
   // 获取媒体详情
   Future<EmbyMediaItemDetail> getMediaItemDetails(String itemId) async {
+    final session = (_embyService.serverUrl, _embyService.userId);
+    final cacheKey = json.encode([session.$1, session.$2, itemId]);
     // 如果已经缓存了详情，直接返回
-    if (_mediaDetailsCache.containsKey(itemId)) {
-      return _mediaDetailsCache[itemId]!;
+    if (_mediaDetailsCache.containsKey(cacheKey)) {
+      return _mediaDetailsCache[cacheKey]!;
     }
     
     try {
       final details = await _embyService.getMediaItemDetails(itemId);
-      _mediaDetailsCache[itemId] = details;
+      if (_disposed || session != (_embyService.serverUrl, _embyService.userId)) {
+        throw StateError('Media detail request superseded');
+      }
+      _mediaDetailsCache[cacheKey] = details;
       return details;
     } catch (e) {
       rethrow;
@@ -328,15 +361,20 @@ class EmbyProvider extends ChangeNotifier {
   
   // 获取电影详情
   Future<EmbyMovieInfo?> getMovieDetails(String movieId) async {
+    final session = (_embyService.serverUrl, _embyService.userId);
+    final cacheKey = json.encode([session.$1, session.$2, movieId]);
     // 如果已经缓存了详情，直接返回
-    if (_movieDetailsCache.containsKey(movieId)) {
-      return _movieDetailsCache[movieId]!;
+    if (_movieDetailsCache.containsKey(cacheKey)) {
+      return _movieDetailsCache[cacheKey]!;
     }
     
     try {
       final details = await _embyService.getMovieDetails(movieId);
+      if (_disposed || session != (_embyService.serverUrl, _embyService.userId)) {
+        throw StateError('Media detail request superseded');
+      }
       if (details != null) {
-        _movieDetailsCache[movieId] = details;
+        _movieDetailsCache[cacheKey] = details;
       }
       return details;
     } catch (e) {
@@ -482,8 +520,14 @@ class EmbyProvider extends ChangeNotifier {
       final sortSettingsJson = prefs.getString('emby_library_sort_settings');
       if (sortSettingsJson != null) {
         final Map<String, dynamic> decoded = json.decode(sortSettingsJson);
-        _librarySpecificSortSettings = decoded.map((key, value) =>
-            MapEntry(key, Map<String, String>.from(value)));
+        _librarySpecificSortSettings = decoded.map((key, value) => MapEntry(
+              key,
+              resolveMediaLibrarySortSettings(
+                value,
+                defaultSortBy: _currentSortBy,
+                defaultSortOrder: _currentSortOrder,
+              ),
+            ));
         print('EmbyProvider: 加载了媒体库排序设置: $_librarySpecificSortSettings');
       }
     } catch (e) {

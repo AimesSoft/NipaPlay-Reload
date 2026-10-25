@@ -8,13 +8,12 @@ import 'package:nipaplay/themes/cupertino/widgets/player_menu/adaptive_player_me
 import 'package:path/path.dart' as p;
 import 'package:nipaplay/services/emby_service.dart';
 import 'package:nipaplay/services/jellyfin_service.dart';
-import 'package:nipaplay_core/models/media_server_playback.dart';
+import 'package:nipaplay/services/media_server_playlist_loader.dart';
 import 'package:nipaplay/themes/cupertino/widgets/cupertino_bottom_sheet.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_snackbar.dart';
 import 'package:nipaplay/utils/video_player_state.dart';
 import 'package:nipaplay/models/playable_item.dart';
 import 'package:nipaplay_core/models/shared_remote_library.dart';
-import 'package:nipaplay/providers/settings_provider.dart';
 import 'package:nipaplay/services/playback_service.dart';
 import 'package:nipaplay/services/smb_proxy_service.dart';
 import 'package:nipaplay/services/smb_service.dart';
@@ -193,6 +192,8 @@ class _CupertinoPlaylistPaneState extends State<CupertinoPlaylistPane> {
     final matches = SMBService.instance.connections.where((connection) {
       if (connection.host == connName) return true;
       if ('${connection.host}:${connection.port}' == connName) return true;
+      if (connection.wanHost == connName) return true;
+      if ('${connection.wanHost}:${connection.wanPort}' == connName) return true;
       return false;
     }).toList();
     if (matches.length == 1) return matches.first;
@@ -414,9 +415,11 @@ class _CupertinoPlaylistPaneState extends State<CupertinoPlaylistPane> {
     final info = await JellyfinService.instance.getEpisodeDetails(episodeId);
     if (info == null) throw Exception('无法获取 Jellyfin 剧集信息');
 
-    final episodes = await JellyfinService.instance.getSeasonEpisodes(
-      info.seriesId!,
-      info.seasonId!,
+    final episodes = await loadMediaServerPlaylist(
+      currentItem: info,
+      seriesId: info.seriesId,
+      seasonId: info.seasonId,
+      loadSeason: JellyfinService.instance.getSeasonEpisodes,
     );
     if (episodes.isEmpty) throw Exception('该季没有剧集');
 
@@ -447,9 +450,11 @@ class _CupertinoPlaylistPaneState extends State<CupertinoPlaylistPane> {
     final info = await EmbyService.instance.getEpisodeDetails(episodeId);
     if (info == null) throw Exception('无法获取 Emby 剧集信息');
 
-    final episodes = await EmbyService.instance.getSeasonEpisodes(
-      info.seriesId!,
-      info.seasonId!,
+    final episodes = await loadMediaServerPlaylist(
+      currentItem: info,
+      seriesId: info.seriesId,
+      seasonId: info.seasonId,
+      loadSeason: EmbyService.instance.getSeasonEpisodes,
     );
     if (episodes.isEmpty) throw Exception('该季没有剧集');
 
@@ -598,58 +603,14 @@ class _CupertinoPlaylistPaneState extends State<CupertinoPlaylistPane> {
 
   Future<void> _playEpisode(String path) async {
     try {
-      PlaybackSession? playbackSession;
-      final actualPlayUrl = (MediaSourceUtils.isNewWebDavPath(path) ||
-              MediaSourceUtils.isNewSmbPath(path))
-          ? MediaSourceUtils.resolveRemotePathToUrl(path)
-          : null;
-      if ((MediaSourceUtils.isNewWebDavPath(path) ||
-              MediaSourceUtils.isNewSmbPath(path)) &&
-          (actualPlayUrl == null || actualPlayUrl.isEmpty)) {
-        throw Exception('无法解析远程媒体路径: $path');
-      }
-      final settingsProvider =
-          Provider.of<SettingsProvider>(context, listen: false);
-      if (settingsProvider.useExternalPlayer) {
-        if (path.startsWith('jellyfin://')) {
-          final itemId = path.replaceFirst('jellyfin://', '');
-          playbackSession =
-              await JellyfinService.instance.createPlaybackSession(
-            itemId: itemId,
-          );
-        } else if (path.startsWith('emby://')) {
-          final embyPath = path.replaceFirst('emby://', '');
-          final parts = embyPath.split('/');
-          final embyId = parts.isNotEmpty ? parts.last : embyPath;
-          playbackSession = await EmbyService.instance.createPlaybackSession(
-            itemId: embyId,
-          );
-        }
-
-        final playableItem = PlayableItem(
-          videoPath: path,
-          mediaKey: MediaIdentityResolver.forPath(path),
-          actualPlayUrl: actualPlayUrl,
-          playbackSession: playbackSession,
-        );
-        if (!mounted) return;
-        if (await PlaybackService().tryPlayExternally(context, playableItem)) {
-          return;
-        }
-      }
-
-      await widget.videoState.initializePlayer(
-        path,
+      final started = await PlaybackService().play(PlayableItem(
+        videoPath: path,
         mediaKey: MediaIdentityResolver.forPath(path),
-        actualPlayUrl: actualPlayUrl,
-        playbackSession: playbackSession,
-        playbackDetailContext: widget.videoState.playbackDetailContext,
-      );
-      if (!mounted) return;
-      BlurSnackBar.show(context, '已切换到新的播放项');
-    } catch (e) {
-      if (!mounted) return;
-      BlurSnackBar.show(context, '无法播放该条目：$e');
+        detailContext: widget.videoState.playbackDetailContext,
+      ));
+      if (started && mounted) BlurSnackBar.show(context, '已切换到新的播放项');
+    } catch (error) {
+      if (mounted) BlurSnackBar.show(context, '无法播放该条目：$error');
     }
   }
 

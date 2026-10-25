@@ -1,6 +1,9 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/cupertino.dart' as cupertino;
 import 'package:flutter/material.dart';
+import 'package:nipaplay/media_library/pick_local_media_directory.dart';
+import 'package:nipaplay/services/harmony_local_media_service.dart';
+import 'package:nipaplay/utils/platform_identity.dart' as platformIdentity;
 import 'dart:io' as io;
 import 'package:path/path.dart' as p;
 import 'package:nipaplay/models/watch_history_model.dart';
@@ -14,7 +17,6 @@ import 'package:nipaplay/themes/nipaplay/widgets/hover_scale_text_button.dart';
 import 'package:nipaplay/services/scan_service.dart';
 import 'package:nipaplay/services/android_saf_service.dart';
 import 'package:kmbal_ionicons/kmbal_ionicons.dart'; // Import Ionicons
-import 'package:nipaplay/services/file_picker_service.dart';
 import 'package:nipaplay/utils/storage_service.dart'; // 导入StorageService
 import 'package:permission_handler/permission_handler.dart'; // 导入权限处理库
 import 'package:nipaplay/utils/android_storage_helper.dart'; // 导入Android存储辅助类
@@ -25,6 +27,7 @@ import 'package:nipaplay/services/manual_danmaku_matcher.dart'; // 导入手动�
 import 'package:nipaplay/services/danmaku_matching_service.dart';
 import 'package:nipaplay_core/services/webdav_service.dart'; // 导入WebDAV服务
 import 'package:nipaplay/services/smb_service.dart';
+import 'package:nipaplay/services/media_library_reachability_service.dart';
 import 'package:nipaplay/services/smb_proxy_service.dart';
 import 'package:nipaplay/utils/media_source_utils.dart';
 import 'package:nipaplay/providers/watch_history_provider.dart';
@@ -54,6 +57,77 @@ import 'package:nipaplay_ui_common/app/app_display_surface_scope.dart';
 enum LibraryManagementSection { local, webdav, smb }
 
 enum _MountedLibraryType { local, webdav, smb }
+
+/// 地址是否可达；`null` 表示尚未检测过。
+LibraryManagementAddressStatus _addressStatus(bool? reachable) {
+  if (reachable == null) return LibraryManagementAddressStatus.unknown;
+  return reachable
+      ? LibraryManagementAddressStatus.reachable
+      : LibraryManagementAddressStatus.unreachable;
+}
+
+/// 组装 WebDAV 连接地址明细：内网/公网各占一行，并带上最近一次连通性。
+List<LibraryManagementAddressLine> _webdavAddressLines(
+  WebDAVConnection connection,
+) {
+  final reachability =
+      WebDAVService.instance.lastAddressReachability(connection.id);
+  return [
+    if (connection.url.trim().isNotEmpty)
+      LibraryManagementAddressLine(
+        label: '内网',
+        address: connection.url.trim(),
+        status: _addressStatus(reachability?.lan),
+      ),
+    if (connection.wanUrl.trim().isNotEmpty)
+      LibraryManagementAddressLine(
+        label: '公网',
+        address: connection.wanUrl.trim(),
+        status: _addressStatus(reachability?.wan),
+      ),
+  ];
+}
+
+/// 组装 SMB 连接地址明细：内网/公网各占一行，并带上最近一次连通性。
+List<LibraryManagementAddressLine> _smbAddressLines(
+  SMBConnection connection,
+) {
+  String format(String host, int port) => port == 445 ? host : '$host:$port';
+  final reachability =
+      SMBService.instance.lastAddressReachability(connection.id);
+  return [
+    if (connection.host.trim().isNotEmpty)
+      LibraryManagementAddressLine(
+        label: '内网',
+        address: format(connection.host.trim(), connection.port),
+        status: _addressStatus(reachability?.lan),
+      ),
+    if (connection.wanHost.trim().isNotEmpty)
+      LibraryManagementAddressLine(
+        label: '公网',
+        address: format(connection.wanHost.trim(), connection.wanPort),
+        status: _addressStatus(reachability?.wan),
+      ),
+  ];
+}
+
+/// 供仅支持单行文本的旧渲染路径使用的兜底文本（各地址换行、附连通性）。
+String _addressLinesFallback(List<LibraryManagementAddressLine> lines) {
+  return lines
+      .map((line) {
+        final status = libraryManagementAddressStatusText(line.status);
+        return status.isEmpty
+            ? '${line.label} ${line.address}'
+            : '${line.label} ${line.address}（$status）';
+      })
+      .join('\n');
+}
+
+String _webdavAddressLabel(WebDAVConnection connection) =>
+    _addressLinesFallback(_webdavAddressLines(connection));
+
+String _smbAddressLabel(SMBConnection connection) =>
+    _addressLinesFallback(_smbAddressLines(connection));
 
 class _MountedLibraryLocation {
   const _MountedLibraryLocation.local(this.localPath)
@@ -237,6 +311,9 @@ class _LibraryManagementTabState extends State<LibraryManagementTab> {
   void initState() {
     super.initState();
 
+    // 启动阶段的可达性检测完成后刷新地址行的连通性状态。
+    MediaLibraryReachabilityService.instance.addListener(_onReachabilityUpdated);
+
     // 延迟初始化，确保挂载完成
     if (widget.section == LibraryManagementSection.local) {
       _initScanServiceListener();
@@ -260,6 +337,11 @@ class _LibraryManagementTabState extends State<LibraryManagementTab> {
         _initSMBService();
       }
     }
+  }
+
+  /// 启动阶段的可达性检测有新结果时刷新页面，更新地址行的「可达/不可用」。
+  void _onReachabilityUpdated() {
+    if (mounted) setState(() {});
   }
 
   // 提取为单独的方法，方便管理生命周期
@@ -510,6 +592,8 @@ class _LibraryManagementTabState extends State<LibraryManagementTab> {
     if (_hasScanServiceListener && _scanService != null) {
       _scanService!.removeListener(_checkScanResults);
     }
+    MediaLibraryReachabilityService.instance
+        .removeListener(_onReachabilityUpdated);
     _searchController.dispose();
     _listScrollController.dispose();
     _webdavScrollController.dispose();
@@ -557,8 +641,7 @@ class _LibraryManagementTabState extends State<LibraryManagementTab> {
     // 使用FilePickerService选择目录（适用于Android和桌面平台）
     String? selectedDirectory;
     try {
-      final filePickerService = FilePickerService();
-      selectedDirectory = await filePickerService.pickDirectory();
+      selectedDirectory = await pickLocalMediaDirectory(context);
 
       if (selectedDirectory == null) {
         if (mounted) {
@@ -569,7 +652,10 @@ class _LibraryManagementTabState extends State<LibraryManagementTab> {
 
       // 验证选择的目录是否可访问
       bool accessCheck = false;
-      if (io.Platform.isAndroid &&
+      if (platformIdentity.isHarmonyOS) {
+        accessCheck =
+            await HarmonyLocalMediaService.canReadDirectory(selectedDirectory);
+      } else if (io.Platform.isAndroid &&
           AndroidSafService.isSafUri(selectedDirectory)) {
         // SAF content:// URI（SD/OTG/U盘）：用 SAF canAccessTree 检查权限。
         // io.Directory / StorageService.isValidStorageDirectory 不支持 content://，
@@ -1520,9 +1606,9 @@ class _LibraryManagementTabState extends State<LibraryManagementTab> {
           },
         ),
       ),
-      actions: [
+      actionsBuilder: (dialogContext) => [
         HoverScaleTextButton(
-          onPressed: () => Navigator.of(context).pop(),
+          onPressed: () => Navigator.of(dialogContext).pop(),
           child: Text(
             '关闭',
             locale: const Locale("zh-Hans", "zh"),
@@ -1696,7 +1782,8 @@ class _LibraryManagementTabState extends State<LibraryManagementTab> {
     if (query.isEmpty) return connections;
     return connections.where((connection) {
       return connection.name.toLowerCase().contains(query) ||
-          connection.url.toLowerCase().contains(query);
+          connection.url.toLowerCase().contains(query) ||
+          connection.wanUrl.toLowerCase().contains(query);
     }).toList();
   }
 
@@ -1705,7 +1792,8 @@ class _LibraryManagementTabState extends State<LibraryManagementTab> {
     if (query.isEmpty) return connections;
     return connections.where((connection) {
       return connection.name.toLowerCase().contains(query) ||
-          connection.host.toLowerCase().contains(query);
+          connection.host.toLowerCase().contains(query) ||
+          connection.wanHost.toLowerCase().contains(query);
     }).toList();
   }
 
@@ -2600,7 +2688,8 @@ class _LibraryManagementTabState extends State<LibraryManagementTab> {
             UnifiedLibraryManagementItem(
               id: connection.name,
               title: connection.name,
-              subtitle: connection.url,
+              subtitle: _webdavAddressLabel(connection),
+              addressLines: _webdavAddressLines(connection),
               status: connection.isConnected ? '已连接' : '未连接',
               icon: LibraryManagementIcon.cloud,
               onOpen: !isRemoteMode && connection.isConnected
@@ -2650,9 +2739,8 @@ class _LibraryManagementTabState extends State<LibraryManagementTab> {
             UnifiedLibraryManagementItem(
               id: connection.name,
               title: connection.name,
-              subtitle: connection.port == 445
-                  ? connection.host
-                  : '${connection.host}:${connection.port}',
+              subtitle: _smbAddressLabel(connection),
+              addressLines: _smbAddressLines(connection),
               status: connection.isConnected ? '已连接' : '未连接',
               icon: LibraryManagementIcon.server,
               onOpen: !isRemoteMode && connection.isConnected
@@ -3893,7 +3981,7 @@ class _LibraryManagementTabState extends State<LibraryManagementTab> {
     return _buildLargeScreenRemoteConnectionCard(
       icon: Icons.cloud_outlined,
       title: connection.name,
-      subtitle: connection.url,
+      subtitle: _webdavAddressLabel(connection),
       connected: connection.isConnected,
       selected: selected,
       autofocus: autofocus,
@@ -3933,7 +4021,7 @@ class _LibraryManagementTabState extends State<LibraryManagementTab> {
         children: [
           NipaplayLargeScreenSectionHeader(
             title: connection.name,
-            subtitle: connection.url,
+            subtitle: _webdavAddressLabel(connection),
             trailing: NipaplayLargeScreenActionButton(
               icon: Icons.refresh_rounded,
               label: '测试',
@@ -4024,9 +4112,7 @@ class _LibraryManagementTabState extends State<LibraryManagementTab> {
     required bool selected,
     required bool autofocus,
   }) {
-    final hostLabel = connection.port != 445
-        ? '${connection.host}:${connection.port}'
-        : connection.host;
+    final hostLabel = _smbAddressLabel(connection);
     return _buildLargeScreenRemoteConnectionCard(
       icon: Icons.lan_outlined,
       title: connection.name,
@@ -4060,9 +4146,7 @@ class _LibraryManagementTabState extends State<LibraryManagementTab> {
   Widget _buildLargeScreenSMBConnectionDetail(SMBConnection connection) {
     final key = '${connection.name}:/';
     final isLoading = _loadingSMBFolders.contains(key);
-    final hostLabel = connection.port != 445
-        ? '${connection.host}:${connection.port}'
-        : connection.host;
+    final hostLabel = _smbAddressLabel(connection);
     if (!isLoading && !_smbFolderContents.containsKey(connection.name)) {
       Future.microtask(() => _loadSMBFolderChildren(connection, '/'));
     }
@@ -4365,11 +4449,11 @@ class _LibraryManagementTabState extends State<LibraryManagementTab> {
         final existingHistory =
             await WatchHistoryManager.getHistoryItem(filePath);
 
-        // 如果按 filePath 找不到已有记录，尝试按 animeId+episodeId 查找旧记录
-        // 这处理了"清除匹配信息后更换文件路径重新匹配"的场景
+        // 仅从已解除匹配的旧路径迁移进度，同集其他版本保留。
         WatchHistoryItem? migratedHistory;
         if (existingHistory == null && animeId > 0 && episodeId > 0) {
-          migratedHistory = await WatchHistoryManager.getHistoryItemByEpisode(
+          migratedHistory =
+              await WatchHistoryManager.getClearedHistoryItemByEpisode(
             animeId,
             episodeId,
           );
@@ -4405,7 +4489,7 @@ class _LibraryManagementTabState extends State<LibraryManagementTab> {
         );
         await WatchHistoryManager.addOrUpdateHistory(updatedHistory);
 
-        // 如果是从旧记录迁移的，删除旧路径的记录避免重复
+        // 仅删除已解除匹配的进度来源。
         if (migratedHistory != null && migratedHistory.filePath != filePath) {
           await WatchHistoryManager.removeHistoryItem(migratedHistory.filePath);
         }
@@ -5075,17 +5159,17 @@ class _LibraryManagementTabState extends State<LibraryManagementTab> {
       context: context,
       title: title,
       content: message,
-      actions: [
+      actionsBuilder: (dialogContext) => [
         HoverScaleTextButton(
           child: const Text('取消'),
-          onPressed: () => Navigator.of(context).pop(false),
+          onPressed: () => Navigator.of(dialogContext).pop(false),
         ),
         HoverScaleTextButton(
           child: const Text(
             '删除',
             style: TextStyle(color: Colors.redAccent),
           ),
-          onPressed: () => Navigator.of(context).pop(true),
+          onPressed: () => Navigator.of(dialogContext).pop(true),
         ),
       ],
     );
@@ -5206,7 +5290,7 @@ class _LibraryManagementTabState extends State<LibraryManagementTab> {
           ],
         ),
         subtitle: Text(
-          connection.url,
+          _webdavAddressLabel(connection),
           style: TextStyle(color: secondaryTextColor, fontSize: 11),
           overflow: TextOverflow.ellipsis,
         ),
@@ -5266,9 +5350,7 @@ class _LibraryManagementTabState extends State<LibraryManagementTab> {
     final Color textColor = isDark ? Colors.white : Colors.black87;
     final Color secondaryTextColor = isDark ? Colors.white70 : Colors.black54;
     final Color iconColor = isDark ? Colors.white70 : Colors.black54;
-    final hostLabel = connection.port != 445
-        ? '${connection.host}:${connection.port}'
-        : connection.host;
+    final hostLabel = _smbAddressLabel(connection);
     final rootKey = '${connection.name}:/';
     final expanded = _expandedSMBFolders.contains(rootKey);
 
@@ -5860,10 +5942,11 @@ class _LibraryManagementTabState extends State<LibraryManagementTab> {
         final existingHistory =
             await WatchHistoryManager.getHistoryItem(candidate.filePath);
 
-        // 如果按 filePath 找不到已有记录，尝试按 animeId+episodeId 查找旧记录
+        // 仅从已解除匹配的旧路径迁移进度，同集其他版本保留。
         WatchHistoryItem? migratedHistory;
         if (existingHistory == null && animeId > 0 && episodeId > 0) {
-          migratedHistory = await WatchHistoryManager.getHistoryItemByEpisode(
+          migratedHistory =
+              await WatchHistoryManager.getClearedHistoryItemByEpisode(
             animeId,
             episodeId,
           );
@@ -5911,7 +5994,7 @@ class _LibraryManagementTabState extends State<LibraryManagementTab> {
         );
         await WatchHistoryManager.addOrUpdateHistory(historyItem);
 
-        // 如果是从旧记录迁移的，删除旧路径的记录避免重复
+        // 仅删除已解除匹配的进度来源。
         if (migratedHistory != null &&
             migratedHistory.filePath != candidate.filePath) {
           await WatchHistoryManager.removeHistoryItem(migratedHistory.filePath);
@@ -5943,18 +6026,18 @@ class _LibraryManagementTabState extends State<LibraryManagementTab> {
       title: '刮削WebDAV文件夹',
       content:
           '确定要刮削WebDAV文件夹 "$folderName" 吗？\n\n这将把该文件夹中的视频文件匹配到 WebDAV 媒体库中。',
-      actions: [
+      actionsBuilder: (dialogContext) => [
         HoverScaleTextButton(
           text: '取消',
           idleColor: colorScheme.onSurface.withOpacity(0.7),
           hoverColor: colorScheme.onSurface,
-          onPressed: () => Navigator.of(context).pop(false),
+          onPressed: () => Navigator.of(dialogContext).pop(false),
         ),
         HoverScaleTextButton(
           text: '刮削',
           idleColor: colorScheme.primary,
           hoverColor: colorScheme.primary,
-          onPressed: () => Navigator.of(context).pop(true),
+          onPressed: () => Navigator.of(dialogContext).pop(true),
         ),
       ],
     );
@@ -6178,18 +6261,18 @@ class _LibraryManagementTabState extends State<LibraryManagementTab> {
       context: context,
       title: '刮削SMB文件夹',
       content: '确定要刮削SMB文件夹 "$folderName" 吗？\n\n这将把该文件夹中的视频文件匹配到 SMB 媒体库中。',
-      actions: [
+      actionsBuilder: (dialogContext) => [
         HoverScaleTextButton(
           text: '取消',
           idleColor: colorScheme.onSurface.withOpacity(0.7),
           hoverColor: colorScheme.onSurface,
-          onPressed: () => Navigator.of(context).pop(false),
+          onPressed: () => Navigator.of(dialogContext).pop(false),
         ),
         HoverScaleTextButton(
           text: '刮削',
           idleColor: colorScheme.primary,
           hoverColor: colorScheme.primary,
-          onPressed: () => Navigator.of(context).pop(true),
+          onPressed: () => Navigator.of(dialogContext).pop(true),
         ),
       ],
     );
@@ -6258,6 +6341,7 @@ class _LibraryManagementTabState extends State<LibraryManagementTab> {
           BlurSnackBar.show(context, '正在刮削 $folderName...');
         }
 
+        await SMBProxyService.instance.initialize();
         final candidates = files
             .map((file) => _RemoteScrapeCandidate(
                   filePath: MediaSourceUtils.buildSmbPath(

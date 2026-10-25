@@ -115,6 +115,13 @@ class BaseSettingsMenu extends StatelessWidget {
         final double effectiveWidth =
             standaloneWindow ? screenSize.width : resolvedWidth;
         const double horizontalMargin = 12;
+        final isMobileLandscape = globals.isMobilePlatform &&
+            MediaQuery.orientationOf(context) == Orientation.landscape;
+        final viewPadding = MediaQuery.viewPaddingOf(context);
+        final leftMargin =
+            horizontalMargin + (isMobileLandscape ? viewPadding.left : 0.0);
+        final rightMargin =
+            horizontalMargin + (isMobileLandscape ? viewPadding.right : 0.0);
         const double pointerPadding = 12;
         bool pointUp = true;
         bool useExternalPointer = false;
@@ -130,8 +137,7 @@ class BaseSettingsMenu extends StatelessWidget {
           final spaceBelow = screenSize.height - anchorRect.bottom;
           final showAbove = spaceAbove >= spaceBelow;
           left = (anchorRect.center.dx - resolvedWidth / 2).clamp(
-              horizontalMargin,
-              screenSize.width - resolvedWidth - horizontalMargin);
+              leftMargin, screenSize.width - resolvedWidth - rightMargin);
           pointerX = (anchorRect.center.dx - left)
               .clamp(pointerPadding, resolvedWidth - pointerPadding);
           useExternalPointer = showPointer;
@@ -165,7 +171,10 @@ class BaseSettingsMenu extends StatelessWidget {
                     Positioned(
                       right: standaloneWindow
                           ? 0
-                          : (anchorRect == null ? resolvedRightOffset : null),
+                          : (anchorRect == null
+                              ? resolvedRightOffset +
+                                  (isMobileLandscape ? viewPadding.right : 0.0)
+                              : null),
                       left: anchorRect != null ? left : null,
                       top: standaloneWindow
                           ? 0

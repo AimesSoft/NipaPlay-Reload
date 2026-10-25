@@ -1,9 +1,11 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:collection';
 import 'package:flutter/material.dart';
 import 'package:nipaplay/services/dandanplay_http_client.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:nipaplay_core/models/bangumi_model.dart';
+import 'package:nipaplay/services/quarterly_review_cache.dart';
 import './dandanplay_service.dart';
 import 'package:nipaplay_core/services/web_remote_access_service.dart';
 import 'package:nipaplay/utils/chinese_converter.dart';
@@ -19,28 +21,58 @@ class BangumiService {
   static const Duration _defaultCacheDuration = Duration(hours: 3);
   static const int _oldAnimeThreshold = 18343; // 和弹幕缓存使用相同的判断标准
   static const Duration _oldAnimeCacheDuration = Duration(days: 7);
-  static const Duration _newAnimeCacheDuration = Duration(hours: 24);
-  // 简介这类元数据变化慢。读取路径已经改成「过期也先返回旧数据、再后台
-  // 回源」，TTL 只决定回源频率、不再决定用户能否看到内容，所以可以把
-  // 新番 TTL 从 6h 放宽到 24h，显著降低重启后的重取量。
-  static const int _maxConcurrentRequests = 6;
-  // 过期缓存不再立刻删除，而是作为 stale 数据继续可用；只有超过这个
-  // 硬性保留期才真正丢弃，避免脏数据无限累积。
-  static const Duration _staleRetention = Duration(days: 30);
+  static const Duration _newAnimeCacheDuration =
+      Duration(hours: 6); // 新番缓存时间可以比弹幕长一些
+  static const int _maxConcurrentRequests = 3;
 
   final Map<String, BangumiAnime> _listCache = {};
-  final Map<int, BangumiAnime> _detailsCache = {};
+  final LinkedHashMap<int, BangumiAnime> _detailsCache = LinkedHashMap();
+  static const int _maxHotDetails = 100;
+  final Map<(int, bool), Future<BangumiAnime>> _detailRequests = {};
+  final Map<int, DateTime> _tagRefreshAttempts = {};
+  final Map<int, Object> _pendingDetailEdits = {};
+
+  void _rememberDetail(int id, BangumiAnime anime, DateTime time) {
+    _detailsCache.remove(id);
+    _detailsCache[id] = anime;
+    _detailsCacheTime[id] = time;
+    while (_detailsCache.length > _maxHotDetails) {
+      final oldest = _detailsCache.keys.first;
+      _detailsCache.remove(oldest);
+      _detailsCacheTime.remove(oldest);
+    }
+    // Only memory entries are evicted; custom metadata stays persisted on disk.
+  }
+
+  void _refreshMissingTags(int id) {
+    if (id < 0) return;
+    final lastAttempt = _tagRefreshAttempts[id];
+    if (lastAttempt != null &&
+        DateTime.now().difference(lastAttempt) < const Duration(hours: 6))
+      return;
+    _tagRefreshAttempts[id] = DateTime.now();
+    if (_tagRefreshAttempts.length > 1000)
+      _tagRefreshAttempts.remove(_tagRefreshAttempts.keys.first);
+    unawaited(_refreshDetailQuietly(id));
+  }
+
+  Future<void> _refreshDetailQuietly(int id) async {
+    try {
+      await getAnimeDetails(id, forceRefresh: true);
+    } catch (error) {
+      debugPrint('详情标签更新失败: $error');
+    }
+  }
+
   final Map<int, DateTime> _detailsCacheTime = {};
-  // 同一 animeId 的并发详情请求共享同一个 Future，避免媒体库列表、详情页、
-  // 首页各自打一发请求把仅有的并发槽占满。
-  final Map<int, Future<BangumiAnime>> _inflightDetails = {};
-  // 正在后台回源的 animeId，防止 stale 数据触发重复刷新。
-  final Set<int> _backgroundRefreshes = <int>{};
   bool _isInitialized = false;
   List<BangumiAnime>? _preloadedAnimes;
   late http.Client _client;
   final _requestQueue = <_RequestItem>[];
-  int _activeRequestCount = 0;
+  bool _isProcessingQueue = false;
+
+  @visibleForTesting
+  BangumiService.forTesting(http.Client client) : _client = client;
 
   BangumiService._() {
     _client = http.DandanplayHttpClient();
@@ -62,66 +94,9 @@ class BangumiService {
   Future<void> initialize() async {
     if (_isInitialized) return;
     _isInitialized = true;
-    // 初始化时预加载已缓存的详情数据到内存
-    await _preloadDetailsCacheFromDisk();
+    // Individual details are decoded on demand by _loadDetailFromCache.
   }
 
-  // 预加载已缓存的详情数据到内存
-  Future<void> _preloadDetailsCacheFromDisk() async {
-    try {
-      //debugPrint('[番剧服务] 正在预加载缓存的番剧详情到内存');
-      final prefs = await SharedPreferences.getInstance();
-      final keys = prefs.getKeys();
-
-      final detailsKeys =
-          keys.where((key) => key.startsWith(_detailsCacheKeyPrefix)).toList();
-      int loadedCount = 0;
-
-      for (var key in detailsKeys) {
-        try {
-          final String? cachedString = prefs.getString(key);
-          if (cachedString != null) {
-            final data = json.decode(cachedString);
-            final timestamp = data['timestamp'] as int;
-            final now = DateTime.now().millisecondsSinceEpoch;
-            final animeId =
-                int.parse(key.substring(_detailsCacheKeyPrefix.length));
-
-            // stale-while-revalidate：启动预加载不再按 TTL 删除。超过 TTL 但
-            // 仍在保留期内的条目照常载入内存作为 stale 数据（读取路径负责
-            // 后台回源），只有超过 _staleRetention 才真正丢弃。此前这里一到
-            // 重启就把所有过 TTL 的简介删光，媒体库随即整页走网络重取——
-            // 用户反馈的「重启后几部番剧重新获取」的直接来源之一。
-            final isTooOld = now - timestamp > _staleRetention.inMilliseconds;
-
-            final Map<String, dynamic> animeData =
-                Map<String, dynamic>.from(data['animeDetail'] as Map);
-            final animeDetail = BangumiAnime.fromJson(animeData);
-            await _persistCustomBackground(animeDetail);
-
-            if (!isTooOld || animeId < 0) {
-              _detailsCache[animeId] = animeDetail;
-              _detailsCacheTime[animeId] =
-                  DateTime.fromMillisecondsSinceEpoch(timestamp);
-              loadedCount++;
-            } else {
-              // 超过保留期才删除
-              await prefs.remove(key);
-            }
-          }
-        } catch (e) {
-          //debugPrint('[番剧服务] 预加载单个番剧详情缓存失败: $e');
-          continue;
-        }
-      }
-
-      //debugPrint('[番剧服务] 预加载了 $loadedCount 条番剧详情到内存缓存');
-    } catch (e) {
-      //debugPrint('[番剧服务] 预加载番剧详情缓存失败: $e');
-    }
-  }
-
-  // 同步获取内存缓存中的番剧详情
   BangumiAnime? getAnimeDetailsFromMemory(int animeId) {
     if (_detailsCache.containsKey(animeId)) {
       // 即使缓存过期也返回数据，优先保证显示
@@ -163,25 +138,33 @@ class BangumiService {
       {int maxRetries = 3, int priority = 0}) async {
     final completer = Completer<http.Response>();
     _requestQueue.add(_RequestItem(url, maxRetries, priority, completer));
-    _pumpQueue();
+    _processQueue();
     return completer.future;
   }
 
-  /// 调度器：始终保持最多 `_maxConcurrentRequests` 个在途请求。
-  ///
-  /// 早期实现是「一次取满并发数后 `Future.wait`，整批完成才取下一批」，
-  /// 于是单个慢请求（尤其是无优先级的日历大包）会让后面所有请求排队等它，
-  /// 简介请求的实际并发可能永远到不了 3。改为谁空闲谁取下一个。
-  void _pumpQueue() {
-    while (_activeRequestCount < _maxConcurrentRequests &&
-        _requestQueue.isNotEmpty) {
+  void _processQueue() async {
+    if (_isProcessingQueue || _requestQueue.isEmpty) return;
+    _isProcessingQueue = true;
+
+    try {
       _requestQueue.sort((a, b) => b.priority.compareTo(a.priority));
-      final item = _requestQueue.removeAt(0);
-      _activeRequestCount++;
-      _executeRequest(item).whenComplete(() {
-        _activeRequestCount--;
-        _pumpQueue();
-      });
+
+      while (_requestQueue.isNotEmpty) {
+        final activeRequests = <Future>[];
+        final itemsToRemove = <_RequestItem>[];
+
+        for (var i = 0;
+            i < _maxConcurrentRequests && _requestQueue.isNotEmpty;
+            i++) {
+          final item = _requestQueue.removeAt(0);
+          itemsToRemove.add(item);
+          activeRequests.add(_executeRequest(item));
+        }
+
+        await Future.wait(activeRequests);
+      }
+    } finally {
+      _isProcessingQueue = false;
     }
   }
 
@@ -209,9 +192,7 @@ class BangumiService {
             'X-Timestamp': timestamp.toString(),
             'X-Signature': signature,
           },
-        // 首试 12s：反代在正常网络下回包远快于此，卡住的多半是代理侧
-        // 超时，等 15s 只会白白拖住一个并发槽。
-        ).timeout(const Duration(seconds: 12), onTimeout: () {
+        ).timeout(Duration(seconds: 15 + retryCount * 5), onTimeout: () {
           throw TimeoutException('请求超时');
         });
 
@@ -232,13 +213,8 @@ class BangumiService {
           item.completer.completeError(Exception('请求失败，已达到最大重试次数: $e'));
           return;
         }
-        // 抖动的指数退避（500ms/1s/2s + 0~250ms）替代原来的固定 2s/4s：
-        // 重试总墙钟时间从 6s 降到约 3.75s，且多个并发失败请求不会同时
-        // 在同一毫秒打回去。
-        final backoffMs = (500 << retryCount).clamp(500, 2000);
-        await Future.delayed(
-          Duration(milliseconds: backoffMs + (DateTime.now().microsecondsSinceEpoch % 251)),
-        );
+        final waitSeconds = retryCount * 2;
+        await Future.delayed(Duration(seconds: waitSeconds));
       }
     }
   }
@@ -402,117 +378,39 @@ class BangumiService {
     }
   }
 
-  /// 对外的详情读取入口：在 [_fetchAnimeDetailsInternal] 之上做
-  /// in-flight 去重。媒体库列表、详情页、首页可能在同一帧里请求同一个
-  /// animeId，各自触发会同时占满并发槽并重复等待。
-  ///
-  /// [forceRefresh] 为 true 时跳过内存/磁盘快捷路径直接回源（仅用于启动期
-  /// 补齐 tags 这类维护任务）。强制请求不参与去重共享：它要的正是「绕过
-  /// 现有缓存」，与普通请求的目标不一致。
   Future<BangumiAnime> getAnimeDetails(int animeId,
-      {bool forceRefresh = false}) {
-    if (forceRefresh) {
-      return _fetchAnimeDetailsInternal(animeId, forceRefresh: true);
+      {bool forceRefresh = false}) async {
+    final key = (animeId, forceRefresh);
+    final pending = _detailRequests[key] ??=
+        _getAnimeDetails(animeId, forceRefresh: forceRefresh);
+    try {
+      return await pending;
+    } finally {
+      if (identical(_detailRequests[key], pending)) _detailRequests.remove(key);
     }
-    final inFlight = _inflightDetails[animeId];
-    if (inFlight != null) return inFlight;
-
-    final request = _fetchAnimeDetailsInternal(animeId);
-    _inflightDetails[animeId] = request;
-    return request.whenComplete(() {
-      if (_inflightDetails[animeId] == request) {
-        _inflightDetails.remove(animeId);
-      }
-    });
   }
 
-  Future<BangumiAnime> _fetchAnimeDetailsInternal(int animeId,
-      {bool forceRefresh = false}) async {
+  Future<BangumiAnime> _getAnimeDetails(int animeId,
+      {required bool forceRefresh}) async {
     // 检查是否需要繁体中文
     final isTraditional =
         await ChineseConverter.isTraditionalChineseEnvironment(null);
     final expectedLanguage = isTraditional ? 'zh_Hant' : 'zh';
 
-// 检查内存缓存
-    if (!forceRefresh && _detailsCache.containsKey(animeId)) {
-      final cacheTime = _detailsCacheTime[animeId];
-      if (cacheTime != null && _isCacheValid(animeId, cacheTime)) {
-        final cachedAnime = _detailsCache[animeId]!;
-        // 检查缓存数据是否包含标签信息
-        if (cachedAnime.tags != null && cachedAnime.tags!.isNotEmpty) {
-          // 检查语言是否匹配
-          if (cachedAnime.language == expectedLanguage) {
-            //debugPrint('[番剧服务] 从内存缓存获取番剧 $animeId 的详情 (缓存时间: ${_getCacheDurationForAnime(animeId).inHours}小时)');
-            return cachedAnime;
-          } else {
-            // 对于自定义媒体信息，即使语言不匹配也返回
-            if (animeId < 0) {
-              //debugPrint('[番剧服务] 从内存缓存获取语言不匹配的自定义番剧 $animeId 的详情');
-              return cachedAnime;
-            }
-            // 对正常番剧，语言不匹配依然重取
-            //debugPrint('[番剧服务] 番剧 $animeId 的内存缓存语言不匹配，将重新获取');
-            // 不再直接移除，而是先返回旧数据，随后 API 成功后异步回源
-            // 避免每次打开简介都触发网络请求（原行为导致缓存永不命中）
-            if (!_backgroundRefreshes.contains(animeId)) {
-              _backgroundRefreshes.add(animeId);
-              _scheduleRefreshFromMemory(animeId);
-            }
-            return cachedAnime;
-          }
-        } else {
-          // 标签缺失是 API 的合法状态（部分番剧不返回 tags），不再视为
-          // 损坏强制重取——否则这类番剧缓存永不命中，每次打开简介都重新
-          // 加载（用户反馈）。
-          if (animeId < 0 || cachedAnime.language == expectedLanguage) {
-            return cachedAnime;
-          }
-          // 语言不匹配且有标志的情况：先返回旧数据，后台再回源
-          if (!_backgroundRefreshes.contains(animeId)) {
-            _backgroundRefreshes.add(animeId);
-            _scheduleRefreshFromMemory(animeId);
-          }
-          return cachedAnime;
-        }
-      } else {
-        // 对于自定义媒体信息，即使缓存过期也返回
-        if (animeId < 0 && _detailsCache.containsKey(animeId)) {
-          //debugPrint('[番剧服务] 从内存缓存获取过期的自定义番剧 $animeId 的详情');
-          return _detailsCache[animeId]!;
-        }
-        // 缓存已过期，也不再直接移除：改为返回旧数据，随后后台异步回源
-        // 以保证用户感知的加载速度不受影响
-        //debugPrint('[番剧服务] 番剧 $animeId 的内存缓存已过期，返回旧数据');
-        // 若有后台任务在排队则跳过重排，避免重入
-        if (!_backgroundRefreshes.contains(animeId)) {
-          _backgroundRefreshes.add(animeId);
-          _scheduleRefreshFromMemory(animeId);
-        }
-        return _detailsCache[animeId]!;
-      }
-    }
-
-    // 检查磁盘缓存（forceRefresh 时直接跳到 API）
-    final diskCachedDetail =
-        forceRefresh ? null : await _loadDetailFromCache(animeId);
+    final diskCachedDetail = _detailsCache[animeId] ??
+        await _loadDetailFromCache(animeId, allowExpired: true);
     if (diskCachedDetail != null) {
-      // 对于自定义媒体信息，直接返回缓存数据，不检查标签和语言
-      if (animeId < 0) {
-        //debugPrint('[番剧服务] 从磁盘缓存获取自定义番剧 $animeId 的详情');
+      final cacheTime =
+          _detailsCacheTime[animeId] ?? DateTime.fromMillisecondsSinceEpoch(0);
+      _rememberDetail(animeId, diskCachedDetail, cacheTime);
+      if (animeId < 0 ||
+          (!forceRefresh &&
+              _isCacheValid(animeId, cacheTime) &&
+              diskCachedDetail.language == expectedLanguage)) {
+        if (!forceRefresh && (diskCachedDetail.tags?.isEmpty ?? true))
+          _refreshMissingTags(animeId);
         return diskCachedDetail;
       }
-
-      // 对于正常番剧只检查语言：标签缺失是 API 合法状态（与内存缓存同
-      // 规则），不再当损坏数据丢弃——否则这类番剧缓存永不命中，每次打
-      // 开简介都重新加载（用户反馈）。
-      if (diskCachedDetail.language == expectedLanguage) {
-        //debugPrint('[番剧服务] 从磁盘缓存获取番剧 $animeId 的详情成功');
-        return diskCachedDetail;
-      }
-      //debugPrint('[番剧服务] 番剧 $animeId 的磁盘缓存语言不匹配，将重新获取');
-      final prefs = await SharedPreferences.getInstance();
-      final cacheKey = '$_detailsCacheKeyPrefix$animeId';
-      await prefs.remove(cacheKey);
     }
 
     // 对于自定义媒体信息（animeId为负数），尝试从本地数据生成
@@ -545,18 +443,19 @@ class BangumiService {
       );
 
       // 保存到缓存
-      _detailsCache[animeId] = anime;
-      _detailsCacheTime[animeId] = DateTime.now();
+      _rememberDetail(animeId, anime, DateTime.now());
       _saveDetailToCache(animeId, anime);
 
       return anime;
     }
 
+    final editToken = Object();
+    _pendingDetailEdits[animeId] = editToken;
     // 从API获取
-    final baseUrl = await DandanplayService.getApiBaseUrl();
-    final detailUrl = '$baseUrl$_basePath/bangumi/$animeId';
-    //debugPrint('[番剧服务] 从API获取番剧 $animeId 的详情: $detailUrl');
     try {
+      final baseUrl = await DandanplayService.getApiBaseUrl();
+      final detailUrl = '$baseUrl$_basePath/bangumi/$animeId';
+      //debugPrint('[番剧服务] 从API获取番剧 $animeId 的详情: $detailUrl');
       final response = await _makeRequest(detailUrl);
 
       if (response.statusCode == 200) {
@@ -579,9 +478,13 @@ class BangumiService {
           // 用户背景是本地元数据，API 刷新不能覆盖它。
           anime = await _mergeCustomBackground(anime);
 
+          if (!identical(_pendingDetailEdits[animeId], editToken)) {
+            return _detailsCache[animeId] ??
+                await _loadDetailFromCache(animeId, allowExpired: true) ??
+                anime;
+          }
           // 更新内存缓存
-          _detailsCache[animeId] = anime;
-          _detailsCacheTime[animeId] = DateTime.now();
+          _rememberDetail(animeId, anime, DateTime.now());
           final cacheDuration = _getCacheDurationForAnime(animeId);
           //debugPrint('[番剧服务] 成功从API获取番剧 $animeId 的详情并缓存到内存 (缓存时间: ${cacheDuration.inHours}小时)');
 
@@ -604,8 +507,12 @@ class BangumiService {
         throw Exception('获取番剧 $animeId 详情失败: ${response.statusCode}');
       }
     } catch (e) {
-      //debugPrint('[番剧服务] 获取番剧 $animeId 详情时出错: $e');
+      // A failed refresh must not destroy usable cached content.
+      if (diskCachedDetail != null) return diskCachedDetail;
       rethrow;
+    } finally {
+      if (identical(_pendingDetailEdits[animeId], editToken))
+        _pendingDetailEdits.remove(animeId);
     }
   }
 
@@ -633,11 +540,10 @@ class BangumiService {
               continue;
             }
 
-            // 与 _loadDetailFromCache 的 stale-while-revalidate 对齐：TTL 过期
-            // 的缓存是「待回源的 stale 数据」而不是垃圾，只有超过
-            // _staleRetention 才真正删除。此前每次打开详情页都会按 TTL 批量
-            // 删除，等于把软过期缓存全部清光，详情页每次都得走网络。
-            if (now - timestamp > _staleRetention.inMilliseconds) {
+            final cacheDuration = _getCacheDurationForAnime(animeId);
+
+            // 检查是否过期
+            if (now - timestamp > cacheDuration.inMilliseconds) {
               final raw = data['animeDetail'];
               final anime = raw is Map
                   ? BangumiAnime.fromJson(Map<String, dynamic>.from(raw))
@@ -657,14 +563,14 @@ class BangumiService {
 
       //debugPrint('[番剧服务] 清理了 $removedCount 条过期的番剧详情缓存');
 
-      // 同时清理内存缓存（同一保留期口径）
+      // 同时清理内存缓存
       final expiredIds = <int>[];
       _detailsCacheTime.forEach((id, time) {
         // 跳过自定义媒体信息（animeId为负数）
         if (id < 0) {
           return;
         }
-        if (DateTime.now().difference(time) > _staleRetention) {
+        if (!_isCacheValid(id, time)) {
           expiredIds.add(id);
         }
       });
@@ -683,6 +589,9 @@ class BangumiService {
   // 保存详情数据到磁盘缓存
   Future<void> _saveDetailToCache(int animeId, BangumiAnime animeDetail) async {
     try {
+      unawaited(QuarterlyReviewCache.instance
+          .recordAnime(animeDetail)
+          .catchError((Object _) {}));
       final prefs = await SharedPreferences.getInstance();
       final data = {
         'timestamp': DateTime.now().millisecondsSinceEpoch,
@@ -704,7 +613,8 @@ class BangumiService {
   }
 
   // 从磁盘缓存加载详情数据
-  Future<BangumiAnime?> _loadDetailFromCache(int animeId) async {
+  Future<BangumiAnime?> _loadDetailFromCache(int animeId,
+      {bool allowExpired = false}) async {
     try {
       final prefs = await SharedPreferences.getInstance();
       final cacheKey = '$_detailsCacheKeyPrefix$animeId';
@@ -718,38 +628,32 @@ class BangumiService {
 
         //debugPrint('[番剧服务] 找到番剧 $animeId 的磁盘缓存，缓存时间: $cacheTime');
 
-        // 使用动态缓存时间（支持新旧番两套 TTL）
+        // 使用动态缓存时间
         final cacheDuration = _getCacheDurationForAnime(animeId);
 
-        // 检查是否过期（软过期：先返回旧数据，后台惰性回源）
+        // 检查是否过期
         bool isExpired = now - timestamp > cacheDuration.inMilliseconds;
 
         // 对于自定义媒体信息（animeId为负数），即使缓存过期也返回
         final Map<String, dynamic> animeData =
             Map<String, dynamic>.from(data['animeDetail'] as Map);
         final animeDetail = BangumiAnime.fromJson(animeData);
+        unawaited(QuarterlyReviewCache.instance
+            .recordAnime(animeDetail)
+            .catchError((Object _) {}));
         await _persistCustomBackground(animeDetail);
 
-        // ============= OPTIMIZATION: stale-while-revalidate =============
-        // 硬性丢弃前的检查：超过 _staleRetention 天的数据才真正删除，
-        // 中间段（cacheDuration < age < _staleRetention）视为 stale 继续可用
-        bool isTooOld = now - timestamp > _staleRetention.inMilliseconds;
-        if (isTooOld && animeDetail.backgroundImageUrl?.trim().isNotEmpty != true) {
-          // 真正过期，清除磁盘缓存，让后续请求重取
+        if (allowExpired || !isExpired || animeId < 0) {
+          // 加载到内存缓存
+          _rememberDetail(animeId, animeDetail,
+              DateTime.fromMillisecondsSinceEpoch(timestamp));
+
+          //debugPrint('[番剧服务] 从磁盘缓存成功加载番剧 $animeId 的详情 (缓存时间: ${cacheDuration.inHours}小时)');
+          return animeDetail;
+        } else if (animeDetail.backgroundImageUrl?.trim().isNotEmpty != true) {
+          //debugPrint('[番剧服务] 番剧 $animeId 的磁盘缓存已过期，将从网络重新获取');
           await prefs.remove(cacheKey);
-          // 同时从内存移除，保持一致性
-          _detailsCache.remove(animeId);
-          _detailsCacheTime.remove(animeId);
-          return null;
         }
-        // 只要没超过 _staleRetention，无论 isExpired 如何都先返回旧数据
-        // （若过期了，用户看到的是最后一次成功的简介；随后后台会惰性回源）
-        // 加载到内存缓存（即使已标为 expired，也继续显示，以保用户感知不中断）
-        _detailsCache[animeId] = animeDetail;
-        _detailsCacheTime[animeId] =
-            DateTime.fromMillisecondsSinceEpoch(timestamp);
-        //debugPrint('[番剧服务] 从磁盘缓存成功加载番剧 $animeId 的详情 (缓存时间: ${cacheDuration.inHours}小时)');
-        return animeDetail;
       }
       return null;
     } catch (e) {
@@ -788,9 +692,11 @@ class BangumiService {
 
         for (final anime in animesToPreload) {
           if (!_detailsCache.containsKey(anime.id)) {
-            // 异步加载，不等待完成；预加载失败只需吞掉，不值得让
-            // Future<BangumiAnime> 的 catchError 返回一个假数据
-            unawaited(getAnimeDetails(anime.id).then<void>((_) {}, onError: (_) {}));
+            // 异步加载，不等待完成
+            getAnimeDetails(anime.id).catchError((e) {
+              // 忽略预加载错误
+              //debugPrint('[番剧服务] 预加载番剧 ${anime.id} 详情失败: $e');
+            });
 
             // 短暂延迟以避免并发请求过多
             await Future.delayed(const Duration(milliseconds: 100));
@@ -837,122 +743,24 @@ class BangumiService {
     return false;
   }
 
-  /// 启动期回源清扫（原名 checkAndRefreshCacheWithoutTags，行为已演进）。
-  ///
-  /// 挑出已过 TTL 的详情缓存，在后台做有预算的强制回源，让媒体库的陈旧
-  /// 简介每次启动悄悄更新一批；tags 缺失的补齐搭这趟车（无 tags 已被读
-  /// 路径视为合法状态，不再单独作筛选条件——否则 API 永不返回 tags 的
-  /// 番剧会永久占用全部预算，过期番剧反而永远轮不到）。
-  ///
-  /// 历史行为是「先删缓存再逐条串行重取」：重启后简介先被清空、再慢速
-  /// 回源，即用户反馈的「重启后几部番剧重新获取且很慢」。现在：
-  /// 1. 旧缓存留在原地，stale-while-revalidate 保证用户始终看到内容；
-  /// 2. forceRefresh 直接回源，成功后覆盖，失败保留旧数据；
-  /// 3. 每次启动最多 4 条、条间隔 200ms，没刷到的下个启动周期再试。
-  Future<void> revalidateExpiredCacheOnStartup() async {
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      final keys = prefs.getKeys();
-      final detailsKeys =
-          keys.where((key) => key.startsWith(_detailsCacheKeyPrefix)).toList();
-      final keysToRefresh = <int>[];
-      final now = DateTime.now().millisecondsSinceEpoch;
-
-      bool isExpired(int animeId, int timestamp) =>
-          now - timestamp > _getCacheDurationForAnime(animeId).inMilliseconds;
-
-      // 检查内存缓存
-      _detailsCache.forEach((animeId, _) {
-        // 跳过自定义媒体信息（animeId为负数）
-        if (animeId < 0) return;
-        final timestamp = _detailsCacheTime[animeId]?.millisecondsSinceEpoch;
-        if (timestamp == null || isExpired(animeId, timestamp)) {
-          keysToRefresh.add(animeId);
-        }
-      });
-
-      // 检查磁盘缓存
-      for (var key in detailsKeys) {
-        try {
-          final String? cachedString = prefs.getString(key);
-          if (cachedString != null) {
-            final data = json.decode(cachedString);
-            final animeId =
-                int.parse(key.substring(_detailsCacheKeyPrefix.length));
-
-            // 跳过自定义媒体信息（animeId为负数）
-            if (animeId < 0) continue;
-
-            // 跳过已在内存中检查过的
-            if (keysToRefresh.contains(animeId)) continue;
-
-            final timestamp = data['timestamp'];
-            if (timestamp is int && isExpired(animeId, timestamp)) {
-              keysToRefresh.add(animeId);
-            }
-          }
-        } catch (e) {
-          //debugPrint('[番剧服务] 检查单个缓存失败: $e');
-          continue;
-        }
-      }
-
-      if (keysToRefresh.isEmpty) return;
-
-      // 后台清扫（不阻塞 UI）
-      Future.microtask(() async {
-        var budget = 4;
-        for (var animeId in keysToRefresh) {
-          if (budget <= 0) break;
-          budget--;
-          try {
-            // 回源成功即覆盖缓存；失败保留旧数据，下个启动周期再试
-            await getAnimeDetails(animeId, forceRefresh: true);
-            //debugPrint('[番剧服务] 已刷新番剧 $animeId 的缓存');
-
-            // 每次请求后稍微延迟，避免过于频繁的网络请求
-            await Future.delayed(const Duration(milliseconds: 200));
-          } catch (e) {
-            //debugPrint('[番剧服务] 刷新番剧 $animeId 缓存失败: $e');
-          }
-        }
-        //debugPrint('[番剧服务] 完成启动期缓存回源清扫');
-      });
-    } catch (e) {
-      //debugPrint('[番剧服务] 启动期缓存回源清扫失败: $e');
+  // 检查并刷新缺少标签的缓存数据
+  Future<void> checkAndRefreshCacheWithoutTags() async {
+    // Maintain only a bounded set of already requested details. Never scan and
+    // delete all SharedPreferences detail payloads during application startup.
+    for (final anime in _detailsCache.values
+        .toList()
+        .where((anime) => anime.id >= 0 && (anime.tags?.isEmpty ?? true))
+        .take(5)) {
+      _refreshMissingTags(anime.id);
     }
-  }
-
-  /// stale-while-revalidate：把已过期的旧数据立即还给调用方，同时后台
-  /// 悄悄回源刷新。回源结果只更新缓存，不打断当前这次读取。
-  ///
-  /// 之前会话期的行为是「过期即删除缓存并同步重新请求」：媒体库一屏有几
-  /// 部番剧就并发打几发请求，共享 3 个并发槽，外加 2s/4s 的线性重试背压，
-  /// 最后一页卡片要等十几秒才逐一亮出。
-  void _scheduleRefreshFromMemory(int animeId) async {
-    // 必须 forceRefresh：调用方正是因为「内存里有但已过期」才走到这里，
-    // 普通读取会再次命中同一份过期内存数据直接返回，刷新永远触达不到
-    // 网络——stale-while-revalidate 的「revalidate」全靠这条强制路径。
-    // 仅 animeId > 0 会被调到这里（自定义媒体在上游分支已提前返回）。
-    final request = getAnimeDetails(animeId, forceRefresh: true).then<void>(
-      (_) {},
-      onError: (Object e) {
-        // 回源失败：旧数据已经交给调用方了，这里静默保留即可。
-        //debugPrint('[番剧服务] 后台刷新番剧缓存失败: $animeId: $e');
-      },
-    ).whenComplete(() {
-      _backgroundRefreshes.remove(animeId);
-    });
-    // 保证任何地方调用该方法都不会因为忘记 await 而报未处理异常
-    unawaited(request);
   }
 
   // 保存自定义媒体信息到缓存
   Future<void> saveCustomAnimeDetail(
       int animeId, BangumiAnime animeDetail) async {
+    _pendingDetailEdits.remove(animeId);
     final resolved = await _mergeCustomBackground(animeDetail);
-    _detailsCache[animeId] = resolved;
-    _detailsCacheTime[animeId] = DateTime.now();
+    _rememberDetail(animeId, resolved, DateTime.now());
     await _persistCustomBackground(resolved);
     await _saveDetailToCache(animeId, resolved);
   }

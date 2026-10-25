@@ -499,9 +499,9 @@ class _AboutSettingsContentState extends State<AboutSettingsContent> {
         context: context,
         title: context.l10n.updateCheckFailed,
         content: context.l10n.pleaseTryAgainLater,
-        actions: [
+        actionsBuilder: (dialogContext) => [
           HoverScaleTextButton(
-            onPressed: () => Navigator.of(context).pop(),
+            onPressed: () => Navigator.of(dialogContext).pop(),
             child: Text(context.l10n.close),
           ),
         ],
@@ -561,17 +561,17 @@ class _AboutSettingsContentState extends State<AboutSettingsContent> {
           ],
         ),
       ),
-      actions: [
+      actionsBuilder: (dialogContext) => [
         if (info.releaseUrl.trim().isNotEmpty)
           HoverScaleTextButton(
             onPressed: () {
-              Navigator.of(context).pop();
+              Navigator.of(dialogContext).pop();
               _launchURL(info.releaseUrl);
             },
             child: Text(context.l10n.aboutOpenReleasePage),
           ),
         HoverScaleTextButton(
-          onPressed: () => Navigator.of(context).pop(),
+          onPressed: () => Navigator.of(dialogContext).pop(),
           child: Text(context.l10n.close),
         ),
       ],
@@ -627,9 +627,9 @@ class _AboutSettingsContentState extends State<AboutSettingsContent> {
       context: context,
       title: title,
       contentWidget: content,
-      actions: [
+      actionsBuilder: (dialogContext) => [
         HoverScaleTextButton(
-          onPressed: () => Navigator.of(context).pop(),
+          onPressed: () => Navigator.of(dialogContext).pop(),
           child: Text(context.l10n.close),
         ),
       ],

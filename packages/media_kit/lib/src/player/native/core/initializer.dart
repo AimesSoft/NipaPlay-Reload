@@ -57,15 +57,15 @@ class Initializer {
   }
 
   /// Disposes [Pointer<mpv_handle>].
-  void dispose(Pointer<generated.mpv_handle> ctx) {
+  Future<void> dispose(Pointer<generated.mpv_handle> ctx) async {
     if (kDebugMode && isMainIsolate()) {
-      InitializerIsolate().dispose(mpv, ctx);
+      await InitializerIsolate().dispose(mpv, ctx);
       return;
     }
     if (!isExecmemRestricted) {
-      InitializerNativeCallable(mpv).dispose(ctx);
+      await InitializerNativeCallable(mpv).dispose(ctx);
     } else {
-      InitializerIsolate().dispose(mpv, ctx);
+      await InitializerIsolate().dispose(mpv, ctx);
     }
   }
 

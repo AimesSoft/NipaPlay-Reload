@@ -54,6 +54,8 @@ class DandanplayHttpClient extends transport.BaseClient {
             uri.path.endsWith('/api/v2/register'));
   }
 
+  static bool _isRenewal(Uri uri) => uri.path.endsWith('/api/v2/login/renew');
+
   @override
   Future<transport.StreamedResponse> send(transport.BaseRequest request) async {
     final target = targetUri(request.url);
@@ -87,6 +89,43 @@ class DandanplayHttpClient extends transport.BaseClient {
         removeHeaderIfValueMatches(request.headers, 'authorization', token);
       }
     }
+    final response = await _sendOnce(request, target, isGatewayTarget);
+    final sent = authorization['Authorization'];
+    if (!isGatewayTarget ||
+        response.statusCode != 401 ||
+        sent == null ||
+        isAccountEntry(request.method, target) ||
+        _isRenewal(target)) {
+      return response;
+    }
+    // 网关拒绝了这份登录凭据：续期一次。续期成功就带新凭据重发这一次请求；
+    // 续期也被拒时，DandanplayService 清除登录并请用户重新登录。
+    final body = await response.stream.toBytes();
+    final renewed = await DandanplayService.handleTokenRefused(sent);
+    if (renewed && request is transport.Request) {
+      final retry = transport.Request(request.method, request.url)
+        ..followRedirects = request.followRedirects
+        ..maxRedirects = request.maxRedirects
+        ..persistentConnection = request.persistentConnection;
+      addOrReplaceHeaders(retry.headers, request.headers);
+      addOrReplaceHeaders(retry.headers, _authorization());
+      retry.bodyBytes = request.bodyBytes;
+      return _sendOnce(retry, target, isGatewayTarget);
+    }
+    return transport.StreamedResponse(
+      Stream.value(body),
+      response.statusCode,
+      contentLength: body.length,
+      request: response.request,
+      headers: response.headers,
+      isRedirect: response.isRedirect,
+      persistentConnection: response.persistentConnection,
+      reasonPhrase: response.reasonPhrase,
+    );
+  }
+
+  Future<transport.StreamedResponse> _sendOnce(
+      transport.BaseRequest request, Uri target, bool isGatewayTarget) async {
     try {
       final response = await _inner.send(request);
       if (isGatewayTarget) {

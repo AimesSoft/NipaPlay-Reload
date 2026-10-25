@@ -74,6 +74,8 @@ class PlayerFactory {
         defaultTargetPlatform == TargetPlatform.iOS ||
         defaultTargetPlatform == TargetPlatform.windows ||
         defaultTargetPlatform == TargetPlatform.android ||
+        (defaultTargetPlatform == TargetPlatform.linux &&
+            ErikaPlayerAdapter.linuxBuildEnabled) ||
         isHarmonyOS;
   }
 
@@ -264,7 +266,11 @@ class PlayerFactory {
     // bridge chains and the Flutter danmaku overlay entirely. MDK remains
     // the default elsewhere. Users can still switch kernels in settings;
     // the hot-swap path handles it live.
-    if (!kIsWeb && defaultTargetPlatform == TargetPlatform.iOS) {
+    // 上游 1.11.11 起桌面 Linux 也可选 Erika（linuxBuildEnabled 门控）。
+    if (!kIsWeb &&
+        (defaultTargetPlatform == TargetPlatform.iOS ||
+            (defaultTargetPlatform == TargetPlatform.linux &&
+                ErikaPlayerAdapter.linuxBuildEnabled))) {
       return PlayerKernelType.erika;
     }
     return PlayerKernelType.mdk;
@@ -273,6 +279,7 @@ class PlayerFactory {
   static bool _isKernelSupportedOnCurrentPlatform(PlayerKernelType type) {
     if (kIsWeb) return type == PlayerKernelType.videoPlayer;
     if (globals.isTvOS) return isKernelSupportedOnTvOS(type);
+    if (type == PlayerKernelType.erika) return isErikaKernelSupported;
     return true;
   }
 

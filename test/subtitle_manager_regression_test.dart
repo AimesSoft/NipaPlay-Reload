@@ -10,10 +10,59 @@ import 'package:shared_preferences/shared_preferences.dart';
 class _UnusedPlayerDelegate extends Fake implements AbstractPlayer {
   @override
   bool get supportsExternalSubtitles => false;
+
+  @override
+  List<int> get activeSubtitleTracks => [];
+}
+
+class _KernelDelegate extends Fake implements AbstractPlayer {
+  List<int> _active = [0];
+  final List<String> mediaSet = [];
+
+  @override
+  bool get supportsExternalSubtitles => true;
+
+  @override
+  List<int> get activeSubtitleTracks => _active;
+
+  @override
+  set activeSubtitleTracks(List<int> value) => _active = List<int>.of(value);
+
+  @override
+  void setMedia(String path, PlayerMediaType type) {
+    if (type == PlayerMediaType.subtitle) mediaSet.add(path);
+  }
+
+  @override
+  PlayerMediaInfo get mediaInfo => PlayerMediaInfo(duration: 0);
+
+  @override
+  void setProperty(String name, String value) {}
 }
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
+
+  test('subtitle index is replaced when a cached file changes', () async {
+    SharedPreferences.setMockInitialValues(<String, Object>{});
+    final directory =
+        await Directory.systemTemp.createTemp('subtitle-index-refresh-');
+    final file = File('${directory.path}/track.srt');
+    final manager =
+        SubtitleManager(player: Player.withDelegate(_UnusedPlayerDelegate()));
+    await file.writeAsString('1\n00:00:00,000 --> 00:00:01,000\nFirst\n');
+    manager.setExternalSubtitle(file.path);
+    await manager.preloadSubtitleFile(file.path);
+    expect(manager.getCurrentExternalSubtitleTextAt(500), 'First');
+    await file
+        .writeAsString('1\n00:00:00,000 --> 00:00:01,000\nReplacement text\n');
+    await manager.preloadSubtitleFile(file.path);
+    expect(manager.getCurrentExternalSubtitleTextAt(500), 'Replacement text');
+    expect(manager.getCurrentExternalSubtitleTextAt(1000), 'Replacement text');
+    expect(manager.getCurrentExternalSubtitleTextAt(1001), '');
+    manager.dispose();
+    await directory.delete(recursive: true);
+  });
 
   test('preserves a saved remote subtitle with the current SHA-1 cache name',
       () async {
@@ -73,5 +122,103 @@ void main() {
       manager.dispose();
       await subtitleDir.delete(recursive: true);
     }
+  });
+  test('episode reset clears the stack and pending stack additions', () async {
+    SharedPreferences.setMockInitialValues(<String, Object>{});
+    final dir = await Directory.systemTemp.createTemp('subtitle_reset_');
+    final subtitle = File('${dir.path}/episode1.srt');
+    await subtitle.writeAsString('1\n00:00:00,000 --> 00:00:01,000\nHello\n');
+    final manager =
+        SubtitleManager(player: Player.withDelegate(_UnusedPlayerDelegate()));
+    try {
+      manager.setCurrentVideoPath('${dir.path}/episode1.mkv');
+      manager.setExternalSubtitle(subtitle.path);
+      await manager.preloadSubtitleFile(subtitle.path);
+      manager.clearExternalSubtitle(notifyListenersToo: false);
+      manager.setCurrentVideoPath('${dir.path}/episode2.mkv');
+      expect(manager.getAllActiveExternalSubtitlePaths(), isEmpty);
+      expect(manager.shouldRenderCurrentExternalSubtitleInApp(), isFalse);
+      final pending = manager.addExternalSubtitleToStack(subtitle.path);
+      manager.clearExternalSubtitle(notifyListenersToo: false);
+      await pending;
+      expect(manager.getAllActiveExternalSubtitlePaths(), isEmpty);
+    } finally {
+      manager.dispose();
+      await dir.delete(recursive: true);
+    }
+  });
+
+  group('single subtitle at a time', () {
+    late Directory dir;
+    late File srt;
+    // 测试替身无法冒充 Media Kit 适配器，用 .sup 代表由内核渲染、占内核字幕轨的外挂
+    // （与 libmpv 下的 ASS/SSA 走同一条路径）。
+    late File ass;
+    late _KernelDelegate delegate;
+    late SubtitleManager manager;
+
+    setUp(() async {
+      SharedPreferences.setMockInitialValues(<String, Object>{});
+      dir = await Directory.systemTemp.createTemp('subtitle_single_');
+      srt = File('${dir.path}/movie.zh-Hans.srt');
+      ass = File('${dir.path}/movie.sup');
+      const content = '1\n00:00:00,000 --> 00:00:01,000\nHello\n';
+      await srt.writeAsString(content);
+      await ass.writeAsString('kernel-track');
+      delegate = _KernelDelegate();
+      manager = SubtitleManager(player: Player.withDelegate(delegate));
+    });
+
+    tearDown(() async {
+      manager.dispose();
+      await dir.delete(recursive: true);
+    });
+
+    test('attaching an app-rendered srt turns the embedded track off', () {
+      expect(delegate.activeSubtitleTracks, [0]);
+      manager.setExternalSubtitle(srt.path);
+      expect(manager.getAllActiveExternalSubtitlePaths(), [srt.path]);
+      expect(delegate.activeSubtitleTracks, isEmpty);
+    });
+
+    test('stacking an srt via the stack also turns the embedded track off',
+        () async {
+      await manager.addExternalSubtitleToStack(srt.path);
+      expect(delegate.activeSubtitleTracks, isEmpty);
+    });
+
+    test('choosing an embedded track detaches the external subtitle', () {
+      manager.setExternalSubtitle(srt.path);
+      manager.selectEmbeddedSubtitleTrack(0);
+      expect(manager.getAllActiveExternalSubtitlePaths(), isEmpty);
+      expect(delegate.activeSubtitleTracks, [0]);
+    });
+
+    test('turning subtitles off clears both sides', () {
+      manager.setExternalSubtitle(srt.path);
+      manager.selectEmbeddedSubtitleTrack(-1);
+      expect(manager.getAllActiveExternalSubtitlePaths(), isEmpty);
+      expect(delegate.activeSubtitleTracks, isEmpty);
+
+      delegate.activeSubtitleTracks = [2];
+      manager.selectEmbeddedSubtitleTrack(-1);
+      expect(delegate.activeSubtitleTracks, isEmpty);
+    });
+
+    test('a kernel-rendered external track keeps its existing behavior', () {
+      manager.setExternalSubtitle(ass.path);
+      expect(manager.getAllActiveExternalSubtitlePaths(), [ass.path]);
+      expect(manager.externalSubtitleRenderedInApp(ass.path), isFalse);
+      expect(delegate.mediaSet, [ass.path]);
+      expect(delegate.activeSubtitleTracks, [0]);
+    });
+
+    test('stacking an srt keeps a kernel-rendered external track alive', () async {
+      manager.setExternalSubtitle(ass.path);
+      await manager.addExternalSubtitleToStack(srt.path);
+      expect(manager.getAllActiveExternalSubtitlePaths(),
+          containsAll(<String>[ass.path, srt.path]));
+      expect(delegate.activeSubtitleTracks, [0]);
+    });
   });
 }

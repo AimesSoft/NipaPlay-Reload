@@ -6,6 +6,7 @@ import 'package:crypto/crypto.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:path/path.dart' as p;
 import 'subtitle_parser.dart';
+import 'subtitle_timeline_index.dart';
 import 'storage_service.dart';
 import '../../player_abstraction/player_abstraction.dart';
 import 'package:nipaplay/services/remote_subtitle_service.dart';
@@ -38,10 +39,10 @@ class SubtitleManager extends ChangeNotifier {
   String? _currentExternalSubtitlePath;
   final Map<String, Map<String, dynamic>> _subtitleTrackInfo = {};
   final Map<String, List<dynamic>> _subtitleCache = {};
+  final Expando<SubtitleTimelineIndex> _subtitleIndexes = Expando();
 
   /// [某字幕路径] 最近一次查询的结果缓存：命中窗口内直接返回文本，
   /// 避免每帧二分/扫描。entries 与 _subtitleCache 同引用时才可信。
-  final Map<String, _SubtitleLookupResult> _subtitleLookupCache = {};
 
   /// 解析结果缓存上限：一份剧场版字幕解析后约 0.5-2MB，不设上限的话
   /// 本次会话挂载过的每一份字幕都驻留到进程退出。超出上限按插入序淘汰
@@ -53,7 +54,6 @@ class SubtitleManager extends ChangeNotifier {
     if (_activeExternalSubtitlePaths.contains(path)) return;
     _subtitleCache.remove(path);
     _subtitleCacheFingerprint.remove(path);
-    _subtitleLookupCache.remove(path);
   }
 
   /// 缓存超限时按插入序（最旧优先）淘汰非激活条目。
@@ -68,6 +68,7 @@ class SubtitleManager extends ChangeNotifier {
   /// 缓存指纹：path -> "size:mtime"，用于检测字幕文件内容变化
   final Map<String, String> _subtitleCacheFingerprint = {};
   int _subtitleLoadToken = 0;
+  Future<void> _pendingExternalSubtitleLoad = Future<void>.value();
 
   // 视频-字幕路径映射的持久化存储键
   static const String _videoSubtitleMapKey = 'video_subtitle_map';
@@ -96,6 +97,7 @@ class SubtitleManager extends ChangeNotifier {
 
   // 设置当前视频路径
   void setCurrentVideoPath(String? path) {
+    if (_currentVideoPath != path) ++_subtitleLoadToken;
     _currentVideoPath = path;
     // 副字幕轨随视频/内核实例重置：新 adapter 的 secondary-sid 默认 no，
     // 状态必须同步清掉，否则菜单残留已失效的勾选。
@@ -193,8 +195,7 @@ class SubtitleManager extends ChangeNotifier {
   Map<String, double> _defaultDisplayState({int staggerDepth = 0}) =>
       <String, double>{
         'delay': 0.0,
-        'position':
-            (globalPositionSeed - 20 * staggerDepth).clamp(30.0, 100.0),
+        'position': (globalPositionSeed - 20 * staggerDepth).clamp(30.0, 100.0),
         'marginX': globalMarginSeed,
       };
 
@@ -223,6 +224,7 @@ class SubtitleManager extends ChangeNotifier {
   Future<bool> _loadPathDisplayState(String path) async {
     try {
       final prefs = await SharedPreferences.getInstance();
+      if (!_activeExternalSubtitlePaths.contains(path)) return false;
       final raw = prefs.getString(_pathDisplayStateKey(path));
       if (raw == null || raw.isEmpty) return false;
       final decoded = json.decode(raw);
@@ -347,6 +349,23 @@ class SubtitleManager extends ChangeNotifier {
     if (!_shouldRenderExternalSubtitleInApp(path)) return '';
     return _textAtPath(path, positionMs);
   }
+
+  /// 所有 SRT/VTT 外挂字幕共用的时轴偏移（秒；设置项 `srt_subtitle_delay`）。
+  /// 由 VideoPlayerState 在读取/修改该设置时同步进来。
+  double srtDelaySeconds = 0.0;
+
+  /// 叠层里这条外挂字幕此刻的总偏移（毫秒；正值延后，负值提前）：
+  /// SRT/VTT 先加共用的 SRT 偏移，再加这条字幕自己的偏移；ASS/SSA 只有自己的偏移。
+  int overlayDelayMs(String path) {
+    final extension = p.extension(path).toLowerCase();
+    final shared =
+        extension == '.srt' || extension == '.vtt' ? srtDelaySeconds : 0.0;
+    return ((shared + pathDelaySeconds(path)) * 1000).round();
+  }
+
+  /// 叠层此刻给出的这条外挂字幕的那一行：播放位置减去总偏移后查表。
+  String overlayTextAt(String path, int playbackMs) =>
+      pathSubtitleTextAt(path, playbackMs - overlayDelayMs(path));
 
   // 获取当前活跃的外部字幕文件路径
   String? getActiveExternalSubtitlePath() {
@@ -479,9 +498,7 @@ class SubtitleManager extends ChangeNotifier {
         // 仅对文本字幕进行预解析，图像字幕(.sup)与 VobSub 二进制(.sub 头部
         // 为 MPEG-PS)直接交给播放器，不做文本级解析
         final extension = p.extension(path).toLowerCase();
-        if (extension == '.ass' ||
-            extension == '.srt' ||
-            extension == '.ssa') {
+        if (extension == '.ass' || extension == '.srt' || extension == '.ssa') {
           final result = await SubtitleParser.parseSubtitleFile(
             path,
             allowUnknownFormat: true,
@@ -490,7 +507,7 @@ class SubtitleManager extends ChangeNotifier {
           _subtitleCacheFingerprint[path] = fingerprint;
           _enforceSubtitleCacheBudget();
           notifyListeners();
-        } else if (extension == '.sup') {
+        } else if (extension == '.sup' || extension == '.idx') {
           debugPrint('SubtitleManager: 检测到sup字幕，跳过文本解析');
         } else if (extension == '.sub') {
           // .sub 可能是 VobSub 二进制或 MicroDVD 文本：只读前 4 字节嗅探
@@ -548,10 +565,35 @@ class SubtitleManager extends ChangeNotifier {
     return sha1.convert(utf8.encode(videoPath)).toString();
   }
 
+  Future<void> _subtitlePersistence = Future<void>.value();
+
   Future<void> _persistExternalSubtitleSelection({
     required String videoPath,
     required String subtitlePath,
     required bool isActive,
+    String? displayName,
+    bool registerOnly = false,
+  }) {
+    final activePaths = Set<String>.from(_activeExternalSubtitlePaths);
+    final primaryPath = _currentExternalSubtitlePath;
+    return _subtitlePersistence = _subtitlePersistence.then((_) =>
+        _writeExternalSubtitleSelection(
+            videoPath: videoPath,
+            subtitlePath: subtitlePath,
+            isActive: isActive,
+            displayName: displayName,
+            registerOnly: registerOnly,
+            activePaths: activePaths,
+            primaryPath: primaryPath));
+  }
+
+  Future<void> _writeExternalSubtitleSelection({
+    required String videoPath,
+    required String subtitlePath,
+    required bool isActive,
+    required bool registerOnly,
+    required Set<String> activePaths,
+    required String? primaryPath,
     String? displayName,
   }) async {
     try {
@@ -579,8 +621,11 @@ class SubtitleManager extends ChangeNotifier {
         }
       }
 
-      // 移除同路径条目，并把当前字幕置顶（方便选择）
-      subtitles.removeWhere((s) => s['path'] == subtitlePath);
+      final existingIndex =
+          subtitles.indexWhere((s) => s['path'] == subtitlePath);
+      final existing = existingIndex < 0
+          ? <String, dynamic>{}
+          : subtitles.removeAt(existingIndex);
 
       // 旧版本持久化过的条目可能存的是哈希文件名（远程缓存路径），
       // 用下载时登记的持久化注册表修正显示名（不依赖本次会话内存注册，
@@ -603,24 +648,47 @@ class SubtitleManager extends ChangeNotifier {
 
       // 将所有字幕设为非激活
       for (final s in subtitles) {
-        s['isActive'] = false;
+        final entryPath = s['path']?.toString() ?? '';
+        if (entryPath.isEmpty) continue;
+        final entryName = s['name']?.toString() ?? '';
+        final isHashNamed = entryName.isEmpty ||
+            (entryName == p.basename(entryPath) &&
+                entryPath.contains('remote_subtitles'));
+        if (!isHashNamed) continue;
+        final registered = _pathDisplayNames[entryPath] ??
+            await RemoteSubtitleService.instance.lookupDisplayName(entryPath);
+        if (registered != null && registered.isNotEmpty) {
+          s['name'] = registered;
+        }
       }
 
-      final now = DateTime.now().millisecondsSinceEpoch;
-      subtitles.insert(0, <String, dynamic>{
+      final entry = <String, dynamic>{
+        ...existing,
         'path': subtitlePath,
-        // 缓存文件名是哈希，优先用调用方登记的原名
-        'name': displayName ?? p.basename(subtitlePath),
+        'name': displayName ?? existing['name'] ?? p.basename(subtitlePath),
         'type': p.extension(subtitlePath).toLowerCase().replaceFirst('.', ''),
-        'addTime': now,
-        'isActive': isActive,
-      });
-
+        'addTime': existing['addTime'] ?? DateTime.now().millisecondsSinceEpoch,
+        'isActive': registerOnly ? (existing['isActive'] ?? false) : isActive,
+      };
+      // Keep indices stable: menus may already be displaying this list.
+      if (existingIndex < 0) {
+        subtitles.add(entry);
+      } else {
+        subtitles.insert(existingIndex, entry);
+      }
+      if (!registerOnly) {
+        for (final item in subtitles) {
+          item['isActive'] = activePaths.contains(item['path']);
+        }
+      }
       await prefs.setString(subtitlesKey, json.encode(subtitles));
-
       final lastActiveKey = 'last_active_subtitle_$videoHashKey';
-      if (isActive) {
-        await prefs.setInt(lastActiveKey, 0);
+      var activeIndex = subtitles
+          .indexWhere((s) => s['path'] == primaryPath && s['isActive'] == true);
+      if (activeIndex < 0)
+        activeIndex = subtitles.indexWhere((s) => s['isActive'] == true);
+      if (activeIndex >= 0) {
+        await prefs.setInt(lastActiveKey, activeIndex);
       } else {
         await prefs.remove(lastActiveKey);
       }
@@ -659,8 +727,8 @@ class SubtitleManager extends ChangeNotifier {
     // external_subtitles 里没有（或仍是哈希名）：查远程字幕下载时登记的
     // 持久化注册表（跨进程/跨平台可用，不依赖本次会话的内存注册）。
     try {
-      final registered = await RemoteSubtitleService.instance
-          .lookupDisplayName(subtitlePath);
+      final registered =
+          await RemoteSubtitleService.instance.lookupDisplayName(subtitlePath);
       if (registered != null) return registered;
     } catch (_) {}
     return null;
@@ -671,7 +739,19 @@ class SubtitleManager extends ChangeNotifier {
     bool resetManualFlag = true,
     bool clearPlayer = true,
   }) {
-    if (clearPlayer) {
+    ++_subtitleLoadToken;
+    // SRT/VTT only live in the app overlay. With no native external subtitle,
+    // clearing this state must not unload media or disable embedded tracks.
+    // resetPlayer clears again on idle and before reopening, while MDK may
+    // still be stopping: changing its subtitle tracks then can strand the
+    // decoder and make fvp's next prepare wait for Stopped forever.
+    final currentPath = _currentExternalSubtitlePath;
+    final hasNativeExternalSubtitle =
+        (currentPath != null &&
+            !_shouldRenderExternalSubtitleInApp(currentPath)) ||
+        _activeExternalSubtitlePaths
+            .any((path) => !_shouldRenderExternalSubtitleInApp(path));
+    if (clearPlayer && hasNativeExternalSubtitle) {
       try {
         if (_player.supportsExternalSubtitles) {
           _player.setMedia("", MediaType.subtitle);
@@ -729,6 +809,11 @@ class SubtitleManager extends ChangeNotifier {
       {bool isManualSetting = false,
       String? displayName,
       bool preserveStack = false}) {
+    if (path.isNotEmpty && !isVobSubPairComplete(path)) {
+      onUserNotification?.call('VobSub 字幕需要同名 .sub 与 .idx 文件');
+      return;
+    }
+    path = canonicalSubtitlePath(path);
     if (path.isNotEmpty && displayName != null) {
       registerPathDisplayName(path, displayName);
     }
@@ -758,8 +843,10 @@ class SubtitleManager extends ChangeNotifier {
       if (path.isNotEmpty && File(path).existsSync()) {
         final shouldRenderInApp = _shouldRenderExternalSubtitleInApp(path);
         final shouldFixEncoding = _shouldFixExternalSubtitleEncoding();
+        _currentExternalSubtitlePath = path;
         if (shouldRenderInApp) {
-          _activateAppRenderedExternalSubtitle(path);
+          _activateAppRenderedExternalSubtitle(path,
+              keepKernelExternal: preserveStack);
         } else if (!shouldFixEncoding) {
           // 设置外部字幕文件
           _loadExternalSubtitleIntoPlayer(
@@ -770,7 +857,7 @@ class SubtitleManager extends ChangeNotifier {
         } else {
           // 对 MDK / Media Kit 预处理字幕编码，避免 UTF-16 直接喂给内核导致崩溃
           unawaited(
-            _loadExternalSubtitleWithEncodingFix(
+            _pendingExternalSubtitleLoad = _loadExternalSubtitleWithEncodingFix(
               path,
               loadToken,
               previousSubtitleTrackSignatures: previousSubtitleTrackSignatures,
@@ -778,13 +865,14 @@ class SubtitleManager extends ChangeNotifier {
           );
         }
 
-        // 更新内部路径，如果是手动设置的，特别标记以避免被内嵌字幕覆盖
-        _currentExternalSubtitlePath = path;
         // 字体预取后的 ASS 重载不应丢掉已叠加的 SRT/VTT。
-        if (!preserveStack || !_activeExternalSubtitlePaths.contains(path)) {
-          _activeExternalSubtitlePaths
-            ..clear()
-            ..add(path);
+        if (!preserveStack) _activeExternalSubtitlePaths.clear();
+        if (!shouldRenderInApp) {
+          _activeExternalSubtitlePaths.removeWhere((other) =>
+              other != path && !_shouldRenderExternalSubtitleInApp(other));
+        }
+        if (!_activeExternalSubtitlePaths.contains(path)) {
+          _activeExternalSubtitlePaths.add(path);
         }
         unawaited(_autoPlaceExternalSubtitleIfNeeded(path));
 
@@ -809,6 +897,7 @@ class SubtitleManager extends ChangeNotifier {
             _persistExternalSubtitleSelection(
               videoPath: _currentVideoPath!,
               subtitlePath: path,
+              displayName: displayName ?? displayNameForPath(path),
               isActive: true,
             ),
           );
@@ -816,8 +905,6 @@ class SubtitleManager extends ChangeNotifier {
 
         debugPrint('SubtitleManager: 外部字幕设置成功');
       } else if (path.isEmpty) {
-        _activeExternalSubtitlePaths.clear();
-        _pathDisplayState.clear();
         _clearExternalSubtitleState();
         debugPrint('SubtitleManager: 外部字幕已清除');
       } else {
@@ -835,13 +922,17 @@ class SubtitleManager extends ChangeNotifier {
   /// 取消挂载一条外部字幕（从叠层/堆栈移除 + 清内核轨）
   Future<void> removeExternalSubtitleFromStack(String path) async {
     if (path.isEmpty) return;
+    path = canonicalSubtitlePath(path);
+    if (!_shouldRenderExternalSubtitleInApp(path)) ++_subtitleLoadToken;
     _activeExternalSubtitlePaths.remove(path);
     _pathDisplayState.remove(path);
     // 移除即释放解析缓存：剧场版字幕解析结果 0.5-2MB，取消挂载后
     // 没有理由驻留；重新挂载时 preloadSubtitleFile 会重新解析。
     _evictSubtitleCache(path);
     if (_currentExternalSubtitlePath == path) {
-      _currentExternalSubtitlePath = '';
+      _currentExternalSubtitlePath = _activeExternalSubtitlePaths.isEmpty
+          ? null
+          : _activeExternalSubtitlePaths.last;
     }
     // 只有非叠层（占内核轨的 ASS/SSA）才清内核轨；叠层 SRT 移除不动内嵌轨
     if (!_shouldRenderExternalSubtitleInApp(path)) {
@@ -855,17 +946,17 @@ class SubtitleManager extends ChangeNotifier {
         // BUG-A：外挂（占 sid 的 ASS/SSA）移除后必须回退内嵌轨——
         // 之前 sid=no 就结束，只剩内嵌时位置滑块/延迟全打在空轨道上，
         // 用户感知为「移除外挂后滑块拖不动内嵌」。
-        final stillKernelExternal = _activeExternalSubtitlePaths.any(
-            (p) => !_shouldRenderExternalSubtitleInApp(p));
+        final stillKernelExternal = _activeExternalSubtitlePaths
+            .any((p) => !_shouldRenderExternalSubtitleInApp(p));
         final embeddedTracks = _player.mediaInfo.subtitle;
-        if (!stillKernelExternal && embeddedTracks != null &&
+        if (!stillKernelExternal &&
+            embeddedTracks != null &&
             embeddedTracks.isNotEmpty) {
-          final restore = _lastSelectedEmbeddedTrackIndex
-              .clamp(0, embeddedTracks.length - 1);
+          final restore = _lastSelectedEmbeddedTrackIndex.clamp(
+              0, embeddedTracks.length - 1);
           try {
             _player.activeSubtitleTracks = [restore];
-            debugPrint(
-                'SubtitleManager: 移除外挂后回退内嵌轨 index=$restore');
+            debugPrint('SubtitleManager: 移除外挂后回退内嵌轨 index=$restore');
           } catch (e) {
             debugPrint('SubtitleManager: 回退内嵌轨失败: $e');
           }
@@ -874,57 +965,83 @@ class SubtitleManager extends ChangeNotifier {
         debugPrint('SubtitleManager: 清除字幕轨失败: $e');
       }
     }
+    final primary = _currentExternalSubtitlePath;
     updateSubtitleTrackInfo('external_subtitle', <String, dynamic>{
-      'path': path,
-      'title': displayNameForPath(path),
-      'isActive': false,
+      'path': primary,
+      'title': primary == null ? '' : displayNameForPath(primary),
+      'isActive': primary != null,
       'isManualSet': true,
     });
+    if (_currentVideoPath != null) {
+      await _persistExternalSubtitleSelection(
+          videoPath: _currentVideoPath!, subtitlePath: path, isActive: false);
+    }
     onSubtitleTrackChanged();
     notifyListeners();
   }
 
+  /// Add a choice to the menu without changing playback or the saved primary.
+  Future<void> registerExternalSubtitleCandidate(String path,
+      {String? displayName}) async {
+    final videoPath = _currentVideoPath;
+    if (videoPath == null || path.isEmpty || !isVobSubPairComplete(path))
+      return;
+    path = canonicalSubtitlePath(path);
+    if (displayName != null) registerPathDisplayName(path, displayName);
+    await _persistExternalSubtitleSelection(
+      videoPath: videoPath,
+      subtitlePath: path,
+      isActive: false,
+      displayName: displayName ?? displayNameForPath(path),
+      registerOnly: true,
+    );
+  }
+
+  /// Explicit user activation: app-rendered tracks stack; native tracks replace
+  /// the previous native track while retaining all app-rendered tracks.
   Future<void> addExternalSubtitleToStack(String path,
       {String? displayName}) async {
-    if (path.isEmpty) return;
-    if (displayName != null) {
-      registerPathDisplayName(path, displayName);
-    }
-    final file = File(path);
-    if (!await file.exists()) {
-      debugPrint('SubtitleManager: 叠加字幕文件不存在: $path');
-      return;
-    }
-    if (_activeExternalSubtitlePaths.contains(path)) {
-      return;
-    }
-    // 未有记忆状态时按叠加深度错开默认位置
+    if (path.isEmpty || !isVobSubPairComplete(path)) return;
+    path = canonicalSubtitlePath(path);
+    final loadToken = _subtitleLoadToken;
+    if (!await File(path).exists() || loadToken != _subtitleLoadToken) return;
+    if (_activeExternalSubtitlePaths.contains(path)) return;
     _pathDisplayState.putIfAbsent(
-      path,
-      () => _defaultDisplayState(
-          staggerDepth: _activeExternalSubtitlePaths.length),
-    );
-    _activeExternalSubtitlePaths.add(path);
-    unawaited(_autoPlaceExternalSubtitleIfNeeded(path));
+        path,
+        () => _defaultDisplayState(
+            staggerDepth: _activeExternalSubtitlePaths.length));
     if (_shouldRenderExternalSubtitleInApp(path)) {
-      // 叠层字幕（SRT/VTT）：App 内逐条渲染，不影响其它条目
-      _activateAppRenderedExternalSubtitle(path);
+      if (displayName != null) registerPathDisplayName(path, displayName);
+      _activeExternalSubtitlePaths.add(path);
+      unawaited(_loadPathDisplayState(path));
+      _activateAppRenderedExternalSubtitle(path, keepKernelExternal: true);
+      if (!_activeExternalSubtitlePaths
+          .contains(_currentExternalSubtitlePath)) {
+        _currentExternalSubtitlePath = path;
+      }
+      final primary = _currentExternalSubtitlePath!;
+      updateSubtitleTrackInfo('external_subtitle', {
+        'path': primary,
+        'title': displayNameForPath(primary),
+        'isActive': true,
+        'isManualSet': true,
+      });
+      if (_currentVideoPath != null) {
+        await _persistExternalSubtitleSelection(
+            videoPath: _currentVideoPath!,
+            subtitlePath: path,
+            isActive: true,
+            displayName: displayName ?? displayNameForPath(path));
+        await saveVideoSubtitleMapping(_currentVideoPath!, primary);
+      }
+      onSubtitleTrackChanged();
+      notifyListeners();
     } else {
-      // 内核轨字幕（ASS/SSA 等）：只登记进堆栈，**不抢占当前激活的字幕**
-      // （不再 setMedia）。叠挂 = 进入轨道列表供用户切换；画面继续显示
-      // 原先激活的字幕，用户从菜单点选时才经 setExternalSubtitle 真正
-      // 挂载。此前每次叠挂都 setMedia，导致叠挂结束后内核激活的是最后
-      // 一条叠挂字幕（勾 SC 播 TC 的根因）。
+      setExternalSubtitle(path,
+          isManualSetting: true, displayName: displayName, preserveStack: true);
+      await _pendingExternalSubtitleLoad;
+      await _subtitlePersistence;
     }
-    unawaited(preloadSubtitleFile(path));
-    updateSubtitleTrackInfo('external_subtitle', <String, dynamic>{
-      'path': path,
-      'title': displayNameForPath(path),
-      'isActive': false,
-      'isManualSet': false,
-    });
-    onSubtitleTrackChanged();
-    notifyListeners();
   }
 
   Future<void> activateEmbyExternalSubtitle(
@@ -1008,11 +1125,43 @@ class SubtitleManager extends ChangeNotifier {
     return false;
   }
 
-  void _activateAppRenderedExternalSubtitle(String path) {
-    // 多字幕分块渲染：外挂字幕（SRT/ASS）走 Flutter 叠层，与内嵌轨共存，
-    // 不再清内核字幕轨/选择——否则挂载外挂会顶掉用户选好的内嵌轨。
+  void _activateAppRenderedExternalSubtitle(String path,
+      {bool keepKernelExternal = false}) {
+    // 同一时间只显示一条字幕：外挂字幕走 Flutter 叠层渲染，内核里选中的内嵌轨
+    // 会同时出画面，所以挂载时先关掉内核的内嵌轨。叠加挂载时若内核正在渲染外挂
+    // ASS/SSA（占 sid），则保持不动。
+    final kernelExternalActive = keepKernelExternal &&
+        _activeExternalSubtitlePaths.any(
+            (other) => other != path && !_shouldRenderExternalSubtitleInApp(other));
+    if (!kernelExternalActive) {
+      try {
+        if (_player.activeSubtitleTracks.isNotEmpty) {
+          _player.activeSubtitleTracks = [];
+        }
+      } catch (e) {
+        debugPrint('SubtitleManager: 关闭内嵌字幕轨失败: $e');
+      }
+    }
     unawaited(preloadSubtitleFile(path));
     debugPrint('SubtitleManager: 使用应用内叠层渲染外挂字幕: $path');
+  }
+
+  /// 在字幕菜单里选内嵌轨（[trackIndex] >= 0）或关闭字幕（< 0）：
+  /// 先摘掉所有外挂字幕（叠层与内核轨），再选内嵌轨，保证同一时间只显示一条。
+  void selectEmbeddedSubtitleTrack(int trackIndex) {
+    setExternalSubtitle('');
+    try {
+      if (trackIndex >= 0) {
+        _lastSelectedEmbeddedTrackIndex = trackIndex;
+        _player.activeSubtitleTracks = [trackIndex];
+      } else {
+        _player.activeSubtitleTracks = [];
+      }
+    } catch (e) {
+      debugPrint('SubtitleManager: 切换内嵌字幕轨失败: $e');
+    }
+    onSubtitleTrackChanged();
+    notifyListeners();
   }
 
   /// 该外挂字幕是否走 App 叠层渲染（false = 内核轨，如 libmpv 的 ASS/SSA）
@@ -1160,8 +1309,7 @@ class SubtitleManager extends ChangeNotifier {
   bool shouldRenderCurrentExternalSubtitleInApp() {
     // 多字幕分块渲染：以激活路径集合为准——取消其中一条不能让
     // 其他仍在叠加的字幕块跟着消失（旧实现读单条当前路径）。
-    if (_activeExternalSubtitlePaths
-        .any(_shouldRenderExternalSubtitleInApp)) {
+    if (_activeExternalSubtitlePaths.any(_shouldRenderExternalSubtitleInApp)) {
       return true;
     }
     // 旧单路径回退（集合为空时保持旧行为：无激活则隐藏）
@@ -1192,59 +1340,14 @@ class SubtitleManager extends ChangeNotifier {
     if (!_shouldRenderExternalSubtitleInApp(path)) return '';
 
     final cachedEntries = _subtitleCache[path];
-    if (cachedEntries == null || cachedEntries.isEmpty) {
+    if (cachedEntries == null) {
       unawaited(preloadSubtitleFile(path));
       return '';
     }
 
-    // 热路径（每 vsync 被 ExternalSubtitleOverlay 调用）：
-    // 缓存条目已按 startTimeMs 排序（Dart/C++ 解析路径均保证），
-    // 用二分定位窗口起点 + 结果缓存，替代每帧 O(n) 全量线性扫描。
-    final cachedResult = _subtitleLookupCache[path];
-    if (cachedResult != null &&
-        identical(cachedResult.entries, cachedEntries) &&
-        positionMs >= cachedResult.fromMs &&
-        positionMs <= cachedResult.toMs) {
-      return cachedResult.text;
-    }
-
-    final activeContents = <String>[];
-    // 二分找第一条 endTimeMs >= positionMs 的条目：更早的条目不可能覆盖
-    // 当前时间点（endTimeMs 随 startTimeMs 单调不减——同一条目自身除外）。
-    var lo = 0;
-    var hi = cachedEntries.length;
-    while (lo < hi) {
-      final mid = (lo + hi) >> 1;
-      final entry = cachedEntries[mid];
-      final endMs = entry is SubtitleEntry ? entry.endTimeMs : 0;
-      if (endMs < positionMs) {
-        lo = mid + 1;
-      } else {
-        hi = mid;
-      }
-    }
-
-    var windowEndMs = positionMs;
-    for (var i = lo; i < cachedEntries.length; i++) {
-      final entry = cachedEntries[i];
-      if (entry is! SubtitleEntry) continue;
-      if (entry.startTimeMs > positionMs) break;
-      if (entry.endTimeMs < positionMs) continue;
-      final content = entry.content.trim();
-      if (content.isEmpty || activeContents.contains(content)) continue;
-      activeContents.add(content);
-      // 覆盖当前时间点的条目中最早结束者决定结果有效窗口的上界
-      if (entry.endTimeMs < windowEndMs) windowEndMs = entry.endTimeMs;
-    }
-
-    final text = activeContents.join('\n');
-    _subtitleLookupCache[path] = _SubtitleLookupResult(
-      entries: cachedEntries,
-      fromMs: positionMs,
-      toMs: windowEndMs,
-      text: text,
-    );
-    return text;
+    final index = _subtitleIndexes[cachedEntries] ??=
+        SubtitleTimelineIndex(cachedEntries.whereType<SubtitleEntry>());
+    return index.textAt(positionMs);
   }
 
   List<String> _snapshotCurrentSubtitleTrackSignatures() {
@@ -1427,7 +1530,7 @@ class SubtitleManager extends ChangeNotifier {
       if (kIsWeb) return;
 
       final extension = p.extension(sourcePath).toLowerCase();
-      if (extension == '.sup') {
+      if (extension == '.sup' || extension == '.idx') {
         if (loadToken != _subtitleLoadToken) return;
         if (_currentExternalSubtitlePath != sourcePath) return;
         _loadExternalSubtitleIntoPlayer(
@@ -1590,14 +1693,19 @@ class SubtitleManager extends ChangeNotifier {
     if (MediaSourceUtils.isContentUri(videoPath)) {
       return;
     }
+    var detectionToken = _subtitleLoadToken;
+    bool isCurrent() =>
+        _currentVideoPath == videoPath && detectionToken == _subtitleLoadToken;
+    if (!isCurrent()) return;
     try {
       debugPrint('SubtitleManager: 自动检测字幕文件...');
 
       // 首先检查是否有保存的字幕路径
       String? savedSubtitlePath = await getVideoSubtitlePath(videoPath);
+      if (!isCurrent()) return;
       if (savedSubtitlePath != null && savedSubtitlePath.isNotEmpty) {
         // 恢复持久化时登记的显示名（缓存文件名是哈希，不能用 basename）
-        final savedDisplayName = await _lookupPersistedDisplayName(
+        var savedDisplayName = await _lookupPersistedDisplayName(
           videoPath: videoPath,
           subtitlePath: savedSubtitlePath,
         );
@@ -1606,46 +1714,46 @@ class SubtitleManager extends ChangeNotifier {
         // 内存重、日文为主。保存的映射是 sub/idx 时改选候选中的文本字幕
         // （SC/简中优先，TC 次选），sub/idx 转为叠挂候选。
         final savedExt = p.extension(savedSubtitlePath).toLowerCase();
-        if (savedExt == '.sub' || savedExt == '.idx') {
-          debugPrint(
-              'SubtitleManager: 保存的字幕是 VobSub($savedExt)，改选文本字幕为主');
+        if (isVobSubBinaryFile(savedSubtitlePath) || savedExt == '.idx') {
+          debugPrint('SubtitleManager: 保存的字幕是 VobSub($savedExt)，改选文本字幕为主');
           final replacement = _pickTextSubtitleReplacement(
             videoPath: videoPath,
             excludePath: savedSubtitlePath,
           );
           if (replacement != null) {
-            debugPrint(
-                'SubtitleManager: VobSub 主字幕替换为: $replacement');
+            debugPrint('SubtitleManager: VobSub 主字幕替换为: $replacement');
             saveVideoSubtitleMapping(videoPath, replacement);
             savedSubtitlePath = replacement;
+            savedDisplayName = p.basename(replacement);
           }
         }
         debugPrint('SubtitleManager: 找到保存的字幕映射: $savedSubtitlePath');
 
         // 检查字幕文件是否存在
         final subtitleFile = File(savedSubtitlePath);
-        if (subtitleFile.existsSync()) {
+        if (subtitleFile.existsSync() &&
+            isVobSubPairComplete(savedSubtitlePath)) {
           debugPrint('SubtitleManager: 加载上次使用的外部字幕: $savedSubtitlePath');
 
           // 等待一段时间确保播放器准备好
           await Future.delayed(_autoLoadPlayerReadyDelay);
 
+          if (!isCurrent()) return;
           // 设置外部字幕（标记为手动设置，因为这是用户曾经手动选择过的）
           setExternalSubtitle(savedSubtitlePath,
               isManualSetting: true, displayName: savedDisplayName);
+          detectionToken = _subtitleLoadToken;
 
-          // 命中保存映射同样把其余候选叠挂进轨道列表（评分最佳已激活，
-          // 其余供手动切换），否则恢复路径只挂一条。
-          // 本地：扫描视频目录（同名+目录模糊候选，含 sub/idx 成对校验）；
-          // 远程：拉候选列表下载缓存。与全新加载路径的类型范围保持一致。
-          unawaited(_stackRemainingSubtitlesAfterRestore(
+          // Restore the menu choices without activating additional subtitles.
+          await _registerRemainingSubtitlesAfterRestore(
             videoPath: videoPath,
             savedSubtitlePath: savedSubtitlePath,
-          ));
+          );
 
           // 设置完成后强制刷新状态
           await Future.delayed(_autoLoadStateSettleDelay);
 
+          if (!isCurrent()) return;
           // 触发自动加载字幕回调
           if (onExternalSubtitleAutoLoaded != null) {
             final fileName = p.basename(savedSubtitlePath);
@@ -1677,15 +1785,17 @@ class SubtitleManager extends ChangeNotifier {
                 .resolveVideoPathForMatching(videoPath);
             final matchPath =
                 resolvedMatchPath.isNotEmpty ? resolvedMatchPath : videoPath;
-            final selected = _pickRemoteSubtitleCandidate(
-              candidates,
-              matchPath,
-            );
+            if (!isCurrent()) return;
+            final matching = candidates
+                .where((c) => _remoteCandidateMatchesVideo(matchPath, c))
+                .toList();
+            if (matching.isEmpty) return;
+            final selected = _pickRemoteSubtitleCandidate(matching, matchPath);
             if (kDebugMode)
               debugPrint(
                   '[FONT_DEBUG] 选中字幕: ${selected.name}, extension=${selected.extension}');
-            final cachedPath = await RemoteSubtitleService.instance
-                .ensureSubtitleCached(
+            final cachedPath =
+                await RemoteSubtitleService.instance.ensureSubtitleCached(
               selected,
               allCandidates: candidates,
             );
@@ -1699,15 +1809,49 @@ class SubtitleManager extends ChangeNotifier {
             await Future.delayed(_autoLoadPlayerReadyDelay);
 
             // 设置外部字幕（不标记为手动设置，因为是自动检测的）
+            if (!isCurrent()) return;
             setExternalSubtitle(cachedPath,
-                isManualSetting: false,
-                displayName: selected.name);
+                isManualSetting: false, displayName: selected.name);
+            detectionToken = _subtitleLoadToken;
             await _persistExternalSubtitleSelection(
               videoPath: videoPath,
               subtitlePath: cachedPath,
               isActive: true,
               displayName: selected.name,
             );
+
+            // 保存这个自动找到的字幕路径，下次可以直接使用
+            saveVideoSubtitleMapping(videoPath, cachedPath);
+
+            // Register same-video alternatives without changing playback.
+            final registeredPaths = <String>{cachedPath};
+            for (final other in matching) {
+              if (!isCurrent()) return;
+              if (identical(other, selected)) continue;
+              try {
+                final otherPath =
+                    await RemoteSubtitleService.instance.ensureSubtitleCached(
+                  other,
+                  allCandidates: candidates,
+                );
+                if (!isCurrent()) return;
+                if (!registeredPaths.add(otherPath)) continue;
+                await registerExternalSubtitleCandidate(otherPath,
+                    displayName: other.name);
+                debugPrint('SubtitleManager: 登记候选字幕 ${other.name}');
+              } catch (e) {
+                debugPrint('SubtitleManager: 登记候选字幕 ${other.name} 失败: $e');
+              }
+            }
+
+            // 设置完成后强制刷新状态
+            await Future.delayed(_autoLoadStateSettleDelay);
+
+            if (!isCurrent()) return;
+            // 触发自动加载字幕回调
+            if (onExternalSubtitleAutoLoaded != null) {
+              onExternalSubtitleAutoLoaded!(cachedPath, selected.name);
+            }
 
             // 后台下载远程字体，完成后重新加载字幕使字体生效
             _prefetchRemoteFontsForSubtitle(videoPath, cachedPath).then((_) {
@@ -1740,47 +1884,6 @@ class SubtitleManager extends ChangeNotifier {
               }
             });
 
-            // 保存这个自动找到的字幕路径，下次可以直接使用
-            saveVideoSubtitleMapping(videoPath, cachedPath);
-
-            // 其余候选也叠挂进轨道列表（多语言 ASS、SRT 等全部纳入，
-            // 供手动切换；内核 sid 单轨显示，叠挂的 ASS 仍只有激活条目
-            // 可见）。.idx 与主选字幕同源成对，避免重复下载叠挂。
-            for (final other in candidates) {
-              if (identical(other, selected)) continue;
-              final otherExt = other.extension.toLowerCase();
-              if (otherExt == '.idx' &&
-                  p.setExtension(selected.name, '.').toLowerCase() ==
-                      p.setExtension(other.name, '.').toLowerCase()) {
-                continue;
-              }
-              if (otherExt == '.sub' &&
-                  p.setExtension(selected.name, '.').toLowerCase() ==
-                      p.setExtension(other.name, '.').toLowerCase()) {
-                continue;
-              }
-              try {
-                final otherPath = await RemoteSubtitleService.instance
-                    .ensureSubtitleCached(
-                  other,
-                  allCandidates: candidates,
-                );
-                await addExternalSubtitleToStack(otherPath,
-                    displayName: other.name);
-                debugPrint('SubtitleManager: 自动叠加字幕 ${other.name}');
-              } catch (e) {
-                debugPrint('SubtitleManager: 自动叠加字幕 ${other.name} 失败: $e');
-              }
-            }
-
-            // 设置完成后强制刷新状态
-            await Future.delayed(_autoLoadStateSettleDelay);
-
-            // 触发自动加载字幕回调
-            if (onExternalSubtitleAutoLoaded != null) {
-              onExternalSubtitleAutoLoaded!(cachedPath, selected.name);
-            }
-
             return;
           } else {
             debugPrint('SubtitleManager: 远程目录未找到字幕文件');
@@ -1802,6 +1905,7 @@ class SubtitleManager extends ChangeNotifier {
 
       // 需求：即使存在内嵌字幕，也应优先尝试自动加载外挂字幕。
 
+      if (!isCurrent()) return;
       // 检查视频文件是否存在
       final videoFile = File(videoPath);
       if (!videoFile.existsSync()) {
@@ -1834,33 +1938,8 @@ class SubtitleManager extends ChangeNotifier {
       // 常见字幕文件扩展名按优先级排序
       final subtitleExts = subtitleExtensionMatchScore.keys.toList();
 
-      // 同名精确匹配 + 目录模糊匹配统一走"激活最佳一条 + 其余叠挂"：
-      // 内核 sid 单轨显示，叠挂的多条 ASS 仍只有激活条目可见，但全部进入
-      // 轨道列表可手动切换，不再需要从远程库另行加载。
-      final exactMatches = <File>[];
-      for (final ext in subtitleExts) {
-        final potentialPath = p.join(videoDir, '$videoName$ext');
-        debugPrint('SubtitleManager: 尝试检测字幕文件: $potentialPath');
-        final subtitleFile = File(potentialPath);
-        // .idx 无独立播放语义：同名 .sub 不存在时跳过该候选
-        if (subtitleFile.existsSync() && isVobSubPairComplete(potentialPath)) {
-          debugPrint('SubtitleManager: 找到匹配的字幕文件: $potentialPath');
-          exactMatches.add(subtitleFile);
-        }
-      }
-
-      if (exactMatches.isNotEmpty) {
-        await _autoLoadLocalSubtitleGroup(
-          videoPath: videoPath,
-          subtitleFiles: exactMatches,
-          videoName: videoName,
-          videoNumbers: videoNumbers,
-          episodeNumber: episodeNumber,
-        );
-        return;
-      }
-
-      // 如果没有找到完全匹配的，尝试查找目录中可能匹配的字幕文件
+      // 扫描所有同集候选，统一选主字幕并登记其余选项。
+      // 收集目录内候选，再根据视频名称与集数过滤。
       final videoDirectory = Directory(videoDir);
       if (videoDirectory.existsSync()) {
         try {
@@ -1891,6 +1970,7 @@ class SubtitleManager extends ChangeNotifier {
             episodeNumber: episodeNumber,
             requireReliableMatch: true,
           );
+          return;
         } catch (e) {
           debugPrint('SubtitleManager: 目录搜索错误: $e');
         }
@@ -1902,8 +1982,7 @@ class SubtitleManager extends ChangeNotifier {
     }
   }
 
-  /// 本地自动加载一组字幕：评分选最佳一条激活（简中/简日优先），
-  /// 其余叠加挂载进入轨道列表供手动切换。
+  /// 本地自动加载最佳一条，其余匹配候选保存在菜单中供手动选择。
   Future<void> _autoLoadLocalSubtitleGroup({
     required String videoPath,
     required List<File> subtitleFiles,
@@ -1912,6 +1991,17 @@ class SubtitleManager extends ChangeNotifier {
     String? episodeNumber,
     bool requireReliableMatch = false,
   }) async {
+    final detectionToken = _subtitleLoadToken;
+    bool isCurrent() =>
+        _currentVideoPath == videoPath && detectionToken == _subtitleLoadToken;
+    subtitleFiles = subtitleFiles
+        .where((file) => subtitleMatchesVideo(
+            videoName, p.basenameWithoutExtension(file.path)))
+        .map((file) => canonicalSubtitlePath(file.path))
+        .toSet()
+        .map(File.new)
+        .toList();
+    if (subtitleFiles.isEmpty || !isCurrent()) return;
     final scored = subtitleFiles.map((file) {
       final subtitleName = p.basenameWithoutExtension(file.path);
       final extension = p.extension(file.path).toLowerCase();
@@ -1947,8 +2037,10 @@ class SubtitleManager extends ChangeNotifier {
     // 等待一段时间确保播放器准备好
     await Future.delayed(_autoLoadPlayerReadyDelay);
 
+    if (!isCurrent()) return;
     // 设置外部字幕（不标记为手动设置，因为是自动检测的）
     setExternalSubtitle(best.file.path, isManualSetting: false);
+    final activeToken = _subtitleLoadToken;
 
     // 保存这个自动找到的字幕路径，下次可以直接使用
     saveVideoSubtitleMapping(videoPath, best.file.path);
@@ -1960,31 +2052,26 @@ class SubtitleManager extends ChangeNotifier {
       isActive: true,
     );
 
-    // 其余候选叠加挂载（不重复激活）。ASS/SSA 叠挂只进轨道列表不显示，
-    // SRT/VTT 叠层可共存显示；同源 .idx 与 .sub 不重复挂。
-    final bestBase = p.basenameWithoutExtension(best.file.path).toLowerCase();
+    // Available candidates never enter the active display stack automatically.
     for (final candidate in scored.skip(1)) {
-      final ext = p.extension(candidate.file.path).toLowerCase();
-      if (ext == '.idx' &&
-          bestBase == p.basenameWithoutExtension(candidate.file.path).toLowerCase()) {
-        continue;
-      }
-      if (ext == '.sub' &&
-          bestBase == p.basenameWithoutExtension(candidate.file.path).toLowerCase()) {
-        continue;
-      }
       try {
-        await addExternalSubtitleToStack(candidate.file.path,
+        if (_currentVideoPath != videoPath || activeToken != _subtitleLoadToken)
+          return;
+        await registerExternalSubtitleCandidate(candidate.file.path,
             displayName: p.basename(candidate.file.path));
-        debugPrint('SubtitleManager: 自动叠加字幕 ${p.basename(candidate.file.path)}');
+        debugPrint(
+            'SubtitleManager: 登记候选字幕 ${p.basename(candidate.file.path)}');
       } catch (e) {
-        debugPrint('SubtitleManager: 自动叠加字幕 ${p.basename(candidate.file.path)} 失败: $e');
+        debugPrint(
+            'SubtitleManager: 登记候选字幕 ${p.basename(candidate.file.path)} 失败: $e');
       }
     }
 
     // 设置完成后强制刷新状态
     await Future.delayed(_autoLoadStateSettleDelay);
 
+    if (_currentVideoPath != videoPath || activeToken != _subtitleLoadToken)
+      return;
     // 触发自动加载字幕回调
     if (onExternalSubtitleAutoLoaded != null) {
       final fileName = p.basename(best.file.path);
@@ -2006,7 +2093,7 @@ class SubtitleManager extends ChangeNotifier {
       final videoName = p.basenameWithoutExtension(videoPath);
       final subtitleExts = subtitleExtensionMatchScore.keys
           .toList()
-          .where((ext) => ext != '.sub' && ext != '.idx')
+          .where((ext) => ext != '.sup' && ext != '.idx')
           .toList();
 
       final files = <File>{};
@@ -2027,8 +2114,7 @@ class SubtitleManager extends ChangeNotifier {
       }
       if (files.isEmpty) return null;
 
-      final videoNumberMatch =
-          RegExp(r'(\d+)').allMatches(videoName).toList();
+      final videoNumberMatch = RegExp(r'(\d+)').allMatches(videoName).toList();
       final videoNumbers =
           videoNumberMatch.map((match) => match.group(0)!).toList();
       final episodeNumber = videoNumbers.isNotEmpty
@@ -2039,6 +2125,9 @@ class SubtitleManager extends ChangeNotifier {
       int bestScore = -0x7fffffff;
       for (final file in files) {
         if (p.normalize(file.path) == p.normalize(excludePath)) continue;
+        if (isVobSubBinaryFile(file.path) ||
+            !subtitleMatchesVideo(
+                videoName, p.basenameWithoutExtension(file.path))) continue;
         final score = computeLocalSubtitleMatchScore(
           videoName: videoName,
           subtitleName: p.basenameWithoutExtension(file.path),
@@ -2058,19 +2147,20 @@ class SubtitleManager extends ChangeNotifier {
     }
   }
 
-  /// 恢复保存映射后的叠挂：本地视频扫描视频目录（含 sub/idx 成对校验），
-  /// 远程视频拉候选列表下载缓存；同基名的 .sub/.idx 与已激活条目去重。
-  Future<void> _stackRemainingSubtitlesAfterRestore({
+  /// Restore matching candidates to the menu while keeping the saved selection.
+  Future<void> _registerRemainingSubtitlesAfterRestore({
     required String videoPath,
     required String savedSubtitlePath,
   }) async {
     if (kIsWeb) return;
-    final savedBase =
-        p.basenameWithoutExtension(savedSubtitlePath).toLowerCase();
+    final token = _subtitleLoadToken;
+    bool isCurrent() =>
+        _currentVideoPath == videoPath && token == _subtitleLoadToken;
     final candidates = <_StackCandidate>[];
 
     try {
-      if (RemoteSubtitleService.instance.isPotentialRemoteVideoPath(videoPath)) {
+      if (RemoteSubtitleService.instance
+          .isPotentialRemoteVideoPath(videoPath)) {
         final remote = await RemoteSubtitleService.instance
             .listCandidatesForVideo(videoPath);
         for (final other in remote) {
@@ -2087,7 +2177,8 @@ class SubtitleManager extends ChangeNotifier {
         final subtitleExts = subtitleExtensionMatchScore.keys.toList();
         final seen = <String>{};
         for (final ext in subtitleExts) {
-          final potentialPath = p.join(videoDir, '${p.basenameWithoutExtension(videoPath)}$ext');
+          final potentialPath =
+              p.join(videoDir, '${p.basenameWithoutExtension(videoPath)}$ext');
           if (File(potentialPath).existsSync() &&
               isVobSubPairComplete(potentialPath) &&
               seen.add(potentialPath.toLowerCase())) {
@@ -2118,19 +2209,15 @@ class SubtitleManager extends ChangeNotifier {
 
     for (final candidate in candidates) {
       try {
-        final base = p.basenameWithoutExtension(candidate.name).toLowerCase();
-        // 与已激活主字幕同基名的 .sub/.idx 不重复挂
-        if ((base == savedBase) &&
-            (candidate.path?.toLowerCase().endsWith('.sub') == true ||
-                candidate.path?.toLowerCase().endsWith('.idx') == true)) {
-          continue;
-        }
+        if (!isCurrent()) return;
+        if (candidate.remote != null
+            ? !_remoteCandidateMatchesVideo(videoPath, candidate.remote!)
+            : !_candidateMatchesVideo(videoPath, candidate.name)) continue;
         String stackPath;
         if (candidate.path != null) {
-          stackPath = candidate.path!;
+          stackPath = canonicalSubtitlePath(candidate.path!);
         } else {
-          stackPath = await RemoteSubtitleService.instance
-              .ensureSubtitleCached(
+          stackPath = await RemoteSubtitleService.instance.ensureSubtitleCached(
             candidate.remote!,
             allCandidates: candidates
                 .map((c) => c.remote)
@@ -2142,13 +2229,41 @@ class SubtitleManager extends ChangeNotifier {
             stackPath == savedSubtitlePath) {
           continue;
         }
-        await addExternalSubtitleToStack(stackPath,
+        if (!isCurrent()) return;
+        await registerExternalSubtitleCandidate(stackPath,
             displayName: candidate.name);
-        debugPrint('SubtitleManager: 恢复时叠加字幕 ${candidate.name}');
+        debugPrint('SubtitleManager: 恢复时登记候选字幕 ${candidate.name}');
       } catch (e) {
-        debugPrint('SubtitleManager: 恢复叠加字幕 ${candidate.name} 失败: $e');
+        debugPrint('SubtitleManager: 恢复候选字幕 ${candidate.name} 失败: $e');
       }
     }
+  }
+
+  bool _remoteCandidateMatchesVideo(
+      String videoPath, RemoteSubtitleCandidate candidate) {
+    // These endpoints identify a video by ID, not by its filename. Use their
+    // per-video metadata rather than matching the literal "stream"/hash name.
+    if (candidate is DandanplayRemoteSubtitleCandidate) return true;
+    final uri = Uri.tryParse(videoPath);
+    if (candidate is SharedRemoteSubtitleCandidate &&
+        uri != null &&
+        RegExp(r'/api/media/local/share/episodes/[^/]+/stream$')
+            .hasMatch(uri.path)) {
+      return candidate.isLikelyMatch;
+    }
+    return _candidateMatchesVideo(videoPath, candidate.name);
+  }
+
+  bool _candidateMatchesVideo(String videoPath, String subtitleName) {
+    final resolved =
+        RemoteSubtitleService.instance.resolveVideoPathForMatching(videoPath);
+    final path = resolved.isEmpty ? videoPath : resolved;
+    final uri = Uri.tryParse(path);
+    final name = uri != null && uri.hasScheme && uri.pathSegments.isNotEmpty
+        ? uri.pathSegments.last
+        : p.basename(path);
+    return subtitleMatchesVideo(p.basenameWithoutExtension(name),
+        p.basenameWithoutExtension(subtitleName));
   }
 
   RemoteSubtitleCandidate _pickRemoteSubtitleCandidate(
@@ -2531,21 +2646,4 @@ class _StackCandidate {
   final String name;
   final String? path;
   final RemoteSubtitleCandidate? remote;
-}
-
-/// [某字幕路径] 最近一次 _textAtPath 查询的缓存行。
-/// [fromMs, toMs] 是这段文本确定有效的播放时间窗口（窗口内 O(1) 命中）；
-/// [entries] 必须与 _subtitleCache 中该路径的列表同引用，缓存重载后失效。
-class _SubtitleLookupResult {
-  final List<dynamic> entries;
-  final int fromMs;
-  final int toMs;
-  final String text;
-
-  const _SubtitleLookupResult({
-    required this.entries,
-    required this.fromMs,
-    required this.toMs,
-    required this.text,
-  });
 }

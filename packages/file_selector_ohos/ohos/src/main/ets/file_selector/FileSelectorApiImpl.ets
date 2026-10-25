@@ -15,6 +15,7 @@ import { AbilityPluginBinding } from '@ohos/flutter_ohos/src/main/ets/embedding/
 import common from '@ohos.app.ability.common';
 import { photoPickerSelect, documentPickerSelect, filePicker } from './FIleSelectorUtil'
 import ArrayList from '@ohos.util.ArrayList';
+import { LocalMediaAccess } from './LocalMediaAccess';
 
 const TAG = "FileSelectorApiImpl";
 const DOCUMENT = "Document";
@@ -227,10 +228,6 @@ export class FileSelectorApiImpl {
     }
   }
 
-  getDirectoryPath(initialDirectory: string, result: Result<string>): void {
-    throw new Error('Method not implemented.')
-  }
-
   async getUrisForPaths(paths: Array<string>): Promise<Array<string>> {
     Log.i(TAG, "getUrisForPaths");
     let uris = new Array<string>();
@@ -256,6 +253,7 @@ export class FileSelectorApiImpl {
   }
 
   setup(binaryMessenger: BinaryMessenger, abilityPluginBinding: AbilityPluginBinding): void {
+    new LocalMediaAccess(abilityPluginBinding.getAbility().context).setup(binaryMessenger);
     let api = this;
     {
       this.binding = abilityPluginBinding;

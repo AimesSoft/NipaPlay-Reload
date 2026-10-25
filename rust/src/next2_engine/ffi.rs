@@ -34,6 +34,29 @@ pub extern "C" fn next2_engine_vsync(handle: u64, elapsed_us: u64) -> u8 {
     }).unwrap_or(0)
 }
 
+/// A native display link owns iOS presentation. Unlike the Dart pulse fallback,
+/// this remains available while Dart is busy and must not compete with a timer.
+#[cfg(target_os = "ios")]
+#[no_mangle]
+pub extern "C" fn next2_engine_display_tick(handle: u64, target_delay_s: f64) -> u8 {
+    std::panic::catch_unwind(|| {
+        if !target_delay_s.is_finite() {
+            return 0;
+        }
+        let now = std::time::Instant::now();
+        let delay = std::time::Duration::from_secs_f64(target_delay_s.abs().min(0.25));
+        let target = if target_delay_s >= 0.0 {
+            now + delay
+        } else {
+            now - delay
+        };
+        lookup_engine(handle).is_some_and(|entry| {
+            entry.cmd_tx.send(EngineCommand::DisplayTick { target }).is_ok()
+        }) as u8
+    })
+    .unwrap_or(0)
+}
+
 #[no_mangle]
 pub extern "C" fn next2_engine_create(width: u32, height: u32) -> u64 {
     let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {

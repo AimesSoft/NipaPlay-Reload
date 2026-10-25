@@ -6,6 +6,7 @@ import 'base_settings_menu.dart';
 import 'player_menu_theme.dart';
 import 'dart:io';
 import 'package:nipaplay/services/jellyfin_service.dart';
+import 'package:nipaplay/services/media_server_playlist_loader.dart';
 import 'package:nipaplay/services/emby_service.dart';
 import 'package:nipaplay/services/jellyfin_episode_mapping_service.dart';
 import 'package:nipaplay/services/emby_episode_mapping_service.dart';
@@ -16,6 +17,7 @@ import 'package:nipaplay/models/playable_item.dart';
 import 'package:nipaplay/models/watch_history_model.dart';
 import 'package:nipaplay_core/models/shared_remote_library.dart';
 import 'package:nipaplay/services/playback_service.dart';
+import 'package:nipaplay/services/episode_file_selection_service.dart';
 import 'package:nipaplay/services/smb_proxy_service.dart';
 import 'package:nipaplay/services/smb_service.dart';
 import 'package:nipaplay_core/services/webdav_service.dart';
@@ -293,6 +295,12 @@ class _PlaylistMenuState extends State<PlaylistMenu> {
       if ('${connection.host}:${connection.port}' == connName) {
         return true;
       }
+      if (connection.wanHost == connName) {
+        return true;
+      }
+      if ('${connection.wanHost}:${connection.wanPort}' == connName) {
+        return true;
+      }
       return false;
     }).toList();
 
@@ -563,8 +571,12 @@ class _PlaylistMenuState extends State<PlaylistMenu> {
       }
 
       // 获取该季的所有剧集
-      final episodes = await JellyfinService.instance
-          .getSeasonEpisodes(episodeInfo.seriesId!, episodeInfo.seasonId!);
+      final episodes = await loadMediaServerPlaylist(
+        currentItem: episodeInfo,
+        seriesId: episodeInfo.seriesId,
+        seasonId: episodeInfo.seasonId,
+        loadSeason: JellyfinService.instance.getSeasonEpisodes,
+      );
 
       if (episodes.isEmpty) {
         throw Exception('该季没有找到剧集');
@@ -616,8 +628,12 @@ class _PlaylistMenuState extends State<PlaylistMenu> {
       }
 
       // 获取该季的所有剧集
-      final episodes = await EmbyService.instance
-          .getSeasonEpisodes(episodeInfo.seriesId!, episodeInfo.seasonId!);
+      final episodes = await loadMediaServerPlaylist(
+        currentItem: episodeInfo,
+        seriesId: episodeInfo.seriesId,
+        seasonId: episodeInfo.seasonId,
+        loadSeason: EmbyService.instance.getSeasonEpisodes,
+      );
 
       if (episodes.isEmpty) {
         throw Exception('该季没有找到剧集');
@@ -666,6 +682,23 @@ class _PlaylistMenuState extends State<PlaylistMenu> {
       debugPrint('[播放列表] 开始播放剧集: $filePath');
 
       final videoState = Provider.of<VideoPlayerState>(context, listen: false);
+      final selected = await EpisodeFileSelectionService.select(
+        context,
+        PlayableItem(
+          videoPath: filePath,
+          historyItem: _remoteHistoryCache[filePath],
+          detailContext: videoState.playbackDetailContext,
+        ),
+      );
+      if (selected == null || !mounted) return;
+      if (!MediaIdentityResolver.samePath(selected.videoPath, filePath)) {
+        if (await PlaybackService().play(selected, episodeFileSelectionHandled: true)) {
+          if (mounted) widget.onClose();
+        }
+        return;
+      }
+      var selectionHandled = selected.historyItem?.animeId != null &&
+          selected.historyItem?.episodeId != null;
       final skipDanmakuMatching =
           context.read<SettingsProvider>().skipDanmakuMatching;
 
@@ -680,13 +713,6 @@ class _PlaylistMenuState extends State<PlaylistMenu> {
           if (episodeInfo == null) {
             throw Exception('无法获取Jellyfin剧集信息');
           }
-
-          // 获取播放会话
-          final playbackSession =
-              await JellyfinService.instance.createPlaybackSession(
-            itemId: episodeId,
-          );
-          debugPrint('[播放列表] 获取Jellyfin播放会话: ${playbackSession.streamUrl}');
 
           // 尝试获取弹幕映射
           int? animeId;
@@ -715,6 +741,29 @@ class _PlaylistMenuState extends State<PlaylistMenu> {
             skipDanmakuMatching: skipDanmakuMatching,
           );
 
+          if (!selectionHandled) {
+            final mappedSelection = await EpisodeFileSelectionService.select(
+              context,
+              PlayableItem(videoPath: filePath, historyItem: historyItem),
+            );
+            if (mappedSelection == null || !mounted) return;
+            if (!MediaIdentityResolver.samePath(
+                mappedSelection.videoPath, filePath)) {
+              if (await PlaybackService().play(mappedSelection,
+                  episodeFileSelectionHandled: true)) {
+                if (mounted) widget.onClose();
+              }
+              return;
+            }
+            selectionHandled = historyItem.animeId != null &&
+                historyItem.episodeId != null;
+          }
+
+          final playbackSession =
+              await JellyfinService.instance.createPlaybackSession(
+            itemId: episodeId,
+          );
+
           final playableItem = PlayableItem(
             videoPath: filePath,
             mediaKey: MediaIdentityResolver.forPath(filePath),
@@ -729,7 +778,8 @@ class _PlaylistMenuState extends State<PlaylistMenu> {
             return;
           }
           if (await PlaybackService()
-              .tryPlayExternally(context, playableItem)) {
+              .tryPlayExternally(context, playableItem,
+                    episodeFileSelectionHandled: selectionHandled)) {
             if (mounted) {
               widget.onClose();
             }
@@ -743,6 +793,7 @@ class _PlaylistMenuState extends State<PlaylistMenu> {
             historyItem: historyItem,
             playbackSession: playbackSession,
             playbackDetailContext: videoState.playbackDetailContext,
+            episodeFileSelectionHandled: selectionHandled,
           );
           debugPrint('[播放列表] Jellyfin剧集播放完成');
         } else if (filePath.startsWith('emby://')) {
@@ -756,13 +807,6 @@ class _PlaylistMenuState extends State<PlaylistMenu> {
           if (episodeInfo == null) {
             throw Exception('无法获取Emby剧集信息');
           }
-
-          // 获取播放会话
-          final playbackSession =
-              await EmbyService.instance.createPlaybackSession(
-            itemId: episodeId,
-          );
-          debugPrint('[播放列表] 获取Emby播放会话: ${playbackSession.streamUrl}');
 
           // 尝试获取弹幕映射
           int? animeId;
@@ -791,6 +835,29 @@ class _PlaylistMenuState extends State<PlaylistMenu> {
             skipDanmakuMatching: skipDanmakuMatching,
           );
 
+          if (!selectionHandled) {
+            final mappedSelection = await EpisodeFileSelectionService.select(
+              context,
+              PlayableItem(videoPath: filePath, historyItem: historyItem),
+            );
+            if (mappedSelection == null || !mounted) return;
+            if (!MediaIdentityResolver.samePath(
+                mappedSelection.videoPath, filePath)) {
+              if (await PlaybackService().play(mappedSelection,
+                  episodeFileSelectionHandled: true)) {
+                if (mounted) widget.onClose();
+              }
+              return;
+            }
+            selectionHandled = historyItem.animeId != null &&
+                historyItem.episodeId != null;
+          }
+
+          final playbackSession =
+              await EmbyService.instance.createPlaybackSession(
+            itemId: episodeId,
+          );
+
           final playableItem = PlayableItem(
             videoPath: filePath,
             mediaKey: MediaIdentityResolver.forPath(filePath),
@@ -805,7 +872,8 @@ class _PlaylistMenuState extends State<PlaylistMenu> {
             return;
           }
           if (await PlaybackService()
-              .tryPlayExternally(context, playableItem)) {
+              .tryPlayExternally(context, playableItem,
+                    episodeFileSelectionHandled: selectionHandled)) {
             if (mounted) {
               widget.onClose();
             }
@@ -819,6 +887,7 @@ class _PlaylistMenuState extends State<PlaylistMenu> {
             historyItem: historyItem,
             playbackSession: playbackSession,
             playbackDetailContext: videoState.playbackDetailContext,
+            episodeFileSelectionHandled: selectionHandled,
           );
           debugPrint('[播放列表] Emby剧集播放完成');
         } else {
@@ -857,7 +926,8 @@ class _PlaylistMenuState extends State<PlaylistMenu> {
               return;
             }
             if (await PlaybackService()
-                .tryPlayExternally(context, playableItem)) {
+                .tryPlayExternally(context, playableItem,
+                    episodeFileSelectionHandled: selectionHandled)) {
               if (mounted) {
                 widget.onClose();
               }
@@ -870,6 +940,7 @@ class _PlaylistMenuState extends State<PlaylistMenu> {
               historyItem: cachedHistory,
               actualPlayUrl: actualPlayUrl,
               playbackDetailContext: videoState.playbackDetailContext,
+              episodeFileSelectionHandled: selectionHandled,
             );
             debugPrint('[播放列表] 远程流媒体播放完成');
           } else {
@@ -887,7 +958,8 @@ class _PlaylistMenuState extends State<PlaylistMenu> {
               return;
             }
             if (await PlaybackService()
-                .tryPlayExternally(context, playableItem)) {
+                .tryPlayExternally(context, playableItem,
+                    episodeFileSelectionHandled: selectionHandled)) {
               if (mounted) {
                 widget.onClose();
               }
@@ -898,6 +970,7 @@ class _PlaylistMenuState extends State<PlaylistMenu> {
               filePath,
               mediaKey: MediaIdentityResolver.forPath(filePath),
               playbackDetailContext: videoState.playbackDetailContext,
+              episodeFileSelectionHandled: selectionHandled,
             );
             debugPrint('[播放列表] 文件路径播放完成');
           }

@@ -334,7 +334,7 @@ Widget _wrapStage(VideoPlayerState videoState, String path,
           child: Stack(
             children: [
               Positioned.fill(
-                child: ExternalSubtitleOverlay(currentPositionMs: positionMs),
+                child: const ExternalSubtitleOverlay(),
               ),
             ],
           ),

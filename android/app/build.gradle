@@ -88,6 +88,8 @@ android {
         }
         
         debug {
+            // Keep local builds installable beside the separately signed release.
+            applicationIdSuffix ".debug"
             // 调试模式不启用代码收缩，保持快速构建与可调试性
             minifyEnabled = false
             shrinkResources = false

@@ -739,17 +739,42 @@ void main() {
     expect(player, contains('final portraitUiScale'));
     expect(player, contains('portraitUiScale: portraitUiScale'));
     expect(player, contains('clipBehavior: Clip.hardEdge'));
-    expect(player, contains('final double horizontalCutoutInset'));
+    // Landscape controls use each side's safe area independently; compact
+    // portrait controls must not inherit the landscape cutout padding.
     expect(
       player,
-      contains('portraitUiScale >= 0.999 ? 24.0 : 0.0'),
+      matches(
+        RegExp(
+          r'final bool isMobileLandscape = globals\.isMobilePlatform &&\s*'
+          r'!isCompactPortrait &&\s*'
+          r'MediaQuery\.orientationOf\(context\) == Orientation\.landscape;',
+        ),
+      ),
     );
+    expect(player, contains('MediaQuery.viewPaddingOf(context)'));
+    expect(player, contains('minimumSideInset = globals.isPhone ? 24.0 : 0.0'));
+    expect(
+      player,
+      contains(
+        'isMobileLandscape ? math.max(minimumSideInset, viewPadding.left) : 0.0',
+      ),
+    );
+    expect(
+      player,
+      contains(
+        'isMobileLandscape ? math.max(minimumSideInset, viewPadding.right) : 0.0',
+      ),
+    );
+    expect(player, contains('left: leftCutoutInset'));
+    expect(player, contains('right: rightCutoutInset'));
+    expect(player, contains('left: 16.0 + leftCutoutInset'));
+    expect(player, contains('right: 16.0 + rightCutoutInset'));
     expect(player, contains('AnimeDetailPage('));
     expect(player, contains('playbackDetailContext: detailContext'));
     expect(player, isNot(contains('AdaptivePlaybackDetailView(')));
     expect(player, contains('renderInWindowScaffold: false'));
     expect(
-        phoneShell, contains('Consumer2<BottomBarProvider, VideoPlayerState>'));
+        phoneShell, contains('Selector2<BottomBarProvider, VideoPlayerState,'));
     expect(phoneShell, contains('final isFullscreenPlayback'));
     expect(phoneShell, contains('selectedPage.id == AppPageIds.video'));
     expect(
@@ -1187,6 +1212,7 @@ void main() {
       onClearCache: () {},
       onOpenDandanHelp: () {},
       onOpenNipaplayHelp: () {},
+      onOpenTokenPage: () {},
     );
 
     expect(dandanplay.actions.map((action) => action.label), [
@@ -1543,7 +1569,8 @@ void main() {
     const deleteDialog = TorrentDeleteDialogViewModel(task: task);
 
     expect(item.primaryAction.label, '播放');
-    item.primaryAction.onPressed();
+    expect(item.primaryAction.onPressed, isNotNull);
+    item.primaryAction.onPressed!();
     expect(played, isTrue);
     expect(item.scanStatusText, '已加入媒体库');
     expect(deleteDialog.title, '删除任务和文件');

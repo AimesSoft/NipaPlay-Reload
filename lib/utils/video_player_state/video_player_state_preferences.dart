@@ -39,6 +39,7 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
           actualPlayUrl: actualUrl,
           playbackDetailContext: _playbackDetailContext,
           resetManualDanmakuOffset: false,
+          episodeFileSelectionHandled: true,
         );
       } else {
         _setStatus(PlayerStatus.idle, message: '请重新选择视频');
@@ -346,20 +347,19 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
     await prefs.setDouble(SettingsKeys.danmakuOpacity, opacity);
   }
 
-  // 获取映射后的弹幕不透明度
-  double get mappedDanmakuOpacity {
-    // 使用平方函数进行映射，使低值区域变化更平缓
-    return _danmakuOpacity * _danmakuOpacity;
-  }
+  // 交给 Flutter 弹幕渲染器的不透明度，与 Erika 原生弹幕、ASS 导出一致，直接取设置值（线性）
+  double get mappedDanmakuOpacity => danmakuOpacity;
 
   // 加载弹幕可见性
   Future<void> _loadDanmakuVisible() async {
     final prefs = await SharedPreferences.getInstance();
+    if (_hasExplicitDanmakuVisibility) return;
     _danmakuVisible = prefs.getBool(SettingsKeys.danmakuVisible) ?? true;
     _notifyListeners();
   }
 
-  void setDanmakuVisible(bool visible) async {
+  Future<void> setDanmakuVisible(bool visible) async {
+    _hasExplicitDanmakuVisibility = true;
     if (_danmakuVisible != visible) {
       _danmakuVisible = visible;
       // Visibility is latency-sensitive and Erika exposes a dedicated toggle.
@@ -386,9 +386,10 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
         _updateMergedDanmakuList();
       }
       _notifyListeners();
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.setBool(SettingsKeys.danmakuVisible, visible);
     }
+    // 即使内存值相同也保存显式选择，避免启动默认值掩盖旧存档。
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(SettingsKeys.danmakuVisible, visible);
   }
 
   void toggleDanmakuVisible() {
@@ -1460,13 +1461,21 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
   Future<void> _loadTitanDanmakuSettings() async {
     final prefs = await SharedPreferences.getInstance();
     final encoded = prefs.getString(SettingsKeys.titanDanmakuSettings);
-    if (encoded == null || encoded.isEmpty) return;
+    if (encoded == null || encoded.isEmpty) {
+      if (globals.isPhone) {
+        _titanDanmakuSettings =
+            _titanDanmakuSettings.copyWith(trackGap: 0.15);
+        _notifyListeners();
+      }
+      return;
+    }
     try {
       final decoded = jsonDecode(encoded);
       if (decoded is Map) {
-        _titanDanmakuSettings = TitanDanmakuSettings.fromJson(
-          Map<String, dynamic>.from(decoded),
-        );
+        final json = Map<String, dynamic>.from(decoded);
+        // 旧版本未持久化轨道间距时，按设备类型补齐默认值（手机 0.15，其他 0）。
+        json.putIfAbsent('trackGap', () => globals.isPhone ? 0.15 : 0.0);
+        _titanDanmakuSettings = TitanDanmakuSettings.fromJson(json);
         _notifyListeners();
       }
     } catch (error) {
@@ -1809,11 +1818,11 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
 
   // 获取实际使用的弹幕字体大小
   double get actualDanmakuFontSize {
-    if (_danmakuFontSize <= 0) {
+    if (danmakuFontSize <= 0) {
       // 使用默认值
       return globals.isPhone ? 20.0 : 30.0;
     }
-    return _danmakuFontSize;
+    return danmakuFontSize;
   }
 
   double _clampSubtitleScale(double value) {
@@ -1904,6 +1913,7 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
             VideoPlayerState.defaultSubtitleScale);
     _srtSubtitleDelaySeconds = prefs.getDouble(_srtSubtitleDelayKey) ??
         VideoPlayerState.defaultSubtitleDelaySeconds;
+    _subtitleManager.srtDelaySeconds = _srtSubtitleDelaySeconds;
     _subtitleDelaySeconds = prefs.getDouble(_subtitleDelayKey) ??
         VideoPlayerState.defaultSubtitleDelaySeconds;
     _subtitlePosition = _clampSubtitlePosition(
@@ -1988,6 +1998,7 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
     final clamped = _resolveSubtitleDelaySecondsForCurrentVideo(seconds);
     if (_srtSubtitleDelaySeconds == clamped) return;
     _srtSubtitleDelaySeconds = clamped;
+    _subtitleManager.srtDelaySeconds = clamped;
     final prefs = await SharedPreferences.getInstance();
     await prefs.setDouble(_srtSubtitleDelayKey, clamped);
     _notifyListeners();
@@ -2932,6 +2943,8 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
       _screenshotSaveTarget = ScreenshotSaveTargetDisplay.fromPrefs(stored);
     _screenshotQuality =
         ScreenshotQualityDisplay.fromPrefs(prefs.getInt(_screenshotQualityKey));
+    _screenshotFormat =
+        ScreenshotFormat.fromPreference(prefs.getString(_screenshotFormatKey));
     _screenshotCaptureIncludesDanmaku =
         prefs.getBool(_screenshotIncludeDanmakuKey) ?? true;
     _screenshotCaptureIncludesSubtitles =
@@ -2966,6 +2979,14 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
     } catch (e) {
       debugPrint('保存截图默认保存位置失败: $e');
     }
+    _notifyListeners();
+  }
+
+  Future<void> setScreenshotFormat(ScreenshotFormat format) async {
+    if (_screenshotFormat == format) return;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_screenshotFormatKey, format.name);
+    _screenshotFormat = format;
     _notifyListeners();
   }
 
@@ -3009,6 +3030,7 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
         path,
         historyItem: history,
         resetManualDanmakuOffset: false,
+        episodeFileSelectionHandled: true,
       );
       // 重载后保持暂停（沿用原 autoPlay:false 语义），用户手动继续播放
       if (hasVideo) {
@@ -3034,9 +3056,6 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
     await prefs.setBool(_screenshotCropLetterboxKey, value);
     _notifyListeners();
   }
-
-  /// 视频画面尺寸模式（适应/填充/拉伸/16:9/4:3）
-  VideoAspectMode get videoAspectMode => _videoAspectMode;
 
   Future<void> setVideoAspectMode(VideoAspectMode mode) async {
     if (_videoAspectMode == mode) return;
@@ -3075,6 +3094,7 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
           path,
           historyItem: history,
           resetManualDanmakuOffset: false,
+          episodeFileSelectionHandled: true,
         );
         // 重载后保持暂停（沿用原 autoPlay:false 语义），用户手动继续播放
         if (hasVideo) {

@@ -46,6 +46,8 @@ class _SMBConnectionFormState extends State<_SMBConnectionForm> {
   final _nameController = TextEditingController();
   final _hostController = TextEditingController();
   final _portController = TextEditingController();
+  final _wanHostController = TextEditingController();
+  final _wanPortController = TextEditingController();
   final _domainController = TextEditingController();
   final _usernameController = TextEditingController();
   final _passwordController = TextEditingController();
@@ -95,11 +97,14 @@ class _SMBConnectionFormState extends State<_SMBConnectionForm> {
       _nameController.text = connection.name;
       _hostController.text = connection.host;
       _portController.text = connection.port.toString();
+      _wanHostController.text = connection.wanHost;
+      _wanPortController.text = connection.wanPort.toString();
       _domainController.text = connection.domain;
       _usernameController.text = connection.username;
       _passwordController.text = connection.password;
     } else {
       _portController.text = '445';
+      _wanPortController.text = '445';
     }
   }
 
@@ -108,6 +113,8 @@ class _SMBConnectionFormState extends State<_SMBConnectionForm> {
     _nameController.dispose();
     _hostController.dispose();
     _portController.dispose();
+    _wanHostController.dispose();
+    _wanPortController.dispose();
     _domainController.dispose();
     _usernameController.dispose();
     _passwordController.dispose();
@@ -145,15 +152,16 @@ class _SMBConnectionFormState extends State<_SMBConnectionForm> {
               _buildTextField(
                 controller: _hostController,
                 fieldId: 'host',
-                label: '主机/IP 地址',
-                required: true,
+                label: '内网主机/IP 地址',
                 hint: '例如：192.168.1.10 或 nas.local（IPv6: [fe80::1]）',
                 validator: (value) {
-                  if (value == null || value.trim().isEmpty) {
-                    return '请输入主机或IP地址';
-                  }
-                  if (value.contains('://')) {
+                  final trimmed = value?.trim() ?? '';
+                  if (trimmed.isNotEmpty && trimmed.contains('://')) {
                     return '无需包含协议，请直接输入主机或IP';
+                  }
+                  if (_hostController.text.trim().isEmpty &&
+                      _wanHostController.text.trim().isEmpty) {
+                    return '请至少填写内网主机或公网主机其中之一';
                   }
                   return null;
                 },
@@ -162,7 +170,40 @@ class _SMBConnectionFormState extends State<_SMBConnectionForm> {
               _buildTextField(
                 controller: _portController,
                 fieldId: 'port',
-                label: '端口',
+                label: '内网端口',
+                hint: '默认 445',
+                keyboardType: TextInputType.number,
+                validator: (value) {
+                  final trimmed = value?.trim() ?? '';
+                  if (trimmed.isEmpty) {
+                    return null;
+                  }
+                  final port = int.tryParse(trimmed);
+                  if (port == null || port <= 0 || port > 65535) {
+                    return '端口范围应为 1-65535';
+                  }
+                  return null;
+                },
+              ),
+              SizedBox(height: 14),
+              _buildTextField(
+                controller: _wanHostController,
+                fieldId: 'wanHost',
+                label: '公网主机/IP 地址（可选）',
+                hint: '例如：your-domain.com 或公网IP',
+                validator: (value) {
+                  final trimmed = value?.trim() ?? '';
+                  if (trimmed.isNotEmpty && trimmed.contains('://')) {
+                    return '无需包含协议，请直接输入主机或IP';
+                  }
+                  return null;
+                },
+              ),
+              SizedBox(height: 14),
+              _buildTextField(
+                controller: _wanPortController,
+                fieldId: 'wanPort',
+                label: '公网端口',
                 hint: '默认 445',
                 keyboardType: TextInputType.number,
                 validator: (value) {
@@ -316,12 +357,15 @@ class _SMBConnectionFormState extends State<_SMBConnectionForm> {
     final port = int.tryParse(_portController.text.trim()) ??
         widget.editConnection?.port ??
         445;
+    final wanPort = int.tryParse(_wanPortController.text.trim()) ?? 445;
 
     final connection = SMBConnection(
       id: widget.editConnection?.id,
       name: _nameController.text.trim(),
       host: _hostController.text.trim(),
       port: port,
+      wanHost: _wanHostController.text.trim(),
+      wanPort: wanPort,
       username: _usernameController.text.trim(),
       password: _passwordController.text,
       domain: _domainController.text.trim(),

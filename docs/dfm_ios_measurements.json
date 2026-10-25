@@ -1,0 +1,358 @@
+{
+  "environment": {
+    "device": "iPhone 17 Pro simulator",
+    "os": "iOS 26.5",
+    "display_hz": 60,
+    "mode": "Flutter debug, Rust dev",
+    "video_decoding": false,
+    "input_comments_per_second": 30,
+    "sample_seconds": 15,
+    "cpu_percent_unit": "100 percent = one host CPU core",
+    "memory": "process RSS sum; shared pages may be counted more than once",
+    "limitations": [
+      "Different collision policies and visible counts (DFM layout count 8 in samples).",
+      "No pre-change process CPU sample; these values do not quantify optimization savings.",
+      "Host load, memory compression, and debug instrumentation affect results.",
+      "No direct Metal GPU time, release-device power, or 120 Hz simulator verification."
+    ]
+  },
+  "measurements": [
+    {
+      "label": "dfm-playing",
+      "seconds": 15.022774541983381,
+      "processes": {
+        "98831": {
+          "cpu_percent_one_core": 58.31146553866519,
+          "rss_mib": 142.84375
+        }
+      },
+      "snapshot": {
+        "renderer": "dfm",
+        "position": 23.19993099999999,
+        "playing": true,
+        "rate": 1.0,
+        "visible": true,
+        "offset": 0.0,
+        "layout": {
+          "count": 8,
+          "sample_media": 23.19700699999998,
+          "first_time": 16.233,
+          "first_x": -117.19224127498,
+          "first_text": "流畅弹幕测试 2 NipaPlay",
+          "speed": 142.33073592185974
+        },
+        "flutter_frames": 1056,
+        "build_p95_us": 1641,
+        "raster_p95_us": 1503
+      },
+      "total_cpu_percent_one_core": 58.31146553866519,
+      "total_rss_mib": 142.84375
+    },
+    {
+      "label": "dfm-paused",
+      "seconds": 15.016293374937959,
+      "processes": {
+        "98831": {
+          "cpu_percent_one_core": 3.462905172510048,
+          "rss_mib": 94.28125
+        }
+      },
+      "snapshot": {
+        "renderer": "dfm",
+        "position": 10.0,
+        "playing": false,
+        "rate": 1.0,
+        "visible": true,
+        "offset": 0.0,
+        "layout": {
+          "count": 8,
+          "sample_media": 10.0,
+          "first_time": 2.466,
+          "first_x": -198.3197644352913,
+          "first_text": "流畅弹幕测试 9 NipaPlay",
+          "speed": 142.33073592185974
+        },
+        "flutter_frames": 5603,
+        "build_p95_us": 1264,
+        "raster_p95_us": 2453
+      },
+      "total_cpu_percent_one_core": 3.462905172510048,
+      "total_rss_mib": 94.28125
+    },
+    {
+      "label": "titan-playing",
+      "seconds": 15.063743500038981,
+      "processes": {
+        "387": {
+          "cpu_percent_one_core": 8.829146619474491,
+          "rss_mib": 295.125
+        },
+        "416": {
+          "cpu_percent_one_core": 8.49722381423109,
+          "rss_mib": 197.828125
+        },
+        "419": {
+          "cpu_percent_one_core": 2.9209206861419363,
+          "rss_mib": 96.015625
+        },
+        "420": {
+          "cpu_percent_one_core": 0.0,
+          "rss_mib": 69.78125
+        }
+      },
+      "snapshot": {
+        "renderer": "titan",
+        "position": 23.304323000000004,
+        "playing": true,
+        "rate": 1.0,
+        "visible": true,
+        "offset": 0.0,
+        "layout": {},
+        "flutter_frames": 0,
+        "build_p95_us": 0,
+        "raster_p95_us": 0
+      },
+      "total_cpu_percent_one_core": 20.247291119847517,
+      "total_rss_mib": 658.75
+    },
+    {
+      "label": "titan-paused",
+      "seconds": 15.03967183304485,
+      "processes": {
+        "387": {
+          "cpu_percent_one_core": 6.4496088130642395,
+          "rss_mib": 162.390625
+        },
+        "416": {
+          "cpu_percent_one_core": 5.385755812971168,
+          "rss_mib": 148.703125
+        },
+        "419": {
+          "cpu_percent_one_core": 0.3989448750349015,
+          "rss_mib": 65.25
+        },
+        "420": {
+          "cpu_percent_one_core": 0.0,
+          "rss_mib": 41.640625
+        }
+      },
+      "snapshot": {
+        "renderer": "titan",
+        "position": 10.0,
+        "playing": false,
+        "rate": 1.0,
+        "visible": true,
+        "offset": 0.0,
+        "layout": {},
+        "flutter_frames": 0,
+        "build_p95_us": 0,
+        "raster_p95_us": 0
+      },
+      "total_cpu_percent_one_core": 12.234309501070308,
+      "total_rss_mib": 417.984375
+    }
+  ],
+  "functional": [
+    {
+      "case": "paused seek 20",
+      "state": {
+        "renderer": "dfm",
+        "position": 20.0,
+        "playing": false,
+        "rate": 1.0,
+        "visible": true,
+        "offset": 0.0,
+        "layout": {
+          "count": 8,
+          "sample_media": 20.0,
+          "first_time": 12.3,
+          "first_x": -221.94666659832,
+          "first_text": "流畅弹幕测试 4 NipaPlay",
+          "speed": 142.33073592185974
+        },
+        "flutter_frames": 0,
+        "build_p95_us": 0,
+        "raster_p95_us": 0
+      }
+    },
+    {
+      "case": "paused seek 8",
+      "state": {
+        "renderer": "dfm",
+        "position": 8.0,
+        "playing": false,
+        "rate": 1.0,
+        "visible": true,
+        "offset": 0.0,
+        "layout": {
+          "count": 8,
+          "sample_media": 8.0,
+          "first_time": 0.5,
+          "first_x": -193.48051941394806,
+          "first_text": "流畅弹幕测试 0 NipaPlay",
+          "speed": 142.33073592185974
+        },
+        "flutter_frames": 0,
+        "build_p95_us": 0,
+        "raster_p95_us": 0
+      }
+    },
+    {
+      "case": "paused seek 8.1",
+      "state": {
+        "renderer": "dfm",
+        "position": 8.1,
+        "playing": false,
+        "rate": 1.0,
+        "visible": true,
+        "offset": 0.0,
+        "layout": {
+          "count": 8,
+          "sample_media": 8.1,
+          "first_time": 0.5,
+          "first_x": -207.71359300613403,
+          "first_text": "流畅弹幕测试 0 NipaPlay",
+          "speed": 142.33073592185974
+        },
+        "flutter_frames": 0,
+        "build_p95_us": 0,
+        "raster_p95_us": 0
+      }
+    },
+    {
+      "case": "paused seek 8.0",
+      "state": {
+        "renderer": "dfm",
+        "position": 8.0,
+        "playing": false,
+        "rate": 1.0,
+        "visible": true,
+        "offset": 0.0,
+        "layout": {
+          "count": 8,
+          "sample_media": 8.0,
+          "first_time": 0.5,
+          "first_x": -193.48051941394806,
+          "first_text": "流畅弹幕测试 0 NipaPlay",
+          "speed": 142.33073592185974
+        },
+        "flutter_frames": 0,
+        "build_p95_us": 0,
+        "raster_p95_us": 0
+      }
+    },
+    {
+      "case": "pause stable for 1 second",
+      "passed": true
+    },
+    {
+      "case": "offset +2 seconds",
+      "state": {
+        "renderer": "dfm",
+        "position": 8.0,
+        "playing": false,
+        "rate": 1.0,
+        "visible": true,
+        "offset": 2.0,
+        "layout": {
+          "count": 8,
+          "sample_media": 10.0,
+          "first_time": 2.466,
+          "first_x": -198.3197644352913,
+          "first_text": "流畅弹幕测试 9 NipaPlay",
+          "speed": 142.33073592185974
+        },
+        "flutter_frames": 0,
+        "build_p95_us": 0,
+        "raster_p95_us": 0
+      }
+    },
+    {
+      "case": "hidden seek then show",
+      "state": {
+        "renderer": "dfm",
+        "position": 15.0,
+        "playing": false,
+        "rate": 1.0,
+        "visible": true,
+        "offset": 0.0,
+        "layout": {
+          "count": 8,
+          "sample_media": 15.0,
+          "first_time": 8.366,
+          "first_x": -70.22210210561752,
+          "first_text": "流畅弹幕测试 6 NipaPlay",
+          "speed": 142.33073592185974
+        },
+        "flutter_frames": 0,
+        "build_p95_us": 0,
+        "raster_p95_us": 0
+      }
+    },
+    {
+      "case": "empty segment then back",
+      "state": {
+        "renderer": "dfm",
+        "position": 5.0,
+        "playing": false,
+        "rate": 1.0,
+        "visible": true,
+        "offset": 0.0,
+        "layout": {
+          "count": 6,
+          "sample_media": 5.0,
+          "first_time": 0.5,
+          "first_x": 233.51168835163116,
+          "first_text": "流畅弹幕测试 0 NipaPlay",
+          "speed": 142.33073592185974
+        },
+        "flutter_frames": 0,
+        "build_p95_us": 0,
+        "raster_p95_us": 0
+      }
+    },
+    {
+      "case": "rapid seeks last wins",
+      "state": {
+        "renderer": "dfm",
+        "position": 7.05,
+        "playing": false,
+        "rate": 1.0,
+        "visible": true,
+        "offset": 0.0,
+        "layout": {
+          "count": 8,
+          "sample_media": 7.05,
+          "first_time": 0.5,
+          "first_x": -58.266320288181305,
+          "first_text": "流畅弹幕测试 0 NipaPlay",
+          "speed": 142.33073592185974
+        },
+        "flutter_frames": 0,
+        "build_p95_us": 0,
+        "raster_p95_us": 0
+      }
+    },
+    {
+      "case": "playback rate 0.5",
+      "wall_seconds": 1.5397141670109704,
+      "scene_advance_seconds": 0.7351099999999988
+    },
+    {
+      "case": "playback rate 1",
+      "wall_seconds": 1.513769416953437,
+      "scene_advance_seconds": 1.549768000000002
+    },
+    {
+      "case": "playback rate 2",
+      "wall_seconds": 1.525368000031449,
+      "scene_advance_seconds": 3.0345539999999964
+    }
+  ],
+  "rendered_seek": {
+    "expected_pixel_shift": 42.69922077655792,
+    "observed_pixel_shift": 43,
+    "pause_seek_seconds": 0.1,
+    "dpr": 3
+  }
+}

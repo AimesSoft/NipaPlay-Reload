@@ -485,14 +485,14 @@ class DeveloperOptionsSettingsContent extends StatelessWidget {
           return _buildBuildInfoContent(context, snapshot.data ?? []);
         },
       ),
-      actions: [
+      actionsBuilder: (dialogContext) => [
         HoverScaleTextButton(
           child: Text(
             context.l10n.close,
             locale: const Locale('zh-Hans', 'zh'),
             style: const TextStyle(color: Colors.lightBlueAccent),
           ),
-          onPressed: () => Navigator.of(context).pop(),
+          onPressed: () => Navigator.of(dialogContext).pop(),
         ),
       ],
     );
@@ -602,14 +602,14 @@ XDG缓存目录: $cacheDir
 遵循XDG Base Directory规范，提供更好的Linux用户体验。
         '''
             .trim(),
-        actions: [
+        actionsBuilder: (dialogContext) => [
           HoverScaleTextButton(
             child: const Text(
               '知道了',
               locale: Locale('zh-Hans', 'zh'),
               style: TextStyle(color: Colors.lightBlueAccent),
             ),
-            onPressed: () => Navigator.of(context).pop(),
+            onPressed: () => Navigator.of(dialogContext).pop(),
           ),
         ],
       );
@@ -631,13 +631,13 @@ XDG缓存目录: $cacheDir
       context: context,
       title: '确认迁移',
       content: '这将重新执行数据目录迁移过程。\n\n注意：这是一个测试功能，在正常情况下不应该使用。',
-      actions: [
+      actionsBuilder: (dialogContext) => [
         HoverScaleTextButton(
           child: const Text(
             '取消',
             locale: Locale('zh-Hans', 'zh'),
           ),
-          onPressed: () => Navigator.of(context).pop(false),
+          onPressed: () => Navigator.of(dialogContext).pop(false),
         ),
         HoverScaleTextButton(
           child: const Text(
@@ -645,7 +645,7 @@ XDG缓存目录: $cacheDir
             locale: Locale('zh-Hans', 'zh'),
             style: TextStyle(color: Colors.orange),
           ),
-          onPressed: () => Navigator.of(context).pop(true),
+          onPressed: () => Navigator.of(dialogContext).pop(true),
         ),
       ],
     );
@@ -672,14 +672,14 @@ ${result.message}
 - 失败项目: ${result.failedItems}
           '''
               .trim(),
-          actions: [
+          actionsBuilder: (dialogContext) => [
             HoverScaleTextButton(
               child: const Text(
                 '知道了',
                 locale: Locale('zh-Hans', 'zh'),
                 style: TextStyle(color: Colors.lightBlueAccent),
               ),
-              onPressed: () => Navigator.of(context).pop(),
+              onPressed: () => Navigator.of(dialogContext).pop(),
             ),
           ],
         );
@@ -694,14 +694,14 @@ ${result.message}
 ${result.errors.join('\n')}
           '''
               .trim(),
-          actions: [
+          actionsBuilder: (dialogContext) => [
             HoverScaleTextButton(
               child: const Text(
                 '知道了',
                 locale: Locale('zh-Hans', 'zh'),
                 style: TextStyle(color: Colors.orange),
               ),
-              onPressed: () => Navigator.of(context).pop(),
+              onPressed: () => Navigator.of(dialogContext).pop(),
             ),
           ],
         );
@@ -750,14 +750,14 @@ XDG_CACHE_HOME: $xdgCacheHome
 - 提供与其他Linux应用一致的用户体验
         '''
             .trim(),
-        actions: [
+        actionsBuilder: (dialogContext) => [
           HoverScaleTextButton(
             child: const Text(
               '知道了',
               locale: Locale('zh-Hans', 'zh'),
               style: TextStyle(color: Colors.lightBlueAccent),
             ),
-            onPressed: () => Navigator.of(context).pop(),
+            onPressed: () => Navigator.of(dialogContext).pop(),
           ),
         ],
       );
@@ -788,13 +788,13 @@ XDG_CACHE_HOME: $xdgCacheHome
 是否继续？
       '''
           .trim(),
-      actions: [
+      actionsBuilder: (dialogContext) => [
         HoverScaleTextButton(
           child: const Text(
             '取消',
             locale: Locale('zh-Hans', 'zh'),
           ),
-          onPressed: () => Navigator.of(context).pop(false),
+          onPressed: () => Navigator.of(dialogContext).pop(false),
         ),
         HoverScaleTextButton(
           child: const Text(
@@ -802,7 +802,7 @@ XDG_CACHE_HOME: $xdgCacheHome
             locale: Locale('zh-Hans', 'zh'),
             style: TextStyle(color: Colors.red),
           ),
-          onPressed: () => Navigator.of(context).pop(true),
+          onPressed: () => Navigator.of(dialogContext).pop(true),
         ),
       ],
     );
@@ -831,14 +831,14 @@ ${result.message}
 您的个人文件已恢复到 ~/Documents 目录。
           '''
               .trim(),
-          actions: [
+          actionsBuilder: (dialogContext) => [
             HoverScaleTextButton(
               child: const Text(
                 '知道了',
                 locale: Locale('zh-Hans', 'zh'),
                 style: TextStyle(color: Colors.lightBlueAccent),
               ),
-              onPressed: () => Navigator.of(context).pop(),
+              onPressed: () => Navigator.of(dialogContext).pop(),
             ),
           ],
         );
@@ -853,14 +853,14 @@ ${result.message}
 ${result.errors.join('\n')}
           '''
               .trim(),
-          actions: [
+          actionsBuilder: (dialogContext) => [
             HoverScaleTextButton(
               child: const Text(
                 '知道了',
                 locale: Locale('zh-Hans', 'zh'),
                 style: TextStyle(color: Colors.orange),
               ),
-              onPressed: () => Navigator.of(context).pop(),
+              onPressed: () => Navigator.of(dialogContext).pop(),
             ),
           ],
         );

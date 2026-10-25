@@ -37,6 +37,8 @@ class _ImageCacheMemoryPressureHandlerState
   @override
   void didHaveMemoryPressure() {
     super.didHaveMemoryPressure();
+    // 前台收到系统内存警告：只清缓存索引，不动屏幕上正在显示的句柄，
+    // 否则用户眼前的画面会立刻变成一片空白。
     ImageCacheManager.instance.handleMemoryPressure();
     // 自定义磁盘缓存只覆盖部分图片；Flutter 引擎内的解码缓存（海报等）
     // 也要一并清掉，系统低压信号才真正释放显存/堆。
@@ -47,11 +49,16 @@ class _ImageCacheMemoryPressureHandlerState
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     super.didChangeAppLifecycleState(state);
-    // 退到后台时释放非活跃图片；回到前台会按需重新解码（有磁盘缓存兜底）。
+    if (state == AppLifecycleState.resumed) {
+      // 回到前台：挂起时释放掉的图片由各个组件自己重新加载（有磁盘缓存兜底）。
+      ImageCacheManager.instance.lifecycleGeneration.value++;
+      return;
+    }
+    // 退到后台时连句柄一起释放；组件会同步放下引用，回前台再重载。
     if (state == AppLifecycleState.hidden ||
         state == AppLifecycleState.paused ||
         state == AppLifecycleState.detached) {
-      ImageCacheManager.instance.handleMemoryPressure();
+      ImageCacheManager.instance.handleMemoryPressure(releaseHandles: true);
     }
   }
 

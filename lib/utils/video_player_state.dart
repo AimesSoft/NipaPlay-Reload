@@ -1,13 +1,17 @@
 library video_player_state;
 
 export 'package:nipaplay_core/utils/video_aspect_geometry.dart' show VideoAspectMode;
+export 'screenshot_encoding.dart' show ScreenshotFormat;
 
 import 'package:nipaplay_core/services/playback_position_store.dart';
 import 'package:nipaplay/services/plugin_playback_service.dart';
 import 'package:nipaplay/plugins/url_resolver.dart';
 import 'package:nipaplay_core/utils/video_aspect_geometry.dart';
+import 'video_frame_image.dart';
+import 'screenshot_encoding.dart';
 
 import 'package:nipaplay/utils/local_danmaku_file.dart';
+import 'package:nipaplay/utils/danmaku_track_timing.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -29,7 +33,6 @@ import 'dart:io';
 import 'package:nipaplay/dev/perf_stats_logger.dart';
 import 'package:nipaplay/dev/eval_scenarios.dart';
 import 'dart:async';
-import 'dart:math' as math;
 import 'dart:typed_data';
 import 'dart:ui' as ui;
 import 'package:nipaplay/utils/storage_service.dart';
@@ -66,6 +69,7 @@ import 'package:nipaplay/services/timeline_danmaku_service.dart'; // 导入时�
 import 'package:nipaplay/services/danmaku_spoiler_filter_service.dart';
 import 'package:nipaplay/services/player_remote_control_bridge.dart';
 import 'package:nipaplay/services/playback_service.dart';
+import 'package:nipaplay/services/episode_file_selection_service.dart';
 import 'media_info_helper.dart';
 import 'package:nipaplay/services/danmaku_cache_manager.dart';
 import 'package:nipaplay/models/watch_history_model.dart';
@@ -307,7 +311,44 @@ class _VideoDimensionSnapshot {
 }
 
 class VideoPlayerState extends ChangeNotifier implements WindowListener {
-  late Player player; // 改为 late 修饰，使用 Player.create() 方法创建
+  late Player _player;
+  ValueListenable<bool>? _playerBuffering;
+
+  Player get player => _player;
+  set player(Player value) {
+    _playerBuffering?.removeListener(_onPlayerBufferingChanged);
+    _player = value;
+    _playerBuffering = value.buffering;
+    _playerBuffering!.addListener(_onPlayerBufferingChanged);
+  }
+
+  bool get isBuffering => player.isBuffering;
+  bool get isTimelinePreviewAvailable =>
+      _timelinePreviewEnabled && _timelinePreviewSupported;
+  int _dfmClockRevision = 0;
+  int get dfmClockRevision => _dfmClockRevision;
+
+  void _onPlayerBufferingChanged() {
+    if (_isDisposed) return;
+    // Preserve a short buffer/resume pair even when Flutter coalesces rebuilds.
+    _dfmClockRevision++;
+    if (hasVideo && _status == PlayerStatus.playing) {
+      // Keep the existing scene on entry. On recovery accept the native
+      // position once, even when it is behind the old interpolated clock.
+      final mediaMs = isBuffering
+          ? _playbackTimeMs.value
+          : (_seekTargetMs ?? player.position.toDouble());
+      _smoothAnchorMs = mediaMs;
+      _smoothAnchorElapsedUs = _lastElapsedUs;
+      _lastRawPlayerMs = player.position;
+      _rawSpikeStreak = 0;
+      _playbackTimeMs.value = mediaMs;
+      debugPrint('[DFM-BUFFER] kernel=${player.getPlayerKernelName()} '
+          'buffering=$isBuffering mediaMs=${mediaMs.toStringAsFixed(1)} '
+          'seekRevision=$_seekRevision');
+    }
+    _notifyListeners();
+  }
   BuildContext? _context;
   bool _isDisposed = false;
   bool _isBackgroundDanmakuLoading = false;
@@ -334,6 +375,23 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
   int _playerKernelSwapRequested = 0;
   int _playerKernelSwapApplied = 0;
   Future<void>? _playerKernelSwapDrain;
+  // 内核热切换的 UI surface 重建代数：每次切换开始前自增，渲染层
+  // （Texture / PlatformView / macOS 原生视图）以此作为 ValueKey——代数变化
+  // 时 Flutter 强制销毁重建整棵 surface 子树，等效于"关闭页面重开"。
+  // 没有它时 Texture 会跨内核实例被复用，旧内核的纹理句柄/平台视图
+  // 状态残留在新内核的渲染路径上，是播放中切换闪退的一类根因。
+  int _playerSurfaceGeneration = 0;
+  int get playerSurfaceGeneration => _playerSurfaceGeneration;
+
+  /// 内核热切换开始时调用：surface 代数自增并广播，渲染层 ValueKey 变化
+  /// → Flutter 销毁旧 surface 子树（Texture/PlatformView），新内核起播后
+  /// 以全新 Widget 生命周期挂载。热切换导致的渲染层闪退由此类别清零。
+  void beginKernelSurfaceSwap() {
+    _playerSurfaceGeneration++;
+    // ignore: invalid_use_of_protected_member, invalid_use_of_visible_for_testing_member
+    notifyListeners();
+  }
+
   PlayerStatus _status = PlayerStatus.idle;
   List<String> _statusMessages = []; // 修改为列表存储多个状态消息
   bool _isStartupMessageFlowActive = false;
@@ -467,6 +525,8 @@ int _exactEndStreak = 0;
   bool _screenshotCropLetterbox = true;
   // 视频画面尺寸模式（适应/填充/拉伸/16:9/4:3），默认适应
   VideoAspectMode _videoAspectMode = VideoAspectMode.contain;
+  /// 视频画面尺寸模式（适应/填充/拉伸/16:9/4:3）。
+  VideoAspectMode get videoAspectMode => _videoAspectMode;
   final String _videoAspectModeKey = 'video_aspect_mode';
   // 软解输出颜色格式（空=内核默认），mdk 走 video.decoder 属性
     String _softDecodePixelFormat = '';
@@ -517,6 +577,8 @@ int _exactEndStreak = 0;
   ScreenshotSaveTarget _screenshotSaveTarget = ScreenshotSaveTarget.file;
   final String _screenshotQualityKey = 'screenshot_quality';
   ScreenshotQuality _screenshotQuality = ScreenshotQuality.ultra;
+  final String _screenshotFormatKey = 'screenshot_format';
+  ScreenshotFormat _screenshotFormat = ScreenshotFormat.jpeg;
 
   Duration? _lastSeekPosition; // 添加这个字段来记录最后一次seek的位置
   PlaybackEndAction _playbackEndAction = PlaybackEndAction.autoNext;
@@ -580,6 +642,7 @@ int _exactEndStreak = 0;
   Future<void> _timelinePreviewSerialTask = Future.value();
   double _danmakuOpacity = 1.0; // 默认透明度
   bool _danmakuVisible = true; // 默认显示弹幕
+  bool _hasExplicitDanmakuVisibility = false;
   bool _mergeDanmaku = false; // 默认不合并弹幕
   bool _danmakuStacking = false; // 默认不启用弹幕堆叠
   bool _danmakuRandomColorEnabled = false; // 默认关闭随机染色
@@ -664,6 +727,7 @@ int _exactEndStreak = 0;
       ? defaultTvOSErikaDanmakuOutlineWidthLevel
       : defaultDanmakuOutlineWidthLevel;
   TitanDanmakuSettings _titanDanmakuSettings = const TitanDanmakuSettings();
+  final Completer<void> _initialDanmakuSettingsReady = Completer<void>();
   Timer? _titanDanmakuSettingsPersistenceTimer;
   static const double minSubtitleScale = 0.5;
   static const double maxSubtitleScale = 2.5;
@@ -981,6 +1045,12 @@ int _exactEndStreak = 0;
       EvalScenarios.start(this);
     }
     _initialize();
+    unawaited(_initialize().whenComplete(() {
+      // Do not leave the renderer waiting if initialization exits early.
+      if (!_initialDanmakuSettingsReady.isCompleted) {
+        _initialDanmakuSettingsReady.complete();
+      }
+    }));
   }
 
   /// tools/perf 评估用的内核侧快照：跨内核统一走 Player 门面的
@@ -1276,6 +1346,7 @@ int _exactEndStreak = 0;
   String? get screenshotSaveDirectory => _screenshotSaveDirectory;
   ScreenshotSaveTarget get screenshotSaveTarget => _screenshotSaveTarget;
   ScreenshotQuality get screenshotQuality => _screenshotQuality;
+  ScreenshotFormat get screenshotFormat => _screenshotFormat;
   List<Map<String, dynamic>> get danmakuList => _danmakuList;
   int get danmakuListVersion => _danmakuListVersion;
   int get locallySentDanmakuRevision => _locallySentDanmakuRevision;
@@ -1306,6 +1377,8 @@ int _exactEndStreak = 0;
   DanmakuShadowStyle get danmakuShadowStyle => _danmakuShadowStyle;
   double get next2DanmakuOutlineWidth => _next2DanmakuOutlineWidth;
   TitanDanmakuSettings get titanDanmakuSettings => _titanDanmakuSettings;
+  Future<void> get initialDanmakuSettingsReady =>
+      _initialDanmakuSettingsReady.future;
   double get subtitleScale => _subtitleScale;
   double get srtSubtitleScale => _srtSubtitleScale;
   double get subtitleDelayCustomLimitSeconds {
@@ -1857,6 +1930,8 @@ int _exactEndStreak = 0;
     _isDisposed = true;
     unawaited(DevPerfStatsLogger.instance.stop());
     EvalScenarios.stop();
+    _playerBuffering?.removeListener(_onPlayerBufferingChanged);
+    _playerBuffering = null;
     _cancelDfmStartupGate();
 
     if (_currentVideoPath != null) {
@@ -1968,7 +2043,7 @@ int _exactEndStreak = 0;
       _hoverSettingsMenuOverlay!.remove();
       _hoverSettingsMenuOverlay = null;
     }
-    WakelockPlus.disable();
+    _setWakelockSafely(false);
     //debugPrint("Wakelock disabled on dispose.");
     if (globals.isDesktop) {
       windowManager.removeListener(this);
@@ -1976,6 +2051,14 @@ int _exactEndStreak = 0;
     _playerKernelChangeSubscription?.cancel(); // 取消播放器内核切换事件订阅
     _danmakuKernelChangeSubscription?.cancel(); // 取消弹幕内核切换事件订阅
     super.dispose();
+  }
+
+  // WSLg and minimal Linux sessions may not provide a ScreenSaver D-Bus service.
+  // Wakelock failure must not become an unhandled playback exception.
+  void _setWakelockSafely(bool enabled) {
+    unawaited(WakelockPlus.toggle(enable: enabled).catchError((Object error) {
+      debugPrint('Wakelock unavailable: $error');
+    }));
   }
 
   // 设置窗口管理器监听器

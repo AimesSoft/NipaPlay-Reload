@@ -21,6 +21,9 @@ outputs:
   rpm-path:
     description: '生成的 RPM 包路径'
     value: ${{ steps.package.outputs.rpm_path }}
+  flatpak-path:
+    description: '生成的 Flatpak 包路径'
+    value: ${{ steps.flatpak_package.outputs.flatpak_path }}
 runs:
   using: 'composite'
   steps:
@@ -53,6 +56,54 @@ runs:
         sudo apt-get install -y libasound2-dev libass-dev libmpv-dev
         # Install keybinder-3.0 for hotkey_manager
         sudo apt-get install -y libkeybinder-3.0-dev
+
+    - name: Cache Flatpak builder state
+      uses: actions/cache@v4
+      with:
+        path: .flatpak-builder
+        key: flatpak-deps-24.08-${{ runner.arch }}-${{ hashFiles('io.github.AimesSoft.NipaPlay-Reload.yml') }}
+        restore-keys: |
+          flatpak-deps-24.08-${{ runner.arch }}-
+
+    - name: Install Erika native build dependencies
+      shell: bash
+      run: |
+        sudo apt-get install -y build-essential curl git patch zip unzip nasm \
+          python3-venv ffmpeg libclang-dev libpulse-dev libvulkan-dev libva-dev \
+          libdrm-dev libepoxy-dev libwayland-dev
+
+    - name: Setup Rust for Erika
+      uses: dtolnay/rust-toolchain@d0befba8b9ddf874327619e84c39b094edd58b66
+      with:
+        toolchain: 1.93.0
+
+    - name: Cache Erika Linux runtime
+      id: erika-cache
+      uses: actions/cache/restore@v4
+      with:
+        path: build/erika-linux-runtime
+        key: erika-linux-0.2.1-${{ runner.arch }}-${{ runner.os }}-${{ hashFiles('scripts/build_erika_linux_runtime.sh', '.github/patches/erika-linux-native-deps.patch', '.github/workflows/build-linux.yml', '.github/actions/build-linux/action.yml') }}
+
+    - name: Build Erika Linux runtime
+      if: steps.erika-cache.outputs.cache-hit != 'true'
+      shell: bash
+      run: bash scripts/build_erika_linux_runtime.sh "$GITHUB_WORKSPACE/build/erika-linux-runtime"
+
+    - name: Configure Erika Linux plugin
+      shell: bash
+      run: |
+        echo "ERIKA_LIBRARY_DIR=$GITHUB_WORKSPACE/build/erika-linux-runtime/lib" >> "$GITHUB_ENV"
+
+    - name: Smoke test Erika Linux runtime
+      shell: bash
+      run: python3 scripts/smoke_erika_linux_runtime.py "$ERIKA_LIBRARY_DIR"
+
+    - name: Cache verified Erika Linux runtime
+      if: steps.erika-cache.outputs.cache-hit != 'true'
+      uses: actions/cache/save@v4
+      with:
+        path: build/erika-linux-runtime
+        key: ${{ steps.erika-cache.outputs.cache-primary-key }}
 
     - name: Build Web and copy assets
       shell: bash
@@ -172,7 +223,16 @@ runs:
         pkg-config --modversion mpv
         # --obfuscate + --split-debug-info：Dart 代码混淆 + 分离调试符号（体积↓ + 反逆向）
         # symbol map 由 workflow 的 dart-symbols-* artifact 上传，用于 crash stack 反混淆
-        flutter build linux --release --obfuscate --split-debug-info=build/symbols-linux
+        flutter build linux --release --obfuscate --split-debug-info=build/symbols-linux \
+          --dart-define=NIPAPLAY_LINUX_ERIKA=true
+        arch_dir=x64
+        if [ "${{ inputs.arch }}" = arm64 ]; then arch_dir=arm64; fi
+        bundle="build/linux/$arch_dir/release/bundle"
+        test -f "$bundle/lib/liberika_capi.so"
+        mkdir -p "$bundle/lib/erika-licenses"
+        cp -a build/erika-linux-runtime/licenses/. "$bundle/lib/erika-licenses/"
+        cp build/erika-linux-runtime/LICENSE build/erika-linux-runtime/THIRD_PARTY_NOTICES.md \
+          build/erika-linux-runtime/MANIFEST.txt "$bundle/lib/erika-licenses/"
     
     - name: Linux packaging and cleanup
       id: package
@@ -651,3 +711,60 @@ runs:
         fi
         echo "archive_path=${LINUX_BUILD_DIR}/${ARCHIVE_NAME}" >> $GITHUB_OUTPUT
         echo "rpm_path=${LINUX_BUILD_DIR}/${DESIRED_RPM_NAME_FOR_CHECK}" >> $GITHUB_OUTPUT
+
+    - name: Create Flatpak package
+      id: flatpak_package
+      shell: bash
+      env:
+        VERSION: ${{ inputs.app-version }}
+        ARCH: ${{ inputs.arch }}
+      run: |
+        set -euo pipefail
+        APP_NAME="NipaPlay"
+        LINUX_BUILD_DIR="build/linux"
+        DEB_PKG_NAME="${APP_NAME}-${VERSION}-Linux-${ARCH}"
+        FLATPAK_NAME="${APP_NAME}-${VERSION}-Linux-${ARCH}.flatpak"
+
+        echo "--- Installing Flatpak builder tools ---"
+        sudo apt-get update
+        sudo apt-get remove -y fuse 2>/dev/null || true
+        sudo apt-get install -y flatpak flatpak-builder zstd
+        sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0 || true
+        git config --global protocol.file.allow always
+
+        echo "--- Creating Flatpak package ---"
+        FLATPAK_WORK_DIR="${LINUX_BUILD_DIR}/flatpak-work-${ARCH}"
+        FLATPAK_REPO_DIR="${FLATPAK_WORK_DIR}/repo"
+        FLATPAK_BUILD_DIR="${FLATPAK_WORK_DIR}/build-dir"
+        rm -rf "${FLATPAK_WORK_DIR}"
+        mkdir -p "${FLATPAK_WORK_DIR}"
+
+        cp "${LINUX_BUILD_DIR}/${DEB_PKG_NAME}.deb" "${LINUX_BUILD_DIR}/nipaplay.deb"
+
+        flatpak remote-add --user --if-not-exists flathub https://dl.flathub.org/repo/flathub.flatpakrepo
+        flatpak install --user -y --noninteractive flathub \
+          org.freedesktop.Platform//24.08 \
+          org.freedesktop.Sdk//24.08 \
+          org.freedesktop.Platform.ffmpeg-full//24.08
+
+        flatpak-builder --user \
+          --repo="${FLATPAK_REPO_DIR}" \
+          --force-clean \
+          --disable-rofiles-fuse \
+          "${FLATPAK_BUILD_DIR}" \
+          io.github.AimesSoft.NipaPlay-Reload.yml
+
+        flatpak build-bundle \
+          "${FLATPAK_REPO_DIR}" \
+          "${LINUX_BUILD_DIR}/${FLATPAK_NAME}" \
+          io.github.AimesSoft.NipaPlay-Reload
+
+        rm -f "${LINUX_BUILD_DIR}/nipaplay.deb"
+        rm -rf "${FLATPAK_WORK_DIR}" .flatpak-builder/build/nipaplay-reload* .flatpak-builder/rofiles
+
+        if [ ! -f "${LINUX_BUILD_DIR}/${FLATPAK_NAME}" ]; then
+          echo "Error: Flatpak file not found! Expected: ${LINUX_BUILD_DIR}/${FLATPAK_NAME}"
+          exit 1
+        fi
+        echo "Flatpak package created at ${LINUX_BUILD_DIR}/${FLATPAK_NAME}"
+        echo "flatpak_path=${LINUX_BUILD_DIR}/${FLATPAK_NAME}" >> "$GITHUB_OUTPUT"

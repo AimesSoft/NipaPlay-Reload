@@ -47,6 +47,7 @@ class ConcurrentVideoProcessor {
     List<String> videoPaths, {
     bool skipPreviouslyMatchedUnwatched = false,
     Function(int processed, int total, String currentFile)? onProgress,
+    Future<Map<String, dynamic>> Function(String)? getVideoInfo,
   }) async {
     if (videoPaths.isEmpty) return [];
 
@@ -67,6 +68,7 @@ class ConcurrentVideoProcessor {
         if (existingItem != null &&
             existingItem.animeId != null &&
             existingItem.episodeId != null &&
+            existingItem.animeName.trim().isNotEmpty &&
             existingItem.watchProgress <= 0.01) {
           skippedCount++;
           onProgress?.call(
@@ -92,7 +94,8 @@ class ConcurrentVideoProcessor {
     for (String videoPath in pathsToProcess) {
       final future = semaphore.acquire().then((_) async {
         try {
-          final result = await _processSingleVideoPath(videoPath);
+          final result = await _processSingleVideoPath(videoPath,
+              getVideoInfo: getVideoInfo);
           processedCount++;
           onProgress?.call(
               processedCount, videoPaths.length, _displayName(videoPath));
@@ -113,11 +116,12 @@ class ConcurrentVideoProcessor {
     return results;
   }
 
-  static Future<VideoProcessResult> _processSingleVideoPath(
-      String videoPath) async {
+  static Future<VideoProcessResult> _processSingleVideoPath(String videoPath,
+      {Future<Map<String, dynamic>> Function(String)? getVideoInfo}) async {
     try {
-      final videoInfo = await DanmakuMatchingService.instance
-          .getVideoInfo(videoPath)
+      final videoInfo = await (getVideoInfo == null
+              ? DanmakuMatchingService.instance.getVideoInfo(videoPath)
+              : getVideoInfo(videoPath))
           .timeout(_requestTimeout, onTimeout: () {
         throw TimeoutException('获取视频信息超时 (${_displayName(videoPath)})');
       });
@@ -138,12 +142,12 @@ class ConcurrentVideoProcessor {
           WatchHistoryItem? existingItem =
               await WatchHistoryManager.getHistoryItem(videoPath);
 
-          // 如果按 filePath 找不到已有记录，尝试按 animeId+episodeId 查找旧记录
-          // 这处理了"清除匹配信息后更换文件路径重新匹配"的场景：
-          // 旧记录保留 animeId/episodeId 但 filePath 不同，此处迁移进度到新文件
+          // Only a cleared match can transfer progress to a replacement path.
+          // An active record is another playable version of the same episode.
           WatchHistoryItem? migratedItem;
           if (existingItem == null) {
-            migratedItem = await WatchHistoryManager.getHistoryItemByEpisode(
+            migratedItem =
+                await WatchHistoryManager.getClearedHistoryItemByEpisode(
               animeIdFromMatch,
               episodeIdFromMatch,
             );
@@ -199,7 +203,7 @@ class ConcurrentVideoProcessor {
                 thumbnailPath: migratedItem.thumbnailPath,
                 isFromScan: true);
 
-            // 删除旧路径的记录，避免同一 animeId+episodeId 出现重复条目
+            // The donor was explicitly unlinked; its old path can be removed.
             await WatchHistoryManager.removeHistoryItem(migratedItem.filePath);
           } else {
             // 新扫描项目

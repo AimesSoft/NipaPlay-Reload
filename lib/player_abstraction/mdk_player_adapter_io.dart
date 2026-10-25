@@ -5,7 +5,28 @@ import 'package:nipaplay_core/player_abstraction/abstract_player.dart';
 import 'package:nipaplay_core/player_abstraction/player_enums.dart';
 import 'package:nipaplay_core/player_abstraction/player_data_models.dart';
 import 'dart:async';
+import 'package:nipaplay/utils/player_kernel_manager.dart';
 import 'package:nipaplay/utils/subtitle_font_loader.dart';
+
+@visibleForTesting
+StreamSubscription<({mdk.MediaStatus oldValue, mdk.MediaStatus newValue})>?
+    listenMdkMediaStatus(
+  Object source,
+  void Function(mdk.MediaStatus status) onStatus,
+) {
+  if (source
+      is Stream<({mdk.MediaStatus oldValue, mdk.MediaStatus newValue})>) {
+    return source.listen((event) => onStatus(event.newValue));
+  }
+  // Mainline FVP 0.33 registers a callback; the OHOS 0.37 fork uses a stream.
+  (source as void Function(
+    bool Function(mdk.MediaStatus oldStatus, mdk.MediaStatus status),
+  ))((oldStatus, status) {
+    onStatus(status);
+    return true;
+  });
+  return null;
+}
 
 @visibleForTesting
 void applyMdkUserAgentProperties(
@@ -188,7 +209,16 @@ PlayerMediaInfo _toPlayerMediaInfo(mdk.MediaInfo mdkInfo,
   );
 }
 
-class MdkPlayerAdapter implements AbstractPlayer {
+class MdkPlayerAdapter
+    implements
+        AbstractPlayer,
+        AsyncDisposablePlayer,
+        AsyncSeekPlayer,
+        BufferingAwarePlayer {
+  final ValueNotifier<bool> _buffering = ValueNotifier<bool>(false);
+
+  @override
+  ValueListenable<bool> get buffering => _buffering;
   late mdk.Player _mdkPlayer;
   double _playbackRate = 1.0;
   List<String> _videoDecoders = const [];
@@ -205,6 +235,17 @@ class MdkPlayerAdapter implements AbstractPlayer {
   // 最近一次请求的内嵌字幕轨选择：停滞恢复重建原生 player 后需要重放。
   List<int> _lastRequestedSubtitleTracks = const [];
 
+  // 幂等守卫：热切换主路径（步骤 3.1）与 finally 兜底会先后调用
+  // disposeAsync，必须合并为同一次 teardown，杜绝 double mdkPlayerAPI_delete。
+  bool _isDisposed = false;
+  Future<void>? _disposeAsyncFuture;
+  final Set<String> _callsAfterTeardown = {};
+  // Bumped by every seek, so a resume seek stops asking again once anything
+  // has asked for another position.
+  int _seekGeneration = 0;
+  Completer<void>? _seekSettled;
+  StreamSubscription<({mdk.MediaStatus oldValue, mdk.MediaStatus newValue})>?
+      _mediaStatusSubscription;
   MdkPlayerAdapter({String? httpProxy})
       : _httpProxy = (httpProxy ?? '').trim() {
     _mdkPlayer = mdk.Player();
@@ -212,7 +253,25 @@ class MdkPlayerAdapter implements AbstractPlayer {
     _applyInitialSettings();
   }
 
+  @visibleForTesting
+  MdkPlayerAdapter.withPlayer(mdk.Player player) : _httpProxy = '' {
+    _mdkPlayer = player;
+    _attachMdkBufferingListener();
+  }
+
+  void _attachMdkBufferingListener() {
+    _mediaStatusSubscription =
+        listenMdkMediaStatus(_mdkPlayer.onMediaStatus, (status) {
+      if (!_isDisposed) {
+        _buffering.value = status.test(mdk.MediaStatus.buffering);
+      }
+      if (!status.test(mdk.MediaStatus.seeking)) _settleSeek();
+    });
+    _buffering.value = _mdkPlayer.mediaStatus.test(mdk.MediaStatus.buffering);
+  }
+
   void _attachMdkEventListeners() {
+    _attachMdkBufferingListener();
     try {
       void handleEvent(mdk.MediaEvent e) {
         switch (e.category) {
@@ -245,6 +304,7 @@ class MdkPlayerAdapter implements AbstractPlayer {
     _mdkPlayer.setProperty(key, value);
   }
 
+  /// 停滞恢复重建原生 player 后，把代理/UA/字幕字体等 sticky 属性重放。
   void _reapplyStickyProperties() {
     for (final entry in _stickyProperties.entries) {
       try {
@@ -289,6 +349,7 @@ class MdkPlayerAdapter implements AbstractPlayer {
           return;
         }
 
+        if (_isDisposed) return;
         final fontsDir = fontInfo['directory'];
         final fontFile = fontInfo['filePath'];
         if (fontsDir == null || fontFile == null) {
@@ -320,16 +381,35 @@ class MdkPlayerAdapter implements AbstractPlayer {
     }());
   }
 
+  /// fvp deletes the native player on another isolate while this one runs
+  /// on, and its members call through that player's function table, which
+  /// is gone then. Once teardown begins, members answer as a stopped player
+  /// with no media and change nothing; the first call of each is traced
+  /// with its caller.
+  bool _released(String member) {
+    if (!_isDisposed) return false;
+    if (_callsAfterTeardown.add(member)) {
+      final caller = StackTrace.current.toString().split('\n').skip(1).take(14);
+      PlayerKernelManager.traceHotSwapStage(
+          'mdk $member called after teardown began\n${caller.join('\n')}');
+    }
+    return true;
+  }
+
   @override
   double get volume => _mdkPlayer.volume;
   @override
-  set volume(double value) => _mdkPlayer.volume = value;
+  set volume(double value) {
+    if (_released('volume=')) return;
+    _mdkPlayer.volume = value;
+  }
 
   @override
   double get playbackRate => _playbackRate;
   @override
   set playbackRate(double value) {
     _playbackRate = value;
+    if (_released('playbackRate=')) return;
     try {
       _mdkPlayer.playbackRate = value;
       debugPrint('MDK: 设置播放速度: ${value}x');
@@ -341,8 +421,10 @@ class MdkPlayerAdapter implements AbstractPlayer {
   @override
   PlayerPlaybackState get state => _toPlayerPlaybackState(_mdkPlayer.state);
   @override
-  set state(PlayerPlaybackState value) =>
-      _mdkPlayer.state = _fromPlayerPlaybackState(value);
+  set state(PlayerPlaybackState value) {
+    if (_released('state=')) return;
+    _mdkPlayer.state = _fromPlayerPlaybackState(value);
+  }
 
   @override
   ValueListenable<int?> get textureId => _mdkPlayer.textureId;
@@ -351,52 +433,29 @@ class MdkPlayerAdapter implements AbstractPlayer {
   String get media => _mdkPlayer.media;
   @override
   set media(String value) {
+    if (_isDisposed) throw StateError('MDK player is disposed');
     // 换主媒体后旧的字幕停滞观察作废
     _subtitleStallWatchTimer?.cancel();
     if (value.isNotEmpty && _mdkPlayer.media != value) {
+      _buffering.value = false;
       _activeVideoDecoder = null;
       _activeAudioDecoder = null;
-      _internalAudioTrackCount = 0; // 重置：新主媒体尚未加载外挂音频
-      final videoDecoders = _videoDecoders.isNotEmpty
-          ? List<String>.from(_videoDecoders)
-          : List<String>.from(_mdkPlayer.videoDecoders);
-      final audioDecoders = _audioDecoders.isNotEmpty
-          ? List<String>.from(_audioDecoders)
-          : List<String>.from(_mdkPlayer.audioDecoders);
-
-      try {
-        _mdkPlayer.dispose();
-      } catch (e) {}
-
-      _mdkPlayer = mdk.Player();
-      _attachMdkEventListeners();
-      _applyInitialSettings();
-
-      try {
-        _reapplyStickyProperties();
-        if (videoDecoders.isNotEmpty) {
-          setDecoders(PlayerMediaType.video, videoDecoders);
-        }
-        if (audioDecoders.isNotEmpty) {
-          setDecoders(PlayerMediaType.audio, audioDecoders);
-        }
-      } catch (e) {}
-    } else if (value.isEmpty && _mdkPlayer.media.isNotEmpty) {
-      _mdkPlayer.state = mdk.PlaybackState.stopped;
-      _mdkPlayer.setMedia("", mdk.MediaType.video);
+      _internalAudioTrackCount = 0;
     }
-
     _mdkPlayer.media = value;
   }
 
   @override
-  PlayerMediaInfo get mediaInfo => _toPlayerMediaInfo(_mdkPlayer.mediaInfo,
-      internalAudioTrackCount: _internalAudioTrackCount);
+  PlayerMediaInfo get mediaInfo => _released('mediaInfo')
+      ? PlayerMediaInfo(duration: 0)
+      : _toPlayerMediaInfo(_mdkPlayer.mediaInfo,
+          internalAudioTrackCount: _internalAudioTrackCount);
 
   @override
   List<int> get activeSubtitleTracks => _mdkPlayer.activeSubtitleTracks;
   @override
   set activeSubtitleTracks(List<int> value) {
+    if (_released('activeSubtitleTracks=')) return;
     if (value.isEmpty) {
       _subtitleStallWatchTimer?.cancel();
       _lastRequestedSubtitleTracks = const [];
@@ -576,14 +635,17 @@ class MdkPlayerAdapter implements AbstractPlayer {
   @override
   List<int> get activeAudioTracks => _mdkPlayer.activeAudioTracks;
   @override
-  set activeAudioTracks(List<int> value) =>
-      _mdkPlayer.activeAudioTracks = value;
+  set activeAudioTracks(List<int> value) {
+    if (_released('activeAudioTracks=')) return;
+    _mdkPlayer.activeAudioTracks = value;
+  }
 
   @override
-  int get position => _mdkPlayer.position;
+  int get position => _released('position') ? 0 : _mdkPlayer.position;
 
   @override
   int get bufferedPosition {
+    if (_released('bufferedPosition')) return 0;
     try {
       final bufferedDuration = _mdkPlayer.buffered();
       if (bufferedDuration <= 0) {
@@ -602,6 +664,7 @@ class MdkPlayerAdapter implements AbstractPlayer {
 
   @override
   void setBufferRange({int minMs = -1, int maxMs = -1, bool drop = false}) {
+    if (_released('setBufferRange')) return;
     try {
       _mdkPlayer.setBufferRange(min: minMs, max: maxMs, drop: drop);
     } catch (e) {
@@ -627,6 +690,10 @@ class MdkPlayerAdapter implements AbstractPlayer {
 
   @override
   void setMedia(String path, PlayerMediaType type) {
+    if (_released('setMedia')) return;
+    if (type == PlayerMediaType.video || type == PlayerMediaType.unknown) {
+      _buffering.value = false;
+    }
     if (type == PlayerMediaType.audio) {
       if (path.isNotEmpty) {
         // 记录当前内部音频轨道数，用于区分外挂MKA轨道
@@ -644,6 +711,7 @@ class MdkPlayerAdapter implements AbstractPlayer {
 
   @override
   Future<void> prepare() async {
+    if (_released('prepare')) return;
     try {
       _mdkPlayer.prepare();
       // prepare后重新应用播放速度，确保设置生效
@@ -658,29 +726,72 @@ class MdkPlayerAdapter implements AbstractPlayer {
 
   @override
   void seek({required int position}) {
+    if (_released('seek')) return;
+    _seekGeneration++;
     _mdkPlayer.seek(position: position);
+  }
+
+  /// MDK cancels a seek (-2), or turns it away (-10), while a seek of its own
+  /// is running, such as the one an active-track change makes to the current
+  /// position; playback then goes on from where that one went. So this waits
+  /// for MDK's answer and, when MDK did not take the seek and nothing has
+  /// asked for another position since, asks again once MDK's own seek is
+  /// done.
+  @override
+  Future<void> seekAndWait({required int position}) async {
+    if (_released('seekAndWait')) return;
+    final generation = ++_seekGeneration;
+    for (var attempt = 0; attempt < 3; attempt++) {
+      final result = await _mdkPlayer
+          .seek(position: position)
+          .timeout(const Duration(seconds: 3), onTimeout: () => 0);
+      if (result >= 0 || _isDisposed || generation != _seekGeneration) return;
+      debugPrint('MDK: seek($position) 未被执行（$result），内核自己的 seek 结束后再请求一次');
+      await _untilSeekSettled();
+      if (_isDisposed || generation != _seekGeneration) return;
+    }
+  }
+
+  Future<void> _untilSeekSettled() {
+    if (!_mdkPlayer.mediaStatus.test(mdk.MediaStatus.seeking)) {
+      return Future<void>.value();
+    }
+    return (_seekSettled ??= Completer<void>())
+        .future
+        .timeout(const Duration(seconds: 2), onTimeout: () {});
+  }
+
+  void _settleSeek() {
+    final settled = _seekSettled;
+    _seekSettled = null;
+    if (settled != null && !settled.isCompleted) settled.complete();
   }
 
   @override
   void dispose() {
-    _subtitleStallWatchTimer?.cancel();
-    // MDK 的原生 dispose 是同步 FFI 调用，网络流（WebDAV/http）关闭时
-    // 可能会在原生层等网络读取数秒——内核热切换链直接 await 这一下会把
-    // 整个主 isolate 冻住（iOS「从 WebDAV 播放切内核导致 app 卡死」的
-    // 主要嫌疑）。与 MediaKit 适配器同款处理：先让出事件循环让热切换继续
-    // 创建新播放器，原生释放在下一拍执行并吞掉异常。
-    final mdkPlayer = _mdkPlayer;
-    unawaited(Future<void>.delayed(const Duration(milliseconds: 16), () {
-      try {
-        mdkPlayer.dispose();
-      } catch (e) {
-        debugPrint('MDK: 释放原生播放器失败: $e');
-      }
+    unawaited(disposeAsync().catchError((Object error, StackTrace stack) {
+      debugPrint('MDK: asynchronous disposal failed: $error');
     }));
   }
 
   @override
+  Future<void> disposeAsync() =>
+      _disposeAsyncFuture ??= _disposeAsyncInternal();
+
+  Future<void> _disposeAsyncInternal() async {
+    _isDisposed = true;
+    _subtitleStallWatchTimer?.cancel();
+    _buffering.dispose();
+    _settleSeek();
+    await _mediaStatusSubscription?.cancel();
+    PlayerKernelManager.traceHotSwapStage('mdk teardown: begin');
+    await Future<void>.sync(_mdkPlayer.dispose);
+    PlayerKernelManager.traceHotSwapStage('mdk teardown: complete');
+  }
+
+  @override
   Future<PlayerFrame?> snapshot({int width = 0, int height = 0}) async {
+    if (_released('snapshot')) return null;
     final Uint8List? frameBytes =
         await _mdkPlayer.snapshot(width: width, height: height);
     if (frameBytes == null) {
@@ -712,6 +823,7 @@ class MdkPlayerAdapter implements AbstractPlayer {
       default:
         break;
     }
+    if (_released('setDecoders')) return;
     _mdkPlayer.setDecoders(_fromPlayerMediaType(type), decoders);
   }
 
@@ -737,6 +849,7 @@ class MdkPlayerAdapter implements AbstractPlayer {
       case 'decoder.audio':
         return _activeAudioDecoder;
     }
+    if (_released('getProperty')) return null;
     return _mdkPlayer.getProperty(key);
   }
 
@@ -748,6 +861,7 @@ class MdkPlayerAdapter implements AbstractPlayer {
 
   @override
   void setProperty(String key, String value) {
+    if (_released('setProperty')) return;
     try {
       _setStickyProperty(key, value);
     } catch (e) {
@@ -788,6 +902,7 @@ class MdkPlayerAdapter implements AbstractPlayer {
 
   @override
   Future<void> playDirectly() async {
+    if (_released('playDirectly')) return;
     try {
       _mdkPlayer.state = mdk.PlaybackState.playing;
     } catch (e) {}
@@ -795,6 +910,7 @@ class MdkPlayerAdapter implements AbstractPlayer {
 
   @override
   Future<void> pauseDirectly() async {
+    if (_released('pauseDirectly')) return;
     try {
       _mdkPlayer.state = mdk.PlaybackState.paused;
     } catch (e) {}
@@ -807,6 +923,9 @@ class MdkPlayerAdapter implements AbstractPlayer {
 
   // 提供详细播放技术信息（MDK）
   Map<String, dynamic> getDetailedMediaInfo() {
+    if (_released('getDetailedMediaInfo')) {
+      return {'kernel': 'MDK', 'video': <dynamic>[], 'audio': <dynamic>[], 'duration': 0};
+    }
     final info = _mdkPlayer.mediaInfo;
     final Map<String, dynamic> ret = {
       'kernel': 'MDK',

@@ -47,6 +47,8 @@ class EpisodeMatchRestoreItem {
 
 class WatchHistoryDatabase {
   static Database? _database;
+  static Future<Database>? _opening;
+  Future<List<WatchHistoryItem>>? _readingHistory;
   static final WatchHistoryDatabase instance = WatchHistoryDatabase._init();
   static const String _dbName = 'watch_history.db';
   static const int _dbVersion = 2;
@@ -64,8 +66,12 @@ class WatchHistoryDatabase {
   Future<Database> get database async {
     if (_database != null) return _database!;
 
-    _database = await _initDB();
-    return _database!;
+    final opening = _opening ??= _initDB();
+    try {
+      return _database = await opening;
+    } finally {
+      if (identical(_opening, opening)) _opening = null;
+    }
   }
 
   // 初始化数据库
@@ -196,6 +202,12 @@ class WatchHistoryDatabase {
     if (_migrationCompleted) return;
 
     try {
+      final jsonPath = await _getJsonFilePath();
+      if (jsonPath != null &&
+          !await io.File(path.join(path.dirname(jsonPath), 'watch_history.db'))
+              .exists()) {
+        await WatchHistoryManager.initialize();
+      }
       final db = await database;
       // 检查是否已经有数据
       final count = Sqflite.firstIntValue(
@@ -400,13 +412,16 @@ class WatchHistoryDatabase {
     });
   }
 
-  static Future<void> _persistWebStore() async {
+  static Future<void> _persistWebStore({bool requireSuccess = false}) async {
     if (!kIsWeb) return;
     try {
       final prefs = await SharedPreferences.getInstance();
       final items = _webStore.values.map((item) => item.toJson()).toList();
-      await prefs.setString(_webStoreKey, json.encode(items));
+      if (!await prefs.setString(_webStoreKey, json.encode(items))) {
+        throw StateError('无法保存Web观看记录缓存');
+      }
     } catch (e) {
+      if (requireSuccess) rethrow;
       debugPrint('保存Web观看记录缓存失败: $e');
     }
   }
@@ -646,8 +661,8 @@ class WatchHistoryDatabase {
 
     final db = await database;
     return db.transaction((txn) async {
-      final existing =
-          await _prefetchByFilePaths(txn, incomingMatches.map((e) => e.filePath));
+      final existing = await _prefetchByFilePaths(
+          txn, incomingMatches.map((e) => e.filePath));
       var restored = 0;
       var skipped = 0;
       final writes = txn.batch();
@@ -748,8 +763,27 @@ class WatchHistoryDatabase {
         'is_from_scan': item.isFromScan ? 1 : 0,
       };
 
+  Future<List<WatchHistoryItem>> getRecentWatchHistory({int limit = 40}) async {
+    if (limit <= 0) return [];
+    if (kIsWeb) return (await getAllWatchHistory()).take(limit).toList();
+    final db = await database;
+    final maps = await db.query('watch_history',
+        orderBy: 'last_watch_time DESC', limit: limit);
+    return maps.map(_mapToWatchHistoryItem).toList();
+  }
+
   // 获取所有观看历史，按最后观看时间排序
   Future<List<WatchHistoryItem>> getAllWatchHistory() async {
+    final reading = _readingHistory ??= _readAllWatchHistory();
+    try {
+      // Consumers receive independent objects (iOS path repair can mutate them).
+      return (await reading).map((item) => item.copyWith()).toList();
+    } finally {
+      if (identical(_readingHistory, reading)) _readingHistory = null;
+    }
+  }
+
+  Future<List<WatchHistoryItem>> _readAllWatchHistory() async {
     if (kIsWeb) {
       await _ensureWebStoreLoaded();
       final items = _webStore.values.toList();
@@ -890,6 +924,88 @@ class WatchHistoryDatabase {
   }
 
   // 根据番剧ID和集数ID获取历史记录
+  Future<List<WatchHistoryItem>> getMatchedHistoriesByEpisode(
+      int animeId, int episodeId) async {
+    if (kIsWeb) {
+      await _ensureWebStoreLoaded();
+      return _webStore.values
+          .where((item) =>
+              item.animeId == animeId &&
+              item.episodeId == episodeId &&
+              item.animeName.trim().isNotEmpty &&
+              item.filePath.trim().isNotEmpty)
+          .toList()
+        ..sort((a, b) => b.lastWatchTime.compareTo(a.lastWatchTime));
+    }
+    final db = await database;
+    final rows = await db.query(
+      'watch_history',
+      where: "anime_id = ? AND episode_id = ? AND TRIM(anime_name) != '' "
+          "AND TRIM(file_path) != ''",
+      whereArgs: [animeId, episodeId],
+      orderBy: 'last_watch_time DESC, file_path ASC',
+    );
+    return rows.map(_mapToWatchHistoryItem).toList();
+  }
+
+  /// Only a previously cleared match may donate progress to a new file path.
+  /// Active versions of the same episode remain independent records.
+  Future<WatchHistoryItem?> getClearedHistoryByEpisode(
+      int animeId, int episodeId) async {
+    if (kIsWeb) {
+      await _ensureWebStoreLoaded();
+      final cleared = _webStore.values
+          .where((item) =>
+              item.animeId == animeId &&
+              item.episodeId == episodeId &&
+              item.animeName.trim().isEmpty)
+          .toList()
+        ..sort((a, b) => b.lastWatchTime.compareTo(a.lastWatchTime));
+      return cleared.isEmpty ? null : cleared.first;
+    }
+    final db = await database;
+    final rows = await db.query(
+      'watch_history',
+      where: "anime_id = ? AND episode_id = ? AND TRIM(anime_name) = ''",
+      whereArgs: [animeId, episodeId],
+      orderBy: 'last_watch_time DESC, file_path ASC',
+      limit: 1,
+    );
+    return rows.isEmpty ? null : _mapToWatchHistoryItem(rows.first);
+  }
+
+  Future<bool> clearMatchInfoForFile(WatchHistoryItem expected) async {
+    if (kIsWeb) {
+      await _ensureWebStoreLoaded();
+      final existing = _webStore[expected.filePath];
+      if (existing == null ||
+          existing.animeId != expected.animeId ||
+          existing.episodeId != expected.episodeId) {
+        return false;
+      }
+      final cleared = existing.withoutMatchInfo();
+      _webStore[expected.filePath] = cleared;
+      try {
+        await _persistWebStore(requireSuccess: true);
+      } catch (_) {
+        if (identical(_webStore[expected.filePath], cleared)) {
+          _webStore[expected.filePath] = existing;
+        }
+        _scheduleWebStorePersist();
+        rethrow;
+      }
+      return true;
+    }
+    final db = await database;
+    final changed = await db.update(
+      'watch_history',
+      {'anime_name': '', 'episode_title': null, 'is_from_scan': 0},
+      where: 'file_path = ? AND anime_id = ? AND episode_id = ?',
+      whereArgs: [expected.filePath, expected.animeId, expected.episodeId],
+    );
+    return changed > 0;
+  }
+
   Future<WatchHistoryItem?> getHistoryByEpisode(
       int animeId, int episodeId) async {
     if (kIsWeb) {
@@ -1258,9 +1374,7 @@ class WatchHistoryDatabase {
     final uniqueReferences = references.toSet().toList();
     final rows = await db.query(
       'watch_history',
-      where: uniqueReferences
-          .map((_) => 'file_path LIKE ?')
-          .join(' OR '),
+      where: uniqueReferences.map((_) => 'file_path LIKE ?').join(' OR '),
       whereArgs: uniqueReferences.map((ref) => '$scheme://$ref/%').toList(),
     );
     for (final row in rows) {

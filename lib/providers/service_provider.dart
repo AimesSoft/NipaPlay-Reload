@@ -25,7 +25,7 @@ class ServiceProvider {
   static final ServerHistorySyncService serverHistorySyncService =
       ServerHistorySyncService.instance;
 
-  static Future<void> initialize() async {
+  static Future<void> initialize({bool deferBackground = false}) async {
     // 网络媒体库 provider 的连接验证全部转为后台：启动路径只保留本地偏好
     // 读取。首页对未加载完成的 provider 已有 loading 态。
     unawaited(Future.wait([
@@ -39,17 +39,19 @@ class ServiceProvider {
       );
     }));
 
-    // 本地观看历史延后到首帧后加载（加载含逐条文件存在性 stat，历史多时
-    // 占用数百毫秒）；首屏 splash 到主页面期间 provider 自身有 loading 态。
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      unawaited(_loadAfterFirstFrame());
-    });
+    // 本地观看历史延后到首帧后加载：上游 deferBackground/initializeAfterFirstFrame
+    // 机制已承接这一意图（历史加载含逐条文件存在性 stat，历史多时占用数百毫秒，
+    // 延后避免阻塞首帧）；主入口在首帧后调用 initializeAfterFirstFrame()。
+    watchHistoryProvider.setScanService(scanService);
+    if (!deferBackground) await initializeAfterFirstFrame();
   }
 
-  static Future<void> _loadAfterFirstFrame() async {
+  static Future<void>? _backgroundInitialization;
+  static Future<void> initializeAfterFirstFrame() =>
+      _backgroundInitialization ??= _initializeBackground();
+
+  static Future<void> _initializeBackground() async {
     await watchHistoryProvider.loadHistory();
-    // 让 WatchHistoryProvider 能响应扫描完成（包括来自远程 API 的扫描请求）
-    watchHistoryProvider.setScanService(scanService);
 
     // 远程访问服务：若用户开启了“软件启动自动开启”，则在此启动服务。
     // 绑定 HTTP 端口不需要发生在首帧之前。

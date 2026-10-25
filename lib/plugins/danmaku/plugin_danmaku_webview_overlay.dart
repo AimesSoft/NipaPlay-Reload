@@ -16,11 +16,13 @@ class PluginDanmakuWebViewOverlay extends StatefulWidget {
     required this.renderer,
     required this.videoState,
     this.fontScale = 1.0,
+    this.isVisible = true,
   });
 
   final PluginDanmakuRenderer renderer;
   final VideoPlayerState videoState;
   final double fontScale;
+  final bool isVisible;
 
   @override
   State<PluginDanmakuWebViewOverlay> createState() =>
@@ -32,12 +34,18 @@ class _PluginDanmakuWebViewOverlayState
   WebViewController? _controller;
   Object? _loadError;
   bool _rendererReady = false;
+  bool _initialStateSent = false;
   int _lastClockSentAtMs = 0;
   int _lastDanmakuListVersion = -1;
   int _lastLocallySentDanmakuRevision = -1;
   int _lastSeekRevision = -1;
   String _lastSettingsJson = '';
   String _lastPlaybackState = '';
+  bool _lastBuffering = false;
+  bool? _lastVisible;
+  int _visibilitySeekRevision = 0;
+
+  bool get _visible => widget.isVisible && widget.videoState.danmakuVisible;
   Future<void> _sendQueue = Future<void>.value();
   int _loadGeneration = 0;
 
@@ -60,11 +68,15 @@ class _PluginDanmakuWebViewOverlayState
     }
     if (oldWidget.renderer.selectionId != widget.renderer.selectionId) {
       _rendererReady = false;
+      _initialStateSent = false;
       _controller = null;
       _loadError = null;
       unawaited(_initialize());
-    } else if (oldWidget.fontScale != widget.fontScale) {
+    } else if (oldWidget.fontScale != widget.fontScale && _initialStateSent) {
       unawaited(_sendSettings(force: true));
+    }
+    if (oldWidget.isVisible != widget.isVisible) {
+      _onVideoStateChanged();
     }
   }
 
@@ -118,7 +130,7 @@ class _PluginDanmakuWebViewOverlayState
       switch (decoded['type']) {
         case 'ready':
           _rendererReady = true;
-          unawaited(_sendFullState());
+          unawaited(_sendFullState(generation));
           return;
         case 'error':
           debugPrint(
@@ -136,28 +148,33 @@ class _PluginDanmakuWebViewOverlayState
     } catch (_) {}
   }
 
-  Future<void> _sendFullState() async {
+  Future<void> _sendFullState(int generation) async {
+    await widget.videoState.initialDanmakuSettingsReady;
+    if (!mounted || generation != _loadGeneration) return;
     await _send(<String, dynamic>{
       'type': 'initialize',
       'apiVersion': PluginDanmakuRenderer.supportedApiVersion,
       'pluginId': widget.renderer.pluginId,
       'rendererId': widget.renderer.id,
     });
-    await _sendDanmaku(force: true);
     await _sendSettings(force: true);
     await _sendClock(force: true);
+    await _sendDanmaku(force: true);
+    if (!mounted || generation != _loadGeneration) return;
+    _initialStateSent = true;
+    _onVideoStateChanged();
   }
 
   void _onVideoStateChanged() {
-    if (!_rendererReady) return;
-    unawaited(_sendDanmaku());
+    if (!_rendererReady || !_initialStateSent) return;
     unawaited(_sendSettings());
+    unawaited(_sendDanmaku());
     unawaited(
         _sendClock(force: _lastSeekRevision != widget.videoState.seekRevision));
   }
 
   void _onPlaybackClock() {
-    if (!_rendererReady) return;
+    if (!_rendererReady || !_initialStateSent) return;
     unawaited(_sendClock());
   }
 
@@ -213,7 +230,7 @@ class _PluginDanmakuWebViewOverlayState
           state.titanDanmakuSettings.fontSize * fontScale;
     }
     final settings = <String, dynamic>{
-      'visible': state.danmakuVisible,
+      'visible': _visible,
       'opacity': state.mappedDanmakuOpacity,
       'fontSize': state.actualDanmakuFontSize * fontScale,
       'fontFamily': state.danmakuFontFamily,
@@ -239,24 +256,35 @@ class _PluginDanmakuWebViewOverlayState
     final now = DateTime.now().millisecondsSinceEpoch;
     final state = widget.videoState;
     final playbackState = state.status.toString().split('.').last;
+    final isBuffering = state.isBuffering;
+    final visible = _visible;
+    final visibilityChanged = visible != _lastVisible;
+    // Restore the current window after hidden playback without reloading data.
+    if (visible && _lastVisible == false) _visibilitySeekRevision++;
     final seekChanged = state.seekRevision != _lastSeekRevision;
     final stateChanged = playbackState != _lastPlaybackState;
+    final bufferingChanged = isBuffering != _lastBuffering;
+    // Buffer/resume transitions must reach JS even within one clock interval.
     if (!force &&
         !seekChanged &&
         !stateChanged &&
-        now - _lastClockSentAtMs < 100) {
+        !bufferingChanged &&
+        !visibilityChanged &&
+        (!visible || now - _lastClockSentAtMs < 100)) {
       return;
     }
     _lastClockSentAtMs = now;
     _lastSeekRevision = state.seekRevision;
     _lastPlaybackState = playbackState;
+    _lastBuffering = isBuffering;
+    _lastVisible = visible;
     await _send(<String, dynamic>{
       'type': 'clock',
       'positionSeconds': state.playbackTimeMs.value / 1000,
       'durationSeconds': state.videoDuration.inMilliseconds / 1000,
-      'playing': playbackState == 'playing',
+      'playing': visible && playbackState == 'playing' && !isBuffering,
       'playbackRate': state.effectivePlaybackRate,
-      'seekRevision': state.seekRevision,
+      'seekRevision': state.seekRevision + _visibilitySeekRevision,
     });
   }
 

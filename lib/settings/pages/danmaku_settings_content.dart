@@ -872,9 +872,9 @@ class _DanmakuSettingsContentState extends State<DanmakuSettingsContent> {
                     subtitle: '以更高像素密度渲染弹幕，使文字更清晰',
                     icon: Ionicons.expand_outline,
                     items: items,
-                    onChanged: (dynamic value) {
+                    onChanged: (dynamic value) async {
                       if (value is! double) return;
-                      settingsProvider.setDanmakuSupersample(value);
+                      await settingsProvider.setDanmakuSupersample(value);
                       if (context.mounted) {
                         final label = value == 0.0 ? '关闭' : '${value}x';
                         BlurSnackBar.show(
@@ -1048,6 +1048,24 @@ class _DanmakuSettingsContentState extends State<DanmakuSettingsContent> {
                   );
                 },
                 labelFormatter: (value) => '${value.toStringAsFixed(2)}×',
+              ),
+              Divider(
+                  color: colorScheme.onSurface.withValues(alpha: 0.12),
+                  height: 1),
+              AdaptiveSettingsTile.slider(
+                title: 'Titan 弹幕轨道间距',
+                subtitle: '增大间距可减少重叠，减小间距可显示更多弹幕',
+                icon: Icons.reorder,
+                value: videoState.titanDanmakuSettings.trackGap,
+                min: 0.0,
+                max: 0.5,
+                divisions: 50,
+                onChanged: (value) {
+                  videoState.setTitanDanmakuSettings(
+                    videoState.titanDanmakuSettings.copyWith(trackGap: value),
+                  );
+                },
+                labelFormatter: (value) => '${(value * 100).round()}%',
               ),
               Divider(
                   color: colorScheme.onSurface.withValues(alpha: 0.12),

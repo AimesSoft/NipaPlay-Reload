@@ -577,6 +577,7 @@ class ErikaPlayerAdapter
         AsyncDisposablePlayer,
         AsyncSeekPlayer,
         AsyncExternalSubtitlePlayer,
+        BufferingAwarePlayer,
         GifExportCapablePlayer {
   ErikaPlayerAdapter({
     PlayerErikaAndroidOutputMode androidOutputMode =
@@ -595,6 +596,10 @@ class ErikaPlayerAdapter
   }
 
   final ErikaPlayer _player;
+  final ValueNotifier<bool> _buffering = ValueNotifier<bool>(false);
+
+  @override
+  ValueListenable<bool> get buffering => _buffering;
   final ValueNotifier<int?> _textureIdNotifier = ValueNotifier<int?>(null);
   final Map<PlayerMediaType, List<String>> _decoders = {
     PlayerMediaType.video: const <String>[],
@@ -652,6 +657,11 @@ class ErikaPlayerAdapter
   static ErikaOutputMode? _resolveNativeOutputMode(
     PlayerErikaAndroidOutputMode mode,
   ) {
+    if (!kIsWeb &&
+        defaultTargetPlatform == TargetPlatform.linux &&
+        linuxNativeSurfaceEnabled) {
+      return ErikaOutputMode.auto;
+    }
     if (defaultTargetPlatform != TargetPlatform.android) {
       return null;
     }
@@ -665,12 +675,25 @@ class ErikaPlayerAdapter
   static bool get _isHarmonyOS =>
       !kIsWeb && defaultTargetPlatform.name == 'ohos';
 
+  // Enabled by Linux builds that bundle the matching Erika native runtime.
+  static const bool linuxBuildEnabled =
+      bool.fromEnvironment('NIPAPLAY_LINUX_ERIKA');
+
+  static bool get linuxNativeSurfaceEnabled =>
+      linuxBuildEnabled &&
+      !kIsWeb &&
+      defaultTargetPlatform == TargetPlatform.linux &&
+      Platform.environment['ERIKA_LINUX_PRESENTATION'] != 'texture' &&
+      Platform.environment['GDK_BACKEND']?.split(',').first.trim() != 'x11' &&
+      (Platform.environment['WAYLAND_DISPLAY']?.isNotEmpty ?? false);
+
   static bool get _isSupported =>
       !kIsWeb &&
       (defaultTargetPlatform == TargetPlatform.macOS ||
           defaultTargetPlatform == TargetPlatform.iOS ||
           defaultTargetPlatform == TargetPlatform.windows ||
           defaultTargetPlatform == TargetPlatform.android ||
+          (defaultTargetPlatform == TargetPlatform.linux && linuxBuildEnabled) ||
           _isHarmonyOS);
 
   @override
@@ -727,6 +750,8 @@ class ErikaPlayerAdapter
   bool get usesWindowOverlayVideoSurface =>
       _isSupported &&
       defaultTargetPlatform != TargetPlatform.android &&
+      (defaultTargetPlatform != TargetPlatform.linux ||
+          linuxNativeSurfaceEnabled) &&
       !_isHarmonyOS;
 
   @override
@@ -856,7 +881,7 @@ class ErikaPlayerAdapter
 
   @override
   int get position {
-    if (_state != PlayerPlaybackState.playing) {
+    if (_state != PlayerPlaybackState.playing || _buffering.value) {
       return _lastPositionMs;
     }
     final elapsedMs =
@@ -888,10 +913,13 @@ class ErikaPlayerAdapter
       _media = path;
       _lastPositionMs = 0;
       _lastPositionUpdate = DateTime.now();
+      _buffering.value = false;
       _mediaInfo = PlayerMediaInfo(duration: 0);
       _lastPresenterStats = const <String, dynamic>{};
       _lastOutputStatus = const <String, dynamic>{};
       _lastDecoderStatus = const <String, dynamic>{};
+      _properties.remove('decoder.video');
+      _properties.remove('video.decoder');
       _lastAudioOutputStatus = const <String, dynamic>{};
       _lastNativeError = null;
       _externalSubtitleTrackIds.clear();
@@ -952,6 +980,7 @@ class ErikaPlayerAdapter
       return existing;
     }
     _disposed = true;
+    _buffering.dispose();
     _danmakuConfigTimer?.cancel();
     _danmakuConfigTimer = null;
     for (final completer in _pendingDanmakuConfigCompleters) {
@@ -1263,6 +1292,14 @@ class ErikaPlayerAdapter
     ValueChanged<Rect?>? onFrameRectChanged,
   }) {
     _ensureSupported();
+    if (defaultTargetPlatform == TargetPlatform.linux &&
+        !linuxNativeSurfaceEnabled) {
+      return ErikaTextureVideoView(
+        player: _player,
+        debugLabel: debugLabel,
+        onTextureIdChanged: onPlatformViewIdChanged,
+      );
+    }
     if (defaultTargetPlatform == TargetPlatform.android || _isHarmonyOS) {
       return ErikaVideoView(
         player: _player,
@@ -1584,6 +1621,16 @@ class ErikaPlayerAdapter
     if (_disposed) {
       return;
     }
+    if (event.kind == ErikaEventKind.bufferingChanged) {
+      // BufferingChanged is a sparse event: its position field defaults to 0.
+      // Freeze the current anchor on entry, then reuse the latest real
+      // PositionChanged sample on recovery without extrapolating the wait.
+      if (event.buffering) {
+        _lastPositionMs = position;
+      }
+      _lastPositionUpdate = DateTime.now();
+      _buffering.value = event.buffering;
+    }
     if (event.kind == ErikaEventKind.error) {
       final errorMessage = _formatPlaybackError(event);
       _lastNativeError = errorMessage;
@@ -1598,6 +1645,14 @@ class ErikaPlayerAdapter
 
     final decoder = event.decoder;
     if (event.kind == ErikaEventKind.videoDecoderChanged && decoder != null) {
+      final decoderName = switch (decoder.activeBackend) {
+        'cuda' => 'CUDA / NVDEC',
+        'vaapi' => 'VA-API',
+        'software' => 'FFmpeg (software)',
+        final backend => backend,
+      };
+      _properties['decoder.video'] = decoderName;
+      _properties['video.decoder'] = decoderName;
       _lastDecoderStatus = <String, dynamic>{
         'stage': decoder.stage,
         'requestedBackend': decoder.requestedBackend,
@@ -1861,7 +1916,7 @@ class ErikaPlayerAdapter
   void _ensureSupported() {
     if (!_isSupported) {
       throw UnsupportedError(
-        'Erika is currently only wired on Android/iOS/macOS/Windows/HarmonyOS.',
+        'Erika requires a supported platform and a matching native plugin.',
       );
     }
   }

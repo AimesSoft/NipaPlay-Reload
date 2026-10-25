@@ -1,6 +1,5 @@
 import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
-import 'package:nipaplay/services/media_server_image_loader.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/immersive_backdrop_focus.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/tv_safe_blur.dart';
 import 'package:nipaplay/utils/image_cache_manager.dart';
@@ -8,7 +7,7 @@ import 'loading_placeholder.dart';
 
 // 图片加载模式
 enum CachedImageLoadMode {
-  // 当前混合模式：先快速加载基础图，再通过缓存/压缩通道加载高清图
+  // 优先显示内存缓存；未命中时仅执行一次加载/解码。
   hybrid,
   // 旧版模式（699387b 提交之前）：仅走缓存管理器的单通道加载
   legacy,
@@ -35,8 +34,8 @@ class CachedNetworkImageWidget extends StatefulWidget {
   final Widget Function(BuildContext, Object)? errorBuilder;
   final bool shouldRelease;
   final Duration fadeDuration;
-  final bool shouldCompress; // 新增参数，控制是否压缩图片
-  final bool delayLoad; // 新增参数，控制是否延迟加载（避免与HEAD验证竞争）
+  final bool shouldCompress; // 兼容旧参数：允许原始字节落盘，不做额外压缩
+  final bool delayLoad; // 保留调用兼容性；原先仅延迟的冗余基础图通道已移除
   final CachedImageLoadMode loadMode; // 新增：加载模式（hybrid/legacy）
   final int? memCacheWidth; // 新增：指定内存缓存宽度（用于解码降采样）
   final int? memCacheHeight; // 新增：指定内存缓存高度（用于解码降采样）
@@ -87,6 +86,16 @@ class _CachedNetworkImageWidgetState extends State<CachedNetworkImageWidget> {
   String? _smartCropKey;
   Alignment _smartCropAlignment = Alignment.center;
 
+  /// 本次 URL 已经自动重试过几次。
+  int _autoRetryCount = 0;
+  int _loadGeneration = 0;
+
+  /// 一次性加载失败后最多自动重试几次。
+  ///
+  /// 图床同时收到几十个海报请求时会丢掉其中一部分，而加载失败一次就永久留白
+  /// 正是 iOS 上"刷不出全部图片"的直接来源。
+  static const int _maxAutoRetries = 2;
+
   /// 本次解码的目标尺寸（物理像素），null 表示无法推导。
   (int?, int?)? _decodeTarget;
 
@@ -100,6 +109,8 @@ class _CachedNetworkImageWidgetState extends State<CachedNetworkImageWidget> {
   @override
   void initState() {
     super.initState();
+    ImageCacheManager.instance.lifecycleGeneration
+        .addListener(_onCacheReleased);
     if (widget.width == null &&
         widget.height == null &&
         widget.memCacheWidth == null &&
@@ -141,14 +152,48 @@ class _CachedNetworkImageWidgetState extends State<CachedNetworkImageWidget> {
 
   @override
   void dispose() {
+    ImageCacheManager.instance.lifecycleGeneration
+        .removeListener(_onCacheReleased);
     _isDisposed = true;
-    // 完全移除图片释放逻辑，改为依赖缓存管理器的定期清理
+    // 句柄的释放统一交给缓存管理器按字节预算与内存压力决定，
+    // 组件这边只负责在收到通知时放下引用。
     super.dispose();
   }
 
-  void _loadImage() {
-    if (_currentUrl == widget.imageUrl || _isDisposed) return;
+  /// 缓存管理器主动释放了句柄（退到后台），或者 App 回到了前台。
+  ///
+  /// 释放时必须放下自己手里的引用：那些 [ui.Image] 已经被 dispose，
+  /// 继续交给 RawImage 绘制只会画出一块空白。回前台则重新加载一次，
+  /// 走磁盘缓存解码，不产生网络请求。
+  void _onCacheReleased() {
+    if (!mounted || _isDisposed) return;
+    final isResumed =
+        WidgetsBinding.instance.lifecycleState == AppLifecycleState.resumed;
+    if (isResumed) {
+      setState(() {
+        _isImageLoaded = false;
+      });
+      _loadImage(force: true);
+      return;
+    }
+    setState(() {
+      _basicImage = null;
+      _imageFuture = null;
+      _isImageLoaded = false;
+    });
+    // 允许回前台时重新走一遍加载。
+    _currentUrl = null;
+  }
+
+  void _loadImage({bool force = false}) {
+    if (_isDisposed) return;
+    if (!force && _currentUrl == widget.imageUrl) return;
+    if (_currentUrl != widget.imageUrl) {
+      // 换了 URL：重试次数从头开始，否则上一张图的失败次数会传染给下一张。
+      _autoRetryCount = 0;
+    }
     _currentUrl = widget.imageUrl;
+    _loadGeneration++;
     _hasRetriedLowRes = false;
 
     final target = _resolveDecodeTarget();
@@ -156,39 +201,20 @@ class _CachedNetworkImageWidgetState extends State<CachedNetworkImageWidget> {
     final int? targetWidth = target?.$1;
     final int? targetHeight = target?.$2;
 
-    // 旧版：仅使用缓存管理器单通道加载
-    if (widget.loadMode == CachedImageLoadMode.legacy) {
-      _imageFuture = ImageCacheManager.instance.loadImage(
-        widget.imageUrl,
-        targetWidth: targetWidth,
-        targetHeight: targetHeight,
-      );
-      return;
-    }
-
-    final cachedImage = ImageCacheManager.instance.getCachedImage(
+    // Keep a cached preview, but use a single load/decode for the final image.
+    _basicImage = ImageCacheManager.instance.getCachedImage(
+          widget.imageUrl,
+          targetWidth: targetWidth,
+          targetHeight: targetHeight,
+        ) ??
+        _basicImage;
+    _imageFuture = ImageCacheManager.instance.loadImage(
       widget.imageUrl,
       targetWidth: targetWidth,
       targetHeight: targetHeight,
+      cacheOnDisk: widget.loadMode == CachedImageLoadMode.legacy ||
+          widget.shouldCompress,
     );
-
-    if (cachedImage != null) {
-      _basicImage = cachedImage;
-    } else {
-      // 混合模式：立即拉取基础图 + 异步加载高清图
-      _loadBasicImage();
-    }
-
-    // 异步加载高清图片
-    if (widget.shouldCompress) {
-      _imageFuture = ImageCacheManager.instance.loadImage(
-        widget.imageUrl,
-        targetWidth: targetWidth,
-        targetHeight: targetHeight,
-      );
-    } else {
-      _imageFuture = _loadOriginalImage(widget.imageUrl);
-    }
   }
 
   /// 解析本次解码的目标尺寸（物理像素）。
@@ -247,45 +273,20 @@ class _CachedNetworkImageWidgetState extends State<CachedNetworkImageWidget> {
     return (width, height);
   }
 
-  // 新增方法：立即加载基础图片
-  void _loadBasicImage() async {
-    // 🔥 根据delayLoad参数决定是否延迟（避免与HEAD验证竞争）
-    if (widget.delayLoad) {
-      await Future.delayed(const Duration(milliseconds: 1500));
-    }
-
-    try {
-      final imageBytes = await loadNetworkImageBytes(
-        Uri.parse(widget.imageUrl),
-      );
-      final codec = await ui.instantiateImageCodec(
-        imageBytes,
-        targetWidth: _decodeTarget?.$1,
-        targetHeight: _decodeTarget?.$2,
-      );
-      final frame = await codec.getNextFrame();
-
-      // 如果组件还在使用，更新基础图片
-      if (mounted && !_isDisposed) {
-        setState(() {
-          _basicImage = frame.image;
-        });
-      }
-    } catch (e) {
-      debugPrint('加载基础图片失败: $e');
-    }
-  }
-
-  // 新增方法：直接加载原始图片，不进行压缩
-  Future<ui.Image> _loadOriginalImage(String imageUrl) async {
-    final imageBytes = await loadNetworkImageBytes(Uri.parse(imageUrl));
-    final codec = await ui.instantiateImageCodec(
-      imageBytes,
-      targetWidth: _decodeTarget?.$1,
-      targetHeight: _decodeTarget?.$2,
-    );
-    final frame = await codec.getNextFrame();
-    return frame.image;
+  /// 一次性加载失败后安排一次自动重试。
+  ///
+  /// 早前 `_currentUrl == widget.imageUrl` 的守卫让失败的图片永远不会再试，
+  /// 而 iOS 上同时发出的几十个海报请求很容易有个别失败，那些卡片就永久空白。
+  /// 这里最多补两次，间隔递增，避免对真正的坏图反复发请求。
+  void _scheduleAutoRetry() {
+    if (_isDisposed || _autoRetryCount >= _maxAutoRetries) return;
+    _autoRetryCount++;
+    final generation = _loadGeneration;
+    Future.delayed(Duration(milliseconds: 600 * _autoRetryCount), () {
+      if (!mounted || _isDisposed || generation != _loadGeneration) return;
+      _loadImage(force: true);
+      setState(() {});
+    });
   }
 
   // 安全获取图片，添加多重保护
@@ -454,6 +455,14 @@ class _CachedNetworkImageWidgetState extends State<CachedNetworkImageWidget> {
       );
     }
 
+    // 标记"这张图正在被显示"：LRU 淘汰只看最后访问时间，而静止显示在屏幕上的
+    // 图片不会再走缓存命中路径，不标记就会被当成最久未访问的那批淘汰掉。
+    ImageCacheManager.instance.touch(
+      widget.imageUrl,
+      targetWidth: _decodeTarget?.$1,
+      targetHeight: _decodeTarget?.$2,
+    );
+
     return SizedBox(
       width: widget.width,
       height: widget.height,
@@ -465,7 +474,7 @@ class _CachedNetworkImageWidgetState extends State<CachedNetworkImageWidget> {
           return FutureBuilder<ui.Image>(
             // A resized decode may reuse its previous frame, but a new URL
             // must not expose the previous poster while its request starts.
-            key: widget.smartCrop ? ValueKey(widget.imageUrl) : null,
+            key: ValueKey(widget.imageUrl),
             future: _imageFuture,
             builder: (context, snapshot) {
               final baseImage = _getSafeImage(_basicImage);
@@ -513,6 +522,7 @@ class _CachedNetworkImageWidgetState extends State<CachedNetworkImageWidget> {
               }
 
               if (snapshot.hasError && selectedImage == null) {
+                _scheduleAutoRetry();
                 if (widget.errorBuilder != null) {
                   return widget.errorBuilder!(context, snapshot.error!);
                 }

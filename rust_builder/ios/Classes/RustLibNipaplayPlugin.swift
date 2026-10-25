@@ -26,6 +26,11 @@ private func next2_engine_dispose(_ engineHandle: UInt64)
 @_silgen_name("next2_engine_poll_frame_ready")
 private func next2_engine_poll_frame_ready(_ engineHandle: UInt64) -> Bool
 
+// CADisplayLink's target, expressed relative to the monotonic clock at this
+// call. The Rust worker samples motion at presentation time, not wake-up time.
+@_silgen_name("next2_engine_display_tick")
+private func next2_engine_display_tick(_ engineHandle: UInt64, _ targetDelaySeconds: Double) -> UInt8
+
 @_silgen_name("next2_engine_set_frame")
 private func next2_engine_set_frame(
   _ engineHandle: UInt64,
@@ -237,6 +242,7 @@ private final class Next2SurfaceState {
     height: Int,
     result: @escaping FlutterResult
   ) {
+    displayLink?.isPaused = false
     stateLock.lock()
     let entry: Next2SurfaceState
     if let existing = surfaces[surfaceId] {
@@ -462,14 +468,19 @@ private final class Next2SurfaceState {
     let customFontFamily = (dict["customFontFamily"] as? String) ?? ""
     let customFontFilePath = (dict["customFontFilePath"] as? String) ?? ""
 
-    let ok = frameJson.withCString { ptr in
-      customFontFamily.withCString { familyPtr in
-        customFontFilePath.withCString { filePtr in
-          next2_engine_set_frame(handle, ptr, fontSize, outlineWidth, shadowStyle, opacity, familyPtr, filePtr) != 0
+    // This FFI call waits for the render thread (JSON parsing, font changes,
+    // atlas work). Never hold up UIKit/Flutter's display links while it waits.
+    // The serial queue also preserves ordering with resize/disposal.
+    initQueue.async {
+      let ok = frameJson.withCString { ptr in
+        customFontFamily.withCString { familyPtr in
+          customFontFilePath.withCString { filePtr in
+            next2_engine_set_frame(handle, ptr, fontSize, outlineWidth, shadowStyle, opacity, familyPtr, filePtr) != 0
+          }
         }
       }
+      DispatchQueue.main.async { result(ok) }
     }
-    result(ok)
   }
 
   private func resetScene(arguments: Any?, result: @escaping FlutterResult) {
@@ -483,15 +494,20 @@ private final class Next2SurfaceState {
       )
       return
     }
-    let ok = next2_engine_reset_scene(handle) != 0
-    result(ok)
+    // Keep reset ordered after previously submitted frames on the same queue.
+    initQueue.async {
+      let ok = next2_engine_reset_scene(handle) != 0
+      DispatchQueue.main.async { result(ok) }
+    }
   }
 
   private func disposeSurface(surfaceId: String, result: @escaping FlutterResult) {
     var removed: Next2SurfaceState?
     stateLock.lock()
     removed = surfaces.removeValue(forKey: surfaceId)
+    let hasSurfaces = !surfaces.isEmpty
     stateLock.unlock()
+    displayLink?.isPaused = !hasSurfaces
 
     if let entry = removed {
       if let textureId = entry.textureId {
@@ -535,6 +551,16 @@ private final class Next2SurfaceState {
 
   private func startDisplayLink() {
     let link = CADisplayLink(target: self, selector: #selector(onDisplayLinkTick(_:)))
+    // CADisplayLink otherwise defaults to 60 Hz even on ProMotion displays.
+    // The system may vary the actual cadence; targetTimestamp remains the
+    // source of truth, rather than a hard-coded 60/120 Hz render timer.
+    let maximum = Float(UIScreen.main.maximumFramesPerSecond)
+    if #available(iOS 15.0, *) {
+      link.preferredFrameRateRange = CAFrameRateRange(minimum: min(60, maximum), maximum: maximum, preferred: maximum)
+    } else {
+      link.preferredFramesPerSecond = Int(maximum)
+    }
+    link.isPaused = true
     link.add(to: .main, forMode: .common)
     displayLink = link
   }
@@ -550,6 +576,7 @@ private final class Next2SurfaceState {
     stateLock.unlock()
 
     for (handle, textureId) in entries {
+      // Publish the completed previous frame before requesting the next one.
       let ready = next2_engine_poll_frame_ready(handle)
       if ready {
         if Thread.isMainThread {
@@ -560,6 +587,7 @@ private final class Next2SurfaceState {
           }
         }
       }
+      _ = next2_engine_display_tick(handle, link.targetTimestamp - CACurrentMediaTime())
     }
   }
 }

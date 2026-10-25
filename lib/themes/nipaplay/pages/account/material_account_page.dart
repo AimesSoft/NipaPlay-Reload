@@ -204,13 +204,13 @@ class _UnifiedAccountPageState extends State<UnifiedAccountPage>
         context: context,
         title: '账号注销确认',
         content: '账号注销不可逆，将永久删除账号及其关联数据。继续后会在浏览器中打开注销页面。',
-        actions: [
+        actionsBuilder: (dialogContext) => [
           BlurButton(
             icon: fluent.FluentIcons.cancel,
             text: '取消',
             flatStyle: true,
             hoverScale: _buttonHoverScale,
-            onTap: () => Navigator.of(context).pop(),
+            onTap: () => Navigator.of(dialogContext).pop(),
           ),
           BlurButton(
             icon: fluent.FluentIcons.delete,
@@ -218,7 +218,7 @@ class _UnifiedAccountPageState extends State<UnifiedAccountPage>
             flatStyle: true,
             hoverScale: _buttonHoverScale,
             onTap: () {
-              Navigator.of(context).pop();
+              Navigator.of(dialogContext).pop();
               unawaited(
                 _openExternalUrl(
                   deleteAccountUrl,
@@ -288,6 +288,7 @@ class _UnifiedAccountPageState extends State<UnifiedAccountPage>
         onOpenNipaplayHelp: () => _showBangumiSyncHelpDialog(
           _BangumiSyncHelpService.nipaplay,
         ),
+        onOpenTokenPage: _openBangumiAccessTokenPage,
       ),
     );
   }
@@ -517,16 +518,33 @@ class _UnifiedAccountPageState extends State<UnifiedAccountPage>
       context: context,
       title: title,
       content: message,
-      actions: [
+      actionsBuilder: (dialogContext) => [
         BlurButton(
           icon: fluent.FluentIcons.accept,
           text: '知道了',
           flatStyle: true,
           hoverScale: _buttonHoverScale,
-          onTap: () => Navigator.of(context).pop(),
+          onTap: () => Navigator.of(dialogContext).pop(),
         ),
       ],
     );
+  }
+
+  /// 打开 Bangumi 访问令牌创建页面。
+  ///
+  /// 之前在账户页重构时丢失了跳转链接，只保留了说明弹窗，用户无法直接
+  /// 前往官方页面创建令牌。这里恢复跳转：优先在外部浏览器打开官方页面，
+  /// 若打开失败（例如 Web 端）则回退到说明弹窗并把链接展示给用户。
+  Future<void> _openBangumiAccessTokenPage() async {
+    final opened = await _openExternalUrl(
+      BangumiAccountViewModel.bangumiAccessTokenUrl,
+      cannotOpenMessage: '无法打开访问令牌页面，请手动访问：'
+          '${BangumiAccountViewModel.bangumiAccessTokenUrl}',
+    );
+    if (!mounted) return;
+    if (!opened) {
+      await _showBangumiSyncHelpDialog(_BangumiSyncHelpService.nipaplay);
+    }
   }
 
   Future<void> _startDandanBangumiAuthorize() async {

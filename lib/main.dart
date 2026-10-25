@@ -1,5 +1,7 @@
+import 'package:nipaplay/utils/performance_trace.dart';
 import 'package:nipaplay/services/remote_control_access_guard_service.dart';
 import 'package:nipaplay/services/password_input_mode_service.dart';
+import 'package:nipaplay/services/harmony_local_media_service.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
@@ -103,6 +105,7 @@ import 'package:nipaplay_core/services/http_client_initializer.dart';
 import 'package:nipaplay/services/smb_proxy_service.dart';
 import 'package:nipaplay/services/large_screen_ui_sfx_service.dart';
 import 'package:nipaplay/services/server_connectivity_service.dart';
+import 'package:nipaplay/services/media_library_reachability_service.dart';
 import 'package:nipaplay/providers/bottom_bar_provider.dart';
 import 'package:nipaplay_core/models/anime_detail_display_mode.dart';
 import 'package:nipaplay_core/models/background_image_render_mode.dart';
@@ -123,29 +126,21 @@ final GlobalKey<State<DefaultTabController>> tabControllerKey =
     GlobalKey<State<DefaultTabController>>();
 
 void _installFrameTimingTrace() {
-  const enabled = bool.fromEnvironment('NIPAPLAY_FRAME_TIMING_TRACE');
-  if (!enabled) {
-    return;
-  }
-
-  var frameCount = 0;
+  if (!PerformanceTrace.enabled) return;
   SchedulerBinding.instance.addTimingsCallback((timings) {
+    final views = WidgetsBinding.instance.platformDispatcher.views;
+    final refreshRate = views.isEmpty ? 60.0 : views.first.display.refreshRate;
     for (final timing in timings) {
-      frameCount += 1;
-      final buildMs = timing.buildDuration.inMicroseconds / 1000.0;
-      final rasterMs = timing.rasterDuration.inMicroseconds / 1000.0;
-      final totalMs = timing.totalSpan.inMicroseconds / 1000.0;
-      final isSlowFrame = buildMs > 8.0 || rasterMs > 8.0 || totalMs > 16.7;
-      if (isSlowFrame || frameCount % 60 == 0) {
-        debugPrint(
-          '[nipa-frame-trace] frame=$frameCount '
-          'build_ms=${buildMs.toStringAsFixed(2)} '
-          'raster_ms=${rasterMs.toStringAsFixed(2)} '
-          'total_ms=${totalMs.toStringAsFixed(2)} '
-          'slow=$isSlowFrame',
-        );
-      }
+      PerformanceTrace.frame(
+        buildUs: timing.buildDuration.inMicroseconds,
+        rasterUs: timing.rasterDuration.inMicroseconds,
+        refreshRate: refreshRate,
+      );
     }
+  });
+  // A background application may receive no more frames to flush a partial window.
+  AppLifecycleListener(onStateChange: (state) {
+    if (state != AppLifecycleState.resumed) PerformanceTrace.flush();
   });
 }
 
@@ -174,6 +169,19 @@ Alignment _resolveStartupWindowAlignment(
 
 void main(List<String> args) async {
   WidgetsFlutterBinding.ensureInitialized();
+  // Restore directory grants before storage, history, scanning or playback.
+  if (globals.isHarmonyOS) {
+    try {
+      final failed =
+          await HarmonyLocalMediaService.restoreDirectoryPermissions();
+      if (failed.isNotEmpty) {
+        debugPrint('部分媒体文件夹授权已失效，请重新添加文件夹: $failed');
+      }
+    } catch (error) {
+      debugPrint('鸿蒙媒体文件夹授权恢复失败: $error');
+    }
+  }
+
   // Flutter defaults are 100 MiB / 1000 entries, which lets the poster wall
   // alone consume ~100 MiB before playback starts. Keep the low-memory
   // surfaces (Android/Web/TV boxes) at 32 MiB per the low-end device budget
@@ -277,13 +285,13 @@ void main(List<String> args) async {
         level: 'INFO', tag: 'FileAssociation');
   }
 
-  // Android平台通过Intent传入
-  if (!kIsWeb && Platform.isAndroid) {
+  // Android Intent / iOS Files 传入的视频文件。
+  if (!kIsWeb && (Platform.isAndroid || Platform.isIOS)) {
     final intentFilePath = await FileAssociationService.getOpenFileUri();
     if (intentFilePath != null &&
         await FileAssociationService.validateFilePath(intentFilePath)) {
       launchFilePath = intentFilePath;
-      debugLogService.addLog('应用启动时收到Intent文件路径: $intentFilePath',
+      debugLogService.addLog('应用启动时收到系统文件路径: $intentFilePath',
           level: 'INFO', tag: 'FileAssociation');
     }
   }
@@ -395,8 +403,12 @@ void main(List<String> args) async {
   //   }
   // }
 
-  // 请求Android存储权限
-  if (!kIsWeb && Platform.isAndroid) {
+  // Only a configured external app-data directory may require authorization
+  // before storage initialization. Normal media access requests stay at the
+  // picker/library entry points, after the UI is available.
+  if (!kIsWeb &&
+      Platform.isAndroid &&
+      (await StorageService.getCustomStoragePath())?.isNotEmpty == true) {
     debugPrint("正在请求Android存储权限...");
 
     // 先检查当前权限状态
@@ -482,8 +494,10 @@ void main(List<String> args) async {
 
   // 并行执行初始化操作
   await Future.wait(<Future<dynamic>>[
-    // 初始化服务提供者（其内部网络/IO 部分已自行延后到首帧后）
-    ServiceProvider.initialize(),
+    // 初始化弹弹play服务
+    DandanplayService.initialize(renewToken: false),
+    // 初始化服务提供者
+    ServiceProvider.initialize(deferBackground: true),
 
     // 加载设置
     Future.wait(<Future<dynamic>>[
@@ -533,27 +547,34 @@ void main(List<String> args) async {
 
     // 根据设置清理弹幕缓存
     _prepareDanmakuCachePolicy(),
+
   ]).then((results) async {
     // 以下服务不阻塞首帧：等首帧渲染完成后再初始化（冷启动内存
     // 与启动耗时同时受益；这些服务都不在首帧渲染路径上）。
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      // 弹弹play 服务含 token 续期网络请求（自带 onTimeout 兜底），非首帧路径
-      DandanplayService.initialize();
-      WatchHistoryManager.initialize();
-      if (!kIsWeb) AutoSyncService.instance.initialize();
-      if (!kIsWeb) SMBProxyService.instance.initialize();
-      BangumiService.instance.initialize().then((_) {
-        try {
-          // 启动期有预算的过期缓存回源清扫（不删旧数据，后台静默执行）
-          BangumiService.instance.revalidateExpiredCacheOnStartup();
-        } catch (e) {
-          debugPrint('启动期缓存回源清扫失败: $e');
-        }
-      });
-      ServerConnectivityService.instance.checkConnectivity();
+      unawaited(_runDeferredStartupTask(
+          'services', ServiceProvider.initializeAfterFirstFrame));
+      unawaited(_runDeferredStartupTask('token', DandanplayService.loadToken));
+      unawaited(_runDeferredStartupTask('connectivity', () async {
+        await ServerConnectivityService.instance.checkConnectivity();
+      }));
+      unawaited(_runDeferredStartupTask(
+          'watch-history', WatchHistoryManager.initialize));
+      if (!kIsWeb) {
+        unawaited(_runDeferredStartupTask(
+            'media-library-reachability',
+            MediaLibraryReachabilityService.instance.checkAll));
+        unawaited(_runDeferredStartupTask(
+            'sync', AutoSyncService.instance.initialize));
+        unawaited(_runDeferredStartupTask(
+            'danmaku-cache', DanmakuCacheManager.clearExpiredCache));
+        unawaited(_runDeferredStartupTask(
+            'smb-proxy', SMBProxyService.instance.initialize));
+      }
+      // 番剧详情按需解码 + allowExpired 读旧回新（上游 #1004）；初始化本身
+      // 不做网络请求，tags 补齐等维护任务由其内部预算机制承接。
+      BangumiService.instance.initialize();
     });
-
-    // 服务器连接状态检测（后台执行，不阻塞启动）
 
     // 处理主题模式设置
     // 外层列表现在是 [ServiceProvider.initialize, 设置加载(Map), 弹幕缓存清理]
@@ -692,6 +713,19 @@ void main(List<String> args) async {
   });
 }
 
+Future<void> _runDeferredStartupTask(
+    String name, Future<void> Function() task) async {
+  final watch = Stopwatch()..start();
+  try {
+    await task();
+  } catch (error) {
+    debugPrint('[Startup] $name failed: $error');
+  } finally {
+    debugPrint(
+        '[Startup] $name ${watch.elapsedMilliseconds}ms (after first frame)');
+  }
+}
+
 // 初始化应用所需的所有目录
 Future<void> _initializeAppDirectories() async {
   if (kIsWeb) return;
@@ -719,8 +753,6 @@ Future<void> _prepareDanmakuCachePolicy() async {
     );
     if (clearOnLaunch) {
       await DanmakuCacheManager.clearAllCache();
-    } else {
-      await DanmakuCacheManager.clearExpiredCache();
     }
   } catch (e) {
     debugPrint('初始化弹幕缓存策略失败: $e');
@@ -1282,7 +1314,8 @@ class MainPageState extends State<MainPage>
   bool _isThemeRevealRunning = false;
   bool _useLargeScreenLayout = false;
   StreamSubscription<GamepadEvent>? _guideButtonSubscription;
-  StreamSubscription<String>? _androidFileAssociationSubscription;
+  StreamSubscription<String>? _fileAssociationSubscription;
+  StreamSubscription<String>? _fileAssociationErrorSubscription;
   DownloaderSettingsProvider? _downloaderSettingsProvider;
   SettingsProvider? _settingsProvider;
 
@@ -1387,8 +1420,21 @@ class MainPageState extends State<MainPage>
     DesktopPlayerWindowService.instance.addListener(_manageHotkeys);
     ExternalPlayerConsoleService.sessionAvailability
         .addListener(_onExternalPlayerConsoleAvailabilityChanged);
+    DandanplayService.loginExpired.addListener(_onDandanplayLoginExpired);
     _initGuideButtonListener();
     _initialize();
+  }
+
+  /// 服务器作废了保存的弹弹play登录：说清楚，并给出重新登录的入口。
+  void _onDandanplayLoginExpired() {
+    if (!mounted) return;
+    BlurSnackBar.show(
+      context,
+      '弹弹play登录已失效，请重新登录',
+      actionText: '去登录',
+      onAction: () => _selectPage(AppPageIds.account),
+      duration: const Duration(seconds: 8),
+    );
   }
 
   /// 监听手柄 Guide 按钮（Xbox 正中间上方按键），
@@ -1455,23 +1501,31 @@ class MainPageState extends State<MainPage>
 
     await _initializeController();
     _initializeListeners();
-    _initializeAndroidFileAssociationListener();
+    _initializeFileAssociationListeners();
     _postFrameCallbacks();
   }
 
-  void _initializeAndroidFileAssociationListener() {
-    if (kIsWeb || !Platform.isAndroid) {
+  void _initializeFileAssociationListeners() {
+    if (kIsWeb || (!Platform.isAndroid && !Platform.isIOS)) {
       return;
     }
-    _androidFileAssociationSubscription ??=
+    _fileAssociationSubscription ??=
         FileAssociationService.openFileStream.listen((filePath) async {
       if (!mounted) return;
-      if (!await FileAssociationService.validateFilePath(filePath)) {
+      final isValid = await FileAssociationService.validateFilePath(filePath);
+      if (!mounted) return;
+      if (!isValid) {
         BlurSnackBar.show(context, '无法播放启动文件: ${path.basename(filePath)}');
         return;
       }
       await _handleLaunchFile(filePath);
     });
+    if (Platform.isIOS) {
+      _fileAssociationErrorSubscription ??=
+          FileAssociationService.openFileErrorStream.listen((message) {
+        if (mounted) BlurSnackBar.show(context, message);
+      });
+    }
   }
 
   void _onWebDAVSettingsChanged() {
@@ -1589,9 +1643,12 @@ class MainPageState extends State<MainPage>
 
   void _postFrameCallbacks() {
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (widget.launchFilePath != null) {
-        _handleLaunchFile(widget.launchFilePath!);
-      }
+      final playbackReady = widget.launchFilePath == null
+          ? Future<void>.value()
+          : _handleLaunchFile(widget.launchFilePath!);
+      unawaited(ServiceProvider.scanService.startStartupRefresh(
+        playbackReady: playbackReady,
+      ));
 
       if (globals.isDesktop) {
         _checkWindowMaximizedState();
@@ -1615,22 +1672,8 @@ class MainPageState extends State<MainPage>
   }
 
   void _startSplashScreenSequence() {
-    // 确保在第一帧后执行
-    WidgetsBinding.instance.addPostFrameCallback((_) async {
-      if (!mounted) return;
-
-      // 使用 _getInitialTabIndex() 设置的初始 Tab
-      // 如果需要启动动画，可以在这里实现
-
-      // 延迟一段时间后隐藏启动画面
-      await Future.delayed(const Duration(milliseconds: 500));
-
-      if (mounted) {
-        setState(() {
-          _showSplash = false;
-        });
-      }
-    });
+    // Invoked from the first-frame callback after the initial tab is ready.
+    if (mounted && _showSplash) setState(() => _showSplash = false);
   }
 
   // 处理启动文件
@@ -1693,6 +1736,7 @@ class MainPageState extends State<MainPage>
   void dispose() {
     HotkeyService().setLargeScreenModeActive(false);
     DesktopPlayerWindowService.instance.removeListener(_manageHotkeys);
+    DandanplayService.loginExpired.removeListener(_onDandanplayLoginExpired);
     _tabChangeNotifier
         ?.removeListener(_onTabChangeRequested); // Temporarily remove
     _webdavQuickAccessProvider?.removeListener(_onWebDAVSettingsChanged);
@@ -1704,7 +1748,8 @@ class MainPageState extends State<MainPage>
     ExternalPlayerConsoleService.sessionAvailability
         .removeListener(_onExternalPlayerConsoleAvailabilityChanged);
     _guideButtonSubscription?.cancel();
-    _androidFileAssociationSubscription?.cancel();
+    _fileAssociationSubscription?.cancel();
+    _fileAssociationErrorSubscription?.cancel();
     globalTabController?.removeListener(_onTabChange);
     _videoPlayerState?.removeListener(_manageHotkeys);
     globalTabController?.dispose();
@@ -2111,8 +2156,11 @@ class _LargeScreenModeSfxSyncState extends State<_LargeScreenModeSfxSync> {
   }
 
   void _sync() {
-    context.read<LargeScreenUiSfxService>().largeScreenModeActive =
-        widget.isActive;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      context.read<LargeScreenUiSfxService>().largeScreenModeActive =
+          widget.isActive;
+    });
   }
 
   @override

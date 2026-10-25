@@ -465,6 +465,8 @@ class _LoadingOverlayState extends State<LoadingOverlay>
             )
           : ListView.builder(
               controller: _scrollController,
+              // 卡片已提供内边距，避免继承页面安全区域而将加载文字挤到下方。
+              padding: EdgeInsets.zero,
               physics: const BouncingScrollPhysics(),
               itemCount: widget.messages.length,
               itemBuilder: (context, index) {

@@ -26,6 +26,7 @@ class _ControlledAsyncPlayerDelegate extends Fake
   final Completer<void> _disposeCompleter = Completer<void>();
   int disposeCalls = 0;
   int disposeAsyncCalls = 0;
+  final disposalStarted = Completer<void>();
 
   @override
   double get volume => 0.5;
@@ -41,6 +42,7 @@ class _ControlledAsyncPlayerDelegate extends Fake
   @override
   Future<void> disposeAsync() {
     disposeAsyncCalls++;
+    if (!disposalStarted.isCompleted) disposalStarted.complete();
     return _disposeCompleter.future;
   }
 
@@ -62,6 +64,9 @@ class _HotSwapVideoPlayerState extends Fake implements VideoPlayerState {
 
   Player _player;
   int replacementAssignments = 0;
+
+  @override
+  void beginKernelSurfaceSwap() {}
 
   @override
   bool get isDisposed => false;
@@ -181,6 +186,7 @@ void main() {
       );
       final expectation = expectLater(swap, throwsStateError);
 
+      await delegate.disposalStarted.future;
       delegate.failDisposal(StateError('native teardown failed'));
       await expectation;
 

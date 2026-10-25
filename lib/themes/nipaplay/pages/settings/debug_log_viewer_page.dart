@@ -326,15 +326,15 @@ class _DebugLogViewerPageState extends State<DebugLogViewerPage>
       context: context,
       title: '确认清空',
       content: '确定要清空所有日志吗？此操作无法撤销。',
-      actions: [
+      actionsBuilder: (dialogContext) => [
         HoverScaleTextButton(
-          onPressed: () => Navigator.pop(context),
+          onPressed: () => Navigator.pop(dialogContext),
           child: Text('取消',
               style: TextStyle(color: colorScheme.onSurface.withOpacity(0.7))),
         ),
         HoverScaleTextButton(
           onPressed: () {
-            Navigator.pop(context);
+            Navigator.pop(dialogContext);
             DebugLogService().clearLogs();
             BlurSnackBar.show(context, '日志已清空');
           },
@@ -413,9 +413,9 @@ class _DebugLogViewerPageState extends State<DebugLogViewerPage>
       context: context,
       title: '日志统计',
       content: contentBuffer.toString(),
-      actions: [
+      actionsBuilder: (dialogContext) => [
         HoverScaleTextButton(
-          onPressed: () => Navigator.pop(context),
+          onPressed: () => Navigator.pop(dialogContext),
           child: Text('关闭', style: TextStyle(color: colorScheme.onSurface)),
         ),
       ],
@@ -953,16 +953,16 @@ class _DebugLogViewerPageState extends State<DebugLogViewerPage>
                                 context: context,
                                 title: '日志详细信息',
                                 content: detailsContent,
-                                actions: [
+                                actionsBuilder: (dialogContext) => [
                                   HoverScaleTextButton(
-                                    onPressed: () => Navigator.pop(context),
+                                    onPressed: () => Navigator.pop(dialogContext),
                                     child: Text('关闭',
                                         style: TextStyle(
                                             color: colorScheme.onSurface)),
                                   ),
                                   HoverScaleTextButton(
                                     onPressed: () {
-                                      Navigator.pop(context);
+                                      Navigator.pop(dialogContext);
                                       _copyLogEntry(entry);
                                     },
                                     child: Text('复制',

@@ -410,7 +410,7 @@ class _PlaybackInfoMenuState extends State<PlaybackInfoMenu> {
       return [
         InfoItem('编解码器', codecName),
         InfoItem('分辨率', resolution),
-        InfoItem('解码', 'Erika'),
+        InfoItem('解码', videoState.player.getProperty('decoder.video') ?? 'Erika'),
         if (details.isNotEmpty) InfoItem('参数', details),
       ];
     } else if (playerKernelName.toLowerCase().contains('mdk')) {

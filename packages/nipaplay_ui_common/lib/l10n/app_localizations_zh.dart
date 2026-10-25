@@ -694,6 +694,21 @@ class AppLocalizationsZh extends AppLocalizations {
   String get webdavAddress => 'WebDAV 地址';
 
   @override
+  String get addressAtLeastOne => '请至少填写内网地址或公网地址其中之一';
+
+  @override
+  String get webdavLanAddress => '内网地址';
+
+  @override
+  String get webdavWanAddress => '公网地址';
+
+  @override
+  String get smbLanHost => '内网主机/IP 地址';
+
+  @override
+  String get smbWanHost => '公网主机/IP 地址';
+
+  @override
   String get smbAddServer => '添加 SMB 服务器';
 
   @override
@@ -2640,6 +2655,21 @@ class AppLocalizationsZhHant extends AppLocalizationsZh {
 
   @override
   String get webdavAddress => 'WebDAV 位址';
+
+  @override
+  String get addressAtLeastOne => '請至少填寫內網位址或公網位址其中之一';
+
+  @override
+  String get webdavLanAddress => '內網位址';
+
+  @override
+  String get webdavWanAddress => '公網位址';
+
+  @override
+  String get smbLanHost => '內網主機/IP 位址';
+
+  @override
+  String get smbWanHost => '公網主機/IP 位址';
 
   @override
   String get smbAddServer => '新增 SMB 伺服器';

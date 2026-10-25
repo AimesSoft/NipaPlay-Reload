@@ -1,3 +1,4 @@
+import 'package:nipaplay/playback/player_ui_snapshot.dart';
 import 'dart:async';
 
 import 'package:desktop_multi_window/desktop_multi_window.dart';
@@ -9,9 +10,10 @@ import 'package:nipaplay/danmaku_abstraction/danmaku_kernel_factory.dart';
 import 'package:nipaplay/services/system_share_service.dart';
 import 'package:nipaplay/services/photo_library_service.dart';
 import 'package:nipaplay/utils/globals.dart' as globals;
+import 'package:nipaplay/utils/media_source_utils.dart';
 import 'package:nipaplay_core/utils/platform_utils.dart';
 import 'package:nipaplay/utils/video_player_state.dart';
-import 'package:nipaplay_core/utils/video_aspect_geometry.dart';
+import 'package:nipaplay/widgets/video_surface_layout.dart';
 import 'package:nipaplay/widgets/context_menu/context_menu.dart';
 import 'package:nipaplay/widgets/danmaku_overlay.dart';
 import 'package:nipaplay/widgets/external_subtitle_overlay.dart';
@@ -158,7 +160,7 @@ class _VideoPlayerUIState extends State<VideoPlayerUI>
         opacity: videoState.mappedDanmakuOpacity,
       ),
       builder: (context, posMs, child) {
-        if (isStableKernel && child != null) {
+        if ((isStableKernel || !videoState.danmakuVisible) && child != null) {
           return child;
         }
         return DanmakuOverlay(
@@ -331,7 +333,19 @@ class _VideoPlayerUIState extends State<VideoPlayerUI>
     return videoState.actualDanmakuFontSize;
   }
 
+  /// 渲染层出口统一包 ValueKey(playerSurfaceGeneration)：内核热切换时代数
+  /// 变化 → Flutter 销毁并重建整棵 surface 子树（Texture 解除旧纹理绑定、
+  /// PlatformView 重建平台视图），杜绝旧内核的渲染状态残留在新内核上。
   Widget _buildVideoSurface(VideoPlayerState videoState, int? textureId) {
+    return KeyedSubtree(
+      key: ValueKey<int>(
+        Object.hash(videoState.playerSurfaceGeneration, 'player-surface'),
+      ),
+      child: _buildVideoSurfaceInner(videoState, textureId),
+    );
+  }
+
+  Widget _buildVideoSurfaceInner(VideoPlayerState videoState, int? textureId) {
     if (kIsWeb) {
       final controller = videoState.player.videoPlayerController;
       if (controller == null) {
@@ -374,37 +388,20 @@ class _VideoPlayerUIState extends State<VideoPlayerUI>
 
   Widget _buildVideoSurfaceWithAspectMode(
       VideoPlayerState videoState, int? textureId) {
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final videoTracks = videoState.player.mediaInfo.video;
-        Size? naturalSize;
-        if (videoTracks != null && videoTracks.isNotEmpty) {
-          final codec = videoTracks.first.codec;
-          if (codec.width > 0 && codec.height > 0) {
-            naturalSize = Size(codec.width.toDouble(), codec.height.toDouble());
-          }
-        }
-        final rect = VideoAspectGeometry.displayRect(
-          mode: videoState.videoAspectMode,
-          viewport: constraints.biggest,
-          sourceAspect: videoState.aspectRatio,
-          naturalSize: naturalSize,
-        );
-        return ClipRect(
-          child: OverflowBox(
-            alignment: Alignment.center,
-            minWidth: 0,
-            minHeight: 0,
-            maxWidth: double.infinity,
-            maxHeight: double.infinity,
-            child: SizedBox(
-              width: rect.width,
-              height: rect.height,
-              child: _buildVideoSurface(videoState, textureId),
-            ),
-          ),
-        );
-      },
+    final videoTracks = videoState.player.mediaInfo.video;
+    Size? naturalSize;
+    if (videoTracks != null && videoTracks.isNotEmpty) {
+      final codec = videoTracks.first.codec;
+      if (codec.width > 0 && codec.height > 0) {
+        naturalSize = Size(codec.width.toDouble(), codec.height.toDouble());
+      }
+    }
+    return VideoSurfaceLayout(
+      mode: videoState.videoAspectMode,
+      sourceAspect: videoState.aspectRatio,
+      naturalSize: naturalSize,
+      handlesAspectFit: videoState.player.handlesVideoAspectFit,
+      child: _buildVideoSurface(videoState, textureId),
     );
   }
 
@@ -512,21 +509,24 @@ class _VideoPlayerUIState extends State<VideoPlayerUI>
             () async {
           if (mounted && _videoPlayerStateInstance != null) {
             // 获取当前的错误信息用于显示
-            final String errorMessage =
-                _videoPlayerStateInstance!.error ?? "发生未知播放错误，已停止播放。";
+            final videoState = _videoPlayerStateInstance!;
+            final errorMessage = MediaSourceUtils.playbackErrorForDisplay(
+              videoState.error ?? "发生未知播放错误，已停止播放。",
+              videoState.currentVideoPath,
+            );
 
             // 显示 BlurDialog
             BlurDialog.show<void>(
               context: context, // 使用 VideoPlayerUI 的 context
               title: '播放错误',
               content: errorMessage,
-              actions: [
+              actionsBuilder: (dialogContext) => [
                 HoverScaleTextButton(
                   child: const Text('确定'),
                   onPressed: () {
                     // 1. Pop the dialog
-                    //    这里的 context 是 BlurDialog.show 内部创建的用于对话框的 context
-                    Navigator.of(context).pop();
+                    //    使用弹窗路由内部的 context 关闭弹窗。
+                    Navigator.of(dialogContext).pop();
 
                     // 2. Reset the player state.
                     //    这将导致 VideoPlayerUI 重建并因 hasVideo 为 false 而显示 VideoUploadUI。
@@ -1136,8 +1136,10 @@ class _VideoPlayerUIState extends State<VideoPlayerUI>
   Widget build(BuildContext context) {
     final isPictureInPicture =
         DesktopPictureInPictureScope.isEnabledOf(context);
-    return Consumer<VideoPlayerState>(
-      builder: (context, videoState, child) {
+    return Selector<VideoPlayerState, List<Object?>>(
+      selector: (_, state) => playerUiSnapshot(state),
+      builder: (context, snapshot, child) {
+        final videoState = context.read<VideoPlayerState>();
         return ValueListenableBuilder<int?>(
           valueListenable: videoState.player.textureId,
           builder: (context, textureId, _) {
@@ -1228,7 +1230,6 @@ class _VideoPlayerUIState extends State<VideoPlayerUI>
                               _handleHorizontalDragEnd(context, details)
                           : null,
                       child: FocusScope(
-                        node: FocusScopeNode(),
                         child: globals.isMobilePlatform
                             ? RepaintBoundary(
                                 key: videoState.screenshotBoundaryKey,
@@ -1243,10 +1244,8 @@ class _VideoPlayerUIState extends State<VideoPlayerUI>
                                         ),
                                       ),
                                     ),
-                                    if ((videoState.hasVideo ||
-                                            videoState
-                                                .isDfmStartupGatePending) &&
-                                        videoState.danmakuVisible)
+                                    if (videoState.hasVideo ||
+                                        videoState.isDfmStartupGatePending)
                                       Positioned.fill(
                                         // RepaintBoundary 隔离弹幕层：同 Stack
                                         // 的字幕叠层重绘不得把弹幕拖进重新
@@ -1254,11 +1253,14 @@ class _VideoPlayerUIState extends State<VideoPlayerUI>
                                         child: RepaintBoundary(
                                           child: IgnorePointer(
                                             ignoring: true,
-                                            child: Consumer<VideoPlayerState>(
-                                              builder:
-                                                  (context, videoState, _) {
+                                            child: Selector<VideoPlayerState,
+                                                List<Object?>>(
+                                              selector: (_, state) =>
+                                                  danmakuUiSnapshot(state),
+                                              builder: (context, snapshot, _) {
                                                 return _buildDanmakuOverlay(
-                                                  videoState,
+                                                  context
+                                                      .read<VideoPlayerState>(),
                                                 );
                                               },
                                             ),
@@ -1270,20 +1272,7 @@ class _VideoPlayerUIState extends State<VideoPlayerUI>
                                         // RepaintBoundary：SRT 叠层逐帧取文本
                                         // 重绘，隔离后不连带弹幕层重合成。
                                         child: RepaintBoundary(
-                                          child: Consumer<VideoPlayerState>(
-                                            builder: (context, videoState, _) {
-                                              return ValueListenableBuilder<
-                                                  double>(
-                                                valueListenable:
-                                                    videoState.playbackTimeMs,
-                                                builder: (context, posMs, __) {
-                                                  return ExternalSubtitleOverlay(
-                                                    currentPositionMs: posMs,
-                                                  );
-                                                },
-                                              );
-                                            },
-                                          ),
+                                          child: const ExternalSubtitleOverlay(),
                                         ),
                                       ),
                                     // 内嵌字幕整块移动模式：sub-text 驱动的
@@ -1352,20 +1341,21 @@ class _VideoPlayerUIState extends State<VideoPlayerUI>
                                           ),
                                         ),
                                       ),
-                                      if ((videoState.hasVideo ||
-                                              videoState
-                                                  .isDfmStartupGatePending) &&
-                                          videoState.danmakuVisible)
+                                      if (videoState.hasVideo ||
+                                          videoState.isDfmStartupGatePending)
                                         Positioned.fill(
                                           // 同上：弹幕层 RepaintBoundary 隔离。
                                           child: RepaintBoundary(
                                             child: IgnorePointer(
                                               ignoring: true,
-                                              child: Consumer<VideoPlayerState>(
-                                                builder:
-                                                    (context, videoState, _) {
+                                              child: Selector<VideoPlayerState,
+                                                  List<Object?>>(
+                                                selector: (_, state) =>
+                                                    danmakuUiSnapshot(state),
+                                                builder: (context, snapshot, _) {
                                                   return _buildDanmakuOverlay(
-                                                    videoState,
+                                                    context
+                                                        .read<VideoPlayerState>(),
                                                   );
                                                 },
                                               ),
@@ -1376,21 +1366,7 @@ class _VideoPlayerUIState extends State<VideoPlayerUI>
                                         Positioned.fill(
                                           // 同上：SRT 叠层 RepaintBoundary 隔离。
                                           child: RepaintBoundary(
-                                            child: Consumer<VideoPlayerState>(
-                                              builder:
-                                                  (context, videoState, _) {
-                                                return ValueListenableBuilder<
-                                                    double>(
-                                                  valueListenable:
-                                                      videoState.playbackTimeMs,
-                                                  builder: (context, posMs, __) {
-                                                    return ExternalSubtitleOverlay(
-                                                      currentPositionMs: posMs,
-                                                    );
-                                                  },
-                                                );
-                                              },
-                                            ),
+                                            child: const ExternalSubtitleOverlay(),
                                           ),
                                         ),
                                       // 内嵌字幕整块移动模式（第二处布局分支）

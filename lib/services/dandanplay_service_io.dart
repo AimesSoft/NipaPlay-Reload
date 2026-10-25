@@ -180,7 +180,7 @@ class DandanplayService {
   /// 这一步在首帧之前的关键路径上，慢网络下会让启动界面长时间不消失。
   static const Duration _tokenLoadTimeout = Duration(seconds: 5);
 
-  static Future<void> initialize() async {
+  static Future<void> initialize({bool renewToken = true}) async {
     final prefs = await SharedPreferences.getInstance();
     // 新版由服务端保管 AppSecret，清理旧版本曾缓存到本地的副本。
     await prefs.remove('dandanplay_app_secret');
@@ -191,6 +191,8 @@ class DandanplayService {
     // loadToken 内部在距上次续期超过 21 天时会发起一次网络续期请求。
     // 加超时护栏：超时就沿用本地已缓存的 token 继续启动，
     // 续期交由后续请求自然重试，不阻塞首帧。
+    _token = prefs.getString('dandanplay_token');
+    if (!renewToken) return;
     await loadToken().timeout(
       _tokenLoadTimeout,
       onTimeout: () {
@@ -307,67 +309,116 @@ class DandanplayService {
   }
 
   // 检查并刷新Token
+  static Future<void>? _renewingToken;
   static Future<void> _checkAndRenewToken() async {
-    if (_token == null) return;
+    final pending = _renewingToken ??= _renewToken();
+    try {
+      await pending;
+    } finally {
+      if (identical(_renewingToken, pending)) _renewingToken = null;
+    }
+  }
 
+  static Future<void> _renewToken() async {
+    if (_token == null) return;
     final prefs = await SharedPreferences.getInstance();
     final lastRenewTime = prefs.getInt(_lastTokenRenewKey) ?? 0;
     final currentTime = DateTime.now().millisecondsSinceEpoch;
 
     // 如果距离上次刷新超过21天，则刷新Token
     if (currentTime - lastRenewTime >= _tokenRenewInterval) {
-      try {
-        const apiPath = '/api/v2/login/renew';
-        final appSecret = await getAppSecret();
-        final timestamp =
-            (DateTime.now().toUtc().millisecondsSinceEpoch / 1000).round();
+      await _renewOrExpire();
+    }
+  }
 
-        final apiBaseUrl = await getAccountApiBaseUrl();
-        final requestUri = Uri.parse('$apiBaseUrl$apiPath');
-        final headers = _buildLoginRenewHeaders(
-          timestamp: timestamp,
-          apiPath: apiPath,
-          appSecret: appSecret,
-        );
-        final requestResult = await _requestLoginRenewWithFallback(
-          requestUri: requestUri,
-          headers: headers,
-          logTag: 'Token续期',
-        );
-        final response = requestResult['response'] as http.Response;
-        final requestMethod =
-            requestResult['requestMethod']?.toString() ?? 'POST';
+  /// 保存的登录被服务器作废时递增：显示账号的页面据此刷新，并请用户重新登录。
+  static final ValueNotifier<int> loginExpired = ValueNotifier(0);
 
-        if (response.statusCode == 200) {
-          final data = json.decode(response.body);
-          if (data['success'] == true && data['token'] != null) {
-            // 更新Token和刷新时间
-            _token = data['token'];
-            await saveToken(_token!);
-            await prefs.setInt(_lastTokenRenewKey, currentTime);
-            if (data is Map<String, dynamic>) {
-              final hasLinkedAccount = data.containsKey('linkedAccounts');
-              final hasLoginTs = data.containsKey('ts');
-              if (hasLinkedAccount || hasLoginTs) {
-                await _saveLinkedBangumiAccount(
-                  _extractLinkedBangumiAccount(data),
-                  loginTimestamp: _parseLoginTimestamp(data['ts']),
-                );
-              }
+  static Future<bool>? _refusalCheck;
+
+  /// 网关拒绝了带着当前登录凭据的请求（401）。先续期一次，成功则返回 true，
+  /// 调用方可以带新凭据重试；续期也被拒，就清除登录并通知界面。
+  /// 同时到达的多次拒绝只确认一次。
+  static Future<bool> handleTokenRefused(String? authorization) {
+    final token = _token;
+    if (token == null || authorization != 'Bearer $token') {
+      // 登录已经变了（重新登录或已续期）：带当前凭据再试即可。
+      return Future.value(token != null);
+    }
+    return _refusalCheck ??=
+        _renewOrExpire().whenComplete(() => _refusalCheck = null);
+  }
+
+  /// 续期一次；服务器明确拒绝（401/403）说明保存的登录已经失效。
+  /// 网络或服务器故障不算失效，保持原样。
+  static Future<bool> _renewOrExpire() async {
+    final tokenAtStart = _token;
+    final outcome = await _renewNow();
+    if (_token != tokenAtStart) return _token != null;
+    if (outcome == _RenewOutcome.refused) {
+      debugPrint('[弹弹play服务][Token续期] 服务器拒绝续期，登录已失效');
+      await clearLoginInfo();
+      loginExpired.value++;
+    }
+    return outcome == _RenewOutcome.renewed;
+  }
+
+  static Future<_RenewOutcome> _renewNow() async {
+    final tokenAtStart = _token;
+    if (tokenAtStart == null) return _RenewOutcome.unavailable;
+    try {
+      const apiPath = '/api/v2/login/renew';
+      final appSecret = await getAppSecret();
+      final timestamp =
+          (DateTime.now().toUtc().millisecondsSinceEpoch / 1000).round();
+
+      final apiBaseUrl = await getAccountApiBaseUrl();
+      final requestUri = Uri.parse('$apiBaseUrl$apiPath');
+      final headers = _buildLoginRenewHeaders(
+        timestamp: timestamp,
+        apiPath: apiPath,
+        appSecret: appSecret,
+      );
+      final requestResult = await _requestLoginRenewWithFallback(
+        requestUri: requestUri,
+        headers: headers,
+        logTag: 'Token续期',
+      );
+      final response = requestResult['response'] as http.Response;
+      final requestMethod =
+          requestResult['requestMethod']?.toString() ?? 'POST';
+
+      if (_token != tokenAtStart) return _RenewOutcome.unavailable;
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        if (data['success'] == true && data['token'] != null) {
+          // 更新Token和刷新时间（saveToken 记录刷新时间）
+          _token = data['token'];
+          await saveToken(_token!);
+          if (data is Map<String, dynamic>) {
+            final hasLinkedAccount = data.containsKey('linkedAccounts');
+            final hasLoginTs = data.containsKey('ts');
+            if (hasLinkedAccount || hasLoginTs) {
+              await _saveLinkedBangumiAccount(
+                _extractLinkedBangumiAccount(data),
+                loginTimestamp: _parseLoginTimestamp(data['ts']),
+              );
             }
-            //////debugPrint('Token已成功刷新');
-          } else {
-            //////debugPrint('Token刷新失败: ${data['errorMessage']}');
           }
-        } else {
-          debugPrint(
-            '[弹弹play服务][Token续期] 请求失败: method=$requestMethod '
-            'status=${response.statusCode} allow=${response.headers['allow'] ?? '-'}',
-          );
+          return _RenewOutcome.renewed;
         }
-      } catch (e) {
-        debugPrint('[弹弹play服务][Token续期] 请求异常: $e');
+        return _RenewOutcome.unavailable;
       }
+      debugPrint(
+        '[弹弹play服务][Token续期] 请求失败: method=$requestMethod '
+        'status=${response.statusCode} allow=${response.headers['allow'] ?? '-'}',
+      );
+      return response.statusCode == 401 || response.statusCode == 403
+          ? _RenewOutcome.refused
+          : _RenewOutcome.unavailable;
+    } catch (e) {
+      debugPrint('[弹弹play服务][Token续期] 请求异常: $e');
+      return _RenewOutcome.unavailable;
     }
   }
 
@@ -624,6 +675,9 @@ class DandanplayService {
     required int fileSize,
   }) async {
     await ensureLoggedInForMatching();
+    debugPrint(
+      '[弹幕自动匹配] 发出精确匹配请求: fileName=$fileName, fileSize=$fileSize',
+    );
     final appSecret = await getAppSecret();
     final timestamp =
         (DateTime.now().toUtc().millisecondsSinceEpoch / 1000).round();
@@ -661,7 +715,32 @@ class DandanplayService {
     if (decoded is! Map) {
       throw const FormatException('弹幕匹配响应格式错误');
     }
-    return Map<String, dynamic>.from(decoded);
+    final result = Map<String, dynamic>.from(decoded);
+    debugPrint(
+      '[弹幕自动匹配] 精确匹配响应: status=${response.statusCode}, '
+      'isMatched=${result['isMatched']}, '
+      'matches=${result['matches'] is List ? (result['matches'] as List).length : 'invalid'}',
+    );
+    return result;
+  }
+
+  /// 服务器给出的原因：先看响应头，再看 JSON 正文；都没有时按状态码说明，
+  /// 只有确实没有回应时才归到网络。
+  static String _errorMessage(http.Response response) {
+    final header = response.headers['x-error-message'];
+    if (header != null && header.trim().isNotEmpty) return header;
+    try {
+      final decoded = json.decode(response.body);
+      if (decoded is Map && decoded['errorMessage'] is String) {
+        final message = (decoded['errorMessage'] as String).trim();
+        if (message.isNotEmpty) return message;
+      }
+    } catch (_) {}
+    if (response.statusCode == 401) return '弹弹play登录已失效，请重新登录';
+    if (response.statusCode >= 500) {
+      return '弹弹play服务暂时不可用（${response.statusCode}）';
+    }
+    return '请检查网络连接';
   }
 
   static String _responseError(String body) {
@@ -1101,7 +1180,7 @@ class DandanplayService {
           throw Exception(data['errorMessage'] ?? '更新观看状态失败');
         }
       } else {
-        final errorMessage = response.headers['x-error-message'] ?? '请检查网络连接';
+        final errorMessage = _errorMessage(response);
         throw Exception('更新观看状态失败: $errorMessage');
       }
     } catch (e) {
@@ -1174,6 +1253,10 @@ class DandanplayService {
     // 尝试从缓存获取视频信息
     final cachedInfo = await getCachedVideoInfo(fileHash);
     if (cachedInfo != null) {
+      debugPrint(
+        '[弹幕自动匹配] 命中视频匹配缓存: isMatched=${cachedInfo['isMatched']}, '
+        'matches=${cachedInfo['matches'] is List ? (cachedInfo['matches'] as List).length : 'invalid'}',
+      );
       if (cachedInfo['matches'] != null && cachedInfo['matches'].isNotEmpty) {
         final match = cachedInfo['matches'][0];
         if (match['episodeId'] != null && match['animeId'] != null) {
@@ -1193,6 +1276,7 @@ class DandanplayService {
     }
 
     final prefs = await SharedPreferences.getInstance();
+    debugPrint('[弹幕自动匹配] 未命中有效缓存，准备请求精确匹配');
     final data = await matchVideo(
       fileName: fileName,
       fileHash: fileHash,
@@ -1226,12 +1310,14 @@ class DandanplayService {
 
       if (autoMatchEnabled) {
         try {
+          debugPrint('[弹幕自动匹配] 精确匹配失败，开始按文件名搜索兜底: $fileName');
           final fallback = await _tryMatchByFileNameFirstResult(
             fileName: fileName,
             fileHash: fileHash,
             fileSize: fileSize,
           );
           if (fallback != null && fallback['isMatched'] == true) {
+            debugPrint('[弹幕自动匹配] 文件名搜索兜底匹配成功');
             _ensureVideoInfoTitles(fallback);
             await saveVideoInfoToCache(fileHash, fallback);
 
@@ -1256,9 +1342,11 @@ class DandanplayService {
             return fallback;
           }
         } catch (e) {
-          debugPrint('文件名 fallback 匹配失败: $e');
+          debugPrint('[弹幕自动匹配] 文件名搜索兜底异常: $e');
         }
       }
+
+      debugPrint('[弹幕自动匹配] 所有远程匹配方式均未找到结果，缓存未匹配状态');
 
       final unmatchedResult = {
         'isMatched': false,
@@ -1684,7 +1772,7 @@ class DandanplayService {
       return _parseDanmakuBody(response.body, episodeId, animeId);
     }
 
-    final errorMessage = response.headers['x-error-message'] ?? '请检查网络连接';
+    final errorMessage = _errorMessage(response);
     debugPrint('获取弹幕失败: 状态码=${response.statusCode}, 错误信息=$errorMessage');
     throw Exception('获取弹幕失败: $errorMessage');
   }
@@ -1918,7 +2006,7 @@ class DandanplayService {
           throw Exception(data['errorMessage'] ?? '获取播放历史失败');
         }
       } else {
-        final errorMessage = response.headers['x-error-message'] ?? '请检查网络连接';
+        final errorMessage = _errorMessage(response);
         throw Exception('获取播放历史失败: $errorMessage');
       }
     } catch (e) {
@@ -1990,7 +2078,7 @@ class DandanplayService {
           throw Exception(data['errorMessage'] ?? '提交播放历史失败');
         }
       } else {
-        final errorMessage = response.headers['x-error-message'] ?? '请检查网络连接';
+        final errorMessage = _errorMessage(response);
         throw Exception('提交播放历史失败: $errorMessage');
       }
     } catch (e) {
@@ -2097,7 +2185,7 @@ class DandanplayService {
         final data = json.decode(response.body);
         return data;
       } else {
-        final errorMessage = response.headers['x-error-message'] ?? '请检查网络连接';
+        final errorMessage = _errorMessage(response);
         throw Exception('获取番剧详情失败: $errorMessage');
       }
     } catch (e) {
@@ -2395,7 +2483,7 @@ class DandanplayService {
           throw Exception(data['errorMessage'] ?? '获取收藏列表失败');
         }
       } else {
-        final errorMessage = response.headers['x-error-message'] ?? '请检查网络连接';
+        final errorMessage = _errorMessage(response);
         throw Exception('获取收藏列表失败: $errorMessage');
       }
     } catch (e) {
@@ -2461,7 +2549,7 @@ class DandanplayService {
           throw Exception(data['errorMessage'] ?? '添加收藏失败');
         }
       } else {
-        final errorMessage = response.headers['x-error-message'] ?? '请检查网络连接';
+        final errorMessage = _errorMessage(response);
         throw Exception('添加收藏失败: $errorMessage');
       }
     } catch (e) {
@@ -2513,7 +2601,7 @@ class DandanplayService {
           throw Exception(data['errorMessage'] ?? '取消收藏失败');
         }
       } else {
-        final errorMessage = response.headers['x-error-message'] ?? '请检查网络连接';
+        final errorMessage = _errorMessage(response);
         throw Exception('取消收藏失败: $errorMessage');
       }
     } catch (e) {
@@ -2670,7 +2758,7 @@ class DandanplayService {
           throw Exception(data['errorMessage'] ?? '发送弹幕失败');
         }
       } else {
-        final errorMessage = response.headers['x-error-message'] ?? '请检查网络连接';
+        final errorMessage = _errorMessage(response);
         throw Exception('发送弹幕失败: $errorMessage');
       }
     } catch (e) {
@@ -2876,3 +2964,5 @@ class DandanplayService {
     }
   }
 }
+
+enum _RenewOutcome { renewed, refused, unavailable }

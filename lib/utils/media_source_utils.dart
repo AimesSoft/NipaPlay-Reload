@@ -6,6 +6,47 @@ import 'package:nipaplay/services/smb_proxy_service.dart';
 class MediaSourceUtils {
   MediaSourceUtils._();
 
+  /// Decode a remote playback URL only for the error dialog. The media URL
+  /// used by the player remains encoded; credentials are omitted from the
+  /// displayed URL so decoding cannot reveal an encoded password.
+  static String playbackErrorForDisplay(String message, String? mediaPath) {
+    if (mediaPath == null ||
+        !(isNewWebDavPath(mediaPath) ||
+            isNewSmbPath(mediaPath) ||
+            isWebDavPath(mediaPath) ||
+            isSmbPath(mediaPath))) {
+      return message;
+    }
+
+    final urlPattern = RegExp(
+      r'''(?:https?|webdav|smb)://[^\s<>"'）)]+''',
+      caseSensitive: false,
+    );
+    return message.replaceAllMapped(urlPattern, (match) {
+      final rawUrl = match.group(0)!;
+      final authorityStart = rawUrl.indexOf('://') + 3;
+      final authorityEnd = rawUrl.indexOf(
+        RegExp(r'[/?#]'),
+        authorityStart,
+      );
+      final end = authorityEnd < 0 ? rawUrl.length : authorityEnd;
+      final userInfoEnd = rawUrl.lastIndexOf('@', end - 1);
+      final safeUrl = userInfoEnd < authorityStart
+          ? rawUrl
+          : rawUrl.substring(0, authorityStart) +
+              rawUrl.substring(userInfoEnd + 1);
+      try {
+        // This is display text, so decode encoded separators in an SMB
+        // proxy's `path` parameter as well as non-ASCII directory names.
+        return Uri.decodeComponent(safeUrl);
+      } on ArgumentError {
+        return safeUrl;
+      } on FormatException {
+        return safeUrl;
+      }
+    });
+  }
+
   static List<WebDAVConnection> _remoteWebDavConnections = const [];
 
   static void updateRemoteWebDavConnections(
@@ -74,19 +115,23 @@ class MediaSourceUtils {
   static bool _matchesRemoteWebDavConnection(Uri fileUri) {
     final fileHost = fileUri.host.toLowerCase();
     for (final conn in _remoteWebDavConnections) {
-      final baseUri = Uri.tryParse(conn.url.trim());
-      if (baseUri == null || baseUri.scheme.isEmpty || baseUri.host.isEmpty) {
-        continue;
-      }
-      if (baseUri.scheme != fileUri.scheme) continue;
-      if (baseUri.host.toLowerCase() != fileHost) continue;
-      if (_effectivePort(baseUri) != _effectivePort(fileUri)) continue;
+      // 内网与公网地址都参与匹配。
+      for (final base in [conn.url, conn.wanUrl]) {
+        if (base.trim().isEmpty) continue;
+        final baseUri = Uri.tryParse(base.trim());
+        if (baseUri == null || baseUri.scheme.isEmpty || baseUri.host.isEmpty) {
+          continue;
+        }
+        if (baseUri.scheme != fileUri.scheme) continue;
+        if (baseUri.host.toLowerCase() != fileHost) continue;
+        if (_effectivePort(baseUri) != _effectivePort(fileUri)) continue;
 
-      final basePath = _normalizePath(baseUri.path);
-      final filePath = _normalizePath(fileUri.path, keepTrailingSlash: true);
-      if (filePath == basePath.substring(0, basePath.length - 1) ||
-          filePath.startsWith(basePath)) {
-        return true;
+        final basePath = _normalizePath(baseUri.path);
+        final filePath = _normalizePath(fileUri.path, keepTrailingSlash: true);
+        if (filePath == basePath.substring(0, basePath.length - 1) ||
+            filePath.startsWith(basePath)) {
+          return true;
+        }
       }
     }
     return false;
@@ -242,7 +287,8 @@ class MediaSourceUtils {
       // 如果只有一个 WebDAV 连接，直接用那个
       if (connections.length == 1) {
         final conn = connections.first;
-        final relativePath = _extractRelativePath(fileUri.path, conn.url);
+        final relativePath =
+            _extractRelativePathForConnection(fileUri.path, conn);
         if (relativePath != null) {
           return buildWebDavPath(conn.id, relativePath);
         }
@@ -264,7 +310,8 @@ class MediaSourceUtils {
         }
 
         // URL path 前缀匹配加分
-        final relativePath = _extractRelativePath(fileUri.path, conn.url);
+        final relativePath =
+            _extractRelativePathForConnection(fileUri.path, conn);
         if (relativePath != null) {
           score += 50;
         }
@@ -276,13 +323,24 @@ class MediaSourceUtils {
       }
 
       if (bestMatch != null && bestScore >= 50) {
-        final relativePath = _extractRelativePath(fileUri.path, bestMatch.url);
+        final relativePath =
+            _extractRelativePathForConnection(fileUri.path, bestMatch);
         if (relativePath != null) {
           return buildWebDavPath(bestMatch.id, relativePath);
         }
       }
     } catch (_) {}
     return null;
+  }
+
+  /// 内网/公网地址都尝试，返回首个可提取的相对路径。
+  static String? _extractRelativePathForConnection(
+    String filePath,
+    WebDAVConnection conn,
+  ) {
+    final lan = _extractRelativePath(filePath, conn.url);
+    if (lan != null) return lan;
+    return _extractRelativePath(filePath, conn.wanUrl);
   }
 
   /// 从文件 URL path 中提取相对于连接 base URL 的路径

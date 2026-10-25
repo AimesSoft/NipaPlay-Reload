@@ -8,6 +8,7 @@ import 'package:flutter/scheduler.dart'; // 导入TickerProvider
 import 'package:nipaplay/utils/subtitle_font_loader.dart';
 import 'package:nipaplay/utils/subtitle_file_utils.dart';
 import 'package:nipaplay_core/utils/platform_utils.dart';
+import 'package:nipaplay/utils/player_kernel_manager.dart';
 import 'package:media_kit/media_kit.dart';
 import 'package:media_kit_video/media_kit_video.dart';
 
@@ -59,7 +60,9 @@ bool isRetryableMediaKitLoadError(String message) {
 
 /// MediaKit播放器适配器
 class MediaKitPlayerAdapter
-    implements AbstractPlayer, MediaLoadAwarePlayer, TickerProvider {
+    implements AbstractPlayer, MediaLoadAwarePlayer, AsyncDisposablePlayer,
+        BufferingAwarePlayer,
+        TickerProvider {
   static bool _disableMpvLogs = false;
   static int? _cachedMacosMajor;
   static bool _macOSNativeVideoPreference = false;
@@ -263,6 +266,11 @@ class MediaKitPlayerAdapter
   String _currentMedia = '';
   PlayerMediaInfo _mediaInfo = PlayerMediaInfo(duration: 0);
   PlayerPlaybackState _state = PlayerPlaybackState.stopped;
+  final ValueNotifier<bool> _buffering = ValueNotifier<bool>(false);
+  StreamSubscription<bool>? _bufferingSubscription;
+
+  @override
+  ValueListenable<bool> get buffering => _buffering;
   List<int> _activeSubtitleTracks = [];
   List<int> _activeAudioTracks = [];
 
@@ -270,9 +278,10 @@ class MediaKitPlayerAdapter
   StreamSubscription<Track>? _trackSubscription;
   // [FIX-L1] 订阅 mpv 真实 position 流，校正 _lastActualPosition，消除纯墙钟插值漂移。
   // 根因：原实现未订阅 stream.position，_lastActualPosition 仅 playing/seek 时设一次，
-  // 正常播放纯墙钟插值，永不被 mpv 真实 position 校正 → 与 mpv 漂移 → 下游 big-fwd snap → 回弹。
+  // 正常播放纯墙钟插值，永不被 mpv 真实 position 校正  与 mpv 漂移  下游 big-fwd snap  回弹。
   StreamSubscription<Duration>? _positionSubscription;
   bool _isDisposed = false;
+  final Set<String> _callsAfterTeardown = {};
   // MKV 章节列表是否已成功获取过（用于 _refreshChapters 去重，避免 duration
   // stream 每次触发都重复 getProperty chapter-list）。切集时在 _openMainMedia
   // 重置为 false。
@@ -415,6 +424,19 @@ class MediaKitPlayerAdapter
         'mpvDiagnostics=$_mpvDiagnosticsEnabled',
       );
     }
+  }
+
+  /// An adapter over [player] that only listens to its streams: no video
+  /// output, options or ticker.
+  @visibleForTesting
+  MediaKitPlayerAdapter.withPlayer(Player player)
+      : _mpvDiagnosticsEnabled = false,
+        _enableHardwareAcceleration = true,
+        _prefersPlatformVideoSurface = false,
+        _androidAudioOutput = null,
+        _httpProxy = '',
+        _player = player {
+    _addEventListeners();
   }
 
   void _applyMpvLogLevelOverride() {
@@ -1020,6 +1042,16 @@ class MediaKitPlayerAdapter
   }
 
   void _addEventListeners() {
+    _buffering.value = _player.state.buffering;
+    _bufferingSubscription = _player.stream.buffering.listen((buffering) {
+      if (_isDisposed) return;
+      // Do not extrapolate through a native clock stop, or include the wait
+      // in the first position sample after recovery.
+      _lastActualPosition = _player.state.position;
+      _interpolatedPosition = _lastActualPosition;
+      _lastPositionTimestampUs = DateTime.now().microsecondsSinceEpoch;
+      _buffering.value = buffering;
+    });
     _player.stream.playing.listen((playing) {
       _state = playing
           ? PlayerPlaybackState.playing
@@ -1078,6 +1110,9 @@ class MediaKitPlayerAdapter
         //debugPrint('[MediaKit] 视频开始播放，检查视频尺寸');
         // 延迟一点时间确保视频已经真正开始播放
         Future.delayed(const Duration(milliseconds: 500), () {
+          // 热切换/退出后原生 player 已销毁：不能再读 _player.state，
+          // 否则触发 "[Player] has been disposed" 断言（debug）/ 释放后访问（release）
+          if (_isDisposed) return;
           if (_player.state.width != null &&
               _player.state.height != null &&
               _player.state.width! > 0 &&
@@ -1183,6 +1218,7 @@ class MediaKitPlayerAdapter
     _interpolatedPosition = Duration.zero;
     _lastActualPosition = Duration.zero;
     _lastPositionTimestampUs = 0;
+    _buffering.value = false;
   }
 
   void _markCurrentMediaReady(String evidence) {
@@ -1936,8 +1972,8 @@ class MediaKitPlayerAdapter
   // （逆向补偿），getter 中对 mpv 值取三次方还原用户值。
   //
   // 映射关系：
-  //   用户值 0.45 → mpv volume = 0.45^(1/3)*100 ≈ 76.6 → gain = 0.45
-  //   用户值 1.0  → mpv volume = 100 → gain = 1.0
+  //   用户值 0.45  mpv volume = 0.45^(1/3)*100 ≈ 76.6  gain = 0.45
+  //   用户值 1.0   mpv volume = 100  gain = 1.0
   @override
   double get volume {
     final mpvLinear = _player.state.volume / 100.0;
@@ -2262,8 +2298,24 @@ class MediaKitPlayerAdapter
     return _textureIdNotifier.value;
   }
 
+  /// Once teardown begins this adapter stays torn down: a member reached
+  /// then changes nothing, and the first call of each is traced with its
+  /// caller.
+  bool _released(String member) {
+    if (!_isDisposed) return false;
+    if (_callsAfterTeardown.add(member)) {
+      final caller = StackTrace.current.toString().split('\n').skip(1).take(14);
+      PlayerKernelManager.traceHotSwapStage(
+          'media_kit $member called after teardown began\n${caller.join('\n')}');
+    }
+    return true;
+  }
+
   @override
   void setMedia(String path, PlayerMediaType type) {
+    // Media set on a player being torn down would reopen it on the mpv
+    // being destroyed and restart the reads and delayed callbacks of a load.
+    if (_released('setMedia')) return;
     //debugPrint('[MediaKit] setMedia: path=$path, type=$type');
     if (type == PlayerMediaType.subtitle) {
       //debugPrint('MediaKitAdapter: setMedia called for SUBTITLE. Path: "$path"');
@@ -2301,7 +2353,6 @@ class MediaKitPlayerAdapter
     _activeAudioTracks = [];
     _lastKnownActiveSubtitleId = null;
     _mediaInfo = PlayerMediaInfo(duration: 0);
-    _isDisposed = false;
     // 标记需要在 AO 就绪后重新同步音量（首次 playing 事件时执行）
     _volumeResyncNeeded = true;
     // 递增代数计数器，使旧的延迟加载操作作废
@@ -2343,6 +2394,10 @@ class MediaKitPlayerAdapter
 
     // 设置mpv底层video-aspect属性，确保保持原始宽高比
     Future.delayed(const Duration(milliseconds: 500), () {
+      // 热切换/退出后原生 player 已销毁：延迟回调不能再访问 platform，
+      // 否则触发 "[Player] has been disposed" 断言（debug，实测热切换复现）
+      // 或释放后访问原生对象（release）。与下方 track-info 延迟块同样加守卫。
+      if (_isDisposed) return;
       try {
         final dynamic platform = _player.platform;
         if (platform != null && platform.setProperty != null) {
@@ -2352,6 +2407,7 @@ class MediaKitPlayerAdapter
 
           // 延迟检查设置是否生效
           Future.delayed(const Duration(milliseconds: 500), () async {
+            if (_isDisposed) return;
             try {
               var videoAspect = platform.getProperty('video-aspect');
               if (videoAspect is Future) {
@@ -2616,44 +2672,36 @@ class MediaKitPlayerAdapter
     _lastPositionTimestampUs = DateTime.now().microsecondsSinceEpoch;
   }
 
+  Future<void>? _disposeAsyncFuture;
+
   @override
   void dispose() {
-    if (_isDisposed) {
-      return;
-    }
+    unawaited(disposeAsync().catchError((Object error, StackTrace stack) {
+      debugPrint('MediaKit: asynchronous disposal failed: $error');
+    }));
+  }
+
+  @override
+  Future<void> disposeAsync() => _disposeAsyncFuture ??= _disposeAsyncInternal();
+
+  Future<void> _disposeAsyncInternal() async {
     _isDisposed = true;
-    if (!_mediaReadyCompleter.isCompleted) {
-      _mediaReadyCompleter.complete(false);
-    }
+    if (!_mediaReadyCompleter.isCompleted) _mediaReadyCompleter.complete(false);
     _ticker?.dispose();
-    _trackSubscription?.cancel();
-    _positionSubscription?.cancel();
+    await _trackSubscription?.cancel();
+    await _positionSubscription?.cancel();
+    await _bufferingSubscription?.cancel();
+    _buffering.dispose();
     _jellyfinRetryTimer?.cancel();
     _chapterRetryTimer?.cancel();
     if (_textureIdListenerAttached && _controller != null) {
       _controller!.id.removeListener(_handleTextureIdChange);
     }
-
-    void disposePlayerCore() {
-      try {
-        _player.dispose();
-      } catch (e) {
-        debugPrint('MediaKit: 销毁播放器失败: $e');
-      }
-    }
-
-    if (_prefersPlatformVideoSurface) {
-      unawaited(
-        detachPlatformVideoSurface().whenComplete(disposePlayerCore),
-      );
-    } else {
-      // ✨ 优化：异步执行销毁，不阻塞主线程
-      // Future.microtask 仍在当前事件循环执行，会阻塞 UI
-      // Future.delayed 让出一帧时间，确保页面过渡动画完成
-      unawaited(
-          Future.delayed(const Duration(milliseconds: 16), disposePlayerCore));
-    }
+    if (_prefersPlatformVideoSurface) await detachPlatformVideoSurface();
+    PlayerKernelManager.traceHotSwapStage('media_kit teardown: native dispose');
+    await _player.dispose();
     _textureIdNotifier.dispose();
+    PlayerKernelManager.traceHotSwapStage('media_kit teardown: complete');
   }
 
   GlobalKey get repaintBoundaryKey => _repaintBoundaryKey;
@@ -2840,10 +2888,10 @@ class MediaKitPlayerAdapter
   ///
   /// P3 修复：先探测 `chapter-list/count` 区分"未就绪"与"确实无章节"。
   /// 网络流媒体场景下 duration（mpv 估计值）可能先于 chapter-list 就绪，
-  /// 此时 count 返回 null/空表示 chapter-list 尚未加载 → 延迟重试（最多
+  /// 此时 count 返回 null/空表示 chapter-list 尚未加载  延迟重试（最多
   /// [_maxChapterRetries] 次，间隔递增 300/600/900ms），避免 _chaptersFetched
   /// 被无条件置 true 导致后续 duration stream 去重跳过、章节永久为空。
-  /// count 返回有效数字 <=0 表示确实无章节 → 置 _chaptersFetched=true 终止。
+  /// count 返回有效数字 <=0 表示确实无章节  置 _chaptersFetched=true 终止。
   Future<void> _refreshChapters() async {
     if (_isDisposed) return;
     if (_chaptersFetched) {
@@ -3305,6 +3353,7 @@ class MediaKitPlayerAdapter
         }
       } catch (e) {
         debugPrint('MediaKit: 解绑平台原生视频面失败: $e');
+        if (_isDisposed) rethrow;
       }
     }();
 
@@ -3475,7 +3524,8 @@ class MediaKitPlayerAdapter
     // may still have no demuxed metadata at this point, so do not manufacture
     // a position from wall time until readiness and a real time-pos event have
     // both been observed.
-    if (_player.state.playing && _mediaReady && _hasReceivedRealPosition) {
+    if (_player.state.playing && !_buffering.value &&
+        _mediaReady && _hasReceivedRealPosition) {
       // 使用微秒精度的 DateTime.now() 替代原来的毫秒精度。
       // Windows 平台上毫秒级时钟默认粒度约 15.6ms，导致插值 delta
       // 在连续帧之间跳变，造成弹幕可见的"抽帧"。微秒精度（~1µs）
@@ -3487,7 +3537,7 @@ class MediaKitPlayerAdapter
       final rawDeltaUs = nowUs - _lastPositionTimestampUs;
       final prevInterpMs = _interpolatedPosition.inMilliseconds;
       // [FIX-L1] 阻塞后追赶限幅：主线程阻塞恢复后 rawDeltaUs 会很大（>100ms），
-      // 原实现一次性墙钟追赶 → _interpolatedPosition 暴跳 → 下游 big-fwd snap → 回弹。
+      // 原实现一次性墙钟追赶  _interpolatedPosition 暴跳  下游 big-fwd snap  回弹。
       // 修复：deltaUs 超过 50ms（约3帧@60fps）时 clamp 到 50ms，并把锚点重设到
       // 当前 _interpolatedPosition，使后续帧从限幅后的位置继续推进，避免暴跳传递。
       // 与 L2 的 Ticker.elapsed（阻塞不累积）行为对齐，消除层间时钟源不一致。
@@ -3509,9 +3559,9 @@ class MediaKitPlayerAdapter
       // 与 L2 [CHAIN-A] / L3 [CHAIN-B] 共享墙钟时间戳，验证三层时钟源不一致假设：
       //   L1 用 DateTime.now()（绝对墙钟，阻塞后一次性追赶）
       //   L2 用 Ticker.elapsed（vsync 累积，阻塞不累积）
-      //   主线程阻塞恢复后 L1 暴跳 → L2 看到 playerMs 暴跳 → big-fwd snap → 回弹
+      //   主线程阻塞恢复后 L1 暴跳  L2 看到 playerMs 暴跳  big-fwd snap  回弹
       // 关键指标：
-      //   deltaUs > 100000(100ms) = 主线程阻塞，L1 一次性追赶 → L2 将看到暴跳
+      //   deltaUs > 100000(100ms) = 主线程阻塞，L1 一次性追赶  L2 将看到暴跳
       //   interpJump > 50ms = _interpolatedPosition 单帧跳变（回弹的直接上游）
       //   actualMs = _lastActualPosition（mpv 真实 position 锚点，正常播放不更新）
       if (!kReleaseMode) {
@@ -3526,7 +3576,7 @@ class MediaKitPlayerAdapter
               'actualMs=${_lastActualPosition.inMilliseconds} '
               'mpvStatePosMs=${_player.state.position.inMilliseconds} '
               'rate=${_player.state.rate} '
-              '← ${deltaUs > 100000 ? "BLOCKED-RECOVER: 主线程阻塞后L1墙钟追赶" : ""} '
+              ' ${deltaUs > 100000 ? "BLOCKED-RECOVER: 主线程阻塞后L1墙钟追赶" : ""} '
               '${interpJump > 50 ? "L1-JUMP: 适配器插值暴跳" : ""}');
         }
       }

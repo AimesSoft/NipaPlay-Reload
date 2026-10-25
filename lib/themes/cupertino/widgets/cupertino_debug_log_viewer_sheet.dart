@@ -64,12 +64,15 @@ class _CupertinoDebugLogViewerSheetState
 
   void _handleScroll() {
     if (!mounted) return;
-    setState(() {
-      _scrollOffset = _scrollController.offset;
-    });
+    _scrollOffset = _scrollController.offset;
+    if (!(ModalRoute.of(context)?.isCurrent ?? true)) return;
+    CupertinoBottomSheetScope.maybeOf(context)
+        ?.pageController
+        .setTitleOpacity((1 - _scrollOffset / 18).clamp(0.0, 1.0));
   }
 
   void _handleSearchChanged() {
+    if (_searchQuery == _searchController.text) return;
     setState(() {
       _searchQuery = _searchController.text;
     });
@@ -114,7 +117,18 @@ class _CupertinoDebugLogViewerSheetState
     }
   }
 
+  (int, String, String, String)? _filterKey;
+  List<LogEntry> _filteredSnapshot = const [];
+
   List<LogEntry> _filteredLogs() {
+    final key = (
+      _logService.revision,
+      _selectedLevel,
+      _selectedTag,
+      _searchQuery.toLowerCase()
+    );
+    if (_filterKey == key) return _filteredSnapshot;
+    _filterKey = key;
     Iterable<LogEntry> logs = _logService.logEntries;
     if (_selectedLevel != '全部') {
       logs = logs.where((entry) => entry.level == _selectedLevel);
@@ -126,7 +140,7 @@ class _CupertinoDebugLogViewerSheetState
       final query = _searchQuery.toLowerCase();
       logs = logs.where((entry) => entry.message.toLowerCase().contains(query));
     }
-    return logs.toList();
+    return _filteredSnapshot = logs.toList();
   }
 
   void _scrollToBottom() {

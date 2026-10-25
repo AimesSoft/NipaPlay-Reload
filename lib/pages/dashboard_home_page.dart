@@ -1,5 +1,7 @@
 library dashboard_home_page;
 
+import 'package:nipaplay/widgets/page_activity_mixin.dart';
+import 'package:nipaplay/widgets/scroll_edge_builder.dart';
 import 'dart:ui';
 import 'dart:math' as math;
 import 'dart:async';
@@ -18,6 +20,8 @@ import 'package:nipaplay/providers/emby_provider.dart';
 import 'package:nipaplay/services/jellyfin_service.dart';
 import 'package:nipaplay/services/emby_service.dart';
 import 'package:nipaplay/services/bangumi_service.dart';
+import 'package:nipaplay/services/bangumi_api_service.dart';
+import 'package:nipaplay/services/quarterly_review_cache.dart';
 import 'package:nipaplay_core/utils/network_settings.dart';
 import 'package:nipaplay/services/dandanplay_service.dart';
 import 'package:nipaplay/services/scan_service.dart';
@@ -32,6 +36,8 @@ import 'package:nipaplay/themes/nipaplay/widgets/blur_snackbar.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_dialog.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_dropdown.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/tv_safe_blur.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/bangumi_comment_dialog.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/quarterly_review_comment.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/hover_scale_text_button.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/horizontal_anime_card.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/horizontal_anime_skeleton.dart';
@@ -45,6 +51,7 @@ import 'package:nipaplay/themes/nipaplay/widgets/large_screen_page_scaffold.dart
 import 'package:nipaplay/themes/nipaplay/pages/settings/watch_history_page.dart';
 import 'package:nipaplay/pages/media_server_detail_page.dart';
 import 'package:nipaplay/services/playback_service.dart';
+import 'package:nipaplay/services/episode_file_selection_service.dart';
 import 'package:nipaplay/models/playable_item.dart';
 import 'package:nipaplay_core/models/media_server_playback.dart';
 import 'package:nipaplay_core/models/dandanplay_remote_model.dart';
@@ -81,6 +88,8 @@ part '../themes/nipaplay/widgets/dashboard_home_page_image_helpers.dart';
 part '../themes/nipaplay/widgets/dashboard_home_page_models.dart';
 part '../themes/nipaplay/widgets/dashboard_home_page_random_recommendations.dart';
 part '../themes/nipaplay/widgets/dashboard_home_page_trending.dart';
+part '../themes/nipaplay/widgets/dashboard_home_page_quarterly_review.dart';
+part '../themes/nipaplay/widgets/dashboard_home_page_quarterly_review_logic.dart';
 part '../themes/cupertino/widgets/cupertino_home_page_controls.dart';
 
 /// 一次推荐位封面升级的结果，用于把多次 setState 合并成一次。
@@ -99,7 +108,7 @@ class DashboardHomePage extends StatefulWidget {
 }
 
 class _DashboardHomePageState extends State<DashboardHomePage>
-    with AutomaticKeepAliveClientMixin {
+    with AutomaticKeepAliveClientMixin, PageActivityMixin {
   bool get _isLargeScreenModeActive {
     return NipaplayLargeScreenHomeScope.isActive(context);
   }
@@ -138,6 +147,8 @@ class _DashboardHomePageState extends State<DashboardHomePage>
   JellyfinProvider? _jellyfinProviderRef;
   EmbyProvider? _embyProviderRef;
   WatchHistoryProvider? _watchHistoryProviderRef;
+  AppearanceSettingsProvider? _appearanceSettingsProviderRef;
+  bool? _lastQuarterlyReviewEnabled;
   ScanService? _scanServiceRef;
   VideoPlayerState? _videoPlayerStateRef;
   DandanplayRemoteProvider? _dandanplayProviderRef;
@@ -196,6 +207,18 @@ class _DashboardHomePageState extends State<DashboardHomePage>
   List<BangumiAnime> _todayAnimes = [];
   bool _isLoadingTodayAnimes = false;
   ScrollController? _todayAnimesScrollController;
+
+  List<_QuarterlyReviewItem> _quarterlyReviewItems = [];
+  int? _quarterlyReviewYear;
+  int? _quarterlyReviewMonth;
+  bool _isLoadingQuarterlyReview = false;
+  bool _reviewReloadAfterCurrent = false;
+  bool _reviewWarmScheduled = false;
+  bool _reviewCollectionsScheduled = false;
+  bool _isEditingQuarterlyReviewComment = false;
+  _QuarterlyReviewSort _quarterlyReviewSort = _QuarterlyReviewSort.airDate;
+  final ScrollController _quarterlyReviewScrollController = ScrollController();
+  final GlobalKey _quarterlyReviewSortDropdownKey = GlobalKey();
 
   // 排行榜数据
   TrendingRankingKind _trendingKind = TrendingRankingKind.allHot;
@@ -264,7 +287,7 @@ class _DashboardHomePageState extends State<DashboardHomePage>
   bool _isAutoSwitching = true;
   int _currentHeroBannerIndex = 0;
   late final ValueNotifier<int> _heroBannerIndexNotifier;
-  int? _hoveredIndicatorIndex;
+  final _hoveredIndicatorIndex = ValueNotifier<int?>(null);
 
   // 追踪已绘制的文件路径
   // ignore: unused_field
@@ -281,6 +304,9 @@ class _DashboardHomePageState extends State<DashboardHomePage>
   void initState() {
     super.initState();
     _heroBannerIndexNotifier = ValueNotifier(0);
+    BangumiApiService.loginStatusNotifier.addListener(_onReviewLoginChanged);
+    QuarterlyReviewCache.instance.revision.addListener(_onReviewCacheChanged);
+    unawaited(_loadQuarterlyReviewSort());
 
     // 🔥 修复Flutter状态错误：将数据加载移到addPostFrameCallback中
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -354,8 +380,18 @@ class _DashboardHomePageState extends State<DashboardHomePage>
     return _todayAnimesScrollController!;
   }
 
+  @override
+  void onPageActivityChanged(bool active) {
+    if (active) {
+      _startAutoSwitch();
+    } else {
+      _autoSwitchTimer?.cancel();
+    }
+  }
+
   void _startAutoSwitch() {
     _autoSwitchTimer?.cancel();
+    if (!mounted || !isPageActive) return;
     _autoSwitchTimer = Timer.periodic(const Duration(seconds: 5), (timer) {
       if (_isAutoSwitching && _recommendedItems.length >= 5 && mounted) {
         _currentHeroBannerIndex = (_currentHeroBannerIndex + 1) % 5;
@@ -377,11 +413,22 @@ class _DashboardHomePageState extends State<DashboardHomePage>
   }
 
   void _resumeAutoSwitch() {
+    if (!mounted) return;
     _isAutoSwitching = true;
     _startAutoSwitch();
   }
 
   void _setupProviderListeners() {
+    try {
+      _appearanceSettingsProviderRef =
+          Provider.of<AppearanceSettingsProvider>(context, listen: false);
+      _lastQuarterlyReviewEnabled =
+          _appearanceSettingsProviderRef!.showQuarterlyAnimeReview;
+      _appearanceSettingsProviderRef!.addListener(_onReviewAppearanceChanged);
+    } catch (e) {
+      debugPrint('DashboardHomePage: 添加外观设置监听器失败: $e');
+    }
+
     // 订阅 Provider 级 ready；ready 之前不监听 Provider 的即时变化
     try {
       _jellyfinProviderRef =
@@ -611,6 +658,7 @@ class _DashboardHomePageState extends State<DashboardHomePage>
     if (!mounted) return;
 
     final isCurrentlyActive = _isVideoPlayerActive();
+    if (isCurrentlyActive == _wasPlayerActive) return;
 
     // 检测播放器从活跃状态变为非活跃状态（退出播放器）
     if (_wasPlayerActive && !isCurrentlyActive) {
@@ -929,6 +977,11 @@ class _DashboardHomePageState extends State<DashboardHomePage>
   void dispose() {
     _todayAnimesScrollController?.dispose();
     _todayAnimesScrollController = null;
+    _appearanceSettingsProviderRef?.removeListener(_onReviewAppearanceChanged);
+    BangumiApiService.loginStatusNotifier.removeListener(_onReviewLoginChanged);
+    QuarterlyReviewCache.instance.revision
+        .removeListener(_onReviewCacheChanged);
+    _quarterlyReviewScrollController.dispose();
     debugPrint('DashboardHomePage: 开始销毁Widget');
 
     // 清理定时器和ValueNotifier
@@ -943,6 +996,7 @@ class _DashboardHomePageState extends State<DashboardHomePage>
     _wasPlayerActive = false;
 
     _heroBannerIndexNotifier.dispose();
+    _hoveredIndicatorIndex.dispose();
 
     // 移除监听器 - 使用初始化时保存的实例引用，避免在dispose中再次查找context
     try {
@@ -1059,29 +1113,33 @@ class _DashboardHomePageState extends State<DashboardHomePage>
         ],
         padding: const EdgeInsets.fromLTRB(30, 24, 30, 30),
         headerBottomSpacing: 14,
-        child: Consumer2<JellyfinProvider, EmbyProvider>(
-          builder: (context, jellyfinProvider, embyProvider, child) {
+        child: Builder(
+          builder: (context) {
             final configuredSections = _buildConfiguredSections(
               isPhone: false,
               sectionsProvider: homeSections,
             );
-            return SingleChildScrollView(
+            final sections = <Widget>[
+              // 主页顶部推荐区（大图轮播 + 两张推荐小卡片，可在外观设置中开关）
+              if (_isAnyHomeHeroWidgetVisible(false)) ...[
+                Builder(builder: (_) => _buildHeroBanner(isPhone: false)),
+                const SizedBox(height: 24),
+              ],
+              if (_hasQuarterlyReviewForToday()) ...[
+                Builder(builder: (_) => _buildQuarterlyReviewSection()),
+                const SizedBox(height: 24),
+              ],
+              ...configuredSections,
+              const SizedBox(height: 56),
+            ];
+            return PrimaryScrollController(
               controller: _mainScrollController,
-              physics: const AlwaysScrollableScrollPhysics(),
-              child: PrimaryScrollController(
+              child: ListView.builder(
                 controller: _mainScrollController,
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    // 主页顶部推荐区（大图轮播 + 两张推荐小卡片，可在外观设置中开关）
-                    if (_isAnyHomeHeroWidgetVisible(false)) ...[
-                      _buildHeroBanner(isPhone: false),
-                      const SizedBox(height: 24),
-                    ],
-                    ...configuredSections,
-                    const SizedBox(height: 56),
-                  ],
-                ),
+                padding: EdgeInsets.zero,
+                physics: const AlwaysScrollableScrollPhysics(),
+                itemCount: sections.length,
+                itemBuilder: (_, index) => sections[index],
               ),
             );
           },
@@ -1100,34 +1158,37 @@ class _DashboardHomePageState extends State<DashboardHomePage>
         onPressed: _onDashboardRefreshPressed,
       ),
       floatingActionButtonLocation: FloatingActionButtonLocation.endFloat,
-      body: Consumer2<JellyfinProvider, EmbyProvider>(
-        builder: (context, jellyfinProvider, embyProvider, child) {
+      body: Builder(
+        builder: (context) {
           final configuredSections = _buildConfiguredSections(
             isPhone: isPhone,
             sectionsProvider: homeSections,
           );
-          return SingleChildScrollView(
-            controller: _mainScrollController,
-            physics: const AlwaysScrollableScrollPhysics(),
-            child: PrimaryScrollController(
-              controller: _mainScrollController,
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  // 大海报推荐区域（大图轮播 + 两张推荐小卡片，可在外观设置中开关）
-                  if (_isAnyHomeHeroWidgetVisible(isPhone)) ...[
-                    _buildHeroBanner(isPhone: isPhone),
-                    SizedBox(height: isPhone ? 16 : 32),
-                  ],
-                  ...configuredSections,
+          final sections = <Widget>[
+            // 大海报推荐区域（大图轮播 + 两张推荐小卡片，可在外观设置中开关）
+            if (_isAnyHomeHeroWidgetVisible(isPhone)) ...[
+              Builder(builder: (_) => _buildHeroBanner(isPhone: isPhone)),
+              SizedBox(height: isPhone ? 16 : 32),
+            ],
+            if (_hasQuarterlyReviewForToday()) ...[
+              Builder(builder: (_) => _buildQuarterlyReviewSection()),
+              SizedBox(height: isPhone ? 16 : 32),
+            ],
+            ...configuredSections,
 
-                  // 底部间距（大屏幕模式额外预留40px，避免被底部overlay遮挡）
-                  SizedBox(
-                    height: (isPhone ? 30 : 50) +
-                        (_isLargeScreenModeActive ? 40 : 0),
-                  ),
-                ],
-              ),
+            // 底部间距（大屏幕模式额外预留40px，避免被底部overlay遮挡）
+            SizedBox(
+              height: (isPhone ? 30 : 50) + (_isLargeScreenModeActive ? 40 : 0),
+            ),
+          ];
+          return PrimaryScrollController(
+            controller: _mainScrollController,
+            child: ListView.builder(
+              controller: _mainScrollController,
+              padding: EdgeInsets.zero,
+              physics: const AlwaysScrollableScrollPhysics(),
+              itemCount: sections.length,
+              itemBuilder: (_, index) => sections[index],
             ),
           );
         },
