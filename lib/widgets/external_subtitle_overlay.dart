@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
 import 'package:nipaplay/utils/video_player_state.dart';
 import 'package:provider/provider.dart';
+import 'package:nipaplay/widgets/in_view_dialog.dart';
 
 class ExternalSubtitleOverlay extends StatefulWidget {
   const ExternalSubtitleOverlay({
@@ -942,7 +943,7 @@ class _ExternalSubtitleOverlayState extends State<ExternalSubtitleOverlay> {
     VideoPlayerState videoState,
   ) async {
     var hsv = HSVColor.fromColor(videoState.externalSubtitleColor);
-    final picked = await showDialog<Color>(
+    final picked = await showInViewDialog<Color>(
       context: context,
       builder: (dialogContext) {
         return StatefulBuilder(

@@ -15,6 +15,7 @@ import 'package:nipaplay/themes/nipaplay/widgets/tvos_remote_text_input_scope.da
 import 'package:nipaplay/utils/remote_access_address_utils.dart';
 import 'package:provider/provider.dart';
 import 'package:qr_flutter/qr_flutter.dart';
+import 'package:nipaplay/widgets/in_view_dialog.dart';
 
 class RemoteAccessReceiverSettingsSection extends StatefulWidget {
   const RemoteAccessReceiverSettingsSection({super.key});
@@ -108,7 +109,7 @@ class _RemoteAccessReceiverSettingsSectionState
               ],
             ),
           )
-        : await showDialog<bool>(
+        : await showInViewDialog<bool>(
             context: context,
             builder: (dialogContext) => AlertDialog(
               title: const Text('移除受信任设备'),
@@ -307,7 +308,7 @@ class _RemoteAccessReceiverSettingsSectionState
       );
       return;
     }
-    showDialog<void>(
+    showInViewDialog<void>(
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('远程访问服务启动失败'),
@@ -356,7 +357,7 @@ class _RemoteAccessReceiverSettingsSectionState
     }
 
     final controller = TextEditingController(text: _currentPort.toString());
-    final newPort = await showDialog<int>(
+    final newPort = await showInViewDialog<int>(
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('设置远程访问端口'),
@@ -471,7 +472,7 @@ class _RemoteAccessReceiverSettingsSectionState
       return;
     }
 
-    await showDialog<void>(
+    await showInViewDialog<void>(
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('手机扫码连接'),

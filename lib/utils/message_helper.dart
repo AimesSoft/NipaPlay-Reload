@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart' as material;
+import 'package:nipaplay/widgets/in_view_dialog.dart';
 
 class MessageHelper {
   /// 显示消息提示
@@ -34,7 +35,7 @@ class MessageHelper {
     bool isError,
   ) {
     try {
-      material.showDialog(
+      showInViewDialog(
         context: context,
         builder: (context) => material.AlertDialog(
           title: material.Text(isError ? '错误' : '提示'),

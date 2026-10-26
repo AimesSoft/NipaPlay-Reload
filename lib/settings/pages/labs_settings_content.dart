@@ -11,6 +11,7 @@ import 'package:nipaplay/providers/labs_settings_provider.dart';
 import 'package:nipaplay/settings/adaptive_settings_widgets.dart';
 import 'package:nipaplay/utils/globals.dart' as globals;
 import 'package:provider/provider.dart';
+import 'package:nipaplay/widgets/in_view_dialog.dart';
 
 class LabsSettingsContent extends StatelessWidget {
   const LabsSettingsContent({
@@ -176,7 +177,7 @@ class LabsSettingsContent extends StatelessWidget {
   }
 
   Future<bool> _confirmNext(BuildContext context) async =>
-      await showDialog<bool>(
+      await showInViewDialog<bool>(
         context: context,
         builder: (context) => AlertDialog(
           title: Text(_text(context, '开启 NipaPlay Next（实验）',

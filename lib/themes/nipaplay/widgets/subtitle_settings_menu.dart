@@ -14,6 +14,7 @@ import 'blur_dropdown.dart';
 import 'fluent_settings_switch.dart';
 import 'settings_hint_text.dart';
 import 'settings_slider.dart';
+import 'package:nipaplay/widgets/in_view_dialog.dart';
 
 class SubtitleSettingsMenu extends StatefulWidget {
   final VoidCallback onClose;
@@ -1090,7 +1091,7 @@ class _SubtitleSettingsMenuState extends State<SubtitleSettingsMenu> {
     ValueChanged<Color> onPicked,
   ) async {
     final controller = TextEditingController(text: _colorToHex(initial));
-    await showDialog<void>(
+    await showInViewDialog<void>(
       context: context,
       builder: (dialogContext) {
         return AlertDialog(

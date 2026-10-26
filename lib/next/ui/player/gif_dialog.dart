@@ -2,10 +2,11 @@ import 'package:file_selector/file_selector.dart';
 import 'package:flutter/material.dart';
 
 import '../../player/ports/session_playback.dart';
+import 'package:nipaplay/widgets/in_view_dialog.dart';
 
 Future<void> showNextGifDialog(
         BuildContext context, SessionPlayback playback) =>
-    showDialog<void>(
+    showInViewDialog<void>(
         context: context, builder: (_) => _GifDialog(playback: playback));
 
 class _GifDialog extends StatefulWidget {
