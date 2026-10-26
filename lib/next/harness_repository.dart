@@ -11,12 +11,14 @@ String get harnessHome => Platform.isWindows
     ? Platform.environment['USERPROFILE']!
     : Platform.environment['HOME'] ?? Directory.systemTemp.parent.path;
 String get defaultHarnessPath => LabProfile.active
-    ? LabProfile.location('harness') : p.join(harnessHome, 'nipaplay-harness');
+    ? LabProfile.location('harness')
+    : p.join(harnessHome, 'nipaplay-harness');
 File get defaultEndpointFile => LabProfile.active
-    ? File(LabProfile.location('endpoint.json')) : Platform.isWindows
-    ? File(
-        p.join(Platform.environment['APPDATA']!, 'NipaPlay', 'endpoint.json'))
-    : File(p.join(harnessHome, '.config', 'nipaplay', 'endpoint.json'));
+    ? File(LabProfile.location('endpoint.json'))
+    : Platform.isWindows
+        ? File(p.join(
+            Platform.environment['APPDATA']!, 'NipaPlay', 'endpoint.json'))
+        : File(p.join(harnessHome, '.config', 'nipaplay', 'endpoint.json'));
 
 String expandHarnessPath(String value) {
   final expanded = value == '~'
@@ -44,6 +46,8 @@ Future<Map<String, Object?>> harnessSeedStatus(
     final remote = await read(repository, ['remote', 'get-url', 'nipaplay']);
     final tracking = await read(
         repository, ['rev-parse', '--verify', 'refs/remotes/nipaplay/main']);
+    final repositoryHead =
+        await read(repository, ['rev-parse', '--verify', 'HEAD']);
     bool? remoteMatchesSeed;
     if (remote != null) {
       final uri = Uri.tryParse(remote);
@@ -83,6 +87,15 @@ Future<Map<String, Object?>> harnessSeedStatus(
         state = ancestry.exitCode == 1 ? 'diverged' : 'unrelated_or_unknown';
       }
     }
+    bool? merged;
+    if (head != null && repositoryHead != null && remoteMatchesSeed == true) {
+      final ancestry = await Process.run(
+          'git', ['merge-base', '--is-ancestor', head, repositoryHead],
+          workingDirectory: repository.path);
+      if (ancestry.exitCode == 0 || ancestry.exitCode == 1) {
+        merged = ancestry.exitCode == 0;
+      }
+    }
     return {
       'path': seed.absolute.path,
       'head': head,
@@ -90,6 +103,8 @@ Future<Map<String, Object?>> harnessSeedStatus(
       'remoteMatchesSeed': remoteMatchesSeed,
       'trackingHead': tracking,
       'trackingBehindSeed': behind,
+      'repositoryHead': repositoryHead,
+      'merged': merged,
       'state': state
     };
   } on ProcessException catch (error) {
@@ -99,6 +114,186 @@ Future<Map<String, Object?>> harnessSeedStatus(
       'state': 'git_unavailable',
       'trackingBehindSeed': null
     };
+  }
+}
+
+/// Preview in Git's object database, then apply only a fast-forward. A failed
+/// preview never touches HEAD, the index or user files; Git's fast-forward
+/// checkout refuses to overwrite overlapping staged/unstaged/untracked work.
+/// No stash, reset, conflict checkout or abort is used in the user's repository.
+Future<Map<String, Object?>> updateHarnessRepository(
+    Directory repository, Directory seed) async {
+  final receipt = <String, Object?>{
+    'repository': repository.absolute.path,
+    'checkedAt': DateTime.now().toUtc().toIso8601String(),
+  };
+  Map<String, Object?> finish(String state, String reason) =>
+      {...receipt, 'state': state, 'reason': reason};
+  // An empty, private directory disables user hooks without changing config.
+  Directory? hooks;
+  Future<ProcessResult> git(List<String> args) => Process.run(
+      'git',
+      [
+        '-c',
+        'core.hooksPath=${hooks!.path}',
+        '-c',
+        'commit.gpgSign=false',
+        '-c',
+        'core.fsmonitor=false',
+        '-c',
+        'submodule.recurse=false',
+        ...args
+      ],
+      workingDirectory: repository.path,
+      environment: {'GIT_TERMINAL_PROMPT': '0', 'GIT_MERGE_AUTOEDIT': 'no'});
+  String output(ProcessResult result) => (result.stdout as String).trim();
+  try {
+    final status = await harnessSeedStatus(repository, seed);
+    if (status['remoteMatchesSeed'] != true || status['head'] == null) {
+      return finish(
+          status['state'] as String, '仅自动更新指向本机官方种子的 nipaplay 远端；未修改仓库配置。');
+    }
+    hooks = await Directory.systemTemp.createTemp('nipa-update-hooks-');
+    final branch = await git(['symbolic-ref', '-q', 'HEAD']);
+    if (branch.exitCode != 0) {
+      return finish('detached_head', '当前没有检出分支，保留现状。');
+    }
+    for (final name in const [
+      'MERGE_HEAD',
+      'CHERRY_PICK_HEAD',
+      'REVERT_HEAD',
+      'rebase-merge',
+      'rebase-apply',
+      'sequencer',
+      'BISECT_LOG'
+    ]) {
+      final path = await git(['rev-parse', '--git-path', name]);
+      if (path.exitCode != 0) return finish('failed', '无法检查仓库状态。');
+      if (await FileSystemEntity.type(p.join(repository.path, output(path))) !=
+          FileSystemEntityType.notFound) {
+        return finish('in_progress', '仓库有尚未完成的 Git 操作，保留现状。');
+      }
+    }
+    final unmerged = await git(['ls-files', '--unmerged', '-z']);
+    if (unmerged.exitCode != 0 || output(unmerged).isNotEmpty) {
+      return finish('in_progress', '索引存在未解决的合并项，保留现状。');
+    }
+    // Use the verified local path, rather than a remote fetch refspec/config
+    // which may have been customized. Never contact a network remote here.
+    final fetch = await git([
+      '-c',
+      'protocol.file.allow=always',
+      'fetch',
+      '--no-tags',
+      '--no-recurse-submodules',
+      '--no-write-fetch-head',
+      '--no-auto-maintenance',
+      seed.absolute.path,
+      'refs/heads/main:refs/remotes/nipaplay/main'
+    ]);
+    if (fetch.exitCode != 0) return finish('fetch_failed', '无法抓取本机官方种子。');
+    final head = await git(['rev-parse', '--verify', 'HEAD']);
+    final upstream =
+        await git(['rev-parse', '--verify', 'refs/remotes/nipaplay/main']);
+    if (head.exitCode != 0 || upstream.exitCode != 0) {
+      return finish('failed', '无法读取仓库版本。');
+    }
+    final before = output(head), incoming = output(upstream);
+    receipt.addAll({'previousHead': before, 'seedHead': incoming});
+    final included =
+        await git(['merge-base', '--is-ancestor', incoming, before]);
+    if (included.exitCode == 0) {
+      return {...finish('current', '官方种子已合并。'), 'head': before};
+    }
+    final base = await git(['merge-base', before, incoming]);
+    if (base.exitCode != 0) {
+      return finish('unrelated_history', '仓库与官方种子没有共同历史，保留现状。');
+    }
+    final fastForward =
+        await git(['merge-base', '--is-ancestor', before, incoming]);
+    var target = incoming;
+    if (fastForward.exitCode != 0) {
+      final preview = await git([
+        'merge-tree',
+        '--write-tree',
+        '--no-messages',
+        '--name-only',
+        '-z',
+        before,
+        incoming
+      ]);
+      if (preview.exitCode == 1) {
+        final paths = (preview.stdout as String)
+            .split('\x00')
+            .skip(1)
+            .where((path) => path.isNotEmpty)
+            .toList();
+        return {
+          ...finish('conflict', '官方更新与本地提交有冲突；文件和索引保持原样，请先处理后重启 Next。'),
+          'paths': paths
+        };
+      }
+      if (preview.exitCode != 0) {
+        return finish('preview_unavailable',
+            '无法安全预览合并，请检查 Git 是否支持 merge-tree --write-tree（2.38 或更新）。');
+      }
+      final tree = (preview.stdout as String).split('\x00').first.trim();
+      final commit = await git([
+        '-c',
+        'user.name=NipaPlay',
+        '-c',
+        'user.email=harness@localhost',
+        'commit-tree',
+        tree,
+        '-p',
+        before,
+        '-p',
+        incoming,
+        '-m',
+        'Merge NipaPlay harness seed'
+      ]);
+      if (commit.exitCode != 0) return finish('failed', '无法创建官方更新的合并提交。');
+      target = output(commit);
+    }
+    final changes = await git(['diff', '--name-only', '-z', before, target]);
+    final latest = await git(['rev-parse', '--verify', 'HEAD']);
+    final latestBranch = await git(['symbolic-ref', '-q', 'HEAD']);
+    if (output(latest) != before || output(latestBranch) != output(branch)) {
+      return finish('repository_changed', '检查期间仓库版本发生变化，稍后重试。');
+    }
+    final apply = await git([
+      'merge',
+      '--ff-only',
+      '--no-edit',
+      '--no-stat',
+      '--no-autostash',
+      target
+    ]);
+    if (apply.exitCode != 0) {
+      return finish('local_changes', '本地未提交内容阻止更新，保留现状；请先检查并提交这些内容，再重启 Next。');
+    }
+    return {
+      ...finish('updated', '已自动合并官方种子，保留本地历史与个人文件。'),
+      'head': target,
+      'paths': (changes.stdout as String)
+          .split('\x00')
+          .where((s) => s.isNotEmpty)
+          .toList()
+    };
+  } on ProcessException {
+    return finish('git_unavailable', 'Git 不可用，尚未更新 harness。');
+  } on FileSystemException {
+    return finish('failed', '无法访问更新所需的文件，保留现状。');
+  } on ArgumentError {
+    return finish('failed', '无法解析仓库配置，保留现状。');
+  } on FormatException {
+    return finish('failed', '无法解析仓库配置，保留现状。');
+  } finally {
+    if (hooks != null) {
+      try {
+        await hooks.delete(recursive: true);
+      } on FileSystemException {/* best effort */}
+    }
   }
 }
 

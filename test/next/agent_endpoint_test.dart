@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:nipa_harness/nipa_harness.dart';
 import 'package:nipaplay/next/agent_endpoint.dart';
+import 'package:nipaplay/next/harness_repository.dart';
 import 'package:nipaplay/next/capabilities/classic_action.dart';
 import 'package:nipaplay/next/ui_data/ui_data.dart' show UiNowPlaying;
 
@@ -17,6 +18,7 @@ void main() {
   late AgentEndpoint endpoint;
   late HttpClient client;
   setUp(() async {
+    HttpOverrides.global = null;
     root = await Directory.systemTemp.createTemp('endpoint-constraints-');
     repository = Directory('${root.path}/harness');
     credentials = File('${root.path}/private/endpoint.json');
@@ -24,6 +26,7 @@ void main() {
         harness: Harness([]),
         seed: {'nipa': utf8.encode('#!/usr/bin/env python3\n')},
         appVersion: 'test',
+        instanceFacts: () async => {},
         credentialFile: credentials,
         port: 0);
     client = HttpClient()..findProxy = (_) => 'DIRECT';
@@ -32,6 +35,47 @@ void main() {
     client.close(force: true);
     await endpoint.stop();
     await root.delete(recursive: true);
+  });
+
+  test('startup updates instructions and reports the actual merged state',
+      () async {
+    await maintainHarnessSeed(
+        endpoint.seedRepository, {'AGENTS.md': utf8.encode('old')});
+    await createHarnessRepository(repository, {},
+        upstream: endpoint.seedRepository);
+    final running = await endpoint.start(repository);
+    expect(running, isA<AgentEndpointRunning>());
+    expect(endpoint.harnessUpdate?['state'], 'updated');
+    expect(await File('${repository.path}/nipa').exists(), true);
+    final token =
+        (jsonDecode(await credentials.readAsString()) as Map)['token'];
+    final request = await client.postUrl(
+        (running as AgentEndpointRunning).url.replace(path: '/harness'));
+    request.headers.set('Authorization', 'Bearer $token');
+    request.write(jsonEncode({'operation': 'status', 'full': false}));
+    final response =
+        jsonDecode(await utf8.decodeStream(await request.close())) as Map;
+    expect(response['harnessSeed']['merged'], true);
+    expect(response['harnessSeed']['autoUpdate']['state'], 'updated');
+    final receipt =
+        File('${endpoint.seedRepository.parent.path}/harness-update.json');
+    expect(jsonDecode(await receipt.readAsString())['state'], 'updated');
+  });
+
+  test('a blocked instruction update keeps endpoint and user work available',
+      () async {
+    await maintainHarnessSeed(
+        endpoint.seedRepository, {'nipa': utf8.encode('old')});
+    await createHarnessRepository(repository, {},
+        upstream: endpoint.seedRepository);
+    await File('${repository.path}/nipa')
+        .writeAsString('personal pending tool');
+    expect(await endpoint.start(repository), isA<AgentEndpointRunning>());
+    expect(endpoint.harnessUpdate?['state'], 'local_changes');
+    expect(await credentials.exists(), true);
+    expect(await File('${repository.path}/nipa').readAsString(),
+        'personal pending tool');
+    expect(await File('${repository.path}/.git/MERGE_HEAD').exists(), false);
   });
 
   group('status playback', () {

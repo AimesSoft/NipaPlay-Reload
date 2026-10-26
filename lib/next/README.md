@@ -46,7 +46,7 @@ Mesh 的身份、证书和去重文件独立持久化，不新增 `next.db` 迁�
 
 开启 Next 时，`AgentEndpoint` 从 `assets/next/harness/` 创建用户仓库，默认
 `~/nipaplay-harness`；`next.harnessPath` 设置和实验室共用 `HarnessLocation`。
-已有路径不写入任何文件。初次种子包含无令牌的 Codex 配置、`nipa`、hooks 说明。
+创建时不会覆盖已有路径。初次种子包含无令牌的 Codex 配置、`nipa`、hooks 说明。
 应用在 `next/harness-seed` 维护本地 git 历史，种子内容变化时提交一次。
 
 `nipa status.instance` 与 `app.instance` 读取同一进程事实：PID、可执行文件和
@@ -55,8 +55,11 @@ Mesh 的身份、证书和去重文件独立持久化，不新增 `next.db` 迁�
 以及 `method`、`includesNativeVideo`：macOS 上用窗口合成截图（含原生视频层与 Erika 弹幕，
 只截本应用自己的窗口，不需要录屏权限）；其他平台只有 Flutter 内容，原生覆盖层不在其中，
 回执如实写明。系统窗口边框、其他窗口和外部播放器始终不在其中。文件属于宿主设备，不经 Mesh 传输。
-新 harness 从它克隆，远端名为 `nipaplay`，分支为 `main`；Agent 自行 fetch 与合并。
-已有 harness 的工作区和 git 配置都不改写。CLI 默认列能力索引与任务概况，
+新 harness 从它克隆，远端名为 `nipaplay`，分支为 `main`。启动时先验证远端指向本机种子，
+自动抓取并用 `merge-tree` 预览；干净结果才以快进更新（必要时创建保留双方历史的合并提交）。
+冲突或未提交内容阻挡时保持文件与索引原状，不 stash/reset，也不改远端配置；Git 2.38 以下不能预览时跳过。
+`status.harnessSeed.merged` 和 `autoUpdate` 报告实际合并与本次结果，回执写到种子旁的 `harness-update.json`，
+更新或待处理事实注入 GUI 与 headless 的最近记忆。CLI 默认列能力索引与任务概况，
 `list/status --full` 取完整内容，`describe ACTION` 取单项契约。
 令牌每次开启轮换，写到仓库外的用户私有 `endpoint.json`；MCP `/mcp` 与 CLI
 `/harness` 共用认证和 Harness，CLI 调用来源为 `harness_cli`。

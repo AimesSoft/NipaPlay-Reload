@@ -69,6 +69,9 @@ final class AgentEndpoint {
   final int _port;
   final File credentialFile;
   final Directory seedRepository;
+  Map<String, Object?>? _harnessUpdate;
+  Map<String, Object?>? get harnessUpdate =>
+      _harnessUpdate == null ? null : Map.unmodifiable(_harnessUpdate!);
   HttpServer? _server;
   AgentEndpointRunning? _running;
   McpEndpoint? _mcp;
@@ -204,6 +207,15 @@ final class AgentEndpoint {
       await createHarnessRepository(repository, seed, upstream: upstream);
       if (!await repository.exists()) {
         throw StateError('Harness is not a directory.');
+      }
+      _harnessUpdate =
+          await updateHarnessRepository(repository, seedRepository);
+      // A receipt failure must not stop chat or undo a successful Git update.
+      try {
+        await File(p.join(seedRepository.parent.path, 'harness-update.json'))
+            .writeAsString(jsonEncode(_harnessUpdate));
+      } on FileSystemException {
+        // The current process still exposes its receipt in status and memory.
       }
       await writeEndpointFile(
           credentialFile, url.replace(path: '/harness'), endpoint.token);
@@ -614,8 +626,10 @@ final class AgentEndpoint {
           },
         'version': _appVersion,
         'repository': _running?.repository.path,
-        'harnessSeed':
-            await harnessSeedStatus(_running!.repository, seedRepository),
+        'harnessSeed': {
+          ...await harnessSeedStatus(_running!.repository, seedRepository),
+          'autoUpdate': harnessUpdate,
+        },
         'actions': _harness.catalog.length,
         // The latest capability change within the last week, if any.
         if (await _catalogChange?.call() case final change?)

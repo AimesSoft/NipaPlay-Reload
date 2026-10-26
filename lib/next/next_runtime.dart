@@ -945,6 +945,7 @@ final class NextRuntime extends ChangeNotifier {
           await core.followups.activeList(), activity.rows, current,
           activityTotal: activity.total,
           capabilityChanges: await core.catalogChanges.recent(),
+          harnessUpdate: _endpoint.harnessUpdate,
           redact: core.uiData.meshLibrary!.worker.redactText,
           finishedHelpers: [
             for (final job in ((await core.engine.list(type: 'agent.helper'))

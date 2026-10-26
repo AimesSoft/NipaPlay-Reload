@@ -117,5 +117,6 @@ Classic 与 Next 是同一身体的两套界面，共用播放器。Next 有首�
 ## 维护这个 harness
 
 经验记清日期和确认依据。可复用工具、测试、用法、实测限制放进仓库，能用就及时提交；`/tmp` 会清理，对话会中断。使用开源工具记来源、版本和许可。
-应用升级维护本地种子，但不改写你的 harness；需要更新时 `git fetch nipaplay` 并合并 `nipaplay/main`，自行判断冲突。`status.harnessSeed` 只读报告抓取状态，详情见 `describe app`；跟踪引用最新不等于已合并。
+应用升级维护本地官方种子；Next 启动时，在对话与 hooks 启动前自动抓取并合并指向该种子的 `nipaplay/main`。能干净合并就更新，保留本地提交、记忆、工具及不冲突的未提交修改；冲突或本地修改阻挡更新时保留原状，不留下冲突文件，不自动 stash、reset 或改写远端配置。`status.harnessSeed.merged` 报告是否已合并，`autoUpdate` 给出本次检查结果与冲突路径；待处理结果会注入最近记忆。先说明阻挡原因，检查相关文件，经用户同意解决冲突或修改后再重启 Next；不要覆盖个人内容。`current` 仍只表示跟踪引用最新，详情见 `describe app`。
+弹幕池是持久资料，获取成功后保存，切换播放器或清理普通缓存不应丢失。播放前由宿主复用 Classic 的哈希匹配，唯一命中时自动绑定并获取弹幕；没有唯一命中时再根据用户意图确认，不猜绑定。具体能力与结果以 `describe danmaku` 和调用回执为准。
 秘密、令牌和运行记录不进 git（见 `.gitignore`）。连接凭据在仓库外，默认 macOS/Linux `~/.config/nipaplay/endpoint.json`、Windows `%APPDATA%\NipaPlay\endpoint.json`，可用 `NIPAPLAY_ENDPOINT_FILE` 指定。

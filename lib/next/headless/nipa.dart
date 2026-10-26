@@ -317,6 +317,7 @@ final class HeadlessNipa {
       return recentMemoryFacts(host, await activeJobFacts(engine),
           await followups.activeList(), activity.rows, current,
           activityTotal: activity.total,
+          harnessUpdate: endpoint.harnessUpdate,
           finishedHelpers: [
             for (final job in ((await engine.list(type: 'agent.helper'))
                     .where((job) => job.state.isTerminal)

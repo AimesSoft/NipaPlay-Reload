@@ -1,8 +1,53 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:nipaplay/next/chat/chat_host.dart';
 import 'package:nipaplay/next/memory/recent.dart';
+import 'package:nipaplay/next/memory/service.dart';
 
 void main() {
+  test('harness notice stays visible within the worst-case memory budget',
+      () async {
+    final long = '字' * 10000;
+    final facts = await recentMemoryFacts(
+        _Thread([long]),
+        [
+          {'title': long}
+        ],
+        [
+          {'title': long}
+        ],
+        [
+          {'title': long}
+        ],
+        null,
+        finishedHelpers: [
+          {'title': long}
+        ],
+        capabilityChanges: [
+          {
+            'at': '2026-10-26',
+            'families': {
+              long: {
+                'added': [long],
+                'removed': [],
+                'changed': []
+              }
+            }
+          }
+        ],
+        harnessUpdate: {
+          'state': 'conflict',
+          'reason': '请检查官方更新冲突',
+          'checkedAt': '2026-10-26',
+          'paths': [long]
+        });
+    final text = facts['text'] as String;
+    expect(text, contains('Harness 官方更新'));
+    expect(text, contains('conflict'));
+    expect(text, contains('请检查官方更新冲突'));
+    expect(
+        text.runes.length, lessThanOrEqualTo(HarnessMemory.recentCharacters));
+    expect(facts['truncated'], true);
+  });
   Future<Map<String, Object?>> recent(List<String> userTexts) =>
       recentMemoryFacts(_Thread(userTexts), [], [], [], null);
 

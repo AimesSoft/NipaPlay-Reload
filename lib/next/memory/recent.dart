@@ -23,6 +23,7 @@ Future<JsonMap> recentMemoryFacts(ConversationHistory host, List<JsonMap> jobs,
     List<JsonMap> followups, List<JsonMap> activity, String? current,
     {List<JsonMap> finishedHelpers = const [],
     List<JsonMap> capabilityChanges = const [],
+    JsonMap? harnessUpdate,
     int? activityTotal,
     Future<String> Function(String)? redact}) async {
   String? source;
@@ -78,7 +79,7 @@ Future<JsonMap> recentMemoryFacts(ConversationHistory host, List<JsonMap> jobs,
     }
   }
   final sections = <(String, String, int)>[
-    ('最近会话 ${source ?? '无'} 最后几句话', jsonEncode(messages.toList()), 1250),
+    ('最近会话 ${source ?? '无'} 最后几句话', jsonEncode(messages.toList()), 1100),
     (
       '未结束任务',
       jsonEncode(jobs
@@ -138,7 +139,7 @@ Future<JsonMap> recentMemoryFacts(ConversationHistory host, List<JsonMap> jobs,
                   'summary': summary,
               })
           .toList()),
-      900
+      700
     ),
     // Only when the last launches changed the capability catalogue.
     if (capabilityChanges.isNotEmpty)
@@ -146,6 +147,15 @@ Future<JsonMap> recentMemoryFacts(ConversationHistory host, List<JsonMap> jobs,
         'NipaPlay 更新',
         capabilityChanges.map(CapabilityCatalogChanges.describe).join('\n'),
         450
+      ),
+    if (harnessUpdate != null && harnessUpdate['state'] != 'current')
+      (
+        'Harness 官方更新',
+        jsonEncode({
+          for (final key in ['state', 'reason', 'checkedAt', 'paths'])
+            if (harnessUpdate.containsKey(key)) key: harnessUpdate[key],
+        }),
+        300
       ),
   ];
   final omitted = <String>[];
