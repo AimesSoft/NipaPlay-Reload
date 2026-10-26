@@ -25,6 +25,29 @@ bool _newer(JsonMap a, JsonMap b) {
           (a['writer'] as String).compareTo(b['writer'] as String) > 0);
 }
 
+// Evidence from another device may carry identities/credits absent locally.
+// Keep each provider object, rather than letting the selected file owner hide it.
+JsonMap _combinedEvidence(JsonMap primary, List<JsonMap> members) {
+  final sources = <String, Map>{};
+  final ratings = <String, Map>{};
+  for (final member in members) {
+    final metadata = member['metadata'] as Map;
+    for (final row in (metadata['sources'] as List? ?? const []).whereType<Map>()) {
+      final key = jsonEncode([row['provider'], row['objectType'], row['externalId'], row['scope'], row['language']]);
+      final old = sources[key];
+      if (old == null || '${row['fetchedAt']}'.compareTo('${old['fetchedAt']}') > 0) sources[key] = row;
+    }
+    for (final row in (metadata['ratings'] as List? ?? const []).whereType<Map>()) {
+      ratings.putIfAbsent(jsonEncode([row['source'], row['ref'], row['language']]), () => row);
+    }
+  }
+  return {...primary,
+    'keys': members.expand((m) => (m['keys'] as List).cast<String>()).toSet().toList(),
+    'metadata': {...primary['metadata'] as Map,
+      'sources': sources.values.toList(), 'ratings': ratings.values.toList()},
+  };
+}
+
 String _ref(String device, String id) =>
     'mesh-ref:${base64Url.encode(utf8.encode(jsonEncode([
               device,
@@ -671,7 +694,7 @@ final class LibraryProjection {
         _historicalIds[eid] = es
             .map((e) => _ref(e['deviceId'] as String, e['id'] as String))
             .toList();
-        newEvidence[eid] = selected;
+        newEvidence[eid] = _combinedEvidence(selected, es);
         if (selected['local'] == true) {
           newLocalTargets[eid] = selected['id'] as String;
         }
@@ -749,7 +772,7 @@ final class LibraryProjection {
         ...members.first['value'] as JsonMap,
         'workId': id
       };
-      newEvidence[id] = members.first;
+      newEvidence[id] = _combinedEvidence(members.first, members);
       final sourceEpisodesOf = <String, List<JsonMap>>{};
       for (final e in sourceEpisodes) {
         (sourceEpisodesOf[ownerOf(e['deviceId'], e['workId'])] ??= []).add(e);

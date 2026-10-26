@@ -83,6 +83,11 @@ abstract final class Found {
       // A TMDB movie is a film; the other objects say nothing of it.
       film: ref(workId)?.objectType == 'movie',
       overview: _text(record['overview']),
+      details: {'sources': [{
+        'provider': provider, 'objectType': ref(workId)?.objectType,
+        'externalId': ref(workId)?.externalId,
+        'fields': {...record, ...Map<String, Object?>.from(record['details'] as Map? ?? const {})},
+      }]},
       ratings: [
         if (rating != null) UiRating(source(provider ?? ''), rating),
       ],
@@ -103,6 +108,7 @@ abstract final class Found {
       film: work.film || more.film,
       runtime: work.runtime,
       overview: more.overview ?? work.overview,
+      details: more.details,
       ratings: work.ratings.isEmpty ? more.ratings : work.ratings,
       artwork: UiArtwork(
         backdrop: work.artwork.backdrop,

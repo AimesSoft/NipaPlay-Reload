@@ -251,3 +251,16 @@ git diff --check
 `danmaku_bindings.local_file` 是本地路径引用，含声明的平台/视频号、条数、大小、修改与读取时间及无正文的时间计数。`cache_key=sidecar:<bindingId>` 表示路径池；不写 `danmaku_cache_chunks`。热度使用持久时间计数；主视觉与播放器按引用读取正文，最多四个池留在进程内。公开 `danmaku.bindings.localFile`、`danmaku.tracks`、`danmaku.tracks(entityId)` 和 `media.metadata.ui_facts.episodes.items[].danmaku` 提供同一绑定的覆盖事实，时间计数不进入公开查询。不可用轨道不会进入热度、主视觉候选或播放挂载；上次读取时间、条数和错误仍可查询。
 
 Next 连接播放器后，同名自动加载进入这些绑定，不再调用 Classic 的第二次目录查找。`playback.tracks` 额外列出已有绑定的弹幕轨道，含 `bindingId`、来源与条数。Next 未连接时，Classic 沿用原先自动加载的策略与排名。Next 播放期间成功加载的弹弹play Classic 原始缓存也保存为 `automatic` 绑定，保留聚合池里显式的平台来源、复用当前播放器轨道；后续播放及界面能读取同一池。此路径不发出新的网络请求，也不代替 Classic 的自动匹配设置。
+
+### 身份与获取分开
+
+`danmaku.bind` / `bind_batch` 只保存已确认的来源，不联网、不探测时长、
+不创建获取任务、不挂载轨道；Dandanplay 剧集允许 durationMs=0。
+作品与发行、剧集的正式元数据身份仍用 `media.identity.bind_batch`，保留真实父 scope。
+`danmaku.prepare` / `prepare_batch` 明确绑定并下载；`attach` 是其兼容别名。
+`fetch` 可带 bindingId 将内容保存到先前绑定，来源/视频必须一致。
+
+常规刮削准备资料、作品及准确剧集 ID，不预下载弹幕。播放时优先复用已有池，
+其次按 accepted Dandanplay episode 元数据身份获取；没有准确身份才做 Classic
+哈希匹配。skipMatching 不阻止准确身份的获取，local-only 仍不联网。
+手动来源、禁用及明确撤销优先，作品 ID 不用于猜测剧集。

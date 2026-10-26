@@ -269,3 +269,17 @@ Classic 标题快照带来源及未知语言 `und`，不会覆盖来源服务快
 无哈希匹配目录为 1 次完整列表、2 次元数据调用、1 次批量绑定；哈希匹配目录为
 1 次批量哈希、1 次批量绑定。调用次数是工具能力的测试事实，不规定 Agent 的调用顺序。
 真实来源响应和 native MDK 时长在真机上验收。
+
+### 丰富资料与多来源身份
+
+跨站搜索和判断由 agent 完成，宿主保留 exact/contains 身份、提供方独立快照、
+字段来源和手动覆盖。metadata.get 的 details 保存 TMDB 演职员/制作/播出资料、
+Bangumi 公开 staff/characters/infobox、Dandanplay 作品资料及完整 providerData。
+Bangumi 公开资料无需账号。metadata.sources 返回各外部对象的最新资料，评分分来源；
+手动覆盖和提交资料优先，普通快照的中文标题优先 Bangumi，同语言简介取更完整来源，
+其余汇总字段优先 TMDB。具体来源仍在 provenance，不改写原始快照。
+
+ui_facts 报告三站身份与动画的建议补全目标。刮削不下载弹幕；正式剧集身份在播放时
+由 AutomaticDanmaku 使用，跨季、SP、合集不能仅按编号推断。
+文件扫描同时保存 technical（容器、码率 bit/s、视频和音轨），files.list 返回它；
+详情页按来源展示演职员、角色声优、评分、资料表及已探测的文件信息。

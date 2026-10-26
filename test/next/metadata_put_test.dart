@@ -162,7 +162,7 @@ void main() {
     expect(((result['episodes'] as List).single as Map)['episodeId'], episodeId);
     final summary = result['uiFacts'] as Map;
     final missing = summary['missing'] as Map;
-    expect(missing['identities'], isEmpty);
+    expect(missing['identities'], ['bangumi', 'dandanplay']);
     expect(missing['chinese'], isEmpty);
     expect(missing['fields'], isNot(containsAll(['backdrop', 'poster', 'logo'])));
     expect(missing['fields'], isNot(contains('title')));
@@ -452,7 +452,7 @@ void main() {
     final shown = await facts(id);
     final missing = shown['missing'] as Map;
     expect(missing['identities'], ['tmdb']);
-    expect(shown['identities'], {'tmdb': false});
+    expect(shown['identities'], {'tmdb': false, 'bangumi': false, 'dandanplay': false});
     expect(missing['fields'], containsAll(['backdrop', 'logo', 'poster', 'overview']));
     expect(missing['chinese'], ['title', 'overview']);
     expect(await facts(), isNot(contains('nothing')));

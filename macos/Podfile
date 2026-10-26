@@ -136,7 +136,10 @@ target 'Runner' do
   end
 end
 
+require_relative 'patches/erika_media_io'
+
 post_install do |installer|
+  ErikaMediaIO.install(installer, __dir__)
   installer.pods_project.targets.each do |target|
     flutter_additional_macos_build_settings(target)
     

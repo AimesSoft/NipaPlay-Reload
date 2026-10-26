@@ -32,7 +32,7 @@ final class AutomaticDanmaku {
   Future<bool> prepare(String path, {String? fileId, String? episodeId}) {
     // A Mesh receiver must ask the owner, never hash the loopback grant URL.
     if (path.startsWith('file://')) path = Uri.parse(path).toFilePath();
-    if (path.contains('://')) return Future.value(false);
+    if (path.contains('://') && fileId == null) return Future.value(false);
     final key = '$path\u0000$fileId\u0000$episodeId';
     final pending = _pending.putIfAbsent(
         key,
@@ -48,8 +48,7 @@ final class AutomaticDanmaku {
       {String? fileId, String? episodeId}) async {
     try {
       final policy = await readSettings();
-      if (policy.skipMatching ||
-          policy.strategy == DanmakuAutoLoadStrategy.local) {
+      if (policy.strategy == DanmakuAutoLoadStrategy.local) {
         return false;
       }
       final store = service.store;
@@ -96,6 +95,49 @@ final class AutomaticDanmaku {
       }
       // Preserve manual sources and explicit detach decisions.
       if (existing.any((b) => b['local_file'] == null)) return false;
+      // A confirmed metadata episode is already a stable Dandanplay video
+      // identity. Reuse it before considering hash matching (including when
+      // the user disabled matching). Never derive episodes from a work ID.
+      final known = <String, ({String entityId, JsonMap binding})>{};
+      for (final id in entities) {
+        final identity = await store.identities.identity(id);
+        for (final b in (identity['bindings'] as List).cast<JsonMap>()) {
+          if (b['status'] == 'accepted' &&
+              b['provider'] == 'dandanplay' &&
+              b['object_type'] == 'episode' &&
+              b['relation'] == 'exact') {
+            known[b['external_id'] as String] = (entityId: id, binding: b);
+          }
+        }
+      }
+      if (known.length > 1) return false;
+      if (known.length == 1) {
+        final exact = known.values.single;
+        final identity = await store.identities.identity(exact.entityId);
+        if (!(identity['bindings'] as List).cast<JsonMap>().any(
+            (b) => b['id'] == exact.binding['id'] && b['status'] == 'accepted')) {
+          return false;
+        }
+        if ((await bindings()).any((b) => b['local_file'] == null)) {
+          return false;
+        }
+        final fields = (identity['metadata'] as JsonMap)['fields'] as JsonMap;
+        final video = DanmakuVideo(
+          sourceId: 'dandanplay',
+          videoId: exact.binding['external_id'] as String,
+          objectType: 'episode',
+          title: fields['title'] as String? ?? '',
+          durationMs: (fields['runtimeMs'] as num?)?.toInt() ?? 0,
+        );
+        final bindingId = await store.attach(
+            exact.entityId,
+            video,
+            'Confirmed Dandanplay metadata episode identity',
+            null,
+            Invocation(origin: 'application:playback'));
+        return _fetch(await store.binding(bindingId));
+      }
+      if (policy.skipMatching || path.contains('://')) return false;
       final candidates = await matchHash(path);
       final distinct = <String, DanmakuVideo>{
         for (final v in candidates)

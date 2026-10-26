@@ -16,6 +16,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:nipaplay/next/media/classic_metadata_view.dart';
 import 'package:nipaplay/next/media/providers.dart';
+import 'package:nipaplay/next/media/metadata_provider.dart';
 import 'package:nipaplay/next/next_core.dart';
 import 'package:nipaplay/services/bangumi_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -113,6 +114,24 @@ void main() {
   tearDown(() async {
     await core.close();
     await root.delete(recursive: true);
+  });
+
+  test('provider credits and file-independent rich facts persist across reopen', () async {
+    final row = tmdb.responses['/3/tv/9001'] as Map;
+    row['genres'] = [{'id':16,'name':'动画'}];
+    row['episode_run_time'] = [24];
+    row['aggregate_credits'] = {'cast':[{'id':1,'name':'样本配音','roles':[{'character':'主角'}]}]};
+    final record = await TmdbMetadataProvider(tmdb).get(ExternalRef.fromJson(mediaWorkRef));
+    await core.media.service.store.saveSnapshot(record);
+    final metadata = await core.media.service.store.mergedMetadata(workId);
+    expect((metadata['fields'] as Map)['genres'], ['动画']);
+    expect((metadata['fields'] as Map)['runtimeMs'], 1440000);
+    expect((((metadata['fields'] as Map)['credits'] as Map)['cast'] as List).single['name'], '样本配音');
+    expect((metadata['sources'] as List).where((s) => s['provider'] == 'tmdb'), isNotEmpty);
+    await core.close();
+    await connect();
+    final restored = await core.media.service.store.mergedMetadata(workId);
+    expect(restored['fields'], metadata['fields']);
   });
 
   test(

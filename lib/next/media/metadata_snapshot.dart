@@ -27,6 +27,7 @@ const metadataViewSchema = ObjectSchema({
   'fields': ObjectSchema({}, additionalProperties: true),
   'provenance': ObjectSchema({}, additionalProperties: true),
   'ratings': ArraySchema(ObjectSchema({}, additionalProperties: true)),
+  'sources': ArraySchema(ObjectSchema({}, additionalProperties: true)),
 }, required: [
   'fields',
   'provenance',

@@ -166,6 +166,7 @@ final class UiManagedWork {
     required this.work,
     required this.kind,
     this.match,
+    this.metadata = const {},
     this.text = const {},
     this.art = const {},
     this.episodes = const [],
@@ -178,6 +179,7 @@ final class UiManagedWork {
   final UiWork work;
   final UiWorkKind kind;
   final UiMatch? match;
+  final Map<String, Object?> metadata;
   final Map<UiTextField, UiText> text;
   final Map<UiArtKind, UiArt> art;
 
@@ -407,6 +409,7 @@ final class UiFile {
   const UiFile({
     required this.path,
     this.size,
+    this.technical = const {},
     this.duration,
     this.modified,
     this.device,
@@ -422,6 +425,7 @@ final class UiFile {
     return UiFile(
       path: row['path'] as String,
       size: row['size'] as int?,
+      technical: Map<String, Object?>.from(row['technical'] as Map? ?? const {}),
       duration: ms == null || ms <= 0 ? null : Duration(milliseconds: ms),
       modified: modified == null ? null : DateTime.tryParse(modified),
       device: device,
@@ -433,6 +437,7 @@ final class UiFile {
   /// As its device knows it.
   final String path;
   final int? size;
+  final Map<String, Object?> technical;
   final Duration? duration;
   final DateTime? modified;
 

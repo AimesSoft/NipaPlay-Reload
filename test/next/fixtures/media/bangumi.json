@@ -1,6 +1,94 @@
 {
-  "/v0/search/subjects":{"data":[{"id":8001,"type":2,"name":"Cour Sample Part 2","name_cn":"分割季度样本 后半","date":"2024-07-01","summary":"独立 subject 的后半季度","images":{"large":"https://example.invalid/cour.jpg"}}],"total":1,"limit":20,"offset":0},
-  "/v0/subjects/8001":{"id":8001,"type":2,"name":"Cour Sample Part 2","name_cn":"分割季度样本 后半","date":"2024-07-01","summary":"独立 subject 的后半季度","images":{"large":"https://example.invalid/cour.jpg"}},
-  "/v0/episodes":{"data":[{"id":8101,"type":0,"name":"Episode 13","name_cn":"第十三话","sort":1,"airdate":"2024-07-01"},{"id":8102,"type":0,"name":"Episode 14","name_cn":"第十四话","sort":2,"airdate":"2024-07-08"},{"id":8191,"type":1,"name":"Special","name_cn":"特别篇","sort":1,"airdate":"2024-07-09"}],"total":3,"limit":100,"offset":0},
-  "/v0/episodes/8101":{"id":8101,"type":0,"name":"Episode 13","name_cn":"第十三话","sort":1,"airdate":"2024-07-01"}
+  "/v0/search/subjects": {
+    "data": [
+      {
+        "id": 8001,
+        "type": 2,
+        "name": "Cour Sample Part 2",
+        "name_cn": "分割季度样本 后半",
+        "date": "2024-07-01",
+        "summary": "独立 subject 的后半季度",
+        "images": {
+          "large": "https://example.invalid/cour.jpg"
+        }
+      }
+    ],
+    "total": 1,
+    "limit": 20,
+    "offset": 0
+  },
+  "/v0/subjects/8001": {
+    "id": 8001,
+    "type": 2,
+    "name": "Cour Sample Part 2",
+    "name_cn": "分割季度样本 后半",
+    "date": "2024-07-01",
+    "summary": "独立 subject 的后半季度",
+    "images": {
+      "large": "https://example.invalid/cour.jpg"
+    }
+  },
+  "/v0/episodes": {
+    "data": [
+      {
+        "id": 8101,
+        "type": 0,
+        "name": "Episode 13",
+        "name_cn": "第十三话",
+        "sort": 1,
+        "airdate": "2024-07-01"
+      },
+      {
+        "id": 8102,
+        "type": 0,
+        "name": "Episode 14",
+        "name_cn": "第十四话",
+        "sort": 2,
+        "airdate": "2024-07-08"
+      },
+      {
+        "id": 8191,
+        "type": 1,
+        "name": "Special",
+        "name_cn": "特别篇",
+        "sort": 1,
+        "airdate": "2024-07-09"
+      }
+    ],
+    "total": 3,
+    "limit": 100,
+    "offset": 0
+  },
+  "/v0/episodes/8101": {
+    "id": 8101,
+    "type": 0,
+    "name": "Episode 13",
+    "name_cn": "第十三话",
+    "sort": 1,
+    "airdate": "2024-07-01"
+  },
+  "/v0/subjects/8001/persons": {
+    "data": [
+      {
+        "id": 1,
+        "name": "样本监督",
+        "relation": "监督"
+      }
+    ]
+  },
+  "/v0/subjects/8001/characters": {
+    "data": [
+      {
+        "id": 2,
+        "name": "样本角色",
+        "relation": "主角",
+        "actors": [
+          {
+            "id": 3,
+            "name": "样本声优"
+          }
+        ]
+      }
+    ]
+  }
 }

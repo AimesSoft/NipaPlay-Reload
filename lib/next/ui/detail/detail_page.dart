@@ -28,6 +28,7 @@ import 'episodes.dart';
 import 'manage_episode.dart';
 import 'manage_sheet.dart';
 import 'manage_work.dart';
+import 'metadata_panel.dart';
 
 /// A work's page (INTERACTION.md「详情」): full-bleed backdrop, the work on
 /// the left (original title, logo or Songti title, one meta line, two lines
@@ -582,7 +583,13 @@ class _WorkDetailPageState extends State<WorkDetailPage>
                         padding: EdgeInsets.only(
                             top: compact ? 32 : 48,
                             bottom: 30 + MediaQuery.paddingOf(context).bottom),
-                        child: _episodesBlock(),
+                        child: Column(mainAxisSize: MainAxisSize.min,
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            _episodesBlock(),
+                            Padding(padding: EdgeInsets.symmetric(horizontal: NextLayout.gutter(context)),
+                              child: WorkMetadataPanel(work: _work, manage: _manage)),
+                          ]),
                       ),
                     ),
                   ),

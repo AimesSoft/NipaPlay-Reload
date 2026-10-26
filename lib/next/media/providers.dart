@@ -31,6 +31,100 @@ JsonMap? _score(Object? value, Object? count) => value is num && value > 0
 
 int? _count(Object? value) => value is num && value > 0 ? value.toInt() : null;
 
+List<String> _names(Object? rows) => rows is List
+    ? [
+        for (final row in rows.whereType<Map>())
+          if (row['name'] is String) row['name'] as String
+      ]
+    : const [];
+
+JsonMap _tmdbDetails(JsonMap row) {
+  final credits = row['aggregate_credits'] ?? row['credits'];
+  final cast = credits is Map ? credits['cast'] : null;
+  final crew = credits is Map ? credits['crew'] : null;
+  final runtime =
+      row['runtime'] ?? (row['episode_run_time'] as List?)?.firstOrNull;
+  return {
+    'providerData': row,
+    if (row['keywords'] is Map)
+      'tags': _names((row['keywords'] as Map)['results'] ??
+          (row['keywords'] as Map)['keywords']),
+    if (row['genres'] is List) 'genres': _names(row['genres']),
+    if (runtime is num && runtime > 0) 'runtimeMs': (runtime * 60000).round(),
+    if (row['production_companies'] is List) ...{
+      'studios': _names(row['production_companies']),
+      if (_names(row['production_companies']).isNotEmpty)
+        'studio': _names(row['production_companies']).join(' · '),
+    },
+    if (credits is Map)
+      'credits': {
+        'cast': [
+          for (final p in cast is List ? cast.whereType<Map>() : <Map>[])
+            {
+              'id': p['id'],
+              'name': p['name'],
+              'role': p['character'] ??
+                  (p['roles'] is List
+                      ? (p['roles'] as List)
+                          .whereType<Map>()
+                          .map((r) => r['character'])
+                          .whereType<String>()
+                          .join(' / ')
+                      : null),
+              if (p['profile_path'] != null)
+                'imageUrl':
+                    'https://image.tmdb.org/t/p/w185${p['profile_path']}',
+            }
+        ],
+        'crew': [
+          for (final p in crew is List ? crew.whereType<Map>() : <Map>[])
+            {
+              'id': p['id'],
+              'name': p['name'],
+              'department': p['department'],
+              'role': p['job'] ??
+                  (p['jobs'] is List
+                      ? (p['jobs'] as List)
+                          .whereType<Map>()
+                          .map((r) => r['job'])
+                          .whereType<String>()
+                          .join(' / ')
+                      : null)
+            }
+        ],
+      },
+    if (cast is List) 'actors': _names(cast),
+    if (crew is List)
+      'directors': _names(crew
+          .whereType<Map>()
+          .where((p) =>
+              p['job'] == 'Director' ||
+              (p['jobs'] is List &&
+                  (p['jobs'] as List)
+                      .whereType<Map>()
+                      .any((j) => j['job'] == 'Director')))
+          .toList()),
+    for (final entry in const {
+      'status': 'status',
+      'tagline': 'tagline',
+      'homepage': 'homepage',
+      'first_air_date': 'firstAirDate',
+      'last_air_date': 'lastAirDate',
+      'release_date': 'releaseDate',
+      'origin_country': 'countries',
+      'original_language': 'originalLanguage',
+      'spoken_languages': 'languages',
+      'networks': 'networks',
+      'created_by': 'creators',
+      'external_ids': 'externalIds',
+      'budget': 'budget',
+      'revenue': 'revenue',
+      'number_of_seasons': 'seasonCount',
+    }.entries)
+      if (row[entry.key] != null) entry.value: row[entry.key],
+  };
+}
+
 MetadataRecord _verifyRef(MetadataRecord record, ExternalRef ref) {
   if (record.ref.provider != ref.provider ||
       record.ref.objectType != ref.objectType ||
@@ -101,6 +195,7 @@ final class TmdbMetadataProvider implements MetadataProvider {
               ? _score(row['vote_average'], row['vote_count'])
               : null,
           episodeCount: type == 'tv' ? _count(row['number_of_episodes']) : null,
+          details: _tmdbDetails(row),
           fetchedAt: DateTime.now().toUtc());
 
   @override
@@ -133,7 +228,13 @@ final class TmdbMetadataProvider implements MetadataProvider {
         throw const Failure(
             FailureCode.invalidInput, 'Unsupported TMDB object type.');
     }
-    final row = await transport.request(path, query: {'language': language});
+    final row = await transport.request(path, query: {
+      'language': language,
+      if (ref.objectType == 'tv')
+        'append_to_response': 'aggregate_credits,external_ids,keywords',
+      if (ref.objectType == 'movie')
+        'append_to_response': 'credits,external_ids,keywords',
+    });
     final episodes = ref.objectType == 'season'
         ? [
             for (final ep in _rows(row, 'episodes'))
@@ -209,6 +310,19 @@ final class BangumiMetadataProvider implements MetadataProvider {
                 _count(row['total_episodes']) ??
                 _count(regular)
             : null,
+        details: {
+          'providerData': row,
+          if (row['infobox'] != null) 'infobox': row['infobox'],
+          if (row['tags'] is List) 'tags': row['tags'],
+          if (row['date'] != null) 'releaseDate': row['date'],
+          if (row['collection'] != null) 'collection': row['collection'],
+          if (rating is Map && rating['count'] != null)
+            'scoreDistribution': rating['count'],
+          if (row['platform'] != null) 'platform': row['platform'],
+          if (row['staff'] != null) 'staff': row['staff'],
+          if (row['characters'] != null) 'characters': row['characters'],
+          if (row['detailErrors'] != null) 'detailErrors': row['detailErrors'],
+        },
         fetchedAt: DateTime.now().toUtc());
   }
 
@@ -226,7 +340,22 @@ final class BangumiMetadataProvider implements MetadataProvider {
       throw const Failure(
           FailureCode.invalidInput, 'Unsupported Bangumi object type.');
     }
-    final row = await transport.request('/v0/subjects/${ref.externalId}');
+    final row = {...await transport.request('/v0/subjects/${ref.externalId}')};
+    final errors = <String>[];
+    for (final entry
+        in const {'persons': 'staff', 'characters': 'characters'}.entries) {
+      try {
+        row[entry.value] = _rows(
+            await transport
+                .request('/v0/subjects/${ref.externalId}/${entry.key}'),
+            'data');
+      } on Failure {
+        errors.add(entry.value);
+      } on ProviderRetry {
+        errors.add(entry.value);
+      }
+    }
+    if (errors.isNotEmpty) row['detailErrors'] = errors;
     final episodes = <MetadataRecord>[];
     var offset = 0;
     while (true) {
@@ -280,6 +409,20 @@ final class DandanplayMetadataProvider implements HashMetadataProvider {
           episodes: episodes,
           order: 'provider',
           rating: _score(row['rating'], null),
+          details: {
+            'providerData': row,
+            if (row['typeDescription'] != null)
+              'platform': row['typeDescription'],
+            if (row['airDate'] != null) 'releaseDate': row['airDate'],
+            if (row['isOnAir'] != null) 'isOnAir': row['isOnAir'],
+            if (row['bangumiUrl'] != null) 'homepage': row['bangumiUrl'],
+            if (row['tags'] != null) 'tags': row['tags'],
+            if (row['metadata'] is List) 'infobox': row['metadata'],
+            if (row['ratingDetails'] != null)
+              'ratingDetails': row['ratingDetails'],
+            if (row['onlineDatabases'] != null)
+              'onlineDatabases': row['onlineDatabases'],
+          },
           episodeCount: episodeCount ?? _count(row['episodeCount']),
           fetchedAt: DateTime.now().toUtc());
   MetadataRecord _episode(JsonMap row, String animeId) => MetadataRecord(

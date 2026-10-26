@@ -66,7 +66,7 @@ class ChatFrame extends StatelessWidget {
                 columnWidth: columnWidth,
                 textSize: textSize,
                 posterWidth: posterWidth,
-                padding: EdgeInsets.fromLTRB(sidePadding, 12, sidePadding, 28),
+                padding: EdgeInsets.fromLTRB(sidePadding, 12, sidePadding, 72),
               ),
             ),
             if (chat.menuOpen)

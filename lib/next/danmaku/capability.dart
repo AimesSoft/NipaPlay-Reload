@@ -170,6 +170,7 @@ const _descriptor = ObjectSchema({
 const _fetchFields = {
   'video': _video,
   'requestId': _text,
+  'bindingId': _text,
   'startMs': IntegerSchema(minimum: 0),
   'endMs': IntegerSchema(minimum: 1),
   'localDurationMs': IntegerSchema(minimum: 1, maximum: 7200000),
@@ -293,7 +294,58 @@ final _specs = [
       Effect.write,
       const ObjectSchema(_fetchFields, required: ['video', 'requestId']),
       _job,
-      'Create a cancellable segmented acquisition/cache task for one explicit video/range. Does not modify player tracks. requestId makes retries idempotent. A failed acquisition receipt also reports available Classic cache, assigned/partial Next cache and currently loaded matching player tracks; existing comments do not prove this request succeeded.'),
+      'Explicitly download and persist danmaku for one video/range; not part of normal scraping. bindingId optionally assigns content to an existing danmaku.bind binding; without it the task does not create a track binding. Does not modify player tracks. requestId makes retries idempotent. A failed acquisition receipt also reports available Classic cache, assigned/partial Next cache and currently loaded matching player tracks; existing comments do not prove this request succeeded.'),
+  _spec(
+      'danmaku.bind',
+      Effect.write,
+      const ObjectSchema({
+        'video': _video,
+        'entityId': _text,
+        'path': _text,
+        'current': BooleanSchema(),
+        'reason': _text,
+        'url': StringSchema(nullable: true),
+      }, required: [
+        'video',
+        'reason'
+      ]),
+      const ObjectSchema({
+        'bindingId': StringSchema(),
+        'jobId': StringSchema(nullable: true),
+        'downloaded': BooleanSchema(),
+      }, required: [
+        'bindingId',
+        'jobId',
+        'downloaded'
+      ]),
+      'Record a confirmed danmaku source identity only. No network, duration probe, acquisition task or player mounting. durationMs=0 is allowed for Dandanplay episodes. Use media.identity.bind_batch for work/season/episode metadata identities (with real parent scope); a danmaku binding alone does not identify the work. Normal scraping binds IDs only. Playback acquires known episode pools automatically. Use danmaku.fetch with bindingId to explicitly prefetch this binding.'),
+  _spec(
+      'danmaku.prepare',
+      Effect.write,
+      const ObjectSchema({
+        'video': _video,
+        'requestId': _text,
+        'entityId': _text,
+        'path': _text,
+        'current': BooleanSchema(),
+        'refresh': BooleanSchema(),
+        'reason': _text,
+        'url': StringSchema(nullable: true)
+      }, required: [
+        'video',
+        'reason',
+        'requestId'
+      ]),
+      const ObjectSchema({
+        'bindingId': StringSchema(nullable: true),
+        'jobId': StringSchema(nullable: true),
+        'status': StringSchema(),
+        'trackId': StringSchema()
+      }, required: [
+        'bindingId',
+        'jobId'
+      ]),
+      'Explicitly prepare danmaku now: bind the source, download and persist its pool, then refresh applicable player tracks. Only use for an explicit request to prepare/download danmaku; normal scraping uses media.identity.bind_batch or danmaku.bind without downloading. Existing pools/tracks are reused unless refresh=true. Unknown duration is measured when possible; Dandanplay whole pools also work before a file exists.'),
   _spec(
       'danmaku.attach',
       Effect.write,
@@ -320,7 +372,7 @@ final _specs = [
         'bindingId',
         'jobId'
       ]),
-      'Bind a platform video to entityId, path or the current file (default). Existing platform/video tracks are reused; Classic dandanplay reuse records a binding, with jobId=null. Local pools prevent online acquisition. refresh=true fetches and replaces. When video.durationMs is 0 (search results do not know it), NipaPlay measures the entity\'s file on this device; an episode with no file yet is attached all the same (dandanplay returns its whole pool at once), so its comments are there when the file arrives. Invalid required local ranges fail without mounting; outside-range errors are reported separately. Credentials are opaque host references.'),
+      'Compatibility alias for danmaku.prepare: this downloads danmaku as well as binding the source. Do not use during normal metadata scraping. Use media.identity.bind_batch or danmaku.bind for identity only; danmaku.prepare for an explicit request to download/prepare comments.'),
   _spec(
       'danmaku.tracks',
       Effect.read,
@@ -491,10 +543,18 @@ final _specs = [
 
 final class DanmakuCapability implements Capability {
   DanmakuCapability(DanmakuService service)
-      : actions = [for (final spec in _specs) _Action(service, spec),
+      : actions = [
+          for (final spec in _specs) _Action(service, spec),
           for (final spec in _specs)
-            if (const {'danmaku.fetch', 'danmaku.attach', 'danmaku.import'}.contains(spec.id))
-              _BatchAction(service, spec)];
+            if (const {
+              'danmaku.fetch',
+              'danmaku.bind',
+              'danmaku.prepare',
+              'danmaku.attach',
+              'danmaku.import'
+            }.contains(spec.id))
+              _BatchAction(service, spec)
+        ];
   @override
   final List<Action> actions;
 }
@@ -504,7 +564,8 @@ final class _BatchAction extends Action<_Data, _Data> {
   final DanmakuService service;
   final ActionSpec single;
   @override
-  ActionSpec get spec => ActionSpec(id: '${single.id}_batch',
+  ActionSpec get spec => ActionSpec(
+      id: '${single.id}_batch',
       title: '${single.title} batch',
       description: 'Independent entries in input order using ${single.id}. '
           'All schemas are validated before execution. atomic=false; each index '
@@ -512,10 +573,19 @@ final class _BatchAction extends Action<_Data, _Data> {
           'Successful entries are retained when another fails. Each requestId is '
           'scoped exactly as in the single action; credentials remain host references.',
       effect: single.effect,
-      input: ObjectSchema({'entries': ArraySchema(single.input,
-          description: '1–100 independent entries.')}, required: ['entries']),
-      output: const ObjectSchema({'atomic': BooleanSchema(),
-          'entries': ArraySchema(ObjectSchema({}, additionalProperties: true))}, required: ['atomic', 'entries']));
+      input: ObjectSchema({
+        'entries':
+            ArraySchema(single.input, description: '1–100 independent entries.')
+      }, required: [
+        'entries'
+      ]),
+      output: const ObjectSchema({
+        'atomic': BooleanSchema(),
+        'entries': ArraySchema(ObjectSchema({}, additionalProperties: true))
+      }, required: [
+        'atomic',
+        'entries'
+      ]));
   @override
   _Data decodeInput(JsonMap json) => _Data(json);
   @override
@@ -523,16 +593,23 @@ final class _BatchAction extends Action<_Data, _Data> {
     final harness = Harness([_SingleCapability(_Action(service, single))]);
     final entries = (input.value['entries'] as List).cast<JsonMap>();
     if (entries.isEmpty || entries.length > 100) {
-      throw const Failure(FailureCode.invalidInput, 'Batch requires 1–100 entries.');
+      throw const Failure(
+          FailureCode.invalidInput, 'Batch requires 1–100 entries.');
     }
-    return Completed(_Data({'atomic': false, 'entries': [
-      for (var i = 0; i < entries.length; i++) {
-        'index': i,
-        ...(await harness.invokeJson(single.id, entries[i], invocation)).toEnvelope(),
-      }
-    ]}));
+    return Completed(_Data({
+      'atomic': false,
+      'entries': [
+        for (var i = 0; i < entries.length; i++)
+          {
+            'index': i,
+            ...(await harness.invokeJson(single.id, entries[i], invocation))
+                .toEnvelope(),
+          }
+      ]
+    }));
   }
 }
+
 final class _SingleCapability implements Capability {
   const _SingleCapability(this.action);
   final Action action;
@@ -619,12 +696,22 @@ final class _Action extends Action<_Data, _Data> {
           final job = await service.fetch(
               DanmakuVideo.fromJson(
                   Map<String, Object?>.from(j['video'] as Map)),
+              bindingId: j['bindingId'] as String?,
               startMs: j['startMs'] as int? ?? 0,
               endMs: j['endMs'] as int?,
               localDurationMs: j['localDurationMs'] as int?,
               refresh: j['refresh'] == true,
               requestId: j['requestId'] as String);
           return result({'jobId': job.jobId});
+        case 'danmaku.bind':
+          return result(await service.bind(
+              await service.resolveEntity(j),
+              DanmakuVideo.fromJson(
+                  Map<String, Object?>.from(j['video'] as Map)),
+              j['reason'] as String,
+              j['url'] as String?,
+              invocation));
+        case 'danmaku.prepare':
         case 'danmaku.attach':
           return result(await service.attach(
               await service.resolveEntity(j),

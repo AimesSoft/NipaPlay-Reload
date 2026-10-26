@@ -100,23 +100,28 @@ final class HttpMetadataTransport implements MetadataTransport {
             'Request timed out. $target');
       } on HandshakeException {
         NetworkObservations.record(provider, uri: uri, error: 'tls_failed');
-        throw ProviderRetry(provider, DateTime.now().toUtc().add(const Duration(seconds: 30)),
+        throw ProviderRetry(
+            provider,
+            DateTime.now().toUtc().add(const Duration(seconds: 30)),
             'TLS negotiation failed. $target');
       } on SocketException {
-        NetworkObservations.record(provider, uri: uri, error: 'connection_failed');
+        NetworkObservations.record(provider,
+            uri: uri, error: 'connection_failed');
         throw ProviderRetry(
             provider,
             DateTime.now().toUtc().add(const Duration(seconds: 30)),
             'Network unavailable. $target');
       } on http.ClientException {
-        NetworkObservations.record(provider, uri: uri, error: 'transport_failed');
+        NetworkObservations.record(provider,
+            uri: uri, error: 'transport_failed');
         throw ProviderRetry(
             provider,
             DateTime.now().toUtc().add(const Duration(seconds: 30)),
             'Transport unavailable. $target');
       }
       _next = DateTime.now().add(interval);
-      NetworkObservations.record(provider, uri: uri, status: response.statusCode);
+      NetworkObservations.record(provider,
+          uri: uri, status: response.statusCode);
       final diagnostics = httpDiagnostics(uri,
           statusCode: response.statusCode,
           contentType: response.headers['content-type']);
@@ -149,6 +154,12 @@ final class HttpMetadataTransport implements MetadataTransport {
       } on FormatException {
         throw Failure(FailureCode.unavailable,
             '$provider returned invalid JSON. $diagnostics');
+      }
+      // Bangumi's public credits endpoints return a bare JSON array.
+      if (provider == 'bangumi' &&
+          decoded is List &&
+          RegExp(r'^/v0/subjects/\d+/(persons|characters)$').hasMatch(path)) {
+        return {'data': decoded};
       }
       if (decoded is! Map) {
         throw Failure(FailureCode.unavailable,

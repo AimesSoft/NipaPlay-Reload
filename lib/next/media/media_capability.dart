@@ -64,6 +64,7 @@ ObjectSchema _recordSchema(int depth) => ObjectSchema({
       ], description: 'Work score as the provider reports it; absent when unrated.'),
       'episodeCount': const IntegerSchema(
           description: 'Work episode count as the provider reports it; absent when unknown.'),
+      'details': const ObjectSchema({}, additionalProperties: true),
       'episodes': ArraySchema(
           depth == 0 ? const ObjectSchema({}) : _recordSchema(depth - 1))
     }, required: [
@@ -311,7 +312,7 @@ final _specs = [
           required: const ['results'])),
   _spec(
       'media.metadata.get',
-      'Fetch an external object without persisting it. TMDB refs use stable IDs and a route scope including season/episode numbers. Work records carry rating {value,max,count?} and episodeCount when the provider reports them.',
+      'Fetch an external object without persisting it. TMDB refs use stable IDs and a route scope including season/episode numbers. Work records carry rating {value,max,count?}, episodeCount and details (credits, studios, genres, runtime, status, infobox, staff, characters, tags and retained providerData when available). Bangumi public metadata needs no login. Scraping never downloads danmaku; bind confirmed episode IDs separately.',
       Effect.read,
       const ObjectSchema({'ref': _refSchema, 'language': _text},
           required: ['ref']),
@@ -356,7 +357,7 @@ final _specs = [
       const ObjectSchema({'job': _jobRefSchema}, required: ['job'])),
   _spec(
       'media.files.list',
-      'Return the complete recursive video file list for root, or every indexed file location for workId. Includes size, durationMs (null when unavailable), 16 MiB headMd5 and current bindings. Read-only: no indexing or identity judgment.',
+      'Return the complete recursive video file list for root, or every indexed file location for workId. Includes size, durationMs, technical (container, bitrate in bit/s, video/audio streams; null for files not yet probed), 16 MiB headMd5 and current bindings. Scan refreshes stored probe facts. Read-only: no indexing or identity judgment.',
       Effect.read,
       const ObjectSchema({
         'root': _text,
@@ -371,6 +372,7 @@ final _specs = [
           'path': StringSchema(),
           'size': IntegerSchema(nullable: true),
           'durationMs': IntegerSchema(nullable: true),
+          'technical': ObjectSchema({}, additionalProperties: true, nullable: true),
           'headMd5': StringSchema(nullable: true),
           'modifiedAt': StringSchema(nullable: true),
           'bindings': ArraySchema(ObjectSchema({}, additionalProperties: true)),

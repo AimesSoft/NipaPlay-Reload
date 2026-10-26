@@ -88,6 +88,7 @@ final class UiWork {
     this.next,
     this.danmaku = const [],
     this.devices = const [],
+    this.details = const {},
   });
   final String workId;
   final String title;
@@ -117,6 +118,9 @@ final class UiWork {
   /// Other devices holding some of its episodes. Empty when everything is
   /// on this device.
   final List<UiDevice> devices;
+
+  /// Detailed provider records for a found work; library pages read on demand.
+  final Map<String, Object?> details;
 }
 
 final class UiEpisode {

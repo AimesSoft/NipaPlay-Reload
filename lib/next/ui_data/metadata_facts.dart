@@ -121,7 +121,21 @@ extension UiMetadataFacts on UiDataService {
           if (local != null) 'file': {...local}..remove('timeCounts'),
         });
       }
+      final metadataIdentities = <JsonMap>[];
+      if (episodeEvidence != null) {
+        for (final key in episodeEvidence['keys'] as List? ?? const []) {
+          final parts = key is String ? jsonDecode(key) as List : key as List;
+          metadataIdentities.add({'provider': parts[0], 'objectType': parts[1],
+            'scope': parts[2], 'externalId': parts[3]});
+        }
+      } else {
+        metadataIdentities.addAll(await db.rawQuery(
+          "SELECT o.provider,o.object_type AS objectType,o.external_id AS externalId,o.scope "
+          "FROM media_bindings b JOIN media_external_objects o ON o.id=b.object_id "
+          "WHERE b.entity_id=? AND b.status='accepted' AND b.relation='exact'", [e.episodeId]));
+      }
       episodeFacts.add({
+        'metadataIdentities': metadataIdentities,
         'subtitles': {
           'files': episodeEvidence == null ? await (subtitles ?? subtitleFacts(media, mediaRoot)).episodeFiles(e.episodeId) : episodeEvidence['subtitleFiles'],
           'available': subtitleTracks.any((t) => t['available'] == true),
@@ -175,25 +189,37 @@ extension UiMetadataFacts on UiDataService {
         'poster': image('poster', work.artwork.poster, metadata),
         'logo': image('logo', work.artwork.logo, metadata),
     };
-    // Whether the work has a TMDB identity: backdrop, logo and episode
-    // stills come from it.
-    final bool? tmdb;
+    final identities = <String, bool>{};
     if (evidence != null) {
       final keys = evidence['keys'];
-      tmdb = keys is List
-          ? keys.any((k) =>
-              (k is String ? jsonDecode(k) as List : k as List).first == 'tmdb')
-          : null;
+      if (keys is List) {
+        for (final provider in ['tmdb', 'bangumi', 'dandanplay']) {
+          identities[provider] = keys.any((k) =>
+              (k is String ? jsonDecode(k) as List : k as List).first == provider);
+        }
+      }
     } else {
-      tmdb = await media.store.workHasTmdb(workId);
+      final family = await media.store.metadataFamily(workId);
+      for (final provider in ['tmdb', 'bangumi', 'dandanplay']) {
+        identities[provider] = (await db.rawQuery(
+          "SELECT 1 FROM media_bindings b JOIN media_external_objects o ON o.id=b.object_id "
+          "WHERE b.entity_id IN (${List.filled(family.length, '?').join(',')}) "
+          "AND b.status='accepted' AND b.relation IN ('exact','contains') AND o.provider=? LIMIT 1",
+          [...family, provider])).isNotEmpty;
+      }
     }
+    final animation = !work.film && (identities['bangumi'] == true ||
+        identities['dandanplay'] == true || attrs['type'] == 'anime' ||
+        work.genres.any((g) => ['动画', '動畫', 'Animation', 'アニメ'].contains(g)));
     return {
       'workId': workId,
       'fields': fieldFacts,
-      'identities': {if (tmdb != null) 'tmdb': tmdb},
+      'identities': identities,
+      'metadata': metadata,
+      'identityTargets': ['tmdb', if (animation) ...['bangumi', 'dandanplay']],
       // What the facts above lack, as plain lists; nothing else is implied.
       'missing': {
-        'identities': [if (tmdb == false) 'tmdb'],
+        'identities': [for (final p in ['tmdb', if (animation) ...['bangumi', 'dandanplay']]) if (identities[p] == false) p],
         'fields': [
           for (final e in fieldFacts.entries)
             if ((e.value as Map)['available'] != true) e.key
@@ -203,6 +229,12 @@ extension UiMetadataFacts on UiDataService {
             if ((fieldFacts[name] as Map)['inChinese'] != true) name
         ],
         'episodes': {
+          'withoutDandanplayEpisodeIdentity': [
+            if (animation)
+              for (final e in episodeFacts)
+                if (!(e['metadataIdentities'] as List).cast<Map>().any((r) =>
+                    r['provider'] == 'dandanplay' && r['objectType'] == 'episode')) e['episodeId']
+          ],
           'withoutTitle': [
             for (final e in episodes)
               if (e.title == null) e.episodeId

@@ -7,13 +7,84 @@ import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 import 'package:nipa_harness/nipa_harness.dart';
 import 'package:nipaplay/next/media/metadata_provider.dart';
-import 'package:nipaplay/next/media/provider_transport.dart' hide VaultCredentialResolver;
+import 'package:nipaplay/next/media/provider_transport.dart'
+    hide VaultCredentialResolver;
 import 'package:nipaplay/next/media/vault_credential_resolver.dart';
 import 'package:nipaplay/next/media/providers.dart';
 
 import 'media_test_support.dart';
 
 void main() {
+  test(
+      'rich TMDB and Bangumi records retain credits, facts and roundtrip details',
+      () async {
+    final transport = FixtureTransport('tmdb');
+    final row = transport.responses['/3/tv/9001'] as Map;
+    row.addAll(<String, dynamic>{
+      'genres': [
+        {'id': 16, 'name': '动画'}
+      ],
+      'episode_run_time': [24],
+      'production_companies': [
+        {'name': '样本工作室'}
+      ],
+      'status': 'Returning Series',
+      'aggregate_credits': {
+        'cast': [
+          {
+            'id': 1,
+            'name': '样本演员',
+            'roles': [
+              {'character': '主角'}
+            ]
+          }
+        ],
+        'crew': [
+          {
+            'id': 2,
+            'name': '样本导演',
+            'jobs': [
+              {'job': 'Director'}
+            ]
+          }
+        ]
+      },
+      'external_ids': {'imdb_id': 'tt123'},
+    });
+    final record = await TmdbMetadataProvider(transport)
+        .get(const ExternalRef('tmdb', 'tv', '9001'));
+    expect(record.details['genres'], ['动画']);
+    expect(record.details['runtimeMs'], 1440000);
+    expect(((record.details['credits'] as Map)['cast'] as List).single['role'],
+        '主角');
+    expect(record.details['directors'], ['样本导演']);
+    expect(MetadataRecord.fromJson(record.toJson()).details, record.details);
+    expect((transport.requests.last['query'] as Map)['append_to_response'],
+        contains('aggregate_credits'));
+    final bgm = await BangumiMetadataProvider(FixtureTransport('bangumi'))
+        .get(const ExternalRef('bangumi', 'subject', '8001'));
+    expect((bgm.details['staff'] as List).single['name'], '样本监督');
+    expect(
+        ((bgm.details['characters'] as List).single['actors'] as List)
+            .single['name'],
+        '样本声优');
+  });
+
+  test('public Bangumi credit arrays are read without authentication',
+      () async {
+    final client = MockClient((request) async {
+      expect(request.headers.containsKey('authorization'), false);
+      return http.Response('[{"id":1,"name":"Staff"}]', 200);
+    });
+    final transport = HttpMetadataTransport(
+        provider: 'bangumi',
+        baseUri: Uri.parse('https://example.invalid'),
+        client: client,
+        interval: Duration.zero);
+    expect((await transport.request('/v0/subjects/8001/persons'))['data'],
+        hasLength(1));
+    client.close();
+  });
   test(
       'TMDB stable object IDs keep route numbers separately and retain language and images',
       () async {
@@ -86,9 +157,19 @@ void main() {
     transport.responses['/3/search/multi'] = {
       'total_results': 3,
       'results': [
-        {'id': 133701, 'media_type': 'movie', 'title': '钢铁之泪', 'release_date': '2012-09-26'},
+        {
+          'id': 133701,
+          'media_type': 'movie',
+          'title': '钢铁之泪',
+          'release_date': '2012-09-26'
+        },
         {'id': 7, 'media_type': 'person', 'name': 'Someone'},
-        {'id': 296286, 'media_type': 'tv', 'name': '躲在超市后门抽烟的两人', 'first_air_date': '2026-10-04'},
+        {
+          'id': 296286,
+          'media_type': 'tv',
+          'name': '躲在超市后门抽烟的两人',
+          'first_air_date': '2026-10-04'
+        },
       ]
     };
     final provider = TmdbMetadataProvider(transport);

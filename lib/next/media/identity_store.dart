@@ -1004,6 +1004,8 @@ final class IdentityStore {
       }
     }
     final ratings = <JsonMap>[];
+    final sources = <JsonMap>[];
+    final seenSources = <String>{};
     final seenRatings = <String>{}, seenSubmitted = <String>{};
     for (final row in rows) {
       final record = decodeMediaJson(row['fields']);
@@ -1014,12 +1016,25 @@ final class IdentityStore {
                 'originalTitle',
                 'overview',
                 'imageUrl',
-                'year'
+                'year',
+                'rating',
+                'episodeCount',
+                'number',
+                'season',
               ])
-                key: record[key]
+                key: record[key],
+              ...Map<String, Object?>.from(record['details'] as Map? ?? const {}),
             }
           : Map<String, Object?>.from(record['metadata'] as Map);
       final sourceKey = '${row['object_id']}/${row['language']}';
+      if (seenSources.add(sourceKey)) {
+        sources.add({
+          'provider': row['provider'], 'objectType': row['object_type'],
+          'externalId': row['external_id'], 'scope': row['object_scope'],
+          'snapshotId': row['id'], 'language': row['language'],
+          'fetchedAt': row['fetched_at'], 'fields': values,
+        });
+      }
       if (record['source'] == 'submitted_snapshot' &&
           !seenSubmitted.add(sourceKey)) {
         continue;
@@ -1048,12 +1063,32 @@ final class IdentityStore {
             _ => 2,
           };
         }
+        final empty = values[field] is List && (values[field] as List).isEmpty ||
+            values[field] is Map && (values[field] as Map).isEmpty;
+        if (empty) continue;
+        final oldSource = provenance[field] as Map?;
+        int providerRank(Object? provider) {
+          final order = field == 'title' || field == 'infobox' || field == 'tags'
+              ? const ['bangumi', 'tmdb', 'dandanplay']
+              : const ['tmdb', 'bangumi', 'dandanplay'];
+          final rank = order.indexOf(provider as String? ?? '');
+          return rank < 0 ? order.length : rank;
+        }
+        final languageField = field == 'title' || field == 'overview';
+        final providerPolicy = oldSource?['source'] != 'submitted_snapshot' && record['source'] != 'submitted_snapshot';
+        final sameLanguage = !languageField || languageRank(row['language'], values[field]) ==
+            languageRank(oldSource?['language'], fields[field]);
+        final moreCompleteOverview = field == 'overview' && providerPolicy && oldSource?['provider'] != row['provider'] && sameLanguage &&
+            values[field] is String && fields[field] is String &&
+            (values[field] as String).trim().length > (fields[field] as String).trim().length;
+        final preferredProvider = providerPolicy && sameLanguage && field != 'overview' &&
+            providerRank(row['provider']) < providerRank(oldSource?['provider']);
         final preferChinese = (field == 'title' || field == 'overview') &&
             fields.containsKey(field) && languageRank(row['language'], values[field]) <
                 languageRank((provenance[field] as Map)['language'], fields[field]);
         if (values[field] != null &&
             values[field] != '' &&
-            (!fields.containsKey(field) || preferChinese || (provenance[field] as Map?)?['source'] == 'local_catalog')) {
+            (!fields.containsKey(field) || preferChinese || preferredProvider || moreCompleteOverview || (provenance[field] as Map?)?['source'] == 'local_catalog')) {
           fields[field] = values[field];
           provenance[field] = {
             'provider': row['provider'],
@@ -1093,7 +1128,7 @@ final class IdentityStore {
         'mode': row['mode']
       };
     }
-    return {'fields': fields, 'provenance': provenance, 'ratings': ratings};
+    return {'fields': fields, 'provenance': provenance, 'ratings': ratings, 'sources': sources};
   }
 
   Future<void> overrideField(

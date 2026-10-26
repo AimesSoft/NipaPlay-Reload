@@ -236,6 +236,7 @@ final class MediaService {
         'modifiedAt': after.modified.toUtc().toIso8601String(),
         'headMd5': md5.convert(bytes).toString(),
         'durationMs': info['durationMs'],
+        if (info.containsKey('technical')) 'technical': info['technical'],
         if (info.containsKey('subtitles')) 'subtitles': info['subtitles'],
       };
     } on FileSystemException catch (error) {
@@ -401,6 +402,7 @@ final class MediaService {
       'path': path,
       'size': probe['size'],
       'durationMs': probe['durationMs'],
+      'technical': probe['technical'],
       'headMd5': probe['headMd5'],
       'modifiedAt': probe['modifiedAt'],
       'bindings': [

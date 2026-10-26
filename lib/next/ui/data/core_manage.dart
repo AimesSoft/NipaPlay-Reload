@@ -244,6 +244,7 @@ final class CoreWorkManage implements NextWorkManage {
     return UiManagedWork(
       work: work,
       kind: kind,
+      metadata: Map<String, Object?>.from(facts['metadata'] as Map? ?? const {}),
       match: provider == null
           ? null
           : UiMatch(
@@ -934,7 +935,7 @@ final class CoreWorkManage implements NextWorkManage {
     if (duration != null && (video['durationMs'] as num? ?? 0) <= 0) {
       video['durationMs'] = duration.inMilliseconds;
     }
-    await _callOn(owner, 'danmaku.attach', {
+    await _callOn(owner, 'danmaku.prepare', {
       'video': video,
       'reason': 'Viewer added comments in the episode sheet.',
       'requestId': _id('gui-attach'),

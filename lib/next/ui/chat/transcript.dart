@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/scheduler.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_markdown/flutter_markdown.dart';
 
@@ -81,7 +82,6 @@ class _ChatTranscriptState extends State<ChatTranscript> {
 
   void _onScroll() {
     final bottom = _atBottom;
-    _pinned = bottom;
     final away = !bottom &&
         _scroll.position.maxScrollExtent - _scroll.position.pixels > 160;
     if (away != _away) setState(() => _away = away);
@@ -101,15 +101,13 @@ class _ChatTranscriptState extends State<ChatTranscript> {
     SchedulerBinding.instance.ensureVisualUpdate();
   }
 
-  /// Content grew or shrank: still at the bottom if you were; otherwise
-  /// the way down shows once there is a way down.
-  bool _onMetrics(ScrollMetricsNotification n) {
-    if (_pinned) {
-      _jumpSoon();
-    } else {
-      SchedulerBinding.instance.addPostFrameCallback((_) {
-        if (mounted && _scroll.hasClients) _onScroll();
-      });
+  bool _onScrollNotification(ScrollNotification n) {
+    if (n.depth != 0 || n.metrics.axis != Axis.vertical) return false;
+    if (n is ScrollStartNotification && n.dragDetails != null ||
+        n is UserScrollNotification && n.direction != ScrollDirection.idle) {
+      _pinned = false;
+    } else if (n is ScrollEndNotification) {
+      _pinned = _atBottom;
     }
     return false;
   }
@@ -163,8 +161,8 @@ class _ChatTranscriptState extends State<ChatTranscript> {
       hold: _hold,
       child: Stack(children: [
         Positioned.fill(
-          child: NotificationListener<ScrollMetricsNotification>(
-            onNotification: _onMetrics,
+          child: NotificationListener<ScrollNotification>(
+            onNotification: _onScrollNotification,
             // Words fade out under the title rather than being cut.
             child: ShaderMask(
               blendMode: BlendMode.dstIn,
@@ -174,20 +172,30 @@ class _ChatTranscriptState extends State<ChatTranscript> {
                 colors: const [Color(0x00000000), Color(0xFF000000)],
                 stops: [0, (18 / rect.height).clamp(0.0, 1.0)],
               ).createShader(rect),
-              child: SingleChildScrollView(
+              child: ListView.builder(
                 controller: _scroll,
+                physics: _TranscriptPhysics(
+                  follow: () => _pinned,
+                  parent:
+                      ScrollConfiguration.of(context).getScrollPhysics(context),
+                ),
                 padding: widget.padding,
-                child: Center(
-                  child: ConstrainedBox(
-                    constraints: BoxConstraints(maxWidth: widget.columnWidth),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                        for (final (i, child) in children.indexed) ...[
-                          if (i > 0) const SizedBox(height: 26),
-                          child,
-                        ],
-                      ],
+                itemCount: children.length,
+                findChildIndexCallback: (key) {
+                  final index = children.indexWhere((child) =>
+                      child.key == (key is ValueKey<Key> ? key.value : key));
+                  return index < 0 ? null : index;
+                },
+                itemBuilder: (context, index) => Padding(
+                  key: children[index].key == null
+                      ? null
+                      : ValueKey<Key>(children[index].key!),
+                  padding: EdgeInsets.only(top: index == 0 ? 0 : 26),
+                  child: Center(
+                    child: ConstrainedBox(
+                      constraints: BoxConstraints(maxWidth: widget.columnWidth),
+                      child: SizedBox(
+                          width: double.infinity, child: children[index]),
                     ),
                   ),
                 ),
@@ -211,6 +219,38 @@ class _ChatTranscriptState extends State<ChatTranscript> {
           ),
         ),
       ]),
+    );
+  }
+}
+
+/// Follow a growing reply during layout, without cancelling a drag, inertia,
+/// or the platform's overscroll spring with a post-frame jumpTo.
+class _TranscriptPhysics extends ScrollPhysics {
+  const _TranscriptPhysics({required this.follow, super.parent});
+  final bool Function() follow;
+
+  @override
+  _TranscriptPhysics applyTo(ScrollPhysics? ancestor) =>
+      _TranscriptPhysics(follow: follow, parent: buildParent(ancestor));
+
+  @override
+  double adjustPositionForNewDimensions({
+    required ScrollMetrics oldPosition,
+    required ScrollMetrics newPosition,
+    required bool isScrolling,
+    required double velocity,
+  }) {
+    if (follow() &&
+        !isScrolling &&
+        !oldPosition.outOfRange &&
+        newPosition.maxScrollExtent != oldPosition.maxScrollExtent) {
+      return newPosition.maxScrollExtent;
+    }
+    return super.adjustPositionForNewDimensions(
+      oldPosition: oldPosition,
+      newPosition: newPosition,
+      isScrolling: isScrolling,
+      velocity: velocity,
     );
   }
 }
@@ -556,6 +596,17 @@ class _Steps extends StatelessWidget {
         ),
       ]),
     );
+    Widget stepAt(int i) {
+      final step = group.steps[i];
+      return switch (step) {
+        ThoughtStep() => _Thought(step: step),
+        CommandStep() => _Command(key: ObjectKey(step), step: step),
+        ToolStep() =>
+          Text(step.label, style: NextText.sans(12.5, color: NextColors.p2)),
+        HelperStep() => _Helper(step: step),
+      };
+    }
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       mainAxisSize: MainAxisSize.min,
@@ -568,22 +619,28 @@ class _Steps extends StatelessWidget {
             decoration: const BoxDecoration(
                 border: Border(
                     left: BorderSide(color: NextColors.line2, width: 1.5))),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                for (final (i, step) in group.steps.indexed) ...[
-                  if (i > 0) const SizedBox(height: 10),
-                  switch (step) {
-                    ThoughtStep() => _Thought(step: step),
-                    CommandStep() => _Command(key: ObjectKey(step), step: step),
-                    ToolStep() => Text(step.label,
-                        style: NextText.sans(12.5, color: NextColors.p2)),
-                    HelperStep() => _Helper(step: step),
-                  },
-                ],
-              ],
-            ),
+            child: group.steps.length > 10
+                ? SizedBox(
+                    height: (MediaQuery.sizeOf(context).height * 0.6)
+                        .clamp(160.0, 480.0),
+                    child: ListView.separated(
+                      primary: false,
+                      itemCount: group.steps.length,
+                      itemBuilder: (context, index) => stepAt(index),
+                      separatorBuilder: (context, index) =>
+                          const SizedBox(height: 10),
+                    ),
+                  )
+                : Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      for (var i = 0; i < group.steps.length; i++) ...[
+                        if (i > 0) const SizedBox(height: 10),
+                        stepAt(i),
+                      ],
+                    ],
+                  ),
           ),
       ],
     );
@@ -806,6 +863,9 @@ class _ReplyTextState extends State<ReplyText>
   late final Ticker _ticker;
   double _shown = 0;
   Duration _last = Duration.zero;
+  String? _renderedText;
+  TextStyle? _renderedStyle;
+  Widget? _markdown;
 
   @override
   void initState() {
@@ -827,6 +887,9 @@ class _ReplyTextState extends State<ReplyText>
   }
 
   void _tick(Duration elapsed) {
+    // Markdown parsing/layout is expensive for long replies. Coalesce reveal
+    // updates instead of parsing the entire reply on every display frame.
+    if (elapsed - _last < const Duration(milliseconds: 80)) return;
     final dt = (elapsed - _last).inMicroseconds / 1e6;
     _last = elapsed;
     final target = widget.text.length;
@@ -851,8 +914,11 @@ class _ReplyTextState extends State<ReplyText>
     final visible =
         widget.text.substring(0, _shown.floor().clamp(0, widget.text.length));
     final base = widget.style;
+    if (_renderedText == visible && _renderedStyle == base) return _markdown!;
+    _renderedText = visible;
+    _renderedStyle = base;
     final size = base.fontSize ?? 15;
-    return MarkdownBody(
+    return _markdown = MarkdownBody(
       data: visible,
       softLineBreak: true,
       fitContent: false,

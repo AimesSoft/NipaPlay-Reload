@@ -203,6 +203,17 @@ final class DanmakuService {
       bool refresh = false,
       required String requestId}) async {
     final src = source(video.sourceId);
+    if (bindingId != null) {
+      final binding = await store.binding(bindingId);
+      final bound = DanmakuVideo.fromJson(binding['video'] as JsonMap);
+      if (binding['status'] != 'accepted' ||
+          bound.sourceId != video.sourceId ||
+          bound.objectType != video.objectType ||
+          bound.videoId != video.videoId) {
+        throw const Failure(FailureCode.conflict,
+            'Fetch video must match an accepted source binding.');
+      }
+    }
     final end = endMs ?? video.durationMs;
     src.planFetch(video, startMs, end);
     final key = stableMediaId('danmaku-fetch', [
@@ -244,6 +255,14 @@ final class DanmakuService {
     } finally {
       done.complete();
     }
+  }
+
+  Future<JsonMap> bind(String entityId, DanmakuVideo video, String reason,
+      String? url, Invocation invocation) async {
+    // Validate identity/ranges, without probing a file or calling the source.
+    source(video.sourceId).planFetch(video, 0, video.durationMs);
+    final id = await store.attach(entityId, video, reason, url, invocation);
+    return {'bindingId': id, 'jobId': null, 'downloaded': false};
   }
 
   Future<JsonMap> attach(String entityId, DanmakuVideo video, String reason,
@@ -504,14 +523,23 @@ final class DanmakuService {
     final remote = await remoteTracks?.call(target.path);
     if (remote != null) {
       if (player.target?.generation != target.generation) return;
-      final ids = remote.map((t) => (t['binding'] as JsonMap)['id'] as String).toSet();
+      final ids =
+          remote.map((t) => (t['binding'] as JsonMap)['id'] as String).toSet();
       for (final id in player.managedTracks.difference(ids)) player.remove(id);
       for (final track in remote) {
         final binding = track['binding'] as JsonMap;
         final loaded = player.loaded(binding['id'] as String);
-        if (loaded?['revision'] == binding['revision'] && loaded?['cacheRevision'] == binding['cache_revision']) continue;
-        player.install(target, binding, [for (final e in (track['entries'] as List).cast<JsonMap>()) DanmakuEntry.fromJson(e)],
-          startMs: track['startMs'] as int, endMs: track['endMs'] as int?);
+        if (loaded?['revision'] == binding['revision'] &&
+            loaded?['cacheRevision'] == binding['cache_revision']) continue;
+        player.install(
+            target,
+            binding,
+            [
+              for (final e in (track['entries'] as List).cast<JsonMap>())
+                DanmakuEntry.fromJson(e)
+            ],
+            startMs: track['startMs'] as int,
+            endMs: track['endMs'] as int?);
       }
       return;
     }
@@ -538,12 +566,14 @@ final class DanmakuService {
                 sourceId: 'dandanplay',
                 videoId: videoId,
                 title: videoId,
-                durationMs: target.durationMs, objectType: 'episode'),
+                durationMs: target.durationMs,
+                objectType: 'episode'),
             [
               for (var i = 0; i < rows.length; i++)
                 classicDanmakuEntry(rows[i], i, 'dandanplay', videoId,
-                  platform: rows[i]['source'] as String? ?? 'unknown',
-                  originVideoId: rows[i]['platformVideoId'] as String?, preserveDeclaredOrigin: true)
+                    platform: rows[i]['source'] as String? ?? 'unknown',
+                    originVideoId: rows[i]['platformVideoId'] as String?,
+                    preserveDeclaredOrigin: true)
             ],
             target.path,
             'Acquired during playback',
@@ -686,9 +716,11 @@ final class DanmakuService {
       for (final b in rows)
         {
           'origin': b['provenance'] != null
-              ? b['bound_by'] == 'automatic' ? 'playback' : b['bound_by'] == 'agent'
-                  ? 'agent_import'
-                  : 'manual_import'
+              ? b['bound_by'] == 'automatic'
+                  ? 'playback'
+                  : b['bound_by'] == 'agent'
+                      ? 'agent_import'
+                      : 'manual_import'
               : (b['video'] as JsonMap)['sourceId'] == 'local'
                   ? 'manual_import'
                   : 'binding',
