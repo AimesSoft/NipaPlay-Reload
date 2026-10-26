@@ -10,6 +10,7 @@ import 'dart:async';
 import 'video_player_state.dart';
 import 'danmaku_dialog_manager.dart'; // 导入弹幕对话框管理器
 import 'package:nipaplay/services/desktop_player_window_service.dart';
+import 'package:nipaplay/utils/globals.dart' as globals;
 
 @visibleForTesting
 bool shouldBlockDesktopHotkeys({
@@ -77,6 +78,10 @@ class HotkeyService extends ChangeNotifier {
 
   // 存储注册的热键
   final List<HotKey> _registeredHotkeys = [];
+  late final _hotkeys = _InAppHotkeys(
+    blocked: _shouldBlockHotkey,
+    cancelPressed: _cancelForwardKey,
+  );
 
   // 快捷键配置
   final Map<String, String> _shortcuts = {};
@@ -139,7 +144,7 @@ class HotkeyService extends ChangeNotifier {
     }
 
     // 初始化hotkey_manager，但不注册任何热键
-    await hotKeyManager.unregisterAll();
+    await _hotkeys.unregisterAll();
 
     // 加载快捷键配置
     await loadShortcuts();
@@ -169,7 +174,7 @@ class HotkeyService extends ChangeNotifier {
       _registeredHotkeys.clear();
       return;
     }
-    await hotKeyManager.unregisterAll();
+    await _hotkeys.unregisterAll();
     if (_registeredHotkeys.isEmpty) {
       //debugPrint('[HotkeyService] 没有已注册的热键需要注销');
       return;
@@ -232,7 +237,7 @@ class HotkeyService extends ChangeNotifier {
     }
     //debugPrint('[HotkeyService] 开始注册所有热键');
     // 先清除所有已注册的热键
-    await hotKeyManager.unregisterAll();
+    await _hotkeys.unregisterAll();
     _registeredHotkeys.clear();
 
     // 注册播放/暂停热键
@@ -326,7 +331,7 @@ class HotkeyService extends ChangeNotifier {
         scope: HotKeyScope.inapp,
       );
 
-      await hotKeyManager.register(
+      await _hotkeys.register(
         hotKey,
         keyDownHandler: (HotKey hotKey) {
           if (_shouldBlockHotkey()) {
@@ -349,11 +354,14 @@ class HotkeyService extends ChangeNotifier {
     if (focusedContext == null) {
       return false;
     }
-    return focusedContext.widget is EditableText;
+    return focusedContext.widget is EditableText ||
+        focusedContext.findAncestorStateOfType<EditableTextState>() != null;
   }
 
   bool _shouldBlockHotkey() {
-    if (_isLargeScreenModeActive) {
+    // Next owns its player's keyboard; the hidden Classic tree must not
+    // consume its letters or editing keys.
+    if (globals.nextShellHostsPlayer || _isLargeScreenModeActive) {
       return true;
     }
     final videoState = _getVideoPlayerState();
@@ -397,7 +405,7 @@ class HotkeyService extends ChangeNotifier {
         scope: HotKeyScope.inapp,
       );
 
-      await hotKeyManager.register(
+      await _hotkeys.register(
         hotKey,
         keyDownHandler: (HotKey hotKey) {
           ////debugPrint('[HotkeyService] ESC键被按下 - 退出全屏');
@@ -933,7 +941,7 @@ class HotkeyService extends ChangeNotifier {
         scope: HotKeyScope.inapp,
       );
 
-      await hotKeyManager.register(
+      await _hotkeys.register(
         hotKey,
         keyDownHandler: (HotKey hotKey) {
           if (_shouldBlockHotkey()) {
@@ -942,9 +950,6 @@ class HotkeyService extends ChangeNotifier {
           _handleForwardKeyDown();
         },
         keyUpHandler: (HotKey hotKey) {
-          if (_shouldBlockHotkey()) {
-            return;
-          }
           _handleForwardKeyUp();
         },
       );
@@ -967,7 +972,7 @@ class HotkeyService extends ChangeNotifier {
     // 启动长按检测计时器
     _longPressTimer =
         Timer(const Duration(milliseconds: _longPressThreshold), () {
-      if (_isForwardKeyPressed && !_isSpeedBoostActive) {
+      if (_isForwardKeyPressed && !_isSpeedBoostActive && !_shouldBlockHotkey()) {
         _startSpeedBoost();
       }
     });
@@ -994,6 +999,12 @@ class HotkeyService extends ChangeNotifier {
     }
     // 如果没有触发倍速（短按），执行快进
     _handleForward();
+  }
+
+  void _cancelForwardKey() {
+    _isForwardKeyPressed = false;
+    _longPressTimer?.cancel();
+    if (_isSpeedBoostActive) _stopSpeedBoost();
   }
 
   void _startSpeedBoost() {
@@ -1063,10 +1074,79 @@ class HotkeyService extends ChangeNotifier {
   Future<void> dispose() async {
     _longPressTimer?.cancel();
     if (_supportsHotkeys) {
-      await hotKeyManager.unregisterAll();
+      await _hotkeys.unregisterAll();
     }
     _registeredHotkeys.clear();
     super.dispose();
+  }
+}
+
+/// The plugin consumes a matching key even when its callback returns early.
+/// Check ownership before handling the event, so editors keep the key itself.
+class _InAppHotkeys {
+  _InAppHotkeys({required this.blocked, required this.cancelPressed});
+
+  final bool Function() blocked;
+  final VoidCallback cancelPressed;
+  final _handlers = <HotKey, ({HotKeyHandler? down, HotKeyHandler? up})>{};
+  final _pressed = <PhysicalKeyboardKey, List<HotKey>>{};
+  bool _listening = false;
+
+  Future<void> register(HotKey hotKey,
+      {HotKeyHandler? keyDownHandler, HotKeyHandler? keyUpHandler}) async {
+    _handlers[hotKey] = (down: keyDownHandler, up: keyUpHandler);
+    if (!_listening) {
+      HardwareKeyboard.instance.addHandler(_handle);
+      _listening = true;
+    }
+  }
+
+  Future<void> unregisterAll() async {
+    if (_listening) {
+      HardwareKeyboard.instance.removeHandler(_handle);
+      _listening = false;
+    }
+    _handlers.clear();
+    _pressed.clear();
+    cancelPressed();
+  }
+
+  bool _handle(KeyEvent event) {
+    if (blocked()) {
+      if (_pressed.isNotEmpty) {
+        _pressed.clear();
+        cancelPressed();
+      }
+      return false;
+    }
+    if (event is KeyUpEvent) {
+      final pressed = _pressed.remove(event.physicalKey);
+      if (pressed == null) return false;
+      for (final hotKey in pressed) {
+        _handlers[hotKey]?.up?.call(hotKey);
+      }
+      return true;
+    }
+    if (event is KeyRepeatEvent) {
+      return _pressed.containsKey(event.physicalKey);
+    }
+    if (event is! KeyDownEvent) return false;
+    final physical = HardwareKeyboard.instance.physicalKeysPressed;
+    final modifiers = HotKeyModifier.values
+        .where((m) => m.physicalKeys.any(physical.contains))
+        .toSet();
+    final matches = _handlers.keys.where((hotKey) {
+      final expected = hotKey.modifiers ?? const <HotKeyModifier>[];
+      return event.logicalKey == hotKey.logicalKey &&
+          modifiers.length == expected.length &&
+          modifiers.every(expected.contains);
+    }).toList();
+    if (matches.isEmpty) return false;
+    _pressed[event.physicalKey] = matches;
+    for (final hotKey in matches) {
+      _handlers[hotKey]?.down?.call(hotKey);
+    }
+    return true;
   }
 }
 
