@@ -1259,7 +1259,7 @@ final class FakeChatPort implements ChatPort {
     };
     // “慢慢来”: it starts thinking, then nothing more (“好像没有回应”).
     if (text.contains('慢慢')) {
-      _work(threadId, turn, const ['想想周末适合看什么，先看看片库'], 300);
+      _work(threadId, turn, const ['想想周末适合看什么，先看看媒体库'], 300);
       return response;
     }
     _play(threadId, turn, _scriptFor(text), 300);
@@ -1332,7 +1332,7 @@ final class FakeChatPort implements ChatPort {
     }
     const replies = [
       '这个我还没太明白。是想找点看的，还是想准备哪一部？',
-      '我先记下了。要不要我从片库里挑几部给你？',
+      '我先记下了。要不要我从媒体库里挑几部给你？',
       '能再多说一点吗？比如想看什么类型，或者哪一部。',
     ];
     return _Script([
@@ -1377,7 +1377,7 @@ final class FakeChatPort implements ChatPort {
       '一个视频文件，对一下它是哪部的哪一集',
       _Run(_call('media.hash.match', {'path': files.first}),
           _ok({'matched': true, 'title': '孤独摇滚！', 'episode': 9})),
-    ], '这是《孤独摇滚！》第 9 集，片库里已经有了，你看到还剩 4 分钟。');
+    ], '这是《孤独摇滚！》第 9 集，媒体库里已经有了，你看到还剩 4 分钟。');
   }
 
   /// Latest episode of the works that have one, and when it came.
@@ -1391,7 +1391,7 @@ final class FakeChatPort implements ChatPort {
     if (key == null) {
       return _Script(
           [
-            '看看片库里最近进来的新一集，再对一下在追的',
+            '看看媒体库里最近进来的新一集，再对一下在追的',
             _Run(_call('media.library.works', {'sort': 'updated', 'limit': 20}),
                 _ok({'total': 48, 'updated': 3})),
             _Run(_call('history.continue_watching', {'limit': 10}),
@@ -1400,7 +1400,7 @@ final class FakeChatPort implements ChatPort {
             _present(['episode', 'episode', 'episode']),
           ],
           '这几天有三部更新：《药屋少女的呢喃》第 32 集今天早上出的，你第 31 集还剩 9 分钟；'
-          '《迷宫饭》第 13 集是昨晚；【我推的孩子】第 15 集前天就有了。都在片库里。',
+          '《迷宫饭》第 13 集是昨晚；【我推的孩子】第 15 集前天就有了。都在媒体库里。',
           cards: () => [
                 for (final k in _latest.keys)
                   UiEpisodeCard(
@@ -1417,7 +1417,7 @@ final class FakeChatPort implements ChatPort {
         _Run(_call('media.library.work', {'title': title}),
             _ok({'title': title, 'episodes': count, 'updated': null})),
         _present(['work']),
-      ], '《$title》这阵子没有新的一集${count == null ? '' : '，片库里现有 $count 集'}。',
+      ], '《$title》这阵子没有新的一集${count == null ? '' : '，媒体库里现有 $count 集'}。',
           cards: () => [UiWorkCard(world.sample(key))]);
     }
     final (n, came) = latest;
@@ -1425,7 +1425,7 @@ final class FakeChatPort implements ChatPort {
     final left = p == null ? null : (24 * (1 - p)).round();
     return _Script(
         [
-          '看看《$title》最近一集是什么时候进片库的，再对一下看到哪了',
+          '看看《$title》最近一集是什么时候进媒体库的，再对一下看到哪了',
           _Run(_call('media.library.work', {'title': title}),
               _ok({'title': title, 'latest': n, 'added': came})),
           _Run(_call('history.read', {'title': title}),
@@ -1434,8 +1434,8 @@ final class FakeChatPort implements ChatPort {
           _present(['episode']),
         ],
         next >= n
-            ? '更新了，第 $n 集$came出的，已经在片库里，正好接着看。'
-            : '更新了，第 $n 集$came出的，已经在片库里。你第 $next 集'
+            ? '更新了，第 $n 集$came出的，已经在媒体库里，正好接着看。'
+            : '更新了，第 $n 集$came出的，已经在媒体库里。你第 $next 集'
                 '${left == null ? '还没看' : '还剩 $left 分钟'}，'
                 '${next == n - 1 ? '看完正好接上' : '中间还差 ${n - next} 集'}。',
         cards: () => [
@@ -1453,16 +1453,16 @@ final class FakeChatPort implements ChatPort {
     // Works the library does not have: cards by provider identity (found
     // works, their page offers to prepare them). 摇曳露营 is on the
     // workstation already, so its card is the library's.
-    if (_any(said, ['没看过', '片库里没有', '片库外', '没有的'])) {
+    if (_any(said, ['没看过', '媒体库里没有', '媒体库外', '没有的'])) {
       return _Script(
           [
-            '要片库外的，找轻松、一集二十分钟左右的',
+            '要媒体库外的，找轻松、一集二十分钟左右的',
             _Run(
                 _call('media.metadata.search',
                     {'provider': 'bangumi', 'query': '日常 喜剧'}),
                 _ok({'results': 20}),
                 ms: 900),
-            '去掉片库里有的，留三部',
+            '去掉媒体库里有的，留三部',
             _Run(
                 _call('ui.present', {
                   'cards': [
@@ -1484,7 +1484,7 @@ final class FakeChatPort implements ChatPort {
                 }),
                 _ok({'count': 1})),
           ],
-          '片库外挑了三部：《败犬女主太多了！》吵吵闹闹，很下饭；'
+          '媒体库外挑了三部：《败犬女主太多了！》吵吵闹闹，很下饭；'
           '《我心里危险的东西》很甜，不用动脑；《摇曳露营△》工作站上已经有了，现在就能看。'
           '前两部想看哪部，我去准备。',
           cards: () => [
@@ -1566,7 +1566,7 @@ final class FakeChatPort implements ChatPort {
     }
     if (_any(said, ['轻松', '下饭', '搞笑', '开心', '短', '来点'])) {
       return _Script([
-        '想要轻松的，看看片库和最近在看的，挑一集不长、不用动脑的',
+        '想要轻松的，看看媒体库和最近在看的，挑一集不长、不用动脑的',
         _Run(_call('media.library.works', {'genre': '喜剧', 'limit': 50}),
             _ok({'total': 12})),
         _Run(_call('history.continue_watching', {'limit': 10}),
@@ -1576,7 +1576,7 @@ final class FakeChatPort implements ChatPort {
     }
     return _Script(
         [
-          '没说想看什么，先看看在追的，再从片库里挑一部换换口味',
+          '没说想看什么，先看看在追的，再从媒体库里挑一部换换口味',
           _Run(_call('history.continue_watching', {'limit': 10}),
               _ok({'items': 5})),
           _Run(_call('media.library.works', {'unwatched': true, 'limit': 30}),

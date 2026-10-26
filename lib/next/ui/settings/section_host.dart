@@ -1335,7 +1335,7 @@ class NipaSectionState extends State<NipaSection> {
       if (setup?.runtime != UiAgentRuntimeKind.dsh && runtime != null)
         _runtimeCard(runtime),
       if (files != null)
-        SettingsCard(title: 'Nipa 记得的事', children: [
+        SettingsCard(title: '梨花记得的事', children: [
           if (files.isEmpty) const SettingsRow(title: '还没有记下什么', dim: true),
           for (final f in files)
             SettingsRow(
@@ -1363,7 +1363,7 @@ class NipaSectionState extends State<NipaSection> {
             ),
         ]),
       if (changed.isNotEmpty)
-        SettingsCard(title: 'Nipa 改过的设置', children: [
+        SettingsCard(title: '梨花改过的设置', children: [
           for (final s in changed)
             SettingsRow(
               title: SettingWords.title(s),

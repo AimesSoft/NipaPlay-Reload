@@ -779,7 +779,7 @@ class WorkManageSheetState extends State<WorkManageSheet>
                     ? const NextIcon(NextGlyph.check,
                         size: 16, color: NextColors.accent)
                     : c.elsewhere
-                        ? const TagChip('已在片库')
+                        ? const TagChip('已在媒体库')
                         : const NextIcon(NextGlyph.chevronRight,
                             size: 15, color: NextColors.p3),
                 onTap: () => _pick(c),

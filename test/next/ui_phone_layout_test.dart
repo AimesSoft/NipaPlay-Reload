@@ -34,7 +34,7 @@ void main() {
     await pumpPlayer(tester, size: const Size(430, 932));
     await tester.pump(const Duration(milliseconds: 400));
     expect(find.byType(NextTabBar), findsOneWidget);
-    for (final label in ['首页', '发现', '片库', '动态']) {
+    for (final label in ['首页', '发现', '媒体库', '动态']) {
       expect(
           find.descendant(
               of: find.byType(NextTabBar), matching: button(label)),
@@ -42,7 +42,7 @@ void main() {
           reason: label);
     }
     // What is always at hand stays on the bar: search, the menu, Nipa.
-    for (final label in ['搜索', '菜单', 'Nipa']) {
+    for (final label in ['搜索', '菜单', '梨花']) {
       expect(button(label).hitTestable(), findsOneWidget, reason: label);
     }
     await tester.pumpWidget(const SizedBox.shrink());

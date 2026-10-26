@@ -19,7 +19,7 @@ import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
-  test('a turn carries the Nipa base instead of the coding-agent base',
+  test('a turn carries the 梨花 base instead of the coding-agent base',
       () async {
     final previousOverrides = HttpOverrides.current;
     HttpOverrides.global = null;
@@ -98,7 +98,7 @@ void main() {
     await answered.future.timeout(const Duration(minutes: 1));
 
     final instructions = requests.first['instructions'] as String;
-    expect(instructions, startsWith('You are Nipa, the assistant inside NipaPlay'));
+    expect(instructions, startsWith('You are 梨花, the assistant inside NipaPlay'));
     expect(instructions, isNot(contains('You are a coding agent')));
     expect(jsonEncode(requests.first['input']),
         contains('The harness speaks here.'));

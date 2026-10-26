@@ -128,7 +128,7 @@ class NipaSetupChip extends StatelessWidget {
               padding: padding,
               child: Pressable(
               onTap: () => shell.openSettings(section: SettingsSection.nipa),
-              semanticLabel: '设置 Nipa',
+              semanticLabel: '设置梨花',
               builder: (context, hovered) => AnimatedContainer(
                 duration: const Duration(milliseconds: 160),
                 height: 32,
@@ -145,12 +145,12 @@ class NipaSetupChip extends StatelessWidget {
                   const SizedBox(width: 8),
                   Text(
                       shell.nipaSetup.picksDevice
-                          ? shell.nipaSetup.note ?? '选择 Nipa'
+                          ? shell.nipaSetup.note ?? '选择梨花'
                           : shell.nipaSetup.preparing
                           ? shell.nipaSetup.progress == null
-                              ? '正在准备 Nipa'
-                              : '正在准备 Nipa · ${(shell.nipaSetup.progress! * 100).floor()}%'
-                          : '设置 Nipa',
+                              ? '正在准备梨花'
+                              : '正在准备梨花 · ${(shell.nipaSetup.progress! * 100).floor()}%'
+                          : '设置梨花',
                       style: NextText.sans(12.5,
                           color: hovered ? NextColors.paper : NextColors.p2)),
                 ]),

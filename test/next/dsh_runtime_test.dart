@@ -49,7 +49,7 @@ trust_level = "trusted"
     final patch = jsonEncode(dshPatch(
         route: route,
         plugins: Directory('/plugins'),
-        personaPrefix: 'You are Nipa.',
+        personaPrefix: 'You are 梨花.',
         personaSuffix: '# In NipaPlay',
         harness: '/harness',
         version: 'x'));
@@ -275,9 +275,9 @@ trust_level = "trusted"
       addTearDown(lab.close);
     }
 
-    test('a turn runs as Nipa with AGENTS.md and memory, history and names readable',
+    test('a turn runs as 梨花 with AGENTS.md and memory, history and names readable',
         () async {
-      await open([_Rule(when: ['你好'], reasoning: '想一想', text: '你好，我是 Nipa。')]);
+      await open([_Rule(when: ['你好'], reasoning: '想一想', text: '你好，我是梨花。')]);
       final host = await lab.start();
       expect(host.launchEnvironment['NIPAPLAY_AGENT_RUNTIME'], 'dsh');
       expect(jsonEncode(host.launchEnvironment), isNot(contains(_key)));
@@ -296,7 +296,7 @@ trust_level = "trusted"
       final input = request['input'] as List;
       final system = (input.first as Map)['content'] as String;
       expect((input.first as Map)['role'], 'system');
-      expect(system, contains('You are Nipa, the assistant inside NipaPlay'));
+      expect(system, contains('You are 梨花, the assistant inside NipaPlay'));
       expect(system, isNot(contains('coding agent')));
       final context = jsonEncode(input.skip(1).toList());
       expect(context, contains('AGENTS_FIXTURE_MARKER'));
@@ -321,7 +321,7 @@ trust_level = "trusted"
       expect(turn['id'], turnId);
       expect([for (final item in turn['items'] as List) item['type']],
           ['userMessage', 'reasoning', 'agentMessage']);
-      expect((turn['items'] as List).last['text'], '你好，我是 Nipa。');
+      expect((turn['items'] as List).last['text'], '你好，我是梨花。');
       final sessions = await host.listSessions();
       expect((sessions['data'] as List).single['name'], 'NipaPlay 主会话');
       expect((sessions['data'] as List).single['preview'], '你好');
@@ -400,7 +400,7 @@ trust_level = "trusted"
       expect(jsonEncode(fake.requests.last['input']), contains('ACTIVITY_MARKER_C'));
     });
 
-    test("the model gets DSH's own prompt and tool descriptions, with Nipa as its persona", () async {
+    test("the model gets DSH's own prompt and tool descriptions, with 梨花 as its persona", () async {
       await open([_Rule(when: ['你好'], text: '好。')]);
       final host = await lab.start();
       await host.getMainSession();

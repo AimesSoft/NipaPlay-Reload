@@ -732,7 +732,7 @@ class _Nipa extends StatelessWidget {
           final unset = shell.nipaSetup.needsModel;
           return Pressable(
             onTap: shell.toggleChat,
-            semanticLabel: 'Nipa',
+            semanticLabel: '梨花',
             pressScale: 0.94,
             builder: (context, hovered) => Stack(
               clipBehavior: Clip.none,

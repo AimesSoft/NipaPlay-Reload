@@ -148,7 +148,7 @@ class NipaChat extends ChangeNotifier {
 
   String _title(Object? preview, [Object? name]) {
     final text = preview is String ? preview.trim() : '';
-    if (ChatContext.isFollowup(text)) return 'Nipa 后来说的';
+    if (ChatContext.isFollowup(text)) return '梨花后来说的';
     final said = ChatContext.strip(text);
     final title = said.isEmpty ? '新的对话' : Words.firstSentence(said);
     // A conversation another device began says which: by the name it was
@@ -167,11 +167,11 @@ class NipaChat extends ChangeNotifier {
 
   /// The title of the session shown.
   String get title {
-    if (onMain) return 'Nipa';
+    if (onMain) return '梨花';
     final id = thread;
     if (id == null) return '新的对话';
     if (_helpers[id] case final helper?) return helper;
-    return sessions.where((s) => s.id == id).firstOrNull?.title ?? 'Nipa';
+    return sessions.where((s) => s.id == id).firstOrNull?.title ?? '梨花';
   }
 
   void toggleMenu() {
@@ -450,7 +450,7 @@ class NipaChat extends ChangeNotifier {
 
   String get hint {
     if (question != null) return secretAsked ? '这里不输入密码' : '也可以直接说';
-    if (attachments.isNotEmpty) return '想让 Nipa 做什么？';
+    if (attachments.isNotEmpty) return '想让梨花做什么？';
     if (about != null) return '问问《${about!.title}》';
     if (running) return '补充，或者改主意';
     return turns.isEmpty ? '今天想看什么？' : '继续说…';
@@ -532,7 +532,7 @@ class NipaChat extends ChangeNotifier {
         debugPrint('[NextUi] unavailable reason failed: $error');
       }
       if (port.available) return _start(turn);
-      _fail(turn, why ?? 'Nipa 现在还不能开始对话。请打开“设置 Nipa”检查模型和运行环境。');
+      _fail(turn, why ?? '梨花现在还不能开始对话。请打开“设置梨花”检查模型和运行环境。');
       return;
     }
     final generation = _generation;
@@ -765,7 +765,7 @@ class NipaChat extends ChangeNotifier {
         return;
       case 'host/error':
         if (live case final turn? when !turn.queued) {
-          _fail(turn, 'Nipa 现在不在，过一会儿再试试。');
+          _fail(turn, '梨花现在不在，过一会儿再试试。');
         }
         return;
       case 'host/reasoning':

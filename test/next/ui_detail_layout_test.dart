@@ -118,7 +118,7 @@ void main() {
           artwork: const UiArtwork(tint: 0xff446688));
       final shell =
           await _open(tester, work, record: {'overview': _overview});
-      expect(find.text('让 Nipa 准备'), findsOneWidget);
+      expect(find.text('让梨花准备'), findsOneWidget);
       _expectClear(tester, label);
       await _close(tester, shell);
     });

@@ -215,7 +215,7 @@ class _LibraryPageState extends State<LibraryPage>
   void _askNipa() {
     final shell = _shell!;
     setState(() => _menu = _Menu.none);
-    final text = '帮我整理片库里的「${_source!.name}」：';
+    final text = '帮我整理媒体库里的「${_source!.name}」：';
     shell.askText.value = TextEditingValue(
         text: text, selection: TextSelection.collapsed(offset: text.length));
     shell.openChat();
@@ -314,7 +314,7 @@ class _LibraryPageState extends State<LibraryPage>
         CompositedTransformTarget(
           link: _sourceLink,
           child: SourceTitle(
-            name: _status?.label ?? _source?.name ?? '片库',
+            name: _status?.label ?? _source?.name ?? '媒体库',
             open: _menu == _Menu.sources,
             onTap: () => _toggle(_Menu.sources),
           ),

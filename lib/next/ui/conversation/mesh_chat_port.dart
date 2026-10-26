@@ -87,7 +87,7 @@ final class MeshChatPort implements ChatPort {
   }
 
   String _missing() =>
-      _peer == null ? '选一台设备的 Nipa。在设置的“Nipa”里选。' : '${_name()} 现在不在。';
+      _peer == null ? '选一台设备的梨花。在设置的“梨花”里选。' : '${_name()} 现在不在。';
 
   String _name() => peers.chosenName ?? '那台设备';
 
@@ -167,7 +167,7 @@ final class MeshChatPort implements ChatPort {
     if (reason == 'outcome_unknown') {
       return '${_name()} 没有回应。';
     }
-    return '${_name()} 上的 Nipa 现在不能用。';
+    return '${_name()} 上的梨花现在不能用。';
   }
 
   Future<JsonMap> _call(String method, JsonMap params) async {

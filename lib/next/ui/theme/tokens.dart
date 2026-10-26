@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart' show defaultTargetPlatform, TargetPlatform;
 import 'package:flutter/scheduler.dart';
 import 'package:flutter/widgets.dart';
 
@@ -129,8 +130,10 @@ abstract final class NextMotion {
 }
 
 abstract final class NextMetrics {
-  /// Left edge of content, leaving room for the window's traffic lights.
-  static const gutter = 96.0;
+  /// Left edge of content. Windows has its controls on the right, so it
+  /// uses the normal bar margin rather than reserving the traffic-light band.
+  static double get gutter =>
+      defaultTargetPlatform == TargetPlatform.windows ? chromeEdge : 96.0;
 
   /// The top bar. On macOS the window's title bar band has the same height,
   /// so the traffic lights and every item of the bar share its centre line.

@@ -12,7 +12,7 @@ enum SettingsSection {
   storage('存储'),
   devices('设备'),
   sync('同步'),
-  nipa('Nipa'),
+  nipa('梨花'),
   general('通用'),
   shortcuts('快捷键'),
   plugins('插件'),
@@ -350,7 +350,7 @@ abstract final class SettingWords {
     if (s.key.startsWith('shortcuts.')) {
       return _shortcuts[s.key.substring('shortcuts.'.length)] ?? s.title;
     }
-    if (s.key == 'next.harnessPath') return 'Nipa 的文件夹';
+    if (s.key == 'next.harnessPath') return '梨花的文件夹';
     return s.title;
   }
 }

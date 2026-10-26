@@ -207,30 +207,30 @@ final class ChatHostPort implements ChatPort {
 String chatUnavailableReason(String? problem) {
   final text = problem?.trim() ?? '';
   if (text.contains('正在准备') || text.contains('正在下载') || text.contains('正在解包')) {
-    return '正在准备 Nipa 的运行环境，请稍后再试。';
+    return '正在准备梨花的运行环境，请稍后再试。';
   }
   if (text.contains('运行环境') ||
       text.contains('DeepSeek Harness') ||
       text.contains('DSH')) {
-    return '还没有准备好 Nipa 的运行环境。请打开“设置 Nipa”安装运行环境。';
+    return '还没有准备好梨花的运行环境。请打开“设置梨花”安装运行环境。';
   }
   if (text.contains('密钥')) {
-    return '还没有设置 Nipa 的模型密钥。请打开“设置 Nipa”填写密钥。';
+    return '还没有设置梨花的模型密钥。请打开“设置梨花”填写密钥。';
   }
   if (text.contains('地址') ||
       text.contains('模型名') ||
       text.contains('模型') && !text.contains('模型服务') ||
       text.contains('Codex 配置') ||
       text.contains('接口')) {
-    return '还没有设置 Nipa 的模型。请打开“设置 Nipa”填写地址和模型名。';
+    return '还没有设置梨花的模型。请打开“设置梨花”填写地址和模型名。';
   }
   if (text.contains('模型服务') ||
       text.contains('服务') ||
       text.contains('断开') ||
       text.contains('启动')) {
-    return 'Nipa 的模型服务没有启动。请打开“设置 Nipa”检查模型设置。';
+    return '梨花的模型服务没有启动。请打开“设置梨花”检查模型设置。';
   }
-  return 'Nipa 现在还不能开始对话。请打开“设置 Nipa”检查模型和运行环境。';
+  return '梨花现在还不能开始对话。请打开“设置梨花”检查模型和运行环境。';
 }
 
 /// Reads the turn ID from a `turn/start` response.

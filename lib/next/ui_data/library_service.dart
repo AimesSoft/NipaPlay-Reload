@@ -898,10 +898,10 @@ final class LibraryDataService implements NextLibraryData, NextLibraryActions {
           }
           layout['categories'] = categories;
           sourceTitles.add(switch (operation) {
-            'put' => '已整理片库类别',
+            'put' => '已整理媒体库类别',
             'remove' => '已移除整理类别',
             'move' => '已调整整理类别顺序',
-            _ => '已调整片库显示'
+            _ => '已调整媒体库显示'
           });
           sourceEffects.add({'operation': operation, ...input});
         }

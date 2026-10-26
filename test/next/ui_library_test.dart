@@ -80,7 +80,7 @@ void main() {
       UiCategory(categoryId: 'a', title: '番剧', count: 1211),
     ]));
     expect(remove, findsNothing);
-    expect(find.text('让 Nipa 整理'), findsOneWidget);
+    expect(find.text('让梨花整理'), findsOneWidget);
   });
 
   testWidgets('a category dragged by its grip moves where it is dropped',

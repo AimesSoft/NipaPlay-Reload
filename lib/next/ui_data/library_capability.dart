@@ -72,7 +72,7 @@ final class _Action extends Action<_Json, _Json> {
   @override
   ActionSpec get spec => ActionSpec(
       id: 'ui.library.$op',
-      title: '片库 · $op',
+      title: '媒体库 · $op',
       description: switch (op) {
         'put' =>
           'Atomically replace categories in entries. Globally unique categoryId; replacement retains order. content kind=condition uses local filter (OR within arrays, AND across dimensions); manual uses ordered workIds; original references sourceId/parentId. Server works require accepted identity for conditions. Optional coverWorkIds (up to 3) and sort. Shows arrangement, retains origin/activity. Classification is requested by the user.',

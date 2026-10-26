@@ -77,10 +77,10 @@ extension LibraryArrivals on Followups {
             'automatic': 'library',
             'batchKey': batch,
             'state': 'ready',
-            'title': '新进片库的文件',
+            'title': '新进媒体库的文件',
             'instruction': target == null
-                ? '这些文件进了片库，不是由你在对话里发起的。事实见下。下一步由你决定。'
-                : '你发起的操作让这些文件进了片库。事实见下。下一步由你决定。',
+                ? '这些文件进了媒体库，不是由你在对话里发起的。事实见下。下一步由你决定。'
+                : '你发起的操作让这些文件进了媒体库。事实见下。下一步由你决定。',
             'condition': {'kind': 'library.facts'},
             'libraryObjects': [path, if (fileId != null) fileId],
             'firstAt': now.toIso8601String(),
@@ -199,7 +199,7 @@ extension LibraryArrivals on Followups {
     try {
       await dispatch(
           jobId: jobId,
-          title: '新进片库的 ${facts.length} 个文件',
+          title: '新进媒体库的 ${facts.length} 个文件',
           instruction:
               '${row['instruction']}\n触发事实：${jsonEncode(row['trigger'])}');
     } on Failure catch (error) {
@@ -253,7 +253,7 @@ extension LibraryArrivals on Followups {
       for (final fact in left)
         if (fact['fileId'] != null) fact['fileId'] as String
     ]);
-    row['title'] = '新进片库的 ${left.length} 个文件';
+    row['title'] = '新进媒体库的 ${left.length} 个文件';
     row['frozen'] = true;
     await _save(row, 'ready', 'frozen');
     return true;

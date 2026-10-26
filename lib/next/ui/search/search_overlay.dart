@@ -202,7 +202,7 @@ class _Panel extends StatelessWidget {
   final VoidCallback onSubmit;
 
   static const _titles = {
-    SearchGroupKind.library: '片库',
+    SearchGroupKind.library: '媒体库',
     SearchGroupKind.online: '在线',
     SearchGroupKind.sources: '来源',
   };
@@ -517,7 +517,7 @@ class _RowState extends State<_Row> {
               name,
           ].join(' '),
         SourceEntry(:final hit) => '${hit.title} ${hit.source.name}',
-        NipaEntry() => '让 Nipa 找',
+        NipaEntry() => '让梨花找',
       };
 
   @override
@@ -731,7 +731,7 @@ class _RowState extends State<_Row> {
             child: Text.rich(
               TextSpan(children: [
                 TextSpan(
-                    text: '让 Nipa 找',
+                    text: '让梨花找',
                     style: NextText.sans(14,
                         color: on ? NextColors.paper : NextColors.p2)),
                 TextSpan(

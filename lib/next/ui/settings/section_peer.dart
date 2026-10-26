@@ -41,7 +41,7 @@ class _NipaPeerSectionState extends State<NipaPeerSection> {
 
   String _state(NipaPeer peer) {
     if (!peer.online) return '不在线';
-    if (!peer.runs) return '没有运行 Nipa';
+    if (!peer.runs) return '没有运行梨花';
     return peer.busy ? '忙' : '空闲';
   }
 
@@ -52,7 +52,7 @@ class _NipaPeerSectionState extends State<NipaPeerSection> {
     if (list.isEmpty) {
       return SettingsCard(children: [
         SettingsRow(
-          title: _asked ? '没有设备在运行 Nipa' : '正在查找',
+          title: _asked ? '没有设备在运行梨花' : '正在查找',
         ),
       ]);
     }

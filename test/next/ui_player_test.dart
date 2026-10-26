@@ -72,7 +72,7 @@ void main() {
       '字幕',
       '剧集',
       '全屏',
-      'Nipa'
+      '梨花'
     ]) {
       expect(button(label).hitTestable(), findsOneWidget, reason: label);
     }
@@ -197,12 +197,12 @@ void main() {
     expect(shell.section, NextSection.activity);
   });
 
-  testWidgets('Nipa over the video: a click or ⌘K; Classic\'s hotkeys rest',
+  testWidgets('梨花 over the video: a click or ⌘K; Classic\'s hotkeys rest',
       (tester) async {
     final p = await pumpPlayer(tester, status: PlayerStatus.playing);
     final shell =
         NextShellScope.of(tester.element(find.byType(NextPlayerLayer)));
-    await tester.tap(button('Nipa').hitTestable());
+    await tester.tap(button('梨花').hitTestable());
     await tester.pump(const Duration(milliseconds: 600));
     expect(shell.panelOpen.value, isTrue);
     expect(find.byType(ChatPanelLayer), findsOneWidget);
@@ -249,7 +249,7 @@ void main() {
     Rect sheet() => tester.getRect(find.byType(ChatFrame));
     expect(picture(), const Rect.fromLTWH(0, 0, 1440, 900));
 
-    await tester.tap(button('Nipa').hitTestable());
+    await tester.tap(button('梨花').hitTestable());
     await tester.pump();
     // Frame by frame the picture's edge stays a margin left of the panel,
     // drawn smaller as one picture, never laid out again.
@@ -742,8 +742,8 @@ void main() {
   }
 
   testWidgets(
-      'a login Nipa asks for over the video: no window on the picture; its '
-      'card waits in the conversation, a note under Nipa opens it',
+      'a login 梨花 asks for over the video: no window on the picture; its '
+      'card waits in the conversation, a note under 梨花 opens it',
       (tester) async {
     final p = await pumpPlayer(tester, status: PlayerStatus.playing);
     final shell =
@@ -774,7 +774,7 @@ void main() {
     expect(button('登录 弹弹play').hitTestable(), findsOneWidget);
 
     // The conversation over the video has its card; the note gives way.
-    await tester.tap(button('Nipa').hitTestable());
+    await tester.tap(button('梨花').hitTestable());
     await panel(tester);
     expect(find.text('需要登录 弹弹play'), findsOneWidget);
     expect(find.text('打开登录窗口'), findsOneWidget);

@@ -891,7 +891,7 @@ class _Choices extends StatelessWidget {
               subtitle: Text([
                 if (c.originalTitle case final o? when o != c.title) o,
                 if (c.year case final y?) '$y',
-                if (c.inLibrary) '已在片库',
+                if (c.inLibrary) '已在媒体库',
               ].join(' · ')),
               trailing: pick.chosen == k ? const _Tick() : null,
               onTap: () => onPick(k),

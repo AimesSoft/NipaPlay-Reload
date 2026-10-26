@@ -73,7 +73,7 @@ void main() {
     await tester.pumpWidget(row(const UiTask(
         taskId: 't2',
         type: 'media.scan',
-        title: '整理片库',
+        title: '整理媒体库',
         state: UiTaskState.running)));
     expect(mark(), findsNothing);
   });

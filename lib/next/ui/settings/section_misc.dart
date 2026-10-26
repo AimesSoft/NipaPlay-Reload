@@ -255,7 +255,7 @@ class ShortcutsSection extends StatelessWidget {
   final String? highlight;
 
   static const own = [
-    ('问 Nipa', '⌘ K'),
+    ('问梨花', '⌘ K'),
     ('设置', '⌘ ,'),
     ('返回', 'Esc'),
   ];

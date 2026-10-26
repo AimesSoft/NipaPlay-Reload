@@ -615,7 +615,7 @@ class _EmptyStart extends StatelessWidget {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('片库还是空的',
+            Text('媒体库还是空的',
                 style: NextText.sans(34, weight: FontWeight.w700)),
             const SizedBox(height: 22),
             Row(mainAxisSize: MainAxisSize.min, children: [

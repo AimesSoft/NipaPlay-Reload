@@ -59,7 +59,7 @@ class NextShellController extends ChangeNotifier {
           : switch (section) {
               NextSection.home => '首页',
               NextSection.discover => '发现',
-              NextSection.library => '片库',
+              NextSection.library => '媒体库',
               NextSection.activity => '动态',
             };
 

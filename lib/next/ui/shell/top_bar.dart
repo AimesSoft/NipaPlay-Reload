@@ -28,7 +28,7 @@ class NextTopBar extends StatelessWidget {
   static const _sections = [
     (NextSection.home, '首页'),
     (NextSection.discover, '发现'),
-    (NextSection.library, '片库'),
+    (NextSection.library, '媒体库'),
     (NextSection.activity, '动态'),
   ];
 
@@ -91,7 +91,7 @@ class NextTopBar extends StatelessWidget {
                   onLongPress: () => shell.togglePopover(NextPopover.nipa),
                   child: Pressable(
                     onTap: shell.toggleChat,
-                    semanticLabel: 'Nipa',
+                    semanticLabel: '梨花',
                     pressScale: 0.94,
                     builder: (context, hovered) => Stack(
                       clipBehavior: Clip.none,
@@ -300,12 +300,12 @@ class _NipaMenu extends StatelessWidget {
     return MenuPanel(children: [
       if (shell.nipaSetup.needsModel)
         MenuItem(
-          label: '设置 Nipa',
+          label: '设置梨花',
           trailing: const NipaSetupDot(),
           onTap: () => shell.openSettings(section: SettingsSection.nipa),
         ),
       MenuItem(
-        label: '问 Nipa',
+        label: '问梨花',
         trailing: keys ? const KeyHint('⌘ K') : null,
         onTap: shell.openChat,
       ),

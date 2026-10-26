@@ -281,7 +281,7 @@ class NipaMark extends StatelessWidget {
   @override
   Widget build(BuildContext context) => Pressable(
         onTap: onTap,
-        semanticLabel: 'Nipa 改过',
+        semanticLabel: '梨花改过',
         pressScale: 0.9,
         builder: (context, hovered) => AnimatedContainer(
           duration: const Duration(milliseconds: 160),
@@ -323,7 +323,7 @@ class NipaNote extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(at == null ? 'Nipa' : 'Nipa · ${whenText(at)}',
+                Text(at == null ? '梨花' : '梨花 · ${whenText(at)}',
                     style: NextText.sans(12, color: NextColors.p3)),
                 if (setting.reason case final reason?
                     when reason.trim().isNotEmpty)

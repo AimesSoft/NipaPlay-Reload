@@ -146,7 +146,7 @@ class _AskBarState extends State<AskBar> {
                 style: NextText.sans(15.5),
                 decoration: InputDecoration.collapsed(
                   hintText:
-                      widget.attachments.isEmpty ? widget.hint : '想让 Nipa 做什么？',
+                      widget.attachments.isEmpty ? widget.hint : '想让梨花做什么？',
                   hintStyle: NextText.sans(15.5, color: NextColors.p3),
                 ),
               ),

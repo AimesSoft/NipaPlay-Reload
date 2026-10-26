@@ -149,7 +149,7 @@ class _CategoryEditorState extends State<CategoryEditor> {
           color: NextColors.line,
         ),
       MenuItem(
-        label: '让 Nipa 整理',
+        label: '让梨花整理',
         onTap: widget.onAskNipa,
         trailing: const NipaAvatar(size: 20),
       ),

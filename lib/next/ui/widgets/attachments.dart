@@ -152,7 +152,7 @@ class DropGlow extends StatelessWidget {
       {super.key,
       required this.over,
       required this.radius,
-      this.label = '松开，交给 Nipa'});
+      this.label = '松开，交给梨花'});
   final bool over;
   final BorderRadius radius;
   final String label;

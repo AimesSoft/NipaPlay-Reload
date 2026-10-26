@@ -492,7 +492,7 @@ class _SettingsPageState extends State<SettingsPage> implements SettingsDebug {
         Positioned.fill(
           top: NextLayout.underBar(context),
           child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            const SizedBox(width: NextMetrics.gutter),
+            SizedBox(width: NextMetrics.gutter),
             SizedBox(
               width: 176,
               child: Padding(

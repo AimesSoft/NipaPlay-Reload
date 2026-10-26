@@ -1696,7 +1696,7 @@ final class FakeCalls {
       }),
       a('media.library.scan_classic', (input) {
         final id = 'fake-scan-${++_scans}';
-        world._tasks[id] = _FakeTask(id, '整理片库', const UiArtwork(), 0.05,
+        world._tasks[id] = _FakeTask(id, '整理媒体库', const UiArtwork(), 0.05,
             type: 'media.scan_classic');
         world._ticker ??=
             Timer.periodic(const Duration(seconds: 1), (_) => world._tick());

@@ -28,7 +28,7 @@ final class _MemoryAction extends Action<_Json, _Json> {
         title: 'Memory $verb',
         description: switch (verb) {
           'list' =>
-            'List Markdown files under harness memory/ with byte sizes and revisions for Nipa 记得的事.',
+            'List Markdown files under harness memory/ with byte sizes and revisions for 梨花记得的事.',
           'read' =>
             'Read a memory Markdown file. Preferences live in preferences.md, the one-line-per-topic index in MEMORY.md. Secrets are redacted.',
           'edit' =>

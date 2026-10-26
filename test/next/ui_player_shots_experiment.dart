@@ -269,7 +269,7 @@ void main() {
     await close(tester);
   }, skip: !shoot);
 
-  testWidgets('Nipa over the video', (tester) async {
+  testWidgets('梨花 over the video', (tester) async {
     await open(tester);
     final shell = NextShellScope.of(tester.element(find.byType(PlayerTimeline)));
     shell.openChat();

@@ -16,7 +16,7 @@ abstract final class ChatContext {
   /// [text] asked from [work]'s page: the agent gets the work along.
   static String about(String text, UiWork work) => Found.isFound(work)
       ? '$text\n\n$_mark 这句话是在《${work.title}》的页面上问的'
-          '（还不在片库里；${Found.describe(work)}）。'
+          '（还不在媒体库里；${Found.describe(work)}）。'
       : '$text\n\n$_mark 这句话是在《${work.title}》的页面上问的'
           '（作品 ID：${work.workId}）。';
 

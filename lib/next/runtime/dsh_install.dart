@@ -572,7 +572,7 @@ final class DshInstall {
   }
 
   Future<void> remove() async {
-    if (inUse()) throw StateError('请先结束当前 Nipa 会话');
+    if (inUse()) throw StateError('请先结束当前梨花会话');
     await cancel();
     if (await installed.exists()) await installed.delete(recursive: true);
     if (await _downloads.exists()) await _downloads.delete(recursive: true);

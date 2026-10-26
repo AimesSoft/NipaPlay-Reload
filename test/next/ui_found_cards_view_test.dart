@@ -65,7 +65,7 @@ void main() {
     expect(find.text('败犬女主太多了！'), findsOneWidget);
     expect(find.text('轻松，一集二十分钟'), findsOneWidget);
     // No words about where they come from.
-    for (final word in ['TMDB', 'Bangumi', '片库', '1001', '3003']) {
+    for (final word in ['TMDB', 'Bangumi', '媒体库', '1001', '3003']) {
       expect(find.textContaining(word, findRichText: true), findsNothing);
     }
     // Only what the library can play offers to play.
@@ -79,7 +79,7 @@ void main() {
     final page = tester.widget<WorkDetailPage>(find.byType(WorkDetailPage));
     expect(page.work.workId, 'found:tmdb:tv:1001');
     expect(discover.asked, ['found:tmdb:tv:1001']);
-    expect(find.text('让 Nipa 准备'), findsOneWidget);
+    expect(find.text('让梨花准备'), findsOneWidget);
     expect(find.textContaining('长安城的一天'), findsOneWidget);
     expect(played, isEmpty);
 
@@ -92,7 +92,7 @@ void main() {
     await tester.pump(const Duration(seconds: 1));
     expect(tester.widget<WorkDetailPage>(find.byType(WorkDetailPage)).work,
         same(makeine));
-    expect(find.text('让 Nipa 准备'), findsOneWidget);
+    expect(find.text('让梨花准备'), findsOneWidget);
 
     await tester.pumpWidget(const SizedBox());
     await tester.pump(const Duration(seconds: 1));

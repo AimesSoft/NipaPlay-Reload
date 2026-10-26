@@ -650,7 +650,7 @@ abstract final class NextUiDebug {
         return {'devices': devices, ..._status(shell)};
       case 'lib':
         final page = _find<LibraryDebug>();
-        if (page == null) throw StateError('The 片库 page is not showing');
+        if (page == null) throw StateError('The 媒体库 page is not showing');
         await page.debug(p);
         await Future<void>.delayed(const Duration(milliseconds: 600));
         await _settle();
@@ -1267,7 +1267,7 @@ abstract final class NextUiDebug {
         final rect = box.localToGlobal(Offset.zero) & box.size;
         final name = switch (widget) {
           RichText(:final text)
-              when const {'首页', '发现', '片库', '动态'}
+              when const {'首页', '发现', '媒体库', '动态'}
                   .contains(text.toPlainText()) =>
             text.toPlainText(),
           NipaAvatar() => 'avatar',

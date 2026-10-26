@@ -103,7 +103,7 @@ void main() {
     keys.dispose();
   });
 
-  testWidgets('Codex is fetched from the Nipa section; templates only fill in',
+  testWidgets('Codex is fetched from the 梨花 section; templates only fill in',
       (tester) async {
     final data = FakeSettings();
     data.host
@@ -342,7 +342,7 @@ void main() {
           isTrue);
     });
 
-    test('provenance: Nipa’s change, its reason and the value before', () {
+    test('provenance: 梨花’s change, its reason and the value before', () {
       final s = row({
         'type': 'number',
         'value': 0.6,
@@ -492,7 +492,7 @@ void main() {
       model.dispose();
     });
 
-    testWidgets('Nipa’s mark opens her reason; 改回 restores the value before',
+    testWidgets('梨花’s mark opens her reason; 改回 restores the value before',
         (tester) async {
       final data = _Recording();
       final model = SettingsModel(data);

@@ -30,7 +30,7 @@ void main() {
 
   group('the words', () {
     test('a missing model leaves a system explanation in the turn', () async {
-      final port = _UnavailablePort('还没有设置 Nipa 的模型。请打开“设置 Nipa”填写地址和模型名。');
+      final port = _UnavailablePort('还没有设置梨花的模型。请打开“设置梨花”填写地址和模型名。');
       final chat = NipaChat(port: port, data: _ChatData());
       addTearDown(chat.dispose);
 
@@ -39,8 +39,8 @@ void main() {
       final turn = chat.turns.single;
       final notice = turn.parts.whereType<NoticePart>().single;
       expect(turn.status, 'failed');
-      expect(notice.text, contains('还没有设置 Nipa 的模型'));
-      expect(notice.text, contains('设置 Nipa'));
+      expect(notice.text, contains('还没有设置梨花的模型'));
+      expect(notice.text, contains('设置梨花'));
       expect(turn.answer, isNull);
       expect(turn.lastWords, isEmpty);
       expect(turn.folded(notice), false);
@@ -48,7 +48,7 @@ void main() {
       expect(chat.trouble, isNull, reason: 'the notice is not repeated below');
     });
 
-    test('setup problems point to the right part of 设置 Nipa', () {
+    test('setup problems point to the right part of 设置梨花', () {
       expect(chatUnavailableReason('请先填写地址和模型名'), contains('填写地址和模型名'));
       expect(chatUnavailableReason('请先填写密钥'), contains('填写密钥'));
       expect(chatUnavailableReason('还没有运行环境'), contains('安装运行环境'));

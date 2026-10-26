@@ -501,13 +501,13 @@ void main() {
     await tester.enterText(find.byType(TextField), '芙莉莲');
     await tester.pump(const Duration(milliseconds: 60));
     await tester.pump(const Duration(milliseconds: 200));
-    expect(find.text('片库'), findsOneWidget);
+    expect(find.text('媒体库'), findsOneWidget);
     expect(find.text('葬送的芙莉莲 第二季'), findsOneWidget);
     expect(find.text('第 3 集 · 杀人魔法'), findsOneWidget);
     expect(find.text('在线'), findsOneWidget);
     expect(find.text('暂时搜不了'), findsOneWidget);
     expect(find.text('没有找到'), findsNothing);
-    expect(find.textContaining('让 Nipa 找', findRichText: true), findsOneWidget);
+    expect(find.textContaining('让梨花找', findRichText: true), findsOneWidget);
 
     await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
     await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
@@ -622,7 +622,7 @@ void main() {
     search.dispose();
   });
 
-  testWidgets('⌘F opens search; an episode plays; Nipa gets the words, unsaid',
+  testWidgets('⌘F opens search; an episode plays; 梨花 gets the words, unsaid',
       (tester) async {
     SharedPreferences.setMockInitialValues({});
     final actions = _Actions();
@@ -878,7 +878,7 @@ final class _MergedSearch extends h.Action<_Json, _Json> {
   @override
   h.ActionSpec get spec => const h.ActionSpec(
         id: 'media.library.search_merged',
-        title: '搜索合并片库',
+        title: '搜索合并媒体库',
         description: 'Read the merged library index.',
         effect: h.Effect.read,
         input: h.ObjectSchema({

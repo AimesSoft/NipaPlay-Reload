@@ -814,7 +814,7 @@ class _WorkDetailPageState extends State<WorkDetailPage>
     final compact = NextLayout.compact(context);
     final lead = <Widget>[
       if (_found) ...[
-        NextButton(label: '让 Nipa 准备', onTap: _prepare),
+        NextButton(label: '让梨花准备', onTap: _prepare),
         const SizedBox(width: 12),
       ] else if (next != null && next.playable) ...[
         PlayButton(
@@ -831,7 +831,7 @@ class _WorkDetailPageState extends State<WorkDetailPage>
     ];
     final rest = <Widget>[
       NextButton.ghost(
-        label: '问 Nipa',
+        label: '问梨花',
         leading: const NipaAvatar(size: 20),
         onTap: () => shell.openChat(about: work),
       ),
@@ -964,7 +964,7 @@ class _WorkDetailPageState extends State<WorkDetailPage>
             radius: BorderRadius.circular(24),
             padding: const EdgeInsets.fromLTRB(22, 8, 8, 8),
             child: Row(mainAxisSize: MainAxisSize.min, children: [
-              Text('已从片库移除',
+              Text('已从媒体库移除',
                   style: NextText.sans(13.5, color: NextColors.p2)),
               const SizedBox(width: 16),
               NextButton(label: '撤回', onTap: _undoRemove),
