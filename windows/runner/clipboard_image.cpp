@@ -3,12 +3,18 @@
 #include <flutter/method_channel.h>
 #include <flutter/standard_method_codec.h>
 #include <windows.h>
+#include <gdiplus.h>
 
 #include <shlobj.h>
 
 #include <cstring>
+#include <algorithm>
+#include <cwctype>
+#include <filesystem>
+#include <fstream>
 #include <memory>
 #include <string>
+#include <stdexcept>
 
 namespace {
 
@@ -86,9 +92,114 @@ std::wstring WideFromUtf8(const std::string& value) {
   return wide;
 }
 
+std::filesystem::path AttachmentPath(const std::filesystem::path& directory,
+                                     const std::wstring& extension) {
+  GUID id;
+  if (FAILED(::CoCreateGuid(&id))) {
+    throw std::runtime_error("Cannot create an attachment name");
+  }
+  wchar_t name[40];
+  ::StringFromGUID2(id, name, 40);
+  return directory / (std::wstring(L"clipboard-") + name + extension);
+}
+
+void ReadImageFiles(
+    const flutter::MethodCall<flutter::EncodableValue>& call,
+    std::unique_ptr<flutter::MethodResult<flutter::EncodableValue>> result) {
+  const auto* args = std::get_if<flutter::EncodableMap>(call.arguments());
+  const auto entry = args == nullptr ? nullptr : [&]() -> const std::string* {
+    auto item = args->find(flutter::EncodableValue("directory"));
+    return item == args->end() ? nullptr : std::get_if<std::string>(&item->second);
+  }();
+  if (entry == nullptr || entry->empty()) {
+    result->Error("INVALID_ARGUMENTS", "An attachment directory is required");
+    return;
+  }
+  if (!::OpenClipboard(nullptr)) {
+    result->Error("CLIPBOARD_READ_FAILED", "The clipboard is busy; try again");
+    return;
+  }
+  struct ClipboardGuard {
+    ~ClipboardGuard() { ::CloseClipboard(); }
+  } clipboard_guard;
+  try {
+    const std::filesystem::path directory(WideFromUtf8(*entry));
+    std::filesystem::create_directories(directory);
+    flutter::EncodableList paths;
+    if (auto drop = static_cast<HDROP>(::GetClipboardData(CF_HDROP))) {
+      const auto count = ::DragQueryFileW(drop, 0xffffffff, nullptr, 0);
+      for (UINT i = 0; i < count; ++i) {
+        const auto length = ::DragQueryFileW(drop, i, nullptr, 0);
+        std::wstring name(length + 1, L'\0');
+        ::DragQueryFileW(drop, i, name.data(), length + 1);
+        name.resize(length);
+        const std::filesystem::path source(name);
+        auto ext = source.extension().wstring();
+        std::transform(ext.begin(), ext.end(), ext.begin(),
+                       [](wchar_t c) { return static_cast<wchar_t>(::towlower(c)); });
+        if (ext != L".png" && ext != L".jpg" && ext != L".jpeg" &&
+            ext != L".gif" && ext != L".webp" && ext != L".heic" &&
+            ext != L".heif" && ext != L".bmp" && ext != L".tif" && ext != L".tiff") {
+          continue;
+        }
+        const auto target = AttachmentPath(directory, ext);
+        std::filesystem::copy_file(source, target);
+        paths.emplace_back(target.u8string());
+      }
+    }
+    if (!paths.empty()) {
+      result->Success(flutter::EncodableValue(paths));
+      return;
+    }
+    // Browser copies may contain a lossless PNG (including its alpha channel).
+    const auto png_format = ::RegisterClipboardFormatW(L"PNG");
+    if (auto handle = ::GetClipboardData(png_format)) {
+      const auto size = ::GlobalSize(handle);
+      const auto* bytes = static_cast<const char*>(::GlobalLock(handle));
+      if (bytes != nullptr) {
+        const auto target = AttachmentPath(directory, L".png");
+        std::ofstream output(target, std::ios::binary);
+        output.write(bytes, static_cast<std::streamsize>(size));
+        ::GlobalUnlock(handle);
+        output.close();
+        if (!output) throw std::runtime_error("Cannot save the clipboard image");
+        paths.emplace_back(target.u8string());
+      }
+    }
+    if (paths.empty()) {
+      // Windows synthesizes CF_BITMAP for screenshot DIB/DIBV5 clipboard data.
+      if (auto bitmap = static_cast<HBITMAP>(::GetClipboardData(CF_BITMAP))) {
+        struct GdiGuard {
+          ULONG_PTR token = 0;
+          ~GdiGuard() { if (token != 0) Gdiplus::GdiplusShutdown(token); }
+        } gdi;
+        Gdiplus::GdiplusStartupInput startup;
+        if (Gdiplus::GdiplusStartup(&gdi.token, &startup, nullptr) != Gdiplus::Ok) {
+          throw std::runtime_error("Cannot decode the clipboard bitmap");
+        }
+        std::unique_ptr<Gdiplus::Bitmap> image(Gdiplus::Bitmap::FromHBITMAP(bitmap, nullptr));
+        const CLSID png_encoder = {0x557cf406, 0x1a04, 0x11d3,
+                                  {0x9a, 0x73, 0x00, 0x00, 0xf8, 0x1e, 0xf3, 0x2e}};
+        const auto target = AttachmentPath(directory, L".png");
+        if (!image || image->Save(target.c_str(), &png_encoder, nullptr) != Gdiplus::Ok) {
+          throw std::runtime_error("Cannot save the clipboard bitmap");
+        }
+        paths.emplace_back(target.u8string());
+      }
+    }
+    result->Success(flutter::EncodableValue(paths));
+  } catch (const std::exception&) {
+    result->Error("CLIPBOARD_READ_FAILED", "Cannot save the clipboard image; try again");
+  }
+}
+
 void HandleMethodCall(
     const flutter::MethodCall<flutter::EncodableValue>& call,
     std::unique_ptr<flutter::MethodResult<flutter::EncodableValue>> result) {
+  if (call.method_name() == "readImageFiles") {
+    ReadImageFiles(call, std::move(result));
+    return;
+  }
   if (call.method_name() != "copyImageFile") {
     result->NotImplemented();
     return;

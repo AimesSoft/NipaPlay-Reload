@@ -7,6 +7,7 @@ import 'package:flutter/widgets.dart';
 import '../../ui_data/ui_data.dart';
 import '../data/collections.dart';
 import '../settings/section_accounts.dart' show ServiceMark;
+import '../widgets/service_icon.dart';
 import '../shell/shell_controller.dart';
 import '../theme/tokens.dart';
 import '../widgets/buttons.dart';
@@ -664,7 +665,7 @@ class _AccountMark extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final (text, brand) = ServiceMark.of(link.provider);
+    final (_, brand) = ServiceMark.of(link.provider);
     final out = state == _Sync.signedOut;
     return Pressable(
       onTap: onTap,
@@ -682,9 +683,7 @@ class _AccountMark extends StatelessWidget {
               borderRadius: BorderRadius.circular(7),
               border: Border.all(color: color.withValues(alpha: 0.35)),
             ),
-            child: Text(text,
-                style:
-                    NextText.sans(11, weight: FontWeight.w700, color: color)),
+            child: ServiceIcon(link.provider, color: color, size: 15),
           ),
           const SizedBox(width: 7),
           Text(link.name,

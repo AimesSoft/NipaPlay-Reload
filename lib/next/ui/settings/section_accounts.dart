@@ -8,6 +8,7 @@ import '../data/settings_data.dart';
 import '../data/upkeep.dart';
 import '../theme/tokens.dart';
 import '../widgets/icons.dart';
+import '../widgets/service_icon.dart';
 import 'controls.dart';
 import 'registry_rows.dart';
 
@@ -56,10 +57,12 @@ class _ConfirmPillState extends State<ConfirmPill> {
 
 /// A round mark for a service, in its colour.
 class ServiceMark extends StatelessWidget {
-  const ServiceMark(this.text, this.color, {super.key, this.square = false});
+  const ServiceMark(this.text, this.color,
+      {super.key, this.square = false, this.provider});
   final String text;
   final Color color;
   final bool square;
+  final String? provider;
 
   static (String, Color) of(String kind) => switch (kind) {
         'dandanplay' => ('弹', const Color(0xFFFF2E55)),
@@ -83,8 +86,11 @@ class ServiceMark extends StatelessWidget {
           borderRadius: BorderRadius.circular(square ? 9 : 16),
           border: Border.all(color: color.withValues(alpha: 0.35)),
         ),
-        child: Text(text,
-            style: NextText.sans(13.5, weight: FontWeight.w700, color: color)),
+        child: provider != null
+            ? ServiceIcon(provider!, color: color)
+            : Text(text,
+                style:
+                    NextText.sans(13.5, weight: FontWeight.w700, color: color)),
       );
 }
 
@@ -256,7 +262,7 @@ class _AccountTile extends StatelessWidget {
           Transform.scale(
               scale: 1.25,
               alignment: Alignment.topLeft,
-              child: ServiceMark(mark, color)),
+              child: ServiceMark(mark, color, provider: account.provider)),
           const Spacer(),
           if (a.loggedIn) const StateDot(NextColors.mint),
         ]),
@@ -507,15 +513,14 @@ class _NearbyState extends State<_Nearby> {
           width: 64,
           height: 30,
           child: Align(
-              alignment: Alignment.centerLeft,
-              child: Text('附近', style: quiet)),
+              alignment: Alignment.centerLeft, child: Text('附近', style: quiet)),
         ),
         Expanded(
           child: _found == null && _failed == null
               ? const SizedBox(
                   height: 30,
-                  child: Align(
-                      alignment: Alignment.centerLeft, child: BusyDots()))
+                  child:
+                      Align(alignment: Alignment.centerLeft, child: BusyDots()))
               : Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
@@ -612,9 +617,8 @@ class _FoldersState extends State<_Folders> {
   }
 
   /// A scan holds the folders: changing them waits for it.
-  String _failure(Object e) => e is Failure && e.code == FailureCode.conflict
-      ? '正在扫描'
-      : callFailure(e);
+  String _failure(Object e) =>
+      e is Failure && e.code == FailureCode.conflict ? '正在扫描' : callFailure(e);
 
   Future<void> _run(String key, Future<void> Function() action) async {
     setState(() {
@@ -708,8 +712,7 @@ class _FoldersState extends State<_Folders> {
               ConfirmPill(
                 label: '移除',
                 confirm: '确定移除',
-                onConfirm: () =>
-                    _run(path, () => widget.folders.remove(path)),
+                onConfirm: () => _run(path, () => widget.folders.remove(path)),
               ),
             ]),
           );
@@ -721,8 +724,7 @@ class _FoldersState extends State<_Folders> {
         onTap: _busy.contains('+') ? null : _add,
         trailing: Row(mainAxisSize: MainAxisSize.min, children: [
           if (_note != null) ...[
-            Text(_note!,
-                style: NextText.sans(12.5, color: NextColors.accent2)),
+            Text(_note!, style: NextText.sans(12.5, color: NextColors.accent2)),
             const SizedBox(width: 12),
           ],
           if (_busy.contains('+')) ...[
@@ -755,8 +757,7 @@ class _FolderMark extends StatelessWidget {
           borderRadius: BorderRadius.circular(9),
           border: Border.all(color: NextColors.line),
         ),
-        child: const CustomPaint(
-            size: Size(14, 11), painter: _FolderPainter()),
+        child: const CustomPaint(size: Size(14, 11), painter: _FolderPainter()),
       );
 }
 
@@ -899,7 +900,7 @@ class _SourceRowState extends State<_SourceRow> {
     };
     final dot = s.needsPassword ? NextColors.accent : state;
     return SettingsRow(
-      leading: ServiceMark(mark, color, square: true),
+      leading: ServiceMark(mark, color, square: true, provider: s.type),
       title: s.name,
       subtitle: [
         UiMediaSource.typeName(s.type),

@@ -98,6 +98,10 @@ final class ClipboardImagePlugin: NSObject, FlutterPlugin {
   }
 
   func handle(_ call: FlutterMethodCall, result: @escaping FlutterResult) {
+    if call.method == "readImageFiles" {
+      readImageFiles(call, result: result)
+      return
+    }
     guard call.method == "copyImageFile" else {
       result(FlutterMethodNotImplemented)
       return
@@ -157,6 +161,47 @@ final class ClipboardImagePlugin: NSObject, FlutterPlugin {
       return
     }
     result(true)
+  }
+
+  private func readImageFiles(_ call: FlutterMethodCall, result: @escaping FlutterResult) {
+    guard let args = call.arguments as? [String: Any],
+          let directory = args["directory"] as? String, !directory.isEmpty else {
+      result(FlutterError(code: "INVALID_ARGUMENTS", message: "An attachment directory is required", details: nil))
+      return
+    }
+    let board = NSPasteboard.general
+    let destination = URL(fileURLWithPath: directory, isDirectory: true)
+    do {
+      try FileManager.default.createDirectory(at: destination, withIntermediateDirectories: true)
+      let extensions: Set<String> = ["png", "jpg", "jpeg", "gif", "webp", "heic", "heif", "bmp", "tif", "tiff"]
+      let urls = board.readObjects(forClasses: [NSURL.self], options: [.urlReadingFileURLsOnly: true]) as? [URL] ?? []
+      var paths: [String] = []
+      for url in urls where extensions.contains(url.pathExtension.lowercased()) {
+        let target = destination.appendingPathComponent("clipboard-\(UUID().uuidString).\(url.pathExtension.lowercased())")
+        try FileManager.default.copyItem(at: url, to: target)
+        paths.append(target.path)
+      }
+      if !paths.isEmpty { result(paths); return }
+      // Screenshots and copied browser images usually carry PNG or TIFF data.
+      let data: Data?
+      if let png = board.data(forType: .png) {
+        data = png
+      } else if let image = NSImage(pasteboard: board),
+                let tiff = image.tiffRepresentation,
+                let bitmap = NSBitmapImageRep(data: tiff) {
+        data = bitmap.representation(using: .png, properties: [:])
+      } else {
+        data = nil
+      }
+      if let data = data {
+        let target = destination.appendingPathComponent("clipboard-\(UUID().uuidString).png")
+        try data.write(to: target, options: .atomic)
+        paths.append(target.path)
+      }
+      result(paths)
+    } catch {
+      result(FlutterError(code: "CLIPBOARD_READ_FAILED", message: error.localizedDescription, details: nil))
+    }
   }
 }
 

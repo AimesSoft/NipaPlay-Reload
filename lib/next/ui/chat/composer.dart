@@ -13,6 +13,7 @@ import '../widgets/buttons.dart';
 import '../widgets/icons.dart';
 import '../widgets/progress.dart';
 import '../widgets/words.dart';
+import 'input_paste.dart';
 
 /// Where you talk to Nipa, under the conversation: what this conversation
 /// set going that is still under way, the work it is about, the files
@@ -126,21 +127,28 @@ class _ChatComposerState extends State<ChatComposer> {
               Expanded(
                 child: Padding(
                   padding: const EdgeInsets.only(bottom: 9),
-                  child: TextField(
+                  child: ChatInputPaste(
+                    key: ValueKey(chat.thread),
                     controller: widget.controller,
-                    focusNode: widget.focusNode,
                     enabled: chat.acceptsTyping,
-                    minLines: 1,
-                    maxLines: 6,
-                    keyboardType: TextInputType.multiline,
-                    textInputAction: TextInputAction.newline,
-                    cursorColor: NextColors.accent,
-                    cursorWidth: 1.5,
-                    style: NextText.sans(widget.textSize, height: 1.5),
-                    decoration: InputDecoration.collapsed(
-                      hintText: chat.hint,
-                      hintStyle:
-                          NextText.sans(widget.textSize, color: NextColors.p3),
+                    onImages: chat.attach,
+                    builder: (contextMenuBuilder) => TextField(
+                      contextMenuBuilder: contextMenuBuilder,
+                      controller: widget.controller,
+                      focusNode: widget.focusNode,
+                      enabled: chat.acceptsTyping,
+                      minLines: 1,
+                      maxLines: 6,
+                      keyboardType: TextInputType.multiline,
+                      textInputAction: TextInputAction.newline,
+                      cursorColor: NextColors.accent,
+                      cursorWidth: 1.5,
+                      style: NextText.sans(widget.textSize, height: 1.5),
+                      decoration: InputDecoration.collapsed(
+                        hintText: chat.hint,
+                        hintStyle: NextText.sans(widget.textSize,
+                            color: NextColors.p3),
+                      ),
                     ),
                   ),
                 ),

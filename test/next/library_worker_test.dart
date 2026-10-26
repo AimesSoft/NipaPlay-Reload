@@ -94,6 +94,18 @@ void main() {
     await jobs.database.close();
     await deleteTestDirectory(root);
   });
+  test('Mesh evidence retains typed metadata for work and episode facts', () async {
+    await worker.build('metadata-facts');
+    final snapshot = await worker.compose({}, {}, null);
+    final work = snapshot.works.values.single;
+    for (final id in [work.workId, ...snapshot.episodes[work.workId]!.map((e) => e.episodeId)]) {
+      final evidence = await worker.call('evidence', id) as JsonMap;
+      final metadata = evidence['metadata'] as JsonMap;
+      expect(metadata['fields'], isA<JsonMap>());
+      expect(metadata['provenance'], isA<JsonMap>());
+      expect(metadata['sources'], isA<List>());
+    }
+  });
   test('background build, SQL query, live host relations and progress persist',
       () async {
     await worker.build('one');

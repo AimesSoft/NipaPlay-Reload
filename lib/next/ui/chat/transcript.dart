@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/scheduler.dart';
+import 'package:flutter/material.dart' show SelectionArea;
 import 'package:flutter/rendering.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_markdown/flutter_markdown.dart';
@@ -14,6 +15,7 @@ import '../widgets/attachments.dart';
 import '../widgets/buttons.dart';
 import '../widgets/icons.dart';
 import '../widgets/progress.dart';
+import 'copy_message.dart';
 
 /// The conversation itself: every turn in order, then whatever waits for
 /// you. It stays where you are reading: it follows new words only while
@@ -172,30 +174,36 @@ class _ChatTranscriptState extends State<ChatTranscript> {
                 colors: const [Color(0x00000000), Color(0xFF000000)],
                 stops: [0, (18 / rect.height).clamp(0.0, 1.0)],
               ).createShader(rect),
-              child: ListView.builder(
-                controller: _scroll,
-                physics: _TranscriptPhysics(
-                  follow: () => _pinned,
-                  parent:
-                      ScrollConfiguration.of(context).getScrollPhysics(context),
-                ),
-                padding: widget.padding,
-                itemCount: children.length,
-                findChildIndexCallback: (key) {
-                  final index = children.indexWhere((child) =>
-                      child.key == (key is ValueKey<Key> ? key.value : key));
-                  return index < 0 ? null : index;
+              child: SelectionArea(
+                onSelectionChanged: (selection) {
+                  if (selection?.plainText.isNotEmpty ?? false) _hold();
                 },
-                itemBuilder: (context, index) => Padding(
-                  key: children[index].key == null
-                      ? null
-                      : ValueKey<Key>(children[index].key!),
-                  padding: EdgeInsets.only(top: index == 0 ? 0 : 26),
-                  child: Center(
-                    child: ConstrainedBox(
-                      constraints: BoxConstraints(maxWidth: widget.columnWidth),
-                      child: SizedBox(
-                          width: double.infinity, child: children[index]),
+                child: ListView.builder(
+                  controller: _scroll,
+                  physics: _TranscriptPhysics(
+                    follow: () => _pinned,
+                    parent: ScrollConfiguration.of(context)
+                        .getScrollPhysics(context),
+                  ),
+                  padding: widget.padding,
+                  itemCount: children.length,
+                  findChildIndexCallback: (key) {
+                    final index = children.indexWhere((child) =>
+                        child.key == (key is ValueKey<Key> ? key.value : key));
+                    return index < 0 ? null : index;
+                  },
+                  itemBuilder: (context, index) => Padding(
+                    key: children[index].key == null
+                        ? null
+                        : ValueKey<Key>(children[index].key!),
+                    padding: EdgeInsets.only(top: index == 0 ? 0 : 26),
+                    child: Center(
+                      child: ConstrainedBox(
+                        constraints:
+                            BoxConstraints(maxWidth: widget.columnWidth),
+                        child: SizedBox(
+                            width: double.infinity, child: children[index]),
+                      ),
                     ),
                   ),
                 ),
@@ -354,17 +362,24 @@ class _TurnViewState extends State<_TurnView> {
       }
       if (turn.folded(part)) continue;
       children.add(switch (part) {
-        SaidPart() => _You(
-            key: ObjectKey(part),
-            part: part,
-            width: widget.width,
-            showAbout: part.about != widget.chat.about?.title,
-            showWatched: part.watched != widget.chat.watched),
-        ReplyPart() => ReplyText(
+        SaidPart() => CopyChatMessage(
             key: ObjectKey(part),
             text: part.text,
-            style: widget.text,
-          ),
+            alignment: Alignment.centerRight,
+            child: _You(
+                key: ObjectKey(part),
+                part: part,
+                width: widget.width,
+                showAbout: part.about != widget.chat.about?.title,
+                showWatched: part.watched != widget.chat.watched)),
+        ReplyPart() => CopyChatMessage(
+            key: ObjectKey(part),
+            text: part.text,
+            child: ReplyText(
+              key: ObjectKey(part),
+              text: part.text,
+              style: widget.text,
+            )),
         NoticePart() => Text(
             key: ObjectKey(part),
             part.text,

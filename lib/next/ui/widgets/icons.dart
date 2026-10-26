@@ -14,6 +14,7 @@ enum NextGlyph {
   chevronRight,
   chevronLeft,
   check,
+  copy,
   plus,
   minus,
 
@@ -83,6 +84,19 @@ class _GlyphPainter extends CustomPainter {
       ..strokeWidth = stroke ?? 2;
     final fill = Paint()..color = color;
     switch (glyph) {
+      case NextGlyph.copy:
+        canvas.drawRRect(
+            RRect.fromRectAndRadius(
+                const Rect.fromLTWH(8, 8, 12, 13), const Radius.circular(2)),
+            line);
+        canvas.drawPath(
+            Path()
+              ..moveTo(15, 5)
+              ..lineTo(15, 3)
+              ..lineTo(3, 3)
+              ..lineTo(3, 16)
+              ..lineTo(5, 16),
+            line);
       case NextGlyph.search:
         canvas.drawCircle(const Offset(11, 11), 7, line);
         canvas.drawLine(const Offset(20, 20), const Offset(16.5, 16.5), line);

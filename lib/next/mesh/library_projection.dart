@@ -43,7 +43,7 @@ JsonMap _combinedEvidence(JsonMap primary, List<JsonMap> members) {
   }
   return {...primary,
     'keys': members.expand((m) => (m['keys'] as List).cast<String>()).toSet().toList(),
-    'metadata': {...primary['metadata'] as Map,
+    'metadata': <String, Object?>{...(primary['metadata'] as Map).cast<String, Object?>(),
       'sources': sources.values.toList(), 'ratings': ratings.values.toList()},
   };
 }

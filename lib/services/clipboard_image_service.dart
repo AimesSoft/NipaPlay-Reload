@@ -43,4 +43,19 @@ class ClipboardImageService {
       return false;
     }
   }
+
+  /// Copies clipboard images into durable attachment storage. An empty list
+  /// means there is no image; the editor should then paste ordinary text.
+  static Future<List<String>> readImageFiles(String directory) async {
+    if (!isSupported) return const [];
+    try {
+      return await _channel.invokeListMethod<String>(
+            'readImageFiles',
+            {'directory': directory},
+          ) ??
+          const [];
+    } on MissingPluginException {
+      return const [];
+    }
+  }
 }

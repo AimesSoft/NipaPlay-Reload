@@ -91,6 +91,7 @@ void main() {
     final gesture = await tester
         .startGesture(tester.getCenter(find.byType(ListView).first));
     await gesture.moveBy(const Offset(0, -180));
+    await gesture.moveBy(const Offset(0, -20));
     await tester.pump();
     expect(scroll.position.outOfRange, true);
     final bouncing = scroll.offset;
