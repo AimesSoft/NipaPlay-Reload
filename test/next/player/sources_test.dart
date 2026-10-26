@@ -123,6 +123,74 @@ void main() {
   });
 
   test(
+      'fresh grants resume by stable identity and reopening saves latest position',
+      () async {
+    final rig = FakeHost();
+    const stable = 'mesh:///mesh-episode%3Aresume';
+    final resolver = NextSourceResolver();
+    resolver.specialSource = (item) async => SourcePlan(
+        item: item,
+        source: ResolvedSource(
+            locator: stable, uri: item.videoPath, kind: 'mesh', direct: true),
+        detail: PlaybackDetailContext(
+            sourceKind: PlaybackSourceKind.networkStream,
+            sourceLabel: 'Mesh',
+            sourceKey: 'mesh',
+            title: 'Mesh',
+            isIdentified: false,
+            episodeLoader: () async => const []));
+    final sources = PlaybackSources(rig.host, resolver);
+    addTearDown(sources.dispose);
+    addTearDown(() => rig.host.dispose());
+    rig.records.positions[stable] = 720000;
+    final first = await sources
+        .open(PlayableItem(videoPath: 'http://127.0.0.1/grant-one'));
+    expect(first.position.inSeconds, inInclusiveRange(720, 721));
+    rig.drivers.last.sample(const Duration(minutes: 15));
+    final second = await sources
+        .open(PlayableItem(videoPath: 'http://127.0.0.1/grant-two'));
+    expect(second.position.inSeconds, inInclusiveRange(900, 901));
+    final restarted = await sources.open(
+        PlayableItem(videoPath: 'http://127.0.0.1/grant-three'),
+        start: Duration.zero);
+    expect(restarted.position.inSeconds, 0);
+    expect(rig.records.positions.keys, everyElement(stable));
+  });
+
+  test(
+      'synchronized resume works without runtime and overrides older local position',
+      () async {
+    final rig = FakeHost();
+    final resolver = NextSourceResolver();
+    var resume = const Duration(minutes: 8);
+    resolver.specialSource = (item) async => SourcePlan(
+        item: item,
+        resumePosition: resume,
+        source: ResolvedSource(
+            locator: item.videoPath,
+            uri: 'http://127.0.0.1/grant',
+            kind: 'mesh',
+            direct: true),
+        detail: PlaybackDetailContext(
+            sourceKind: PlaybackSourceKind.networkStream,
+            sourceLabel: 'Mesh',
+            sourceKey: 'mesh',
+            title: 'Mesh',
+            isIdentified: false,
+            episodeLoader: () async => const []));
+    final sources = PlaybackSources(rig.host, resolver);
+    addTearDown(sources.dispose);
+    addTearDown(() => rig.host.dispose());
+    rig.records.positions[item(0).videoPath] = 60000;
+    final first = await sources.open(item(0));
+    expect(first.position.inSeconds, inInclusiveRange(480, 481));
+    await rig.host.close(reason: 'test');
+    resume = Duration.zero;
+    final completed = await sources.open(item(0));
+    expect(completed.position.inSeconds, 0);
+  });
+
+  test(
       'network resume uses stable identity and episode switches create fresh kernels',
       () async {
     final rig = FakeHost();

@@ -227,7 +227,10 @@ final class LibraryProjection {
           if (changed.containsKey(episode.episodeId))
             episodeValue({
               ...episodeJson(episode),
-              'progress': changed[episode.episodeId]
+              'progress': changed[episode.episodeId],
+              'positionMs': prepared[_episodeKeys[episode.episodeId]!.first]
+                  ?['positionMs'],
+              'lastPlayedAt': at,
             }, device: episode.device)
           else
             episode
@@ -422,13 +425,6 @@ final class LibraryProjection {
           });
         }
         if (nativeFiles.isNotEmpty) value['playable'] = locations.isNotEmpty;
-        final stamp = files
-            .ofEpisode(episode.episodeId)
-            .map((f) => ((f['progress'] as Map?)?['lastWatchedAt'] ??
-                (f['progress'] as Map?)?['lastWatchTime']) as String?)
-            .whereType<String>()
-            .toList()
-          ..sort();
         final tracks = <JsonMap>[];
         for (final t in await ui.heat.tracks(episode.episodeId, reads: reads)) {
           final local = t['local_file'] as JsonMap?,
@@ -467,9 +463,7 @@ final class LibraryProjection {
             for (final t in subtitles?.files ?? <JsonMap>[])
               publicHarnessFacts(t)
           ],
-          'watchedAt': stamp.isEmpty
-              ? null
-              : DateTime.parse(stamp.last).toUtc().toIso8601String(),
+          'watchedAt': episode.lastPlayedAt?.toUtc().toIso8601String(),
           'value': value
         });
       }
@@ -708,11 +702,16 @@ final class LibraryProjection {
             }
           }
           final value = e['value'] as Map;
-          if (value['progress'] != null && e['watchedAt'] != null) {
+          if (value['progress'] != null &&
+              e['watchedAt'] != null &&
+              ((value['progress'] as num) > 0 ||
+                  value['lastPlayedAt'] != null ||
+                  ((value['positionMs'] as num?) ?? 0) > 0)) {
             final observation = <String, Object?>{
               'progress': value['progress'],
               'at': e['watchedAt'],
-              'writer': e['deviceId']
+              'writer': e['deviceId'],
+              'positionMs': value['positionMs'],
             };
             if (watched == null || _newer(observation, watched)) {
               watched = observation;
@@ -730,7 +729,11 @@ final class LibraryProjection {
           ...selected['value'] as JsonMap,
           'episodeId': eid,
           'workId': id,
-          if (watched != null) 'progress': watched['progress']
+          if (watched != null) ...{
+            'progress': watched['progress'],
+            'positionMs': watched['positionMs'],
+            'lastPlayedAt': watched['at'],
+          }
         };
         newEpisodeKeys[eid] = watchKeys.toList();
         newLocations[eid] = locations;

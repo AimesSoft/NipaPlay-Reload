@@ -22,6 +22,7 @@ import 'no_airing.dart' if (dart.library.ui) 'airing.dart';
 import 'heat.dart';
 import '../subtitles/facts.dart';
 import 'ui_data.dart';
+import 'recently_played.dart';
 import 'library_service.dart';
 import '../mesh/library.dart';
 import '../chat/turn_boundaries.dart';
@@ -298,6 +299,8 @@ final class UiDataService implements NextUiData, NextNowPlaying {
       final locations = files.ofEpisode(id);
       int? duration = positive(fields['runtimeMs']);
       double? progress;
+      Duration? position;
+      DateTime? lastPlayedAt;
       var playable = false;
       for (final f in locations) {
         final fileAttrs = decodeMediaJson(f['attributes']);
@@ -312,14 +315,37 @@ final class UiDataService implements NextUiData, NextNowPlaying {
           if (p != null) {
             final d =
                 end != null ? end - start : (p['durationMs'] as num?)?.toInt();
-            final position = (p['positionMs'] as num?)?.toDouble();
+            final observedPosition = (p['positionMs'] as num?)?.toDouble();
             final value = (p['progress'] as num?) == 1
                 ? 1.0
-                : d != null && d > 0 && position != null
-                    ? ((position - start) / d).clamp(0.0, 1.0)
+                : d != null && d > 0 && observedPosition != null
+                    ? ((observedPosition - start) / d).clamp(0.0, 1.0)
                     : (p['progress'] as num?)?.toDouble().clamp(0.0, 1.0);
-            if (value != null && (progress == null || value > progress)) {
+            final played = (observedPosition ?? 0) > 0 ||
+                ((p['durationMs'] as num?) ?? 0) > 0 ||
+                (value ?? 0) > 0;
+            final at = played
+                ? DateTime.tryParse(
+                    (p['lastWatchedAt'] ?? p['lastWatchTime']) as String? ?? '')
+                : null;
+            if (value != null &&
+                (at != null &&
+                        (lastPlayedAt == null || !at.isBefore(lastPlayedAt)) ||
+                    lastPlayedAt == null &&
+                        (progress == null || value > progress))) {
               progress = value;
+              final elapsed = observedPosition == null
+                  ? null
+                  : (observedPosition - start).round();
+              position = elapsed == null
+                  ? null
+                  : Duration(
+                      milliseconds: d != null && d > 0
+                          ? elapsed.clamp(0, d)
+                          : elapsed < 0
+                              ? 0
+                              : elapsed);
+              lastPlayedAt = at;
             }
           }
         }
@@ -337,6 +363,8 @@ final class UiDataService implements NextUiData, NextNowPlaying {
           runtime: duration == null ? null : Duration(milliseconds: duration),
           still: art['still'] as String?,
           progress: progress,
+          position: position,
+          lastPlayedAt: lastPlayedAt,
           heat: await heat.load(id, duration, reads: reads),
           playable: playable));
     }
@@ -598,6 +626,37 @@ final class UiDataService implements NextUiData, NextNowPlaying {
       return found;
     }
 
+    final played = <(UiWork, UiEpisode, DateTime)>[];
+    final playedWorks = <String>{};
+    DateTime watchedAt(JsonMap row) =>
+        DateTime.tryParse(row['lastWatchTime'] as String? ?? '') ??
+        DateTime.fromMillisecondsSinceEpoch(0, isUtc: true);
+    final history = historyRows.toList()
+      ..sort((a, b) => watchedAt(b).compareTo(watchedAt(a)));
+    for (final row in history) {
+      if (((row['lastPosition'] as num?) ?? 0) <= 0 &&
+          ((row['duration'] as num?) ?? 0) <= 0 &&
+          ((row['watchProgress'] as num?) ?? 0) <= 0) {
+        continue;
+      }
+      final at = DateTime.tryParse(row['lastWatchTime'] as String? ?? '');
+      final path = row['filePath'] as String?;
+      if (at == null || path == null) continue;
+      final linked = await link(path);
+      if (linked == null || playedWorks.contains(linked.workId)) continue;
+      final work = await this.work(linked.workId);
+      if (work == null) continue;
+      final episode = (await episodes(linked.workId))
+          .where((e) => linked.episodeIds.contains(e.episodeId))
+          .firstOrNull;
+      if (episode == null) continue;
+      played.add((work, episode, at));
+      playedWorks.add(linked.workId);
+      if (playedWorks.length == 20) break;
+    }
+    final recentlyPlayed = recentlyPlayedShelf(played);
+    if (recentlyPlayed != null) shelves.add(recentlyPlayed);
+
     if (continueRows.isNotEmpty) {
       for (final row in continueRows) {
         final path = row['filePath'] as String?;
@@ -641,8 +700,8 @@ final class UiDataService implements NextUiData, NextNowPlaying {
     final airing = <UiShelfItem>[];
     for (final update in sources.calendar == null
         ? <JsonMap>[]
-        : await todayUpdates(
-            media.store, following, (await sources.calendar!())?.rows() ?? const [])) {
+        : await todayUpdates(media.store, following,
+            (await sources.calendar!())?.rows() ?? const [])) {
       final work = (await this.work(update['workId'] as String))!;
       final matches = await db.rawQuery(
           "SELECT b.entity_id FROM media_bindings b JOIN media_external_objects o ON o.id=b.object_id WHERE b.status='accepted' AND o.provider='dandanplay' AND o.object_type='episode' AND o.external_id=?",
@@ -673,7 +732,7 @@ final class UiDataService implements NextUiData, NextNowPlaying {
         final work = await this.work(item['workId'] as String);
         if (work == null) continue;
         if (shelf['placement'] == 'hero') {
-          hero = UiHero(work, note: shelf['note'] as String?);
+          hero = UiHero(work, note: shelf['note'] as String?, pinned: true);
         } else {
           items.add(UiShelfItem(work,
               episode: work.next,
@@ -750,9 +809,10 @@ final class UiDataService implements NextUiData, NextNowPlaying {
     if (id == null ||
         id.trim().isEmpty ||
         placement == 'shelf' &&
-            const {'hero', 'continue', 'airing', 'recent'}.contains(id)) {
+            const {'hero', 'continue', 'airing', 'recent', 'recently-played'}
+                .contains(id)) {
       throw const Failure(FailureCode.invalidInput,
-          'For a shelf supply a stable id other than hero, continue or recent, and a short title.');
+          'For a shelf supply a stable id other than hero, continue, airing, recent or recently-played, and a short title.');
     }
     final items = (input['items'] as List).cast<Map>();
     if (placement == 'hero' && items.length > 1) {

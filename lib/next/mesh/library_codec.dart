@@ -10,6 +10,8 @@ JsonMap episodeJson(UiEpisode e) => {
       'runtimeMs': e.runtime?.inMilliseconds,
       'still': e.still,
       'progress': e.progress,
+      'positionMs': e.position?.inMilliseconds,
+      'lastPlayedAt': e.lastPlayedAt?.toUtc().toIso8601String(),
       'heat': e.heat,
       'playable': e.playable,
       'device': e.device == null
@@ -53,6 +55,10 @@ UiEpisode episodeValue(JsonMap e, {UiDevice? device}) => UiEpisode(
         : Duration(milliseconds: e['runtimeMs'] as int),
     still: e['still'] as String?,
     progress: (e['progress'] as num?)?.toDouble(),
+    position: e['positionMs'] == null
+        ? null
+        : Duration(milliseconds: (e['positionMs'] as num).toInt()),
+    lastPlayedAt: DateTime.tryParse(e['lastPlayedAt'] as String? ?? ''),
     heat: (e['heat'] as List?)?.map((n) => (n as num).toDouble()).toList(),
     playable: e['playable'] == true && (device?.online ?? true),
     device: device);

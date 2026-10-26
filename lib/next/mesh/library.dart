@@ -820,10 +820,11 @@ final class MeshLibrary {
     if (ep == null) {
       throw const Failure(FailureCode.notFound, 'Unknown episode.');
     }
-    result['resumeMs'] = (result['startMs'] as int? ?? 0) +
-        ((ep.progress ?? 0) < 1
-            ? ((ep.progress ?? 0) * (ep.runtime?.inMilliseconds ?? 0)).round()
-            : 0);
+    final start = result['startMs'] as int? ?? 0;
+    final resume = ep.resumePosition;
+    if (resume != null || start != 0) {
+      result['resumeMs'] = start + (resume?.inMilliseconds ?? 0);
+    }
     return result;
   }
 

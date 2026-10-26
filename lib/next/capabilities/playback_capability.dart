@@ -186,7 +186,7 @@ final class PlaybackOpenAction
     }
     final state = _player.snapshot();
     return Completed(PlaybackOpenOutput(
-      path: item.videoPath,
+      path: _usesExternalPlayer() ? item.videoPath : state.path ?? item.videoPath,
       player: state.player ?? (_usesExternalPlayer() ? 'external' : 'internal'),
       state: state,
     ));

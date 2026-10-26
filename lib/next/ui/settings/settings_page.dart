@@ -472,23 +472,6 @@ class _SettingsPageState extends State<SettingsPage> implements SettingsDebug {
     return ColoredBox(
       color: NextColors.ink,
       child: Stack(children: [
-        // A faint warmth from the top left, where the rail begins.
-        const Positioned(
-          left: -240,
-          top: -280,
-          width: 900,
-          height: 760,
-          child: IgnorePointer(
-            child: DecoratedBox(
-              decoration: BoxDecoration(
-                gradient: RadialGradient(colors: [
-                  Color(0x14FF2E55),
-                  Color(0x00FF2E55),
-                ]),
-              ),
-            ),
-          ),
-        ),
         Positioned.fill(
           top: NextLayout.underBar(context),
           child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [

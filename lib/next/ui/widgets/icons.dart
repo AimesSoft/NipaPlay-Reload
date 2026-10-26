@@ -1,3 +1,4 @@
+import 'dart:math' as math;
 import 'package:flutter/widgets.dart';
 
 import '../theme/tokens.dart';
@@ -5,6 +6,7 @@ import '../theme/tokens.dart';
 /// The concept's stroke icons, drawn on a 24-unit grid.
 enum NextGlyph {
   search,
+  settings,
   send,
   play,
   close,
@@ -84,6 +86,21 @@ class _GlyphPainter extends CustomPainter {
       case NextGlyph.search:
         canvas.drawCircle(const Offset(11, 11), 7, line);
         canvas.drawLine(const Offset(20, 20), const Offset(16.5, 16.5), line);
+      case NextGlyph.settings:
+        final cog = Path();
+        for (var i = 0; i < 32; i++) {
+          final angle = i * math.pi / 16 - math.pi / 2;
+          final radius = i % 4 < 2 ? 10.0 : 7.5;
+          final x = 12 + radius * math.cos(angle);
+          final y = 12 + radius * math.sin(angle);
+          if (i == 0) {
+            cog.moveTo(x, y);
+          } else {
+            cog.lineTo(x, y);
+          }
+        }
+        canvas.drawPath(cog..close(), line);
+        canvas.drawCircle(const Offset(12, 12), 3.2, line);
       case NextGlyph.send:
         line.strokeWidth = stroke ?? 2.4;
         canvas.drawPath(
@@ -140,13 +157,13 @@ class _GlyphPainter extends CustomPainter {
         canvas.drawLine(const Offset(5, 12), const Offset(19, 12), line);
       case NextGlyph.maximize:
         canvas.drawRRect(
-            RRect.fromRectAndRadius(
-                const Rect.fromLTWH(5.5, 5.5, 13, 13), const Radius.circular(1.5)),
+            RRect.fromRectAndRadius(const Rect.fromLTWH(5.5, 5.5, 13, 13),
+                const Radius.circular(1.5)),
             line);
       case NextGlyph.restore:
         canvas.drawRRect(
-            RRect.fromRectAndRadius(
-                const Rect.fromLTWH(4.5, 8.5, 11, 11), const Radius.circular(1.5)),
+            RRect.fromRectAndRadius(const Rect.fromLTWH(4.5, 8.5, 11, 11),
+                const Radius.circular(1.5)),
             line);
         canvas.drawPath(
             Path()
@@ -219,8 +236,8 @@ class _GlyphPainter extends CustomPainter {
           Offset(13.5, 13.5)
         ]) {
           canvas.drawRRect(
-              RRect.fromRectAndRadius(o & const Size(6.5, 6.5),
-                  const Radius.circular(1.6)),
+              RRect.fromRectAndRadius(
+                  o & const Size(6.5, 6.5), const Radius.circular(1.6)),
               line);
         }
       case NextGlyph.grip:
@@ -299,7 +316,8 @@ class _GlyphPainter extends CustomPainter {
               ..lineTo(5, 19)
               ..close(),
             fill);
-        canvas.drawLine(const Offset(18.5, 5.5), const Offset(18.5, 18.5), line);
+        canvas.drawLine(
+            const Offset(18.5, 5.5), const Offset(18.5, 18.5), line);
       case NextGlyph.fullscreen:
         canvas.drawPath(
             Path()

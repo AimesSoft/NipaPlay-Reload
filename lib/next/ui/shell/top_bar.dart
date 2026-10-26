@@ -42,7 +42,7 @@ class NextTopBar extends StatelessWidget {
   static double get avatarRight =>
       NextMetrics.chromeEdge + NextWindowButtons.width;
   static double get tasksRight =>
-      avatarRight + _avatar + _gap + _search + _gap;
+      avatarRight + _avatar + _gap + _search + _gap + _search + _gap;
 
   /// Sections line up with the content column, past the traffic lights
   /// when they would reach it; in full screen there are none.
@@ -51,8 +51,8 @@ class NextTopBar extends StatelessWidget {
       : math.max(NextMetrics.gutter, chrome.leading + _afterLights);
 
 
-  /// Background work, search and Nipa, on the right of either bar.
-  static List<Widget> _trailing(NextShellController shell) => [
+  /// Background work, settings, search and Nipa, on the right of either bar.
+  static List<Widget> _trailing(NextShellController shell, {bool compact = false}) => [
             ValueListenableBuilder(
               valueListenable: shell.tasks,
               builder: (context, _, __) {
@@ -73,11 +73,25 @@ class NextTopBar extends StatelessWidget {
               },
             ),
             NextIconButton(
+                glyph: NextGlyph.settings,
+                label: '设置',
+                size: _search,
+                onTap: shell.openSettings),
+            const SizedBox(width: _gap),
+            NextIconButton(
                 glyph: NextGlyph.search,
                 label: '搜索',
                 size: _search,
                 onTap: shell.openSearch),
             const SizedBox(width: _gap),
+            if (compact) ...[
+              NextIconButton(
+                  glyph: NextGlyph.more,
+                  label: '菜单',
+                  size: _search,
+                  onTap: () => shell.togglePopover(NextPopover.nipa)),
+              const SizedBox(width: _gap),
+            ],
             ListenableBuilder(
               listenable: Listenable.merge([shell.chat, shell.nipaSetup]),
               builder: (context, _) {
@@ -260,7 +274,10 @@ class NextPopovers extends StatelessWidget {
           Positioned(
             top: NextLayout.underBar(context) + 4,
             right: (which == NextPopover.tasks
-                    ? NextTopBar.tasksRight - 14
+                    ? NextTopBar.tasksRight - 14 +
+                        (NextLayout.compact(context)
+                            ? NextTopBar._search + NextTopBar._gap
+                            : 0)
                     : NextTopBar.avatarRight - 8) -
                 (NextLayout.compact(context)
                     ? NextMetrics.chromeEdge - NextLayout.compactGutter
@@ -342,14 +359,7 @@ class _CompactBar extends StatelessWidget {
           height: NextMetrics.topBar,
           child: Row(children: [
             const Spacer(),
-            ...NextTopBar._trailing(shell).take(3),
-            NextIconButton(
-                glyph: NextGlyph.more,
-                label: '菜单',
-                size: NextTopBar._search,
-                onTap: () => shell.togglePopover(NextPopover.nipa)),
-            const SizedBox(width: NextTopBar._gap),
-            NextTopBar._trailing(shell).last,
+            ...NextTopBar._trailing(shell, compact: true),
           ]),
         ),
       );

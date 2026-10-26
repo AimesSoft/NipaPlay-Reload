@@ -42,6 +42,7 @@ class _NextHomePageState extends State<NextHomePage> {
   NextShellController? _shell;
   StreamSubscription<void>? _changes;
   UiHome? _home;
+  int _loadGeneration = 0;
 
   /// The shelf card held for 600 ms, previewed in the hero.
   UiWork? _shelfFocus;
@@ -76,9 +77,15 @@ class _NextHomePageState extends State<NextHomePage> {
   }
 
   Future<void> _load() async {
+    final generation = ++_loadGeneration;
     try {
       final home = await _shell!.services.data.home();
-      if (mounted) setState(() => _home = home);
+      if (mounted && generation == _loadGeneration) {
+        setState(() {
+          _home = home;
+          if (home.hero?.pinned == true) _heroOverride = null;
+        });
+      }
     } catch (error) {
       debugPrint('[NextUi] home failed: $error');
     }
@@ -94,7 +101,9 @@ class _NextHomePageState extends State<NextHomePage> {
     if (!open) {
       // Folded: the work the conversation settled on takes the hero.
       final settled = _chat.settledWork;
-      if (settled != null && settled.workId != _baseHero()?.workId) {
+      if (_home?.hero?.pinned != true &&
+          settled != null &&
+          settled.workId != _baseHero()?.workId) {
         _heroOverride = settled;
       }
     }
@@ -145,7 +154,9 @@ class _NextHomePageState extends State<NextHomePage> {
         ?.work;
   }
 
-  UiWork? _heroWork() => _heroOverride ?? _baseHero();
+  UiWork? _heroWork() => _home?.hero?.pinned == true
+      ? _home!.hero!.work
+      : _heroOverride ?? _baseHero();
 
   /// The shelf work previewed in place of [hero]: not with reduced motion,
   /// and not when it is the hero already.
@@ -245,7 +256,9 @@ class _NextHomePageState extends State<NextHomePage> {
           final hero = _heroWork();
           final preview = open ? null : _preview(hero, reduced: reduced);
           final backdropWork = open
-              ? (reduced ? hero : (_chatWork() ?? hero))
+              ? (reduced || _home?.hero?.pinned == true
+                  ? hero
+                  : (_chatWork() ?? hero))
               : (preview ?? hero);
           return Stack(fit: StackFit.expand, children: [
             // The push-in animates every frame: keep it off the page's layer.
@@ -282,7 +295,9 @@ class _NextHomePageState extends State<NextHomePage> {
                       slivers: [
                         SliverToBoxAdapter(child: _region(size, hero, preview)),
                         SliverToBoxAdapter(child: _shelvesWidget()),
-                        SliverToBoxAdapter(child: SizedBox(height: 64 + NextLayout.foot(context))),
+                        SliverToBoxAdapter(
+                            child: SizedBox(
+                                height: 64 + NextLayout.foot(context))),
                       ],
                     ),
             ),
@@ -349,7 +364,8 @@ class _NextHomePageState extends State<NextHomePage> {
         alignment: Alignment.bottomLeft,
         child: Padding(
           padding: EdgeInsets.only(
-              left: NextLayout.gutter(context), top: NextLayout.underBar(context) + 40),
+              left: NextLayout.gutter(context),
+              top: NextLayout.underBar(context) + 40),
           child: hero == null
               ? (_isEmpty ? _EmptyStart(shell: shell) : const SizedBox.shrink())
               : ValueListenableBuilder(
@@ -399,22 +415,22 @@ class _NextHomePageState extends State<NextHomePage> {
           child: ListenableBuilder(
             listenable: shell.nipaSetup,
             builder: (context, _) => AskBar(
-                focusNode: shell.askFocus,
-                controller: shell.askText,
-                onSay: _say,
-                mood: c.mood,
-                moodSentence: c.moodSentence,
-                hint: c.running ? '补充，或者改主意' : '今天想看什么？',
-                suggestions: _suggestions(),
-                aside: shell.nipaSetup.needsModel ? const NipaSetupChip() : null,
-                maxWidth: size.width - NextLayout.gutter(context) - 32,
-                attachments: c.attachments,
-                onAttach: c.attach,
-                onDetach: c.detach,
-                running: c.running,
-                onStop: c.stop,
-                onExpand: c.turns.isEmpty && !c.loading ? null : shell.openChat,
-              ),
+              focusNode: shell.askFocus,
+              controller: shell.askText,
+              onSay: _say,
+              mood: c.mood,
+              moodSentence: c.moodSentence,
+              hint: c.running ? '补充，或者改主意' : '今天想看什么？',
+              suggestions: _suggestions(),
+              aside: shell.nipaSetup.needsModel ? const NipaSetupChip() : null,
+              maxWidth: size.width - NextLayout.gutter(context) - 32,
+              attachments: c.attachments,
+              onAttach: c.attach,
+              onDetach: c.detach,
+              running: c.running,
+              onStop: c.stop,
+              onExpand: c.turns.isEmpty && !c.loading ? null : shell.openChat,
+            ),
           ),
         ),
         const SizedBox(height: 34),
@@ -518,7 +534,7 @@ class _HeroPreview extends StatelessWidget {
 }
 
 /// The shelves: continue watching (16:9 with progress), Nipa's shelves
-/// (posters with a reason), recently added.
+/// (posters with a reason), recently played and recently added.
 class _Shelves extends StatelessWidget {
   const _Shelves({required this.home, required this.page});
   final UiHome? home;
@@ -593,7 +609,6 @@ class _Shelves extends StatelessWidget {
   }
 }
 
-
 /// The home before there is anything to watch: two ways in besides asking
 /// Nipa below.
 class _EmptyStart extends StatelessWidget {
@@ -615,8 +630,7 @@ class _EmptyStart extends StatelessWidget {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('媒体库还是空的',
-                style: NextText.sans(34, weight: FontWeight.w700)),
+            Text('媒体库还是空的', style: NextText.sans(34, weight: FontWeight.w700)),
             const SizedBox(height: 22),
             Row(mainAxisSize: MainAxisSize.min, children: [
               NextButton(label: '添加文件夹', onTap: _addFolder),

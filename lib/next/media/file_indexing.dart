@@ -1,7 +1,8 @@
 import 'package:nipa_harness/nipa_harness.dart';
 import 'identity_store.dart';
 
-/// Classic file listings and playback receipts carry locations, not work IDs.
+/// Classic file listings carry locations, not work IDs. Playback receipts
+/// describe an already resolved source; they are not file discovery.
 final class FileIndexingCapability implements Capability {
   FileIndexingCapability(Capability capability, IdentityStore store)
       : actions = [
@@ -25,7 +26,10 @@ final class _IndexFiles extends Action<JsonEncodable, JsonEncodable> {
         if ((entry.key == 'path' || entry.key == 'filePath') &&
             entry.value is String &&
             (entry.value as String).isNotEmpty) {
-          await store.ensureFile(entry.value as String);
+          final path = entry.value as String;
+          if (Uri.tryParse(path)?.scheme != 'mesh') {
+            await store.ensureFile(path);
+          }
         } else {
           await _locations(entry.value);
         }
@@ -41,6 +45,11 @@ final class _IndexFiles extends Action<JsonEncodable, JsonEncodable> {
   Future<Outcome<JsonEncodable>> run(
       JsonEncodable input, Invocation invocation) async {
     final outcome = await action.run(input, invocation);
+    if (spec.id.startsWith('playback.') ||
+        spec.id == 'ui.open' ||
+        spec.id.startsWith('download.play')) {
+      return outcome;
+    }
     if (outcome is Completed) await _locations(outcome.value.toJson());
     if (outcome is NeedsDecision) {
       for (final option in outcome.decision.options) {

@@ -567,10 +567,10 @@ class FakePlayback extends Fake implements NextPlayback {
 
 /// The services the player's tests run on; [chat] instead of a host that
 /// is never there.
-NextUiServices playerTestServices({ChatPort? chat}) {
+NextUiServices playerTestServices({ChatPort? chat, NextUiData? data}) {
   final unused = _Unused();
   return NextUiServices(
-    data: _Data(),
+    data: data ?? _Data(),
     actions: _Actions(),
     chat: chat ?? _Port(),
     discover: unused,

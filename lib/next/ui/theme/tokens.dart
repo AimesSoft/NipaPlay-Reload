@@ -4,7 +4,7 @@ import 'package:flutter/widgets.dart';
 
 /// Colours from `docs/next/design/visual/concept.html` (`:root`).
 abstract final class NextColors {
-  static const ink = Color(0xFF08080B);
+  static const ink = Color(0xFF000000);
   static const ink2 = Color(0xFF0F0F14);
   static const ink3 = Color(0xFF17171E);
   static const paper = Color(0xFFF5F1EA);

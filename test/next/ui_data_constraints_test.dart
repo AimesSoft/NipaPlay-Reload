@@ -70,7 +70,8 @@ void main() {
         'kind': 'work',
         'attributes': jsonEncode({'title': id == 'w1' ? '葬送的芙莉莲' : '孤独摇滚！'})
       });
-    await File(ppath.join(root.path, 'journal.jsonl')).writeAsString('${jsonEncode({
+    await File(ppath.join(root.path, 'journal.jsonl'))
+        .writeAsString('${jsonEncode({
           'event': 'chat.turn_boundary',
           'origin': 'harness_cli:chat:fixture',
           'threadId': 'thread',
@@ -150,6 +151,46 @@ void main() {
     expect(task.artwork, isNull);
     await context.succeed(
         JobReceipt(verification: VerificationLevel.verified, details: {}));
+  });
+
+  test('episode observations use latest position and exclude scan timestamps',
+      () async {
+    await store.database.insert('media_entities', {
+      'id': 'r-progress',
+      'kind': 'release',
+      'parent_id': 'w1',
+      'attributes': '{}'
+    });
+    await store.database.insert('media_entities', {
+      'id': 'e-progress',
+      'kind': 'episode',
+      'parent_id': 'r-progress',
+      'attributes': jsonEncode({'number': '1'})
+    });
+    JsonMap file(String id, int position, int duration, String at) => {
+          'fileId': id,
+          'episodeId': 'e-progress',
+          'attributes': '{}',
+          'startMs': 100,
+          'endMs': 1100,
+          'progress': {
+            'positionMs': position,
+            'durationMs': duration,
+            'progress': position / 1100,
+            'lastWatchedAt': at
+          }
+        };
+    var episodes = await service.localEpisodes('w1',
+        files: LocalFiles([file('scan', 0, 0, '2026-10-26T20:00:00Z')]));
+    expect(episodes.single.lastPlayedAt, isNull);
+    episodes = await service.localEpisodes('w1',
+        files: LocalFiles([
+          file('old', 900, 1100, '2026-10-25T20:00:00Z'),
+          file('new', 500, 1100, '2026-10-26T20:00:00Z'),
+        ]));
+    expect(episodes.single.position, const Duration(milliseconds: 400));
+    expect(episodes.single.progress, .4);
+    expect(episodes.single.lastPlayedAt, DateTime.utc(2026, 10, 26, 20));
   });
 
   test(

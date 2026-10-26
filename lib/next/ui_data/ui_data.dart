@@ -129,6 +129,8 @@ final class UiEpisode {
     this.runtime,
     this.still,
     this.progress,
+    this.position,
+    this.lastPlayedAt,
     this.heat,
     this.playable = false,
     this.device,
@@ -148,6 +150,18 @@ final class UiEpisode {
   /// 0..1 when started, 1 when watched, null when never played.
   final double? progress;
 
+  /// The observed position within this episode, independent of metadata length.
+  final Duration? position;
+  final DateTime? lastPlayedAt;
+
+  Duration? get resumePosition {
+    if ((progress ?? 0) >= 1) return Duration.zero;
+    if (position != null) return position;
+    if (progress == null || runtime == null) return null;
+    return Duration(
+        milliseconds: (progress! * runtime!.inMilliseconds).round());
+  }
+
   /// Danmaku density over the episode, normalised to 0..1, or null when
   /// there are no comments yet.
   final List<double>? heat;
@@ -165,8 +179,7 @@ final class UiEpisode {
 void sortEpisodes(List<UiEpisode> episodes, {int seasonless = 0}) {
   final order = {for (final (i, e) in episodes.indexed) e: i};
   episodes.sort((a, b) {
-    final season =
-        (a.season ?? seasonless).compareTo(b.season ?? seasonless);
+    final season = (a.season ?? seasonless).compareTo(b.season ?? seasonless);
     if (season != 0) return season;
     final number = switch ((a.number, b.number)) {
       (final x?, final y?) => x.compareTo(y),
@@ -196,8 +209,11 @@ final class UiHome {
 }
 
 final class UiHero {
-  const UiHero(this.work, {this.note});
+  const UiHero(this.work, {this.note, this.pinned = false});
   final UiWork work;
+
+  /// An explicitly saved hero takes precedence over conversation suggestions.
+  final bool pinned;
 
   /// Nipa's one sentence about it, e.g. “准备好了，第一集随时可以看。”
   final String? note;
@@ -205,6 +221,7 @@ final class UiHero {
 
 enum UiShelfKind {
   continueWatching,
+  recentlyPlayed,
 
   /// Works the user follows that have a new episode out today.
   airing,

@@ -91,12 +91,13 @@ final class PlaybackSources extends ChangeNotifier {
     cancelAutoNext();
     host.resolve(MediaRequest(locator: item.videoPath, origin: origin),
         kernel: kernel);
-    final effectiveStart = start ??
-        Duration(milliseconds: await host.records.resumeAt(item.videoPath));
+    final saved = await host.records.resumeAt(item.videoPath);
+    final resolverStart =
+        start ?? (saved > 0 ? Duration(milliseconds: saved) : null);
     final SourcePlan prepared;
     try {
       prepared = await resolver.resolve(item,
-          start: effectiveStart, selection: selection, direct: direct);
+          start: resolverStart, selection: selection, direct: direct);
     } on Failure {
       rethrow;
     } catch (e) {
@@ -112,6 +113,28 @@ final class PlaybackSources extends ChangeNotifier {
       throw const Failure(
           FailureCode.conflict, 'Playback changed while resolving the source.');
     }
+    final current = host.current.value;
+    final reopening = current != null &&
+        !current.phase.value.done &&
+        current.path == prepared.source.locator;
+    final canonicalSaved = prepared.source.locator == item.videoPath
+        ? saved
+        : await host.records.resumeAt(prepared.source.locator);
+    if (_disposed || ticket != _ticket) {
+      await prepared.progress?.stopTranscoding();
+      throw const Failure(
+          FailureCode.conflict, 'Playback changed while loading its progress.');
+    }
+    // Reopening the same episode lets the host close and save it before the
+    // new session reads its position. Otherwise prefer the synchronized
+    // observation, then the position stored under its stable identity.
+    final effectiveStart = start ??
+        (reopening
+            ? null
+            : prepared.resumePosition ??
+                (canonicalSaved > 0
+                    ? Duration(milliseconds: canonicalSaved)
+                    : null));
     final history = item.historyItem;
     final session = await host.open(
         MediaRequest(

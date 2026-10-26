@@ -34,6 +34,7 @@ import '../ui_data/no_airing.dart' if (dart.library.ui) '../ui_data/airing.dart'
     as airing;
 import '../ui_data/service.dart';
 import '../ui_data/ui_data.dart';
+import '../ui_data/recently_played.dart';
 import '../sqlite_library.dart';
 import 'library_codec.dart';
 import 'library_projection.dart';
@@ -1049,8 +1050,8 @@ Future<void> _serve(
             for (final row in rows) row['type'] as String: row['n'] as int
           };
         case 'homePlan':
-          return _DetachedReply(await _homePlan(
-              db, media, sources, ui.engine, projection.snapshot));
+          return _DetachedReply(await _homePlan(db, media, sources, ui.engine,
+              projection.snapshot, projection.canonical));
         case 'works':
           return _packedWorks(projection.snapshot);
         case 'locations':
@@ -1358,16 +1359,27 @@ Future<String?> _homeJobWork(
 /// matching, bound episodes, saved shelves and the fallback hero scan all walk
 /// catalogue-sized inputs, so none of that or its record decoding reaches the
 /// UI isolate.
-Future<UiHome> _homePlan(Database db, MediaService media, StateSources sources,
-    TaskEngine engine, LibrarySnapshot snapshot) async {
+Future<UiHome> _homePlan(
+    Database db,
+    MediaService media,
+    StateSources sources,
+    TaskEngine engine,
+    LibrarySnapshot snapshot,
+    String Function(String) canonical) async {
   final works = snapshot.works;
   final aliases = snapshot.aliases;
-  String canonical(String id) => aliases[id] ?? id;
   UiWork? work(String id) => works[canonical(id)];
   List<UiEpisode> episodes(String workId) =>
       snapshot.episodes[canonical(workId)] ?? const <UiEpisode>[];
 
   final shelves = <UiShelf>[];
+  final recentlyPlayed = recentlyPlayedShelf([
+    for (final episodes in snapshot.episodes.values)
+      for (final episode in episodes)
+        if (episode.lastPlayedAt != null && works[episode.workId] != null)
+          (works[episode.workId]!, episode, episode.lastPlayedAt!),
+  ]);
+  if (recentlyPlayed != null) shelves.add(recentlyPlayed);
   final continuing = <UiShelfItem>[];
   final continuingIds = <String>{};
   final seen = <String>{};
@@ -1430,8 +1442,8 @@ Future<UiHome> _homePlan(Database db, MediaService media, StateSources sources,
   };
   final airingItems = <UiShelfItem>[];
   if (sources.calendar != null) {
-    for (final update in await airing.todayUpdates(
-        media.store, following, (await sources.calendar!())?.rows() ?? const [])) {
+    for (final update in await airing.todayUpdates(media.store, following,
+        (await sources.calendar!())?.rows() ?? const [])) {
       final itemWork = work(update['workId'] as String);
       if (itemWork == null) continue;
       final matches = await db.rawQuery(
@@ -1463,7 +1475,7 @@ Future<UiHome> _homePlan(Database db, MediaService media, StateSources sources,
       final itemWork = work(item['workId'] as String);
       if (itemWork == null) continue;
       if (shelf['placement'] == 'hero') {
-        hero = UiHero(itemWork, note: shelf['note'] as String?);
+        hero = UiHero(itemWork, note: shelf['note'] as String?, pinned: true);
       } else {
         items.add(_homeItem(itemWork, itemWork.next,
             caption: item['note'] as String? ??

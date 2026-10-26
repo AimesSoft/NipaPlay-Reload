@@ -88,6 +88,9 @@ final class MeshPlayback {
             subtitle: item.subtitle,
             detailContext: detail),
         detail: detail,
+        resumePosition: opened['resumeMs'] == null
+            ? null
+            : Duration(milliseconds: opened['resumeMs'] as int),
         source: ResolvedSource(
             locator: locator, uri: actual, kind: 'mesh', direct: true));
   }

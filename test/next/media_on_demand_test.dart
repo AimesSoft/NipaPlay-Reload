@@ -16,29 +16,35 @@ final class _Json implements JsonEncodable {
 }
 
 final class _Listing extends Action<_Json, _Json> {
+  _Listing({this.id = 'fixture.list', this.value});
+  final String id;
+  final JsonMap? value;
   @override
-  ActionSpec get spec => const ActionSpec(
-      id: 'fixture.list',
+  ActionSpec get spec => ActionSpec(
+      id: id,
       title: 'List',
       description: 'Synthetic files',
       effect: Effect.read,
-      input: ObjectSchema({}),
-      output: ObjectSchema({}, additionalProperties: true));
+      input: const ObjectSchema({}),
+      output: const ObjectSchema({}, additionalProperties: true));
   @override
   _Json decodeInput(JsonMap json) => _Json(json);
   @override
   Future<Outcome<_Json>> run(_Json input, Invocation invocation) async =>
-      const Completed(_Json({
-        'files': [
-          {'path': '/fixture/listed.mkv'},
-          {'path': 'smb://fixture/video.mkv'}
-        ]
-      }));
+      Completed(_Json(value ??
+          {
+            'files': [
+              {'path': '/fixture/listed.mkv'},
+              {'path': 'smb://fixture/video.mkv'}
+            ]
+          }));
 }
 
 final class _Capability implements Capability {
+  _Capability([this.action]);
+  final Action? action;
   @override
-  List<Action> get actions => [_Listing()];
+  List<Action> get actions => [action ?? _Listing()];
 }
 
 void main() {
@@ -48,6 +54,37 @@ void main() {
     await f.open();
   });
   tearDown(() => f.close());
+  test('playback receipts never discover temporary grants or Mesh placeholders',
+      () async {
+    for (final id in [
+      'ui.open',
+      'playback.open',
+      'playback.state',
+      'download.play'
+    ]) {
+      final harness = Harness([
+        FileIndexingCapability(
+            _Capability(_Listing(id: id, value: {
+              'path': 'http://127.0.0.1/temporary-grant',
+              'state': {'path': 'mesh:///mesh-episode%3Aone'}
+            })),
+            f.identities)
+      ]);
+      expect(await harness.invokeJson(id, {}, Invocation(origin: 'gui')),
+          isA<Completed>());
+    }
+    expect(await f.jobs.database.query('media_entities'), isEmpty);
+    expect(await f.jobs.database.query('media_locations'), isEmpty);
+  });
+  test('a Mesh locator in a listing is already an episode identity', () async {
+    final harness = Harness([
+      FileIndexingCapability(
+          _Capability(_Listing(value: {'path': 'mesh:///mesh-episode%3Aone'})),
+          f.identities)
+    ]);
+    await harness.invokeJson('fixture.list', {}, Invocation(origin: 'test'));
+    expect(await f.jobs.database.query('media_entities'), isEmpty);
+  });
   test(
       'Classic listing indexes every returned location while preserving its public result',
       () async {

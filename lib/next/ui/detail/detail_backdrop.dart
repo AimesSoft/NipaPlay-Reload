@@ -3,7 +3,7 @@ import 'dart:ui' show ImageFilter, lerpDouble;
 
 import 'package:flutter/widgets.dart';
 
-import '../home/hero_backdrop.dart' show NoArtGlow, ShadeLayers;
+import '../home/hero_backdrop.dart' show NoArtBackground, ShadeLayers;
 import '../theme/tokens.dart';
 import '../widgets/art_origin.dart';
 import '../widgets/artwork.dart';
@@ -121,7 +121,7 @@ class DetailBackdrop extends StatelessWidget {
                       Opacity(
                         opacity: artIn,
                         child: image == null
-                            ? NoArtGlow(tint: tint)
+                            ? const NoArtBackground()
                             : _Art(image,
                                 decodeWidth: soft ? 256 : decode,
                                 tint: tint,

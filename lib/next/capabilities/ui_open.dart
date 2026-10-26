@@ -239,7 +239,13 @@ final class UiOpenAction extends Action<UiOpenValue, UiOpenValue> {
             : _unavailable(target, '作品详情尚未就绪。');
       }
       final path = (merged['url'] ?? merged['path']) as String;
-      return _play(target, path, invocation, startPositionMs: merged['resumeMs'] as int?);
+      // Mesh resolves the stable episode and its latest progress in the
+      // playback source. Treating this earlier snapshot as an explicit seek
+      // overrides the final position saved when reopening the same episode.
+      final meshEpisode = (merged['episodeId'] as String?)
+              ?.startsWith('mesh-episode:') == true;
+      return _play(target, path, invocation,
+          startPositionMs: meshEpisode ? null : merged['resumeMs'] as int?);
     }
     final entity = await service.store.entity(id);
     if (target.containsKey('workId') && entity['kind'] != 'work') {

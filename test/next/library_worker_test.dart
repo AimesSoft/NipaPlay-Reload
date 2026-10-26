@@ -112,6 +112,15 @@ void main() {
     expect((await jobs.database.query('ui_cache', where: "id='mesh:progress'")),
         hasLength(1));
     expect(update.works, hasLength(1));
+    final observed =
+        update.episodes.values.single.singleWhere((e) => e.episodeId == id);
+    expect(observed.runtime, isNull);
+    expect(observed.resumePosition, const Duration(milliseconds: 400));
+    expect(observed.lastPlayedAt, isNotNull);
+    final recent = (await worker.homePlan())
+        .shelves
+        .singleWhere((s) => s.kind == UiShelfKind.recentlyPlayed);
+    expect(recent.items.single.episode?.episodeId, id);
     // SQL readers must run on the worker: replacing the UI reader with a
     // failure leaves this query usable.
     final original = ui.state.views['library.episodes']!;
@@ -152,6 +161,66 @@ void main() {
             .singleWhere((e) => e.episodeId == id)
             .progress,
         .4);
+    final restored =
+        rebuilt.episodes.values.single.singleWhere((e) => e.episodeId == id);
+    expect(restored.position, observed.position);
+    expect(restored.lastPlayedAt, observed.lastPlayedAt);
+  });
+  test('saved remote hero survives worker restart and identity merging',
+      () async {
+    await worker.build('hero');
+    JsonMap peer(List<String> keys) => {
+          'name': '工作站',
+          'records': [
+            {
+              'kind': 'work',
+              'id': 'remote-work',
+              'keys': keys,
+              'added': 1,
+              'attributes': <String, Object?>{},
+              'metadata': {'fields': <String, Object?>{}},
+              'value': workJson(
+                  const UiWork(workId: 'remote-work', title: '穹庐下的魔女')),
+            }
+          ],
+        };
+    final snapshot = await worker.compose({
+      'peer': peer([
+        jsonEncode(['tmdb', 'tv', '', '999'])
+      ])
+    }, {
+      'peer': false
+    }, null);
+    final remote =
+        snapshot.works.values.singleWhere((w) => w.title == '穹庐下的魔女');
+    expect(remote.next, isNull);
+    await jobs.database.insert('ui_shelves', {
+      'id': 'hero',
+      'updated_at': DateTime.now().toUtc().toIso8601String(),
+      'payload': jsonEncode({
+        'placement': 'hero',
+        'items': [
+          {'workId': remote.workId}
+        ],
+        'note': '穹庐下的魔女',
+      })
+    });
+    final home = await worker.homePlan();
+    expect(home.hero?.work.workId, remote.workId);
+    expect(home.hero?.pinned, true);
+    // A new shared identity changes the public ID; the persisted selection
+    // still resolves through its historical members, with no local files.
+    final merged = await worker.compose({
+      'peer': peer([
+        jsonEncode(['bangumi', 'subject', '', '999']),
+        jsonEncode(['tmdb', 'tv', '', '999'])
+      ])
+    }, {
+      'peer': false
+    }, null);
+    final current = merged.works.values.singleWhere((w) => w.title == '穹庐下的魔女');
+    expect(current.workId, isNot(remote.workId));
+    expect((await worker.homePlan()).hero?.work.workId, current.workId);
   });
   test('startup indexers scan, parse and commit in the library worker',
       () async {

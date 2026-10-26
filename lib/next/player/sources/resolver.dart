@@ -28,12 +28,14 @@ final class SourcePlan {
       required this.source,
       required this.detail,
       this.serverSession,
+      this.resumePosition,
       this.selection = const {},
       this.progress});
   final PlayableItem item;
   final ResolvedSource source;
   final PlaybackDetailContext detail;
   final server.PlaybackSession? serverSession;
+  final Duration? resumePosition;
   final JsonMap selection;
   final ServerProgress? progress;
   bool get isServer => serverSession != null;

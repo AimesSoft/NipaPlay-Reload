@@ -146,7 +146,7 @@ class _HeroBackdropState extends State<HeroBackdrop>
             child: KeyedSubtree(
               key: ValueKey(widget.image),
               child: widget.image == null
-                  ? NoArtGlow(tint: widget.tint)
+                  ? const NoArtBackground()
                   : widget.soft
                   ? SoftArt(widget.image!, tint: widget.tint)
                   : NextImage(
@@ -321,29 +321,12 @@ class ShadeLayers extends StatelessWidget {
       ]);
 }
 
-/// No artwork yet: a quiet glow in the work's tint (or Nipa's crimson), so
-/// the hero still has depth.
-class NoArtGlow extends StatelessWidget {
-  const NoArtGlow({super.key, this.tint});
-  final int? tint;
+/// A plain black background when no artwork is available.
+class NoArtBackground extends StatelessWidget {
+  const NoArtBackground({super.key});
 
   @override
   Widget build(BuildContext context) {
-    final glow = tint == null ? NextColors.accent : Color(tint!);
-    return DecoratedBox(
-      decoration: BoxDecoration(
-        color: NextColors.ink2,
-        gradient: RadialGradient(
-          center: const Alignment(0.55, -0.35),
-          radius: 0.9,
-          colors: [
-            glow.withValues(alpha: tint == null ? 0.16 : 0.42),
-            glow.withValues(alpha: tint == null ? 0.05 : 0.14),
-            NextColors.ink2.withValues(alpha: 0),
-          ],
-          stops: const [0, 0.45, 1],
-        ),
-      ),
-    );
+    return const ColoredBox(color: NextColors.ink);
   }
 }
