@@ -97,12 +97,17 @@ extension VideoPlayerStateStreaming on VideoPlayerState {
     final capturedVideoPath = _currentVideoPath;
 
     _isCapturingFrame = true;
-    _screenshotCompleter = Completer<void>();
+    final screenshotCompleter = Completer<void>();
+    _screenshotCompleter = screenshotCompleter;
     _logMacOSHdrExitTrace(
       'capture start trigger=$triggerEvent path=$_currentVideoPath status=$_status playerState=${player.state}',
     );
     try {
       String? newThumbnailPath = await _captureVideoFrameWithoutPausing();
+      if (_currentVideoPath != capturedVideoPath ||
+          !identical(_screenshotCompleter, screenshotCompleter)) {
+        return;
+      }
       // Windows+MediaKit 暂停态对 mpv 渲染管线取帧会冻死 platform 线程
       // （本地大文件 MFT 硬解必现），跳过暂停态补拍。
       if (newThumbnailPath == null &&
@@ -134,9 +139,13 @@ extension VideoPlayerStateStreaming on VideoPlayerState {
         'capture error trigger=$triggerEvent error=$e status=$_status playerState=${player.state}',
       );
     } finally {
-      _isCapturingFrame = false;
-      _screenshotCompleter?.complete();
-      _screenshotCompleter = null;
+      // A timed-out exit capture may finish after a new video's capture starts.
+      // Complete only this request; do not clear or finish the new one's state.
+      if (identical(_screenshotCompleter, screenshotCompleter)) {
+        _isCapturingFrame = false;
+        _screenshotCompleter = null;
+      }
+      if (!screenshotCompleter.isCompleted) screenshotCompleter.complete();
     }
   }
 

@@ -1402,11 +1402,14 @@ extension VideoPlayerStateDanmaku on VideoPlayerState {
       }
 
       if (existingHistory != null) {
+        // resetPlayer already waits for a bounded exit screenshot. Saving its
+        // final position must not start another unbounded render request.
         // 使用当前缩略图路径，如果没有则尝试捕获一个
         String? thumbnailPath = _currentThumbnailPath;
         if (thumbnailPath == null || thumbnailPath.isEmpty) {
           thumbnailPath = existingHistory.thumbnailPath;
           if ((thumbnailPath == null || thumbnailPath.isEmpty) &&
+              !_isResetting &&
               player.state == PlaybackState.playing &&
               !_usesWindowsPlatformVideoSurface) {
             // 仅在播放时尝试捕获
@@ -1528,6 +1531,7 @@ extension VideoPlayerStateDanmaku on VideoPlayerState {
         // 尝试获取缩略图
         String? thumbnailPath = _currentThumbnailPath;
         if (thumbnailPath == null &&
+            !_isResetting &&
             player.state == PlaybackState.playing &&
             !_usesWindowsPlatformVideoSurface) {
           // 仅在播放时尝试捕获
