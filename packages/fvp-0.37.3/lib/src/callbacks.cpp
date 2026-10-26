@@ -4,6 +4,7 @@
 
 #include "mdk/Player.h"
 #include <condition_variable>
+#include <functional>
 #include <memory>
 #include <mutex>
 #include <unordered_map>
@@ -36,6 +37,9 @@ public:
     Player(int64_t handle)
         : mdk::Player(reinterpret_cast<mdkPlayerAPI*>(handle)) {}
     const shared_ptr<CallbackState> callbacks = make_shared<CallbackState>();
+    // Surface wrappers reset the shared native player's callbacks on destruction.
+    // Keep the existing Dart port and subscriptions when that surface is replaced.
+    function<void()> attach;
 };
 
 static unordered_map<int64_t, shared_ptr<Player>> players;
@@ -106,7 +110,9 @@ FVP_EXPORT void MdkCallbacksRegisterPort(int64_t handle, void* post_c_object, in
     const auto tid = this_thread::get_id();
 
     auto wp = weak_ptr<CallbackState>(player->callbacks);
-    player->onEvent([=](const mdk::MediaEvent& e){
+    auto* raw = player.get();
+    player->attach = [=]{
+    raw->onEvent([=](const mdk::MediaEvent& e){
         auto sp = wp.lock();
         if (!sp)
             return false;
@@ -155,7 +161,7 @@ FVP_EXPORT void MdkCallbacksRegisterPort(int64_t handle, void* post_c_object, in
         return false;
     });
 
-    player->onStateChanged([=](mdk::State s){
+    raw->onStateChanged([=](mdk::State s){
         auto sp = wp.lock();
         if (!sp)
             return;
@@ -212,7 +218,7 @@ FVP_EXPORT void MdkCallbacksRegisterPort(int64_t handle, void* post_c_object, in
         });
     });
 
-    player->onMediaStatus([=](mdk::MediaStatus oldValue, mdk::MediaStatus newValue){
+    raw->onMediaStatus([=](mdk::MediaStatus oldValue, mdk::MediaStatus newValue){
         auto sp = wp.lock();
         if (!sp)
             return false;
@@ -268,7 +274,7 @@ FVP_EXPORT void MdkCallbacksRegisterPort(int64_t handle, void* post_c_object, in
         return p->data[type].mediaStatus.ret;
     });
 
-    player->onSubtitleText([=](double start, double end, const std::vector<std::string>& texts){
+    raw->onSubtitleText([=](double start, double end, const std::vector<std::string>& texts){
         auto sp = wp.lock();
         if (!sp)
             return;
@@ -333,7 +339,17 @@ FVP_EXPORT void MdkCallbacksRegisterPort(int64_t handle, void* post_c_object, in
             return;
         }
     });
+    };
+    player->attach();
+}
 
+FVP_EXPORT void MdkCallbacksRearm(int64_t handle)
+{
+    const auto it = players.find(handle);
+    if (it == players.cend() || !it->second->attach) {
+        return;
+    }
+    it->second->attach();
 }
 
 FVP_EXPORT void MdkCallbacksUnregisterPort(int64_t handle)
