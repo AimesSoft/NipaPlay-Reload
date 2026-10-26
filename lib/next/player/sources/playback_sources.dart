@@ -26,6 +26,7 @@ final class PlaybackSources extends ChangeNotifier {
   }
   final NextPlayerHost host;
   final NextSourceResolver resolver;
+  Future<void> Function(String path)? prepareDanmaku;
   final Future<(String, int)> Function() readEndSettings;
   late final StreamSubscription<PlaybackEvent> _events;
   SourcePlan? plan;
@@ -112,6 +113,12 @@ final class PlaybackSources extends ChangeNotifier {
       await prepared.progress?.stopTranscoding();
       throw const Failure(
           FailureCode.conflict, 'Playback changed while resolving the source.');
+    }
+    await prepareDanmaku?.call(prepared.source.locator);
+    if (_disposed || ticket != _ticket) {
+      await prepared.progress?.stopTranscoding();
+      throw const Failure(FailureCode.conflict,
+          'Playback changed while preparing its danmaku.');
     }
     final current = host.current.value;
     final reopening = current != null &&

@@ -454,13 +454,13 @@ final _specs = [
       Effect.write,
       const ObjectSchema({'maxBytes': IntegerSchema(minimum: 0)}),
       const ObjectSchema({}, additionalProperties: true),
-      'Reclaim oldest recoverable danmaku pools to maxBytes (default 128 MiB). Imported unique copies are excluded. Defers while acquisition tasks are active; unloads evicted pools. Also collects unreferenced content files.'),
+      'Collect unreferenced content files only. All saved danmaku pools, including online fetches and playback imports, are persistent and retained. maxBytes is a legacy compatibility parameter and never evicts saved pools. Defers while acquisition tasks are active; use cache_delete only for an explicit deletion.'),
   _spec(
       'danmaku.cache_delete',
       Effect.destructive,
       const ObjectSchema({'cacheKey': _text}, required: ['cacheKey']),
       const ObjectSchema({'deleted': BooleanSchema()}, required: ['deleted']),
-      'Delete a specific source cache object and unload bindings using it. Binding evidence remains.'),
+      'Explicitly delete a saved danmaku pool and unload bindings using it. This removes persistent media data, including online acquisitions. Binding evidence remains.'),
   _spec(
       'danmaku.export',
       Effect.write,

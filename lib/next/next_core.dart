@@ -17,6 +17,8 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import 'danmaku/export.dart';
 import 'danmaku/runtime.dart';
+import 'danmaku/automatic.dart';
+import 'danmaku/source.dart';
 import 'downloads/download_backend.dart';
 import 'downloads/download_runtime.dart';
 import 'media/classic_projection.dart';
@@ -334,6 +336,22 @@ final class NextCore {
         media.service.authorizedPath(path, directory: directory);
     danmaku = await DanmakuRuntime.create(media.service.store,
         authorizeLocalFile: media.service.authorizedPath);
+    danmaku.automatic = AutomaticDanmaku(danmaku.service, matchHash: (path) async {
+      final result = await media.service.matchHashes([{'path': path}]);
+      final files = result['files'] as List;
+      final found = files.single as JsonMap;
+      if (found['error'] != null) return [];
+      return [
+        for (final candidate in found['candidates'] as List)
+          for (final episode in (candidate as JsonMap)['episodes'] as List)
+            DanmakuVideo(
+                sourceId: 'dandanplay',
+                videoId: ((episode as JsonMap)['ref'] as JsonMap)['externalId'] as String,
+                title: '${candidate['title']} · ${episode['title']}',
+                durationMs: 0,
+                objectType: 'episode')
+      ];
+    });
     danmaku.service.exporter = DanmakuExporter(danmaku.service.store,
         (path) => media.service.authorizedPath(path, directory: true));
     subtitles = SubtitleLibrary(media.service, root, probe: mediaSubtitleProbe);
@@ -532,7 +550,10 @@ final class NextCore {
     storage.libraryRoots = media.service.authorizedRoots;
     storage.artworkBusy = () => uiData.artwork.busy;
     uiData.meshLibrary = MeshLibrary(uiData, mesh,
-        subtitleProbe: mediaSubtitleProbe, startupPhase: _startupPhase);
+        subtitleProbe: mediaSubtitleProbe, startupPhase: _startupPhase,
+        prepareDanmaku: (path, fileId, episodeId) async {
+          await danmaku.automatic!.prepare(path, fileId: fileId, episodeId: episodeId);
+        });
     memory.redact = uiData.meshLibrary!.worker.redactText;
     hooks.redact = uiData.meshLibrary!.worker.redactJson;
     phase('state: mesh library');

@@ -129,7 +129,7 @@ const applicationSettingDescriptions = <String, String>{
   // ---- 弹幕：加载与匹配 ----
   'danmaku.convertToSimplified': '把繁体中文弹幕转换为简体显示。默认值随语言：系统语言不是繁体中文时默认开启。',
   'danmaku.autoMatchFirstSearchResultOnHashFail':
-      '文件哈希匹配弹幕失败时，默认用文件名搜索的第一个结果自动匹配；关闭后改为弹出搜索弹幕菜单让用户选。默认开启。',
+      'Classic 文件哈希匹配失败时，是否采用文件名搜索的第一个结果，默认开启。Next 仅对唯一哈希匹配自动获取弹幕，不使用此搜索回退，也不自动弹出匹配窗口。',
   'danmaku.autoLoadStrategy':
       '播放时自动加载弹幕的来源：remoteAndLocal（默认）自动加载远程弹幕，同时叠加视频同目录下同名的 .xml 或 .json 弹幕文件；remote 只自动识别并加载弹弹play 网络弹幕；local 只加载视频同目录下同名的 .xml 或 .json 文件。是否完全不自动加载由 danmaku.skipMatching 决定。',
   'danmaku.skipMatching':

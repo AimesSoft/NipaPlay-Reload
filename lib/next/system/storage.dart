@@ -107,7 +107,6 @@ final class SystemStorage implements Capability {
     'images',
     'thumbnails',
     'timeline',
-    'nextDanmaku',
     'nextArtwork'
   ];
 
@@ -240,7 +239,7 @@ final class SystemStorage implements Capability {
         for (final path in roots) await space(path)
       ],
       'preservation':
-          'Imports, artwork, mesh assets, databases and user downloads are retained. nextDanmaku contains both cache and unique imports; prune checks storage_kind.'
+          'Saved danmaku, artwork, mesh assets, databases and user downloads are retained. nextDanmaku is persistent media data, including online acquisitions.'
     };
   }
 
@@ -252,11 +251,6 @@ final class SystemStorage implements Capability {
         .toSet();
     final entries = <JsonMap>[], retained = <JsonMap>[];
     final chunks = await database.query('danmaku_cache_chunks');
-    final importedPaths = chunks
-        .where((r) => r['storage_kind'] == 'imported')
-        .map((r) => r['file_path'])
-        .toSet();
-    final seenPaths = <Object?>{};
     final recoverableArtwork = await _recoverableArtwork();
     for (final kind in kinds) {
       if (kind == 'nextDanmaku') {
@@ -267,11 +261,7 @@ final class SystemStorage implements Capability {
             'path': row['file_path'],
             'bytes': row['byte_count']
           };
-          if (importedPaths.contains(row['file_path'])) {
-            retained.add({...item, 'reason': 'unique_import'});
-          } else if (seenPaths.add(row['file_path'])) {
-            entries.add(item);
-          }
+          retained.add({...item, 'reason': 'saved_danmaku'});
         }
       } else if (kind == 'nextArtwork' || kind == 'artwork') {
         for (final file in await files(dirs[kind]!)) {
@@ -311,11 +301,7 @@ final class SystemStorage implements Capability {
       'planId': id,
       'entries': entries,
       'retained': retained,
-      'nextDanmakuKeys': chunks
-          .where((r) => r['storage_kind'] != 'imported')
-          .map((r) => r['cache_key'])
-          .toSet()
-          .toList(),
+      'nextDanmakuKeys': <String>[],
       'reclaimableBytes':
           entries.fold<int>(0, (n, e) => n + (e['bytes'] as int? ?? 0)),
       'maxBytes': (input['maxBytes'] as num?)?.toInt() ?? 0,

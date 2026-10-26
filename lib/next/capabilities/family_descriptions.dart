@@ -62,7 +62,9 @@ const appFamilyDescription =
     'indexed facts or disk files. settings exposes only returned keys.';
 
 const danmakuFamilyDescription =
-    'Persistent danmaku sources, caches and tracks. '
+    'Persistent danmaku sources, saved content and tracks. Online acquisitions, '
+    'playback imports and manual imports are retained across restarts and cache '
+    'cleanup. Only explicit deletion, replacement or detachment removes content. '
     'Both GUI and headless use the same NipaPlay Dandanplay gateway/client, '
     'host vault reference preferences/dandanplay_token and local import parser. '
     'sources reports installed adapters; app.capabilities reports credential readiness. '
@@ -99,7 +101,7 @@ const familyFacts = <String, String>{
 - MDK 的日志处理器全进程只有一个：Next 开启时接过来，每一行原样交给原来的处理器，Next 关闭时交还；设了 MDK_LOG 时 MDK 自己写 stderr，Next 不接，player_log 的 mdkLog 说明这一点。
 - errors 另给 thisRun（本进程记下的不同错误数与出现次数）和 uncleanExits（总数、还没被 errors 返回过的条数、最近一次的时间）；返回过的异常退出算已读，跨重启保留；summaryOnly 只看计数，不改变已读。
 - 这些记录只在 Next 开启时进行；原有的错误处理、日志级别与界面日志设置不变。''',
-  'cache': r'''plan(kinds,maxBytes) 返回实际回收对象、估计字节和保留原因，prune(planId) 重新核对引用与变化并返回逐项结果。仅可重取缓存回收无 NeedsDecision。Next 弹幕池复用引用感知回收；正在获取时推迟。计划是当前进程的预览，不允许夹带任意路径。''',
+  'cache': r'''plan(kinds,maxBytes) 返回实际回收对象、估计字节和保留原因，prune(planId) 重新核对引用与变化并返回逐项结果。仅可重取缓存回收无 NeedsDecision。已保存的 Next 弹幕是持久媒体数据，包括在线获取与播放时取得的内容，不参与缓存空间回收；删除须明确调用 danmaku.cache_delete。计划是当前进程的预览，不允许夹带任意路径。''',
   'storage': r'''status 给目录真实用量和卷可用空间。父目录包含子目录，不相加。watch 显式订阅空间阈值、unwatch 取消；仅当前进程有效，转换发 storage.space_changed。可重取缓存用 cache.plan/prune；字幕、导入弹幕、用户下载与无法证明可重取的图片保留。磁盘用户文件删除/覆盖沿用 media.mesh_files 的 NeedsDecision。 `state.query storage.volumes`、`storage.directories` 以行给出同样的事实，可过滤。''',
   'network': r'''status 给路由、代理、故障转移、媒体服务器连接 UA 及来源最近错误/上次成功。check 显式检查已登记来源或官方网关 healthz，不更换路由或登录。观测历史只覆盖当前进程，未观察值不宣称可达。第三方凭据去向仍由用户设置；秘密不进输出。 `state.query network.routes`、`network.observations` 以行给出同样的事实；来源逐地址的连通性在 `media.sources` 族的 `addresses[]` 与 `media.source_addresses` 视图。''',
   'events': r'''身体变化共用 hook 与 followup 的持久事实日志。describe 列出事件；wait(afterCursor) 有界等待和分页，游标跨重启；只重读事实，不重跑脚本。followup.register 订阅下一次事件；hook 名称就是事件名。播放位置不逐帧发事件；seek_requested 是受理意图，settlement 必须另核对。playback.failed 的 facts 是一条播放失败记录，与 playback.failures 的条目相同（stage、category、内核原文等）。''',
@@ -175,6 +177,8 @@ NipaPlay 自己会做一部分：作品有 TMDB 身份时取图，同步 Classic
 - **记录与通知**：每次提交写入 db_commits（SQL、参数、改动计数、前后镜像、origin、invocationId、actor），并在 activity 里留一条；发出 `media.assets.changed`（kind 为 metadata、artwork、danmaku 或 identity），刷新读这些行的界面、媒体库索引和封面缓存。直接写入不往 Classic 投影，不产生专用原语的回执和领域历史，不自动递增 media_entities.revision。
 - **撤回**：`db.undo {commitId}` 恢复那次提交的前镜像。每一行当前内容必须仍等于那次提交的后镜像，否则整个撤回被拒绝并列出冲突的行；`dryRun:true` 只看不改。撤回本身也是一次提交，可再撤回。''',
   'danmaku': danmakuFamilyDescription + r'''- **弹幕**：
+  - **长期保存**：fetch、attach、import 以及播放时自动获取成功的弹幕都保存为持久内容，重启和缓存空间清理不会删除。表名和参数里的 cache 是历史命名。刷新失败保留旧内容；明确删除用 danmaku.cache_delete。
+  - **播放时自动匹配**：按 danmaku.autoLoadStrategy 和 danmaku.skipMatching 设置，先复用已有弹幕；原绑定缺内容时按原视频号补取；无绑定的本地文件使用既有弹弹play 头部 16 MiB MD5 哈希匹配，只有唯一匹配才自动获取并保存。无匹配、多匹配或网络失败均不猜标题、不阻断播放。Mesh 在文件所在设备做同样的准备，再发送轨道给播放端；播放端不对临时串流地址求哈希。
   - **轨道**：一条弹幕轨道属于某个文件或某一集，有它的来源平台（弹弹play、优酷、B 站、本地文件……）和该平台上的视频；同一平台的同一个视频只保留一条，再次交入就是刷新。
   - **用在哪里**：剧集的热度线和主视觉上飘的弹幕，都来自 NipaPlay 记下的轨道。用 `danmaku.*` 修改，用 `state.query` 的 `danmaku.bindings`、`danmaku.tracks` 读取。
   - **同名弹幕文件**：NipaPlay 索引本地视频时，在后台发现并读取旁边最匹配的 XML/JSON，记录路径、平台、视频号、条数与读取时间；内容留在原文件。文件变化会重读，消失或不可读会记为不可用。热度线、主视觉弹幕、`ui_facts` 每集覆盖和轨道查询读取同一份记录，Next 播放器加载这条轨道。Next 播放时自动取得的弹弹play 弹幕也会保存为轨道，下一次仍可读取和播放。

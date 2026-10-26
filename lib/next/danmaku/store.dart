@@ -288,7 +288,9 @@ final class DanmakuStore {
           'offset_ms': 0,
           'alignment': jsonEncode({'method': 'identity', 'confirmed': false}),
           'evidence': jsonEncode({'reason': reason, 'url': url}),
-          'bound_by': invocation.origin == 'gui' ? 'user' : 'agent',
+          'bound_by': invocation.origin == 'application:playback'
+              ? 'automatic'
+              : invocation.origin == 'gui' ? 'user' : 'agent',
           'invocation_id': invocation.id,
           'revision': 0,
           'created_at': now
@@ -296,7 +298,9 @@ final class DanmakuStore {
         await _event(tx, id, 0, invocation.id, {
           'operation': 'attach',
           'origin': invocation.origin,
-          'actor': invocation.origin == 'gui' ? 'user' : 'agent',
+          'actor': invocation.origin == 'application:playback'
+              ? 'automatic'
+              : invocation.origin == 'gui' ? 'user' : 'agent',
           'video': video.toJson(),
           'reason': reason,
           'url': url

@@ -16,7 +16,9 @@ import 'store.dart';
 import 'local_source.dart';
 import 'sidecar.dart';
 import '../player/next_playback.dart';
+import '../player/ports/session_playback.dart';
 import '../player/perf/counters.dart';
+import 'automatic.dart';
 
 /// Forwards track operations to what plays while Next is open.
 final class _HostPlayerPort implements PlaybackDanmakuPort {
@@ -66,6 +68,7 @@ final class DanmakuRuntime {
   final DanmakuCapability capability;
   final _HostPlayerPort _port;
   final List<http.Client> _clients;
+  AutomaticDanmaku? automatic;
   Future<void> _restoring = Future.value();
   bool _busy = false, _stopped = false, _dirty = false;
   Harness? _harness;
@@ -135,6 +138,11 @@ final class DanmakuRuntime {
     _stopped = false;
     _harness = harness;
     _playback = playback;
+    if (playback is SessionPlayback) {
+      playback.sources.prepareDanmaku = (path) async {
+        await automatic?.prepare(path);
+      };
+    }
     playback.localDanmakuLoader = (path) async {
       if (path.contains('://')) return false;
       final id = await service.store.identities.ensureFile(path);
@@ -151,6 +159,9 @@ final class DanmakuRuntime {
   }
 
   void _unbind() {
+    if (_playback case final SessionPlayback playback) {
+      playback.sources.prepareDanmaku = null;
+    }
     _playback?.media.removeListener(_mediaChanged);
     _playback?.danmakuVersion.removeListener(_changed);
     _playback?.localDanmakuLoader = null;

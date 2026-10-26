@@ -91,7 +91,6 @@ Future<Database> openNextDatabase(Directory root,
   try {
     final files = DanmakuFiles(db);
     await files.migrate();
-    await files.prune();
     return db;
   } catch (_) {
     await db.close();

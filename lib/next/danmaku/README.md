@@ -92,12 +92,14 @@ Classic 格式的条目采用现有解析器的默认值和筛选语义，不再
 全部行完成后执行一次 VACUUM，持久标记在成功后清除；整理中断也会在下次打开时重试。
 迁移不删除既有无绑定的导入行，以保留可能仅剩的副本。
 
-`storage_kind=imported` 是明确交入的唯一副本；`cache` 是在线分段与
-`application:playback` 回写的可重新获取内容。两者均存文件，读取校验哈希和条数。
+`storage_kind=imported` 记录明确交入的内容；`cache` 记录在线分段与
+`application:playback` 回写的来源类别。这些名称为历史兼容保留，全部已提交内容都是
+持久媒体数据，不能因可联网重新获取而自动删除。两者均存文件，读取校验哈希和条数。
 刷新或撤销后，没有其他 accepted 绑定引用的导入池移除；共享文件等到最后一个
 数据库引用释放才删除。事务回滚或中断遗留的无引用文件在启动、刷新、撤销及清理时收集。
-缓存在启动时按最旧池回收到 128 MiB，也可调用 `danmaku.cache_prune(maxBytes)`；
-它清空被回收池的绑定指针并刷新播放，绝不回收 imported。存在未结束的获取任务时延后。
+启动不再按空间预算删除弹幕。`danmaku.cache_prune(maxBytes)` 仅收集数据库没有引用的
+遗留文件，`maxBytes` 为兼容参数，不删除任何已保存池，不清空绑定指针。
+存在未结束的获取任务时延后；系统 `cache.plan/prune` 同样保留全部弹幕内容。
 `cache_delete` 仍是明确指定池的破坏性操作，可以删除交入内容。
 
 现有 `backup.*` 和 WebDAV `sync.*` 只覆盖 Classic 类别（preferences、mediaLibraries、
@@ -189,6 +191,19 @@ Classic 与 Next 的弹弹play 原始响应共用 `dandanplay_comments.dart` 解
 缓存和后续播放器解析保留 related 的平台、视频与原弹幕 ID。没有这些证据的旧缓存
 仍按 unknown 处理，不猜平台。Classic 单独播放时仍走原合并逻辑。
 
+## 播放时自动准备
+
+Next 本地播放在打开视频前复用持久弹幕。遵循 `danmaku.autoLoadStrategy` 与
+`danmaku.skipMatching`；既有弹弹play 绑定缺少正文时按原视频号补取，不重新猜匹配。
+没有绑定的本地文件使用既有 `media.hash.match` 相同的头部 16 MiB MD5 与 hashOnly
+提供方，只接受唯一剧集候选。无匹配、多匹配、显式解绑、手动绑定或网络失败均不自动
+选择标题搜索结果。获取通过同一持久任务引擎执行；失败保留原记录，下一次播放可重试。
+准备最多等待 12 秒，超时不阻断播放，已提交的获取任务可在后台完成并保存。
+
+Mesh 在视频文件所在设备执行同一准备，再生成播放弹幕包。接收端不对临时串流地址
+求哈希，不另存一份与源设备脱离的匹配。所有取得的正文长期保存；表名与 API 中的
+`cache` 是历史兼容名称，不代表自动删除策略。
+
 ## Action 目录
 
 输入/输出 schema 的唯一事实来源是 `capability.dart`。视频引用包括 sourceId、
@@ -199,7 +214,7 @@ requestId 只用于存量任务查找。
 | Action | Effect | 结果 |
 |---|---|---|
 | sources / search / episodes / resolve / tracks | read | 瞬时声明/候选/目录/明确视频/全部轨道与覆盖；tracks 可登记缺失文件位置，不建绑定、任务或弹幕缓存 |
-| fetch | write | 立即返回 jobId；只获取缓存，不改播放轨道 |
+| fetch | write | 立即返回 jobId；获取并持久保存正文，不改播放轨道 |
 | attach | write | 明确绑定及获取任务，或复用已有轨道；复用/已存在时 jobId=null，回执带 status/trackId |
 | set_enabled / set_dedup / offset / detach | write | 绑定修订 CAS；绝对设置；解绑释放无引用的交入池，保留来源审计 |
 | analyze_alignment | read | 估计、逐锚点偏移/残差、证据、置信与限制；无持久化或任务 |
@@ -207,7 +222,7 @@ requestId 只用于存量任务查找。
 | align / align_apply / align_keep | write | 仅存量任务查找/恢复；新任务迁移到只读分析加属性更新 |
 | export | write | 授权媒体目录中的新 JSON 文件；raw 或 mapped，按 bytes/SHA-256 回读；不覆盖现有文件 |
 | cache_delete | destructive | 删除明确 cacheKey；活动获取任务引用该缓存时返回 conflict，先停止任务 |
-| cache_prune | write | 按空间回收可重新获取的缓存；默认 128 MiB，交入唯一副本不参与，有活动获取任务则延后 |
+| cache_prune | write | 仅清理没有数据库引用的遗留内容文件；已保存弹幕全部持久保留，有活动获取任务则延后 |
 
 上表各项带 `danmaku.` 前缀。export 的 mapped 指一条绑定映射后的源数据，不是
 播放器经过过滤的最终显示列表，也不包含其他轨道。

@@ -74,6 +74,29 @@ void main() {
   void end(FakeHost rig) => rig.drivers.last
       .emit((seq, at) => KernelEnded(rig.drivers.last.instance, seq, at));
 
+  test('danmaku preparation precedes opening and stale requests cannot open', () async {
+    final rig = FakeHost();
+    final sources = PlaybackSources(rig.host, _Resolver());
+    addTearDown(sources.dispose);
+    addTearDown(() => rig.host.dispose());
+    final entered = Completer<void>(), release = Completer<void>();
+    sources.prepareDanmaku = (path) async {
+      if (path == item(0).videoPath) {
+        entered.complete();
+        await release.future;
+      }
+    };
+    final old = sources.open(item(0));
+    final rejected = expectLater(old, throwsA(isA<Failure>()));
+    await entered.future;
+    expect(rig.drivers, isEmpty);
+    final current = await sources.open(item(1));
+    release.complete();
+    await rejected;
+    expect(rig.host.current.value, same(current));
+    expect(current.path, item(1).videoPath);
+  });
+
   test('Mesh episode IDs with colons keep stable locators and get fresh grants',
       () async {
     final rig = FakeHost();

@@ -218,7 +218,7 @@ const dbTableDocs = <String, DbTableDoc>{
       '弹幕对齐分析的候选结果，挂在分析任务（job_id）上。',
       reason: '随任务引擎的任务生命周期存在。'),
   'danmaku_cache_chunks': DbTableDoc(DbAccess.read,
-      '弹幕缓存与已导入弹幕的分块，file_path 指向磁盘文件。',
+      '持久弹幕内容的分块，file_path 指向磁盘文件。在线获取与导入均长期保留；cache 表名和 storage_kind 是历史命名，不代表可以自动回收。',
       reason: '与磁盘文件和缓存回收（cache.plan/prune）对账。'),
   'danmaku_storage_state': DbTableDoc(DbAccess.read, '弹幕存储维护的内部标志。',
       reason: '内部状态。'),

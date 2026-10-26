@@ -32,6 +32,7 @@ final class MeshLibrary {
     this.mesh, {
     Future<JsonMap> Function(String) subtitleProbe = probeMediaInfo,
     this.startupPhase,
+    this.prepareDanmaku,
   }) {
     worker = LibraryWorker(ui, subtitleProbe: subtitleProbe);
     ui.state.queryWorker = worker.query;
@@ -46,6 +47,7 @@ final class MeshLibrary {
   final UiDataService ui;
   final MeshRuntime mesh;
   final void Function(String)? startupPhase;
+  final Future<void> Function(String path, String fileId, String episodeId)? prepareDanmaku;
   final _peers = <String, JsonMap>{};
   final _online = <String, bool>{};
   Map<String, String> _assets = {};
@@ -572,6 +574,7 @@ final class MeshLibrary {
     if (links.isEmpty) {
       throw const FormatException('Episode is not in this file.');
     }
+    await prepareDanmaku?.call(path, fileId, episodeId);
     final tracks = <JsonMap>[];
     final store = DanmakuStore(ui.media.store);
     await SidecarIndexer(store, () async {}).inspect(fileId, path);

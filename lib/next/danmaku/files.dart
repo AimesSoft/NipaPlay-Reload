@@ -180,8 +180,9 @@ final class DanmakuFiles {
     }
   }
 
-  /// Imported content never participates in the cache budget. Acquisition jobs
-  /// retain their checkpoints and receipts until they finish.
+  /// All committed comment pools are persistent media data, including online
+  /// acquisitions and playback imports. The legacy budget arguments remain for
+  /// API compatibility; only files without database references are collected.
   Future<Map<String, Object?>> prune({int maxBytes = cacheBudget, Set<String>? cacheKeys}) =>
       db.transaction((tx) async {
         final active = await tx.query('jobs',
@@ -192,51 +193,19 @@ final class DanmakuFiles {
         if (active.isNotEmpty) {
           return {'deferred': true, 'reclaimedBytes': 0, 'deletedPools': 0};
         }
-        final pools = await tx.rawQuery(
-            "SELECT cache_key,MIN(fetched_at) AS oldest "
-            "FROM danmaku_cache_chunks GROUP BY cache_key "
-            "HAVING SUM(CASE WHEN storage_kind='imported' THEN 1 ELSE 0 END)=0 "
-            'ORDER BY oldest,cache_key');
         final rows = await tx.query('danmaku_cache_chunks');
-        final protected = rows
-            .where((r) => r['storage_kind'] == 'imported')
-            .map((r) => r['file_path'])
-            .toSet();
-        final references = <Object?, int>{}, sizes = <Object?, int>{};
-        for (final row in rows.where((r) => r['storage_kind'] == 'cache')) {
-          final path = row['file_path'];
-          references[path] = (references[path] ?? 0) + 1;
-          sizes[path] = row['byte_count'] as int;
-        }
-        var remaining = sizes.entries
-            .where((e) => !protected.contains(e.key))
-            .fold<int>(0, (n, e) => n + e.value);
-        var reclaimed = 0, deleted = 0;
-        for (final pool in pools) {
-          if (remaining <= maxBytes) break;
-          final key = pool['cache_key'];
-          if (cacheKeys != null && !cacheKeys.contains(key)) continue;
-          await tx.delete('danmaku_cache_chunks',
-              where: 'cache_key=?', whereArgs: [key]);
-          await tx.update('danmaku_bindings', {'cache_key': null},
-              where: 'cache_key=?', whereArgs: [key]);
-          for (final row in rows.where((r) => r['cache_key'] == key)) {
-            final path = row['file_path'];
-            references[path] = references[path]! - 1;
-            if (references[path] == 0 && !protected.contains(path)) {
-              final bytes = sizes[path]!;
-              remaining -= bytes;
-              reclaimed += bytes;
-            }
-          }
-          deleted++;
-        }
+        final sizes = <Object?, int>{
+          for (final row in rows)
+            if (row['file_path'] != null)
+              row['file_path']: row['byte_count'] as int
+        };
         await collectInTransaction(tx);
         return {
           'deferred': false,
-          'reclaimedBytes': reclaimed,
-          'deletedPools': deleted,
-          'remainingBytes': remaining
+          'reclaimedBytes': 0,
+          'deletedPools': 0,
+          'remainingBytes': sizes.values.fold<int>(0, (n, size) => n + size),
+          'preservation': 'Saved danmaku is persistent; delete a pool explicitly.'
         };
       });
 }

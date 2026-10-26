@@ -53,7 +53,7 @@ void main() {
     expect(rows.single['entry_count'], 0);
   });
 
-  test('cache budget excludes imports and removes playback and fetched caches',
+  test('zero cache budget preserves imported, playback and online content',
       () async {
     final f = DanmakuFixture();
     await f.open();
@@ -81,12 +81,17 @@ void main() {
     await store.saveChunk('fetch-cache', const DanmakuChunk(0, 0, 1000),
         DanmakuChunkResult(cacheEntries));
     final result = await f.call('danmaku.cache_prune', {'maxBytes': 0});
-    expect(result['deletedPools'], 2);
+    expect(result['deletedPools'], 0);
     expect(await store.entries(imported['cache_key'] as String), hasLength(1));
     expect(
-        (await store.binding(playback['id'] as String))['cache_key'], isNull);
-    expect(await store.db.query('danmaku_cache_chunks'), hasLength(1));
-    expect(await store.files.directory.list().length, 1);
+        (await store.binding(playback['id'] as String))['cache_key'], playback['cache_key']);
+    expect(await store.entries('fetch-cache'), hasLength(1));
+    expect(await store.db.query('danmaku_cache_chunks'), hasLength(3));
+    expect(await store.files.directory.list().length, 2);
+    final before = await store.db.query('danmaku_cache_chunks');
+    await f.reopen();
+    expect(await f.service.store.db.query('danmaku_cache_chunks'), before);
+    expect(await f.service.store.entries('fetch-cache'), hasLength(1));
   });
 
   test('cache collection defers while a fetch owns partial results', () async {
@@ -103,7 +108,8 @@ void main() {
     expect((await store.files.prune(maxBytes: 0))['deferred'], true);
     expect(await store.db.query('danmaku_cache_chunks'), hasLength(1));
     await store.db.delete('jobs', where: 'job_id=?', whereArgs: ['x42-active']);
-    expect((await store.files.prune(maxBytes: 0))['deletedPools'], 1);
+    expect((await store.files.prune(maxBytes: 0))['deletedPools'], 0);
+    expect(await store.db.query('danmaku_cache_chunks'), hasLength(1));
   });
 
   test('interrupted legacy migration resumes exact content and VACUUM',
