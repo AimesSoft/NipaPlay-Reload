@@ -1,14 +1,10 @@
 part of 'service.dart';
 
-/// Files that enter the library are reported to Nipa as facts, in batches.
-///
-/// - Caused from a conversation of hers (her call, or a task her call
-///   started): the batch goes back to that conversation as an automatic
-///   followup, like a download's.
-/// - Anything else (the user adding a folder, Classic's scan, a media source
-///   syncing, the app itself): one background helper per batch, with no
-///   return to any conversation. Its end is an entry in activity, as any
-///   task's is.
+/// Files that a conversation of Nipa's brought into the library (her call,
+/// or a task her call started) go back to that conversation as facts, in
+/// batches, as an automatic followup like a download's. Files that entered
+/// any other way (the user adding a folder, Classic's scan, a media source
+/// syncing, the app itself) are not reported: nothing wakes her for them.
 ///
 /// Nothing here looks at what a file is. The only filter is that a file
 /// already reported by a download return is not reported twice.
@@ -26,6 +22,12 @@ extension LibraryArrivals on Followups {
   Future<void> libraryFileAdded(JsonMap file) => _serial(() async {
         if (!_libraryOn) return;
         await location.ready;
+        final cause = file['cause'] as Map?;
+        final origin = cause?['origin'] as String?;
+        if (origin == null || !_conversational.any(origin.startsWith)) return;
+        final target = await downloadReturnTarget(
+            Invocation(origin: origin, id: cause!['invocationId'] as String?));
+        if (target == null) return;
         final path = file['path'] as String;
         final fileId = file['fileId'] as String?;
         // Reported once: a path or file id any library batch already holds.
@@ -33,15 +35,7 @@ extension LibraryArrivals on Followups {
             .isNotEmpty) {
           return;
         }
-        JsonMap? target;
-        final cause = file['cause'] as Map?;
-        final origin = cause?['origin'] as String?;
-        if (origin != null && _conversational.any(origin.startsWith)) {
-          target = await downloadReturnTarget(
-              Invocation(origin: origin, id: cause!['invocationId'] as String?));
-        }
-        final batch =
-            target == null ? 'background' : 'thread:${target['threadId']}';
+        final batch = 'thread:${target['threadId']}';
         final now = DateTime.now().toUtc();
         final entry = {
           'event': 'library.file_added',
@@ -78,26 +72,24 @@ extension LibraryArrivals on Followups {
             'batchKey': batch,
             'state': 'ready',
             'title': '新进媒体库的文件',
-            'instruction': target == null
-                ? '这些文件进了媒体库，不是由你在对话里发起的。事实见下。下一步由你决定。'
-                : '你发起的操作让这些文件进了媒体库。事实见下。下一步由你决定。',
+            'instruction': '你发起的操作让这些文件进了媒体库。事实见下。下一步由你决定。',
             'condition': {'kind': 'library.facts'},
             'libraryObjects': [path, if (fileId != null) fileId],
             'firstAt': now.toIso8601String(),
-            'repository': target?['repository'] ?? location.path,
-            'threadId': target?['threadId'],
+            'repository': target['repository'] ?? location.path,
+            'threadId': target['threadId'],
             'turnId': null,
-            'origin': target?['origin'] ?? 'application',
-            'invocationId': target?['invocationId'] ?? 'library',
+            'origin': target['origin'] ?? 'application',
+            'invocationId': target['invocationId'] ?? 'library',
             'createdAt': now.toIso8601String(),
             'updatedAt': now.toIso8601String(),
             'reason': null,
             'turnStatus': null,
             'waitingFor': 'Waiting for the library batch to settle.',
-            if (target?['deviceId'] != null)
-              'remoteDeviceId': target!['deviceId'],
-            if (target?['returnTicket'] != null)
-              'returnTicket': target!['returnTicket'],
+            if (target['deviceId'] != null)
+              'remoteDeviceId': target['deviceId'],
+            if (target['returnTicket'] != null)
+              'returnTicket': target['returnTicket'],
             'trigger': {
               'kind': 'library.facts',
               'facts': [entry]
@@ -154,11 +146,16 @@ extension LibraryArrivals on Followups {
     if (row['reason'] != reason) await _save(row, 'ready', 'pending', reason: reason);
   }
 
-  /// Whether a ready library batch goes on to be delivered. A batch for a
-  /// conversation is described and then continues into the usual delivery
-  /// (waiting there while the conversation is busy); a background batch is
-  /// dispatched here.
+  /// Whether a ready library batch goes on to be delivered: it is described
+  /// and then continues into the usual delivery (waiting there while the
+  /// conversation is busy). A batch from before files outside conversations
+  /// stopped being reported is dropped.
   Future<bool> _libraryGate(JsonMap row) async {
+    if (row['batchKey'] == 'background') {
+      await _save(row, 'cancelled', 'cancelled',
+          reason: 'Files that no conversation brought in are not reported.');
+      return false;
+    }
     if (row['frozen'] != true) {
       if (!_libraryOn) {
         await _save(row, 'cancelled', 'cancelled',
@@ -168,51 +165,12 @@ extension LibraryArrivals on Followups {
       final due = DateTime.parse(row['deliverAfter'] as String);
       if (DateTime.now().toUtc().isBefore(due)) {
         _until(due);
-        if (row['batchKey'] == 'background') _libraryHeld = true;
         await _libraryPending(
             row, 'Waiting for library files to stop arriving until $due.');
         return false;
       }
     }
-    if (row['batchKey'] != 'background') return _freezeLibrary(row);
-    if (row['frozen'] != true) {
-      if (_libraryHeld) {
-        await _libraryPending(row, 'Waiting for the previous library batch.');
-        return false;
-      }
-      if (await _libraryHelperRunning()) {
-        _libraryHeld = true;
-        await _libraryPending(row,
-            'A background helper is still handling the previous library batch; these files wait for the next one.');
-        return false;
-      }
-    }
-    final dispatch = backgroundDispatch ?? helpers?.dispatchBackground;
-    if (dispatch == null) {
-      _libraryHeld = true;
-      await _libraryPending(row, _unavailable);
-      return false;
-    }
-    if (!await _freezeLibrary(row)) return false;
-    final facts = (row['trigger'] as Map)['facts'] as List;
-    final jobId = 'library-${row['id']}';
-    try {
-      await dispatch(
-          jobId: jobId,
-          title: '新进媒体库的 ${facts.length} 个文件',
-          instruction:
-              '${row['instruction']}\n触发事实：${jsonEncode(row['trigger'])}');
-    } on Failure catch (error) {
-      _libraryHeld = true;
-      await _libraryPending(row, error.message);
-      return false;
-    }
-    row['helperJobId'] = jobId;
-    row['dispatchedAt'] = DateTime.now().toUtc().toIso8601String();
-    await _save(row, 'completed', 'dispatched',
-        reason: 'Handed to a background helper; its end is recorded in activity.');
-    _libraryHeld = true;
-    return false;
+    return _freezeLibrary(row);
   }
 
   /// Describes the files as the library holds them now, and drops those a
@@ -257,32 +215,6 @@ extension LibraryArrivals on Followups {
     row['frozen'] = true;
     await _save(row, 'ready', 'frozen');
     return true;
-  }
-
-  /// Whether the helper of an earlier background batch is still working.
-  /// Such a helper is the task `library-<that batch's id>`, recorded in the
-  /// batch as its helperJobId.
-  Future<bool> _libraryHelperRunning() async {
-    final running = [
-      for (final state in JobState.values)
-        if (!state.isTerminal) state.wireName
-    ];
-    for (final job in await database.rawQuery(
-        'SELECT job_id FROM jobs WHERE state IN (${_marks(running.length)}) '
-        'AND job_id >= ? AND job_id < ?',
-        [...running, 'library-', 'library.'])) {
-      final id = job['job_id'] as String;
-      final batch = await database.query('followups',
-          columns: ['snapshot'],
-          where: 'id = ?',
-          whereArgs: [id.substring('library-'.length)]);
-      if (batch.isEmpty) continue;
-      final other = _decode(batch.single);
-      if (other['automatic'] == 'library' && other['helperJobId'] == id) {
-        return true;
-      }
-    }
-    return false;
   }
 
   /// Of [fileIds], those already on their way to [thread] (any conversation

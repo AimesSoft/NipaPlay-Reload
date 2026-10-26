@@ -384,7 +384,7 @@ final class SystemSettings {
                 : '独立控制 Next 的自动附件检查。关闭后当前文件排空，待处理队列保留；显式检查不受影响。开启后立即核对。'),
       entry(
           'library.notifyNipaEnabled',
-          '新进媒体库时让梨花在后台办好',
+          '梨花带进媒体库的文件回报给她',
           'next_library_notify_enabled',
           const BooleanSchema(),
           true,
@@ -394,7 +394,7 @@ final class SystemSettings {
         libraryNotifyEnabled = v;
       },
           description:
-              '开启时，新进媒体库的文件（用户添加的文件夹、Classic 扫描、媒体来源同步）合成一批，交给一个后台帮手，结果记在动态里，不进主会话；用户不在旁边时媒体库也会办好。梨花自己的操作带进来的文件回到她发起的会话。'
+              '开启时，梨花自己的操作带进媒体库的文件合成一批，回到她发起的会话。用户添加的文件夹、Classic 扫描、媒体来源同步带进来的文件不回报。'
               '关闭后不再发送，关闭期间进来的文件之后不补发。已发出的不撤回。'),
       entry(
           'danmaku.spoilerAiConfigured',

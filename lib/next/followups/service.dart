@@ -88,20 +88,12 @@ final class Followups {
   /// The library's present facts about files that just entered, one per entry.
   Future<List<JsonMap>> Function(List<JsonMap> entries)? describeLibraryFiles;
 
-  /// Starts a background helper that returns to no conversation. Defaults to
-  /// [Helpers.dispatchBackground].
-  Future<String> Function(
-      {required String jobId,
-      required String title,
-      required String instruction})? backgroundDispatch;
-
   /// Files stop arriving for this long, or this long passes since the first,
   /// or the batch is full: the batch is delivered. A scan or sync ending
   /// delivers at once.
   Duration libraryQuiet = const Duration(seconds: 30);
   Duration libraryMaxWait = const Duration(minutes: 5);
   int libraryBatchLimit = 100;
-  bool _libraryHeld = false;
   Future<JsonMap> turnProcess(String threadId, String turnId) async {
     await location.ready;
     final host = _host;
@@ -570,7 +562,6 @@ final class Followups {
 
   Future<void> _sweep() async {
     _sweeps++;
-    _libraryHeld = false;
     _due = null;
     _retry = false;
     final reconcile = _reconcile;
