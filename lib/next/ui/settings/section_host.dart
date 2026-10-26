@@ -12,6 +12,7 @@ import '../widgets/nipa_avatar.dart';
 import '../widgets/progress.dart';
 import '../widgets/segmented.dart';
 import 'controls.dart';
+import '../../settings/reasoning_effort.dart';
 import 'registry_rows.dart';
 import 'section_accounts.dart';
 import 'settings_layout.dart';
@@ -509,7 +510,7 @@ class NipaSectionState extends State<NipaSection> {
   String _registryMirror = '', _nodeMirror = '';
   String? _dshError;
   UiModelApi _api = UiModelApi.responses;
-  String _reasoning = '';
+  String _reasoning = defaultReasoningEffort;
   Map<String, Object?>? _compat;
 
   // The Codex Nipa runs in: fetched by NipaPlay, or one already here.
@@ -605,7 +606,7 @@ class NipaSectionState extends State<NipaSection> {
         _url = setup.baseUrl ?? '';
         _modelName = setup.model ?? '';
         _api = setup.api;
-        _reasoning = setup.reasoning ?? '';
+        _reasoning = setup.reasoning ?? defaultReasoningEffort;
         _compat = setup.compat;
         _key = '';
       }

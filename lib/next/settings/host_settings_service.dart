@@ -18,6 +18,7 @@ import '../runtime/codex_runtime.dart';
 import '../runtime/dsh_install.dart';
 import '../state/change_history.dart';
 import '../ui_data/host_settings.dart';
+import 'reasoning_effort.dart';
 import 'responses_probe.dart';
 
 final class HostSettingsService implements NextHostSettings, NextHostDeviceSettings, NextHostRuntimeSettings {
@@ -352,7 +353,7 @@ final class HostSettingsService implements NextHostSettings, NextHostDeviceSetti
         baseUrl: value['baseUrl'] as String?,
         model: value['model'] as String?,
         api: api,
-        reasoning: value['reasoning'] as String?,
+        reasoning: reasoningChoice(value['reasoning']),
         compat: (value['compat'] as Map?)?.cast<String, Object?>(),
         hasKey: key != null && key.isNotEmpty,
         inUse: host?.available == true ? host!.model : null,
@@ -396,14 +397,11 @@ final class HostSettingsService implements NextHostSettings, NextHostDeviceSetti
           value['model'] = _text(choice.model, '模型');
           if (choice.api != null) value['api'] = choice.api!.name;
           if (choice.reasoning != null) {
-            if (choice.reasoning!.isEmpty) {
-              value.remove('reasoning');
-            } else if (!const {'low', 'medium', 'high'}
+            if (!const {'', 'low', 'medium', 'high'}
                 .contains(choice.reasoning)) {
               throw const FormatException('思考强度填写不正确');
-            } else {
-              value['reasoning'] = choice.reasoning;
             }
+            value['reasoning'] = storedReasoning(choice.reasoning!);
           }
           if (choice.compat != null) {
             if (choice.compat!.isEmpty) {
@@ -499,7 +497,7 @@ final class HostSettingsService implements NextHostSettings, NextHostDeviceSetti
             model: model,
             key: key,
             api: chatApi ? 'openai-completions' : 'openai-responses',
-            reasoningEffort: value['reasoning'] as String?,
+            reasoningEffort: reasoningEffort(value['reasoning']),
             compat: (value['compat'] as Map?)?.cast<String, Object?>()));
   }
 

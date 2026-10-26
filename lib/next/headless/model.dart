@@ -9,6 +9,7 @@ import '../../security/credential_vault.dart';
 import '../../security/secret_redactor.dart';
 import '../chat/dsh_runtime.dart';
 import '../chat/model_launch.dart';
+import '../settings/reasoning_effort.dart';
 import '../settings/responses_probe.dart';
 import '../ui_data/host_settings.dart' show UiModelCheck;
 
@@ -93,7 +94,7 @@ final class HeadlessModel {
         baseUrl: value['baseUrl'] as String?,
         model: value['model'] as String?,
         api: value['api'] == 'chat' ? 'chat' : 'responses',
-        reasoning: value['reasoning'] as String?,
+        reasoning: reasoningChoice(value['reasoning']),
         revision: value['revision'] as int? ?? 0,
         keyConfigured: hasKey,
         missing: [if (!hasAddress) 'model', if (!hasKey) 'key']);
@@ -130,13 +131,7 @@ final class HeadlessModel {
       'model': _text(model, 'Model'),
       'api': api,
     };
-    if (reasoning != null) {
-      if (reasoning.isEmpty) {
-        value.remove('reasoning');
-      } else {
-        value['reasoning'] = reasoning;
-      }
-    }
+    if (reasoning != null) value['reasoning'] = storedReasoning(reasoning);
     if (key != null) {
       if (key.contains(RegExp(r'[\x00-\x20]')) || key.length > 16384) {
         throw const FormatException('The key is not valid.');
@@ -192,7 +187,7 @@ final class HeadlessModel {
             model: model,
             key: key,
             api: chat ? 'openai-completions' : 'openai-responses',
-            reasoningEffort: value['reasoning'] as String?,
+            reasoningEffort: reasoningEffort(value['reasoning']),
             compat: (value['compat'] as Map?)?.cast<String, Object?>()));
   }
 

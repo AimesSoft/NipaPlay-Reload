@@ -340,7 +340,7 @@ void main() {
     test('with no device chosen it says to choose one', () async {
       await peers.load();
       expect(port.available, false);
-      expect(await port.unavailableReason(), '选一台设备的 Nipa。在设置的“Nipa”里选。');
+      expect(await port.unavailableReason(), '选一台设备的梨花。在设置的“梨花”里选。');
       expect(port.note, isNull);
       await expectLater(port.mainThread(), throwsA(isA<ChatUnavailable>()));
     });
@@ -401,7 +401,7 @@ void main() {
       await peers.refresh();
       running = false;
       await peers.choose('mac');
-      expect(await port.unavailableReason(), 'MacBook 上的 Nipa 现在不能用。');
+      expect(await port.unavailableReason(), 'MacBook 上的梨花现在不能用。');
     });
   });
 }
