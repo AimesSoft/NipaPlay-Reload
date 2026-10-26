@@ -85,11 +85,42 @@ class MacosPlatformMenu extends StatelessWidget {
     return <PlatformMenuItem>[
       _buildAppMenu(),
       _buildFileMenu(),
+      _buildEditMenu(),
       _buildNavigationMenu(context),
       _buildWindowMenu(),
       _buildHelpMenu(),
     ];
   }
+
+  // Keep native Command shortcuts routed to the currently focused Flutter
+  // editor/selection, including the chat's image-aware paste action.
+  PlatformMenu _buildEditMenu() => const PlatformMenu(
+        label: '编辑',
+        menus: [
+          PlatformMenuItem(
+            label: '剪切',
+            shortcut: SingleActivator(LogicalKeyboardKey.keyX, meta: true),
+            onSelectedIntent:
+                CopySelectionTextIntent.cut(SelectionChangedCause.keyboard),
+          ),
+          PlatformMenuItem(
+            label: '复制',
+            shortcut: SingleActivator(LogicalKeyboardKey.keyC, meta: true),
+            onSelectedIntent: CopySelectionTextIntent.copy,
+          ),
+          PlatformMenuItem(
+            label: '粘贴',
+            shortcut: SingleActivator(LogicalKeyboardKey.keyV, meta: true),
+            onSelectedIntent: PasteTextIntent(SelectionChangedCause.keyboard),
+          ),
+          PlatformMenuItem(
+            label: '全选',
+            shortcut: SingleActivator(LogicalKeyboardKey.keyA, meta: true),
+            onSelectedIntent:
+                SelectAllTextIntent(SelectionChangedCause.keyboard),
+          ),
+        ],
+      );
 
   /// 应用菜单 (NipaPlay)
   PlatformMenu _buildAppMenu() {
