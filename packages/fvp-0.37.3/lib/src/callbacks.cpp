@@ -542,6 +542,15 @@ FVP_EXPORT bool MdkSnapshot(int64_t handle, int64_t texId, int w, int h, void* p
     if (it == players.cend()) {
         return false;
     }
+#if defined(__ANDROID__) || defined(__OHOS__)
+    auto* const surface = MdkGetPlayerVid(texId);
+#ifdef __OHOS__
+    // There is no default renderer on OHOS before a native surface is attached.
+    // Reject the request rather than leave Dart waiting for an absent renderer.
+    if (!surface)
+        return false;
+#endif
+#endif
     const auto postCObject = reinterpret_cast<bool(*)(Dart_Port, Dart_CObject*)>(post_c_object);
     auto sp = it->second;
     Player::SnapshotRequest req{
@@ -560,8 +569,8 @@ FVP_EXPORT bool MdkSnapshot(int64_t handle, int64_t texId, int w, int h, void* p
             .value = {
                 .as_typed_data = {
                     .type = Dart_TypedData_kUint8,
-                    .length = ret->stride * ret->height,
-                    .values = ret->data,
+                    .length = ret ? ret->stride * ret->height : 0,
+                    .values = ret ? ret->data : nullptr,
                 },
             }
         };
@@ -581,8 +590,8 @@ FVP_EXPORT bool MdkSnapshot(int64_t handle, int64_t texId, int w, int h, void* p
         }
         return {};
     }
-#ifdef __ANDROID__
-        , MdkGetPlayerVid(texId)
+#if defined(__ANDROID__) || defined(__OHOS__)
+        , surface
 #endif
     );
     return true;

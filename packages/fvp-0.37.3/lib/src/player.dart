@@ -855,6 +855,9 @@ class Player {
   /// [height] snapshot height. if not set, result is `mediaInfo.video[current_track].codec.height`
   /// Return rgba data of image size [width]x[height], stride is `width*4`
   Future<Uint8List?> snapshot({int? width, int? height}) {
+    if (Platform.operatingSystem == 'ohos') {
+      return _snapshotOhos(width: width, height: height);
+    }
     if (!(_snapshot?.isCompleted ?? true)) {
       _snapshot?.complete(null);
     }
@@ -870,6 +873,34 @@ class Player {
       _snapshot!.complete(null);
     }
     return _snapshot!.future;
+  }
+
+  Future<Uint8List?> _snapshotOhos({int? width, int? height}) async {
+    if (_disposing) return null;
+    // Rotation can leave the native renderer unable to deliver a frame. Each
+    // request owns its port so a late callback cannot complete a newer capture.
+    final port = ReceivePort();
+    try {
+      if (!Libfvp.snapshot(
+        nativeHandle,
+        textureId.value ?? -1,
+        width ?? 0,
+        height ?? 0,
+        NativeApi.postCObject.cast(),
+        port.sendPort.nativePort,
+      )) {
+        return null;
+      }
+      final message = await port.first.timeout(
+        const Duration(seconds: 1),
+        onTimeout: () => null,
+      );
+      if (message == null) return null;
+      final data = message[1] as Uint8List;
+      return data.isEmpty ? null : data;
+    } finally {
+      port.close();
+    }
   }
   // callbacks
 
@@ -933,8 +964,8 @@ class Player {
   }
 
   Pointer<Void> _getVid() {
-    // currently only android vo_opaque is not null, and may change
-    if (Platform.isAndroid) {
+    // Native-surface renderers identify their context with the surface pointer.
+    if (Platform.isAndroid || Platform.operatingSystem == 'ohos') {
       return Libfvp.getVid(textureId.value ?? -1);
     }
     return Pointer.fromAddress(0);
