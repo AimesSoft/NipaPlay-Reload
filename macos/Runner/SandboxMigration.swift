@@ -336,7 +336,11 @@ final class SandboxMigration {
             try socketIndex.write(to: state.appendingPathComponent("volatile-sockets.plist"), options: .atomic)
             let (units, archives) = try plan(snapshot: snapshot)
             let oldPlist = snapshot.appendingPathComponent("Library/Preferences/\(bundleID).plist")
-            let preferences = try exists(oldPlist) ? Self.preferences(at: oldPlist) : [:]
+            let containerPreferences = try exists(oldPlist) ? Self.preferences(at: oldPlist) : [:]
+            // macOS can recreate an empty container after the app has moved out of
+            // the sandbox. It is not a new source of user data for the ordinary app.
+            guard !units.isEmpty || !containerPreferences.isEmpty else { return }
+            let preferences = try containerPreferences.isEmpty ? readPreferences() : containerPreferences
             let preferencesURL = state.appendingPathComponent("preferences.plist")
             try Self.plist(preferences).write(to: preferencesURL, options: .atomic)
             let ordinaryPreferencesURL = state.appendingPathComponent("ordinary-preferences.plist")
@@ -490,6 +494,8 @@ final class SandboxMigration {
                                     copyOnly: copyOnly))
         }
         func add(_ input: URL, _ destination: String) throws {
+            // Empty container placeholders must never retire a populated group.
+            guard try containsData(input) else { return }
             let family = sqliteFamily(input.lastPathComponent)
             if try family.count > 1 && !isDirectory(input) {
                 for member in family {
@@ -571,6 +577,23 @@ final class SandboxMigration {
     }
     private func children(_ url: URL) throws -> [URL] {
         try fm.contentsOfDirectory(at: url, includingPropertiesForKeys: nil).sorted { $0.lastPathComponent < $1.lastPathComponent }
+    }
+    private func containsData(_ url: URL) throws -> Bool {
+        guard try exists(url), url.lastPathComponent != ".DS_Store" else { return false }
+        let attributes = try fm.attributesOfItem(atPath: url.path)
+        switch attributes[.type] as? FileAttributeType {
+        case .typeDirectory:
+            for child in try children(url) {
+                if try containsData(child) { return true }
+            }
+            return false
+        case .typeRegular:
+            return ((attributes[.size] as? NSNumber)?.uint64Value ?? 0) > 0
+        case .typeSymbolicLink:
+            return true
+        default:
+            return false
+        }
     }
     private func digest(_ root: URL) throws -> String {
         var hash = SHA256()

@@ -216,6 +216,45 @@ enum SandboxMigrationTests {
             try f.expect(f.preferences["existing"] as? String == "value", "preferences changed")
             try f.expect(!fm.fileExists(atPath: f.state.appendingPathComponent("journal.plist").path), "unexpected import")
         }
+        try test("recreated empty container preserves ordinary data and preferences across launches") { f in
+            try f.seedOrdinary()
+            for path in ["Documents/nipaplay/next", "Library/Application Support/NipaPlay/torrent_session"] {
+                try fm.createDirectory(at: f.source.appendingPathComponent(path), withIntermediateDirectories: true)
+            }
+            let emptyPreferences = f.source.appendingPathComponent("Library/Preferences/\(bundleID).plist")
+            try fm.createDirectory(at: emptyPreferences.deletingLastPathComponent(), withIntermediateDirectories: true)
+            try PropertyListSerialization.data(fromPropertyList: [:], format: .binary, options: 0).write(to: emptyPreferences)
+            try f.write("Documents/.DS_Store", "finder-metadata")
+            let before = f.root.appendingPathComponent("ordinary-before")
+            try fm.copyItem(at: f.home, to: before)
+            try f.migrator().run()
+            try f.migrator().run()
+            try f.expectSameTree(before, f.home)
+            try f.expect(f.preferences["ordinary-only"] as? Int == 17, "ordinary preferences cleared")
+            try f.expect(!fm.fileExists(atPath: f.state.appendingPathComponent("journal.plist").path), "empty container was imported")
+        }
+        try test("container data with empty preferences preserves the existing preference domain") { f in
+            try f.seed()
+            try f.seedOrdinary()
+            let emptyPreferences = f.source.appendingPathComponent("Library/Preferences/\(bundleID).plist")
+            try PropertyListSerialization.data(fromPropertyList: [:], format: .binary, options: 0).write(to: emptyPreferences)
+            try f.migrator().run()
+            try f.expect(f.text("Documents/nipaplay/next/next.db") == "next-facts", "container data missing")
+            try f.expect(f.preferences["ordinary-only"] as? Int == 17, "ordinary preferences cleared")
+            try f.expect(f.preferences["flutter.locale"] as? String == "en", "ordinary locale cleared")
+        }
+        try test("container preferences with empty Documents preserve the ordinary database group") { f in
+            try f.seedOrdinary()
+            try fm.createDirectory(at: f.source.appendingPathComponent("Documents/nipaplay/next"), withIntermediateDirectories: true)
+            let containerPreferences = f.source.appendingPathComponent("Library/Preferences/\(bundleID).plist")
+            try fm.createDirectory(at: containerPreferences.deletingLastPathComponent(), withIntermediateDirectories: true)
+            try PropertyListSerialization.data(fromPropertyList: ["flutter.locale": "zh"], format: .binary, options: 0).write(to: containerPreferences)
+            try f.migrator().run()
+            try f.expect(f.text("Documents/nipaplay/next/next.db") == "ordinary-next", "ordinary Next data retired")
+            try f.expect(f.text("Documents/nipaplay/watch_history.db-wal") == "ordinary-wal", "ordinary WAL retired")
+            try f.expect(f.preferences["flutter.locale"] as? String == "zh", "container preferences missing")
+            try f.expect(!fm.fileExists(atPath: f.state.appendingPathComponent("ordinary-archive/Documents/nipaplay").path), "empty Documents replaced ordinary data")
+        }
         try test("container-only imports Classic, Next, preferences, bookmarks, caches and support") { f in
             try f.seed()
             try f.migrator().run()
@@ -365,13 +404,14 @@ enum SandboxMigrationTests {
             try f.checkImported()
             try f.expect(f.preferences["ordinary-only"] == nil && f.preferences["new-old-key"] == nil, "old domain keys retained")
         }
-        try test("missing container preference plist clears old domain and archives old plist intact") { f in
+        try test("missing container preference plist retains the ordinary domain and archives old plist intact") { f in
             try f.seed()
             try f.seedOrdinary()
             try fm.removeItem(at: f.source.appendingPathComponent("Library/Preferences/\(bundleID).plist"))
             let before = try Data(contentsOf: f.home.appendingPathComponent("Library/Preferences/\(bundleID).plist"))
             try f.migrator().run()
-            try f.expect(f.preferences.isEmpty, "missing container domain kept ordinary keys")
+            try f.expect(f.preferences["ordinary-only"] as? Int == 17, "missing container domain cleared ordinary keys")
+            try f.expect(f.preferences["flutter.locale"] as? String == "en", "missing container domain cleared ordinary locale")
             try f.expect(Data(contentsOf: f.state.appendingPathComponent("ordinary-archive/Library/Preferences/\(bundleID).plist")) == before, "old plist bytes changed")
         }
         try test("changed ordinary group blocks archival without overwriting either version") { f in
