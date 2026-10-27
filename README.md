@@ -33,7 +33,20 @@
 
 ---
 
-> Next 开发者预览的发行范围与 Classic 不同：本次包括 macOS、Windows、Linux、Linux headless 和 iPhone/iPad，不包括 Android、tvOS 和 HarmonyOS。试用前请阅读 [Next 开发者预览文档](docs/next/README.md)。
+## 版本说明
+
+| 项目 | NipaPlay Classic | NipaPlay Next |
+| --- | --- | --- |
+| 阶段 | 1.x 稳定版本 | 2.0.0-alpha.1 开发者预览 |
+| 交互 | 以页面操作为主 | 可通过梨花对话，由 Agent 判断并使用个人 harness 执行任务；也保留图形界面操作 |
+| 媒体归属 | 使用现有自动匹配流程 | 索引文件后可由用户或 Agent 判断和绑定作品、剧集与文件；不会在启动时自动运行 Classic 识别 |
+| 跨设备 | 使用现有媒体来源和远程访问功能 | 可通过 Mesh 在认证设备间访问媒体和能力；设备需要可直连 |
+| 平台范围 | 见[平台矩阵](Documentation/platform-matrix.md) | 本次预览包含 macOS、Windows、Linux、Linux headless 和 iPhone/iPad；iPhone/iPad 使用其他设备上的梨花。Android、tvOS 和 HarmonyOS 不在本次发行范围 |
+| 文档与下载 | [文档](Documentation/index.md) · [稳定版下载](https://github.com/AimesSoft/nipaplay-reload/releases/latest) | [预览文档](https://github.com/AimesSoft/nipaplay-reload/tree/next/docs/next) · [发行页面](https://github.com/AimesSoft/nipaplay-reload/releases) |
+
+Next 包含 Classic，可在设置中切回。两者共享部分观看进度和设置，并非完全隔离的数据环境；试用前请参阅 [数据与恢复](https://github.com/AimesSoft/nipaplay-reload/blob/next/docs/next/DATA_AND_RECOVERY.md)。iPhone/iPad 的 TestFlight 邀请以发行页面公布的信息为准。
+
+下文功能介绍与截图主要描述 Classic；Next 的具体功能和平台状态见其预览文档。
 
 ## 核心亮点
 
