@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:nipaplay/services/remote_control_settings.dart';
 import 'package:nipaplay/utils/globals.dart' as globals;
 import 'package:shelf/shelf.dart';
+import 'package:nipaplay/widgets/in_view_dialog.dart';
 
 enum RemoteControlAccessStatus {
   authorized,
@@ -208,7 +209,7 @@ class RemoteControlAccessGuardService {
     }
 
     try {
-      final result = await showDialog<Map<String, dynamic>>(
+      final result = await showInViewDialog<Map<String, dynamic>>(
         context: context,
         barrierDismissible: false,
         builder: (dialogContext) {
