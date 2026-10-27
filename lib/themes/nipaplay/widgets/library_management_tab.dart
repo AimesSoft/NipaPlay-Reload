@@ -4765,7 +4765,7 @@ class _LibraryManagementTabState extends State<LibraryManagementTab> {
               duration: existingHistory?.duration ?? 0,
               lastWatchTime: DateTime.now(),
               thumbnailPath: existingHistory?.thumbnailPath,
-              isFromScan: existingHistory?.isFromScan ?? false,
+              isFromScan: existingHistory?.isFromScan ?? true,
               videoHash: existingHistory?.videoHash,
             );
 

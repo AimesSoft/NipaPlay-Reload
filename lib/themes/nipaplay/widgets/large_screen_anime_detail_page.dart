@@ -1114,7 +1114,7 @@ class _NipaplayLargeScreenAnimeDetailPageState
       progressColor =
           isDarkMode ? Colors.orangeAccent : const Color(0xFFB45309);
     } else if (hasSharedPlayable) {
-      progressLabel = '共享媒体';
+      progressLabel = widget.sharedSourceLabel ?? '共享媒体';
       progressColor =
           isDarkMode ? Colors.lightBlueAccent : const Color(0xFF1565C0);
     }

@@ -2234,7 +2234,7 @@ class _AnimeDetailPageState extends State<AnimeDetailPage>
                     playbackEpisode?.progress ?? sharedEpisode?.progress;
                 final sourceAvailabilityLabel = playbackEpisode != null
                     ? _playbackDetailContext!.sourceLabel
-                    : '共享媒体';
+                    : (_sharedSourceLabel ?? '共享媒体');
                 final historyFuture = _episodeHistoryFutures.putIfAbsent(
                   episode.id,
                   () {
