@@ -614,6 +614,11 @@ extension VideoPlayerStatePlayerSetup on VideoPlayerState {
           cancelled: () =>
               _isDisposed || initializationGeneration != _playbackGeneration,
         );
+        // 被新的播放任务取代时就绪门静默返回，这里必须中止，不能继续对
+        // 已换成新媒体的播放器做 updateTexture / 设置 ready。
+        if (_isDisposed || initializationGeneration != _playbackGeneration) {
+          return;
+        }
       }
       debugPrint('[PlayerSetup] 媒体就绪检查完成 state=${player.state} '
           '进入纹理阶段');

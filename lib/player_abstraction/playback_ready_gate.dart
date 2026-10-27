@@ -10,6 +10,9 @@ import 'player_abstraction.dart';
 /// 超时，随后错误恢复级联会静默退出播放页（切集闪退回首页且无错误提示，
 /// 见 issue #1010）。因此这里只在 paused/playing 放行；超时抛
 /// [TimeoutException]，由调用方走统一的「打开媒体失败」错误路径。
+///
+/// [cancelled] 为真时静默返回且不区分“已就绪”，调用方须在返回后自行
+/// 复查取消条件并中止后续初始化。
 Future<void> waitForPlaybackReady(
   Player player, {
   required bool Function() cancelled,
