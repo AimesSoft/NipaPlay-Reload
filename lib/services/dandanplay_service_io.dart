@@ -1671,6 +1671,23 @@ class DandanplayService {
       throw Exception('获取弹幕失败');
     } catch (e) {
       ////debugPrint('获取弹幕时出错: $e');
+      // 联网失败（例如离线）时回退到已过新鲜期但仍保留的缓存，避免看过的
+      // 集离线重播时没有弹幕（#1024）。需要登录的错误照常交给调用方处理。
+      if (e is! http.DandanplayLoginRequired) {
+        final staleDanmaku = await DanmakuCacheManager.getDanmakuFromCache(
+          episodeId,
+          allowExpired: true,
+        );
+        if (staleDanmaku != null) {
+          debugPrint('联网获取弹幕失败，使用过期缓存: $episodeId, $e');
+          return {
+            'comments': staleDanmaku,
+            'fromCache': true,
+            'stale': true,
+            'count': staleDanmaku.length,
+          };
+        }
+      }
       rethrow;
     }
   }
