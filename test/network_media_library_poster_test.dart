@@ -94,6 +94,16 @@ void main() {
       await tester.runAsync(() => fixture.seedPosters());
       await http.runWithClient(() async {
         await _openLibrary(tester, server);
+        // The library view bounds poster decodes (memCacheWidth/Height), and
+        // a sized decode finishes only in real time.
+        Iterable<RawImage> decoded() => tester
+            .widgetList<RawImage>(find.byType(RawImage))
+            .where((image) => image.image != null);
+        for (var attempt = 0; attempt < 100 && decoded().length < 4; attempt++) {
+          await tester.runAsync(
+              () => Future<void>.delayed(const Duration(milliseconds: 10)));
+          await tester.pump();
+        }
         final images = tester.widgetList<CachedNetworkImageWidget>(
           find.byType(CachedNetworkImageWidget),
         );
@@ -101,12 +111,7 @@ void main() {
             images.map((image) => image.imageUrl),
             unorderedEquals(
                 fixture.items.map((item) => fixture.imageUrl(item))));
-        expect(
-          tester
-              .widgetList<RawImage>(find.byType(RawImage))
-              .where((image) => image.image != null),
-          hasLength(4),
-        );
+        expect(decoded(), hasLength(4));
         expect(find.byIcon(Icons.folder_open_rounded), findsNothing);
         await _disposeLibrary(tester);
       }, () => MockClient(fixture.handleRequest));
@@ -278,9 +283,19 @@ class _PosterFixture {
         ? '/Users/user/Items'
         : '/Items';
     if (path == itemsPath) {
-      expect(request.url.queryParameters['ParentId'], 'library');
-      expect(request.url.queryParameters['IncludeItemTypes'], 'Series');
-      return http.Response(jsonEncode({'Items': items}), 200);
+      final query = request.url.queryParameters;
+      expect(query['ParentId'], 'library');
+      expect(query['IncludeItemTypes'], 'Series');
+      // Page like a real Jellyfin/Emby server: honour StartIndex/Limit and
+      // report the total, so the client's paginated loader can finish.
+      final start = int.parse(query['StartIndex'] ?? '0');
+      final limit = int.parse(query['Limit'] ?? '${items.length}');
+      return http.Response(
+          jsonEncode({
+            'Items': items.skip(start).take(limit).toList(),
+            'TotalRecordCount': items.length,
+          }),
+          200);
     }
     throw StateError('Unexpected request: ${request.url}');
   }

@@ -2,10 +2,12 @@ class PluginTextSetting {
   const PluginTextSetting({
     this.hintText,
     this.defaultValue,
+    this.obscureText = false,
   });
 
   final String? hintText;
   final String? defaultValue;
+  final bool obscureText;
 
   factory PluginTextSetting.fromJson(Map<String, dynamic> json) {
     final hintText = json['hintText']?.toString().trim();
@@ -13,6 +15,7 @@ class PluginTextSetting {
     return PluginTextSetting(
       hintText: (hintText == null || hintText.isEmpty) ? null : hintText,
       defaultValue: defaultValue,
+      obscureText: json['obscureText'] == true,
     );
   }
 }

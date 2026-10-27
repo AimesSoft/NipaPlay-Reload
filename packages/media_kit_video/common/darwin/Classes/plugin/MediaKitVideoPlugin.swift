@@ -127,7 +127,7 @@ public class MediaKitVideoPlugin: NSObject, FlutterPlugin {
 
   private func handleDisposeMethodCall(
     _ arguments: Any?,
-    _ result: FlutterResult
+    _ result: @escaping FlutterResult
   ) {
     let args = arguments as? [String: Any]
     let handleStr = args?["handle"] as! String
@@ -135,11 +135,13 @@ public class MediaKitVideoPlugin: NSObject, FlutterPlugin {
 
     assert(handle != nil, "handle must be an Int64")
 
+    // The player destroys mpv as soon as this is answered, and mpv aborts if
+    // a render context is still alive then: answer once it is freed.
     videoOutputManager.destroy(
       handle: handle!
-    )
-
-    result(nil)
+    ) {
+      result(nil)
+    }
   }
 
   private func handleEnterNativeFullscreenMethodCall(

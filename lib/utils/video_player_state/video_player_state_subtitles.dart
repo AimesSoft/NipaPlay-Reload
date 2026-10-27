@@ -162,6 +162,12 @@ extension VideoPlayerStateSubtitles on VideoPlayerState {
     _notifyListeners();
   }
 
+  // 选内嵌字幕轨（>= 0）或关闭字幕（< 0），同时摘掉外挂字幕
+  void selectEmbeddedSubtitleTrack(int trackIndex) {
+    _subtitleManager.selectEmbeddedSubtitleTrack(trackIndex);
+    _notifyListeners();
+  }
+
   // 强制设置外部字幕（手动操作）
   void forceSetExternalSubtitle(String path) {
     _subtitleManager.forceSetExternalSubtitle(path);
@@ -206,6 +212,14 @@ extension VideoPlayerStateSubtitles on VideoPlayerState {
   /// 查询单条字幕在指定时间点的文本
   String pathSubtitleTextAt(String path, int positionMs) =>
       _subtitleManager.pathSubtitleTextAt(path, positionMs);
+
+  /// 叠层里这条外挂字幕的总偏移（毫秒）：SRT/VTT 含共用的 SRT 偏移
+  int overlaySubtitleDelayMs(String path) =>
+      _subtitleManager.overlayDelayMs(path);
+
+  /// 叠层此刻给出的这条外挂字幕的那一行（已按偏移）
+  String overlaySubtitleTextAt(String path, int playbackMs) =>
+      _subtitleManager.overlayTextAt(path, playbackMs);
 
   /// 某条字幕的显示名（无登记时回退文件名）
   String externalSubtitleDisplayName(String path) =>
