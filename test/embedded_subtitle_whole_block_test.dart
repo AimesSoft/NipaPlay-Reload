@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -44,6 +46,14 @@ class _FakeMediaKitDelegate extends Fake implements MediaKitPlayerAdapter {
 
   @override
   List<int> get activeSubtitleTracks => const [];
+
+  // Loading an external ASS into the kernel also sets tracks and reads
+  // mediaInfo; the menu-path test below goes through that load.
+  @override
+  set activeSubtitleTracks(List<int> value) {}
+
+  @override
+  PlayerMediaInfo get mediaInfo => PlayerMediaInfo(duration: 10000);
 
   @override
   void setMedia(String path, PlayerMediaType type) {}
@@ -171,6 +181,48 @@ void main() {
     videoState.debugSetEmbeddedSubtitleOverlayText('中文翻译行\n日本語原文行');
     await tester.pump();
     expect(find.textContaining('中文翻译行'), findsNWidgets(2)); // stroke + fill
+  });
+
+  // A plain test: the stack entry points await real file IO, which the
+  // fake-async zone of testWidgets would never let complete.
+  test(
+      'attaching and removing a kernel ASS from the menu re-syncs sub-visibility',
+      () async {
+    TestWidgetsFlutterBinding.ensureInitialized();
+    final delegate = _FakeMediaKitDelegate(liveProperties: {
+      'sub-text': '中文翻译行\n日本語原文行',
+    });
+    final videoState = await _buildVideoPlayerState(delegate);
+    await videoState.setEmbeddedSubtitleOverlayMode(true);
+    expect(delegate.writtenProperties['sub-visibility'], 'no');
+
+    final dir = await Directory.systemTemp.createTemp('whole_block_ass');
+    addTearDown(() => dir.delete(recursive: true));
+    final assPath = '${dir.path}/sample.chs.ass';
+    await File(assPath).writeAsString(
+      '[Script Info]\nScriptType: v4.00+\n\n[Events]\n'
+      'Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text\n'
+      'Dialogue: 0,0:00:01.00,0:00:02.00,Default,,0,0,0,,外挂\n',
+    );
+
+    // The subtitle menu goes through the stack entry points, which only
+    // reach SubtitleManager.
+    await videoState.addExternalSubtitleToStack(assPath);
+    expect(videoState.isKernelRenderedExternalAssActive, isTrue);
+    expect(
+      delegate.writtenProperties['sub-visibility'],
+      'yes',
+      reason: 'libass must render the attached external ASS',
+    );
+
+    await videoState
+        .removeExternalSubtitle(videoState.activeExternalSubtitlePaths.single);
+    expect(videoState.isKernelRenderedExternalAssActive, isFalse);
+    expect(
+      delegate.writtenProperties['sub-visibility'],
+      'no',
+      reason: 'Whole-block mode must take over again after the ASS is removed',
+    );
   });
 
   testWidgets(

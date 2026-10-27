@@ -428,12 +428,18 @@ class SubtitleManager extends ChangeNotifier {
     }
   }
 
+  /// 外挂字幕激活状态变化（挂载、移除、清除、切换）后回调。每个改变激活
+  /// 状态的入口最后都会走 [onSubtitleTrackChanged]，在这里统一通知，
+  /// VideoPlayerState 借此让内核 sub-visibility 跟随整块字幕模式。
+  VoidCallback? onExternalSubtitleActivationChanged;
+
   // 当字幕轨道改变时调用
   void onSubtitleTrackChanged() {
     final subtitlePath = getActiveExternalSubtitlePath();
     if (subtitlePath != null) {
       preloadSubtitleFile(subtitlePath);
     }
+    onExternalSubtitleActivationChanged?.call();
   }
 
   // 设置当前外部字幕路径

@@ -1027,6 +1027,10 @@ int _exactEndStreak = 0;
     player = Player();
     _ensurePlayerVolumeMatchesPlatformPolicy();
     _subtitleManager = SubtitleManager(player: player);
+    // 菜单挂载/移除外挂 ASS 等入口只经过 SubtitleManager，在这里统一同步
+    // 整块字幕模式的内核开关。
+    _subtitleManager.onExternalSubtitleActivationChanged =
+        () => applyEmbeddedSubtitleOverlayKernelState();
     _audioTrackManager = AudioTrackManager(player: player);
     _decoderManager = DecoderManager(player: player);
     onExternalSubtitleAutoLoaded = _onExternalSubtitleAutoLoaded;
