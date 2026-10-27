@@ -1390,8 +1390,21 @@ class MainPageState extends State<MainPage>
     DesktopPlayerWindowService.instance.addListener(_manageHotkeys);
     ExternalPlayerConsoleService.sessionAvailability
         .addListener(_onExternalPlayerConsoleAvailabilityChanged);
+    DandanplayService.loginExpired.addListener(_onDandanplayLoginExpired);
     _initGuideButtonListener();
     _initialize();
+  }
+
+  /// 服务器作废了保存的弹弹play登录：说清楚，并给出重新登录的入口。
+  void _onDandanplayLoginExpired() {
+    if (!mounted) return;
+    BlurSnackBar.show(
+      context,
+      '弹弹play登录已失效，请重新登录',
+      actionText: '去登录',
+      onAction: () => _selectPage(AppPageIds.account),
+      duration: const Duration(seconds: 8),
+    );
   }
 
   /// 监听手柄 Guide 按钮（Xbox 正中间上方按键），
@@ -1693,6 +1706,7 @@ class MainPageState extends State<MainPage>
   void dispose() {
     HotkeyService().setLargeScreenModeActive(false);
     DesktopPlayerWindowService.instance.removeListener(_manageHotkeys);
+    DandanplayService.loginExpired.removeListener(_onDandanplayLoginExpired);
     _tabChangeNotifier
         ?.removeListener(_onTabChangeRequested); // Temporarily remove
     _webdavQuickAccessProvider?.removeListener(_onWebDAVSettingsChanged);

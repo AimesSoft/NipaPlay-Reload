@@ -433,7 +433,7 @@ extension VideoPlayerStateNavigation on VideoPlayerState {
     String? actualPlayUrl;
     if (MediaSourceUtils.isNewWebDavPath(episode.videoPath)) {
       actualPlayUrl = episode.actualPlayUrl ??
-          await MediaSourceUtils.resolveWebDavPathToUrlAsync(
+          await MediaSourceUtils.resolveWebDavPathToUrlInitialized(
             episode.videoPath,
           );
     } else if (MediaSourceUtils.isNewSmbPath(episode.videoPath)) {
@@ -718,7 +718,7 @@ extension VideoPlayerStateNavigation on VideoPlayerState {
     if (MediaSourceUtils.isNewWebDavPath(filePath)) {
       try {
         final url =
-            await MediaSourceUtils.resolveWebDavPathToUrlAsync(filePath);
+            await MediaSourceUtils.resolveWebDavPathToUrlInitialized(filePath);
         if (url != null && url.isNotEmpty) return url;
       } catch (_) {}
     }

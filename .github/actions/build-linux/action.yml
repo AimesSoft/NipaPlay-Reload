@@ -21,6 +21,9 @@ outputs:
   rpm-path:
     description: '生成的 RPM 包路径'
     value: ${{ steps.package.outputs.rpm_path }}
+  flatpak-path:
+    description: '生成的 Flatpak 包路径'
+    value: ${{ steps.flatpak_package.outputs.flatpak_path }}
 runs:
   using: 'composite'
   steps:
@@ -53,6 +56,14 @@ runs:
         sudo apt-get install -y libasound2-dev libass-dev libmpv-dev
         # Install keybinder-3.0 for hotkey_manager
         sudo apt-get install -y libkeybinder-3.0-dev
+
+    - name: Cache Flatpak builder state
+      uses: actions/cache@v4
+      with:
+        path: .flatpak-builder
+        key: flatpak-deps-24.08-${{ runner.arch }}-${{ hashFiles('io.github.AimesSoft.NipaPlay-Reload.yml') }}
+        restore-keys: |
+          flatpak-deps-24.08-${{ runner.arch }}-
 
     - name: Install Erika native build dependencies
       shell: bash
@@ -700,3 +711,60 @@ runs:
         fi
         echo "archive_path=${LINUX_BUILD_DIR}/${ARCHIVE_NAME}" >> $GITHUB_OUTPUT
         echo "rpm_path=${LINUX_BUILD_DIR}/${DESIRED_RPM_NAME_FOR_CHECK}" >> $GITHUB_OUTPUT
+
+    - name: Create Flatpak package
+      id: flatpak_package
+      shell: bash
+      env:
+        VERSION: ${{ inputs.app-version }}
+        ARCH: ${{ inputs.arch }}
+      run: |
+        set -euo pipefail
+        APP_NAME="NipaPlay"
+        LINUX_BUILD_DIR="build/linux"
+        DEB_PKG_NAME="${APP_NAME}-${VERSION}-Linux-${ARCH}"
+        FLATPAK_NAME="${APP_NAME}-${VERSION}-Linux-${ARCH}.flatpak"
+
+        echo "--- Installing Flatpak builder tools ---"
+        sudo apt-get update
+        sudo apt-get remove -y fuse 2>/dev/null || true
+        sudo apt-get install -y flatpak flatpak-builder zstd
+        sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0 || true
+        git config --global protocol.file.allow always
+
+        echo "--- Creating Flatpak package ---"
+        FLATPAK_WORK_DIR="${LINUX_BUILD_DIR}/flatpak-work-${ARCH}"
+        FLATPAK_REPO_DIR="${FLATPAK_WORK_DIR}/repo"
+        FLATPAK_BUILD_DIR="${FLATPAK_WORK_DIR}/build-dir"
+        rm -rf "${FLATPAK_WORK_DIR}"
+        mkdir -p "${FLATPAK_WORK_DIR}"
+
+        cp "${LINUX_BUILD_DIR}/${DEB_PKG_NAME}.deb" "${LINUX_BUILD_DIR}/nipaplay.deb"
+
+        flatpak remote-add --user --if-not-exists flathub https://dl.flathub.org/repo/flathub.flatpakrepo
+        flatpak install --user -y --noninteractive flathub \
+          org.freedesktop.Platform//24.08 \
+          org.freedesktop.Sdk//24.08 \
+          org.freedesktop.Platform.ffmpeg-full//24.08
+
+        flatpak-builder --user \
+          --repo="${FLATPAK_REPO_DIR}" \
+          --force-clean \
+          --disable-rofiles-fuse \
+          "${FLATPAK_BUILD_DIR}" \
+          io.github.AimesSoft.NipaPlay-Reload.yml
+
+        flatpak build-bundle \
+          "${FLATPAK_REPO_DIR}" \
+          "${LINUX_BUILD_DIR}/${FLATPAK_NAME}" \
+          io.github.AimesSoft.NipaPlay-Reload
+
+        rm -f "${LINUX_BUILD_DIR}/nipaplay.deb"
+        rm -rf "${FLATPAK_WORK_DIR}" .flatpak-builder/build/nipaplay-reload* .flatpak-builder/rofiles
+
+        if [ ! -f "${LINUX_BUILD_DIR}/${FLATPAK_NAME}" ]; then
+          echo "Error: Flatpak file not found! Expected: ${LINUX_BUILD_DIR}/${FLATPAK_NAME}"
+          exit 1
+        fi
+        echo "Flatpak package created at ${LINUX_BUILD_DIR}/${FLATPAK_NAME}"
+        echo "flatpak_path=${LINUX_BUILD_DIR}/${FLATPAK_NAME}" >> "$GITHUB_OUTPUT"

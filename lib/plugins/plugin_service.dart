@@ -1,7 +1,6 @@
 import 'package:nipaplay/utils/performance_trace.dart';
 import 'dart:async';
 import 'dart:convert';
-import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 import 'package:nipaplay/plugins/url_resolver.dart';
@@ -10,6 +9,7 @@ import 'package:flutter/widgets.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:nipaplay/plugins/js_runtime_factory.dart';
 import 'package:nipaplay/plugins/plugin_storage.dart';
+import 'package:nipaplay/plugins/plugin_process_manager.dart';
 import 'package:nipaplay/plugins/js_runtime_types.dart';
 import 'package:nipaplay/plugins/models/plugin_descriptor.dart';
 import 'package:nipaplay/plugins/models/plugin_ui_action_result.dart';
@@ -31,6 +31,7 @@ import 'package:nipaplay/danmaku_abstraction/danmaku_kernel_factory.dart';
 
 class PluginService extends ChangeNotifier {
   PluginService() : _eventBus = PluginEventBus() {
+    _processManagers.add(_processManager);
     _ready = _initialize();
     _setupEventListeners();
   }
@@ -94,8 +95,14 @@ class PluginService extends ChangeNotifier {
   final PluginStorage _pluginStorage = createPluginStorage();
   final PluginEventBus _eventBus;
 
-  /// 插件启动的外部进程，key 为 pluginId，value 为 Process。
-  final Map<String, Process> _managedProcesses = {};
+  final PluginProcessManager _processManager =
+      PluginProcessManager(onLog: debugPrint);
+  static final Set<PluginProcessManager> _processManagers = {};
+
+  /// Must be awaited before exit(0), which bypasses provider disposal.
+  static Future<void> shutdownExternalProcesses() async {
+    await Future.wait(_processManagers.map((manager) => manager.shutdown()));
+  }
 
   late final Future<void> _ready;
   bool _isLoaded = false;
@@ -751,11 +758,6 @@ class PluginService extends ChangeNotifier {
   bool _handleProcessStart(String pluginId, List<dynamic> callArgs) {
     if (kIsWeb) return false;
 
-    // 如果已有进程在运行，先停止
-    if (_isProcessRunning(pluginId)) {
-      _handleProcessStop(pluginId);
-    }
-
     if (callArgs.isEmpty) return false;
     final executable = callArgs[0]?.toString().trim() ?? '';
     if (executable.isEmpty) return false;
@@ -770,8 +772,7 @@ class PluginService extends ChangeNotifier {
 
     // 支持通过环境变量传递配置：callArgs[2] 为 Map<String, String>
     // 在当前环境变量基础上追加
-    Map<String, String> environment =
-        Map<String, String>.from(Platform.environment);
+    final environment = <String, String>{};
     if (callArgs.length >= 3 && callArgs[2] is Map) {
       final envMap = callArgs[2] as Map;
       for (final key in envMap.keys) {
@@ -783,67 +784,17 @@ class PluginService extends ChangeNotifier {
       }
     }
 
-    // 工作目录默认为可执行文件所在目录
-    String? workingDirectory;
-    try {
-      final file = File(executable);
-      if (file.path.contains('/')) {
-        workingDirectory = file.parent.path;
-      }
-    } catch (_) {}
-
-    try {
-      final process = Process.start(
-        executable,
-        arguments,
-        environment: environment,
-        workingDirectory: workingDirectory,
-      );
-      process.then((p) {
-        _managedProcesses[pluginId] = p;
-        debugPrint('[Plugin:$pluginId] 进程已启动: $executable');
-
-        // 捕获 stdout/stderr 用于调试
-        p.stdout.transform(utf8.decoder).listen((data) {
-          debugPrint('[Plugin:$pluginId] stdout: ${data.trim()}');
-        });
-        p.stderr.transform(utf8.decoder).listen((data) {
-          debugPrint('[Plugin:$pluginId] stderr: ${data.trim()}');
-        });
-
-        // 监听退出
-        p.exitCode.then((code) {
-          debugPrint('[Plugin:$pluginId] 进程已退出 (code=$code)');
-          _managedProcesses.remove(pluginId);
-        });
-      }).catchError((e) {
-        debugPrint('[Plugin:$pluginId] 进程启动失败: $e');
-      });
-      return true;
-    } catch (e) {
-      debugPrint('[Plugin:$pluginId] 进程启动异常: $e');
-      return false;
-    }
+    final options = callArgs.length >= 4 && callArgs[3] is Map
+        ? callArgs[3] as Map
+        : const {};
+    return _processManager.start(pluginId, executable, arguments, environment,
+        minimizedTerminal: options['window'] == 'minimized');
   }
 
-  bool _handleProcessStop(String pluginId) {
-    final process = _managedProcesses.remove(pluginId);
-    if (process == null) return false;
-    try {
-      process.kill();
-      debugPrint('[Plugin:$pluginId] 进程已终止');
-      return true;
-    } catch (e) {
-      debugPrint('[Plugin:$pluginId] 进程终止失败: $e');
-      return false;
-    }
-  }
+  bool _handleProcessStop(String pluginId) => _processManager.stop(pluginId);
 
-  bool _isProcessRunning(String pluginId) {
-    final process = _managedProcesses[pluginId];
-    if (process == null) return false;
-    return true;
-  }
+  bool _isProcessRunning(String pluginId) =>
+      _processManager.isRunning(pluginId);
 
   void _handleDanmakuLoadedEvent(PluginEvent event) {
     final rawDanmaku = event.data['danmaku'];
@@ -1327,9 +1278,9 @@ class PluginService extends ChangeNotifier {
       };
 
       const process = {
-        start: function(executable, args, env) {
+        start: function(executable, args, env, options) {
           if (!plugin.hasPermission('system.override')) return false;
-          return !!flutter_invokeMethod('processStart', executable, args || [], env || {});
+          return !!flutter_invokeMethod('processStart', executable, args || [], env || {}, options || {});
         },
         stop: function() {
           if (!plugin.hasPermission('system.override')) return false;
@@ -1787,6 +1738,9 @@ class PluginService extends ChangeNotifier {
 
   @override
   void dispose() {
+    unawaited(_processManager.shutdown().whenComplete(() {
+      _processManagers.remove(_processManager);
+    }));
     _eventBus.dispose();
     for (final runtime in _runtimeByPluginId.values) {
       try {

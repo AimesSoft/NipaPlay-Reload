@@ -416,17 +416,21 @@ class MediaSourceUtils {
     return filePath;
   }
 
-  /// 将新格式 WebDAV 路径解析为可播放的 HTTP URL（本地认证代理）。
+  /// 连接配置了用户名或密码时，媒体需要经本地认证代理播放。
+  static bool webDavNeedsAuthProxy(WebDAVConnection connection) =>
+      connection.username.trim().isNotEmpty || connection.password.isNotEmpty;
+
+  /// 将新格式 WebDAV 路径解析为可播放的 HTTP URL。
   ///
-  /// 播放内核（MDK/Media Kit）无法完成 WebDAV 的 Digest 挑战协商，统一走
-  /// WebDAVProxyService 由应用代持认证。连接未认证/代理未启动时回退直链，
-  /// 保持旧行为。返回 null 如果找不到对应连接。
+  /// 播放内核（MDK/Media Kit）无法完成 WebDAV 的 Digest 挑战协商，需要认证
+  /// 的连接走 WebDAVProxyService 由应用代持认证；匿名连接、代理未启动时
+  /// 仍返回直链，保持旧行为。返回 null 如果找不到对应连接。
   static String? resolveWebDavPathToUrl(String filePath) {
     final resolved = WebDAVService.instance.resolveMediaPath(filePath);
     if (resolved == null) return null;
 
     final proxy = WebDAVProxyService.instance;
-    if (proxy.isRunning) {
+    if (proxy.isRunning && webDavNeedsAuthProxy(resolved.connection)) {
       try {
         return proxy.buildStreamUrl(
           resolved.connection,
@@ -442,13 +446,21 @@ class MediaSourceUtils {
     );
   }
 
-  /// 异步版本：确保本地代理已启动后再解析，播放主链路使用。
-  static Future<String?> resolveWebDavPathToUrlAsync(String filePath) async {
-    if (!isNewWebDavPath(filePath)) return filePath;
-    try {
-      await WebDAVProxyService.instance.initialize();
-    } catch (e) {
-      debugPrint('MediaSourceUtils: WebDAV 本地代理启动失败，回退直链: $e');
+  /// 同 [resolveWebDavPathToUrl]，但会先确保 WebDAV 连接配置已从本地存储加载，
+  /// 并在连接需要认证时启动本地认证代理。
+  ///
+  /// WebDAVService 的连接列表要等 initialize() 完成才有内容；调用链上若没有
+  /// 其它环节触发过初始化（例如播放器内的续播/下一话逻辑），同步版本会因为
+  /// 连接列表为空而返回 null，表现为"无法解析远程媒体路径"。
+  static Future<String?> resolveWebDavPathToUrlInitialized(String filePath) async {
+    await WebDAVService.instance.initialize();
+    final resolved = WebDAVService.instance.resolveMediaPath(filePath);
+    if (resolved != null && webDavNeedsAuthProxy(resolved.connection)) {
+      try {
+        await WebDAVProxyService.instance.initialize();
+      } catch (e) {
+        debugPrint('MediaSourceUtils: WebDAV 本地代理启动失败，回退直链: $e');
+      }
     }
     return resolveWebDavPathToUrl(filePath);
   }

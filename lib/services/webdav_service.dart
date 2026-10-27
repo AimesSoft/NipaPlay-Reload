@@ -93,6 +93,16 @@ class WebDAVConnection {
     );
   }
 
+  /// 历史版本对没有持久化 id 的连接按 url|username 派生确定性 v5 id。
+  /// 连接删除重建后只剩新的随机 v4 id，而旧媒体库条目/观看记录仍引用
+  /// 旧派生 id，因此解析失败时要按同一规则重绑回现有连接。
+  static String _deriveLegacyConnectionId(String url, String username) {
+    return const Uuid().v5(
+      '6ba7b811-9dad-11d1-80b4-00c04fd430c8',
+      'nipaplay:webdav:$url|$username',
+    );
+  }
+
   WebDAVConnection copyWith({
     String? id,
     String? name,
@@ -834,8 +844,36 @@ class WebDAVService {
             connection.id == reference || connection.name == reference,
       );
     } catch (_) {
-      return null;
+      return _rebindConnectionByLegacyId(reference);
     }
+  }
+
+  /// 连接被删除重建后 id 会换成新的随机 v4，旧条目引用的派生 id 直接
+  /// 查不到连接。按 url|username 的派生规则把旧 id 重绑回现有连接；
+  /// 同时检查内网/公网地址及末尾斜杠，兼容旧公网 url 迁移到 wanUrl。
+  WebDAVConnection? _rebindConnectionByLegacyId(String reference) {
+    for (final connection in _connections) {
+      final urlCandidates = <String>{};
+      for (final url in [connection.url, connection.wanUrl]) {
+        if (url.trim().isEmpty) continue;
+        urlCandidates.add(url);
+        if (url.endsWith('/')) {
+          urlCandidates.add(url.substring(0, url.length - 1));
+        } else {
+          urlCandidates.add('$url/');
+        }
+      }
+      for (final url in urlCandidates) {
+        if (WebDAVConnection._deriveLegacyConnectionId(
+              url,
+              connection.username,
+            ) ==
+            reference) {
+          return connection;
+        }
+      }
+    }
+    return null;
   }
 
   /// 通过连接名称和相对路径解析文件信息
