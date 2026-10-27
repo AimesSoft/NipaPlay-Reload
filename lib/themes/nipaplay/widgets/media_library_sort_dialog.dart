@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'dart:ui';
+import 'package:nipaplay/widgets/in_view_dialog.dart';
 
 /// 媒体库类型枚举
 enum MediaLibraryType {
@@ -160,7 +161,7 @@ class MediaLibrarySortDialog extends StatefulWidget {
     required String currentSortOrder,
     required MediaLibraryType libraryType,
   }) {
-    return showDialog<Map<String, String>>(
+    return showInViewDialog<Map<String, String>>(
       context: context,
       builder: (context) => MediaLibrarySortDialog(
         currentSortBy: currentSortBy,

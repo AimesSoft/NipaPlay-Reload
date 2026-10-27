@@ -18,6 +18,7 @@ import 'package:nipaplay/utils/anime4k_shader_manager.dart';
 import 'package:nipaplay/utils/crt_shader_manager.dart';
 import 'package:nipaplay/utils/globals.dart' as globals;
 import 'package:nipaplay/services/auto_next_episode_service.dart';
+import 'package:nipaplay/widgets/in_view_dialog.dart';
 
 class PlayerSettingsContent extends StatefulWidget {
   const PlayerSettingsContent({super.key});
@@ -803,7 +804,7 @@ class _PlayerSettingsContentState extends State<PlayerSettingsContent> {
                                   ],
                                 ),
                               )
-                            : await showDialog<bool>(
+                            : await showInViewDialog<bool>(
                                 context: context,
                                 builder: (dialogContext) => AlertDialog(
                                   title: const Text('开启警告'),

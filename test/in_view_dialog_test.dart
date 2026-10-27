@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -52,6 +54,23 @@ void main() {
       debugDefaultTargetPlatformOverride = null;
     });
   }
+
+  test('lib does not call showDialog directly', () {
+    // Experimental desktop windowing promotes showDialog to a native window
+    // whose first ShowWindow can deadlock the whole app on Windows (#1020).
+    final call = RegExp(r'(?<![\w.])showDialog\s*[<(]|material\.showDialog\s*\(');
+    final offenders = <String>[];
+    for (final entity in Directory('lib').listSync(recursive: true)) {
+      if (entity is! File || !entity.path.endsWith('.dart')) continue;
+      if (entity.path.endsWith('in_view_dialog.dart')) continue;
+      final lines = entity.readAsLinesSync();
+      for (var i = 0; i < lines.length; i++) {
+        if (lines[i].trimLeft().startsWith('//')) continue;
+        if (call.hasMatch(lines[i])) offenders.add('${entity.path}:${i + 1}');
+      }
+    }
+    expect(offenders, isEmpty, reason: 'Use showInViewDialog instead.');
+  });
 }
 
 class _RecordingNavigatorObserver extends NavigatorObserver {
