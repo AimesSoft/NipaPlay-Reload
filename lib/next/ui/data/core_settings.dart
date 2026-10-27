@@ -3,9 +3,11 @@ import 'dart:async';
 import 'package:file_selector/file_selector.dart' show openFile;
 import 'package:nipa_harness/nipa_harness.dart';
 import 'package:nipaplay/services/file_picker_service.dart';
+import 'package:nipaplay/utils/app_build_info.dart';
 
 import '../../next_core.dart';
 import '../../next_runtime.dart';
+import '../../capabilities/player_facts.dart' show configuredPlayerKernelId;
 import '../../ui_data/host_settings.dart';
 import 'login_requests.dart';
 import 'settings_data.dart';
@@ -294,9 +296,17 @@ final class CoreSettingsData implements NextSettingsData {
   @override
   Future<UiAbout> about() async {
     try {
-      final r = await _call('app.instance', {});
-      return UiAbout(version: r['version'] as String?);
-    } on Failure {
+      final facts = await loadAppBuildInfo();
+      facts['所选播放内核'] = switch (configuredPlayerKernelId()) {
+        'mdk' => 'MDK',
+        'media_kit' => 'Media Kit (mpv)',
+        'erika' => 'Erika',
+        'video_player' => 'Video Player',
+        final name => name,
+      };
+      return UiAbout(
+          version: facts['应用版本'], build: facts['构建号'], facts: facts);
+    } catch (_) {
       return const UiAbout();
     }
   }

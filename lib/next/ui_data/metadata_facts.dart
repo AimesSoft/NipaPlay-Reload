@@ -165,6 +165,19 @@ extension UiMetadataFacts on UiDataService {
         'still': image('still', e.still, m)
       });
     }
+    final creditSources = <JsonMap>[];
+    for (final source in (metadata['sources'] as List? ?? const []).whereType<Map>()) {
+      final values = source['fields'] as Map? ?? const {};
+      final credits = values['credits'] as Map? ?? const {};
+      int count(Object? value) => value is List ? value.length : 0;
+      creditSources.add({
+        'provider': source['provider'], 'externalId': source['externalId'],
+        'fetched': values.containsKey('credits') || values.containsKey('staff') || values.containsKey('characters'),
+        'cast': count(credits['cast']), 'crew': count(credits['crew']),
+        'staff': count(values['staff']), 'characters': count(values['characters']),
+        if (values['detailErrors'] != null) 'errors': values['detailErrors'],
+      });
+    }
     final fieldFacts = <String, Object?>{
         'title': {...text('title', work.title),
           'available': (fields['title'] ?? attrs['title']) is String &&
@@ -178,6 +191,11 @@ extension UiMetadataFacts on UiDataService {
           if (provenance['episodeCount'] == null && work.episodeCount != null)
             'source': {'source': 'library_episode_count'}},
         'studio': text('studio', work.studio),
+        'credits': {
+          'available': creditSources.any((s) => ['cast','crew','staff','characters']
+              .any((field) => (s[field] as int) > 0)),
+          'sources': creditSources,
+        },
         'ratings': {
           'available': work.ratings.isNotEmpty,
           'value': [

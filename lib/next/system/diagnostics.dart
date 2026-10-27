@@ -3,7 +3,6 @@ import 'dart:io';
 import 'package:nipa_harness/nipa_harness.dart';
 import 'package:nipaplay/services/debug_log_service.dart';
 import 'package:nipaplay/services/file_log_service.dart';
-import 'package:nipaplay/services/update_service.dart';
 import 'package:nipaplay/security/secret_redactor.dart';
 import 'package:nipaplay/utils/linux_storage_migration.dart';
 import 'package:nipaplay/utils/settings_storage.dart';
@@ -18,6 +17,7 @@ import '../network/observations.dart';
 import '../settings/system_settings.dart';
 import '../settings/registry.dart';
 import 'storage.dart';
+import 'alpha_updates.dart';
 
 final class SystemDiagnostics implements Capability {
   SystemDiagnostics(
@@ -36,7 +36,7 @@ final class SystemDiagnostics implements Capability {
   }
 
   Future<JsonMap> _checkUpdate() async {
-    final info = await UpdateService.checkForUpdates();
+    final info = await checkNextUpdate();
     final url = Uri.tryParse(info.releaseUrl);
     final safeRelease = url != null &&
         url.scheme == 'https' &&

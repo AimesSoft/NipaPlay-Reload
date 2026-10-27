@@ -436,9 +436,16 @@ final class UiMemoryDoc {
 }
 
 final class UiAbout {
-  const UiAbout({this.version, this.build});
+  const UiAbout({this.version, this.build, this.facts = const {}});
   final String? version;
   final String? build;
+  final Map<String, String> facts;
+
+  String get diagnosticsText => [
+        'NipaPlay Next',
+        if (facts.isEmpty && version != null) '应用版本: $version',
+        for (final entry in facts.entries) '${entry.key}: ${entry.value}',
+      ].join('\n');
 }
 
 /// The settings registry's failure, in a few plain words.

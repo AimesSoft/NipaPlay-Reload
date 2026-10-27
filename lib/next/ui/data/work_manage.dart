@@ -143,6 +143,12 @@ abstract interface class NextWorkManage {
   Future<String?> pickFile(List<String> kinds);
 }
 
+/// Detail text remains readable from the catalogue when a source's file or
+/// management RPC is temporarily unavailable.
+abstract interface class NextWorkMetadata {
+  Future<Map<String, Object?>> metadata(UiWork work);
+}
+
 enum UiProvider {
   dandanplay('弹弹play'),
   tmdb('TMDB'),

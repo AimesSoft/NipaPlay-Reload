@@ -65,14 +65,14 @@ class ServiceMark extends StatelessWidget {
   final String? provider;
 
   static (String, Color) of(String kind) => switch (kind) {
-        'dandanplay' => ('弹', const Color(0xFFFF2E55)),
-        'bangumi' => ('B', const Color(0xFFF09199)),
+        'dandanplay' => ('弹', const Color(0xFF00A0E9)),
+        'bangumi' => ('B', const Color(0xFFF25D6B)),
         'jellyfin' => ('J', const Color(0xFF8A6CF0)),
         'emby' => ('E', const Color(0xFF52B54B)),
         'smb' => ('S', const Color(0xFF4A90D9)),
         'webdav' => ('W', const Color(0xFFE0A33A)),
         'nipaplay' => ('N', const Color(0xFFFF6F8A)),
-        'dandanplay_remote' => ('弹', const Color(0xFFFF2E55)),
+        'dandanplay_remote' => ('弹', const Color(0xFF00A0E9)),
         _ => ('·', NextColors.p3),
       };
 
@@ -246,16 +246,9 @@ class _AccountTile extends StatelessWidget {
       height: 156,
       padding: const EdgeInsets.fromLTRB(20, 20, 16, 16),
       decoration: BoxDecoration(
+        color: const Color(0xFF0A0A0A),
         borderRadius: BorderRadius.circular(18),
         border: Border.all(color: NextColors.line),
-        gradient: LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [
-            color.withValues(alpha: a.loggedIn ? 0.16 : 0.07),
-            const Color(0x05FFFFFF),
-          ],
-        ),
       ),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         Row(children: [

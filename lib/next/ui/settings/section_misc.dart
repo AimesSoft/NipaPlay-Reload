@@ -1,4 +1,6 @@
 import 'package:flutter/widgets.dart';
+import 'package:flutter/services.dart';
+import 'package:flutter/material.dart' show SelectableText;
 
 import '../data/gui_calls.dart';
 import '../data/settings_data.dart';
@@ -316,6 +318,14 @@ class AboutSectionState extends State<AboutSection> {
 
   /// The release page did not open.
   String? _note;
+  bool _copied = false;
+
+  Future<void> _copyDiagnostics() async {
+    final about = _about;
+    if (about == null) return;
+    await Clipboard.setData(ClipboardData(text: about.diagnosticsText));
+    if (mounted) setState(() => _copied = true);
+  }
 
   @override
   void initState() {
@@ -371,7 +381,7 @@ class AboutSectionState extends State<AboutSection> {
           const NipaAvatar(size: 56),
           const SizedBox(width: 18),
           Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Text('NipaPlay', style: NextText.serif(26, letterSpacing: 0.5)),
+            Text('NipaPlay Next', style: NextText.serif(26, letterSpacing: 0.5)),
             const SizedBox(height: 4),
             Text(about?.version ?? '',
                 style: NextText.num(13, color: NextColors.p3)),
@@ -404,6 +414,32 @@ class AboutSectionState extends State<AboutSection> {
               model: widget.model,
               highlight: widget.highlight == auto.key),
       ]),
+      if (about != null && about.facts.isNotEmpty) ...[
+        const SizedBox(height: 24),
+        SettingsCard(title: '测试与诊断', children: [
+          SettingsRow(
+            title: '反馈问题时附上这些信息',
+            subtitle: '版本、构建和运行环境，可直接复制到问题反馈中。',
+            trailing: PillButton(
+                label: _copied ? '已复制' : '复制诊断信息',
+                onTap: _copyDiagnostics),
+          ),
+          for (final entry in about.facts.entries)
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 9),
+              child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                SizedBox(
+                    width: 108,
+                    child: Text(entry.key,
+                        style: NextText.sans(13, color: NextColors.p3))),
+                const SizedBox(width: 12),
+                Expanded(
+                    child: SelectableText(entry.value,
+                        style: NextText.sans(13, color: NextColors.p2))),
+              ]),
+            ),
+        ]),
+      ],
     ]);
   }
 }

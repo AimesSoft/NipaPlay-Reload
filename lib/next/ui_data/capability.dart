@@ -107,6 +107,7 @@ const _putSpec = ActionSpec(
     description:
         'Hand in one library work\'s data in a single atomic commit: the work\'s title, originalTitle, overview, year, genres, poster, backdrop, logo, and per episode title, overview, airDate, runtime (minutes) and still. '
         'Every field is optional; omitted fields are not touched. There is no clearing here (use media.metadata.override / media.artwork.clear). '
+        'For credits/cast/crew, Bangumi staff/characters, scores and other rich source facts, use media.metadata.import_batch with an accepted ref; its fields retain additional JSON facts. put edits the viewer copy and images, not an exhaustive provider snapshot. '
         'work.* applies to workId (the whole work family: its releases share this view). '
         'Each episodes[] item names its episode by episodeId, or by number (string, e.g. "3" or "12.5") with season (integer, omitted when the episode has none; season and number are matched exactly as ui_facts reports them, "03" equals "3"). '
         'An episode that does not exist is created as a local catalogue episode (localOnly, no file needed) under the work\'s release with that season; a work without one gets a local release. '

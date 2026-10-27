@@ -18,7 +18,7 @@ typedef _Owner = WorkOwner;
 /// this device's are asked directly, another's through `mesh.invoke`, so
 /// every check and question happens where the work is. Nothing is
 /// inferred from names.
-final class CoreWorkManage implements NextWorkManage {
+final class CoreWorkManage implements NextWorkManage, NextWorkMetadata {
   CoreWorkManage(this.harness, this.data);
 
   /// The runtime's, read at each call (it may come later).
@@ -166,6 +166,12 @@ final class CoreWorkManage implements NextWorkManage {
   }
 
   @override
+  Future<Map<String, Object?>> metadata(UiWork work) async {
+    final facts = await _call('media.metadata.ui_facts', {'workId': work.workId});
+    return Map<String, Object?>.from(facts['metadata'] as Map? ?? const {});
+  }
+
+  @override
   Future<UiManagedWork> work(UiWork work) async {
     final facts = (await _call('media.metadata.ui_facts', {
       'workId': work.workId
@@ -190,6 +196,7 @@ final class CoreWorkManage implements NextWorkManage {
       if (away.isEmpty) throw const UiManageError(message: 'no device has it');
       return UiManagedWork(
           work: work,
+          metadata: Map<String, Object?>.from(facts['metadata'] as Map? ?? const {}),
           kind: UiWorkKind.loose,
           away: away,
           unavailable: away.first);

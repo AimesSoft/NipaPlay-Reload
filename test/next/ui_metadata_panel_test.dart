@@ -5,6 +5,17 @@ import 'package:nipaplay/next/ui/detail/metadata_panel.dart';
 import 'package:nipaplay/next/ui_data/ui_data.dart';
 
 void main() {
+  testWidgets('catalogue credits remain visible when remote file management fails', (tester) async {
+    const work = UiWork(workId: 'offline', title: '离线资料');
+    await tester.pumpWidget(MaterialApp(home: Scaffold(body: SingleChildScrollView(
+      child: WorkMetadataPanel(work: work, manage: _OfflineMetadata()),
+    ))));
+    await tester.pump();
+    await tester.pump();
+    expect(find.textContaining('已保存的演员'), findsOneWidget);
+    expect(find.text('重试读取详细资料'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
   testWidgets(
       'details show separate scores, credits, characters and actual file facts',
       (tester) async {
@@ -100,6 +111,19 @@ class _Manage implements NextWorkManage {
   final UiManagedWork value;
   @override
   Future<UiManagedWork> work(UiWork work) async => value;
+  @override
+  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
+}
+
+class _OfflineMetadata implements NextWorkManage, NextWorkMetadata {
+  @override
+  Future<Map<String, Object?>> metadata(UiWork work) async => {
+    'sources': [{'provider': 'tmdb', 'fields': {'credits': {
+      'cast': [{'name': '已保存的演员', 'role': '主角'}],
+    }}}],
+  };
+  @override
+  Future<UiManagedWork> work(UiWork work) async => throw StateError('source unavailable');
   @override
   dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
 }

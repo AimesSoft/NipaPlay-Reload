@@ -6,6 +6,7 @@ import '../../ui_data/ui_data.dart';
 import '../data/work_manage.dart';
 import '../theme/tokens.dart';
 import '../widgets/buttons.dart';
+import '../widgets/artwork.dart';
 
 /// Full source records are read only on the detail page, never carried through
 /// every home/library card. Each provider keeps its own labels and credits.
@@ -20,6 +21,7 @@ class WorkMetadataPanel extends StatefulWidget {
 
 class _WorkMetadataPanelState extends State<WorkMetadataPanel> {
   UiManagedWork? _managed;
+  Map<String, Object?>? _metadata;
   Object? _error;
   bool _allFiles = false;
 
@@ -40,6 +42,12 @@ class _WorkMetadataPanelState extends State<WorkMetadataPanel> {
   Future<void> _load() async {
     final work = widget.work;
     try {
+      final manage = widget.manage;
+      if (manage is NextWorkMetadata) {
+        final metadata = await (manage as NextWorkMetadata).metadata(work);
+        if (!mounted || !identical(work, widget.work)) return;
+        setState(() => _metadata = metadata);
+      }
       final result = await widget.manage?.work(work);
       if (mounted && identical(work, widget.work)) {
         setState(() {
@@ -61,7 +69,7 @@ class _WorkMetadataPanelState extends State<WorkMetadataPanel> {
 
   @override
   Widget build(BuildContext context) {
-    final metadata = _managed?.metadata ?? widget.work.details;
+    final metadata = _metadata ?? _managed?.metadata ?? widget.work.details;
     final sources = _maps(metadata['sources']);
     final files = _managed?.files.toSet().toList() ?? const <UiFile>[];
     if (sources.isEmpty && files.isEmpty && _error == null) {
@@ -90,6 +98,12 @@ class _WorkMetadataPanelState extends State<WorkMetadataPanel> {
 
 List<Map> _maps(Object? value) =>
     value is List ? value.whereType<Map>().toList() : const [];
+String? _personImage(Map person) {
+  final images = person['images'];
+  final value = person['imageUrl'] ??
+      (images is Map ? images['medium'] ?? images['large'] : null);
+  return value is String && Uri.tryParse(value)?.scheme == 'https' ? value : null;
+}
 String _words(Object? value) {
   if (value == null) return '';
   if (value is String || value is num) return '$value';
@@ -154,6 +168,13 @@ class _SourceDetailsState extends State<_SourceDetails> {
       'IMDb': (fields['externalIds'] as Map?)?['imdb_id'],
       'TVDB': (fields['externalIds'] as Map?)?['tvdb_id'],
       '创作': fields['creators'],
+      if (fields['budget'] is num && (fields['budget'] as num) > 0)
+        '预算': '\$${fields['budget']}',
+      if (fields['revenue'] is num && (fields['revenue'] as num) > 0)
+        '票房': '\$${fields['revenue']}',
+      '收藏统计': fields['collection'] is Map
+          ? (fields['collection'] as Map).entries.map((e) => '${e.key}: ${e.value}').join(' · ')
+          : null,
       for (final info in _maps(fields['infobox']))
         '${info['key']}': info['value'],
     };
@@ -176,9 +197,17 @@ class _SourceDetailsState extends State<_SourceDetails> {
                   decoration: BoxDecoration(
                       color: const Color(0x0DFFFFFF),
                       borderRadius: BorderRadius.circular(8)),
-                  child: Text(label(person),
+                  child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                    if (_personImage(person) case final image?) ...[
+                      ClipRRect(borderRadius: BorderRadius.circular(5),
+                        child: SizedBox(width: 48, height: 64,
+                          child: NextImage(image, shape: ArtShape.poster))),
+                      const SizedBox(width: 10),
+                    ],
+                    Expanded(child: Text(label(person),
                       style: NextText.sans(13,
                           color: NextColors.p2, height: 1.5))),
+                  ])),
           ]),
         ]);
     return Padding(
@@ -225,6 +254,12 @@ class _SourceDetailsState extends State<_SourceDetails> {
               characters,
               (p) =>
                   '${_words(p['name'])} · ${_words(p['relation'])}\n${_words(p['actors'])}'),
+        if (['tmdb', 'bangumi'].contains(provider) &&
+            [cast, crew, staff, characters].every((rows) => rows.isEmpty))
+          Padding(padding: const EdgeInsets.only(top: 12),
+            child: Text(fields.containsKey('credits') || fields.containsKey('staff') || fields.containsKey('characters')
+                ? '此来源没有返回演职员资料' : '此来源的演职员资料尚未获取',
+              style: NextText.sans(12.5, color: NextColors.p3))),
         if ([cast, crew, staff, characters].any((r) => r.length > 18))
           NextButton.ghost(
               label: _expanded ? '收起演职员' : '查看全部演职员',
