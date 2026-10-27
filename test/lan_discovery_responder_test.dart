@@ -88,9 +88,12 @@ void main() {
           NipaPlayLanDiscoveryResponder.bindOverrideForTest = null;
         });
       } else {
+        // RawDatagramSocket.bind 默认 reuseAddress: true；Linux 上两个都设了
+        // SO_REUSEADDR 的 UDP socket 可以共享端口，占位方必须显式关闭。
         dartBlocker = await RawDatagramSocket.bind(
           InternetAddress.anyIPv4,
           nipaplayLanDiscoveryPort,
+          reuseAddress: false,
         );
         addTearDown(dartBlocker.close);
       }
