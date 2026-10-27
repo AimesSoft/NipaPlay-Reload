@@ -37,6 +37,26 @@ void main() {
       expect(fixture.started.single.episodeId, isNull);
     });
 
+    test('a stable Mesh locator reaches the source resolver without a URL host', () async {
+      fixture = PlaybackFixture(rows: []);
+      const locator = 'mesh:///mesh-episode%3Averified-id';
+      await invokeCompleted(fixture.harness, 'playback.open', {'path': locator});
+      expect(fixture.started.single.videoPath, locator);
+      expect(fixture.started.single.historyItem, isNull);
+    });
+
+    for (final locator in [
+      'mesh://other-device/episode', 'mesh:///', 'mesh:///a/b',
+      'mesh:///episode?grant=invalid', 'mesh:///episode#fragment',
+    ]) {
+      test('rejects malformed Mesh locator $locator before opening', () async {
+        fixture = PlaybackFixture(rows: []);
+        await invokeFailed(fixture.harness, 'playback.open', {'path': locator},
+            FailureCode.invalidInput);
+        expect(fixture.started, isEmpty);
+      });
+    }
+
     test('a file URL resolves to the same local history identity', () async {
       // A drive-letter path on Windows; a POSIX path has no file URL there.
       if (Platform.isWindows) {

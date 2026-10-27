@@ -48,10 +48,6 @@ final class MeshCoordinator {
     Uri uri, {
     String Function(Uri)? systemProxy,
   }) {
-    if (['127.0.0.1', '::1', 'localhost'].contains(uri.host) ||
-        InternetAddress.tryParse(uri.host)?.isLoopback == true) {
-      return 'DIRECT';
-    }
     return AppHttpProxy.findProxy(
         uri, systemProxy ?? SystemProxyService.instance.findProxy);
   }

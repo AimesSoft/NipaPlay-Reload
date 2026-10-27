@@ -122,6 +122,11 @@ final class PlaybackOpenAction
         if (!await File(path).exists()) {
           throw const Failure(FailureCode.notFound, 'The local file does not exist or is inaccessible.');
         }
+      } else if (uri.scheme == 'mesh') {
+        if (uri.host.isNotEmpty || uri.pathSegments.length != 1 ||
+            uri.pathSegments.single.isEmpty || uri.hasQuery || uri.hasFragment) {
+          throw const Failure(FailureCode.invalidInput, 'A Mesh locator must name one episode.');
+        }
       } else if (uri.host.isEmpty) {
         throw const Failure(FailureCode.invalidInput, 'A media URL must include a host or item ID.');
       }
