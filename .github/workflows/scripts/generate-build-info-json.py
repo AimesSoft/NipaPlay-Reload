@@ -174,7 +174,7 @@ def _build_payload():
             pass
     return {
         "app_version": version,
-        "git_commit": _run(["git", "rev-parse", "HEAD"]),
+        "git_commit": os.environ.get("NIPAPLAY_BUILD_REVISION", "").strip() or _run(["git", "rev-parse", "HEAD"]),
         "git_dirty": bool(_run(["git", "status", "--porcelain", "--untracked-files=no", "--", ".", ":!assets/build_info.json"])),
         "flutter_version": flutter_version,
         "build_time": now.strftime("%Y-%m-%d %H:%M:%S UTC"),
