@@ -4,6 +4,9 @@
 
 - [技术架构](../ARCHITECTURE.md)：宿主、运行器、媒体身份、Mesh 与数据边界。
 - [能力使用参考](../CAPABILITIES.md)：按任务查找能力。
+- [完整 Action 参考](ACTION_REFERENCE.md)：逐项查阅应用动作的用途、影响和源码。
+- [Action 覆盖核对](ACTION_COVERAGE.md)：目录如何提取、动态注册与校验边界。
+- [界面、书架与图片能力](UI_CAPABILITIES.md)：首页主视觉、分类排列、图片覆盖与设备归属。
 - [研究纲领](../RESEARCH.md)：核心假设、Classic 隔离与个人 harness。
 - [可观测性契约](../OBSERVABILITY_CONTRACT.md)：运行状态与诊断。
 - [DSH 高级配置](../DSH_ADVANCED_CONFIG.md) · [Headless](../HEADLESS.md)。
