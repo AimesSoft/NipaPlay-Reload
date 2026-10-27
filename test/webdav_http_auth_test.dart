@@ -33,7 +33,7 @@ void main() {
       expect(digest, contains('nonce="abc123"'));
       expect(digest, contains('uri="/dav/file.mkv"'));
       expect(digest, contains('qop=auth'));
-      expect(digest, contains('opaque=xy'));
+      expect(digest, contains('opaque="xy"'));
       expect(digest, isNot(contains('p"')));
     });
 
@@ -70,20 +70,39 @@ void main() {
       );
     });
 
-    test('Digest 计算与 RFC 7616 已知向量一致', () {
-      final auth = WebDavChallengeAuth(username: 'Mufasa', password: 'Circle Of Life');
+    test('Digest 计算与 RFC 2617 §3.5 已知向量一致', () {
+      final auth = WebDavChallengeAuth(
+        username: 'Mufasa',
+        password: 'Circle Of Life',
+        cnonceGenerator: () => '0a4f113b',
+      );
       auth.tryHandleUnauthorized(
         'Digest realm="testrealm@host.com", qop="auth,auth-int", '
         'nonce="dcd98b7102dd2f0e8b11d0f600bfb0c093", '
         'opaque="5ccc069c403ebaf9f0171e9517f40e41"',
       );
       final header = auth.authorizationHeader('GET', '/dir/index.html');
-      // cnonce/nc 每次随机，只校验确定性部分的形状。
       expect(header, contains('realm="testrealm@host.com"'));
       expect(header, contains('nonce="dcd98b7102dd2f0e8b11d0f600bfb0c093"'));
       expect(header, contains('uri="/dir/index.html"'));
-      expect(header, contains('nc=1'));
-      expect(header, contains('opaque=5ccc069c403ebaf9f0171e9517f40e41'));
+      expect(header, contains('qop=auth,'));
+      expect(header, contains('nc=00000001'));
+      expect(header, contains('cnonce="0a4f113b"'));
+      expect(header, contains('response="6629fae49393a05397450978507c4ef1"'));
+      expect(header, contains('opaque="5ccc069c403ebaf9f0171e9517f40e41"'));
+    });
+
+    test('Digest 的 uri 与已编码的请求路径逐字一致（不二次编码）', () {
+      final auth = WebDavChallengeAuth(username: 'u', password: 'p');
+      auth.tryHandleUnauthorized('Digest realm="dav", nonce="n1", qop="auth"');
+      final target = webDavDigestRequestTarget(
+        Uri.parse('http://host/dav/番剧 01.mkv'),
+      );
+      expect(target, '/dav/%E7%95%AA%E5%89%A7%2001.mkv');
+      expect(
+        auth.authorizationHeader('GET', target),
+        contains('uri="/dav/%E7%95%AA%E5%89%A7%2001.mkv"'),
+      );
     });
   });
 

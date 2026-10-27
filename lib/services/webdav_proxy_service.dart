@@ -48,9 +48,11 @@ class WebDAVProxyService {
   Future<void> _initialize() async {
     if (_isRunning) return;
 
+    // shelf_router 会给每个 GET 路由自动加一个去 body 的 HEAD 路由（并把
+    // Content-Length 改成 0），显式的 HEAD 处理必须先于 GET 注册才会生效。
     final router = Router()
-      ..add('GET', '/webdav/stream', _handleStream)
       ..add('HEAD', '/webdav/stream', _handleStreamHead)
+      ..add('GET', '/webdav/stream', _handleStream)
       ..get('/webdav/health', (Request request) => Response.ok('ok'));
 
     final handler = const Pipeline().addHandler(router.call);
@@ -162,26 +164,40 @@ class WebDAVProxyService {
     }
 
     final directUrl = WebDAVService.instance.getFileUrl(connection, rawPath);
-    final directUri = Uri.parse(directUrl);
+    final directUri = Uri.parse(directUrl).replace(userInfo: '');
     final rangeHeader = request.headers['range'];
+    final method = headOnly ? 'HEAD' : 'GET';
 
-    HttpClient? client;
-    HttpClientResponse? upstream;
+    final client = HttpClient()
+      ..connectionTimeout = const Duration(seconds: 15)
+      // 原样透传字节：自动解压会让透传的 Content-Length/Content-Range 与
+      // 实际字节数不一致，Range 播放会错位。
+      ..autoUncompress = false;
+    // 只有成功交给流式响应时，client 才由 _bindClientToStream 在流结束时关闭；
+    // 其余所有出口（认证失败、上游错误、超时、HEAD）都在 finally 里关闭。
+    var handedToStream = false;
     try {
-      var currentUri = directUri.replace(userInfo: '');
-      var auth = WebDavChallengeAuth(
+      var currentUri = directUri;
+      var redirects = 0;
+      const maxRedirects = 5;
+      final auth = WebDavChallengeAuth(
         username: connection.username,
         password: connection.password,
       );
-      var redirects = 0;
-      const maxRedirects = 5;
+      HttpClientResponse upstream;
 
       while (true) {
-        final method = headOnly ? 'HEAD' : 'GET';
-        final authorization =
-            auth.authorizationHeader(method, webDavDigestRequestTarget(currentUri));
+        // 凭证只发往连接配置的源（scheme + host + port），跨源跳转后不再携带，
+        // 也不做乐观 Basic，避免外泄。
+        final sameOrigin = _isSameOrigin(currentUri, directUri);
+        final authorization = sameOrigin
+            ? auth.authorizationHeader(
+                method, webDavDigestRequestTarget(currentUri))
+            : null;
 
-        final req = await client!.getUrl(currentUri);
+        final req = await client.openUrl(method, currentUri);
+        // 重定向必须手动处理，自动跟随会把 Authorization 带到跳转目标。
+        req.followRedirects = false;
         req.headers.set(HttpHeaders.userAgentHeader, _userAgent);
         req.headers.set(HttpHeaders.acceptHeader, '*/*');
         if (rangeHeader != null) {
@@ -194,13 +210,13 @@ class WebDAVProxyService {
         final resp = await req.close().timeout(const Duration(seconds: 30));
 
         if (resp.statusCode == HttpStatus.unauthorized) {
-          if (auth.tryHandleUnauthorized(
-            resp.headers.value(HttpHeaders.wwwAuthenticateHeader),
-          )) {
-            await _drainAndAbort(resp, req);
+          await _drainAndAbort(resp, req);
+          if (sameOrigin &&
+              auth.tryHandleUnauthorized(
+                resp.headers.value(HttpHeaders.wwwAuthenticateHeader),
+              )) {
             continue; // 按新认证方案重发同一请求
           }
-          await _drainAndAbort(resp, req);
           return Response(
             HttpStatus.unauthorized,
             body: 'WebDAV server rejected credentials',
@@ -212,13 +228,8 @@ class WebDAVProxyService {
             redirects < maxRedirects) {
           final location = resp.headers.value(HttpHeaders.locationHeader);
           if (location != null) {
-            final nextUri = currentUri.resolve(location);
             await _drainAndAbort(resp, req);
-            // 跨主机跳转不携带凭证，也不做乐观 Basic（避免外泄）。
-            if (nextUri.host.toLowerCase() != currentUri.host.toLowerCase()) {
-              auth = WebDavChallengeAuth.unauthenticated();
-            }
-            currentUri = nextUri;
+            currentUri = currentUri.resolve(location).replace(userInfo: '');
             redirects++;
             continue;
           }
@@ -240,6 +251,8 @@ class WebDAVProxyService {
               'application/octet-stream';
       final contentRange =
           upstream.headers.value(HttpHeaders.contentRangeHeader);
+      final contentEncoding =
+          upstream.headers.value(HttpHeaders.contentEncodingHeader);
       final acceptRanges =
           upstream.headers.value(HttpHeaders.acceptRangesHeader) ?? 'bytes';
 
@@ -247,6 +260,7 @@ class WebDAVProxyService {
         'Content-Type': contentType,
         'Accept-Ranges': acceptRanges,
         if (contentRange != null) 'Content-Range': contentRange,
+        if (contentEncoding != null) 'Content-Encoding': contentEncoding,
         'Cache-Control': 'no-cache',
       };
 
@@ -260,10 +274,12 @@ class WebDAVProxyService {
         return Response(statusCode, headers: passthroughHeaders);
       }
 
-      final bodyStream =
-          _bindClientToStream(upstream.cast<List<int>>(), client);
-      upstream = null;
-      return Response(statusCode, body: bodyStream, headers: passthroughHeaders);
+      handedToStream = true;
+      return Response(
+        statusCode,
+        body: _bindClientToStream(upstream, client),
+        headers: passthroughHeaders,
+      );
     } on TimeoutException {
       return Response(
         HttpStatus.gatewayTimeout,
@@ -272,16 +288,18 @@ class WebDAVProxyService {
     } catch (e) {
       return Response.internalServerError(body: 'WebDAV stream error: $e');
     } finally {
-      upstream = null;
-      if (headOnly) {
-        // client 在此分支已被赋值；空值只可能是异常路径，防御性关闭。
+      if (!handedToStream) {
         try {
-          if (client != null) client.close(force: true);
+          client.close(force: true);
         } catch (_) {}
       }
-      // 非流式路径由 _bindClientToStream 在流结束时关闭 client。
     }
   }
+
+  static bool _isSameOrigin(Uri a, Uri b) =>
+      a.scheme.toLowerCase() == b.scheme.toLowerCase() &&
+      a.host.toLowerCase() == b.host.toLowerCase() &&
+      a.port == b.port;
 
   /// 把上游响应流包装为在完成/出错时关闭 [client] 的流，
   /// 保证播放器 seek 断开连接后 HttpClient 资源被回收。
