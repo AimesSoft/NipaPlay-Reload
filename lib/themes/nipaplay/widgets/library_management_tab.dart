@@ -30,6 +30,7 @@ import 'package:nipaplay/services/smb_service.dart';
 import 'package:nipaplay/services/media_library_reachability_service.dart';
 import 'package:nipaplay/services/smb_proxy_service.dart';
 import 'package:nipaplay/utils/media_source_utils.dart';
+import 'package:nipaplay/utils/manual_match_history.dart';
 import 'package:nipaplay/providers/watch_history_provider.dart';
 import 'package:nipaplay/providers/shared_remote_library_provider.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/batch_danmaku_dialog.dart';
@@ -4452,33 +4453,14 @@ class _LibraryManagementTabState extends State<LibraryManagementTab> {
           );
         }
 
-        final sourceForProgress = existingHistory ?? migratedHistory;
-        final preserveProgress = sourceForProgress != null &&
-            sourceForProgress.watchProgress > 0.01 &&
-            !sourceForProgress.isFromScan;
-
-        final updatedHistory = WatchHistoryItem(
+        final updatedHistory = buildManualMatchHistoryItem(
           filePath: filePath,
-          animeName: animeTitle.isNotEmpty
-              ? animeTitle
-              : (sourceForProgress?.animeName ??
-                  p.basenameWithoutExtension(fileName)),
-          episodeTitle: episodeTitle.isNotEmpty
-              ? episodeTitle
-              : sourceForProgress?.episodeTitle,
-          episodeId: episodeId,
+          fileName: fileName,
           animeId: animeId,
-          watchProgress: preserveProgress
-              ? sourceForProgress.watchProgress
-              : (sourceForProgress?.watchProgress ?? 0.0),
-          lastPosition: preserveProgress
-              ? sourceForProgress.lastPosition
-              : (sourceForProgress?.lastPosition ?? 0),
-          duration: sourceForProgress?.duration ?? 0,
-          lastWatchTime: DateTime.now(),
-          thumbnailPath: sourceForProgress?.thumbnailPath,
-          isFromScan: sourceForProgress?.isFromScan ?? false,
-          videoHash: sourceForProgress?.videoHash,
+          episodeId: episodeId,
+          animeTitle: animeTitle,
+          episodeTitle: episodeTitle,
+          source: existingHistory ?? migratedHistory,
         );
         await WatchHistoryManager.addOrUpdateHistory(updatedHistory);
 
@@ -4742,24 +4724,14 @@ class _LibraryManagementTabState extends State<LibraryManagementTab> {
                 await WatchHistoryManager.getHistoryItem(filePath);
 
             // 创建更新后的历史记录
-            final updatedHistory = WatchHistoryItem(
+            final updatedHistory = buildManualMatchHistoryItem(
               filePath: filePath,
-              animeName: animeTitle.isNotEmpty
-                  ? animeTitle
-                  : (existingHistory?.animeName ??
-                      p.basenameWithoutExtension(fileName)),
-              episodeTitle: episodeTitle.isNotEmpty
-                  ? episodeTitle
-                  : existingHistory?.episodeTitle,
-              episodeId: int.tryParse(episodeId),
+              fileName: fileName,
               animeId: int.tryParse(animeId),
-              watchProgress: existingHistory?.watchProgress ?? 0.0,
-              lastPosition: existingHistory?.lastPosition ?? 0,
-              duration: existingHistory?.duration ?? 0,
-              lastWatchTime: DateTime.now(),
-              thumbnailPath: existingHistory?.thumbnailPath,
-              isFromScan: existingHistory?.isFromScan ?? false,
-              videoHash: existingHistory?.videoHash,
+              episodeId: int.tryParse(episodeId),
+              animeTitle: animeTitle,
+              episodeTitle: episodeTitle,
+              source: existingHistory,
             );
 
             // 保存更新后的历史记录
