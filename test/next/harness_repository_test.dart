@@ -77,6 +77,71 @@ void main() {
       await noConflictArtifacts();
     });
 
+    for (final directory in [false, true]) {
+      test(
+          'ignored personal ${directory ? 'directory' : 'file'} blocks seed overwrite',
+          () async {
+        await Directory('${repository.path}/.git/info').create(recursive: true);
+        await File('${repository.path}/.git/info/exclude')
+            .writeAsString('official-tool\n');
+        final personal = File(
+            '${repository.path}/official-tool${directory ? '/private.py' : ''}');
+        await personal.parent.create(recursive: true);
+        await personal.writeAsString('personal content');
+        final before = await git(['rev-parse', 'HEAD']);
+        await maintainHarnessSeed(source, seed('updated', tool: true));
+        final result = await updateHarnessRepository(repository, source);
+        expect(result['state'], 'local_changes');
+        expect(await personal.readAsString(), 'personal content');
+        expect(await git(['rev-parse', 'HEAD']), before);
+      });
+    }
+
+    test(
+        'a competing branch switch cannot change the branch pinned for publication',
+        () async {
+      await git(['branch', 'other']);
+      await maintainHarnessSeed(source, seed('updated'));
+      final realGit =
+          (await Process.run('which', ['git'])).stdout.toString().trim();
+      final wrapperDir = await Directory('${root.path}/bin').create();
+      final report = File('${root.path}/race.json');
+      final wrapper = File('${wrapperDir.path}/git');
+      await wrapper.writeAsString('''#!/usr/bin/env python3
+import os, sys, subprocess, json
+real = ${jsonEncode(realGit)}
+args = sys.argv[1:]
+if 'read-tree' in args or ('merge' in args and '--ff-only' in args):
+    environment = dict(os.environ)
+    environment.pop('GIT_INDEX_FILE', None)
+    switched = subprocess.run([real, 'symbolic-ref', 'HEAD', 'refs/heads/other'], env=environment, capture_output=True)
+    checked = subprocess.run([real, 'checkout', 'other'], env=environment, capture_output=True)
+    with open(${jsonEncode(report.path)}, 'w') as out:
+        json.dump({'switch': switched.returncode, 'checkout': checked.returncode}, out)
+os.execv(real, [real, *args])
+''');
+      await Process.run('chmod', ['755', wrapper.path]);
+      final result = await Process.run('dart', [
+        '--packages=.dart_tool/package_config.json',
+        'test/next/support/harness_update_process.dart',
+        repository.path,
+        source.path
+      ], environment: {
+        'PATH': '${wrapperDir.path}:${Platform.environment['PATH']}'
+      });
+      expect(result.exitCode, 0, reason: result.stderr.toString());
+      expect((jsonDecode(result.stdout.toString()) as Map)['state'], 'updated');
+      final raced = jsonDecode(await report.readAsString()) as Map;
+      expect(raced['switch'], isNot(0));
+      expect(raced['checkout'], isNot(0));
+      expect(await git(['branch', '--show-current']), 'main');
+      expect(await File('${repository.path}/AGENTS.md').readAsString(),
+          'updated\n');
+    },
+        skip: Platform.isWindows
+            ? 'POSIX process wrapper; Git transaction is shared across platforms.'
+            : false);
+
     test('disjoint committed customization keeps both parents and dirty memory',
         () async {
       await File('${repository.path}/AGENTS.md')

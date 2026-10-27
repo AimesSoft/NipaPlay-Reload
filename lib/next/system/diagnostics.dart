@@ -18,6 +18,7 @@ import '../settings/system_settings.dart';
 import '../settings/registry.dart';
 import 'storage.dart';
 import 'alpha_updates.dart';
+import 'operation_observations.dart';
 
 final class SystemDiagnostics implements Capability {
   SystemDiagnostics(
@@ -157,6 +158,7 @@ final class SystemDiagnostics implements Capability {
 
   @override
   List<Action> get actions => [
+        ...const OperationObservationsCapability().actions,
         ClassicAction(
             const ActionSpec(
                 id: 'diagnostics.status',

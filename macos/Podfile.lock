@@ -1,5 +1,5 @@
 PODS:
-  - erika_flutter (0.2.1):
+  - erika_flutter (0.3.0):
     - FlutterMacOS
   - flutter_js (0.0.1):
     - FlutterMacOS
@@ -76,7 +76,7 @@ EXTERNAL SOURCES:
     :path: Flutter/ephemeral/.symlinks/plugins/window_manager/macos
 
 SPEC CHECKSUMS:
-  erika_flutter: f490e184f5328878bd636bbc3652c725b4891493
+  erika_flutter: 3116799640d45707e573fd6e6b89aa4153354d87
   flutter_js: 79c3c70d33ba464c67d8eb88639a61aa718cd8b8
   FlutterMacOS: d0db08ddef1a9af05a5ec4b724367152bb0500b1
   fvp: ed100b827d10aff53789fb9cb9dfdd85a87d037d
@@ -91,6 +91,6 @@ SPEC CHECKSUMS:
   tray_manager: a104b5c81b578d83f3c3d0f40a997c8b10810166
   window_manager: 1d01fa7ac65a6e6f83b965471b1a7fdd3f06166c
 
-PODFILE CHECKSUM: d8f651b9b24d21681d77d9cf5a55e67bfaa4a5a9
+PODFILE CHECKSUM: 1a16ebec4a65989ec79127f736a97a21da70ccfb
 
 COCOAPODS: 1.16.2

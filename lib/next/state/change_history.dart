@@ -7,6 +7,7 @@ import 'package:nipaplay/security/secret_redactor.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
 import '../settings/registry.dart';
+import '../system/operation_observations.dart';
 import 'query.dart';
 
 Future<void> migrateChangeHistory(DatabaseExecutor db) async {
@@ -80,8 +81,8 @@ final class ChangeHistory {
     _previous[collection] = next;
     if (before == null) {
       for (final row in rows) {
-        _writes = _writes.then((_) async => onChanged?.call(collection,
-            row['id'] as String, {'before': null, 'after': row}));
+        _writes = _writes.then((_) async => onChanged?.call(
+            collection, row['id'] as String, {'before': null, 'after': row}));
       }
       return;
     }
@@ -147,9 +148,58 @@ final class _ScopedAction extends Action<JsonEncodable, JsonEncodable> {
   JsonEncodable decodeInput(JsonMap input) => action.decodeInput(input);
   @override
   Future<Outcome<JsonEncodable>> run(
-          JsonEncodable input, Invocation invocation) =>
-      runZoned(() async => await action.run(input, invocation),
+      JsonEncodable input, Invocation invocation) async {
+    if (spec.id == 'diagnostics.operations' ||
+        spec.id == 'mesh.invoke' &&
+            input.toJson()['action'] == 'diagnostics.operations') {
+      return runZoned(() => action.run(input, invocation),
           zoneValues: {BodyChanges.invocationKey: invocation});
+    }
+    final observations = OperationObservations.current;
+    final elapsed = Stopwatch()..start();
+    final key = 'action:${invocation.id}:${spec.id}';
+    final facts = <String, Object?>{
+      'invocationId': invocation.id,
+      if (BodyChanges.invocation case final parent?)
+        if (parent.id != invocation.id) 'parentInvocationId': parent.id,
+      'action': spec.id,
+      'origin': invocation.origin,
+      if (invocation.origin.startsWith('mesh:'))
+        'peerId': invocation.origin.substring(5),
+      'effect': spec.effect.name,
+      ...OperationObservations.references(input.toJson())
+    };
+    observations.record(key, 'action_started', facts);
+    try {
+      final result = await runZoned(
+          () async => await action.run(input, invocation),
+          zoneValues: {BodyChanges.invocationKey: invocation});
+      observations.record(
+          key,
+          switch (result) {
+            Completed() => 'action_completed',
+            Failed() => 'action_failed',
+            NeedsDecision() => 'needs_decision',
+          },
+          {
+            'elapsedMs': elapsed.elapsedMilliseconds,
+            if (result is Completed)
+              ...OperationObservations.references(result.value.toJson()),
+            if (result is Failed)
+              ...OperationObservations.failure(result.failure),
+          });
+      return result;
+    } catch (error) {
+      observations.record(key, 'action_failed', {
+        'elapsedMs': elapsed.elapsedMilliseconds,
+        if (error is Failure)
+          ...OperationObservations.failure(error)
+        else
+          'failureCode': 'internal',
+      });
+      rethrow;
+    }
+  }
 }
 
 final class OriginExecutor implements JobExecutor {

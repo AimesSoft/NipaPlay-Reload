@@ -33,19 +33,62 @@ JsonMap _combinedEvidence(JsonMap primary, List<JsonMap> members) {
   final ratings = <String, Map>{};
   for (final member in members) {
     final metadata = member['metadata'] as Map;
-    for (final row in (metadata['sources'] as List? ?? const []).whereType<Map>()) {
-      final key = jsonEncode([row['provider'], row['objectType'], row['externalId'], row['scope'], row['language']]);
+    for (final row
+        in (metadata['sources'] as List? ?? const []).whereType<Map>()) {
+      final key = jsonEncode([
+        row['provider'],
+        row['objectType'],
+        row['externalId'],
+        row['scope'],
+        row['language']
+      ]);
       final old = sources[key];
-      if (old == null || '${row['fetchedAt']}'.compareTo('${old['fetchedAt']}') > 0) sources[key] = row;
+      if (old == null) {
+        sources[key] = row;
+      } else {
+        final newer =
+            '${row['fetchedAt']}'.compareTo('${old['fetchedAt']}') > 0;
+        final latest = newer ? row : old, earlier = newer ? old : row;
+        sources[key] = {
+          ...latest,
+          'fields': {
+            ...?earlier['fields'] as Map?,
+            ...?latest['fields'] as Map?
+          },
+          'fieldProvenance': {
+            for (final field in (earlier['fields'] as Map? ?? {}).keys)
+              field: (earlier['fieldProvenance'] as Map?)?[field] ??
+                  {
+                    'snapshotId': earlier['snapshotId'],
+                    'fetchedAt': earlier['fetchedAt']
+                  },
+            for (final field in (latest['fields'] as Map? ?? {}).keys)
+              field: (latest['fieldProvenance'] as Map?)?[field] ??
+                  {
+                    'snapshotId': latest['snapshotId'],
+                    'fetchedAt': latest['fetchedAt']
+                  },
+          },
+        };
+      }
     }
-    for (final row in (metadata['ratings'] as List? ?? const []).whereType<Map>()) {
-      ratings.putIfAbsent(jsonEncode([row['source'], row['ref'], row['language']]), () => row);
+    for (final row
+        in (metadata['ratings'] as List? ?? const []).whereType<Map>()) {
+      ratings.putIfAbsent(
+          jsonEncode([row['source'], row['ref'], row['language']]), () => row);
     }
   }
-  return {...primary,
-    'keys': members.expand((m) => (m['keys'] as List).cast<String>()).toSet().toList(),
-    'metadata': <String, Object?>{...(primary['metadata'] as Map).cast<String, Object?>(),
-      'sources': sources.values.toList(), 'ratings': ratings.values.toList()},
+  return {
+    ...primary,
+    'keys': members
+        .expand((m) => (m['keys'] as List).cast<String>())
+        .toSet()
+        .toList(),
+    'metadata': <String, Object?>{
+      ...(primary['metadata'] as Map).cast<String, Object?>(),
+      'sources': sources.values.toList(),
+      'ratings': ratings.values.toList()
+    },
   };
 }
 
@@ -69,7 +112,7 @@ final class LibraryProjection {
   final _added = <String, int>{};
   Map<String, List<String>> _historicalIds = {};
   JsonMap _local = {'records': <JsonMap>[]};
-  final _wireSnapshots = <String, EncodedLibrarySnapshot>{};
+  final _wireSnapshots = LibraryPublications();
   Map<String, UiWork> _works = {};
   Map<String, List<UiEpisode>> _episodes = {};
   Map<String, String> _aliases = {}, _localTargets = {};
@@ -157,27 +200,36 @@ final class LibraryProjection {
   }
 
   JsonMap page(JsonMap input, int revision) {
-    final version = "${_local['version']}:$revision";
+    final separateProgress = input['progressSeparately'] == true;
+    final version =
+        "${_local['version']}:${separateProgress ? 'content' : revision}";
+    final peer = input['_peerId'] as String? ?? 'local';
+    final progress = <String, Object?>{
+      if (separateProgress && input['offset'] == 0) ...{
+        'progress': _progress,
+        'progressRevision': revision,
+        'progressSeparately': true,
+      },
+    };
     // Progress can advance while another device downloads a large catalogue.
     // Finish that immutable publication rather than making every page chase
     // the playing device's latest progress revision.
     if (input['encoding'] == librarySnapshotEncoding &&
         input['version'] is String) {
-      final publication = _wireSnapshots[input['version']];
-      if (publication != null) {
-        final offset = input['offset'];
-        if (offset is! int) {
-          throw const FormatException('Invalid catalogue byte offset.');
-        }
-        return publication.page(offset);
-      }
+      final offset = input['offset'];
+      if (offset is! int)
+        throw const FormatException('Invalid catalogue byte offset.');
+      final page =
+          _wireSnapshots.read(input['version'] as String, offset, peer);
+      if (page != null) return {...page, ...progress};
     }
     if (input['known'] == version) {
       return {
         'version': version,
         'records': <JsonMap>[],
         'next': null,
-        'unchanged': true
+        'unchanged': true,
+        ...progress,
       };
     }
     if (input['version'] != null && input['version'] != version) {
@@ -185,20 +237,18 @@ final class LibraryProjection {
     }
     final records = [
       ...(_local['records'] as List).cast<JsonMap>(),
-      for (final entry in _progress.entries)
-        {'kind': 'watch', 'id': entry.key, 'value': entry.value}
+      if (!separateProgress)
+        for (final entry in _progress.entries)
+          {'kind': 'watch', 'id': entry.key, 'value': entry.value}
     ];
     if (input['encoding'] == librarySnapshotEncoding) {
-      final publication = _wireSnapshots.putIfAbsent(version,
-          () => EncodedLibrarySnapshot(version, records));
-      while (_wireSnapshots.length > 4) {
-        _wireSnapshots.remove(_wireSnapshots.keys.first);
-      }
       final offset = input['offset'];
-      if (offset is! int) {
+      if (offset is! int)
         throw const FormatException('Invalid catalogue byte offset.');
-      }
-      return publication.page(offset);
+      return {
+        ..._wireSnapshots.publish(version, records, offset, peer),
+        ...progress
+      };
     }
     final offset = input['offset'];
     if (offset is! int || offset < 0 || offset > records.length) {
@@ -388,14 +438,16 @@ final class LibraryProjection {
     final records = <JsonMap>[];
     final entityAliases = <String, List<String>>{};
     for (final row in await db.query('media_entity_aliases')) {
-      (entityAliases[row['entity_id'] as String] ??= []).add(row['old_id'] as String);
+      (entityAliases[row['entity_id'] as String] ??= [])
+          .add(row['old_id'] as String);
     }
     final reads = LibraryReads(ui.media.store);
     final files = await ui.localFiles();
     for (final row in await db.query('media_entities',
         where: "kind='work'", orderBy: 'rowid')) {
       final id = row['id'] as String;
-      if ((jsonDecode(row['attributes'] as String) as Map)['removed'] == true) continue;
+      if ((jsonDecode(row['attributes'] as String) as Map)['removed'] == true)
+        continue;
       // A work made from identities alone, left with none and with no file,
       // is nothing the viewer has. It stays stored (progress, provenance)
       // and shows again when it is bound again.
@@ -588,7 +640,10 @@ final class LibraryProjection {
       return i;
     }
 
-    final owners = <String, int>{};
+    final owners = <String, List<int>>{};
+    final workMembers = {
+      for (var i = 0; i < works.length; i++) i: <int>[i]
+    };
     final workIndex = <String, int>{};
     for (var i = 0; i < works.length; i++) {
       final w = works[i],
@@ -597,16 +652,24 @@ final class LibraryProjection {
       final keys = (w['keys'] as List).cast<String>().toList();
       for (final e
           in episodesOf[ownerOf(w['deviceId'], w['id'])] ?? <JsonMap>[]) {
-        keys.addAll(
-            (e['files'] as List).cast<Map>().map((f) => 'file:${f['sample']}'));
+        keys.addAll((e['files'] as List)
+            .cast<Map>()
+            .where((f) =>
+                f['sample'] is String && (f['sample'] as String).isNotEmpty)
+            .map(_fileToken));
       }
       for (final key in keys) {
-        final old = owners[key];
-        if (old != null) {
-          roots[root(i)] = root(old);
-        } else {
-          owners[key] = i;
+        final candidates = owners.putIfAbsent(key, () => []);
+        for (final old in candidates) {
+          final a = root(i), b = root(old);
+          if (a == b) continue;
+          if (workMembers[a]!.every((x) => workMembers[b]!
+              .every((y) => _compatibleIdentities(works[x], works[y])))) {
+            roots[a] = b;
+            workMembers[b]!.addAll(workMembers.remove(a)!);
+          }
         }
+        candidates.add(i);
       }
     }
     final groups = <int, List<JsonMap>>{};
@@ -670,7 +733,10 @@ final class LibraryProjection {
         return i;
       }
 
-      final contentOwners = <String, int>{};
+      final contentOwners = <String, List<int>>{};
+      final episodeMembers = {
+        for (var i = 0; i < sourceEpisodes.length; i++) i: <int>[i]
+      };
       final episodeTokens = <List<String>>[];
       for (var i = 0; i < sourceEpisodes.length; i++) {
         final e = sourceEpisodes[i];
@@ -684,16 +750,24 @@ final class LibraryProjection {
           if (numbered != null) 'number:$numbered',
           ...identity.map((k) => 'identity:$k'),
           for (final f in (e['files'] as List).cast<Map>())
-            'file:${f['sample']}:${f['startMs']}:${f['endMs']}'
+            if (f['sample'] is String && (f['sample'] as String).isNotEmpty)
+              _fileToken(f)
         ];
         episodeTokens.add(tokens);
         for (final token in tokens) {
-          final old = contentOwners[token];
-          if (old != null) {
-            episodeRoots[episodeRoot(i)] = episodeRoot(old);
-          } else {
-            contentOwners[token] = i;
+          final candidates = contentOwners.putIfAbsent(token, () => []);
+          for (final old in candidates) {
+            final a = episodeRoot(i), b = episodeRoot(old);
+            if (a == b) continue;
+            if (episodeMembers[a]!.every((x) => episodeMembers[b]!.every((y) =>
+                _compatibleIdentities(sourceEpisodes[x], sourceEpisodes[y],
+                    episode: true) &&
+                _compatibleRanges(sourceEpisodes[x], sourceEpisodes[y])))) {
+              episodeRoots[a] = b;
+              episodeMembers[b]!.addAll(episodeMembers.remove(a)!);
+            }
           }
+          candidates.add(i);
         }
       }
       final groupedEpisodes = <int, List<JsonMap>>{};
@@ -755,7 +829,8 @@ final class LibraryProjection {
           }
           titles.addAll(librarySearchTitles(e['value'] as Map));
           for (final f in (e['files'] as List).cast<JsonMap>()) {
-            watchKeys.add('file:${f['sample']}:${f['startMs']}:${f['endMs']}');
+            watchKeys
+                .add('file:$id:${f['sample']}:${f['startMs']}:${f['endMs']}');
             if (!locations.any((l) =>
                 l['sample'] == f['sample'] &&
                 l['startMs'] == f['startMs'] &&
@@ -1185,4 +1260,41 @@ final class LibraryProgress {
   final Map<String, UiWork> works;
   final Map<String, List<UiEpisode>> episodes;
   final Map<int, UiWork> orderedUpdates;
+}
+
+// A content sample identifies bytes, not an episode or a work. Compilation
+// ranges and explicit source identities must agree across the entire union,
+// including when an unbound record would otherwise bridge conflicting groups.
+String _fileToken(Map file) =>
+    'file:${file['sample']}:${file['startMs'] ?? 0}:${file['endMs']}';
+
+bool _compatibleIdentities(JsonMap a, JsonMap b, {bool episode = false}) {
+  Map<String, Set<String>> identities(JsonMap record) {
+    final result = <String, Set<String>>{};
+    for (final key in (record['keys'] as List).cast<String>()) {
+      final parts = jsonDecode(key);
+      if (parts is! List || parts.length != 4) continue;
+      (result[jsonEncode(parts.take(episode ? 2 : 3).toList())] ??= {})
+          .add(jsonEncode(parts.skip(episode ? 2 : 3).toList()));
+    }
+    return result;
+  }
+
+  final left = identities(a), right = identities(b);
+  return left.entries.every((entry) =>
+      !right.containsKey(entry.key) ||
+      entry.value.intersection(right[entry.key]!).isNotEmpty);
+}
+
+bool _compatibleRanges(JsonMap a, JsonMap b) {
+  for (final left in (a['files'] as List).cast<Map>()) {
+    if (left['sample'] == null) continue;
+    for (final right in (b['files'] as List).cast<Map>()) {
+      if (left['sample'] == right['sample'] &&
+          _fileToken(left) != _fileToken(right)) {
+        return false;
+      }
+    }
+  }
+  return true;
 }

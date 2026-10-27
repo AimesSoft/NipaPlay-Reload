@@ -123,7 +123,8 @@ module ErikaMediaIO
       '  func attach(texture: ErikaFlutterTextureSurface) throws {' => 'try? self.attach(texture: texture)',
       '  func detach(viewId: Int64?) {' => 'self.detach(viewId: viewId)',
       '  func resizeFromAttachedView() {' => 'self.resizeFromAttachedView()',
-      '  func resizeFromAttachedTexture() {' => 'self.resizeFromAttachedTexture()'
+      '  func resizeFromAttachedTexture() {' => 'self.resizeFromAttachedTexture()',
+      '  private func reportDisplayHeadroom() {' => 'self.reportDisplayHeadroom()'
     }.each do |anchor, work|
       replace!(source, anchor, "#{anchor}\n    if deferDuringMediaIO({ #{work} }) { return }")
     end

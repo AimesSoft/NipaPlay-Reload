@@ -77,8 +77,13 @@ final class DanmakuService {
     return {'platform': video['sourceId'], 'platformVideoId': video['videoId']};
   }
 
-  Future<String> _trackIdentity(JsonMap binding) async {
-    final provenance = await _provenance(binding);
+  Future<String> _trackIdentity(JsonMap binding,
+      {List<DanmakuEntry>? entries}) async {
+    final provenance = entries != null &&
+            binding['local_file'] == null &&
+            (binding['video'] as JsonMap)['sourceId'] == 'local'
+        ? localDanmakuProvenance(entries)
+        : await _provenance(binding);
     if (provenance['platform'] == 'dandanplay') {
       return jsonEncode(['dandanplay', null]);
     }
@@ -525,20 +530,77 @@ final class DanmakuService {
     }
   }
 
+  Future<void> _selectMounts(
+      Map<String, ({JsonMap binding, int start, int? end})> mounts,
+      String? replaceBindingId,
+      Future<String> Function(String) identity) async {
+    final loadedIds = registry.map((track) => track['bindingId']).toSet();
+    final ordered = mounts.keys.toList();
+    final positions = {for (var i = 0; i < ordered.length; i++) ordered[i]: i};
+    int priority(String id) => id == replaceBindingId
+        ? 0
+        : loadedIds.contains(id)
+            ? 1
+            : (mounts[id]!.binding['video'] as JsonMap)['sourceId'] == 'local'
+                ? 2
+                : 3;
+    ordered.sort((a, b) {
+      final order = priority(a).compareTo(priority(b));
+      if (order != 0) return order;
+      final importedA = (mounts[a]!.binding['provenance']
+          as JsonMap?)?['importedAt'] as String?;
+      final importedB = (mounts[b]!.binding['provenance']
+          as JsonMap?)?['importedAt'] as String?;
+      final importedOrder = (importedB ?? '').compareTo(importedA ?? '');
+      return importedOrder == 0
+          ? positions[a]!.compareTo(positions[b]!)
+          : importedOrder;
+    });
+    final seenVideos = <String>{};
+    for (final id in ordered) {
+      if (!seenVideos.add(await identity(id))) {
+        mounts.remove(id);
+      }
+    }
+  }
+
   Future<void> _refreshCurrent({String? replaceBindingId}) async {
     final target = player.target;
     if (target == null) return;
     final remote = await remoteTracks?.call(target.path);
     if (remote != null) {
       if (player.target?.generation != target.generation) return;
-      final ids =
-          remote.map((t) => (t['binding'] as JsonMap)['id'] as String).toSet();
+      final remoteById = {
+        for (final t in remote) (t['binding'] as JsonMap)['id'] as String: t
+      };
+      final mounts = {
+        for (final entry in remoteById.entries)
+          entry.key: (
+            binding: entry.value['binding'] as JsonMap,
+            start: entry.value['startMs'] as int,
+            end: entry.value['endMs'] as int?
+          )
+      };
+      await _selectMounts(
+          mounts,
+          replaceBindingId,
+          (id) => _trackIdentity(mounts[id]!.binding, entries: [
+                for (final e
+                    in (remoteById[id]!['entries'] as List).cast<JsonMap>())
+                  DanmakuEntry.fromJson(e)
+              ]));
+      if (player.target?.generation != target.generation) return;
+      final ids = mounts.keys.toSet();
       for (final id in player.managedTracks.difference(ids)) player.remove(id);
-      for (final track in remote) {
+      for (final track in remote
+          .where((t) => ids.contains((t['binding'] as JsonMap)['id']))) {
         final binding = track['binding'] as JsonMap;
         final loaded = player.loaded(binding['id'] as String);
         if (loaded?['revision'] == binding['revision'] &&
-            loaded?['cacheRevision'] == binding['cache_revision']) continue;
+            loaded?['cacheRevision'] == binding['cache_revision'] &&
+            loaded?['cacheKey'] == binding['cache_key'] &&
+            loaded?['startMs'] == track['startMs'] &&
+            loaded?['endMs'] == track['endMs']) continue;
         player.install(
             target,
             binding,
@@ -627,34 +689,8 @@ final class DanmakuService {
         player.target?.generation != target.generation) {
       return;
     }
-    final loadedIds = registry.map((track) => track['bindingId']).toSet();
-    final ordered = mounts.keys.toList();
-    final positions = {for (var i = 0; i < ordered.length; i++) ordered[i]: i};
-    int priority(String id) => id == replaceBindingId
-        ? 0
-        : loadedIds.contains(id)
-            ? 1
-            : (mounts[id]!.binding['video'] as JsonMap)['sourceId'] == 'local'
-                ? 2
-                : 3;
-    ordered.sort((a, b) {
-      final order = priority(a).compareTo(priority(b));
-      if (order != 0) return order;
-      final importedA = (mounts[a]!.binding['provenance']
-          as JsonMap?)?['importedAt'] as String?;
-      final importedB = (mounts[b]!.binding['provenance']
-          as JsonMap?)?['importedAt'] as String?;
-      final importedOrder = (importedB ?? '').compareTo(importedA ?? '');
-      return importedOrder == 0
-          ? positions[a]!.compareTo(positions[b]!)
-          : importedOrder;
-    });
-    final seenVideos = <String>{};
-    for (final id in ordered) {
-      if (!seenVideos.add(await _trackIdentity(mounts[id]!.binding))) {
-        mounts.remove(id);
-      }
-    }
+    await _selectMounts(
+        mounts, replaceBindingId, (id) => _trackIdentity(mounts[id]!.binding));
     if (player.target?.path != target.path ||
         player.target?.generation != target.generation) {
       return;

@@ -233,6 +233,30 @@ enum SandboxMigrationTests {
             try f.expect(f.preferences["ordinary-only"] as? Int == 17, "ordinary preferences cleared")
             try f.expect(!fm.fileExists(atPath: f.state.appendingPathComponent("journal.plist").path), "empty container was imported")
         }
+        try test("cache-only container cannot retire persistent ordinary data") { f in
+            try f.seedOrdinary()
+            try f.write("Documents/nipaplay/cache/image", "cached picture")
+            let before = f.root.appendingPathComponent("ordinary-before")
+            try fm.copyItem(at: f.home, to: before)
+            try f.migrator().run()
+            try f.migrator().run()
+            try f.expectSameTree(before, f.home)
+        }
+        try test("legacy Classic-only container retains the complete ordinary Next group") { f in
+            try f.seedOrdinary()
+            try f.write("Documents/watch_history.db", "legacy Classic history")
+            try f.migrator().run()
+            try f.expect(f.text("Documents/nipaplay/next/next.db") == "ordinary-next", "unrepresented Next group retired")
+            try f.expect(f.text("Documents/nipaplay/watch_history.db") == "legacy Classic history", "selected history missing")
+        }
+        try test("zero-byte current database does not shadow a legacy database family") { f in
+            try f.write("Documents/nipaplay/watch_history.db", "")
+            try f.write("Documents/watch_history.db", "legacy database")
+            try f.write("Documents/watch_history.db-wal", "legacy WAL")
+            try f.migrator().run()
+            try f.expect(f.text("Documents/nipaplay/watch_history.db") == "legacy database", "zero-byte database selected")
+            try f.expect(f.text("Documents/nipaplay/watch_history.db-wal") == "legacy WAL", "database family split")
+        }
         try test("container data with empty preferences preserves the existing preference domain") { f in
             try f.seed()
             try f.seedOrdinary()

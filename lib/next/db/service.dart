@@ -55,9 +55,8 @@ final class _TableInfo {
       doc!.access == DbAccess.write &&
       pk.isNotEmpty &&
       !name.startsWith('sqlite_');
-  String get readOnlyReason => doc == null
-      ? '没有登记在 db.describe 里的表默认只读'
-      : doc!.reason ?? '该表只读';
+  String get readOnlyReason =>
+      doc == null ? '没有登记在 db.describe 里的表默认只读' : doc!.reason ?? '该表只读';
 }
 
 final class _Statement {
@@ -87,8 +86,8 @@ final class _Change {
       before != null && after != null && _same(table, before!, after!);
 }
 
-bool _same(_TableInfo t, Row a, Row b) => jsonEncode(
-        [for (final c in t.columns) jsonSafe(a[c])]) ==
+bool _same(_TableInfo t, Row a, Row b) =>
+    jsonEncode([for (final c in t.columns) jsonSafe(a[c])]) ==
     jsonEncode([for (final c in t.columns) jsonSafe(b[c])]);
 
 final class _Applied {
@@ -226,9 +225,7 @@ Object? _param(Object? value, String path) {
     return value;
   } else if (value is bool) {
     return value ? 1 : 0;
-  } else if (value is Map &&
-      value.length == 1 &&
-      value[r'$blob'] is String) {
+  } else if (value is Map && value.length == 1 && value[r'$blob'] is String) {
     try {
       return fromJsonSafe(value);
     } catch (_) {}
@@ -330,7 +327,8 @@ Never _sqliteFailure(Object error, int index, {bool probe = false}) {
   final match = _sqliteMessage.firstMatch(text);
   final message = match?.group(1) ?? text.split('\n').first;
   final code = int.tryParse(match?.group(2) ?? '');
-  final readonly = RegExp(r'nipa_db_readonly\|([^|]+)\|(.*)').firstMatch(message);
+  final readonly =
+      RegExp(r'nipa_db_readonly\|([^|]+)\|(.*)').firstMatch(message);
   if (readonly != null) {
     _fail(
         FailureCode.invalidInput,
@@ -344,7 +342,8 @@ Never _sqliteFailure(Object error, int index, {bool probe = false}) {
         {'statementIndex': index});
   }
   final constraint = code != null && (code & 0xff) == 19;
-  _fail(constraint ? FailureCode.conflict : FailureCode.invalidInput,
+  _fail(
+      constraint ? FailureCode.conflict : FailureCode.invalidInput,
       'Statement ${index + 1} was rejected by SQLite: $message',
       {'statementIndex': index, if (code != null) 'sqliteCode': code});
 }
@@ -374,10 +373,11 @@ final class DbService {
       final info = await db.rawQuery('PRAGMA table_info(${_q(name)})');
       final pk = info.where((c) => (c['pk'] as int) > 0).toList()
         ..sort((a, b) => (a['pk'] as int).compareTo(b['pk'] as int));
-      result.add(_TableInfo(name, row['sql'] as String?,
-          [for (final c in info) c['name'] as String], [
-        for (final c in pk) c['name'] as String
-      ]));
+      result.add(_TableInfo(
+          name,
+          row['sql'] as String?,
+          [for (final c in info) c['name'] as String],
+          [for (final c in pk) c['name'] as String]));
     }
     return result;
   }
@@ -394,10 +394,11 @@ final class DbService {
     final result = <JsonMap>[];
     for (final t in tables) {
       if (wanted != null && !wanted.contains(t.name)) continue;
-      final columns = await database.rawQuery('PRAGMA table_info(${_q(t.name)})');
+      final columns =
+          await database.rawQuery('PRAGMA table_info(${_q(t.name)})');
       final fks = <int, JsonMap>{};
-      for (final r
-          in await database.rawQuery('PRAGMA foreign_key_list(${_q(t.name)})')) {
+      for (final r in await database
+          .rawQuery('PRAGMA foreign_key_list(${_q(t.name)})')) {
         final entry = fks.putIfAbsent(
             r['id'] as int,
             () => {
@@ -438,7 +439,9 @@ final class DbService {
         if (!t.writable) 'readOnlyReason': t.readOnlyReason,
         if (doc != null && doc.notes.isNotEmpty) 'notes': doc.notes,
         if (t.writable && doc!.json.isNotEmpty)
-          'jsonColumns': {for (final e in doc.json.entries) e.key: e.value.name},
+          'jsonColumns': {
+            for (final e in doc.json.entries) e.key: e.value.name
+          },
         'columns': [
           for (final c in columns)
             {
@@ -484,8 +487,7 @@ final class DbService {
     const known = {'sql', 'params', 'limit', 'offset', 'maxBytes'};
     final unknown = input.keys.where((k) => !known.contains(k));
     if (unknown.isNotEmpty) {
-      _fail(FailureCode.invalidInput,
-          'Unknown fields: ${unknown.join(', ')}.');
+      _fail(FailureCode.invalidInput, 'Unknown fields: ${unknown.join(', ')}.');
     }
     final sql = singleStatement(input['sql'] as String);
     final rawParams = input['params'];
@@ -496,7 +498,8 @@ final class DbService {
     final params = [
       for (var i = 0; i < given.length; i++) _param(given[i], 'params/$i')
     ];
-    final limit = (input['limit'] as num?)?.toInt() ?? dbQueryLimits.defaultRows;
+    final limit =
+        (input['limit'] as num?)?.toInt() ?? dbQueryLimits.defaultRows;
     final offset = (input['offset'] as num?)?.toInt() ?? 0;
     final maxBytes =
         (input['maxBytes'] as num?)?.toInt() ?? dbQueryLimits.defaultBytes;
@@ -571,8 +574,7 @@ final class DbService {
     const known = {'statements', 'previewId', 'reason'};
     final unknown = input.keys.where((k) => !known.contains(k));
     if (unknown.isNotEmpty) {
-      _fail(FailureCode.invalidInput,
-          'Unknown fields: ${unknown.join(', ')}.');
+      _fail(FailureCode.invalidInput, 'Unknown fields: ${unknown.join(', ')}.');
     }
     final reason = input['reason'] as String?;
     final previewId = input['previewId'] as String?;
@@ -586,6 +588,35 @@ final class DbService {
   void _expire() {
     final cutoff = DateTime.now().subtract(_previewTtl);
     _previews.removeWhere((_, p) => p.at.isBefore(cutoff));
+  }
+
+  Future<JsonMap> receipt(JsonMap input, Invocation invocation) async {
+    final kind = input['kind'] as String;
+    final key = input['requestKey'] as String;
+    final row = await _receipt(database, kind, key, invocation.origin);
+    if (row != null)
+      return {
+        'state': 'committed',
+        'durable': true,
+        'kind': kind,
+        'requestKey': key,
+        'commitId': row['commit_id'],
+        'result': _receiptResult(row),
+        'retry': 'same_request_returns_receipt',
+      };
+    _expire();
+    final preview = kind == 'write' ? _previews[key] : null;
+    return {
+      'state': preview?.origin == invocation.origin
+          ? 'preview_available'
+          : 'unknown',
+      'durable': false,
+      'kind': kind,
+      'requestKey': key,
+      'absenceMeans':
+          'No committed receipt observed for this origin and key; this is not proof that an in-flight request cannot commit later.',
+      'retry': 'keep_original_request_key'
+    };
   }
 
   Future<JsonMap> _preview(
@@ -615,8 +646,7 @@ final class DbService {
       'committed': false,
       if (id != null) 'previewId': id,
       if (id != null)
-        'expiresAt':
-            DateTime.now().add(_previewTtl).toUtc().toIso8601String(),
+        'expiresAt': DateTime.now().add(_previewTtl).toUtc().toIso8601String(),
       'committable': problems.isEmpty,
       if (problems.isNotEmpty) 'problems': problems,
       'statements': [
@@ -755,8 +785,7 @@ final class DbService {
     const known = {'commitId', 'dryRun', 'reason', 'requestId'};
     final unknown = input.keys.where((k) => !known.contains(k));
     if (unknown.isNotEmpty) {
-      _fail(FailureCode.invalidInput,
-          'Unknown fields: ${unknown.join(', ')}.');
+      _fail(FailureCode.invalidInput, 'Unknown fields: ${unknown.join(', ')}.');
     }
     final commitId = input['commitId'] as String;
     final dryRun = input['dryRun'] == true;
@@ -882,7 +911,8 @@ final class DbService {
     return rows.isEmpty ? null : Row.of(rows.single);
   }
 
-  Future<List<JsonMap>> _conflicts(DatabaseExecutor tx, List<_Change> changes) async {
+  Future<List<JsonMap>> _conflicts(
+      DatabaseExecutor tx, List<_Change> changes) async {
     final result = <JsonMap>[];
     final view = CellView(300);
     for (final c in changes) {
@@ -901,7 +931,8 @@ final class DbService {
       }
       if (conflict == null &&
           c.before != null &&
-          (c.after == null || c.table.pk.any((k) => c.before![k] != c.after![k]))) {
+          (c.after == null ||
+              c.table.pk.any((k) => c.before![k] != c.after![k]))) {
         final occupied = await _current(tx, c, c.before!);
         if (occupied != null) {
           conflict = {
@@ -916,7 +947,9 @@ final class DbService {
           'table': c.table.name,
           'key': safeRow(c.key),
           for (final e in conflict.entries)
-            e.key: e.value is Map ? view.row((e.value as Map).cast<String, Object?>()) : e.value,
+            e.key: e.value is Map
+                ? view.row((e.value as Map).cast<String, Object?>())
+                : e.value,
         });
       }
     }
@@ -926,7 +959,9 @@ final class DbService {
   /// Statements that take each recorded change back: delete what it inserted,
   /// put back what it updated, insert what it deleted.
   List<_Statement> _inverseStatements(List<_Change> recorded) {
-    final deletes = <_Statement>[], updates = <_Statement>[], inserts = <_Statement>[];
+    final deletes = <_Statement>[],
+        updates = <_Statement>[],
+        inserts = <_Statement>[];
     for (final c in recorded) {
       final t = c.table;
       if (c.after == null) {
@@ -957,7 +992,8 @@ final class DbService {
     final log = 'nipa_log_${_token()}';
     final names = <String>[];
     final recursive =
-        (await tx.rawQuery('PRAGMA recursive_triggers')).first.values.first == 1;
+        (await tx.rawQuery('PRAGMA recursive_triggers')).first.values.first ==
+            1;
     final sequenceBefore = await _sequences(tx);
     final violationsBefore = await _violations(tx);
     var changes = <_Change>[];
@@ -982,8 +1018,8 @@ final class DbService {
       }
       for (var i = 0; i < statements.length; i++) {
         try {
-          affected.add(await tx.rawUpdate(
-              statements[i].sql, statements[i].params));
+          affected
+              .add(await tx.rawUpdate(statements[i].sql, statements[i].params));
         } catch (error) {
           _sqliteFailure(error, i);
         }
@@ -992,7 +1028,8 @@ final class DbService {
     } finally {
       try {
         await _disarm(tx, log, names);
-        await tx.execute('PRAGMA recursive_triggers=${recursive ? 'ON' : 'OFF'}');
+        await tx
+            .execute('PRAGMA recursive_triggers=${recursive ? 'ON' : 'OFF'}');
       } catch (_) {}
     }
     // sqlite_sequence cannot carry a trigger; compare it instead.
@@ -1010,10 +1047,12 @@ final class DbService {
     }
     var imageBytes = 0;
     for (final c in changes) {
-      imageBytes += utf8.encode(jsonEncode([
-        if (c.before != null) safeRow(c.before!),
-        if (c.after != null) safeRow(c.after!)
-      ])).length;
+      imageBytes += utf8
+          .encode(jsonEncode([
+            if (c.before != null) safeRow(c.before!),
+            if (c.after != null) safeRow(c.after!)
+          ]))
+          .length;
     }
     if (imageBytes > _maxImageBytes) {
       _fail(FailureCode.invalidInput,
@@ -1050,12 +1089,18 @@ final class DbService {
         });
       }
     }
-    return _Applied(changes, affected, problems,
-        [for (final t in {for (final c in changes) c.table.name}) t]..sort());
+    return _Applied(
+        changes,
+        affected,
+        problems,
+        [
+          for (final t in {for (final c in changes) c.table.name}) t
+        ]..sort());
   }
 
   Future<Map<String, int?>> _sequences(DatabaseExecutor tx) async => {
-        for (final r in await tx.rawQuery('SELECT name, seq FROM sqlite_sequence'))
+        for (final r
+            in await tx.rawQuery('SELECT name, seq FROM sqlite_sequence'))
           r['name'] as String: r['seq'] as int?
       };
 
@@ -1154,7 +1199,8 @@ final class DbService {
           for (var i = 0; i < t.columns.length; i++)
             t.columns[i]: row['$prefix$i']
         };
-    for (final row in await tx.rawQuery('SELECT * FROM ${_q(log)} ORDER BY seq')) {
+    for (final row
+        in await tx.rawQuery('SELECT * FROM ${_q(log)} ORDER BY seq')) {
       final t = byName[row['tbl'] as String]!;
       switch (row['op']) {
         case 'I':
@@ -1225,8 +1271,10 @@ final class DbService {
       case 'media_external_objects':
         final expected = stableMediaId(
             'object',
-            ExternalRef(after['provider'] as String,
-                    after['object_type'] as String, after['external_id'] as String,
+            ExternalRef(
+                    after['provider'] as String,
+                    after['object_type'] as String,
+                    after['external_id'] as String,
                     scope: after['scope'] as String)
                 .toJson());
         if (after['id'] != expected) {
@@ -1294,8 +1342,8 @@ final class DbService {
     final id = newMediaId('dbcommit');
     final at = DateTime.now().toUtc().toIso8601String();
     final next = (await tx.rawQuery(
-                'SELECT COALESCE(MAX(sequence),0)+1 AS next FROM db_commits'))
-            .first['next'] as int;
+            'SELECT COALESCE(MAX(sequence),0)+1 AS next FROM db_commits'))
+        .first['next'] as int;
     final counts = _counts(changes);
     await tx.insert('db_commits', {
       'id': id,
@@ -1334,7 +1382,8 @@ final class DbService {
         if (undoes != null) 'undoes': undoes,
         if (reason != null) 'reason': reason,
         'counts': counts,
-        'entityIds': ({for (final ids in entities.values) ...ids}.toList()..sort())
+        'entityIds': ({for (final ids in entities.values) ...ids}.toList()
+              ..sort())
             .take(50)
             .toList(),
       }),
@@ -1345,8 +1394,8 @@ final class DbService {
   JsonMap _counts(List<_Change> changes) {
     final result = <String, Map<String, int>>{};
     for (final c in changes) {
-      final entry =
-          result.putIfAbsent(c.table.name, () => {'insert': 0, 'update': 0, 'delete': 0});
+      final entry = result.putIfAbsent(
+          c.table.name, () => {'insert': 0, 'update': 0, 'delete': 0});
       entry[c.op] = entry[c.op]! + 1;
     }
     return result;
@@ -1371,8 +1420,16 @@ final class DbService {
         continue;
       }
       final JsonMap item = switch (c.op) {
-        'insert' => {'op': 'insert', 'key': safeRow(c.key), 'after': view.row(c.after!)},
-        'delete' => {'op': 'delete', 'key': safeRow(c.key), 'before': view.row(c.before!)},
+        'insert' => {
+            'op': 'insert',
+            'key': safeRow(c.key),
+            'after': view.row(c.after!)
+          },
+        'delete' => {
+            'op': 'delete',
+            'key': safeRow(c.key),
+            'before': view.row(c.before!)
+          },
         _ => {
             'op': 'update',
             'key': safeRow(c.key),
@@ -1394,8 +1451,7 @@ final class DbService {
     return {
       'changedRows': changes.length,
       'tables': tables,
-      if (changes.length > shown)
-        'shownRows': shown,
+      if (changes.length > shown) 'shownRows': shown,
       if (changes.length > shown)
         'note':
             'Only a sample of rows is shown; counts are complete and the commit records every row for db.undo.',
@@ -1433,8 +1489,8 @@ final class DbService {
     }
     var refreshed = <String>[];
     try {
-      refreshed = await afterCommit?.call(
-              DbCommitSummary(commitId, tables, entities)) ??
+      refreshed = await afterCommit
+              ?.call(DbCommitSummary(commitId, tables, entities)) ??
           [];
     } catch (error) {
       refreshed = ['failed: $error'];
@@ -1491,10 +1547,10 @@ final class DbService {
         case 'media_overrides':
           final field = row['field'] as String;
           result[field.startsWith('artwork.') ||
-                  field == 'imageUrl' ||
-                  field == 'artworkUrls'
-              ? 'artwork'
-              : 'metadata']!
+                      field == 'imageUrl' ||
+                      field == 'artworkUrls'
+                  ? 'artwork'
+                  : 'metadata']!
               .add(row['entity_id'] as String);
         case 'media_snapshots':
           await viaObject(row['object_id'], result['metadata']!);

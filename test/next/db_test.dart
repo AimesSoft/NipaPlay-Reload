@@ -264,6 +264,7 @@ void main() {
           s.id: s.effect
       }, {
         'db.describe': Effect.read,
+        'db.receipt': Effect.read,
         'db.query': Effect.read,
         'db.write': Effect.write,
         'db.undo': Effect.write,
@@ -277,7 +278,7 @@ void main() {
       expect(familyFacts['media'], contains('db.query'));
       final family = describeFamily('db', h.catalog);
       expect([for (final a in family['actions'] as List) (a as Map)['id']],
-          ['db.describe', 'db.query', 'db.undo', 'db.write']);
+          ['db.describe', 'db.query', 'db.receipt', 'db.undo', 'db.write']);
     });
   });
 
@@ -1091,6 +1092,10 @@ void main() {
       await entered.future;
       try {
         final restarted = DbService(d);
+        final receipt = await call('db.receipt', {'kind': 'write', 'requestKey': p['previewId']});
+        expect(receipt['state'], 'committed');
+        expect((receipt['result'] as Map)['postCommitPending'], true);
+        expect((await call('db.receipt', {'kind': 'write', 'requestKey': p['previewId']}, origin: 'mesh:other'))['state'], 'unknown');
         final recovered = await restarted.write({'previewId': p['previewId']}, Invocation(origin: 'mcp'));
         expect(recovered['committed'], true);
         expect(recovered['postCommitPending'], true);

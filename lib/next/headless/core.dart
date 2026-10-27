@@ -17,6 +17,7 @@ import '../tasks/device_identity.dart';
 import '../tasks/job_origin.dart';
 import '../tasks/sqlite_job_store.dart';
 import '../state/change_history.dart';
+import '../system/operation_observations.dart';
 import '../db/capability.dart';
 import '../db/wiring.dart';
 import '../state/query.dart';
@@ -377,6 +378,7 @@ final class HeadlessCore {
             programEnabled: () => programs.enabled,
             subtitleProbeReady: () => headlessFfprobe != null),
         InstanceCapability(const InstanceFacts(headlessAppVersion)),
+        const OperationObservationsCapability(),
         bodyEvents,
         TaskCapability(engine),
         programs.capability,

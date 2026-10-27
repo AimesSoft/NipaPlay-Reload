@@ -22,6 +22,7 @@ import 'library_projection.dart';
 import '../ui_data/library_search.dart';
 import '../media/metadata_provider.dart';
 import 'files.dart';
+import '../system/operation_observations.dart';
 
 String _hash(Object value) =>
     sha256.convert(utf8.encode(jsonEncode(value))).toString();
@@ -48,17 +49,42 @@ final class MeshLibrary {
   final UiDataService ui;
   final MeshRuntime mesh;
   final void Function(String)? startupPhase;
-  final Future<void> Function(String path, String fileId, String episodeId)? prepareDanmaku;
+  final Future<void> Function(String path, String fileId, String episodeId)?
+      prepareDanmaku;
   final _peers = <String, JsonMap>{};
   final _online = <String, bool>{};
   final _peerErrors = <String, JsonMap>{};
+  final _peerState = <String, JsonMap>{};
+  final _artworkTasks = <String, Future<void>>{};
+  final _assetReads = <String, Future<String>>{};
   JsonMap get refreshStatus => {
-    'peers': [
-      for (final id in {..._peers.keys, ..._online.keys})
-        {'deviceId': id, 'online': _online[id] == true,
-          if (_peerErrors[id] case final error?) 'error': error},
-    ],
-  };
+        'ownerDeviceId': own,
+        'scope': 'cached_observations',
+        'observedAt': DateTime.now().toUtc().toIso8601String(),
+        'refreshInProgress': _sync != null,
+        'polling': _timer != null,
+        'closed': _closed,
+        'peers': [
+          for (final id in {
+            ..._peers.keys,
+            ..._online.keys,
+            ..._peerState.keys,
+            for (final peer in mesh.cachedDevices)
+              if (peer['deviceId'] != own) peer['deviceId'] as String,
+          })
+            {
+              'deviceId': id,
+              'online': _online[id],
+              'catalogue': _peers.containsKey(id) ? 'saved' : 'not_refreshed',
+              'version': _peers[id]?['version'],
+              'reachability': 'unknown',
+              'catalogueFreshness':
+                  _peers.containsKey(id) ? 'stale' : 'not_refreshed',
+              ...?_peerState[id],
+              if (_peerErrors[id] case final error?) 'error': error
+            },
+        ],
+      };
   Map<String, String> _assets = {};
   final _playAssets = <String, String>{};
   Map<String, UiWork> _works = {};
@@ -86,8 +112,8 @@ final class MeshLibrary {
 
   /// Progress moves independently of the catalogue's composition revision.
   int _peersRevision = 0, _progressRevision = 0, _onlineRevision = 0;
-  String _changeStamp() =>
-      jsonEncode([_builtStamp, _peersRevision, _onlineRevision]);
+  String _changeStamp() => jsonEncode(
+      [_builtStamp, _peersRevision, _onlineRevision, _progressRevision]);
   Timer? _timer;
   HttpServer? _http;
   Future<void>? _httpBinding;
@@ -177,22 +203,35 @@ final class MeshLibrary {
     if (mesh.accountId != null) {
       for (final peer
           in mesh.cachedDevices.where((d) => d['deviceId'] != own)) {
+        if (_closed) break;
         final id = peer['deviceId'] as String;
         if (peer['revoked'] == true) {
           _setOnline(id, false);
           continue;
         }
         try {
+          _peerState[id] = {
+            ...?_peerState[id],
+            'refreshing': true,
+            'lastAttemptAt': DateTime.now().toUtc().toIso8601String()
+          };
           final old = _peers[id];
           final first = await mesh.rpc(id, 'mesh/library/snapshot', {
             'offset': 0,
             'encoding': librarySnapshotEncoding,
+            'progressSeparately': true,
             if (old?['version'] != null) 'known': old!['version']
           });
+          if (first['progress'] is Map) {
+            await _mergeProgress((first['progress'] as Map).map((key, value) =>
+                MapEntry(
+                    key as String, (value as Map).cast<String, Object?>())));
+          }
           if (first['unchanged'] != true &&
               old?['version'] != first['version']) {
-            final records = await readLibrarySnapshot(first,
-                (input) => mesh.rpc(id, 'mesh/library/snapshot', input));
+            final records = await readLibrarySnapshot(
+                first, (input) => mesh.rpc(id, 'mesh/library/snapshot', input),
+                cancelled: () => _closed);
             await _mergeProgress({
               for (final r in records.where((r) => r['kind'] == 'watch'))
                 r['id'] as String: r['value'] as JsonMap
@@ -204,18 +243,40 @@ final class MeshLibrary {
               'version': first['version'],
               'records': records
             };
-            await _cacheArtwork(id, records);
+            // Publish validated structure first. Optional artwork has its own
+            // bounded task and cannot prevent a playable catalogue appearing.
+            await _save('mesh:peer:$id', saved);
             _peers[id] = saved;
             _peersRevision++;
-            await _save('mesh:peer:$id', saved);
+            _startArtwork(id, saved);
+          }
+          final current = _peers[id];
+          final artworkAt = DateTime.tryParse(
+              _peerState[id]?['artworkAttemptAt'] as String? ?? '');
+          if (current != null &&
+              (_peerState[id]?['artworkVersion'] != current['version'] ||
+                  _peerState[id]?['artwork'] != 'complete' &&
+                      (artworkAt == null ||
+                          DateTime.now().difference(artworkAt) >=
+                              const Duration(seconds: 30)))) {
+            _startArtwork(id, current);
           }
           _setOnline(id, true);
           _peerErrors.remove(id);
+          _peerState[id] = {
+            ...?_peerState[id],
+            'refreshing': false,
+            'reachability': 'reachable',
+            'catalogueFreshness': 'current',
+            'lastSuccessAt': DateTime.now().toUtc().toIso8601String()
+          };
         } on Failure catch (error) {
           await _catalogueFailed(id, error);
         } on FormatException catch (error) {
-          await _catalogueFailed(id, Failure(FailureCode.invalidInput,
-              'Invalid peer catalogue: ${error.message}'));
+          await _catalogueFailed(
+              id,
+              Failure(FailureCode.invalidInput,
+                  'Invalid peer catalogue: ${error.message}'));
         }
       }
     } else {
@@ -231,20 +292,35 @@ final class MeshLibrary {
     // Catalogue failures do not establish that the file owner is offline.
     // Keep the last complete publication usable when a small authenticated
     // probe still reaches it; a real disconnect continues to disable playback.
-    var reachable = false;
+    bool? reachable;
     try {
       await mesh.rpc(id, 'mesh/presence', {}, ungated: true);
       reachable = true;
-    } on Failure {
-      // Both the catalogue and the independent reachability probe failed.
+    } on Failure catch (probe) {
+      if (probe.details['responseReceived'] == true) reachable = true;
+      if (probe.details['reason'] == 'not_delivered') reachable = false;
     }
-    _setOnline(id, reachable);
+    if (reachable != null) _setOnline(id, reachable);
     _peerErrors[id] = error.toJson();
+    _peerState[id] = {
+      ...?_peerState[id],
+      'refreshing': false,
+      'reachability': reachable == true
+          ? 'reachable'
+          : reachable == false
+              ? 'unreachable'
+              : 'unknown',
+      'catalogueFreshness': _peers.containsKey(id) ? 'stale' : 'not_refreshed'
+    };
     lastError = error.message;
   }
 
   Future<void> _mergeProgress(Map<String, JsonMap> values) async {
-    if (await worker.call('merge', values) == true) _progressRevision++;
+    if (await worker.call('merge', values) == true) {
+      _progressRevision++;
+      _composedStamp = null;
+      invalidateIndex();
+    }
   }
 
   void _setOnline(String id, bool value) {
@@ -523,7 +599,8 @@ final class MeshLibrary {
     switch (method) {
       case 'mesh/library/snapshot':
         await _build();
-        return await worker.call('snapshot', (input, _progressRevision))
+        return await worker.call(
+                'snapshot', ({...input, '_peerId': peer}, _progressRevision))
             as JsonMap;
       case 'mesh/library/file':
         final path = await _source(input);
@@ -532,8 +609,17 @@ final class MeshLibrary {
       case 'mesh/library/read':
         final path = await _source(input), stat = await File(path).stat();
         final offset = input['offset'], length = input['length'];
-        if (input['tag'] != _tag(stat) ||
-            offset is! int ||
+        if (input['tag'] != _tag(stat)) {
+          throw Failure(
+              FailureCode.conflict, 'Source file changed since it was opened.',
+              details: {
+                'reason': 'file_changed',
+                'stage': 'file_read',
+                'fileId': input['fileId'],
+                'actualTag': _tag(stat)
+              });
+        }
+        if (offset is! int ||
             length is! int ||
             offset < 0 ||
             length < 0 ||
@@ -645,10 +731,18 @@ final class MeshLibrary {
       String peer, JsonMap source, String tag, int offset, int length) async {
     final result = await mesh.rpc(peer, 'mesh/library/read',
         {...source, 'tag': tag, 'offset': offset, 'length': length});
-    return base64Decode(result['data'] as String);
+    final bytes = base64Decode(result['data'] as String);
+    if (bytes.length != length) {
+      throw const Failure(FailureCode.conflict, 'Incomplete source file range.',
+          details: {'reason': 'file_range_incomplete', 'stage': 'file_read'});
+    }
+    return bytes;
   }
 
-  Future<String> cacheAsset(String peer, String id, {String? name}) async {
+  Future<String> cacheAsset(String peer, String id,
+      {String? name,
+      DateTime? deadline,
+      void Function(String)? onStage}) async {
     final directory = await Directory('${ui.mediaRoot.path}/mesh-artwork')
         .create(recursive: true);
     final file = File('${directory.path}/${_hash([
@@ -656,38 +750,184 @@ final class MeshLibrary {
           id
         ])}${name == null ? '' : p.extension(name)}');
     if (await file.exists()) return file.path;
-    final source = <String, Object?>{'assetId': id};
-    final info = await mesh.rpc(peer, 'mesh/library/file', source);
-    final size = info['size'] as int;
-    final temporary = File('${file.path}.tmp'), output = temporary.openWrite();
-    try {
-      for (var offset = 0; offset < size; offset += 1048576) {
-        output.add(await _bytes(peer, source, info['tag'] as String, offset,
-            math.min(size - offset, 1048576)));
-      }
-      await output.close();
-      await temporary.rename(file.path);
-      return file.path;
-    } catch (_) {
-      await output.close();
-      if (await temporary.exists()) await temporary.delete();
-      rethrow;
+    if (_assetReads.length >= 16 && !_assetReads.containsKey(file.path)) {
+      throw const Failure(
+          FailureCode.unavailable, 'Asset transfer capacity exhausted.',
+          details: {'reason': 'asset_transfer_capacity'});
     }
+    return _assetReads.putIfAbsent(
+        file.path,
+        () => (() async {
+              final until =
+                  deadline ?? DateTime.now().add(const Duration(minutes: 2));
+              Duration remaining() {
+                if (_closed || !DateTime.now().isBefore(until)) {
+                  throw const Failure(
+                      FailureCode.unavailable, 'Asset transfer stopped.',
+                      details: {
+                        'reason': 'asset_transfer_cancelled_or_expired'
+                      });
+                }
+                return until.difference(DateTime.now());
+              }
+
+              final source = <String, Object?>{'assetId': id};
+              onStage?.call('asset_info');
+              final info = await mesh
+                  .rpc(peer, 'mesh/library/file', source)
+                  .timeout(remaining());
+              final size = info['size'];
+              if (size is! int || size < 0 || size > 64 * 1024 * 1024) {
+                throw const Failure(FailureCode.unavailable,
+                    'Asset exceeds the 64 MiB transfer budget.',
+                    details: {'reason': 'asset_byte_capacity'});
+              }
+              remaining();
+              final temporary = File('${file.path}.tmp');
+              final output = await temporary.open(mode: FileMode.write);
+              var outputClosed = false;
+              try {
+                for (var offset = 0; offset < size; offset += 1048576) {
+                  onStage?.call('asset_read');
+                  final bytes = await _bytes(
+                          peer,
+                          source,
+                          info['tag'] as String,
+                          offset,
+                          math.min(size - offset, 1048576))
+                      .timeout(remaining());
+                  remaining();
+                  await output.writeFrom(bytes);
+                  onStage?.call('asset_flush');
+                  await output.flush();
+                }
+                onStage?.call('asset_close');
+                outputClosed = true;
+                await output.close();
+                remaining();
+                onStage?.call('asset_publish');
+                await temporary.rename(file.path);
+                return file.path;
+              } catch (_) {
+                if (!outputClosed) await output.close();
+                if (await temporary.exists()) await temporary.delete();
+                rethrow;
+              }
+            })()
+                .whenComplete(() {
+              // Returning remove() would return this very Future: whenComplete
+              // would then wait for itself forever after the file was saved.
+              _assetReads.remove(file.path);
+            }));
   }
 
-  Future<void> _cacheArtwork(String peer, List<JsonMap> records) async {
-    for (final record in records) {
-      final value = record['value'] as JsonMap;
-      final paths =
-          record['kind'] == 'work' ? value['artwork'] as JsonMap : value;
-      for (final key in record['kind'] == 'work'
-          ? ['poster', 'backdrop', 'logo']
-          : ['still']) {
-        if (paths[key] case final String asset) {
-          paths[key] = await cacheAsset(peer, asset);
+  void _startArtwork(String peer, JsonMap publication) {
+    if (_artworkTasks.containsKey(peer) || _closed) return;
+    _peerState[peer] = {
+      ...?_peerState[peer],
+      'artwork': 'loading',
+      'artworkFailure': null,
+      'artworkAssetId': null,
+      'artworkAttemptAt': DateTime.now().toUtc().toIso8601String()
+    };
+    _artworkTasks[peer] = (() async {
+      void stage(String value, [JsonMap facts = const {}]) {
+        _peerState[peer] = {
+          ...?_peerState[peer],
+          'artworkStage': value,
+          'artworkUpdatedAt': DateTime.now().toUtc().toIso8601String(),
+          ...facts,
+        };
+      }
+
+      stage('preparing');
+      final records = (publication['records'] as List).cast<JsonMap>();
+      final deadline = DateTime.now().add(const Duration(seconds: 30));
+      var missing = 0;
+      // Work on a copy, retaining the published structure on any asset failure.
+      final copied = (jsonDecode(jsonEncode(records)) as List).cast<JsonMap>();
+      for (final record in copied) {
+        if (_closed || !identical(_peers[peer], publication)) return;
+        final value = record['value'] as JsonMap;
+        final paths =
+            record['kind'] == 'work' ? value['artwork'] as JsonMap : value;
+        for (final key in record['kind'] == 'work'
+            ? ['poster', 'backdrop', 'logo']
+            : ['still']) {
+          final assetIds =
+              (record['_artworkSources'] as Map?)?.cast<String, Object?>() ??
+                  <String, Object?>{};
+          record['_artworkSources'] = assetIds;
+          if (paths[key] case final String path when path.startsWith('asset:'))
+            assetIds[key] = path;
+          if (assetIds[key] case final String asset) {
+            if (!DateTime.now().isBefore(deadline)) {
+              missing++;
+              paths[key] = null;
+              stage('asset_failed', {
+                'artworkFailure': {
+                  'failureCode': 'timeout',
+                  'reason': 'artwork_deadline',
+                }
+              });
+              continue;
+            }
+            try {
+              stage('fetching_asset', {'artworkAssetId': asset});
+              paths[key] = await cacheAsset(peer, asset,
+                  deadline: deadline, onStage: (value) => stage(value));
+            } catch (error) {
+              missing++;
+              paths[key] = null;
+              stage('asset_failed', {
+                'artworkFailure': error is Failure
+                    ? OperationObservations.failure(error)
+                    : {
+                        'failureCode':
+                            error is TimeoutException ? 'timeout' : 'internal'
+                      },
+              });
+            }
+          }
         }
       }
-    }
+      if (_closed || !identical(_peers[peer], publication)) return;
+      final updated = {...publication, 'records': copied};
+      stage('saving');
+      await _save('mesh:peer:$peer', updated);
+      if (_closed || !identical(_peers[peer], publication)) return;
+      _peers[peer] = updated;
+      _peersRevision++;
+      _peerState[peer] = {
+        ...?_peerState[peer],
+        'artwork': missing == 0 ? 'complete' : 'partial',
+        'artworkVersion': publication['version'],
+        'missingArtwork': missing
+      };
+      stage('publishing');
+      await prepareIndex();
+      stage('settled');
+      ui.notifyLibraryChanged();
+    })()
+        .catchError((Object error) {
+      _peerState[peer] = {
+        ...?_peerState[peer],
+        'artwork': 'failed',
+        'artworkFailure': error is Failure
+            ? OperationObservations.failure(error)
+            : {'failureCode': 'internal'},
+        'artworkVersion': publication['version']
+      };
+    }).whenComplete(() {
+      _artworkTasks.remove(peer);
+      final current = _peers[peer];
+      if (!_closed &&
+          current != null &&
+          !identical(current, publication) &&
+          _peerState[peer]?['artworkVersion'] != current['version']) {
+        _startArtwork(peer, current);
+      }
+    });
   }
 
   Future<JsonMap> readable(String id) async {
@@ -716,9 +956,36 @@ final class MeshLibrary {
       throw const Failure(
           FailureCode.notFound, 'No recorded native file for episode.');
     }
-    final location = candidates.where((l) => l['online'] == true).firstOrNull;
+    var location = candidates.where((l) => l['online'] == true).firstOrNull;
+    // A saved catalogue is usable before a successful refresh. Probe the file
+    // owner independently instead of making catalogue freshness a play gate.
     if (location == null) {
-      throw const Failure(FailureCode.unavailable, 'Source device is offline.');
+      for (final candidate in candidates.take(3)) {
+        final peer = candidate['deviceId'] as String;
+        try {
+          await mesh.rpc(peer, 'mesh/presence', {}, ungated: true);
+          _setOnline(peer, true);
+          location = {...candidate, 'online': true};
+          break;
+        } on Failure catch (error) {
+          _peerState[peer] = {
+            ...?_peerState[peer],
+            'reachability': error.details['reason'] == 'not_delivered'
+                ? 'unreachable'
+                : 'unknown'
+          };
+        }
+      }
+    }
+    if (location == null) {
+      throw Failure(FailureCode.unavailable,
+          'Source reachability has not been confirmed.',
+          details: {
+            'reason': 'source_not_verified',
+            'stage': 'resolve_source',
+            'sources': refreshStatus['peers'],
+            'cataloguePreserved': true
+          });
     }
     if (location['local'] == true) {
       return {
@@ -781,7 +1048,9 @@ final class MeshLibrary {
     if (configured == _requestedPort) return;
     await _httpBinding;
     await _http?.close(force: true);
-    for (final stream in _streams) { stream.destroy(); }
+    for (final stream in _streams) {
+      stream.destroy();
+    }
     _streams.clear();
     _http = null;
     _readers.clear();
@@ -902,8 +1171,8 @@ final class MeshLibrary {
     StreamSubscription<List<int>>? disconnect;
     try {
       if (request.method == 'GET') {
-        // Observe EOF directly: HttpResponse.done can wait until the entire
-        // buffered response is closed, long after a player abandoned its URL.
+        // A read EOF only closes the client's sending half. It may still be
+        // receiving the response. A reset/write failure terminates streaming.
         // One response per socket also prevents a pipelined request from being
         // interpreted as file bytes after handing off the HTTP headers.
         response.persistentConnection = false;
@@ -912,8 +1181,9 @@ final class MeshLibrary {
         disconnect = output.listen((_) {
           disconnected = true;
           output.destroy();
-        }, onDone: () { disconnected = true; },
-          onError: (Object _) { disconnected = true; }, cancelOnError: true);
+        }, onError: (Object _) {
+          disconnected = true;
+        }, cancelOnError: true);
         for (var offset = start; offset <= end; offset += 1048576) {
           if (_closed || disconnected) break;
           final bytes = await _bytes(
@@ -932,7 +1202,8 @@ final class MeshLibrary {
       }
     } on Object catch (error) {
       if (!disconnected && !_closed) {
-        lastError = error is Failure ? error.message : error.runtimeType.toString();
+        lastError =
+            error is Failure ? error.message : error.runtimeType.toString();
       }
       if (stream == null) {
         try {
@@ -962,11 +1233,18 @@ final class MeshLibrary {
     if (_closed) return;
     _closed = true;
     _timer?.cancel();
+    for (final stream in _streams) {
+      stream.destroy();
+    }
+    _streams.clear();
+    await _http?.close(force: true);
     await _sync;
     await _building;
     await _httpBinding;
     await _http?.close(force: true);
-    for (final stream in _streams) { stream.destroy(); }
+    for (final stream in _streams) {
+      stream.destroy();
+    }
     _streams.clear();
     _http = null;
     _readers.clear();

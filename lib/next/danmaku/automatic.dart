@@ -45,7 +45,7 @@ final class AutomaticDanmaku {
   }
 
   Future<bool> _safePrepare(String path,
-      {String? fileId, String? episodeId}) async {
+      {String? fileId, String? episodeId, bool allowHash = true}) async {
     try {
       final policy = await readSettings();
       if (policy.strategy == DanmakuAutoLoadStrategy.local) {
@@ -114,8 +114,8 @@ final class AutomaticDanmaku {
       if (known.length == 1) {
         final exact = known.values.single;
         final identity = await store.identities.identity(exact.entityId);
-        if (!(identity['bindings'] as List).cast<JsonMap>().any(
-            (b) => b['id'] == exact.binding['id'] && b['status'] == 'accepted')) {
+        if (!(identity['bindings'] as List).cast<JsonMap>().any((b) =>
+            b['id'] == exact.binding['id'] && b['status'] == 'accepted')) {
           return false;
         }
         if ((await bindings()).any((b) => b['local_file'] == null)) {
@@ -137,7 +137,8 @@ final class AutomaticDanmaku {
             Invocation(origin: 'application:playback'));
         return _fetch(await store.binding(bindingId));
       }
-      if (policy.skipMatching || path.contains('://')) return false;
+      if (!allowHash || policy.skipMatching || path.contains('://'))
+        return false;
       final candidates = await matchHash(path);
       final distinct = <String, DanmakuVideo>{
         for (final v in candidates)
@@ -148,6 +149,20 @@ final class AutomaticDanmaku {
       // A manual change made while the network request ran wins.
       existing = await bindings();
       if (existing.any((b) => b['local_file'] == null)) return false;
+      // Metadata identity may have been confirmed while hashing, without any
+      // danmaku binding being written yet. Re-enter the exact-identity path;
+      // never accept the obsolete hash candidate or launch another hash.
+      for (final entityId in entities) {
+        final identity = await store.identities.identity(entityId);
+        if ((identity['bindings'] as List).cast<JsonMap>().any((b) =>
+            b['status'] == 'accepted' &&
+            b['provider'] == 'dandanplay' &&
+            b['object_type'] == 'episode' &&
+            b['relation'] == 'exact')) {
+          return _safePrepare(path,
+              fileId: fileId, episodeId: episodeId, allowHash: false);
+        }
+      }
       final video = distinct.values.single;
       final id = await store.attach(
           fileId,

@@ -34,9 +34,12 @@ final class MeshResponseChunks {
   }
 
   JsonMap read(String peer, JsonMap input) {
+    _saved.removeWhere((_, value) => !value.expires.isAfter(_clock()));
     final entry = _saved[input['token']];
     if (entry == null || entry.peer != peer || !entry.expires.isAfter(_clock())) {
-      throw const Failure(FailureCode.notFound, 'Response continuation expired or unavailable.');
+      throw const Failure(FailureCode.notFound, 'Response continuation expired or unavailable.',
+          details: {'reason': 'response_continuation_unavailable',
+            'execution': 'may_have_completed', 'retry': 'query_receipt'});
     }
     final offset = input['offset'];
     if (offset is! int || offset < 0 || offset >= entry.bytes.length) {

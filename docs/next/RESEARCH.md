@@ -49,7 +49,7 @@ download-harness 是一个 Codex 在其中工作的仓库：对话就是操作�
 
 ## 每个人的 harness
 
-开启 Next 时，NipaPlay 为用户创建一个 harness 仓库（默认 `~/nipaplay-harness`），之后不再改动它：
+开启 Next 时，NipaPlay 为用户创建一个 harness 仓库（默认 `~/nipaplay-harness`）。启动 Agent 前安全合入官方种子更新：先在 Git 对象库预览，再锁定 HEAD、分支和索引；保留个人提交、未提交和忽略文件。冲突或中断时暴露实际状态，不强制覆盖。
 
 - **种子 `AGENTS.md`**：上面的假设，加上 `nipa` 的用法。「环境」一节留空，由 Agent 在与用户的第一次对话中探索并写下。
 - **`nipa` 命令行**：
@@ -83,3 +83,7 @@ download-harness 是一个 Codex 在其中工作的仓库：对话就是操作�
 - harness 之间分享工具：一个人的 Agent 写好的优酷工具，另一个人的 Agent 拿来审阅、改造。分发渠道可以就是 GitHub，不必另建插件市场。
 - 在 NipaPlay 里直接与 Agent 对话。
 - 用命令行还是 MCP，哪种让 Agent 做得更好？用实验比较。
+
+## 可观察的宿主
+
+Agent 的决策依据包含结果、过程与证据。宿主必须分别暴露请求传输、能力执行、事务提交、任务进度、投影发布与播放器状态；未知不能简化成失败，更不能把未收到响应当成没有提交。统一约定及当前覆盖范围见 [可观测性契约](OBSERVABILITY_CONTRACT.md)。SQL 继续保留为直接查询与修复入口。

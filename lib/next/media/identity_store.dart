@@ -1135,9 +1135,8 @@ final class IdentityStore {
             _ => 2,
           };
         }
-        final empty = values[field] is List && (values[field] as List).isEmpty ||
-            values[field] is Map && (values[field] as Map).isEmpty;
-        if (empty) continue;
+        // An explicitly supplied empty collection clears that field. Only an
+        // absent key is a sparse update eligible for older-snapshot fallback.
         final oldSource = provenance[field] as Map?;
         int providerRank(Object? provider) {
           final order = field == 'title' || field == 'infobox' || field == 'tags'

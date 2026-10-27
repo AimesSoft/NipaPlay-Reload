@@ -116,15 +116,20 @@ pub async fn mesh_send(
     device: String,
     body: String,
 ) -> Result<String, String> {
-    // Only the read-only file primitive gets the media deadline. A task or a
-    // write can legitimately run for much longer and must not be replayed.
-    let file_read = serde_json::from_str::<serde_json::Value>(&body)
-        .ok().is_some_and(|frame| frame["method"] == "mesh/library/read");
+    // Bounded reads release their socket even if the Dart receiver stalls.
+    // Action calls keep the existing write deadline; a timeout never implies
+    // cancellation of an operation that the receiver already executed.
+    let method = serde_json::from_str::<serde_json::Value>(&body).ok()
+        .and_then(|v| v["method"].as_str().map(str::to_owned));
+    let file_read = method.as_deref() == Some("mesh/library/read");
+    let bounded_read = matches!(method.as_deref(), Some("mesh/library/read" |
+        "mesh/library/snapshot" | "mesh/library/file" | "mesh/response/chunk" |
+        "mesh/describe" | "mesh/presence" | "tools/list"));
     let node = node(id)?;
-    let response = if file_read {
+    let response = if bounded_read {
         node.send_with_timeout(&host, port, &device, &body,
-            std::time::Duration::from_secs(15)).await.map_err(|error| {
-                if error == "call timeout" { "mesh file read timeout".to_owned() }
+            std::time::Duration::from_secs(if file_read { 15 } else { 30 })).await.map_err(|error| {
+                if error == "call timeout" { if file_read { "mesh file read timeout" } else { "mesh response read timeout" }.to_owned() }
                 else { error }
             })?
     } else {

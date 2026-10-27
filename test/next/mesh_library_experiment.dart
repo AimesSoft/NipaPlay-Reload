@@ -142,8 +142,15 @@ Future<void> x47LibraryExperiment(_Rig rig) async {
   expect(
       eps.skip(3).every((e) => e.device?.name == 'workstation' && e.playable),
       true);
-  expect(await File(works.single.artwork.poster!).exists(), true);
-  expect(works.single.artwork.poster, startsWith(a.mediaRoot.path));
+  final artworkDeadline = DateTime.now().add(const Duration(seconds: 10));
+  while (!(a.meshLibrary!.refreshStatus['peers'] as List).cast<Map>().any(
+      (p) => p['deviceId'] == source.identity!.deviceId && p['artwork'] == 'complete')) {
+    if (DateTime.now().isAfter(artworkDeadline)) fail('Artwork did not settle: ${a.meshLibrary!.refreshStatus}');
+    await Future<void>.delayed(const Duration(milliseconds: 20));
+  }
+  final artworkWork = (await a.library()).single;
+  expect(await File(artworkWork.artwork.poster!).exists(), true);
+  expect(artworkWork.artwork.poster, startsWith(a.mediaRoot.path));
   final opened = (await a.meshLibrary!.open(eps[3].episodeId))!;
   final url = Uri.parse(opened['url'] as String);
   expect((opened['bundle'] as Map)['tracks'], hasLength(1));

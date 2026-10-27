@@ -1,3 +1,5 @@
+import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 import 'platform/lab_profile.dart';
 
@@ -261,16 +263,26 @@ Future<Map<String, Object?>> updateHarnessRepository(
     if (output(latest) != before || output(latestBranch) != output(branch)) {
       return finish('repository_changed', '检查期间仓库版本发生变化，稍后重试。');
     }
-    final apply = await git([
-      'merge',
-      '--ff-only',
-      '--no-edit',
-      '--no-stat',
-      '--no-autostash',
-      target
-    ]);
-    if (apply.exitCode != 0) {
-      return finish('local_changes', '本地未提交内容阻止更新，保留现状；请先检查并提交这些内容，再重启 Next。');
+    final apply =
+        await _applySeed(repository, hooks, output(branch), before, target);
+    receipt.addAll(apply);
+    if (apply['state'] != 'updated') {
+      return finish(apply['state'] as String, apply['reason'] as String);
+    }
+    final appliedHead = await git(['rev-parse', '--verify', 'HEAD']);
+    final appliedBranch = await git(['symbolic-ref', '-q', 'HEAD']);
+    receipt.addAll({
+      'branch': output(branch),
+      'observedBranch': output(appliedBranch),
+      'observedHead': output(appliedHead),
+      'targetHead': target,
+    });
+    if (appliedHead.exitCode != 0 ||
+        appliedBranch.exitCode != 0 ||
+        output(appliedHead) != target ||
+        output(appliedBranch) != output(branch)) {
+      return finish('repository_changed',
+          '应用更新期间仓库发生并发变化；请核查 observedBranch/observedHead，未自动回退个人修改。');
     }
     return {
       ...finish('updated', '已自动合并官方种子，保留本地历史与个人文件。'),
@@ -293,6 +305,172 @@ Future<Map<String, Object?>> updateHarnessRepository(
       try {
         await hooks.delete(recursive: true);
       } on FileSystemException {/* best effort */}
+    }
+  }
+}
+
+/// Git's prepared HEAD update locks both HEAD and its current branch tip.
+/// The real index.lock excludes checkout/commit in other processes while an
+/// alternate index preserves unrelated staged work. read-tree's two-tree merge
+/// refuses overlapping dirty/untracked/ignored content without a reset/stash.
+Future<Map<String, Object?>> _applySeed(Directory repository, Directory hooks,
+    String branch, String before, String target) async {
+  final indexResult = await Process.run(
+      'git', ['rev-parse', '--git-path', 'index'],
+      workingDirectory: repository.path);
+  if (indexResult.exitCode != 0)
+    return {'state': 'failed', 'reason': '无法定位 Git 索引。'};
+  final index =
+      File(p.absolute(repository.path, (indexResult.stdout as String).trim()));
+  final lock = File('${index.path}.lock');
+  try {
+    await lock.create(exclusive: true);
+  } on FileSystemException {
+    return {'state': 'in_progress', 'reason': 'Git 索引被另一个操作或中断任务锁定，保留现状。'};
+  }
+  final alternate =
+      File('${index.path}.nipa-seed-${DateTime.now().microsecondsSinceEpoch}');
+  final recovery = File('${alternate.path}.json');
+  Process? transaction;
+  StreamIterator<String>? lines;
+  var changedWorktree = false, completed = false, ownsIndexLock = true;
+  try {
+    if (await index.exists()) await index.copy(alternate.path);
+    transaction = await Process.start(
+        'git',
+        [
+          '-c',
+          'core.hooksPath=${hooks.path}',
+          'update-ref',
+          '-m',
+          'Merge NipaPlay harness seed',
+          '--stdin'
+        ],
+        workingDirectory: repository.path);
+    final errors = transaction.stderr.transform(utf8.decoder).join();
+    lines = StreamIterator(transaction.stdout
+        .transform(utf8.decoder)
+        .transform(const LineSplitter()));
+    Future<bool> reply(String expected) async {
+      final cursor = lines!;
+      return await cursor.moveNext().timeout(const Duration(seconds: 10)) &&
+          cursor.current == expected;
+    }
+
+    transaction.stdin.writeln('start');
+    transaction.stdin.writeln('update HEAD $target $before');
+    transaction.stdin.writeln('prepare');
+    await transaction.stdin.flush();
+    if (!await reply('start: ok') || !await reply('prepare: ok')) {
+      await transaction.stdin.close();
+      await transaction.exitCode;
+      final error = await errors;
+      return {
+        'state': error.contains('unknown command')
+            ? 'preview_unavailable'
+            : 'repository_changed',
+        'reason': '无法原子锁定分支与 HEAD，保留现状；请检查 Git 版本和并发操作。'
+      };
+    }
+    // update HEAD prepares locks on both the symbolic HEAD and its referent.
+    // Read the branch while those locks are held, including same-tip switches.
+    final pinned = await Process.run('git', ['symbolic-ref', '-q', 'HEAD'],
+        workingDirectory: repository.path);
+    if (pinned.exitCode != 0 || (pinned.stdout as String).trim() != branch) {
+      transaction.stdin.writeln('abort');
+      await transaction.stdin.close();
+      await transaction.exitCode;
+      return {'state': 'repository_changed', 'reason': '锁定前检出分支已变化，保留现状。'};
+    }
+    await recovery.writeAsString(
+        jsonEncode({
+          'branch': branch,
+          'previousHead': before,
+          'targetHead': target,
+          'index': index.path,
+          'preparedIndex': alternate.path
+        }),
+        flush: true);
+    // read-tree may honor repository/global excludes. Protect every untracked
+    // path explicitly, including ignored files and directory/type collisions.
+    final others = await Process.run('git', ['ls-files', '--others', '-z'],
+        workingDirectory: repository.path);
+    final diff = await Process.run(
+        'git', ['diff', '--name-only', '-z', before, target],
+        workingDirectory: repository.path);
+    if (others.exitCode != 0 || diff.exitCode != 0)
+      throw const FileSystemException('Cannot inspect personal paths');
+    final paths =
+        (others.stdout as String).split('\x00').where((s) => s.isNotEmpty);
+    final changed =
+        (diff.stdout as String).split('\x00').where((s) => s.isNotEmpty);
+    final blocked = paths
+        .where((path) => changed.any((name) =>
+            path == name ||
+            path.startsWith('$name/') ||
+            name.startsWith('$path/')))
+        .toList();
+    if (blocked.isNotEmpty) {
+      transaction.stdin.writeln('abort');
+      await transaction.stdin.close();
+      await transaction.exitCode;
+      return {
+        'state': 'local_changes',
+        'reason': '官方更新与个人未跟踪或被忽略的路径重叠，保留现状。',
+        'blockedPaths': blocked.take(24).toList()
+      };
+    }
+    final checkout = await Process.run(
+        'git',
+        [
+          '-c',
+          'core.hooksPath=${hooks.path}',
+          '-c',
+          'core.fsmonitor=false',
+          '-c',
+          'submodule.recurse=false',
+          'read-tree',
+          '-m',
+          '-u',
+          before,
+          target
+        ],
+        workingDirectory: repository.path,
+        environment: {'GIT_INDEX_FILE': alternate.path});
+    if (checkout.exitCode != 0) {
+      transaction.stdin.writeln('abort');
+      await transaction.stdin.close();
+      await transaction.exitCode;
+      return {'state': 'local_changes', 'reason': '本地未提交或被忽略的个人文件阻止更新，保留现状。'};
+    }
+    changedWorktree = true;
+    await lock.writeAsBytes(await alternate.readAsBytes(), flush: true);
+    transaction.stdin.writeln('commit');
+    await transaction.stdin.flush();
+    if (!await reply('commit: ok'))
+      throw const FileSystemException('Git ref commit failed');
+    await transaction.stdin.close();
+    if (await transaction.exitCode != 0)
+      throw const FileSystemException('Git ref transaction failed');
+    await lock.rename(index.path);
+    ownsIndexLock = false;
+    completed = true;
+    return {'state': 'updated', 'reason': '官方种子已更新；分支、HEAD 和索引均经过锁定。'};
+  } catch (_) {
+    return {
+      'state': changedWorktree ? 'interrupted' : 'failed',
+      'reason': changedWorktree
+          ? '更新中断，已保留索引锁和恢复记录；请核查后恢复，不自动覆盖个人文件。'
+          : '无法安全准备更新，保留现状。',
+      if (changedWorktree) 'recoveryFile': recovery.path
+    };
+  } finally {
+    transaction?.kill();
+    await lines?.cancel();
+    if (!changedWorktree || completed) {
+      for (final file in [alternate, recovery, if (ownsIndexLock) lock]) {
+        if (await file.exists()) await file.delete();
+      }
     }
   }
 }

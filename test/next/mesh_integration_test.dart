@@ -32,6 +32,8 @@ import 'package:nipaplay/next/media/media_service.dart';
 import 'package:nipaplay/next/media/metadata_provider.dart' show ExternalRef;
 import 'package:nipaplay/next/headless/ports.dart';
 import 'package:nipaplay/next/state/query.dart';
+import 'package:nipaplay/next/state/change_history.dart';
+import 'package:nipaplay/next/system/operation_observations.dart';
 import 'package:nipaplay/next/state/views.dart';
 import 'package:nipaplay/next/settings/registry.dart';
 import 'package:nipaplay/next/danmaku/service.dart';
@@ -357,6 +359,38 @@ void main() {
 
   test('X47 merged library and real TLS video Range and seeking', () => x47LibraryExperiment(rig), timeout: const Timeout(Duration(minutes: 5)), skip: reuseX47Evidence);
 
+  test('library status is readable while a remote catalogue request is still running', () async {
+    final a = await rig.node('status-reader'), b = await rig.node('status-owner');
+    await a.refreshDevices();
+    final data = await x47Data(rig, a);
+    await x47Data(rig, b);
+    final entered = Completer<void>(), release = Completer<void>();
+    final original = b.libraryRequest!;
+    b.libraryRequest = (method, input, peer) async {
+      if (method == 'mesh/library/snapshot' && !entered.isCompleted) {
+        entered.complete();
+        await release.future;
+      }
+      return original(method, input, peer);
+    };
+    final pending = data.meshLibrary!.refresh();
+    try {
+      await entered.future;
+      final h = Harness([MeshLibraryCapability(data.meshLibrary!)]);
+      final outcome = await h.invokeJson('media.library.status', {}, Invocation(origin: 'test'))
+          .timeout(const Duration(seconds: 1));
+      final facts = (outcome as Completed).value.toJson();
+      expect(facts['refreshInProgress'], true);
+      final peer = (facts['peers'] as List).cast<Map>().singleWhere((p) => p['deviceId'] == b.identity!.deviceId);
+      expect(peer['refreshing'], true);
+      expect(peer['reachability'], 'unknown');
+      expect(peer['catalogueFreshness'], 'not_refreshed');
+    } finally {
+      release.complete();
+      await pending;
+    }
+  });
+
   test('large rich metadata crosses real TLS without repeating the operation', () async {
     final a = await rig.node('a'), b = await rig.node('b');
     await a.refreshDevices();
@@ -369,6 +403,35 @@ void main() {
     final result = await a.rpc(b.identity!.deviceId, 'mesh/library/large-test', {});
     expect(result['metadata'], expected);
     expect(executions, 1);
+  });
+
+  test('real TLS exposes correlated process facts without recording diagnostic polling', () async {
+    final a = await rig.node('observer'), b = await rig.node('observed');
+    b.attach(Harness([
+      InvocationScopeCapability(_Actions(Completer<void>(), Completer<void>())),
+      InvocationScopeCapability(const OperationObservationsCapability()),
+    ]));
+    await a.refreshDevices();
+    final peer = b.identity!.deviceId;
+    await a.invoke(peer, 'download.echo', {'value': 'PRIVATE_INPUT'}, destructive: false);
+    final outbound = (OperationObservations.current.read({
+      'peerId': peer, 'action': 'download.echo',
+    })['records'] as List).cast<Map>().singleWhere((r) => r['direction'] == 'outbound');
+    Future<JsonMap> query() async {
+      final result = await a.invoke(peer, 'diagnostics.operations', {
+        'invocationId': outbound['invocationId'],
+      }, destructive: false);
+      return (result as Completed).value.toJson();
+    }
+    final facts = await query();
+    final records = (facts['records'] as List).cast<Map>();
+    expect(records.any((r) => r['stage'] == 'action_completed' && r['action'] == 'download.echo'), true);
+    expect(records.any((r) => r['direction'] == 'inbound' &&
+        (r['stages'] as List).any((s) => s['stage'] == 'request_received')), true);
+    expect(jsonEncode(facts), isNot(contains('PRIVATE_INPUT')));
+    final next = await query();
+    expect(next['next'], facts['next']);
+    expect(OperationObservations.current.read({'action': 'diagnostics.operations'})['records'], isEmpty);
   });
 
   test('real TLS discovers SQL and recovers write and undo receipts on the target', () async {
@@ -389,7 +452,7 @@ void main() {
       }
       final listed = await a.devices(deviceIds: [peer]);
       final actions = ((listed['devices'] as List).single as Map)['actions'] as List;
-      expect(actions.map((a) => (a as Map)['id']).toSet(), {'db.describe', 'db.query', 'db.write', 'db.undo'});
+      expect(actions.map((a) => (a as Map)['id']).toSet(), {'db.describe', 'db.query', 'db.write', 'db.undo', 'db.receipt'});
       await remote('db.describe', {'tables': ['media_entities', 'db_operations']});
       final before = await remote('db.query', {'sql': "SELECT revision FROM media_entities WHERE id='sql-work'"});
       expect((before['rows'] as List).single, {'revision': 0});
@@ -414,6 +477,8 @@ void main() {
           ca: await File('${rig.caDirectory.path}/ca.pem').readAsString(),
           coordinator: MeshCoordinator(rig.base, () async => _jwt(424242)),
           name: 'sql-reader', broadcast: false);
+      final receipt = await remote('db.receipt', {'kind': 'write', 'requestKey': p['previewId']});
+      expect(receipt['state'], 'committed');
       final done = await remote('db.write', input);
       expect(done['committed'], true);
       service = DbService(database);
@@ -533,6 +598,41 @@ void main() {
     final loaded = await MeshIdentity.load(a.root, rig.vault, native);
     expect(loaded.deviceId, old.deviceId);
     expect(a.identity!.deviceId, isNot(b.identity!.deviceId));
+  });
+
+  test('bulk reads do not spend the durable invocation budget or block presence', () async {
+    final a = await rig.node('budget-reader');
+    final root = await Directory('${rig.directory.path}/budget-source').create();
+    final expiry = DateTime.now().millisecondsSinceEpoch + 3590000;
+    await File('${root.path}/mesh-replay.jsonl').writeAsString([
+      for (var i = 0; i < 9990; i++) jsonEncode({'keys': [
+        '${a.identity!.deviceId}:id:seed-$i', '${a.identity!.deviceId}:nonce:seed-$i'], 'deadline': expiry})
+    ].join('\n'));
+    final b = await rig.node('budget-source');
+    await a.refreshDevices();
+    var reads = 0;
+    b.libraryRequest = (_, __, ___) async { reads++; return {'data': ''}; };
+    final before = await File('${root.path}/mesh-replay.jsonl').length();
+    for (var i = 0; i < 25; i++) {
+      expect(await a.rpc(b.identity!.deviceId, 'mesh/library/read', {}), {'data': ''});
+    }
+    expect(reads, 25);
+    expect(await File('${root.path}/mesh-replay.jsonl').length(), before);
+    expect(await a.rpc(b.identity!.deviceId, 'mesh/presence', {}), isNotEmpty);
+  });
+
+  test('stop invalidates a login read suspended during startup', () async {
+    final entered = Completer<void>(), token = Completer<String?>();
+    final node = MeshRuntime(root: await Directory('${rig.directory.path}/stopping').create(),
+      vault: rig.vault, native: native, token: () { entered.complete(); return token.future; });
+    final starting = node.startConfigured();
+    await entered.future;
+    final stopping = node.stop();
+    token.complete(null);
+    await Future.wait([starting, stopping]);
+    expect(node.status, 'disabled');
+    expect(node.runtimeFacts['loginWatchActive'], false);
+    await node.close();
   });
 
   test(

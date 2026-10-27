@@ -64,18 +64,19 @@ void main() {
     return result;
   }
 
-  test('the application offers the four db actions locally and to Mesh peers',
+  test('the application offers the db actions locally and to Mesh peers',
       () {
     expect({
       for (final s in api.catalog.where((s) => s.id.startsWith('db.')))
         s.id: s.effect
     }, {
       'db.describe': Effect.read,
+      'db.receipt': Effect.read,
       'db.query': Effect.read,
       'db.undo': Effect.write,
       'db.write': Effect.write,
     });
-    for (final id in ['db.describe', 'db.query', 'db.write', 'db.undo']) {
+    for (final id in ['db.describe', 'db.query', 'db.write', 'db.undo', 'db.receipt']) {
       expect(meshActionAllowed(id), true, reason: id);
     }
   });

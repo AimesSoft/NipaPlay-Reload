@@ -58,6 +58,20 @@ Future<void> x47ProxyReview(_Rig rig) async {
       ])),
       404);
   expect(await fetch(uri, body: 'proxy review fixture'), 200);
+  // Closing only the request half is valid HTTP: the response still arrives.
+  final raw = await RawSocket.connect(uri.host, uri.port);
+  final received = <int>[];
+  final ended = Completer<void>();
+  raw.listen((event) {
+    if (event == RawSocketEvent.read) received.addAll(raw.read() ?? []);
+    if (event == RawSocketEvent.readClosed) {
+      raw.close(); if (!ended.isCompleted) ended.complete();
+    }
+  }, onError: (Object e) { if (!ended.isCompleted) ended.completeError(e); });
+  raw.write(utf8.encode('GET ${uri.path} HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n'));
+  raw.shutdown(SocketDirection.send);
+  await ended.future.timeout(const Duration(seconds: 10));
+  expect(latin1.decode(received).split('\r\n\r\n').last, 'proxy review fixture');
   expect((await status())['state'], 'random');
   expect(jsonEncode(await status()), isNot(contains(token)));
   final reservation = await ServerSocket.bind(InternetAddress.loopbackIPv4, 0);

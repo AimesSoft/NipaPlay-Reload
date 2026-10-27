@@ -9,6 +9,23 @@ final class DbCapability implements Capability {
       : actions = [
           ClassicAction(
             const ActionSpec(
+                id: 'db.receipt',
+                title: '查询数据库提交回执',
+                description:
+                    '查询同一调用来源的持久提交回执，不重新执行操作。kind=write 时 requestKey 为原 previewId；kind=undo 时为原 requestId。committed 由与数据同事务的 db_operations 证明，跨重启有效；result.postCommitPending 表示视图通知尚未确认完成。unknown 不等于没有执行，可能还在途或来源/key 不符；不要换新 key 重做。可直接跨设备路由。',
+                effect: Effect.read,
+                input: ObjectSchema({
+                  'kind': StringSchema(values: ['write', 'undo']),
+                  'requestKey': StringSchema(minLength: 1, maxLength: 256),
+                }, required: [
+                  'kind',
+                  'requestKey'
+                ]),
+                output: ObjectSchema({}, additionalProperties: true)),
+            service.receipt,
+          ),
+          ClassicAction(
+            const ActionSpec(
               id: 'db.describe',
               title: 'Describe next.db',
               description:

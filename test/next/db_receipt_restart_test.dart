@@ -36,6 +36,9 @@ void main() {
       await database.close();
       database = await openNextDatabase(root, factory: databaseFactoryFfi);
       service = DbService(database);
+      final recovered = await service.receipt({'kind': 'write', 'requestKey': preview['previewId']}, Invocation(origin: origin));
+      expect(recovered['state'], 'committed');
+      expect(recovered['result'], committed);
       expect(await service.write(input, Invocation(origin: origin)), committed);
       final undo = <String, Object?>{'commitId': committed['commitId'], 'requestId': 'undo-once'};
       final undone = await service.undo(undo, Invocation(origin: origin));

@@ -96,7 +96,7 @@ undo_merge {mergeId,requestId,reason} 同样先预览再携 expectedPlan 提交�
   'window': r'''bounds.get 读取、bounds.set 设置本进程主窗准确位置与尺寸，读写 effect 分开；不激活窗口，变化发 window.bounds_changed；已有 window.control 管 fullscreen/PiP/托盘。坐标为 window_manager 逻辑像素。目标不会按应用名查找。''',
   'share': r'''prepare 预览文字、公开 URL 或授权本地文件；open 打开该计划的系统面板，由用户选目的地。会核对预览后文件变化。不以打开面板冒充已分享，也不自动上传日志。''',
   'notification': r'''当前 macOS 宿主有原生 OS 通知：status 读取系统设置，send 受系统授权、声音及系统展示策略管理，list 区分 pending/delivered，cancel 请求移除。未授权默认 blocked，requestPermission 明确请求系统询问用户。accepted 不等于用户看到了横幅；其他平台如实返回 unavailable。''',
-  'diagnostics': r'''status 给健康、版本、资源、日志和迁移观察；file_logs 用受限 fileId 与行游标读取脱敏摘录。recover 只执行显式的日志重启、投影核对、索引器检查，不自动修改用户数据或登录。日志公开发布必须有明确目标与内容；本族不上传。
+  'diagnostics': r'''operations 给本进程能力与 Mesh 阶段，可按 invocationId/action/peerId 关联查询；最多 512 条、30 分钟，缺失表示未知。SQL 提交证据用源设备 db.receipt，传输结果与事务提交分开。status 给健康、版本、资源、日志和迁移观察；file_logs 用受限 fileId 与行游标读取脱敏摘录。recover 只执行显式的日志重启、投影核对、索引器检查，不自动修改用户数据或登录。日志公开发布必须有明确目标与内容；本族不上传。
 - status 的 player.details 与 playback.info 来自同一次内核查询：videoCodec、audioCodec、videoWidth/Height、fps、hwdec（正在用的硬解方式，软解为 no，未知为 null）、decoder、hardwareDecoding、droppedFrames、buffering。
 - errors 读 Next 开启期间本进程的未捕获错误（Flutter 框架错误、未捕获的异步错误、isolate 错误），同一错误再次出现只累计次数；以及上一次开着 Next、却没有经过 NipaPlay 退出流程就结束的运行（unclean_exit），带那次最后记下的播放。原生崩溃没有 Dart 堆栈，只表现为 unclean_exit。
 - player_log 读播放内核交给应用的最近若干行：Media Kit 是 mpv 日志消息（默认只有 error 级），MDK 是媒体事件与状态以及 MDK 自己的日志（全进程一份，不属于某个播放器），Erika 是播放错误、解码器切换、音频输出变化与视频参数，再加上 Erika 自己的日志环（全进程一份：source=engine 是 Erika 的运行诊断，source=ffmpeg 是 Erika 内 FFmpeg 的警告与错误，已由 Erika 脱敏），在读取时与 Erika 播放器关闭前抄进来。player_log_file 让 Media Kit 把 mpv 完整日志写进数据目录的文件，再用 player_log 的 file=true 分页读。
@@ -180,6 +180,7 @@ NipaPlay 自己会做一部分：作品有 TMDB 身份时取图，把下载完�
 - **写**：`db.write` 一次提交一批 INSERT/UPDATE/DELETE（至多 100 条，同一事务）。不带 previewId 只预演：事务回滚，按表返回插入、更新、删除的行及前后值（太多时给计数和样例）和 `previewId`。带 `previewId` 提交的就是预演过的效果：这些行在预演后被改过，就拒绝并什么都不写，重新预演即可。未提交的 previewId 绑定调用来源，只在目标进程内存里保留约 10 分钟。提交成功后的回执持久保存在 db_operations；响应丢失或目标重启后，同一来源用同一 previewId 重试会返回原回执，不再执行 SQL。提交时提供的 statements 与 reason 在重试时必须一致。提交后刷新尚未完成时，恢复回执可能带 committed:true、postCommitPending:true。
 - **边界由 SQLite 执行**：只有 describe 标为可写的表能改（别的表的写入被 SQLite 触发器中止）；DDL、PRAGMA、ATTACH、事务控制、多条语句不被 SQLite 当作单条 INSERT/UPDATE/DELETE 接受；外键、JSON 列和少量不变量在提交前检查，违反就整批回滚并列出原因。可写的是媒体身份与资料（media_entities、media_bindings、media_overrides、media_snapshots……）、danmaku_bindings、ui_shelves、ui_presentations；任务引擎、后续、会话、各类历史与审计、缓存和投影队列只读。
 - **记录与通知**：每次提交写入 db_commits（SQL、参数、改动计数、前后镜像、origin、invocationId、actor），并在 activity 里留一条；发出 `media.assets.changed`（kind 为 metadata、artwork、danmaku 或 identity），刷新读这些行的界面、媒体库索引和封面缓存。直接写入不往 Classic 投影，不产生专用原语的回执和领域历史，不自动递增 media_entities.revision。
+- **回执**：`db.receipt {kind:"write",requestKey:原previewId}` 查询同一来源的持久 SQL 回执；撤回用 kind:"undo" 和原 requestId。committed 由数据同事务写入证明，跨重启有效；postCommitPending 单独标记后续通知。unknown 不证明未执行，不换 key 重做。
 - **撤回**：`db.undo {commitId}` 恢复那次提交的前镜像。每一行当前内容必须仍等于那次提交的后镜像，否则整个撤回被拒绝并列出冲突的行；`dryRun:true` 只看不改。撤回本身也是一次提交，可再撤回。远程实际撤回须带稳定 requestId；同一来源以相同 requestId、commitId 和 reason 重试，取回原回执而不重复撤回。本地旧调用可省略 requestId。''',
   'danmaku': danmakuFamilyDescription + r'''- **弹幕**：
   - **长期保存**：fetch、attach、import 以及播放时自动获取成功的弹幕都保存为持久内容，重启和缓存空间清理不会删除。表名和参数里的 cache 是历史命名。刷新失败保留旧内容；明确删除用 danmaku.cache_delete。
@@ -277,6 +278,7 @@ NipaPlay 自己会做一部分：作品有 TMDB 身份时取图，把下载完�
 - put/update 接受这些字段；省略的字段（包括另一套地址）保持不变，空字符串清除该地址，但至少保留一个。地址规则不变：WebDAV 只允许 HTTP(S)，不带凭据、query、fragment；SMB 主机不带凭据或路径。
 - 已保存的密码属于保存时的那组地址：删除某个地址或在内网与公网间切换仍可使用，新增或更换为不同的地址、或换账号，需要重新 login。''',
   'media.library': r'''`media.library.search_merged {query,limit?,episodeLimit?}` 只读搜索 X48 本机与认证 Mesh 合并目录的标题、原名、已有别名、年份及剧集标题；空白分词为 AND，忽略大小写，按字面子串匹配。返回 works[]、episodes[{work,episode}]、workTotal/episodeTotal，默认每组最多 12。返回 workId/episodeId 可以直接用于 Next 作品页和 ui.open；海报是本机路径，设备与 playable 是目录最近观察。索引每 5 秒随目录更新，media.library.refresh 可立即刷新；首次搜索建立索引，其后不逐次读全库。离线 Mesh 保留事实并标为不可播放。
+`media.library.status` 立即查询本机观察到的 Mesh 目录状态，不发起网络或等待刷新；reachability、catalogueFreshness、version、lastAttemptAt/lastSuccessAt 与图片阶段分别给出，unknown 不是离线。刷新中也可查询，主动刷新用 refresh。
 原 media.library.search 保留 Classic 观看记录语义与 animeId。不要将这个 animeId 当成合并 workId。''',
   'media.metadata': r'''`media.metadata.search/search_batch` 读取在线候选，每个结果另带 workId。它是本机与认证 Mesh 合并媒体库已接受 exact/contains 作品或发行身份的 Next workId；没有对应身份就是 null，不按同名推断。首次读取可能准备可重建的目录与图片缓存，不接受候选或写绑定。资料、身份与图片能力的其余约定见 nipa describe media。''',
   'media.mesh_files':

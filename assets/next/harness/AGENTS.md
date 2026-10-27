@@ -106,7 +106,7 @@ Classic 与 Next 是同一身体的两套界面，共用播放器。Next 有首�
 
 你的外部工具负责从 RSS、站点、API 或文件找东西；通过对应能力交给 NipaPlay 才进入身体。没有入口时如实告诉用户。需要登录的平台优先用用户浏览器的现有登录态；没有时打开平台登录页，请用户自行登录。
 
-Next 启动、扫描和下载完成只索引文件；认作品和认集由你查候选、核实后通过能力层绑定。Classic 旧身份只有显式 `media.library.import_history` 才导入，不用它代替 Next 刮削。发现重复作品，先查 `media.management.targets` 找拥有者设备的原始 ID，再用 `media.management.merge_work` 预览；明确季、集对应，不按标题或集号猜，核对文件区间与身份冲突后携 expectedPlan 提交。`bind_batch` 只改绑定；完整合并可用 `undo_merge` 预览撤回，后续关系已改则拒绝。SQL 保留，`db.describe/query/write/undo` 可直接经 `--device` 调用；响应不明先用原请求恢复回执，不换 requestId 重做写入。具体参数以目标设备的 `describe` 为准。
+Next 启动、扫描和下载完成只索引文件；认作品和认集由你查候选、核实后通过能力层绑定。Classic 旧身份只有显式 `media.library.import_history` 才导入，不用它代替 Next 刮削。发现重复作品，先查 `media.management.targets` 找拥有者设备的原始 ID，再用 `media.management.merge_work` 预览；明确季、集对应，不按标题或集号猜，核对文件区间与身份冲突后携 expectedPlan 提交。`bind_batch` 只改绑定；完整合并可用 `undo_merge` 预览撤回，后续关系已改则拒绝。SQL 保留，`db.describe/query/write/undo/receipt` 可直接经 `--device` 调用；响应不明先用原请求恢复回执，不换 requestId 重做写入。具体参数以目标设备的 `describe` 为准。
 
 ## 预制的外部工具
 
@@ -122,3 +122,7 @@ Next 启动、扫描和下载完成只索引文件；认作品和认集由你查
 应用升级维护本地官方种子；Next 启动时，在对话与 hooks 启动前自动抓取并合并指向该种子的 `nipaplay/main`。能干净合并就更新，保留本地提交、记忆、工具及不冲突的未提交修改；冲突或本地修改阻挡更新时保留原状，不留下冲突文件，不自动 stash、reset 或改写远端配置。`status.harnessSeed.merged` 报告是否已合并，`autoUpdate` 给出本次检查结果与冲突路径；待处理结果会注入最近记忆。先说明阻挡原因，检查相关文件，经用户同意解决冲突或修改后再重启 Next；不要覆盖个人内容。`current` 仍只表示跟踪引用最新，详情见 `describe app`。
 弹幕池是持久资料，获取成功后保存，切换播放器或清理普通缓存不应丢失。播放前先复用已确认的弹弹play 剧集身份直接获取；没有准确身份时才复用 Classic 哈希匹配，唯一命中时自动绑定并获取弹幕；没有唯一命中时再根据用户意图确认，不猜绑定。具体能力与结果以 `describe danmaku` 和调用回执为准。
 秘密、令牌和运行记录不进 git（见 `.gitignore`）。连接凭据在仓库外，默认 macOS/Linux `~/.config/nipaplay/endpoint.json`、Windows `%APPDATA%\NipaPlay\endpoint.json`，可用 `NIPAPLAY_ENDPOINT_FILE` 指定。
+
+### 先查过程事实
+
+失败或长时间无结果时，`diagnostics.operations` 可按 invocationId、action、peerId 查询本进程的能力阶段与 Mesh 请求关联；桌面和无界面宿主都支持，保留 30 分钟、最多 512 条；分页携 session 和 after=next，sessionChanged/historyGap 表示历史不连续，重启或淘汰后的缺失表示未知。传输请求与源设备调用共享远端 invocationId。收到响应、Action 完成和数据库提交是不同事实。SQL 写入响应丢失时，在原设备以原来源调用 `db.receipt {kind:"write",requestKey:原previewId}`（undo 用原 requestId）；committed 才是持久提交证明，postCommitPending 另说明通知是否完成。unknown 可能仍在执行，不换 key 重做写入。用 `media.library.status` 可立即查看正在刷新的目录，不发起刷新或等待网络；目录刷新结果分别给 reachability、catalogueFreshness、version、lastAttemptAt、lastSuccessAt 和 artwork；旧目录、缺图与源文件变化分别处理。其他持久任务、合并回执、播放器和网络依据各自能力查询，不能从一个通用状态猜全链路。

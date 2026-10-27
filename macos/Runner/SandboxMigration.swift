@@ -520,12 +520,45 @@ final class SandboxMigration {
                 let target = active.appendingPathComponent(entry.lastPathComponent)
                 // Keep a database and its sidecars from the same generation.
                 let currentFamily = sqliteFamily(entry.lastPathComponent)
-                let hasCurrentFamily = try currentFamily.contains { try exists(current.appendingPathComponent($0)) }
+                // A zero-byte placeholder is not a database generation. Never
+                // combine a selected database with another generation's WAL.
+                let hasCurrentFamily = try currentFamily.contains { try containsData(current.appendingPathComponent($0)) }
+                if !hasCurrentFamily && currentFamily.count > 1 {
+                    for name in currentFamily {
+                        let placeholder = active.appendingPathComponent(name)
+                        if try exists(placeholder), try !containsData(placeholder) {
+                            try fm.removeItem(at: placeholder)
+                        }
+                    }
+                }
                 if try !exists(target) && !hasCurrentFamily {
                     try fm.copyItem(at: entry, to: target)
                 }
             }
-            try add(active, "Documents/nipaplay")
+            // Cache-only containers are often recreated by macOS after an
+            // upgrade. They cannot replace a live database/identity/harness.
+            if try containsPersistentData(active) {
+                let ordinary = home.appendingPathComponent("Documents/nipaplay")
+                if try isDirectory(ordinary) {
+                    var handled = Set<String>()
+                    for entry in try children(ordinary) {
+                        let family = sqliteFamily(entry.lastPathComponent)
+                        guard family.count > 1 || ["next", "danmaku", "harness"].contains(entry.lastPathComponent) else { continue }
+                        guard handled.insert(family[0]).inserted else { continue }
+                        let selected = try family.contains { try containsPersistentData(active.appendingPathComponent($0)) }
+                        if !selected {
+                            for name in family {
+                                let original = ordinary.appendingPathComponent(name)
+                                guard try exists(original) else { continue }
+                                let target = active.appendingPathComponent(name)
+                                if try exists(target) { try fm.removeItem(at: target) }
+                                try fm.copyItem(at: original, to: target)
+                            }
+                        }
+                    }
+                }
+                try add(active, "Documents/nipaplay")
+            }
         }
         let library = snapshot.appendingPathComponent("Library")
         if try isDirectory(library) {
@@ -594,6 +627,20 @@ final class SandboxMigration {
         default:
             return false
         }
+    }
+
+    private func containsPersistentData(_ url: URL) throws -> Bool {
+        let name = url.lastPathComponent.lowercased()
+        if [".ds_store", "cache", "caches", "image_cache", "mesh-assets", "mesh-cache",
+            "temp", "tmp", "logs", "flutter_assets"].contains(name) { return false }
+        guard try exists(url), try !isSymbolicLink(url) else { return false }
+        if try isDirectory(url) {
+            for child in try children(url) {
+                if try containsPersistentData(child) { return true }
+            }
+            return false
+        }
+        return try containsData(url)
     }
     private func digest(_ root: URL) throws -> String {
         var hash = SHA256()

@@ -11,6 +11,7 @@ final class MeshLibraryCapability implements Capability {
           _ManagementTargets(library),
           _LibraryAction(library, 'readable'),
           _LibraryAction(library, 'refresh'),
+          _LibraryAction(library, 'status'),
           _LibraryAction(library, 'progress')
         ];
   @override
@@ -78,18 +79,21 @@ final class _LibraryAction extends Action<MeshJson, MeshJson> {
       title: switch (operation) {
         'readable' => '取得剧集可读地址',
         'refresh' => '刷新组网媒体库',
+        'status' => '读取目录同步过程状态',
         _ => '记录跨设备观看进度'
       },
       description: switch (operation) {
         'readable' =>
           'Resolve merged or local episode IDs in one batch. Native local files return path; remote files return a process-lifetime loopback HTTP url supporting HEAD/Range for players, ffprobe and ffmpeg. File bytes use authenticated direct Mesh TLS; no file copy. Loopback HTTP must bypass HTTP_PROXY. Offline sources return per-entry errors.',
         'refresh' =>
-          'Read authenticated peer catalogues now and update the persistent merged projection. Offline catalogues remain visible with online=false and playable=false. Joining Mesh grants peer access.',
+          'Read authenticated peer catalogues now and update the persistent merged projection. Reachability, catalogue freshness and optional artwork status are independent. Keeps the last complete catalogue on failure; a reachable owner can still serve its files. Use media.library.status to inspect a running refresh without waiting or starting another refresh.',
+        'status' =>
+          'Read cached observations immediately without network requests, database work or waiting for a refresh. Reports ownerDeviceId, refreshInProgress and each peer\'s reachability, catalogueFreshness, version, lastAttemptAt/lastSuccessAt, typed error and artwork stages. observedAt is the time these observations were read, not proof that the device is reachable now. Unknown stays unknown; this is not a health probe.',
         _ =>
           'Record observed progress (0..1, including resets) for merged/local episode IDs in a batch. Optional positionMs/durationMs are observations. Latest timestamp and device-ID tie break wins across Mesh peers; progress is retained offline and synchronized when reachable.'
       },
       effect: operation == 'progress' ? Effect.write : Effect.read,
-      input: operation == 'refresh'
+      input: operation == 'refresh' || operation == 'status'
           ? const ObjectSchema({})
           : operation == 'readable'
               ? const ObjectSchema(
@@ -113,6 +117,9 @@ final class _LibraryAction extends Action<MeshJson, MeshJson> {
   MeshJson decodeInput(JsonMap input) => MeshJson(input);
   @override
   Future<Outcome<MeshJson>> run(MeshJson input, Invocation invocation) async {
+    if (operation == 'status') {
+      return Completed(MeshJson(library.refreshStatus));
+    }
     if (operation == 'refresh') {
       await library.refresh();
       return Completed(MeshJson({'works': (await library.library()).length,
