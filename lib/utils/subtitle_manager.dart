@@ -428,12 +428,18 @@ class SubtitleManager extends ChangeNotifier {
     }
   }
 
+  /// 外挂字幕激活状态变化（挂载、移除、清除、切换）后回调。每个改变激活
+  /// 状态的入口最后都会走 [onSubtitleTrackChanged]，在这里统一通知，
+  /// VideoPlayerState 借此让内核 sub-visibility 跟随整块字幕模式。
+  VoidCallback? onExternalSubtitleActivationChanged;
+
   // 当字幕轨道改变时调用
   void onSubtitleTrackChanged() {
     final subtitlePath = getActiveExternalSubtitlePath();
     if (subtitlePath != null) {
       preloadSubtitleFile(subtitlePath);
     }
+    onExternalSubtitleActivationChanged?.call();
   }
 
   // 设置当前外部字幕路径
@@ -1027,6 +1033,21 @@ class SubtitleManager extends ChangeNotifier {
   /// 该外挂字幕是否走 App 叠层渲染（false = 内核轨，如 libmpv 的 ASS/SSA）
   bool externalSubtitleRenderedInApp(String path) =>
       _shouldRenderExternalSubtitleInApp(path);
+
+  /// Whether the currently active external subtitle is a kernel-track
+  /// ASS/SSA (rendered by libass with script styles under libmpv).
+  ///
+  /// The whole-block embedded subtitle mode must step aside for it: writing
+  /// sub-visibility=no stops libass rendering and sub-text only exposes
+  /// plain text, which strips the script's positioning and colors (colored
+  /// \pos annotations collapse into white centered text).
+  bool isKernelRenderedExternalAssActive() {
+    final path = getActiveExternalSubtitlePath();
+    if (path == null || path.isEmpty) return false;
+    if (_shouldRenderExternalSubtitleInApp(path)) return false;
+    final ext = p.extension(path).toLowerCase();
+    return ext == '.ass' || ext == '.ssa';
+  }
 
   bool shouldRenderCurrentExternalSubtitleInApp() {
     // 多字幕分块渲染：以激活路径集合为准——取消其中一条不能让
