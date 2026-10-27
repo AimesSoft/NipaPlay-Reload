@@ -144,13 +144,55 @@ yay -S nipaplay-reload
 ebuild gentoo/media-video/nipaplay-bin/nipaplay-bin-1.8.11.ebuild merge
 ```
 
-## NipaPlay Next（开发者预览）
 
-NipaPlay Classic 是当前稳定版本。NipaPlay Next 2.0 处于开发者预览阶段，面向开发与测试。
+## NipaPlay Next · Developer Preview
 
-Next 引入梨花：Agent 根据用户意图查询实际状态，并通过 NipaPlay 的能力执行媒体整理、下载和播放等任务，结果呈现在媒体库与播放器中。个人 harness 仓库保存可扩展的工具与记忆；Mesh 支持跨设备使用这些能力。
+> [!CAUTION]
+> **⚠️ 高风险实验性软件 · 仅供具备相关技术经验的用户测试**
+>
+> NipaPlay Next 2.0 是一项探索 Agentic Software 的
+> 实验性项目，目前不面向普通消费者。
+>
+> Next 引入具有完整用户级系统权限的 AI Agent。
+> 启用后，Agent 可以在当前账户权限范围内：
+>
+> - 读取、修改、覆盖和删除媒体库之外的文件；
+> - 执行程序、访问网络及使用已有账号登录状态；
+> - 通过 Mesh 调用其他设备的能力，并在额外授权后执行远程程序。
+>
+> Agent 可能因模型误判、软件缺陷或外部恶意内容作出错误操作。
+> **这些操作可能造成不可恢复的数据丢失、隐私泄露或其他损失，
+> 且不一定每次执行前都会要求用户确认。**
+>
+> **我们强烈建议仅在隔离的测试环境中使用，
+> 不要在存有唯一重要数据的主力电脑或生产环境中启用。**
+>
+> 如果你不具备必要的系统管理和数据恢复能力，
+> 请使用稳定的 **NipaPlay Classic**。
 
-[Next 文档](https://github.com/AimesSoft/nipaplay-reload/tree/next/docs/next) · [预发布版本](https://github.com/AimesSoft/nipaplay-reload/releases)
+### 关于 NipaPlay Next
+
+NipaPlay Next 探索一种不同的软件交互方式：
+
+用户通过自然语言表达意图，AI Agent 根据实际环境
+查询信息、选择工具并执行操作，执行结果直接呈现在
+媒体库、播放器、书架和其他图形界面中。
+
+Next 还引入个人 Git Harness、跨设备 Mesh、
+可扩展的 Agent 工具及持久任务系统。
+
+这是一次关于 Agentic Native Software 的公开实验，
+其行为、可靠性和安全边界仍在持续研究和验证中。
+
+**NipaPlay Classic 仍然是推荐给普通用户的稳定版本。**
+
+### 参与开发者预览
+
+- [Alpha 1 发行说明](https://github.com/AimesSoft/NipaPlay-Reload/releases/tag/v2.0.0-alpha.1)
+- [快速开始](https://github.com/AimesSoft/NipaPlay-Reload/blob/next/docs/next/QUICKSTART.md)
+- [数据与恢复](https://github.com/AimesSoft/NipaPlay-Reload/blob/next/docs/next/DATA_AND_RECOVERY.md)
+- [已知问题](https://github.com/AimesSoft/NipaPlay-Reload/blob/next/docs/next/KNOWN_ISSUES.md)
+- [技术架构](https://github.com/AimesSoft/NipaPlay-Reload/blob/next/docs/next/ARCHITECTURE.md)
 
 ## 功能列表
 
