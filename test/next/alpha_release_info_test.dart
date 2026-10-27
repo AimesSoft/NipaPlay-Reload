@@ -18,7 +18,7 @@ void main() {
         dartVersion: '3.12',
         mode: 'Release');
     expect(facts['应用版本'], '2.0.0-alpha.1');
-    expect(facts['系统版本号'], '2.0.0.1');
+    expect(facts['安装包版本'], '2.0.0.1');
     expect(facts['源码状态'], '包含本地修改');
     expect(facts['Flutter'], '未提供');
     final text = UiAbout(facts: facts).diagnosticsText;

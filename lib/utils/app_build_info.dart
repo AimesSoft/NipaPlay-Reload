@@ -46,7 +46,7 @@ Map<String, String> appBuildInfoFacts(Map<String, Object?> source,
     // suffix. Retain the source's SemVer separately from that native value.
     '应用版本': value('app_version') ?? nativeVersion,
     '构建号': buildNumber.isEmpty ? '未提供' : buildNumber,
-    '系统版本号': nativeVersion,
+    '安装包版本': nativeVersion,
     '构建模式': mode,
     '系统': '$os · $osVersion',
     '运行架构': abi,

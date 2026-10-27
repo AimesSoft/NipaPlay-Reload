@@ -426,7 +426,7 @@ class AboutSectionState extends State<AboutSection> {
           ),
           for (final entry in about.facts.entries)
             Padding(
-              padding: const EdgeInsets.symmetric(vertical: 9),
+              padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 9),
               child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
                 SizedBox(
                     width: 108,
