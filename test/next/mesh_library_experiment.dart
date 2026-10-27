@@ -247,6 +247,38 @@ Future<void> x47LibraryExperiment(_Rig rig) async {
   expect(
       await a.db.query('ui_cache', where: 'id=?', whereArgs: ['mesh:progress']),
       before);
+  final sourceRequest = source.libraryRequest!;
+  for (final malformed in [false, true]) {
+    source.libraryRequest = (method, input, peer) async {
+      if (method == 'mesh/library/snapshot') {
+        if (!malformed) {
+          throw const Failure(FailureCode.conflict, 'Catalogue not ready.');
+        }
+        return {
+          'version': 'bad-catalogue',
+          'encoding': 'json-base64-v1',
+          'data': 'invalid-base64!',
+          'totalBytes': 1,
+          'next': null
+        };
+      }
+      return sourceRequest(method, input, peer);
+    };
+    await a.meshLibrary!.refresh();
+    final status = (a.meshLibrary!.refreshStatus['peers'] as List)
+        .cast<Map>()
+        .singleWhere((p) => p['deviceId'] == source.identity!.deviceId);
+    expect(status['online'], true);
+    expect(status['error'], isNotNull);
+    expect((await a.meshLibrary!.readable(eps[3].episodeId))['url'], isNotNull);
+  }
+  source.libraryRequest = sourceRequest;
+  await a.meshLibrary!.refresh();
+  final recovered = (a.meshLibrary!.refreshStatus['peers'] as List)
+      .cast<Map>()
+      .singleWhere((p) => p['deviceId'] == source.identity!.deviceId);
+  expect(recovered['online'], true);
+  expect(recovered['error'], isNull);
   await b.meshLibrary!.close();
   await source.close();
   rig.nodes.remove(source);

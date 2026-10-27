@@ -598,7 +598,9 @@ void main() {
     await File('${f.media.path}/notes.txt').writeAsString('not video');
     final input = {'root': f.media.path, 'requestId': 'infrastructure'};
     final scan = await f.call('media.library.scan', input);
-    expect(await f.call('media.library.scan', input), scan);
+    final repeated = await f.call('media.library.scan', input);
+    // The task may advance between reads, but the request must not enqueue twice.
+    expect((repeated['job'] as Map)['jobId'], (scan['job'] as Map)['jobId']);
     final job = await waitForJob(
         f.engine, (scan['job'] as Map)['jobId'], JobState.succeeded);
     expect(job.receipt!.details['indexed'], 1);

@@ -211,9 +211,10 @@ final class MeshLibrary {
           _setOnline(id, true);
           _peerErrors.remove(id);
         } on Failure catch (error) {
-          _setOnline(id, false);
-          _peerErrors[id] = error.toJson();
-          lastError = error.message;
+          await _catalogueFailed(id, error);
+        } on FormatException catch (error) {
+          await _catalogueFailed(id, Failure(FailureCode.invalidInput,
+              'Invalid peer catalogue: ${error.message}'));
         }
       }
     } else {
@@ -223,6 +224,22 @@ final class MeshLibrary {
     }
     await prepareIndex();
     if (before != _changeStamp()) ui.notifyLibraryChanged();
+  }
+
+  Future<void> _catalogueFailed(String id, Failure error) async {
+    // Catalogue failures do not establish that the file owner is offline.
+    // Keep the last complete publication usable when a small authenticated
+    // probe still reaches it; a real disconnect continues to disable playback.
+    var reachable = false;
+    try {
+      await mesh.rpc(id, 'mesh/presence', {}, ungated: true);
+      reachable = true;
+    } on Failure {
+      // Both the catalogue and the independent reachability probe failed.
+    }
+    _setOnline(id, reachable);
+    _peerErrors[id] = error.toJson();
+    lastError = error.message;
   }
 
   Future<void> _mergeProgress(Map<String, JsonMap> values) async {

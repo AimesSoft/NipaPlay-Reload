@@ -106,6 +106,24 @@ void main() {
       expect(metadata['sources'], isA<List>());
     }
   });
+  test('byte catalogue publication survives progress changing between pages',
+      () async {
+    await worker.build('wire-snapshot');
+    final first = await worker.call('snapshot', (
+      <String, Object?>{'offset': 0, 'encoding': 'json-base64-v1'},
+      1
+    )) as JsonMap;
+    final retained = await worker.call('snapshot', (
+      <String, Object?>{
+        'offset': 0,
+        'encoding': 'json-base64-v1',
+        'version': first['version']
+      },
+      2
+    )) as JsonMap;
+    expect(retained['version'], first['version']);
+    expect(retained['data'], first['data']);
+  });
   test('background build, SQL query, live host relations and progress persist',
       () async {
     await worker.build('one');

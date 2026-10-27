@@ -69,7 +69,7 @@ final class LibraryProjection {
   final _added = <String, int>{};
   Map<String, List<String>> _historicalIds = {};
   JsonMap _local = {'records': <JsonMap>[]};
-  EncodedLibrarySnapshot? _wireSnapshot;
+  final _wireSnapshots = <String, EncodedLibrarySnapshot>{};
   Map<String, UiWork> _works = {};
   Map<String, List<UiEpisode>> _episodes = {};
   Map<String, String> _aliases = {}, _localTargets = {};
@@ -158,6 +158,20 @@ final class LibraryProjection {
 
   JsonMap page(JsonMap input, int revision) {
     final version = "${_local['version']}:$revision";
+    // Progress can advance while another device downloads a large catalogue.
+    // Finish that immutable publication rather than making every page chase
+    // the playing device's latest progress revision.
+    if (input['encoding'] == librarySnapshotEncoding &&
+        input['version'] is String) {
+      final publication = _wireSnapshots[input['version']];
+      if (publication != null) {
+        final offset = input['offset'];
+        if (offset is! int) {
+          throw const FormatException('Invalid catalogue byte offset.');
+        }
+        return publication.page(offset);
+      }
+    }
     if (input['known'] == version) {
       return {
         'version': version,
@@ -175,14 +189,16 @@ final class LibraryProjection {
         {'kind': 'watch', 'id': entry.key, 'value': entry.value}
     ];
     if (input['encoding'] == librarySnapshotEncoding) {
-      if (_wireSnapshot?.version != version) {
-        _wireSnapshot = EncodedLibrarySnapshot(version, records);
+      final publication = _wireSnapshots.putIfAbsent(version,
+          () => EncodedLibrarySnapshot(version, records));
+      while (_wireSnapshots.length > 4) {
+        _wireSnapshots.remove(_wireSnapshots.keys.first);
       }
       final offset = input['offset'];
       if (offset is! int) {
         throw const FormatException('Invalid catalogue byte offset.');
       }
-      return _wireSnapshot!.page(offset);
+      return publication.page(offset);
     }
     final offset = input['offset'];
     if (offset is! int || offset < 0 || offset > records.length) {
