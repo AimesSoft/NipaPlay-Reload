@@ -1,3 +1,4 @@
+import 'dart:collection';
 import 'dart:convert';
 import 'dart:io';
 
@@ -2004,6 +2005,7 @@ class WebDAVService {
     Set<String>? searchTargets,
     int timeoutSeconds = 30,
     int requestIntervalMs = 100,
+    int maxConcurrency = 3,
     void Function(int searched, int found)? onProgress,
     void Function(WebDAVSearchResult result)? onResultFound,
     bool Function()? onStopRequested,
@@ -2038,24 +2040,24 @@ class WebDAVService {
         actualStartPath = startPath;
     }
 
-    // 递归遍历搜索
-    await _recursiveSearch(
+    // 有界并发遍历搜索：请求内容与串行版完全一致（逐目录 PROPFIND），
+    // 仅通过少量并发重叠在途往返；全局速率仍受 requestIntervalMs 约束。
+    await _searchBreadthFirst(
       connection: normalizedConnection,
       keyword: normalizedKeyword,
-      currentPath: actualStartPath,
       startPath: actualStartPath,
-      currentDepth: 0,
       depthLimit: depthLimit,
       searchTargets: targets,
       results: results,
       startTime: startTime,
       timeoutSeconds: timeoutSeconds,
       requestIntervalMs: requestIntervalMs,
+      maxConcurrency: maxConcurrency,
       onProgress: onProgress,
       onResultFound: onResultFound,
       onStopRequested: onStopRequested,
-      searchedCount: () => searchedCount,
-      foundCount: () => foundCount,
+      getSearchedCount: () => searchedCount,
+      getFoundCount: () => foundCount,
       updateSearchedCount: (count) {
         searchedCount = count;
       },
@@ -2067,121 +2069,124 @@ class WebDAVService {
     return results;
   }
 
-  /// 递归搜索
-  Future<void> _recursiveSearch({
+  /// 有界并发广度优先搜索。
+  ///
+  /// 与旧版串行 DFS 的差异仅在调度：每个目录仍恰好请求一次（visited 去重），
+  /// 相邻请求的发起间隔不小于 requestIntervalMs（旧版是“上一请求返回后再等
+  /// requestIntervalMs”，因此请求速率会高于旧版，这正是提速来源），
+  /// 并发数由 [maxConcurrency]（默认 3）限制。
+  Future<void> _searchBreadthFirst({
     required WebDAVConnection connection,
     required String keyword,
-    required String currentPath,
     required String startPath,
-    required int currentDepth,
     required int depthLimit,
     required Set<String> searchTargets,
     required List<WebDAVSearchResult> results,
     required DateTime startTime,
     required int timeoutSeconds,
     required int requestIntervalMs,
+    required int maxConcurrency,
     required void Function(int, int)? onProgress,
     required void Function(WebDAVSearchResult)? onResultFound,
     required bool Function()? onStopRequested,
-    required int Function() searchedCount,
-    required int Function() foundCount,
+    required int Function() getSearchedCount,
+    required int Function() getFoundCount,
     required void Function(int) updateSearchedCount,
     required void Function(int) updateFoundCount,
   }) async {
-    // 检查停止条件
-    if (onStopRequested != null && onStopRequested()) {
-      return;
-    }
+    final pending = ListQueue<MapEntry<String, int>>()..add(MapEntry(startPath, 0));
+    final visited = <String>{startPath};
+    var inFlight = 0;
+    var nextAllowedRequestAt = DateTime.now();
 
-    // 检查超时
-    if (timeoutSeconds > 0) {
-      final elapsed = DateTime.now().difference(startTime).inSeconds;
-      if (elapsed >= timeoutSeconds) {
-        return;
-      }
-    }
+    bool stopped() => onStopRequested != null && onStopRequested();
+    bool timedOut() =>
+        timeoutSeconds > 0 &&
+        DateTime.now().difference(startTime).inSeconds >= timeoutSeconds;
 
-    // 检查层级限制
-    if (currentDepth > depthLimit) {
-      return;
-    }
+    Future<void> worker() async {
+      while (true) {
+        if (stopped() || timedOut()) return;
 
-    // 添加请求间隔延迟（非首次请求）
-    if (currentDepth > 0 && requestIntervalMs > 0) {
-      await Future.delayed(Duration(milliseconds: requestIntervalMs));
-    }
-
-    try {
-      final files = await listDirectoryAll(connection, currentPath);
-      // listDirectoryAll 是网络调用，返回后立即检查停止信号
-      if (onStopRequested != null && onStopRequested()) {
-        return;
-      }
-      updateSearchedCount(searchedCount() + files.length);
-
-      for (final file in files) {
-        // 检查停止信号
-        if (onStopRequested != null && onStopRequested()) {
-          return;
+        final job = pending.isNotEmpty ? pending.removeFirst() : null;
+        if (job == null) {
+          // 队列暂时为空：若还有在途请求，它们可能继续产出子目录，稍后重试
+          if (inFlight == 0) return;
+          await Future<void>.delayed(const Duration(milliseconds: 5));
+          continue;
         }
 
-        // 检查超时
-        if (timeoutSeconds > 0) {
-          final elapsed = DateTime.now().difference(startTime).inSeconds;
-          if (elapsed >= timeoutSeconds) {
-            return;
+        final path = job.key;
+        final depth = job.value;
+        if (depth > depthLimit) continue;
+
+        // 出队即计入在途：等待限速期间，其他 worker 不能把“队列空且无在途”
+        // 误判为搜索结束而提前退出。
+        inFlight++;
+        try {
+          // 全局请求间隔：在 await 之前同步预留发起时间槽，多个 worker 拿到
+          // 的槽互不重叠，相邻请求的发起间隔不小于 requestIntervalMs。
+          // 首个请求的槽就是当前时刻，无需等待。
+          if (requestIntervalMs > 0) {
+            final now = DateTime.now();
+            final slot = nextAllowedRequestAt.isAfter(now)
+                ? nextAllowedRequestAt
+                : now;
+            nextAllowedRequestAt =
+                slot.add(Duration(milliseconds: requestIntervalMs));
+            final wait = slot.difference(now);
+            if (wait > Duration.zero) {
+              await Future<void>.delayed(wait);
+            }
           }
-        }
+          if (stopped() || timedOut()) return;
 
-        // 匹配搜索目标和关键词
-        if (_matchesSearchTarget(file, searchTargets) &&
-            file.name.toLowerCase().contains(keyword)) {
-          final result = WebDAVSearchResult(
-            file: file,
-            fullPath: file.path,
-            relativePath: _getRelativePath(file.path, startPath),
-            connection: connection,
-          );
-          results.add(result);
-          updateFoundCount(foundCount() + 1);
-          // 实时通知找到的结果
-          onResultFound?.call(result);
-          onProgress?.call(searchedCount(), foundCount());
-          // 结果通知后立即检查停止信号，UI 回调可能已设置 _maxResultsReached
-          if (onStopRequested != null && onStopRequested()) {
-            return;
+          final files = await listDirectoryAll(connection, path);
+          // 网络调用返回后立即检查停止信号
+          if (stopped()) return;
+          updateSearchedCount(getSearchedCount() + files.length);
+
+          for (final file in files) {
+            if (stopped() || timedOut()) return;
+
+            // 匹配搜索目标和关键词
+            if (_matchesSearchTarget(file, searchTargets) &&
+                file.name.toLowerCase().contains(keyword)) {
+              final result = WebDAVSearchResult(
+                file: file,
+                fullPath: file.path,
+                relativePath: _getRelativePath(file.path, startPath),
+                connection: connection,
+              );
+              results.add(result);
+              updateFoundCount(getFoundCount() + 1);
+              // 实时通知找到的结果
+              onResultFound?.call(result);
+              onProgress?.call(getSearchedCount(), getFoundCount());
+              // 结果通知后立即检查停止信号，UI 回调可能已设置 _maxResultsReached
+              if (stopped()) return;
+            }
+
+            // 目录入队（visited 去重，深度限制与旧串行版一致）
+            if (file.isDirectory && depth < depthLimit && visited.add(file.path)) {
+              pending.add(MapEntry(file.path, depth + 1));
+            }
           }
-        }
 
-        // 如果是目录，递归搜索
-        if (file.isDirectory) {
-          await _recursiveSearch(
-            connection: connection,
-            keyword: keyword,
-            currentPath: file.path,
-            startPath: startPath,
-            currentDepth: currentDepth + 1,
-            depthLimit: depthLimit,
-            searchTargets: searchTargets,
-            results: results,
-            startTime: startTime,
-            timeoutSeconds: timeoutSeconds,
-            requestIntervalMs: requestIntervalMs,
-            onProgress: onProgress,
-            onResultFound: onResultFound,
-            onStopRequested: onStopRequested,
-            searchedCount: searchedCount,
-            foundCount: foundCount,
-            updateSearchedCount: updateSearchedCount,
-            updateFoundCount: updateFoundCount,
-          );
+          onProgress?.call(getSearchedCount(), getFoundCount());
+        } catch (e) {
+          debugPrint('[WebDAV] 搜索目录失败: $path - $e');
+        } finally {
+          inFlight--;
         }
       }
-
-      onProgress?.call(searchedCount(), foundCount());
-    } catch (e) {
-      debugPrint('[WebDAV] 搜索目录失败: $currentPath - $e');
     }
+
+    final concurrency =
+        maxConcurrency < 1 ? 1 : (maxConcurrency > 8 ? 8 : maxConcurrency);
+    await Future.wait(
+      List.generate(concurrency, (_) => worker(), growable: false),
+    );
   }
 
   /// 检查文件是否匹配搜索目标

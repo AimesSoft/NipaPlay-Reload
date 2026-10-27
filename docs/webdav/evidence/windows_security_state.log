@@ -1,0 +1,11 @@
+== Get-NetFirewallApplicationFilter -Program '*nipaplay*' ==
+0
+== netsh interface ipv4 show excludedportrange protocol=udp ==
+
+协议 udp 端口排除范围
+
+开始端口    结束端口      
+----------    --------      
+
+* - 管理的端口排除。
+
