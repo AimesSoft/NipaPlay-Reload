@@ -1,5 +1,6 @@
 // Export all necessary enums, data models, and the abstract interface
 export './player_enums.dart' show PlayerPlaybackState, PlayerMediaType;
+export './playback_ready_gate.dart';
 export './player_data_models.dart';
 export './abstract_player.dart'
     show
