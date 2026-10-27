@@ -430,11 +430,16 @@ extension VideoPlayerStateNavigation on VideoPlayerState {
       );
     }
 
-    final actualPlayUrl = episode.actualPlayUrl ??
-        (MediaSourceUtils.isNewWebDavPath(episode.videoPath) ||
-                MediaSourceUtils.isNewSmbPath(episode.videoPath)
-            ? MediaSourceUtils.resolveRemotePathToUrl(episode.videoPath)
-            : null);
+    String? actualPlayUrl;
+    if (MediaSourceUtils.isNewWebDavPath(episode.videoPath)) {
+      actualPlayUrl = episode.actualPlayUrl ??
+          await MediaSourceUtils.resolveWebDavPathToUrlInitialized(
+            episode.videoPath,
+          );
+    } else if (MediaSourceUtils.isNewSmbPath(episode.videoPath)) {
+      actualPlayUrl = episode.actualPlayUrl ??
+          MediaSourceUtils.resolveSmbPathToUrl(episode.videoPath);
+    }
 
     // 当 historyItem 未匹配到番剧（animeId 为空）但当前播放上下文已识别时，
     // 将上下文的番剧名写回 historyItem。否则 initializePlayer 会优先读取

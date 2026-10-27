@@ -35,7 +35,7 @@ Future<String?> resolveExternalPlayerMediaPath(PlayableItem item) async {
 
   if (MediaSourceUtils.isNewWebDavPath(finalPath)) {
     await WebDAVService.instance.initialize();
-    return MediaSourceUtils.resolveWebDavPathToUrl(finalPath);
+    return MediaSourceUtils.resolveWebDavPathToUrlInitialized(finalPath);
   }
   if (MediaSourceUtils.isNewSmbPath(finalPath)) {
     await SMBProxyService.instance.initialize();

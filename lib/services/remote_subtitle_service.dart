@@ -15,6 +15,7 @@ import 'package:nipaplay/services/dandanplay_remote_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:nipaplay/utils/player_event_log.dart';
 import 'package:nipaplay/utils/media_source_utils.dart';
+import 'package:nipaplay/utils/webdav_http_auth.dart';
 import 'package:nipaplay/utils/storage_service.dart';
 import 'package:nipaplay/utils/subtitle_file_utils.dart';
 
@@ -1811,38 +1812,35 @@ class RemoteSubtitleService {
       WebDavRemoteSubtitleCandidate candidate, File destination) async {
     final rawUrl = WebDAVService.instance
         .getFileUrl(candidate.connection, candidate.remotePath);
-    final rawUri = Uri.parse(rawUrl);
-    final sanitized = rawUri.replace(userInfo: '');
 
-    final headers = <String, String>{
-      'user-agent': 'NipaPlay',
-      'accept': '*/*',
-    };
+    final auth = WebDavChallengeAuth(
+      username: candidate.connection.username,
+      password: candidate.connection.password,
+    );
 
-    final hasAuth = candidate.connection.username.isNotEmpty ||
-        candidate.connection.password.isNotEmpty;
-    if (hasAuth) {
-      final credentials =
-          '${candidate.connection.username}:${candidate.connection.password}';
-      headers['authorization'] =
-          'Basic ${base64Encode(utf8.encode(credentials))}';
-    }
-
+    // 认证头不能放进 BaseOptions：Dio 会把默认头合并到每一跳，跨源重定向
+    // 时就会把凭证带给目标主机。认证与重定向都由 webDavAuthenticatedGet 处理。
     final dio = Dio(
       BaseOptions(
         connectTimeout: const Duration(milliseconds: 15000),
         receiveTimeout: const Duration(milliseconds: 45000),
         sendTimeout: const Duration(milliseconds: 15000),
-        followRedirects: true,
-        responseType: ResponseType.bytes,
-        headers: headers,
       ),
     );
 
-    final resp = await dio.get<List<int>>(sanitized.toString());
+    final resp = await webDavAuthenticatedGet(
+      dio,
+      Uri.parse(rawUrl),
+      auth,
+      headers: const {'user-agent': 'NipaPlay', 'accept': '*/*'},
+    );
+
     final status = resp.statusCode ?? 0;
     if (status != 200 && status != 206) {
-      throw Exception('WebDAV 下载失败 (HTTP $status)');
+      final message = status == 401 || status == 403
+          ? 'WebDAV 服务器拒绝了提供的用户名或密码 (HTTP $status)'
+          : 'WebDAV 下载失败 (HTTP $status)';
+      throw Exception(message);
     }
     final data = resp.data;
     if (data == null || data.isEmpty) {
