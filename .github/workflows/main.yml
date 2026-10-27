@@ -36,13 +36,25 @@ jobs:
       triggered: ${{ steps.check.outputs.triggered }}
       release_title: ${{ steps.check.outputs.release_title }}
       prerelease: ${{ steps.check.outputs.prerelease }}
+      next_preview: ${{ steps.check.outputs.next_preview }}
+      version: ${{ steps.check.outputs.version }}
     steps:
+      - uses: actions/checkout@v4
       - name: Check release title
         id: check
         env:
           RELEASE_TITLE: ${{ inputs.release_title }}
           REF_NAME: ${{ github.ref_name }}
         run: |
+          set -euo pipefail
+          version="$(awk '/^version:/ {print $2; exit}' pubspec.yaml)"
+          test -n "$version"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          if [[ "$REF_NAME" == "next" ]]; then
+            echo "next_preview=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "next_preview=false" >> "$GITHUB_OUTPUT"
+          fi
           if [[ "$RELEASE_TITLE" =~ ^[0-9]{4}\.[0-9]{4}$ ]]; then
             echo "✅ Release title accepted."
             echo "triggered=true" >> $GITHUB_OUTPUT
@@ -66,7 +78,7 @@ jobs:
   Build-Android:
     name: Build Android
     needs: Gatekeeper
-    if: needs.Gatekeeper.outputs.triggered == 'true'
+    if: needs.Gatekeeper.outputs.triggered == 'true' && needs.Gatekeeper.outputs.next_preview != 'true'
     uses: ./.github/workflows/build-android.yml
     secrets:
       SIGNING_KEY: ${{ secrets.SIGNING_KEY }}
@@ -148,7 +160,7 @@ jobs:
   Build-tvOS:
     name: Build Apple TV sideload package
     needs: Gatekeeper
-    if: needs.Gatekeeper.outputs.triggered == 'true'
+    if: needs.Gatekeeper.outputs.triggered == 'true' && needs.Gatekeeper.outputs.next_preview != 'true'
     uses: ./.github/workflows/build-tvos.yml
 
   Publish:
@@ -163,7 +175,7 @@ jobs:
       - Build-Headless
       - Build-HarmonyOS
       - Build-tvOS
-    # A build skipped on purpose (HarmonyOS in a prerelease) does not stop the release; a failed one does.
+    # A build skipped on purpose (Android/tvOS for Next; HarmonyOS in a prerelease) does not stop the release; a failed one does.
     if: ${{ !cancelled() && needs.Gatekeeper.outputs.triggered == 'true' && !contains(needs.*.result, 'failure') && !contains(needs.*.result, 'cancelled') }}
     runs-on: ubuntu-latest
     steps:
@@ -181,6 +193,7 @@ jobs:
         run: ls -R /tmp/artifacts
 
       - name: Generate Changelog with AI
+        if: needs.Gatekeeper.outputs.next_preview != 'true'
         id: ai_changelog
         env:
           GITHUB_TOKEN: ${{ secrets.RELEASE_GITHUB_TOKEN || github.token }}
@@ -432,6 +445,17 @@ jobs:
             : > release_notes.md
           fi
 
+      - name: Use Next developer preview release notes
+        if: needs.Gatekeeper.outputs.next_preview == 'true'
+        env:
+          RELEASE_REVISION: ${{ github.sha }}
+          RELEASE_VERSION: ${{ needs.Gatekeeper.outputs.version }}
+        run: |
+          set -euo pipefail
+          test -s docs/next/DEVELOPER_PREVIEW.md
+          cp docs/next/DEVELOPER_PREVIEW.md release_notes.md
+          printf '\n构建版本：`%s` · 源码：`%s`\n' "$RELEASE_VERSION" "$RELEASE_REVISION" >> release_notes.md
+
       - name: Upload generated release notes for downstream publishing
         uses: actions/upload-artifact@v4
         with:
@@ -443,14 +467,14 @@ jobs:
       - name: Upload to release
         uses: ncipollo/release-action@v1
         with:
-          tag: v${{ needs.Build-Android.outputs.version }}
-          name: Release v${{ needs.Build-Android.outputs.version }}
+          tag: v${{ needs.Gatekeeper.outputs.version }}
+          name: ${{ needs.Gatekeeper.outputs.next_preview == 'true' && format('NipaPlay Next {0} · Developer Preview', needs.Gatekeeper.outputs.version) || format('Release v{0}', needs.Gatekeeper.outputs.version) }}
           bodyFile: "release_notes.md"
           commit: ${{ github.sha }}
           prerelease: ${{ needs.Gatekeeper.outputs.prerelease == 'true' }}
           makeLatest: ${{ needs.Gatekeeper.outputs.prerelease == 'true' && 'false' || 'legacy' }}
           allowUpdates: true
-          artifacts: /tmp/artifacts/release-Android/*.apk,/tmp/artifacts/release-iOS/*.ipa,/tmp/artifacts/release-macOS-*/*.dmg,/tmp/artifacts/release-macOS-*/*.zip,/tmp/artifacts/release-macOS-*/*.pkg,/tmp/artifacts/release-Windows-x64/*.zip,/tmp/artifacts/release-Windows-x64/*.exe,/tmp/artifacts/release-Windows-x64/*.msix,/tmp/artifacts/release-Linux-amd64/*.deb,/tmp/artifacts/release-Linux-amd64/*.AppImage,/tmp/artifacts/release-Linux-amd64/*.tar.gz,/tmp/artifacts/release-Linux-amd64/*.rpm,/tmp/artifacts/release-Linux-arm64/*.deb,/tmp/artifacts/release-Linux-arm64/*.tar.gz,/tmp/artifacts/release-Linux-arm64/*.rpm,/tmp/artifacts/release-Headless-amd64/*.tar.gz,/tmp/artifacts/release-Headless-arm64/*.tar.gz,/tmp/artifacts/release-tvOS-sideload/*.ipa${{ needs.Gatekeeper.outputs.prerelease != 'true' && ',/tmp/artifacts/release-HarmonyOS-signed/*.hap' || '' }}
+          artifacts: ${{ needs.Gatekeeper.outputs.next_preview != 'true' && '/tmp/artifacts/release-Android/*.apk,' || '' }}/tmp/artifacts/release-iOS/*.ipa,/tmp/artifacts/release-macOS-*/*.dmg,/tmp/artifacts/release-macOS-*/*.zip,/tmp/artifacts/release-macOS-*/*.pkg,/tmp/artifacts/release-Windows-x64/*.zip,/tmp/artifacts/release-Windows-x64/*.exe,/tmp/artifacts/release-Windows-x64/*.msix,/tmp/artifacts/release-Linux-amd64/*.deb,/tmp/artifacts/release-Linux-amd64/*.AppImage,/tmp/artifacts/release-Linux-amd64/*.tar.gz,/tmp/artifacts/release-Linux-amd64/*.rpm,/tmp/artifacts/release-Linux-arm64/*.deb,/tmp/artifacts/release-Linux-arm64/*.tar.gz,/tmp/artifacts/release-Linux-arm64/*.rpm,/tmp/artifacts/release-Headless-amd64/*.tar.gz,/tmp/artifacts/release-Headless-arm64/*.tar.gz${{ needs.Gatekeeper.outputs.next_preview != 'true' && ',/tmp/artifacts/release-tvOS-sideload/*.ipa' || '' }}${{ needs.Gatekeeper.outputs.prerelease != 'true' && ',/tmp/artifacts/release-HarmonyOS-signed/*.hap' || '' }}
           artifactErrorsFailBuild: true
           replacesArtifacts: true
           token: ${{ secrets.RELEASE_GITHUB_TOKEN || github.token }}

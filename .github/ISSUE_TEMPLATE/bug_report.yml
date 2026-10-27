@@ -11,6 +11,8 @@ body:
         - [故障排查文档](https://github.com/AimesSoft/NipaPlay-Reload/blob/main/Documentation/troubleshooting.md)
         - [完整使用文档](https://github.com/AimesSoft/NipaPlay-Reload/blob/main/Documentation/index.md)
 
+        - [Next 开发者预览与已知问题](https://github.com/AimesSoft/NipaPlay-Reload/blob/next/docs/next/KNOWN_ISSUES.md)
+
         如果你能附上日志、截图或录屏，通常会大幅提升排查效率。
 
   - type: checkboxes
@@ -25,6 +27,17 @@ body:
           required: true
         - label: 如果条件允许，我已经在较新版本上再次确认过这个问题
           required: false
+
+  - type: dropdown
+    id: edition
+    attributes:
+      label: 产品版本线
+      options:
+        - Classic
+        - Next 开发者预览
+        - 不确定
+    validations:
+      required: true
 
   - type: dropdown
     id: platform
@@ -82,6 +95,8 @@ body:
         - 播放
         - 弹幕 / 字幕
         - 媒体库
+        - Next Mesh
+        - 梨花 / DSH / 模型
         - Emby
         - Jellyfin
         - WebDAV
@@ -142,6 +157,15 @@ body:
         这里更适合粘贴文本内容，例如日志、报错信息或堆栈。
         如果需要提供截图、录屏或示例文件，请先创建 Issue，再在后续评论中追加上传附件。
       render: shell
+
+  - type: textarea
+    id: next_context
+    attributes:
+      label: Next、Mesh 或 DSH 信息（如适用）
+      description: |
+        Next 请附关于页复制的诊断信息。Mesh 请填写两端版本和诊断、连接方式，以及来源端和播放端的情况。
+        DSH 请填写模型及服务商、相关配置和错误；分享前删除 API 密钥、令牌、个人路径和其他敏感信息。
+      placeholder: 两端版本 / 诊断、网络与来源类型，或模型 / 服务商 / 配置
 
   - type: textarea
     id: extra_context

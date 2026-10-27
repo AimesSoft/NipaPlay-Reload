@@ -33,6 +33,8 @@
 
 ---
 
+> Next 开发者预览的发行范围与 Classic 不同：本次包括 macOS、Windows、Linux、Linux headless 和 iPhone/iPad，不包括 Android、tvOS 和 HarmonyOS。试用前请阅读 [Next 开发者预览文档](docs/next/README.md)。
+
 ## 核心亮点
 
 NipaPlay 不仅仅是一个播放器，更是您的二次元媒体管家：

@@ -1,4 +1,4 @@
-# Next alpha 发布候选
+# Next Alpha 1 发布与候选流程
 
 首版版本号：`2.0.0-alpha.1`，GitHub 标签：`v2.0.0-alpha.1`。
 从 `next` 的同一个已提交 revision 构建。公开发布使用 CI 产物；本地工作目录的
@@ -12,16 +12,20 @@
 | Windows x64 | build-windows.yml | ZIP/安装程序；安装、覆盖更新与防火墙/播放检查 |
 | Linux amd64 / arm64 | build-linux.yml | 流程实际生成的 DEB/AppImage/TAR/RPM；干净系统启动、原生库与播放检查 |
 | iOS / iPadOS | build-ios.yml | 共用 iOS 构建；当前 release-iOS 为未签名 IPA，需要用户自行签名侧载 |
-| Android | build-android.yml | 签名 APK；安装与本地/远端视频检查 |
 | Linux headless amd64 / arm64 | build-headless.yml | AOT + 原生库 TAR；启动、加入组网、目录及 Range 文件读取 |
-| tvOS | build-tvos.yml | 未签名侧载 IPA；Apple TV 实机安装与遥控器验收 |
 
-HarmonyOS 的现有播放器 fork 尚不能编译 Next 接口，本轮候选与现有预发布流程一致跳过。
+本次 Next Developer Preview 不分发 Android、tvOS 或 HarmonyOS；移动端仅包含 iPhone/iPad。HarmonyOS 的现有播放器 fork 尚不能编译 Next 接口。
 iOS/iPadOS 的无签名 IPA 不代表 TestFlight 已准备好。TestFlight 需要独立验证
 签名 archive、合法的 Apple 数字版本/递增构建号、App Store Connect 上传和测试组；
 不要为 alpha 自动提交 App Store 审核。
 
-## 候选构建
+## 本次直接发布
+
+本次用户选择从 `next` 的已提交 revision 运行 `main.yml`，直接构建并公开 GitHub prerelease，版本为 `v2.0.0-alpha.1`，定位为 Developer Preview。`submit_ios_for_review=false`；Next 预发布不分发 Android、tvOS 或 HarmonyOS。流程的成功与各平台产物、实机验收须分别确认；启动工作流不代表发布已成功。
+
+包含 Android/tvOS 的旧运行 [Actions #40560045637](https://github.com/AimesSoft/NipaPlay-Reload/actions/runs/40560045637) 已取消。当前运行请查看 [Build & Release 的 next 分支记录](https://github.com/AimesSoft/NipaPlay-Reload/actions/workflows/main.yml?query=branch%3Anext)，以该运行的 SHA 为发行源码。CI 将使用 [DEVELOPER_PREVIEW.md](DEVELOPER_PREVIEW.md) 作为预发布正文并命名 Developer Preview；完成后核对标签、prerelease 标记和实际附件。
+
+## 可供未来使用的独立候选流程
 
 1. 提交修复、锁定依赖，记录 `next` 的准确 SHA。
 2. 运行 `build-all-manual.yml`，明确选择 `next`；该流程只上传 Actions artifacts。
@@ -32,7 +36,7 @@ iOS/iPadOS 的无签名 IPA 不代表 TestFlight 已准备好。TestFlight 需�
    附安装方式、测试范围、数据目录与已知问题。审核后再将 draft 公开。
    同一候选升级发布时沿用原产物，避免重新构建后失去验收对应关系。
 
-`main.yml` 是直接构建并公开 Release 的现有流程，不用它代替候选验收。
+`main.yml` 是直接构建并公开 Release 的现有流程；直接发布不会自动完成独立候选验收。
 Next 的更新检查查询公开的 2.x+ 预发布版本，按 SemVer 比较 alpha/beta/正式版；
 Classic 继续使用稳定版更新入口。
 

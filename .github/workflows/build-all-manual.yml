@@ -18,6 +18,7 @@ jobs:
   # 并行构建所有平台，fail-fast: false 策略由各子工作流保证
   Build-Android:
     name: Build Android
+    if: github.ref_name != 'next'
     uses: ./.github/workflows/build-android.yml
     secrets:
       SIGNING_KEY: ${{ secrets.SIGNING_KEY }}
@@ -87,6 +88,7 @@ jobs:
 
   Build-tvOS:
     name: Build Apple TV sideload package
+    if: github.ref_name != 'next'
     uses: ./.github/workflows/build-tvos.yml
 
   Candidate-Manifest:
