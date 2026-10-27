@@ -272,7 +272,10 @@ void main() {
   });
 
   test('App Store existing-build publishing remains non-interactive', () {
-    final workflow = File('.github/workflows/main.yml').readAsStringSync();
+    final source = File('.github/workflows/main.yml').readAsStringSync();
+    // TestFlight has a separate upload-only path; inspect the two App Store
+    // delivery jobs here, including reuse of an existing signed artifact.
+    final workflow = source.substring(source.indexOf('  Publish-iOS-App-Store:'));
 
     expect('--skip_binary_upload true'.allMatches(workflow).length, 2);
     expect('mkdir -p metadata'.allMatches(workflow).length, 2);

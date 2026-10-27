@@ -17,9 +17,9 @@
 | macOS / Windows | 主要验证平台，提供完整桌面体验。 |
 | Linux | 实验性桌面构建；环境兼容性和实机体验仍需反馈。 |
 | Linux headless | 实验性无界面宿主，可作为 Mesh 媒体来源和运行环境；参见 [headless 指南](https://github.com/AimesSoft/NipaPlay-Reload/blob/next/docs/next/HEADLESS.md)。 |
-| iPad / iOS | 实验性远程 Nipa 身体：提供界面、播放器和 Mesh，通过其他设备上的 Nipa 工作；不启动本地 Agent 或对话宿主。IPA 需自行签名侧载。 |
+| iPad / iOS | 实验性远程 Nipa 身体：提供界面、播放器和 Mesh，通过其他设备上的 Nipa 工作；不启动本地 Agent 或对话宿主。计划上传 TestFlight；GitHub 无签名 IPA 仍需自行签名侧载。 |
 
-本次不分发 Android、tvOS 或 HarmonyOS；移动端仅包含 iPhone/iPad。iOS/iPadOS 侧载包不代表 TestFlight 已就绪。可用文件以实际 Release 附件为准。
+本次不分发 Android、tvOS 或 HarmonyOS；移动端仅包含 iPhone/iPad。TestFlight 上传、Apple 处理及测试组状态以实际结果为准；尚不承诺公开邀请或外部 Beta 审核完成。可用文件以实际 Release 附件为准。
 
 ## 开始使用
 

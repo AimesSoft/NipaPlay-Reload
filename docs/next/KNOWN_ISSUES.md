@@ -6,7 +6,7 @@
 - **Mesh 网络**：目前按直连使用，双方需要网络可达；不承诺 NAT 穿透或中继。真实切网、睡眠恢复和长时间播放尚缺本轮验收。遇到问题请记录两端版本、诊断、网络和来源类型。
 - **作品资料**：支持完整字段不等于每个来源都有完整资料；演员、评分等缺项可能来自来源数据。
 - **DSH 高级配置**：配置格式及部分预算会校验，但原生插件参数仍可能在运行器重启时失败，任意插件组合不保证可用。详见 [DSH 高级配置](DSH_ADVANCED_CONFIG.md)。请勿公开密钥。
-- **平台覆盖**：macOS 和 Windows 是主要验证平台；其余构建为实验性。iPhone/iPad 需要自行签名侧载；本次不分发 Android、tvOS 或 HarmonyOS。构建通过不等同于实机通过。
+- **平台覆盖**：macOS 和 Windows 是主要验证平台；其余构建为实验性。iPhone/iPad 计划上传 TestFlight，上传和 Apple 处理及测试组状态待确认；GitHub 无签名 IPA 需自行签名侧载。尚不承诺公开邀请或外部 Beta 审核完成；本次不分发 Android、tvOS 或 HarmonyOS。构建通过不等同于实机通过。
 - **本轮验证**：已安装的 Mac/Windows 实机包是 `45764aef1`、构建 `2026102802`；`82e7c3d17` 的 DSH 高级配置 61 项测试未代表该 revision 已编译安装。历史 54 项或其他 411 项测试不能作为本次完整回归的证据。
 
 提交 [Bug 报告](https://github.com/AimesSoft/NipaPlay-Reload/issues/new?template=bug_report.yml) 时，请附系统、版本、复现步骤和关于页复制的诊断信息。涉及 Mesh 时提供两端信息，涉及 DSH 时提供模型和服务商；公开前移除密钥、令牌及个人信息。

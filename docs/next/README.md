@@ -1,6 +1,6 @@
 # NipaPlay Next 开发者预览文档
 
-Next `v2.0.0-alpha.1` 是 Developer Preview：功能和数据格式仍可能变化，请先备份重要数据。 本次发行范围为 macOS、Windows、Linux、Linux headless 和 iPhone/iPad；Android、tvOS 和 HarmonyOS 不在本次发行范围。构建成功不等于对应设备已经实机验收；发行页面和关于页中的版本、构建号与提交是反馈时的依据。
+Next `v2.0.0-alpha.1` 是 Developer Preview：功能和数据格式仍可能变化，请先备份重要数据。 本次发行范围为 macOS、Windows、Linux、Linux headless 和 iPhone/iPad；Android、tvOS 和 HarmonyOS 不在本次发行范围。 iPhone/iPad 计划上传 TestFlight，但上传、Apple 处理及外部测试邀请尚未确认；安装方式以发行页公布的状态为准。构建成功不等于对应设备已经实机验收；发行页面和关于页中的版本、构建号与提交是反馈时的依据。
 
 ## 使用者
 

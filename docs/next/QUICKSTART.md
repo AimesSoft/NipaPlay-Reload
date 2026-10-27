@@ -1,6 +1,6 @@
 # 快速开始
 
-这是开发者预览版。先阅读[数据与恢复](DATA_AND_RECOVERY.md)，并保留现有数据的备份。安装对应平台的 GitHub prerelease 产物；具体文件和签名状态以发行页为准。本次预览发行范围为 macOS、Windows、Linux、Linux headless 和 iPhone/iPad；Android、tvOS 和 HarmonyOS 不在本次发行范围。iOS/iPadOS 的未签名 IPA 需要自行签名侧载，并非 App Store 或 TestFlight 发布。构建通过不代表所有平台已实机验证。
+这是开发者预览版。先阅读[数据与恢复](DATA_AND_RECOVERY.md)，并保留现有数据的备份。安装对应平台的 GitHub prerelease 产物；具体文件和签名状态以发行页为准。本次预览发行范围为 macOS、Windows、Linux、Linux headless 和 iPhone/iPad；Android、tvOS 和 HarmonyOS 不在本次发行范围。iPhone/iPad 计划上传 TestFlight；目前尚未确认上传成功、Apple 处理完成或外部测试组邀请。若发行页公布 TestFlight 邀请，可按邀请加入；没有邀请时，可使用 GitHub 上的未签名 IPA 自行签名侧载。构建通过不代表所有平台已实机验证。
 
 ## 从 Classic 进入 Next
 

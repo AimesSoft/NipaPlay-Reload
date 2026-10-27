@@ -12,6 +12,11 @@ on:
         required: true
         default: true
         type: boolean
+      upload_ios_testflight:
+        description: 'Upload the Next iPhone/iPad build to TestFlight (no App Store review or external distribution)'
+        required: true
+        default: false
+        type: boolean
       publish_ios_from_run_id:
         description: 'Publish iOS from artifacts in an existing workflow run; skips all builds when set'
         required: false
@@ -92,7 +97,7 @@ jobs:
     if: needs.Gatekeeper.outputs.triggered == 'true'
     uses: ./.github/workflows/build-ios.yml
     with:
-      upload-to-app-store: ${{ needs.Gatekeeper.outputs.prerelease != 'true' }}
+      upload-to-app-store: ${{ needs.Gatekeeper.outputs.prerelease != 'true' || (needs.Gatekeeper.outputs.next_preview == 'true' && inputs.upload_ios_testflight) }}
     secrets:
       IOS_DISTRIBUTION_CERTIFICATE_BASE64: ${{ secrets.IOS_DISTRIBUTION_CERTIFICATE_BASE64 }}
       IOS_DISTRIBUTION_CERTIFICATE_PASSWORD: ${{ secrets.IOS_DISTRIBUTION_CERTIFICATE_PASSWORD }}
@@ -478,6 +483,90 @@ jobs:
           artifactErrorsFailBuild: true
           replacesArtifacts: true
           token: ${{ secrets.RELEASE_GITHUB_TOKEN || github.token }}
+
+  Publish-iOS-TestFlight:
+    name: Upload Next iPhone and iPad to TestFlight
+    needs: [Gatekeeper, Build-iOS]
+    if: ${{ !cancelled() && needs.Gatekeeper.outputs.next_preview == 'true' && inputs.upload_ios_testflight && needs.Build-iOS.result == 'success' }}
+    runs-on: macos-26
+    timeout-minutes: 90
+    permissions:
+      contents: read
+    env:
+      APP_BUNDLE_ID: com.aimessoft.nipaplay
+      APP_VERSION: ${{ needs.Build-iOS.outputs.app-store-version }}
+      APP_BUILD_NUMBER: ${{ needs.Build-iOS.outputs.app-store-build-number }}
+      APP_STORE_CONNECT_API_KEY_ID: ${{ secrets.APP_STORE_CONNECT_API_KEY_ID }}
+      APP_STORE_CONNECT_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
+      FASTLANE_SKIP_UPDATE_CHECK: "1"
+      FASTLANE_HIDE_CHANGELOG: "1"
+      FASTLANE_DISABLE_COLORS: "1"
+    steps:
+      - uses: actions/checkout@v4
+      - name: Download signed iOS IPA
+        uses: actions/download-artifact@v4
+        with:
+          name: ${{ needs.Build-iOS.outputs.app-store-artifact-name }}
+          path: ${{ runner.temp }}/testflight-ipa
+      - uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: '3.3'
+      - name: Install fastlane
+        run: gem install fastlane --version 2.237.0 --no-document
+      - name: Prepare TestFlight upload
+        shell: bash
+        env:
+          APP_STORE_CONNECT_API_PRIVATE_KEY: ${{ secrets.APP_STORE_CONNECT_API_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          for variable_name in APP_VERSION APP_BUILD_NUMBER APP_STORE_CONNECT_API_KEY_ID APP_STORE_CONNECT_ISSUER_ID APP_STORE_CONNECT_API_PRIVATE_KEY; do
+            if [ -z "${!variable_name:-}" ]; then
+              echo "Missing TestFlight configuration: $variable_name" >&2
+              exit 1
+            fi
+          done
+          signed_ipa="$(find "$RUNNER_TEMP/testflight-ipa" -maxdepth 2 -type f -name '*.ipa' -print -quit)"
+          test -n "$signed_ipa"
+          umask 077
+          api_key_path="$RUNNER_TEMP/testflight-api-key.json"
+          jq -n \
+            --arg key_id "$APP_STORE_CONNECT_API_KEY_ID" \
+            --arg issuer_id "$APP_STORE_CONNECT_ISSUER_ID" \
+            --arg key "$APP_STORE_CONNECT_API_PRIVATE_KEY" \
+            '{key_id: $key_id, issuer_id: $issuer_id, key: $key, in_house: false}' > "$api_key_path"
+          echo "APP_STORE_CONNECT_API_KEY_PATH=$api_key_path" >> "$GITHUB_ENV"
+          echo "SIGNED_IPA=$signed_ipa" >> "$GITHUB_ENV"
+      - name: Upload and verify TestFlight processing
+        shell: bash
+        run: |
+          set -euo pipefail
+          set +e
+          ruby .github/workflows/scripts/check-app-store-build.rb \
+            "$APP_STORE_CONNECT_API_KEY_PATH" "$APP_BUNDLE_ID" "$APP_VERSION" "$APP_BUILD_NUMBER"
+          status=$?
+          set -e
+          case "$status" in
+            0) echo "This TestFlight build is already uploaded and valid." ;;
+            10)
+              fastlane pilot upload \
+                --api_key_path "$APP_STORE_CONNECT_API_KEY_PATH" \
+                --ipa "$SIGNED_IPA" \
+                --app_identifier "$APP_BUNDLE_ID" \
+                --skip_submission true \
+                --distribute_external false \
+                --notify_external_testers false \
+                --skip_waiting_for_build_processing false \
+                --wait_processing_timeout_duration 3600
+              ruby .github/workflows/scripts/check-app-store-build.rb \
+                "$APP_STORE_CONNECT_API_KEY_PATH" "$APP_BUNDLE_ID" "$APP_VERSION" "$APP_BUILD_NUMBER"
+              ;;
+            *) exit "$status" ;;
+          esac
+          printf 'TestFlight build **%s (%s)** is uploaded and processed. Test group assignment and public invitations are separate.\n' "$APP_VERSION" "$APP_BUILD_NUMBER" >> "$GITHUB_STEP_SUMMARY"
+      - name: Clean TestFlight credentials
+        if: always()
+        shell: bash
+        run: rm -f "$RUNNER_TEMP/testflight-api-key.json"
 
   Publish-iOS-App-Store:
     name: Publish iOS to App Store Connect

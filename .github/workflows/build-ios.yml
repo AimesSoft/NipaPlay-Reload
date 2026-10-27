@@ -4,7 +4,7 @@ on:
   workflow_call:
     inputs:
       upload-to-app-store:
-        description: '是否构建签名 IPA，供 GitHub Release 发布成功后上传到 App Store Connect'
+        description: '是否构建签名 IPA，供上传到 TestFlight 或 GitHub Release 发布成功后上传到 App Store Connect'
         required: false
         default: false
         type: boolean
@@ -41,7 +41,7 @@ on:
         description: 'App Store 构建号'
         value: ${{ jobs.build.outputs.app-store-build-number }}
       app-store-version:
-        description: 'App Store 版本号（不含 pubspec build metadata）'
+        description: 'Apple 数字版本号（不含 prerelease 或 build metadata）'
         value: ${{ jobs.build.outputs.app-store-version }}
 
 permissions:
@@ -195,7 +195,12 @@ jobs:
           archive_path="$RUNNER_TEMP/NipaPlay.xcarchive"
           export_path="$RUNNER_TEMP/NipaPlay-AppStore"
           export_options="$RUNNER_TEMP/ExportOptions-AppStore.plist"
-          marketing_version="${APP_VERSION%%+*}"
+          # Apple accepts numeric marketing versions, not SemVer prerelease labels.
+          marketing_version="${APP_VERSION%%[-+]*}"
+          if [[ ! "$marketing_version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "Invalid Apple marketing version: $marketing_version" >&2
+            exit 1
+          fi
           build_number="${GITHUB_RUN_NUMBER}.${GITHUB_RUN_ATTEMPT}"
 
           rm -rf "$archive_path" "$export_path" "$export_options"
@@ -246,7 +251,14 @@ jobs:
             exit 1
           fi
 
-          codesign --verify --deep --strict "$archive_path/Products/Applications/Runner.app"
+          app_path="$archive_path/Products/Applications/Runner.app"
+          codesign --verify --deep --strict "$app_path"
+          actual_version="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$app_path/Info.plist")"
+          actual_build="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' "$app_path/Info.plist")"
+          if [[ "$actual_version" != "$marketing_version" || "$actual_build" != "$build_number" ]]; then
+            echo "Archived Apple version/build does not match the requested values." >&2
+            exit 1
+          fi
           echo "ipa-path=$signed_ipa" >> "$GITHUB_OUTPUT"
           echo "build-number=$build_number" >> "$GITHUB_OUTPUT"
           echo "version=$marketing_version" >> "$GITHUB_OUTPUT"
