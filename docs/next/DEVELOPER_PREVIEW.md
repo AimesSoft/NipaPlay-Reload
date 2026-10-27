@@ -1,34 +1,113 @@
 # NipaPlay Next Alpha 1 · Developer Preview
 
-`v2.0.0-alpha.1` 是面向开发者和愿意参与实验、反馈的用户的开发者预览。Next 探索一种以对话为操作入口的媒体体验：Agent 根据实时信息判断，NipaPlay 宿主执行操作并提供验证和回执，海报墙、播放器与弹幕呈现结果。
+这是 NipaPlay Next 的首次公开开发者预览。我们重新组织了媒体库、播放器和个人助手之间的关系：你通过对话表达想做的事，梨花查询信息、选择工具并执行，结果呈现在书架、作品资料、播放器和弹幕里。
 
-每个人的 Git harness 可以保留并逐步发展自己的工具、经验与记忆。它连接 NipaPlay 的领域工具，也可以使用 SQL 查询与整理数据；Mesh 则让同账号设备上的能力和媒体参与工作。具体能力及验证状态仍在演进，请以实际环境和操作结果为准。
+本次预览由 **AimesSoft** 发布，面向开发者、Agent 系统爱好者，以及愿意一起探索这种使用方式的用户。
 
-## 可以探索的场景
+> [!WARNING]
+> **Next 是具有高风险的完整权限 Agent 实验。开启前，请理解你授予的访问范围。**
+>
+> 梨花可以在应用进程及当前用户拥有的权限范围内读写、覆盖和删除文件，运行程序、联网，并使用可访问的账号和登录状态。它的操作范围可以超出 NipaPlay 媒体库；不要将它视为只会回答问题的聊天窗口，也不要假定所有操作都会再次弹窗确认。
+>
+> **风险同样延伸到 Mesh 和内网设备。** 加入组网意味着信任同账号认证设备访问本机开放的能力和应用进程可访问的文件；启用远程程序运行后，其他设备上的 Agent 还可以在本机执行程序。处于同一局域网并不意味着安全，设备认证也不能防止已经受信任的 Agent 作出错误操作。
+>
+> 模型误判、软件缺陷，以及网页、文件名、字幕等外部内容中的恶意指令，都可能引发数据丢失、隐私或凭据泄露、账号操作和额外费用。**请优先使用隔离的测试设备、系统账号和数据副本，保留离线备份，只加入可信设备；不要在存放唯一重要数据或关键业务的环境中直接试用。** 模型服务会接收任务所需的对话与工具结果，请自行选择并了解其数据政策。
 
-- **整理媒体库**：Agent 查询文件和作品候选，决定归属并显式绑定；宿主执行、检查冲突并记录结果，作品资料在界面中呈现。领域工具与 SQL 为不同整理任务提供入口。
-- **跨设备播放**：通过 Mesh 浏览另一台设备提供的媒体，在当前设备播放；来源端可以是桌面或 headless 节点。设备之间需要可达的直连网络。
-- **让个人助手逐步适应你**：与梨花对话，使用 DSH 和配置的模型处理媒体任务；个人 harness 中的工具与经验可以随实际使用演进。
+## 我们希望探索什么
 
-## 平台角色
+整理媒体往往是一连串具体判断：文件是哪一集、几个版本该选哪个、资料应该如何补齐、哪台设备能提供视频、怎样把片库摆成自己喜欢的样子。我们希望用户能够直接表达目标，让 Agent 根据当下的文件、来源和设备状态完成这些工作。
 
-| 平台 | 本次定位 |
-| --- | --- |
-| macOS / Windows | 主要验证平台，提供完整桌面体验。 |
-| Linux | 实验性桌面构建；环境兼容性和实机体验仍需反馈。 |
-| Linux headless | 实验性无界面宿主，可作为 Mesh 媒体来源和运行环境；参见 [headless 指南](https://github.com/AimesSoft/NipaPlay-Reload/blob/next/docs/next/HEADLESS.md)。 |
-| iPad / iOS | 实验性远程 Nipa 身体：提供界面、播放器和 Mesh，通过其他设备上的 Nipa 工作；不启动本地 Agent 或对话宿主。计划上传 TestFlight；GitHub 无签名 IPA 仍需自行签名侧载。 |
+这也是 Next 的分工：**梨花负责理解和判断，NipaPlay 负责具体执行、保存数据和报告结果。** 文件识别工具提供候选，明确的匹配操作建立作品归属；下载、播放和后台任务有可查询的状态，资料修改保留来源，支持的写入提供预览与回执。图形界面承载观看体验，也让对话中的操作有看得见的结果。
 
-本次不分发 Android、tvOS 或 HarmonyOS；移动端仅包含 iPhone/iPad。TestFlight 上传、Apple 处理及测试组状态以实际结果为准；尚不承诺公开邀请或外部 Beta 审核完成。可用文件以实际 Release 附件为准。
+每个人还拥有自己的 **Git harness**——一个保存工具、脚本、偏好和操作经验的个人仓库。梨花可以在实际任务中维护它，复用已有工具、补充脚本，记录适合你的工作方式。经验随着使用积累，你也可以打开文件查看、修改和管理 Git 历史。
 
-## 开始使用
+## Alpha 1 带来了什么
 
-- [Next 文档入口](https://github.com/AimesSoft/NipaPlay-Reload/blob/next/docs/next/README.md) · [快速开始](https://github.com/AimesSoft/NipaPlay-Reload/blob/next/docs/next/QUICKSTART.md) · [用户指南](https://github.com/AimesSoft/NipaPlay-Reload/blob/next/docs/next/USER_GUIDE.md)
-- [技术架构](https://github.com/AimesSoft/NipaPlay-Reload/blob/next/docs/next/ARCHITECTURE.md) · [能力与边界](https://github.com/AimesSoft/NipaPlay-Reload/blob/next/docs/next/CAPABILITIES.md) · [研究纲领](https://github.com/AimesSoft/NipaPlay-Reload/blob/next/docs/next/RESEARCH.md)
-- [数据与恢复](https://github.com/AimesSoft/NipaPlay-Reload/blob/next/docs/next/DATA_AND_RECOVERY.md) · [已知问题](https://github.com/AimesSoft/NipaPlay-Reload/blob/next/docs/next/KNOWN_ISSUES.md) · [DSH 高级配置](https://github.com/AimesSoft/NipaPlay-Reload/blob/next/docs/next/DSH_ADVANCED_CONFIG.md)
+### 独立的 Next 界面与播放器
 
-## 已知限制与反馈
+- 新增首页、媒体库、作品详情、对话和播放界面，将观看内容与梨花的工作结果放在同一套体验中。
+- 首页呈现继续观看、最近播放和自定义书架；作品详情汇集剧集、资料、图片和播放来源。
+- 提供独立播放会话与内核控制，支持续播、定位、音轨和字幕轨道选择，以及本地和 Mesh 远端媒体播放。
+- 保留 Classic。可在设置中切换两套界面，部分设置、观看记录与续播进度继续共用；切换时保存进度并关闭当前播放会话。
 
-这是仍在演进的预览：完整的 Next 产品内备份恢复尚未完成，真实切网、睡眠恢复和长时间播放尚缺本轮验收。请在试用和更新前备份重要数据。元数据完整度取决于来源；Mesh 不承诺穿透或中继；DSH 插件的任意组合不保证可用。各平台的构建与实机验证状态见[已知问题](https://github.com/AimesSoft/NipaPlay-Reload/blob/next/docs/next/KNOWN_ISSUES.md)。
+### 梨花对话与个人工作环境
 
-请通过 [Bug 报告](https://github.com/AimesSoft/NipaPlay-Reload/issues/new?template=bug_report.yml) 提供版本、系统、复现步骤和关于页复制的诊断信息。Mesh 问题请附两端版本、诊断和连接方式；DSH 问题请附模型、服务商及相关配置。公开提交前请移除密钥、令牌和个人信息。
+- 接入 DeepSeek Harness（DSH）和 Codex 会话运行器。桌面设置提供 DSH 运行环境下载，以及模型服务商、接口地址、模型和 API key 配置。
+- 对话支持流式输出、图片附件、工作过程查看和作品、剧集、任务等结果卡片。
+- 完整历史采用渐进加载，向上翻阅可以继续读取早期回合；DSH 提供上下文压缩，个人记忆另行保存在可查看和编辑的文件中。
+- 开放 DSH 高级配置，包括上下文预算、压缩和插件设置，并提供配置文件编辑入口。
+- 个人 harness 保存工具、记忆和事件脚本；官方种子更新会保留个人修改，遇到合并冲突时报告状态。可通过 hooks 和定时程序安排后续工作。
+
+### 媒体身份、资料与整理
+
+- 建立作品、季、剧集、文件及文件时间范围之间的关系，保存外部平台身份，支持一个文件包含多集等媒体布局。
+- 接入 TMDB、Bangumi、弹弹play 等资料来源，支持搜索、批量获取和导入标题、简介、评分、演职员等信息，并记录资料来源。
+- 提供显式匹配、重新绑定、作品合并、合并预览及符合条件时的撤回工具，方便整理重复作品和错误归属。
+- Next 扫描和下载完成时登记文件事实；媒体身份由明确的匹配操作写入。Classic 已有匹配可通过专门入口导入。
+
+### 可以按你的习惯整理的书架与图片
+
+- 梨花可以建立首页书架，指定其中作品的排列顺序，并选择一部作品作为首页主视觉。
+- 媒体库支持手选分类、按观看状态、类型、年份、评分等条件生成的分类，以及按原始来源浏览；可调整分类顺序、隐藏和恢复原始分类，切换卡片或书架形式。
+- 支持用已有本地图片或图片链接设置作品海报、背景、Logo 和剧集截图，编辑标题与简介，也可以清除覆盖、恢复来源资料。
+
+可以直接试着说：“把这几部按这个顺序放进‘周末想看’，首页大图用其中这一部。”或者：“用我给你的这张图替换它的背景。”
+
+### 弹幕、字幕、下载与后台任务
+
+- 弹幕支持来源搜索、身份绑定、立即准备、本地导入及持久保存。播放时复用已保存内容，按配置补充获取；普通缓存回收与持久弹幕分开管理。
+- 字幕支持导入、来源记录、轨道选择和调整；弹幕提供启用、去重与时间偏移等控制。
+- 下载支持磁力链接、种子和 HTTP 文件，可预览内容、选择文件、查看进度、暂停和继续，并在完成校验后登记文件。
+- 后台任务提供状态、事件、回执和后续通知入口。梨花可以跟进下载或整理任务，并在出现结果后继续工作。
+
+### Mesh：让不同设备参与同一项工作
+
+- 同账号设备可以加入 Mesh，发现彼此、同步媒体目录，并通过直连传输媒体。视频可以留在工作站上，由另一台设备播放。
+- 支持跨设备调用开放的应用能力，也可以将任务交给另一台设备上正在运行的梨花。
+- 每台设备保有自己的数据库、个人仓库和记忆；操作在实际持有数据或能力的设备上执行。
+- iPhone/iPad 提供 Next 界面、播放器和 Mesh，通过桌面或其他宿主上的梨花完成对话与操作。Linux headless 提供适合服务器使用的无界面宿主。
+
+### 面向开发者的能力与诊断
+
+- 应用能力通过 `nipa` 命令行发现和调用；`list`、`describe` 可以查询目标设备当前提供的工具及参数，`--device` 指定 Mesh 设备。
+- 保留本机及跨设备 SQL：查询结构与数据、预演修改、提交、查看回执，以及在满足条件时撤回。领域工具和 SQL 可用于不同粒度的整理任务。
+- 提供任务、设备、来源、网络和播放器诊断，记录操作过程与关联标识，帮助梨花解释失败发生在哪一步。支持回执恢复的写入可以在响应丢失后查询提交结果。
+- [逐项 Action 参考](https://github.com/AimesSoft/NipaPlay-Reload/blob/next/docs/next/development/ACTION_REFERENCE.md)收录 315 个源码动作；[场景指南](https://github.com/AimesSoft/NipaPlay-Reload/blob/next/docs/next/NIPA_CAPABILITIES.md)提供更适合直接提出的请求示例。
+
+### 同步、播放与升级修复
+
+本轮也修复了丰富元数据导致 Mesh 目录或 RPC 响应超限、目录同步失败被误判为设备离线、macOS Erika 打开远端视频时卡住等问题；改进了稳定播放身份与续播顺序、Classic 与 Next 的身份归属衔接、Mac 数据目录迁移和个人 harness 更新时的数据保留。
+
+## 安装与开始使用
+
+Release 附件提供以下版本：
+
+- **macOS**：Apple Silicon、Intel 和 Universal，提供 DMG、PKG 与 ZIP。
+- **Windows x64**：安装程序、ZIP 便携包与 MSIX。
+- **Linux**：amd64 和 arm64 的 DEB、RPM 与 tar.gz；amd64 另提供 AppImage。
+- **Linux headless**：amd64、arm64 的无界面宿主包，见 [Headless 指南](https://github.com/AimesSoft/NipaPlay-Reload/blob/next/docs/next/HEADLESS.md)。
+- **iPhone / iPad**：当前附件为需自行签名侧载的 IPA；TestFlight 分发正在准备，开放信息将在发行页更新。
+
+本次发行不包含 Android、tvOS 和 HarmonyOS。
+
+安装后，在 Classic 的「设置 → 实验室」阅读授权提示并开启 NipaPlay Next，再开启 Next 界面。桌面用户进入「设置 → 梨花」配置运行环境和模型服务，保存并测试连接后即可开始对话。iPhone/iPad 用户先在另一台设备上运行梨花，让两台设备同账号加入 Mesh，再选择远端梨花。
+
+完整步骤见[快速开始](https://github.com/AimesSoft/NipaPlay-Reload/blob/next/docs/next/QUICKSTART.md)。模型服务由用户自行配置，API 使用费用按所选服务商计费。
+
+## 当前范围与已知问题
+
+Alpha 1 以桌面体验和设备直连为重点。Mesh 需要双方地址可达，目前不提供 NAT 穿透或中继；移动端使用远端梨花，本机不运行 Agent。完整的 Next 产品内备份恢复仍在开发，试用前请按[数据与恢复指南](https://github.com/AimesSoft/NipaPlay-Reload/blob/next/docs/next/DATA_AND_RECOVERY.md)保留应用数据和个人 harness 的副本。
+
+持续更新的使用限制见[已知问题](https://github.com/AimesSoft/NipaPlay-Reload/blob/next/docs/next/KNOWN_ISSUES.md)。欢迎提交 [Bug 报告](https://github.com/AimesSoft/NipaPlay-Reload/issues/new?template=bug_report.yml)，附版本、系统、复现步骤和关于页的诊断信息。Mesh 问题请附两端信息；公开内容请移除密钥、令牌及其他个人信息。
+
+## 免责声明
+
+NipaPlay Next 是由 AimesSoft 发布的实验性开发者预览，依据项目 [MIT 许可证](https://github.com/AimesSoft/NipaPlay-Reload/blob/next/LICENSE)按“现状”提供。在适用法律允许的范围内，AimesSoft、作者及贡献者不提供任何明示或默示担保，包括适销性、特定用途适用性及不侵权担保。
+
+用户自行决定是否启用 Agent、授予系统权限、连接模型服务及加入 Mesh，并承担由此产生的风险。在适用法律允许的范围内，AimesSoft、作者及贡献者不对因使用本软件或 Agent 操作产生的数据丢失、文件损坏、隐私或凭据泄露、账号损失、服务费用、业务中断及其他损失承担责任。本声明不排除适用法律规定不得排除或限制的责任；具体许可条款以仓库中的 LICENSE 为准。
+
+---
+
+**NipaPlay Next 主要开发：Shinokawa · AimesSoft**
+
+[文档入口](https://github.com/AimesSoft/NipaPlay-Reload/blob/next/docs/next/README.md) · [能力使用指南](https://github.com/AimesSoft/NipaPlay-Reload/blob/next/docs/next/NIPA_CAPABILITIES.md) · [技术架构](https://github.com/AimesSoft/NipaPlay-Reload/blob/next/docs/next/ARCHITECTURE.md) · [研究纲领](https://github.com/AimesSoft/NipaPlay-Reload/blob/next/docs/next/RESEARCH.md)
