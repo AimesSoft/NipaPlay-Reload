@@ -10,6 +10,7 @@ import 'package:nipa_harness/nipa_harness.dart';
 import 'package:nipaplay/next/agent_endpoint.dart';
 import 'package:nipaplay/next/chat/chat_host.dart';
 import 'package:nipaplay/next/chat/dsh_runtime.dart';
+import 'package:nipaplay/next/settings/dsh_config_store.dart';
 import 'package:nipaplay/next/chat/helpers.dart';
 import 'package:nipaplay/next/chat/memory_stale.dart';
 import 'package:nipaplay/next/chat/model_launch.dart';
@@ -398,6 +399,40 @@ trust_level = "trusted"
       await lab.next((e) => e['method'] == 'turn/completed');
       expect(await hookCalls(), 2);
       expect(jsonEncode(fake.requests.last['input']), contains('ACTIVITY_MARKER_C'));
+    });
+
+    test('user config is effective and external edits reload next turn without losing history', () async {
+      await open([_Rule(when: ['CONFIG_QX'], text: 'configured')]);
+      lab.userConfig = true;
+      final store = DshConfigStore(lab.root);
+      await store.file.writeAsString(jsonEncode({
+        'schema': 1,
+        'model': {'input': ['text'], 'contextWindow': 131072, 'maxTokens': 4096},
+        'provider': {'retryPolicy': {'maxRetries': 0}},
+        'compaction': {'headroomTokens': 16384},
+        'plugins': {'tool-web': {'config': {'fetch': false}}},
+      }));
+      final host = await lab.start();
+      await host.getMainSession();
+      await host.startTurn('CONFIG_QX first');
+      await lab.next((e) => e['method'] == 'turn/completed');
+      expect(fake.requests.last['max_output_tokens'], 4096);
+      expect(fake.probes, 0, reason: 'explicit input declaration skips probing');
+      final before = host.activeDshConfigFingerprint;
+      final doc = jsonDecode(await store.file.readAsString()) as Map;
+      doc['request'] = {'maxTokens': 2048};
+      await store.file.writeAsString(jsonEncode(doc));
+      lab.events.clear();
+      await host.startTurn('CONFIG_QX second');
+      await lab.next((e) => e['method'] == 'turn/completed');
+      expect(fake.requests.last['max_output_tokens'], 2048);
+      expect(jsonEncode(fake.requests.last['input']), contains('CONFIG_QX first'));
+      expect(host.activeDshConfigFingerprint, isNot(before));
+      final active = host.activeDshConfigFingerprint;
+      await store.file.writeAsString('{broken');
+      await expectLater(host.startTurn('blocked'), throwsFormatException);
+      expect(host.available, true);
+      expect(host.activeDshConfigFingerprint, active);
     });
 
     test("the model gets DSH's own prompt and tool descriptions, with 梨花 as its persona", () async {
@@ -959,6 +994,7 @@ final class _Lab {
   late final AgentEndpoint endpoint;
   ChatHost? host;
   Directory? plugins;
+  bool userConfig = false;
   StreamSubscription<ChatMessage>? _subscription;
   final events = <ChatMessage>[];
   HttpOverrides? _overrides;
@@ -1032,7 +1068,8 @@ def redact(text, secrets=()):
         repository: repository,
         labRoot: dir,
         sessions: SessionStore(store.database),
-        modelLaunch: () async => const ModelLaunch(revision: 0),
+        modelLaunch: () async => ModelLaunch(revision: 0,
+          dshConfig: userConfig ? await DshConfigStore(root).load() : null),
         dsh: runtime,
         dshPlugins: plugins ?? Directory('assets/next/agent/dsh'));
     events.clear();

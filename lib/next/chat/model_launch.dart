@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'dsh_runtime.dart';
+import 'dsh_config.dart';
 
 /// A private launch snapshot. Credentials are environment values, never RPC
 /// configuration, process arguments, or public host diagnostics.
@@ -13,7 +14,8 @@ final class ModelLaunch {
       this.provider,
       this.executable,
       this.prepare,
-      this.route});
+      this.route,
+      this.dshConfig});
   final int revision;
   final Directory? home;
   final Map<String, String> environment;
@@ -24,4 +26,5 @@ final class ModelLaunch {
 
   /// For DeepSeek Harness: the model route set up in NipaPlay, key included.
   final DshRoute? route;
+  final DshConfig? dshConfig;
 }

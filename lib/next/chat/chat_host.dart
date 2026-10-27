@@ -111,6 +111,8 @@ final class ChatHost implements ConversationHistory, DelegationChat, GuestChat {
       dsh == null ? repository.path : 'dsh:${repository.path}';
   ModelLaunch? _launch;
   int? get activeModelRevision => _launch?.revision;
+  String? get activeDshConfigFingerprint =>
+      available ? _launch?.dshConfig?.fingerprint : null;
   bool _restarting = false;
   final _rollouts = <String, String>{};
   final _loaded = <String>{};
@@ -384,14 +386,17 @@ final class ChatHost implements ConversationHistory, DelegationChat, GuestChat {
     SecretRedactor.remember(
         const CredentialRef('next_model', 'dsh'), route.key);
     // DSH's read_image hands an image only to a model declared to take one.
-    final imageInput = await probeDshImageInput(
-        route, File('${next.path}/dsh/model-input.json'));
+    final imageInput = _launch?.dshConfig?.model.containsKey('input') == true
+        ? null
+        : await probeDshImageInput(
+            route, File('${next.path}/dsh/model-input.json'));
     final patch = File('${next.path}/dsh/nipa-patch.json');
     final persona = await Future.wait([
       File('${dshPlugins!.path}/persona-prefix.md').readAsString(),
       File('${dshPlugins!.path}/persona-suffix.md').readAsString(),
     ]);
     final rows = dshPatch(
+        config: _launch?.dshConfig,
         route: route.withImageInput(imageInput),
         plugins: dshPlugins!,
         personaPrefix: persona[0].trim(),
@@ -572,6 +577,7 @@ final class ChatHost implements ConversationHistory, DelegationChat, GuestChat {
     if (next == null ||
         next.revision == _launch?.revision &&
             next.executable == _launch?.executable &&
+            next.dshConfig?.fingerprint == _launch?.dshConfig?.fingerprint &&
             available) {
       return;
     }

@@ -409,6 +409,22 @@ void main() {
       await scanSecrets([await database.query('body_changes'), route.piAiConfig]);
     });
 
+    test('DSH settings save and external edits reach launch without a model revision change', () async {
+      await dshSettings.setModel(choice('https://relay.example/v1', key: secret));
+      final before = await dshSettings.launch();
+      final shown = await dshSettings.dshConfig();
+      await dshSettings.saveDshConfig('{"schema":1,"model":{"maxTokens":4096}}', expectedRevision: shown.revision);
+      final after = await dshSettings.launch();
+      expect(after.revision, before.revision);
+      expect(after.dshConfig!.maxTokens, 4096);
+      expect(after.dshConfig!.fingerprint, isNot(before.dshConfig!.fingerprint));
+      await File(shown.path).writeAsString('{"schema":1,"model":{"maxTokens":2048}}');
+      expect((await dshSettings.launch()).dshConfig!.maxTokens, 2048);
+      await File(shown.path).writeAsString('{broken');
+      expect((await dshSettings.dshConfig()).error, isNotNull);
+      await expectLater(dshSettings.launch(), throwsFormatException);
+    });
+
     test('Nipa is not ready until the runtime is there, and says what is missing first',
         () async {
       expect((await dshSettings.model()).problem, '请先填写地址和模型名');

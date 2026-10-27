@@ -12,6 +12,7 @@ import '../widgets/nipa_avatar.dart';
 import '../widgets/progress.dart';
 import '../widgets/segmented.dart';
 import 'controls.dart';
+import 'dsh_config_card.dart';
 import '../../settings/reasoning_effort.dart';
 import 'registry_rows.dart';
 import 'section_accounts.dart';
@@ -1333,6 +1334,9 @@ class NipaSectionState extends State<NipaSection> {
       if (setup != null) _modelCard(setup),
       if (setup?.runtime == UiAgentRuntimeKind.dsh)
         if (_dsh case final dsh?) _dshCard(dsh),
+      if (setup?.runtime == UiAgentRuntimeKind.dsh &&
+          _host is NextHostDshConfigSettings)
+        DshConfigCard(host: _host as NextHostDshConfigSettings),
       if (setup?.runtime != UiAgentRuntimeKind.dsh && runtime != null)
         _runtimeCard(runtime),
       if (files != null)

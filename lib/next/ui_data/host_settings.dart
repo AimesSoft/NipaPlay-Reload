@@ -370,3 +370,22 @@ final class UiMeshChoice {
   final List<String> addresses;
   final int? fileProxyPort;
 }
+
+/// Optional advanced DSH settings, independent of runtime installation.
+abstract interface class NextHostDshConfigSettings {
+  Future<UiDshConfig> dshConfig();
+  Future<void> saveDshConfig(String text, {required String expectedRevision});
+  Future<void> openDshConfig();
+}
+
+final class UiDshConfig {
+  const UiDshConfig(
+      {required this.path,
+      required this.text,
+      required this.revision,
+      this.fingerprint,
+      this.activeFingerprint,
+      this.error});
+  final String path, text, revision;
+  final String? fingerprint, activeFingerprint, error;
+}

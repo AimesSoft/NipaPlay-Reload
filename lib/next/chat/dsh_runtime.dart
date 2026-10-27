@@ -1,6 +1,8 @@
 import 'dart:convert';
 import 'dart:io';
 
+import 'dsh_config.dart';
+
 /// Which runtime Nipa thinks in: DeepSeek Harness or Codex.
 enum AgentRuntimeKind { dsh, codex }
 
@@ -220,13 +222,20 @@ final class DshRoute {
   }
 
   /// The `llm-pi-ai` route configuration: no secret, only the variable name.
-  Map<String, Object?> get piAiConfig => {
+  Map<String, Object?> get piAiConfig => configuredPiAi(null);
+
+  Map<String, Object?> configuredPiAi(DshConfig? config) => {
         'providers': {
           provider: {
             'api': api,
             'baseURL': baseUrl,
             'apiKeyEnv': keyVariable,
-            'retryPolicy': {'mode': 'normal', 'maxRetries': maxRetries ?? 3},
+            ...?config?.provider,
+            'retryPolicy': {
+              'mode': 'normal',
+              'maxRetries': maxRetries ?? 3,
+              ...?config?.provider['retryPolicy'] as Map?
+            },
             'models': [
               {
                 'id': model,
@@ -239,6 +248,8 @@ final class DshRoute {
                     for (final level in {'low', 'medium', 'high', reasoningEffort!})
                       level: level,
                   },
+                ...?config?.model,
+                if (config != null) 'maxTokens': config.maxTokens,
               }
             ],
           }
@@ -394,10 +405,11 @@ List<Map<String, Object?>> dshPatch(
         required String personaSuffix,
         required String harness,
         required String version,
-        bool webSearch = false}) =>
+        bool webSearch = false,
+        DshConfig? config}) =>
     [
       for (final id in dshDisabledRows) {'id': id, 'disabled': true},
-      {'id': 'llm-pi-ai', 'config': route.piAiConfig},
+      {'id': 'llm-pi-ai', 'config': route.configuredPiAi(config)},
       // DSH's own prompt and tool guidance stay; Nipa is its persona.
       {
         'id': 'system-prompt',
@@ -419,6 +431,7 @@ List<Map<String, Object?>> dshPatch(
         'id': 'tool-web',
         'config': {'search': webSearch, 'fetch': true}
       },
+      ...?config?.pluginRows,
       {
         'insert': [
           {
@@ -437,6 +450,8 @@ List<Map<String, Object?>> dshPatch(
               'dshVersion': version,
               if (route.reasoningEffort != null)
                 'reasoningEffort': route.reasoningEffort,
+              if (config != null) 'maxTokens': config.maxTokens,
+              ...?config?.request,
             },
           },
         ]

@@ -18,10 +18,16 @@ import '../runtime/codex_runtime.dart';
 import '../runtime/dsh_install.dart';
 import '../state/change_history.dart';
 import '../ui_data/host_settings.dart';
+import 'dsh_config_store.dart';
 import 'reasoning_effort.dart';
 import 'responses_probe.dart';
 
-final class HostSettingsService implements NextHostSettings, NextHostDeviceSettings, NextHostRuntimeSettings {
+final class HostSettingsService
+    implements
+        NextHostSettings,
+        NextHostDeviceSettings,
+        NextHostRuntimeSettings,
+        NextHostDshConfigSettings {
   HostSettingsService(
       {required this.root,
       required this.vault,
@@ -475,8 +481,25 @@ final class HostSettingsService implements NextHostSettings, NextHostDeviceSetti
         });
   }
 
-  /// DeepSeek Harness reads the model set up here, either wire protocol,
-  /// with the key from the vault. Nothing is written to disk for it.
+  DshConfigStore get _dshConfigStore => DshConfigStore(root);
+  @override
+  Future<UiDshConfig> dshConfig() async {
+    await _writes;
+    return _dshConfigStore.read(
+        activeFingerprint: chat()?.activeDshConfigFingerprint);
+  }
+
+  @override
+  Future<void> saveDshConfig(String text, {required String expectedRevision}) =>
+      _write(() async {
+        await _dshConfigStore.save(text, expectedRevision: expectedRevision);
+        notify();
+      });
+  @override
+  Future<void> openDshConfig() => _write(() => _dshConfigStore.open());
+
+  /// Snapshot the user config and model route before replacing the runtime.
+  /// The primary model key remains in the vault and process environment.
   Future<ModelLaunch> _dshLaunch() async {
     await _writes;
     final value = await _read('model.json');
@@ -488,7 +511,10 @@ final class HostSettingsService implements NextHostSettings, NextHostDeviceSetti
     final url = chatApi
         ? chatBase(_url(value['baseUrl'] as String?))
         : responsesBase(_url(value['baseUrl'] as String?));
+    final config = await _dshConfigStore.load();
+    config.validateTarget(DshRoute.provider, model);
     return ModelLaunch(
+        dshConfig: config,
         revision: value['revision'] as int? ?? 0,
         model: model,
         provider: DshRoute.provider,
