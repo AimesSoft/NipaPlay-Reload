@@ -33,6 +33,10 @@ public:
     Player(int64_t handle)
         : mdk::Player(reinterpret_cast<mdkPlayerAPI*>(handle)) {}
     const shared_ptr<CallbackState> callbacks = make_shared<CallbackState>();
+    // Re-installs the native callbacks that forward to Dart. Another wrapper
+    // around the same native player (the texture's) clears all of them when
+    // it is destroyed, so this runs again after that.
+    function<void()> attach;
 };
 
 static unordered_map<int64_t, shared_ptr<Player>> players;
@@ -88,7 +92,9 @@ FVP_EXPORT void MdkCallbacksRegisterPort(int64_t handle, void* post_c_object, in
     const auto tid = this_thread::get_id();
 
     auto wp = weak_ptr<CallbackState>(player->callbacks);
-    player->onEvent([=](const mdk::MediaEvent& e){
+    auto* raw = player.get();
+    player->attach = [=]{
+    raw->onEvent([=](const mdk::MediaEvent& e){
         auto sp = wp.lock();
         if (!sp)
             return false;
@@ -137,7 +143,7 @@ FVP_EXPORT void MdkCallbacksRegisterPort(int64_t handle, void* post_c_object, in
         return false;
     });
 
-    player->onStateChanged([=](mdk::State s){
+    raw->onStateChanged([=](mdk::State s){
         auto sp = wp.lock();
         if (!sp)
             return;
@@ -194,7 +200,7 @@ FVP_EXPORT void MdkCallbacksRegisterPort(int64_t handle, void* post_c_object, in
         });
     });
 
-    player->onMediaStatus([=](mdk::MediaStatus oldValue, mdk::MediaStatus newValue){
+    raw->onMediaStatus([=](mdk::MediaStatus oldValue, mdk::MediaStatus newValue){
         auto sp = wp.lock();
         if (!sp)
             return false;
@@ -249,7 +255,17 @@ FVP_EXPORT void MdkCallbacksRegisterPort(int64_t handle, void* post_c_object, in
         });
         return p->data[type].mediaStatus.ret;
     });
+    };
+    player->attach();
+}
 
+FVP_EXPORT void MdkCallbacksRearm(int64_t handle)
+{
+    const auto it = players.find(handle);
+    if (it == players.cend() || !it->second->attach) {
+        return;
+    }
+    it->second->attach();
 }
 
 FVP_EXPORT void MdkCallbacksUnregisterPort(int64_t handle)

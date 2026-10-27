@@ -1,13 +1,17 @@
 library video_player_state;
 
 export 'video_aspect_geometry.dart' show VideoAspectMode;
+export 'screenshot_encoding.dart' show ScreenshotFormat;
 
 import 'package:nipaplay/services/playback_position_store.dart';
 import 'package:nipaplay/services/plugin_playback_service.dart';
 import 'package:nipaplay/plugins/url_resolver.dart';
 import 'video_aspect_geometry.dart';
+import 'video_frame_image.dart';
+import 'screenshot_encoding.dart';
 
 import 'package:nipaplay/utils/local_danmaku_file.dart';
+import 'package:nipaplay/utils/danmaku_track_timing.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -27,7 +31,6 @@ import 'package:universal_html/html.dart' as web_html;
 // Added import for subtitle parser
 import 'dart:io';
 import 'dart:async';
-import 'dart:math' as math;
 import 'dart:typed_data';
 import 'dart:ui' as ui;
 import 'package:nipaplay/utils/storage_service.dart';
@@ -520,6 +523,8 @@ int _exactEndStreak = 0;
   bool _screenshotCropLetterbox = true;
   // 视频画面尺寸模式（适应/填充/拉伸/16:9/4:3），默认适应
   VideoAspectMode _videoAspectMode = VideoAspectMode.contain;
+  /// 视频画面尺寸模式（适应/填充/拉伸/16:9/4:3）。
+  VideoAspectMode get videoAspectMode => _videoAspectMode;
   final String _videoAspectModeKey = 'video_aspect_mode';
   // 软解输出颜色格式（空=内核默认），mdk 走 video.decoder 属性
     String _softDecodePixelFormat = '';
@@ -570,6 +575,8 @@ int _exactEndStreak = 0;
   ScreenshotSaveTarget _screenshotSaveTarget = ScreenshotSaveTarget.file;
   final String _screenshotQualityKey = 'screenshot_quality';
   ScreenshotQuality _screenshotQuality = ScreenshotQuality.ultra;
+  final String _screenshotFormatKey = 'screenshot_format';
+  ScreenshotFormat _screenshotFormat = ScreenshotFormat.jpeg;
 
   Duration? _lastSeekPosition; // 添加这个字段来记录最后一次seek的位置
   PlaybackEndAction _playbackEndAction = PlaybackEndAction.autoNext;
@@ -1306,6 +1313,7 @@ int _exactEndStreak = 0;
   String? get screenshotSaveDirectory => _screenshotSaveDirectory;
   ScreenshotSaveTarget get screenshotSaveTarget => _screenshotSaveTarget;
   ScreenshotQuality get screenshotQuality => _screenshotQuality;
+  ScreenshotFormat get screenshotFormat => _screenshotFormat;
   List<Map<String, dynamic>> get danmakuList => _danmakuList;
   int get danmakuListVersion => _danmakuListVersion;
   int get locallySentDanmakuRevision => _locallySentDanmakuRevision;

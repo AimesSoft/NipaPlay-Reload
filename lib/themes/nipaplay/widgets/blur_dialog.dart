@@ -8,6 +8,8 @@ import 'package:provider/provider.dart';
 import 'package:nipaplay/providers/appearance_settings_provider.dart';
 
 class BlurDialog {
+  /// Build dismissing actions with [actionsBuilder] so their context belongs
+  /// to the dialog route, including when the caller uses a nested Navigator.
   static Future<T?> show<T>({
     required BuildContext context,
     required String title,
@@ -15,6 +17,7 @@ class BlurDialog {
     String? content,
     Widget? contentWidget,
     List<Widget>? actions,
+    List<Widget> Function(BuildContext dialogContext)? actionsBuilder,
     Color? backgroundColor,
     bool barrierDismissible = true,
     bool hidePhoneBottomBar = true,
@@ -23,6 +26,7 @@ class BlurDialog {
     double? desktopMaxHeightFactor,
     double phoneHeightRatio = 0.86,
   }) {
+    assert(actions == null || actionsBuilder == null);
     if ((displaySurface ?? AppDisplaySurfaceScope.of(context)) ==
         AppDisplaySurface.phone) {
       return _showPhonePresentation<T>(
@@ -31,6 +35,7 @@ class BlurDialog {
         content: content,
         contentWidget: contentWidget,
         actions: actions,
+        actionsBuilder: actionsBuilder,
         barrierDismissible: barrierDismissible,
         hidePhoneBottomBar: hidePhoneBottomBar,
         phoneBarrierColor: phoneBarrierColor,
@@ -45,6 +50,7 @@ class BlurDialog {
       content: content,
       contentWidget: contentWidget,
       actions: actions,
+      actionsBuilder: actionsBuilder,
       backgroundColor: backgroundColor,
       barrierDismissible: barrierDismissible,
       maxWidth: desktopMaxWidth,
@@ -58,6 +64,7 @@ class BlurDialog {
     String? content,
     Widget? contentWidget,
     List<Widget>? actions,
+    List<Widget> Function(BuildContext dialogContext)? actionsBuilder,
     Color? backgroundColor,
     bool barrierDismissible = true,
     double? maxWidth,
@@ -74,10 +81,9 @@ class BlurDialog {
       barrierDismissible: barrierDismissible,
       child: Builder(
         builder: (BuildContext dialogContext) {
-          final screenSize = MediaQuery.of(dialogContext).size;
+          final screenSize = MediaQuery.sizeOf(dialogContext);
           final dialogWidth =
               maxWidth ?? globals.DialogSizes.getDialogWidth(screenSize.width);
-          final keyboardHeight = MediaQuery.of(dialogContext).viewInsets.bottom;
           final shortestSide = screenSize.shortestSide;
           final bool isRealPhone = globals.isPhone && shortestSide < 600;
           final bool hasTitle = title.isNotEmpty;
@@ -89,7 +95,7 @@ class BlurDialog {
               title: title,
               content: content,
               contentWidget: contentWidget,
-              actions: actions,
+              actions: actionsBuilder?.call(dialogContext) ?? actions,
               includeTitle: hasTitle,
             ),
           );
@@ -101,10 +107,7 @@ class BlurDialog {
                 ? () => Navigator.of(dialogContext).maybePop()
                 : null,
             backgroundColor: backgroundColor,
-            child: SingleChildScrollView(
-              padding: EdgeInsets.only(bottom: keyboardHeight),
-              child: dialogContent,
-            ),
+            child: _KeyboardInsetScrollView(child: dialogContent),
           );
         },
       ),
@@ -117,6 +120,7 @@ class BlurDialog {
     String? content,
     Widget? contentWidget,
     List<Widget>? actions,
+    List<Widget> Function(BuildContext dialogContext)? actionsBuilder,
     bool barrierDismissible = true,
     bool hidePhoneBottomBar = true,
     Color? phoneBarrierColor,
@@ -128,6 +132,7 @@ class BlurDialog {
       content: content,
       contentWidget: contentWidget,
       actions: actions,
+      actionsBuilder: actionsBuilder,
       barrierDismissible: barrierDismissible,
       hidePhoneBottomBar: hidePhoneBottomBar,
       phoneBarrierColor: phoneBarrierColor,
@@ -141,6 +146,7 @@ class BlurDialog {
     String? content,
     Widget? contentWidget,
     List<Widget>? actions,
+    List<Widget> Function(BuildContext dialogContext)? actionsBuilder,
     bool barrierDismissible = true,
     bool hidePhoneBottomBar = true,
     Color? phoneBarrierColor,
@@ -153,30 +159,22 @@ class BlurDialog {
       barrierDismissible: barrierDismissible,
       barrierColor: phoneBarrierColor,
       hideBottomBar: hidePhoneBottomBar,
-      child: Builder(
-        builder: (sheetContext) {
-          final keyboardHeight = MediaQuery.of(sheetContext).viewInsets.bottom;
-          return SafeArea(
-            top: false,
-            bottom: false,
-            child: SingleChildScrollView(
-              padding: EdgeInsets.fromLTRB(
-                24,
-                16,
-                24,
-                24 + keyboardHeight,
-              ),
-              child: _buildDialogContent(
-                context: sheetContext,
-                title: title,
-                content: content,
-                contentWidget: contentWidget,
-                actions: actions,
-                includeTitle: false,
-              ),
+      child: SafeArea(
+        top: false,
+        bottom: false,
+        child: _KeyboardInsetScrollView(
+          padding: const EdgeInsets.fromLTRB(24, 16, 24, 24),
+          child: Builder(
+            builder: (sheetContext) => _buildDialogContent(
+              context: sheetContext,
+              title: title,
+              content: content,
+              contentWidget: contentWidget,
+              actions: actionsBuilder?.call(sheetContext) ?? actions,
+              includeTitle: false,
             ),
-          );
-        },
+          ),
+        ),
       ),
     );
   }
@@ -247,4 +245,22 @@ class BlurDialog {
       ],
     );
   }
+}
+
+// Only the scrolling inset subscribes to keyboard metrics. The dialog body is
+// a stable child, so successive IME animation frames do not rebuild its form.
+class _KeyboardInsetScrollView extends StatelessWidget {
+  const _KeyboardInsetScrollView({
+    required this.child,
+    this.padding = EdgeInsets.zero,
+  });
+  final Widget child;
+  final EdgeInsets padding;
+
+  @override
+  Widget build(BuildContext context) => SingleChildScrollView(
+        padding: padding +
+            EdgeInsets.only(bottom: MediaQuery.viewInsetsOf(context).bottom),
+        child: child,
+      );
 }

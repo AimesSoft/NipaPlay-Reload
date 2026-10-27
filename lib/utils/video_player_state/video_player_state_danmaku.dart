@@ -643,7 +643,10 @@ extension VideoPlayerStateDanmaku on VideoPlayerState {
         final trackData = _danmakuTracks[trackId]!;
         final trackDanmaku =
             trackData['danmakuList'] as List<Map<String, dynamic>>;
-        mergedList.addAll(trackDanmaku);
+        final offset = DanmakuTrackTiming.offsetOf(trackData);
+        mergedList.addAll(trackDanmaku.map(
+          (comment) => DanmakuTrackTiming.shift(comment, offset),
+        ));
       }
     }
 
@@ -755,14 +758,19 @@ extension VideoPlayerStateDanmaku on VideoPlayerState {
       }
 
       final trackDanmaku = entry.value['danmakuList'];
+      final offset = DanmakuTrackTiming.offsetOf(entry.value);
       if (trackDanmaku is List<Map<String, dynamic>>) {
-        exportList.addAll(trackDanmaku);
+        exportList.addAll(trackDanmaku.map(
+          (comment) => DanmakuTrackTiming.shift(comment, offset),
+        ));
       } else if (trackDanmaku is List) {
         for (final item in trackDanmaku) {
           if (item is Map<String, dynamic>) {
-            exportList.add(item);
+            exportList.add(DanmakuTrackTiming.shift(item, offset));
           } else if (item is Map) {
-            exportList.add(Map<String, dynamic>.from(item));
+            exportList.add(DanmakuTrackTiming.shift(
+              Map<String, dynamic>.from(item), offset,
+            ));
           }
         }
       }
@@ -1318,6 +1326,17 @@ extension VideoPlayerStateDanmaku on VideoPlayerState {
   }
 
   // 切换轨道启用状态
+  double danmakuTrackOffset(String trackId) =>
+      DanmakuTrackTiming.offsetOf(_danmakuTracks[trackId] ?? const {});
+
+  void setDanmakuTrackOffset(String trackId, double offset) {
+    if (_isDisposed || !offset.isFinite || trackId == 'timeline') return;
+    final track = _danmakuTracks[trackId];
+    if (track == null || danmakuTrackOffset(trackId) == offset) return;
+    track['timeOffset'] = offset;
+    _updateMergedDanmakuList();
+  }
+
   void toggleDanmakuTrack(String trackId, bool enabled) {
     if (_danmakuTracks.containsKey(trackId)) {
       _danmakuTrackEnabled[trackId] = enabled;
@@ -1677,7 +1696,9 @@ extension VideoPlayerStateDanmaku on VideoPlayerState {
       // 重新计算合并后的弹幕列表
       _updateMergedDanmakuList(
         preserveOverlay: true,
-        locallySentDanmaku: localDanmaku,
+        locallySentDanmaku: DanmakuTrackTiming.shift(
+          localDanmaku, danmakuTrackOffset(trackId),
+        ),
         locallySentTrackEnabled: _danmakuTrackEnabled[trackId] == true,
       );
 

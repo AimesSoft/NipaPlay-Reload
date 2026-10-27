@@ -1,3 +1,4 @@
+import 'package:nipaplay/widgets/page_activity_mixin.dart';
 import 'dart:async';
 import 'package:flutter/cupertino.dart' as cupertino;
 import 'package:flutter/material.dart';
@@ -169,7 +170,7 @@ class NetworkMediaLibraryView extends StatefulWidget {
 }
 
 class _NetworkMediaLibraryViewState extends State<NetworkMediaLibraryView>
-    with AutomaticKeepAliveClientMixin {
+    with AutomaticKeepAliveClientMixin, PageActivityMixin {
   static Color get _accentColor => AppAccentColors.current;
 
   // “只看未观看”状态的持久化 Key（按服务器类型区分）
@@ -187,6 +188,7 @@ class _NetworkMediaLibraryViewState extends State<NetworkMediaLibraryView>
   bool _isLoadingLibraryContent = false;
   bool _isFolderNavigation = false;
   final List<_FolderNode> _folderStack = [];
+  int _contentLoadRevision = 0;
 
   // 搜索状态
   final TextEditingController _searchController = TextEditingController();
@@ -800,9 +802,8 @@ class _NetworkMediaLibraryViewState extends State<NetworkMediaLibraryView>
     if (items.isEmpty) {
       final filteredEmpty = !_isSearching && _showOnlyUnwatched;
       return NipaplayLargeScreenEmptyState(
-        icon: filteredEmpty
-            ? Ionicons.eye_off_outline
-            : Icons.search_off_rounded,
+        icon:
+            filteredEmpty ? Ionicons.eye_off_outline : Icons.search_off_rounded,
         title: filteredEmpty ? '没有未观看的条目' : '没有匹配结果',
         subtitle: filteredEmpty ? '关闭“只看未观看”或刷新后再试' : '换个关键词再试试',
       );
@@ -838,6 +839,9 @@ class _NetworkMediaLibraryViewState extends State<NetworkMediaLibraryView>
         ? Colors.white
         : const Color(0xFF151820);
     final imageUrl = _getNetworkMediaImageUrl(item, width: 460);
+    final fallbackPoster = item.isFolder
+        ? _buildLargeScreenFolderPoster(textColor)
+        : _buildLargeScreenFallbackPoster(textColor);
 
     return NipaplayLargeScreenFocusableAction(
       autofocus: autofocus,
@@ -860,15 +864,19 @@ class _NetworkMediaLibraryViewState extends State<NetworkMediaLibraryView>
               child: Stack(
                 fit: StackFit.expand,
                 children: [
-                  if (item.isFolder)
-                    _buildLargeScreenFolderPoster(textColor)
-                  else
+                  if (imageUrl.isNotEmpty)
                     CachedNetworkImageWidget(
                       imageUrl: imageUrl,
                       fit: BoxFit.cover,
-                      errorBuilder: (_, __) =>
-                          _buildLargeScreenFallbackPoster(textColor),
-                    ),
+                      // 封面 URL 本身就是 460 宽的缩放版本；不限制解码尺寸时
+                      // 会按原始分辨率整图解码（每张可达数 MB），在 32MB 的
+                      // 电视字节预算下反复淘汰重解码，封面墙会加载到一半停住。
+                      memCacheWidth: 460,
+                      memCacheHeight: 690,
+                      errorBuilder: (_, __) => fallbackPoster,
+                    )
+                  else
+                    fallbackPoster,
                   Positioned.fill(
                     child: DecoratedBox(
                       decoration: BoxDecoration(
@@ -1369,8 +1377,10 @@ class _NetworkMediaLibraryViewState extends State<NetworkMediaLibraryView>
                           gridDelegate:
                               SliverGridDelegateWithMaxCrossAxisExtent(
                             maxCrossAxisExtent: showSummary
-                                ? HorizontalAnimeCard.detailedGridMaxCrossAxisExtent
-                                : HorizontalAnimeCard.compactGridMaxCrossAxisExtent,
+                                ? HorizontalAnimeCard
+                                    .detailedGridMaxCrossAxisExtent
+                                : HorizontalAnimeCard
+                                    .compactGridMaxCrossAxisExtent,
                             mainAxisExtent: showSummary
                                 ? HorizontalAnimeCard.detailedCardHeight
                                 : HorizontalAnimeCard.compactCardHeight,
@@ -1593,7 +1603,14 @@ class _NetworkMediaLibraryViewState extends State<NetworkMediaLibraryView>
       return;
     }
 
-    if (mounted) {
+    final revision = ++_contentLoadRevision;
+    final server = (_provider.serverUrl, _provider.username);
+    bool current() =>
+        mounted &&
+        revision == _contentLoadRevision &&
+        server == (_provider.serverUrl, _provider.username) &&
+        !_isShowingLibraryContent;
+    if (current()) {
       setState(() {
         _error = null;
       });
@@ -1607,6 +1624,7 @@ class _NetworkMediaLibraryViewState extends State<NetworkMediaLibraryView>
         case NetworkMediaServerType.jellyfin:
           items = await (service as JellyfinService).getLatestMediaItems(
             limit: 99999,
+            isCurrent: current,
             sortBy: provider.currentSortBy,
             sortOrder: provider.currentSortOrder,
           );
@@ -1615,21 +1633,22 @@ class _NetworkMediaLibraryViewState extends State<NetworkMediaLibraryView>
           items = await (service as EmbyService).getLatestMediaItems(
             limitPerLibrary: 99999,
             totalLimit: 99999,
+            isCurrent: current,
             sortBy: provider.currentSortBy,
             sortOrder: provider.currentSortOrder,
           );
           break;
       }
 
-      if (mounted && !_isShowingLibraryContent) {
+      if (current()) {
         setState(() {
           _mediaItems = _convertToNetworkMediaItems(items);
           _applySortAndFilter();
         });
       }
-      _setupRefreshTimer();
+      if (current()) _setupRefreshTimer();
     } catch (e) {
-      if (mounted) {
+      if (current()) {
         setState(() {
           _error = e.toString();
         });
@@ -1701,15 +1720,27 @@ class _NetworkMediaLibraryViewState extends State<NetworkMediaLibraryView>
         return;
       }
 
-      final keyword = query.trim().toLowerCase();
-      final results = _mediaItems
-          .where((item) => item.title.toLowerCase().contains(keyword))
-          .toList();
-
-      setState(() {
-        _isSearching = true;
-        _searchResults = results;
-        _isSearchLoading = false;
+      final items = _mediaItems;
+      final folderId = _currentFolderId;
+      final libraryId = _selectedLibraryId;
+      _searchDebounceTimer = Timer(const Duration(milliseconds: 150), () {
+        if (!mounted ||
+            !_isFolderNavigation ||
+            !identical(items, _mediaItems) ||
+            folderId != _currentFolderId ||
+            libraryId != _selectedLibraryId ||
+            _searchController.text != query) {
+          return;
+        }
+        final keyword = query.trim().toLowerCase();
+        final results = items
+            .where((item) => item.title.toLowerCase().contains(keyword))
+            .toList();
+        setState(() {
+          _isSearching = true;
+          _searchResults = results;
+          _isSearchLoading = false;
+        });
       });
       return;
     }
@@ -1989,6 +2020,13 @@ class _NetworkMediaLibraryViewState extends State<NetworkMediaLibraryView>
   // 加载媒体库内容
   Future<void> _loadLibraryContent(String libraryId) async {
     if (!mounted) return;
+    final revision = ++_contentLoadRevision;
+    final server = (_provider.serverUrl, _provider.username);
+    bool current() =>
+        mounted &&
+        revision == _contentLoadRevision &&
+        server == (_provider.serverUrl, _provider.username) &&
+        _selectedLibraryId == libraryId;
 
     if (_isFolderNavigation) {
       await _loadFolderItems(libraryId);
@@ -2009,6 +2047,7 @@ class _NetworkMediaLibraryViewState extends State<NetworkMediaLibraryView>
               await (service as JellyfinService).getLatestMediaItemsByLibrary(
             libraryId,
             limit: 99999,
+            isCurrent: current,
             sortBy: sortSettings['sortBy'] ?? provider.currentSortBy,
             sortOrder: sortSettings['sortOrder'] ?? provider.currentSortOrder,
           );
@@ -2017,13 +2056,14 @@ class _NetworkMediaLibraryViewState extends State<NetworkMediaLibraryView>
           items = await (service as EmbyService).getLatestMediaItemsByLibrary(
             libraryId,
             limit: 99999,
+            isCurrent: current,
             sortBy: sortSettings['sortBy'] ?? provider.currentSortBy,
             sortOrder: sortSettings['sortOrder'] ?? provider.currentSortOrder,
           );
           break;
       }
 
-      if (mounted) {
+      if (current()) {
         setState(() {
           _mediaItems = _convertToNetworkMediaItems(items);
           _applySortAndFilter();
@@ -2031,9 +2071,9 @@ class _NetworkMediaLibraryViewState extends State<NetworkMediaLibraryView>
           _error = null;
         });
       }
-      _setupRefreshTimer();
+      if (current()) _setupRefreshTimer();
     } catch (e) {
-      if (mounted) {
+      if (current()) {
         setState(() {
           _error = e.toString();
           _isLoadingLibraryContent = false;
@@ -2044,8 +2084,16 @@ class _NetworkMediaLibraryViewState extends State<NetworkMediaLibraryView>
 
   Future<void> _loadFolderItems(String parentId) async {
     if (!mounted) return;
+    final revision = ++_contentLoadRevision;
+    final server = (_provider.serverUrl, _provider.username);
+    bool current() =>
+        mounted &&
+        revision == _contentLoadRevision &&
+        server == (_provider.serverUrl, _provider.username) &&
+        _folderStack.isNotEmpty &&
+        _folderStack.last.id == parentId;
 
-    if (mounted) {
+    if (current()) {
       setState(() {
         _isLoadingLibraryContent = true;
         _error = null;
@@ -2061,17 +2109,19 @@ class _NetworkMediaLibraryViewState extends State<NetworkMediaLibraryView>
           items = await (service as JellyfinService).getFolderItems(
             parentId,
             limit: 99999,
+            isCurrent: current,
           );
           break;
         case NetworkMediaServerType.emby:
           items = await (service as EmbyService).getFolderItems(
             parentId,
             limit: 99999,
+            isCurrent: current,
           );
           break;
       }
 
-      if (mounted) {
+      if (current()) {
         setState(() {
           _mediaItems = _convertToNetworkMediaItems(items);
           _applySortAndFilter();
@@ -2079,9 +2129,9 @@ class _NetworkMediaLibraryViewState extends State<NetworkMediaLibraryView>
           _error = null;
         });
       }
-      _setupRefreshTimer();
+      if (current()) _setupRefreshTimer();
     } catch (e) {
-      if (mounted) {
+      if (current()) {
         setState(() {
           _error = e.toString();
           _isLoadingLibraryContent = false;
@@ -2090,9 +2140,24 @@ class _NetworkMediaLibraryViewState extends State<NetworkMediaLibraryView>
     }
   }
 
+  bool _hasBeenActive = false;
+  @override
+  void onPageActivityChanged(bool active) {
+    if (active) {
+      _setupRefreshTimer();
+      if (_hasBeenActive && !_isLoadingLibraryContent) {
+        unawaited(_manualRefresh());
+      }
+      _hasBeenActive = true;
+    } else {
+      _refreshTimer?.cancel();
+    }
+  }
+
   // 设置刷新定时器
   void _setupRefreshTimer() {
     _refreshTimer?.cancel();
+    if (!mounted || !isPageActive) return;
     _refreshTimer = Timer.periodic(const Duration(minutes: 60), (timer) {
       if (_isShowingLibraryContent) {
         if (_isFolderNavigation) {
@@ -2213,8 +2278,7 @@ class _NetworkMediaLibraryViewState extends State<NetworkMediaLibraryView>
     final effectiveHeightRatio =
         (contentHeight / screenHeight).clamp(0.3, 0.82).toDouble();
 
-    final selection =
-        await CupertinoBottomSheet.show<_RemoteSortSelection>(
+    final selection = await CupertinoBottomSheet.show<_RemoteSortSelection>(
       context: context,
       title: '排序',
       heightRatio: effectiveHeightRatio,

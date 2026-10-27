@@ -115,7 +115,8 @@ void main() {
       // 目标小于所有元素：返回 0
       expect(CanvasDanmakuTimeline.lowerBound(entries, -1, timeOf: timeOf), 0);
       // 目标大于所有元素：返回 length（空窗口）
-      expect(CanvasDanmakuTimeline.lowerBound(entries, 100, timeOf: timeOf), 10);
+      expect(
+          CanvasDanmakuTimeline.lowerBound(entries, 100, timeOf: timeOf), 10);
       // 空列表返回 0
       expect(
         CanvasDanmakuTimeline.lowerBound(
@@ -176,13 +177,53 @@ void main() {
     await tester.pump();
 
     expect(tester.element(find.byType(DanmakuScreen)), same(original));
-    expect(_scrollPainter(tester).scrollDanmakuItems.single, same(originalItem));
+    expect(
+        _scrollPainter(tester).scrollDanmakuItems.single, same(originalItem));
 
     await tester.pumpWidget(_rendererHost(danmakuList: danmaku));
     await tester.pump();
 
     expect(tester.element(find.byType(DanmakuScreen)), same(original));
-    expect(_scrollPainter(tester).scrollDanmakuItems.single, same(originalItem));
+    expect(
+        _scrollPainter(tester).scrollDanmakuItems.single, same(originalItem));
+  });
+
+  testWidgets(
+      'pause and visibility toggles retain screen and stop hidden frames',
+      (tester) async {
+    final entries = [
+      <String, dynamic>{'time': 0.0, 'content': 'before', 'type': 'scroll'},
+      <String, dynamic>{'time': 20.0, 'content': 'after', 'type': 'scroll'},
+    ];
+    await tester.pumpWidget(_rendererHost(danmakuList: entries));
+    await tester.pump();
+    final screen = tester.state(find.byType(DanmakuScreen));
+    await tester
+        .pumpWidget(_rendererHost(danmakuList: entries, isPlaying: false));
+    await tester.pump();
+    expect(tester.state(find.byType(DanmakuScreen)), same(screen));
+    await tester.pumpWidget(_rendererHost(danmakuList: entries));
+    await tester.pump();
+    expect(tester.state(find.byType(DanmakuScreen)), same(screen));
+    await tester
+        .pumpWidget(_rendererHost(danmakuList: entries, visible: false));
+    await tester.pump(const Duration(seconds: 1));
+    expect(tester.state(find.byType(DanmakuScreen, skipOffstage: false)),
+        same(screen));
+    expect(tester.binding.hasScheduledFrame, isFalse);
+    await tester.pumpWidget(
+        _rendererHost(danmakuList: entries, visible: false, currentTime: 20));
+    await tester.pump();
+    expect(tester.binding.hasScheduledFrame, isFalse);
+    await tester
+        .pumpWidget(_rendererHost(danmakuList: entries, currentTime: 20));
+    await tester.pump();
+    expect(tester.state(find.byType(DanmakuScreen)), same(screen));
+    expect(_scrollPainter(tester).scrollDanmakuItems.map((e) => e.content.text),
+        contains('after'));
+    expect(_scrollPainter(tester).scrollDanmakuItems.map((e) => e.content.text),
+        isNot(contains('before')));
+    await tester.pumpWidget(const SizedBox.shrink());
   });
 
   testWidgets('renderer initializes safely while playback is paused',
@@ -224,7 +265,7 @@ void main() {
     expect(_scrollPainter(tester).scrollDanmakuItems, isEmpty);
   });
 
-  testWidgets('showing after a hidden rate change uses a fresh controller',
+  testWidgets('showing after a hidden rate change restores the current window',
       (tester) async {
     final danmaku = [
       <String, dynamic>{
@@ -285,8 +326,7 @@ void main() {
     expect(item.xPosition, closeTo(expectedX, 0.01));
   });
 
-  testWidgets('seek restoration drains every active candidate',
-      (tester) async {
+  testWidgets('seek restoration drains every active candidate', (tester) async {
     final danmaku = List.generate(
       30,
       (index) => <String, dynamic>{
@@ -358,7 +398,8 @@ void main() {
 
     // 空轨道：第一条顶部弹幕成功上屏
     expect(
-      controller.addDanmaku(DanmakuContentItem('first', type: DanmakuItemType.top)),
+      controller
+          .addDanmaku(DanmakuContentItem('first', type: DanmakuItemType.top)),
       isTrue,
     );
     await tester.pump();
@@ -367,7 +408,8 @@ void main() {
     // 轨道已占用：第二条被丢弃并如实返回 false，
     // 调用方据此不应把它记入"已添加"去重表，否则其后续重放会缺失。
     expect(
-      controller.addDanmaku(DanmakuContentItem('second', type: DanmakuItemType.top)),
+      controller
+          .addDanmaku(DanmakuContentItem('second', type: DanmakuItemType.top)),
       isFalse,
     );
     await tester.pump();

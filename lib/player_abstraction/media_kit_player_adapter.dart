@@ -281,6 +281,7 @@ class MediaKitPlayerAdapter
   // 正常播放纯墙钟插值，永不被 mpv 真实 position 校正  与 mpv 漂移  下游 big-fwd snap  回弹。
   StreamSubscription<Duration>? _positionSubscription;
   bool _isDisposed = false;
+  final Set<String> _callsAfterTeardown = {};
   // MKV 章节列表是否已成功获取过（用于 _refreshChapters 去重，避免 duration
   // stream 每次触发都重复 getProperty chapter-list）。切集时在 _openMainMedia
   // 重置为 false。
@@ -410,6 +411,19 @@ class MediaKitPlayerAdapter
         'mpvDiagnostics=$_mpvDiagnosticsEnabled',
       );
     }
+  }
+
+  /// An adapter over [player] that only listens to its streams: no video
+  /// output, options or ticker.
+  @visibleForTesting
+  MediaKitPlayerAdapter.withPlayer(Player player)
+      : _mpvDiagnosticsEnabled = false,
+        _enableHardwareAcceleration = true,
+        _prefersPlatformVideoSurface = false,
+        _androidAudioOutput = null,
+        _httpProxy = '',
+        _player = player {
+    _addEventListeners();
   }
 
   void _applyMpvLogLevelOverride() {
@@ -2242,8 +2256,24 @@ class MediaKitPlayerAdapter
     return _textureIdNotifier.value;
   }
 
+  /// Once teardown begins this adapter stays torn down: a member reached
+  /// then changes nothing, and the first call of each is traced with its
+  /// caller.
+  bool _released(String member) {
+    if (!_isDisposed) return false;
+    if (_callsAfterTeardown.add(member)) {
+      final caller = StackTrace.current.toString().split('\n').skip(1).take(14);
+      PlayerKernelManager.traceHotSwapStage(
+          'media_kit $member called after teardown began\n${caller.join('\n')}');
+    }
+    return true;
+  }
+
   @override
   void setMedia(String path, PlayerMediaType type) {
+    // Media set on a player being torn down would reopen it on the mpv
+    // being destroyed and restart the reads and delayed callbacks of a load.
+    if (_released('setMedia')) return;
     //debugPrint('[MediaKit] setMedia: path=$path, type=$type');
     if (type == PlayerMediaType.subtitle) {
       //debugPrint('MediaKitAdapter: setMedia called for SUBTITLE. Path: "$path"');
@@ -2281,7 +2311,6 @@ class MediaKitPlayerAdapter
     _activeAudioTracks = [];
     _lastKnownActiveSubtitleId = null;
     _mediaInfo = PlayerMediaInfo(duration: 0);
-    _isDisposed = false;
     // 标记需要在 AO 就绪后重新同步音量（首次 playing 事件时执行）
     _volumeResyncNeeded = true;
     // 递增代数计数器，使旧的延迟加载操作作废

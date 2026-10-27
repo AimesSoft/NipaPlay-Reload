@@ -84,6 +84,17 @@ class _ModernVideoControlsState extends State<ModernVideoControls> {
   bool _isDanmakuHovered = false;
   bool _isAspectModePressed = false;
   bool _isAspectModeHovered = false;
+  // 菜单打开期间必须隐藏按钮 tooltip：气泡固定悬停在按钮上方，
+  // 会和向上弹出的菜单面板叠成"两层气泡"，还会挡住菜单项的点击。
+  bool _isAspectMenuOpen = false;
+
+  /// 任一播放器内弹出面板（画面比例菜单 / 设置面板 / 播放列表面板）是否打开。
+  bool get _hasOpenMenu =>
+      _isAspectMenuOpen ||
+      _settingsOverlay != null ||
+      _playlistOverlay != null ||
+      _settingsPopup != null ||
+      _playlistPopup != null;
 
   static String _aspectModeLabel(VideoAspectMode mode) {
     switch (mode) {
@@ -213,6 +224,7 @@ class _ModernVideoControlsState extends State<ModernVideoControls> {
     );
     _aspectMenuVideoState = videoState;
     videoState.setControlsVisibilityLocked(true);
+    setState(() => _isAspectMenuOpen = true);
     _aspectMenuController.open();
   }
 
@@ -224,6 +236,9 @@ class _ModernVideoControlsState extends State<ModernVideoControls> {
   void _releaseAspectMenuLock() {
     _aspectMenuVideoState?.setControlsVisibilityLocked(false);
     _aspectMenuVideoState = null;
+    if (_isAspectMenuOpen) {
+      setState(() => _isAspectMenuOpen = false);
+    }
   }
 
   Widget _buildAspectMenuButton(
@@ -289,7 +304,9 @@ class _ModernVideoControlsState extends State<ModernVideoControls> {
         isHovered: _isAspectModeHovered,
         onHover: (value) => setState(() => _isAspectModeHovered = value),
         onPressed: (value) => setState(() => _isAspectModePressed = value),
-        tooltip: '画面比例（适应/填充/拉伸/16:9/4:3）',
+        // 菜单打开时传空文本让 TooltipBubble 立即收起气泡；
+        // 菜单关闭后若指针仍在按钮上会自动恢复显示。
+        tooltip: _hasOpenMenu ? '' : '画面比例',
       ),
     );
   }
@@ -608,7 +625,7 @@ class _ModernVideoControlsState extends State<ModernVideoControls> {
                       setState(() => _isSettingsHovered = value),
                   onPressed: (value) =>
                       setState(() => _isSettingsPressed = value),
-                  tooltip: '播放器菜单',
+                  tooltip: _hasOpenMenu ? '' : '播放器菜单',
                 ),
               ),
             ),
@@ -1033,7 +1050,9 @@ class _ModernVideoControlsState extends State<ModernVideoControls> {
                                             onPressed: (value) => setState(
                                               () => _isPlaylistPressed = value,
                                             ),
-                                            tooltip: '播放列表',
+                                            tooltip: _hasOpenMenu
+                                                ? ''
+                                                : '播放列表',
                                             useAnimatedSwitcher: true,
                                           ),
                                         );

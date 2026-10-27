@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:desktop_multi_window/desktop_multi_window.dart';
 import 'package:flutter/material.dart';
+import 'desktop_transient_overlay_scope.dart';
 
 typedef DesktopPopupContentBuilder = Widget Function(
   BuildContext context,
@@ -93,7 +94,10 @@ class DesktopTransientOverlay {
         controller: _controller,
         child: DesktopMultiWindow.inheritTransientViewContext(
           _sourceContext,
-          _contentBuilder(_sourceContext, close),
+          DesktopTransientOverlayScope(
+            close: close,
+            child: _contentBuilder(_sourceContext, close),
+          ),
         ),
       ),
     );

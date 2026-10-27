@@ -83,6 +83,7 @@ struct _RustLibNipaplayPlugin {
   GObject parent_instance;
   FlMethodChannel* channel;
   FlPluginRegistrar* registrar;
+  FlView* view;
   FlTextureRegistrar* texture_registrar;
   SurfaceMap surfaces;
   SurfaceMutex surfaces_lock;
@@ -438,7 +439,7 @@ static void handle_method_call(RustLibNipaplayPlugin* self,
         fl_method_call_respond(method_call, response, nullptr);
         return;
       }
-      FlView* view = fl_plugin_registrar_get_view(self->registrar);
+      FlView* view = self->view;
       GdkWindow* window = view ? gtk_widget_get_window(GTK_WIDGET(view)) : nullptr;
       g_autoptr(GError) context_error = nullptr;
       GdkGLContext* context = window
@@ -611,6 +612,7 @@ static void rust_lib_nipaplay_plugin_init(RustLibNipaplayPlugin* self) {
   new (&self->surfaces_lock) SurfaceMutex();
   self->channel = nullptr;
   self->registrar = nullptr;
+  self->view = nullptr;
   self->texture_registrar = nullptr;
   self->tick_source = 0;
 }
@@ -619,6 +621,7 @@ void rust_lib_nipaplay_plugin_register_with_registrar(FlPluginRegistrar* registr
   RustLibNipaplayPlugin* self = RUST_LIB_NIPAPLAY_PLUGIN(
       g_object_new(rust_lib_nipaplay_plugin_get_type(), nullptr));
   self->registrar = registrar;
+  self->view = fl_plugin_registrar_get_view(registrar);
   self->texture_registrar = fl_plugin_registrar_get_texture_registrar(registrar);
 
   g_autoptr(FlMethodCodec) codec =

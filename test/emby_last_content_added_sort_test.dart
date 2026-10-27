@@ -39,7 +39,7 @@ void main() {
       request.response.headers.contentType = ContentType.json;
       if (request.uri.path == '/emby/Users/test-user/Items/library-id') {
         request.response.write('{"CollectionType":"tvshows"}');
-      } else if (request.uri.path == '/emby/Items') {
+      } else if (request.uri.path == '/emby/Users/test-user/Items') {
         request.response.write('{"Items":[],"TotalRecordCount":0}');
       } else {
         request.response.statusCode = HttpStatus.notFound;
@@ -81,7 +81,7 @@ void main() {
     await provider.fetchMediaItemsForLibrary('library-id', limit: 37);
 
     final itemsRequest = requests.singleWhere(
-      (uri) => uri.path == '/emby/Items',
+      (uri) => uri.path == '/emby/Users/test-user/Items',
     );
     expect(itemsRequest.queryParameters['ParentId'], 'library-id');
     expect(itemsRequest.queryParameters['SortBy'], sortBy);

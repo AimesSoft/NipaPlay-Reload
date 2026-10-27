@@ -1,6 +1,7 @@
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:nipaplay/widgets/media_server_network_image.dart';
 import 'dart:async';
+import 'dart:typed_data';
 import 'dart:ui' as ui;
 import 'package:flutter/rendering.dart';
 import 'package:path_provider/path_provider.dart'
@@ -23,6 +24,36 @@ class ImageCacheManager {
   /// 必须串行读写同一个磁盘缓存文件，否则并发 writeAsBytes 会互相破坏，
   /// 导致读取到半截文件、解码失败（表现为背景图闪黑/不显示）。
   final Map<String, Future<void>> _diskWrites = {};
+  final Map<(String, bool, bool), Future<Uint8List>> _byteLoads = {};
+
+  Future<Uint8List> _loadBytes(
+      String url, bool forceRefresh, bool cacheOnDisk) async {
+    final key = (url, forceRefresh, cacheOnDisk);
+    final existing = _byteLoads[key];
+    if (existing != null) return existing;
+    final future = _readOrDownloadBytes(url, forceRefresh, cacheOnDisk);
+    _byteLoads[key] = future;
+    try {
+      return await future;
+    } finally {
+      if (identical(_byteLoads[key], future)) _byteLoads.remove(key);
+    }
+  }
+
+  Future<Uint8List> _readOrDownloadBytes(
+      String url, bool forceRefresh, bool cacheOnDisk) async {
+    if (cacheOnDisk && !forceRefresh && !kIsWeb) {
+      await _awaitDiskWrite(url);
+      final file = await _getCacheFile(url);
+      if (await file.exists()) return file.readAsBytes();
+    }
+    final bytes = await loadNetworkImageBytes(Uri.parse(url));
+    if (cacheOnDisk && !kIsWeb) {
+      final file = await _getCacheFile(url);
+      await _chainDiskWrite(url, () => file.writeAsBytes(bytes));
+    }
+    return bytes;
+  }
 
   /// 每张缓存图片的估算字节数，以及总量。
   /// 解码后的 ui.Image 像素位于 native/external 内存，不受 Dart GC 管理，
@@ -136,11 +167,14 @@ class ImageCacheManager {
     final previous = _diskWrites[url] ?? Future<void>.value();
     final next = previous.then((_) => write());
     _diskWrites[url] = next;
-    next.whenComplete(() {
+    void removeWrite() {
       if (identical(_diskWrites[url], next)) {
         _diskWrites.remove(url);
       }
-    });
+    }
+
+    next.then((_) => removeWrite(),
+        onError: (Object _, StackTrace __) => removeWrite());
     return next;
   }
 
@@ -171,6 +205,7 @@ class ImageCacheManager {
     int? targetWidth,
     int? targetHeight,
     bool forceRefresh = false,
+    bool cacheOnDisk = true,
   }) async {
     if (!_isInitialized && !kIsWeb) {
       await _initCacheDir();
@@ -197,54 +232,19 @@ class ImageCacheManager {
     // 使用一个异步的IIFE（立即执行的函数表达式）来执行加载逻辑
     () async {
       try {
-        // 检查本地缓存 (本地缓存文件本身不区分尺寸，只存原图数据)
-        // 我们从本地读取原图数据，然后按需解码
-        if (!forceRefresh && !kIsWeb) {
-          await _awaitDiskWrite(url);
-          final cacheFile = await _getCacheFile(url); // 文件名只跟URL有关
-          if (await cacheFile.exists()) {
-            final bytes = await cacheFile.readAsBytes();
-            final codec = await ui.instantiateImageCodec(
-              bytes,
-              targetWidth: targetWidth,
-              targetHeight: targetHeight,
-            );
-            final frame = await codec.getNextFrame();
-            final image = frame.image;
-
-            _store(cacheKey, image);
-            completer.complete(image);
-            return; // 加载成功，退出IIFE
-          }
-        }
-
-        // 从网络下载
-        final downloadedBytes = await loadNetworkImageBytes(Uri.parse(url));
-
-        // 保存到本地缓存 (只保存原图数据)
-        //
-        // 注意：这里曾经先用 package:image 在 compute isolate 里完整解码一次，
-        // 目的只是"校验图片"，然后丢弃结果、原样返回原始字节。纯 Dart 解码一张
-        // 1080p JPEG 在低端设备上要几百毫秒并产生一次整图 RGBA 分配，加上
-        // isolate 启动和字节缓冲跨 isolate 拷贝，产出为零。真正的解码由下面
-        // instantiateImageCodec 完成，它本身就是流式的，也能做降采样。
-        if (!kIsWeb) {
-          final cacheFile = await _getCacheFile(url);
-          // 同一 URL 的写入串行执行，防止并发写坏磁盘缓存文件。
-          await _chainDiskWrite(
-            url,
-            () => cacheFile.writeAsBytes(downloadedBytes),
-          );
-        }
-
-        // 解码图片数据
+        // Different decoded sizes share only the in-flight original bytes.
+        final bytes = await _loadBytes(url, forceRefresh, cacheOnDisk);
         final codec = await ui.instantiateImageCodec(
-          downloadedBytes,
+          bytes,
           targetWidth: targetWidth,
           targetHeight: targetHeight,
         );
-        final frame = await codec.getNextFrame();
-        final uiImage = frame.image;
+        late final ui.Image uiImage;
+        try {
+          uiImage = (await codec.getNextFrame()).image;
+        } finally {
+          codec.dispose();
+        }
 
         // 存入内存缓存
         _store(cacheKey, uiImage);

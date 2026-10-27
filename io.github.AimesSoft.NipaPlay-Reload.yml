@@ -1,0 +1,272 @@
+app-id: io.github.AimesSoft.NipaPlay-Reload
+runtime: org.freedesktop.Platform
+runtime-version: '24.08'
+sdk: org.freedesktop.Sdk
+command: nipaplay
+appstream-compose: false
+finish-args:
+  - --filesystem=xdg-documents
+  - --filesystem=xdg-download
+  - --filesystem=xdg-pictures
+  - --filesystem=xdg-music
+  - --filesystem=xdg-videos
+  - --share=ipc
+  - --socket=wayland
+  - --socket=fallback-x11
+  - --device=dri
+  - --socket=pulseaudio
+  - --share=network
+  - --talk-name=org.kde.StatusNotifierWatcher
+  - --talk-name=org.freedesktop.ScreenSaver
+add-extensions:
+  org.freedesktop.Platform.ffmpeg-full:
+    directory: lib/ffmpeg
+    add-ld-path: .
+    version: '24.08'
+    autodelete: false
+cleanup:
+  - '*.la'
+  - '*.a'
+  - /include
+  - /lib/pkgconfig
+  - /lib/cmake
+  - /share/gtk-doc
+  - /share/gir-1.0
+  - /lib/girepository-1.0
+  - /share/vala
+  - /libexec
+modules:
+  - name: libunibreak
+    buildsystem: autotools
+    config-opts:
+      - --disable-static
+    sources:
+      - type: archive
+        url: https://github.com/adah1972/libunibreak/releases/download/libunibreak_6_1/libunibreak-6.1.tar.gz
+        sha256: cc4de0099cf7ff05005ceabff4afed4c582a736abc38033e70fdac86335ce93f
+
+  - name: libass
+    buildsystem: meson
+    config-opts:
+      - --libdir=lib
+      - -Ddefault_library=shared
+      - -Dlibunibreak=enabled
+      - -Dcheckasm=disabled
+      - -Dtest=disabled
+      - -Dcompare=disabled
+      - -Dprofile=disabled
+      - -Dfuzz=disabled
+    sources:
+      - type: git
+        url: https://github.com/libass/libass.git
+        tag: 0.17.4
+        commit: bbb3c7f1570a4a021e52683f3fbdf74fe492ae84
+
+  - name: libplacebo
+    buildsystem: meson
+    config-opts:
+      - --libdir=lib
+      - -Ddefault_library=shared
+      - -Ddemos=false
+      - -Dtests=false
+      - -Dbench=false
+      - -Dvulkan=enabled
+      - -Dshaderc=enabled
+    sources:
+      - type: git
+        url: https://github.com/haasn/libplacebo.git
+        tag: v7.349.0
+        commit: 9c4b6bbd7a1e223ffdd61affc4e5d463d42d4345
+
+  - name: mpv
+    buildsystem: meson
+    config-opts:
+      - --libdir=lib
+      - -Dlibmpv=true
+      - -Dcplayer=false
+      - -Dbuild-date=false
+      - -Dmanpage-build=disabled
+      - -Dhtml-build=disabled
+      - -Dpdf-build=disabled
+      - -Dlua=disabled
+      - -Djavascript=disabled
+      - -Dlibarchive=disabled
+      - -Ddvbin=disabled
+      - -Dsdl2=disabled
+      - -Djpeg=disabled
+      - -Dlibbluray=disabled
+      - -Drubberband=disabled
+      - -Dzimg=disabled
+      - -Duchardet=disabled
+    sources:
+      - type: archive
+        url: https://github.com/mpv-player/mpv/archive/refs/tags/v0.39.0.tar.gz
+        sha256: 2ca92437affb62c2b559b4419ea4785c70d023590500e8a52e95ea3ab4554683
+
+  - name: libevdev
+    buildsystem: meson
+    config-opts:
+      - --libdir=lib
+      - -Dtests=disabled
+      - -Ddocumentation=disabled
+      - -Dtools=disabled
+    sources:
+      - type: git
+        url: https://gitlab.freedesktop.org/libevdev/libevdev.git
+        tag: libevdev-1.13.3
+        commit: 2342d8c9eea862111991a609df961adae89f8eee
+
+  - name: mimalloc
+    buildsystem: cmake
+    config-opts:
+      - -DCMAKE_INSTALL_LIBDIR=lib
+      - -DMI_INSTALL_TOPLEVEL=ON
+      - -DMI_BUILD_SHARED=ON
+      - -DMI_BUILD_STATIC=OFF
+      - -DMI_BUILD_TESTS=OFF
+    sources:
+      - type: archive
+        url: https://github.com/microsoft/mimalloc/archive/refs/tags/v2.1.2.tar.gz
+        sha256: 2b1bff6f717f9725c70bf8d79e4786da13de8a270059e4ba0bdd262ae7be46eb
+
+  - name: intltool
+    buildsystem: autotools
+    cleanup:
+      - '*'
+    sources:
+      - type: archive
+        url: https://launchpad.net/intltool/trunk/0.51.0/+download/intltool-0.51.0.tar.gz
+        sha256: 67c74d94196b153b774ab9f89b2fa6c6ba79352407037c8c14d5aeb334e959cd
+
+  - name: libdbusmenu
+    buildsystem: simple
+    build-commands:
+      - |
+        for f in libdbusmenu-glib/Makefile.am libdbusmenu-gtk/Makefile.am tests/Makefile.am tools/Makefile.am; do
+          sed -i 's/ -Werror//g' "$f"
+        done
+      - autoreconf -fiv
+      - ./configure --prefix=/app --disable-static --with-gtk=3 --disable-dumper
+          --disable-introspection --disable-vala
+      - make -j$(nproc)
+      - make install
+    sources:
+      - type: archive
+        url: https://launchpad.net/libdbusmenu/16.04/16.04.0/+download/libdbusmenu-16.04.0.tar.gz
+        sha256: b9cc4a2acd74509435892823607d966d424bd9ad5d0b00938f27240a1bfa878a
+
+  - name: ayatana-ido
+    buildsystem: simple
+    build-commands:
+      - sed -i 's/find_package(Vala REQUIRED QUIET)/find_package(Vala QUIET)/' src/CMakeLists.txt
+      - cmake -B_build -S. -DCMAKE_INSTALL_PREFIX=/app -DENABLE_TESTS=OFF -DENABLE_GTKDOC=OFF -DCMAKE_INSTALL_LIBDIR=lib
+      - cmake --build _build
+      - touch _build/src/AyatanaIdo3-0.4.gir _build/src/AyatanaIdo3-0.4.typelib _build/src/libayatana-ido3-0.4.vapi
+      - cmake --install _build
+    sources:
+      - type: git
+        url: https://github.com/AyatanaIndicators/ayatana-ido.git
+        tag: 0.10.2
+
+  - name: libayatana-indicator
+    buildsystem: cmake
+    config-opts:
+      - -DCMAKE_INSTALL_LIBDIR=lib
+      - -DENABLE_TESTS=OFF
+      - -DFLAVOUR_GTK3=ON
+      - -DENABLE_LOADER=OFF
+      - -DENABLE_IDO=ON
+    sources:
+      - type: git
+        url: https://github.com/AyatanaIndicators/libayatana-indicator.git
+        tag: 0.9.4
+        commit: 611bb384b73fa6311777ba4c41381a06f5b99dad
+
+  - name: libayatana-appindicator
+    buildsystem: cmake
+    config-opts:
+      - -DCMAKE_INSTALL_LIBDIR=lib
+      - -DENABLE_BINDINGS_MONO=OFF
+      - -DENABLE_BINDINGS_VALA=OFF
+      - -DENABLE_BINDINGS_PYTHON=OFF
+      - -DENABLE_GTKDOC=OFF
+      - -DENABLE_TESTS=OFF
+    sources:
+      - type: git
+        url: https://github.com/AyatanaIndicators/libayatana-appindicator.git
+        tag: 0.5.94
+        commit: 31e8bb083b307e1cc96af4874a94707727bd1e79
+
+  - name: keybinder3
+    buildsystem: simple
+    build-commands:
+      - touch ChangeLog
+      - autoreconf -fiv
+      - ./configure --prefix=/app --disable-static
+      - make -j$(nproc)
+      - make install
+    sources:
+      - type: git
+        url: https://github.com/kupferlauncher/keybinder.git
+        tag: keybinder-3.0-v0.3.2
+        commit: 04ae06724d914c7d4fec6a2723edf9c6320ec502
+
+  - name: nipaplay-reload
+    buildsystem: simple
+    build-commands:
+      - ar x nipaplay.deb
+      - tar -xf data.tar.*
+      - install -Dm755 opt/nipaplay/NipaPlay /app/bin/NipaPlay
+      - mkdir -p /app/lib/nipaplay /app/lib/ffmpeg
+      - |
+        for f in opt/nipaplay/lib/*; do
+          case "$(basename "$f")" in
+            libmpv.so*|libmpv*.so*) continue ;;
+          esac
+          cp -a "$f" /app/lib/nipaplay/
+        done
+      - mkdir -p /app/share/nipaplay
+      - cp -a opt/nipaplay/data /app/share/nipaplay/
+      - ln -s /app/lib/nipaplay /app/bin/lib
+      - ln -s /app/share/nipaplay/data /app/bin/data
+      - ln -s /usr/lib/${FLATPAK_ARCH}-linux-gnu/libsqlite3.so.0 /app/lib/libsqlite3.so
+      - install -Dm755 nipaplay-wrapper.sh /app/bin/nipaplay
+      - install -Dm644 io.github.AimesSoft.NipaPlay-Reload.desktop
+          /app/share/applications/io.github.AimesSoft.NipaPlay-Reload.desktop
+      - install -Dm644 io.github.AimesSoft.NipaPlay-Reload.metainfo.xml
+          /app/share/metainfo/io.github.AimesSoft.NipaPlay-Reload.metainfo.xml
+      - install -Dm644 icon64.png /app/share/icons/hicolor/64x64/apps/io.github.AimesSoft.NipaPlay-Reload.png
+      - install -Dm644 icon128.png /app/share/icons/hicolor/128x128/apps/io.github.AimesSoft.NipaPlay-Reload.png
+      - install -Dm644 icon256.png /app/share/icons/hicolor/256x256/apps/io.github.AimesSoft.NipaPlay-Reload.png
+      - install -Dm644 icon512.png /app/share/icons/hicolor/512x512/apps/io.github.AimesSoft.NipaPlay-Reload.png
+      - install -Dm644 LICENSE /app/share/licenses/io.github.AimesSoft.NipaPlay-Reload/LICENSE
+      - appstreamcli compose --prefix=/ --origin=flatpak --result-root=/app
+          --data-dir=/app/share/app-info/xmls --icons-dir=/app/share/app-info/icons/flatpak
+          --components=io.github.AimesSoft.NipaPlay-Reload,io.github.AimesSoft.NipaPlay-Reload.desktop
+          /app
+    sources:
+      - type: file
+        path: build/linux/nipaplay.deb
+        dest-filename: nipaplay.deb
+      - type: file
+        path: assets/linux/flatpak/nipaplay-wrapper.sh
+        dest-filename: nipaplay-wrapper.sh
+      - type: file
+        path: assets/linux/flatpak/io.github.AimesSoft.NipaPlay-Reload.desktop
+      - type: file
+        path: assets/linux/flatpak/io.github.AimesSoft.NipaPlay-Reload.metainfo.xml
+      - type: file
+        path: assets/linux/flatpak/hicolor/64x64/apps/io.github.AimesSoft.NipaPlay-Reload.png
+        dest-filename: icon64.png
+      - type: file
+        path: assets/linux/flatpak/hicolor/128x128/apps/io.github.AimesSoft.NipaPlay-Reload.png
+        dest-filename: icon128.png
+      - type: file
+        path: assets/linux/flatpak/hicolor/256x256/apps/io.github.AimesSoft.NipaPlay-Reload.png
+        dest-filename: icon256.png
+      - type: file
+        path: assets/linux/flatpak/hicolor/512x512/apps/io.github.AimesSoft.NipaPlay-Reload.png
+        dest-filename: icon512.png
+      - type: file
+        path: LICENSE
+

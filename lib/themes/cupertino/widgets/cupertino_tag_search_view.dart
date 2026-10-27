@@ -52,10 +52,10 @@ class _CupertinoTagSearchViewState extends State<CupertinoTagSearchView> {
                 const SizedBox(height: 14),
                 _buildSearchButton(context),
                 const SizedBox(height: 22),
-                _buildResults(context),
               ],
             ),
           ),
+          ..._buildResultSlivers(context),
         ],
       ),
     );
@@ -123,7 +123,8 @@ class _CupertinoTagSearchViewState extends State<CupertinoTagSearchView> {
           child: CupertinoSearchTextField(
             controller: _keywordController,
             placeholder: '作品标题关键词',
-            onChanged: controller.setKeyword,
+            // Draft edits do not change the displayed search results.
+            onChanged: (value) => controller.setKeyword(value, notify: false),
             onSubmitted: (_) => controller.performSmartSearch(),
           ),
         ),
@@ -171,46 +172,76 @@ class _CupertinoTagSearchViewState extends State<CupertinoTagSearchView> {
     );
   }
 
-  Widget _buildResults(BuildContext context) {
+  List<Widget> _buildResultSlivers(BuildContext context) {
     final controller = widget.controller;
-    if (controller.isSearching && controller.visibleResults.isEmpty) {
-      return const SizedBox(
-        height: 180,
-        child: Center(child: CupertinoActivityIndicator(radius: 12)),
-      );
+    final results = controller.visibleResults;
+    Widget? placeholder;
+    if (controller.isSearching && results.isEmpty) {
+      placeholder = const SizedBox(
+          height: 180,
+          child: Center(child: CupertinoActivityIndicator(radius: 12)));
+    } else if (controller.mode == TagSearchMode.none) {
+      placeholder = const _EmptyResults(message: '添加标签或设置筛选条件后开始搜索');
+    } else if (results.isEmpty) {
+      placeholder = const _EmptyResults(message: '没有找到匹配的番剧');
     }
-    if (controller.mode == TagSearchMode.none) {
-      return const _EmptyResults(
-        message: '添加标签或设置筛选条件后开始搜索',
-      );
+    if (placeholder != null) {
+      return [SliverToBoxAdapter(child: placeholder)];
     }
-    if (controller.visibleResults.isEmpty) {
-      return const _EmptyResults(message: '没有找到匹配的番剧');
-    }
-
-    return CupertinoListSection.insetGrouped(
-      margin: EdgeInsets.zero,
-      header: Text('搜索结果·${controller.totalResults}'),
-      children: [
-        for (final anime in controller.visibleResults)
-          _ResultTile(
-            anime: anime,
-            onPressed: () => widget.onOpenAnimeDetail(anime.animeId),
-          ),
-        if ((controller.mode == TagSearchMode.text && controller.hasMoreText) ||
+    final hasMore =
+        (controller.mode == TagSearchMode.text && controller.hasMoreText) ||
             (controller.mode == TagSearchMode.advanced &&
-                controller.hasMoreAdvanced))
-          CupertinoButton(
-            onPressed: controller.mode == TagSearchMode.text
-                ? controller.loadMoreTextResults
-                : controller.loadMoreAdvancedResults,
-            child:
-                controller.isLoadingMoreText || controller.isLoadingMoreAdvanced
-                    ? const CupertinoActivityIndicator()
-                    : const Text('加载更多'),
-          ),
-      ],
-    );
+                controller.hasMoreAdvanced);
+    final count = results.length + (hasMore ? 1 : 0);
+    return [
+      SliverToBoxAdapter(
+          child: Padding(
+        padding: const EdgeInsets.fromLTRB(32, 0, 32, 8),
+        child: Text('搜索结果·${controller.totalResults}',
+            style: TextStyle(
+                color: CupertinoColors.secondaryLabel.resolveFrom(context))),
+      )),
+      SliverPadding(
+        padding: const EdgeInsets.fromLTRB(16, 0, 16, 32),
+        sliver: SliverList(
+            delegate: SliverChildBuilderDelegate((context, index) {
+          final isLast = index == count - 1;
+          final child = index < results.length
+              ? _ResultTile(
+                  anime: results[index],
+                  onPressed: () =>
+                      widget.onOpenAnimeDetail(results[index].animeId))
+              : CupertinoButton(
+                  onPressed: controller.isLoadingMoreText ||
+                          controller.isLoadingMoreAdvanced
+                      ? null
+                      : controller.mode == TagSearchMode.text
+                          ? controller.loadMoreTextResults
+                          : controller.loadMoreAdvancedResults,
+                  child: controller.isLoadingMoreText ||
+                          controller.isLoadingMoreAdvanced
+                      ? const CupertinoActivityIndicator()
+                      : const Text('加载更多'));
+          return DecoratedBox(
+            decoration: BoxDecoration(
+                color: CupertinoColors.secondarySystemGroupedBackground
+                    .resolveFrom(context),
+                borderRadius: BorderRadius.vertical(
+                    top: index == 0 ? const Radius.circular(10) : Radius.zero,
+                    bottom: isLast ? const Radius.circular(10) : Radius.zero)),
+            child: Column(children: [
+              child,
+              if (!isLast)
+                Padding(
+                    padding: const EdgeInsets.only(left: 16),
+                    child: Container(
+                        height: 0.5,
+                        color: CupertinoColors.separator.resolveFrom(context))),
+            ]),
+          );
+        }, childCount: count)),
+      ),
+    ];
   }
 
   void _addTag() {

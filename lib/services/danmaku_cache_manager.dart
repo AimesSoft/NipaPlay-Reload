@@ -6,6 +6,16 @@ import 'package:path/path.dart' as path;
 
 import 'package:nipaplay/utils/storage_service.dart';
 
+// Legacy payload parsing runs off the UI isolate; new entries have small sidecars.
+Future<Map<String, dynamic>> _readLegacyDanmakuMetadata(String filePath) async {
+  final data = json.decode(await io.File(filePath).readAsString())
+      as Map<String, dynamic>;
+  return {
+    'timestamp': data['timestamp'] as int,
+    'animeId': data['animeId'] as int
+  };
+}
+
 class DanmakuCacheManager {
   static const String _cacheKeyPrefix = 'danmaku_cache_';
   static const int _oldAnimeThreshold = 18343;
@@ -15,8 +25,78 @@ class DanmakuCacheManager {
   static io.Directory? _cachedDanmakuDir;
   static bool _migrationAttempted = false;
 
+  static Future<void> _diskOperation = Future.value();
+
+  static Future<T> _serialized<T>(Future<T> Function() operation) {
+    final result = _diskOperation.then((_) => operation());
+    _diskOperation =
+        result.then<void>((_) {}, onError: (Object _, StackTrace __) {});
+    return result;
+  }
+
+  static Future<bool> isCacheValid(String episodeId) =>
+      _serialized(() => _isCacheValid(episodeId));
+  static Future<List<dynamic>?> getDanmakuFromCache(String episodeId) =>
+      _serialized(() => _getDanmakuFromCache(episodeId));
+  static Future<void> saveDanmakuToCache(
+          String episodeId, int animeId, List<dynamic> comments) =>
+      _serialized(() => _saveDanmakuToCache(episodeId, animeId, comments));
+  static Future<void>? _cleanup;
+  static Future<void> clearExpiredCache() async {
+    final cleanup = _cleanup ??= _clearExpiredCache();
+    try {
+      await cleanup;
+    } finally {
+      if (identical(_cleanup, cleanup)) _cleanup = null;
+    }
+  }
+
+  static Future<void> clearAllCache() => _serialized(_clearAllCache);
+
+  static Future<void> _writeMetadata(
+      io.File file, Map<String, dynamic> data) async {
+    final stat = await file.stat();
+    await io.File('${file.path}.meta').writeAsString(json.encode({
+      'timestamp': data['timestamp'],
+      'animeId': data['animeId'],
+      'size': stat.size,
+      'modified': stat.modified.microsecondsSinceEpoch,
+    }));
+  }
+
+  static Future<Map<String, dynamic>> _metadata(io.File file) async {
+    final meta = io.File('${file.path}.meta');
+    final stat = await file.stat();
+    try {
+      final data =
+          json.decode(await meta.readAsString()) as Map<String, dynamic>;
+      if (data['size'] == stat.size &&
+          data['modified'] == stat.modified.microsecondsSinceEpoch &&
+          data['timestamp'] is int &&
+          data['animeId'] is int) return data;
+    } catch (_) {
+      /* Old or interrupted writes are migrated from their payload. */
+    }
+    final data = await compute(_readLegacyDanmakuMetadata, file.path);
+    try {
+      await _writeMetadata(file, data);
+    } catch (_) {}
+    return data;
+  }
+
+  static Future<io.Directory>? _directoryInitialization;
   static Future<io.Directory> _getDanmakuCacheDirectory() async {
     if (_cachedDanmakuDir != null) return _cachedDanmakuDir!;
+    final pending = _directoryInitialization ??= _initializeDirectory();
+    try {
+      return await pending;
+    } finally {
+      if (identical(_directoryInitialization, pending))
+        _directoryInitialization = null;
+    }
+  }
+
+  static Future<io.Directory> _initializeDirectory() async {
     final cacheRoot = await StorageService.getCacheDirectory();
     final danmakuDir = io.Directory('${cacheRoot.path}/danmaku');
     if (!await danmakuDir.exists()) {
@@ -74,7 +154,7 @@ class DanmakuCacheManager {
     }
   }
 
-  static Future<bool> isCacheValid(String episodeId) async {
+  static Future<bool> _isCacheValid(String episodeId) async {
     try {
       //////debugPrint('检查缓存有效性: $episodeId');
       // 首先检查内存缓存
@@ -126,7 +206,7 @@ class DanmakuCacheManager {
     }
   }
 
-  static Future<void> saveDanmakuToCache(
+  static Future<void> _saveDanmakuToCache(
       String episodeId, int animeId, List<dynamic> comments) async {
     if (kIsWeb) return;
     try {
@@ -146,12 +226,13 @@ class DanmakuCacheManager {
       // 异步保存到文件
       final file = io.File(await _getCacheFilePath(episodeId));
       await file.writeAsString(json.encode(jsonData));
+      await _writeMetadata(file, jsonData);
     } catch (e) {
       //////debugPrint('保存弹幕缓存失败: $e');
     }
   }
 
-  static Future<List<dynamic>?> getDanmakuFromCache(String episodeId) async {
+  static Future<List<dynamic>?> _getDanmakuFromCache(String episodeId) async {
     if (kIsWeb) return null;
     try {
       //////debugPrint('尝试从缓存获取弹幕: $episodeId');
@@ -180,14 +261,15 @@ class DanmakuCacheManager {
         }
       }
 
-      if (!await isCacheValid(episodeId)) {
+      if (!await _isCacheValid(episodeId)) {
         //////debugPrint('缓存无效');
         return null;
       }
 
       //////debugPrint('从文件缓存获取弹幕');
       final file = io.File(await _getCacheFilePath(episodeId));
-      final jsonData = json.decode(await file.readAsString());
+      final jsonData =
+          _memoryCache[episodeId] ?? json.decode(await file.readAsString());
       final comments = jsonData['comments'] as List<dynamic>;
       // 去除重复弹幕
       final uniqueComments = _removeDuplicateDanmaku(comments);
@@ -227,7 +309,7 @@ class DanmakuCacheManager {
     return uniqueComments;
   }
 
-  static Future<void> clearExpiredCache() async {
+  static Future<void> _clearExpiredCache() async {
     if (kIsWeb) return;
     try {
       // 清理内存缓存
@@ -248,29 +330,40 @@ class DanmakuCacheManager {
       final directory = await _getDanmakuCacheDirectory();
       final files = await directory
           .list()
-          .where((entity) => entity.path.contains(_cacheKeyPrefix))
+          .where((entity) =>
+              path.basename(entity.path).startsWith(_cacheKeyPrefix) &&
+              entity.path.endsWith('.json'))
           .toList();
 
       for (var file in files) {
         if (file is io.File) {
-          try {
-            final jsonData = json.decode(await file.readAsString());
-            final timestamp = jsonData['timestamp'] as int;
-            final animeId = jsonData['animeId'] as int;
-            final cacheTime = DateTime.fromMillisecondsSinceEpoch(timestamp);
-            final now = DateTime.now();
+          await _serialized(() async {
+            if (!await file.exists()) return;
+            try {
+              final jsonData = await _metadata(file);
+              final timestamp = jsonData['timestamp'] as int;
+              final animeId = jsonData['animeId'] as int;
+              final cacheTime = DateTime.fromMillisecondsSinceEpoch(timestamp);
+              final now = DateTime.now();
 
-            final cacheDuration = animeId < _oldAnimeThreshold
-                ? _oldAnimeCacheDuration
-                : _newAnimeCacheDuration;
+              final cacheDuration = animeId < _oldAnimeThreshold
+                  ? _oldAnimeCacheDuration
+                  : _newAnimeCacheDuration;
 
-            if (now.difference(cacheTime) > cacheDuration) {
-              await file.delete();
+              if (now.difference(cacheTime) > cacheDuration) {
+                await file.delete();
+                final meta = io.File('${file.path}.meta');
+                if (await meta.exists()) await meta.delete();
+              }
+            } catch (e) {
+              // 如果文件损坏，直接删除
+              if (await file.exists()) await file.delete();
+              final meta = io.File('${file.path}.meta');
+              if (await meta.exists()) await meta.delete();
             }
-          } catch (e) {
-            // 如果文件损坏，直接删除
-            await file.delete();
-          }
+          });
+          // Yield between files so playback reads/writes can enter the queue.
+          await Future<void>.delayed(Duration.zero);
         }
       }
     } catch (e) {
@@ -278,7 +371,7 @@ class DanmakuCacheManager {
     }
   }
 
-  static Future<void> clearAllCache() async {
+  static Future<void> _clearAllCache() async {
     if (kIsWeb) return;
     try {
       _memoryCache.clear();
@@ -291,7 +384,7 @@ class DanmakuCacheManager {
         if (entity is io.File) {
           final fileName = path.basename(entity.path);
           if (fileName.startsWith(_cacheKeyPrefix) &&
-              fileName.endsWith('.json')) {
+              (fileName.endsWith('.json') || fileName.endsWith('.json.meta'))) {
             try {
               await entity.delete();
             } catch (_) {

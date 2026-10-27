@@ -36,6 +36,25 @@ void main() {
   });
   tearDown(() => debugDefaultTargetPlatformOverride = null);
 
+  testWidgets('TV focus stays visible after touch and restores its strategy',
+      (tester) async {
+    final originalStrategy = FocusManager.instance.highlightStrategy;
+    addTearDown(() {
+      FocusManager.instance.highlightStrategy = originalStrategy;
+    });
+    FocusManager.instance.highlightStrategy =
+        FocusHighlightStrategy.alwaysTouch;
+    await tester.pumpWidget(_app(const Scaffold(body: Text('root'))));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('root'));
+    await tester.pumpAndSettle();
+    expect(FocusManager.instance.highlightMode, FocusHighlightMode.traditional);
+
+    await tester.pumpWidget(const SizedBox.shrink());
+    expect(FocusManager.instance.highlightStrategy,
+        FocusHighlightStrategy.alwaysTouch);
+  });
+
   test('Android menu and back are distinct; desktop Escape still opens menu',
       () {
     debugDefaultTargetPlatformOverride = TargetPlatform.android;

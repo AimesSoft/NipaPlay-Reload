@@ -712,7 +712,8 @@ extension VideoPlayerStateNavigation on VideoPlayerState {
     // "路径不可用"（非本地文件也非 HTTP URL）而跳过，导致续播无弹幕。
     if (MediaSourceUtils.isNewWebDavPath(filePath)) {
       try {
-        final url = MediaSourceUtils.resolveWebDavPathToUrl(filePath);
+        final url =
+            await MediaSourceUtils.resolveWebDavPathToUrlInitialized(filePath);
         if (url != null && url.isNotEmpty) return url;
       } catch (_) {}
     }
