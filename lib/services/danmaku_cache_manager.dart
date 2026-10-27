@@ -21,6 +21,9 @@ class DanmakuCacheManager {
   static const int _oldAnimeThreshold = 18343;
   static const Duration _oldAnimeCacheDuration = Duration(days: 7);
   static const Duration _newAnimeCacheDuration = Duration(hours: 2);
+  // 过了新鲜期的缓存不立即删除：联网失败（例如离线）时仍可回退使用，
+  // 超过这个期限才清理（#1024）。
+  static const Duration _staleRetention = Duration(days: 30);
   static final Map<String, Map<String, dynamic>> _memoryCache = {};
   static io.Directory? _cachedDanmakuDir;
   static bool _migrationAttempted = false;
@@ -36,8 +39,12 @@ class DanmakuCacheManager {
 
   static Future<bool> isCacheValid(String episodeId) =>
       _serialized(() => _isCacheValid(episodeId));
-  static Future<List<dynamic>?> getDanmakuFromCache(String episodeId) =>
-      _serialized(() => _getDanmakuFromCache(episodeId));
+  /// 读取缓存的弹幕。默认只返回仍在新鲜期内的缓存；[allowExpired] 为 true
+  /// 时也返回已过新鲜期但尚未清理的缓存，供联网失败时回退。
+  static Future<List<dynamic>?> getDanmakuFromCache(String episodeId,
+          {bool allowExpired = false}) =>
+      _serialized(
+          () => _getDanmakuFromCache(episodeId, allowExpired: allowExpired));
   static Future<void> saveDanmakuToCache(
           String episodeId, int animeId, List<dynamic> comments) =>
       _serialized(() => _saveDanmakuToCache(episodeId, animeId, comments));
@@ -52,6 +59,19 @@ class DanmakuCacheManager {
   }
 
   static Future<void> clearAllCache() => _serialized(_clearAllCache);
+
+  static Duration _cacheAge(Map<String, dynamic> data) => DateTime.now()
+      .difference(DateTime.fromMillisecondsSinceEpoch(data['timestamp'] as int));
+
+  static bool _isFresh(Map<String, dynamic> data) {
+    final cacheDuration = (data['animeId'] as int) < _oldAnimeThreshold
+        ? _oldAnimeCacheDuration
+        : _newAnimeCacheDuration;
+    return _cacheAge(data) < cacheDuration;
+  }
+
+  static bool _isRetained(Map<String, dynamic> data) =>
+      _cacheAge(data) < _staleRetention;
 
   static Future<void> _writeMetadata(
       io.File file, Map<String, dynamic> data) async {
@@ -232,7 +252,8 @@ class DanmakuCacheManager {
     }
   }
 
-  static Future<List<dynamic>?> _getDanmakuFromCache(String episodeId) async {
+  static Future<List<dynamic>?> _getDanmakuFromCache(String episodeId,
+      {bool allowExpired = false}) async {
     if (kIsWeb) return null;
     try {
       //////debugPrint('尝试从缓存获取弹幕: $episodeId');
@@ -240,16 +261,7 @@ class DanmakuCacheManager {
       if (_memoryCache.containsKey(episodeId)) {
         //////debugPrint('从内存缓存获取弹幕');
         final cacheData = _memoryCache[episodeId]!;
-        final timestamp = cacheData['timestamp'] as int;
-        final animeId = cacheData['animeId'] as int;
-        final cacheTime = DateTime.fromMillisecondsSinceEpoch(timestamp);
-        final now = DateTime.now();
-
-        final cacheDuration = animeId < _oldAnimeThreshold
-            ? _oldAnimeCacheDuration
-            : _newAnimeCacheDuration;
-
-        if (now.difference(cacheTime) < cacheDuration) {
+        if (_isFresh(cacheData) || (allowExpired && _isRetained(cacheData))) {
           final comments = cacheData['comments'] as List<dynamic>;
           // 对内存缓存中的数据也进行去重
           final uniqueComments = _removeDuplicateDanmaku(comments);
@@ -261,15 +273,18 @@ class DanmakuCacheManager {
         }
       }
 
-      if (!await _isCacheValid(episodeId)) {
+      final file = io.File(await _getCacheFilePath(episodeId));
+      if (allowExpired) {
+        if (!await file.exists()) return null;
+      } else if (!await _isCacheValid(episodeId)) {
         //////debugPrint('缓存无效');
         return null;
       }
 
       //////debugPrint('从文件缓存获取弹幕');
-      final file = io.File(await _getCacheFilePath(episodeId));
       final jsonData =
           _memoryCache[episodeId] ?? json.decode(await file.readAsString());
+      if (allowExpired && !_isRetained(jsonData)) return null;
       final comments = jsonData['comments'] as List<dynamic>;
       // 去除重复弹幕
       final uniqueComments = _removeDuplicateDanmaku(comments);
@@ -312,19 +327,8 @@ class DanmakuCacheManager {
   static Future<void> _clearExpiredCache() async {
     if (kIsWeb) return;
     try {
-      // 清理内存缓存
-      final now = DateTime.now();
-      _memoryCache.removeWhere((episodeId, cacheData) {
-        final timestamp = cacheData['timestamp'] as int;
-        final animeId = cacheData['animeId'] as int;
-        final cacheTime = DateTime.fromMillisecondsSinceEpoch(timestamp);
-
-        final cacheDuration = animeId < _oldAnimeThreshold
-            ? _oldAnimeCacheDuration
-            : _newAnimeCacheDuration;
-
-        return now.difference(cacheTime) > cacheDuration;
-      });
+      // 清理内存缓存（文件仍保留，供联网失败时回退）
+      _memoryCache.removeWhere((episodeId, cacheData) => !_isFresh(cacheData));
 
       // 清理文件缓存
       final directory = await _getDanmakuCacheDirectory();
@@ -341,16 +345,8 @@ class DanmakuCacheManager {
             if (!await file.exists()) return;
             try {
               final jsonData = await _metadata(file);
-              final timestamp = jsonData['timestamp'] as int;
-              final animeId = jsonData['animeId'] as int;
-              final cacheTime = DateTime.fromMillisecondsSinceEpoch(timestamp);
-              final now = DateTime.now();
-
-              final cacheDuration = animeId < _oldAnimeThreshold
-                  ? _oldAnimeCacheDuration
-                  : _newAnimeCacheDuration;
-
-              if (now.difference(cacheTime) > cacheDuration) {
+              // 只删除超过保留期的文件；过了新鲜期的仍留作离线回退。
+              if (!_isRetained(jsonData)) {
                 await file.delete();
                 final meta = io.File('${file.path}.meta');
                 if (await meta.exists()) await meta.delete();
