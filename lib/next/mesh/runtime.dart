@@ -19,6 +19,7 @@ import 'install_id.dart';
 import 'message.dart';
 import 'native.dart';
 import 'presence.dart';
+import 'response_chunks.dart';
 import 'system_bonjour.dart';
 import 'trust.dart';
 export 'host.dart' show authorizeMeshPeer;
@@ -148,6 +149,7 @@ final class MeshRuntime implements MeshDeviceSource {
   /// application, showing the other interface). Calls to a device that is not
   /// in front fail at once with `device_not_present`.
   final presence = MeshPresence();
+  final _responseChunks = MeshResponseChunks();
 
   /// What this device is playing, added to the presence it announces.
   JsonMap Function()? presenceFacts;
@@ -1534,6 +1536,7 @@ final class MeshRuntime implements MeshDeviceSource {
           'method': method,
           'params': params,
           'mesh': {
+            'chunkedResponses': true,
             'invocationId': _nonce(),
             'nonce': _nonce(),
             'deadline': DateTime.now().millisecondsSinceEpoch + 3600000
@@ -1673,9 +1676,15 @@ final class MeshRuntime implements MeshDeviceSource {
             encodedFrame,
           );
           if (finished) return;
-          final Object? decoded;
+          Object? decoded;
           try {
             decoded = jsonDecode(body);
+            if (decoded is Map && decoded['result'] is Map &&
+                (decoded['result'] as Map)[meshChunkMarker] is Map) {
+              decoded = await readMeshResponse(
+                  Map<String, Object?>.from((decoded['result'] as Map)[meshChunkMarker] as Map),
+                  (input) => rpc(peer, 'mesh/response/chunk', input, ungated: true));
+            }
           } on FormatException catch (e) {
             formatError ??= e;
             return;
@@ -1694,7 +1703,11 @@ final class MeshRuntime implements MeshDeviceSource {
               finishWithError(Failure(
                   FailureCode.values
                       .firstWhere((c) => c.wireName == denial['code']),
-                  denial['message'] as String));
+                  denial['message'] as String,
+                  retryable: denial['retryable'] == true,
+                  details: denial['details'] is Map
+                      ? Map<String, Object?>.from(denial['details'] as Map)
+                      : const {}));
               return;
             }
             if (error['code'] == -32600 && active > 1) {
@@ -1780,10 +1793,12 @@ final class MeshRuntime implements MeshDeviceSource {
       return;
     }
     JsonMap response;
+    var chunkedResponses = false;
     try {
       final frame = jsonDecode(event.body);
       if (frame is! JsonMap) throw const FormatException('Invalid frame.');
       final metadata = frame['mesh'];
+      chunkedResponses = metadata is Map && metadata['chunkedResponses'] == true;
       if (metadata is! JsonMap ||
           metadata['invocationId'] is! String ||
           metadata['nonce'] is! String ||
@@ -1825,6 +1840,12 @@ final class MeshRuntime implements MeshDeviceSource {
         throw const Failure(
             FailureCode.unavailable, 'Mesh peer was revoked or disconnected.');
       }
+      if (frame['method'] == 'mesh/response/chunk') {
+        response = {'jsonrpc': '2.0', 'id': frame['id'],
+          'result': _responseChunks.read(event.deviceId, frame['params'] as JsonMap)};
+        await _respond(node, event, response, chunkedResponses);
+        return;
+      }
       // Enrollment and the authenticated active peer set above authorize this
       // body. Domain decisions still run on the receiving host's Harness.
       if (frame['method'] == 'mesh/describe') {
@@ -1846,7 +1867,7 @@ final class MeshRuntime implements MeshDeviceSource {
                   .toEnvelope(),
           }
         };
-        await native.respond(node, event.requestId, jsonEncode(response));
+        await _respond(node, event, response, chunkedResponses);
         return;
       }
       if (frame['method'] == 'mesh/devices/changed') {
@@ -1864,7 +1885,7 @@ final class MeshRuntime implements MeshDeviceSource {
             'revocationEpoch': _epoch,
           }
         };
-        await native.respond(node, event.requestId, jsonEncode(response));
+        await _respond(node, event, response, chunkedResponses);
         return;
       }
       if (frame['method'] == 'mesh/presence') {
@@ -1875,7 +1896,7 @@ final class MeshRuntime implements MeshDeviceSource {
           'id': frame['id'],
           'result': {'accepted': accepted, 'presence': ownPresence()}
         };
-        await native.respond(node, event.requestId, jsonEncode(response));
+        await _respond(node, event, response, chunkedResponses);
         return;
       }
       if (frame['method'] == 'mesh/delivery') {
@@ -1885,7 +1906,7 @@ final class MeshRuntime implements MeshDeviceSource {
         final result =
             await receiveDelivery!(event.deviceId, frame['params'] as JsonMap);
         response = {'jsonrpc': '2.0', 'id': frame['id'], 'result': result};
-        await native.respond(node, event.requestId, jsonEncode(response));
+        await _respond(node, event, response, chunkedResponses);
         return;
       }
       if (delegationMethods.contains(frame['method']) ||
@@ -1915,7 +1936,7 @@ final class MeshRuntime implements MeshDeviceSource {
             }
           };
         }
-        await native.respond(node, event.requestId, jsonEncode(response));
+        await _respond(node, event, response, chunkedResponses);
         return;
       }
       if ((frame['method'] as String).startsWith('mesh/library/')) {
@@ -1925,7 +1946,7 @@ final class MeshRuntime implements MeshDeviceSource {
         final result = await libraryRequest!(frame['method'] as String,
             frame['params'] as JsonMap, event.deviceId);
         response = {'jsonrpc': '2.0', 'id': frame['id'], 'result': result};
-        await native.respond(node, event.requestId, jsonEncode(response));
+        await _respond(node, event, response, chunkedResponses);
         return;
       }
       final params = frame['params'] as JsonMap?;
@@ -1966,6 +1987,9 @@ final class MeshRuntime implements MeshDeviceSource {
           }
         ];
       }
+    } on Failure catch (failure) {
+      response = {'jsonrpc': '2.0', 'id': _rpcId(event.body), 'error': {
+        'code': -32001, 'message': failure.message, 'data': failure.toJson()}};
     } on FormatException {
       response = McpRpc.error(
           _rpcId(event.body), -32600, 'Invalid or replayed Mesh request.');
@@ -1974,11 +1998,34 @@ final class MeshRuntime implements MeshDeviceSource {
           McpRpc.error(_rpcId(event.body), -32603, 'Mesh request failed.');
     }
     try {
-      await native.respond(node, event.requestId, jsonEncode(response));
+      await _respond(node, event, response, chunkedResponses);
     } catch (_) {
       // Closing/revoked peers no longer have a response channel.
       status = _node == node ? 'peer_disconnected' : status;
     }
+  }
+
+  Future<void> _respond(int node, MeshMessage event, JsonMap response,
+      bool chunked) async {
+    final encoded = jsonEncode(response);
+    final bytes = utf8.encode(encoded);
+    if (bytes.length <= 512 * 1024) {
+      await native.respond(node, event.requestId, encoded);
+      return;
+    }
+    JsonMap envelope;
+    try {
+      if (!chunked) {
+        throw const Failure(FailureCode.unavailable,
+            'Response requires a newer Mesh client. The original operation may have completed.');
+      }
+      envelope = {'jsonrpc': '2.0', 'id': response['id'],
+        'result': {meshChunkMarker: _responseChunks.describe(event.deviceId, bytes)}};
+    } on Failure catch (failure) {
+      envelope = {'jsonrpc': '2.0', 'id': response['id'], 'error': {
+        'code': -32001, 'message': failure.message, 'data': failure.toJson()}};
+    }
+    await native.respond(node, event.requestId, jsonEncode(envelope));
   }
 
   /// Cuts the full `tools/list` answer to one page of at most
@@ -2175,6 +2222,7 @@ final class MeshRuntime implements MeshDeviceSource {
 
   Future<void> close() async {
     _closed = true;
+    _responseChunks.clear();
     _loginWatch?.cancel();
     _heartbeat?.cancel();
     _deferredRefresh?.cancel();

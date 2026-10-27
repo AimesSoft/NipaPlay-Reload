@@ -14,6 +14,7 @@ import '../media/library_reads.dart';
 import '../media/metadata_provider.dart';
 import '../harness_redaction.dart';
 import 'library_codec.dart';
+import 'library_transfer.dart';
 
 String _hash(Object value) =>
     sha256.convert(utf8.encode(jsonEncode(value))).toString();
@@ -68,6 +69,7 @@ final class LibraryProjection {
   final _added = <String, int>{};
   Map<String, List<String>> _historicalIds = {};
   JsonMap _local = {'records': <JsonMap>[]};
+  EncodedLibrarySnapshot? _wireSnapshot;
   Map<String, UiWork> _works = {};
   Map<String, List<UiEpisode>> _episodes = {};
   Map<String, String> _aliases = {}, _localTargets = {};
@@ -172,6 +174,16 @@ final class LibraryProjection {
       for (final entry in _progress.entries)
         {'kind': 'watch', 'id': entry.key, 'value': entry.value}
     ];
+    if (input['encoding'] == librarySnapshotEncoding) {
+      if (_wireSnapshot?.version != version) {
+        _wireSnapshot = EncodedLibrarySnapshot(version, records);
+      }
+      final offset = input['offset'];
+      if (offset is! int) {
+        throw const FormatException('Invalid catalogue byte offset.');
+      }
+      return _wireSnapshot!.page(offset);
+    }
     final offset = input['offset'];
     if (offset is! int || offset < 0 || offset > records.length) {
       throw const FormatException('Invalid catalogue offset.');

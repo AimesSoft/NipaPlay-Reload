@@ -115,7 +115,8 @@ final class _LibraryAction extends Action<MeshJson, MeshJson> {
   Future<Outcome<MeshJson>> run(MeshJson input, Invocation invocation) async {
     if (operation == 'refresh') {
       await library.refresh();
-      return Completed(MeshJson({'works': (await library.library()).length}));
+      return Completed(MeshJson({'works': (await library.library()).length,
+        ...library.refreshStatus}));
     }
     if (operation == 'progress') {
       final entries = (input.json['entries'] as List).cast<JsonMap>();

@@ -16,6 +16,7 @@ import '../danmaku/store.dart';
 import '../danmaku/sidecar.dart';
 import 'runtime.dart';
 import 'library_codec.dart';
+import 'library_transfer.dart';
 import 'library_worker.dart';
 import 'library_projection.dart';
 import '../ui_data/library_search.dart';
@@ -50,6 +51,14 @@ final class MeshLibrary {
   final Future<void> Function(String path, String fileId, String episodeId)? prepareDanmaku;
   final _peers = <String, JsonMap>{};
   final _online = <String, bool>{};
+  final _peerErrors = <String, JsonMap>{};
+  JsonMap get refreshStatus => {
+    'peers': [
+      for (final id in {..._peers.keys, ..._online.keys})
+        {'deviceId': id, 'online': _online[id] == true,
+          if (_peerErrors[id] case final error?) 'error': error},
+    ],
+  };
   Map<String, String> _assets = {};
   final _playAssets = <String, String>{};
   Map<String, UiWork> _works = {};
@@ -176,22 +185,13 @@ final class MeshLibrary {
           final old = _peers[id];
           final first = await mesh.rpc(id, 'mesh/library/snapshot', {
             'offset': 0,
+            'encoding': librarySnapshotEncoding,
             if (old?['version'] != null) 'known': old!['version']
           });
           if (first['unchanged'] != true &&
               old?['version'] != first['version']) {
-            final records = (first['records'] as List).cast<JsonMap>().toList();
-            var next = first['next'] as int?;
-            while (next != null) {
-              final page = await mesh.rpc(id, 'mesh/library/snapshot',
-                  {'offset': next, 'version': first['version']});
-              if (page['version'] != first['version']) {
-                throw const Failure(
-                    FailureCode.conflict, 'Library changed during pagination.');
-              }
-              records.addAll((page['records'] as List).cast<JsonMap>());
-              next = page['next'] as int?;
-            }
+            final records = await readLibrarySnapshot(first,
+                (input) => mesh.rpc(id, 'mesh/library/snapshot', input));
             await _mergeProgress({
               for (final r in records.where((r) => r['kind'] == 'watch'))
                 r['id'] as String: r['value'] as JsonMap
@@ -209,8 +209,10 @@ final class MeshLibrary {
             await _save('mesh:peer:$id', saved);
           }
           _setOnline(id, true);
+          _peerErrors.remove(id);
         } on Failure catch (error) {
           _setOnline(id, false);
+          _peerErrors[id] = error.toJson();
           lastError = error.message;
         }
       }

@@ -133,6 +133,67 @@ void main() {
     expect(await f.jobs.database.query('media_bindings'), before);
   });
 
+  test('Classic recognition reuses the explicit whole-file hierarchy', () async {
+    final fileId = await f.file('adopt.mkv');
+    final result = await f.call('media.identity.bind_batch', {
+      'requestId': 'tmdb-first', 'entries': [tmdbBinding(fileId)]
+    });
+    final bound = (result['entries'] as List).single as Map;
+    final path = (await f.identities.locations(fileId)).single['locator'] as String;
+    f.classic.rows[path] = {'filePath': path, 'animeName': 'Recognized anime',
+      'episodeTitle': 'Recognized episode', 'animeId': 7001, 'episodeId': 7101,
+      'videoHash': null};
+    await f.call('media.library.import_history', {});
+    await f.call('media.library.import_history', {});
+    final db = f.jobs.database;
+    expect(await db.query('media_entities', where: "kind='work'"), hasLength(1));
+    expect(await db.query('media_entities', where: "kind='episode'"), hasLength(1));
+    final links = await db.query('media_file_episodes', where: 'file_id=?', whereArgs: [fileId]);
+    expect(links.single['episode_id'], (bound['episodeIds'] as List).single);
+    final owners = await db.rawQuery("SELECT b.entity_id FROM media_bindings b JOIN media_external_objects o ON o.id=b.object_id WHERE b.status='accepted' AND o.provider='dandanplay' AND o.object_type='anime' AND b.entity_id=?", [bound['workId']]);
+    expect(owners, hasLength(1));
+  });
+
+  test('explicit identity adopts Classic ownership only for identical file segments', () async {
+    final fileId = await f.file('classic-first.mkv');
+    final path = (await f.identities.locations(fileId)).single['locator'] as String;
+    f.classic.rows[path] = {'filePath': path, 'animeName': 'Recognized anime',
+      'episodeTitle': 'Recognized episode', 'animeId': 7001, 'episodeId': 7101,
+      'videoHash': null};
+    await f.call('media.library.import_history', {});
+    final result = await f.call('media.identity.bind_batch', {
+      'requestId': 'tmdb-second', 'entries': [tmdbBinding(fileId)]
+    });
+    final bound = (result['entries'] as List).single as Map;
+    await f.call('media.identity.bind_batch', {
+      'requestId': 'adopt-exact', 'entries': [
+        {'kind': 'work', 'entityId': bound['workId'], 'reason': 'Same files',
+          'ref': {'provider': 'dandanplay', 'objectType': 'anime', 'externalId': '7001', 'scope': ''}},
+        {'kind': 'episode', 'entityId': (bound['episodeIds'] as List).single,
+          'reason': 'Same file and timeline',
+          'ref': {'provider': 'dandanplay', 'objectType': 'episode', 'externalId': '7101', 'scope': 'anime/7001'}},
+      ]
+    });
+    final links = await f.jobs.database.query('media_file_episodes', where: 'file_id=?', whereArgs: [fileId]);
+    expect(links.single['episode_id'], (bound['episodeIds'] as List).single);
+    final audit = await f.jobs.database.query('media_evidence', where: "payload LIKE '%\"event\":\"adopt\"%'");
+    expect(audit, hasLength(2));
+    final other = await f.file('other-content.mkv');
+    final second = await f.call('media.identity.bind_batch', {
+      'requestId': 'other-work', 'entries': [tmdbBinding(other)]
+    });
+    // Fixture TMDB reuses the same work; an unrelated local episode must still
+    // refuse to steal the accepted external episode.
+    await f.jobs.database.insert('media_entities', {'id': 'unrelated-episode', 'kind': 'episode',
+      'parent_id': (second['entries'] as List).single['releaseId'], 'attributes': '{}'});
+    final failed = await f.harness.invokeJson('media.identity.bind_batch', {
+      'requestId': 'must-not-steal', 'entries': [
+        {'kind': 'episode', 'entityId': 'unrelated-episode', 'reason': 'No matching file',
+          'ref': {'provider': 'dandanplay', 'objectType': 'episode', 'externalId': '7101', 'scope': 'anime/7001'}}]
+    }, Invocation(origin: 'mcp'));
+    expect(failed, isA<Failed>());
+  });
+
   test('GUI provenance is host derived and cannot be supplied by an Agent',
       () async {
     final id = await f.file('user.mkv');

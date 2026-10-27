@@ -355,6 +355,20 @@ void main() {
 
   test('X47 merged library and real TLS video Range and seeking', () => x47LibraryExperiment(rig), timeout: const Timeout(Duration(minutes: 5)), skip: reuseX47Evidence);
 
+  test('large rich metadata crosses real TLS without repeating the operation', () async {
+    final a = await rig.node('a'), b = await rig.node('b');
+    await a.refreshDevices();
+    var executions = 0;
+    final expected = '中文演职员、角色与完整来源资料' * 80000;
+    b.libraryRequest = (method, input, peer) async {
+      executions++;
+      return {'metadata': expected};
+    };
+    final result = await a.rpc(b.identity!.deviceId, 'mesh/library/large-test', {});
+    expect(result['metadata'], expected);
+    expect(executions, 1);
+  });
+
   test('two real TLS nodes invoke the same Harness and wrap decision effects',
       () async {
     var classicApprovals = 0;

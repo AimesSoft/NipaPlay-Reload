@@ -385,12 +385,14 @@ final class IdentityStore {
                   () => stableMediaId('object', ref.toJson()));
               final workObjectId = objectId(work.ref);
               final episodeObjectId = objectId(episode.ref);
-              final workId = await _classicLocal(tx, 'work', work, null,
+              final adopted = await _classicFileTarget(
+                  tx, fileId, workObjectId, episodeObjectId);
+              final workId = adopted?.work ?? await _classicLocal(tx, 'work', work, null,
                   objectId: workObjectId);
-              final releaseId = await _classicLocal(
+              final releaseId = adopted?.release ?? await _classicLocal(
                   tx, 'release', work, workId,
                   objectId: workObjectId);
-              final episodeLocalId = await _classicLocal(
+              final episodeLocalId = adopted?.episode ?? await _classicLocal(
                   tx, 'episode', episode, releaseId,
                   objectId: episodeObjectId);
               for (final pair in [
@@ -546,6 +548,38 @@ final class IdentityStore {
       result[episodeId] = sources;
     }
     return result;
+  }
+
+  /// A whole file already assigned to exactly one explicit episode does not
+  /// need a parallel Classic hierarchy. Never guess across split files or
+  /// overwrite a conflicting accepted identity from the same provider.
+  Future<({String work, String release, String episode})?> _classicFileTarget(
+      DatabaseExecutor tx, String fileId, String workObject, String episodeObject) async {
+    final rows = await tx.rawQuery(
+        "SELECT DISTINCT e.id,e.parent_id AS release_id,r.parent_id AS work_id "
+        "FROM media_file_episodes fe JOIN media_entities e ON e.id=fe.episode_id "
+        "JOIN media_entities r ON r.id=e.parent_id WHERE fe.file_id=? "
+        "AND COALESCE(fe.start_ms,0)=0 AND fe.end_ms IS NULL "
+        "AND (fe.relation='local_catalog' OR EXISTS (SELECT 1 FROM media_bindings b "
+        "WHERE b.entity_id=e.id AND b.status='accepted' AND b.source!='classic_match'))",
+        [fileId]);
+    if (rows.length != 1) return null;
+    final row = rows.single;
+    final target = (work: row['work_id'] as String,
+        release: row['release_id'] as String, episode: row['id'] as String);
+    for (final entry in [(target.work, workObject),
+      (target.release, workObject), (target.episode, episodeObject)]) {
+      if ((await tx.rawQuery(
+          "SELECT 1 FROM media_bindings b JOIN media_external_objects o ON o.id=b.object_id "
+          "WHERE b.entity_id=? AND b.status='accepted' AND o.provider='dandanplay' AND b.object_id<>? LIMIT 1",
+          [entry.$1, entry.$2])).isNotEmpty) return null;
+      final kind = (await entity(entry.$1, db: tx))['kind'];
+      if ((await tx.rawQuery(
+          "SELECT 1 FROM media_bindings b JOIN media_entities e ON e.id=b.entity_id "
+          "WHERE b.object_id=? AND b.status='accepted' AND e.kind=? AND b.entity_id<>? LIMIT 1",
+          [entry.$2, kind, entry.$1])).isNotEmpty) return null;
+    }
+    return target;
   }
 
   Future<String> _classicLocal(
@@ -1329,12 +1363,12 @@ final class IdentityStore {
   }
 
   Future<void> _checkObjects(
-      DatabaseExecutor tx, String id, List<MetadataRecord> records) async {
+      DatabaseExecutor tx, String id, List<MetadataRecord> records, Invocation invocation) async {
     final kind = (await entity(id, db: tx))['kind'];
     if (kind != 'file') {
       for (final record in records) {
         final owners = await tx.rawQuery(
-            'SELECT b.entity_id FROM media_bindings b JOIN media_entities e ON e.id=b.entity_id '
+            'SELECT b.* FROM media_bindings b JOIN media_entities e ON e.id=b.entity_id '
             'WHERE b.object_id=? AND b.status=? AND e.kind=? AND b.entity_id!=?',
             [
               stableMediaId('object', record.ref.toJson()),
@@ -1343,8 +1377,28 @@ final class IdentityStore {
               id
             ]);
         if (owners.isNotEmpty) {
-          throw Failure(FailureCode.conflict,
-              'External object is already bound to local $kind ${owners.first['entity_id']}.');
+          final targetFiles = await _entityFileSegments(tx, id);
+          for (final owner in owners) {
+            final previous = owner['entity_id'] as String;
+            final files = await _entityFileSegments(tx, previous);
+            if (owner['source'] != 'classic_match' || targetFiles.isEmpty ||
+                files.length != targetFiles.length || !files.containsAll(targetFiles)) {
+              throw Failure(FailureCode.conflict,
+                  'External object is already bound to local $kind $previous.');
+            }
+          }
+          for (final owner in owners) {
+            await tx.update('media_bindings', {
+              'entity_id': id, 'revision': (owner['revision'] as int) + 1,
+            }, where: 'id=?', whereArgs: [owner['id']]);
+            await _audit(tx, owner['id'] as String,
+                {'reason': 'Reuse Classic recognition for the same files.'},
+                invocation,
+                event: 'adopt', extra: {'previousEntityId': owner['entity_id'], 'entityId': id});
+          }
+          for (final segment in targetFiles) {
+            await _pruneFileLinks(tx, (jsonDecode(segment) as List).first as String);
+          }
         }
       }
     }
@@ -1359,6 +1413,16 @@ final class IdentityStore {
       throw const Failure(FailureCode.conflict,
           'Conflicting accepted identity from this source; unbind it explicitly.');
     }
+  }
+
+  Future<Set<String>> _entityFileSegments(DatabaseExecutor tx, String id) async {
+    final rows = await tx.rawQuery(
+        'WITH RECURSIVE members(id) AS (SELECT id FROM media_entities WHERE id=? '
+        'UNION ALL SELECT e.id FROM media_entities e JOIN members m ON e.parent_id=m.id) '
+        'SELECT DISTINCT fe.file_id,fe.start_ms,fe.end_ms FROM media_file_episodes fe '
+        'JOIN members m ON m.id=fe.episode_id', [id]);
+    return {for (final row in rows)
+      jsonEncode([row['file_id'], row['start_ms'] ?? 0, row['end_ms']])};
   }
 
   Future<String> _local(DatabaseExecutor tx, String? id, String kind,
@@ -1404,7 +1468,7 @@ final class IdentityStore {
                       title: '',
                       kind: kind,
                       fetchedAt: DateTime.now().toUtc());
-                  await _checkObjects(tx, id, [record]);
+                  await _checkObjects(tx, id, [record], invocation);
                   final binding = await _bindRecord(
                       tx,
                       id,
@@ -1497,7 +1561,7 @@ final class IdentityStore {
                   'startMs': null,
                   'endMs': null
                 };
-                await _checkObjects(tx, workId, [work]);
+                await _checkObjects(tx, workId, [work], invocation);
                 await bind(workId, work, 'contains', {
                   ...parentScope,
                   'season': work.season,
@@ -1514,7 +1578,7 @@ final class IdentityStore {
                       'release',
                       release,
                       workId);
-                  await _checkObjects(tx, releaseId, [release]);
+                  await _checkObjects(tx, releaseId, [release], invocation);
                   await bind(releaseId, release, 'contains', parentScope);
                   for (var i = 0; i < selected.length; i++) {
                     final ep = selected[i];
@@ -1528,7 +1592,7 @@ final class IdentityStore {
                         'episode',
                         ep,
                         releaseId);
-                    await _checkObjects(tx, id, [ep]);
+                    await _checkObjects(tx, id, [ep], invocation);
                     await bind(id, ep, 'exact', {
                       ...parentScope,
                       'numbers': [ep.number]
@@ -1573,7 +1637,7 @@ final class IdentityStore {
                   final previousBindings = await tx.query('media_bindings',
                       where: 'entity_id=? AND status=?',
                       whereArgs: [fileId, 'accepted']);
-                  await _checkObjects(tx, fileId, selected);
+                  await _checkObjects(tx, fileId, selected, invocation);
                   final relation = selected.length == 1 ? 'exact' : 'combined';
                   for (var i = 0; i < selected.length; i++) {
                     await bind(fileId, selected[i], relation, scope, file: {
@@ -2033,7 +2097,7 @@ final class IdentityStore {
         title: '',
         kind: 'episode',
         fetchedAt: DateTime.now().toUtc());
-    await _checkObjects(tx, fileId, [record]);
+    await _checkObjects(tx, fileId, [record], invocation);
     final previous = await tx.query('media_bindings',
         where: 'entity_id=? AND status=?', whereArgs: [fileId, 'accepted']);
     final scope = decodeMediaJson(accepted.first['scope']);
