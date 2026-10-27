@@ -150,7 +150,7 @@ NipaPlay Classic 是当前稳定版本。NipaPlay Next 2.0 处于开发者预览
 
 Next 引入梨花：Agent 根据用户意图查询实际状态，并通过 NipaPlay 的能力执行媒体整理、下载和播放等任务，结果呈现在媒体库与播放器中。个人 harness 仓库保存可扩展的工具与记忆；Mesh 支持跨设备使用这些能力。
 
-[Next 文档](https://github.com/AimesSoft/nipaplay-reload/tree/next/docs/next) · [预发布版本](https://github.com/AimesSoft/nipaplay-reload/releases)
+[Next 文档](https://github.com/AimesSoft/nipaplay-reload/blob/next/docs/next/README.md) · [预发布版本](https://github.com/AimesSoft/nipaplay-reload/releases)
 
 ## 功能列表
 
