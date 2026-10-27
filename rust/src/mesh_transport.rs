@@ -212,6 +212,18 @@ pub struct Node {
     stopped: std::sync::atomic::AtomicBool,
 }
 
+// Remove response handles when a connection is cancelled, expires or vanishes.
+// The domain operation may already be running; only its transport is released.
+struct PendingResponse<'a> {
+    node: &'a Node,
+    id: u64,
+}
+impl Drop for PendingResponse<'_> {
+    fn drop(&mut self) {
+        self.node.responses.lock().unwrap().remove(&self.id);
+    }
+}
+
 impl Node {
     pub async fn start(
         ca: String,
@@ -378,8 +390,15 @@ impl Node {
                 static SEQUENCE: AtomicU64 = AtomicU64::new(1);
                 let id = SEQUENCE.fetch_add(1, Ordering::SeqCst);
                 let (send, receive) = oneshot::channel();
+                let _pending = PendingResponse { node: self, id };
                 tx.send(Request { incoming: Incoming { request_id: id, device_id: peer.clone(), body }, response: send }).await.map_err(|_| "node stopped")?;
-                let response = receive.await.map_err(|_| "response cancelled")?;
+                // Exactly one request/response lives on this connection. An
+                // extra application byte is invalid; EOF means the caller no
+                // longer needs the response, so do not occupy a slot for 1h.
+                let response = tokio::select! {
+                    response = receive => response.map_err(|_| "response cancelled")?,
+                    _ = tls.read_u8() => return Err("peer disconnected".into()),
+                };
                 self.check_device(&peer)?;
                 if let Some(spec) = response.strip_prefix("\0mesh-file\n") {
                     let parts: Vec<_> = spec.splitn(4, '\n').collect();
@@ -411,15 +430,20 @@ impl Node {
     pub async fn next(&self) -> Result<Incoming, String> {
         let changes = self.changes.subscribe();
         let mut events = self.events.lock().await;
-        let request = tokio::select! {
-            _ = self.cancelled(&self.device_id, changes) => return Err("node stopped".into()),
-            event = events.recv() => event.ok_or("node stopped")?,
-        };
-        self.responses
-            .lock()
-            .unwrap()
-            .insert(request.incoming.request_id, request.response);
-        Ok(request.incoming)
+        loop {
+            let request = tokio::select! {
+                _ = self.cancelled(&self.device_id, changes.clone()) => return Err("node stopped".into()),
+                event = events.recv() => event.ok_or("node stopped")?,
+            };
+            let mut responses = self.responses.lock().unwrap();
+            // Hold the same lock as PendingResponse while checking/inserting,
+            // so a disconnect cannot leave a handle behind between the two.
+            if request.response.is_closed() {
+                continue;
+            }
+            responses.insert(request.incoming.request_id, request.response);
+            return Ok(request.incoming);
+        }
     }
     pub fn respond(&self, id: u64, body: String) -> Result<(), String> {
         let send = self
@@ -437,11 +461,20 @@ impl Node {
         device: &str,
         body: &str,
     ) -> Result<String, String> {
+        self.send_with_timeout(host, port, device, body, CALL_TIMEOUT).await
+    }
+
+    /// A caller such as media-file reads may use a shorter total deadline.
+    /// Dropping the timed-out future closes its TCP/TLS stream as well.
+    pub async fn send_with_timeout(
+        &self, host: &str, port: u16, device: &str, body: &str,
+        call_timeout: Duration,
+    ) -> Result<String, String> {
         self.check_device(device)?;
         let changes = self.changes.subscribe();
         tokio::select! {
             _ = self.cancelled(device, changes) => Err("device revoked".into()),
-            result = timeout(CALL_TIMEOUT, async {
+            result = timeout(call_timeout, async {
                 let tcp = timeout(NETWORK_TIMEOUT, TcpStream::connect((host, port))).await.map_err(|_| "connect: connect timeout".to_owned())?.map_err(|e| format!("connect: {e}"))?;
                 let mut tls = timeout(NETWORK_TIMEOUT, TlsConnector::from(self.client.clone()).connect(server_name(device).map_err(|e| format!("connect: {e}"))?, tcp)).await.map_err(|_| "connect: TLS handshake timeout".to_owned())?.map_err(|e| format!("connect: {e}"))?;
                 let peer_certs = tls.get_ref().1.peer_certificates().ok_or_else(|| "connect: missing peer certificate".to_owned())?;
@@ -499,6 +532,90 @@ async fn write_frame<S: AsyncWrite + Unpin>(socket: &mut S, body: &str) -> Resul
 #[cfg(test)]
 mod tests {
     use super::*;
+    async fn pair() -> (Arc<Node>, Arc<Node>) {
+        use rcgen::{BasicConstraints, CertificateParams, ExtendedKeyUsagePurpose,
+            IsCa, Issuer, KeyPair, KeyUsagePurpose, SanType};
+        let ca_key = KeyPair::generate_for(&rcgen::PKCS_ED25519).unwrap();
+        let mut ca_params = CertificateParams::new(Vec::<String>::new()).unwrap();
+        ca_params.is_ca = IsCa::Ca(BasicConstraints::Constrained(0));
+        ca_params.key_usages = vec![KeyUsagePurpose::KeyCertSign];
+        let ca = ca_params.self_signed(&ca_key).unwrap().pem();
+        let issuer = Issuer::new(ca_params, ca_key);
+        let mut identities = Vec::new();
+        for _ in 0..2 {
+            let private = generate_key().unwrap();
+            let device = device_id(&public_key(&private).unwrap());
+            let key = KeyPair::try_from(private.as_slice()).unwrap();
+            let mut params = CertificateParams::new(vec![device_dns_name(&device).unwrap()]).unwrap();
+            params.is_ca = IsCa::ExplicitNoCa;
+            params.key_usages = vec![KeyUsagePurpose::DigitalSignature];
+            params.extended_key_usages = vec![ExtendedKeyUsagePurpose::ServerAuth,
+                ExtendedKeyUsagePurpose::ClientAuth];
+            params.subject_alt_names.push(SanType::URI(format!(
+                "nipaplay-mesh://device?account=test&device={device}").try_into().unwrap()));
+            let cert = params.signed_by(&key, &issuer).unwrap().pem();
+            identities.push((device, private, cert));
+        }
+        let allowed = identities.iter().map(|i| i.0.clone()).collect::<Vec<_>>();
+        let mut nodes = Vec::new();
+        for (_, private, cert) in identities {
+            nodes.push(Node::start(ca.clone(), cert, private, "test".into(),
+                allowed.clone(), "127.0.0.1:0".into()).await.unwrap());
+        }
+        (nodes.remove(0), nodes.remove(0))
+    }
+
+    async fn wait_for_released(node: &Node) {
+        timeout(Duration::from_secs(2), async {
+            while !node.responses.lock().unwrap().is_empty() {
+                tokio::time::sleep(Duration::from_millis(5)).await;
+            }
+        }).await.expect("disconnected response handle must be released");
+    }
+
+    #[tokio::test]
+    async fn short_deadline_closes_the_socket_and_releases_the_peer_response_slot() {
+        let (a, b) = pair().await;
+        let caller = a.clone();
+        let peer = b.device_id.clone();
+        let port = b.port;
+        let task = tokio::spawn(async move {
+            caller.send_with_timeout("127.0.0.1", port, &peer, "stalled read",
+                Duration::from_millis(200)).await
+        });
+        let incoming = timeout(Duration::from_secs(2), b.next()).await.unwrap().unwrap();
+        assert_eq!(incoming.body, "stalled read");
+        assert_eq!(task.await.unwrap().unwrap_err(), "call timeout");
+        wait_for_released(&b).await;
+        assert!(b.respond(incoming.request_id, "too late".into()).is_err());
+        a.stop(); b.stop();
+    }
+
+    #[tokio::test]
+    async fn cancelling_a_caller_releases_its_slot_and_other_calls_still_work() {
+        let (a, b) = pair().await;
+        let caller = a.clone();
+        let peer = b.device_id.clone();
+        let port = b.port;
+        let task = tokio::spawn(async move {
+            caller.send("127.0.0.1", port, &peer, "cancelled call").await
+        });
+        b.next().await.unwrap();
+        task.abort();
+        assert!(task.await.unwrap_err().is_cancelled());
+        wait_for_released(&b).await;
+        let caller = a.clone();
+        let peer = b.device_id.clone();
+        let task = tokio::spawn(async move {
+            caller.send("127.0.0.1", port, &peer, "long task").await
+        });
+        let request = b.next().await.unwrap();
+        tokio::time::sleep(Duration::from_millis(250)).await;
+        b.respond(request.request_id, "completed once".into()).unwrap();
+        assert_eq!(task.await.unwrap().unwrap(), "completed once");
+        a.stop(); b.stop();
+    }
+
     #[test]
     fn every_base64url_device_id_prefix_is_accepted_by_the_standard_dns_validator() {
         for first in 0..=255 {

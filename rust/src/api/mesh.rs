@@ -116,7 +116,20 @@ pub async fn mesh_send(
     device: String,
     body: String,
 ) -> Result<String, String> {
-    let response = node(id)?.send(&host, port, &device, &body).await?;
+    // Only the read-only file primitive gets the media deadline. A task or a
+    // write can legitimately run for much longer and must not be replayed.
+    let file_read = serde_json::from_str::<serde_json::Value>(&body)
+        .ok().is_some_and(|frame| frame["method"] == "mesh/library/read");
+    let node = node(id)?;
+    let response = if file_read {
+        node.send_with_timeout(&host, port, &device, &body,
+            std::time::Duration::from_secs(15)).await.map_err(|error| {
+                if error == "call timeout" { "mesh file read timeout".to_owned() }
+                else { error }
+            })?
+    } else {
+        node.send(&host, port, &device, &body).await?
+    };
     if let Some(bytes) = response.strip_prefix("\0mesh-bytes\n") {
         let (header, data) = bytes.split_once('\n').ok_or("invalid byte response")?;
         let mut envelope: serde_json::Value = serde_json::from_slice(&B64.decode(header).map_err(|e| e.to_string())?).map_err(|e| e.to_string())?;

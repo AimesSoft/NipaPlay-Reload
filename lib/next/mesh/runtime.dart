@@ -93,6 +93,9 @@ final class MeshRuntime implements MeshDeviceSource {
     this.candidateLookupBase = const Duration(seconds: 30),
     this.candidateLookupInterval = const Duration(minutes: 10),
     this.interfaceProvider,
+    this.networkPollInterval = const Duration(seconds: 5),
+    this.networkChangeDelay = const Duration(seconds: 2),
+    this.networkReportMinGap = const Duration(minutes: 2),
     MeshNative? native,
     int Function()? clockSeconds,
   })  : native = native ?? MeshNative(),
@@ -127,6 +130,7 @@ final class MeshRuntime implements MeshDeviceSource {
   final Duration candidateLookupBase;
   final Duration candidateLookupInterval;
   final Future<List<NetworkInterfaceSnapshot>> Function()? interfaceProvider;
+  final Duration networkPollInterval, networkChangeDelay, networkReportMinGap;
   final int Function()? _clockSeconds;
 
   Future<JsonMap?> Function(String, Invocation)? returnTarget;
@@ -168,6 +172,10 @@ final class MeshRuntime implements MeshDeviceSource {
   int? _node;
   int _generation = 0;
   Timer? _heartbeat, _loginWatch;
+  Timer? _networkPoll, _networkDebounce, _networkReport;
+  bool _networkPolling = false, _networkWatching = false;
+  String? _observedAddresses, _publishedAddresses;
+  DateTime? _lastAddressReportAt;
   Future<void> _operations = Future.value();
   Future<void>? _receiver;
   String _status = 'disabled';
@@ -293,6 +301,7 @@ final class MeshRuntime implements MeshDeviceSource {
   /// Offline until [startConfigured] again: no listener, no login watch, no
   /// heartbeat.
   Future<void> stop() async {
+    _stopNetworkWatch();
     _loginWatch?.cancel();
     _heartbeat?.cancel();
     _deferredRefresh?.cancel();
@@ -614,6 +623,115 @@ final class MeshRuntime implements MeshDeviceSource {
             'LAN broadcast unavailable; coordinator candidates remain available.';
       }
     }
+    _observedAddresses = null;
+    _publishedAddresses = null;
+    final discovery = _discovery!;
+    _networkWatching = true;
+    _networkPoll = Timer.periodic(networkPollInterval,
+        (_) => unawaited(_checkNetwork(discovery: discovery)));
+  }
+
+  Future<List<JsonMap>> _currentAddresses() async => [
+        if (_bindHost != '127.0.0.1') ...await _discovery!.localCandidates(),
+        ..._manual,
+      ].take(32).toList();
+
+  String _addressSignature(List<JsonMap> candidates) {
+    final addresses = [for (final c in candidates)
+      jsonEncode([c['kind'], c['host'], c['port'], c['priority']])]
+      ..sort();
+    return jsonEncode(addresses);
+  }
+
+  Future<JsonMap> _publishAddresses() async {
+    final candidates = await _currentAddresses();
+    final signature = _addressSignature(candidates);
+    _observedAddresses = signature;
+    _lastAddressReportAt = DateTime.now();
+    final response = await _coordinator!.request('POST', '/mesh/v1/addresses', {
+      'device_id': identity!.deviceId,
+      'candidates': candidates,
+    });
+    _publishedAddresses = signature;
+    return response;
+  }
+
+  Future<void> _checkNetwork({required MeshDiscovery discovery}) async {
+    if (_networkPolling || !_networkWatching || _closed ||
+        !identical(_discovery, discovery)) {
+      return;
+    }
+    _networkPolling = true;
+    try {
+      final signature = _addressSignature(await _currentAddresses());
+      if (!_networkWatching || _closed || !identical(_discovery, discovery) ||
+          signature == _observedAddresses) {
+        return;
+      }
+      final previous = _observedAddresses;
+      _observedAddresses = signature;
+      if (previous == null) return;
+      _networkDebounce?.cancel();
+      _networkDebounce = Timer(networkChangeDelay, () {
+        unawaited(_queue(() async {
+          if (!_networkWatching || !identical(_discovery, discovery) ||
+              _observedAddresses == _publishedAddresses) {
+            return;
+          }
+          // Forget only lookup backoff, not authenticated roster or old routes:
+          // an address change must not break otherwise usable LAN connections.
+          _candidateLookupAt.clear();
+          _candidateLookupGap.clear();
+          if (_broadcast || SystemBonjour.available) {
+            try {
+              await discovery.close();
+              await discovery.start();
+              discoveryNotice = null;
+            } catch (_) {
+              discoveryNotice = 'LAN discovery could not refresh after a network change.';
+            }
+          }
+          _scheduleNetworkReport(discovery);
+        }));
+      });
+    } catch (_) {
+      // A transient interface enumeration failure is not an empty network.
+    } finally {
+      _networkPolling = false;
+    }
+  }
+
+  void _scheduleNetworkReport(MeshDiscovery discovery) {
+    if (_networkReport?.isActive == true || _coordinatorSyncPending) return;
+    final since = _lastAddressReportAt;
+    final elapsed = since == null ? networkReportMinGap : DateTime.now().difference(since);
+    final wait = elapsed >= networkReportMinGap
+        ? Duration.zero : networkReportMinGap - elapsed;
+    _networkReport = Timer(wait, () {
+      unawaited(_queue(() async {
+        if (!_networkWatching || !identical(_discovery, discovery) ||
+            _coordinatorSyncPending ||
+            _observedAddresses == _publishedAddresses) {
+          return;
+        }
+        // A normal heartbeat may have reported while this operation waited
+        // for the serialized queue. Recheck the budget at execution time.
+        if (_lastAddressReportAt case final last?) {
+          if (DateTime.now().difference(last) < networkReportMinGap) {
+            _scheduleNetworkReport(discovery);
+            return;
+          }
+        }
+        await _reportAddressesAndSyncEpoch();
+      }));
+    });
+  }
+
+  void _stopNetworkWatch() {
+    _networkWatching = false;
+    _networkPoll?.cancel();
+    _networkDebounce?.cancel();
+    _networkReport?.cancel();
   }
 
   Future<JsonMap> _enrollOrRenew({
@@ -806,14 +924,7 @@ final class MeshRuntime implements MeshDeviceSource {
   }
 
   Future<void> _reportAddressesAndSyncEpoch() async {
-    final own = identity!;
-    final response = await _coordinator!.request('POST', '/mesh/v1/addresses', {
-      'device_id': own.deviceId,
-      'candidates': [
-        if (_bindHost != '127.0.0.1') ...await _discovery!.localCandidates(),
-        ..._manual,
-      ].take(32).toList(),
-    });
+    final response = await _publishAddresses();
     _interval =
         max(900, response['heartbeat_interval_seconds'] as int? ?? _interval);
     final remoteEpoch = response['revocation_epoch'] as int?;
@@ -938,13 +1049,7 @@ final class MeshRuntime implements MeshDeviceSource {
     JsonMap? response;
     Object? addressError;
     try {
-      response = await _coordinator!.request('POST', '/mesh/v1/addresses', {
-        'device_id': own.deviceId,
-        'candidates': [
-          if (_bindHost != '127.0.0.1') ...await _discovery!.localCandidates(),
-          ..._manual,
-        ].take(32).toList(),
-      });
+      response = await _publishAddresses();
     } catch (error) {
       addressError = error;
     }
@@ -1008,8 +1113,11 @@ final class MeshRuntime implements MeshDeviceSource {
     coordinatorNotice = error is Failure
         ? error.message
         : 'Mesh coordinator returned an unexpected response.';
+    final alreadyPending = _coordinatorSyncPending;
     _coordinatorSyncPending = true;
-    if (_heartbeat?.isActive != true) _scheduleHeartbeat(retry: true);
+    if (!alreadyPending || _heartbeat?.isActive != true) {
+      _scheduleHeartbeat(retry: true);
+    }
   }
 
   void _scheduleHeartbeat({bool retry = false}) {
@@ -1200,7 +1308,7 @@ final class MeshRuntime implements MeshDeviceSource {
     final config = jsonDecode(await file.readAsString()) as JsonMap;
     config['addresses'] = _manual;
     await file.writeAsString(jsonEncode(config), flush: true);
-    // Changed hints are advertised at the next scheduled heartbeat.
+    // The network watcher coalesces changed hints into a bounded update.
   }
 
   Future<List<JsonMap>> manualAddresses() async {
@@ -1582,6 +1690,12 @@ final class MeshRuntime implements MeshDeviceSource {
       _reachedSinceLookup.add(peer);
       return winner.result;
     } on Failure catch (failure) {
+      if (failure.details['reason'] == 'read_timeout') {
+        // Let the next range request resolve a fresh route; do not extend this
+        // block's deadline with a recursive retry on the remembered address.
+        if (remembered != null) await _removeRoute(peer);
+        rethrow;
+      }
       if (remembered != null &&
           failure.code == FailureCode.unavailable &&
           failure.retryable &&
@@ -1612,12 +1726,13 @@ final class MeshRuntime implements MeshDeviceSource {
     String? connectCause;
     Failure? rpcFailure;
     FormatException? formatError;
-    Timer? staggerTimer;
+    Timer? staggerTimer, readDeadline;
 
     void finishWithError(Object error) {
       if (finished) return;
       finished = true;
       staggerTimer?.cancel();
+      readDeadline?.cancel();
       if (!completer.isCompleted) {
         completer.completeError(error);
       }
@@ -1627,6 +1742,7 @@ final class MeshRuntime implements MeshDeviceSource {
       if (finished) return;
       finished = true;
       staggerTimer?.cancel();
+      readDeadline?.cancel();
       if (!completer.isCompleted) {
         completer.complete((candidate: candidate, result: result));
       }
@@ -1725,6 +1841,12 @@ final class MeshRuntime implements MeshDeviceSource {
           finishWithSuccess(candidate, decoded['result'] as JsonMap);
         } catch (error) {
           if (finished) return;
+          if (method == 'mesh/library/read' &&
+              error.toString().contains('mesh file read timeout')) {
+            rpcFailure = const Failure(FailureCode.unavailable,
+                'Mesh file read timed out.', retryable: true,
+                details: {'reason': 'read_timeout', 'stage': 'read'});
+          }
           if (!_isConnectStageError(error)) {
             hadPostConnectFailure = true;
           } else {
@@ -1737,6 +1859,14 @@ final class MeshRuntime implements MeshDeviceSource {
       }());
     };
 
+    if (method == 'mesh/library/read') {
+      // Multiple address candidates must not turn a short per-socket timeout
+      // into another long wait for one media block.
+      readDeadline = Timer(const Duration(seconds: 20), () => finishWithError(
+          const Failure(FailureCode.unavailable, 'Mesh file read timed out.',
+              retryable: true,
+              details: {'reason': 'read_timeout', 'stage': 'read'})));
+    }
     launchNextIfPossible();
     if (candidates.length > 1 && !finished) {
       staggerTimer = Timer.periodic(candidateStaggerDelay, (timer) {
@@ -2000,8 +2130,8 @@ final class MeshRuntime implements MeshDeviceSource {
     try {
       await _respond(node, event, response, chunkedResponses);
     } catch (_) {
-      // Closing/revoked peers no longer have a response channel.
-      status = _node == node ? 'peer_disconnected' : status;
+      // Closing/revoked peers no longer have a response channel. The local
+      // listener is still healthy; one cancelled request must not mark it down.
     }
   }
 
@@ -2209,6 +2339,7 @@ final class MeshRuntime implements MeshDeviceSource {
       });
 
   Future<void> _stopNode() async {
+    _stopNetworkWatch();
     _heartbeat?.cancel();
     final node = _node;
     _node = null;
@@ -2222,6 +2353,7 @@ final class MeshRuntime implements MeshDeviceSource {
 
   Future<void> close() async {
     _closed = true;
+    _stopNetworkWatch();
     _responseChunks.clear();
     _loginWatch?.cancel();
     _heartbeat?.cancel();

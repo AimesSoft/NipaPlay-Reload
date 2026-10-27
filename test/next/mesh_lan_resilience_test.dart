@@ -95,6 +95,7 @@ final class _ControllableCoordinator {
   bool gateOpen = true;
   final requestCounts = <String, int>{};
   final logs = <String>[];
+  final addressReports = <JsonMap>[];
 
   int countFor(String method, String pathPrefix) =>
       requestCounts['$method $pathPrefix'] ?? 0;
@@ -185,6 +186,9 @@ final class _ControllableCoordinator {
           <int>[],
           (acc, chunk) => acc..addAll(chunk),
         );
+        if (request.method == 'POST' && request.uri.path == '/mesh/v1/addresses') {
+          addressReports.add(jsonDecode(utf8.decode(bodyBytes)) as JsonMap);
+        }
         if (bodyBytes.isNotEmpty) {
           outReq.add(bodyBytes);
         }
@@ -208,6 +212,14 @@ final class _ControllableCoordinator {
     await coordinator.exitCode;
     await upstream.close(force: true);
     await deleteTestDirectory(directory);
+  }
+}
+
+Future<void> _until(bool Function() ready) async {
+  final deadline = DateTime.now().add(const Duration(seconds: 5));
+  while (!ready()) {
+    if (DateTime.now().isAfter(deadline)) fail('Expected state did not arrive.');
+    await Future<void>.delayed(const Duration(milliseconds: 10));
   }
 }
 
@@ -1015,4 +1027,120 @@ void main() {
       await env.close();
     }
   });
+  test('network changes republish current addresses without a heartbeat storm', () async {
+    final temp = await Directory.systemTemp.createTemp('mesh-network-change-');
+    final env = _ControllableCoordinator(temp, caDirectory);
+    await env.start();
+    var addresses = ['192.168.50.10', '192.168.50.11'];
+    var enumerateFails = false;
+    final node = MeshRuntime(root: await Directory('${temp.path}/node').create(),
+      vault: _Vault(), native: native, token: () async => _jwt(424242),
+      authorize: (_, __) async => null,
+      coordinatorRetryDelay: const Duration(milliseconds: 30),
+      networkPollInterval: const Duration(milliseconds: 10),
+      networkChangeDelay: const Duration(milliseconds: 30),
+      networkReportMinGap: const Duration(milliseconds: 180),
+      interfaceProvider: () async {
+        if (enumerateFails) throw const SocketException('interfaces unavailable');
+        return [(name: 'en0', addresses: addresses.map(InternetAddress.new).toList()),
+          (name: 'utun4', addresses: [InternetAddress('10.8.0.2')])];
+      });
+    node.attach(Harness([_EchoCapability(), MeshCapability(node)]));
+    try {
+      await node.join(ca: caPem,
+        coordinator: MeshCoordinator(env.gateUri, () async => _jwt(424242)),
+        name: 'network-test', broadcast: false);
+      env.resetCounts();
+      env.addressReports.clear();
+      addresses = addresses.reversed.toList();
+      await Future<void>.delayed(const Duration(milliseconds: 100));
+      enumerateFails = true;
+      await Future<void>.delayed(const Duration(milliseconds: 100));
+      enumerateFails = false;
+      expect(env.countFor('POST', '/mesh/v1/addresses'), 0,
+        reason: 'interface ordering and enumeration errors are not address changes');
+      addresses = ['192.168.50.20'];
+      await _until(() => env.addressReports.isNotEmpty);
+      expect((env.addressReports.last['candidates'] as List).single['host'],
+        '192.168.50.20');
+      env.resetCounts();
+      env.addressReports.clear();
+      for (final suffix in [21, 22, 23]) {
+        addresses = ['192.168.50.$suffix'];
+        await Future<void>.delayed(const Duration(milliseconds: 25));
+      }
+      await _until(() => env.addressReports.isNotEmpty);
+      expect(env.countFor('POST', '/mesh/v1/addresses'), 1);
+      expect((env.addressReports.last['candidates'] as List).single['host'],
+        '192.168.50.23', reason: 'coalesced reports carry the latest address');
+
+      env.gateOpen = false;
+      addresses = ['192.168.50.24'];
+      await _until(() => node.coordinatorSyncPending);
+      expect(node.status, 'online');
+      env.gateOpen = true;
+      await _until(() => !node.coordinatorSyncPending);
+      expect((env.addressReports.last['candidates'] as List).single['host'],
+        '192.168.50.24');
+      expect(node.status, 'online');
+      await node.stop();
+      final reportsAfterStop = env.countFor('POST', '/mesh/v1/addresses');
+      addresses = ['192.168.50.25'];
+      await Future<void>.delayed(const Duration(milliseconds: 240));
+      expect(env.countFor('POST', '/mesh/v1/addresses'), reportsAfterStop);
+    } finally {
+      await node.close();
+      await env.close();
+    }
+  });
+
+  test('a stalled file read times out once and leaves both TLS nodes healthy', () async {
+    final temp = await Directory.systemTemp.createTemp('mesh-file-deadline-');
+    final env = _ControllableCoordinator(temp, caDirectory);
+    await env.start();
+    final nodes = <MeshRuntime>[];
+    final response = Completer<JsonMap>();
+    var reads = 0;
+    Future<MeshRuntime> member(String name) async {
+      final node = MeshRuntime(root: await Directory('${temp.path}/$name').create(),
+        vault: _Vault(), native: native, token: () async => _jwt(424242),
+        authorize: (_, __) async => null, interfaceProvider: () async => []);
+      node.attach(Harness([_EchoCapability(), MeshCapability(node)]));
+      nodes.add(node);
+      await File('${node.root.path}/mesh.json').writeAsString(
+          jsonEncode({'coordinator': env.gateUri.toString()}));
+      await node.join(ca: caPem,
+        coordinator: MeshCoordinator(env.gateUri, () async => _jwt(424242)),
+        name: name, broadcast: false);
+      await node.setManualAddresses([
+        {'kind': 'manual', 'host': '127.0.0.1', 'port': node.port}]);
+      await node.heartbeat(renew: false);
+      return node;
+    }
+    try {
+      final a = await member('reader'), b = await member('source');
+      await a.refreshDevices();
+      await a.rpc(b.identity!.deviceId, 'mesh/presence', {});
+      b.libraryRequest = (_, __, ___) async { reads++; return response.future; };
+      final elapsed = Stopwatch()..start();
+      await expectLater(a.rpc(b.identity!.deviceId, 'mesh/library/read', {}),
+        throwsA(isA<Failure>()
+          .having((f) => f.details['reason'], 'reason', 'read_timeout')
+          .having((f) => f.details['stage'], 'stage', 'read')
+          .having((f) => f.retryable, 'retryable', true)));
+      expect(elapsed.elapsed, lessThan(const Duration(seconds: 20)));
+      expect(reads, 1, reason: 'the timed-out operation is not replayed');
+      expect(a.rememberedRoutes.containsKey(b.identity!.deviceId), false);
+      response.complete({'data': ''});
+      await Future<void>.delayed(const Duration(milliseconds: 50));
+      expect(a.status, 'online');
+      expect(b.status, 'online', reason: 'a cancelled response does not stop the listener');
+      expect(await a.rpc(b.identity!.deviceId, 'mesh/presence', {}), isNotEmpty);
+    } finally {
+      if (!response.isCompleted) response.complete({'data': ''});
+      for (final node in nodes.reversed) { await node.close(); }
+      await env.close();
+    }
+  });
+
 }

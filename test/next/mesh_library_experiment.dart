@@ -177,6 +177,38 @@ Future<void> x47LibraryExperiment(_Rig rig) async {
   } finally {
     client.close(force: true);
   }
+  // A player abandoning a range must not make the bridge keep reading the
+  // rest of the file. Stall one source block so the disconnect is deliberate.
+  final beforeAbort = source.libraryRequest!;
+  final enteredRead = Completer<void>(), releaseRead = Completer<void>();
+  var abortedReads = 0;
+  source.libraryRequest = (method, input, peer) async {
+    if (method == 'mesh/library/read') {
+      abortedReads++;
+      if (!enteredRead.isCompleted) enteredRead.complete();
+      await releaseRead.future;
+    }
+    return beforeAbort(method, input, peer);
+  };
+  final abandonedClient = HttpClient()..findProxy = (_) => 'DIRECT';
+  try {
+    final request = await abandonedClient.getUrl(url);
+    final pending = request.close()
+        .then<void>((response) => response.drain<void>())
+        .catchError((Object _) {});
+    await enteredRead.future.timeout(const Duration(seconds: 3));
+    abandonedClient.close(force: true);
+    await Future<void>.delayed(const Duration(milliseconds: 50));
+    releaseRead.complete();
+    await pending;
+    await Future<void>.delayed(const Duration(milliseconds: 100));
+    expect(abortedReads, 1, reason: 'no next block after the client disconnects');
+    expect(source.status, 'online');
+  } finally {
+    if (!releaseRead.isCompleted) releaseRead.complete();
+    abandonedClient.close(force: true);
+    source.libraryRequest = beforeAbort;
+  }
   final probed = await Process.run(ffprobeExecutable, [
     '-v',
     'error',

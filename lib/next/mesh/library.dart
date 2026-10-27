@@ -95,6 +95,7 @@ final class MeshLibrary {
   String _proxyState = 'not_started';
   String? _proxyReason;
   final _readers = <String, JsonMap>{};
+  final _streams = <Socket>{};
   final playback = <String, JsonMap>{};
   bool _closed = false;
   String? lastError;
@@ -780,6 +781,8 @@ final class MeshLibrary {
     if (configured == _requestedPort) return;
     await _httpBinding;
     await _http?.close(force: true);
+    for (final stream in _streams) { stream.destroy(); }
+    _streams.clear();
     _http = null;
     _readers.clear();
     playback.clear();
@@ -894,31 +897,54 @@ final class MeshLibrary {
     response.headers.set('Accept-Ranges', 'bytes');
     response.headers.set('Content-Type', 'application/octet-stream');
     response.contentLength = math.max(0, end - start + 1);
+    var disconnected = false;
+    Socket? stream;
+    StreamSubscription<List<int>>? disconnect;
     try {
       if (request.method == 'GET') {
+        // Observe EOF directly: HttpResponse.done can wait until the entire
+        // buffered response is closed, long after a player abandoned its URL.
+        // One response per socket also prevents a pipelined request from being
+        // interpreted as file bytes after handing off the HTTP headers.
+        response.persistentConnection = false;
+        final output = stream = await response.detachSocket();
+        _streams.add(output);
+        disconnect = output.listen((_) {
+          disconnected = true;
+          output.destroy();
+        }, onDone: () { disconnected = true; },
+          onError: (Object _) { disconnected = true; }, cancelOnError: true);
         for (var offset = start; offset <= end; offset += 1048576) {
-          response.add(await _bytes(
+          if (_closed || disconnected) break;
+          final bytes = await _bytes(
               record['deviceId'] as String,
               record['source'] as JsonMap,
               record['tag'] as String,
               offset,
-              math.min(1048576, end - offset + 1)));
-          await response.flush();
+              math.min(1048576, end - offset + 1));
+          if (_closed || disconnected) break;
+          output.add(bytes);
+          await output.flush();
+        }
+        await output.close();
+      } else {
+        await response.close();
+      }
+    } on Object catch (error) {
+      if (!disconnected && !_closed) {
+        lastError = error is Failure ? error.message : error.runtimeType.toString();
+      }
+      if (stream == null) {
+        try {
+          (await response.detachSocket()).destroy();
+        } on Object {
+          // The response or socket is already gone.
         }
       }
-      await response.close();
-    } on Object catch (error) {
-      lastError =
-          error is Failure ? error.message : error.runtimeType.toString();
-      // A client can disappear after headers are sent. Closing the response
-      // then fails too; detaching is best-effort and must not surface as an
-      // unhandled HTTP server error.
-      try {
-        final socket = await response.detachSocket();
-        socket.destroy();
-      } on Object {
-        // The response or socket is already gone.
-      }
+    } finally {
+      _streams.remove(stream);
+      await disconnect?.cancel();
+      stream?.destroy();
     }
   }
 
@@ -940,6 +966,8 @@ final class MeshLibrary {
     await _building;
     await _httpBinding;
     await _http?.close(force: true);
+    for (final stream in _streams) { stream.destroy(); }
+    _streams.clear();
     _http = null;
     _readers.clear();
     playback.clear();
