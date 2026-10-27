@@ -2072,7 +2072,8 @@ class WebDAVService {
   /// 有界并发广度优先搜索。
   ///
   /// 与旧版串行 DFS 的差异仅在调度：每个目录仍恰好请求一次（visited 去重），
-  /// 请求之间维持 requestIntervalMs 的全局限速（对服务端不比串行版更激进），
+  /// 相邻请求的发起间隔不小于 requestIntervalMs（旧版是“上一请求返回后再等
+  /// requestIntervalMs”，因此请求速率会高于旧版，这正是提速来源），
   /// 并发数由 [maxConcurrency]（默认 3）限制。
   Future<void> _searchBreadthFirst({
     required WebDAVConnection connection,
@@ -2096,7 +2097,6 @@ class WebDAVService {
     final pending = ListQueue<MapEntry<String, int>>()..add(MapEntry(startPath, 0));
     final visited = <String>{startPath};
     var inFlight = 0;
-    var isFirstRequest = true;
     var nextAllowedRequestAt = DateTime.now();
 
     bool stopped() => onStopRequested != null && onStopRequested();
@@ -2120,20 +2120,27 @@ class WebDAVService {
         final depth = job.value;
         if (depth > depthLimit) continue;
 
-        // 全局请求间隔（首次请求除外），平均速率上限与串行版一致
-        if (!isFirstRequest && requestIntervalMs > 0) {
-          final wait = nextAllowedRequestAt.difference(DateTime.now());
-          if (wait > Duration.zero) {
-            await Future<void>.delayed(wait);
-          }
-        }
-        if (stopped() || timedOut()) return;
-        isFirstRequest = false;
-        nextAllowedRequestAt =
-            DateTime.now().add(Duration(milliseconds: requestIntervalMs));
-
+        // 出队即计入在途：等待限速期间，其他 worker 不能把“队列空且无在途”
+        // 误判为搜索结束而提前退出。
         inFlight++;
         try {
+          // 全局请求间隔：在 await 之前同步预留发起时间槽，多个 worker 拿到
+          // 的槽互不重叠，相邻请求的发起间隔不小于 requestIntervalMs。
+          // 首个请求的槽就是当前时刻，无需等待。
+          if (requestIntervalMs > 0) {
+            final now = DateTime.now();
+            final slot = nextAllowedRequestAt.isAfter(now)
+                ? nextAllowedRequestAt
+                : now;
+            nextAllowedRequestAt =
+                slot.add(Duration(milliseconds: requestIntervalMs));
+            final wait = slot.difference(now);
+            if (wait > Duration.zero) {
+              await Future<void>.delayed(wait);
+            }
+          }
+          if (stopped() || timedOut()) return;
+
           final files = await listDirectoryAll(connection, path);
           // 网络调用返回后立即检查停止信号
           if (stopped()) return;

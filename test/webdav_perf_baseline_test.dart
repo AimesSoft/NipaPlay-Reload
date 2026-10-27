@@ -16,6 +16,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 // 不可测量指标（需真机/真实播放链路）：起播延迟、播放内存曲线 → 记入 unverified。
 //
 // 运行：flutter test test/webdav_perf_baseline_test.dart
+// 刷新基线文件：WEBDAV_PERF_BASELINE_WRITE=1 flutter test test/webdav_perf_baseline_test.dart
 
 class _RecordedRequest {
   _RecordedRequest(this.method, this.path, this.depth, this.elapsedMs);
@@ -35,17 +36,27 @@ class _RecordedRequest {
 }
 
 class _MockDavServer {
-  _MockDavServer({this.propfindLatencyMs = 0});
+  _MockDavServer({this.propfindLatencyMs = 0, this.latencyFor});
 
   /// 每个 PROPFIND 引入的模拟服务器延迟（模拟真实往返）
   final int propfindLatencyMs;
 
+  /// 按路径覆盖 PROPFIND 延迟（返回 null 时使用 [propfindLatencyMs]）
+  final int? Function(String path)? latencyFor;
+
   final List<_RecordedRequest> requests = <_RecordedRequest>[];
   final Stopwatch _clock = Stopwatch()..start();
   HttpServer? _server;
+  int _activePropfind = 0;
+
+  /// 同时在处理中的 PROPFIND 最大数量（观察客户端实际并发度）
+  int maxActivePropfind = 0;
 
   int get count => requests.length;
-  void reset() => requests.clear();
+  void reset() {
+    requests.clear();
+    maxActivePropfind = 0;
+  }
 
   // 模拟目录树：
   // /  → Series/ Movies/ Bench/ readme.txt
@@ -84,6 +95,19 @@ class _MockDavServer {
         <String>['f', 'other_$i.txt'],
       ];
     }
+    // 不挂在根目录下，只供并发调度测试从 /Solo/ 起搜：
+    // /Solo/ → Inner/ → D0..D5（每个目录内 1 个 needle）
+    t['/Solo/'] = <List<String>>[
+      <String>['d', 'Inner'],
+    ];
+    t['/Solo/Inner/'] = <List<String>>[
+      for (var i = 0; i < 6; i++) <String>['d', 'D$i'],
+    ];
+    for (var i = 0; i < 6; i++) {
+      t['/Solo/Inner/D$i/'] = <List<String>>[
+        <String>['f', 'needle_solo_$i.mkv'],
+      ];
+    }
     return t;
   }
 
@@ -110,16 +134,27 @@ class _MockDavServer {
           return;
         }
         if (request.method == 'PROPFIND') {
-          if (propfindLatencyMs > 0) {
-            await Future<void>.delayed(Duration(milliseconds: propfindLatencyMs));
+          _activePropfind++;
+          if (_activePropfind > maxActivePropfind) {
+            maxActivePropfind = _activePropfind;
           }
-          final depth = request.headers.value('depth') ?? '1';
-          final body = _multistatusFor(request.uri.path, depth);
-          request.response.statusCode = 207;
-          request.response.headers.contentType =
-              ContentType('application', 'xml', charset: 'utf-8');
-          request.response.write(body);
-          await request.response.close();
+          try {
+            final latency =
+                latencyFor?.call(Uri.decodeComponent(request.uri.path)) ??
+                    propfindLatencyMs;
+            if (latency > 0) {
+              await Future<void>.delayed(Duration(milliseconds: latency));
+            }
+            final depth = request.headers.value('depth') ?? '1';
+            final body = _multistatusFor(request.uri.path, depth);
+            request.response.statusCode = 207;
+            request.response.headers.contentType =
+                ContentType('application', 'xml', charset: 'utf-8');
+            request.response.write(body);
+            await request.response.close();
+          } finally {
+            _activePropfind--;
+          }
           return;
         }
         request.response.statusCode = 405;
@@ -265,6 +300,7 @@ Future<Map<String, dynamic>> _runBaseline() async {
     () async {
       await service.listDirectoryAll(connection, '/Series/');
       await service.listDirectoryAll(connection, '/Series/Season 1/');
+      return null;
     },
     target: 'request_count == 2（每个新目录恰 1 次 PROPFIND）',
   );
@@ -276,6 +312,7 @@ Future<Map<String, dynamic>> _runBaseline() async {
       await service.listDirectoryAll(connection, '/Series/Season 1/');
       await service.listDirectoryAll(connection, '/Series/');
       await service.listDirectoryAll(connection, '/');
+      return null;
     },
     target: 'request_count == 0（切换/返回目录零重复请求）',
   );
@@ -437,13 +474,19 @@ Future<Map<String, dynamic>> _runBaseline() async {
 }
 
 void main() {
-  test('WebDAV 性能基线采集并写入 docs/webdav/perf-baseline.json', () async {
+  test('WebDAV 性能基线采集（WEBDAV_PERF_BASELINE_WRITE=1 时写入 docs/webdav/perf-baseline.json）',
+      () async {
     final baseline = await _runBaseline();
-    final file = File('docs/webdav/perf-baseline.json');
-    file.parent.createSync(recursive: true);
-    file.writeAsStringSync(const JsonEncoder.withIndent('  ').convert(baseline));
+    // 普通 flutter test 不改写仓库内文件，只有显式要求时才刷新基线。
+    if (Platform.environment['WEBDAV_PERF_BASELINE_WRITE'] == '1') {
+      final file = File('docs/webdav/perf-baseline.json');
+      file.parent.createSync(recursive: true);
+      file.writeAsStringSync(
+          const JsonEncoder.withIndent('  ').convert(baseline));
+    }
 
-    // 硬断言：确定性目标（防回归）
+    // 硬断言：确定性目标（防回归）。search_speedup 依赖墙钟耗时，只记录在
+    // 基线里，不做硬断言；并发调度由下面的确定性用例覆盖。
     final verdicts = baseline['verdicts'] as Map<String, dynamic>;
     bool passOf(String key) =>
         (verdicts[key] as Map<String, dynamic>)['pass'] as bool;
@@ -457,7 +500,55 @@ void main() {
         reason: '并发搜索的结果集必须与串行完全一致');
     expect(passOf('search_request_pattern_identical'), isTrue,
         reason: '并发搜索的请求集合必须与串行完全一致（协议行为不变）');
-    expect(passOf('search_speedup'), isTrue,
-        reason: '有界并发搜索应快于串行搜索');
   }, timeout: const Timeout(Duration(minutes: 3)));
+
+  test('有界并发搜索：相邻请求发起间隔不小于 requestIntervalMs，且 worker 不会提前退出',
+      () async {
+    // /Solo/ 与 /Solo/Inner/ 很快返回，Inner 下 6 个目录很慢。Inner 出队时
+    // 要等限速槽而此刻没有在途请求：若 worker 等待期间不计入在途，其余
+    // worker 会把“队列空且无在途”当成结束而退出，6 个慢目录只能串行列出。
+    final server = _MockDavServer(
+      latencyFor: (path) => path.startsWith('/Solo/Inner/D') ? 150 : 5,
+    );
+    final baseUrl = await server.start();
+    addTearDown(server.stop);
+
+    final service = WebDAVService.forTesting();
+    SharedPreferences.setMockInitialValues(<String, Object>{});
+    await service.initialize();
+    final connection = WebDAVConnection(
+      name: 'search-mock',
+      url: baseUrl,
+      username: '',
+      password: '',
+    );
+    await service.upsertConnection(connection);
+    server.reset();
+
+    const intervalMs = 50;
+    final results = await service.searchFiles(
+      connection: connection,
+      keyword: 'needle',
+      startPath: '/Solo/',
+      scope: 'current_with_depth',
+      depthLimit: 2,
+      requestIntervalMs: intervalMs,
+      maxConcurrency: 3,
+    );
+
+    expect(results, hasLength(6));
+    final starts = server.requests
+        .where((r) => r.method == 'PROPFIND')
+        .map((r) => r.elapsedMs)
+        .toList()
+      ..sort();
+    expect(starts, hasLength(8), reason: '/Solo/ + Inner + 6 个子目录各 1 次');
+    for (var i = 1; i < starts.length; i++) {
+      // 留 15ms 余量给连接建立与计时抖动；竞争版本会出现接近 0 的间隔。
+      expect(starts[i] - starts[i - 1], greaterThanOrEqualTo(intervalMs - 15),
+          reason: '请求发起时刻：$starts');
+    }
+    expect(server.maxActivePropfind, greaterThanOrEqualTo(2),
+        reason: '慢目录应被多个 worker 重叠列出');
+  });
 }
