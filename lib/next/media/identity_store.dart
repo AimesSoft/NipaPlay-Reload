@@ -1039,7 +1039,8 @@ final class IdentityStore {
     }
     final ratings = <JsonMap>[];
     final sources = <JsonMap>[];
-    final seenSources = <String>{};
+    final sourceFields = <String, JsonMap>{};
+    final sourceFieldHistory = <String, JsonMap>{};
     final seenRatings = <String>{}, seenSubmitted = <String>{};
     for (final row in rows) {
       final record = decodeMediaJson(row['fields']);
@@ -1061,17 +1062,31 @@ final class IdentityStore {
             }
           : Map<String, Object?>.from(record['metadata'] as Map);
       final sourceKey = '${row['object_id']}/${row['language']}';
-      if (seenSources.add(sourceKey)) {
+      if (record['source'] == 'submitted_snapshot' &&
+          !seenSubmitted.add(sourceKey)) {
+        continue;
+      }
+      if (!sourceFields.containsKey(sourceKey)) {
+        sourceFields[sourceKey] = {};
+        sourceFieldHistory[sourceKey] = {};
         sources.add({
           'provider': row['provider'], 'objectType': row['object_type'],
           'externalId': row['external_id'], 'scope': row['object_scope'],
           'snapshotId': row['id'], 'language': row['language'],
-          'fetchedAt': row['fetched_at'], 'fields': values,
+          'fetchedAt': row['fetched_at'], 'fields': sourceFields[sourceKey],
+          'fieldProvenance': sourceFieldHistory[sourceKey],
         });
       }
-      if (record['source'] == 'submitted_snapshot' &&
-          !seenSubmitted.add(sourceKey)) {
-        continue;
+      // Artwork and identity snapshots can be newer but deliberately sparse.
+      // A detail source must retain older facts absent from those updates,
+      // just as the merged view does, with their actual acquisition history.
+      for (final entry in values.entries) {
+        if (sourceFields[sourceKey]![entry.key] == null && entry.value != null) {
+          sourceFields[sourceKey]![entry.key] = entry.value;
+          sourceFieldHistory[sourceKey]![entry.key] = {
+            'snapshotId': row['id'], 'fetchedAt': row['fetched_at'],
+          };
+        }
       }
       if (values['rating'] case final Map rating
           when seenRatings.add(sourceKey)) {

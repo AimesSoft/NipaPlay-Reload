@@ -134,6 +134,37 @@ void main() {
     expect(restored['fields'], metadata['fields']);
   });
 
+  test('a newer sparse artwork snapshot retains source credits and their provenance', () async {
+    final row = tmdb.responses['/3/tv/9001'] as Map;
+    row['aggregate_credits'] = {'cast': [{'id': 1, 'name': '已存配音',
+      'roles': [{'character': '主角'}]}]};
+    final store = core.media.service.store;
+    await store.saveSnapshot(await TmdbMetadataProvider(tmdb)
+        .get(ExternalRef.fromJson(mediaWorkRef)));
+    final before = await store.mergedMetadata(workId);
+    final originalSource = (before['sources'] as List).cast<Map>()
+        .singleWhere((s) => s['objectType'] == 'tv');
+    final object = (await store.database.query('media_external_objects',
+        where: 'provider=? AND object_type=? AND external_id=?',
+        whereArgs: ['tmdb', 'tv', '9001'])).single;
+    await store.database.insert('media_snapshots', {
+      'id': 'new-artwork-only', 'object_id': object['id'], 'language': 'zh-CN',
+      'fetched_at': '2099-01-01T00:00:00Z',
+      'fields': jsonEncode({'source': 'provider_snapshot', 'metadata': {
+        'title': '新的来源标题', 'artworkUrls': {'backdrop': 'https://example.org/bg.jpg'},
+      }}),
+    });
+    final after = await store.mergedMetadata(workId);
+    final source = (after['sources'] as List).cast<Map>()
+        .singleWhere((s) => s['objectType'] == 'tv');
+    expect(source['snapshotId'], 'new-artwork-only');
+    expect((source['fields'] as Map)['title'], '新的来源标题');
+    expect((source['fields'] as Map)['credits'], (originalSource['fields'] as Map)['credits']);
+    expect(((source['fieldProvenance'] as Map)['credits'] as Map)['snapshotId'],
+        ((originalSource['fieldProvenance'] as Map)['credits'] as Map)['snapshotId']);
+    expect((after['fields'] as Map)['credits'], (before['fields'] as Map)['credits']);
+  });
+
   test(
       'X9 experiment: arbitrary facts coexist and work views agree after reopen',
       () async {
