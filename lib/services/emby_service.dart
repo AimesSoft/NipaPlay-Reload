@@ -960,14 +960,28 @@ class EmbyService extends MediaServerServiceBase
     }
 
     try {
-      final response = await _makeAuthenticatedRequest(
-          '/emby/Users/$_userId/Items?parentId=$seriesId&IncludeItemTypes=Season&Recursive=false&Fields=Overview');
+      // 先用标准的季接口。部分服务端（版本或反代配置不同）会忽略通用 Items
+      // 接口的 IncludeItemTypes=Season，把单集当成季返回：季 Tab 显示单集名，
+      // 再按这个“季”查集自然为空（#570）。
+      http.Response response;
+      try {
+        response = await _makeAuthenticatedRequest(
+            '/emby/Shows/$seriesId/Seasons?userId=$_userId&Fields=Overview');
+      } catch (e) {
+        // 不支持标准季接口的服务端回退到通用 Items 接口，结果在下面按类型过滤。
+        DebugLogService().addLog('EmbyService: 标准季接口失败，回退到 Items 接口: $e');
+        response = await _makeAuthenticatedRequest(
+            '/emby/Users/$_userId/Items?parentId=$seriesId&IncludeItemTypes=Season&Recursive=false&Fields=Overview');
+      }
 
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
         final items = data['Items'] as List;
 
-        return items.map((item) => EmbySeasonInfo.fromJson(item)).toList();
+        return items
+            .where((item) => _hasItemType(item, 'Season'))
+            .map((item) => EmbySeasonInfo.fromJson(item))
+            .toList();
       } else {
         print('Error response: ${response.statusCode} - ${response.body}');
         throw Exception('HTTP ${response.statusCode}: 无法获取季节信息');
@@ -977,6 +991,13 @@ class EmbyService extends MediaServerServiceBase
       print('Stack trace: $stackTrace');
       throw Exception('无法获取季节信息: $e');
     }
+  }
+
+  /// 条目带了 Type 且不是 [type] 时排除；没带 Type 的条目保留。
+  static bool _hasItemType(dynamic item, String type) {
+    if (item is! Map) return false;
+    final itemType = item['Type'];
+    return itemType == null || itemType == type;
   }
 
   Future<List<EmbyEpisodeInfo>> getEpisodes(String seasonId) async {
@@ -992,7 +1013,11 @@ class EmbyService extends MediaServerServiceBase
         final data = json.decode(response.body);
         final items = data['Items'] as List;
 
-        return items.map((item) => EmbyEpisodeInfo.fromJson(item)).toList();
+        // 通用 Items 接口同样可能不执行 IncludeItemTypes 过滤。
+        return items
+            .where((item) => _hasItemType(item, 'Episode'))
+            .map((item) => EmbyEpisodeInfo.fromJson(item))
+            .toList();
       } else {
         print('Error response: ${response.statusCode} - ${response.body}');
         throw Exception('HTTP ${response.statusCode}: 无法获取剧集信息');
