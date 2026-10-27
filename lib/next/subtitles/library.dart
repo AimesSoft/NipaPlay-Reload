@@ -593,6 +593,7 @@ final class SubtitleLibrary implements SubtitleOperations {
 
   @override
   Future<List<JsonMap>> episodeTracks(String id) async {
+    id = await canonicalFileId(db, id);
     final tracks = <JsonMap>[];
     for (final file in await db
         .query('media_file_episodes', where: 'episode_id=?', whereArgs: [id])) {
@@ -615,7 +616,7 @@ final class SubtitleLibrary implements SubtitleOperations {
   @override
   Future<List<JsonMap>> episodeFiles(String id) async => [
         for (final file in await db.query('media_file_episodes',
-            where: 'episode_id=?', whereArgs: [id]))
+            where: 'episode_id=?', whereArgs: [await canonicalFileId(db, id)]))
           {...await facts(file['file_id'] as String)}..remove('tracks')
       ];
 

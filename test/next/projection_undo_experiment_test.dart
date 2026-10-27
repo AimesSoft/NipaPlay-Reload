@@ -27,11 +27,11 @@ void main() {
   late WatchHistoryMetadataPort port;
   late FixtureTransport source;
 
-  Future<void> connect({bool interruptUndo = false}) async {
+  Future<void> connect({bool interruptUndo = false, ClassicMetadataPort? projectionPort}) async {
     jobs = await SqliteJobStore.open(Directory('${root.path}/next'),
         factory: databaseFactoryFfi);
     runtime = await MediaRuntime.create(root, jobs.database, 'fixture-device',
-        classic: interruptUndo ? _InterruptUndoReadback(port) : port,
+        classic: projectionPort ?? (interruptUndo ? _InterruptUndoReadback(port) : port),
         authorizedRoots: () => [media.path],
         durationProbe: (_) async => 1440000,
         providers: [
@@ -121,6 +121,122 @@ void main() {
     StorageService.debugAppStorageDirectoryOverride = null;
     await root.delete(recursive: true);
   });
+
+  test('one batch resolves the Classic history path index once', () async {
+    await connect();
+    var histories = 0;
+    final calls = <String, int>{};
+    final lookup = ClassicProjectionLookup(() async {
+      histories++;
+      return [for (var i = 0; i < 100; i++)
+        {'filePath': '${root.path}/history-$i'}];
+    }, resolvePath: (path) async {
+      calls[path] = (calls[path] ?? 0) + 1;
+      return path.replaceAll('/history-', '/content-');
+    });
+    for (var i = 0; i < 40; i++) {
+      final result = await lookup.resolve('${root.path}/content-$i');
+      expect(result.locator, '${root.path}/history-$i');
+    }
+    expect(histories, 1);
+    expect(calls.values.fold<int>(0, (a, b) => a + b), 140);
+    expect(calls.values.every((count) => count == 1), true);
+  });
+
+  test('a multi-file bind shares one Classic lookup across projection drains', () async {
+    final first = await seed();
+    final template = (await classic.query('watch_history')).single;
+    await classic.delete('watch_history');
+    final entries = <JsonMap>[];
+    for (var i = 0; i < 40; i++) {
+      final file = await File('${media.path}/batch-$i.mkv').writeAsString('video $i');
+      final alias = await Link('${media.path}/alias-$i.mkv').create(file.path);
+      await classic.insert('watch_history', {...template}..remove('id')
+        ..['file_path'] = alias.path..['media_key'] = 'batch-$i');
+      entries.add({...dandanplayBinding('')..remove('entityId'), 'path': file.path});
+    }
+    await File(first).delete();
+    final counting = _CountingProjectionPort(port);
+    await connect(projectionPort: counting);
+    await call('media.identity.bind_batch', {'requestId': 'forty-files', 'entries': entries});
+    expect(counting.historyReads, 1);
+    expect(await classic.query('watch_history'), hasLength(40));
+    expect(await jobs.database.query('media_classic_observations'), isEmpty);
+  }, skip: Platform.isWindows ? 'Symlink creation requires host privileges' : false);
+
+  test('projection keeps the original Classic alias for delivery, undo and receipts', () async {
+    final path = await seed();
+    final alias = await Link('${media.path}/classic-alias.mkv').create(path);
+    await classic.update('watch_history', {'file_path': alias.path});
+    final before = await classic.query('watch_history');
+    await connect();
+    final bound = await bind(path);
+    final entry = (bound['entries'] as List).single as Map;
+    final fileId = entry['fileId'] as String;
+    expect((entry['classicProjection'] as List).single['locator'], alias.path);
+    expect(await classic.query('watch_history'), hasLength(1));
+    final read = (await call('media.identity.get', {'path': path}))['identity'] as Map;
+    expect(read['id'], fileId);
+    expect(await jobs.database.query('media_classic_observations'), isEmpty);
+    final projection = (await jobs.database.query('media_projection_outbox')).single;
+    final delivery = ((jsonDecode(projection['payload'] as String) as Map)
+        ['deliveryLocators'] as Map).values.single as Map;
+    expect(delivery['locator'], alias.path);
+    expect(delivery['canonicalPath'], await File(path).resolveSymbolicLinks());
+    final restored = await call('media.identity.unbind_batch', undo(fileId));
+    expect(((restored['entries'] as List).single['classicProjection'] as List)
+        .single['locator'], alias.path);
+    expect(await classic.query('watch_history'), before);
+  }, skip: Platform.isWindows ? 'Symlink creation requires host privileges' : false);
+
+  for (final change in ['retargeted', 'removed']) {
+    test('a $change projection alias cannot redirect undo', () async {
+      final path = await seed();
+      final alias = await Link('${media.path}/classic-alias.mkv').create(path);
+      await classic.update('watch_history', {'file_path': alias.path});
+      await connect();
+      final bound = await bind(path);
+      final fileId = (bound['entries'] as List).single['fileId'] as String;
+      final projected = await classic.query('watch_history');
+      await alias.delete();
+      if (change == 'retargeted') {
+        final other = await File('${media.path}/other.mkv').writeAsString('other video');
+        await alias.create(other.path);
+      }
+      final input = undo(fileId);
+      final refused = await harness.invokeJson('media.identity.unbind_batch',
+          input, Invocation(origin: 'mcp'));
+      expect(refused, isA<Failed>());
+      expect((refused as Failed).failure.code, FailureCode.conflict);
+      expect(await classic.query('watch_history'), projected);
+      if (change == 'retargeted') await alias.delete();
+      await alias.create(path);
+      final retried = await call('media.identity.unbind_batch', input);
+      expect(((retried['entries'] as List).single['classicProjection'] as List)
+          .single['restored'], true);
+      expect((await classic.query('watch_history')).single['anime_id'], isNull);
+    }, skip: Platform.isWindows ? 'Symlink creation requires host privileges' : false);
+  }
+
+  test('multiple equivalent Classic paths are not chosen arbitrarily', () async {
+    final path = await seed();
+    final a = await Link('${media.path}/alias-a.mkv').create(path);
+    final b = await Link('${media.path}/alias-b.mkv').create(path);
+    final row = (await classic.query('watch_history')).single;
+    await classic.update('watch_history', {'file_path': a.path});
+    await classic.insert('watch_history', {...row}..remove('id')
+      ..['file_path'] = b.path..['media_key'] = 'other-alias');
+    final before = await classic.query('watch_history');
+    await connect();
+    final refused = await harness.invokeJson('media.identity.bind_batch', {
+      'requestId': 'ambiguous-alias', 'entries': [
+        {...dandanplayBinding('')..remove('entityId'), 'path': path}]
+    }, Invocation(origin: 'mcp'));
+    expect(refused, isA<Failed>());
+    expect((refused as Failed).failure.code, FailureCode.conflict);
+    expect(await classic.query('watch_history'), before);
+    expect(await jobs.database.query('media_classic_observations'), isEmpty);
+  }, skip: Platform.isWindows ? 'Symlink creation requires host privileges' : false);
 
   test('X8 unbind restores the entire original row and replay is idempotent',
       () async {
@@ -492,4 +608,23 @@ final class _InterruptUndoReadback implements ClassicMetadataPort {
   @override
   Future<bool> verify(String locator, JsonMap fields) async =>
       fields['clear'] == true ? false : await port.verify(locator, fields);
+}
+
+
+final class _CountingProjectionPort implements ReversibleClassicMetadataPort {
+  _CountingProjectionPort(this.port);
+  final ReversibleClassicMetadataPort port;
+  int historyReads = 0;
+  @override
+  Future<List<JsonMap>> history() {
+    historyReads++;
+    return port.history();
+  }
+  @override
+  Future<void> apply(String locator, JsonMap fields) => port.apply(locator, fields);
+  @override
+  Future<bool> verify(String locator, JsonMap fields) => port.verify(locator, fields);
+  @override
+  Future<JsonMap> projectionOutcome(String locator, JsonMap fields) =>
+      port.projectionOutcome(locator, fields);
 }

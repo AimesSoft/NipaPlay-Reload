@@ -1,3 +1,4 @@
+import 'package:nipaplay/services/file_association_service.dart';
 import 'dart:async';
 import 'dart:io';
 import 'followups/service.dart';
@@ -1159,6 +1160,19 @@ final class NextRuntime extends ChangeNotifier {
         Zone.current.handleUncaughtError(error, stack);
       }
     });
+  }
+
+  /// A system open belongs to Next itself. Wait for startup and any queued
+  /// mode transition so the old playback close cannot race this new open.
+  Future<void> openExternalFile(String path,
+      {required bool Function() stillActive}) async {
+    await _operations;
+    if (_disposed || !_nextOpen || !stillActive()) return;
+    if (!await FileAssociationService.validateFilePath(path)) {
+      throw const Failure(FailureCode.invalidInput, '文件不存在或格式不受支持。');
+    }
+    if (_disposed || !_nextOpen || !stillActive()) return;
+    await playback.openItem(PlayableItem(videoPath: path), origin: 'external_open');
   }
 
   /// Classic asks before it opens [item] (drag and drop, open with, its

@@ -23,6 +23,7 @@ import 'downloads/download_backend.dart';
 import 'downloads/download_runtime.dart';
 import 'media/classic_projection.dart';
 import 'media/library_arrivals.dart';
+import 'media/startup_index.dart';
 import 'media/media_runtime.dart';
 import 'media/media_probe.dart';
 import 'media_sources/service.dart';
@@ -98,7 +99,7 @@ import 'system/storage.dart';
 import 'system/diagnostics.dart';
 import 'system/desktop.dart';
 import 'package:nipaplay/services/scan_service.dart';
-import 'package:nipaplay/constants/settings_keys.dart';
+import 'package:nipaplay/services/classic_mode_policy.dart';
 import 'dart:async';
 
 /// Application-owned task and capability composition, independent of Labs.
@@ -195,6 +196,7 @@ final class NextCore {
   /// Open while Next's interface is: Nipa's own work waits for it (D1).
   late final NipaGate nipaGate;
   bool _nipa = false;
+  bool _startupIndexed = false;
   late final TaskResources resources;
   late final BodyEvents events;
   late final SystemSettings automatic;
@@ -463,14 +465,8 @@ final class NextCore {
     followups.libraryEnabled = () => automatic.libraryNotifyEnabled;
     followups.describeLibraryFiles =
         (entries) => describeLibraryArrivals(media.service.store, entries);
-    ScanService.startupRefreshAllowed = () async {
-      final prefs = await SharedPreferences.getInstance();
-      final nextOpen = NextUiPreference.interfaceOpen(
-          nextEnabled:
-              prefs.getBool(SettingsKeys.labsEnableAgentEndpoint) == true,
-          preference: prefs.getBool(NextUiPreference.key) == true);
-      return !nextOpen || automatic.startupScanEnabled;
-    };
+    ScanService.startupRefreshAllowed = ClassicModePolicy.allowsImplicitWork;
+
     events = BodyEvents(database);
     followups.eventCommitted = events.changed;
     settings.onChanged = (facts) async {
@@ -682,7 +678,7 @@ final class NextCore {
               throw const Failure(FailureCode.unavailable,
                   'No Classic scan service is attached to this host.');
             }
-            return LocalLibraryOperations.scanState(scan);
+            return LocalLibraryOperations.scanState(scan, engine: engine);
           })
           ..update = (() => readStatus('app.update.status'))
           ..hooks = hooks.status
@@ -714,6 +710,19 @@ final class NextCore {
     await ready;
     if (_nipa) return;
     _nipa = true;
+    if (!_startupIndexed) {
+      await classicScan.scan?.foldersReady;
+      _startupIndexed = true;
+      automatic.startupScanStatus = await submitStartupIndex(
+        enabled: automatic.startupScanEnabled,
+        roots: media.service.authorizedRoots(),
+        submit: (root) async {
+          final path =
+              await media.service.authorizedPath(root, directory: true);
+          await media.service.submit('media.scan', {'root': path});
+        },
+      );
+    }
     hooks.observeEvent = followups.hookEvent;
     BodySignals.emit = (event, id, facts) async {
       await hooks.emit(event, id, facts);

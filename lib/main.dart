@@ -1234,8 +1234,9 @@ class _NipaPlayAppState extends State<NipaPlayApp> with WidgetsBindingObserver {
                         child: MainPage(launchFilePath: widget.launchFilePath),
                       )
                     : NextUiGate(
-                        classic:
-                            MainPage(launchFilePath: widget.launchFilePath),
+                        launchFilePath: widget.launchFilePath,
+                        classicBuilder: (launchPath) =>
+                            MainPage(launchFilePath: launchPath),
                       ),
                 AppDisplaySurface.phone: () => kIsWeb
                     ? WebRemoteAccessGate(
@@ -1246,8 +1247,9 @@ class _NipaPlayAppState extends State<NipaPlayApp> with WidgetsBindingObserver {
                     // An iPhone can show Next; Android stays Classic alone.
                     : Platform.isIOS
                         ? NextUiGate(
-                            classic: CupertinoMainPage(
-                              launchFilePath: widget.launchFilePath,
+                            launchFilePath: widget.launchFilePath,
+                            classicBuilder: (launchPath) => CupertinoMainPage(
+                              launchFilePath: launchPath,
                             ),
                           )
                         : CupertinoMainPage(

@@ -74,7 +74,7 @@ void main() {
     await db.close();
     final upgraded =
         await SqliteJobStore.open(root, factory: databaseFactoryFfi);
-    expect(await upgraded.database.getVersion(), 23);
+    expect(await upgraded.database.getVersion(), 25);
     expect((await upgraded.database.query('media_entities')).single,
         {...entity, 'parent_id': null});
     expect(
@@ -323,6 +323,30 @@ void main() {
     expect(f.player.managedTracks, isEmpty);
     expect((await f.call('danmaku.tracks', {'entityId': entity}))['tracks'],
         contains(isA<Map>().having((r) => r['stale'], 'stale', true)));
+  });
+  test(
+      'moving a binding during fetch refuses the obsolete cache assignment',
+      () async {
+    final entity = await f.file();
+    f.host.blockedKey = 'segmented.chunk:1';
+    f.host.entered = Completer();
+    f.host.release = Completer();
+    final result = await attach(entity, segmentedVideo);
+    await f.host.entered!.future;
+    final id = result['bindingId'] as String;
+    final jobId = result['jobId'] as String;
+    expect((await f.engine.get(jobId)).input['bindingEntityId'], entity);
+    final other = await f.identities.registerFile('/fixture/other.mkv',
+        {'size': 2, 'modifiedAt': 'other', 'headMd5': 'other'});
+    // Simulate a late relationship write between request and cache commit.
+    // Public work merge separately refuses active acquisition jobs.
+    await f.jobs.database.update('danmaku_bindings', {'entity_id': other},
+        where: 'id=?', whereArgs: [id]);
+    f.host.release!.complete();
+    final failed = await f.wait(jobId, JobState.failed);
+    expect(failed.error!.code, FailureCode.conflict);
+    expect((await f.service.store.binding(id))['cache_key'], isNull);
+    expect(f.player.managedTracks, isEmpty);
   });
   test(
       'changing video during fetch caches data but never loads into the other file',

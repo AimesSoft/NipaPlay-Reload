@@ -29,6 +29,12 @@ const _classicAudit =
     '由 Classic 的观看历史同步（IdentityStore.importLegacy）写入；规则见 semantics.classic_match。';
 
 const dbTableDocs = <String, DbTableDoc>{
+  'media_entity_aliases': DbTableDoc(DbAccess.read,
+      '作品合并后旧 work/release/episode ID 到保留实体的映射；旧实体作为墓碑和审计引用保留。',
+      reason: '由 media.management.merge_work / undo_merge 原子维护；不能单独改映射。'),
+  'media_work_merges': DbTableDoc(DbAccess.read,
+      '作品合并的来源隔离请求、完整前后镜像、提交回执和撤回状态。',
+      reason: '持久审计与幂等回执；通过 media.management.undo_merge 撤回。'),
   // ── 媒体身份与资料：可写 ──────────────────────────────────────────────
   'media_entities': DbTableDoc(
     DbAccess.write,
@@ -114,7 +120,7 @@ const dbTableDocs = <String, DbTableDoc>{
   'media_classic_current': DbTableDoc(
     DbAccess.write,
     '每个文件位置当前生效的 Classic 观察（location_id 主键 → observation_id）。',
-    notes: ['规则见 semantics.classic_match。删除一行，下次同步会把该位置当作全新观察重新导入。'],
+    notes: ['规则见 semantics.classic_match。删除一行，下次显式 import_history 会把该位置当作全新观察重新导入。'],
   ),
   'danmaku_bindings': DbTableDoc(
     DbAccess.write,
@@ -185,6 +191,9 @@ const dbTableDocs = <String, DbTableDoc>{
   'body_changes': DbTableDoc(DbAccess.read,
       '各领域变更的公开事实（前后镜像），activity 的来源之一。db.write 的提交也在这里留一条摘要。',
       reason: '审计表。'),
+  'db_operations': DbTableDoc(DbAccess.read,
+      'db.write / db.undo 的持久提交回执：kind、origin、request_key 唯一绑定请求与已提交结果；postCommitPending 表示提交后的刷新尚未记录完成。',
+      reason: '幂等回执；修改会使重试重复执行或误报提交结果。'),
   'db_commits': DbTableDoc(DbAccess.read,
       'db.write 与 db.undo 的审计：SQL、参数、改动计数、前后镜像、origin、invocationId、actor。db.undo 靠它撤回。',
       reason: '审计表本身；改它等于改写历史，也会让 undo 失效。'),
@@ -234,12 +243,12 @@ const dbTableDocs = <String, DbTableDoc>{
 /// Facts that cross tables. Served by `db.describe`.
 const dbSemantics = <String, String>{
   'classic_match':
-      '''source='classic_match' 的绑定、media_classic_observations 和 media_classic_current 来自 Classic 观看历史。同步（IdentityStore.importLegacy，随 Classic 历史同步、media.library.import_history、扫描触发）按文件位置逐条处理：
+      '''source='classic_match' 的绑定、media_classic_observations 和 media_classic_current 来自 Classic 观看历史。显式调用 media.library.import_history（IdentityStore.importLegacy）时按文件位置逐条处理；Next 启动、Classic 历史通知、扫描、其他身份写入和投影回读都不会隐式导入：
 1. 用 animeId、episodeId、animeName、episodeTitle、videoHash 算 fingerprint；与 media_classic_current 当前观察的 fingerprint 相同则整条跳过——所以直接改写的绑定、对应、观察，在 Classic 对该文件的记录没变时保持原样。
 2. fingerprint 不同（或没有当前观察）：把上一次观察的 binding_id 对应的绑定改为 revoked，并追加一条 unbind 证据；新建观察；匹配成立（animeId>0、episodeId>0、有 animeName 和 episodeTitle，并通过 Classic 历史资格检查）时，为作品、版本、剧集和文件各建 classic_match 绑定（该实体已有同一对象的 accepted 绑定则不重建）、写 source=classic_match 的快照、补 media_file_episodes（已存在则保留）；再替换 media_classic_current。
 3. Classic 不再列出某文件时，按未匹配重新导入一次：旧绑定 revoked，新观察没有 binding_id。
 4. 如果这个文件的对应是 Next 自己投影出去又被 Classic 读回的（回读），只记观察，不重建绑定。
-结论：直接 revoke 或删除 classic_match 绑定，只在 Classic 对该文件的记录不变时有效；Classic 的记录一变，或你删掉 media_classic_current 的那一行，同步会按上面规则重新生成。要让某个文件长期不跟随 Classic，请给它显式的 accepted 绑定与对应（bind_batch），classic_match 与显式绑定可并存，identity.get 的 conflicts 会列出差异。''',
+结论：直接 revoke 或删除 classic_match 绑定后不会被后台导入自动恢复。若日后显式调用 import_history，Classic 的记录已变或 media_classic_current 已被删除时，仍会按上面规则接纳新观察。显式绑定不会禁止未来的显式导入；classic_match 与显式绑定可并存，identity.get 的 conflicts 会列出差异。长期撤销某次导入的观察可点名 unbind_batch，恢复则使用 restore_classic_batch 并核验当前 Classic 匹配。''',
   'overrides_over_snapshots':
       '''资料合并顺序：先按快照（media_snapshots，经 accepted 绑定关联到实体）填字段——classic_match 来源最后，其余绑定在实体自己身上的优先，再按 fetched_at 新者优先，标题与简介另有中文优先；然后 media_overrides 逐字段覆盖，覆盖永远赢（mode=correction 的在更晚的快照出现后让位）。本地目录自建、没有快照的作品，标题取实体 attributes.title。''',
   'artwork':
@@ -249,7 +258,7 @@ const dbSemantics = <String, String>{
   'no_classic_projection':
       '''db.write 和 db.undo 不往 Classic 投影：不写 media_projection_outbox，也不碰 Classic 的数据库。Classic 看到的匹配结果只在专用原语（bind_batch 等）或 Classic 自己的改动时变化。''',
   'no_receipts':
-      '''直接写入不产生 media_binding_operations 回执，不写 media_metadata_edits 或 danmaku_binding_events 这类领域历史，也不自动递增 media_entities.revision；它的记录是 db_commits（审计与撤回依据）和 body_changes 里的一条摘要。''',
+      '''直接写入不产生 media_binding_operations 回执，不写 media_metadata_edits 或 danmaku_binding_events 这类领域历史，也不自动递增 media_entities.revision；它的记录是 db_commits（审计与撤回依据）、db_operations（按来源隔离的幂等回执）和 body_changes 里的一条摘要。''',
   'foreign_keys':
       '''外键在整批语句之后统一检查（批内顺序随意）；提交前新增的违例让整批回滚，并列出违例的行。提交前已存在的违例不算。''',
   'json_columns':
@@ -257,7 +266,7 @@ const dbSemantics = <String, String>{
   'sql_dialect':
       '''db.write 的每条语句必须被 SQLite 当作触发器正文接受：单条 INSERT、UPDATE、DELETE（含 INSERT OR REPLACE、ON CONFLICT）。因此表名不带 main. 前缀、不能用 RETURNING；WITH 要放进子查询或 INSERT 的 SELECT 里（例如 DELETE FROM t WHERE id IN (WITH x AS (…) SELECT id FROM x)）。DDL、PRAGMA、ATTACH、事务控制和一条里放多条语句都会被拒绝。参数用 ? 按位置绑定。''',
   'preview_binding':
-      '''previewId 绑定的是这批语句的“效果”：语句原文，加上每一行改动的前后镜像。提交时在新事务里重新执行，行级镜像与预演逐字节相同才提交；预演之后这些行被别人改过（或语句依赖的数据变了）就拒绝，重新预演即可。与这批改动无关的表的变化不影响提交。每次执行结果不同的表达式（datetime('now')、random()）会让提交被拒，请写具体的值。previewId 只存在于内存，约 10 分钟有效，用一次即失效。''',
+      '''previewId 绑定的是这批语句的“效果”：语句原文，加上每一行改动的前后镜像。提交时在新事务里重新执行，行级镜像与预演逐字节相同才提交；预演之后这些行被别人改过（或语句依赖的数据变了）就拒绝，重新预演即可。与这批改动无关的表的变化不影响提交。每次执行结果不同的表达式（datetime('now')、random()）会让提交被拒，请写具体的值。未提交的 previewId 绑定调用 origin，只存在于内存，约 10 分钟有效。提交事务同时保存 db_operations 回执；同一 origin 重试已提交的 previewId（包括重启后）直接返回回执，不重复执行 SQL。重试时 statements（若提供）和提交 reason 必须与首次提交一致。''',
   'undo':
-      '''db.undo 恢复一次提交的前镜像：每一行当前内容必须仍等于那次提交的后镜像（插入的行必须还在且没变，删除的行位置必须仍然空着），否则整个撤回被拒绝并列出冲突的行。撤回本身也是一次提交，有自己的 commitId，可以再被撤回。''',
+      '''db.undo 恢复一次提交的前镜像：每一行当前内容必须仍等于那次提交的后镜像（插入的行必须还在且没变，删除的行位置必须仍然空着），否则整个撤回被拒绝并列出冲突的行。撤回本身也是一次提交，有自己的 commitId，可以再被撤回。远程撤回必须提供稳定 requestId；同一 origin 使用同一 requestId 和相同 commitId/reason 重试返回持久回执，不重复撤回。本地调用兼容省略 requestId。''',
 };

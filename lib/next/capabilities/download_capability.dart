@@ -180,7 +180,7 @@ final class _DownloadAction extends Action<_DownloadJson, _DownloadJson> {
           'select_files' =>
             'Replace the included file indices for jobId or jobIds without deleting data or changing paths. Empty selects none. The builtin engine supports inclusion changes, not file priority. Readback verifies the selection. Expanding a finished selection returns a new observation job; the previous receipt is preserved.',
           'import' =>
-            'Scan completed local video files for jobId or jobIds with the Classic scanner, even when automatic scanning is disabled. Verifies file sizes first; returns current imported/identification status. Does not rewrite historical download receipts.',
+            'Register verified completed local video files for jobId or jobIds in Next, without choosing metadata identities or invoking Classic matching. Verifies file sizes first; returns current imported/identification status. Use media.hash.match and media.metadata tools for candidates, then bind explicitly. Does not rewrite historical download receipts.',
           'remove' =>
             'Remove session entries for jobId or jobIds, keeping downloaded files. A job that had already ended keeps its state, and its receipt then records sessionPresent false, removedAt, dataDeleted false and each file re-read (actualSize, retained, imported). Returns per-item persisted jobs and failures.',
           _ =>

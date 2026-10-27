@@ -11,6 +11,7 @@ import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import '../danmaku/store.dart';
 import '../media/library_reads.dart';
 import '../media/identity_store.dart';
+import '../media/file_identity_merge.dart';
 import '../media/media_service.dart';
 import '../media/metadata_provider.dart';
 import '../state/query.dart';
@@ -209,6 +210,7 @@ final class UiDataService implements NextUiData, NextNowPlaying {
       {LocalFiles? files,
       List<UiEpisode>? episodes,
       LibraryReads? reads}) async {
+    workId = await canonicalFileId(db, workId);
     final rows = await db.query('media_entities',
         where: "id=? AND kind='work'", whereArgs: [workId]);
     if (rows.isEmpty) return null;
@@ -280,6 +282,7 @@ final class UiDataService implements NextUiData, NextNowPlaying {
 
   Future<List<UiEpisode>> localEpisodes(String workId,
       {int? season, LocalFiles? files, LibraryReads? reads}) async {
+    workId = await canonicalFileId(db, workId);
     final rows = await db.rawQuery(
         "SELECT e.*,r.attributes AS release_attributes FROM media_entities e JOIN media_entities r ON r.id=e.parent_id WHERE e.kind='episode' AND r.parent_id=? ORDER BY e.rowid",
         [workId]);
@@ -290,6 +293,7 @@ final class UiDataService implements NextUiData, NextNowPlaying {
     for (final row in rows) {
       final attrs = decodeMediaJson(row['attributes']),
           release = decodeMediaJson(row['release_attributes']);
+      if (attrs['removed'] == true || release['removed'] == true) continue;
       final s = attrs['season'] as int? ?? release['season'] as int?;
       if (season != null && s != season) continue;
       final id = row['id'] as String;

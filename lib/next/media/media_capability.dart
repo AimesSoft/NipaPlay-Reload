@@ -343,7 +343,7 @@ final _specs = [
       const ObjectSchema({'work': _libraryWorkSchema}, required: ['work'])),
   _spec(
       'media.library.import_history',
-      'Synchronize Classic paths and visible Dandanplay matches into the shared library, preserving source observations and conflicts. Retained IDs of cleared matches remain evidence; progress is never overwritten.',
+      'Explicitly import Classic paths and visible Dandanplay matches into Next, preserving source observations and conflicts. This is opt-in: startup, history changes, scans and identity writes never import Classic matches automatically. Retained IDs of cleared matches remain evidence; progress is never overwritten.',
       Effect.write,
       const ObjectSchema({}),
       const ObjectSchema({'imported': IntegerSchema()},
@@ -811,7 +811,7 @@ final class _MediaAction extends Action<_JsonValue, _JsonValue> {
           'total': works.length
         };
       case 'media.library.work':
-        final id = json['workId'] as String;
+        final id = (await store.entity(json['workId'] as String))['id'];
         final works = (await store.library())
             .where((work) => work['workId'] == id)
             .toList();

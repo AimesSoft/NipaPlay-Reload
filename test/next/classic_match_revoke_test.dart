@@ -212,11 +212,55 @@ void main() {
     await root.delete(recursive: true);
   });
 
+  test('startup and Classic notifications do not import identities', () async {
+    final path = await video('startup');
+    await seedRow(path, 7001, 7101);
+    await connect();
+    expect(await jobs.database.query('media_entities'), isEmpty);
+    historyChanges.notifyListeners();
+    await Future<void>.delayed(const Duration(milliseconds: 350));
+    expect(await jobs.database.query('media_entities'), isEmpty);
+    expect(await jobs.database.query('media_classic_observations'), isEmpty);
+    await call('media.library.import_history', {});
+    expect(await workIdsOf(path), hasLength(1));
+  });
+
+  test('restore checks only its imported observation without accepting new history', () async {
+    final path = await video('restore-target');
+    await seedRow(path, 7001, 7101);
+    await connect();
+    await call('media.library.import_history', {});
+    final store = runtime.service.store;
+    final fileId = await store.ensureFile(path);
+    final binding = await classicBindingOf(fileId);
+    await unbindClassic(fileId, binding);
+    final unrelated = await video('unrelated');
+    await seedRow(unrelated, 8001, 8101);
+    final observations = await jobs.database.query('media_classic_observations');
+    await classicDb.update('watch_history', {'episode_id': 7102},
+        where: 'file_path=?', whereArgs: [path]);
+    final refused = await invoke('media.identity.restore_classic_batch', {
+      'requestId': 'restore-changed', 'entries': [
+        {'entityId': fileId, 'bindingIds': [binding], 'reason': 'test'}]
+    });
+    expect(refused, isA<Failed>());
+    expect((refused as Failed).failure.code, FailureCode.conflict);
+    expect(await jobs.database.query('media_classic_observations'), observations);
+    expect(await store.registeredFileId(unrelated), isNull);
+    expect(await workIdsOf(path), isEmpty);
+    await classicDb.update('watch_history', {'episode_id': 7101},
+        where: 'file_path=?', whereArgs: [path]);
+    await restoreNamed(fileId, [binding], requestId: 'restore-still-current');
+    expect(await workIdsOf(path), hasLength(1));
+    expect(await store.registeredFileId(unrelated), isNull);
+  });
+
   test('revoking the Classic match leaves the explicit episode, the Classic '
       'record and its progress; later syncs do not attach it again', () async {
     final path = await video('ep7');
     await seedRow(path, 7001, 7107);
     await connect();
+    await call('media.library.import_history', {});
     final store = runtime.service.store;
     final fileId = await store.ensureFile(path);
     final classicWork = (await workIdsOf(path)).single;
@@ -319,6 +363,7 @@ void main() {
     await seedRow(a, 7001, 7107);
     await seedRow(b, 7001, 7108);
     await connect();
+    await call('media.library.import_history', {});
     final store = runtime.service.store;
     final fileA = await store.ensureFile(a);
     final work = (await workIdsOf(a)).single;
@@ -336,6 +381,7 @@ void main() {
     final path = await video('ep7');
     await seedRow(path, 7001, 7107);
     await connect();
+    await call('media.library.import_history', {});
     final store = runtime.service.store;
     final fileId = await store.ensureFile(path);
     final binding = await classicBindingOf(fileId);
@@ -385,6 +431,7 @@ void main() {
     final path = await video('ep7');
     await seedRow(path, 7001, 7107);
     await connect();
+    await call('media.library.import_history', {});
     final store = runtime.service.store;
     final fileId = await store.ensureFile(path);
     final classicWork = (await workIdsOf(path)).single;
@@ -446,6 +493,7 @@ void main() {
     final path = await video('ep7');
     await seedRow(path, 7001, 7107);
     await connect();
+    await call('media.library.import_history', {});
     final store = runtime.service.store;
     final fileId = await store.ensureFile(path);
     final classicBinding = await classicBindingOf(fileId);
@@ -485,6 +533,7 @@ void main() {
     final path = await video('same');
     await seedRow(path, 7001, 7101);
     await connect();
+    await call('media.library.import_history', {});
     final store = runtime.service.store;
     final fileId = await store.ensureFile(path);
     await bind(path, dandanplayBinding(''), origin: 'gui');

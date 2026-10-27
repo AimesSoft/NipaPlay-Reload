@@ -150,6 +150,8 @@ void main() {
     await insert('first', payload);
     await insert('second', 'interruption fixture');
     await db.execute('DROP TABLE next_library_index');
+    await db.execute('DROP TABLE media_entity_aliases');
+    await db.execute('DROP TABLE media_work_merges');
     await db.setVersion(14);
     await db.close();
     final before = await File('${root.path}/next.db').length();

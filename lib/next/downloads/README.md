@@ -114,13 +114,16 @@ A file with no links has `episodes: []` and `identificationPending: true`. The
 download writes no identity itself: binding downloaded files is done with the
 `media.identity` primitives like any other file.
 
-`download.import` scans completed local videos, including when automatic scan is
-off. It checks containment and actual sizes, reuses the Classic scanner and
-completed-scan marker, and returns actual recognized entries. An attempted scan
-does not imply `imported: true`; unmatched or unauthenticated scans remain
-`identificationPending`. The action never rewrites the original receipt. For
-unidentified files, existing `media.library.scan` can register native files under
-a configured media root without inventing work or episode identity.
+`download.import` registers verified completed local videos without running Classic
+identification. Next's automatic completion path does the same, independently of
+Classic's `autoScanCompletedTasks` preference. Desktop Next and the headless host
+share this adapter and report the same file, work and episode IDs. Registration
+has its own completion markers; it does not mark a torrent as scanned in Classic.
+The action checks containment and actual sizes first and never rewrites the
+original receipt. It creates no work, episode or provider binding. Use
+`media.library.scan` for full probing, `media.hash.match` / `media.metadata.*` for
+candidates, then explicitly bind or use SQL. Classic mode retains its own scanner
+and preference, with in-flight recognition invalidated when switching to Next.
 
 A download succeeds when its selected files have been read back and checked
 against the backend manifest. Identification does not certify or block download
@@ -134,24 +137,24 @@ Selected local videos without a confirmed library entry have
 receipt never claims an entry was registered merely because the scanner returned
 success. Remote files retain `requires_transfer` before any local registration.
 
-The Classic adapter registers completed local videos in Next and reads their
-current episode/work links as well as Classic matching. A completed scan attempt is recorded even if some files remain
+In Classic mode, the adapter registers completed local video files and reads
+their current episode/work links as well as Classic matching. A completed scan attempt is recorded even if some files remain
 unidentified, so session observation and application restart cannot repeatedly
 scan the same torrent. Busy scanners and backend/file access failures still
 retry as operational errors; missing identities do not schedule download retries.
 
-The media intelligence work in `next/media-ma` owns file identity storage,
-registration, and identification jobs/Decisions. Its integration point is
-`AppDownloadLibrary.importFiles` and `lookup` behind `DownloadLibrary`: register
-the verified local paths, read back their entries (including unidentified
-entries), and let a separate identification task consume pending identities.
+The media layer owns file identity storage and registration. Agent decisions
+use its explicit binding tools or SQL. `IndexedDownloadLibrary`, shared by
+desktop Next and the headless host, registers verified paths and reads their
+entries without querying metadata providers or importing Classic history.
 An unidentified registered entry returned by `lookup` carries
 `identificationPending: true` in its media map. The executor reports
 `imported: true` together with `identificationPending: true`. The application
-adapter also reports `classicScanPending` when no Classic history entry exists;
-enabled automatic scanning still gets its one identification attempt. This implementation does not create
-an alternative identity store or launch identification tasks. Historical download
-receipts remain snapshots; identification results belong to those later tasks.
+adapter reports `classicScanPending` only in Classic mode when no Classic history
+entry exists; Classic's enabled scanner can then make its identification attempt.
+Next creates no alternative identity store and launches no identification task.
+Historical download receipts remain snapshots; later bindings are read from
+the current media identity store.
 
 Before whole-task completion, checked individual files are size/path verified,
 registered through the same library adapter and persisted under

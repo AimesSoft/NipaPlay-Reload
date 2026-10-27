@@ -10,6 +10,7 @@ import 'package:nipaplay/models/watch_history_model.dart';
 import 'package:nipaplay/next/next_database.dart';
 import 'package:nipaplay/next/settings/application_settings.dart';
 import 'package:nipaplay/next/settings/registry.dart';
+import 'package:nipaplay/next/ui/shell/next_ui_preference.dart';
 import 'package:nipaplay/providers/watch_history_provider.dart';
 import 'package:nipaplay/services/scan_service.dart';
 import 'package:nipaplay/utils/storage_service.dart';
@@ -17,6 +18,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
 import 'test_support.dart';
+import '../../packages/nipa_harness/test/task_support.dart' show MemoryJobStore;
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -52,6 +54,46 @@ void main() {
     SettingsAccess.registry = null;
     await db.close();
     await root.delete(recursive: true);
+  });
+
+  test('Classic scan capability is unavailable in Next before submission', () async {
+    final supported = NextUiPreference.deviceHasNext;
+    NextUiPreference.deviceHasNext = () => true;
+    addTearDown(() => NextUiPreference.deviceHasNext = supported);
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool('labs_enable_agent_endpoint', true);
+    await prefs.setBool('labs_use_next_interface', true);
+    await invokeFailed(harness, 'media.library.scan_classic',
+        {'paths': [root.path]}, FailureCode.unavailable);
+    expect(scan.isScanning, isFalse);
+    expect(await db.query('jobs'), isEmpty);
+  });
+
+  test('Next reports indexing jobs instead of Classic scan state', () async {
+    final supported = NextUiPreference.deviceHasNext;
+    NextUiPreference.deviceHasNext = () => true;
+    addTearDown(() => NextUiPreference.deviceHasNext = supported);
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool('labs_enable_agent_endpoint', true);
+    await prefs.setBool('labs_use_next_interface', true);
+    final store = MemoryJobStore();
+    final now = DateTime.now().toUtc();
+    for (final type in ['media.scan', 'media.scan_classic']) {
+      store.jobs[type] = Job(
+          jobId: type, type: type, title: type,
+          state: JobState.running,
+          phase: 'scan', progress: JobProgress(completed: 3, unit: 'files'),
+          createdAt: now, updatedAt: now, ownerDeviceId: 'test', revision: 0,
+          input: {'root': root.path});
+    }
+    final engine = TaskEngine(store: store, ownerDeviceId: 'test', executors: []);
+    addTearDown(engine.close);
+    final state = await LocalLibraryOperations.scanState(scan, engine: engine);
+    expect(state['mode'], 'next');
+    expect(state['scanning'], isTrue);
+    expect(state['totalFilesFound'], 3);
+    expect(state['failedFiles'], isEmpty);
+    expect(state['jobIds'], ['media.scan']);
   });
 
   test('a bad root in a batch does not persist earlier roots', () async {

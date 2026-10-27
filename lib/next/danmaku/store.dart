@@ -267,14 +267,17 @@ final class DanmakuStore {
         final previous = await tx.query('danmaku_bindings',
             where:
                 'entity_id = ? AND object_id = ? AND status = ? AND entity_revision = ?',
-            whereArgs: [entityId, objectId, 'accepted', entity['revision']]);
+            whereArgs: [entityId, objectId, 'accepted', entity['revision']],
+            orderBy: 'CASE WHEN cache_key IS NOT NULL THEN 0 ELSE 1 END, created_at DESC, id');
         if (previous.isNotEmpty) {
-          if (jsonEncode(decodeMediaJson(previous.single['video'])) !=
-              jsonEncode(video.toJson())) {
+          if (previous.any((b) => stableMediaId('video', decodeMediaJson(b['video'])) !=
+              stableMediaId('video', video.toJson()))) {
             throw const Failure(FailureCode.conflict,
                 'Existing binding has different video metadata. Detach before replacing it.');
           }
-          return previous.single['id'] as String;
+          // A work merge retains both source audits and persistent pools.
+          // Rebinding the same video reuses a deterministic current binding.
+          return previous.first['id'] as String;
         }
         final id = newMediaId('danmaku');
         await tx.insert('danmaku_bindings', {
@@ -368,9 +371,13 @@ final class DanmakuStore {
         return b;
       });
   Future<void> assignCache(String id, String key, String jobId,
-          {int? expectedCacheRevision}) =>
+          {int? expectedCacheRevision, String? expectedEntityId, int? expectedEntityRevision}) =>
       _transaction((tx) async {
         final b = await binding(id, tx: tx);
+        if (expectedEntityId != null && b['entity_id'] != expectedEntityId ||
+            expectedEntityRevision != null && b['entity_revision'] != expectedEntityRevision) {
+          throw const Failure(FailureCode.conflict, 'Danmaku target changed during acquisition.');
+        }
         if (expectedCacheRevision != null &&
             b['cache_revision'] != expectedCacheRevision) {
           throw const Failure(FailureCode.conflict,

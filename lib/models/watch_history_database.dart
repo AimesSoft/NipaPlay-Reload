@@ -487,6 +487,63 @@ class WatchHistoryDatabase {
     }
   }
 
+  /// A scanner's match and optional progress transfer are one publication.
+  /// A mode change while SQLite is awaiting a write rolls the transaction back.
+  Future<bool> commitScanMatch(WatchHistoryItem item,
+      {required bool Function() mayCommit, String? donorPath,
+      List<WatchHistoryItem>? legacyItems}) async {
+    final db = await database;
+    try {
+      return await db.transaction((txn) async {
+        if (!mayCommit()) throw const _ScanMatchCancelled();
+        if (legacyItems != null) {
+          await _preserveLegacyHistory(txn, legacyItems);
+          if (!mayCommit()) throw const _ScanMatchCancelled();
+        }
+        await txn.insert('watch_history', _databaseValues(item),
+            conflictAlgorithm: ConflictAlgorithm.replace);
+        if (!mayCommit()) throw const _ScanMatchCancelled();
+        if (donorPath != null && donorPath != item.filePath) {
+          await txn.delete('watch_history',
+              where: 'file_path = ? AND anime_name = ?',
+              whereArgs: [donorPath, '']);
+        }
+        if (!mayCommit()) throw const _ScanMatchCancelled();
+        return true;
+      });
+    } on _ScanMatchCancelled {
+      return false;
+    }
+  }
+
+  /// Recovery of a scan interrupted while it was creating the first database.
+  /// The receipt commits with the rows, so a crash before sidecar cleanup cannot
+  /// resurrect a donor or history that was subsequently removed from SQLite.
+  Future<void> completeLegacyBootstrap(
+      Future<List<WatchHistoryItem>> Function() loadItems) async {
+    final db = await database;
+    await db.transaction((txn) async {
+      if (await _legacyImportRecorded(txn)) return;
+      await _preserveLegacyHistory(txn, await loadItems());
+    });
+  }
+
+  Future<bool> _legacyImportRecorded(Transaction txn) async {
+    await txn.execute('CREATE TABLE IF NOT EXISTS watch_history_legacy_import '
+        '(id INTEGER PRIMARY KEY CHECK (id = 1))');
+    return (await txn.query('watch_history_legacy_import', limit: 1)).isNotEmpty;
+  }
+
+  Future<void> _preserveLegacyHistory(
+      Transaction txn, List<WatchHistoryItem> items) async {
+    if (await _legacyImportRecorded(txn)) return;
+    for (final item in items) {
+      await txn.insert('watch_history', _databaseValues(item),
+          conflictAlgorithm: ConflictAlgorithm.ignore);
+    }
+    await txn.insert('watch_history_legacy_import', {'id': 1});
+  }
+
   /// Merges a bounded restore batch with one prefetch and one SQLite
   /// transaction. Newer backup records win; older records may still provide a
   /// missing thumbnail. This preserves the full-backup conflict semantics
@@ -1366,4 +1423,8 @@ class WatchHistoryDatabase {
       }
     });
   }
+}
+
+final class _ScanMatchCancelled implements Exception {
+  const _ScanMatchCancelled();
 }

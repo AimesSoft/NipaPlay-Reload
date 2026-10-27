@@ -135,6 +135,9 @@ Future<List<JsonMap>> _impact(
   final result = <JsonMap>[];
   for (final id in ids) {
     final row = await store.entity(id);
+    if (row['id'] != id) {
+      throw const Failure(FailureCode.conflict, 'This catalog ID was merged; use its surviving ID or undo the merge first.');
+    }
     final attrs = row['attributes'] as JsonMap;
     if (attrs['localOnly'] != true) {
       throw const Failure(FailureCode.conflict,
@@ -262,6 +265,9 @@ Future<JsonMap> _put(IdentityStore store, JsonMap input, Invocation invocation,
     final seen = <String>{};
     for (final e in entries) {
       final id = e['entityId'] as String, kind = e['kind'] as String;
+      if ((await tx.query('media_entity_aliases', where: 'old_id=?', whereArgs: [id])).isNotEmpty) {
+        throw const Failure(FailureCode.conflict, 'This entity was merged; edit its surviving ID or undo the merge first.');
+      }
       if (!seen.add(id)) {
         throw const Failure(
             FailureCode.invalidInput, 'Duplicate entityId in batch.');
@@ -359,7 +365,7 @@ Future<JsonMap> _remove(IdentityStore store, JsonMap input,
   final queue = ids.toList();
   for (var i = 0; i < queue.length; i++) {
     for (final child in await store.database
-        .query('media_entities', where: 'parent_id=?', whereArgs: [queue[i]])) {
+        .query('media_entities', where: 'parent_id=? AND id NOT IN (SELECT old_id FROM media_entity_aliases)', whereArgs: [queue[i]])) {
       if (ids.add(child['id'] as String)) queue.add(child['id'] as String);
     }
   }

@@ -177,15 +177,21 @@ void main() {
     final world = _World();
     final folders = NextFolders(world.calls);
     expect(await folders.add(), ['/Users/hikari/Movies/电影']);
-    expect(await folders.scan(['/Users/hikari/Movies/电影']), 'scan-1');
-    expect(world.scanned, [
-      ['/Users/hikari/Movies/电影']
-    ]);
+    expect(await folders.scan(['/Users/hikari/Movies/电影']), 'index-1');
+    expect(world.scanned, isEmpty);
     expect(world.indexed, ['/Users/hikari/Movies/电影'],
-        reason: "the files reach NipaPlay's index even if Classic takes none");
+        reason: 'Next indexes files without asking Classic to identify them');
+    await expectLater(folders.scan([]), throwsA(isA<Failure>()));
     final near = await folders.nearby();
     expect(near.single.name, '客厅的 Mac mini');
     expect(near.single.address, 'http://192.168.1.20:1180');
+  });
+
+  test('folder indexing failure does not fall back to Classic recognition', () async {
+    final world = _World()..indexAvailable = false;
+    await expectLater(NextFolders(world.calls).scan(['/unavailable']),
+        throwsA(isA<Failure>()));
+    expect(world.scanned, isEmpty);
   });
 
   testWidgets('storage: the room left, each cache, and 空 once cleared',
@@ -235,6 +241,7 @@ final class _World {
   final pruned = <String>[];
   final scanned = <List<String>>[];
   final indexed = <String>[];
+  bool indexAvailable = true;
   JsonMap? checked;
   bool downloadsElsewhere = false;
   bool syncAnswers = true;
@@ -300,6 +307,9 @@ final class _World {
       _Action('media.library.roots.add',
           (_) => {'selected': ['/Users/hikari/Movies/电影'], 'roots': []}),
       _Action('media.library.scan', (input) {
+        if (!indexAvailable) {
+          throw const Failure(FailureCode.unavailable, 'Unavailable directory.');
+        }
         indexed.add(input['root'] as String);
         return {'job': {'jobId': 'index-${indexed.length}'}};
       }),

@@ -203,8 +203,10 @@ final class DanmakuService {
       bool refresh = false,
       required String requestId}) async {
     final src = source(video.sourceId);
+    JsonMap? observedBinding;
     if (bindingId != null) {
       final binding = await store.binding(bindingId);
+      observedBinding = binding;
       final bound = DanmakuVideo.fromJson(binding['video'] as JsonMap);
       if (binding['status'] != 'accepted' ||
           bound.sourceId != video.sourceId ||
@@ -235,7 +237,9 @@ final class DanmakuService {
       if (existing != null) return existing;
       if (bindingId != null) {
         final b = await store.binding(bindingId);
-        if (jsonEncode(b['video']) != jsonEncode(video.toJson())) {
+        if (jsonEncode(b['video']) != jsonEncode(video.toJson()) ||
+            b['entity_id'] != observedBinding!['entity_id'] ||
+            b['entity_revision'] != observedBinding['entity_revision']) {
           throw const Failure(
               FailureCode.conflict, 'Fetch video differs from binding.');
         }
@@ -247,6 +251,10 @@ final class DanmakuService {
           input: {
             'video': video.toJson(),
             'bindingId': bindingId,
+            if (observedBinding != null) ...{
+              'bindingEntityId': observedBinding['entity_id'],
+              'bindingEntityRevision': observedBinding['entity_revision'],
+            },
             'startMs': startMs,
             'endMs': end,
             'localDurationMs': localDurationMs,

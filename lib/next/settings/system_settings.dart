@@ -28,6 +28,7 @@ final class SystemSettings {
   final SidecarIndexer sidecars;
   final SubtitleLibrary subtitles;
   bool startupScanEnabled = true;
+  JsonMap? startupScanStatus;
   bool libraryNotifyEnabled = true;
   Future<void> load() async {
     startupScanEnabled = await SettingsStorage.loadBool(
@@ -380,7 +381,7 @@ final class SystemSettings {
           }
         },
             description: kind == 'startupScan'
-                ? 'Next 开启时的启动扫描；下一次启动生效。Next 关闭时沿用 Classic 行为。不取消正在执行的扫描。'
+                ? '下次启动 Next 时，仅索引已授权本地目录中的文件；不执行 Classic 识别、元数据匹配或弹幕获取。不可用目录和远程来源会报告为跳过。Classic 启动扫描独立运行。'
                 : '独立控制 Next 的自动附件检查。关闭后当前文件排空，待处理队列保留；显式检查不受影响。开启后立即核对。'),
       entry(
           'library.notifyNipaEnabled',

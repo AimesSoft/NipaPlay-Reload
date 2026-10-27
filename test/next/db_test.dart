@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
@@ -128,18 +129,18 @@ void main() {
 
   JsonMap stmt(String sql, [List<Object?> params = const []]) =>
       {'sql': sql, if (params.isNotEmpty) 'params': params};
-  Future<JsonMap> preview(List<JsonMap> statements, {String? reason}) =>
+  Future<JsonMap> preview(List<JsonMap> statements, {String? reason, String origin = 'mcp'}) =>
       call('db.write', {
         'statements': statements,
         if (reason != null) 'reason': reason,
-      });
+      }, origin: origin);
   Future<JsonMap> commit(JsonMap previewed,
           {String origin = 'mcp', String? invocationId}) =>
       call('db.write', {'previewId': previewed['previewId']},
           origin: origin, invocationId: invocationId);
   Future<JsonMap> write(List<JsonMap> statements,
       {String? reason, String origin = 'mcp', String? invocationId}) async {
-    final previewed = await preview(statements, reason: reason);
+    final previewed = await preview(statements, reason: reason, origin: origin);
     expect(previewed['committable'], true, reason: jsonEncode(previewed));
     return commit(previewed, origin: origin, invocationId: invocationId);
   }
@@ -504,9 +505,8 @@ void main() {
       expect(await d.rawQuery('SELECT name FROM sqlite_temp_master'), isEmpty);
       expect((await d.rawQuery('PRAGMA recursive_triggers')).first.values.first, 0);
       expect((await d.rawQuery('PRAGMA query_only')).first.values.first, 0);
-      // The preview is used up.
-      await failure('db.write', {'previewId': p['previewId']},
-          code: FailureCode.notFound);
+      // The same key recovers the durable result without executing again.
+      expect(await commit(p), done);
 
       final commitRow = (await d.query('db_commits')).single;
       expect(commitRow['id'], done['commitId']);
@@ -696,6 +696,8 @@ void main() {
         'file_skip_segments': {'file_id': 'e1', 'kind': 'opening', 'start_ms': 0, 'end_ms': 1, 'set_at': 't'},
         'next_library_index': {'id': 'x', 'added': 1, 'payload': '{}', 'facts': '{}'},
         'ui_cache': {'id': 'c', 'fingerprint': 'f', 'payload': 'p'},
+        'media_entity_aliases': {'old_id': 'unused-old', 'entity_id': 'w1'},
+        'media_work_merges': {'id':'m', 'origin':'test', 'request_id':'m', 'fingerprint':'f', 'snapshot':'{}', 'result':'{}', 'state':'committed'},
       };
       await d.execute('PRAGMA foreign_keys=OFF');
       for (final seed in seeds.entries) {
@@ -713,7 +715,7 @@ void main() {
               e.key != 'change_epochs')
             e.key
       ]..sort();
-      expect(readOnly, [...seeds.keys, 'db_commits']..sort(),
+      expect(readOnly, [...seeds.keys, 'db_commits', 'db_operations']..sort(),
           reason: 'a new read-only table needs a seed row here');
       final before = await dump();
       for (final table in readOnly) {
@@ -1048,6 +1050,97 @@ void main() {
       h = Harness([DbCapability(db)]);
       await call('db.undo', {'commitId': done['commitId']});
       expect(await d.query('media_entities', where: "id='e1'"), hasLength(1));
+    });
+  });
+
+  group('durable operation receipts', () {
+    test('two concurrent commits execute once and survive a new service', () async {
+      final p = await preview([stmt("UPDATE media_entities SET revision=revision+1 WHERE id='w1'")]);
+      final results = await Future.wait([commit(p), commit(p)]);
+      expect(results[0]['commitId'], results[1]['commitId']);
+      expect((await d.query('media_entities', where: "id='w1'")).single['revision'], 1);
+      expect(await d.query('db_commits'), hasLength(1));
+      db = createDbService(database: d, media: f.service, uiData: ui);
+      h = Harness([DbCapability(db)]);
+      expect((await commit(p))['commitId'], results[0]['commitId']);
+      expect(await d.query('db_commits'), hasLength(1));
+      expect((await call('db.describe', {'tables': ['db_operations']}))['tables'], isNotEmpty);
+      expect((await call('db.query', {'sql': 'SELECT * FROM db_operations'}))['rows'], hasLength(1));
+    });
+
+    test('other origins and mismatched statements cannot consume a preview', () async {
+      final statements = [stmt("UPDATE media_entities SET revision=1 WHERE id='w1'")];
+      final p = await preview(statements, origin: 'mesh:alice');
+      await failure('db.write', {'previewId': p['previewId']},
+          origin: 'mesh:bob', code: FailureCode.notFound);
+      await failure('db.write', {'previewId': p['previewId'], 'statements': [stmt("DELETE FROM media_entities WHERE id='e1'")]},
+          origin: 'mesh:alice', code: FailureCode.invalidInput);
+      final done = await call('db.write', {'previewId': p['previewId'], 'statements': statements, 'reason': 'reviewed'}, origin: 'mesh:alice');
+      expect(await call('db.write', {'previewId': p['previewId'], 'reason': 'reviewed'}, origin: 'mesh:alice'), done);
+      await failure('db.write', {'previewId': p['previewId'], 'reason': 'changed'}, origin: 'mesh:alice', code: FailureCode.conflict);
+      await failure('db.write', {'previewId': p['previewId'], 'statements': [stmt("DELETE FROM media_entities WHERE id='e1'")], 'reason': 'reviewed'}, origin: 'mesh:alice', code: FailureCode.conflict);
+      await failure('db.write', {'previewId': p['previewId'], 'reason': 'reviewed'}, origin: 'mesh:bob', code: FailureCode.notFound);
+      expect(await d.query('db_commits'), hasLength(1));
+    });
+
+    test('receipt exists before refresh; losing that response cannot repeat SQL', () async {
+      final entered = Completer<void>(), release = Completer<void>();
+      db.afterCommit = (_) async { entered.complete(); await release.future; return ['test']; };
+      final p = await preview([stmt("UPDATE media_entities SET revision=revision+1 WHERE id='w1'")]);
+      final original = commit(p);
+      await entered.future;
+      try {
+        final restarted = DbService(d);
+        final recovered = await restarted.write({'previewId': p['previewId']}, Invocation(origin: 'mcp'));
+        expect(recovered['committed'], true);
+        expect(recovered['postCommitPending'], true);
+        expect(await d.query('db_commits'), hasLength(1));
+      } finally { release.complete(); }
+      final done = await original;
+      expect(done.containsKey('postCommitPending'), false);
+      expect(await commit(p), done);
+    });
+
+    test('receipt failure rolls back SQL and audit without consuming preview', () async {
+      final p = await preview([stmt("UPDATE media_entities SET revision=revision+1 WHERE id='w1'")]);
+      await d.execute("CREATE TRIGGER reject_db_receipt BEFORE INSERT ON db_operations BEGIN SELECT RAISE(ABORT, 'synthetic receipt failure'); END");
+      try {
+        await expectLater(db.write({'previewId': p['previewId']}, Invocation(origin: 'mcp')), throwsA(anything));
+        expect(await d.query('db_commits'), isEmpty);
+        expect(await d.query('db_operations'), isEmpty);
+        expect((await d.query('media_entities', where: "id='w1'")).single['revision'], 0);
+      } finally { await d.execute('DROP TRIGGER reject_db_receipt'); }
+      await commit(p);
+      expect(await d.query('db_commits'), hasLength(1));
+    });
+
+    test('failed refresh still leaves a committed retryable result', () async {
+      db.afterCommit = (_) async => throw StateError('synthetic refresh failure');
+      final p = await preview([stmt("UPDATE media_entities SET revision=1 WHERE id='w1'")]);
+      final done = await commit(p);
+      expect(done['committed'], true);
+      expect((done['refreshed'] as List).single, contains('synthetic refresh failure'));
+      expect(await commit(p), done);
+    });
+
+    test('remote undo uses origin scoped request IDs across service restart', () async {
+      final done = await write([stmt("UPDATE media_entities SET revision=5 WHERE id='w1'")]);
+      await failure('db.undo', {'commitId': done['commitId']}, origin: 'mesh:alice', code: FailureCode.invalidInput);
+      await call('db.undo', {'commitId': done['commitId'], 'dryRun': true}, origin: 'mesh:alice');
+      final input = <String, Object?>{'commitId': done['commitId'], 'requestId': 'undo-1', 'reason': 'restore'};
+      final results = await Future.wait([call('db.undo', input, origin: 'mesh:alice'), call('db.undo', input, origin: 'mesh:alice')]);
+      expect(results[0]['commitId'], results[1]['commitId']);
+      db = DbService(d);
+      h = Harness([DbCapability(db)]);
+      expect((await call('db.undo', input, origin: 'mesh:alice'))['commitId'], results[0]['commitId']);
+      await failure('db.undo', {...input, 'reason': 'different'}, origin: 'mesh:alice', code: FailureCode.conflict);
+      await failure('db.undo', {...input, 'commitId': results[0]['commitId']}, origin: 'mesh:alice', code: FailureCode.conflict);
+      await failure('db.undo', input, origin: 'mesh:bob', code: FailureCode.conflict);
+      expect(await d.query('db_commits'), hasLength(2));
+      expect((await d.query('media_entities', where: "id='w1'")).single['revision'], 0);
+      // A different caller can deliberately undo the undo with its own key.
+      await call('db.undo', {'commitId': results[0]['commitId'], 'requestId': 'undo-1'}, origin: 'mesh:bob');
+      expect(await d.query('db_commits'), hasLength(3));
     });
   });
 

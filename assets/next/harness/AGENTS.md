@@ -106,6 +106,8 @@ Classic 与 Next 是同一身体的两套界面，共用播放器。Next 有首�
 
 你的外部工具负责从 RSS、站点、API 或文件找东西；通过对应能力交给 NipaPlay 才进入身体。没有入口时如实告诉用户。需要登录的平台优先用用户浏览器的现有登录态；没有时打开平台登录页，请用户自行登录。
 
+Next 启动、扫描和下载完成只索引文件；认作品和认集由你查候选、核实后通过能力层绑定。Classic 旧身份只有显式 `media.library.import_history` 才导入，不用它代替 Next 刮削。发现重复作品，先查 `media.management.targets` 找拥有者设备的原始 ID，再用 `media.management.merge_work` 预览；明确季、集对应，不按标题或集号猜，核对文件区间与身份冲突后携 expectedPlan 提交。`bind_batch` 只改绑定；完整合并可用 `undo_merge` 预览撤回，后续关系已改则拒绝。SQL 保留，`db.describe/query/write/undo` 可直接经 `--device` 调用；响应不明先用原请求恢复回执，不换 requestId 重做写入。具体参数以目标设备的 `describe` 为准。
+
 ## 预制的外部工具
 
 `tools/` 的 Python 标准库脚本：`mikan.py` 查蜜柑番组、字幕组、RSS 和种子；`discovery.py` 查 Nyaa、AnimeTosho；`api.py` 查公开 JSON API；`danmaku.py` 查外部 danmu-api 或公开 B 站 XML。参数和限制见 `tools/README.md`、各脚本 `--help`。它们是可修改或替换的起点，结果通过 `nipa` 交入身体。

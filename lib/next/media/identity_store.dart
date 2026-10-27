@@ -175,7 +175,8 @@ final class IdentityStore {
     // A merged file's old ID names the file it became: one query for both.
     final rows = await (db ?? database).rawQuery(
         'SELECT * FROM media_entities WHERE id = '
-        'COALESCE((SELECT file_id FROM media_file_aliases WHERE old_id = ?1), ?1)',
+        'COALESCE((SELECT file_id FROM media_file_aliases WHERE old_id = ?1), '
+        '(SELECT entity_id FROM media_entity_aliases WHERE old_id = ?1), ?1)',
         [id]);
     if (rows.isEmpty) {
       throw Failure(FailureCode.notFound,
@@ -656,6 +657,7 @@ final class IdentityStore {
 
   Future<String> _materialize(DatabaseExecutor tx, String kind,
       MetadataRecord record, String? parent) async {
+    if (parent != null) parent = await canonicalFileId(tx, parent);
     final id = stableMediaId(kind, record.ref.toJson());
     await tx.insert(
         'media_entities',
@@ -678,7 +680,7 @@ final class IdentityStore {
       throw const Failure(FailureCode.conflict,
           'External object already belongs to another local release.');
     }
-    return id;
+    return existing['id'] as String;
   }
 
   Future<String> _bindRecord(
@@ -831,6 +833,7 @@ final class IdentityStore {
 
   Future<List<String>> _metadataEntities(String id) async {
     final target = await entity(id);
+    id = target['id'] as String;
     if (target['kind'] != 'work' && target['kind'] != 'release') return [id];
     final workId =
         target['kind'] == 'work' ? id : target['parent_id'] as String;
@@ -904,6 +907,26 @@ final class IdentityStore {
         if (fileId != null) ...['conflict', fileId]
       ],
       orderBy: 'binding_revision');
+  /// A delivery address is transport evidence, never a Classic identity import.
+  /// Persist it before applying so retry, undo and receipts use the same row.
+  Future<void> recordProjectionLocator(String projectionId, String locationId,
+      JsonMap delivery) => _transaction((tx) async {
+    final row = (await tx.query('media_projection_outbox',
+        where: 'id=?', whereArgs: [projectionId])).single;
+    final payload = decodeMediaJson(row['payload']);
+    final locators = Map<String, Object?>.from(
+        payload['deliveryLocators'] as Map? ?? const {});
+    if (locators.containsKey(locationId) &&
+        jsonEncode(locators[locationId]) != jsonEncode(delivery)) {
+      throw const Failure(FailureCode.conflict,
+          'The recorded Classic projection target cannot change.');
+    }
+    locators[locationId] = delivery;
+    await tx.update('media_projection_outbox', {
+      'payload': jsonEncode({...payload, 'deliveryLocators': locators})
+    }, where: 'id=?', whereArgs: [projectionId]);
+  });
+
   Future<void> finishProjection(String id, String state) =>
       _transaction((tx) async {
         final previous = (await tx.query('media_projection_outbox',
@@ -1442,6 +1465,7 @@ final class IdentityStore {
 
   Future<String> _local(DatabaseExecutor tx, String? id, String kind,
       MetadataRecord record, String? parent) async {
+    if (parent != null) parent = await canonicalFileId(tx, parent);
     if (id == null) return _materialize(tx, kind, record, parent);
     final existing = await entity(id, db: tx);
     if (existing['kind'] != kind || existing['parent_id'] != parent) {
@@ -1451,7 +1475,7 @@ final class IdentityStore {
           'entityId identifies the entry itself; workId/releaseId identify its parents. '
           'Omit local IDs to create/reuse the hierarchy by catalogue refs.');
     }
-    return id;
+    return existing['id'] as String;
   }
 
   Future<JsonMap> bindBatch(List<JsonMap> entries, String key,
@@ -1462,8 +1486,11 @@ final class IdentityStore {
             final results = <JsonMap>[];
             for (var index = 0; index < entries.length; index++) {
               final entry = {...entries[index],
-                if (entries[index]['entityId'] is String)
-                  'entityId': await canonicalFileId(tx, entries[index]['entityId'] as String)};
+                for (final field in ['entityId','workId','releaseId'])
+                  if (entries[index][field] is String)
+                    field: await canonicalFileId(tx, entries[index][field] as String),
+                if (entries[index]['localEpisodeIds'] case final List ids)
+                  'localEpisodeIds': [for (final id in ids) await canonicalFileId(tx, id as String)]};
               try {
                 final kind = entry['kind'] as String;
                 if (entry.containsKey('ref')) {
@@ -1934,6 +1961,51 @@ final class IdentityStore {
             [id]))
           {'entityId': id, 'kind': row['kind'], 'bindingId': row['id']}
     ];
+  }
+
+  /// Check only the imported file observations selected for restoration.
+  /// This reads current Classic facts without accepting identities, replacing
+  /// observations, registering paths or reconciling unrelated history rows.
+  Future<void> verifyClassicRestoreHistory(List<JsonMap> entries,
+      Future<List<JsonMap>> Function() readHistory) async {
+    List<JsonMap>? history;
+    for (var index = 0; index < entries.length; index++) {
+      final entry = entries[index];
+      final target = await entity(entry['entityId'] as String);
+      if (target['kind'] != 'file') continue;
+      final id = target['id'] as String;
+      final requested = (entry['bindingIds'] as List?)?.cast<String>();
+      final revoked = await database.query('media_bindings',
+          columns: ['id'],
+          where: "entity_id=? AND status='revoked' AND source='classic_match'",
+          whereArgs: [id]);
+      final selected = revoked
+          .where((b) => requested == null || requested.contains(b['id']))
+          .map((b) => b['id'])
+          .toSet();
+      if (selected.isEmpty) continue;
+      final locationsById = {
+        for (final location in await locations(id))
+          location['id']: location['locator']
+      };
+      for (final observed in await classicObservations(id, currentOnly: true)) {
+        if (!selected.contains(observed['bindingId']) ||
+            observed['provenance'] != 'classic_match_revoked') {
+          continue;
+        }
+        history ??= await readHistory();
+        final path = locationsById[observed['locationId']];
+        final current = history.where((row) => row['filePath'] == path).firstOrNull;
+        if (current == null || !eligibleClassicHistory(current) ||
+            const ['animeId', 'episodeId', 'animeName', 'episodeTitle', 'videoHash']
+                .any((key) => current[key] != observed[key])) {
+          throw Failure(FailureCode.conflict,
+              'Classic matching changed since this observation was imported; explicitly import history before restoring it.',
+              violations: [SchemaViolation('/entries/$index',
+                  'The selected Classic file observation is no longer current.')]);
+        }
+      }
+    }
   }
 
   /// Puts back classic_match bindings `unbindBatch` revoked, by name. A

@@ -282,7 +282,7 @@ final class SystemDiagnostics implements Capability {
                 id: 'media.indexers.status',
                 title: '自动行为实际状态',
                 description:
-                    '读取独立开关、队列、正在排空的文件、上次运行和错误。策略值与工作器生效状态分别返回。自动匹配和弹幕下载沿用 settings 的 Classic 策略。',
+                    '读取独立开关、队列、正在排空的文件、上次运行和错误。策略值与工作器生效状态分别返回。Next 启动只索引本地文件，识别与弹幕获取由 Agent 显式调用。',
                 effect: Effect.read,
                 input: ObjectSchema({}),
                 output: ObjectSchema({}, additionalProperties: true)),
@@ -293,7 +293,9 @@ final class SystemDiagnostics implements Capability {
                   ],
                   'startupScan': {
                     'enabled': automatic.startupScanEnabled,
-                    'applies': 'next startup while Next enabled',
+                    'applies':
+                        'Next local file indexing only; no Classic recognition',
+                    'lastRun': automatic.startupScanStatus,
                     'stopsRunningScan': false
                   },
                   'policies': {

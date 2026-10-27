@@ -146,6 +146,8 @@ void main() {
       }
     }
     await old.execute('DROP TABLE change_epochs');
+    await old.execute('DROP TABLE media_entity_aliases');
+    await old.execute('DROP TABLE media_work_merges');
     await old.setVersion(20);
     await old.close();
     db = await openNextDatabase(root, factory: databaseFactoryFfi);

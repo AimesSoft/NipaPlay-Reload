@@ -124,6 +124,7 @@ void main() {
       }
     };
     await connect();
+    await call('media.library.import_history', {});
     await call('media.identity.bind_batch', {
       'requestId': 'preexisting-works',
       'entries': [
@@ -171,7 +172,7 @@ void main() {
     }
     final before = await classicDb.query('watch_history', orderBy: 'id');
     await connect();
-    final store = runtime.service.store;
+    await call('media.library.import_history', {});
     final works = (await call('media.library.works', {}))['works'] as List;
     final episodeCount = await jobs.database
         .rawQuery("SELECT count(*) n FROM media_entities WHERE kind='episode'");
@@ -296,16 +297,7 @@ void main() {
         where: 'file_path=?',
         whereArgs: [conflictPath]);
     historyChanges.notifyListeners();
-    final deadline = DateTime.now().add(const Duration(seconds: 5));
-    while ((await store.classicObservations(conflict['id'] as String,
-                currentOnly: true))
-            .single['animeId'] !=
-        8010) {
-      if (DateTime.now().isAfter(deadline)) {
-        fail('Classic live observation did not arrive');
-      }
-      await Future<void>.delayed(const Duration(milliseconds: 20));
-    }
+    await call('media.library.import_history', {});
     final changed = await identity(conflictPath);
     final observations = changed['classicObservations'] as List;
     expect(observations.where((o) => o['current'] == true).single['animeId'],
@@ -317,7 +309,7 @@ void main() {
             b['source'] == 'explicit_binding' && b['status'] == 'accepted'),
         isTrue);
     print(
-        'X5 live Classic rematch: currentAnime=8010; old observation retained=true; Agent binding retained=true; conflict visible=true');
+        'X5 explicit Classic rematch import: currentAnime=8010; old observation retained=true; Agent binding retained=true; conflict visible=true');
 
     final addedPath = await video('classic-added');
     await seedRow(addedPath, 8020, 80200001);
@@ -340,6 +332,7 @@ void main() {
   test('X5 import interruption rolls back current file and resumes on restart',
       () async {
     await connect();
+    await call('media.library.import_history', {});
     for (var i = 1; i <= 53; i++) {
       await seedRow(await video('restart-$i'), 8000 + (i ~/ 7), 8000000 + i);
     }
@@ -358,6 +351,7 @@ void main() {
     await db.execute('DROP TRIGGER interrupt_import');
     await disconnect();
     await connect();
+    await call('media.library.import_history', {});
     final restored = await jobs.database.query('media_classic_observations');
     expect(restored, hasLength(53));
     for (final row in committed) {
@@ -380,6 +374,7 @@ void main() {
     await seedRow(path, 7001, 7101);
     final before = await classicDb.query('watch_history', orderBy: 'id');
     await connect();
+    await call('media.library.import_history', {});
     await call('media.identity.bind_batch', {
       'requestId': 'same-episode',
       'entries': [
@@ -433,6 +428,7 @@ void main() {
         'X5 delivery interrupted: Classic episode=7101; outbox=pending; Agent binding durable=true');
     await disconnect();
     await connect();
+    await call('media.library.import_history', {});
     final projectionJobs = await engine.list(type: 'media.project');
     expect(projectionJobs, hasLength(1));
     final job = await waitForJob(

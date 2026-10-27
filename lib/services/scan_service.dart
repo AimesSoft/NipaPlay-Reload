@@ -5,6 +5,7 @@ import 'dart:io' if (dart.library.io) 'dart:io';
 import 'package:path/path.dart' as p;
 import 'package:nipaplay/models/watch_history_model.dart';
 import 'package:nipaplay/services/concurrent_video_processor.dart';
+import 'classic_mode_policy.dart';
 import 'package:nipaplay/services/rust_file_scan_service.dart';
 import 'package:nipaplay/services/android_saf_service.dart';
 import 'package:nipaplay/services/harmony_local_media_service.dart';
@@ -145,7 +146,8 @@ class ScanService with ChangeNotifier {
       List.unmodifiable(_failedScanFiles);
 
   bool _isScanning = false;
-  bool get isScanning => _isScanning;
+  bool _completedScanPending = false;
+  bool get isScanning => _isScanning || _completedScanPending;
 
   double _scanProgress = 0.0;
   double get scanProgress => _scanProgress;
@@ -177,24 +179,26 @@ class ScanService with ChangeNotifier {
   int _totalFilesFound = 0;
   int get totalFilesFound => _totalFilesFound;
 
-  final Future<List<VideoProcessResult>> Function(List<String>)
-      _completedFilesProcessor;
+  final Future<List<VideoProcessResult>> Function(
+      List<String>, Future<bool> Function()) _completedFilesProcessor;
 
   @visibleForTesting
   ScanService.forTesting({
     required Future<List<VideoProcessResult>> Function(List<String>)
         completedFilesProcessor,
     Future<void> Function()? startupAction,
-  })  : _completedFilesProcessor = completedFilesProcessor,
+  })  : _completedFilesProcessor =
+            ((paths, _) => completedFilesProcessor(paths)),
         _startupAction = startupAction;
 
   static Future<List<VideoProcessResult>> _processCompletedFiles(
-          List<String> paths) =>
+          List<String> paths, Future<bool> Function() allowed) =>
       ConcurrentVideoProcessor.processVideoPaths(paths,
-          skipPreviouslyMatchedUnwatched: true);
+          continueProcessing: allowed, skipPreviouslyMatchedUnwatched: true);
 
   final Future<void> Function()? _startupAction;
   Future<void> _foldersLoaded = Future.value();
+  Future<void> get foldersReady => _foldersLoaded;
   Future<void>? _startupRefresh;
   Timer? _progressNotification;
   bool _disposed = false;
@@ -236,8 +240,10 @@ class ScanService with ChangeNotifier {
     } catch (error) {
       debugPrint('启动扫描等待播放就绪结束: $error');
     }
-    if (_disposed) return;
-    if (startupRefreshAllowed != null && !await startupRefreshAllowed!()) return;
+    if (_disposed || !await ClassicModePolicy.allowsImplicitWork()) return;
+    if (startupRefreshAllowed != null && !await startupRefreshAllowed!()) {
+      return;
+    }
     if (_startupAction != null) {
       await _startupAction();
       return;
@@ -271,10 +277,13 @@ class ScanService with ChangeNotifier {
       // 文件夹列表加载失败时静默放弃本次自动刷新
       return;
     }
-    if (_disposed || _scannedFolders.isEmpty || _isScanning) return;
+    final permit = await ClassicModePolicy.acquire();
+    if (permit == null || _disposed || _scannedFolders.isEmpty || _isScanning) {
+      return;
+    }
     // 短暂延迟，让主界面先完成首帧渲染，避免差异比对与启动 I/O 争抢资源
     await Future<void>.delayed(const Duration(seconds: 2));
-    if (_disposed || _isScanning) return;
+    if (_disposed || _isScanning || !await permit.allowed) return;
     try {
       await rescanAllFolders();
     } catch (e) {
@@ -665,12 +674,14 @@ class ScanService with ChangeNotifier {
 
   Future<void> rescanAllFolders(
       {bool skipPreviouslyMatchedUnwatched = true}) async {
+    final permit = await ClassicModePolicy.acquire();
+    if (permit == null || _disposed) return;
     if (kIsWeb) {
       _updateScanMessage("Web版不支持扫描本地媒体库。");
       _updateScanState(scanning: false, completed: true);
       return;
     }
-    if (_isScanning) {
+    if (_isScanning || _completedScanPending) {
       _updateScanMessage("已有扫描任务在进行中，请稍后开始全面刷新。");
       return;
     }
@@ -694,7 +705,7 @@ class ScanService with ChangeNotifier {
     _updateScanState(message: "正在检查文件夹变化...");
 
     for (int i = 0; i < allFoldersToScan.length; i++) {
-      if (!_isScanning) {
+      if (!_isScanning || !await permit.allowed) {
         _precomputedFolderDiffs.clear();
         _updateScanState(scanning: false, message: "刷新已取消。", completed: true);
         return;
@@ -720,6 +731,11 @@ class ScanService with ChangeNotifier {
       }
     }
 
+    if (!await permit.allowed) {
+      _precomputedFolderDiffs.clear();
+      _updateScanState(scanning: false, message: '扫描已停止', completed: true);
+      return;
+    }
     if (foldersNeedingScan.isEmpty) {
       for (final diffEntry in _precomputedFolderDiffs.entries) {
         await _storeFileHashes(diffEntry.key, diffEntry.value);
@@ -739,7 +755,7 @@ class ScanService with ChangeNotifier {
     var foldersProcessedCount = 0;
 
     for (final folderPath in foldersNeedingScan) {
-      if (!_isScanning) {
+      if (!_isScanning || !await permit.allowed) {
         _precomputedFolderDiffs.clear();
         _updateScanState(scanning: false, message: "刷新已取消。", completed: true);
         return;
@@ -754,6 +770,7 @@ class ScanService with ChangeNotifier {
 
       await startDirectoryScan(folderPath,
           isPartOfBatch: true,
+          continueProcessing: () => permit.allowed,
           skipPreviouslyMatchedUnwatched: skipPreviouslyMatchedUnwatched);
 
       foldersProcessedCount++;
@@ -785,6 +802,13 @@ class ScanService with ChangeNotifier {
       Future<bool> Function()? continueProcessing,
       void Function(List<VideoProcessResult>)? onResults,
       void Function(Object)? onFailure}) async {
+    final permit = await ClassicModePolicy.acquire();
+    if (permit == null || _disposed) return;
+    Future<bool> allowed() async =>
+        !_disposed &&
+        await permit.allowed &&
+        (continueProcessing == null || await continueProcessing());
+    if (!await allowed()) return;
     if (kIsWeb) {
       _updateScanMessage("Web版不支持扫描本地媒体库。");
       if (!isPartOfBatch) {
@@ -792,199 +816,206 @@ class ScanService with ChangeNotifier {
       }
       return;
     }
-    if (!isPartOfBatch && _isScanning) {
+    if (!isPartOfBatch && (_isScanning || _completedScanPending)) {
       _updateScanMessage("已有扫描任务在进行中，请稍后。");
       return;
     }
 
-    if (!isPartOfBatch) {
-      clearFailedScanFiles(notify: false);
-      // Standalone scans must not reuse diff snapshots from previous runs.
-      _precomputedFolderDiffs.clear();
-    }
-
-    if (!isPartOfBatch) {
-      _updateScanState(
-          scanning: true, progress: 0.0, message: "准备智能扫描: $directoryPath");
-    } else {
-      _updateScanState(
-          message:
-              "开始扫描子文件夹: ${p.basename(directoryPath)} (${skipPreviouslyMatchedUnwatched ? "跳过已匹配" : "全面扫描"})");
-    }
-
-    bool newFolderAddedToPrefs = false;
-    if (!_scannedFolders.contains(directoryPath)) {
-      _scannedFolders = List.from(_scannedFolders)..add(directoryPath);
-      newFolderAddedToPrefs = true;
-    }
-
-    if (newFolderAddedToPrefs) {
-      await _saveScannedFolders();
-      notifyListeners();
-    }
-
-    // 第一阶段：分析文件变化
-    _updateScanState(message: "正在分析文件变化...");
-    final _FolderFileDiff diff;
     try {
-      diff = await _calculateFolderFileDiff(directoryPath);
-    } catch (e) {
-      final message = "Rust 文件扫描失败: $e";
-      debugPrint("$message ($directoryPath)");
+      if (!isPartOfBatch) {
+        clearFailedScanFiles(notify: false);
+        // Standalone scans must not reuse diff snapshots from previous runs.
+        _precomputedFolderDiffs.clear();
+      }
+
       if (!isPartOfBatch) {
         _updateScanState(
-          scanning: false,
-          message: message,
-          completed: true,
-        );
+            scanning: true, progress: 0.0, message: "准备智能扫描: $directoryPath");
       } else {
-        _updateScanMessage("${p.basename(directoryPath)} $message");
+        _updateScanState(
+            message:
+                "开始扫描子文件夹: ${p.basename(directoryPath)} (${skipPreviouslyMatchedUnwatched ? "跳过已匹配" : "全面扫描"})");
       }
-      onFailure?.call(e);
-      return;
-    }
-    if (continueProcessing != null && !await continueProcessing()) {
-      _updateScanState(scanning: false, message: '扫描已停止', completed: true);
-      return;
-    }
-    if (diff.currentCount == 0 && diff.cachedCount == 0) {
-      if (!isPartOfBatch) {
-        _totalFilesFound = 0;
+
+      bool newFolderAddedToPrefs = false;
+      if (!_scannedFolders.contains(directoryPath)) {
+        _scannedFolders = List.from(_scannedFolders)..add(directoryPath);
+        newFolderAddedToPrefs = true;
+      }
+
+      if (newFolderAddedToPrefs) {
+        await _saveScannedFolders();
+        notifyListeners();
+      }
+
+      // 第一阶段：分析文件变化
+      _updateScanState(message: "正在分析文件变化...");
+      final _FolderFileDiff diff;
+      try {
+        diff = await _calculateFolderFileDiff(directoryPath);
+      } catch (e) {
+        final message = "Rust 文件扫描失败: $e";
+        debugPrint("$message ($directoryPath)");
+        if (!isPartOfBatch) {
+          _updateScanState(
+            scanning: false,
+            message: message,
+            completed: true,
+          );
+        } else {
+          _updateScanMessage("${p.basename(directoryPath)} $message");
+        }
+        onFailure?.call(e);
+        return;
+      }
+      if (!await allowed()) {
+        _updateScanState(scanning: false, message: '扫描已停止', completed: true);
+        return;
+      }
+      if (diff.currentCount == 0 && diff.cachedCount == 0) {
+        if (!isPartOfBatch) {
+          _totalFilesFound = 0;
+          _justFinishedScanning = true;
+          _updateScanState(
+              scanning: false,
+              message: "在 $directoryPath 中没有找到 mp4 或 mkv 文件。",
+              completed: true);
+          debugPrint(
+              "扫描结束，没有找到文件，已设置 _justFinishedScanning=$_justFinishedScanning, _totalFilesFound=$_totalFilesFound");
+        } else {
+          _updateScanMessage("在 ${p.basename(directoryPath)} 中无视频文件。");
+        }
+        await _updateFileHashes(directoryPath, precomputedDiff: diff);
+        return;
+      }
+
+      List<String> filesToProcess = List<String>.from(diff.filesToProcess)
+        ..sort();
+      if (filesToProcess.isEmpty) {
+        if (diff.deletedFiles.isNotEmpty) {
+          final deletionMessage =
+              "检测到 ${diff.deletedFiles.length} 个文件被删除，无需重新刮削。";
+          if (!isPartOfBatch) {
+            await _updateFileHashes(directoryPath, precomputedDiff: diff);
+            _updateScanState(
+              scanning: false,
+              progress: 1.0,
+              message: "智能扫描完成：$deletionMessage",
+              completed: true,
+            );
+          } else {
+            await _updateFileHashes(directoryPath, precomputedDiff: diff);
+            _updateScanMessage("${p.basename(directoryPath)} $deletionMessage");
+          }
+        } else {
+          if (!isPartOfBatch) {
+            await _updateFileHashes(directoryPath, precomputedDiff: diff);
+            _updateScanState(
+              scanning: false,
+              progress: 1.0,
+              message: "智能扫描完成：文件夹 ${p.basename(directoryPath)} 没有变化，无需重新扫描。",
+              completed: true,
+            );
+          } else {
+            await _updateFileHashes(directoryPath, precomputedDiff: diff);
+            _updateScanMessage("文件夹 ${p.basename(directoryPath)} 没有变化，已跳过。");
+          }
+        }
+        return;
+      }
+
+      final List<String> detailParts = [];
+      if (diff.newFiles.isNotEmpty) {
+        detailParts.add("新增 ${diff.newFiles.length} 个");
+      }
+      if (diff.modifiedFiles.isNotEmpty) {
+        detailParts.add("修改 ${diff.modifiedFiles.length} 个");
+      }
+      final String detail =
+          detailParts.isEmpty ? "" : "（${detailParts.join('，')}）";
+
+      _updateScanState(
+          message: "发现 ${filesToProcess.length} 个需要处理的视频文件$detail，开始并发扫描...");
+
+      final filePathsByRelativePath = diff.filePathsByRelativePath;
+      final List<String> videoPaths = filesToProcess
+          .map((relativePath) =>
+              filePathsByRelativePath?[relativePath] ??
+              p.join(directoryPath, relativePath))
+          .toList();
+
+      if (!_isScanning && !isPartOfBatch) {
+        _updateScanState(
+            scanning: false, message: "扫描已取消: $directoryPath", completed: true);
+        return;
+      }
+
+      // 第二阶段：并发处理视频文件
+      final generation = _scanGeneration;
+      final results = await ConcurrentVideoProcessor.processVideoPaths(
+          videoPaths,
+          maxConcurrency: matchingConcurrency,
+          continueProcessing: allowed,
+          skipPreviouslyMatchedUnwatched: skipPreviouslyMatchedUnwatched,
+          onProgress: (processed, total, currentFile) {
+        if (_disposed || !_isScanning || generation != _scanGeneration) return;
+        _updateScanState(
+            progress: processed / total,
+            message: "正在处理: $currentFile ($processed/$total)");
+      });
+
+      if (!await allowed()) {
+        _updateScanState(scanning: false, message: '扫描已停止', completed: true);
+        return;
+      }
+      if (!_isScanning && !isPartOfBatch) {
+        _updateScanState(
+            scanning: false, message: "扫描已取消: $directoryPath", completed: true);
+        return;
+      }
+
+      if (_disposed || generation != _scanGeneration) return;
+      onResults?.call(results);
+      // 第三阶段：处理结果
+      final successResults = results.where((r) => r.success).toList();
+      final failedResults = results.where((r) => !r.success).toList();
+      _recordFailedScanFiles(directoryPath, failedResults);
+      final addedAnimeTitles = successResults
+          .where((r) => r.animeTitle != null)
+          .map((r) => r.animeTitle!)
+          .toSet();
+      final skippedFilesCount = videoPaths.length - results.length;
+
+      if (!isPartOfBatch && _isScanning) {
+        _totalFilesFound = videoPaths.length;
+
+        String completionMessage = "";
+        if (failedResults.isNotEmpty) {
+          completionMessage =
+              "并发扫描 $directoryPath 完成。添加/更新 ${addedAnimeTitles.length} 部番剧。${failedResults.length} 个文件处理失败。";
+        } else {
+          completionMessage =
+              "并发扫描 $directoryPath 完成。添加/更新 ${addedAnimeTitles.length} 部番剧。";
+        }
+        if (skippedFilesCount > 0) {
+          completionMessage += " 跳过了 $skippedFilesCount 个已匹配文件。";
+        }
+
         _justFinishedScanning = true;
+        await _updateFileHashes(directoryPath, precomputedDiff: diff);
         _updateScanState(
             scanning: false,
-            message: "在 $directoryPath 中没有找到 mp4 或 mkv 文件。",
+            progress: 1.0,
+            message: completionMessage,
             completed: true);
-        debugPrint(
-            "扫描结束，没有找到文件，已设置 _justFinishedScanning=$_justFinishedScanning, _totalFilesFound=$_totalFilesFound");
-      } else {
-        _updateScanMessage("在 ${p.basename(directoryPath)} 中无视频文件。");
+      } else if (isPartOfBatch) {
+        _totalFilesFound += videoPaths.length;
+        await _updateFileHashes(directoryPath, precomputedDiff: diff);
       }
-      await _updateFileHashes(directoryPath, precomputedDiff: diff);
-      return;
-    }
-
-    List<String> filesToProcess = List<String>.from(diff.filesToProcess)
-      ..sort();
-    if (filesToProcess.isEmpty) {
-      if (diff.deletedFiles.isNotEmpty) {
-        final deletionMessage =
-            "检测到 ${diff.deletedFiles.length} 个文件被删除，无需重新刮削。";
-        if (!isPartOfBatch) {
-          await _updateFileHashes(directoryPath, precomputedDiff: diff);
-          _updateScanState(
-            scanning: false,
-            progress: 1.0,
-            message: "智能扫描完成：$deletionMessage",
-            completed: true,
-          );
-        } else {
-          await _updateFileHashes(directoryPath, precomputedDiff: diff);
-          _updateScanMessage("${p.basename(directoryPath)} $deletionMessage");
-        }
-      } else {
-        if (!isPartOfBatch) {
-          await _updateFileHashes(directoryPath, precomputedDiff: diff);
-          _updateScanState(
-            scanning: false,
-            progress: 1.0,
-            message: "智能扫描完成：文件夹 ${p.basename(directoryPath)} 没有变化，无需重新扫描。",
-            completed: true,
-          );
-        } else {
-          await _updateFileHashes(directoryPath, precomputedDiff: diff);
-          _updateScanMessage("文件夹 ${p.basename(directoryPath)} 没有变化，已跳过。");
-        }
-      }
-      return;
-    }
-
-    final List<String> detailParts = [];
-    if (diff.newFiles.isNotEmpty) {
-      detailParts.add("新增 ${diff.newFiles.length} 个");
-    }
-    if (diff.modifiedFiles.isNotEmpty) {
-      detailParts.add("修改 ${diff.modifiedFiles.length} 个");
-    }
-    final String detail =
-        detailParts.isEmpty ? "" : "（${detailParts.join('，')}）";
-
-    _updateScanState(
-        message: "发现 ${filesToProcess.length} 个需要处理的视频文件$detail，开始并发扫描...");
-
-    final filePathsByRelativePath = diff.filePathsByRelativePath;
-    final List<String> videoPaths = filesToProcess
-        .map((relativePath) =>
-            filePathsByRelativePath?[relativePath] ??
-            p.join(directoryPath, relativePath))
-        .toList();
-
-    if (!_isScanning && !isPartOfBatch) {
-      _updateScanState(
-          scanning: false, message: "扫描已取消: $directoryPath", completed: true);
-      return;
-    }
-
-    // 第二阶段：并发处理视频文件
-    final generation = _scanGeneration;
-    final results = await ConcurrentVideoProcessor.processVideoPaths(videoPaths,
-        maxConcurrency: matchingConcurrency,
-        continueProcessing: continueProcessing,
-        skipPreviouslyMatchedUnwatched: skipPreviouslyMatchedUnwatched,
-        onProgress: (processed, total, currentFile) {
-      if (_disposed || !_isScanning || generation != _scanGeneration) return;
-      _updateScanState(
-          progress: processed / total,
-          message: "正在处理: $currentFile ($processed/$total)");
-    });
-
-    onResults?.call(results);
-    if (continueProcessing != null && !await continueProcessing()) {
+    } catch (_) {
+      _precomputedFolderDiffs.clear();
       _updateScanState(scanning: false, message: '扫描已停止', completed: true);
-      return;
-    }
-    if (!_isScanning && !isPartOfBatch) {
-      _updateScanState(
-          scanning: false, message: "扫描已取消: $directoryPath", completed: true);
-      return;
-    }
-
-    if (_disposed || generation != _scanGeneration) return;
-    // 第三阶段：处理结果
-    final successResults = results.where((r) => r.success).toList();
-    final failedResults = results.where((r) => !r.success).toList();
-    _recordFailedScanFiles(directoryPath, failedResults);
-    final addedAnimeTitles = successResults
-        .where((r) => r.animeTitle != null)
-        .map((r) => r.animeTitle!)
-        .toSet();
-    final skippedFilesCount = videoPaths.length - results.length;
-
-    if (!isPartOfBatch && _isScanning) {
-      _totalFilesFound = videoPaths.length;
-
-      String completionMessage = "";
-      if (failedResults.isNotEmpty) {
-        completionMessage =
-            "并发扫描 $directoryPath 完成。添加/更新 ${addedAnimeTitles.length} 部番剧。${failedResults.length} 个文件处理失败。";
-      } else {
-        completionMessage =
-            "并发扫描 $directoryPath 完成。添加/更新 ${addedAnimeTitles.length} 部番剧。";
-      }
-      if (skippedFilesCount > 0) {
-        completionMessage += " 跳过了 $skippedFilesCount 个已匹配文件。";
-      }
-
-      _justFinishedScanning = true;
-      await _updateFileHashes(directoryPath, precomputedDiff: diff);
-      _updateScanState(
-          scanning: false,
-          progress: 1.0,
-          message: completionMessage,
-          completed: true);
-    } else if (isPartOfBatch) {
-      _totalFilesFound += videoPaths.length;
-      await _updateFileHashes(directoryPath, precomputedDiff: diff);
+      rethrow;
     }
   }
 
@@ -992,12 +1023,16 @@ class ScanService with ChangeNotifier {
   /// directory that could later expose other torrents' unfinished files.
   Future<bool> scanCompletedFiles(List<String> paths,
       {required String folderPath}) async {
-    if (kIsWeb || _isScanning) return false;
-    if (paths.isEmpty) return true;
-    _updateScanState(scanning: true, progress: 0, message: '正在扫描已完成的下载文件');
+    if (kIsWeb || _isScanning || _completedScanPending) return false;
+    _completedScanPending = true;
     try {
-      final results = await _completedFilesProcessor(paths);
-      if (!_isScanning) return false;
+      final permit = await ClassicModePolicy.acquire();
+      if (permit == null || _disposed || _isScanning) return false;
+      if (paths.isEmpty) return true;
+      _updateScanState(scanning: true, progress: 0, message: '正在扫描已完成的下载文件');
+      final results =
+          await _completedFilesProcessor(paths, () => permit.allowed);
+      if (!_isScanning || !await permit.allowed) return false;
       final failures = results.where((result) => !result.success).toList();
       final scannedPaths = paths.toSet();
       _failedScanFiles
@@ -1017,6 +1052,7 @@ class ScanService with ChangeNotifier {
           scanning: false, message: '扫描下载文件失败: $error', completed: true);
       return false;
     } finally {
+      _completedScanPending = false;
       if (_isScanning) _updateScanState(scanning: false);
     }
   }

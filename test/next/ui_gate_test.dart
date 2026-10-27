@@ -1,5 +1,9 @@
+import 'dart:async';
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
+import 'package:flutter/material.dart' show MaterialApp;
+import 'package:nipaplay/next/ui/player/playback.dart';
+import 'player_test_support.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:nipaplay/constants/settings_keys.dart';
 import 'package:nipaplay/next/ui/shell/next_shell.dart';
@@ -35,6 +39,8 @@ void main() {
       await labs.ready;
       await preference.ready;
     });
+    addTearDown(labs.dispose);
+    addTearDown(preference.dispose);
     await tester.pumpWidget(MultiProvider(
       providers: [
         ChangeNotifierProvider.value(value: labs),
@@ -55,13 +61,7 @@ void main() {
     expect(chromeCalls, isEmpty);
     // Classic's player keeps its tabs: only Next hides them while playing.
     expect(globals.nextShellHostsPlayer, isFalse);
-    final offstage = tester.widget<Offstage>(find.ancestor(
-        of: find.text('classic'), matching: find.byType(Offstage)));
-    expect(offstage.offstage, isFalse);
-    final ticker = tester.widget<TickerMode>(find
-        .ancestor(of: find.text('classic'), matching: find.byType(TickerMode))
-        .first);
-    expect(ticker.enabled, isTrue);
+    expect(find.byType(Offstage), findsNothing);
   }
 
   testWidgets('preference off: Classic only', (tester) async {
@@ -85,4 +85,92 @@ void main() {
     });
     await expectClassicOnly(tester);
   });
+  testWidgets('Next never mounts Classic, including while preferences load',
+      (tester) async {
+    SharedPreferences.setMockInitialValues({
+      SettingsKeys.labsEnableAgentEndpoint: true,
+      NextUiPreference.key: true,
+    });
+    final supported = NextUiPreference.deviceHasNext;
+    NextUiPreference.deviceHasNext = () => true;
+    addTearDown(() => NextUiPreference.deviceHasNext = supported);
+    final sandbox = Completer<bool>();
+    final labs = LabsSettingsProvider(sandboxStatus: () => sandbox.future);
+    final preference = NextUiPreference();
+    final state = FakePlayerState();
+    final playback = FakePlayback(state);
+    NextShell.debugServices = (_) => playerTestServices();
+    addTearDown(() => NextShell.debugServices = null);
+    var mounted = 0, disposed = 0;
+    final opened = <String>[];
+    final classicLaunches = <String?>[];
+    await tester.pumpWidget(MultiProvider(
+      providers: [
+        ChangeNotifierProvider.value(value: labs),
+        ChangeNotifierProvider.value(value: preference),
+      ],
+      child: NextPlaybackScope(
+          playback: playback,
+          child: MaterialApp(
+              home: NextUiGate(
+                  launchFilePath: '/launch.mkv',
+                  openNextFile: (path) async {
+                    opened.add(path);
+                  },
+                  classicBuilder: (path) {
+                    classicLaunches.add(path);
+                    return _Lifecycle(
+                        onMount: () => mounted++, onDispose: () => disposed++);
+                  }))),
+    ));
+    await tester.pump();
+    expect(mounted, 0);
+    expect(find.byType(NextShell), findsNothing);
+    sandbox.complete(false);
+    await tester.runAsync(() async {
+      await labs.ready;
+      await preference.ready;
+    });
+    await tester.pump();
+    await tester.pump();
+    expect(find.byType(NextShell), findsOneWidget);
+    expect(mounted, 0);
+    expect(opened, ['/launch.mkv']);
+    await preference.setEnabled(false);
+    await tester.pump();
+    expect(mounted, 1);
+    expect(classicLaunches.last, isNull);
+    await preference.setEnabled(true);
+    await tester.pump();
+    expect(disposed, 1);
+    expect(opened, ['/launch.mkv']);
+    expect(find.byType(_Lifecycle, skipOffstage: false), findsNothing);
+    await tester.pumpWidget(const SizedBox());
+    labs.dispose();
+    preference.dispose();
+  });
+}
+
+class _Lifecycle extends StatefulWidget {
+  const _Lifecycle({required this.onMount, required this.onDispose});
+  final VoidCallback onMount, onDispose;
+  @override
+  State<_Lifecycle> createState() => _LifecycleState();
+}
+
+class _LifecycleState extends State<_Lifecycle> {
+  @override
+  void initState() {
+    super.initState();
+    widget.onMount();
+  }
+
+  @override
+  void dispose() {
+    widget.onDispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => const Text('classic');
 }

@@ -7,6 +7,7 @@ import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
 import '../danmaku/store.dart';
 import '../media/library_reads.dart';
+import '../media/file_identity_merge.dart';
 
 final class EpisodeHeat {
   const EpisodeHeat(this.store);
@@ -20,6 +21,7 @@ final class EpisodeHeat {
   /// The danmaku tracks of an episode and of its files, in three queries:
   /// the files it is in, those entities' revisions, their bindings.
   Future<List<JsonMap>> _tracks(String id) async {
+    id = await canonicalFileId(store.db, id);
     final links = await store.db.rawQuery(
         'SELECT fe.*,(SELECT COUNT(*) FROM media_file_episodes x WHERE x.file_id=fe.file_id) AS episode_count '
         'FROM media_file_episodes fe WHERE fe.episode_id=? ORDER BY fe.file_id',

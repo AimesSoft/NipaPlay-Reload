@@ -274,7 +274,7 @@ List<StateView> systemStateViews(SystemStatusSources s) {
     if (s.scan != null)
       _view(
           'library.scan',
-          'The Classic library scan now: whether it runs, its progress and message, the scanned folders and the files that failed recognition with the recorded reason. One row.',
+          'The current interface library scan: Next file-indexing jobs or Classic recognition, with roots and recorded failures. Next does not report stale Classic scan results. One row.',
           {
             'scanning': _bool('A scan is running.'),
             'progress': const NumberSchema(

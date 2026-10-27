@@ -138,6 +138,7 @@ void main() {
       'explicit binding beside it says who made it', () async {
     final path = await video('ep7');
     await connect();
+    await call('media.library.import_history', {});
     final store = runtime.service.store;
     final fileId = await store.ensureFile(path);
     expect(await store.linkSources(fileId), isEmpty);
@@ -175,6 +176,7 @@ void main() {
     final path = await video('same');
     await seedRow(path, 7001, 7101);
     await connect();
+    await call('media.library.import_history', {});
     final store = runtime.service.store;
     final fileId = await store.ensureFile(path);
     await bind(path, dandanplayBinding(''), origin: 'gui');
@@ -193,6 +195,7 @@ void main() {
     final path = await video('rm');
     await seedRow(path, 7001, 7107);
     await connect();
+    await call('media.library.import_history', {});
     final store = runtime.service.store;
     final fileId = await store.ensureFile(path);
     final classicWork = (await workIdsOf(path)).single;

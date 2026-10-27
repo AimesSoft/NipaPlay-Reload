@@ -64,8 +64,8 @@ abstract final class DownloadSettings {
       toggle(
           'download.autoScanCompletedTasks',
           SettingsKeys.downloaderAutoScanCompletedTasks,
-          '完成后自动加入媒体库',
-          '复用 Classic 扫描与扫描记录。未识别文件不会伪造作品或剧集身份。',
+          'Classic 下载完成后自动识别',
+          '仅控制 Classic 的完成后扫描。Next 始终登记已验证文件，不运行 Classic 匹配；作品与剧集身份由 Agent 显式绑定。',
           (p, v) => p.setAutoScanCompletedTasks(v)),
       SettingEntry(
         key: 'download.directory',

@@ -11,6 +11,8 @@ import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart'
     show ExternalLibrary;
 import 'package:nipa_harness/nipa_harness.dart';
 import 'package:nipaplay/next/mesh/capability.dart';
+import 'package:nipaplay/next/db/capability.dart';
+import 'package:nipaplay/next/db/service.dart';
 import 'package:nipaplay/next/mesh/coordinator.dart';
 import 'package:nipaplay/next/mesh/identity.dart';
 import 'package:nipaplay/next/mesh/native.dart';
@@ -367,6 +369,103 @@ void main() {
     final result = await a.rpc(b.identity!.deviceId, 'mesh/library/large-test', {});
     expect(result['metadata'], expected);
     expect(executions, 1);
+  });
+
+  test('real TLS discovers SQL and recovers write and undo receipts on the target', () async {
+    final a = await rig.node('sql-reader'), b = await rig.node('sql-owner');
+    await a.refreshDevices();
+    final fixture = MediaFixture();
+    await fixture.open();
+    final database = fixture.jobs.database;
+    try {
+      await database.insert('media_entities', {'id': 'sql-work', 'kind': 'work', 'revision': 0, 'attributes': '{"title":"SQL target","localOnly":true}'});
+      var service = DbService(database);
+      b.attach(Harness([DbCapability(service)]));
+      final peer = b.identity!.deviceId;
+      Future<JsonMap> remote(String action, JsonMap input) async {
+        final result = await a.invoke(peer, action, input, destructive: false);
+        expect(result, isA<Completed>(), reason: jsonEncode(result.toEnvelope()));
+        return (result as Completed).value.toJson();
+      }
+      final listed = await a.devices(deviceIds: [peer]);
+      final actions = ((listed['devices'] as List).single as Map)['actions'] as List;
+      expect(actions.map((a) => (a as Map)['id']).toSet(), {'db.describe', 'db.query', 'db.write', 'db.undo'});
+      await remote('db.describe', {'tables': ['media_entities', 'db_operations']});
+      final before = await remote('db.query', {'sql': "SELECT revision FROM media_entities WHERE id='sql-work'"});
+      expect((before['rows'] as List).single, {'revision': 0});
+      final p = await remote('db.write', {'statements': [{'sql': "UPDATE media_entities SET revision=revision+1 WHERE id='sql-work'"}]});
+      final input = <String, Object?>{'previewId': p['previewId']};
+      final committedAtTarget = Completer<void>(), releaseRefresh = Completer<void>();
+      service.afterCommit = (_) async {
+        committedAtTarget.complete();
+        await releaseRefresh.future;
+        return [];
+      };
+      // Cut the caller's real TLS node after the transaction is durable but
+      // before the response exists. Its next invocation uses a fresh RPC nonce
+      // and the same previewId, recovering the domain receipt.
+      final lostResponse = a.invoke(peer, 'db.write', input, destructive: false);
+      final lost = expectLater(lostResponse, throwsA(isA<Failure>().having(
+          (e) => e.details['reason'], 'reason', 'outcome_unknown')));
+      await committedAtTarget.future;
+      try { await a.stop(); await lost; }
+      finally { releaseRefresh.complete(); }
+      await a.join(
+          ca: await File('${rig.caDirectory.path}/ca.pem').readAsString(),
+          coordinator: MeshCoordinator(rig.base, () async => _jwt(424242)),
+          name: 'sql-reader', broadcast: false);
+      final done = await remote('db.write', input);
+      expect(done['committed'], true);
+      service = DbService(database);
+      b.attach(Harness([DbCapability(service)]));
+      expect(await remote('db.write', input), done);
+      expect((await database.query('db_commits')).single['origin'], 'mesh:${a.identity!.deviceId}');
+      final undoInput = <String, Object?>{'commitId': done['commitId'], 'requestId': 'sql-undo-1'};
+      final undone = await remote('db.undo', undoInput);
+      b.attach(Harness([DbCapability(DbService(database))]));
+      expect(await remote('db.undo', undoInput), undone);
+      expect(await database.query('db_commits'), hasLength(2));
+      expect((await database.query('media_entities', where: "id='sql-work'")).single['revision'], 0);
+      final large = await remote('db.query', {'sql': "WITH RECURSIVE n(x) AS (VALUES(1) UNION ALL SELECT x+1 FROM n WHERE x<500) SELECT x, printf('%01900d',x) AS text FROM n", 'limit': 500, 'maxBytes': 1048576});
+      expect(large['rowCount'], 500);
+      expect(((large['rows'] as List).last as Map)['text'], endsWith('500'));
+      expect(utf8.encode(jsonEncode(large)).length, greaterThan(512 * 1024));
+    } finally { await fixture.close(); }
+  });
+
+  test('real TLS previews merges and undoes on the owner with durable request receipts', () async {
+    final a=await rig.node('merge-reader'), b=await rig.node('merge-owner');
+    await a.refreshDevices();
+    final f=MediaFixture();
+    await f.open();
+    try {
+      for(final id in ['duplicate','survivor']) {
+        await f.jobs.database.insert('media_entities',{'id':id,'kind':'work','revision':0,'attributes':'{"title":"Same work","localOnly":true}'});
+      }
+      b.attach(f.harness);
+      final peer=b.identity!.deviceId;
+      Future<JsonMap> remote(String action,JsonMap input) async {
+        final out=await a.invoke(peer,action,input,destructive:false);
+        expect(out,isA<Completed>(),reason:jsonEncode(out.toEnvelope()));
+        return (out as Completed).value.toJson();
+      }
+      final input=<String,Object?>{'sourceWorkId':'duplicate','targetWorkId':'survivor','requestId':'merge-over-mesh','reason':'Same source work'};
+      final p=await remote('media.management.merge_work',input);
+      expect(p['canCommit'],isTrue);
+      final apply={...input,'expectedPlan':p['expectedPlan']};
+      final done=await remote('media.management.merge_work',apply);
+      await f.reopen();
+      b.attach(f.harness);
+      expect(await remote('media.management.merge_work',apply),done);
+      expect((await f.jobs.database.query('media_work_merges')).single['origin'],'mesh:${a.identity!.deviceId}');
+      final undo=<String,Object?>{'mergeId':done['mergeId'],'requestId':'undo-over-mesh','reason':'Restore source'};
+      final up=await remote('media.management.undo_merge',undo);
+      final undoApply={...undo,'expectedPlan':up['expectedPlan']};
+      final undone=await remote('media.management.undo_merge',undoApply);
+      expect(await remote('media.management.undo_merge',undoApply),undone);
+      expect(await f.jobs.database.query('media_entity_aliases'),isEmpty);
+      expect(await f.identities.library(),hasLength(2));
+    } finally { await f.close(); }
   });
 
   test('two real TLS nodes invoke the same Harness and wrap decision effects',

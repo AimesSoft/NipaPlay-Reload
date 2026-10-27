@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:nipaplay/models/torrent_task.dart';
 import 'package:nipaplay/services/concurrent_video_processor.dart';
 import 'package:nipaplay/services/scan_service.dart';
@@ -8,6 +9,7 @@ import 'package:nipaplay/services/torrent_download_service.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
+  setUp(() => SharedPreferences.setMockInitialValues({}));
 
   test('failed and throwing scans return failure and can be retried', () async {
     var attempt = 0;
@@ -38,9 +40,11 @@ void main() {
   test('an occupied scanner does not claim the next task was imported',
       () async {
     final pending = Completer<List<VideoProcessResult>>();
+    final entered = Completer<void>();
     var calls = 0;
     final scanner = ScanService.forTesting(completedFilesProcessor: (_) {
       calls++;
+      entered.complete();
       return pending.future;
     });
     addTearDown(scanner.dispose);
@@ -48,6 +52,7 @@ void main() {
         scanner.scanCompletedFiles(['a.mp4'], folderPath: '/download');
     expect(await scanner.scanCompletedFiles(['b.mp4'], folderPath: '/download'),
         isFalse);
+    await entered.future;
     expect(calls, 1);
     pending.complete([]);
     expect(await first, isTrue);

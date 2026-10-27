@@ -6,6 +6,7 @@ import 'package:nipaplay/models/watch_history_database.dart';
 import 'package:nipaplay/providers/watch_history_provider.dart';
 import 'package:nipaplay/services/file_picker_service.dart';
 import 'package:nipaplay/services/scan_service.dart';
+import 'package:nipaplay/services/classic_mode_policy.dart';
 import 'package:nipaplay/services/android_saf_service.dart';
 import 'package:nipaplay/services/harmony_local_media_service.dart';
 import 'package:nipaplay/utils/platform_identity.dart' as platform;
@@ -36,11 +37,33 @@ final class LocalLibraryOperations implements Capability {
     }
   }
 
-  JsonMap _state() => scanState(scan);
+  Future<JsonMap> _state() => scanState(scan, engine: engine);
 
-  /// The Classic scan as `media.library.roots.list` and the `library.scan`
-  /// view report it.
-  static JsonMap scanState(ScanService scan) => {
+  /// Each interface reports its own work. A stopped Classic scanner's last
+  /// failures must not masquerade as the result of a Next indexing job.
+  static Future<JsonMap> scanState(ScanService scan, {TaskEngine? engine}) async {
+    if (!await ClassicModePolicy.allowsImplicitWork()) {
+      final jobs = await engine?.listRecent(type: 'media.scan', limit: 20) ?? <Job>[];
+      final active = (await engine?.listActive() ?? <Job>[])
+          .where((job) => job.type == 'media.scan' && job.state != JobState.paused)
+          .toList();
+      final latest = jobs.firstOrNull;
+      return {
+        'mode': 'next',
+        'roots': scan.scannedFolders,
+        'scanning': active.isNotEmpty,
+        'progress': null,
+        'message': active.isNotEmpty ? '正在索引文件' : '文件索引任务见 task.list',
+        'totalFilesFound': latest?.progress.completed ?? 0,
+        'failedFiles': [
+          if (latest?.state == JobState.failed)
+            {'path': latest!.input['root'], 'reason': latest.error?.message ?? '索引失败'}
+        ],
+        'jobIds': [for (final job in active) job.jobId],
+      };
+    }
+    return {
+        'mode': 'classic',
         'roots': scan.scannedFolders,
         'scanning': scan.isScanning,
         'progress': scan.scanProgress,
@@ -51,6 +74,7 @@ final class LocalLibraryOperations implements Capability {
             {'path': file.filePath, 'reason': file.errorMessage}
         ],
       };
+  }
 
   Future<List<String>> _directories(JsonMap input) async {
     final paths = (input['paths'] as List?)?.cast<String>();
@@ -99,7 +123,7 @@ final class LocalLibraryOperations implements Capability {
                     'Omit paths to let the user choose a directory with the Classic permission picker. '
                     'Use absolute existing paths, or platform-granted SAF/Harmony directory URIs. '
                     'Existing roots are retained. This registers roots without scanning; '
-                    'call media.library.scan_classic for Classic identification or media.library.scan for Next indexing.',
+                    'call media.library.scan for Next file indexing; it does not choose identities.',
                 effect: Effect.write,
                 input: ObjectSchema({'paths': _paths}),
                 output: _output), (input, _) async {
@@ -111,7 +135,7 @@ final class LocalLibraryOperations implements Capability {
           for (final path in paths) {
             await scan.addScannedFolder(path);
           }
-          return {'selected': paths, ..._state()};
+          return {'selected': paths, ...await _state()};
         }),
         ClassicAction(
             const ActionSpec(
@@ -137,7 +161,7 @@ final class LocalLibraryOperations implements Capability {
             removed.add(path);
           }
           await history.refresh();
-          return {'removed': removed, ..._state()};
+          return {'removed': removed, ...await _state()};
         }),
         ClassicAction(
             const ActionSpec(
@@ -155,7 +179,7 @@ final class LocalLibraryOperations implements Capability {
           await history.refresh();
           return {
             'removed': before.difference(scan.scannedFolders.toSet()).toList(),
-            ..._state()
+            ...await _state()
           };
         }),
         ClassicAction(
@@ -163,6 +187,9 @@ final class LocalLibraryOperations implements Capability {
                 id: 'media.library.scan_classic',
                 title: 'Scan with Classic identification',
                 description:
+                    'Legacy Classic-only operation; unavailable while Next is active. '
+                    'Use media.library.scan for Next indexing, media.hash.match or media.metadata tools for candidates, '
+                    'and media.identity.bind_batch for explicit decisions. '
                     'Scan saved Classic roots sequentially with the same smart file-diff, '
                     'hash identification and history persistence as the Classic library. '
                     'Omit paths to scan all roots. paths must already be registered; SAF/Harmony roots are supported by Classic. '
@@ -175,6 +202,10 @@ final class LocalLibraryOperations implements Capability {
                   'skipPreviouslyMatchedUnwatched': BooleanSchema()
                 }),
                 output: _output), (input, _) async {
+          if (!await ClassicModePolicy.allowsImplicitWork()) {
+            throw const Failure(FailureCode.unavailable,
+                'Classic identification is unavailable in Next. Use media.library.scan, media.hash.match and explicit media.identity.bind_batch.');
+          }
           final paths =
               (input['paths'] as List?)?.cast<String>().toSet().toList() ??
                   scan.scannedFolders;

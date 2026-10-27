@@ -3,6 +3,8 @@ import 'dart:async';
 import 'package:flutter/material.dart' show MaterialApp;
 import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart';
+import 'package:nipaplay/next/player/kernel/driver.dart'
+    show PlatformVideoSurface;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:nipaplay/constants/settings_keys.dart';
 import 'package:nipaplay/models/playable_item.dart';
@@ -38,6 +40,7 @@ Future<PlayerRig> pumpPlayer(
   bool next = true,
   PlayerStatus status = PlayerStatus.idle,
   Widget classic = const Text('classic'),
+  Widget? picture,
   Size size = const Size(1440, 900),
   double pixelRatio = 1,
   FakePlayerState? state,
@@ -45,7 +48,11 @@ Future<PlayerRig> pumpPlayer(
 }) async {
   state ??= FakePlayerState();
   state.status = status;
-  final rig = (playback ?? FakePlayback.new)(state);
+  final rig = playback != null
+      ? playback(state)
+      : picture != null
+          ? FakeStagePlayback(state, picture)
+          : FakePlayback(state);
   await _pumpGate(tester,
       next: next,
       state: state,
@@ -96,6 +103,7 @@ Future<void> _pumpGate(
       ),
     ),
   ));
+  await tester.pump();
   await tester.pump();
 }
 
@@ -678,4 +686,18 @@ final class _Unused
 final class _Search implements NextSearchData {
   @override
   dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
+}
+
+/// A Next-owned surface fixture; never mounts the Classic page as video.
+class FakeStagePlayback extends FakePlayback implements VideoStageHost {
+  FakeStagePlayback(super.state, Widget picture)
+      : surface = ValueNotifier(PlatformVideoSurface(picture, aspect: 16 / 9));
+  @override
+  final ValueNotifier<VideoSurface?> surface;
+  @override
+  final ValueNotifier<OverlayFrame?> subtitleOverlay = ValueNotifier(null);
+  @override
+  void pointerMoved() {}
+  @override
+  bool key(KeyEvent event) => false;
 }

@@ -63,7 +63,7 @@ void main() {
     expect(
         (await upgraded.get(job.jobId))!.toStorageJson(), job.toStorageJson());
     expect(await upgraded.events(job.jobId), hasLength(1));
-    expect(await upgraded.database.getVersion(), 23);
+    expect(await upgraded.database.getVersion(), 25);
     expect(await upgraded.database.query('media_entities'), isEmpty);
     await upgraded.close();
     await root.delete(recursive: true);
@@ -192,6 +192,47 @@ void main() {
           'ref': {'provider': 'dandanplay', 'objectType': 'episode', 'externalId': '7101', 'scope': 'anime/7001'}}]
     }, Invocation(origin: 'mcp'));
     expect(failed, isA<Failed>());
+  });
+
+  test('explicit bind, unbind and projection never import unrelated Classic facts', () async {
+    final fileId = await f.file('project-only.mkv');
+    final unrelated = '${f.media.path}/unrelated.mkv';
+    f.classic.rows[unrelated] = {'filePath': unrelated,
+      'animeName': 'Unrelated Classic work', 'episodeTitle': 'Unrelated episode',
+      'animeId': 8001, 'episodeId': 8101, 'videoHash': null};
+    await f.call('media.identity.bind_batch', {
+      'requestId': 'project-only', 'entries': [dandanplayBinding(fileId)]});
+    await f.service.projection.drain();
+    expect(await f.identities.registeredFileId(unrelated), isNull);
+    expect(await f.jobs.database.query('media_classic_observations'), isEmpty);
+    expect(await f.jobs.database.query('media_bindings',
+        where: "source='classic_match'"), isEmpty);
+    final path = (await f.identities.locations(fileId)).single['locator'];
+    expect(f.classic.rows[path]!['episodeId'], 7101);
+    await f.call('media.identity.unbind_batch', {
+      'requestId': 'unproject-only', 'entries': [
+        {'entityId': fileId, 'reason': 'Undo explicit association'}]});
+    expect(await f.identities.registeredFileId(unrelated), isNull);
+    expect(await f.jobs.database.query('media_classic_observations'), isEmpty);
+  });
+
+  test('legacy projection reads fresh conflicting Classic facts without importing them', () async {
+    final fileId = await f.file('projection-conflict.mkv');
+    final path = (await f.identities.locations(fileId)).single['locator'] as String;
+    f.classic.rows[path] = {'filePath': path, 'animeName': 'Different Classic work',
+      'episodeTitle': 'Different episode', 'animeId': 8001, 'episodeId': 8101,
+      'videoHash': null};
+    final before = {...f.classic.rows[path]!};
+    final outcome = await f.harness.invokeJson('media.identity.bind_batch', {
+      'requestId': 'read-only-conflict', 'entries': [dandanplayBinding(fileId)]
+    }, Invocation(origin: 'mcp'));
+    expect(outcome, isA<Failed>());
+    expect((outcome as Failed).failure.code, FailureCode.conflict);
+    expect(f.classic.rows[path], before);
+    expect(await f.jobs.database.query('media_classic_observations'), isEmpty);
+    expect(await f.jobs.database.query('media_external_objects',
+        where: "external_id IN ('8001','8101')"), isEmpty);
+    expect((await f.jobs.database.query('media_projection_outbox')).single['state'], 'conflict');
   });
 
   test('GUI provenance is host derived and cannot be supplied by an Agent',

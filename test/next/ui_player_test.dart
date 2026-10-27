@@ -42,18 +42,11 @@ void main() {
   Finder button(String label) => find.byWidgetPredicate(
       (w) => w is Pressable && w.semanticLabel == label);
 
-  Offstage classicHost(WidgetTester tester) => tester.widget<Offstage>(find
-      .ancestor(
-          of: find.text('classic', skipOffstage: false),
-          matching: find.byType(Offstage, skipOffstage: false))
-      .first);
-
-  testWidgets('Next on: its controls lie over Classic\'s video',
+  testWidgets('Next on: its own controls have no mounted Classic page',
       (tester) async {
     final p = await pumpPlayer(tester, status: PlayerStatus.playing);
     expect(globals.nextShellHostsPlayer, isTrue);
-    expect(classicHost(tester).offstage, isFalse,
-        reason: 'the video shows through');
+    expect(find.text('classic', skipOffstage: false), findsNothing);
     expect(find.byType(NextPlayerLayer), findsOneWidget);
     expect(find.byType(NextTopBar), findsNothing,
         reason: 'the pages are hidden under the video');
@@ -173,7 +166,7 @@ void main() {
   testWidgets('back returns to the page the video was opened from',
       (tester) async {
     final p = await pumpPlayer(tester);
-    expect(classicHost(tester).offstage, isTrue);
+    expect(find.text('classic', skipOffstage: false), findsNothing);
     final shell = NextShellScope.of(tester.element(find.byType(NextTopBar)));
     shell.go(NextSection.activity);
     unawaited(shell.navigatorKey.currentState!.push(PageRouteBuilder<void>(
@@ -192,7 +185,7 @@ void main() {
     await tester.pumpAndSettle();
     expect(p.playback.left, 1);
     expect(find.byType(NextPlayerLayer), findsNothing);
-    expect(classicHost(tester).offstage, isTrue);
+    expect(find.text('classic', skipOffstage: false), findsNothing);
     expect(find.text('原来的页面'), findsOneWidget);
     expect(shell.section, NextSection.activity);
   });
@@ -235,7 +228,7 @@ void main() {
     var taps = 0;
     final p = await pumpPlayer(tester,
         status: PlayerStatus.playing,
-        classic: GestureDetector(
+        picture: GestureDetector(
           behavior: HitTestBehavior.opaque,
           onTap: () => taps++,
           child: const SizedBox.expand(key: ValueKey('picture')),
@@ -301,12 +294,11 @@ void main() {
 
   testWidgets(
       'beside the video, the picture\'s right edge is the way into the '
-      'conversation: Classic\'s menu there does not come up over it',
-      (tester) async {
+      'conversation: the video surface does not intercept it', (tester) async {
     var entered = 0;
     await pumpPlayer(tester,
         status: PlayerStatus.playing,
-        classic: Stack(children: [
+        picture: Stack(children: [
           // Classic's settings menu, opened by the pointer on the right edge.
           Positioned(
             top: 0,
@@ -336,17 +328,18 @@ void main() {
     await tester.pump(const Duration(milliseconds: 600));
     await mouse.moveTo(const Offset(1436, 450));
     await tester.pump();
-    expect(entered, 1, reason: 'without the conversation, it is Classic\'s');
+    expect(entered, 1,
+        reason: 'without the conversation, it belongs to the video surface');
   });
 
   testWidgets(
-      'a video the system draws under the window: Classic is laid out in the '
+      'a video the system draws under the window: Next is laid out in the '
       'room, taken in one step as the panel starts in, given back once it '
       'is out', (tester) async {
     await pumpPlayer(tester,
         status: PlayerStatus.playing,
         state: _SystemDrawn(),
-        classic: const SizedBox.expand(key: ValueKey('picture')));
+        picture: const SizedBox.expand(key: ValueKey('picture')));
     final shell =
         NextShellScope.of(tester.element(find.byType(NextPlayerLayer)));
     final classic = find.byKey(const ValueKey('picture'));
@@ -376,7 +369,7 @@ void main() {
       await pumpPlayer(tester,
           status: PlayerStatus.playing,
           size: size,
-          classic: const SizedBox.expand(key: ValueKey('picture')));
+          picture: const SizedBox.expand(key: ValueKey('picture')));
       final shell =
           NextShellScope.of(tester.element(find.byType(NextPlayerLayer)));
       shell.openChat();
@@ -701,12 +694,11 @@ void main() {
     expect(button('下一集'), findsNothing);
   });
 
-  testWidgets('clicks on the picture are still Classic\'s video\'s',
-      (tester) async {
+  testWidgets('clicks on the Next surface stay with its video', (tester) async {
     var taps = 0;
     await pumpPlayer(tester,
         status: PlayerStatus.playing,
-        classic: GestureDetector(
+        picture: GestureDetector(
           behavior: HitTestBehavior.opaque,
           onTap: () => taps++,
           child: const SizedBox.expand(),
@@ -875,7 +867,7 @@ void main() {
     expect(globals.nextShellHostsPlayer, isFalse);
     expect(find.byType(NextShell), findsNothing);
     expect(find.byType(NextPlayerLayer), findsNothing);
-    expect(classicHost(tester).offstage, isFalse);
+    expect(find.text('classic'), findsOneWidget);
     expect(
         shouldBuildClassicPlayerControls(
             nextHostsPlayer: globals.nextShellHostsPlayer,

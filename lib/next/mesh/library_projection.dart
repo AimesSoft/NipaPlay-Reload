@@ -386,11 +386,16 @@ final class LibraryProjection {
 
   Future<void> _buildLocal(String stamp) async {
     final records = <JsonMap>[];
+    final entityAliases = <String, List<String>>{};
+    for (final row in await db.query('media_entity_aliases')) {
+      (entityAliases[row['entity_id'] as String] ??= []).add(row['old_id'] as String);
+    }
     final reads = LibraryReads(ui.media.store);
     final files = await ui.localFiles();
     for (final row in await db.query('media_entities',
         where: "kind='work'", orderBy: 'rowid')) {
       final id = row['id'] as String;
+      if ((jsonDecode(row['attributes'] as String) as Map)['removed'] == true) continue;
       // A work made from identities alone, left with none and with no file,
       // is nothing the viewer has. It stays stored (progress, provenance)
       // and shows again when it is bound again.
@@ -432,6 +437,7 @@ final class LibraryProjection {
       records.add({
         'kind': 'work',
         'id': id,
+        'aliases': entityAliases[id] ?? <String>[],
         'keys': identities,
         'added': _added[id],
         'value': work,
@@ -500,6 +506,7 @@ final class LibraryProjection {
         records.add({
           'kind': 'episode',
           'id': episode.episodeId,
+          'aliases': entityAliases[episode.episodeId] ?? <String>[],
           'workId': id,
           'keys': await _identities(episode.episodeId),
           'files': locations,
@@ -648,6 +655,10 @@ final class LibraryProjection {
       for (final w in members) {
         newAliases[_ref(w['deviceId'] as String, w['id'] as String)] = id;
         if (w['local'] == true) newAliases[w['id'] as String] = id;
+        for (final old in (w['aliases'] as List? ?? []).cast<String>()) {
+          newAliases[_ref(w['deviceId'] as String, old)] = id;
+          if (w['local'] == true) newAliases[old] = id;
+        }
       }
       final sourceEpisodes = episodesIn[group.key] ?? <JsonMap>[];
       final episodeRoots = List.generate(sourceEpisodes.length, (i) => i);
@@ -736,6 +747,12 @@ final class LibraryProjection {
           mergedIds[ref] = eid;
           if (e['local'] == true) newAliases[e['id'] as String] = eid;
           watchKeys.add(ref);
+          for (final old in (e['aliases'] as List? ?? []).cast<String>()) {
+            final previous = _ref(e['deviceId'] as String, old);
+            newAliases[previous] = eid;
+            watchKeys.add(previous);
+            if (e['local'] == true) newAliases[old] = eid;
+          }
           titles.addAll(librarySearchTitles(e['value'] as Map));
           for (final f in (e['files'] as List).cast<JsonMap>()) {
             watchKeys.add('file:${f['sample']}:${f['startMs']}:${f['endMs']}');

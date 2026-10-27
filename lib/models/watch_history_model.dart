@@ -146,6 +146,17 @@ class WatchHistoryManager {
   // 控制是否需要重绘的标志
   static bool _shouldnotifyListeners = true;
 
+  static io.File get _scanBootstrapMarker =>
+      io.File('$_historyFilePath.scan-migration-pending');
+
+  @visibleForTesting
+  static void resetForTesting() {
+    _initialized = false;
+    _initializing = null;
+    _migratedToDatabase = false;
+    _cachedItems.clear();
+  }
+
   // 设置是否需要重绘的方法
   static void setShouldnotifyListeners(bool value) {
     _shouldnotifyListeners = value;
@@ -184,6 +195,14 @@ class WatchHistoryManager {
       // 检查是否已迁移到数据库
       final dbFile = io.File(path.join(appDir.path, 'watch_history.db'));
       _migratedToDatabase = dbFile.existsSync();
+      if (await _scanBootstrapMarker.exists()) {
+        // A cancelled first scan may have created an empty database. Do not
+        // treat its existence as proof that the older JSON was migrated.
+        await WatchHistoryDatabase.instance
+            .completeLegacyBootstrap(_readLegacyBootstrap);
+        _migratedToDatabase = true;
+        await _clearScanBootstrapMarker();
+      }
       
       // 如果已迁移到数据库，则只从数据库加载
       if (_migratedToDatabase) {
@@ -540,6 +559,65 @@ class WatchHistoryManager {
       _cachedItems.clear();
     } catch (e) {
     }
+  }
+
+  /// Classic recognition publishes only while its originating mode is active.
+  /// Playback writes keep using addOrUpdateHistory and are unaffected.
+  static Future<bool> commitScanMatch(WatchHistoryItem item,
+      {required bool Function() mayCommit, String? donorPath}) async {
+    if (!mayCommit()) return false;
+    if (!_initialized) await initialize();
+    if (!mayCommit()) return false;
+    List<WatchHistoryItem>? legacy;
+    if (!_migratedToDatabase) {
+      // Strictly parse the retained source; never turn a swallowed JSON read
+      // failure into an apparently successful first database migration.
+      final source = await _readLegacyBootstrap();
+      legacy = {
+        for (final old in source) old.filePath: old,
+        for (final cached in _cachedItems) cached.filePath: cached,
+      }.values.toList();
+      if (!mayCommit()) return false;
+      await _scanBootstrapMarker.writeAsString('pending', flush: true);
+    }
+    final saved = await WatchHistoryDatabase.instance.commitScanMatch(item,
+        mayCommit: mayCommit, donorPath: donorPath, legacyItems: legacy);
+    if (!saved) return false;
+    if (legacy != null) {
+      _migratedToDatabase = true;
+      // The committed SQLite receipt makes repeating recovery harmless.
+      await _clearScanBootstrapMarker();
+    }
+    _cachedItems.removeWhere((entry) => entry.filePath == item.filePath ||
+        (donorPath != null && entry.filePath == donorPath && entry.animeName.isEmpty));
+    _cachedItems.add(item);
+    _cachedItems.sort((a, b) => b.lastWatchTime.compareTo(a.lastWatchTime));
+    _lastWriteTime = DateTime.now();
+    _scheduleIncrementalSyncAfterChange();
+    if (item.animeId != null && item.animeName.trim().isNotEmpty &&
+        mayCommit() && await AnimeDeletionTombstones.isDeleted(item.animeId) &&
+        mayCommit()) {
+      await AnimeDeletionTombstones.clear(item.animeId!);
+    }
+    return true;
+  }
+
+  static Future<void> _clearScanBootstrapMarker() async {
+    try {
+      if (await _scanBootstrapMarker.exists()) await _scanBootstrapMarker.delete();
+    } on io.FileSystemException catch (error) {
+      // The SQLite receipt is authoritative; cleanup failure must not hide the
+      // committed history. A later initialization can safely retry cleanup.
+      debugPrint('观看历史已迁移，待清理扫描迁移标记: $error');
+    }
+  }
+
+  static Future<List<WatchHistoryItem>> _readLegacyBootstrap() async {
+    final file = io.File(_historyFilePath);
+    if (!await file.exists()) return [];
+    final values = json.decode(await file.readAsString()) as List;
+    return [for (final value in values)
+      WatchHistoryItem.fromJson(Map<String, dynamic>.from(value as Map))];
   }
 
   // 添加或更新历史记录

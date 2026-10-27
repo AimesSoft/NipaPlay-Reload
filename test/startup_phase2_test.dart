@@ -66,6 +66,7 @@ void main() {
     var notifications = 0;
     scan.addListener(() => notifications++);
     final task = scan.scanCompletedFiles(['a.mp4'], folderPath: '/tmp');
+    await Future<void>.delayed(Duration.zero);
     final atStart = notifications;
     for (var i = 0; i < 500; i++) {
       scan.updateScanMessage('progress $i');

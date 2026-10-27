@@ -1,5 +1,6 @@
 import 'package:nipa_harness/nipa_harness.dart';
 import 'package:nipaplay/services/scan_service.dart';
+import 'package:nipaplay/services/classic_mode_policy.dart';
 import 'package:nipaplay/providers/watch_history_provider.dart';
 import '../harness_redaction.dart';
 
@@ -26,6 +27,11 @@ final class ClassicScanExecutor implements JobExecutor {
           }));
       return;
     }
+    final permit = await ClassicModePolicy.acquire();
+    if (permit == null) {
+      throw const Failure(FailureCode.unavailable,
+          'Classic identification is unavailable in Next; use Next file indexing and explicit identity tools.');
+    }
     if (scanner == null || scanner.isScanning) {
       await context.retryAt(
           DateTime.now().toUtc().add(const Duration(seconds: 1)),
@@ -43,6 +49,10 @@ final class ClassicScanExecutor implements JobExecutor {
     await context.running(phase: 'scan');
     Future<bool> proceed() async {
       if (stopped) return false;
+      if (!await permit.allowed) {
+        throw const Failure(FailureCode.unavailable,
+            'Classic identification stopped because the interface changed to Next.');
+      }
       final job = await context.snapshot();
       return job.state != JobState.paused && job.cancelRequestedAt == null;
     }

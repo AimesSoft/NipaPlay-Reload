@@ -105,7 +105,10 @@ Future<void> mergeLegacyRemoteFile(
 }
 
 Future<String> canonicalFileId(DatabaseExecutor db, String id) async {
-  final rows = await db.query('media_file_aliases',
-      columns: ['file_id'], where: 'old_id=?', whereArgs: [id]);
-  return rows.isEmpty ? id : rows.single['file_id'] as String;
+  // Kept under its original name for callers that also accept episode/work
+  // IDs. Both alias tables are flattened when a survivor is merged again.
+  final rows = await db.rawQuery('SELECT COALESCE('
+      '(SELECT file_id FROM media_file_aliases WHERE old_id=?1),'
+      '(SELECT entity_id FROM media_entity_aliases WHERE old_id=?1),?1) AS id', [id]);
+  return rows.single['id'] as String;
 }

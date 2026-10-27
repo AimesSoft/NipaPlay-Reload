@@ -350,7 +350,7 @@ final class UiSync {
 }
 
 /// Folders on this computer NipaPlay looks through
-/// (`media.library.roots.*`, `media.library.scan_classic`), and NipaPlay
+/// (`media.library.roots.*`, `media.library.scan`), and NipaPlay
 /// shares nearby (`media.sources.discover`).
 final class NextFolders {
   NextFolders(this.calls);
@@ -369,22 +369,20 @@ final class NextFolders {
         'paths': [path]
       });
 
-  /// Looks through [paths] (all when null); the task doing it. NipaPlay
-  /// indexes their files as well, so they reach Nipa as facts even when
-  /// Classic cannot identify them (without a dandanplay login it takes none).
+  /// Indexes [paths] (all when null) and returns the last submitted task.
+  /// No identity is chosen; all submitted tasks are visible in the task list.
   Future<String> scan([List<String>? paths]) async {
     final stamp = DateTime.now().microsecondsSinceEpoch;
-    for (final root in paths ?? (await list()).paths) {
-      try {
-        await calls.call('media.library.scan',
-            {'root': root, 'requestId': 'gui-scan-$stamp-$root'});
-      } catch (_) {
-        // Classic's scan below still runs; the index can be built later.
-      }
+    String? lastJobId;
+    for (final root in (paths ?? (await list()).paths).toSet()) {
+      final result = await calls.call('media.library.scan',
+          {'root': root, 'requestId': 'gui-scan-$stamp-$root'});
+      lastJobId = (result['job'] as Map)['jobId'] as String;
     }
-    final r = await calls.call(
-        'media.library.scan_classic', {if (paths != null) 'paths': paths});
-    return r['jobId'] as String;
+    if (lastJobId == null) {
+      throw const Failure(FailureCode.invalidInput, '请先添加媒体文件夹。');
+    }
+    return lastJobId;
   }
 
   /// NipaPlay shares answering on this network.

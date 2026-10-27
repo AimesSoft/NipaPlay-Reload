@@ -10,6 +10,12 @@ file IDs；离线保留对象及原因。远程操作经 mesh.invoke 在拥有�
 目标能力目录为准。`media.files.reveal {paths}` 在本机文件管理器定位，逐项报错；
 远程调用定位的是目标设备桌面。
 
+`media.management.merge_work/undo_merge` 是完整作品合并与撤回入口，
+`bind_batch` 仍只改身份绑定。合并在拥有者设备内完成，sourceWorkId 归入
+targetWorkId；调用者显式提供 release/episode 的 `mappings`，未映射子实体
+保留原 ID 并迁入目标层级，不按标题或集号猜对应关系。可通过 Mesh 调用，
+SQL 的 `db.describe/query/write/undo` 同时保留并支持 Mesh。
+
 本地自编目录不需要外部身份：`media.entities.put_batch` 原子保存 work → release →
 episode 与已有 fileIds。调用者给稳定 ID，修改要求 revision 与影响预览。
 `remove_batch` 默认只返回预览，执行保留实体前像、文件和观看进度，`restore` 按
@@ -21,7 +27,7 @@ Classic 历史同步保留显式 local_catalog 文件关系。影响预览从当
 
 Next 的媒体识别判断属于 Agent。代码提供文件信息、外部元数据和显式绑定，
 不解析文件名，不推断集号，不生成识别 Decision，也不把一个季的选择级联到目录文件。
-Classic 的扫描、匹配和自动弹幕策略保持原实现。
+Classic 的扫描和匹配只在 Classic 模式运行；Next 不挂载隐藏的 Classic 页面，也不隐式导入 Classic 身份。已有数据保留，旧库导入使用显式 `media.library.import_history`。Next 的启动扫描与下载完成只登记/探测文件事实，身份由 Agent 通过候选查询、显式绑定或 SQL 决定。
 
 ## 工具契约
 
@@ -37,13 +43,15 @@ Action id 是 Harness 名称；MCP 名称把点替换为下划线。输入输出
 | `media.identity.bind_batch` | write | 原子保存显式指定的文件、集、季、作品绑定及理由、证据。 |
 | `media.identity.unbind_batch` | write | 原子撤销多个实体的全部或指定显式绑定，保留来源审计；点名文件的 `classic_match` bindingId 时只在 Next 撤销 Classic 的自动识别。 |
 | `media.identity.restore_classic_batch` | write | 恢复被 `unbind_batch` 撤销、且仍是 Classic 当前观察的自动识别。 |
+| `media.management.merge_work` | write | 先预览，再携 expectedPlan 原子合并重复作品、明确映射的季和剧集；迁移身份、文件关联、覆盖与弹幕，保存旧 ID 别名及撤回前像。 |
+| `media.management.undo_merge` | write | 先预览，再携 expectedPlan 原子恢复合并前状态；受影响关系有后续修改或活动弹幕任务时拒绝撤回。 |
 | `media.metadata.search` | read | 保留单次来源搜索。 |
 | `media.metadata.get` | read | 保留单个外部对象详情查询。 |
 | `media.identity.get` | read | 读取身份、位置、来源审计、合成元数据，以及 Classic 历次观察和当前冲突。 |
 | `media.library.works` | read | 读取共享作品及季、集、文件结构，包含 Classic 弹弹play匹配，支持非弹弹play身份。 |
 | `media.library.work` | read | 读取一部 Next 作品的结构与元数据。 |
 | `media.library.search_merged` | read | 有索引的本机 + Mesh 搜索；标题、原名、已有别名、年份与剧集标题；返回 Next workId/episodeId。 |
-| `media.library.import_history` | write | 重入同步 Classic 文件与有效匹配，保留来源事实与冲突，不推断绑定者。 |
+| `media.library.import_history` | write | 显式导入并对账 Classic 文件与有效匹配，保留来源事实与冲突，不推断绑定者；不会在启动、历史通知或其他身份写入时自动执行。 |
 | `media.library.scan` | write | 提交枚举、探测、哈希和文件索引任务，不请求元数据来源。 |
 | `media.metadata.override` | write | GUI 与 Agent 均可编辑；宿主记录 actor/origin。mode=persistent 刷新保留，correction 被新快照替代，clear 清除编辑。省略 mode 保持持久覆盖兼容语义。 |
 | `media.metadata.refresh` | write | 沿用元数据快照刷新任务，不改变身份。 |
@@ -67,6 +75,47 @@ exact/contains 的作品或发行身份读取本机 + Mesh 合并目录，不按
 一次 Action 的语义仍是返回所有输入文件的独立信号。
 
 ## 绑定与不变量
+
+### 重复作品合并
+
+先通过 `media.management.targets` 查来源设备 ID，在同一拥有者设备调用：
+
+```json
+{
+  "sourceWorkId": "duplicate-work",
+  "targetWorkId": "surviving-work",
+  "mappings": [
+    {"sourceId": "duplicate-release", "targetId": "surviving-release"},
+    {"sourceId": "duplicate-episode", "targetId": "surviving-episode"}
+  ],
+  "requestId": "merge-confirmed-duplicate-001",
+  "reason": "已核实为同一作品、同一集与相同文件区间"
+}
+```
+
+新请求不带 `expectedPlan` 只预览，返回 `canCommit`、`expectedPlan`、实体迁移、
+外部身份、文件区间、未合并子实体、相同文件区间的候选对应及冲突。核实后原输入
+加 `expectedPlan` 提交；数据变化使预览失效。候选对应不会自动采用，集对应必须
+与已指定的季对应一致。不同来源身份可共同保留，同一来源的冲突身份原子拒绝。
+同文件的 start/end/ordinal 不同不能折叠，弹幕设置冲突或活动下载/对齐任务也阻止提交。
+
+`metadataPolicy` 默认为 `reject`；属性或覆盖不同须明确选 `prefer_target` 或
+`prefer_source`，预览列双方值，撤回快照保留原值。该选项不忽略身份、文件区间或
+弹幕冲突。文件、字幕选择、文件/区间进度和来源快照正文不改，绑定证据与弹幕池
+保留。原实体保留合并标记和别名，旧 ID 在读取与播放中解析到保留实体；目录删除
+和修改要求当前 ID，避免通过旧 ID 误操作。没有 Classic 识别、历史导入或投影写入。
+
+撤回使用 `undo_merge {mergeId,requestId,reason}` 预览，再携返回的 `expectedPlan`
+提交；受影响实体、身份、文件关联、覆盖、弹幕或别名有后续修改则整批拒绝。
+播放进度变化不阻止撤回，也不会被旧值覆盖。两个工具的 requestId 均按调用来源
+隔离，提交与回执同事务保存；重启或 `outcome_unknown` 后以完全相同输入重试
+恢复原回执。已提交的 requestId 即使省略 expectedPlan 也返回回执，重新规划须用
+新 requestId。撤回后重试旧合并返回 `mergeState: undone`，不再次合并。
+
+每次最多捕获 1000 个层级实体、4 MiB 关系与审计快照；不跨设备提交分布式事务。
+schema v25 追加只读 `media_entity_aliases` 与 `media_work_merges`，SQL 可查询它们。
+
+### 身份绑定
 
 `bind_batch.entries` 的 `kind` 是 work/release/episode/file。
 本地层级为 work → release → episode；文件通过关联指向 episode。目录模式中
@@ -131,9 +180,9 @@ FileEpisode 的关系/时间段由宿主校验。违反不变量返回稳定 Fai
 outbox 只有回读确认后才完成。投影失败返回对应条目错误，并明确身份已经提交、
 投影仍待完成；重试和启动恢复都使用同一持久 outbox。
 
-Classic 有效匹配按现有媒体库来源筛选函数进入同一实体、绑定及 FileEpisode 表，
+显式导入时，Classic 有效匹配按现有媒体库来源筛选函数进入实体、绑定及 FileEpisode 表，
 `source=classic_match`、`boundBy=null`。清除后保留的 ID 和远端服务自己的身份仍为历史证据。
-启动、Classic 历史通知和显式身份写入都会同步；匹配变化保存追加观察，
+只有显式调用 `media.library.import_history` 才导入并同步；匹配变化保存追加观察，
 撤销旧的 Classic 文件绑定而不改动 Agent/user 绑定。按弹弹play外部对象复用既有实体，
 不按标题或文件名合并。不同来源指向不同集时均保留关联，`identity.get.conflicts` 可见。
 跨来源的同一集可由 Agent 明确提供 `localEpisodeIds` 表达。
@@ -147,7 +196,7 @@ animeId/episodeId）和 Classic 界面不变，也不向投影 outbox 写任何�
 撤销都追加 `unbind` 审计（调用的 origin、理由、`revoked: classic_match`）。
 撤销文件上的：只由它支撑的文件—剧集关联移除（显式绑定及 `local_catalog` 关联不受影响）；它所来自的 Classic
 当前观察改记为 `provenance=classic_match_revoked`（指纹不变，`identity.get.classicObservations` 可见）。
-之后的同步看到指纹相同，不再挂回；Classic 对该文件记下不同的识别（指纹变了，包括记录被删除后重新识别）才按
+之后的显式导入看到指纹相同，不再挂回；Classic 对该文件记下不同的识别（指纹变了，包括记录被删除后重新识别）才按
 一般规则导入新的观察，旧绑定不会被再次撤销。文件条目的结果带 `remainingClassicBindings`：失去该文件关联的剧集，
 以及它们的版本、作品上仍已接受的 `classic_match` 绑定 `{entityId, kind, bindingId}`；未被点名的都保持原样。
 撤销剧集、版本或作品上的：影响片库里对应一层的显示。片库按现有规则（mesh/library.dart）不显示既无已接受绑定、
@@ -159,7 +208,7 @@ animeId/episodeId）和 Classic 界面不变，也不向投影 outbox 写任何�
 `provenance=classic_match`，审计事件 `restore`。剧集、版本、作品只恢复点名的绑定。不碰 Classic 记录和 outbox。
 `requestId` 幂等，可再次撤销。要把这一集记成她自己的决定，用 `bind_batch`，那是显式绑定，另一类事实，并会按规则投影到 Classic。
 `classic_match` 绑定仍跟随 Classic 的匹配记录：该路径的 Classic 观看记录被删除（`history.remove`，
-观看进度随之删除）或匹配改变后，下一次同步（任何身份写入、`media.library.import_history`）撤销它的文件绑定，
+观看进度随之删除）或匹配改变后，下一次显式 `media.library.import_history` 撤销它的文件绑定，
 并移除不再有绑定支撑的文件—剧集关联。显式绑定及其关联不受影响。
 
 Classic 已有不同匹配时，outbox 标为 `conflict`，显式绑定仍已提交，Classic 保持原值。
@@ -255,12 +304,12 @@ legacy history、Classic projection outbox 均保留，不重算身份或修改 
 补充时长等 probe 信息不改变文件内容修订，也不撤销原绑定。
 
 v8 只追加 `media_classic_observations` 和 `media_classic_current`，原表和数据不变。
-Next schema 仍为 v8；Classic 的投影日志在首次投递的事务内可重入创建，
-Classic `user_version` 和 `watch_history` schema 不变，启动同步不写 Classic。
+该历史迁移为 v8；当前 Next schema 版本以 `next_database.dart` 为准。Classic 的投影日志在首次投递的事务内可重入创建，
+Classic `user_version` 和 `watch_history` schema 不变，Next 启动不导入 Classic 身份。
 首次同步保留原 `media_legacy_history`，每个文件的观察、身份和当前指针同事务提交；
-中断后启动从 Classic 重读，已提交的相同指纹不重复写入。进度不参与指纹。
+中断后可重试显式导入，已提交的相同指纹不重复写入。进度不参与指纹。
 Classic 标题快照带来源及未知语言 `und`，不会覆盖来源服务快照或持久用户编辑；
-所有原始标题仍可从观察读取。Classic 删除文件时撤销其来源关联，保留历次观察与结构实体。
+所有原始标题仍可从观察读取。Classic 删除文件后，下一次显式导入撤销其来源关联，保留历次观察与结构实体。
 
 ## 验证边界
 

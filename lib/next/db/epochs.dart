@@ -19,6 +19,7 @@ const catalogueTables = [
   'media_locations',
   'media_file_episodes',
   'media_file_aliases',
+  'media_entity_aliases',
   'media_external_objects',
   'media_bindings',
   'media_snapshots',
@@ -53,11 +54,13 @@ const notCatalogueTables = [
   'harness_discoveries',
   'body_changes',
   'db_commits',
+  'db_operations',
   'settings_changes',
   'media_metadata_edits',
   'media_evidence',
   'danmaku_binding_events',
   'media_binding_operations',
+  'media_work_merges',
   // Bookkeeping of how Classic and the scanner were last read.
   'media_classic_observations',
   'media_classic_current',
@@ -79,6 +82,9 @@ Future<void> migrateChangeEpochs(DatabaseExecutor db) async {
   await db.execute('''CREATE TABLE IF NOT EXISTS change_epochs (
     name TEXT PRIMARY KEY, n INTEGER NOT NULL)''');
   for (final table in catalogueTables) {
+    // Later migrations create their tables and install their epoch triggers.
+    // This migration also runs while upgrading databases predating those tables.
+    if ((await db.rawQuery("SELECT 1 FROM sqlite_master WHERE type='table' AND name=?", [table])).isEmpty) continue;
     // Rows of the library's own output are not a change of what it is made of.
     final own = table == 'ui_cache';
     String when(String row) => own ? "WHEN $row.id NOT LIKE 'mesh:%' " : '';

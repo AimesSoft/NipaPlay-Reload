@@ -101,8 +101,8 @@ final class _Applied {
 
 final class _Preview {
   _Preview(this.id, this.statementsHash, this.digest, this.at, this.statements,
-      this.reason);
-  final String id, statementsHash, digest;
+      this.reason, this.origin);
+  final String id, statementsHash, digest, origin;
   final String? reason;
   final DateTime at;
   final List<_Statement> statements;
@@ -463,9 +463,9 @@ final class DbService {
         'db.query':
             'One SELECT (WITH … SELECT, VALUES) with ? parameters; read-only by SQLite. limit (default ${dbQueryLimits.defaultRows}, max ${dbQueryLimits.maxRows}) and maxBytes (default ${dbQueryLimits.defaultBytes}) bound the result; when cut, truncated is true and nextOffset says where to continue.',
         'db.write':
-            'A batch of INSERT/UPDATE/DELETE in one transaction. Without previewId it is only previewed (rolled back) and returns row-level before/after images and a previewId; with previewId it commits exactly what was previewed.',
+            'A batch of INSERT/UPDATE/DELETE in one transaction. Without previewId it is only previewed (rolled back) and returns row-level before/after images and a previewId; with previewId it commits exactly what was previewed. Reuse that previewId from the same origin to recover its durable receipt after response loss or restart; supplied statements and commit reason must match.',
         'db.undo':
-            'Restores the before-images of a commit when every row is still as that commit left it; otherwise refuses and lists the conflicting rows.',
+            'Restores the before-images of a commit when every row is still as that commit left it; otherwise refuses and lists the conflicting rows. Remote commits require a stable requestId; the same origin retries with identical commitId and reason to recover the durable result.',
       },
       'limits': {
         'statementsPerWrite': _maxStatements,
@@ -577,21 +577,10 @@ final class DbService {
     final reason = input['reason'] as String?;
     final previewId = input['previewId'] as String?;
     if (previewId == null) {
-      return _preview(_statements(input['statements']), reason);
+      return _preview(
+          _statements(input['statements']), reason, invocation.origin);
     }
-    _expire();
-    final preview = _previews.remove(previewId);
-    if (preview == null) {
-      _fail(FailureCode.notFound,
-          'No such preview (it was used, expired or the app restarted). Run db.write without previewId to preview again.');
-    }
-    if (input['statements'] != null &&
-        _statementsHash(_statements(input['statements'])) !=
-            preview.statementsHash) {
-      _fail(FailureCode.invalidInput,
-          'statements differ from the ones previewed under this previewId.');
-    }
-    return _commit(preview, invocation, reason);
+    return _commit(previewId, input, invocation, reason);
   }
 
   void _expire() {
@@ -599,7 +588,8 @@ final class DbService {
     _previews.removeWhere((_, p) => p.at.isBefore(cutoff));
   }
 
-  Future<JsonMap> _preview(List<_Statement> statements, String? reason) async {
+  Future<JsonMap> _preview(
+      List<_Statement> statements, String? reason, String origin) async {
     _Applied? previewed;
     try {
       await database.transaction((tx) async {
@@ -618,7 +608,7 @@ final class DbService {
       }
       id = 'dbp-${_token()}${_token()}';
       _previews[id] = _Preview(id, _statementsHash(statements),
-          _digest(applied.changes), DateTime.now(), statements, reason);
+          _digest(applied.changes), DateTime.now(), statements, reason, origin);
     }
     return redactedOutput({
       'status': 'preview',
@@ -640,15 +630,81 @@ final class DbService {
     });
   }
 
-  Future<JsonMap> _commit(
-      _Preview preview, Invocation invocation, String? reason) async {
-    // Events and refreshes run after the serialized section: what they read
-    // may itself take part in the identity writers' queue.
+  // Receipts are written in the same transaction as the data and audit. The
+  // authenticated origin scopes the key; neither another device nor a new RPC
+  // invocation ID can consume a preview or cause a committed batch to run twice.
+  Future<Row?> _receipt(
+      DatabaseExecutor tx, String kind, String key, String origin) async {
+    final rows = await tx.query('db_operations',
+        where: 'kind=? AND origin=? AND request_key=?',
+        whereArgs: [kind, origin, key]);
+    return rows.firstOrNull;
+  }
+
+  JsonMap _receiptResult(Row row) => redactedOutput(
+      (jsonDecode(row['result'] as String) as Map).cast<String, Object?>());
+
+  Future<void> _saveReceipt(Transaction tx, String kind, String key,
+      Invocation invocation, JsonMap request, JsonMap result) async {
+    await tx.insert('db_operations', {
+      'kind': kind,
+      'origin': invocation.origin,
+      'request_key': key,
+      'request': jsonEncode(request),
+      'commit_id': result['commitId'],
+      'result': jsonEncode(result),
+    });
+  }
+
+  Future<JsonMap> _finishReceipt(String kind, String key, Invocation invocation,
+      String commitId, _Applied applied, Map<String, Set<String>> entities,
+      {String? undoes}) async {
+    final result = {
+      ...await _afterCommit(commitId, kind == 'write' ? 'committed' : 'undone',
+          applied.changes, applied.affected, entities, invocation,
+          undoes: undoes),
+      if (kind == 'write') 'previewId': key else 'requestId': key,
+    };
+    await database.update('db_operations', {'result': jsonEncode(result)},
+        where: 'kind=? AND origin=? AND request_key=?',
+        whereArgs: [kind, invocation.origin, key]);
+    return result;
+  }
+
+  Future<JsonMap> _commit(String previewId, JsonMap input,
+      Invocation invocation, String? reason) async {
+    final suppliedHash = input['statements'] == null
+        ? null
+        : _statementsHash(_statements(input['statements']));
     final done = await _serialize(() async {
       _Applied? applied;
-      late String commitId;
+      String? commitId;
+      JsonMap? recovered;
       var entities = <String, Set<String>>{};
       await database.transaction((tx) async {
+        final receipt =
+            await _receipt(tx, 'write', previewId, invocation.origin);
+        if (receipt != null) {
+          final request = jsonDecode(receipt['request'] as String) as Map;
+          if ((suppliedHash != null &&
+                  suppliedHash != request['statementsHash']) ||
+              reason != request['reason']) {
+            _fail(FailureCode.conflict,
+                'This previewId was committed with different statements or reason.');
+          }
+          recovered = _receiptResult(receipt);
+          return;
+        }
+        _expire();
+        final preview = _previews[previewId];
+        if (preview == null || preview.origin != invocation.origin) {
+          _fail(FailureCode.notFound,
+              'No uncommitted preview for this origin (it expired or the app restarted). Preview again.');
+        }
+        if (suppliedHash != null && suppliedHash != preview.statementsHash) {
+          _fail(FailureCode.invalidInput,
+              'statements differ from the ones previewed under this previewId.');
+        }
         applied = await _apply(tx, preview.statements);
         if (_digest(applied!.changes) != preview.digest) {
           _fail(FailureCode.conflict,
@@ -656,14 +712,33 @@ final class DbService {
         }
         _requireClean(applied!);
         entities = await _entities(tx, applied!.changes);
-        commitId = await _audit(tx, 'write', invocation,
-            reason ?? preview.reason, preview.statements, applied!.changes,
-            null, entities);
+        commitId = await _audit(
+            tx,
+            'write',
+            invocation,
+            reason ?? preview.reason,
+            preview.statements,
+            applied!.changes,
+            null,
+            entities);
+        await _saveReceipt(tx, 'write', previewId, invocation, {
+          'statementsHash': preview.statementsHash,
+          'reason': reason
+        }, {
+          ..._commitResult(commitId!, 'committed', applied!.changes,
+              applied!.affected, const [], const []),
+          'previewId': previewId,
+          'postCommitPending': true,
+        });
       });
-      return (commitId, applied!, entities);
+      if (commitId != null) _previews.remove(previewId);
+      return (commitId, applied, entities, recovered);
     });
-    return _afterCommit(done.$1, 'committed', done.$2.changes, done.$2.affected,
-        done.$3, invocation);
+    if (done.$4 != null) return done.$4!;
+    // Refreshes may themselves enter the domain writers' queue. Run them after
+    // releasing it; a crash here still leaves a truthful, committed receipt.
+    return _finishReceipt(
+        'write', previewId, invocation, done.$1!, done.$2!, done.$3);
   }
 
   void _requireClean(_Applied applied) {
@@ -677,7 +752,7 @@ final class DbService {
   // ── undo ───────────────────────────────────────────────────────────────
 
   Future<JsonMap> undo(JsonMap input, Invocation invocation) async {
-    const known = {'commitId', 'dryRun', 'reason'};
+    const known = {'commitId', 'dryRun', 'reason', 'requestId'};
     final unknown = input.keys.where((k) => !known.contains(k));
     if (unknown.isNotEmpty) {
       _fail(FailureCode.invalidInput,
@@ -686,14 +761,42 @@ final class DbService {
     final commitId = input['commitId'] as String;
     final dryRun = input['dryRun'] == true;
     final reason = input['reason'] as String?;
+    final suppliedKey = input['requestId'];
+    if (suppliedKey != null &&
+        (suppliedKey is! String ||
+            suppliedKey.isEmpty ||
+            suppliedKey.length > 256)) {
+      _fail(FailureCode.invalidInput,
+          'requestId must contain 1..256 characters.');
+    }
+    if (!dryRun &&
+        invocation.origin.startsWith('mesh:') &&
+        suppliedKey == null) {
+      _fail(FailureCode.invalidInput,
+          'Remote db.undo requires a stable requestId; reuse it when retrying.');
+    }
+    final key = suppliedKey as String? ?? 'dbu-${_token()}${_token()}';
+    final request = <String, Object?>{'commitId': commitId, 'reason': reason};
     final done = await _serialize(() async {
       _Applied? applied;
+      JsonMap? recovered;
       List<JsonMap>? conflicts;
       String? undoId;
       List<_Change>? original;
       var entities = <String, Set<String>>{};
       try {
         await database.transaction((tx) async {
+          if (!dryRun) {
+            final receipt = await _receipt(tx, 'undo', key, invocation.origin);
+            if (receipt != null) {
+              if (receipt['request'] != jsonEncode(request)) {
+                _fail(FailureCode.conflict,
+                    'This requestId was used for a different undo or reason.');
+              }
+              recovered = _receiptResult(receipt);
+              return;
+            }
+          }
           final rows = await tx
               .query('db_commits', where: 'id=?', whereArgs: [commitId]);
           if (rows.isEmpty) {
@@ -721,6 +824,13 @@ final class DbService {
           entities = await _entities(tx, applied!.changes);
           undoId = await _audit(tx, 'undo', invocation, reason, statements,
               applied!.changes, commitId, entities);
+          await _saveReceipt(tx, 'undo', key, invocation, request, {
+            ..._commitResult(undoId!, 'undone', applied!.changes,
+                applied!.affected, const [], const [],
+                undoes: commitId),
+            'requestId': key,
+            'postCommitPending': true,
+          });
         });
       } on _Rollback<Null> {
         if (conflicts == null && !dryRun) rethrow;
@@ -734,18 +844,18 @@ final class DbService {
               'conflicts': conflicts!.take(50).toList(),
             });
       }
-      return (undoId, applied!, entities);
+      return (undoId, applied, entities, recovered);
     });
+    if (done.$4 != null) return done.$4!;
     if (done.$1 == null) {
       return redactedOutput({
         'status': 'dry_run',
         'committed': false,
         'commitId': commitId,
-        'wouldRestore': _display(done.$2.changes),
+        'wouldRestore': _display(done.$2!.changes),
       });
     }
-    return _afterCommit(done.$1!, 'undone', done.$2.changes, done.$2.affected,
-        done.$3, invocation,
+    return _finishReceipt('undo', key, invocation, done.$1!, done.$2!, done.$3,
         undoes: commitId);
   }
 
@@ -1329,6 +1439,13 @@ final class DbService {
     } catch (error) {
       refreshed = ['failed: $error'];
     }
+    return _commitResult(commitId, status, changes, affected, events, refreshed,
+        undoes: undoes);
+  }
+
+  JsonMap _commitResult(String commitId, String status, List<_Change> changes,
+      List<int> affected, List<JsonMap> events, List<String> refreshed,
+      {String? undoes}) {
     return redactedOutput({
       'status': status,
       'committed': true,
@@ -1341,7 +1458,7 @@ final class DbService {
       ..._display(changes),
       'notified': events,
       'refreshed': refreshed,
-      'undo': 'db.undo {"commitId":"$commitId"}',
+      'undo': 'db.undo {"commitId":"$commitId","requestId":"undo:$commitId"}',
     });
   }
 

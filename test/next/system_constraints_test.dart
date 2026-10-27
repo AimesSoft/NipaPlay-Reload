@@ -219,7 +219,8 @@ void main() {
     await entered.future;
     stopped = true;
     finish.complete();
-    expect(await future, hasLength(1));
+    expect(await future, isEmpty,
+        reason: 'stopped recognition must not publish its in-flight result');
     expect(attempts, 1);
     expect(maximum, 1);
   });

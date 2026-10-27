@@ -2,12 +2,14 @@ import 'package:nipa_harness/nipa_harness.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
 import '../media/identity_store.dart';
+import '../media/file_identity_merge.dart';
 
 /// An episode's subtitle tracks and its files' subtitle facts (the facts
 /// without their tracks), from one query: what [SubtitleFacts.episodeTracks]
 /// and [SubtitleFacts.episodeFiles] give, for a caller that wants both.
 Future<({List<JsonMap> tracks, List<JsonMap> files})> readEpisodeSubtitles(
     DatabaseExecutor db, String episodeId) async {
+  episodeId = await canonicalFileId(db, episodeId);
   final tracks = <JsonMap>[], files = <JsonMap>[];
   for (final row in await db.rawQuery(
       'SELECT fe.file_id AS asked, '

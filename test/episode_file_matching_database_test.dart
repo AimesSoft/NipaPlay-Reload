@@ -77,6 +77,30 @@ void main() {
         ],
       };
 
+  for (final cancelAt in [2, 3]) {
+    test(
+        'scan transaction rolls back match and donor when revoked at $cancelAt',
+        () async {
+      await seed('/media/donor.mkv');
+      final donor =
+          (await historyDatabase.getHistoryByFilePath('/media/donor.mkv'))!;
+      await historyDatabase.clearMatchInfoForFile(donor);
+      var checks = 0;
+      final saved = await historyDatabase.commitScanMatch(
+        donor.copyWith(filePath: '/media/new.mkv'),
+        donorPath: donor.filePath,
+        mayCommit: () => ++checks < cancelAt,
+      );
+      expect(saved, isFalse);
+      expect(
+          await historyDatabase.getHistoryByFilePath('/media/new.mkv'), isNull);
+      expect(
+          (await historyDatabase.getHistoryByFilePath(donor.filePath))
+              ?.lastPosition,
+          600000);
+    });
+  }
+
   test('matching version 2 keeps version 1 and its own progress', () async {
     await seed('/media/version-1.mkv');
     final version1Before = (await db.query('watch_history',

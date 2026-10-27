@@ -6,7 +6,7 @@ import '../../models/torrent_task.dart';
 import '../downloads/download_backend.dart';
 import '../downloads/download_paths.dart';
 import '../downloads/download_source.dart';
-import '../media/media_service.dart';
+import '../downloads/indexed_download_library.dart';
 import 'native.dart';
 
 final class HeadlessDownloadBackend
@@ -291,60 +291,5 @@ final class _MetadataAction extends Action<_MetadataJson, _MetadataJson> {
   }
 }
 
-final class HeadlessDownloadLibrary implements DownloadLibrary {
-  HeadlessDownloadLibrary(this.media);
-  final MediaService media;
-  @override
-  Future<bool> get enabled async => true;
-  @override
-  bool get isBusy => false;
-  @override
-  Future<bool> wasImported(String key) async =>
-      (await media.store.database.query('ui_cache',
-              where: 'id=?', whereArgs: ['download-import:$key']))
-          .isNotEmpty;
-  @override
-  Future<void> markImported(String key) =>
-      media.store.database.insert('ui_cache', {
-        'id': 'download-import:$key',
-        'fingerprint': 'verified',
-        'payload': 'true'
-      }).then((_) {});
-  @override
-  Future<JsonMap?> lookup(String path) async {
-    final id = await media.store.ensureFile(path, via: 'download_import');
-    return _entry(path, id);
-  }
-
-  @override
-  Future<JsonMap?> registered(String path) async {
-    final id = await media.store.registeredFileId(path);
-    return id == null ? null : _entry(path, id);
-  }
-
-  Future<JsonMap> _entry(String path, String id) async {
-    final episodes = await media.store.database.rawQuery(
-        'SELECT e.id AS episodeId, e.parent_id AS workId, e.attributes FROM media_file_episodes fe JOIN media_entities e ON e.id=fe.episode_id WHERE fe.file_id=?',
-        [id]);
-    final sources = await media.store.linkSources(id);
-    return {
-      'path': path,
-      'fileId': id,
-      'workIds': episodes.map((e) => e['workId']).toSet().toList(),
-      'episodeIds': [for (final e in episodes) e['episodeId']],
-      'episodes': [
-        for (final e in episodes)
-          {...e, 'identitySources': sources[e['episodeId']] ?? <JsonMap>[]}
-      ],
-      'identificationPending': episodes.isEmpty
-    };
-  }
-
-  @override
-  Future<bool> importFiles(List<String> paths, String outputDirectory) async {
-    for (final path in paths) {
-      await media.index(path, via: 'download_import');
-    }
-    return true;
-  }
-}
+/// Headless and desktop Next register the same verified file facts.
+typedef HeadlessDownloadLibrary = IndexedDownloadLibrary;

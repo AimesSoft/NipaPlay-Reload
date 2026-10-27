@@ -71,6 +71,20 @@ final class MediaService {
     if (locator == null) {
       throw const Failure(FailureCode.notFound, 'No current video.');
     }
+    // Binding probes canonicalize local paths. Reuse that indexed file when
+    // a caller later reads its original alias; this does not import history.
+    final direct = await store.database.query('media_locations',
+        columns: ['file_id'], where: 'owner_device_id=? AND locator=?',
+        whereArgs: [store.ownerDeviceId, locator]);
+    if (direct.isEmpty && p.isAbsolute(locator)) {
+      try {
+        final canonical = await File(locator).resolveSymbolicLinks();
+        final indexed = await store.registeredFileId(canonical);
+        if (indexed != null) return indexed;
+      } on FileSystemException {
+        // An unavailable path can still name an explicitly registered file.
+      }
+    }
     return store.ensureFile(locator);
   }
 
@@ -372,8 +386,9 @@ final class MediaService {
         result.add(await _fileDescription(info.fileId, path, info.probe));
       }
     } else {
-      final workId = input['workId'] as String;
-      if ((await store.entity(workId))['kind'] != 'work') {
+      final work = await store.entity(input['workId'] as String);
+      final workId = work['id'] as String;
+      if (work['kind'] != 'work') {
         throw const Failure(
             FailureCode.invalidInput, 'workId must reference a work.');
       }
@@ -525,7 +540,6 @@ final class MediaService {
 
   Future<JsonMap> bindBatch(JsonMap input, Invocation invocation, {String? expectedPlan}) =>
       mutate(() async {
-        await store.importLegacy(await classic.history());
         final key = stableMediaId(
             'bind-operation', [invocation.origin, input['requestId']]);
         final fingerprint = stableMediaId('input', input);
@@ -778,7 +792,6 @@ final class MediaService {
 
   Future<JsonMap> unbindBatch(JsonMap input, Invocation invocation, {String? expectedPlan}) =>
       mutate(() async {
-        await store.importLegacy(await classic.history());
         final key = stableMediaId(
             'unbind-operation', [invocation.origin, input['requestId']]);
         final fingerprint = stableMediaId('input', input);
@@ -806,7 +819,6 @@ final class MediaService {
 
   Future<JsonMap> restoreClassicBatch(JsonMap input, Invocation invocation) =>
       mutate(() async {
-        await store.importLegacy(await classic.history());
         final key = stableMediaId(
             'restore-classic-operation', [invocation.origin, input['requestId']]);
         final fingerprint = stableMediaId('input', input);
@@ -817,6 +829,9 @@ final class MediaService {
           throw const Failure(
               FailureCode.invalidInput, 'entries must not be empty.');
         }
+        // Restoring an imported observation is explicit, but it must not
+        // import any other Classic identity while validating that decision.
+        await store.verifyClassicRestoreHistory(entries, classic.history);
         return store.restoreClassicBatch(entries, key, fingerprint, invocation);
       });
 
@@ -827,12 +842,13 @@ final class MediaService {
   }
 
   Future<void> _deliverBindings(JsonMap result, {bool revoked = false}) async {
+    final targets = projection.lookup();
     for (final row in (result['entries'] as List).cast<JsonMap>()) {
       if (row.containsKey('classicProjection')) continue;
       final id = (row['fileId'] ?? row['entityId']) as String?;
       if (id == null || (await store.entity(id))['kind'] != 'file') continue;
       try {
-        await projection.drain(fileId: id);
+        await projection.drain(fileId: id, targets: targets);
         if (classic is DetachedClassicMetadataPort) {
           row['classicProjection'] = [{'status': 'not_applicable',
             'reason': 'This host has no Classic history; Next identity and metadata are persisted.'}];
@@ -848,7 +864,9 @@ final class MediaService {
               for (final location in await store.locations(id))
                 if (location['owner_device_id'] == store.ownerDeviceId)
                   await reversible.projectionOutcome(
-                      location['locator'] as String, {
+                      ((decodeMediaJson(queued['payload'])['deliveryLocators']
+                          as Map?)?[location['id']] as Map?)?['locator'] as String?
+                          ?? location['locator'] as String, {
                     ...decodeMediaJson(queued['payload']),
                     'projectionId': queued['id']
                   })

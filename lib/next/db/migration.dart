@@ -17,3 +17,16 @@ Future<void> migrateDbCommits(DatabaseExecutor db) async {
     changes TEXT NOT NULL,
     undoes TEXT REFERENCES db_commits(id))''');
 }
+
+/// Durable idempotency receipts. Pending previews remain local and short-lived;
+/// this table survives response loss/restart after a successful transaction.
+Future<void> migrateDbOperations(DatabaseExecutor db) async {
+  await db.execute('''CREATE TABLE IF NOT EXISTS db_operations (
+    kind TEXT NOT NULL CHECK(kind IN ('write','undo')),
+    origin TEXT NOT NULL,
+    request_key TEXT NOT NULL,
+    request TEXT NOT NULL,
+    commit_id TEXT NOT NULL REFERENCES db_commits(id),
+    result TEXT NOT NULL,
+    PRIMARY KEY(kind, origin, request_key))''');
+}

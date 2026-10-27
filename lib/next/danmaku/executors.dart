@@ -121,9 +121,15 @@ final class _Fetch implements JobExecutor {
       if (await control.stop(details())) return;
       await c.running(phase: 'fetch');
       final bindingId = c.job.input['bindingId'] as String?;
+      final binding = bindingId == null ? null : await service.store.binding(bindingId);
+      final expectedEntityId = c.job.input['bindingEntityId'] as String? ?? binding?['entity_id'] as String?;
+      final expectedEntityRevision = c.job.input['bindingEntityRevision'] as int? ?? binding?['entity_revision'] as int?;
+      if (binding != null && (binding['entity_id'] != expectedEntityId || binding['entity_revision'] != expectedEntityRevision)) {
+        throw const Failure(FailureCode.conflict, 'Danmaku target changed after this acquisition was requested.');
+      }
       final cacheRevision = bindingId == null
           ? null
-          : (await service.store.binding(bindingId))['cache_revision'] as int;
+          : binding!['cache_revision'] as int;
       var acquiredCount = 0;
       for (final chunk in plan) {
         if (await control.stop(details())) return;
@@ -196,7 +202,9 @@ final class _Fetch implements JobExecutor {
       if (bindingId != null) {
         if (await control.stop(details())) return;
         await service.store.assignCache(bindingId, cacheKey, c.job.jobId,
-            expectedCacheRevision: cacheRevision);
+            expectedCacheRevision: cacheRevision,
+            expectedEntityId: expectedEntityId,
+            expectedEntityRevision: expectedEntityRevision);
         await c.markSideEffectCommitted();
         await service.refreshCurrent(
             replaceBindingId:

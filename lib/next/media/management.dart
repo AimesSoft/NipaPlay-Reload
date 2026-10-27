@@ -1,13 +1,16 @@
 import 'package:nipa_harness/nipa_harness.dart';
 import 'identity_store.dart';
 import 'media_service.dart';
+import 'work_merge.dart';
+import 'file_identity_merge.dart';
 import '../harness_redaction.dart';
 
 /// The user-facing association protocol; low-level identity primitives retain
-/// their existing idempotent contracts for scanners and persisted operations.
+/// their existing idempotent contracts for explicit and persisted operations.
 final class MediaManagementCapability implements Capability {
   MediaManagementCapability(this.service, Iterable<Action> primitives)
       : actions = [
+          ...WorkMergeCapability(service).actions,
           for (final operation in ['bind', 'unbind'])
             _Manage(
                 service,
@@ -31,7 +34,9 @@ Future<JsonMap> associationImpact(MediaService service, JsonMap input) async {
       if (e[key] case final String id)
         ids.add((await store.entity(id))['id'] as String);
     }
-    ids.addAll((e['localEpisodeIds'] as List? ?? []).cast<String>());
+    for (final id in (e['localEpisodeIds'] as List? ?? []).cast<String>()) {
+      ids.add(await canonicalFileId(db, id));
+    }
     if (e['path'] case final String path) {
       ids.addAll((await db.query('media_locations',
               columns: ['file_id'], where: 'locator=?', whereArgs: [path]))
@@ -144,7 +149,8 @@ final class _Manage extends Action<_Json, _Json> {
           'Without expectedPlan returns affected entities/episodes, locations, progress and identity sources, '
           'without changing associations. Resubmit with expectedPlan to apply; stale associations are rejected '
           'inside the media writer. Never deletes files or changes progress, no NeedsDecision. '
-          'Writes use existing identity audit and Classic projection; withdrawn identities can be rebuilt with bind_batch. '
+          'This changes explicit identity associations, not a full entity merge: it does not move metadata edits, danmaku, subtitles or progress between entities. '
+          'Writes use existing identity audit and deliver the committed identity to Classic without importing Classic matches; withdrawn identities can be rebuilt with bind_batch. '
           'For another device invoke this action through mesh.invoke using that device\'s original entity IDs. '
           'Local-only catalogue removal/restoration uses media.entities.remove_batch/restore.',
       effect: Effect.write,

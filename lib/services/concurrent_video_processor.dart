@@ -6,6 +6,7 @@ import 'package:flutter/foundation.dart';
 import 'package:path/path.dart' as p;
 import 'package:nipaplay/models/watch_history_model.dart';
 import 'package:nipaplay/services/danmaku_matching_service.dart';
+import 'classic_mode_policy.dart';
 
 /// 视频处理结果
 class VideoProcessResult {
@@ -55,6 +56,11 @@ class ConcurrentVideoProcessor {
       throw ArgumentError.value(maxConcurrency, 'maxConcurrency');
     }
     if (videoPaths.isEmpty) return [];
+    final permit = await ClassicModePolicy.acquire();
+    if (permit == null) return [];
+    Future<bool> canContinue() async =>
+        await permit.allowed &&
+        (continueProcessing == null || await continueProcessing());
 
     // 根据文件数量决定并发数
     final int concurrency = maxConcurrency == null
@@ -70,6 +76,7 @@ class ConcurrentVideoProcessor {
     // 第一阶段：过滤需要处理的文件
     if (skipPreviouslyMatchedUnwatched) {
       for (String videoPath in videoPaths) {
+        if (!await canContinue()) return results;
         WatchHistoryItem? existingItem =
             await WatchHistoryManager.getHistoryItem(videoPath);
         if (existingItem != null &&
@@ -101,9 +108,11 @@ class ConcurrentVideoProcessor {
     for (String videoPath in pathsToProcess) {
       final future = semaphore.acquire().then((_) async {
         try {
-          if (continueProcessing != null && !await continueProcessing()) return null;
+          if (!await canContinue()) return null;
           final result = await _processSingleVideoPath(videoPath,
-              getVideoInfo: getVideoInfo);
+              getVideoInfo: getVideoInfo,
+              permit: permit,
+              continueProcessing: canContinue);
           processedCount++;
           onProgress?.call(
               processedCount, videoPaths.length, _displayName(videoPath));
@@ -124,8 +133,10 @@ class ConcurrentVideoProcessor {
     return results;
   }
 
-  static Future<VideoProcessResult> _processSingleVideoPath(String videoPath,
-      {Future<Map<String, dynamic>> Function(String)? getVideoInfo}) async {
+  static Future<VideoProcessResult?> _processSingleVideoPath(String videoPath,
+      {Future<Map<String, dynamic>> Function(String)? getVideoInfo,
+      required ClassicWorkPermit permit,
+      required Future<bool> Function() continueProcessing}) async {
     try {
       final videoInfo = await (getVideoInfo == null
               ? DanmakuMatchingService.instance.getVideoInfo(videoPath)
@@ -134,6 +145,7 @@ class ConcurrentVideoProcessor {
         throw TimeoutException('获取视频信息超时 (${_displayName(videoPath)})');
       });
 
+      if (!await continueProcessing()) return null;
       if (videoInfo['isMatched'] == true &&
           videoInfo['matches'] != null &&
           (videoInfo['matches'] as List).isNotEmpty) {
@@ -210,9 +222,6 @@ class ConcurrentVideoProcessor {
                 lastWatchTime: DateTime.now(),
                 thumbnailPath: migratedItem.thumbnailPath,
                 isFromScan: true);
-
-            // The donor was explicitly unlinked; its old path can be removed.
-            await WatchHistoryManager.removeHistoryItem(migratedItem.filePath);
           } else {
             // 新扫描项目
             itemToSave = WatchHistoryItem(
@@ -229,7 +238,11 @@ class ConcurrentVideoProcessor {
                 isFromScan: true);
           }
 
-          await WatchHistoryManager.addOrUpdateHistory(itemToSave);
+          if (!await continueProcessing()) return null;
+          final saved = await WatchHistoryManager.commitScanMatch(itemToSave,
+              mayCommit: () => permit.isCurrent,
+              donorPath: migratedItem?.filePath);
+          if (!saved) return null;
 
           return VideoProcessResult(
             filePath: videoPath,

@@ -64,7 +64,7 @@ void main() {
     return result;
   }
 
-  test('the application offers db.*, as a write that is not offered to peers',
+  test('the application offers the four db actions locally and to Mesh peers',
       () {
     expect({
       for (final s in api.catalog.where((s) => s.id.startsWith('db.')))
@@ -76,7 +76,7 @@ void main() {
       'db.write': Effect.write,
     });
     for (final id in ['db.describe', 'db.query', 'db.write', 'db.undo']) {
-      expect(meshActionAllowed(id), false, reason: id);
+      expect(meshActionAllowed(id), true, reason: id);
     }
   });
 
@@ -150,5 +150,46 @@ void main() {
     }))['rows'] as List)
         .map((r) => r['type']);
     expect(types, unorderedEquals(['db.write', 'db.undo']));
+  });
+
+  test('work merge reaches the real UI and Mesh projection; old IDs and resume observations survive', () async {
+    final db=core.media.service.store.database;
+    final file=await File('${root.path}/episode.mkv').writeAsString('temporary video');
+    final fileId=await core.media.service.index(file.path);
+    for(final prefix in ['source','target']) {
+      for(final kind in ['work','release','episode']) {
+        await db.insert('media_entities',{'id':'$prefix-$kind','kind':kind,'revision':0,
+          if(kind!='work') 'parent_id':'$prefix-${kind=='episode'?'release':'work'}',
+          'attributes':jsonEncode({'title':kind,'localOnly':true,'number':'1','type':'regular','order':'local'})});
+      }
+      await db.insert('media_file_episodes',{'file_id':fileId,'episode_id':'$prefix-episode',
+        'relation':'local_catalog','ordinal':0,'start_ms':0,'end_ms':10000});
+    }
+    final mesh=core.uiData.meshLibrary!;
+    final before=(await mesh.library()).single;
+    final oldEpisode=(await mesh.episodes(before.workId)).single;
+    await mesh.recordProgress(oldEpisode.episodeId,0.6,positionMs:6000,durationMs:10000);
+    final input=<String,Object?>{'sourceWorkId':'source-work','targetWorkId':'target-work',
+      'requestId':'core-merge','reason':'same confirmed work', 'mappings':[
+        {'sourceId':'source-release','targetId':'target-release'},
+        {'sourceId':'source-episode','targetId':'target-episode'}]};
+    final p=await call('media.management.merge_work',input);
+    expect(p['canCommit'],isTrue,reason:jsonEncode(p));
+    final done=await call('media.management.merge_work',{...input,'expectedPlan':p['expectedPlan']});
+    mesh.invalidateIndex();
+    final works=await mesh.library();
+    expect(works,hasLength(1));
+    final episodes=await mesh.episodes(works.single.workId);
+    expect(episodes,hasLength(1));
+    expect(episodes.single.progress,0.6);
+    expect(await mesh.canonical(oldEpisode.episodeId),episodes.single.episodeId);
+    expect(await mesh.canonical('source-episode'),episodes.single.episodeId);
+    expect((await core.uiData.localWork('source-work'))!.workId,'target-work');
+    expect(await core.uiData.localEpisodes('source-work'),hasLength(1));
+    final undo={'mergeId':done['mergeId'],'requestId':'core-undo','reason':'restore'};
+    final up=await call('media.management.undo_merge',undo);
+    expect(up['canCommit'],isTrue,reason:jsonEncode(up));
+    await call('media.management.undo_merge',{...undo,'expectedPlan':up['expectedPlan']});
+    expect(await db.query('media_file_episodes'),hasLength(2));
   });
 }
