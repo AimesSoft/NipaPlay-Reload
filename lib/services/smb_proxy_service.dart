@@ -146,10 +146,11 @@ class SMBProxyService {
       return Response(HttpStatus.badRequest, body: 'Missing conn or path');
     }
 
-    final connection = SMBService.instance.getConnection(connName);
-    if (connection == null) {
+    final resolved = SMBService.instance.getConnection(connName);
+    if (resolved == null) {
       return Response(HttpStatus.notFound, body: 'SMB connection not found');
     }
+    final connection = SMBService.instance.effectiveConnection(resolved);
 
     final smbPath = _stripTrailingSlash(_normalizeSmbPath(rawPath));
 

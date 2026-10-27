@@ -41,11 +41,13 @@ mixin AccountPageController<T extends StatefulWidget> on State<T> {
     loadLoginStatus();
     loadBangumiStatus();
     BangumiApiService.loginStatusNotifier.addListener(_onLoginStatusChanged);
+    DandanplayService.loginExpired.addListener(loadLoginStatus);
   }
 
   @override
   void dispose() {
     BangumiApiService.loginStatusNotifier.removeListener(_onLoginStatusChanged);
+    DandanplayService.loginExpired.removeListener(loadLoginStatus);
     usernameController.dispose();
     passwordController.dispose();
     registerUsernameController.dispose();

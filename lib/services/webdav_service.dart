@@ -13,13 +13,19 @@ import 'package:uuid/uuid.dart';
 
 import 'package:nipaplay/models/media_identity.dart';
 import 'package:nipaplay/services/process_memory_cache.dart';
+import 'package:nipaplay/utils/network_address_utils.dart';
 import 'package:nipaplay/src/rust/api/webdav_multistatus.dart' as rust_webdav;
 import 'package:nipaplay/src/rust/frb_generated.dart';
 
 class WebDAVConnection {
   final String id;
   final String name;
+
+  /// 内网地址（原 `url` 字段）。可为空——内网与公网至少填一个。
   final String url;
+
+  /// 公网地址。可为空——内网与公网至少填一个。
+  final String wanUrl;
   final String username;
   final String password;
   final bool isConnected;
@@ -28,6 +34,7 @@ class WebDAVConnection {
     String? id,
     required this.name,
     required this.url,
+    this.wanUrl = '',
     required this.username,
     required this.password,
     this.isConnected = false,
@@ -38,6 +45,7 @@ class WebDAVConnection {
       'id': id,
       'name': name,
       'url': url,
+      'wanUrl': wanUrl,
       'username': username,
       'password': password,
       'isConnected': isConnected,
@@ -46,18 +54,53 @@ class WebDAVConnection {
 
   factory WebDAVConnection.fromJson(Map<String, dynamic> json) {
     final savedId = json['id']?.toString().trim();
+    final rawUrl = (json['url'] ?? '').toString();
+    final hasWanKey = json.containsKey('wanUrl');
+    var url = rawUrl;
+    var wanUrl = (json['wanUrl'] ?? '').toString();
+
+    // 旧数据迁移：原本只有单一地址 `url`，未记录 `wanUrl`。
+    // 按私有 IP 自动归类：私有地址保留为内网，其余迁移为公网。
+    if (!hasWanKey && rawUrl.trim().isNotEmpty) {
+      if (NetworkAddressUtils.isPrivateHost(rawUrl)) {
+        url = rawUrl;
+        wanUrl = '';
+      } else {
+        url = '';
+        wanUrl = rawUrl;
+      }
+    }
+
+    // 纯公网连接（url 为空）把公网地址纳入 id 种子，避免同用户名的不同
+    // 公网连接派生出相同 id，导致按 id 解析媒体路径时错配到另一个连接。
+    // 旧数据 url 恒非空，沿用原种子保证升级后 id 不变。
+    final idSeed = rawUrl.trim().isNotEmpty
+        ? 'nipaplay:webdav:$rawUrl|${json['username'] ?? ''}'
+        : 'nipaplay:webdav:wan:$wanUrl|${json['username'] ?? ''}';
+
     return WebDAVConnection(
       id: savedId?.isNotEmpty == true
           ? savedId
           : const Uuid().v5(
               '6ba7b811-9dad-11d1-80b4-00c04fd430c8',
-              'nipaplay:webdav:${json['url'] ?? ''}|${json['username'] ?? ''}',
+              idSeed,
             ),
       name: json['name'] ?? '',
-      url: json['url'] ?? '',
+      url: url,
+      wanUrl: wanUrl,
       username: json['username'] ?? '',
       password: json['password'] ?? '',
       isConnected: json['isConnected'] ?? false,
+    );
+  }
+
+  /// 历史版本对没有持久化 id 的连接按 url|username 派生确定性 v5 id。
+  /// 连接删除重建后只剩新的随机 v4 id，而旧媒体库条目/观看记录仍引用
+  /// 旧派生 id，因此解析失败时要按同一规则重绑回现有连接。
+  static String _deriveLegacyConnectionId(String url, String username) {
+    return const Uuid().v5(
+      '6ba7b811-9dad-11d1-80b4-00c04fd430c8',
+      'nipaplay:webdav:$url|$username',
     );
   }
 
@@ -65,6 +108,7 @@ class WebDAVConnection {
     String? id,
     String? name,
     String? url,
+    String? wanUrl,
     String? username,
     String? password,
     bool? isConnected,
@@ -73,11 +117,18 @@ class WebDAVConnection {
       id: id ?? this.id,
       name: name ?? this.name,
       url: url ?? this.url,
+      wanUrl: wanUrl ?? this.wanUrl,
       username: username ?? this.username,
       password: password ?? this.password,
       isConnected: isConnected ?? this.isConnected,
     );
   }
+
+  /// 是否同时配置了内网与公网地址。
+  bool get hasLan => url.trim().isNotEmpty;
+
+  /// 是否配置了公网地址。
+  bool get hasWan => wanUrl.trim().isNotEmpty;
 }
 
 class WebDAVFile {
@@ -196,6 +247,13 @@ class WebDAVService {
 
   List<WebDAVConnection> _connections = [];
   Map<String, String> _connectionTombstones = {};
+
+  /// 每个连接当前优先使用的地址。true 表示优先公网，false/缺省表示优先内网。
+  /// 由启动阶段的后台可达性检测（或保存连接时的校验）写入。
+  final Map<String, bool> _preferWanById = {};
+
+  /// 每个连接最近一次内网/公网地址的连通性检测结果，供库管理界面展示。
+  final Map<String, ({bool lan, bool wan})> _addressReachabilityById = {};
   final WebDAVConnectionValidator? _connectionValidator;
   final ProcessMemoryListCache<_WebDAVDirectoryCacheKey, WebDAVFile>
       _directoryCache =
@@ -204,6 +262,49 @@ class WebDAVService {
   List<WebDAVConnection> get connections => List.unmodifiable(_connections);
   Map<String, String> get connectionTombstones =>
       Map.unmodifiable(_connectionTombstones);
+
+  /// 记录（并供后续读取）某连接优先使用的地址；true 表示优先公网。
+  void setPreferredAddress(String connectionId, {required bool useWan}) {
+    if (connectionId.trim().isEmpty) return;
+    _preferWanById[connectionId] = useWan;
+  }
+
+  /// 某连接最近一次内网/公网地址的连通性检测结果。
+  ///
+  /// 返回 `null` 表示尚未检测过；`lan`/`wan` 分别表示对应地址是否可达。
+  ({bool lan, bool wan})? lastAddressReachability(String connectionId) {
+    final id = connectionId.trim();
+    if (id.isEmpty) return null;
+    return _addressReachabilityById[id];
+  }
+
+  /// 返回该连接当前应使用的地址（内网/公网）。
+  ///
+  /// 规则：两个地址都配置时按优选结果选择（缺省优先内网）；只配置一个时
+  /// 直接使用该地址；都没有则返回空串。
+  String effectiveUrl(WebDAVConnection connection) {
+    final normalized = _normalizeConnection(connection);
+    final hasLan = normalized.url.trim().isNotEmpty;
+    final hasWan = normalized.wanUrl.trim().isNotEmpty;
+    if (hasLan && hasWan) {
+      return (_preferWanById[normalized.id] ?? false)
+          ? normalized.wanUrl
+          : normalized.url;
+    }
+    if (hasLan) return normalized.url;
+    if (hasWan) return normalized.wanUrl;
+    return '';
+  }
+
+  /// 返回一个 `url` 已被替换为当前优选地址的连接副本，供实际建连/取址使用。
+  WebDAVConnection effectiveConnection(WebDAVConnection connection) {
+    final normalized = _normalizeConnection(connection);
+    final url = effectiveUrl(normalized);
+    if (url.isEmpty || url == normalized.url) {
+      return normalized;
+    }
+    return normalized.copyWith(url: url, wanUrl: '');
+  }
 
   Future<void> initialize() async {
     await _loadConnections();
@@ -273,11 +374,14 @@ class WebDAVService {
   Future<bool> upsertConnection(WebDAVConnection connection) async {
     final normalized = _normalizeConnection(connection);
     try {
-      final validated = await _validateConnection(normalized);
-      if (validated == null) {
+      final result = await _validateAddresses(normalized);
+      if (!result.lanSuccess && !result.wanSuccess) {
         return false;
       }
-      final saved = validated.copyWith(isConnected: true);
+      // 内网可用则优先内网；仅公网可用时才优先公网。
+      _preferWanById[normalized.id] =
+          !result.lanSuccess && result.wanSuccess;
+      final saved = result.connection.copyWith(isConnected: true);
       var index = _connections.indexWhere((item) => item.id == saved.id);
       if (index == -1) {
         index = _connections.indexWhere((item) => item.name == saved.name);
@@ -288,7 +392,7 @@ class WebDAVService {
         _connections[index] = saved;
       }
       _connectionTombstones.remove(saved.id);
-      clearDirectoryCache(connectionName: validated.name);
+      clearDirectoryCache(connectionName: saved.name);
       await _saveConnections();
       await _saveConnectionTombstones();
       return true;
@@ -331,8 +435,51 @@ class WebDAVService {
 
   Future<bool> testConnection(WebDAVConnection connection) async {
     final normalized = _normalizeConnection(connection);
-    final validated = await _validateConnection(normalized);
-    return validated != null;
+    final result = await _validateAddresses(normalized);
+    if (!result.lanSuccess && !result.wanSuccess) {
+      return false;
+    }
+    _preferWanById[normalized.id] = !result.lanSuccess && result.wanSuccess;
+    return true;
+  }
+
+  /// 分别校验内网地址与公网地址，返回各自可达情况与经修正后的地址。
+  ///
+  /// 只配置一个地址时只校验该地址；两个都配置时并行校验，避免一侧
+  /// 不可达时还要等完它的超时与重试链才轮到另一侧。地址的常见子路径
+  /// 与 HTTPS→HTTP 降级修正会各自写回对应的字段。
+  Future<({WebDAVConnection connection, bool lanSuccess, bool wanSuccess})>
+      _validateAddresses(WebDAVConnection connection) async {
+    final normalized = _normalizeConnection(connection);
+    final hasLan = normalized.url.trim().isNotEmpty;
+    final hasWan = normalized.wanUrl.trim().isNotEmpty;
+
+    final results = await Future.wait([
+      hasLan
+          ? _validateConnection(normalized.copyWith(wanUrl: ''))
+          : Future<WebDAVConnection?>.value(null),
+      hasWan
+          ? _validateConnection(
+              normalized.copyWith(url: normalized.wanUrl, wanUrl: ''),
+            )
+          : Future<WebDAVConnection?>.value(null),
+    ]);
+
+    var url = normalized.url;
+    var wanUrl = normalized.wanUrl;
+    final lanSuccess = results[0] != null;
+    final wanSuccess = results[1] != null;
+    if (lanSuccess) url = results[0]!.url;
+    if (wanSuccess) wanUrl = results[1]!.url;
+
+    _addressReachabilityById[normalized.id] =
+        (lan: lanSuccess, wan: wanSuccess);
+
+    return (
+      connection: normalized.copyWith(url: url, wanUrl: wanUrl),
+      lanSuccess: lanSuccess,
+      wanSuccess: wanSuccess,
+    );
   }
 
   Future<WebDAVConnection?> _validateConnection(
@@ -451,7 +598,7 @@ class WebDAVService {
     String path, {
     bool forceRefresh = false,
   }) {
-    final normalizedConnection = _normalizeConnection(connection);
+    final normalizedConnection = effectiveConnection(connection);
     final normalizedPath = _normalizeDirectoryPath(path);
     final key = (
       name: normalizedConnection.name,
@@ -579,8 +726,11 @@ class WebDAVService {
   }
 
   String getFileUrl(WebDAVConnection connection, String filePath) {
-    final normalizedConnection = _normalizeConnection(connection);
+    final normalizedConnection = effectiveConnection(connection);
     if (_isFullyQualifiedUrl(filePath)) {
+      return filePath;
+    }
+    if (normalizedConnection.url.trim().isEmpty) {
       return filePath;
     }
 
@@ -616,25 +766,29 @@ class WebDAVService {
 
     for (final conn in _connections) {
       final normalized = _normalizeConnection(conn);
-      final baseUri = Uri.tryParse(normalized.url);
-      if (baseUri == null || baseUri.scheme.isEmpty || baseUri.host.isEmpty) {
-        continue;
-      }
+      // 内网与公网地址都参与匹配，避免历史记录的任一地址失配。
+      for (final base in [normalized.url, normalized.wanUrl]) {
+        if (base.trim().isEmpty) continue;
+        final baseUri = Uri.tryParse(base.trim());
+        if (baseUri == null || baseUri.scheme.isEmpty || baseUri.host.isEmpty) {
+          continue;
+        }
 
-      if (baseUri.scheme != fileUri.scheme) continue;
-      if (baseUri.host != fileUri.host) continue;
-      if (_effectivePort(baseUri) != _effectivePort(fileUri)) continue;
+        if (baseUri.scheme != fileUri.scheme) continue;
+        if (baseUri.host != fileUri.host) continue;
+        if (_effectivePort(baseUri) != _effectivePort(fileUri)) continue;
 
-      final basePath = _ensureTrailingSlash(
-          _collapseSlashes(baseUri.path.isEmpty ? '/' : baseUri.path));
-      final filePath =
-          _collapseSlashes(fileUri.path.isEmpty ? '/' : fileUri.path);
-      if (!filePath.startsWith(basePath)) continue;
+        final basePath = _ensureTrailingSlash(
+            _collapseSlashes(baseUri.path.isEmpty ? '/' : baseUri.path));
+        final filePath =
+            _collapseSlashes(fileUri.path.isEmpty ? '/' : fileUri.path);
+        if (!filePath.startsWith(basePath)) continue;
 
-      final score = basePath.length;
-      if (score > bestScore) {
-        bestScore = score;
-        bestConnection = normalized;
+        final score = basePath.length;
+        if (score > bestScore) {
+          bestScore = score;
+          bestConnection = normalized;
+        }
       }
     }
 
@@ -663,11 +817,14 @@ class WebDAVService {
       return;
     }
     final normalized = _normalizeConnection(_connections[index]);
-    final validated = await _validateConnection(normalized);
-    final isConnected = validated != null;
-    final updatedConnection = (validated ?? normalized).copyWith(
-      isConnected: isConnected,
-    );
+    final result = await _validateAddresses(normalized);
+    final isConnected = result.lanSuccess || result.wanSuccess;
+    if (isConnected) {
+      _preferWanById[normalized.id] =
+          !result.lanSuccess && result.wanSuccess;
+    }
+    final updatedConnection =
+        result.connection.copyWith(isConnected: isConnected);
     _connections[index] = updatedConnection;
     clearDirectoryCache(connectionName: name);
     await _saveConnections();
@@ -688,8 +845,36 @@ class WebDAVService {
             connection.id == reference || connection.name == reference,
       );
     } catch (_) {
-      return null;
+      return _rebindConnectionByLegacyId(reference);
     }
+  }
+
+  /// 连接被删除重建后 id 会换成新的随机 v4，旧条目引用的派生 id 直接
+  /// 查不到连接。按 url|username 的派生规则把旧 id 重绑回现有连接；
+  /// 同时检查内网/公网地址及末尾斜杠，兼容旧公网 url 迁移到 wanUrl。
+  WebDAVConnection? _rebindConnectionByLegacyId(String reference) {
+    for (final connection in _connections) {
+      final urlCandidates = <String>{};
+      for (final url in [connection.url, connection.wanUrl]) {
+        if (url.trim().isEmpty) continue;
+        urlCandidates.add(url);
+        if (url.endsWith('/')) {
+          urlCandidates.add(url.substring(0, url.length - 1));
+        } else {
+          urlCandidates.add('$url/');
+        }
+      }
+      for (final url in urlCandidates) {
+        if (WebDAVConnection._deriveLegacyConnectionId(
+              url,
+              connection.username,
+            ) ==
+            reference) {
+          return connection;
+        }
+      }
+    }
+    return null;
   }
 
   /// 通过连接名称和相对路径解析文件信息
@@ -708,7 +893,7 @@ class WebDAVService {
     final connection = getConnectionByIdOrName(connectionName);
     if (connection == null) return null;
 
-    final normalizedConnection = _normalizeConnection(connection);
+    final normalizedConnection = effectiveConnection(connection);
     return WebDAVResolvedFile(
       connection: normalizedConnection,
       relativePath: toConnectionRelativePath(
@@ -725,7 +910,7 @@ class WebDAVService {
     String path, {
     bool isDirectory = false,
   }) {
-    final normalizedConnection = _normalizeConnection(connection);
+    final normalizedConnection = effectiveConnection(connection);
     final baseUri = Uri.tryParse(normalizedConnection.url);
     var normalizedPath = _normalizeFilePath(path, isDirectory);
     if (baseUri == null) return normalizedPath;
@@ -748,7 +933,7 @@ class WebDAVService {
 
   /// Builds the old server-root spelling used by historical records.
   String toLegacyServerPath(WebDAVConnection connection, String relativePath) {
-    final baseUri = Uri.tryParse(_normalizeConnection(connection).url);
+    final baseUri = Uri.tryParse(effectiveConnection(connection).url);
     if (baseUri == null) return _normalizeFilePath(relativePath, false);
     return _buildServerRelativePath(baseUri.path, relativePath);
   }
@@ -1752,11 +1937,14 @@ class WebDAVService {
 
   WebDAVConnection _normalizeConnection(WebDAVConnection connection) {
     final normalizedUrl = _normalizeUrl(connection.url);
+    final normalizedWanUrl = _normalizeUrl(connection.wanUrl);
     if (normalizedUrl == connection.url &&
-        connection.url.trim() == connection.url) {
+        connection.url.trim() == connection.url &&
+        normalizedWanUrl == connection.wanUrl &&
+        connection.wanUrl.trim() == connection.wanUrl) {
       return connection;
     }
-    return connection.copyWith(url: normalizedUrl);
+    return connection.copyWith(url: normalizedUrl, wanUrl: normalizedWanUrl);
   }
 
   String _normalizeUrl(String url) {
@@ -1823,7 +2011,7 @@ class WebDAVService {
     bool Function()? onStopRequested,
   }) async {
     final targets = searchTargets ?? const {'folder', 'video'};
-    final normalizedConnection = _normalizeConnection(connection);
+    final normalizedConnection = effectiveConnection(connection);
     final normalizedKeyword = keyword.trim().toLowerCase();
 
     if (normalizedKeyword.isEmpty) {

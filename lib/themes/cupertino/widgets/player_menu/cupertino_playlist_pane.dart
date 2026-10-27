@@ -192,6 +192,8 @@ class _CupertinoPlaylistPaneState extends State<CupertinoPlaylistPane> {
     final matches = SMBService.instance.connections.where((connection) {
       if (connection.host == connName) return true;
       if ('${connection.host}:${connection.port}' == connName) return true;
+      if (connection.wanHost == connName) return true;
+      if ('${connection.wanHost}:${connection.wanPort}' == connName) return true;
       return false;
     }).toList();
     if (matches.length == 1) return matches.first;

@@ -73,6 +73,18 @@ public class VideoOutput: NSObject {
     }
   }
 
+  // Frees the mpv render context on the worker, after the frame it may be
+  // rendering, and then calls `completion` on the main thread. The player
+  // destroys mpv once disposal is answered, and the texture registry can
+  // keep the texture, with its render context, alive past this object.
+  public func dispose(_ completion: @escaping () -> Void) {
+    worker.enqueue {
+      self.disposed = true
+      self.texture?.dispose()
+      DispatchQueue.main.async(execute: completion)
+    }
+  }
+
   private func _init() {
     let enableHardwareAcceleration =
       VideoOutput.isSimulator ? false : enableHardwareAcceleration
@@ -148,6 +160,11 @@ public class VideoOutput: NSObject {
   }
 
   private func _updateCallback() {
+    // After dispose mpv may already be destroyed; `videoSize` reads it.
+    if disposed {
+      return
+    }
+
     let size = videoSize
 
     if size.width == 0 || size.height == 0 {

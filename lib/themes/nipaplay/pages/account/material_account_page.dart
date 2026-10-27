@@ -288,6 +288,7 @@ class _UnifiedAccountPageState extends State<UnifiedAccountPage>
         onOpenNipaplayHelp: () => _showBangumiSyncHelpDialog(
           _BangumiSyncHelpService.nipaplay,
         ),
+        onOpenTokenPage: _openBangumiAccessTokenPage,
       ),
     );
   }
@@ -475,13 +476,24 @@ class _UnifiedAccountPageState extends State<UnifiedAccountPage>
   }
 
   Future<void> _showBangumiSyncHelpDialog(
-    _BangumiSyncHelpService service,
-  ) async {
+    _BangumiSyncHelpService service, {
+    bool showAccessTokenLink = false,
+  }) async {
     final isDandanplay = service == _BangumiSyncHelpService.dandanplay;
     final title = isDandanplay ? '弹弹play Bangumi同步说明' : 'NipaPlay Bangumi同步说明';
     final message = isDandanplay
         ? '这是弹弹play提供的 Bangumi 同步服务，会在你看完后自动同步观看记录。\n\n你可以和下方 NipaPlay 的 Bangumi 同步配合使用，也可以按需只使用其中之一。'
         : '这是 NipaPlay 提供的 Bangumi 服务。默认需要你在番剧详情页手动配置观看集数；支持打分和写评价，也支持按钮一键同步。\n\n你可以和上方弹弹play同步配合使用，也可以按需只使用其中之一。';
+    final tokenLink = showAccessTokenLink
+        ? const Padding(
+            padding: EdgeInsets.only(top: 16),
+            child: SelectableText(
+              '请复制以下链接到浏览器中创建 Bangumi 访问令牌：\n'
+              '${BangumiAccountViewModel.bangumiAccessTokenUrl}',
+              style: TextStyle(fontSize: 14, height: 1.45),
+            ),
+          )
+        : null;
 
     if (_isPhoneSurface) {
       await CupertinoBottomSheet.show<void>(
@@ -500,6 +512,7 @@ class _UnifiedAccountPageState extends State<UnifiedAccountPage>
                       height: 1.45,
                     ),
               ),
+              if (tokenLink != null) tokenLink,
               const SizedBox(height: 16),
               AdaptiveButton(
                 onPressed: () => Navigator.of(context).pop(),
@@ -517,6 +530,7 @@ class _UnifiedAccountPageState extends State<UnifiedAccountPage>
       context: context,
       title: title,
       content: message,
+      contentWidget: tokenLink,
       actionsBuilder: (dialogContext) => [
         BlurButton(
           icon: fluent.FluentIcons.accept,
@@ -527,6 +541,26 @@ class _UnifiedAccountPageState extends State<UnifiedAccountPage>
         ),
       ],
     );
+  }
+
+  /// 打开 Bangumi 访问令牌创建页面。
+  ///
+  /// 之前在账户页重构时丢失了跳转链接，只保留了说明弹窗，用户无法直接
+  /// 前往官方页面创建令牌。这里恢复跳转：优先在外部浏览器打开官方页面，
+  /// 若打开失败（例如 Web 端）则回退到说明弹窗并把链接展示给用户。
+  Future<void> _openBangumiAccessTokenPage() async {
+    final opened = await _openExternalUrl(
+      BangumiAccountViewModel.bangumiAccessTokenUrl,
+      cannotOpenMessage: '无法打开访问令牌页面，请手动访问：'
+          '${BangumiAccountViewModel.bangumiAccessTokenUrl}',
+    );
+    if (!mounted) return;
+    if (!opened) {
+      await _showBangumiSyncHelpDialog(
+        _BangumiSyncHelpService.nipaplay,
+        showAccessTokenLink: true,
+      );
+    }
   }
 
   Future<void> _startDandanBangumiAuthorize() async {

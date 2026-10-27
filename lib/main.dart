@@ -104,6 +104,7 @@ import 'package:nipaplay/models/watch_history_database.dart';
 import 'package:nipaplay/services/http_client_initializer.dart';
 import 'package:nipaplay/services/large_screen_ui_sfx_service.dart';
 import 'package:nipaplay/services/server_connectivity_service.dart';
+import 'package:nipaplay/services/media_library_reachability_service.dart';
 import 'package:nipaplay/providers/bottom_bar_provider.dart';
 import 'package:nipaplay/models/anime_detail_display_mode.dart';
 import 'package:nipaplay/models/background_image_render_mode.dart';
@@ -538,6 +539,9 @@ void main(List<String> args) async {
         await ServerConnectivityService.instance.checkConnectivity();
       }));
       if (!kIsWeb) {
+        unawaited(_runDeferredStartupTask(
+            'media-library-reachability',
+            MediaLibraryReachabilityService.instance.checkAll));
         unawaited(_runDeferredStartupTask(
             'sync', AutoSyncService.instance.initialize));
         unawaited(_runDeferredStartupTask(
@@ -1386,8 +1390,21 @@ class MainPageState extends State<MainPage>
     DesktopPlayerWindowService.instance.addListener(_manageHotkeys);
     ExternalPlayerConsoleService.sessionAvailability
         .addListener(_onExternalPlayerConsoleAvailabilityChanged);
+    DandanplayService.loginExpired.addListener(_onDandanplayLoginExpired);
     _initGuideButtonListener();
     _initialize();
+  }
+
+  /// 服务器作废了保存的弹弹play登录：说清楚，并给出重新登录的入口。
+  void _onDandanplayLoginExpired() {
+    if (!mounted) return;
+    BlurSnackBar.show(
+      context,
+      '弹弹play登录已失效，请重新登录',
+      actionText: '去登录',
+      onAction: () => _selectPage(AppPageIds.account),
+      duration: const Duration(seconds: 8),
+    );
   }
 
   /// 监听手柄 Guide 按钮（Xbox 正中间上方按键），
@@ -1689,6 +1706,7 @@ class MainPageState extends State<MainPage>
   void dispose() {
     HotkeyService().setLargeScreenModeActive(false);
     DesktopPlayerWindowService.instance.removeListener(_manageHotkeys);
+    DandanplayService.loginExpired.removeListener(_onDandanplayLoginExpired);
     _tabChangeNotifier
         ?.removeListener(_onTabChangeRequested); // Temporarily remove
     _webdavQuickAccessProvider?.removeListener(_onWebDAVSettingsChanged);

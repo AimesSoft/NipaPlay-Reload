@@ -347,11 +347,8 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
     await prefs.setDouble(SettingsKeys.danmakuOpacity, opacity);
   }
 
-  // 获取映射后的弹幕不透明度
-  double get mappedDanmakuOpacity {
-    // 使用平方函数进行映射，使低值区域变化更平缓
-    return danmakuOpacity * danmakuOpacity;
-  }
+  // 交给 Flutter 弹幕渲染器的不透明度，与 Erika 原生弹幕、ASS 导出一致，直接取设置值（线性）
+  double get mappedDanmakuOpacity => danmakuOpacity;
 
   // 加载弹幕可见性
   Future<void> _loadDanmakuVisible() async {
@@ -1905,6 +1902,7 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
             VideoPlayerState.defaultSubtitleScale);
     _srtSubtitleDelaySeconds = prefs.getDouble(_srtSubtitleDelayKey) ??
         VideoPlayerState.defaultSubtitleDelaySeconds;
+    _subtitleManager.srtDelaySeconds = _srtSubtitleDelaySeconds;
     _subtitleDelaySeconds = prefs.getDouble(_subtitleDelayKey) ??
         VideoPlayerState.defaultSubtitleDelaySeconds;
     _subtitlePosition = _clampSubtitlePosition(
@@ -1986,6 +1984,7 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
     final clamped = _resolveSubtitleDelaySecondsForCurrentVideo(seconds);
     if (_srtSubtitleDelaySeconds == clamped) return;
     _srtSubtitleDelaySeconds = clamped;
+    _subtitleManager.srtDelaySeconds = clamped;
     final prefs = await SharedPreferences.getInstance();
     await prefs.setDouble(_srtSubtitleDelayKey, clamped);
     _notifyListeners();
