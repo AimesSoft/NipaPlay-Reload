@@ -109,6 +109,7 @@ runs:
           flutter build ios --release --no-codesign --verbose \
             --obfuscate --split-debug-info=build/symbols-ios
         fi
+        python3 .github/workflows/scripts/verify-ios-agent-assets.py build/ios/iphoneos/Runner.app
         sh thin-payload.sh build/ios/iphoneos/*.app
         cd build
         mkdir -p Payload

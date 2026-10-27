@@ -25,6 +25,15 @@ iPhone/iPad 计划上传 TestFlight，实际上传、Apple 处理和测试组状
 
 ## 可供未来使用的独立候选流程
 
+TestFlight 单独修复可在 `next` 触发 `main.yml`，设置 `testflight_only=true`、
+`upload_ios_testflight=true`、`submit_ios_for_review=false`，并填写 `release_title`。
+这会从所选提交重建 iOS、上传并验证 Apple 处理结果，不发布 GitHub Release，也不取消
+正在运行的全平台发行任务。只重试旧上传 job 会继续使用旧 IPA，不能应用打包修复。
+
+iOS 仅运行 Next 界面、播放器和 Mesh；`pubspec.yaml` 通过平台过滤排除本地 Agent 种子与
+运行器资源，Flutter 同时生成匹配的资源清单。CI 对 app、归档和导出的 IPA 检查这些资源
+确实不存在，再验证签名；Apple 成功接收并处理仍需单独确认。
+
 1. 提交修复、锁定依赖，记录 `next` 的准确 SHA。
 2. 运行 `build-all-manual.yml`，明确选择 `next`；该流程只上传 Actions artifacts。
 3. 所有支持平台成功后，下载同一次 run 的 `release-*` 与 `candidate-manifest`。

@@ -233,6 +233,9 @@ jobs:
             archive \
             -quiet
 
+          app_path="$archive_path/Products/Applications/Runner.app"
+          python3 .github/workflows/scripts/verify-ios-agent-assets.py "$app_path"
+
           xcodebuild \
             -exportArchive \
             -archivePath "$archive_path" \
@@ -251,7 +254,7 @@ jobs:
             exit 1
           fi
 
-          app_path="$archive_path/Products/Applications/Runner.app"
+          python3 .github/workflows/scripts/verify-ios-agent-assets.py "$signed_ipa"
           codesign --verify --deep --strict "$app_path"
           actual_version="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$app_path/Info.plist")"
           actual_build="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' "$app_path/Info.plist")"

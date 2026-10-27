@@ -17,6 +17,11 @@ on:
         required: true
         default: false
         type: boolean
+      testflight_only:
+        description: 'Rebuild and upload only Next iPhone/iPad; leave desktop releases running'
+        required: true
+        default: false
+        type: boolean
       publish_ios_from_run_id:
         description: 'Publish iOS from artifacts in an existing workflow run; skips all builds when set'
         required: false
@@ -27,9 +32,9 @@ permissions:
   contents: write
   pull-requests: read
 
-# If previous workflow is still running, we push again, we will cancel the previous workflow
+# An iOS-only repair has its own concurrency group and leaves the release running.
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref_name }}
+  group: ${{ github.workflow }}-${{ github.ref_name }}${{ inputs.testflight_only && '-testflight-only' || '' }}
   cancel-in-progress: true
 
 jobs:
@@ -50,8 +55,14 @@ jobs:
         env:
           RELEASE_TITLE: ${{ inputs.release_title }}
           REF_NAME: ${{ github.ref_name }}
+          TESTFLIGHT_ONLY: ${{ inputs.testflight_only }}
+          UPLOAD_TESTFLIGHT: ${{ inputs.upload_ios_testflight }}
         run: |
           set -euo pipefail
+          if [[ "$TESTFLIGHT_ONLY" == "true" && ( "$REF_NAME" != "next" || "$UPLOAD_TESTFLIGHT" != "true" ) ]]; then
+            echo "testflight_only requires branch next and upload_ios_testflight=true." >&2
+            exit 1
+          fi
           version="$(awk '/^version:/ {print $2; exit}' pubspec.yaml)"
           test -n "$version"
           echo "version=$version" >> "$GITHUB_OUTPUT"
@@ -83,7 +94,7 @@ jobs:
   Build-Android:
     name: Build Android
     needs: Gatekeeper
-    if: needs.Gatekeeper.outputs.triggered == 'true' && needs.Gatekeeper.outputs.next_preview != 'true'
+    if: ${{ !inputs.testflight_only && needs.Gatekeeper.outputs.triggered == 'true' && needs.Gatekeeper.outputs.next_preview != 'true' }}
     uses: ./.github/workflows/build-android.yml
     secrets:
       SIGNING_KEY: ${{ secrets.SIGNING_KEY }}
@@ -109,7 +120,7 @@ jobs:
   Build-macOS:
     name: Build macOS
     needs: Gatekeeper
-    if: needs.Gatekeeper.outputs.triggered == 'true'
+    if: ${{ !inputs.testflight_only && needs.Gatekeeper.outputs.triggered == 'true' }}
     permissions:
       actions: read
       contents: read
@@ -126,7 +137,7 @@ jobs:
   Build-Windows:
     name: Build Windows
     needs: Gatekeeper
-    if: needs.Gatekeeper.outputs.triggered == 'true'
+    if: ${{ !inputs.testflight_only && needs.Gatekeeper.outputs.triggered == 'true' }}
     uses: ./.github/workflows/build-windows.yml
     secrets:
       NIPAPLAY_TMDB_TOKEN: ${{ secrets.NIPAPLAY_TMDB_TOKEN }}
@@ -134,7 +145,7 @@ jobs:
   Build-Linux:
     name: Build Linux
     needs: Gatekeeper
-    if: needs.Gatekeeper.outputs.triggered == 'true'
+    if: ${{ !inputs.testflight_only && needs.Gatekeeper.outputs.triggered == 'true' }}
     uses: ./.github/workflows/build-linux.yml
     secrets:
       NIPAPLAY_TMDB_TOKEN: ${{ secrets.NIPAPLAY_TMDB_TOKEN }}
@@ -142,7 +153,7 @@ jobs:
   Build-Headless:
     name: Build headless Linux packages
     needs: Gatekeeper
-    if: needs.Gatekeeper.outputs.triggered == 'true'
+    if: ${{ !inputs.testflight_only && needs.Gatekeeper.outputs.triggered == 'true' }}
     uses: ./.github/workflows/build-headless.yml
 
   Build-HarmonyOS:
@@ -150,7 +161,7 @@ jobs:
     needs: Gatekeeper
     # The HarmonyOS fvp fork lacks the player interfaces NipaPlay Next uses, so a
     # prerelease from next ships no HarmonyOS package until the fork has them.
-    if: needs.Gatekeeper.outputs.triggered == 'true' && needs.Gatekeeper.outputs.prerelease != 'true'
+    if: ${{ !inputs.testflight_only && needs.Gatekeeper.outputs.triggered == 'true' && needs.Gatekeeper.outputs.prerelease != 'true' }}
     uses: ./.github/workflows/build-ohos.yml
     with:
       sign_hap: true
@@ -165,7 +176,7 @@ jobs:
   Build-tvOS:
     name: Build Apple TV sideload package
     needs: Gatekeeper
-    if: needs.Gatekeeper.outputs.triggered == 'true' && needs.Gatekeeper.outputs.next_preview != 'true'
+    if: ${{ !inputs.testflight_only && needs.Gatekeeper.outputs.triggered == 'true' && needs.Gatekeeper.outputs.next_preview != 'true' }}
     uses: ./.github/workflows/build-tvos.yml
 
   Publish:
@@ -181,7 +192,7 @@ jobs:
       - Build-HarmonyOS
       - Build-tvOS
     # A build skipped on purpose (Android/tvOS for Next; HarmonyOS in a prerelease) does not stop the release; a failed one does.
-    if: ${{ !cancelled() && needs.Gatekeeper.outputs.triggered == 'true' && !contains(needs.*.result, 'failure') && !contains(needs.*.result, 'cancelled') }}
+    if: ${{ !inputs.testflight_only && !cancelled() && needs.Gatekeeper.outputs.triggered == 'true' && !contains(needs.*.result, 'failure') && !contains(needs.*.result, 'cancelled') }}
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
@@ -779,7 +790,7 @@ jobs:
 
   Publish-iOS-Existing-Run:
     name: Publish existing iOS artifact to App Store Connect
-    if: inputs.publish_ios_from_run_id != ''
+    if: inputs.publish_ios_from_run_id != '' && !inputs.testflight_only
     runs-on: macos-26
     timeout-minutes: 120
     permissions:

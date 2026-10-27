@@ -240,18 +240,32 @@ flutter:
   generate: true
   assets:
     - pubspec.lock
-    - assets/next/harness/AGENTS.md
-    - assets/next/harness/nipa
-    - assets/next/harness/.gitignore
-    - assets/next/harness/.codex/config.toml
-    - assets/next/harness/.codex/hooks.json
-    - assets/next/harness/hooks/README.md
-    - assets/next/harness/hooks/session_start.py
-    - assets/next/harness/memory/
-    - assets/next/harness/tools/
-    - assets/next/agent/nipa-base.md
-    - assets/next/agent/dsh/
-    - assets/next/agent/dsh-runtime.json
+    # iOS is a Mesh/player body, without a local Agent or executable seed tools.
+    # Filter before bundling so the asset manifest and signed framework agree.
+    - path: assets/next/harness/AGENTS.md
+      platforms: [android, linux, macos, web, windows]
+    - path: assets/next/harness/nipa
+      platforms: [android, linux, macos, web, windows]
+    - path: assets/next/harness/.gitignore
+      platforms: [android, linux, macos, web, windows]
+    - path: assets/next/harness/.codex/config.toml
+      platforms: [android, linux, macos, web, windows]
+    - path: assets/next/harness/.codex/hooks.json
+      platforms: [android, linux, macos, web, windows]
+    - path: assets/next/harness/hooks/README.md
+      platforms: [android, linux, macos, web, windows]
+    - path: assets/next/harness/hooks/session_start.py
+      platforms: [android, linux, macos, web, windows]
+    - path: assets/next/harness/memory/
+      platforms: [android, linux, macos, web, windows]
+    - path: assets/next/harness/tools/
+      platforms: [android, linux, macos, web, windows]
+    - path: assets/next/agent/nipa-base.md
+      platforms: [android, linux, macos, web, windows]
+    - path: assets/next/agent/dsh/
+      platforms: [android, linux, macos, web, windows]
+    - path: assets/next/agent/dsh-runtime.json
+      platforms: [android, linux, macos, web, windows]
     - packages/adaptive_platform_ui/pubspec.yaml
     - packages/danmaku_canvas/pubspec.yaml
     - packages/nipaplay_smb2/pubspec.yaml
