@@ -55,7 +55,10 @@ class _ChatTranscriptState extends State<ChatTranscript> {
   bool _pinned = true;
   bool _away = false;
   String? _thread;
-  int _turns = 0;
+  ChatTurn? _lastTurn;
+  ChatTurn? _anchorTurn;
+  final _historyCenter = GlobalKey();
+  bool _historyCheckScheduled = false;
 
   @override
   void initState() {
@@ -63,7 +66,7 @@ class _ChatTranscriptState extends State<ChatTranscript> {
     _scroll.addListener(_onScroll);
     ChatTranscript.debugController = _scroll;
     _thread = widget.chat.thread;
-    _turns = widget.chat.turns.length;
+    _lastTurn = widget.chat.turns.lastOrNull;
     _jumpSoon();
   }
 
@@ -87,6 +90,35 @@ class _ChatTranscriptState extends State<ChatTranscript> {
     final away = !bottom &&
         _scroll.position.maxScrollExtent - _scroll.position.pixels > 160;
     if (away != _away) setState(() => _away = away);
+    _checkEarlierSoon();
+  }
+
+  void _checkEarlierSoon() {
+    final chat = widget.chat;
+    final thread = chat.thread;
+    if (_historyCheckScheduled ||
+        !chat.hasEarlierHistory ||
+        chat.loadingEarlier ||
+        chat.earlierHistoryError != null ||
+        !_scroll.hasClients ||
+        _scroll.position.pixels > _scroll.position.minScrollExtent + 200) {
+      return;
+    }
+    _historyCheckScheduled = true;
+    SchedulerBinding.instance.addPostFrameCallback((_) {
+      _historyCheckScheduled = false;
+      if (!mounted ||
+          !identical(chat, widget.chat) ||
+          chat.thread != thread ||
+          !_scroll.hasClients) {
+        return;
+      }
+      if (_scroll.position.pixels <= _scroll.position.minScrollExtent + 200) {
+        _pinned = false;
+        unawaited(chat.loadEarlierHistory());
+      }
+    });
+    SchedulerBinding.instance.ensureVisualUpdate();
   }
 
   bool _jumping = false;
@@ -127,28 +159,27 @@ class _ChatTranscriptState extends State<ChatTranscript> {
   @override
   Widget build(BuildContext context) {
     final chat = widget.chat;
-    // Another session, or something new said: to the bottom.
-    if (chat.thread != _thread || chat.turns.length > _turns) {
+    if (chat.thread != _thread) {
       _thread = chat.thread;
+      _anchorTurn = null;
       _pinned = true;
       _away = false;
       _jumpSoon();
+    } else if (!identical(chat.turns.lastOrNull, _lastTurn) && _pinned) {
+      _jumpSoon();
     }
-    _turns = chat.turns.length;
+    _lastTurn = chat.turns.lastOrNull;
     final text = NextText.sans(widget.textSize, height: 1.7);
     final shown = chat.visibleTurns;
-    final children = <Widget>[
-      for (final (i, turn) in shown.indexed)
-        _TurnView(
-          key: ObjectKey(turn),
-          turn: turn,
-          last: i == shown.length - 1,
-          chat: chat,
-          callbacks: widget.callbacks,
-          text: text,
-          width: widget.columnWidth,
-          posterWidth: widget.posterWidth,
-        ),
+    var anchor = _anchorTurn == null ? -1 : shown.indexOf(_anchorTurn!);
+    if (anchor < 0) {
+      anchor = (shown.length - NipaChat.historyTurns).clamp(0, shown.length);
+      _anchorTurn = shown.isEmpty ? null : shown[anchor];
+    }
+    // Earlier turns grow above a fixed sliver center. Their variable heights
+    // never change the scroll offset of the messages already being read.
+    final indices = {for (var i = 0; i < shown.length; i++) shown[i]: i};
+    final trailing = <Widget>[
       if (chat.questionItems.isNotEmpty) _Question(chat: chat),
       for (final request in widget.logins.pending)
         LoginCard(
@@ -159,6 +190,57 @@ class _ChatTranscriptState extends State<ChatTranscript> {
       if (chat.trouble != null)
         Text(chat.trouble!, style: NextText.sans(14, color: NextColors.p2)),
     ];
+    Widget row(Widget child) => Padding(
+          padding: EdgeInsets.fromLTRB(
+              widget.padding.left, 26, widget.padding.right, 0),
+          child: Center(
+            child: ConstrainedBox(
+              constraints: BoxConstraints(maxWidth: widget.columnWidth),
+              child: SizedBox(width: double.infinity, child: child),
+            ),
+          ),
+        );
+    Widget turnAt(int index) {
+      final turn = shown[index];
+      return KeyedSubtree(
+        key: ObjectKey(turn),
+        child: row(_TurnView(
+          turn: turn,
+          last: index == shown.length - 1,
+          chat: chat,
+          callbacks: widget.callbacks,
+          text: text,
+          width: widget.columnWidth,
+          posterWidth: widget.posterWidth,
+        )),
+      );
+    }
+
+    final earlierLabel = chat.loadingEarlier
+        ? '正在加载更早的对话…'
+        : chat.earlierHistoryError ??
+            (chat.hasEarlierHistory ? '加载更早的对话' : '已到对话开头');
+    Widget historyEdge() => Padding(
+          padding: EdgeInsets.only(top: widget.padding.top, bottom: 8),
+          child: shown.isEmpty
+              ? const SizedBox.shrink()
+              : Center(
+                  child: Pressable(
+                    onTap: chat.hasEarlierHistory && !chat.loadingEarlier
+                        ? () {
+                            _pinned = false;
+                            unawaited(chat.loadEarlierHistory());
+                          }
+                        : null,
+                    semanticLabel: earlierLabel,
+                    builder: (context, hovered) => Padding(
+                      padding: const EdgeInsets.all(12),
+                      child: Text(earlierLabel,
+                          style: NextText.sans(12, color: NextColors.p2)),
+                    ),
+                  ),
+                ),
+        );
     return _Hold(
       hold: _hold,
       child: Stack(children: [
@@ -178,34 +260,52 @@ class _ChatTranscriptState extends State<ChatTranscript> {
                 onSelectionChanged: (selection) {
                   if (selection?.plainText.isNotEmpty ?? false) _hold();
                 },
-                child: ListView.builder(
+                child: CustomScrollView(
                   controller: _scroll,
+                  center: _historyCenter,
                   physics: _TranscriptPhysics(
                     follow: () => _pinned,
                     parent: ScrollConfiguration.of(context)
                         .getScrollPhysics(context),
                   ),
-                  padding: widget.padding,
-                  itemCount: children.length,
-                  findChildIndexCallback: (key) {
-                    final index = children.indexWhere((child) =>
-                        child.key == (key is ValueKey<Key> ? key.value : key));
-                    return index < 0 ? null : index;
-                  },
-                  itemBuilder: (context, index) => Padding(
-                    key: children[index].key == null
-                        ? null
-                        : ValueKey<Key>(children[index].key!),
-                    padding: EdgeInsets.only(top: index == 0 ? 0 : 26),
-                    child: Center(
-                      child: ConstrainedBox(
-                        constraints:
-                            BoxConstraints(maxWidth: widget.columnWidth),
-                        child: SizedBox(
-                            width: double.infinity, child: children[index]),
+                  slivers: [
+                    SliverList(
+                      delegate: SliverChildBuilderDelegate(
+                        (context, index) => index == anchor
+                            ? historyEdge()
+                            : turnAt(anchor - index - 1),
+                        childCount: anchor + 1,
+                        findChildIndexCallback: (key) {
+                          final index =
+                              key is ObjectKey ? indices[key.value] : null;
+                          return index != null && index < anchor
+                              ? anchor - index - 1
+                              : null;
+                        },
                       ),
                     ),
-                  ),
+                    SliverList(
+                      key: _historyCenter,
+                      delegate: SliverChildBuilderDelegate(
+                        (context, index) {
+                          final tail = index - (shown.length - anchor);
+                          if (tail < 0) return turnAt(anchor + index);
+                          if (tail < trailing.length) {
+                            return row(trailing[tail]);
+                          }
+                          return SizedBox(height: widget.padding.bottom);
+                        },
+                        childCount: shown.length - anchor + trailing.length + 1,
+                        findChildIndexCallback: (key) {
+                          final index =
+                              key is ObjectKey ? indices[key.value] : null;
+                          return index != null && index >= anchor
+                              ? index - anchor
+                              : null;
+                        },
+                      ),
+                    ),
+                  ],
                 ),
               ),
             ),
@@ -313,7 +413,6 @@ class _ToLatest extends StatelessWidget {
 /// answer folds into one line that opens again.
 class _TurnView extends StatefulWidget {
   const _TurnView({
-    super.key,
     required this.turn,
     required this.last,
     required this.chat,
@@ -335,6 +434,30 @@ class _TurnView extends StatefulWidget {
 }
 
 class _TurnViewState extends State<_TurnView> {
+  late VoidCallback _unwatch;
+
+  @override
+  void initState() {
+    super.initState();
+    _unwatch = widget.chat.watchTurn(widget.turn);
+  }
+
+  @override
+  void didUpdateWidget(_TurnView oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (!identical(oldWidget.chat, widget.chat) ||
+        !identical(oldWidget.turn, widget.turn)) {
+      _unwatch();
+      _unwatch = widget.chat.watchTurn(widget.turn);
+    }
+  }
+
+  @override
+  void dispose() {
+    _unwatch();
+    super.dispose();
+  }
+
   void _toggle(VoidCallback change) {
     _Hold.of(context);
     setState(change);

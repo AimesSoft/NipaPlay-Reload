@@ -498,6 +498,14 @@ trust_level = "trusted"
       expect(resumed, contains('PREFERENCE_MARKER_2'));
 
       await host.compactThread(thread);
+      final afterCompaction = await host.readThread(thread, withProcess: false);
+      final savedReplies = [
+        for (final turn in afterCompaction['turns'] as List)
+          for (final item in turn['items'] as List)
+            if (item['type'] == 'agentMessage') item['text'],
+      ];
+      expect(savedReplies, containsAll(['ANSWER_ONE', 'ANSWER_TWO']),
+          reason: 'model compaction must not remove readable conversation history');
       lab.events.clear();
       await host.startTurn('TURN_THREE_QX');
       await lab.next((e) => e['method'] == 'turn/completed');

@@ -393,6 +393,25 @@ Codex `codexErrorInfo` names that the followup retry recognises.
 `thread/compact/start` runs DSH's manual compaction and answers when it ends.
 `hooks/list` is empty; `config/read` and `model/list` describe the one route.
 
+The conversation viewer initially expands the newest 30 turns. Scrolling near
+the top expands another 30, until the retained transcript's beginning; the
+same edge also offers an explicit load/retry button. There is no 30-turn
+history cutoff. Earlier rows grow above a fixed scroll center, and both
+halves of the transcript build rows lazily. New replies do not pull someone
+reading history back to the bottom. Card refresh follows mounted rows and
+the live turn, rather than every page the person has visited. The runtime
+still supplies the full history snapshot when opening a conversation; this
+is incremental parsing/display, not disk or network pagination.
+
+DSH model compaction replaces the model-facing surface, not the append-only
+conversation log read by this viewer. The bundled compaction-basic service
+enables automatic pressure checks and context-overflow recovery. Its default
+threshold is capped at 80% of the declared model window, with room reserved
+for output and summarization; overflow recovery is bounded (one retry by
+default). Model-window configuration must reflect the actual provider route.
+The current UI does not yet display a compaction progress indicator or a
+manual compact control.
+
 Tools: `bash`, `read`, `read_image`, `write`, `web_fetch` (`web_search` only
 when `DEEPSEEK_API_KEY` is set, the only search backend DSH ships), `subagent`,
 `subagent_fork`, `send_message`, `interrupt_agent`, `list_agents`, the

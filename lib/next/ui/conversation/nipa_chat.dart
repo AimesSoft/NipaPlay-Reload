@@ -59,7 +59,7 @@ class NipaChat extends ChangeNotifier {
 
   static const quietAfter = Duration(minutes: 3);
 
-  /// Turns read when a session opens; the latest of them read their cards.
+  /// Initial history and each earlier page; not a limit on readable history.
   static const historyTurns = 30;
   static const cardTurns = 12;
 
@@ -235,8 +235,7 @@ class NipaChat extends ChangeNotifier {
   List<ChatTurn> _turns = [];
   final _turnsById = <String, ChatTurn>{};
 
-  /// Every turn kept for live state. The transcript only builds the latest
-  /// [historyTurns], the same window it reads when a session opens.
+  /// Parsed history and live turns. Earlier pages are added at the beginning.
   List<ChatTurn> get turns => _turns;
   set turns(List<ChatTurn> value) {
     _turns = value;
@@ -255,11 +254,13 @@ class NipaChat extends ChangeNotifier {
     if (id != null) _turnsById[id] = turn;
   }
 
-  /// The slice the transcript builds; older turns stay available to live
-  /// state without making every rebuild grow with the session's history.
-  List<ChatTurn> get visibleTurns => turns.length <= historyTurns
-      ? turns
-      : turns.sublist(turns.length - historyTurns);
+  /// All loaded turns are readable; the transcript builds widgets lazily.
+  List<ChatTurn> get visibleTurns => turns;
+  List<Map> _earlierHistory = [];
+  String? _followingSaid;
+  bool get hasEarlierHistory => _earlierHistory.isNotEmpty;
+  bool loadingEarlier = false;
+  String? earlierHistoryError;
   bool loading = false;
 
   /// Something went wrong that the conversation says once.
@@ -273,6 +274,10 @@ class NipaChat extends ChangeNotifier {
     _generation++;
     thread = id;
     turns = [];
+    _earlierHistory = [];
+    _followingSaid = null;
+    loadingEarlier = false;
+    earlierHistoryError = null;
     loading = false;
     trouble = null;
     quiet = false;
@@ -290,7 +295,15 @@ class NipaChat extends ChangeNotifier {
     try {
       final history = await port.readThread(id);
       if (generation != _generation) return;
-      turns = await _fromHistory(history);
+      final raw =
+          (history['turns'] as List? ?? const []).whereType<Map>().toList();
+      final start = (raw.length - historyTurns).clamp(0, raw.length);
+      final recent = raw.sublist(start);
+      final parsed = await _fromHistory(recent);
+      if (_disposed || generation != _generation) return;
+      _earlierHistory = raw.sublist(0, start);
+      _followingSaid = recent.isEmpty ? null : _saidIn(recent.first);
+      turns = parsed;
     } catch (error) {
       debugPrint('[NextUi] thread did not open: $error');
       if (generation != _generation) return;
@@ -313,27 +326,52 @@ class NipaChat extends ChangeNotifier {
     await Future.wait([for (final t in recent) _refreshCards(t)]);
   }
 
-  Future<List<ChatTurn>> _fromHistory(ChatEvent history) async {
+  /// Expand one page without re-reading the runtime or disturbing live turns.
+  Future<void> loadEarlierHistory() async {
+    if (_disposed || loading || loadingEarlier || !hasEarlierHistory) return;
+    final generation = _generation;
+    loadingEarlier = true;
+    earlierHistoryError = null;
+    _notify();
+    try {
+      final end = _earlierHistory.length;
+      final start = (end - historyTurns).clamp(0, end);
+      final raw = _earlierHistory.sublist(start);
+      final parsed = await _fromHistory(raw, followingSaid: _followingSaid);
+      if (_disposed || generation != _generation) return;
+      _earlierHistory.removeRange(start, end);
+      _followingSaid = _saidIn(raw.first);
+      turns = [...parsed, ...turns];
+    } catch (error) {
+      if (_disposed || generation != _generation) return;
+      debugPrint('[NextUi] earlier history did not open: $error');
+      earlierHistoryError = '更早的对话没加载出来，点这里重试';
+    } finally {
+      if (!_disposed && generation == _generation) {
+        loadingEarlier = false;
+        _notify();
+      }
+    }
+  }
+
+  static String? _saidIn(Map turn) => (turn['items'] as List? ?? const [])
+      .whereType<Map>()
+      .where((item) => item['type'] == 'userMessage')
+      .map((item) => ChatTurn.saidOf(item)?.text)
+      .firstOrNull;
+
+  Future<List<ChatTurn>> _fromHistory(List<Map> raw,
+      {String? followingSaid}) async {
     final slice = Slicer();
-    final raw =
-        (history['turns'] as List? ?? const []).whereType<Map>().toList();
-    final shown = raw.length > historyTurns
-        ? raw.sublist(raw.length - historyTurns)
-        : raw;
     final list = <ChatTurn>[];
-    String? saidIn(Map turn) => (turn['items'] as List? ?? const [])
-        .whereType<Map>()
-        .where((item) => item['type'] == 'userMessage')
-        .map((item) => ChatTurn.saidOf(item)?.text)
-        .firstOrNull;
-    for (var i = 0; i < shown.length; i++) {
-      final turn = shown[i];
+    for (var i = 0; i < raw.length; i++) {
+      final turn = raw[i];
       // “重新发” leaves a silent, stopped attempt behind: show it once.
-      final said = saidIn(turn);
+      final said = _saidIn(turn);
+      final nextSaid = i + 1 < raw.length ? _saidIn(raw[i + 1]) : followingSaid;
       if (turn['status'] == 'interrupted' &&
           said != null &&
-          i + 1 < shown.length &&
-          saidIn(shown[i + 1]) == said &&
+          nextSaid == said &&
           !(turn['items'] as List? ?? const [])
               .whereType<Map>()
               .any((item) => item['type'] == 'agentMessage')) {
@@ -1018,6 +1056,24 @@ class NipaChat extends ChangeNotifier {
 
   // —— Cards ——
 
+  final _watchedTurns = <ChatTurn, int>{};
+
+  /// Refresh cards only for mounted rows (including the small scroll cache),
+  /// so visiting old pages does not poll every historical card thereafter.
+  VoidCallback watchTurn(ChatTurn turn) {
+    _watchedTurns.update(turn, (count) => count + 1, ifAbsent: () => 1);
+    unawaited(_refreshCards(turn));
+    return () {
+      final count = _watchedTurns[turn];
+      if (count == null) return;
+      if (count == 1) {
+        _watchedTurns.remove(turn);
+      } else {
+        _watchedTurns[turn] = count - 1;
+      }
+    };
+  }
+
   Future<void> _refreshCards(ChatTurn turn) async {
     final id = thread, turnId = turn.id;
     if (id == null || turnId == null) return;
@@ -1064,7 +1120,7 @@ class NipaChat extends ChangeNotifier {
   }
 
   void _refreshAll() {
-    for (final t in turns) {
+    for (final t in {..._watchedTurns.keys, if (live case final turn?) turn}) {
       if (t.cards.isNotEmpty || t.running) unawaited(_refreshCards(t));
     }
   }
