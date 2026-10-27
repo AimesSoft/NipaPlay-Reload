@@ -71,6 +71,9 @@ jobs:
 
   Build-HarmonyOS:
     name: Build HarmonyOS sideload package
+    # Match the release workflow: the current HarmonyOS player fork cannot
+    # compile Next's player interfaces yet.
+    if: github.ref_name == 'main'
     uses: ./.github/workflows/build-ohos.yml
     with:
       sign_hap: true
@@ -85,3 +88,27 @@ jobs:
   Build-tvOS:
     name: Build Apple TV sideload package
     uses: ./.github/workflows/build-tvos.yml
+
+  Candidate-Manifest:
+    name: Record Candidate Packages
+    needs: [Build-Android, Build-iOS, Build-macOS, Build-Windows, Build-Linux, Build-Headless, Build-tvOS, Build-HarmonyOS]
+    if: ${{ always() && !contains(needs.*.result, 'failure') && !contains(needs.*.result, 'cancelled') }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: release-*
+          path: candidate-artifacts
+      - name: Record exact revision and package checksums
+        env:
+          CANDIDATE_REVISION: ${{ github.sha }}
+        run: |
+          version="$(awk '/^version:/ {print $2; exit}' pubspec.yaml)"
+          python3 scripts/next/release_manifest.py candidate-artifacts candidate-manifest \
+            --revision "$CANDIDATE_REVISION" --version "$version"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: candidate-manifest
+          path: candidate-manifest/
+          if-no-files-found: error

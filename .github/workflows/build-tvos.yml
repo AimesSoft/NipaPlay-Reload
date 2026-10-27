@@ -120,6 +120,10 @@ jobs:
             run tool/configure_flutter_dependencies.dart tvos
           "$FLUTTER_TVOS_ROOT/bin/flutter-tvos" pub get
 
+      - name: Generate build info json
+        shell: bash
+        run: python3 .github/workflows/scripts/generate-build-info-json.py assets/build_info.json
+
       - name: Build tvOS simulator application
         if: github.event_name == 'pull_request'
         shell: bash

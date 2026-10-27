@@ -3,6 +3,8 @@ import datetime
 import json
 import os
 import platform
+import re
+import shutil
 import subprocess
 import sys
 
@@ -158,8 +160,23 @@ def _normalize_arch(machine):
 
 
 def _build_payload():
-    now = datetime.datetime.utcnow()
+    now = datetime.datetime.now(datetime.timezone.utc)
+    version = os.environ.get("NIPAPLAY_BUILD_VERSION", "").strip()
+    if not version:
+        match = re.search(r"^version:\s*([^\s#]+)", _read_file("pubspec.yaml"), re.M)
+        version = match.group(1).strip("\"'") if match else ""
+    flutter = shutil.which("flutter")
+    flutter_version = ""
+    if flutter:
+        try:
+            flutter_version = json.loads(_run([flutter, "--version", "--machine"])).get("frameworkVersion", "")
+        except (ValueError, TypeError):
+            pass
     return {
+        "app_version": version,
+        "git_commit": _run(["git", "rev-parse", "HEAD"]),
+        "git_dirty": bool(_run(["git", "status", "--porcelain", "--untracked-files=no", "--", ".", ":!assets/build_info.json"])),
+        "flutter_version": flutter_version,
         "build_time": now.strftime("%Y-%m-%d %H:%M:%S UTC"),
         "build_time_epoch": int(now.timestamp()),
         "cpu": _detect_cpu(),
