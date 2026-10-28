@@ -86,7 +86,7 @@ final class PlaybackControlsCapability implements Capability {
               'playback.select_stream',
               'Apply stream choices',
               'Applies version, quality, transcoding and server audio/subtitle burn-in '
-                  'through Classic stream reload. Quality/transcode settings use the same '
+                  'through the active playback session reload. Quality/transcode settings use the same '
                   'saved defaults as Classic. Omitted fields retain current selections; '
                   'subtitleIndex -1 disables server subtitle selection.',
               Effect.write,

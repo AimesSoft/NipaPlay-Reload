@@ -156,7 +156,7 @@ undo_merge {mergeId,requestId,reason} 同样先预览再携 expectedPlan 提交�
   'download.limits': r'''get 读取原生内置下载会话限速，set 调整上传/下载字节每秒预算并返回引擎读回值。0 为无限制，正值至少 16384；省略方向保留现值。不自动初始化会话；applied=false 不能宣称已限速。只影响本机内置会话，重建后恢复默认无限制，不改变服务端限流。''',
   'media.entities': r'''Local catalog entities have stable caller-supplied IDs and expectedRevision on update. parentId is an actual local parent, never an external ID. fileIds on an episode replace its local associations. Removal includes descendants, retains tombstones and exact relationship before-images, and returns undoId; restore refuses subsequent conflicting changes. These operations do not manufacture Classic platform matches.''',
   'ui':
-      r'''- **两套界面**：Classic 是原来的界面；在「设置 → 实验室」开启 Next 后，主界面换成 Next。你工作的结果显示在 Next 里。两套界面共用同一个播放器。
+      r'''- **两套界面**：Classic 是原来的界面；在「设置 → 实验室」开启 Next 后，主界面换成 Next。你工作的结果显示在 Next 里。两套界面各有自己的播放器与会话；切换时关闭当前会话并保存进度，不自动接续另一边的播放。
 - **首页**：
   - **主视觉**：一部作品，显示背景图、片名 Logo、评分、年份、类型、集数、两行简介，以及“播放”“详情”两个按钮；左上角是梨花的一句话。你用 `ui.shelves.put` 摆上的 hero 优先；没有时依次取最近准备好的作品、最新的可播作品、继续观看的第一部。
   - **输入栏**：就是和你对话的入口。
