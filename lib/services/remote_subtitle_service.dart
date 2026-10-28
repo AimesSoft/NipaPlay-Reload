@@ -384,8 +384,9 @@ class RemoteSubtitleService {
       {required bool forceRefresh, File? cachedSub}) async {
     final storage = await StorageService.getAppStorageDirectory();
     final hash = sha1.convert(utf8.encode(_sourceKey(idx))).toString();
+    final readable = _readableCacheFileName(idx.name, hash, '');
     final root =
-        Directory(p.join(storage.path, 'remote_subtitles', '$hash-vobsub'));
+        Directory(p.join(storage.path, 'remote_subtitles', '$readable-vobsub'));
     await root.create(recursive: true);
     final manifest = File(p.join(root.path, 'current'));
     Future<String> pairDigest(File index, File bitmap) async {
@@ -500,7 +501,10 @@ class RemoteSubtitleService {
     final hash = sha1.convert(utf8.encode(cacheKey)).toString();
     // Source identity belongs in the path; equal filenames from different
     // directories must never overwrite a saved video's subtitle mapping.
-    final target = File(p.join(cacheDir.path, '$hash$extension'));
+    final target = File(p.join(
+      cacheDir.path,
+      _readableCacheFileName(candidate.name, hash, extension),
+    ));
 
     if (!forceRefresh && await target.exists()) {
       final size = await target.length();
@@ -570,6 +574,19 @@ class RemoteSubtitleService {
   }
 
   static const String _displayNamePrefsKey = 'remote_subtitle_display_names_v1';
+
+  /// 可读缓存文件名：原名清洗文件系统非法字符并截断，短哈希保证不同源
+  /// 同名不冲突（完整哈希仍是缓存键）。iOS「文件」App 直接展示该物理名，
+  /// 纯哈希名对用户毫无可读性（用户反馈）。
+  String _readableCacheFileName(
+      String originalName, String hash, String extension) {
+    var base = p.setExtension(originalName, '').trim();
+    base = base.replaceAll(RegExp(r'[\\/:*?"<>|\x00-\x1f]'), '_').trim();
+    if (base.isEmpty) base = 'subtitle';
+    if (base.length > 80) base = base.substring(0, 80);
+    final shortHash = hash.length >= 8 ? hash.substring(0, 8) : hash;
+    return '$base-$shortHash$extension';
+  }
 
   /// 远程字幕缓存路径 → 原始文件名 的持久化注册表。
   /// 缓存文件名是哈希，跨进程/跨平台（iOS/Windows）读取列表时都要用
