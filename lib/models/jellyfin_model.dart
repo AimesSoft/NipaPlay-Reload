@@ -390,6 +390,26 @@ class JellyfinMovieInfo {
     this.studio,
   });
   
+  factory JellyfinMovieInfo.fromDetail(JellyfinMediaItemDetail detail) =>
+      JellyfinMovieInfo(
+        id: detail.id,
+        name: detail.name,
+        overview: detail.overview,
+        originalTitle: detail.originalTitle,
+        imagePrimaryTag: detail.imagePrimaryTag,
+        imageBackdropTag: detail.imageBackdropTag,
+        productionYear: detail.productionYear,
+        dateAdded: detail.dateAdded,
+        premiereDate: detail.premiereDate,
+        communityRating: detail.communityRating,
+        genres: detail.genres,
+        officialRating: detail.officialRating,
+        cast: detail.cast,
+        directors: detail.directors,
+        runTimeTicks: detail.runTimeTicks,
+        studio: detail.seriesStudio,
+      );
+
   factory JellyfinMovieInfo.fromJson(Map<String, dynamic> json) {
     // 解析演员信息
     List<JellyfinPerson> cast = [];

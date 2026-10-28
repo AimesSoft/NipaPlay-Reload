@@ -365,6 +365,26 @@ class EmbyMovieInfo {
     this.studio,
   });
   
+  factory EmbyMovieInfo.fromDetail(EmbyMediaItemDetail detail) =>
+      EmbyMovieInfo(
+        id: detail.id,
+        name: detail.name,
+        overview: detail.overview,
+        originalTitle: detail.originalTitle,
+        imagePrimaryTag: detail.imagePrimaryTag,
+        imageBackdropTag: detail.imageBackdropTag,
+        productionYear: detail.productionYear,
+        dateAdded: detail.dateAdded,
+        premiereDate: detail.premiereDate,
+        communityRating: detail.communityRating,
+        genres: detail.genres,
+        officialRating: detail.officialRating,
+        cast: detail.cast,
+        directors: detail.directors,
+        runTimeTicks: detail.runTimeTicks,
+        studio: detail.seriesStudio,
+      );
+
   factory EmbyMovieInfo.fromJson(Map<String, dynamic> json) {
     // 解析演员信息
     List<EmbyPerson> cast = [];
