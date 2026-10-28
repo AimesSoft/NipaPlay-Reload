@@ -54,7 +54,7 @@ final class SubtitleCapability implements Capability {
                   id: 'subtitle.import',
                   title: '交入并保存字幕',
                   description:
-                      'Copy local subtitle files into NipaPlay storage for indexed local fileIds, with declared BCP-47 language and source. Originals can be deleted afterwards; read-only video directories need no writes. Batch entries are saved individually; the reply gives every saved track. Supports ass/ssa/srt/vtt/sub/sup/idx (VobSub pair required). Saved tracks are restored next playback. Use subtitle.select for a persistent explicit default.',
+                      'Copy local subtitle files into NipaPlay storage for indexed local fileIds, with declared BCP-47 language and source. Originals can be deleted afterwards; read-only video directories need no writes. Batch entries are saved individually; failures are returned per index with recoveryAction and successful entries are retained. Inspect every result: a completed response can contain partial failure. Supports ass/ssa/srt/vtt/sub/sup/idx (VobSub pair required). Saved tracks are restored next playback. Use subtitle.select for a persistent explicit default.',
                   effect: Effect.write,
                   input: ObjectSchema({
                     'entries': ArraySchema(ObjectSchema({

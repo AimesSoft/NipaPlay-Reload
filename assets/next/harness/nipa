@@ -248,20 +248,43 @@ class Client:
         catalog = self.request("list", full=full)
         return catalog if full else catalog_summary(catalog)
 
+    def remote_description(self, description):
+        # Examples returned by the target assume they run there. Preserve its
+        # prose, but attach routing separately so they cannot be read as local.
+        return {**description, "targetDeviceId": self.device["deviceId"],
+                "cliPrefix": ["nipa", "--device", self.device["deviceId"]],
+                "commandScope": "Every command/example in this guide refers to this target. "
+                                "Retain --device when issuing it from the calling device.",
+                "next": "Use cliPrefix for subsequent list/describe/call/watch on this device."}
+
     def describe(self, action):
         if not self.device:
             return self.request("describe", action=action)
         matches = [a for a in self.catalog()["actions"] if a["id"] == action]
         if not matches:
-            return self.result(self.call("capability.describe", {"family": action}))
-        return matches[0]
+            return self.remote_description(self.result(self.call("capability.describe", {"family": action})))
+        # Ask the receiving version for its interface guide. Never attach local
+        # family prose to a different remote version. Older hosts return not_found.
+        if any(a["id"] == "capability.describe" for a in self.device["actions"]):
+            response = self.request("call", action="mesh.invoke", input={
+                "deviceId": self.device["deviceId"], "action": "capability.describe",
+                "input": {"family": action}})
+            if response.get("status") == "completed":
+                return self.remote_description({**matches[0], **response["result"]})
+            if response.get("error", {}).get("code") != "not_found":
+                return self.result(response)
+        return self.remote_description({**matches[0], "guidanceStatus": "catalogOnlyUnverified",
+            "guidanceReason": "The target returned no exact contract. This catalog may be from "
+                              "an older host or an action no longer registered. Refresh its directory before use."})
 
     def call(self, action, inputs, execute=False):
         if not self.device:
             return repair_hint(self.request("call", action=action, input=inputs, execute=execute), action, inputs)
         if action not in {a["id"] for a in self.catalog()["actions"]}:
             raise ValueError("Unknown remote Action: " + action + ". Run ./nipa --device NAME list, then describe ACTION.")
-        spec = self.describe(action)
+        # Routing needs only the received effect. Describing an action must not
+        # introduce a second RPC into every operation (or recursive discovery).
+        spec = next(a for a in self.catalog()["actions"] if a["id"] == action)
         gateway = "mesh.invoke_destructive" if spec["effect"] == "destructive" else "mesh.invoke"
         return repair_hint(self.request("call", action=gateway, input={
             "deviceId": self.device["deviceId"], "action": action, "input": inputs}, execute=execute), action, inputs)

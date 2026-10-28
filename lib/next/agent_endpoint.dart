@@ -544,14 +544,8 @@ final class AgentEndpoint {
     };
   }
 
-  JsonMap _describe(ActionSpec spec) => {
-        'id': spec.id,
-        'title': spec.title,
-        'description': spec.description,
-        'effect': spec.effect.name,
-        'inputSchema': spec.input.toJsonSchema(),
-        'outputSchema': spec.output.toJsonSchema(),
-      };
+  JsonMap _describe(ActionSpec spec, {bool includeUsage = true}) =>
+      describeAction(spec, includeUsage: includeUsage);
 
   Future<Response> _response(Object? value,
           [int status = 200, bool redact = true]) async =>
@@ -644,7 +638,7 @@ final class AgentEndpoint {
         'actions': [
           for (final spec in _harness.catalog)
             if (full)
-              {..._describe(spec), ...?availability[spec.id]}
+              {..._describe(spec, includeUsage: false), ...?availability[spec.id]}
             else
               {
                 'id': spec.id,

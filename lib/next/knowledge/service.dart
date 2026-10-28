@@ -1,4 +1,6 @@
 import 'dart:convert';
+import 'sections.dart';
+import '../capabilities/family_descriptions.dart';
 import 'package:crypto/crypto.dart';
 import 'package:nipa_harness/nipa_harness.dart';
 
@@ -24,7 +26,9 @@ final class ProjectKnowledge {
           (data['documents'] as List).length > 64 ||
           data['actions'] is! Map ||
           data['appVersion'] is! String ||
-          data['contentRevision'] is! String) {
+          data['contentRevision'] is! String ||
+          (data['sourceCommit'] != null && data['sourceCommit'] is! String) ||
+          (data['sourceDirty'] != null && data['sourceDirty'] is! bool)) {
         throw const FormatException('Unsupported knowledge snapshot');
       }
       final ids = <String>{};
@@ -114,6 +118,51 @@ final class ProjectKnowledge {
         'sourceUrl': _url(data, doc['id'] as String),
       };
 
+  void _checkRevision(JsonMap data, String? expected) {
+    if (expected != null && expected != data['contentRevision']) {
+      throw const Failure(FailureCode.conflict,
+          'Knowledge revision changed. Search or outline again before continuing.');
+    }
+  }
+
+  Map _document(JsonMap data, String id) {
+    final matches =
+        (data['documents'] as List).where((d) => (d as Map)['id'] == id);
+    if (matches.isEmpty) {
+      throw const Failure(
+          FailureCode.notFound, 'Unknown documentId; use knowledge.index.');
+    }
+    return matches.single as Map;
+  }
+
+  Future<JsonMap> outline(String id,
+      {int offset = 0, int limit = 64, String? expectedRevision}) async {
+    if (offset < 0 || limit < 1 || limit > 128) {
+      throw const Failure(
+          FailureCode.invalidInput, 'Invalid outline page (limit 1–128).');
+    }
+    final data = await _readSnapshot();
+    _checkRevision(data, expectedRevision);
+    final doc = _document(data, id);
+    final sections = knowledgeSections(doc['content'] as String);
+    if (offset > sections.length) {
+      throw const Failure(
+          FailureCode.invalidInput, 'Outline offset is past the end.');
+    }
+    final end = (offset + limit).clamp(0, sections.length);
+    return {
+      'provenance': _provenance(data),
+      ..._reference(data, doc),
+      'sections': [
+        for (final section in sections.skip(offset).take(limit))
+          section.toJson()
+      ],
+      'offset': offset,
+      'nextOffset': end < sections.length ? end : null,
+      'sectionCount': sections.length
+    };
+  }
+
   Future<JsonMap> index() async {
     final data = await _readSnapshot();
     return {
@@ -124,39 +173,75 @@ final class ProjectKnowledge {
       ],
       'sourceActionCount': (data['actions'] as Map).length,
       'historyIncluded': false,
-      'next': 'knowledge.search {query}; knowledge.read {documentId,offset?,length?}; '
+      'next': 'knowledge.search {query}; knowledge.outline {documentId}; knowledge.read {documentId,sectionId?,offset?,length?}; '
           'knowledge.locate {action} returns the receiving host’s live ActionSpec and references.',
     };
   }
 
-  Future<JsonMap> read(String id, {int offset = 0, int length = 16000}) async {
+  Future<JsonMap> read(String id,
+      {int offset = 0,
+      int length = 16000,
+      String? sectionId,
+      String? expectedRevision}) async {
     if (offset < 0 || length < 1 || length > 24000) {
       throw const Failure(
           FailureCode.invalidInput, 'Invalid offset or length (1–24000).');
     }
     final data = await _readSnapshot();
-    final matches =
-        (data['documents'] as List).where((d) => (d as Map)['id'] == id);
-    if (matches.isEmpty) {
-      throw const Failure(
-          FailureCode.notFound, 'Unknown documentId; use knowledge.index.');
-    }
-    final doc = matches.single as Map;
+    _checkRevision(data, expectedRevision);
+    final doc = _document(data, id);
     final content = doc['content'] as String;
-    if (offset > content.length) {
-      throw const Failure(
-          FailureCode.invalidInput, 'Offset is past the document end.');
+    var start = 0, finish = content.length;
+    if (sectionId != null) {
+      final matches =
+          knowledgeSections(content).where((s) => s.id == sectionId);
+      if (matches.isEmpty) {
+        throw const Failure(
+            FailureCode.notFound, 'Unknown sectionId; use knowledge.outline.');
+      }
+      start = matches.single.start;
+      finish = matches.single.end;
     }
-    final end = (offset + length).clamp(0, content.length);
-    final chunk = content.substring(offset, end);
+    final total = finish - start;
+    if (offset > total) {
+      throw const Failure(
+          FailureCode.invalidInput, 'Offset is past the selected text end.');
+    }
+    var end = (offset + length).clamp(0, total);
+    // Do not split a supplementary Unicode character across response chunks.
+    if (end < total &&
+        end > offset &&
+        _highSurrogate(content.codeUnitAt(start + end - 1)) &&
+        _lowSurrogate(content.codeUnitAt(start + end))) {
+      if (end - offset == 1) {
+        throw const Failure(FailureCode.invalidInput,
+            'Length must be at least 2 at this Unicode character.');
+      }
+      end--;
+    }
+    if (offset > 0 &&
+        offset < total &&
+        _lowSurrogate(content.codeUnitAt(start + offset)) &&
+        _highSurrogate(content.codeUnitAt(start + offset - 1))) {
+      throw const Failure(FailureCode.invalidInput,
+          'Offset splits a Unicode character; use nextOffset.');
+    }
+    final chunk = content.substring(start + offset, start + end);
     return {
       'provenance': _provenance(data),
       ..._reference(data, doc),
+      'sectionId': sectionId,
       'offset': offset,
-      'nextOffset': end < content.length ? end : null,
-      'totalLength': content.length,
-      'startLine': '\n'.allMatches(content.substring(0, offset)).length + 1,
-      'endLine': '\n'.allMatches(content.substring(0, end)).length + 1,
+      'documentOffset': start + offset,
+      'nextOffset': end < total ? end : null,
+      'totalLength': total,
+      'startLine':
+          '\n'.allMatches(content.substring(0, start + offset)).length + 1,
+      'endLine': '\n'
+              .allMatches(
+                  content.substring(0, start + (end > offset ? end - 1 : end)))
+              .length +
+          1,
       'content': chunk,
       'links': 'Relative links refer to the original repository path. Use knowledge.read '
           'for documentIds in knowledge.index. Other paths are source/history references, '
@@ -164,7 +249,12 @@ final class ProjectKnowledge {
     };
   }
 
-  Future<JsonMap> search(String query, {int limit = 8}) async {
+  Future<JsonMap> search(String query,
+      {int limit = 8,
+      int offset = 0,
+      String? documentId,
+      String? kind,
+      String? expectedRevision}) async {
     final tokens = query
         .trim()
         .toLowerCase()
@@ -175,65 +265,89 @@ final class ProjectKnowledge {
         tokens.isEmpty ||
         tokens.length > 8 ||
         limit < 1 ||
-        limit > 12) {
+        limit > 12 ||
+        offset < 0) {
       throw const Failure(FailureCode.invalidInput,
-          'Use 1–8 keywords, at most 160 characters, limit 1–12.');
+          'Use 1–8 keywords, at most 160 characters, limit 1–12, offset >= 0.');
     }
     final data = await _readSnapshot();
+    _checkRevision(data, expectedRevision);
+    if (documentId != null) _document(data, documentId);
     final results = <JsonMap>[];
     for (final doc in data['documents'] as List) {
-      final content = doc['content'] as String;
-      final searchable = '${doc['title']}\n$content'.toLowerCase();
-      if (!tokens.every(searchable.contains)) continue;
-      final lines = content.split('\n');
-      var best = 0, score = -1;
-      var section = '', bestSection = '';
-      for (var i = 0; i < lines.length; i++) {
-        if (lines[i].startsWith('#')) {
-          section = lines[i].replaceFirst(RegExp(r'^#+\s*'), '');
-        }
-        final lower = lines[i].toLowerCase();
-        final value = tokens.where(lower.contains).length;
-        if (value > score) {
-          best = i;
-          score = value;
-          bestSection = section;
-        }
+      if (documentId != null && doc['id'] != documentId ||
+          kind != null && doc['kind'] != kind) {
+        continue;
       }
-      final line = lines[best];
-      final lower = line.toLowerCase();
-      final positions = tokens.map(lower.indexOf).where((p) => p >= 0).toList()
-        ..sort();
-      final start =
-          positions.isEmpty ? 0 : (positions.first - 100).clamp(0, line.length);
-      results.add({
-        ..._reference(data, doc),
-        'line': best + 1,
-        'section': bestSection,
-        'excerpt': line.substring(start, (start + 700).clamp(0, line.length)),
-        'score': score +
-            (tokens.any(
-                    (t) => (doc['title'] as String).toLowerCase().contains(t))
-                ? 2
-                : 0)
-      });
+      final content = doc['content'] as String;
+      for (final section in knowledgeSections(content)) {
+        // Search non-overlapping heading blocks to avoid repeating nested hits.
+        final block = content.substring(section.start, section.blockEnd);
+        final searchable = '${doc['title']}\n$block'.toLowerCase();
+        if (!tokens.every(searchable.contains)) continue;
+        final lines = block.split('\n');
+        var best = 0, score = -1;
+        for (var i = 0; i < lines.length; i++) {
+          final value = tokens.where(lines[i].toLowerCase().contains).length;
+          if (value > score) {
+            best = i;
+            score = value;
+          }
+        }
+        final line = lines[best];
+        final positions = tokens
+            .map(line.toLowerCase().indexOf)
+            .where((p) => p >= 0)
+            .toList()
+          ..sort();
+        final start = positions.isEmpty
+            ? 0
+            : (positions.first - 100).clamp(0, line.length);
+        results.add({
+          ..._reference(data, doc),
+          'line': section.line + best,
+          'section': section.title,
+          'sectionId': section.id,
+          'excerpt': line.substring(start, (start + 700).clamp(0, line.length)),
+          'score': score +
+              (tokens.any((t) => section.title.toLowerCase().contains(t))
+                  ? 2
+                  : 0),
+          'read': {
+            'documentId': doc['id'],
+            'sectionId': section.id,
+            'expectedRevision': data['contentRevision']
+          }
+        });
+      }
     }
     results.sort((a, b) {
       final score = (b['score'] as int).compareTo(a['score'] as int);
-      return score != 0
-          ? score
-          : (a['documentId'] as String).compareTo(b['documentId'] as String);
+      if (score != 0) return score;
+      final doc =
+          (a['documentId'] as String).compareTo(b['documentId'] as String);
+      return doc != 0 ? doc : (a['line'] as int).compareTo(b['line'] as int);
     });
+    if (offset > results.length) {
+      throw const Failure(
+          FailureCode.invalidInput, 'Search offset is past the end.');
+    }
+    final end = (offset + limit).clamp(0, results.length);
     return {
       'provenance': _provenance(data),
       'query': query,
       'matchCount': results.length,
-      'truncated': results.length > limit,
-      'results': results.take(limit).toList(),
+      'offset': offset,
+      'nextOffset': end < results.length ? end : null,
+      'truncated': end < results.length,
+      'results': results.skip(offset).take(limit).toList(),
       'searchMode':
-          'case-insensitive literal keywords; all keywords must occur in the document'
+          'case-insensitive literal keywords; all keywords must occur in one heading block or document title'
     };
   }
+
+  static bool _highSurrogate(int value) => value >= 0xd800 && value <= 0xdbff;
+  static bool _lowSurrogate(int value) => value >= 0xdc00 && value <= 0xdfff;
 
   Future<JsonMap> locate(String action, Iterable<ActionSpec> catalog) async {
     final matches = catalog.where((s) => s.id == action).toList();
@@ -256,6 +370,7 @@ final class ProjectKnowledge {
               'effect': spec.effect.name,
               'input': spec.input.toJsonSchema(),
               'output': spec.output.toJsonSchema(),
+              'usage': actionUsage(spec),
             },
       'provenance': data == null ? null : _provenance(data),
       'knowledgeStatus': data == null ? 'unavailable' : 'available',

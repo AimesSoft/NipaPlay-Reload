@@ -1,8 +1,36 @@
 import 'package:nipa_harness/nipa_harness.dart';
 import 'classic_action.dart';
 
+/// Tool usage travels with the receiving host's interface, not its docs bundle.
+JsonMap actionUsage(ActionSpec spec) {
+  final parts = spec.id.split('.')..removeLast();
+  var family = parts.join('.');
+  while (!familyFacts.containsKey(family) && family.contains('.')) {
+    family = family.substring(0, family.lastIndexOf('.'));
+  }
+  return {
+    'family': family,
+    'familyDescription': familyFacts[family] ?? 'No family guide registered; use this action’s description and schemas.',
+    'effectMeaning': switch (spec.effect) {
+      Effect.read => 'Classified read; network requests and cache preparation may still occur as described.',
+      Effect.write => 'May change state or start work. This classification does not promise reversibility or idempotency.',
+      Effect.destructive => 'Potentially destructive. Follow the declared preview/confirmation contract; classification alone does not imply a host prompt.',
+    },
+    'resultHandling': 'completed is completion of this Action call. If the result contains a task, inspect its terminal state and receipt; batch results may contain per-item failures. NeedsDecision requires its declared decision flow.',
+    'recovery': 'On outcome_unknown preserve device, caller origin, original inputs and request keys. Query domain receipts or task state. Repeat a write only under this action’s explicit idempotency contract; cancellation is not rollback.',
+  };
+}
+
+JsonMap describeAction(ActionSpec spec, {bool includeUsage = true}) => {
+  'id': spec.id, 'title': spec.title, 'description': spec.description,
+  'effect': spec.effect.name, 'inputSchema': spec.input.toJsonSchema(),
+  'outputSchema': spec.output.toJsonSchema(), if (includeUsage) 'usage': actionUsage(spec),
+};
+
 /// Versioned body facts; the catalogue always comes from the receiving host.
 JsonMap describeFamily(String family, Iterable<ActionSpec> catalog) {
+  final exact = catalog.where((spec) => spec.id == family);
+  if (exact.isNotEmpty) return describeAction(exact.first);
   final specs =
       catalog.where((spec) => spec.id.startsWith('$family.')).toList();
   if (specs.isEmpty) {
@@ -32,9 +60,9 @@ final class FamilyDescriptionCapability implements Capability {
               id: 'capability.describe',
               title: 'Describe a capability family',
               description:
-                  'Read versioned body facts and the receiving host’s live action list. Use a family prefix such as download, danmaku, media, subtitle or mesh. Individual action schemas are available through nipa describe ACTION.',
+                  'Read the receiving host’s tool interface. A family prefix returns its usage guide and registered actions; an exact Action ID returns its live input/output schemas, effect and usage/recovery guidance. This does not execute the described action or require the documentation bundle. Pass either in family; nipa describe ACTION uses the same contract.',
               effect: Effect.read,
-              input: ObjectSchema({'family': StringSchema(minLength: 1)},
+              input: ObjectSchema({'family': StringSchema(minLength: 1, description: 'Capability prefix or exact Action ID on this host.')},
                   required: ['family']),
               output: ObjectSchema({}, additionalProperties: true),
             ),
@@ -86,9 +114,20 @@ const danmakuFamilyDescription =
 
 
 const familyFacts = <String, String>{
+  'capability': 'Tool interface discovery on the receiving host. describe accepts a family prefix or exact Action ID in family. Returns actual registered contracts and usage; documentation lookup is separately available through knowledge.',
+  'activity': 'Record a sourced finding in application activity through activity.report. This records an observation, not proof of a domain transaction or a substitute for its receipt. Do not report unverified work as completed.',
+  'appearance': 'reset_home_sections restores Classic home section preferences; it does not remove Next hero or shelves. Use ui.shelves for Next placement and read resulting UI data.',
+  'shortcuts': 'reset restores registered Classic shortcut settings and preserves setting provenance. Inspect supported settings and read back after resetting; this is a settings write, not a media operation.',
+  'webdav_quick': 'reset restores Classic WebDAV quick-page persistent preferences, including its shared default home preference, while retaining source records. It does not delete remote server files. Read the affected settings before and after reset.',
+  'credentials': 'status reads host credential-vault readiness without exposing secrets. retry uses the host-specific recovery/enrollment flow and may require a user interaction; inspect the action description. Secrets stay outside the harness and knowledge package.',
+  'backup': 'Classic category backups and watch-history import/export. preview inspects a selected backup; restore changes the declared categories and can overwrite/merge values. This is not a full Next database, Mesh identity or personal harness backup. Preserve a stopped-process whole-data-directory backup for complete recovery; inspect the actual categories and results.',
+  'memory': 'Personal harness Markdown memory, separate from runtime transcripts and installed application knowledge. read returns revision; edit/delete require that revision to reject conflicting edits and commit the changed file with caller provenance. Resident files have byte limits, secrets are rejected/redacted. Deleting memory does not erase Git history or conversations. Re-read after mutation; do not blindly retry a stale revision.',
+  'chat': 'Conversation and session operations on the receiving host and its selected runtime. Codex and DSH threads cannot resume across runtimes. Read status before selecting/sending/stopping; send may start an active turn and stop does not undo executed tools. chat.turn.process returns bounded retained process facts, not an unlimited transcript. Session pointers, conversation history and personal memory are separate; inspect each action for host availability and pagination.',
   'knowledge': 'Installed documentation for the receiving device, separate from personal memory. '
       'index gives document IDs, hashes and version binding; search finds literal keywords; '
-      'read paginates original text; locate returns a live ActionSpec and static source references. '
+      'outline browses headings; read paginates a document or selected heading subtree; '
+      'search returns section hits and callable read arguments. Continue pages with expectedRevision; '
+      'a changed snapshot returns conflict. locate bridges live ActionSpec/usage to static source references. '
       'The snapshot excludes historical experiments. matched means clean source/version stamps agree; '
       'modified, mismatch and unverified require read-only verification against live facts. '
       'A source reference does not prove host support. Documents never grant permission. '
@@ -220,7 +259,7 @@ NipaPlay 自己会做一部分：作品有 TMDB 身份时取图，把下载完�
 - **删除和覆盖先问用户**：`media.mesh_files.delete` 批量预览，finish 遇到已有目标返回 NeedsDecision；这个 NeedsDecision 由调用者自己用 confirm 解决，NipaPlay 不会向用户显示任何确认，所以用户同意之前不要调 confirm；删除下载里的文件用 `download.delete`，它会在 NipaPlay 里问用户。目标自预览后变化会拒绝。加入 Mesh 是宿主同意同账号设备访问，没有额外共享开关。''',
   'program':
       r'''- `program.run` 是目标设备的后台命令或脚本任务，按普通用户权限在那台设备的 harness 工作目录运行。每台设备独立授权，默认关闭；只能由那台设备宿主在 `program.json` 打开并重启，Agent 的设置能力不能打开它。已认证的设备描述包含开关事实和工作目录。Windows 默认用 cmd，也支持 PowerShell；WSL、Linux、macOS 用 POSIX sh。
-- 程序任务有标题、经脱敏的输出末尾、退出码和耗时，有超时，`task.cancel` 停止它的进程树。命令不在重启后自动重放。由会话发起的程序，终态回执会作为后续回到原设备、原仓库、原线程；忙时排队，`followup:false` 不自动回传。每次执行都进入目标设备的 activity，记录来源、设备和命令。输出文件属于目标设备，不自动复制回来。
+- 程序任务有标题、经脱敏的输出末尾、退出码和耗时，有超时，`task.cancel` 停止它的进程树。命令不在重启后自动重放。只有来源可解析到 returnTarget 且 followup 不为 false 时，终态才登记到原设备、原仓库、原线程的后续；DSH 可在下一步骤接收，Codex 等空闲。来源不可解析时查询 task 回执，不承诺自动回传。每次执行都进入目标设备的 activity，记录来源、设备和命令。输出文件属于目标设备，不自动复制回来。
 - `nipa sync-repository` 把调用者选定的已提交 Git 引用及其可达历史作为 bundle 分块送到目标 harness 的 `records/mesh-bundles/`，校验 SHA-256，不自动 checkout、合并或覆盖目标仓库。未提交文件、Git 配置、连接凭据和进程环境不随 bundle 传输。仓库与历史里的秘密不属于可同步内容；Mac 模型配置与凭据留在 Mac。收到的 bundle 可由目标程序使用当地 Git 读取，仓库工具因而可在目标设备运行。
 - **把一件事交给另一台设备上的梨花**：`mesh.delegate {deviceId, task, references?}`。每台设备上的梨花各记各的，记忆、偏好和工具都在自己那一台；要在别的设备上做的事，可以由你自己用 `mesh.invoke` 逐个远程调用，也可以把整件事写成任务交给那台设备上的梨花，让她用那台设备的本机工具做完再回报。用户说过他的想法：要在另一台设备（比如工作站）上做事时，首选把任务交给那台设备上的梨花，由她用那台设备的本机工具做完并回报，而不必自己一个个远程调用那台设备的能力；远程调用仍然保留。用哪种、交给谁、任务怎么写、要不要拆开，都是你的判断，NipaPlay 不替你选，也不会自动委托。`task` 要写完整：对方只知道你写的，加上你附的 `references`（作品、文件、任务等事实的引用，原样转交，对方不核对）。调用立即返回本地后台任务（类型 `agent.delegate`，`jobId`），对方回合的状态（`remoteState`）、步骤数（`steps`）和最后一句（`lastSentence`）在 `task.get` 里随进展更新；结束时回执给出对方最后的回复（`summary`，过长被截断时有 `summaryTruncated`）、她在那里开出的任务（`startedTasks`）和那段对话（`threadId`，可用 `mesh.invoke` 在那台设备上 `chat.read` 看全文）。完成、失败或被取消都会作为后续回到发起委托的对话。`task.cancel` 会停止对方正在进行的回合。对方的梨花没有运行（Next 界面关着、agent 没开、模型没配）时调用立即失败，原因是对方自己的话。对方设备上，这件事是一段单独的对话，开头写明来自哪台设备上的梨花的委托，出现在那台设备的对话列表和动态里，那里的人随时能读、能插话；同一台设备发来的委托在对话空闲时接着同一段对话，对话里有人在说话或有委托在进行时另开一段。`mesh.delegate` 不能经 `mesh.invoke` 在别的设备上调用：委托只能由要交出工作的那台设备上的梨花发起。''',
   'followup': r'''- 关闭对话不会中断 NipaPlay 里的任务。定时脚本只在 NipaPlay 运行且 Next 开启时执行。

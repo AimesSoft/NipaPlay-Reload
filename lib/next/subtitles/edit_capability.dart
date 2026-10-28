@@ -18,10 +18,10 @@ final class SubtitleEditCapability implements Capability {
                     id: 'subtitle.$operation',
                     title: '修改字幕事实：$operation',
                     description: operation == 'update'
-                        ? 'Batch edit imported track language/title/source with file facts expectedRevision. Each item commits independently, returns index and structured error. Persistent and current player facts are updated together.'
+                        ? 'Batch 1–100 imported tracks; edit language/title/source with file facts expectedRevision. Each item commits independently, returns index and structured error. Persistent and current player facts are updated together.'
                         : operation == 'remove'
-                            ? 'Batch detach imported subtitle associations. Retains copies on disk and provenance in activity. Selected removed track falls back to automatic choice. Use copy_delete separately to delete unreferenced copies.'
-                            : 'Batch clear explicit defaults and restore automatic language/Classic selection. Does not disable subtitles. Current player is updated. Headless selection becomes null because it has no Classic language preferences.',
+                            ? 'Batch 1–100 imported subtitle associations; each item commits independently and returns an indexed result or error (atomic:false). Retains copies on disk and provenance in activity. Selected removed track falls back to automatic choice. Use copy_delete separately to delete unreferenced copies.'
+                            : 'Batch 1–100 entries; each item commits independently and returns an indexed result or error (atomic:false). Clear explicit defaults and restore automatic language/Classic selection. Does not disable subtitles. Current player is updated. Headless selection becomes null because it has no Classic language preferences.',
                     effect: Effect.write,
                     input: ObjectSchema({
                       'entries': ArraySchema(ObjectSchema({

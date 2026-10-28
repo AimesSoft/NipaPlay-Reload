@@ -75,9 +75,9 @@ final class _Action extends Action<_Json, _Json> {
       title: '媒体库 · $op',
       description: switch (op) {
         'put' =>
-          'Atomically replace categories in entries. Globally unique categoryId; replacement retains order. content kind=condition uses local filter (OR within arrays, AND across dimensions); manual uses ordered workIds; original references sourceId/parentId. Server works require accepted identity for conditions. Optional coverWorkIds (up to 3) and sort. Shows arrangement, retains origin/activity. Classification is requested by the user.',
+          'Atomically replace categories in entries. Globally unique categoryId; replacement retains order. content kind=condition uses local filter (OR within arrays, AND across dimensions); manual uses ordered workIds; original references sourceId/parentId. Server works require accepted identity for conditions. Unknown year, genre or rating does not match its filter; rating is the first displayed rating. The filter applies to the merged work, without an implicit page source constraint. The arrangement is stored on the executing device; it does not modify server/share content or synchronize layouts to other devices. Optional coverWorkIds (up to 3) and sort. Shows arrangement, retains origin/activity. Classification is requested by the user.',
         'configure' =>
-          'Batch source form shelves/cards and original true/false; switching preserves arrangements.',
+          'Batch source form shelves/cards and original true/false; switching preserves arrangements. Settings belong to the executing device, not the server or other devices.',
         'move' =>
           'Batch categoryId/index (zero-based) moves among visible categories. Original order is persisted only in this device\'s NipaPlay; server/share order never changes.',
         'remove' =>

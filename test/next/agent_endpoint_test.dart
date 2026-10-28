@@ -37,6 +37,38 @@ void main() {
     await root.delete(recursive: true);
   });
 
+  test(
+      'exact tool description carries usage; full catalog avoids repeating guides',
+      () async {
+    endpoint = AgentEndpoint(
+        harness: Harness([_WriteCapability()]),
+        seed: {},
+        appVersion: 'test',
+        instanceFacts: () async => {},
+        credentialFile: credentials,
+        port: 0);
+    final running = await endpoint.start(repository) as AgentEndpointRunning;
+    final token =
+        (jsonDecode(await credentials.readAsString()) as Map)['token'];
+    Future<Map> query(JsonMap body) async {
+      final request =
+          await client.postUrl(running.url.replace(path: '/harness'));
+      request.headers.set('Authorization', 'Bearer $token');
+      request.write(jsonEncode(body));
+      return jsonDecode(await utf8.decodeStream(await request.close())) as Map;
+    }
+
+    final description =
+        await query({'operation': 'describe', 'action': 'fixture.write'});
+    expect(description['id'], 'fixture.write');
+    expect((description['usage'] as Map)['effectMeaning'],
+        contains('idempotency'));
+    final all = await query({'operation': 'list', 'full': true});
+    final item = (all['actions'] as List).single as Map;
+    expect(item.containsKey('usage'), false);
+    expect(item['inputSchema'], isA<Map>());
+  });
+
   test('startup updates instructions and reports the actual merged state',
       () async {
     await maintainHarnessSeed(

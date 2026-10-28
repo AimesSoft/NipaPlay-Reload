@@ -131,6 +131,7 @@
 | `history.remove` | write | Remove watch history | Runtime/部分共享 | 允许 | [源码](../../../lib/next/capabilities/local_library_operations.dart) |
 | `knowledge.index` | read | 安装版本知识目录与来源 | 通用/组合 | 允许 | [源码](../../../lib/next/knowledge/capability.dart) |
 | `knowledge.locate` | read | 实时 ActionSpec 与静态源码引用 | 通用/组合 | 允许 | [源码](../../../lib/next/knowledge/capability.dart) |
+| `knowledge.outline` | read | 分页浏览文档章节与精确读取位置 | 通用/组合 | 允许 | [源码](../../../lib/next/knowledge/capability.dart) |
 | `knowledge.read` | read | 分页读取安装包文档 | 通用/组合 | 允许 | [源码](../../../lib/next/knowledge/capability.dart) |
 | `knowledge.search` | read | 受限关键词检索安装包文档 | 通用/组合 | 允许 | [源码](../../../lib/next/knowledge/capability.dart) |
 | `media.artwork.clear` | write | 清除图片覆盖 | 通用/组合 | 允许 | [源码](../../../lib/next/ui_data/capability.dart) |

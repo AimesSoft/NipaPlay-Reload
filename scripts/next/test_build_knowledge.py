@@ -46,6 +46,13 @@ class KnowledgeBuildTest(unittest.TestCase):
             self.assertEqual(json.loads(path.read_text()), one)
             self.assertLess(path.stat().st_size, 4 * 1024 * 1024)
 
+    def test_every_family_requires_an_installed_task_guide(self):
+        with patch.dict(knowledge.FAMILY_GUIDES, {'media': 'missing.md'}):
+            with self.assertRaisesRegex(ValueError, 'no installed task entry'):
+                knowledge.build(version='test')
+        self.assertIn('development/UI_CAPABILITIES.md', knowledge.DOCUMENTS)
+        self.assertIn('reference/media-model.md', knowledge.DOCUMENTS)
+
     def test_both_packaging_paths_include_knowledge(self):
         root = knowledge.ROOT
         self.assertIn('assets/next/knowledge/catalog.json', (root / 'pubspec.yaml').read_text())

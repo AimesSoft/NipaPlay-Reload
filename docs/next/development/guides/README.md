@@ -6,5 +6,9 @@
 - [Mesh 跨设备操作](mesh.md)
 - [媒体身份、资料与合并](media-identity.md)
 - [字幕和弹幕](subtitles-danmaku.md)
+- [媒体来源与下载](downloads-sources.md)
+- [首页、分类与图片](library-presentation.md)
+- [任务、自动化与记忆](automation-memory.md)
+- [账号、设置与维护](maintenance-accounts.md)
 
 推荐不等于执行：用户明确要求后执行对应操作；涉及删除、覆盖或其他设备上的写入时遵循用户授权和目标设备的确认规则。参考 [能力总览](../../CAPABILITIES.md)、[Action 源码参考](../ACTION_REFERENCE.md) 和 [过程事实契约](../../OBSERVABILITY_CONTRACT.md)。

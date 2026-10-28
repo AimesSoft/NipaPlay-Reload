@@ -24,6 +24,8 @@ Windows 使用 `python nipa`；PowerShell 5.1 中带 JSON 的调用可用 UTF-8 
 | 管理片源 | `media.sources.list`、`media.sources.browse`、`media.sources.search`、`media.sources.sync`；登录、可用服务及远端访问取决于来源与配置。 |
 | 下载并检查进度 | 查看 `download` 族，`download.wait_files` 可等待文件；`download.play` 依赖目标播放环境。`download.delete` 和用户在场确认的 `download.delete.request` 有各自契约，删除先核对预览与授权。 |
 | 播放和继续观看 | `playback.state`、`playback.open`、`playback.seek`、`playback.set_paused`，以及 `history.continue_watching`；GUI、播放器内核和设备状态决定实际可用性。 |
+| 内核诊断与临时调节 | `playback.kernel` 查询当前实例，`watch_kernel_properties` 观察、`set_kernel_properties` / `restore_kernel_properties` 调节或恢复；`reopen_with_kernel` 重开媒体，均需核对当前会话及支持范围。 |
+| 应用知识 | `knowledge.index/search/outline/read` 查询本设备安装版本的解释；`knowledge.locate` 连接实时工具契约与源码引用。工具调用说明仍直接读 `describe`。 |
 | 弹幕与字幕 | 查看 `danmaku` 族选择来源、绑定或准备；`subtitle.tracks`、`subtitle.import`、`subtitle.select` 管理字幕。来源访问、登录及当前播放会话是各动作可能的前置。 |
 | 查询和整理数据库 | `db.describe`、`db.query`、`db.write`、`db.undo`、`db.receipt`；按目标 schema 先预演再提交，保留请求键和回执。领域专用动作与 SQL 并存。 |
 | 查看后台任务和事件 | `task` 族和 `nipa watch` 查看状态与回执；`task.control` 管理受支持的任务，`events.describe`、`events.wait` 查询事件。受理不等于完成。 |

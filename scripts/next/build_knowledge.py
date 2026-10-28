@@ -17,7 +17,30 @@ DOCUMENTS = [
     'development/guides/README.md', 'development/guides/playback.md',
     'development/guides/mesh.md', 'development/guides/media-identity.md',
     'development/guides/subtitles-danmaku.md',
+    'development/guides/downloads-sources.md', 'development/guides/library-presentation.md',
+    'development/guides/automation-memory.md', 'development/guides/maintenance-accounts.md',
+    'development/UI_CAPABILITIES.md', 'development/TOOL_GUIDANCE.md',
+    'reference/README.md', 'reference/media-model.md', 'reference/execution-model.md',
+    'reference/device-model.md', 'reference/agent-model.md',
 ]
+# Every public Action family must have a task entry. This is a navigation
+# check, not a claim that every operation has been executed or semantically audited.
+FAMILY_GUIDES = {}
+for guide, families in {
+    'playback': 'playback history',
+    'mesh': 'mesh',
+    'media-identity': 'media db',
+    'subtitles-danmaku': 'subtitle danmaku',
+    'downloads-sources': 'download',
+    'library-presentation': 'ui appearance',
+    'automation-memory': 'activity agent chat events followup memory program task',
+    'maintenance-accounts': 'accounts app backup cache credentials diagnostics discover network notification plugins settings share shortcuts state storage sync webdav_quick',
+}.items():
+    for family in families.split():
+        FAMILY_GUIDES[family] = 'development/guides/' + guide + '.md'
+FAMILY_GUIDES.update({'knowledge': 'KNOWLEDGE.md', 'capability': 'development/TOOL_GUIDANCE.md',
+                      'window': 'development/guides/maintenance-accounts.md'})
+
 OUTPUT = ROOT / 'assets/next/knowledge/catalog.json'
 
 
@@ -47,7 +70,10 @@ def build(version=None, commit=None, dirty=None):
         if len(content.encode()) > 512 * 1024:
             raise ValueError(f'Document exceeds 512 KiB: {path}')
         documents.append(dict(id=path, title=content.splitlines()[0].lstrip('# '),
-                              kind='reference' if name.startswith('development/') else 'current',
+                              kind=('concept' if name.startswith('reference/') or name == 'ARCHITECTURE.md'
+                                    else 'guide' if name.startswith('development/guides/')
+                                    else 'tool-reference' if name in ('CAPABILITIES.md', 'development/ACTION_REFERENCE.md', 'development/TOOL_GUIDANCE.md')
+                                    else 'reference' if name.startswith('development/') else 'current'),
                               sha256=hashlib.sha256(content.encode()).hexdigest(), content=content))
     # Source references are navigation candidates, never synthesized Action schemas.
     reference = (ROOT / 'docs/next/development/ACTION_REFERENCE.md').read_text()
@@ -57,6 +83,11 @@ def build(version=None, commit=None, dirty=None):
         if not match:
             continue
         actions[match[1]] = sorted(set(re.findall(r'\]\(\.\./\.\./\.\./([^)#]+)', line)))
+    for action in actions:
+        family = action.split('.')[0]
+        guide = FAMILY_GUIDES.get(family)
+        if guide not in DOCUMENTS:
+            raise ValueError(f'Action family has no installed task entry: {family}')
     digest = hashlib.sha256(json.dumps(
         {'documents': [(d['id'], d['sha256']) for d in documents], 'actions': actions},
         ensure_ascii=False, sort_keys=True, separators=(',', ':')).encode()).hexdigest()

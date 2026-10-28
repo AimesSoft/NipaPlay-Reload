@@ -15,7 +15,7 @@ final class ProgramRepository implements Capability {
               id: 'program.repository.receive',
               title: '接收 harness Git bundle',
               description:
-                  'Receive a caller-selected Git bundle in ordered base64 chunks (max 384 KiB decoded each, 64 MiB total). Requires target-host program permission. SHA-256 and offset bind the upload; repeated identical chunks are idempotent. Stored inside target harness records/mesh-bundles; does not checkout, merge or overwrite harness files. No Git remote credentials/config or caller environment are included. nipa sync-repository prepares and uploads a committed revision.',
+                  'Receive a caller-selected Git bundle in ordered base64 chunks (max 384 KiB decoded each, 64 MiB total). Requires target-host program permission. SHA-256 and offset bind the upload; repeated identical chunks are idempotent. Partial and completed bundles are scoped to the calling origin; resume with the same origin. Existing complete files are rechecked for size and SHA-256 before returning complete. Stored inside target harness records/mesh-bundles; does not checkout, merge or overwrite harness files. No Git remote credentials/config or caller environment are included. nipa sync-repository prepares and uploads a committed revision.',
               effect: Effect.write,
               input: ObjectSchema({
                 'sha256': StringSchema(minLength: 64),

@@ -13,4 +13,4 @@ Next 当前处于 alpha 开发者预览阶段。平台与安装方式见[快速�
 - [DSH 高级配置](DSH_ADVANCED_CONFIG.md)：模型预算、压缩和插件配置。
 - [Headless](HEADLESS.md)：无界面节点的安装与运行。
 
-架构、能力参考及开发记录见[开发者文档](development/README.md)。
+应用机制见[应用模型](reference/README.md)。架构、能力参考及开发记录见[开发者文档](development/README.md)。

@@ -37,7 +37,8 @@ jobs:
         run: |
           python3 scripts/next/check_capability_docs.py
           python3 scripts/next/build_knowledge.py --check
-          python3 -m unittest discover -s scripts/next -p 'test_build_knowledge.py'
+          python3 -B -m unittest discover -s scripts/next -p 'test_build_knowledge.py'
+          python3 -B -m unittest discover -s test/next -p 'nipa_*test.py'
 
       - name: Generate build info json
         run: python3 .github/workflows/scripts/generate-build-info-json.py assets/build_info.json
