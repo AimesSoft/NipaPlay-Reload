@@ -319,6 +319,7 @@ abstract class MediaServerServiceBase {
       );
 
       ServerProfile? profile;
+      var authenticatedReplacement = false;
 
       if (identifyResult.success && identifyResult.existingProfile != null) {
         profile = identifyResult.existingProfile!;
@@ -342,13 +343,44 @@ abstract class MediaServerServiceBase {
           profile = profile.copyWith(username: username);
         }
       } else if (identifyResult.isConflict) {
-        print('$serviceNameService: 检测到冲突，抛出异常: ${identifyResult.error}');
-        logService.addLog(
-          '$serviceName: 服务器地址冲突，无法连接: ${identifyResult.error}',
-          level: 'ERROR',
-          tag: 'Network',
-        );
-        throw Exception(identifyResult.error ?? '服务器冲突');
+        final newServerId = identifyResult.serverId;
+        final previousProfile = identifyResult.existingProfile;
+        if (newServerId != null &&
+            newServerId.isNotEmpty &&
+            previousProfile != null) {
+          // A user explicitly signing in can recover a reinstalled server at
+          // the same URL. Never change saved ownership before credentials work.
+          await performAuthentication(normalizedUrl, username, password);
+          if (accessToken == null ||
+              accessToken!.isEmpty ||
+              userId == null ||
+              userId!.isEmpty) {
+            throw Exception('认证响应缺少访问令牌或用户ID');
+          }
+          profile = await _multiAddressService.replaceConflictingAddress(
+            previousProfile: previousProfile,
+            url: normalizedUrl,
+            serverId: newServerId,
+            serverName: await getServerName(normalizedUrl) ?? serverNameFallback,
+            username: username,
+            accessToken: accessToken!,
+            userId: userId!,
+            addressName: UrlNameGenerator.generateAddressName(
+              normalizedUrl,
+              customName: addressName,
+            ),
+          );
+          selectedLibraryIds = [];
+          authenticatedReplacement = true;
+        } else {
+          print('$serviceNameService: 检测到冲突，抛出异常: ${identifyResult.error}');
+          logService.addLog(
+            '$serviceName: 服务器地址冲突，无法连接: ${identifyResult.error}',
+            level: 'ERROR',
+            tag: 'Network',
+          );
+          throw Exception(identifyResult.error ?? '服务器冲突');
+        }
       } else if (identifyResult.success) {
         print('$serviceNameService: 创建新的服务器配置');
         profile = await _multiAddressService.addProfile(
@@ -387,7 +419,9 @@ abstract class MediaServerServiceBase {
         this.username = username;
         this.password = password;
 
-        await performAuthentication(this.serverUrl!, username, password);
+        if (!authenticatedReplacement) {
+          await performAuthentication(this.serverUrl!, username, password);
+        }
 
         isConnected = true;
 
@@ -397,7 +431,7 @@ abstract class MediaServerServiceBase {
         );
         await _multiAddressService.updateProfile(currentProfile!);
 
-        await _saveConnectionInfo();
+        await _saveConnectionInfo(resetLibrarySelection: authenticatedReplacement);
 
         await loadAvailableLibraries();
         logService.addLog(
@@ -431,12 +465,15 @@ abstract class MediaServerServiceBase {
     }
   }
 
-  Future<void> _saveConnectionInfo() async {
+  Future<void> _saveConnectionInfo({bool resetLibrarySelection = false}) async {
     final prefs = await SharedPreferences.getInstance();
 
     if (currentProfile != null) {
       await prefs.setString(
           '${prefsKeyPrefix}_current_profile_id', currentProfile!.id);
+    }
+    if (resetLibrarySelection) {
+      await prefs.remove('${prefsKeyPrefix}_selected_libraries');
     }
 
     await prefs.setString('${prefsKeyPrefix}_server_url', serverUrl!);

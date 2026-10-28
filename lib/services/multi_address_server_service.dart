@@ -196,6 +196,68 @@ class MultiAddressServerService {
     }
   }
   
+  /// Rebind only the reused URL after the caller authenticates with the new
+  /// server. Keep the old identity and its other addresses for saved history.
+  Future<ServerProfile> replaceConflictingAddress({
+    required ServerProfile previousProfile,
+    required String url,
+    required String serverId,
+    required String serverName,
+    required String username,
+    required String accessToken,
+    required String userId,
+    required String addressName,
+  }) async {
+    final normalizedUrl = _normalizeUrl(url);
+    final index = _profiles.indexWhere((p) => p.id == previousProfile.id);
+    if (index == -1 || serverId.isEmpty) {
+      throw StateError('服务器配置已改变，请重新连接');
+    }
+    final previous = _profiles[index];
+    if (previous.serverId != previousProfile.serverId ||
+        !previous.addresses.any((a) => a.normalizedUrl == normalizedUrl)) {
+      throw StateError('服务器地址已改变，请重新连接');
+    }
+    if (_profiles.any((p) => p.id != previous.id &&
+        p.serverType == previous.serverType &&
+        p.addresses.any((a) => a.normalizedUrl == normalizedUrl))) {
+      throw StateError('该地址关联多个配置，请先在地址管理中处理');
+    }
+    final remaining = previous.addresses
+        .where((a) => a.normalizedUrl != normalizedUrl).toList();
+    final detached = previous.copyWith(addresses: remaining);
+    if (!remaining.any((a) => a.id == detached.lastSuccessfulAddressId)) {
+      detached.lastSuccessfulAddressId = null;
+    }
+    final address = ServerAddress(
+      id: DateTime.now().microsecondsSinceEpoch.toString(),
+      url: normalizedUrl,
+      name: addressName,
+      priority: 0,
+    );
+    final replacement = ServerProfile(
+      id: DateTime.now().microsecondsSinceEpoch.toString(),
+      serverName: serverName,
+      serverType: previous.serverType,
+      addresses: [address],
+      username: username,
+      serverId: serverId,
+      accessToken: accessToken,
+      userId: userId,
+    );
+    final updated = [..._profiles];
+    updated[index] = detached;
+    updated.add(replacement);
+    final prefs = await SharedPreferences.getInstance();
+    // Persist both sides of ownership together, then publish the new snapshot.
+    if (!await prefs.setString(_profilesKey,
+        json.encode(updated.map((p) => p.toJson()).toList()))) {
+      throw StateError('无法保存服务器配置');
+    }
+    _profiles = updated;
+    return replacement;
+  }
+
   /// 删除服务器配置
   Future<void> deleteProfile(String profileId) async {
     _profiles.removeWhere((p) => p.id == profileId);
@@ -441,6 +503,8 @@ class MultiAddressServerService {
             return ServerIdentifyResult(
               success: false,
               error: '该URL已被另一个${serverType}服务器占用 (服务器ID: ${profile.serverId})',
+              serverId: serverId,
+              url: normalizedUrl,
               isConflict: true,
               existingProfile: profile,
             );
@@ -450,6 +514,8 @@ class MultiAddressServerService {
             return ServerIdentifyResult(
               success: false,
               error: '该URL已被占用，现有配置缺少服务器ID验证信息，请手动处理冲突',
+              serverId: serverId,
+              url: normalizedUrl,
               isConflict: true,
               existingProfile: profile,
             );
