@@ -1,11 +1,13 @@
 import 'dart:async';
 
 import 'package:fluent_ui/fluent_ui.dart' as fluent;
-import 'package:flutter/cupertino.dart' show CupertinoTheme;
+import 'package:flutter/cupertino.dart'
+    show CupertinoColors, CupertinoDynamicColor, CupertinoTheme;
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:nipaplay/app/app_display_surface.dart';
 import 'package:nipaplay/app/app_display_surface_scope.dart';
+import 'package:nipaplay/app/app_size_class_scope.dart';
 import 'package:nipaplay/pages/account/account_controller.dart';
 import 'package:nipaplay/pages/account/account_page_view_model.dart';
 import 'package:nipaplay/themes/cupertino/cupertino_adaptive_platform_ui.dart';
@@ -310,44 +312,106 @@ class _UnifiedAccountPageState extends State<UnifiedAccountPage>
               bottomPadding: 14,
             ),
           ),
-          SliverToBoxAdapter(
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(20, 0, 20, 24),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  AdaptiveSegmentedControl(
-                    labels: const [
-                      AccountPageViewModel.dandanplayLabel,
-                      AccountPageViewModel.bangumiLabel,
-                    ],
-                    selectedIndex: _showDandanplayPhoneSection ? 0 : 1,
-                    onValueChanged: (index) {
-                      setState(() => _showDandanplayPhoneSection = index == 0);
-                    },
-                  ),
-                  const SizedBox(height: 24),
-                  AnimatedSwitcher(
-                    duration: const Duration(milliseconds: 220),
-                    child: _showDandanplayPhoneSection
-                        ? CupertinoDandanplayAccountSection(
-                            key: const ValueKey<String>('dandanplay-account'),
-                            data: data.dandanplay,
-                            userActivity: userActivity,
-                          )
-                        : CupertinoBangumiSection(
-                            key: const ValueKey<String>('bangumi-account'),
-                            data: data.bangumi,
-                          ),
-                  ),
-                ],
+          if (AppSizeClassScope.isRegularWidthOf(context))
+            SliverToBoxAdapter(
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(20, 0, 20, 24),
+                child: _buildCupertinoAccountColumns(data, userActivity),
+              ),
+            )
+          else
+            SliverToBoxAdapter(
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(20, 0, 20, 24),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    AdaptiveSegmentedControl(
+                      labels: const [
+                        AccountPageViewModel.dandanplayLabel,
+                        AccountPageViewModel.bangumiLabel,
+                      ],
+                      selectedIndex: _showDandanplayPhoneSection ? 0 : 1,
+                      onValueChanged: (index) {
+                        setState(
+                            () => _showDandanplayPhoneSection = index == 0);
+                      },
+                    ),
+                    const SizedBox(height: 24),
+                    AnimatedSwitcher(
+                      duration: const Duration(milliseconds: 220),
+                      child: _showDandanplayPhoneSection
+                          ? CupertinoDandanplayAccountSection(
+                              key: const ValueKey<String>('dandanplay-account'),
+                              data: data.dandanplay,
+                              userActivity: userActivity,
+                            )
+                          : CupertinoBangumiSection(
+                              key: const ValueKey<String>('bangumi-account'),
+                              data: data.bangumi,
+                            ),
+                    ),
+                  ],
+                ),
               ),
             ),
-          ),
           const SliverPadding(padding: EdgeInsets.only(bottom: 84)),
         ],
       ),
     );
+  }
+
+  /// Regular width (iPhone Duo inner display): both accounts side by side
+  /// instead of one at a time behind the segmented control.
+  Widget _buildCupertinoAccountColumns(
+    AccountPageViewModel data,
+    Widget userActivity,
+  ) {
+    Widget column(String label, Widget section) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Padding(
+            padding: const EdgeInsets.only(left: 4, bottom: 10),
+            child: Text(
+              label,
+              // Same line height for both scripts keeps the columns level.
+              strutStyle: const StrutStyle(
+                fontSize: 13,
+                height: 1.3,
+                forceStrutHeight: true,
+              ),
+              style: CupertinoTheme.of(context).textTheme.textStyle.copyWith(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                    color: CupertinoDynamicColor.resolve(
+                      CupertinoColors.secondaryLabel,
+                      context,
+                    ),
+                  ),
+            ),
+          ),
+          section,
+        ],
+      );
+    }
+
+    return buildTwoColumnRows(
+      [
+        column(
+          AccountPageViewModel.dandanplayLabel,
+          CupertinoDandanplayAccountSection(
+            data: data.dandanplay,
+            userActivity: userActivity,
+          ),
+        ),
+        column(
+          AccountPageViewModel.bangumiLabel,
+          CupertinoBangumiSection(data: data.bangumi),
+        ),
+      ],
+      columnSpacing: 16,
+    ).single;
   }
 
   Future<void> _showFluentLoginDialog({

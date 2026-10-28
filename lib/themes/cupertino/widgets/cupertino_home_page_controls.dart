@@ -19,6 +19,7 @@ extension _CupertinoHomePageControls on _DashboardHomePageState {
   Widget _buildCupertinoHomePage() {
     final sectionsProvider = context.watch<HomeSectionsSettingsProvider>();
     final sections = _buildCupertinoConfiguredSections(sectionsProvider);
+    final isRegularWidth = AppSizeClassScope.isRegularWidthOf(context);
 
     return ColoredBox(
       color: Colors.transparent,
@@ -34,18 +35,46 @@ extension _CupertinoHomePageControls on _DashboardHomePageState {
           const SliverToBoxAdapter(
             child: CupertinoAppPageHeader(title: '主页'),
           ),
-          SliverToBoxAdapter(child: _buildCupertinoHero()),
-          if (_hasQuarterlyReviewForToday())
-            SliverPadding(
-              padding: const EdgeInsets.only(top: 22),
-              sliver: SliverToBoxAdapter(child: _buildQuarterlyReviewSection()),
-            ),
-          SliverList(
-              delegate: SliverChildBuilderDelegate(
-                  (context, index) => sections[index],
-                  childCount: sections.length)),
+          if (isRegularWidth)
+            _buildCupertinoRegularWidthSections(sections)
+          else ...[
+            SliverToBoxAdapter(child: _buildCupertinoHero()),
+            if (_hasQuarterlyReviewForToday())
+              SliverPadding(
+                padding: const EdgeInsets.only(top: 22),
+                sliver:
+                    SliverToBoxAdapter(child: _buildQuarterlyReviewSection()),
+              ),
+            SliverList(
+                delegate: SliverChildBuilderDelegate(
+                    (context, index) => index.isEven
+                        ? const SizedBox(height: 22)
+                        : sections[index ~/ 2],
+                    childCount: sections.length * 2)),
+          ],
           const SliverPadding(padding: EdgeInsets.only(bottom: 84)),
         ],
+      ),
+    );
+  }
+
+  /// Regular width (iPhone Duo inner display): the same blocks as the compact
+  /// column, two per row.
+  Widget _buildCupertinoRegularWidthSections(List<Widget> sections) {
+    final showHero =
+        context.watch<AppearanceSettingsProvider>().showHomeHeroBanner;
+    final rows = buildTwoColumnRows([
+      if (showHero) _buildCupertinoHero(),
+      if (_hasQuarterlyReviewForToday()) _buildQuarterlyReviewSection(),
+      ...sections,
+    ]);
+    return SliverList(
+      delegate: SliverChildBuilderDelegate(
+        (context, index) => Padding(
+          padding: EdgeInsets.only(top: index == 0 ? 0 : 22),
+          child: rows[index],
+        ),
+        childCount: rows.length,
       ),
     );
   }
@@ -56,7 +85,6 @@ extension _CupertinoHomePageControls on _DashboardHomePageState {
     final slivers = <Widget>[];
 
     void addSection(WidgetBuilder section) {
-      slivers.add(const SizedBox(height: 22));
       slivers.add(Builder(builder: section));
     }
 

@@ -48,6 +48,19 @@ import Photos
         ])
       }
 
+      let windowTraitsChannel = FlutterMethodChannel(
+        name: "nipaplay/window_traits",
+        binaryMessenger: controller.binaryMessenger
+      )
+
+      windowTraitsChannel.setMethodCallHandler { [weak controller] call, result in
+        guard call.method == "getWindowTraits" else {
+          result(FlutterMethodNotImplemented)
+          return
+        }
+        result(controller.map { Self.windowTraits(for: $0.view) })
+      }
+
       let fileChannel = FlutterMethodChannel(
         name: "file_association_channel",
         binaryMessenger: controller.binaryMessenger
@@ -328,6 +341,48 @@ import Photos
     guard url.isFileURL else { return handledByPlugin }
     receiveFileURL(url)
     return true
+  }
+
+  /// Reports where iPhone Duo places toolbars and tab bars
+  /// (`UITraitCollection.verticalBarEdge`), the occluded areas custom bars must
+  /// avoid (`UIView.reservedRegions`), both iOS 27.1, and the horizontal size
+  /// class. The iOS 27.1 APIs are read dynamically so the project still builds
+  /// with SDKs that predate them.
+  static func windowTraits(for view: UIView) -> [String: Any] {
+    let traits = view.traitCollection
+    var edge = 0
+    if traits.responds(to: NSSelectorFromString("verticalBarEdge")) {
+      edge = (traits.value(forKey: "verticalBarEdge") as? NSNumber)?.intValue ?? 0
+    }
+    return [
+      "verticalBarEdge": edge,
+      "isRightToLeft": traits.layoutDirection == .rightToLeft,
+      "occlusions": occlusionRegionFrames(in: view).map {
+        [Double($0.minX), Double($0.minY), Double($0.width), Double($0.height)]
+      },
+      "horizontalSizeClass": traits.horizontalSizeClass.rawValue,
+    ]
+  }
+
+  /// Active occlusion regions, such as the outer camera and the status bar
+  /// column, in the view's coordinate space.
+  private static func occlusionRegionFrames(in view: UIView) -> [CGRect] {
+    let kindSelector = NSSelectorFromString("occlusionRegionKind")
+    let regionsSelector = NSSelectorFromString("reservedRegionsOfKind:")
+    guard
+      let kindClass = NSClassFromString("UIViewReservedRegionKind") as AnyObject?,
+      kindClass.responds(to: kindSelector),
+      view.responds(to: regionsSelector),
+      let kind = kindClass.perform(kindSelector)?.takeUnretainedValue(),
+      let regions = view.perform(regionsSelector, with: kind)?
+        .takeUnretainedValue() as? [NSObject]
+    else {
+      return []
+    }
+    return regions.compactMap { region in
+      guard (region.value(forKey: "active") as? Bool) == true else { return nil }
+      return (region.value(forKey: "frame") as? NSValue)?.cgRectValue
+    }
   }
 
   private func receiveFileURL(_ url: URL) {
