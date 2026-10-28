@@ -1,5 +1,6 @@
 import 'package:nipaplay/themes/cupertino/cupertino_imports.dart';
-import 'package:nipaplay/models/emby_media_selection.dart';
+import 'package:nipaplay_core/models/emby_media_selection.dart';
+import 'package:nipaplay_core/player_abstraction/player_data_models.dart';
 import 'package:nipaplay/services/emby_player_menu_selection.dart';
 import 'package:nipaplay/themes/cupertino/cupertino_adaptive_platform_ui.dart'
     show AdaptiveButton, AdaptiveButtonStyle;
@@ -8,7 +9,7 @@ import 'package:flutter/foundation.dart';
 import 'package:nipaplay/themes/cupertino/widgets/cupertino_bottom_sheet.dart';
 import 'package:nipaplay/themes/cupertino/widgets/player_menu/adaptive_player_menu_primitives.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_snackbar.dart';
-import 'package:nipaplay/themes/nipaplay/widgets/large_screen_mode_scope.dart';
+import 'package:nipaplay_ui_common/themes/nipaplay/widgets/large_screen_mode_scope.dart';
 import 'package:nipaplay/utils/video_player_state.dart';
 import 'package:nipaplay/services/remote_subtitle_service.dart';
 import 'package:nipaplay/services/subtitle_service.dart';
@@ -32,6 +33,9 @@ class _CupertinoSubtitleTracksPaneState
   final SubtitleService _subtitleService = SubtitleService();
   List<Map<String, dynamic>> _externalSubtitles = [];
   bool _isLoading = false;
+
+  /// 远程字幕选择弹窗打开期间为 true：`_isLoading` 在弹窗出现前就复位了，
+  /// 没有它，弹窗开着时再点按钮会叠出第二个选择弹窗。
   bool _isPickingRemote = false;
 
   @override
@@ -51,6 +55,21 @@ class _CupertinoSubtitleTracksPaneState
     if (mounted) setState(() => _isLoading = true);
     try {
       final subtitles = await _subtitleService.loadExternalSubtitles(path);
+      // 哈希名条目（旧版本写入的远程缓存路径）用下载登记的原名归正展示
+      for (final subtitle in subtitles) {
+        final entryPath = subtitle['path']?.toString() ?? '';
+        final entryName = subtitle['name']?.toString() ?? '';
+        if (entryPath.isEmpty) continue;
+        final isHashNamed = entryName.isEmpty ||
+            (entryName == entryPath.split('/').last.split('\\').last &&
+                entryPath.contains('remote_subtitles'));
+        if (!isHashNamed) continue;
+        final registered = await RemoteSubtitleService.instance
+            .lookupDisplayName(entryPath);
+        if (registered != null && registered.isNotEmpty) {
+          subtitle['name'] = registered;
+        }
+      }
       _externalSubtitles = subtitles;
       if (mounted) setState(() {});
     } finally {
@@ -334,6 +353,58 @@ class _CupertinoSubtitleTracksPaneState
     BlurSnackBar.show(context, message);
   }
 
+  /// 从轨道 title / 语言码 / 元数据中识别繁简线索。
+  /// Kamigami 等字组的 MKV 两条中文字幕轨 title 常常都写“中文”、language
+  /// 同为 chi，只有元数据/文件名线索（GB/Big5/CHS/CHT）能区分繁简。
+  String? _scriptLabelForTrack(PlayerSubtitleStreamInfo track) {
+    final buffer = StringBuffer(track.title ?? '')
+      ..write(' ')
+      ..write(track.language ?? '');
+    track.metadata.forEach((_, value) {
+      buffer
+        ..write(' ')
+        ..write(value);
+    });
+    final haystack = buffer.toString().toLowerCase();
+    if (RegExp(
+            r'big5|\bcht\b|zh[-_.]?hant|zh[-_.]?(tw|hk)|繁[體体]|正[體体]|traditional')
+        .hasMatch(haystack)) {
+      return '繁体';
+    }
+    if (RegExp(
+            r'gb2312|gbk|\bgb\d?\b|\bchs\b|\bsc\b|zh[-_.]?hans|zh[-_.]?cn|简[体体]|simplified')
+        .hasMatch(haystack)) {
+      return '简体';
+    }
+    return null;
+  }
+
+  /// 内嵌轨道显示名：title 优先；可识别繁简时附加标注；最终仍重名的
+  /// 追加轨道序号，保证两条同 title 的“中文”轨道在界面上可区分。
+  List<String> _buildEmbeddedSubtitleDisplayNames(
+      List<PlayerSubtitleStreamInfo> tracks) {
+    final tagged = <String>[];
+    for (var i = 0; i < tracks.length; i++) {
+      final track = tracks[i];
+      final base = track.title?.trim().isNotEmpty == true
+          ? track.title!.trim()
+          : '轨道 ${i + 1}';
+      final script = _scriptLabelForTrack(track);
+      tagged.add(script == null ? base : '$base（$script）');
+    }
+    final counts = <String, int>{};
+    for (final name in tagged) {
+      counts[name] = (counts[name] ?? 0) + 1;
+    }
+    final seen = <String, int>{};
+    return List<String>.generate(tagged.length, (i) {
+      final name = tagged[i];
+      if ((counts[name] ?? 0) <= 1) return name;
+      seen[name] = (seen[name] ?? 0) + 1;
+      return '$name（轨道 ${i + 1}）';
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     final isLargeScreen = NipaplayLargeScreenModeScope.isActiveOf(context);
@@ -400,7 +471,9 @@ class _CupertinoSubtitleTracksPaneState
           padding: const EdgeInsets.fromLTRB(20, 8, 20, 0),
           child: AdaptiveButton.child(
             style: AdaptiveButtonStyle.prominentGlass,
-            onPressed: _isLoading ? null : _loadRemoteSubtitleFile,
+            onPressed: (_isLoading || _isPickingRemote)
+                ? null
+                : _loadRemoteSubtitleFile,
             child: const Row(
               mainAxisSize: MainAxisSize.min,
               children: [
@@ -474,6 +547,7 @@ class _CupertinoSubtitleTracksPaneState
     }
 
     if (embeddedTracks != null && embeddedTracks.isNotEmpty) {
+      final displayNames = _buildEmbeddedSubtitleDisplayNames(embeddedTracks);
       children.add(
         AdaptivePlayerMenuSection(
           header: const Text('内嵌字幕'),
@@ -486,9 +560,7 @@ class _CupertinoSubtitleTracksPaneState
                 widget.videoState.player.activeSubtitleTracks.contains(index);
             final String language = _subtitleService
                 .getLanguageName(track.language ?? track.toString());
-            final String title = track.title?.trim().isNotEmpty == true
-                ? track.title!
-                : '轨道 ${index + 1}';
+            final String title = displayNames[index];
 
             return AdaptivePlayerMenuTile(
               leading: Icon(
