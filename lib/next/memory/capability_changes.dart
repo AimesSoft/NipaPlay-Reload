@@ -143,9 +143,11 @@ final class CapabilityCatalogChanges {
       final family = spec.id.split('.').first;
       byFamily.putIfAbsent(family, () => {})[spec.id] = _hash(jsonEncode(_sorted({
         'id': spec.id,
+        'title': spec.title,
         'effect': spec.effect.name,
         'description': spec.description,
         'input': spec.input.toJsonSchema(),
+        'output': spec.output.toJsonSchema(),
       })));
     }
     return {

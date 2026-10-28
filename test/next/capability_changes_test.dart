@@ -8,14 +8,17 @@ import 'package:nipaplay/next/chat/chat_host.dart';
 import 'package:nipaplay/next/memory/recent.dart';
 
 ActionSpec spec(String id,
-        {String description = 'd', Map<String, Schema> input = const {}}) =>
+        {String description = 'd',
+        String? title,
+        Map<String, Schema> input = const {},
+        Map<String, Schema> output = const {}}) =>
     ActionSpec(
         id: id,
-        title: id,
+        title: title ?? id,
         description: description,
         effect: Effect.read,
         input: ObjectSchema(input),
-        output: const ObjectSchema({}));
+        output: ObjectSchema(output));
 
 void main() {
   late Directory dir;
@@ -27,9 +30,9 @@ void main() {
     dir = Directory.systemTemp.createTempSync('catalog_changes');
     clock = DateTime.utc(2026, 10, 22, 8);
     notified = 0;
-    changes = CapabilityCatalogChanges(File('${dir.path}/c.json'),
-        now: () => clock)
-      ..onRecorded = () => notified++;
+    changes =
+        CapabilityCatalogChanges(File('${dir.path}/c.json'), now: () => clock)
+          ..onRecorded = () => notified++;
   });
   tearDown(() => dir.deleteSync(recursive: true));
 
@@ -53,7 +56,8 @@ void main() {
       spec('download.add', description: 'now with http'),
       spec('download.preview'),
       spec('media.list'),
-      spec('media.get', input: {'a': const StringSchema(), 'b': const StringSchema()}),
+      spec('media.get',
+          input: {'a': const StringSchema(), 'b': const StringSchema()}),
       spec('window.open'),
     ], appVersion: '1.2.3', build: '45');
     expect(record, isNotNull);
@@ -75,7 +79,8 @@ void main() {
           spec('download.add', description: 'now with http'),
           spec('download.preview'),
           spec('media.list'),
-          spec('media.get', input: {'a': const StringSchema(), 'b': const StringSchema()}),
+          spec('media.get',
+              input: {'a': const StringSchema(), 'b': const StringSchema()}),
           spec('window.open'),
         ]),
         isNull);
@@ -85,6 +90,21 @@ void main() {
     expect(line, contains('download 族：'));
     expect(line, contains('新增动作 download.preview'));
     expect(line, contains('移除动作 download.old'));
+  });
+
+  test('output contract and discovery title changes are reported', () async {
+    await changes.observe([spec('playback.kernel')]);
+    final outputChange = await changes.observe([
+      spec('playback.kernel', output: {'ready': const BooleanSchema()})
+    ]);
+    expect(((outputChange!['families'] as Map)['playback'] as Map)['changed'],
+        ['playback.kernel']);
+    final titleChange = await changes.observe([
+      spec('playback.kernel',
+          title: 'Inspect kernel', output: {'ready': const BooleanSchema()})
+    ]);
+    expect(((titleChange!['families'] as Map)['playback'] as Map)['changed'],
+        ['playback.kernel']);
   });
 
   test('records expire after a week and only the newest two show', () async {

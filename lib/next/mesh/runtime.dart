@@ -48,6 +48,7 @@ bool meshActionAllowed(String id) =>
       'window.',
       'app.',
       'diagnostics.',
+      'knowledge.',
       'events.',
       'network.',
       'storage.',

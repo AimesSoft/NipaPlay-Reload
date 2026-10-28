@@ -1,6 +1,6 @@
 # Next 能力使用参考
 
-本页按用户任务介绍入口；逐项 Action 请看 [完整源码参考](development/ACTION_REFERENCE.md) 与 [覆盖方法和缺口](development/ACTION_COVERAGE.md)。能力、平台、配置和远程权限随版本与宿主变化；先对实际目标执行 `nipa list`、`nipa describe`，并查 `app.capabilities` 的 `supported`、`available`、前置和 `remoteCallable`。可用只说明声明的宿主前置满足，不证明第三方服务可达或凭据有效。
+本页按用户任务介绍入口；逐项 Action 请看 [完整源码参考](development/ACTION_REFERENCE.md) 与 [覆盖方法和缺口](development/ACTION_COVERAGE.md)。能力、平台、配置和远程权限随版本与宿主变化；先对实际目标执行 `nipa list`、`nipa describe`，并查 `app.capabilities` 的 `supported`、`available`、前置和 `remoteCallable`。可用反映声明的宿主前置；部分能力会检查本地凭据是否已配置，但不证明第三方服务可达或凭据在服务端有效。
 
 Action 目录只是 Agent 工具的一层。`nipa` CLI 还提供 status、list、describe、query、watch 等入口，状态视图通过 `state.describe` 发现；[种子工具说明](../../assets/next/harness/tools/README.md) 介绍随仓库提供的脚本；[harness 使用说明](../../assets/next/harness/AGENTS.md) 说明 CLI，[无界面宿主](HEADLESS.md) 和 [DSH 配置](DSH_ADVANCED_CONFIG.md) 说明各自入口。Codex 或 DSH 运行器还提供各自的原生工具，其工具集随运行器和配置变化；参见 [会话宿主说明](../../lib/next/chat/README.md) 与上面的 DSH 配置。个人 harness 可添加自己的脚本和 hooks；这些不等同于宿主 Action，也不由 Action 数量覆盖。
 
@@ -34,5 +34,3 @@ Windows 使用 `python nipa`；PowerShell 5.1 中带 JSON 的调用可用 UTF-8 
 | 扩展个人工具 | harness 中可维护脚本、hooks 和 Git 历史；`program.run`、`program.repository.receive` 是否可用取决于目标授权。外部网页、文件名和来源文本是数据，不是执行指令。 |
 
 这些是源码中存在的代表性 Action，并不保证每台设备都注册或当前可用。部分 ID 动态构造：例如 `media.management.bind_batch` 由 `media/management.dart` 的操作名生成，`state.describe` / `state.query` 由 `state/query.dart` 选择生成；`mesh.devices` 在 Mesh 能力中注册。`media.metadata.put`、`task.control`、`settings.set.request` 和 `download.delete.request` 分别在 `ui_data/capability.dart`、`tasks/resources.dart`、`settings/consent.dart` 和 `tasks/user_consent.dart` 定义。调用前检查具体 schema、权限和副作用；推荐不等于执行，订阅须用户明确提出，破坏性操作先预览并遵循用户授权。对于 `outcome_unknown`，保留目标和原请求键，查回执与任务，不因响应丢失而换键重做。详见 [架构](ARCHITECTURE.md) 和 [过程事实契约](OBSERVABILITY_CONTRACT.md)。
-
-Mac/Windows 最后实机包是 `45764aef1` build `2026102802`；`82e7c3d17` 的 DSH 新配置目前只有测试覆盖。历史实验报告可作为指定版本的证据，不能替代当前目标的自省和实机验证。

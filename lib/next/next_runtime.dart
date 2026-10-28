@@ -1,5 +1,8 @@
 import 'package:nipaplay/services/file_association_service.dart';
 import 'dart:async';
+import 'dart:convert';
+import 'knowledge/service.dart';
+import 'knowledge/capability.dart';
 import 'dart:io';
 import 'followups/service.dart';
 import 'platform/background_activity.dart';
@@ -560,7 +563,25 @@ final class NextRuntime extends ChangeNotifier {
           data.buffer.asUint8List(data.offsetInBytes, data.lengthInBytes);
     }
     final packageInfo = await PackageInfo.fromPlatform();
-    final instanceFacts = InstanceFacts(packageInfo.version);
+    JsonMap buildSource = {};
+    try {
+      buildSource = (jsonDecode(
+              await rootBundle.loadString('assets/build_info.json')) as Map)
+          .cast<String, Object?>();
+    } catch (_) {
+      // Development builds may have no provenance.
+    }
+    final buildFacts = <String, Object?>{
+      'appVersion': buildSource['app_version'],
+      'nativeVersion': packageInfo.version,
+      'buildNumber': packageInfo.buildNumber,
+      'sourceCommit': buildSource['git_commit'],
+      'sourceDirty': buildSource['git_dirty'],
+    };
+    final instanceFacts = InstanceFacts(packageInfo.version, build: buildFacts);
+    final knowledge = ProjectKnowledge(
+        () => rootBundle.loadString('assets/next/knowledge/catalog.json'),
+        runtimeBuild: buildFacts);
     FlutterPlayerPerfFrames.install();
     final localPlayback = playback.localOperations(
         core.settings, () => globals.navigatorKey.currentContext!);
@@ -597,6 +618,7 @@ final class NextRuntime extends ChangeNotifier {
             vault: core.credentialVault,
             programEnabled: () => !NextBody.bodyOnly && core.programs.enabled),
         InstanceCapability(instanceFacts),
+        KnowledgeCapability(knowledge, () => _harness.catalog),
         UiCaptureCapability(ClassicUiCapture(instanceFacts,
                 videoLayer: () => exportVideoLayer(playback)).capture),
         MediaFramesCapability(

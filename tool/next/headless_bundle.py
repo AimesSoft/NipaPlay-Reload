@@ -78,6 +78,9 @@ if forbidden:
     raise SystemExit('The headless graph still imports dart:ui')
 if not args.output:
     raise SystemExit(0)
+# Include the snapshot; source execution has unverified binary provenance.
+import runpy
+runpy.run_path(str(root / 'scripts/next/build_knowledge.py'))['write']()
 relocated = []
 with zipfile.ZipFile(args.output, 'w', zipfile.ZIP_DEFLATED) as archive:
     for name in sorted(names):
@@ -107,6 +110,7 @@ with zipfile.ZipFile(args.output, 'w', zipfile.ZIP_DEFLATED) as archive:
     for file in agent.rglob('*'):
         if file.is_file():
             archive.write(file, file.relative_to(root))
+    archive.write(root / 'assets/next/knowledge/catalog.json', 'assets/next/knowledge/catalog.json')
     archive.writestr('.dart_tool/package_config.json', json.dumps({
         'configVersion': 2, 'packages': relocated}, indent=2))
 print(f'Wrote {args.output} ({args.output.stat().st_size} bytes)')

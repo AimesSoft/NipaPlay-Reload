@@ -6,7 +6,8 @@ import 'platform/instance_native_io.dart'
     if (dart.library.ui) 'platform/instance_native_flutter.dart';
 
 final class InstanceFacts {
-  const InstanceFacts(this.version);
+  const InstanceFacts(this.version, {this.build = const {}});
+  final JsonMap build;
   final String version;
 
   Future<JsonMap> read() async {
@@ -17,6 +18,7 @@ final class InstanceFacts {
       'experimentalProfile': LabProfile.active,
       'profileName': LabProfile.name,
       'version': version,
+      'build': build,
     };
   }
 }
@@ -31,6 +33,7 @@ const instanceFactsSchema = ObjectSchema({
   'experimentalProfile': BooleanSchema(),
   'profileName': StringSchema(nullable: true),
   'version': StringSchema(),
+  'build': ObjectSchema({}, additionalProperties: true),
 }, required: [
   'pid',
   'executablePath',

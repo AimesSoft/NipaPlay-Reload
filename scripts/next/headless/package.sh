@@ -36,6 +36,12 @@ mkdir -p "$stage/bin" "$stage/libexec" "$stage/assets/next"
 
 cd "$root"
 
+# Knowledge provenance is generated from this checkout. Binary provenance is
+# compiled separately, so HEADLESS_EXE cannot silently inherit this source SHA.
+python3 scripts/next/build_knowledge.py --version "$version"
+knowledge_commit=$(python3 -c 'import json; print(json.load(open("assets/next/knowledge/catalog.json"))["sourceCommit"] or "")')
+knowledge_dirty=$(python3 -c 'import json; print(str(json.load(open("assets/next/knowledge/catalog.json"))["sourceDirty"]).lower())')
+
 # ---- 程序 ----
 exe=${HEADLESS_EXE:-}
 if [ -z "$exe" ]; then
@@ -45,6 +51,8 @@ if [ -z "$exe" ]; then
   "$dart" compile exe --target-os linux --target-arch "$dart_arch" \
     --packages=.dart_tool/package_config.json \
     -DNIPAPLAY_VERSION="$version" \
+    -DNIPAPLAY_SOURCE_COMMIT="$knowledge_commit" \
+    -DNIPAPLAY_SOURCE_DIRTY="$knowledge_dirty" \
     bin/nipaplay_headless.dart -o "$exe"
 fi
 [ -f "$exe" ] || { echo "找不到程序：$exe" >&2; exit 1; }
@@ -71,7 +79,7 @@ if command -v strip >/dev/null 2>&1 && [ -z "${RUST_TARGET:-}" ] && [ "$arch" = 
 fi
 
 # ---- 运行时读的种子资源：harness（--seed）和 agent（--agent-assets）----
-# 主机启动时从 assets/next/harness 读种子、从 assets/next/agent 读 DSH 清单和插件，别的资源不读。
+# 主机从 harness 读种子、agent 读 DSH 资源、knowledge 读版本化文档。
 copy_tree() {
   mkdir -p "$2"
   (cd "$1" && find . -type f ! -path './.codex/*' ! -name '__pycache__' ! -path '*/__pycache__/*' ! -name '.DS_Store' -print0) |
@@ -82,6 +90,7 @@ copy_tree() {
 }
 copy_tree assets/next/harness "$stage/assets/next/harness"
 copy_tree assets/next/agent "$stage/assets/next/agent"
+copy_tree assets/next/knowledge "$stage/assets/next/knowledge"
 
 # ---- 脚本与说明 ----
 install -m 0755 "$here/package/nipaplay-headless" "$stage/bin/nipaplay-headless"

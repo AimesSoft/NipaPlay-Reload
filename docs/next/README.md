@@ -1,6 +1,6 @@
 # NipaPlay Next 使用文档
 
-Next 当前处于 alpha 开发者预览阶段。平台与安装方式见[快速开始](QUICKSTART.md)，测试状态和限制见[已知问题](KNOWN_ISSUES.md)。
+Next 当前处于 alpha 开发者预览阶段。平台与安装方式见[快速开始](QUICKSTART.md)，当前限制见[已知问题](KNOWN_ISSUES.md)。
 
 ## 使用指南
 
@@ -8,6 +8,7 @@ Next 当前处于 alpha 开发者预览阶段。平台与安装方式见[快速�
 - [使用指南](USER_GUIDE.md)：媒体库、对话与 Mesh。
 - [可以让梨花做什么](NIPA_CAPABILITIES.md)：按场景浏览可请求的能力与边界。
 - [数据与恢复](DATA_AND_RECOVERY.md)：备份范围与恢复。
+- [安装包内的知识参考](KNOWLEDGE.md)：按安装版本查阅应用知识。
 - [已知问题](KNOWN_ISSUES.md)：当前限制与反馈信息。
 - [DSH 高级配置](DSH_ADVANCED_CONFIG.md)：模型预算、压缩和插件配置。
 - [Headless](HEADLESS.md)：无界面节点的安装与运行。

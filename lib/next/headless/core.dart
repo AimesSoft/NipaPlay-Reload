@@ -9,6 +9,8 @@ import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
 import '../agent_endpoint.dart';
 import '../instance_facts.dart';
+import '../knowledge/service.dart';
+import '../knowledge/capability.dart';
 import '../app_capabilities.dart';
 import '../events/capability.dart';
 import '../events/signals.dart';
@@ -377,7 +379,15 @@ final class HeadlessCore {
             media: media, danmaku: danmaku, settings: settings, vault: vault,
             programEnabled: () => programs.enabled,
             subtitleProbeReady: () => headlessFfprobe != null),
-        InstanceCapability(const InstanceFacts(headlessAppVersion)),
+        InstanceCapability(const InstanceFacts(headlessAppVersion,
+            build: headlessBuildFacts)),
+        KnowledgeCapability(ProjectKnowledge(() async {
+          final file = File('${headlessAssetPath('knowledge')}/catalog.json');
+          if (await file.length() > 4 * 1024 * 1024) {
+            throw const FormatException('Knowledge snapshot exceeds 4 MiB');
+          }
+          return file.readAsString();
+        }, runtimeBuild: headlessBuildFacts), () => harness.catalog),
         const OperationObservationsCapability(),
         bodyEvents,
         TaskCapability(engine),
@@ -415,6 +425,9 @@ final class HeadlessCore {
         harness: harness,
         seed: seed,
         appVersion: headlessAppVersion,
+        instanceFacts: const InstanceFacts(headlessAppVersion,
+                build: headlessBuildFacts)
+            .read,
         nowPlaying: uiData.nowPlaying,
         port: port,
         credentialFile: File('${root.path}/endpoint.json'),

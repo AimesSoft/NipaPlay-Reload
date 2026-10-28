@@ -175,7 +175,7 @@ def _build_payload():
     return {
         "app_version": version,
         "git_commit": os.environ.get("NIPAPLAY_BUILD_REVISION", "").strip() or _run(["git", "rev-parse", "HEAD"]),
-        "git_dirty": bool(_run(["git", "status", "--porcelain", "--untracked-files=no", "--", ".", ":!assets/build_info.json"])),
+        "git_dirty": bool(_run(["git", "status", "--porcelain", "--untracked-files=no", "--", ".", ":!assets/build_info.json", ":!assets/next/knowledge/catalog.json"])),
         "flutter_version": flutter_version,
         "build_time": now.strftime("%Y-%m-%d %H:%M:%S UTC"),
         "build_time_epoch": int(now.timestamp()),
@@ -198,6 +198,13 @@ def main():
         json.dump(payload, handle, indent=2, sort_keys=True, ensure_ascii=True)
         handle.write("\n")
 
+    # Package documentation from this exact checkout alongside its build stamp.
+    import runpy
+    from pathlib import Path
+    builder = Path(__file__).resolve().parents[3] / "scripts/next/build_knowledge.py"
+    knowledge = runpy.run_path(str(builder))
+    knowledge["write"](version=payload["app_version"],
+                       commit=payload["git_commit"], dirty=payload["git_dirty"])
     print(f"Wrote build info to {output_path}")
 
 

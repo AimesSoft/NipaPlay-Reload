@@ -33,3 +33,11 @@ const headlessVersion =
 
 /// What this host reports as its version on the instance and endpoint.
 const headlessAppVersion = '$headlessVersion-headless';
+
+/// Provenance belongs to the compiled binary, not the surrounding package.
+const headlessBuildFacts = <String, Object?>{
+  'appVersion': headlessVersion,
+  'sourceCommit': String.fromEnvironment('NIPAPLAY_SOURCE_COMMIT'),
+  'sourceDirty':
+      bool.fromEnvironment('NIPAPLAY_SOURCE_DIRTY', defaultValue: true),
+};

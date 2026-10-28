@@ -1,6 +1,6 @@
 # Next Action 参考（源码快照）
 
-本表是 `c414c016699ba272be983c6a96eb8624b78bc414` 中可定位的公开 Action **候选并集**，包含静态和可枚举动态注册；不是任何一台设备的实时目录，也不证明线上来源可用。每个 Action 的输入、输出、实际 effect、前置及错误，以目标设备 `nipa describe ACTION`、`nipa list` 和 `app.capabilities` 为权威。用 `nipa --device NAME describe ACTION` 查询目标；不同实现可共享 ID 而有不同 schema。
+本表记录当前源码中可定位的公开 Action **候选并集**，包含静态和可枚举动态注册；不是任何一台设备的实时目录，也不证明线上来源可用。每个 Action 的输入、输出、实际 effect、前置及错误，以目标设备 `nipa describe ACTION`、`nipa list` 和 `app.capabilities` 为权威。用 `nipa --device NAME describe ACTION` 查询目标；不同实现可共享 ID 而有不同 schema。
 
 列中的 read / write / destructive 是 ActionSpec 的 effect，表示接口分类，不等于纯函数、可撤销或自动确认。read 可能联网或准备缓存；write 可能产生任务、修改文件、发网络请求；destructive 也不保证弹出确认。领域预览、回执、幂等与撤回规则以具体 describe 为准。尤其 `media.mesh_files.confirm` 由调用方在用户同意后执行，宿主不会替它弹窗；`danmaku.send` 发布在线评论；SQL 提交未知先查原键回执。`danmaku.align` 是退役兼容入口，不可用于新对齐。
 
@@ -129,6 +129,10 @@
 | `history.continue_watching` | read | Get continue watching | Runtime/部分共享 | 允许 | [源码](../../../lib/next/capabilities/history_capability.dart) |
 | `history.mark_watched_batch` | write | 标记本地观看状态 | Runtime/部分共享 | 允许 | [源码](../../../lib/next/capabilities/watched_history.dart) |
 | `history.remove` | write | Remove watch history | Runtime/部分共享 | 允许 | [源码](../../../lib/next/capabilities/local_library_operations.dart) |
+| `knowledge.index` | read | 安装版本知识目录与来源 | 通用/组合 | 允许 | [源码](../../../lib/next/knowledge/capability.dart) |
+| `knowledge.locate` | read | 实时 ActionSpec 与静态源码引用 | 通用/组合 | 允许 | [源码](../../../lib/next/knowledge/capability.dart) |
+| `knowledge.read` | read | 分页读取安装包文档 | 通用/组合 | 允许 | [源码](../../../lib/next/knowledge/capability.dart) |
+| `knowledge.search` | read | 受限关键词检索安装包文档 | 通用/组合 | 允许 | [源码](../../../lib/next/knowledge/capability.dart) |
 | `media.artwork.clear` | write | 清除图片覆盖 | 通用/组合 | 允许 | [源码](../../../lib/next/ui_data/capability.dart) |
 | `media.artwork.set` | write | 设置媒体图片覆盖 | 通用/组合 | 允许 | [源码](../../../lib/next/ui_data/capability.dart) |
 | `media.entities.put_batch` | write | 建立或修改本地目录 | 通用/组合 | 允许 | [源码](../../../lib/next/media/catalog_capability.dart) |

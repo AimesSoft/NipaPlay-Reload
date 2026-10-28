@@ -4,6 +4,8 @@
 
 - [技术架构](../ARCHITECTURE.md)：宿主、运行器、媒体身份、Mesh 与数据边界。
 - [能力使用参考](../CAPABILITIES.md)：按任务查找能力。
+- [按任务操作](guides/README.md)：播放、Mesh、媒体身份、字幕与弹幕。
+- [安装包内的知识参考](../KNOWLEDGE.md)：版本化的只读知识入口及版本边界。
 - [完整 Action 参考](ACTION_REFERENCE.md)：逐项查阅应用动作的用途、影响和源码。
 - [Action 覆盖核对](ACTION_COVERAGE.md)：目录如何提取、动态注册与校验边界。
 - [界面、书架与图片能力](UI_CAPABILITIES.md)：首页主视觉、分类排列、图片覆盖与设备归属。

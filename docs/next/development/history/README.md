@@ -85,6 +85,8 @@
 
 ## 实验、专项报告与审计
 
+- [Headless 开发与实验原始记录](headless-development-notes.md)
+
 - [EXPERIMENTS](../../EXPERIMENTS.md)
 - [CAPABILITY_GAPS](../../CAPABILITY_GAPS.md)
 - [CLASSIC_NEXT_ISOLATION_SQL_20261027](../../CLASSIC_NEXT_ISOLATION_SQL_20261027.md)

@@ -30,7 +30,7 @@
 
 ## 数据、任务和投影
 
-设置、观看记录和续播进度按明确契约与 Classic 共用；共享数据不授权 Classic 在 Next 会话中替 Agent 识别。Next 启动、下载完成和扫描登记文件事实，身份由 Agent 核实后显式绑定或用 SQL 保存。旧 Classic 身份只经 `media.library.import_history` 显式导入；已提交的 Next 绑定可按 outbox 契约投影给 Classic，回读不会顺便导入其他身份。Classic 模式保留自己的扫描和匹配行为，隔离不会清空已有数据。
+设置、观看记录和续播进度按明确契约与 Classic 共用；共享数据不授权 Classic 在 Next 会话中替 Agent 识别。Next 启动、下载完成和扫描登记文件事实，身份由用户或 Agent 核实后显式绑定，也可在支持范围内用 SQL 保存。旧 Classic 身份只经 `media.library.import_history` 显式导入；已提交的 Next 绑定可按 outbox 契约投影给 Classic，回读不会顺便导入其他身份。Classic 模式保留自己的扫描和匹配行为，隔离不会清空已有数据。
 
 任务受理不等于任务成功：通过任务状态、事件及回执检查完成和失败。数据库领域原语与 `db.describe/query/write/undo/receipt` 长期并存；SQL 写入有预演、冲突检查、审计和恢复入口。Mesh 可将支持的能力路由到目标设备，在目标自己的库执行；目录、文件路径、权限、前置条件和回执均属于该设备。目标在线、认证和 Action 的 `remoteCallable` 仍是前提；不能把本机存在的能力视为远程可调用。
 
@@ -40,6 +40,6 @@
 
 请求送达、Action 完成、事务提交、投影发布和调用方收到响应是不同事实。`outcome_unknown` 表示结果未知，不证明失败或回滚。保留原目标和请求键，先查询任务、领域回执或 `diagnostics.operations`；SQL 使用原 previewId/requestId 查询 `db.receipt` 并依其契约恢复。没有持久幂等契约的写操作不能因断线自动重做。过程记录有保留期限，不能代替持久领域回执；完整步骤与限制见 [OBSERVABILITY_CONTRACT.md](OBSERVABILITY_CONTRACT.md)。
 
-## 验证范围
+## 规范与验证
 
-当前 Mac/Windows 最后实机包为 `45764aef1`、build `2026102802`。`82e7c3d17` 的新 DSH 配置有测试覆盖，尚不能据此声称已在上述实机包验证。历史 X/Y 报告记录特定时间的实验和证据，不是当前能力规范；跨设备长播、睡眠和换网等场景仍需按实际版本验收。
+本文描述架构和能力边界；实际注册、权限和运行结果以目标设备的实时目录及回执为准。历史 X/Y 报告记录特定版本和环境下的实验，不是当前版本实机验收的证明。已知限制和当前验收状态见 [已知问题](KNOWN_ISSUES.md)。

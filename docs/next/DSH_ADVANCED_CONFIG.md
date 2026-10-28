@@ -87,9 +87,3 @@ API 地址、协议、模型 ID 和主密钥仍在模型设置中管理；不允
 `compaction.modelPolicies` 支持按 `provider` + `model` 精确覆盖，宿主 provider ID 为 `nipaplay`。
 摘要目标的 `summarizationProvider` 和 `summarizationModel` 必须成对设置或成对清空；
 所指模型必须在 DSH 中可用，本文件不会注册额外模型路由。
-
-## 验证边界
-
-本轮覆盖配置合并/预算校验、外部改文件和过期保存、设置控件保留原生 JSON，
-以及真实 DSH 进程的请求输出上限、下一轮重载、历史续接和非法 JSON 保留旧进程。
-没有构建或安装新的应用包；系统编辑器打开与两端设置页外观仍需新版安装后实机验收。
