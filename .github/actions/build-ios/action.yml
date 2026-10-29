@@ -55,8 +55,8 @@ runs:
       id: build
       shell: bash
       env:
-        IPHONEOS_DEPLOYMENT_TARGET: '13.0'
-        FLUTTER_XCODE_IPHONEOS_DEPLOYMENT_TARGET: '13.0'
+        IPHONEOS_DEPLOYMENT_TARGET: '15.0'
+        FLUTTER_XCODE_IPHONEOS_DEPLOYMENT_TARGET: '15.0'
         XCODE_SDK: 'iphoneos'
       run: |
         echo "开始iOS构建流程..."
@@ -76,7 +76,7 @@ runs:
         if [ ! -z "$AVAILABLE_SDK_VERSION" ]; then
           echo "强制设置iOS SDK版本为: $AVAILABLE_SDK_VERSION"
           # 使用sed修改project.pbxproj中的IPHONEOS_DEPLOYMENT_TARGET
-          sed -i.bak "s/IPHONEOS_DEPLOYMENT_TARGET = [^;]*/IPHONEOS_DEPLOYMENT_TARGET = 13.0/g" Runner.xcodeproj/project.pbxproj
+          sed -i.bak "s/IPHONEOS_DEPLOYMENT_TARGET = [^;]*/IPHONEOS_DEPLOYMENT_TARGET = 15.0/g" Runner.xcodeproj/project.pbxproj
         fi
         
         cd ..
