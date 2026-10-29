@@ -55,6 +55,62 @@ void main() {
     items.dispose();
   });
 
+  for (final initialTotal in <int?>[0, null]) {
+    testWidgets(
+        'an empty category shows its first work after refresh '
+        '(initial total: $initialTotal)', (tester) async {
+      final data = _Works(0);
+      final items = CategoryItems(data, 'all', total: initialTotal);
+      const on = LibraryCallbacks(
+          openWork: _ignore, play: _ignore, openFolder: _ignoreFolder);
+      await tester.pumpWidget(host(CustomScrollView(
+        slivers: [CategoryGrid(items: items, on: on)],
+      )));
+      await tester.pump(const Duration(milliseconds: 50));
+      expect(items.count, 0);
+      expect(find.text('作品 0'), findsNothing);
+
+      data.count = 1;
+      items.refresh();
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 50));
+      expect(items.count, 1);
+      expect(find.text('作品 0'), findsOneWidget);
+
+      // Removing the last work must not prevent the next arrival either.
+      data.count = 0;
+      items.refresh();
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 50));
+      expect(items.count, 0);
+      expect(find.text('作品 0'), findsNothing);
+      data.count = 1;
+      items.refresh();
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 50));
+      expect(find.text('作品 0'), findsOneWidget);
+      await tester.pumpWidget(const SizedBox.shrink());
+      items.dispose();
+    });
+  }
+
+  testWidgets('a refresh during an empty read is reconciled after that read', (tester) async {
+    final data = _Works(0)..hold = Completer<void>();
+    final items = CategoryItems(data, 'all', total: 0);
+    items.refresh();
+    data.count = 1;
+    for (var i = 0; i < 10; i++) { items.refresh(); }
+    expect(data.asked, hasLength(1));
+    final hold = data.hold!;
+    data.hold = null;
+    hold.complete();
+    await tester.pump();
+    expect(items.count, 1);
+    expect(data.asked, hasLength(2));
+    expect(items.at(0), isA<UiWorkItem>());
+    items.dispose();
+  });
+
   testWidgets('the editor takes categories away but keeps the last one',
       (tester) async {
     final removed = <String>[];
@@ -151,7 +207,8 @@ void _ignoreFolder(UiFolderItem _) {}
 /// [count] works, answered at once; remembers each slice asked for.
 final class _Works implements NextLibraryData {
   _Works(this.count);
-  final int count;
+  int count;
+  Completer<void>? hold;
   final asked = <({int offset, String? sort})>[];
 
   @override
@@ -159,10 +216,12 @@ final class _Works implements NextLibraryData {
       {int offset = 0, int limit = 60, String? sort}) async {
     asked.add((offset: offset, sort: sort));
     final end = (offset + limit).clamp(0, count);
-    return UiSlice([
+    final result = UiSlice([
       for (var i = offset; i < end; i++)
         UiWorkItem(UiWork(workId: 'w$i', title: '作品 $i'))
     ], total: count);
+    await hold?.future;
+    return result;
   }
 
   @override

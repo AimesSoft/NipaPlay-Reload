@@ -36,6 +36,7 @@ final class FakeDownloadBackend
       initializations = 0;
   int completed = 0, total = 4;
   String handle = '1';
+  String? state;
   String? error;
 
   /// Thrown by [add] after the session is reachable, like a magnet whose
@@ -67,6 +68,7 @@ final class FakeDownloadBackend
       total: total,
       finished: finished,
       paused: paused,
+      state: state,
       error: error,
       health: health,
       files: overrideFiles ?? [video]);

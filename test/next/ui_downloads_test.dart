@@ -255,6 +255,77 @@ void main() {
       expect(list.last.live, isFalse);
     });
 
+    test('the list shows a restored download session once, keeping other '
+        'backends and output directories separate', () async {
+      Map row(String id, String created,
+              {JsonMap backend = const {'kind': 'builtin'}}) =>
+          {..._job(id, 'succeeded', created: created), 'backend': backend};
+      final script = _Script({
+        'task.list': (_) => {
+              'jobs': [
+                row('original', '2026-10-01'),
+                row('restored', '2026-10-02'),
+                row('latest', '2026-10-03'),
+                row('other-folder', '2026-10-04'),
+                row('remote-a', '2026-10-05',
+                    backend: {'kind': 'qbittorrent', 'id': 'a'}),
+                row('remote-b', '2026-10-06',
+                    backend: {'kind': 'qbittorrent', 'id': 'b'}),
+              ]
+            },
+        'download.read': (input) => {
+              'results': [
+                for (final id in input['jobIds'] as List)
+                  {
+                    'status': 'completed',
+                    'task': {
+                      ..._task(finished: true),
+                      'infoHash': '0123456789abcdef0123456789abcdef01234567',
+                      if (id == 'other-folder') 'outputDirectory': '/other',
+                    }
+                  }
+              ]
+            },
+      });
+      final list = await NextDownloads(script.gui).list();
+      expect(list.map((d) => d.jobId),
+          ['remote-b', 'remote-a', 'other-folder', 'latest']);
+    });
+
+    test('a failed latest read does not hide a readable session of the same identity', () async {
+      const receipt = {'details': {'infoHash': 'ABC', 'outputDirectory': '/m/NipaPlay'}};
+      final script = _Script({
+        'task.list': (_) => {'jobs': [
+          {..._job('latest', 'succeeded', created: '2026-10-03', receipt: receipt), 'backend': {'kind': 'builtin'}},
+          {..._job('readable', 'running', created: '2026-10-02'), 'backend': {'kind': 'builtin'}},
+        ]},
+        'download.read': (_) => {'results': [
+          {'status': 'failed', 'error': const Failure(FailureCode.unavailable, 'temporary read failure').toJson()},
+          {'status': 'completed', 'task': {..._task(), 'infoHash': 'abc'}},
+        ]},
+      });
+      final rows = await NextDownloads(script.gui).list();
+      expect(rows, hasLength(1));
+      expect(rows.single.jobId, 'readable');
+      expect(rows.single.live, true);
+      expect(rows.single.state, UiDownloadState.downloading);
+    });
+
+    test('receipt-only duplicates fold but unknown directories remain distinct', () async {
+      Map row(String id, String? directory) => {
+        ..._job(id, 'succeeded', receipt: {'details': {
+          'infoHash': 'abc', if (directory != null) 'outputDirectory': directory,
+        }}), 'backend': {'kind': 'builtin'},
+      };
+      final script = _Script({
+        'task.list': (_) => {'jobs': [row('a', '/one'), row('b', '/one'), row('c', '/two'), row('d', null), row('e', null)]},
+        'download.read': (input) => {'results': [for (final _ in input['jobIds'] as List) {'status': 'completed', 'task': null}]},
+      });
+      final rows = await NextDownloads(script.gui).list();
+      expect(rows, hasLength(4));
+      expect(rows.map((r) => r.jobId), containsAll(['c', 'd', 'e']));
+    });
+
     test('a batch failure is not taken for success', () async {
       final script = _Script({
         'download.set_paused': (_) => {

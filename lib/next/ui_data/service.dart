@@ -133,8 +133,7 @@ final class UiDataService implements NextUiData, NextNowPlaying {
 
   Future<void> start() async {
     _observed = await _fingerprint();
-    _jobs = engine.changes.listen((_) {
-      _changed();
+    void publishTasks() {
       if (!_tasks.hasListener) {
         return;
       }
@@ -145,7 +144,15 @@ final class UiDataService implements NextUiData, NextNowPlaying {
       unawaited(_publishing.then<void>((_) {},
           onError: (Object e, StackTrace s) =>
               Zone.current.handleUncaughtError(e, s)));
+    }
+
+    _jobs = engine.changes.listen((_) {
+      _changed();
+      publishTasks();
     });
+    // The shell may already show tasks while startup or resume is in flight.
+    // Reconcile changes made before this listener was attached.
+    publishTasks();
     // The history, what to continue and the calendar tell when they move.
     _classic = sources.changes.listen((_) => _changed());
     _timer = Timer.periodic(const Duration(milliseconds: 250), (_) {

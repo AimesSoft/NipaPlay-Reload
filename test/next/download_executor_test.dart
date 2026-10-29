@@ -826,6 +826,50 @@ void main() {
     expect(library.scans, hasLength(1));
   });
 
+  test('restoring a completed torrent does not adopt its recheck as a new job',
+      () async {
+    backend.present = true;
+    await backend.finish();
+    final job = await add();
+    final done = await untilState(engine, job.jobId, JobState.succeeded);
+    backend
+      ..handle = 'restored-handle'
+      ..state = 'initializing'
+      ..finished = false
+      ..completed = 2;
+    expect((await downloads.adopt(backend, backend.snapshot)).jobId, job.jobId);
+    expect(await engine.list(type: 'download'), hasLength(1));
+    backend
+      ..state = 'live'
+      ..finished = true
+      ..completed = backend.total;
+    expect((await downloads.adopt(backend, backend.snapshot)).jobId, job.jobId);
+    expect((await engine.get(job.jobId)).toJson(), done.toJson());
+    expect(backend.additions, 0);
+  });
+
+  test('missing pieces after recheck create one repair job without replaying add', () async {
+    backend.present = true;
+    await backend.finish();
+    final original = await add();
+    final done = await untilState(engine, original.jobId, JobState.succeeded);
+    backend..state = 'initializing'..finished = false..completed = 2;
+    expect((await downloads.adopt(backend, backend.snapshot)).jobId, original.jobId);
+    backend.state = 'live';
+    final repair = await downloads.adopt(backend, backend.snapshot);
+    expect(repair.jobId, isNot(original.jobId));
+    for (var i = 0; i < 3; i++) {
+      expect((await downloads.adopt(backend, backend.snapshot)).jobId, repair.jobId);
+    }
+    expect(await engine.list(type: 'download'), hasLength(2));
+    expect((await engine.get(original.jobId)).toJson(), done.toJson());
+    expect(backend.additions, 0);
+    await backend.finish();
+    await untilState(engine, repair.jobId, JobState.succeeded);
+    expect((await downloads.adopt(backend, backend.snapshot)).jobId, repair.jobId);
+    expect(await engine.list(type: 'download'), hasLength(2));
+  });
+
   test(
       'restart reconciles a committed session without a checkpoint and a changed native handle',
       () async {
