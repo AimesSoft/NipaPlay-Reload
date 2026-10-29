@@ -84,6 +84,9 @@ class CategoryItems extends ChangeNotifier {
   /// Something changed: each slice is asked for again as it is shown.
   void refresh() {
     _stale.addAll(_slices.keys);
+    // An empty grid builds no tiles, so none can ask for a stale slice.
+    // Read its first slice to discover works that have arrived since.
+    if (_total == 0) unawaited(_load(0));
     notifyListeners();
   }
 

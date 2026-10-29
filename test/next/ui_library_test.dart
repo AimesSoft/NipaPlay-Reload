@@ -55,6 +55,45 @@ void main() {
     items.dispose();
   });
 
+  for (final initialTotal in <int?>[0, null]) {
+    testWidgets(
+        'an empty category shows its first work after refresh '
+        '(initial total: $initialTotal)', (tester) async {
+      final data = _Works(0);
+      final items = CategoryItems(data, 'all', total: initialTotal);
+      const on = LibraryCallbacks(
+          openWork: _ignore, play: _ignore, openFolder: _ignoreFolder);
+      await tester.pumpWidget(host(CustomScrollView(
+        slivers: [CategoryGrid(items: items, on: on)],
+      )));
+      await tester.pump(const Duration(milliseconds: 50));
+      expect(items.count, 0);
+      expect(find.text('作品 0'), findsNothing);
+
+      data.count = 1;
+      items.refresh();
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 50));
+      expect(items.count, 1);
+      expect(find.text('作品 0'), findsOneWidget);
+
+      // Removing the last work must not prevent the next arrival either.
+      data.count = 0;
+      items.refresh();
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 50));
+      expect(items.count, 0);
+      expect(find.text('作品 0'), findsNothing);
+      data.count = 1;
+      items.refresh();
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 50));
+      expect(find.text('作品 0'), findsOneWidget);
+      await tester.pumpWidget(const SizedBox.shrink());
+      items.dispose();
+    });
+  }
+
   testWidgets('the editor takes categories away but keeps the last one',
       (tester) async {
     final removed = <String>[];
@@ -151,7 +190,7 @@ void _ignoreFolder(UiFolderItem _) {}
 /// [count] works, answered at once; remembers each slice asked for.
 final class _Works implements NextLibraryData {
   _Works(this.count);
-  final int count;
+  int count;
   final asked = <({int offset, String? sort})>[];
 
   @override
