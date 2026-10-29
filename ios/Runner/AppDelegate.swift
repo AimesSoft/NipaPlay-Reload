@@ -5,7 +5,7 @@ import CryptoKit
 import Photos
 
 @main
-@objc class AppDelegate: FlutterAppDelegate {
+@objc class AppDelegate: FlutterAppDelegate, FlutterImplicitEngineDelegate {
   private var fileAssociationChannel: FlutterMethodChannel?
   private var pendingOpenFiles: [String] = []
   private var pendingOpenErrors: [String] = []
@@ -16,190 +16,117 @@ import Photos
     qos: .userInitiated
   )
 
-  override func application(
-    _ application: UIApplication,
-    didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?
-  ) -> Bool {
-    GeneratedPluginRegistrant.register(with: self)
+  /// The window scene the app runs in. The engine and its channels are created
+  /// before the scene has a window, so channels look the scene up per call.
+  private static var windowScene: UIWindowScene? {
+    let scenes = UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }
+    return scenes.first { $0.activationState == .foregroundActive } ?? scenes.first
+  }
 
-    if let registrar = self.registrar(forPlugin: "AirPlayRoutePicker") {
-      let factory = AirPlayRoutePickerFactory(messenger: registrar.messenger())
-      registrar.register(factory, withId: "nipaplay/airplay_route_picker")
+  /// The Flutter view controller in that scene, for presenting system sheets.
+  private static var flutterViewController: FlutterViewController? {
+    windowScene?.windows.lazy.compactMap { $0.rootViewController as? FlutterViewController }.first
+  }
+
+  func didInitializeImplicitFlutterEngine(_ engineBridge: FlutterImplicitEngineBridge) {
+    GeneratedPluginRegistrant.register(with: engineBridge.pluginRegistry)
+
+    let registrar = engineBridge.applicationRegistrar
+    let messenger = registrar.messenger()
+
+    registrar.register(
+      AirPlayRoutePickerFactory(messenger: messenger),
+      withId: "nipaplay/airplay_route_picker"
+    )
+
+    let deviceProfileChannel = FlutterMethodChannel(
+      name: "nipaplay/device_profile",
+      binaryMessenger: messenger
+    )
+
+    deviceProfileChannel.setMethodCallHandler { call, result in
+      guard call.method == "getStartupDeviceProfile" else {
+        result(FlutterMethodNotImplemented)
+        return
+      }
+
+      let bounds = (Self.windowScene?.screen ?? UIScreen.main).bounds
+      result([
+        "isIPad": UIDevice.current.userInterfaceIdiom == .pad,
+        "screenWidthDp": Double(bounds.width),
+        "screenHeightDp": Double(bounds.height),
+        "smallestScreenWidthDp": Double(min(bounds.width, bounds.height)),
+      ])
     }
 
-    if let controller = window?.rootViewController as? FlutterViewController {
-      let deviceProfileChannel = FlutterMethodChannel(
-        name: "nipaplay/device_profile",
-        binaryMessenger: controller.binaryMessenger
-      )
+    let windowTraitsChannel = FlutterMethodChannel(
+      name: "nipaplay/window_traits",
+      binaryMessenger: messenger
+    )
 
-      deviceProfileChannel.setMethodCallHandler { call, result in
-        guard call.method == "getStartupDeviceProfile" else {
-          result(FlutterMethodNotImplemented)
-          return
-        }
-
-        let bounds = UIScreen.main.bounds
-        result([
-          "isIPad": UIDevice.current.userInterfaceIdiom == .pad,
-          "screenWidthDp": Double(bounds.width),
-          "screenHeightDp": Double(bounds.height),
-          "smallestScreenWidthDp": Double(min(bounds.width, bounds.height)),
-        ])
+    windowTraitsChannel.setMethodCallHandler { call, result in
+      guard call.method == "getWindowTraits" else {
+        result(FlutterMethodNotImplemented)
+        return
       }
+      result(Self.flutterViewController.map { Self.windowTraits(for: $0.view) })
+    }
 
-      let windowTraitsChannel = FlutterMethodChannel(
-        name: "nipaplay/window_traits",
-        binaryMessenger: controller.binaryMessenger
-      )
-
-      windowTraitsChannel.setMethodCallHandler { [weak controller] call, result in
-        guard call.method == "getWindowTraits" else {
-          result(FlutterMethodNotImplemented)
-          return
-        }
-        result(controller.map { Self.windowTraits(for: $0.view) })
+    let fileChannel = FlutterMethodChannel(
+      name: "file_association_channel",
+      binaryMessenger: messenger
+    )
+    fileAssociationChannel = fileChannel
+    fileChannel.setMethodCallHandler { [weak self] call, result in
+      guard let self = self else {
+        result(nil)
+        return
       }
-
-      let fileChannel = FlutterMethodChannel(
-        name: "file_association_channel",
-        binaryMessenger: controller.binaryMessenger
-      )
-      fileAssociationChannel = fileChannel
-      fileChannel.setMethodCallHandler { [weak self] call, result in
-        guard let self = self else {
-          result(nil)
-          return
-        }
-        switch call.method {
-        case "getOpenFileUri":
-          result(self.pendingOpenFiles.isEmpty ? nil : self.pendingOpenFiles.removeFirst())
-        case "getOpenFileError":
-          result(self.pendingOpenErrors.isEmpty ? nil : self.pendingOpenErrors.removeFirst())
-        default:
-          result(FlutterMethodNotImplemented)
-        }
+      switch call.method {
+      case "getOpenFileUri":
+        result(self.pendingOpenFiles.isEmpty ? nil : self.pendingOpenFiles.removeFirst())
+      case "getOpenFileError":
+        result(self.pendingOpenErrors.isEmpty ? nil : self.pendingOpenErrors.removeFirst())
+      default:
+        result(FlutterMethodNotImplemented)
       }
+    }
 
-      let channel = FlutterMethodChannel(
-        name: "nipaplay/system_share",
-        binaryMessenger: controller.binaryMessenger
-      )
+    let shareChannel = FlutterMethodChannel(
+      name: "nipaplay/system_share",
+      binaryMessenger: messenger
+    )
 
-      channel.setMethodCallHandler { [weak controller] call, result in
-        if call.method == "exportFile" {
-          guard
-            let args = call.arguments as? [String: Any],
-            let filePath = args["filePath"] as? String,
-            !filePath.isEmpty
-          else {
-            result(
-              FlutterError(
-                code: "INVALID_ARGUMENTS",
-                message: "A file path is required",
-                details: nil
-              )
-            )
-            return
-          }
-
-          guard FileManager.default.fileExists(atPath: filePath) else {
-            result(
-              FlutterError(
-                code: "FILE_NOT_FOUND",
-                message: "The file to export does not exist",
-                details: filePath
-              )
-            )
-            return
-          }
-
-          DispatchQueue.main.async {
-            guard let controller = controller else {
-              result(
-                FlutterError(
-                  code: "NO_CONTROLLER",
-                  message: "No view controller is available",
-                  details: nil
-                )
-              )
-              return
-            }
-
-            let fileURL = URL(fileURLWithPath: filePath)
-            let picker: UIDocumentPickerViewController
-            if #available(iOS 14.0, *) {
-              picker = UIDocumentPickerViewController(
-                forExporting: [fileURL],
-                asCopy: true
-              )
-            } else {
-              picker = UIDocumentPickerViewController(
-                url: fileURL,
-                in: .exportToService
-              )
-            }
-            controller.present(picker, animated: true) {
-              result(true)
-            }
-          }
-          return
-        }
-
-        guard call.method == "share" else {
-          result(FlutterMethodNotImplemented)
-          return
-        }
-
-        guard let args = call.arguments as? [String: Any] else {
+    shareChannel.setMethodCallHandler { call, result in
+      if call.method == "exportFile" {
+        guard
+          let args = call.arguments as? [String: Any],
+          let filePath = args["filePath"] as? String,
+          !filePath.isEmpty
+        else {
           result(
             FlutterError(
               code: "INVALID_ARGUMENTS",
-              message: "Arguments are required",
+              message: "A file path is required",
               details: nil
             )
           )
           return
         }
 
-        let text = args["text"] as? String
-        let urlString = args["url"] as? String
-        let filePath = args["filePath"] as? String
-
-        var items: [Any] = []
-        if let filePath = filePath, !filePath.isEmpty {
-          guard FileManager.default.fileExists(atPath: filePath) else {
-            result(
-              FlutterError(
-                code: "FILE_NOT_FOUND",
-                message: "The file to share does not exist",
-                details: filePath
-              )
-            )
-            return
-          }
-          items.append(URL(fileURLWithPath: filePath))
-        }
-        if let urlString = urlString, let url = URL(string: urlString) {
-          items.append(url)
-        }
-        if let text = text, !text.isEmpty {
-          items.append(text)
-        }
-
-        if items.isEmpty {
+        guard FileManager.default.fileExists(atPath: filePath) else {
           result(
             FlutterError(
-              code: "NO_ITEMS",
-              message: "Nothing to share",
-              details: nil
+              code: "FILE_NOT_FOUND",
+              message: "The file to export does not exist",
+              details: filePath
             )
           )
           return
         }
 
         DispatchQueue.main.async {
-          guard let controller = controller else {
+          guard let controller = Self.flutterViewController else {
             result(
               FlutterError(
                 code: "NO_CONTROLLER",
@@ -209,138 +136,171 @@ import Photos
             )
             return
           }
-          let activity = UIActivityViewController(activityItems: items, applicationActivities: nil)
-          if let popover = activity.popoverPresentationController, let view = controller.view {
-            popover.sourceView = view
-            popover.sourceRect = CGRect(x: view.bounds.midX, y: view.bounds.midY, width: 0, height: 0)
-            popover.permittedArrowDirections = []
+
+          let picker = UIDocumentPickerViewController(
+            forExporting: [URL(fileURLWithPath: filePath)],
+            asCopy: true
+          )
+          controller.present(picker, animated: true) {
+            result(true)
           }
-          controller.present(activity, animated: true)
-          result(true)
         }
+        return
       }
 
-      let photoChannel = FlutterMethodChannel(
-        name: "nipaplay/photo_library",
-        binaryMessenger: controller.binaryMessenger
-      )
+      guard call.method == "share" else {
+        result(FlutterMethodNotImplemented)
+        return
+      }
 
-      photoChannel.setMethodCallHandler { call, result in
-        guard call.method == "saveImage" else {
-          result(FlutterMethodNotImplemented)
-          return
-        }
+      guard let args = call.arguments as? [String: Any] else {
+        result(
+          FlutterError(
+            code: "INVALID_ARGUMENTS",
+            message: "Arguments are required",
+            details: nil
+          )
+        )
+        return
+      }
 
-        guard
-          let args = call.arguments as? [String: Any],
-          let typedData = args["bytes"] as? FlutterStandardTypedData
-        else {
+      let text = args["text"] as? String
+      let urlString = args["url"] as? String
+      let filePath = args["filePath"] as? String
+
+      var items: [Any] = []
+      if let filePath = filePath, !filePath.isEmpty {
+        guard FileManager.default.fileExists(atPath: filePath) else {
           result(
             FlutterError(
-              code: "INVALID_ARGUMENTS",
-              message: "Image bytes are required",
+              code: "FILE_NOT_FOUND",
+              message: "The file to share does not exist",
+              details: filePath
+            )
+          )
+          return
+        }
+        items.append(URL(fileURLWithPath: filePath))
+      }
+      if let urlString = urlString, let url = URL(string: urlString) {
+        items.append(url)
+      }
+      if let text = text, !text.isEmpty {
+        items.append(text)
+      }
+
+      if items.isEmpty {
+        result(
+          FlutterError(
+            code: "NO_ITEMS",
+            message: "Nothing to share",
+            details: nil
+          )
+        )
+        return
+      }
+
+      DispatchQueue.main.async {
+        guard let controller = Self.flutterViewController else {
+          result(
+            FlutterError(
+              code: "NO_CONTROLLER",
+              message: "No view controller is available",
               details: nil
             )
           )
           return
         }
+        let activity = UIActivityViewController(activityItems: items, applicationActivities: nil)
+        if let popover = activity.popoverPresentationController, let view = controller.view {
+          popover.sourceView = view
+          popover.sourceRect = CGRect(x: view.bounds.midX, y: view.bounds.midY, width: 0, height: 0)
+          popover.permittedArrowDirections = []
+        }
+        controller.present(activity, animated: true)
+        result(true)
+      }
+    }
 
-        let data = typedData.data
-        guard let image = UIImage(data: data) else {
-          result(
-            FlutterError(
-              code: "INVALID_IMAGE",
-              message: "Unable to decode image bytes",
-              details: nil
-            )
+    let photoChannel = FlutterMethodChannel(
+      name: "nipaplay/photo_library",
+      binaryMessenger: messenger
+    )
+
+    photoChannel.setMethodCallHandler { call, result in
+      guard call.method == "saveImage" else {
+        result(FlutterMethodNotImplemented)
+        return
+      }
+
+      guard
+        let args = call.arguments as? [String: Any],
+        let typedData = args["bytes"] as? FlutterStandardTypedData
+      else {
+        result(
+          FlutterError(
+            code: "INVALID_ARGUMENTS",
+            message: "Image bytes are required",
+            details: nil
           )
-          return
-        }
+        )
+        return
+      }
 
-        let saveBlock = {
-          PHPhotoLibrary.shared().performChanges({
-            PHAssetChangeRequest.creationRequestForAsset(from: image)
-          }) { success, error in
-            DispatchQueue.main.async {
-              if success {
-                result(true)
-              } else {
-                result(
-                  FlutterError(
-                    code: "SAVE_FAILED",
-                    message: error?.localizedDescription ?? "Failed to save image",
-                    details: nil
-                  )
+      let data = typedData.data
+      guard let image = UIImage(data: data) else {
+        result(
+          FlutterError(
+            code: "INVALID_IMAGE",
+            message: "Unable to decode image bytes",
+            details: nil
+          )
+        )
+        return
+      }
+
+      let saveBlock = {
+        PHPhotoLibrary.shared().performChanges({
+          PHAssetChangeRequest.creationRequestForAsset(from: image)
+        }) { success, error in
+          DispatchQueue.main.async {
+            if success {
+              result(true)
+            } else {
+              result(
+                FlutterError(
+                  code: "SAVE_FAILED",
+                  message: error?.localizedDescription ?? "Failed to save image",
+                  details: nil
                 )
-              }
-            }
-          }
-        }
-
-        if #available(iOS 14, *) {
-          let status = PHPhotoLibrary.authorizationStatus(for: .addOnly)
-          if status == .authorized {
-            saveBlock()
-            return
-          }
-
-          PHPhotoLibrary.requestAuthorization(for: .addOnly) { newStatus in
-            DispatchQueue.main.async {
-              if newStatus == .authorized {
-                saveBlock()
-              } else {
-                result(
-                  FlutterError(
-                    code: "PERMISSION_DENIED",
-                    message: "Photo library permission denied",
-                    details: nil
-                  )
-                )
-              }
-            }
-          }
-        } else {
-          let status = PHPhotoLibrary.authorizationStatus()
-          if status == .authorized {
-            saveBlock()
-            return
-          }
-
-          PHPhotoLibrary.requestAuthorization { newStatus in
-            DispatchQueue.main.async {
-              if newStatus == .authorized {
-                saveBlock()
-              } else {
-                result(
-                  FlutterError(
-                    code: "PERMISSION_DENIED",
-                    message: "Photo library permission denied",
-                    details: nil
-                  )
-                )
-              }
+              )
             }
           }
         }
       }
-    }
 
-    let launched = super.application(application, didFinishLaunchingWithOptions: launchOptions)
-    if let url = launchOptions?[.url] as? URL, url.isFileURL {
-      receiveFileURL(url)
-    }
-    return launched
-  }
+      let status = PHPhotoLibrary.authorizationStatus(for: .addOnly)
+      if status == .authorized {
+        saveBlock()
+        return
+      }
 
-  override func application(
-    _ application: UIApplication,
-    open url: URL,
-    options: [UIApplication.OpenURLOptionsKey: Any] = [:]
-  ) -> Bool {
-    let handledByPlugin = super.application(application, open: url, options: options)
-    guard url.isFileURL else { return handledByPlugin }
-    receiveFileURL(url)
-    return true
+      PHPhotoLibrary.requestAuthorization(for: .addOnly) { newStatus in
+        DispatchQueue.main.async {
+          if newStatus == .authorized {
+            saveBlock()
+          } else {
+            result(
+              FlutterError(
+                code: "PERMISSION_DENIED",
+                message: "Photo library permission denied",
+                details: nil
+              )
+            )
+          }
+        }
+      }
+    }
   }
 
   /// Reports where iPhone Duo places toolbars and tab bars
@@ -385,13 +345,13 @@ import Photos
     }
   }
 
-  private func receiveFileURL(_ url: URL) {
+  func receiveFileURL(_ url: URL) {
     let videoExtensions: Set<String> = [
       "mp4", "mkv", "avi", "mov", "webm", "wmv", "m4v", "3gp", "flv", "ts", "m2ts"
     ]
     guard videoExtensions.contains(url.pathExtension.lowercased()) else { return }
 
-    // A cold launch can report the same URL in launchOptions and openURL.
+    // Ignore the same URL delivered twice in quick succession.
     let now = Date()
     if lastOpenedFileURL == url,
        let previous = lastOpenedFileDate,
