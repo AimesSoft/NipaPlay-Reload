@@ -2,12 +2,14 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:math';
 import 'dart:io';
+import 'package:crypto/crypto.dart';
 
 import 'package:nipa_harness/nipa_harness.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:nipaplay/security/secret_redactor.dart';
 
 import '../chat/chat_host.dart';
+import '../chat/turn_boundaries.dart';
 import '../chat/helpers.dart';
 import '../chat/turn_process_store.dart';
 import '../repository_location.dart';
@@ -20,6 +22,7 @@ part 'download_returns.dart';
 part 'library_arrivals.dart';
 part 'program_returns.dart';
 part 'user_task_returns.dart';
+part 'inbox.dart';
 
 const followupFields = ObjectSchema({
   'id': StringSchema(),
@@ -66,6 +69,7 @@ final class Followups {
   final TaskEngine engine;
   final RepositoryLocation location;
   ChatHost? _host;
+  Future<void>? _inboxSchema;
 
   /// The running conversation host; null while none is attached.
   ChatHost? get chatHost => _host;
@@ -573,6 +577,8 @@ final class Followups {
       await _collectDownloadReturns(tasks);
       await _collectProgramReturns(tasks);
       await _collectUserTaskReturns(tasks);
+      await _collectFolderRequests(tasks);
+      await _collectInboxErrors(tasks);
       await _deliver(tasks);
     } catch (error) {
       // What this sweep took is looked at again by the next one.
@@ -737,6 +743,11 @@ final class Followups {
       }
       final host = _host;
       if (row['state'] == 'ready') {
+        if (row['automatic'] == 'folderRequest' &&
+            await inboxPreference('library.organizeAddedFolders', true) != true) {
+          await _save(row, 'cancelled', 'cancelled', reason: 'Folder organization disabled before dispatch.');
+          continue;
+        }
         if (row['automatic'] == 'library' && !await _libraryGate(row)) {
           continue;
         }
@@ -973,7 +984,7 @@ final class Followups {
   /// the row is `dispatching` before the text leaves, sweeps are serialized,
   /// and the host only reports a turn when the runner took the text.
   Future<bool> _steerIntoTurn(JsonMap row, ChatHost host) async {
-    if (host.dsh == null) return false;
+    if (host.dsh == null && row['automatic'] != 'inboxAnswer') return false;
     // A helper result the parent already collected is recorded by the idle path.
     if ((row['condition'] as Map)['jobId'] case final String jobId) {
       final job = await engine.get(jobId);
@@ -991,7 +1002,7 @@ final class Followups {
     }
     await _save(row, 'dispatching', 'dispatching');
     try {
-      final turnId = await host.steerFollowup(target, _prompt(row));
+      final turnId = await host.steerFollowup(target, _prompt(row), userAnswer: row['automatic'] == 'inboxAnswer');
       if (turnId == null) {
         for (final entry in before.entries) {
           if (entry.value == null) {
@@ -1036,7 +1047,7 @@ final class Followups {
 
   String _marker(JsonMap row) => '[NipaPlay followup ${row['id']}]';
   String _prompt(JsonMap row) => '${_marker(row)}\n'
-      '这是宿主派发的新回合。说明和触发事实如下，下一步由你决定。\n'
+      '这是宿主送达的后续输入。说明和触发事实如下，下一步由你决定。\n'
       '登记来源：${row['origin']}\n登记说明：\n${row['instruction']}\n'
       '触发事实（任务终态不等于成功，请依据状态与回执判断）：\n${jsonEncode(row['trigger'])}';
 

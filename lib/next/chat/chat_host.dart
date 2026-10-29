@@ -1234,13 +1234,12 @@ final class ChatHost implements ConversationHistory, DelegationChat, GuestChat {
   /// for the turn to end: the runner cannot take input mid-turn, no turn is
   /// running on that thread, or the runner refused (the turn ended meanwhile).
   ///
-  /// Only DSH is asked: its `turn/steer` is a next-step message into the
-  /// running turn, like a subagent's report or a finished background command.
-  /// Codex's `turn/steer` is not relied on here; its followups still wait.
+  /// DSH accepts followups at its next step. Explicit viewer answers also use
+  /// Codex's user steer transport; other Codex followups still wait.
   /// An error that leaves the outcome unknown (the runner went away mid-call)
   /// is thrown, so the caller never sends the same text a second time.
-  Future<String?> steerFollowup(String? id, String text) => _control(() async {
-        if (dsh == null) return null;
+  Future<String?> steerFollowup(String? id, String text, {bool userAnswer = false}) => _control(() async {
+        if (dsh == null && !userAnswer) return null;
         final target = id ?? mainThreadId ?? threadId;
         if (target == null) return null;
         final live = livenessFor(target);

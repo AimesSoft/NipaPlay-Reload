@@ -1,3 +1,4 @@
+import '../followups/inbox_capability.dart';
 import '../mesh/files.dart';
 import 'dart:async';
 import 'dart:convert';
@@ -304,6 +305,8 @@ final class HeadlessCore {
         library: library);
     followups =
         Followups(database, engine, HeadlessRepository(repository.path));
+    settings.register(inboxSettings(followups));
+    media.folderRequest = followups.folderRequest;
     helpers.engine = engine;
     helpers.followups = followups;
     followups.helpers = helpers;

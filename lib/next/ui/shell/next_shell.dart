@@ -26,6 +26,7 @@ import '../widgets/art_origin.dart';
 import '../widgets/grain.dart';
 import '../widgets/sheet.dart';
 import 'shell_controller.dart';
+import 'agent_inbox.dart';
 import 'top_bar.dart';
 
 /// The Next application shell: top bar, sections, pushed pages (detail,
@@ -245,6 +246,13 @@ class _NextShellState extends State<NextShell> {
                       ),
                     ),
                   ),
+                  Positioned.fill(child: AgentInboxOverlay(bottomInset: playing ? 120 : 0, calls: _services.calls, events: _services.chat.display,
+                    peer: () => _services.peers?.chosen, errors: _shell.chat.rawError,
+                    onOpen: (row) async {
+                      _shell.openChat();
+                      final target = row['target'] as Map?;
+                      if (target?['threadId'] case final String thread) await _shell.chat.select(thread);
+                    })),
                   const Positioned.fill(child: NextSheetLayer()),
                 ]),
               ),

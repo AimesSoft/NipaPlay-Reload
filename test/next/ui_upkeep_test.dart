@@ -187,6 +187,15 @@ void main() {
     expect(near.single.address, 'http://192.168.1.20:1180');
   });
 
+  test('only explicit folder addition asks for Agent organization', () async {
+    final world = _World();
+    final folders = NextFolders(world.calls);
+    await folders.scan(['/library']);
+    await folders.scan(['/library'], true);
+    expect(world.scanRequests.first.containsKey('organizeAddedFolder'), false);
+    expect(world.scanRequests.last['organizeAddedFolder'], true);
+  });
+
   test('folder indexing failure does not fall back to Classic recognition', () async {
     final world = _World()..indexAvailable = false;
     await expectLater(NextFolders(world.calls).scan(['/unavailable']),
@@ -240,6 +249,7 @@ final class _World {
   final _planned = <String, List<String>>{};
   final pruned = <String>[];
   final scanned = <List<String>>[];
+  final scanRequests = <JsonMap>[];
   final indexed = <String>[];
   bool indexAvailable = true;
   JsonMap? checked;
@@ -307,6 +317,7 @@ final class _World {
       _Action('media.library.roots.add',
           (_) => {'selected': ['/Users/hikari/Movies/电影'], 'roots': []}),
       _Action('media.library.scan', (input) {
+        scanRequests.add(Map.of(input));
         if (!indexAvailable) {
           throw const Failure(FailureCode.unavailable, 'Unavailable directory.');
         }

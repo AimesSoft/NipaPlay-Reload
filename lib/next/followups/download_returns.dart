@@ -301,6 +301,8 @@ extension DownloadReturns on Followups {
             'program' => 'meshProgram',
             'subscription' => 'meshSubscription',
             'userTask' => 'meshUserTask',
+            'inboxAnswer' => 'inboxAnswer',
+            'folderRequest' => 'folderRequest',
             _ => 'meshDownload',
           };
           row['condition'] = {'kind': 'mesh.${remote['automatic']}.facts'};
@@ -311,7 +313,7 @@ extension DownloadReturns on Followups {
         }
         final safe = redactHarnessJson(row) as JsonMap;
         await database.transaction((tx) async {
-          if (!wake && remote['automatic'] != 'subscription') {
+          if (!wake && const {'download', 'program', 'userTask'}.contains(remote['automatic'])) {
             for (final fact in ((safe['trigger'] as Map)['facts'] as List)
                 .cast<JsonMap>()) {
               final event = remote['automatic'] == 'download' &&

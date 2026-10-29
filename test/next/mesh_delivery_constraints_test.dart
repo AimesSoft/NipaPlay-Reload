@@ -72,6 +72,32 @@ void main() {
         'media': {'fileId': 'file-$index'}
       };
 
+  test('inbox answers require the issued peer and return to the original thread once', () async {
+    final question = await runZoned(() => followups.publishInbox({
+      'requestId': 'disk-choice', 'title': '目录', 'body': '整理吗？'
+    }, Invocation(origin: 'mesh:mac'), question: true),
+      zoneValues: {#meshReturnTarget: target()});
+    final replay = await runZoned(() => followups.publishInbox({
+      'body': '整理吗？', 'title': '目录', 'requestId': 'disk-choice'
+    }, Invocation(origin: 'mesh:mac'), question: true),
+      zoneValues: {#meshReturnTarget: {...target(), 'returnTicket': 'new-ticket', 'invocationId': 'retry'}});
+    expect(replay['id'], question['id']);
+    await followups.answerInbox(question['id'] as String, '仅这次', Invocation(origin: 'gui'));
+    final row = (await followups.list()).single;
+    await File('${root.path}/mesh-return-targets.json').writeAsString(jsonEncode({
+      'issued-ticket': {'peer': 'workstation-peer', ...target()}
+    }));
+    await expectLater(mesh.receiveDelivery!('wrong-peer', {'row': row}), throwsFormatException);
+    await expectLater(mesh.receiveDelivery!('workstation-peer', {'row': {...row, 'threadId': 'another'}}), throwsFormatException);
+    await expectLater(mesh.receiveDelivery!('workstation-peer', {'row': {...row}..remove('returnTicket')}), throwsFormatException);
+    final accepted = await mesh.receiveDelivery!('workstation-peer', {'row': row});
+    expect(await mesh.receiveDelivery!('workstation-peer', {'row': row}), accepted);
+    final received = (await followups.list()).where((r) => r['sourceDeviceId'] != null).single;
+    expect(received['threadId'], 'original-thread');
+    expect(received['automatic'], 'inboxAnswer');
+    expect((received['trigger'] as Map)['facts'], containsPair('answer', '仅这次'));
+  });
+
   test('remote manual subscription returns through its issued target and owns the automatic fact', () async {
     final job = await engine.submit(type: 'program', title: 'subscribed', input: {'returnTo': target()});
     final subscription = await runZoned(() => followups.register({

@@ -1,7 +1,6 @@
 import 'dart:async';
 
 import 'package:flutter/widgets.dart';
-import 'package:nipa_harness/nipa_harness.dart' show Failure, FailureCode;
 
 import '../data/gui_calls.dart';
 import '../data/settings_data.dart';
@@ -609,10 +608,6 @@ class _FoldersState extends State<_Folders> {
     }
   }
 
-  /// A scan holds the folders: changing them waits for it.
-  String _failure(Object e) =>
-      e is Failure && e.code == FailureCode.conflict ? '正在扫描' : callFailure(e);
-
   Future<void> _run(String key, Future<void> Function() action) async {
     setState(() {
       _busy.add(key);
@@ -621,7 +616,7 @@ class _FoldersState extends State<_Folders> {
     try {
       await action();
     } catch (e) {
-      if (mounted) setState(() => _note = _failure(e));
+      if (mounted) setState(() => _note = rawFailureText(e));
     }
     if (mounted) setState(() => _busy.remove(key));
     await _load();
@@ -646,7 +641,7 @@ class _FoldersState extends State<_Folders> {
   Future<void> _add() => _run('+', () async {
         final added = await widget.folders.add();
         if (added.isEmpty) return;
-        await widget.folders.scan(added);
+        await widget.folders.scan(added, true);
         await _load();
         _began(added);
       });

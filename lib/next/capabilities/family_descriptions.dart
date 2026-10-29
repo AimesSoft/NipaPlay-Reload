@@ -156,7 +156,8 @@ undo_merge {mergeId,requestId,reason} 同样先预览再携 expectedPlan 提交�
   'download.limits': r'''get 读取原生内置下载会话限速，set 调整上传/下载字节每秒预算并返回引擎读回值。0 为无限制，正值至少 16384；省略方向保留现值。不自动初始化会话；applied=false 不能宣称已限速。只影响本机内置会话，重建后恢复默认无限制，不改变服务端限流。''',
   'media.entities': r'''Local catalog entities have stable caller-supplied IDs and expectedRevision on update. parentId is an actual local parent, never an external ID. fileIds on an episode replace its local associations. Removal includes descendants, retains tombstones and exact relationship before-images, and returns undoId; restore refuses subsequent conflicting changes. These operations do not manufacture Classic platform matches.''',
   'ui':
-      r'''- **两套界面**：Classic 是原来的界面；在「设置 → 实验室」开启 Next 后，主界面换成 Next。你工作的结果显示在 Next 里。两套界面各有自己的播放器与会话；切换时关闭当前会话并保存进度，不自动接续另一边的播放。
+      r'''- **提醒和异步问题**：ui.notify 由 Agent 自行决定时机和标题正文，立即进入提醒列表；不由工具完成自动生成总结。ui.ask 立即返回 pending，问题展示不等待回合结束；继续独立工作，依赖答案的写入等待。ui.inbox.list 查询状态，dismiss 收起不算同意，cancel 才取消问题；respond 是用户界面专用回答通道，不替用户调用。回答固定回原设备、原会话，DSH/Codex 支持时插话，否则排队；结果不明不重复回答或重复执行。错误提醒保留宿主收到的原始错误内容；进度与回执仍是任务事实。notification.agentPopups 只控制普通浮窗。
+- **两套界面**：Classic 是原来的界面；在「设置 → 实验室」开启 Next 后，主界面换成 Next。你工作的结果显示在 Next 里。两套界面各有自己的播放器与会话；切换时关闭当前会话并保存进度，不自动接续另一边的播放。
 - **首页**：
   - **主视觉**：一部作品，显示背景图、片名 Logo、评分、年份、类型、集数、两行简介，以及“播放”“详情”两个按钮；左上角是梨花的一句话。你用 `ui.shelves.put` 摆上的 hero 优先；没有时依次取最近准备好的作品、最新的可播作品、继续观看的第一部。
   - **输入栏**：就是和你对话的入口。
@@ -266,7 +267,7 @@ NipaPlay 自己会做一部分：作品有 TMDB 身份时取图，把下载完�
 - **hooks 和定时程序**：由 NipaPlay 在事件发生时或到点时运行，同样通过 `nipa` 工作。需要你判断时，用 `agent.wake` 叫醒你；只是记下发现，用 `activity.report`。`state.query harness.hooks` 给每个事件对应的程序（ready；存在但没有执行位因而被忽略的是 not_executable；没有是 absent；`hooks/` 里不对应任何事件的文件是 unrecognized）和最近一次运行的时间、状态、退出码、耗时。`harness.schedules` 给 `schedules.json` 的每一项：是否有效及原因、程序是否可执行、下次到点时间、最近一次运行，以及没有启动的次数——`skippedLate` 是时钟晚了两秒以上被丢弃（不补发）的次数，`skippedWhileRunning` 是上一次还没结束而没启动的次数。任何一项无效，文件里的定时程序都不运行。下次到点时间与跳过次数只覆盖本进程；运行记录只覆盖任务列表仍保留的部分。
 - 通过 Mesh 在会话中登记的 `followup.register` 也固定回到发起设备、仓库和线程，沿用持久票据与去重交付；显式线程与发起线程不一致会被拒绝。程序自动回传和同一事件的手动订阅共享事实去重。
 - **耗时操作是 NipaPlay 的后台任务**：Agent 可以登记后续，让自己在任务结束时被唤醒。
-- **新进媒体库的文件**：你的调用带进媒体库的文件（`media.library.roots.*`、导入、扫描等，任务沿用发起它的来源），NipaPlay 把事实合成一批，作为后续回到发起的会话，忙时排队，不另开回合；不按内容挑选，也不丢文件。别的途径进来的（用户添加的文件夹、Classic 扫描、媒体来源同步）不送。开关是设置 `library.notifyNipaEnabled`（默认开；关闭后不再发送，关闭期间进来的文件之后不补发）。
+- **新进媒体库的文件**：你的调用带进媒体库的文件（`media.library.roots.*`、导入、扫描等，任务沿用发起它的来源），NipaPlay 把事实合成一批，作为后续回到发起的会话，忙时排队，不另开回合；不按内容挑选，也不丢文件。普通后台新增文件、Classic 扫描、来源同步不送。GUI 明确添加文件夹另通过扫描请求登记一次整理，受 library.organizeAddedFolders 控制；library.fileOrganization 的 ask/off/auto 分别是异步询问、保持磁盘原样、按已保存规则自动整理。开关是设置 `library.notifyNipaEnabled`（默认开；关闭后不再发送，关闭期间进来的文件之后不补发）。
   - 下载导入的文件由下载回报送出，同一个 fileId 不在这里重复送。重启后已送过的文件不会再送。
   - 一批在文件停止进来 30 秒后送出，从第一个文件起最迟 5 分钟，扫描结束时立即送出，一批最多 100 个文件，多出的进下一批。
   - 每个文件的事实：`path`、`fileId`、`via`（怎么进来的：`local_scan` 本地文件夹扫描、`classic_history` Classic 扫描或观看记录、`media_source` 媒体来源同步、`download_import` 下载导入、`metadata_put`、`path` 某个操作点名了这个路径）、`enteredAt`、`source`（位置来源；媒体来源条目另有 `mediaSource` 的 `sourceId`、`type`、`itemId`、`name`）、`workIds`、`works[].identities.tmdb`（作品有没有 TMDB 身份，与 `media.metadata.ui_facts` 相同的判断）、`episodes[]`（`episodeId`、`workId`、`facts`、`identitySources`）。没有剧集关联时 `episodes` 为空。''',

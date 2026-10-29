@@ -715,6 +715,30 @@ trust_level = "trusted"
       expect(lab.events.where((e) => e['method'] == 'turn/started'), hasLength(1));
     });
 
+    test('an asynchronous inbox answer reaches the running DSH turn once', () async {
+      await open(followupRules());
+      final host = await lab.start();
+      await host.getMainSession();
+      final thread = host.mainThreadId!;
+      await lab.attachFollowups(host);
+      final first = (await host.startTurn('first'))['turn']['id'] as String;
+      await lab.next((e) => e['method'] == 'item/started' && e['params']['item']['type'] == 'commandExecution');
+      final question = await lab.followups.publishInbox({
+        'requestId': 'disk', 'title': '目录', 'body': '整理文件吗？'
+      }, Invocation(origin: host.originFor(thread)), question: true);
+      expect(question['state'], 'pending');
+      expect(host.busyFor(thread), true);
+      await lab.followups.answerInbox(question['id'] as String, 'FACT_SEEN inbox-answer', Invocation(origin: 'gui'));
+      await lab.followups.sweep();
+      final delivery = (await lab.followups.list()).single;
+      expect(delivery['turnId'], first);
+      expect(delivery['state'], 'started');
+      await lab.next((e) => e['method'] == 'turn/completed');
+      expect(fake.requests.indexWhere((r) => jsonEncode(r['input']).contains('FACT_SEEN inbox-answer')), 1);
+      await lab.followups.sweep();
+      expect(lab.events.where((e) => e['method'] == 'turn/started'), hasLength(1));
+    });
+
     test('a followup the runner refuses to steer waits for the turn to end and is sent then', () async {
       await open(followupRules());
       final host = await lab.start();

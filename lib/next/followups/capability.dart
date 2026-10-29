@@ -2,10 +2,12 @@ import 'package:nipa_harness/nipa_harness.dart';
 
 import '../harness_hooks.dart';
 import 'service.dart';
+import 'inbox_capability.dart';
 
 final class FollowupCapability implements Capability {
   FollowupCapability(Followups service)
       : actions = [
+          ...InboxCapability(service).actions,
           _FollowupAction(service, 'register'),
           _FollowupAction(service, 'list'),
           _FollowupAction(service, 'cancel'),

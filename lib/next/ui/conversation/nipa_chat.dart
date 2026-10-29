@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 
 import '../../ui_data/ui_data.dart';
 import '../../util/slicer.dart';
+import '../data/gui_calls.dart' show rawFailureText;
 import '../widgets/nipa_avatar.dart';
 import '../widgets/words.dart';
 import 'chat_context.dart';
@@ -265,6 +266,7 @@ class NipaChat extends ChangeNotifier {
 
   /// Something went wrong that the conversation says once.
   String? trouble;
+  final rawError = ValueNotifier<String?>(null);
 
   /// Bumps whenever another session is shown; late results are dropped.
   int _generation = 0;
@@ -309,6 +311,7 @@ class NipaChat extends ChangeNotifier {
       if (generation != _generation) return;
       loading = false;
       trouble = '这段对话没打开，再试一次？';
+      rawError.value = rawFailureText(error);
       _notify();
       return;
     }
@@ -545,6 +548,7 @@ class NipaChat extends ChangeNotifier {
         debugPrint('[NextUi] steer failed: $error');
         said.echoed = true;
         trouble = '这句没送到，等这一轮结束再说一次？';
+        rawError.value = rawFailureText(error);
         _notify();
       }
       return;
@@ -602,7 +606,7 @@ class NipaChat extends ChangeNotifier {
       _fail(turn, error.message);
     } catch (error) {
       debugPrint('[NextUi] turn did not start: $error');
-      _fail(turn, '这次没接上，再说一次试试？');
+      _fail(turn, rawFailureText(error));
     } finally {
       if (identical(_pending, turn) && turn.id != null) _pending = null;
     }
@@ -611,6 +615,7 @@ class NipaChat extends ChangeNotifier {
   }
 
   void _fail(ChatTurn turn, String why) {
+    rawError.value = why;
     turn
       ..status = 'failed'
       ..endedAt = DateTime.now();
@@ -1147,6 +1152,7 @@ class NipaChat extends ChangeNotifier {
     for (final sub in _subs) {
       sub.cancel();
     }
+    rawError.dispose();
     super.dispose();
   }
 }

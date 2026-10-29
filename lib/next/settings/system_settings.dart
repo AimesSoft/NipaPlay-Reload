@@ -395,7 +395,7 @@ final class SystemSettings {
         libraryNotifyEnabled = v;
       },
           description:
-              '开启时，梨花自己的操作带进媒体库的文件合成一批，回到她发起的会话。用户添加的文件夹、Classic 扫描、媒体来源同步带进来的文件不回报。'
+              '开启时，梨花自己的操作带进媒体库的文件合成一批，回到她发起的会话。GUI 添加文件夹另由“添加文件夹后交给梨花整理”控制；普通后台新增文件、Classic 扫描、媒体来源同步不回报。'
               '关闭后不再发送，关闭期间进来的文件之后不补发。已发出的不撤回。'),
       entry(
           'danmaku.spoilerAiConfigured',
