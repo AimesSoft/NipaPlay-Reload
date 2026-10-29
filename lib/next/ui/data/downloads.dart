@@ -34,14 +34,34 @@ final class NextDownloads {
       'jobIds': [for (final job in jobs) job['jobId']]
     });
     final results = (read['results'] as List).cast<Map>();
-    return [
-      for (final (i, job) in jobs.indexed)
-        UiDownload.from(
-            job,
-            results[i]['status'] == 'completed'
-                ? results[i]['task'] as Map?
-                : null),
-    ];
+    final listed = <UiDownload>[];
+    final sessions = <String, int>{};
+    for (final (i, job) in jobs.indexed) {
+      final task = results[i]['status'] == 'completed'
+          ? results[i]['task'] as Map?
+          : null;
+      final receipt = (job['receipt'] as Map?)?['details'] as Map?;
+      final backend = job['backend'] as Map?;
+      final hash = task?['infoHash'] ?? receipt?['infoHash'];
+      final folder = task?['outputDirectory'] ?? receipt?['outputDirectory'];
+      // Several historical observation jobs can refer to one live session.
+      // Prefer the newest readable observation; retain historical receipts
+      // when none can be read, and never guess an unknown directory.
+      if (backend?['kind'] is String && hash is String && folder is String) {
+        final key = jsonEncode(
+            [backend!['kind'], backend['id'], hash.toLowerCase(), folder]);
+        final previous = sessions[key];
+        if (previous != null) {
+          if (!listed[previous].live && task != null) {
+            listed[previous] = UiDownload.from(job, task);
+          }
+          continue;
+        }
+        sessions[key] = listed.length;
+      }
+      listed.add(UiDownload.from(job, task));
+    }
+    return listed;
   }
 
   /// One download, as it is now.

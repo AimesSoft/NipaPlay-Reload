@@ -123,6 +123,13 @@ final class DownloadService {
           final latest = jobs.last;
           if (!latest.state.isTerminal) return latest;
           if (latest.state == JobState.cancelled && task.paused) return latest;
+          // Restoring a native session rechecks its pieces before reporting
+          // completion. That temporary progress does not start a new download.
+          if (latest.state == JobState.succeeded &&
+              backend.reference.kind == 'builtin' &&
+              task.state == 'initializing') {
+            return latest;
+          }
           // Turning automatic import back on must also process old completed data.
           if (latest.state == JobState.succeeded &&
               task.finished &&
