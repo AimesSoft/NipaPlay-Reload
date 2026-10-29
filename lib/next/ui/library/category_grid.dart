@@ -30,6 +30,7 @@ class CategoryItems extends ChangeNotifier {
   final _loading = <int>{};
   final _stale = <int>{};
   bool _gone = false;
+  int _refreshRevision = 0;
 
   static const slice = 60;
 
@@ -70,10 +71,21 @@ class CategoryItems extends ChangeNotifier {
   Future<void> _load(int n) async {
     if (!_loading.add(n)) return;
     final asked = sort;
-    final got = await data.items(categoryId,
-        offset: n * slice, limit: slice, sort: asked);
-    _loading.remove(n);
+    final revision = _refreshRevision;
+    late final UiSlice got;
+    try {
+      got = await data.items(categoryId,
+          offset: n * slice, limit: slice, sort: asked);
+    } finally {
+      _loading.remove(n);
+    }
     if (_gone || asked != sort) return;
+    if (revision != _refreshRevision) {
+      // Coalesce refreshes that arrived while this stale read was in flight.
+      // An empty response cannot rely on a tile to request the next read.
+      unawaited(_load(n));
+      return;
+    }
     _slices[n] = got.items;
     _stale.remove(n);
     _total = got.total ??
@@ -83,6 +95,7 @@ class CategoryItems extends ChangeNotifier {
 
   /// Something changed: each slice is asked for again as it is shown.
   void refresh() {
+    _refreshRevision++;
     _stale.addAll(_slices.keys);
     // An empty grid builds no tiles, so none can ask for a stale slice.
     // Read its first slice to discover works that have arrived since.
