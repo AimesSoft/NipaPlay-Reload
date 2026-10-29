@@ -256,7 +256,7 @@
 		<string>UIInterfaceOrientationLandscapeRight</string>
 	</array>
 	<key>UIViewControllerBasedStatusBarAppearance</key>
-	<false/>
+	<true/>
 	<key>UISupportsDocumentBrowser</key>
 	<true/>
 	<key>UTImportedTypeDeclarations</key>
