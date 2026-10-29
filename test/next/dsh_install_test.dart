@@ -96,7 +96,7 @@ void main() {
     late int changes;
     late _Fixture fixture;
 
-    DshInstall make({bool Function()? inUse, DshFallback? fallback}) {
+    DshInstall make({bool Function()? inUse, DshFallback? fallback, bool verifySignature = false}) {
       fixture = _Fixture.build(dir, platform!, server.base);
       server.files
         ..clear()
@@ -109,7 +109,7 @@ void main() {
           notify: () => changes++,
           httpClient: HttpClient.new,
           inUse: inUse ?? () => false,
-          verifySignature: false,
+          verifySignature: verifySignature,
           fallback: fallback ?? DshFallback.npmmirror,
           concurrency: 3);
     }
@@ -145,6 +145,16 @@ void main() {
       await install.install();
       expect(server.requests.length, before);
     }, skip: skip);
+
+    test('macOS refuses an unsigned runtime and preserves codesign diagnostics', () async {
+      make(verifySignature: true);
+      await install.install();
+      final state = await install.state();
+      expect(state.status, UiDshStatus.failed);
+      expect(state.problem, contains('codesign exit'));
+      expect(state.problem, contains('not signed'));
+      expect(await install.runtime(), isNull);
+    }, skip: !Platform.isMacOS);
 
     test('a stopped download continues from its partial file and finished files stay',
         () async {
