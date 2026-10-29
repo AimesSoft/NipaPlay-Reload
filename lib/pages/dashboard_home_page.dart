@@ -67,6 +67,7 @@ import 'package:nipaplay/utils/media_source_utils.dart';
 import 'package:nipaplay/app/app_page_ids.dart';
 import 'package:nipaplay/app/app_display_surface.dart';
 import 'package:nipaplay/app/app_display_surface_scope.dart';
+import 'package:nipaplay/app/app_size_class_scope.dart';
 import 'package:nipaplay/app/unified_home_components.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:nipaplay/services/server_history_sync_service.dart';

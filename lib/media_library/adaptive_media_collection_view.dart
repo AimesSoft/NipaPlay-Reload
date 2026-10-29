@@ -11,6 +11,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:nipaplay/app/app_display_surface.dart';
 import 'package:nipaplay/app/app_display_surface_scope.dart';
+import 'package:nipaplay/app/app_size_class_scope.dart';
 import 'package:nipaplay/app/unified_media_library_sections.dart';
 import 'package:nipaplay/media_library/adaptive_media_library_primitives.dart';
 import 'package:nipaplay/media_library/media_collection_empty_content.dart';
@@ -83,8 +84,7 @@ class LibraryNewContentTracker {
   static final LibraryNewContentTracker instance = LibraryNewContentTracker._();
 
   static const String _baselineKey = 'library_new_content_baseline_v1';
-  static const String _discoveredAtKey =
-      'library_new_content_discovered_v1';
+  static const String _discoveredAtKey = 'library_new_content_discovered_v1';
 
   final Map<String, Map<int, int>> _baselines = {};
   // 每部番剧当前 NEW 内容的「首次发现时间」（毫秒时间戳）。
@@ -290,14 +290,12 @@ class LibraryNewContentTracker {
       if (discoveredRaw != null && discoveredRaw.isNotEmpty) {
         final discoveredExisting = json.decode(discoveredRaw);
         if (discoveredExisting is Map) {
-          discoveredAll
-              .addAll(Map<String, dynamic>.from(discoveredExisting));
+          discoveredAll.addAll(Map<String, dynamic>.from(discoveredExisting));
         }
       }
-      discoveredAll[key] = currentDiscovered
-          .map((k, v) => MapEntry<String, dynamic>('$k', v));
-      await prefs.setString(
-          _discoveredAtKey, json.encode(discoveredAll));
+      discoveredAll[key] =
+          currentDiscovered.map((k, v) => MapEntry<String, dynamic>('$k', v));
+      await prefs.setString(_discoveredAtKey, json.encode(discoveredAll));
     } catch (e) {
       debugPrint('保存媒体库新内容基线失败: $e');
     }
@@ -523,8 +521,7 @@ class _AdaptiveMediaCollectionViewState
                   );
         _episodeCounts = _episodeCountByAnime(provider.history);
         _recomputeNewContentState();
-        final filteredItems =
-            _filterAndSort(allItems, _lastOpenTime);
+        final filteredItems = _filterAndSort(allItems, _lastOpenTime);
         for (final item in filteredItems) {
           _ensureDetail(item.animeId!);
         }
@@ -1240,36 +1237,52 @@ class AdaptiveMediaCollectionItems extends material.StatelessWidget {
         ),
       );
     } else {
+      material.Widget buildCard(material.BuildContext context, int index) {
+        final item = items[index];
+        final detail = details[item.animeId];
+        return CupertinoAnimeCard(
+          key: _itemKey(item),
+          title: _AdaptiveMediaCollectionViewState._title(item, detail),
+          imageUrl: _AdaptiveMediaCollectionViewState._imageUrl(item, detail),
+          episodeLabel: _episodeLabel(item.animeId!),
+          lastWatchTime: item.lastWatchTime,
+          sourceLabel: sourceLabel,
+          rating: detail?.rating,
+          summary: detail?.summary,
+          showNewBadge: showNewBadges && newAnimeIds.contains(item.animeId),
+          onTap: () => onTap(item),
+        );
+      }
+
       slivers.add(
         material.SliverPadding(
           padding: const material.EdgeInsets.fromLTRB(20, 12, 20, 112),
-          sliver: material.SliverList.separated(
-            itemCount: items.length,
-            // ignore: deprecated_member_use
-            findChildIndexCallback: (key) {
-              final index = _findItemIndex(key);
-              return index == null ? null : index * 2;
-            },
-            separatorBuilder: (_, __) => const material.SizedBox(height: 12),
-            itemBuilder: (context, index) {
-              final item = items[index];
-              final detail = details[item.animeId];
-              return CupertinoAnimeCard(
-                key: _itemKey(item),
-                title: _AdaptiveMediaCollectionViewState._title(item, detail),
-                imageUrl:
-                    _AdaptiveMediaCollectionViewState._imageUrl(item, detail),
-                episodeLabel: _episodeLabel(item.animeId!),
-                lastWatchTime: item.lastWatchTime,
-                sourceLabel: sourceLabel,
-                rating: detail?.rating,
-                summary: detail?.summary,
-                showNewBadge:
-                    showNewBadges && newAnimeIds.contains(item.animeId),
-                onTap: () => onTap(item),
-              );
-            },
-          ),
+          // Regular width (iPhone Duo inner display) shows the same cards in
+          // two columns; an even count divides cleanly at the fold.
+          sliver: AppSizeClassScope.isRegularWidthOf(context)
+              ? material.SliverGrid.builder(
+                  gridDelegate:
+                      const material.SliverGridDelegateWithFixedCrossAxisCount(
+                    crossAxisCount: 2,
+                    mainAxisExtent: CupertinoAnimeCard.height,
+                    mainAxisSpacing: 12,
+                    crossAxisSpacing: 12,
+                  ),
+                  itemCount: items.length,
+                  findChildIndexCallback: _findItemIndex,
+                  itemBuilder: buildCard,
+                )
+              : material.SliverList.separated(
+                  itemCount: items.length,
+                  // ignore: deprecated_member_use
+                  findChildIndexCallback: (key) {
+                    final index = _findItemIndex(key);
+                    return index == null ? null : index * 2;
+                  },
+                  separatorBuilder: (_, __) =>
+                      const material.SizedBox(height: 12),
+                  itemBuilder: buildCard,
+                ),
         ),
       );
     }
