@@ -246,7 +246,7 @@ class _NextShellState extends State<NextShell> {
                       ),
                     ),
                   ),
-                  Positioned.fill(child: AgentInboxOverlay(calls: _services.calls, events: _services.chat.display,
+                  Positioned.fill(child: AgentInboxOverlay(bottomInset: playing ? 120 : 0, calls: _services.calls, events: _services.chat.display,
                     peer: () => _services.peers?.chosen, errors: _shell.chat.rawError,
                     onOpen: (row) async {
                       _shell.openChat();

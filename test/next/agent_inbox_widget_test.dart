@@ -9,6 +9,23 @@ import 'package:nipaplay/next/ui/shell/agent_inbox.dart';
 
 void main() {
   testWidgets(
+      'empty inbox leaves no overlay and active messages preserve the control strip',
+      (tester) async {
+    final world = _Inbox();
+    await tester.pumpWidget(world.widget(bottomInset: 120));
+    await tester.pump();
+    expect(find.text('问题标题'), findsOneWidget);
+    expect(find.text('播放器按钮').hitTestable(), findsOneWidget);
+    world.rows.clear();
+    await tester.pump(const Duration(seconds: 3));
+    await tester.pump();
+    expect(find.textContaining('梨花提醒'), findsNothing);
+    expect(find.text('播放器按钮').hitTestable(), findsOneWidget);
+    await tester.pumpWidget(const SizedBox());
+    await world.events.close();
+  });
+
+  testWidgets(
       'question appears without waiting for turn end; close is not an answer',
       (tester) async {
     final world = _Inbox();
@@ -127,10 +144,18 @@ class _Inbox {
   final answers = <JsonMap>[];
   int notices = 0;
   late final calls = GuiCalls(() async => Harness([_Capability(this)]));
-  Widget widget({String? peer}) => MaterialApp(
-      home: Scaffold(
-          body: AgentInboxOverlay(
-              calls: calls, events: events.stream, peer: () => peer)));
+  Widget widget({String? peer, double bottomInset = 0}) => MaterialApp(
+          home: Scaffold(
+              body: Stack(children: [
+        Align(
+            alignment: Alignment.bottomRight,
+            child: TextButton(onPressed: () {}, child: const Text('播放器按钮'))),
+        AgentInboxOverlay(
+            bottomInset: bottomInset,
+            calls: calls,
+            events: events.stream,
+            peer: () => peer),
+      ])));
 }
 
 class _Capability implements Capability {

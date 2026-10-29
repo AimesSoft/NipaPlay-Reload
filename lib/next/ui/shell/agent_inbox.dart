@@ -17,7 +17,11 @@ class AgentInboxOverlay extends StatefulWidget {
       required this.events,
       this.peer,
       this.onOpen,
-      this.errors});
+      this.errors,
+      this.bottomInset = 0});
+
+  /// Space reserved for the player controls while video is open.
+  final double bottomInset;
   final GuiCalls calls;
   final Stream<Map> events;
   final String? Function()? peer;
@@ -183,12 +187,14 @@ class _AgentInboxOverlayState extends State<AgentInboxOverlay> {
       _selectedId = id;
       _text.clear();
     }
+    if (_items.isEmpty && _error == null) return const SizedBox.shrink();
     final size = MediaQuery.sizeOf(context);
     return SafeArea(
         child: Align(
             alignment: Alignment.bottomRight,
             child: Padding(
-                padding: const EdgeInsets.all(16),
+                padding:
+                    EdgeInsets.fromLTRB(16, 16, 16, 16 + widget.bottomInset),
                 child: SizedBox(
                     width: math.min(
                         row == null && !_expanded && _error == null ? 150 : 380,
@@ -209,7 +215,8 @@ class _AgentInboxOverlayState extends State<AgentInboxOverlay> {
                                             size.height -
                                                 MediaQuery.paddingOf(context)
                                                     .vertical -
-                                                64)),
+                                                64 -
+                                                widget.bottomInset)),
                                     child: SingleChildScrollView(
                                         child: Column(
                                             mainAxisSize: MainAxisSize.min,
