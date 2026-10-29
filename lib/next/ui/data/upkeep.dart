@@ -371,12 +371,13 @@ final class NextFolders {
 
   /// Indexes [paths] (all when null) and returns the last submitted task.
   /// No identity is chosen; all submitted tasks are visible in the task list.
-  Future<String> scan([List<String>? paths]) async {
+  Future<String> scan([List<String>? paths, bool organizeAddedFolder = false]) async {
     final stamp = DateTime.now().microsecondsSinceEpoch;
     String? lastJobId;
     for (final root in (paths ?? (await list()).paths).toSet()) {
       final result = await calls.call('media.library.scan',
-          {'root': root, 'requestId': 'gui-scan-$stamp-$root'});
+          {'root': root, 'requestId': 'gui-scan-$stamp-$root',
+            if (organizeAddedFolder) 'organizeAddedFolder': true});
       lastJobId = (result['job'] as Map)['jobId'] as String;
     }
     if (lastJobId == null) {

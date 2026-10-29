@@ -360,6 +360,11 @@ Failure _decodeFailure(JsonMap json) => Failure(
       FailureCode.values.singleWhere((c) => c.wireName == json['code']),
       json['message'] as String,
       retryable: json['retryable'] as bool,
+      details: _freezeJson((json['details'] as Map?)?.cast<String, Object?>() ?? const {}),
+      violations: List.unmodifiable([
+        for (final value in (json['violations'] as List? ?? const []).cast<Map>())
+          SchemaViolation(value['path'] as String, value['message'] as String),
+      ]),
     );
 Decision _decodeDecision(JsonMap json) => Decision(
       prompt: json['prompt'] as String,

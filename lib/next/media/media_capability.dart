@@ -350,9 +350,9 @@ final _specs = [
           required: ['imported'])),
   _spec(
       'media.library.scan',
-      'Index video files under an authorized native root: enumeration, probe, head hash and file locations only. Does not search providers, infer episodes or create identification tasks. A directory that cannot be listed (on Windows one deeper than 259 characters, unless the system allows long paths) is left out and the receipt says which: unreadableDirectories {count, examples, reason}. requestId deduplicates submission.',
+      'Index video files under an authorized native root: enumeration, probe, head hash and file locations only. Does not search providers, infer episodes or create identification tasks. A directory that cannot be listed (on Windows one deeper than 259 characters, unless the system allows long paths) is left out and the receipt says which: unreadableDirectories {count, examples, reason}. requestId deduplicates submission. organizeAddedFolder=true explicitly requests Agent organization after this scan using saved settings; omit for background/repeated scans. This only queues work, not a completed scrape.',
       Effect.write,
-      const ObjectSchema({'root': _text, 'requestId': _text},
+      const ObjectSchema({'root': _text, 'requestId': _text, 'organizeAddedFolder': BooleanSchema()},
           required: ['root', 'requestId']),
       const ObjectSchema({'job': _jobRefSchema}, required: ['job'])),
   _spec(
@@ -829,7 +829,11 @@ final class _MediaAction extends Action<_JsonValue, _JsonValue> {
         await service.authorizedPath(json['root'] as String, directory: true);
         final key = stableMediaId('scan', [json]);
         result = {
-          'job': _job(await service.submit('media.scan', json, key: key))
+          'job': _job(await service.submit('media.scan', {
+            ...json,
+            if (json['organizeAddedFolder'] == true && service.folderRequest != null)
+              'folderRequest': await service.folderRequest!(invocation),
+          }, key: key))
         };
       case 'media.files.list':
         result = await service.listFiles(json);

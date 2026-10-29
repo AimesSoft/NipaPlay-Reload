@@ -16,6 +16,7 @@ import 'file_identity_merge.dart';
 import 'metadata_provider.dart';
 
 final class MediaService {
+  Future<JsonMap?> Function(Invocation)? folderRequest;
   MediaService(
       {required this.store,
       required Iterable<MetadataProvider> providers,

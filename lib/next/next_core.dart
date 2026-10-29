@@ -1,3 +1,4 @@
+import 'followups/inbox_capability.dart';
 import 'capabilities/app_runtime_capability.dart';
 import 'platform/lab_profile.dart';
 import 'system/app_restart.dart';
@@ -397,6 +398,8 @@ final class NextCore {
     diskDeletion.engine = engine;
     settingConsent.engine = engine;
     followups = Followups(database, engine, harnessLocation);
+    settings.register(inboxSettings(followups));
+    media.service.folderRequest = followups.folderRequest;
     memory = HarnessMemory(harnessLocation, settings, followups.discover);
     catalogChanges =
         CapabilityCatalogChanges(File('${root.path}/capability_catalog.json'));

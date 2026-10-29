@@ -48,12 +48,23 @@ void attachMeshDelivery(MeshRuntime mesh, Followups followups) {
         row['condition'] is! JsonMap) {
       throw const FormatException('Invalid delivery facts.');
     }
-    if (const {'download', 'program', 'userTask', 'subscription'}.contains(row['automatic'])) {
-      if (row['automatic'] != 'subscription' && (row['deliverAfter'] is! String ||
-          (row['trigger'] as Map)['facts'] is! List)) {
+    final inboxReturn =
+        const {'inboxAnswer', 'folderRequest'}.contains(row['automatic']);
+    final ticketed = inboxReturn && row['returnTicket'] != null;
+    if (ticketed ||
+        const {'download', 'program', 'userTask', 'subscription'}
+            .contains(row['automatic'])) {
+      final batched =
+          const {'download', 'program', 'userTask'}.contains(row['automatic']);
+      if (inboxReturn && (row['trigger'] as Map)['facts'] is! Map) {
+        throw const FormatException('Invalid inbox delivery.');
+      }
+      if (batched &&
+          (row['deliverAfter'] is! String ||
+              (row['trigger'] as Map)['facts'] is! List)) {
         throw const FormatException('Invalid download delivery.');
       }
-      if (row['automatic'] != 'subscription') DateTime.parse(row['deliverAfter'] as String);
+      if (batched) DateTime.parse(row['deliverAfter'] as String);
       await pending;
       final saved = await file.exists()
           ? jsonDecode(await file.readAsString()) as JsonMap
@@ -67,8 +78,14 @@ void attachMeshDelivery(MeshRuntime mesh, Followups followups) {
       }
       return followups.acceptMeshDelivery(peer, payload, target: target);
     }
-    if (row['automatic'] != null ||
-        (row['condition'] as Map)['kind'] != 'wake') {
+    final folderWake = row['automatic'] == 'folderRequest' &&
+        row['threadId'] == null &&
+        row['returnTicket'] == null &&
+        (row['condition'] as Map)['kind'] == 'folderRequest' &&
+        (row['trigger'] as Map)['facts'] is Map;
+    if (!folderWake &&
+        (row['automatic'] != null ||
+            (row['condition'] as Map)['kind'] != 'wake')) {
       throw const FormatException('Invalid wake.');
     }
     // Wake is addressed to this host's Nipa; headless receivers reject it.

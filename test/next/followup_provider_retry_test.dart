@@ -38,6 +38,9 @@ void main() {
   late String threadId;
   late int responseStatus, rejectedRequests, successfulRequests;
   HttpOverrides? previousOverrides;
+  Completer<void>? responseGate;
+  late Completer<void> requestStarted;
+  late List<String> requestBodies;
 
   setUp(() async {
     previousOverrides = HttpOverrides.current;
@@ -59,6 +62,10 @@ void main() {
         'sandbox_mode="danger-full-access"\napproval_policy="never"\n'
         '[features]\nmemories=false\n');
 
+    responseGate = null;
+    requestStarted = Completer<void>();
+    requestBodies = [];
+    addTearDown(() { if (responseGate != null && !responseGate!.isCompleted) responseGate!.complete(); });
     responseStatus = 429;
     rejectedRequests = successfulRequests = 0;
     server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
@@ -69,7 +76,8 @@ void main() {
         await request.response.close();
         return;
       }
-      await request.drain<void>();
+      requestBodies.add(await utf8.decoder.bind(request).join());
+      if (!requestStarted.isCompleted) requestStarted.complete();
       // Keep rejecting every transport retry until the test observes that the
       // first *turn* ended. A fixed request count could succeed in that turn.
       if (responseStatus != 200) {
@@ -88,6 +96,7 @@ void main() {
         }));
       } else {
         successfulRequests++;
+        await responseGate?.future;
         _replyOk(request.response, successfulRequests);
       }
       await request.response.close();
@@ -171,6 +180,26 @@ void main() {
     await state('ready');
     return row;
   }
+
+  test('real Codex accepts an inbox answer into the original active turn', () async {
+    responseStatus = 200;
+    responseGate = Completer<void>();
+    await followups.attach(host);
+    final first = (await host.startTurn('Start fixture work'))['turn']['id'];
+    await requestStarted.future.timeout(const Duration(seconds: 15));
+    final question = await followups.publishInbox({
+      'requestId': 'codex-choice', 'title': '目录', 'body': '整理吗？'
+    }, Invocation(origin: host.originFor(threadId)), question: true);
+    await followups.answerInbox(question['id'] as String, 'CODEX_INBOX_ANSWER', Invocation(origin: 'gui'));
+    final delivery = await state('started');
+    expect(delivery['turnId'], first);
+    responseGate!.complete();
+    await state('completed');
+    expect(requestBodies.any((body) => body.contains('CODEX_INBOX_ANSWER')), true);
+    expect(endedTurns(), hasLength(1));
+    await followups.sweep();
+    expect((await followups.list()).single['turnId'], first);
+  });
 
   test(
       'real Codex 429 failure returns to ready and dispatches exactly one retry',

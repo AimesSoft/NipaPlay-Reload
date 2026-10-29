@@ -1,3 +1,4 @@
+import 'package:nipa_harness/nipa_harness.dart' show Failure;
 import 'dart:async';
 import 'dart:math' as math;
 
@@ -619,8 +620,10 @@ class _EmptyStart extends StatelessWidget {
     final folders = shell.services.folders;
     try {
       final added = await folders.add();
-      if (added.isNotEmpty) await folders.scan(added);
-    } catch (_) {}
+      if (added.isNotEmpty) await folders.scan(added, true);
+    } catch (error) {
+      if (error is! Failure) shell.chat.rawError.value = '$error';
+    }
   }
 
   @override

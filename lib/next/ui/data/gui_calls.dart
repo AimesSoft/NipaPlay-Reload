@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'package:nipa_harness/nipa_harness.dart';
 
 /// The capability layer as the person at this window: every Action through
@@ -23,12 +24,36 @@ final class GuiCalls {
 
   /// The Action's result. A failure throws its [Failure]; an Action asking
   /// for a decision throws [DecisionNeeded], to be put to the person.
-  Future<JsonMap> call(String action, JsonMap input) async =>
-      switch (await invoke(action, input)) {
-        Completed(:final value) => value.toJson(),
-        Failed(:final failure) => throw failure,
-        NeedsDecision(:final decision) => throw DecisionNeeded(decision),
-      };
+  Future<JsonMap> call(String action, JsonMap input,
+      {bool reportFailure = true}) async {
+    final host = await harness();
+    final invocation = _gui;
+    final outcome = await host.invokeJson(action, input, invocation);
+    switch (outcome) {
+      case Completed(:final value):
+        return value.toJson();
+      case Failed(:final failure):
+        // Do not summarize away the error and do not recurse on inbox failures.
+        if (reportFailure &&
+            !action.startsWith('ui.') &&
+            host.lookup('ui.notify') != null) {
+          try {
+            await host.invokeJson(
+                'ui.notify',
+                {
+                  'requestId': 'gui-error-${invocation.id}',
+                  'title': '操作失败：$action',
+                  'body': rawFailureText(failure),
+                  'severity': 'error',
+                },
+                invocation);
+          } catch (_) {/* Preserve the original operation error. */}
+        }
+        throw failure;
+      case NeedsDecision(:final decision):
+        throw DecisionNeeded(decision);
+    }
+  }
 
   /// Runs the option the person chose.
   Future<JsonMap> choose(DecisionOption option) =>
@@ -58,6 +83,12 @@ Failure failureOf(Map json) => Failure(
           orElse: () => FailureCode.internal),
       '${json['message'] ?? ''}',
       retryable: json['retryable'] == true,
+      details: (json['details'] as Map?)?.cast<String, Object?>() ?? const {},
+      violations: [
+        for (final value
+            in (json['violations'] as List? ?? const []).cast<Map>())
+          SchemaViolation(value['path'] as String, value['message'] as String),
+      ],
     );
 
 /// A decision as a task snapshot carries it (`task.get`).
@@ -87,3 +118,8 @@ String callFailure(Object error) {
   }
   return '没能完成';
 }
+
+/// Preserve the received message, code and details; Failure has no toString override.
+String rawFailureText(Object error) => error is Failure
+    ? const JsonEncoder.withIndent('  ').convert(error.toJson())
+    : error.toString();

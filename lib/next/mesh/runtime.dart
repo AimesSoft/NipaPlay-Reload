@@ -1535,6 +1535,9 @@ final class MeshRuntime implements MeshDeviceSource {
               'download.add',
               'program.run',
               'followup.register',
+              'ui.ask',
+              'ui.notify',
+              'media.library.scan',
             }.contains(action) &&
             invocation != null
         ? await returnTarget?.call(peer, invocation)

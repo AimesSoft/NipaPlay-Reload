@@ -11,7 +11,7 @@ Windows 上 NipaPlay 为程序设置 `PYTHONUTF8=1`，Python 读标准输入、�
 | `download.completed` | 下载任务完成并验证入库 | 下载的完整 job 快照，含文件回执 |
 | `download.file_completed` | 单个文件的全部片段通过引擎校验，路径/大小核对且本地视频登记入库 | `jobId`、`infoHash`、`file`（索引、路径、校验大小、完成时间、当前媒体关联）；objectId 为 `jobId:fileIndex` |
 | `download.stalled` | 下载连续五分钟没有新字节（拿不到元数据也算，此时 `metadata` 为 false、带最近一次 `error`，总字节与 peer 数为 null），每段停滞一次；有了新字节这段才算过去，已结束的任务没有 | `jobId`、`infoHash`、`title`、`at`（停滞开始时间）、`secondsWithoutProgress`、`completedBytes`、`totalBytes`、`connectedPeers`、`seenPeers`、`deadPeers`；objectId 为 `stalled:任务号:停滞序号` |
-| `library.file_added` | 文件首次进入本机媒体索引、Classic 媒体库或媒体来源的索引 | `path`，`via`（怎么进来的），索引事件另含 `fileId`；有调用或任务来源时含 `cause`。不论有没有同名 hook，NipaPlay 都把这些文件的事实合成一批送出：用户添加的文件夹、Classic 扫描、媒体来源同步由一个宿主派发的后台回合接收；你的调用带进来的回到发起的会话；设置 `library.notifyNipaEnabled` 可关闭 |
+| `library.file_added` | 文件首次进入媒体索引 | 文件事实含 `path`、`via`，索引事件另含 `fileId`，有来源时含 `cause`。仅 Agent 会话发起的入库按 `library.notifyNipaEnabled` 合并回报原会话；普通后台、Classic 和来源同步不自动唤起。GUI 明确添加文件夹通过扫描任务的独立整理请求处理，受 `library.organizeAddedFolders` 控制，不依赖本事件。 |
 | `playback.started` | 一段播放首次进入 playing；暂停后继续不重复 | `path` |
 
 标准输入是一份 UTF-8 JSON 对象：`{"event":"事件名","objectId":"对象标识",

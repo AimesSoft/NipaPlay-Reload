@@ -96,6 +96,9 @@ abstract final class SettingsLayout {
     ('webdavQuick.', SettingsSection.classic),
     ('next.harnessPath', SettingsSection.nipa),
     ('library.notifyNipaEnabled', SettingsSection.nipa),
+    ('library.organizeAddedFolders', SettingsSection.nipa),
+    ('library.fileOrganization*', SettingsSection.nipa),
+    ('notification.agentPopups', SettingsSection.nipa),
   ];
 
   static SettingsSection sectionOf(String key) {
@@ -212,7 +215,7 @@ abstract final class SettingsLayout {
       ]),
     ],
     SettingsSection.nipa: [
-      SettingsGroup('', ['library.notifyNipaEnabled']),
+      SettingsGroup('提醒与整理', ['notification.agentPopups', 'library.organizeAddedFolders', 'library.fileOrganization', 'library.fileOrganizationRules', 'library.notifyNipaEnabled']),
       SettingsGroup('文件夹', ['next.'], folded: true),
     ],
     SettingsSection.general: [
