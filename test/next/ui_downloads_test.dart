@@ -255,6 +255,43 @@ void main() {
       expect(list.last.live, isFalse);
     });
 
+    test('the list shows a restored download session once, keeping other '
+        'backends and output directories separate', () async {
+      Map row(String id, String created,
+              {JsonMap backend = const {'kind': 'builtin'}}) =>
+          {..._job(id, 'succeeded', created: created), 'backend': backend};
+      final script = _Script({
+        'task.list': (_) => {
+              'jobs': [
+                row('original', '2026-10-01'),
+                row('restored', '2026-10-02'),
+                row('latest', '2026-10-03'),
+                row('other-folder', '2026-10-04'),
+                row('remote-a', '2026-10-05',
+                    backend: {'kind': 'qbittorrent', 'id': 'a'}),
+                row('remote-b', '2026-10-06',
+                    backend: {'kind': 'qbittorrent', 'id': 'b'}),
+              ]
+            },
+        'download.read': (input) => {
+              'results': [
+                for (final id in input['jobIds'] as List)
+                  {
+                    'status': 'completed',
+                    'task': {
+                      ..._task(finished: true),
+                      'infoHash': '0123456789abcdef0123456789abcdef01234567',
+                      if (id == 'other-folder') 'outputDirectory': '/other',
+                    }
+                  }
+              ]
+            },
+      });
+      final list = await NextDownloads(script.gui).list();
+      expect(list.map((d) => d.jobId),
+          ['remote-b', 'remote-a', 'other-folder', 'latest']);
+    });
+
     test('a batch failure is not taken for success', () async {
       final script = _Script({
         'download.set_paused': (_) => {
