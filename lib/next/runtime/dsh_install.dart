@@ -541,12 +541,18 @@ final class DshInstall {
   Future<void> _checkNode(Directory staging) async {
     final node = p.join(staging.path, 'node', _nodeName);
     if (Platform.isMacOS && verifySignature) {
-      // A first download may not have its notarization ticket cached locally.
-      // Fetch the ticket before testing it; keep the notarized requirement.
-      final signature = await Process.run('/usr/bin/codesign',
-          ['--verify', '--strict', '--check-notarization', '-R=notarized', node]);
+      // Keep cached/offline verification working. A first download may need
+      // an online ticket lookup; both attempts retain the same requirements.
+      var signature = await Process.run('/usr/bin/codesign',
+          ['--verify', '--strict', '-R=notarized', node]);
       if (signature.exitCode != 0) {
-        throw const RuntimeInstallException('Node.js 的签名验证失败');
+        signature = await Process.run('/usr/bin/codesign',
+            ['--verify', '--strict', '--check-notarization', '-R=notarized', node]);
+      }
+      if (signature.exitCode != 0) {
+        throw RuntimeInstallException('Node.js 的签名或公证验证失败 '
+            '(codesign exit ${signature.exitCode})\n'
+            '${signature.stderr}${signature.stdout}');
       }
     }
     final run = await Process.run(node, ['--version']);
