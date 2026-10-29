@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'dart:ui' as ui;
@@ -219,6 +220,32 @@ void main() {
     expect([for (final t in tasks) t.workTitle].nonNulls, isEmpty,
         reason: 'a download is not a work');
   });
+
+  for (final resume in [false, true]) {
+    test('task stream reconciles completion before '
+        '${resume ? 'resuming' : 'starting'} observation', () async {
+      if (resume) await service.start();
+      final job = await engine.submit(type: executor.type, title: '下载恢复');
+      final context = await executor.entered.future;
+      await context.report(
+          progress: JobProgress(completed: 67, total: 100, unit: 'bytes'));
+      final tasks = StreamIterator(service.tasks());
+      addTearDown(tasks.cancel);
+      expect(await tasks.moveNext(), isTrue);
+      expect(tasks.current.single.state, UiTaskState.running);
+      expect(tasks.current.single.progress, .67);
+
+      if (resume) await service.pause();
+      await context.succeed(verified());
+      expect((await engine.get(job.jobId)).state, JobState.succeeded);
+      await service.start();
+
+      // No further engine event is needed to clear the old progress.
+      expect(await tasks.moveNext().timeout(const Duration(seconds: 2)), isTrue);
+      expect(tasks.current.single.state, UiTaskState.finished);
+      expect(tasks.current.single.progress, 1);
+    });
+  }
 
   test('the live task list decodes only a bounded recent window', () async {
     final ids = <String>[];
