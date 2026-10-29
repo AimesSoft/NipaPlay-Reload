@@ -59,6 +59,31 @@ bool shouldConsumeLargeScreenPlaybackPop({
   return isLargeScreen && hasVideo;
 }
 
+/// Width the player top bar leaves for the title, between the leading
+/// buttons and the [rightButtonCount] action buttons on the right.
+@visibleForTesting
+double playerTopBarTitleMaxWidth({
+  required double windowWidth,
+  required double leftInset,
+  required double rightInset,
+  required int rightButtonCount,
+  required bool isPictureInPicture,
+  required bool isMobilePlatform,
+}) {
+  final double rightButtonsWidth = rightButtonCount > 0
+      ? rightButtonCount * 44.0 + (rightButtonCount - 1) * 12.0
+      : 0.0;
+  return (windowWidth -
+          (16.0 + leftInset) -
+          (isPictureInPicture ? 0.0 : 116.0) -
+          (16.0 + rightInset) -
+          rightButtonsWidth -
+          (isMobilePlatform ? 86.0 : 0.0) -
+          24.0)
+      .clamp(80.0, 600.0)
+      .toDouble();
+}
+
 class PlayVideoPage extends StatefulWidget {
   final String? videoPath;
 
@@ -989,18 +1014,14 @@ class _PlayVideoPageState extends State<PlayVideoPage> {
         (showAirPlayButton ? 1 : 0) +
         (showScreenshotButton ? 1 : 0) +
         (showShareButton ? 1 : 0);
-    final double rightButtonsWidth = rightButtonCount > 0
-        ? rightButtonCount * 44.0 + (rightButtonCount - 1) * 12.0
-        : 0.0;
-    final double availableTitleWidth = (MediaQuery.of(context).size.width -
-            (16.0 + leftCutoutInset) -
-            (isPictureInPicture ? 0.0 : 116.0) -
-            (16.0 + rightCutoutInset) -
-            rightButtonsWidth -
-            (globals.isMobilePlatform ? 86.0 : 0.0) -
-            24.0)
-        .clamp(80.0, 600.0)
-        .toDouble();
+    final double availableTitleWidth = playerTopBarTitleMaxWidth(
+      windowWidth: MediaQuery.of(context).size.width,
+      leftInset: leftCutoutInset,
+      rightInset: rightCutoutInset,
+      rightButtonCount: rightButtonCount,
+      isPictureInPicture: isPictureInPicture,
+      isMobilePlatform: globals.isMobilePlatform,
+    );
 
     return Stack(
       clipBehavior: Clip.none,
