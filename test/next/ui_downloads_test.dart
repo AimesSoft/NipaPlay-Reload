@@ -292,6 +292,40 @@ void main() {
           ['remote-b', 'remote-a', 'other-folder', 'latest']);
     });
 
+    test('a failed latest read does not hide a readable session of the same identity', () async {
+      const receipt = {'details': {'infoHash': 'ABC', 'outputDirectory': '/m/NipaPlay'}};
+      final script = _Script({
+        'task.list': (_) => {'jobs': [
+          {..._job('latest', 'succeeded', created: '2026-10-03', receipt: receipt), 'backend': {'kind': 'builtin'}},
+          {..._job('readable', 'running', created: '2026-10-02'), 'backend': {'kind': 'builtin'}},
+        ]},
+        'download.read': (_) => {'results': [
+          {'status': 'failed', 'error': const Failure(FailureCode.unavailable, 'temporary read failure').toJson()},
+          {'status': 'completed', 'task': {..._task(), 'infoHash': 'abc'}},
+        ]},
+      });
+      final rows = await NextDownloads(script.gui).list();
+      expect(rows, hasLength(1));
+      expect(rows.single.jobId, 'readable');
+      expect(rows.single.live, true);
+      expect(rows.single.state, UiDownloadState.downloading);
+    });
+
+    test('receipt-only duplicates fold but unknown directories remain distinct', () async {
+      Map row(String id, String? directory) => {
+        ..._job(id, 'succeeded', receipt: {'details': {
+          'infoHash': 'abc', if (directory != null) 'outputDirectory': directory,
+        }}), 'backend': {'kind': 'builtin'},
+      };
+      final script = _Script({
+        'task.list': (_) => {'jobs': [row('a', '/one'), row('b', '/one'), row('c', '/two'), row('d', null), row('e', null)]},
+        'download.read': (input) => {'results': [for (final _ in input['jobIds'] as List) {'status': 'completed', 'task': null}]},
+      });
+      final rows = await NextDownloads(script.gui).list();
+      expect(rows, hasLength(4));
+      expect(rows.map((r) => r.jobId), containsAll(['c', 'd', 'e']));
+    });
+
     test('a batch failure is not taken for success', () async {
       final script = _Script({
         'download.set_paused': (_) => {
