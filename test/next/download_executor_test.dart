@@ -826,6 +826,28 @@ void main() {
     expect(library.scans, hasLength(1));
   });
 
+  test('restoring a completed torrent does not adopt its recheck as a new job',
+      () async {
+    backend.present = true;
+    await backend.finish();
+    final job = await add();
+    final done = await untilState(engine, job.jobId, JobState.succeeded);
+    backend
+      ..handle = 'restored-handle'
+      ..state = 'initializing'
+      ..finished = false
+      ..completed = 2;
+    expect((await downloads.adopt(backend, backend.snapshot)).jobId, job.jobId);
+    expect(await engine.list(type: 'download'), hasLength(1));
+    backend
+      ..state = 'live'
+      ..finished = true
+      ..completed = backend.total;
+    expect((await downloads.adopt(backend, backend.snapshot)).jobId, job.jobId);
+    expect((await engine.get(job.jobId)).toJson(), done.toJson());
+    expect(backend.additions, 0);
+  });
+
   test(
       'restart reconciles a committed session without a checkpoint and a changed native handle',
       () async {
