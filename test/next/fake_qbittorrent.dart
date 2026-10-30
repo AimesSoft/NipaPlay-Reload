@@ -64,6 +64,10 @@ final class FakeQbittorrent {
   final torrents = <String, FakeTorrent>{};
   final requests = <String>[];
   final origins = <String?>[];
+  final authorizations = <String?>[];
+  bool requireBasicAuth = false;
+  String basePath = '';
+  int basicChallenges = 0;
   String? sid;
   int logins = 0, rejectedLogins = 0;
   bool requireAuth = true;
@@ -75,7 +79,7 @@ final class FakeQbittorrent {
   /// What a magnet turns out to contain.
   final magnetContents = <String, ({String name, List<(String, int)> files})>{};
 
-  Uri get address => Uri.parse('http://127.0.0.1:${server.port}');
+  Uri get address => Uri.parse('http://127.0.0.1:${server.port}$basePath');
 
   Future<void> start([int port = 0]) async {
     server = await HttpServer.bind('127.0.0.1', port);
@@ -163,11 +167,21 @@ final class FakeQbittorrent {
     final path = request.uri.path;
     requests.add('${request.method} $path');
     origins.add(request.headers.value('origin'));
-    if (!path.startsWith('/api/v2/')) {
+    final authorization = request.headers.value(HttpHeaders.authorizationHeader);
+    authorizations.add(authorization);
+    if (requireBasicAuth &&
+        authorization != 'Basic ${base64Encode(utf8.encode('$username:$password'))}') {
+      basicChallenges++;
+      await request.drain<void>();
+      response.statusCode = HttpStatus.unauthorized;
+      response.headers.set(HttpHeaders.wwwAuthenticateHeader, 'Basic realm="seedbox"');
+      return response.close();
+    }
+    if (!path.startsWith('$basePath/api/v2/')) {
       response.statusCode = 404;
       return response.close();
     }
-    final endpoint = path.substring('/api/v2/'.length);
+    final endpoint = path.substring('$basePath/api/v2/'.length);
     final body = await request.fold<BytesBuilder>(
         BytesBuilder(copy: false), (b, chunk) => b..add(chunk));
     final bytes = body.takeBytes();

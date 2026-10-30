@@ -63,6 +63,30 @@ void main() {
     await root.delete(recursive: true);
   });
 
+  test('Basic-auth seedbox preserves login body, subpath and session renewal', () async {
+    fake = FakeQbittorrent(v5: false)
+      ..basePath = '/user-demo/qbittorrent'
+      ..requireBasicAuth = true;
+    await fake.start();
+    fake.torrents[hashA] = FakeTorrent(hashA, 'Show', '/seed/dl', [FakeFile('a.mkv', 10)]);
+    final backend = connect();
+    expect(await backend.status(), containsPair('online', true));
+    expect(fake.basicChallenges, 1);
+    expect(fake.logins, 1, reason: 'the retried POST must retain username and password');
+    expect((await backend.list()).single.infoHash, hashA);
+    await backend.pause(hashA);
+    expect(fake.torrents[hashA]!.paused, true);
+    fake.expireSession();
+    await backend.resume(hashA);
+    expect(fake.torrents[hashA]!.paused, false);
+    expect(fake.logins, 2);
+    expect(fake.basicChallenges, 1, reason: 'Basic authentication accompanies every subsequent API request');
+    expect(fake.authorizations.first, isNull);
+    expect(fake.authorizations.skip(1), everyElement(startsWith('Basic ')));
+    expect(fake.requests, everyElement(contains('/user-demo/qbittorrent/api/v2/')));
+    expect((await backend.status()).toString(), isNot(contains(fake.password)));
+  });
+
   for (final v5 in [false, true]) {
     group(v5 ? 'qBittorrent 5' : 'qBittorrent 4', () {
       setUp(() async {

@@ -42,7 +42,10 @@ List<Action> downloadBackendActions(QbittorrentHub hub) => [
                   'cover the server/address and use of credentials, including '
                   'sending a retained login to a changed address. Credentials may '
                   'come from the user or an existing location they explicitly '
-                  'authorize. No manual settings entry is required. Save registers '
+                  'authorize. No manual settings entry is required. '
+                  'HTTP Basic authentication requested by a seedbox reverse proxy '
+                  'is handled automatically with the same saved username/password, '
+                  'alongside the qBittorrent session. No local relay is needed. Save registers '
                   'the backend immediately but does not prove connectivity; call '
                   'download.backends.list with probe:true to verify. A lost response '
                   'may follow a committed save: list before retrying an add.',

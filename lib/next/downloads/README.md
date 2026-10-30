@@ -309,7 +309,7 @@ noticed like any other backend.
 Login: cookie session; a 403 signs in again once; a rejected login is not
 retried for 30 s (qBittorrent bans an address after repeated failures). With no
 login saved the client works against a qBittorrent that lets it in. Origin and
-Referer are sent (qBittorrent's CSRF check). No proxy is used. Unreachable,
+Referer are sent (qBittorrent's CSRF check). A 401 Basic challenge from a seedbox panel retries the same request once with the saved login and unchanged body; subsequent requests keep Basic authentication alongside the qBittorrent cookie, including session renewal. The configured URL subpath is preserved. API requests do not follow redirects. No proxy is used. Unreachable,
 timeouts, 5xx and refused logins are `unavailable, retryable: true`.
 
 Versions: pause/resume (WebAPI < 2.11) and stop/start (>= 2.11) are chosen from

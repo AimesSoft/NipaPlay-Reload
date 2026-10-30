@@ -77,6 +77,7 @@ final class QbittorrentDownloadBackend
 
   HttpClient? _http;
   String? _cookie;
+  String? _basicAuthorization;
   Future<void>? _loggingIn;
   DateTime? _loginBlockedUntil;
   bool? _stopStyle;
@@ -188,10 +189,15 @@ final class QbittorrentDownloadBackend
       final request = await _client()
           .openUrl(method, _uri(endpoint, query))
           .timeout(connectTimeout);
+      // API credentials and request bodies belong to the configured endpoint.
+      request.followRedirects = false;
       final origin = address.replace(path: '').toString();
       // qBittorrent refuses a request whose Origin or Referer is another host.
       request.headers.set(HttpHeaders.refererHeader, origin);
       request.headers.set('origin', origin);
+      if (_basicAuthorization != null) {
+        request.headers.set(HttpHeaders.authorizationHeader, _basicAuthorization!);
+      }
       if (_cookie != null && _cookie!.isNotEmpty) {
         request.headers.set(HttpHeaders.cookieHeader, _cookie!);
       }
@@ -214,6 +220,20 @@ final class QbittorrentDownloadBackend
       final builder = BytesBuilder(copy: false);
       await for (final chunk in response.timeout(requestTimeout)) {
         builder.add(chunk);
+      }
+      // Seedbox panels can protect the entire API with Basic authentication,
+      // including qBittorrent's own form login. Retry that same request once,
+      // keeping its body, then retain Basic alongside the session cookie.
+      if (response.statusCode == HttpStatus.unauthorized &&
+          _basicAuthorization == null &&
+          (response.headers[HttpHeaders.wwwAuthenticateHeader] ?? const <String>[])
+              .any((value) => RegExp(r'(?:^|,)\s*Basic(?:\s|$)', caseSensitive: false)
+                  .hasMatch(value))) {
+        final credentials = await login?.call();
+        if (credentials != null) {
+          _basicAuthorization = 'Basic ${base64Encode(utf8.encode('${credentials.username}:${credentials.password}'))}';
+          return _raw(method, endpoint, query: query, form: form, multipart: multipart);
+        }
       }
       return _Reply(response.statusCode, builder.takeBytes(),
           [for (final c in response.cookies) '${c.name}=${c.value}']);
@@ -366,6 +386,8 @@ final class QbittorrentDownloadBackend
     _closed = true;
     _http?.close(force: true);
     _http = null;
+    _cookie = null;
+    _basicAuthorization = null;
   }
 
   // ------------------------------------------------------------- reads

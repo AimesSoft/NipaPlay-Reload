@@ -92,7 +92,7 @@ for k in rows:
         rows[k][0][1] = '弹幕 ' + k.split('.')[-1].replace('_', ' ') + '；来源及副作用见目标契约'
 import hashlib
 BASELINE_HASHES = {
- 'lib/next/capabilities/download_backends.dart': '840b7551c45cc70e4493856922f8deffbc1cf515ca8d68b4a58694d0df8da206','lib/next/followups/inbox_capability.dart': '566fb00085f124eddebb5e86bf2e9feb5bca63a6ed33be6b1ff6c3eaed656eb8',
+ 'lib/next/capabilities/download_backends.dart': '43c5f6dfb08475802db085ddab0059852d62fe840c4f981a01860a398d0d8587','lib/next/followups/inbox_capability.dart': '566fb00085f124eddebb5e86bf2e9feb5bca63a6ed33be6b1ff6c3eaed656eb8',
  'lib/next/knowledge/capability.dart': '705ef8725a060aa20504794279f0b433e14288663ee024d17e33477dd9b3c400',
  'lib/next/accounts/capability.dart': '1174193fe779e32c1cf3d97792ab7be09ea3aea93d424bca90d2b4ac3b8341e1',
  'lib/next/app_capabilities.dart': '4c9a1eea1af9a09272fcdf074c9de49927bf86a55d77c0d1f9eb3ade68961903',

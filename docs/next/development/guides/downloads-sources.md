@@ -10,7 +10,7 @@
 
 ## 下载：预览与执行
 
-- `download.preview` 可预览磁力、种子或 HTTP 文件；`download.add` 创建任务，`download.read` 查看文件、进度、状态和落盘位置。HTTP 使用对应后端；qBittorrent 用 `download.backends.list` 查询，获用户明确授权后用 `download.backends.save` 添加或修改：`name`、`address`、`local`、可选 `id/username/password`、`userAuthorization`。`local` 指 qBittorrent 的文件是否位于目标 NipaPlay 设备。保存后 `list {probe:true}` 检查连接，再把返回的 `backend` 交给 `download.add`。`download.backends.remove` 移除配置及保存的登录，不删除服务器种子或文件。密码不回传，响应丢失先 list 核对是否已保存。
+- `download.preview` 可预览磁力、种子或 HTTP 文件；`download.add` 创建任务，`download.read` 查看文件、进度、状态和落盘位置。HTTP 使用对应后端；qBittorrent 用 `download.backends.list` 查询，获用户明确授权后用 `download.backends.save` 添加或修改：`name`、`address`、`local`、可选 `id/username/password`、`userAuthorization`。`local` 指 qBittorrent 的文件是否位于目标 NipaPlay 设备。保存后 `list {probe:true}` 检查连接，再把返回的 `backend` 交给 `download.add`。`download.backends.remove` 移除配置及保存的登录，不删除服务器种子或文件。密码不回传，响应丢失先 list 核对是否已保存。Pulsed Media 等面板返回 HTTP Basic 认证挑战时，自动使用同一份已保存用户名/密码认证，后续 API 请求同时携带 Basic 与 qBittorrent 会话；保留地址中的子路径，无需本机转发。
 - 确认来源、目录、要下载的文件及存储空间后再添加；`download.select_files` 改变选择，不删除已有数据。内置会话限速查 `download.limits`，不适用于所有后端。
 - 文件完成并校验后可登记入库，但身份仍需明确判断和绑定，见[媒体身份](media-identity.md)。`task.get` 与下载回执核对实际完成；发起下载后的文件、停滞和终态可作为后续返回对话。
 - `download.remove` 保留文件；删除数据有独立的预览/确认契约，按目标设备 `describe` 和用户决定执行。取消任务不等于删除数据；响应丢失先查任务和回执，勿盲目重复。
