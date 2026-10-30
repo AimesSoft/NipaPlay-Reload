@@ -45,6 +45,7 @@ class _AgentInboxOverlayState extends State<AgentInboxOverlay> {
   int _limit = 30;
   String? _error, _lastEventError, _lastLoadError;
   String? _selectedId;
+  final Set<String> _collapsedIds = {};
 
   @override
   void initState() {
@@ -199,7 +200,10 @@ class _AgentInboxOverlayState extends State<AgentInboxOverlay> {
     final visible = _expanded
         ? _items
         : _items
-            .where((r) => r['hidden'] != true && r['_popup'] == true)
+            .where((r) =>
+                r['hidden'] != true &&
+                r['_popup'] == true &&
+                !_collapsedIds.contains('${r['_peer']}:${r['id']}'))
             .toList();
     final row = visible
             .where((r) => '${r['_peer']}:${r['id']}' == _selectedId)
@@ -300,24 +304,19 @@ class _AgentInboxOverlayState extends State<AgentInboxOverlay> {
                             color: hovered ? NextColors.paper : NextColors.p3)),
                   ),
                 ),
-                if (row != null)
-                  NextIconButton(
-                      key: const Key('agent-inbox.collapse'),
-                      glyph: NextGlyph.close,
-                      label: '收起',
-                      size: 28,
-                      onTap: _acting
-                          ? null
-                          : () => _act(row, 'ui.inbox.dismiss', {}))
-                else
-                  NextIconButton(
-                      glyph: NextGlyph.close,
-                      label: '收起',
-                      size: 28,
-                      onTap: () => setState(() {
-                            _expanded = false;
-                            _error = null;
-                          })),
+                NextIconButton(
+                    key: const Key('agent-inbox.collapse'),
+                    glyph: NextGlyph.close,
+                    label: '收起',
+                    size: 36,
+                    onTap: () => setState(() {
+                          // Closing the panel is local, even while a remote
+                          // answer is pending. Only new arrivals reopen it.
+                          _collapsedIds.addAll(_items
+                              .map((r) => '${r['_peer']}:${r['id']}'));
+                          _expanded = false;
+                          _error = null;
+                        })),
               ]),
               if (_error != null) ...[
                 const SizedBox(height: 10),
