@@ -181,9 +181,8 @@ class _AgentInboxOverlayState extends State<AgentInboxOverlay> {
     _act(row, 'ui.inbox.respond', {'answer': _text.text});
   }
 
-  void _next(List<JsonMap> visible, JsonMap row) => setState(() {
-        final next = visible[(visible.indexOf(row) + 1) % visible.length];
-        _selectedId = '${next['_peer']}:${next['id']}';
+  void _select(JsonMap row) => setState(() {
+        _selectedId = '${row['_peer']}:${row['id']}';
         _text.clear();
       });
 
@@ -294,11 +293,7 @@ class _AgentInboxOverlayState extends State<AgentInboxOverlay> {
                     pressScale: 1,
                     semanticLabel: '全部提醒',
                     builder: (context, hovered) => Text(
-                        visible.length > 1 && row != null
-                            ? '梨花 · ${visible.indexOf(row) + 1} / ${visible.length}'
-                            : _items.length > 1 || _more
-                                ? '梨花 · $count'
-                                : '梨花',
+                        _items.length > 1 || _more ? '梨花 · $count 条' : '梨花',
                         style: NextText.sans(12.5,
                             weight: FontWeight.w500,
                             letterSpacing: 0.4,
@@ -388,10 +383,21 @@ class _AgentInboxOverlayState extends State<AgentInboxOverlay> {
                             ? null
                             : () => _act(
                                 row, 'ui.inbox.dismiss', {'cancel': true})),
-                  if (_expanded && visible.length > 1)
-                    _Quiet('下一条',
-                        arrow: true, onTap: () => _next(visible, row)),
                 ]),
+                // The others waiting, one line each; a tap brings one up.
+                if (visible.length > 1) ...[
+                  Container(
+                      height: 1,
+                      margin: const EdgeInsets.only(top: 10, bottom: 6),
+                      color: NextColors.line),
+                  for (final other in visible
+                      .where((r) => !identical(r, row))
+                      .take(_expanded ? visible.length : 3))
+                    _OtherRow(other, onTap: () => _select(other)),
+                  if (!_expanded && visible.length > 4)
+                    _Quiet('还有 ${visible.length - 4} 条',
+                        onTap: () => setState(() => _expanded = true)),
+                ],
               ] else if (_expanded) ...[
                 const SizedBox(height: 12),
                 Text('没有待处理提醒', style: NextText.sans(13, color: NextColors.p3)),
@@ -554,6 +560,58 @@ class _ReplyState extends State<_Reply> {
               size: 32, onTap: typed && widget.enabled ? widget.onSend : null),
         ),
       ]),
+    );
+  }
+}
+
+/// Another reminder waiting: a dot (crimson for a question or an error),
+/// its title and when it came.
+class _OtherRow extends StatelessWidget {
+  const _OtherRow(this.row, {required this.onTap});
+  final JsonMap row;
+  final VoidCallback onTap;
+
+  static String since(Object? at) {
+    final time = DateTime.tryParse('${at ?? ''}')?.toLocal();
+    if (time == null) return '';
+    final ago = DateTime.now().difference(time);
+    if (ago.inMinutes < 1) return '刚刚';
+    if (ago.inHours < 1) return '${ago.inMinutes} 分钟前';
+    if (ago.inDays < 1) return '${ago.inHours} 小时前';
+    return '${time.month} 月 ${time.day} 日';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final urgent = row['state'] == 'pending' || row['severity'] == 'error';
+    return Pressable(
+      onTap: onTap,
+      semanticLabel: '${row['title']}',
+      pressScale: 0.99,
+      builder: (context, hovered) => Padding(
+        padding: const EdgeInsets.symmetric(vertical: 6),
+        child: Row(children: [
+          Container(
+            width: 6,
+            height: 6,
+            margin: const EdgeInsets.only(left: 9, right: 19),
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              color: urgent ? NextColors.accent : NextColors.p4,
+            ),
+          ),
+          Expanded(
+            child: Text('${row['title']}',
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: NextText.sans(13,
+                    color: hovered ? NextColors.paper : NextColors.p2)),
+          ),
+          const SizedBox(width: 10),
+          Text(since(row['createdAt']),
+              style: NextText.sans(11.5, color: NextColors.p4)),
+        ]),
+      ),
     );
   }
 }
