@@ -1,13 +1,17 @@
 import 'package:file_selector/file_selector.dart';
-import 'package:flutter/material.dart';
+import 'package:flutter/material.dart' show SelectableText;
+import 'package:flutter/widgets.dart';
 
 import '../../player/ports/session_playback.dart';
-import 'package:nipaplay/widgets/in_view_dialog.dart';
+import '../settings/controls.dart' show BusyDots, NextToggle;
+import '../theme/tokens.dart';
+import '../widgets/dialog.dart';
 
+/// 截取 GIF, in Next's own dialog over the player.
 Future<void> showNextGifDialog(
         BuildContext context, SessionPlayback playback) =>
-    showInViewDialog<void>(
-        context: context, builder: (_) => _GifDialog(playback: playback));
+    Navigator.of(context, rootNavigator: true).push(
+        NextDialogRoute<void>(builder: (_) => _GifDialog(playback: playback)));
 
 class _GifDialog extends StatefulWidget {
   const _GifDialog({required this.playback});
@@ -31,6 +35,7 @@ class _GifDialogState extends State<_GifDialog> {
   bool _high = false;
   bool _working = false;
   String? _message;
+  bool _failed = false;
 
   @override
   void dispose() {
@@ -65,12 +70,15 @@ class _GifDialogState extends State<_GifDialog> {
         height < 16 ||
         width > 1920 ||
         height > 1080) {
-      setState(() =>
-          _message = '请输入视频内最长 30 秒的区间、1–30 FPS 和有效尺寸（16–1920 × 16–1080）。');
+      setState(() {
+        _failed = true;
+        _message = '请输入视频内最长 30 秒的区间、1–30 FPS 和有效尺寸（16–1920 × 16–1080）。';
+      });
       return;
     }
     setState(() {
       _working = true;
+      _failed = false;
       _message = null;
     });
     try {
@@ -93,47 +101,71 @@ class _GifDialogState extends State<_GifDialog> {
       });
       if (mounted) setState(() => _message = '已导出：${result['path']}');
     } catch (error) {
-      if (mounted) setState(() => _message = '$error');
+      if (mounted) {
+        setState(() {
+          _failed = true;
+          _message = '$error';
+        });
+      }
     } finally {
       if (mounted) setState(() => _working = false);
     }
   }
 
+  void _close() {
+    if (!_working) Navigator.of(context).pop();
+  }
+
   @override
-  Widget build(BuildContext context) => AlertDialog(
-        title: const Text('截取 GIF'),
-        content: SizedBox(
-            width: 360,
-            child: SingleChildScrollView(
-                child: Column(mainAxisSize: MainAxisSize.min, children: [
-              for (final (label, controller) in [
-                ('开始（秒）', _start),
-                ('结束（秒）', _end),
-                ('FPS', _fps),
-                ('宽度', _width),
-                ('高度', _height)
-              ])
-                TextField(
-                    controller: controller,
-                    enabled: !_working,
-                    keyboardType:
-                        const TextInputType.numberWithOptions(decimal: true),
-                    decoration: InputDecoration(labelText: label)),
-              CheckboxListTile(
-                  contentPadding: EdgeInsets.zero,
-                  title: const Text('高质量'),
-                  value: _high,
-                  onChanged:
-                      _working ? null : (v) => setState(() => _high = v!)),
-              if (_working) const LinearProgressIndicator(),
-              if (_message != null) SelectableText(_message!),
-            ]))),
-        actions: [
-          TextButton(
-              onPressed: _working ? null : () => Navigator.pop(context),
-              child: const Text('关闭')),
-          TextButton(
-              onPressed: _working ? null : _export, child: const Text('导出'))
-        ],
-      );
+  Widget build(BuildContext context) {
+    Widget field(String label, TextEditingController controller) =>
+        Expanded(child: NextDialogField(label: label, controller: controller));
+    return NextDialog(
+      title: '截取 GIF',
+      subtitle: '视频内最长 30 秒',
+      onCancel: _close,
+      body: [
+        Row(children: [
+          field('开始（秒）', _start),
+          const SizedBox(width: 12),
+          field('结束（秒）', _end),
+        ]),
+        Row(children: [
+          field('FPS', _fps),
+          const SizedBox(width: 12),
+          field('宽度', _width),
+          const SizedBox(width: 12),
+          field('高度', _height),
+        ]),
+        Row(children: [
+          Expanded(
+            child:
+                Text('高质量', style: NextText.sans(13.5, color: NextColors.p2)),
+          ),
+          NextToggle(
+              value: _high,
+              label: '高质量',
+              onChanged: _working ? null : (v) => setState(() => _high = v)),
+        ]),
+        if (_working)
+          Row(children: [
+            const BusyDots(color: NextColors.p2),
+            const SizedBox(width: 10),
+            Text('正在导出', style: NextText.sans(13, color: NextColors.p3)),
+          ]),
+        if (_message case final message?)
+          SelectableText(message,
+              style: NextText.sans(13,
+                  color: _failed ? NextColors.accent2 : NextColors.p3,
+                  height: 1.5)),
+      ],
+      actions: [
+        NextDialogButton(label: '关闭', onTap: _working ? null : _close),
+        NextDialogButton(
+            label: '导出',
+            kind: NextDialogButtonKind.primary,
+            onTap: _working ? null : _export),
+      ],
+    );
+  }
 }

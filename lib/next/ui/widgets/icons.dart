@@ -49,7 +49,12 @@ enum NextGlyph {
   episodes,
   nextEpisode,
   fullscreen,
-  exitFullscreen
+  exitFullscreen,
+
+  /// One frame back or forward, and the picture in picture.
+  frameBack,
+  frameForward,
+  pictureInPicture
 }
 
 class NextIcon extends StatelessWidget {
@@ -364,6 +369,34 @@ class _GlyphPainter extends CustomPainter {
               ..lineTo(9, 15)
               ..lineTo(9, 20),
             line);
+      case NextGlyph.frameBack:
+        canvas.drawPath(
+            Path()
+              ..moveTo(19, 5)
+              ..lineTo(9, 12)
+              ..lineTo(19, 19)
+              ..close(),
+            fill);
+        canvas.drawLine(const Offset(5.5, 5.5), const Offset(5.5, 18.5), line);
+      case NextGlyph.frameForward:
+        canvas.drawPath(
+            Path()
+              ..moveTo(5, 5)
+              ..lineTo(15, 12)
+              ..lineTo(5, 19)
+              ..close(),
+            fill);
+        canvas.drawLine(
+            const Offset(18.5, 5.5), const Offset(18.5, 18.5), line);
+      case NextGlyph.pictureInPicture:
+        canvas.drawRRect(
+            RRect.fromRectAndRadius(
+                const Rect.fromLTWH(3, 5, 18, 14), const Radius.circular(2.5)),
+            line);
+        canvas.drawRRect(
+            RRect.fromRectAndRadius(
+                const Rect.fromLTWH(11.5, 11.5, 7, 5), const Radius.circular(1)),
+            fill);
     }
   }
 

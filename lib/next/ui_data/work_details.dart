@@ -1,6 +1,6 @@
+import 'dart:developer' as developer;
 import 'dart:isolate';
 
-import 'package:flutter/foundation.dart';
 import 'package:nipa_harness/nipa_harness.dart';
 
 import '../media/media_service.dart';
@@ -57,7 +57,7 @@ final class WorkDetailsReader {
             '/3/${ref.objectType}/${ref.id}/images',
             query: {'include_image_language': 'zh,ja,en,null'}));
       } catch (error) {
-        debugPrint('[NextUi] gallery $key: ${error.runtimeType}');
+        developer.log('gallery $key: ${error.runtimeType}', name: 'NextUi');
         _galleries.remove(key);
         return const UiGallery();
       }
@@ -75,7 +75,7 @@ final class WorkDetailsReader {
                 const <String>[];
         return person.withLibrary(library);
       } catch (error) {
-        debugPrint('[NextUi] person $key: ${error.runtimeType}');
+        developer.log('person $key: ${error.runtimeType}', name: 'NextUi');
         _people.remove(key);
         return null;
       }

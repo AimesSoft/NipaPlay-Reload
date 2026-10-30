@@ -6,6 +6,7 @@ import 'package:nipa_harness/nipa_harness.dart' hide Action;
 import 'package:nipaplay/next/capabilities/classic_action.dart';
 import 'package:nipaplay/next/ui/data/gui_calls.dart';
 import 'package:nipaplay/next/ui/shell/agent_inbox.dart';
+import 'package:nipaplay/next/ui/widgets/buttons.dart';
 
 void main() {
   testWidgets(
@@ -33,7 +34,7 @@ void main() {
     await tester.pump();
     expect(find.text('问题标题'), findsOneWidget);
     expect(world.answers, isEmpty);
-    await tester.tap(find.byTooltip('收起；问题仍待回答'));
+    await tester.tap(find.byKey(const Key('agent-inbox.collapse')));
     await tester.pump();
     expect(world.rows.single['state'], 'pending');
     expect(world.answers, isEmpty);
@@ -66,7 +67,7 @@ void main() {
     await tester.pump();
     expect(find.text('按我自己的规则'), findsOneWidget);
     expect(find.text('问题标题'), findsOneWidget);
-    await tester.tap(find.text('回复'));
+    await tester.tap(find.byType(SendButton));
     await tester.pump();
     expect(world.answers.single['id'], 'q1');
     expect(world.answers.single['answer'], '按我自己的规则');

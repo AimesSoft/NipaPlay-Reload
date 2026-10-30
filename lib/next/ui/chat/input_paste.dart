@@ -1,9 +1,13 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:path/path.dart' as path;
 
 import '../../../services/clipboard_image_service.dart';
 import '../../../utils/storage_service.dart';
+import '../theme/tokens.dart';
+import '../widgets/glass.dart';
 
 /// One paste path for keyboard shortcuts and the editor's context menu.
 /// Clipboard images become durable files, just like dropped attachments.
@@ -36,6 +40,52 @@ class ChatInputPaste extends StatefulWidget {
 
 class _ChatInputPasteState extends State<ChatInputPaste> {
   bool _pasting = false;
+  final _link = LayerLink();
+  OverlayEntry? _note;
+  Timer? _noteTimer;
+
+  /// A short word just above the field, gone after a moment.
+  void _say(String text) {
+    _noteTimer?.cancel();
+    _note?.remove();
+    final overlay = Overlay.maybeOf(context);
+    if (overlay == null) return;
+    _note = OverlayEntry(
+      builder: (_) => Positioned(
+        left: 0,
+        top: 0,
+        child: CompositedTransformFollower(
+          link: _link,
+          targetAnchor: Alignment.topLeft,
+          followerAnchor: Alignment.bottomLeft,
+          offset: const Offset(0, -12),
+          child: IgnorePointer(
+            child: Glass(
+              blur: 24,
+              color: const Color(0xD9121218),
+              borderColor: const Color(0x1AFFFFFF),
+              radius: BorderRadius.circular(14),
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 9),
+              child: Text(text,
+                  style: NextText.sans(13, color: NextColors.accent2)),
+            ),
+          ),
+        ),
+      ),
+    );
+    overlay.insert(_note!);
+    _noteTimer = Timer(const Duration(milliseconds: 2600), () {
+      _note?.remove();
+      _note = null;
+    });
+  }
+
+  @override
+  void dispose() {
+    _noteTimer?.cancel();
+    _note?.remove();
+    super.dispose();
+  }
 
   Future<void> _paste() async {
     if (_pasting || !widget.enabled) return;
@@ -61,10 +111,7 @@ class _ChatInputPasteState extends State<ChatInputPaste> {
         composing: TextRange.empty,
       );
     } catch (_) {
-      if (mounted) {
-        ScaffoldMessenger.maybeOf(context)
-            ?.showSnackBar(const SnackBar(content: Text('图片粘贴失败，请重试')));
-      }
+      if (mounted) _say('图片粘贴失败，请重试');
     } finally {
       _pasting = false;
     }
@@ -97,6 +144,7 @@ class _ChatInputPasteState extends State<ChatInputPaste> {
             return null;
           }),
         },
-        child: widget.builder(_menu),
+        child: CompositedTransformTarget(
+            link: _link, child: widget.builder(_menu)),
       );
 }
