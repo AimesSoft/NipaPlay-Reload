@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:nipa_harness/nipa_harness.dart';
 
 import '../../ui_data/library.dart';
@@ -143,7 +144,7 @@ final class UiSourceHit {
 final class CoreSearch implements NextSearchData {
   /// [harness]: the runtime's, read at each call (it may come later).
   CoreSearch(this.harness);
-  final Harness Function() harness;
+  final FutureOr<Harness> Function() harness;
 
   static const _limit = 12;
   static const _episodeLimit = 4;
@@ -156,7 +157,7 @@ final class CoreSearch implements NextSearchData {
 
   Future<JsonMap> _call(String action, JsonMap input) async {
     final outcome =
-        await harness().invokeJson(action, input, Invocation(origin: 'gui'));
+        await (await harness()).invokeJson(action, input, Invocation(origin: 'gui'));
     return switch (outcome) {
       Completed(:final value) => value.toJson(),
       Failed(:final failure) => throw failure,

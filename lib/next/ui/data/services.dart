@@ -136,14 +136,11 @@ final class NextUiServices {
       discover: CoreDiscover(runtime),
       library: library,
       libraryActions: library,
-      search: CoreSearch(() => runtime.harness),
+      search: CoreSearch(() => runtime.harnessReady),
       settings: settings,
       logins: logins,
-      manage: CoreWorkManage(() => runtime.harness, data),
-      calls: GuiCalls(() async {
-        await core.ready;
-        return runtime.harness;
-      }),
+      manage: CoreWorkManage(() => runtime.harnessReady, data),
+      calls: GuiCalls(() => runtime.harnessReady),
       onDispose: () {
         detach();
         settings.dispose();
