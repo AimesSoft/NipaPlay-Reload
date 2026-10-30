@@ -148,10 +148,11 @@ class NextShellController extends ChangeNotifier {
   void go(NextSection target) {
     navigatorKey.currentState?.popUntil((route) => route.isFirst);
     popover = NextPopover.none;
-    // The home has the conversation itself: the panel's carries on there.
-    if (target == NextSection.home && panelOpen.value) {
-      _closePanel();
-      homeChatOpen.value = true;
+    // Selecting Home returns to its overview, including when already there.
+    // The conversation keeps running and can be reopened from the avatar.
+    if (target == NextSection.home) {
+      closePanel();
+      foldHomeChat();
     }
     if (section != target) {
       section = target;
