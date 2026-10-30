@@ -58,9 +58,6 @@ class SettingsKeys {
   static const String labsShowRemoteAccessQrCode =
       'labs_show_remote_access_qr_code';
 
-  static const String labsEnableErikaPlayerKernel =
-      'labs_enable_erika_player_kernel';
-
   static const String labsEnableImmersiveAnimeDetail =
       'labs_enable_immersive_anime_detail';
 

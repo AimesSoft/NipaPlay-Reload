@@ -16,14 +16,12 @@ class LabsSettingsProvider extends ChangeNotifier {
   /// SharedPreferences has finished loading.
   late final Future<void> ready;
 
-  bool _enableErikaPlayerKernel = false;
   bool _enableImmersiveAnimeDetail = false;
   bool _enableAgentEndpoint = false;
   bool _isLoaded = false;
   bool _nextAvailable = false;
   late final Future<bool> Function() _sandboxStatus;
 
-  bool get enableErikaPlayerKernel => _enableErikaPlayerKernel;
   bool get enableImmersiveAnimeDetail => _enableImmersiveAnimeDetail;
   bool get nextAvailable => _nextAvailable;
   bool get enableAgentEndpoint => _nextAvailable && _enableAgentEndpoint;
@@ -31,10 +29,6 @@ class LabsSettingsProvider extends ChangeNotifier {
 
   Future<void> _loadSettings() async {
     _nextAvailable = !await _sandboxStatus();
-    _enableErikaPlayerKernel = await SettingsStorage.loadBool(
-      SettingsKeys.labsEnableErikaPlayerKernel,
-      defaultValue: false,
-    );
     _enableImmersiveAnimeDetail = await SettingsStorage.loadBool(
       SettingsKeys.labsEnableImmersiveAnimeDetail,
       defaultValue: false,
@@ -45,17 +39,6 @@ class LabsSettingsProvider extends ChangeNotifier {
     );
     _isLoaded = true;
     notifyListeners();
-  }
-
-  Future<void> setEnableErikaPlayerKernel(bool enabled) async {
-    await ready;
-    if (_enableErikaPlayerKernel == enabled) return;
-    _enableErikaPlayerKernel = enabled;
-    notifyListeners();
-    await SettingsStorage.saveBool(
-      SettingsKeys.labsEnableErikaPlayerKernel,
-      enabled,
-    );
   }
 
   Future<void> setEnableImmersiveAnimeDetail(bool enabled) async {

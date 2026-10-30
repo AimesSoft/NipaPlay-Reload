@@ -205,11 +205,6 @@ final class NextRuntime extends ChangeNotifier {
       };
       core.accounts.requestLogin = showAccountLogin;
     });
-    ApplicationSettings.erikaVisible = () =>
-        PlayerFactory.isErikaKernelSupported &&
-        (globals.isTelevision ||
-            PlayerFactory.isHarmonyOS ||
-            labs.enableErikaPlayerKernel);
     final settings = context.read<SettingsProvider>();
     // Classic's player stays as the lease's other side, and for the lab's
     // observations; Next plays in its own layer (D3, D5).

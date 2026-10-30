@@ -646,14 +646,6 @@ final class ClassicSettings {
       }
     }, source: developerSource);
     add(
-        'labs.enableErikaPlayerKernel',
-        'Erika 内核实验开关',
-        const BooleanSchema(),
-        false,
-        SettingsKeys.labsEnableErikaPlayerKernel,
-        (v) => current.labs.setEnableErikaPlayerKernel(v as bool),
-        source: 'lib/providers/labs_settings_provider.dart');
-    add(
         'labs.enableImmersiveAnimeDetail',
         '沉浸式番剧详情',
         const BooleanSchema(),

@@ -47,7 +47,7 @@ const applicationSettingDescriptions = <String, String>{
   'player.softDecodePixelFormat':
       '软解输出的像素格式名（FFmpeg 的 pixel_format，例如 yuv420p）；空字符串表示自动，使用内核默认。目前只对 MDK 内核的软解生效，硬解输出由硬件决定，不使用此值。Classic 设置页没有对应控件。',
   'player.kernel':
-      '播放器内核：mdk（MDK）、videoPlayer（Video Player 官方播放器）、mediaKit（Libmpv，基于 mpv）、erika（Erika，Rust 编写的实验内核，在 Classic 里需先开启 labs.enableErikaPlayerKernel 才显示，电视和 HarmonyOS 默认显示）。可选值取决于平台。换内核会重建播放器。',
+      '播放器内核：mdk（MDK）、videoPlayer（Video Player 官方播放器）、mediaKit（Libmpv，基于 mpv）、erika（Erika，NipaPlay 自己的 Rust 内核）。可选值取决于平台。换内核会重建播放器。',
   'player.fastPlaybackStartup':
       '视频就绪后跳过“识别加载”界面，立即开始播放，再在后台识别番剧、加载弹幕。Classic 设置页名称：快速开始播放。默认关闭。',
   'player.customUserAgent': '播放器请求视频时使用的 User-Agent；空字符串使用内核默认值，下次打开视频生效。',
@@ -322,8 +322,6 @@ const classicSettingDescriptions = <String, String>{
       '收集应用的所有打印输出，用于调试和问题诊断；开启时立即开始收集，关闭时立即停止。Classic 设置页名称：调试日志收集。默认开启。',
   'diagnostics.fileLog':
       '把日志每 1 秒写入磁盘，保留最近 5 份日志文件；开启时立即开始写入，关闭时立即停止。Classic 设置页名称：日志写入文件。默认开启。',
-  'labs.enableErikaPlayerKernel':
-      '实验开关：开启后播放器内核下拉菜单里显示 Erika（player.kernel 的 erika）。电视和 HarmonyOS 上不需要此开关。默认关闭。',
   'labs.enableImmersiveAnimeDetail':
       '实验开关：开启后桌面、平板和手机都使用新版全屏番剧详情页（Classic 实验室页名称：新版番剧卡片页面）。默认关闭。',
 

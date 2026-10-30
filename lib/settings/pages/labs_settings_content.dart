@@ -6,7 +6,6 @@ import 'package:flutter/material.dart';
 import 'package:kmbal_ionicons/kmbal_ionicons.dart';
 import 'package:nipaplay/l10n/l10n.dart';
 import 'package:nipaplay/next/ui/shell/next_ui_preference.dart';
-import 'package:nipaplay/player_abstraction/player_factory.dart';
 import 'package:nipaplay/providers/labs_settings_provider.dart';
 import 'package:nipaplay/settings/adaptive_settings_widgets.dart';
 import 'package:nipaplay/utils/globals.dart' as globals;
@@ -58,26 +57,6 @@ class LabsSettingsContent extends StatelessWidget {
                     phoneIcon: cupertino.CupertinoIcons.rectangle_stack,
                     value: labsSettings.enableImmersiveAnimeDetail,
                     onChanged: labsSettings.setEnableImmersiveAnimeDetail,
-                  ),
-                if (PlayerFactory.isErikaKernelSupported &&
-                    !globals.isTelevision)
-                  AdaptiveSettingsTile.toggle(
-                    title: _text(
-                      context,
-                      '显示 Erika 播放内核',
-                      '顯示 Erika 播放內核',
-                      'Show Erika Player Kernel',
-                    ),
-                    subtitle: _text(
-                      context,
-                      '开启后，播放器内核下拉菜单显示 Erika',
-                      '開啟後，播放器內核下拉選單顯示 Erika',
-                      'Expose Erika in player kernel menus.',
-                    ),
-                    icon: Ionicons.flask_outline,
-                    phoneIcon: cupertino.CupertinoIcons.lab_flask,
-                    value: labsSettings.enableErikaPlayerKernel,
-                    onChanged: labsSettings.setEnableErikaPlayerKernel,
                   ),
                 AdaptiveSettingsTile.button(
                   title: _text(

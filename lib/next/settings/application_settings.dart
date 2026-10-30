@@ -346,9 +346,6 @@ abstract final class ApplicationSettings {
     'subtitle.externalFontName': '外挂字幕字体',
     'subtitle.fontDir': '字幕字体目录',
   };
-  static bool Function() erikaVisible =
-      () => globals.isTelevision || PlayerFactory.isHarmonyOS;
-
   static Schema dynamicSchema(String key, Schema fallback) => switch (key) {
         'seek.stepSeconds' => NumberSchema(
             minimum: video?.seekStepMinSeconds ??
@@ -357,7 +354,6 @@ abstract final class ApplicationSettings {
                 VideoPlayerState.fallbackSeekStepMaxSeconds),
         'player.kernel' => StringSchema(
             values: PlayerFactory.supportedKernelTypes
-                .where((v) => v != PlayerKernelType.erika || erikaVisible())
                 .map((v) => v.name)
                 .toList()),
         'danmaku.renderEngine' => StringSchema(
