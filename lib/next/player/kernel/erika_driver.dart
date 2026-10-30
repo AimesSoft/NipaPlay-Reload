@@ -45,13 +45,69 @@ Future<List<ChapterFacts>?> readErikaChapters(
   return chapters;
 }
 
+/// `setSubtitleStyle`'s arguments for the shared subtitle look (the keys of
+/// `SubtitleLook.kernelProperties`): colours as Erika's 0xRRGGBBAA, the ASS
+/// numpad alignment, margins, outline, shadow, weight, the font (a file of
+/// the font library when one is named so), and how far it replaces an ASS
+/// file's own style.
+Future<JsonMap> erikaSubtitleStyle(Map<String, String> look) async {
+  int? rgba(String? v) =>
+      v == null ? null : int.tryParse(v.replaceFirst('0x', ''), radix: 16);
+  double? number(String? v) => v == null ? null : double.tryParse(v);
+  int? whole(String? v) => v == null ? null : int.tryParse(v);
+  final row = switch (look['subtitle.align.y']) {
+    'top' => 6,
+    'center' => 3,
+    _ => 0,
+  };
+  final column = switch (look['subtitle.align.x']) {
+    'left' => 1,
+    'right' => 3,
+    _ => 2,
+  };
+  final font = look['subtitle.font'] ?? '';
+  final fontsDir = look['subtitle.fonts.dir'] ?? '';
+  var fontFile = '';
+  if (font.isNotEmpty && fontsDir.isNotEmpty) {
+    for (final ext in const ['ttf', 'otf', 'ttc']) {
+      final file = File('$fontsDir${Platform.pathSeparator}$font.$ext');
+      if (await file.exists()) {
+        fontFile = file.path;
+        break;
+      }
+    }
+  }
+  final margin = whole(look['subtitle.margin.x']);
+  return {
+    if (rgba(look['subtitle.color']) case final c?) 'primaryColorRgba': c,
+    if (rgba(look['subtitle.color.outline']) case final c?)
+      'outlineColorRgba': c,
+    if (number(look['subtitle.border.size']) case final w?) 'outlineWidth': w,
+    if (number(look['subtitle.shadow.offset']) case final d?) 'shadowDepth': d,
+    'bold': look['subtitle.bold'] == '1',
+    'italic': look['subtitle.italic'] == '1',
+    'alignment': row + column,
+    if (margin != null) ...{'marginLeft': margin, 'marginRight': margin},
+    if (whole(look['subtitle.margin.y']) case final m?) 'marginVertical': m,
+    'fontFamily': fontFile.isEmpty ? font : '',
+    'fontFilePath': fontFile,
+    'overrideMask': look['subtitle.override'] == 'force'
+        ? kErikaSubtitleOverrideAll
+        : 0,
+  };
+}
+
 /// Erika, our own kernel, as a [KernelDriver]. The media opens through
-/// Erika's adapter, paused, and seeks to its start position; Erika paints
-/// into a native view under the window (the picture is a
-/// [PlatformVideoSurface], which the stage leaves a hole for) and says its
-/// state, position, buffering, tracks and errors by events. Erika does not
-/// say that the media ended: the driver tells it, marked inferred, when
-/// Erika stops at the end.
+/// Erika's adapter, paused, at its start position; Erika paints into a
+/// native view under the window (the picture is a [PlatformVideoSurface],
+/// which the stage leaves a hole for) and says its state, position,
+/// buffering, tracks, errors and the media's end by events.
+///
+/// What a library newer than the published one has (opening at a
+/// position, the end said, a subtitle delay, what the subtitles say) is
+/// read from its JSON method table as the media opens and used only when
+/// it is there; an older Erika opens at the start and seeks, and the end is
+/// inferred when it stops there.
 ///
 /// Tracks: Erika has no media to set them on before it opens, so the plan
 /// goes on right after, while the media is paused at its start; Erika
@@ -83,17 +139,47 @@ final class ErikaDriver extends AdapterDriver
   KernelId get kernel => KernelId.erika;
   @override
   KernelNative get native => this;
+  /// The methods of Erika's JSON table, read as the media opens.
+  Set<String> _methods = const {};
+  bool _has(String method) => _methods.contains(method);
+
+  /// Opening at a position and the end said came in the same library.
+  bool get _opensAtPosition => _has('setOpenStartPosition');
+
   @override
-  final KernelCapabilities capabilities = const KernelCapabilities(
-    transportEvents: true,
-    seekConfirm: true,
-    bufferingTelemetry: true,
-    endEvent: false,
-    openAtPosition: false,
-    trackConfirm: true,
-    subtitleFiles: {'ass', 'ssa'},
-    subtitleScale: true,
-  );
+  KernelCapabilities get capabilities => KernelCapabilities(
+        transportEvents: true,
+        seekConfirm: true,
+        bufferingTelemetry: true,
+        endEvent: _opensAtPosition,
+        openAtPosition: _opensAtPosition,
+        trackConfirm: true,
+        subtitleFiles: const {'ass', 'ssa'},
+        subtitleScale: true,
+        subtitleDelay: _has('setSubtitleDelay'),
+        subtitleText: _has('subtitleText'),
+        subtitleStyle: _has('setSubtitleStyle') ? _styleKeys : const {},
+      );
+
+  /// What Erika's `setSubtitleStyle` takes of the shared subtitle style. It
+  /// has no subtitle height of its own (`subtitle.position`) nor a shadow
+  /// colour.
+  static const _styleKeys = {
+    'subtitle.color',
+    'subtitle.borderColor',
+    'subtitle.bold',
+    'subtitle.italic',
+    'subtitle.opacity',
+    'subtitle.borderSize',
+    'subtitle.shadowOffset',
+    'subtitle.alignX',
+    'subtitle.alignY',
+    'subtitle.marginX',
+    'subtitle.marginY',
+    'subtitle.fontName',
+    'subtitle.fontDir',
+    'subtitle.overrideMode',
+  };
 
   final _tracksKnown = Completer<void>();
   final _durationKnown = Completer<void>();
@@ -142,8 +228,9 @@ final class ErikaDriver extends AdapterDriver
         };
         final was = observed;
         transportChanged(transport);
-        // Erika has no end event: it stops where the media ends.
-        if (transport == KernelTransport.stopped &&
+        // An Erika that does not say the end stops where the media ends.
+        if (!_opensAtPosition &&
+            transport == KernelTransport.stopped &&
             was == KernelTransport.playing &&
             opened &&
             duration > Duration.zero &&
@@ -156,6 +243,9 @@ final class ErikaDriver extends AdapterDriver
         bufferingChanged(event.buffering);
       case ErikaEventKind.error:
         failed(event.error ?? event.message ?? 'Erika reported an error.');
+      // By name: the published library's enum has no `ended` yet.
+      case final kind when kind.name == 'ended':
+        if (opened) ended();
       default:
         break;
     }
@@ -201,6 +291,14 @@ final class ErikaDriver extends AdapterDriver
 
   @override
   Future<void> configure() async {
+    final listed = await adapter.invokeNative('listMethods', const {});
+    final methods = (listed.result as Map?)?['methods'];
+    if (methods is List) {
+      _methods = {
+        for (final m in methods)
+          if (m is Map && m['name'] is String) m['name'] as String
+      };
+    }
     final mode = PlayerUpscalerMode.values
         .where((m) => m.name == config.settings['player.erikaUpscalerMode'])
         .firstOrNull;
@@ -215,6 +313,15 @@ final class ErikaDriver extends AdapterDriver
 
   @override
   Future<Duration> openMedia(ResolvedSource source, Duration start) async {
+    // An Erika that opens at a position presents the frame there first; an
+    // older one opens at the start and seeks once it has.
+    final openedThere = start > Duration.zero &&
+        _opensAtPosition &&
+        (await adapter.invokeNative('setOpenStartPosition',
+                {'positionMicros': start.inMicroseconds}))
+            .error ==
+            null;
+    queue.live();
     adapter.setMedia(source.uri, PlayerMediaType.video);
     await adapter.prepare();
     queue.live();
@@ -227,6 +334,7 @@ final class ErikaDriver extends AdapterDriver
         .timeout(const Duration(seconds: 2), onTimeout: () {});
     queue.live();
     if (start <= Duration.zero) return Duration.zero;
+    if (openedThere) return start;
     final sample = expectSample(start);
     try {
       await adapter.seekAndWait(position: start.inMilliseconds);
@@ -317,11 +425,32 @@ final class ErikaDriver extends AdapterDriver
     }
   }
 
+  /// The subtitle look as Erika was last told it, each key of
+  /// `SubtitleLook.kernelProperties`: its `setSubtitleStyle` takes the whole
+  /// style each time.
+  final _look = <String, String>{};
+
   @override
   Future<void> applySubtitleProperties(Map<String, String> properties) async {
-    // Erika scales what it draws; its other styles are not mapped.
+    _look.addAll(properties);
     final scale = double.tryParse(properties['subtitle.scale'] ?? '');
     if (scale != null) adapter.setProperty('sub-scale', '$scale');
+    final delay = double.tryParse(properties['subtitle.delay'] ?? '');
+    if (delay != null && _has('setSubtitleDelay')) {
+      await _invokeOrLog('setSubtitleDelay',
+          {'delayMicros': (delay * Duration.microsecondsPerSecond).round()});
+    }
+    if (_has('setSubtitleStyle') &&
+        properties.keys.any((k) => k != 'subtitle.scale' && k != 'subtitle.delay')) {
+      await _invokeOrLog('setSubtitleStyle', await erikaSubtitleStyle(_look));
+    }
+  }
+
+  Future<void> _invokeOrLog(String method, JsonMap arguments) async {
+    final reply = await adapter.invokeNative(method, arguments);
+    if (reply.error != null) {
+      debugPrint('[ErikaDriver] $method: ${reply.error}');
+    }
   }
 
   @override
@@ -362,6 +491,14 @@ final class ErikaDriver extends AdapterDriver
       await adapter.playDirectly();
       _playTaken = true;
     }
+  }
+
+  @override
+  Future<String?> readSubtitleText(Duration? at) async {
+    if (at != null || !_has('subtitleText')) return null;
+    final reply = await adapter.invokeNative('subtitleText', const {});
+    final result = reply.result;
+    return result is Map ? result['text'] as String? : null;
   }
 
   @override
