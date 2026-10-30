@@ -36,6 +36,7 @@ final class SubtitleLook {
     this.shadowColor = 0xFF000000,
     this.fontName = '',
     this.overrideMode = 0,
+    this.fontsDir = '',
     this.kernelDelaySeconds = 0,
     this.overlayDelaySeconds = 0,
   });
@@ -84,6 +85,10 @@ final class SubtitleLook {
   final String fontName;
   final int overrideMode;
 
+  /// `subtitle_font_dir`: the font library's folder, where the kernel finds
+  /// [fontName] (and an ASS file's own fonts) when they are not installed.
+  final String fontsDir;
+
   /// `subtitle_delay_seconds`: Classic's delay for the kernel's subtitles.
   final double kernelDelaySeconds;
 
@@ -115,6 +120,7 @@ final class SubtitleLook {
         shadowColor: prefs.getInt('subtitle_shadow_color') ?? 0xFF000000,
         fontName: prefs.getString('subtitle_font_name') ?? '',
         overrideMode: (prefs.getInt('subtitle_override_mode') ?? 0).clamp(0, 3),
+        fontsDir: prefs.getString('subtitle_font_dir') ?? '',
         kernelDelaySeconds: prefs.getDouble('subtitle_delay_seconds') ?? 0,
         overlayDelaySeconds: prefs.getDouble('srt_subtitle_delay') ?? 0,
       );
@@ -150,6 +156,7 @@ final class SubtitleLook {
         'subtitle.shadow.offset': shadowOffset.toStringAsFixed(1),
         'subtitle.color.shadow': _rgba(_faded(shadowColor)),
         'subtitle.font': fontName,
+        'subtitle.fonts.dir': fontsDir,
         'subtitle.override': switch (overrideMode) {
           1 => 'no',
           2 => 'scale',
@@ -182,6 +189,7 @@ final class SubtitleLook {
     'subtitle.shadowOffset': ['subtitle.shadow.offset'],
     'subtitle.shadowColor': ['subtitle.color.shadow'],
     'subtitle.fontName': ['subtitle.font'],
+    'subtitle.fontDir': ['subtitle.fonts.dir'],
     'subtitle.overrideMode': ['subtitle.override'],
   };
 
@@ -200,6 +208,7 @@ final class SubtitleLook {
           'marginY': marginY,
           'shadowColor': shadowColor,
           'fontName': fontName,
+          'fontsDir': fontsDir.isEmpty ? null : 'set',
           'overrideMode': overrideMode,
           'applied': [
             'subtitle.scale',
@@ -255,6 +264,7 @@ final class SubtitleLook {
       other.shadowColor == shadowColor &&
       other.fontName == fontName &&
       other.overrideMode == overrideMode &&
+      other.fontsDir == fontsDir &&
       other.kernelDelaySeconds == kernelDelaySeconds &&
       other.overlayDelaySeconds == overlayDelaySeconds;
 
@@ -279,6 +289,7 @@ final class SubtitleLook {
       shadowColor,
       fontName,
       overrideMode,
+      fontsDir,
       kernelDelaySeconds,
       overlayDelaySeconds,
     ]);

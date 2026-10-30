@@ -120,6 +120,15 @@ final class NextPlayerHost {
     await _current.value?.subtitles.lookChanged(_look);
   }
 
+  /// Keeps a shared subtitle setting that is words (`subtitle_font_dir`)
+  /// and applies it to what plays.
+  Future<void> setSubtitleText(String key, String value) async {
+    final prefs = _prefs ??= await SharedPreferences.getInstance();
+    await SettingsAccess.persist(key, () => prefs.setString(key, value));
+    _look = SubtitleLook.read(prefs);
+    await _current.value?.subtitles.lookChanged(_look);
+  }
+
   final _current = ValueNotifier<PlaybackSession?>(null);
   final _events = StreamController<PlaybackEvent>.broadcast(sync: true);
   Future<void> _turn = Future.value();

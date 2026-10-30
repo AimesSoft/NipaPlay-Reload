@@ -1218,6 +1218,12 @@ final class SessionPlayback implements NextPlayback, VideoStageHost {
     return path == null ? null : host.placementOf(path);
   }
 
+  /// Where the kernel finds the font library's fonts ('' for none).
+  Future<void> setSubtitleFontsDir(String dir) async {
+    await host.setSubtitleText('subtitle_font_dir', dir);
+    _frame.poke();
+  }
+
   Future<void> setOverlayPlacement(
       SubtitleChoice? on, OverlayPlacement placement) async {
     final path = drawnOver(on);

@@ -523,6 +523,7 @@ class _DanmakuPage extends StatefulWidget {
 
 class _DanmakuPageState extends State<_DanmakuPage> {
   NextPlayback get _playback => widget.playback;
+  String? _saved;
   SessionPlayback? get _session =>
       _playback is SessionPlayback ? _playback as SessionPlayback : null;
 
@@ -537,6 +538,40 @@ class _DanmakuPageState extends State<_DanmakuPage> {
         await _session?.danmaku.writeSetting(key, value);
         if (mounted) setState(() {});
       });
+
+  /// What shows, saved where the person picks, as Classic saves it.
+  Future<void> _save({required bool xml}) async {
+    final session = _session;
+    if (session == null) return;
+    if (session.danmaku.timeline.count == 0) {
+      return setState(() => _saved = '没有可保存的弹幕');
+    }
+    final ext = xml ? 'xml' : 'json';
+    final now = DateTime.now();
+    String two(int v) => v.toString().padLeft(2, '0');
+    final title = (_playback.workTitle ?? '').trim();
+    final base = title.isNotEmpty
+        ? title
+        : (_playback.path ?? 'danmaku')
+            .split(RegExp(r'[\\/]'))
+            .last
+            .replaceAll(RegExp(r'\.[^.]*$'), '');
+    final location = await getSaveLocation(
+      suggestedName: '${base}_danmaku_${now.year}${two(now.month)}'
+          '${two(now.day)}_${two(now.hour)}${two(now.minute)}.$ext',
+      acceptedTypeGroups: [
+        XTypeGroup(label: ext.toUpperCase(), extensions: [ext])
+      ],
+    );
+    if (location == null || !mounted) return;
+    try {
+      final count = await session.danmaku.exportTo(location.path, xml: xml);
+      if (mounted) setState(() => _saved = '已保存 $count 条');
+    } catch (e) {
+      debugPrint('[NextPlayer] save danmaku: $e');
+      if (mounted) setState(() => _saved = '没有保存成功');
+    }
+  }
 
   /// What this page and its style page set, back to NipaPlay's own.
   static const _resettable = [
@@ -689,6 +724,13 @@ class _DanmakuPageState extends State<_DanmakuPage> {
                         label: '发送弹幕',
                         onTap: () => widget.onOpen(_Page.send)),
                     const PlayerMenuDivider(),
+                    PlayerSettingAction(
+                        label: '保存为 JSON',
+                        onTap: () => unawaited(_save(xml: false))),
+                    PlayerSettingAction(
+                        label: '保存为 XML',
+                        value: _saved,
+                        onTap: () => unawaited(_save(xml: true))),
                     PlayerSettingAction(
                       label: '恢复默认',
                       onTap: () => widget.set(() async {

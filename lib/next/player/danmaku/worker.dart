@@ -162,6 +162,12 @@ void _run(SendPort replies) {
                 data['input'] as Map<String, dynamic>, version,
                 data['sessionId'] as String?, data['offset'] as double);
           }
+        case 'export':
+          final text = exportTimeline(snapshot, xml: data['xml'] == true);
+          await File(data['path'] as String).writeAsString(text, flush: true);
+          result = snapshot.entries
+              .where((e) => '${e['content'] ?? ''}'.isNotEmpty)
+              .length;
         case 'layout.dfm':
           await ensureRustInitialized();
           result = await _prepareDfm(snapshot, data);

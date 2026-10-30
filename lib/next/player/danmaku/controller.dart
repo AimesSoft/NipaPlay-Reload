@@ -470,6 +470,11 @@ final class SessionDanmakuController extends ChangeNotifier
     return result;
   }
 
+  /// What shows now, written to [path] off the main isolate as Classic
+  /// saves it (JSON, or bilibili's XML); how many comments there were.
+  Future<int> exportTo(String path, {required bool xml}) =>
+      _worker.request<int>('export', {'path': path, 'xml': xml});
+
   Never _conflict() => throw const Failure(FailureCode.conflict,
       'Danmaku timeline changed; restart pagination.');
 

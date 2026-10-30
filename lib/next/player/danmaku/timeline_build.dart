@@ -348,3 +348,71 @@ String pluginLoadMessage(
     'window': {'startSeconds': from, 'endSeconds': to},
   });
 }
+
+/// What shows, saved as Classic saves it (弹幕设置 › 保存弹幕): JSON with the
+/// comments as the player has them, or the bilibili XML other players read
+/// (`<d p="time,mode,size,color,sent,0,0,0">`). Times are the timeline's,
+/// each track's offset in them.
+String exportTimeline(DanmakuTimeline timeline, {required bool xml}) {
+  final entries = [
+    for (final e in timeline.entries)
+      if ('${e['content'] ?? ''}'.isNotEmpty) e
+  ];
+  if (!xml) {
+    return jsonEncode({
+      'count': entries.length,
+      'comments': [
+        for (final e in entries)
+          {
+            'time': e['time'],
+            'content': e['content'],
+            'type': e['type'],
+            'color': e['color'],
+            if (e['fontSize'] != null) 'fontSize': e['fontSize'],
+            if (e['source'] != null) 'source': e['source'],
+            if (e['sentAt'] != null) 'sentAt': e['sentAt'],
+          }
+      ],
+    });
+  }
+  final out = StringBuffer()
+    ..writeln('<?xml version="1.0" encoding="UTF-8"?>')
+    ..writeln('<i>');
+  for (final e in entries) {
+    final time = ((e['time'] as num?) ?? 0).toDouble().toStringAsFixed(3);
+    final original = e['originalMode'];
+    final mode = original is num && original > 0
+        ? original.toInt()
+        : switch (e['type']) { 'top' => 5, 'bottom' => 4, _ => 1 };
+    final size = (e['fontSize'] as num?)?.toInt() ?? 25;
+    final sent = (e['sentAt'] as num?)?.toInt() ?? 0;
+    out.writeln('<d p="$time,$mode,$size,${_rgbOf(e['color'])},$sent,0,0,0">'
+        '${_xmlText('${e['content']}')}</d>');
+  }
+  out.writeln('</i>');
+  return out.toString();
+}
+
+int _rgbOf(Object? color) {
+  if (color is num) return color.toInt() & 0xFFFFFF;
+  final text = '$color';
+  final rgb = RegExp(r'rgb\((\d+),\s*(\d+),\s*(\d+)\)').firstMatch(text);
+  if (rgb != null) {
+    return (int.parse(rgb[1]!) << 16) |
+        (int.parse(rgb[2]!) << 8) |
+        int.parse(rgb[3]!);
+  }
+  if (text.startsWith('#')) {
+    return (int.tryParse(text.substring(1), radix: 16) ?? 0xFFFFFF) & 0xFFFFFF;
+  }
+  return 0xFFFFFF;
+}
+
+String _xmlText(String text) => text
+    .replaceAll('&', '&amp;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;')
+    .replaceAll('"', '&quot;')
+    .replaceAll("'", '&apos;')
+    // Characters XML 1.0 has no place for.
+    .replaceAll(RegExp(r'[\x00-\x08\x0B\x0C\x0E-\x1F]'), '');

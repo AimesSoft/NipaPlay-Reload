@@ -92,6 +92,7 @@ final class MediaKitDriver extends AdapterDriver
       'subtitle.shadowOffset',
       'subtitle.shadowColor',
       'subtitle.fontName',
+      'subtitle.fontDir',
       'subtitle.overrideMode',
     },
   );
@@ -331,6 +332,7 @@ final class MediaKitDriver extends AdapterDriver
       'sub-shadow-offset': properties['subtitle.shadow.offset'],
       // mpv's own default when none is chosen.
       'sub-font': font == null ? null : (font.isEmpty ? 'sans-serif' : font),
+      'sub-fonts-dir': properties['subtitle.fonts.dir'],
       'sub-ass-override': properties['subtitle.override'],
     };
     for (final entry in options.entries) {
