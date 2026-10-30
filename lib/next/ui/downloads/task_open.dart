@@ -9,6 +9,8 @@ bool isDownload(UiTask task) => task.type == 'download';
 /// A background task tapped: a download opens its own sheet; a task that
 /// waits for the person puts its question up, and the answer runs.
 Future<void> openTask(NextUiServices services, UiTask task) async {
+  // One another device runs opens there.
+  if (task.device != null) return;
   if (isDownload(task)) return openDownload(services, task.taskId);
   final question = await services.background.question(task.taskId);
   if (question == null) return;
@@ -21,6 +23,8 @@ Future<void> openTask(NextUiServices services, UiTask task) async {
 /// What could not be done this way.
 Future<List<String>> controlTasks(
     NextUiServices services, Iterable<UiTask> tasks, String command) async {
+  // Only this device's: another device's are controlled there.
+  tasks = [for (final t in tasks) if (t.device == null) t];
   final ids = [for (final t in tasks) t.taskId];
   final transfers = command == 'cancel'
       ? const <String>[]

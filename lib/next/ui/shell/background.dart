@@ -155,9 +155,10 @@ class BackgroundPanel extends StatelessWidget {
           valueListenable: shell.tasks,
           builder: (context, _, __) {
             final items = shell.backgroundItems;
+            // Another device's tasks are shown, not controlled, here.
             final tasks = [
               for (final t in shell.activeTasks)
-                if (t.kind == UiTaskKind.background) t
+                if (t.kind == UiTaskKind.background && t.device == null) t
             ];
             final running =
                 tasks.where((t) => t.state == UiTaskState.running).toList();
@@ -186,10 +187,12 @@ class BackgroundPanel extends StatelessWidget {
                           )
                         else
                           Pressable(
-                            onTap: () {
-                              shell.closePopover();
-                              unawaited(openTask(services, task));
-                            },
+                            onTap: task.device != null
+                                ? null
+                                : () {
+                                    shell.closePopover();
+                                    unawaited(openTask(services, task));
+                                  },
                             semanticLabel: task.title,
                             pressScale: 0.99,
                             builder: (context, hovered) =>

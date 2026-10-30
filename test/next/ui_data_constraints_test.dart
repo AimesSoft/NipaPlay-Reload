@@ -8,6 +8,9 @@ import 'package:nipa_harness/nipa_harness.dart';
 import 'package:nipaplay/next/chat/turn_boundaries.dart';
 import 'package:nipaplay/next/media/identity_store.dart';
 import 'package:nipaplay/next/media/media_service.dart';
+import 'package:nipaplay/next/mesh/library.dart';
+import 'package:nipaplay/next/mesh/library_transfer.dart';
+import 'package:nipaplay/next/mesh/runtime.dart';
 import 'package:nipaplay/next/state/query.dart';
 import 'package:nipaplay/next/state/views.dart';
 import 'package:nipaplay/next/tasks/sqlite_job_store.dart';
@@ -16,6 +19,7 @@ import 'package:nipaplay/next/ui_data/service.dart';
 import 'package:nipaplay/next/ui_data/ui_data.dart';
 import 'package:nipaplay/next/ui_data/metadata_facts.dart';
 import 'package:nipaplay/next/ui_data/library_service.dart';
+import 'package:nipaplay/next/ui/widgets/words.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
 import '../../packages/nipa_harness/test/task_support.dart';
@@ -135,6 +139,77 @@ void main() {
         .singleWhere((shelf) => shelf.kind == UiShelfKind.continueWatching);
     expect(shelf.items.single.work.workId, 'w1');
     expect(shelf.items.single.episode?.episodeId, 'episode-home');
+  });
+
+  test('what runs here goes with the catalogue to the other devices; '
+      'helpers and settled tasks do not', () async {
+    final mesh =
+        MeshRuntime(root: root, vault: MemoryVault(), token: () async => null);
+    final library = MeshLibrary(service, mesh);
+    try {
+      final job = await engine
+          .submit(type: 'test', title: '整理', input: {'workId': 'w1'});
+      await executor.entered.future;
+      await engine.submit(type: 'agent.helper', title: '帮手');
+      await helperExecutor.entered.future;
+      final done = await engine.submit(type: 'download', title: '已完成');
+      await untilState(engine, done.jobId, JobState.succeeded);
+      final shared = await service.meshTasks();
+      expect([for (final t in shared) t['taskId']], [job.jobId]);
+      expect(shared.single['state'], 'running');
+      expect(shared.single['workId'], 'w1');
+      final reply = await library.request(
+          'mesh/library/snapshot',
+          {
+            'offset': 0,
+            'encoding': librarySnapshotEncoding,
+            'progressSeparately': true,
+            'tasks': true
+          },
+          'peer');
+      expect([for (final t in reply['tasks'] as List) (t as Map)['taskId']],
+          [job.jobId]);
+      final older = await library.request('mesh/library/snapshot',
+          {'offset': 0, 'encoding': librarySnapshotEncoding}, 'peer');
+      expect(older.containsKey('tasks'), isFalse,
+          reason: 'a device that does not ask is not told');
+    } finally {
+      executor.release.complete();
+      helperExecutor.release.complete();
+      await library.close();
+      await mesh.close();
+    }
+  });
+
+  test('another device\'s tasks are shown with its name, until it says none',
+      () async {
+    final mesh =
+        MeshRuntime(root: root, vault: MemoryVault(), token: () async => null);
+    final library = MeshLibrary(service, mesh);
+    service.meshLibrary = library;
+    try {
+      library.heardTasks('device-win', 'Windows', [
+        {
+          'taskId': 'j1',
+          'title': '下载《孤独摇滚！》',
+          'state': 'running',
+          'type': 'download',
+          'progress': .5
+        }
+      ]);
+      final task = (await service.tasks().first).single;
+      expect(task.taskId, 'mesh:device-win:j1');
+      expect(task.device, 'Windows');
+      expect(task.title, '下载《孤独摇滚！》');
+      expect(task.threadId, isNull);
+      expect(Words.taskLine(task), 'Windows · 50%');
+      library.heardTasks('device-win', 'Windows', const []);
+      expect(await service.tasks().first, isEmpty);
+    } finally {
+      service.meshLibrary = null;
+      await library.close();
+      await mesh.close();
+    }
   });
 
   test('task remains readable after its source work disappears', () async {

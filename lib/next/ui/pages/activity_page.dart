@@ -152,6 +152,11 @@ class _ActivityPageState extends State<ActivityPage>
             for (final t in tasks)
               if (t.kind == UiTaskKind.background) t
           ];
+          // What this device runs; another device's are controlled there.
+          final mine = [
+            for (final t in tasks)
+              if (t.device == null) t
+          ];
           final c = shell.chat;
           final line = c.doing ?? c.latestLine;
           void control(UiTask t, String command) => unawaited(
@@ -188,23 +193,24 @@ class _ActivityPageState extends State<ActivityPage>
                     child: Column(
                         crossAxisAlignment: CrossAxisAlignment.stretch,
                         children: [
+                          if (mine.isNotEmpty)
                           Row(children: [
-                            if (tasks.any((t) => t.state == UiTaskState.running))
+                            if (mine.any((t) => t.state == UiTaskState.running))
                               PillButton(
                                   label: '全部暂停',
                                   onTap: () => _all(
-                                      tasks
+                                      mine
                                           .where((t) =>
                                               t.state == UiTaskState.running)
                                           .toList(),
                                       'pause')),
-                            if (tasks.any((t) => t.state == UiTaskState.paused))
+                            if (mine.any((t) => t.state == UiTaskState.paused))
                               ...[
                               const SizedBox(width: 8),
                               PillButton(
                                   label: '全部继续',
                                   onTap: () => _all(
-                                      tasks
+                                      mine
                                           .where((t) =>
                                               t.state == UiTaskState.paused)
                                           .toList(),
@@ -214,7 +220,7 @@ class _ActivityPageState extends State<ActivityPage>
                             PillButton(
                                 label: '全部停止',
                                 danger: true,
-                                onTap: () => _all(tasks, 'cancel')),
+                                onTap: () => _all(mine, 'cancel')),
                             const SizedBox(width: 14),
                             if (_said != null)
                               Flexible(
@@ -227,7 +233,9 @@ class _ActivityPageState extends State<ActivityPage>
                           for (final (i, task) in background.indexed) ...[
                             if (i > 0) const SizedBox(height: 10),
                             Pressable(
-                              onTap: () => openTask(shell.services, task),
+                              onTap: task.device != null
+                                  ? null
+                                  : () => openTask(shell.services, task),
                               semanticLabel: task.title,
                               pressScale: 0.995,
                               builder: (context, hovered) => CardSurface(

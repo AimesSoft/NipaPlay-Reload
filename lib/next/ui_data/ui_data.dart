@@ -307,9 +307,18 @@ final class UiTask {
     this.type,
     this.workTitle,
     this.action,
+    this.workId,
+    this.device,
   });
   final String taskId;
   final String title;
+
+  /// The work it is for, when known.
+  final String? workId;
+
+  /// The Mesh device it runs on, by name; null on this one. A task of
+  /// another device is shown here, not controlled.
+  final String? device;
 
   /// The work it is for, when known: “迷宫饭”.
   final String? workTitle;

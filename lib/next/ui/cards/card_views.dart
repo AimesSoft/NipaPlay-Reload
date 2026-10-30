@@ -653,6 +653,8 @@ class TaskRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // One another device runs is shown, not controlled, here.
+    final mine = task.device == null;
     final running = task.state == UiTaskState.running;
     final paused = task.state == UiTaskState.paused;
     final art = task.artwork?.backdrop ?? task.artwork?.poster;
@@ -688,24 +690,24 @@ class TaskRow extends StatelessWidget {
               track: const Color(0x1AFFFFFF),
             ),
             const SizedBox(height: 6),
-            NumText(Words.task(task),
+            NumText(Words.taskLine(task),
                 maxLines: 2,
                 style: NextText.sans(11.5, color: NextColors.p3)),
           ],
         ),
       ),
       const SizedBox(width: 10),
-      if (running && callbacks.onPauseTask != null)
+      if (mine && running && callbacks.onPauseTask != null)
         _MiniButton(
             glyph: NextGlyph.pause,
             label: '暂停',
             onTap: () => callbacks.onPauseTask!(task)),
-      if (paused && callbacks.onResumeTask != null)
+      if (mine && paused && callbacks.onResumeTask != null)
         _MiniButton(
             glyph: NextGlyph.play,
             label: '继续',
             onTap: () => callbacks.onResumeTask!(task)),
-      if (callbacks.onCancelTask != null) ...[
+      if (mine && callbacks.onCancelTask != null) ...[
         const SizedBox(width: 6),
         _MiniButton(
             glyph: NextGlyph.close,

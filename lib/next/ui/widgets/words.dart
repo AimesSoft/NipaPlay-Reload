@@ -28,6 +28,11 @@ abstract final class Words {
     return m == 0 ? '还要 $h 小时' : '还要 $h 小时 $m 分钟';
   }
 
+  /// [task] as a row says it: one another device runs, that device first.
+  static String taskLine(UiTask task) => task.device == null
+      ? Words.task(task)
+      : '${task.device} · ${Words.task(task)}';
+
   static String task(UiTask task) {
     if (task.type == 'download' && task.currentActivity != null) {
       return task.currentActivity!;

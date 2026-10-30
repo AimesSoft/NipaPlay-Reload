@@ -143,28 +143,32 @@ final class UiDataService
     return epoch.single['n'] as int;
   }
 
+  void _publishTasks() {
+    if (!_tasks.hasListener) {
+      return;
+    }
+    _publishing = _publishing.then((_) async {
+      final tasks = await _taskList();
+      if (!_closed) _tasks.add(tasks);
+    });
+    unawaited(_publishing.then<void>((_) {},
+        onError: (Object e, StackTrace s) =>
+            Zone.current.handleUncaughtError(e, s)));
+  }
+
+  /// The tasks another device of the Mesh runs have changed.
+  void peerTasksChanged() => _publishTasks();
+
   Future<void> start() async {
     _observed = await _fingerprint();
-    void publishTasks() {
-      if (!_tasks.hasListener) {
-        return;
-      }
-      _publishing = _publishing.then((_) async {
-        final tasks = await _taskList();
-        if (!_closed) _tasks.add(tasks);
-      });
-      unawaited(_publishing.then<void>((_) {},
-          onError: (Object e, StackTrace s) =>
-              Zone.current.handleUncaughtError(e, s)));
-    }
-
     _jobs = engine.changes.listen((_) {
+      _jobRevision++;
       _changed();
-      publishTasks();
+      _publishTasks();
     });
     // The shell may already show tasks while startup or resume is in flight.
     // Reconcile changes made before this listener was attached.
-    publishTasks();
+    _publishTasks();
     // The history, what to continue and the calendar tell when they move.
     _classic = sources.changes.listen((_) => _changed());
     _timer = Timer.periodic(const Duration(milliseconds: 250), (_) {
@@ -400,7 +404,10 @@ final class UiDataService
   /// the panel and session menu. Older settled history is audit data, not live
   /// UI; decoding all of it on each subscription used to walk the whole task
   /// table at startup.
-  Future<List<UiTask>> _taskList() async {
+  Future<List<UiTask>> _taskList() async =>
+      [...await _localTasks(), ...await _peerTasks()];
+
+  Future<List<UiTask>> _localTasks() async {
     final jobs = <String, Job>{
       for (final job in await engine.listActive()) job.jobId: job,
     };
@@ -416,11 +423,93 @@ final class UiDataService
 
   static const _recentJobs = 64;
   static const _recentHelperJobs = 64;
+
+  /// Moved by every change of a task of this device.
+  int _jobRevision = 0;
+  static const _sharedLimit = 50;
+  (int, List<JsonMap>)? _shared;
+
+  /// This device's background tasks as the other devices of the Mesh show
+  /// them: what runs, waits or is paused. Not the helpers: their
+  /// conversations are this device's. Read again only once a task moved.
+  Future<List<JsonMap>> meshTasks() async {
+    final revision = _jobRevision;
+    if (_shared case (final at, final list) when at == revision) return list;
+    final list = [
+      for (final job in (await engine.listActive()).take(_sharedLimit))
+        if (job.type != 'agent.helper')
+          if (await _task(job) case final t
+              when const {
+                UiTaskState.queued,
+                UiTaskState.running,
+                UiTaskState.paused
+              }.contains(t.state))
+          {
+            'taskId': t.taskId,
+            'title': t.title,
+            'state': t.state.name,
+            if (t.type != null) 'type': t.type,
+            if (t.workId != null) 'workId': t.workId,
+            if (t.workTitle != null) 'workTitle': t.workTitle,
+            if (t.action != null) 'action': t.action,
+            if (t.progress != null) 'progress': t.progress,
+            if (t.remaining != null) 'remainingMs': t.remaining!.inMilliseconds,
+            if (t.startedAt != null)
+              'startedAt': t.startedAt!.toUtc().toIso8601String(),
+            if (t.currentActivity != null) 'currentActivity': t.currentActivity,
+          }
+    ];
+    _shared = (revision, list);
+    return list;
+  }
+
+  /// The tasks the other devices of the Mesh run, as they last said, each
+  /// with its device's name and its work's picture as this device holds it.
+  Future<List<UiTask>> _peerTasks() async {
+    final library = meshLibrary;
+    if (library == null) return const [];
+    final result = <UiTask>[];
+    for (final (device, name, tasks) in library.peerTasks) {
+      for (final t in tasks) {
+        final workId = t['workId'] as String?;
+        UiWork? work;
+        if (workId != null) {
+          try {
+            work = await library.work(workId);
+          } on Failure {
+            work = null;
+          }
+        }
+        final remaining = t['remainingMs'] as int?;
+        result.add(UiTask(
+            taskId: 'mesh:$device:${t['taskId']}',
+            title: t['title'] as String,
+            state: UiTaskState.values
+                    .where((s) => s.name == t['state'])
+                    .firstOrNull ??
+                UiTaskState.running,
+            type: t['type'] as String?,
+            workId: workId,
+            workTitle: t['workTitle'] as String?,
+            action: t['action'] as String?,
+            artwork: work?.artwork,
+            progress: (t['progress'] as num?)?.toDouble(),
+            remaining:
+                remaining == null ? null : Duration(milliseconds: remaining),
+            startedAt: DateTime.tryParse(t['startedAt'] as String? ?? ''),
+            currentActivity: t['currentActivity'] as String?,
+            device: name));
+      }
+    }
+    return result;
+  }
+
   Future<UiTask> _task(Job job) async {
     Map? title;
     JsonMap? art;
+    String? workId;
     try {
-      final workId = await _jobWork(job);
+      workId = await _jobWork(job);
       if (workId != null) {
         title = (await media.store.mergedMetadata(workId))['fields'] as Map;
         art = await artwork.cached(workId);
@@ -448,6 +537,7 @@ final class UiDataService
                         ? _downloadTitle(job.details['downloadTitle'] as String? ?? job.title)
                         : _taskVerb(job.type),
         workTitle: job.type == 'agent.helper' ? null : name,
+        workId: workId,
         action: job.type == 'agent.helper' ? null : _taskVerb(job.type),
         state: switch (job.state) {
           JobState.queued || JobState.waitingRetry => UiTaskState.queued,

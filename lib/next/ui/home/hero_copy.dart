@@ -189,7 +189,7 @@ class _PreparingLineState extends State<PreparingLine> {
                         live: task.state == UiTaskState.running),
                   ),
                   const SizedBox(width: 10),
-                  NumText(Words.task(task),
+                  NumText(Words.taskLine(task),
                       style: NextText.sans(12.5, color: NextColors.p2)),
                   ] else ...[
                   Container(
@@ -222,7 +222,7 @@ class _PreparingLineState extends State<PreparingLine> {
                       width: 120,
                       live: task.state == UiTaskState.running),
                   const SizedBox(width: 12),
-                  NumText(Words.task(task),
+                  NumText(Words.taskLine(task),
                       style: NextText.sans(12.5, color: NextColors.p2)),
                   ],
                 ],
