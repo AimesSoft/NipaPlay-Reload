@@ -150,6 +150,7 @@ abstract final class SettingsLayout {
     ],
     SettingsSection.danmaku: [
       SettingsGroup('弹幕', [
+        'danmaku.renderEngine',
         'danmaku.visible',
         'danmaku.opacity',
         'danmaku.fontSize',

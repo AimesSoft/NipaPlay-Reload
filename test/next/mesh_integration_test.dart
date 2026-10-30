@@ -345,6 +345,46 @@ void main() {
   });
   tearDown(() => rig.close());
 
+  test('settings return cached devices while a peer description is pending',
+      () async {
+    final a = await rig.node('settings-a');
+    final b = await rig.node('settings-b');
+    await a.refreshDevices();
+    final started = Completer<void>();
+    final release = Completer<JsonMap>();
+    var reads = 0;
+    b.describeSelf = () {
+      reads++;
+      if (!started.isCompleted) started.complete();
+      return release.future;
+    };
+    addTearDown(() {
+      if (!release.isCompleted) release.complete({});
+    });
+    final snapshot = await a.settingsDevices()
+        .timeout(const Duration(seconds: 1));
+    expect(snapshot.any((d) => d['deviceId'] == b.identity!.deviceId), isTrue);
+    await started.future.timeout(const Duration(seconds: 5));
+    for (var i = 0; i < 5; i++) {
+      await a.settingsDevices().timeout(const Duration(seconds: 1));
+    }
+    expect(reads, 1, reason: 'settings reads coalesce pending probes');
+    final updated = Completer<void>();
+    final subscription = a.hostChanges.listen((_) async {
+      final rows = await a.settingsDevices();
+      if (!updated.isCompleted && rows.any((d) =>
+          d['deviceId'] == b.identity!.deviceId &&
+          d['remotePrograms'] == true)) updated.complete();
+    });
+    release.complete({
+      'roles': ['headless'],
+      'programExecution': {'enabled': true},
+    });
+    await updated.future.timeout(const Duration(seconds: 5));
+    await subscription.cancel();
+    expect(reads, 1, reason: 'refresh notifications do not start a new probe');
+  });
+
   test('X47c separate headless process serves catalogue and files', () => x47HeadlessExperiment(rig), skip: Platform.environment['NIPAPLAY_X47_HEADLESS_BINARY'] == null ? '独立 AOT 实验需显式提供构建路径；见 X47_REPORT' : reuseX47Evidence);
 
   test('X47c catalogue evolution preserves IDs and metadata', () => x47CatalogueEvolution(rig), skip: reuseX47Evidence);

@@ -68,8 +68,8 @@ class StorageSectionState extends State<StorageSection> {
           _space = space;
           _spaceFailed = null;
         });
-      }, onError: (Object _) {
-        if (mounted) setState(() => _spaceFailed = '没能读取');
+      }, onError: (Object error) {
+        if (mounted) setState(() => _spaceFailed = rawFailureText(error));
       }),
       widget.upkeep.caches().then((caches) {
         if (!mounted) return;
@@ -77,8 +77,8 @@ class StorageSectionState extends State<StorageSection> {
           _caches = caches;
           _cachesFailed = null;
         });
-      }, onError: (Object _) {
-        if (mounted) setState(() => _cachesFailed = '没能读取');
+      }, onError: (Object error) {
+        if (mounted) setState(() => _cachesFailed = rawFailureText(error));
       }),
     ]);
   }

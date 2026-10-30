@@ -224,6 +224,9 @@ final class MeshRuntime implements MeshDeviceSource {
   Future<void> _replayWrites = Future.value();
   bool _replayLoaded = false;
   Future<void>? _refreshingDevices;
+  Future<void>? _settingsRefresh;
+  int _settingsRefreshGeneration = -1;
+  DateTime _settingsRefreshAt = DateTime.fromMillisecondsSinceEpoch(0);
   DateTime _lastDevicesRefresh = DateTime.fromMillisecondsSinceEpoch(0);
   bool _coordinatorSyncPending = false;
   int _retryAttempts = 0;
@@ -270,7 +273,9 @@ final class MeshRuntime implements MeshDeviceSource {
     _hostFactsLoaded = true;
   }
 
-  Future<List<JsonMap>> settingsDevices() async {
+  /// Settings paint the last observations immediately. Opening a page must
+  /// neither enumerate every peer's tools nor wait for peer timeouts.
+  Future<List<JsonMap>> settingsDevices({bool? selfRemotePrograms}) async {
     await _loadHostFacts();
     if (_devices.isEmpty) {
       final file = File('${root.path}/mesh-devices.json');
@@ -279,21 +284,64 @@ final class MeshRuntime implements MeshDeviceSource {
         _devices = (saved['devices'] as List).cast<JsonMap>();
       }
     }
-    if (_node != null) await devices();
-    final selfDescription = await describeSelf?.call();
+    _refreshSettingsDevices();
     return [
       for (final device in cachedDevices)
         {
           ...device,
           'roles': _descriptions[device['deviceId']]?['roles'] ?? <String>[],
-          'remotePrograms': device['deviceId'] == identity?.deviceId
-              ? (((selfDescription?['programExecution'] as Map?)?['enabled']) ==
-                  true)
+          'remotePrograms': device['deviceId'] == identity?.deviceId &&
+                  selfRemotePrograms != null
+              ? selfRemotePrograms
               : (((_descriptions[device['deviceId']]?['programExecution']
                       as Map?)?['enabled']) ==
                   true),
         }
     ];
+  }
+
+  void _refreshSettingsDevices() {
+    if (_closed || _node == null) return;
+    final generation = _generation;
+    final now = DateTime.now();
+    if (_settingsRefreshGeneration == generation &&
+        (_settingsRefresh != null ||
+            now.difference(_settingsRefreshAt) < const Duration(seconds: 30))) {
+      return;
+    }
+    _settingsRefreshGeneration = generation;
+    _settingsRefreshAt = now;
+    final peers = [for (final d in _devices) Map<String, Object?>.from(d)];
+    bool current() => !_closed && _node != null && _generation == generation;
+    var next = 0;
+    Future<void> worker() async {
+      while (current() && next < peers.length) {
+        final peer = peers[next++];
+        if (peer['revoked'] == true) continue;
+        try {
+          await _describe(peer,
+              includeCatalog: false,
+              current: () => current() && _active.contains(peer['device_id']));
+        } catch (_) {
+          // RPC observations retain failures; a background read must not
+          // fail the settings page or turn an unrelated error into offline.
+        }
+        if (current() && !_hostChanges.isClosed) _hostChanges.add(null);
+      }
+    }
+
+    // Bound concurrent probes and coalesce the resulting host-change reads.
+    // The event queue lets the snapshot return before probing starts.
+    final work = Future<void>(() async {
+      await _joinWork;
+      await Future.wait([
+        for (var i = 0; i < min(4, peers.length); i++) worker(),
+      ]);
+    });
+    _settingsRefresh = work;
+    unawaited(work.whenComplete(() {
+      if (identical(_settingsRefresh, work)) _settingsRefresh = null;
+    }).catchError((Object _) {}));
   }
 
   Future<void> restartConfigured() async {
@@ -1427,8 +1475,10 @@ final class MeshRuntime implements MeshDeviceSource {
   Future<JsonMap> _describe(
     JsonMap device, {
     bool includeCatalog = true,
+    bool Function()? current,
   }) async {
     final id = device['device_id'] as String;
+    if (current != null && !current()) return device;
     if (device['revoked'] == true) {
       _reachability[id] = false;
       return {
@@ -1440,8 +1490,9 @@ final class MeshRuntime implements MeshDeviceSource {
     }
     try {
       final tools = includeCatalog ? await _catalog(id) : null;
-      _reachability[id] = true;
       final description = await rpc(id, 'mesh/describe', {});
+      if (current != null && !current()) return device;
+      _reachability[id] = true;
       presence.record(id, description['presence']);
       _descriptions[id] = {
         'roles': description['roles'] ??
@@ -1468,6 +1519,7 @@ final class MeshRuntime implements MeshDeviceSource {
         'description': description
       };
     } on Failure {
+      if (current != null && !current()) return device;
       _reachability[id] = false;
       return {
         ...device,

@@ -4,7 +4,7 @@ import 'dart:io';
 import 'package:flutter/widgets.dart';
 
 import '../../ui_data/host_settings.dart';
-import '../data/gui_calls.dart' show callFailure;
+import '../data/gui_calls.dart' show callFailure, rawFailureText;
 import '../data/settings_data.dart';
 import '../theme/tokens.dart';
 import '../widgets/icons.dart';
@@ -33,10 +33,11 @@ class DevicesSection extends StatefulWidget {
 class DevicesSectionState extends State<DevicesSection> {
   UiMeshSetup? _mesh;
   bool? _programs;
-  bool _advanced = false;
   bool _saving = false;
   String? _error;
   StreamSubscription<void>? _changes;
+  int _loadRevision = 0;
+  final _loadErrors = <String, String>{};
 
   /// Null on a host without Classic's remote access.
   UiRemoteAccess? _remote;
@@ -53,7 +54,15 @@ class DevicesSectionState extends State<DevicesSection> {
   @override
   void didUpdateWidget(DevicesSection oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (!identical(oldWidget.host, widget.host)) _load();
+    if (!identical(oldWidget.host, widget.host)) {
+      _changes?.cancel();
+      _changes = widget.host.changes.listen((_) => _load());
+      _mesh = null;
+      _programs = null;
+      _remote = null;
+      _loadErrors.clear();
+      _load();
+    }
   }
 
   @override
@@ -63,23 +72,34 @@ class DevicesSectionState extends State<DevicesSection> {
   }
 
   Future<void> _load() async {
-    final (mesh, programs, remote) = await (
-      widget.host.mesh(),
-      widget.host.remotePrograms(),
-      _remoteAccess()
-    ).wait;
-    if (mounted) {
-      setState(() {
-        _mesh = mesh;
-        _programs = programs;
-        _remote = remote;
-      });
+    final revision = ++_loadRevision;
+    final host = widget.host;
+    Future<void> read<T>(
+        String label, Future<T> Function() load, void Function(T) save) async {
+      try {
+        final value = await load();
+        if (!mounted || revision != _loadRevision) return;
+        setState(() {
+          save(value);
+          _loadErrors.remove(label);
+        });
+      } catch (error) {
+        if (mounted && revision == _loadRevision) {
+          setState(() => _loadErrors[label] = rawFailureText(error));
+        }
+      }
     }
+
+    await Future.wait([
+      read('组网', host.mesh, (value) => _mesh = value),
+      read('程序权限', host.remotePrograms, (value) => _programs = value),
+      read('远程访问', () => _remoteAccess(host), (value) => _remote = value),
+    ]);
   }
 
-  Future<UiRemoteAccess?> _remoteAccess() async {
+  Future<UiRemoteAccess?> _remoteAccess(NextHostSettings host) async {
     try {
-      return await widget.host.deviceSettings.remoteAccess();
+      return await host.deviceSettings.remoteAccess();
     } on UnsupportedError {
       return null;
     }
@@ -141,9 +161,8 @@ class DevicesSectionState extends State<DevicesSection> {
             trailing: NextToggle(
               value: r.running,
               label: '远程访问',
-              onChanged: _remoteSaving
-                  ? null
-                  : (on) => _setRemote(r, running: on),
+              onChanged:
+                  _remoteSaving ? null : (on) => _setRemote(r, running: on),
             ),
           ),
         ]),
@@ -201,7 +220,8 @@ class DevicesSectionState extends State<DevicesSection> {
         ),
       ]);
 
-  void debugAdvanced(bool open) => setState(() => _advanced = open);
+  // Kept for older debug clients; device settings are always visible.
+  void debugAdvanced(bool open) {}
 
   UiMeshChoice _choice(UiMeshSetup m,
           {bool? joined,
@@ -263,68 +283,73 @@ class DevicesSectionState extends State<DevicesSection> {
   @override
   Widget build(BuildContext context) {
     final m = _mesh;
-    if (m == null) return const SizedBox(height: 120);
     final remote = _remote;
-    final usable = m.available && !_saving;
+    final usable = m != null && m.available && !_saving;
     final others = [
-      for (final d in m.devices)
+      for (final d in m?.devices ?? const <UiMeshDevice>[])
         if (!d.self) d
     ];
     final online = others.where((d) => d.online).length;
     return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-      SettingsCard(children: [
-        SettingsRow(
-          leading: _DeviceTile(on: m.joined),
-          title: m.joined ? (m.name ?? '这台设备') : '组网',
-          subtitle: _error ??
-              (!m.available
-                  ? m.problem
-                  : m.problem ??
-                      (m.joined && others.isNotEmpty
-                          ? '$online / ${others.length} 台在线'
-                          : null)),
-          trailing: NextToggle(
-            value: m.joined,
-            label: '加入',
-            onChanged: usable ? (on) => _set(_choice(m, joined: on)) : null,
-          ),
-        ),
-        if (m.available)
+      for (final error in _loadErrors.entries)
+        SettingsCard(children: [
+          SettingsRow(title: '${error.key}读取失败', subtitle: error.value),
+        ]),
+      if (m == null && !_loadErrors.containsKey('组网'))
+        const SettingsCard(children: [
+          SettingsRow(title: '正在读取设备信息…'),
+        ]),
+      if (m != null) ...[
+        SettingsCard(children: [
           SettingsRow(
-            title: '本机名',
-            trailing: FieldControl(
-              value: m.name ?? '',
-              width: 200,
-              onCommit: (v) => _set(_choice(m, name: v.trim())),
+            leading: _DeviceTile(on: m.joined),
+            title: m.joined ? (m.name ?? '这台设备') : '组网',
+            subtitle: _error ??
+                (!m.available
+                    ? m.problem
+                    : m.problem ??
+                        (m.joined && others.isNotEmpty
+                            ? '$online / ${others.length} 台在线'
+                            : null)),
+            trailing: NextToggle(
+              value: m.joined,
+              label: '加入',
+              onChanged: usable ? (on) => _set(_choice(m, joined: on)) : null,
             ),
           ),
-      ]),
-      if (m.joined && m.devices.isNotEmpty)
-        Padding(
-          padding: const EdgeInsets.only(bottom: 28),
-          child: Wrap(spacing: 14, runSpacing: 14, children: [
-            for (final d in m.devices)
-              _DeviceCard(
-                  device: d,
-                  onRemove: d.self || d.id.isEmpty ? null : () => _remove(d)),
-          ]),
-        ),
+          if (m.available)
+            SettingsRow(
+              title: '本机名',
+              trailing: FieldControl(
+                value: m.name ?? '',
+                width: 200,
+                onCommit: (v) => _set(_choice(m, name: v.trim())),
+              ),
+            ),
+        ]),
+        if (m.joined && m.devices.isNotEmpty)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 28),
+            child: Wrap(spacing: 14, runSpacing: 14, children: [
+              for (final d in m.devices)
+                _DeviceCard(
+                    device: d,
+                    onRemove: d.self || d.id.isEmpty ? null : () => _remove(d)),
+            ]),
+          ),
+      ],
       SettingsCard(children: [
         SettingsRow(
           title: '允许别的设备在这里运行程序',
           trailing: NextToggle(
             value: _programs ?? false,
-            onChanged: _saving ? null : _setPrograms,
+            onChanged: _saving || _programs == null ? null : _setPrograms,
           ),
         ),
       ]),
       if (remote != null) ..._remoteCards(remote),
-      if (m.available || remote != null) ...[
-        FoldButton(
-            open: _advanced,
-            label: '高级',
-            onTap: () => setState(() => _advanced = !_advanced)),
-        if (_advanced && m.available)
+      if (m?.available == true || remote != null) ...[
+        if (m != null && m.available)
           SettingsCard(children: [
             SettingsRow(
               title: '协调地址',
@@ -385,7 +410,7 @@ class DevicesSectionState extends State<DevicesSection> {
               ),
             ),
           ]),
-        if (_advanced && remote != null) _remoteMore(remote),
+        if (remote != null) _remoteMore(remote),
       ],
     ]);
   }
@@ -506,8 +531,7 @@ class NipaSectionState extends State<NipaSection> {
   // The runtime Nipa thinks in: DeepSeek Harness (fetched by NipaPlay) or Codex.
   UiAgentRuntime? _agent;
   UiDshRuntime? _dsh;
-  bool _dshMore = false, _dshDirty = false, _importing = false;
-  bool _advanced = false;
+  bool _dshDirty = false, _importing = false;
   String _registryMirror = '', _nodeMirror = '';
   String? _dshError;
   UiModelApi _api = UiModelApi.responses;
@@ -516,7 +540,7 @@ class NipaSectionState extends State<NipaSection> {
 
   // The Codex Nipa runs in: fetched by NipaPlay, or one already here.
   UiCodexRuntime? _runtime;
-  bool _runtimeMore = false, _runtimeDirty = false;
+  bool _runtimeDirty = false;
   UiCodexSource _runtimeSource = UiCodexSource.managed;
   String _mirror = '', _executable = '';
   String? _runtimeError;
@@ -535,34 +559,24 @@ class NipaSectionState extends State<NipaSection> {
   /// address and model can be typed instead. What a vendor's models need on
   /// the wire comes with its template, never from the address.
   static const _templates = [
-    _Template(
-        'DeepSeek',
-        'https://api.deepseek.com',
-        'deepseek-flash',
-        UiModelApi.chat,
-        'high',
-        {
-          'supportsStore': false,
-          'supportsDeveloperRole': false,
-          'maxTokensField': 'max_tokens',
-          'requiresReasoningContentOnAssistantMessages': true,
-          'thinkingFormat': 'deepseek',
-          'supportsStrictMode': true,
-        }),
-    _Template(
-        '智谱',
-        'https://open.bigmodel.cn/api/paas/v4',
-        'glm-5.3-flash',
-        UiModelApi.chat,
-        'high',
-        {
-          'supportsStore': false,
-          'supportsDeveloperRole': false,
-          'supportsReasoningEffort': true,
-          'maxTokensField': 'max_tokens',
-          'thinkingFormat': 'zai',
-          'supportsStrictMode': true,
-        }),
+    _Template('DeepSeek', 'https://api.deepseek.com', 'deepseek-flash',
+        UiModelApi.chat, 'high', {
+      'supportsStore': false,
+      'supportsDeveloperRole': false,
+      'maxTokensField': 'max_tokens',
+      'requiresReasoningContentOnAssistantMessages': true,
+      'thinkingFormat': 'deepseek',
+      'supportsStrictMode': true,
+    }),
+    _Template('智谱', 'https://open.bigmodel.cn/api/paas/v4', 'glm-5.3-flash',
+        UiModelApi.chat, 'high', {
+      'supportsStore': false,
+      'supportsDeveloperRole': false,
+      'supportsReasoningEffort': true,
+      'maxTokensField': 'max_tokens',
+      'thinkingFormat': 'zai',
+      'supportsStrictMode': true,
+    }),
   ];
 
   /// Codex speaks only the Responses API.
@@ -881,9 +895,7 @@ class NipaSectionState extends State<NipaSection> {
         trailing: dsh
             ? (s.codexAvailable
                 ? PillButton(
-                    label: '导入 Codex 配置',
-                    busy: _importing,
-                    onTap: _importCodex)
+                    label: '导入 Codex 配置', busy: _importing, onTap: _importCodex)
                 : null)
             : Segmented<UiModelSource>(
                 value: s.source,
@@ -958,7 +970,7 @@ class NipaSectionState extends State<NipaSection> {
                             hint: s.hasKey ? '已保存' : null,
                             width: 300,
                             onChanged: (v) => _edit(() => _key = v))),
-                    if (dsh && _advanced) ...[
+                    if (dsh) ...[
                       _field(
                           '接口',
                           Segmented<UiModelApi>(
@@ -1010,12 +1022,6 @@ class NipaSectionState extends State<NipaSection> {
               ],
               PillButton(
                   label: '测试连接', busy: _checking, onTap: _dirty ? null : _test),
-              if (dsh) ...[
-                const SizedBox(width: 8),
-                PillButton(
-                    label: _advanced ? '收起' : '更多',
-                    onTap: () => setState(() => _advanced = !_advanced)),
-              ],
               if (_check case final check?) ...[
                 const SizedBox(width: 12),
                 StateDot(check.ok ? NextColors.mint : NextColors.accent),
@@ -1117,58 +1123,42 @@ class NipaSectionState extends State<NipaSection> {
       ),
       if (choice != null || !r.fixed)
         SettingsRow(
-          title: '更多',
-          dim: true,
-          trailing: AnimatedRotation(
-            turns: _dshMore ? 0.25 : 0,
-            duration: const Duration(milliseconds: 200),
-            curve: NextMotion.ease,
-            child: const NextIcon(NextGlyph.chevronRight,
-                size: 14, color: NextColors.p3),
+          title: '运行环境选项',
+          below: Padding(
+            padding: const EdgeInsets.fromLTRB(18, 2, 18, 14),
+            child:
+                Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              if (choice != null) choice,
+              if (!r.fixed) ...[
+                _field(
+                    'npm',
+                    LiveTextField(
+                        value: _registryMirror,
+                        hint: 'registry.npmjs.org',
+                        width: 300,
+                        mono: true,
+                        onChanged: (v) => _dshEdit(() => _registryMirror = v))),
+                _field(
+                    'Node',
+                    LiveTextField(
+                        value: _nodeMirror,
+                        hint: 'nodejs.org/dist',
+                        width: 300,
+                        mono: true,
+                        onChanged: (v) => _dshEdit(() => _nodeMirror = v))),
+              ],
+              const SizedBox(height: 4),
+              Wrap(spacing: 8, runSpacing: 8, children: [
+                if (_dshDirty)
+                  PillButton(label: '保存', primary: true, onTap: _saveDsh),
+                if (!r.fixed && r.status == UiDshStatus.ready)
+                  PillButton(
+                      label: '移除',
+                      danger: true,
+                      onTap: () => _runtimeDo((h) => h.removeDsh())),
+              ]),
+            ]),
           ),
-          onTap: () => setState(() => _dshMore = !_dshMore),
-          below: !_dshMore
-              ? null
-              : Padding(
-                  padding: const EdgeInsets.fromLTRB(18, 2, 18, 14),
-                  child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        if (choice != null) choice,
-                        if (!r.fixed) ...[
-                          _field(
-                              'npm',
-                              LiveTextField(
-                                  value: _registryMirror,
-                                  hint: 'registry.npmjs.org',
-                                  width: 300,
-                                  mono: true,
-                                  onChanged: (v) =>
-                                      _dshEdit(() => _registryMirror = v))),
-                          _field(
-                              'Node',
-                              LiveTextField(
-                                  value: _nodeMirror,
-                                  hint: 'nodejs.org/dist',
-                                  width: 300,
-                                  mono: true,
-                                  onChanged: (v) =>
-                                      _dshEdit(() => _nodeMirror = v))),
-                        ],
-                        const SizedBox(height: 4),
-                        Wrap(spacing: 8, runSpacing: 8, children: [
-                          if (_dshDirty)
-                            PillButton(
-                                label: '保存', primary: true, onTap: _saveDsh),
-                          if (!r.fixed && r.status == UiDshStatus.ready)
-                            PillButton(
-                                label: '移除',
-                                danger: true,
-                                onTap: () =>
-                                    _runtimeDo((h) => h.removeDsh())),
-                        ]),
-                      ]),
-                ),
         ),
     ]);
   }
@@ -1243,83 +1233,64 @@ class NipaSectionState extends State<NipaSection> {
             : null,
       ),
       SettingsRow(
-        title: '更多',
-        dim: true,
-        trailing: AnimatedRotation(
-          turns: _runtimeMore ? 0.25 : 0,
-          duration: const Duration(milliseconds: 200),
-          curve: NextMotion.ease,
-          child: const NextIcon(NextGlyph.chevronRight,
-              size: 14, color: NextColors.p3),
+        title: '运行环境选项',
+        below: Padding(
+          padding: const EdgeInsets.fromLTRB(18, 2, 18, 14),
+          child:
+              Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            if (_runtimeChoice() case final choice?) choice,
+            field(
+                '使用',
+                Segmented<UiCodexSource>(
+                  value: _runtimeSource,
+                  options: [
+                    for (final (v, t) in const [
+                      (UiCodexSource.managed, '自动下载'),
+                      (UiCodexSource.path, '系统里的'),
+                      (UiCodexSource.specified, '指定路径'),
+                    ])
+                      (
+                        v,
+                        t,
+                        (c) => Text(t, style: NextText.sans(12.5, color: c))
+                      ),
+                  ],
+                  onChanged: (v) => _runtimeEdit(() => _runtimeSource = v),
+                )),
+            if (_runtimeSource == UiCodexSource.specified)
+              field(
+                  '路径',
+                  LiveTextField(
+                      value: _executable,
+                      hint: '/usr/local/bin/codex',
+                      width: 300,
+                      mono: true,
+                      onChanged: (v) => _runtimeEdit(() => _executable = v))),
+            if (_runtimeSource == UiCodexSource.managed)
+              field(
+                  '镜像',
+                  LiveTextField(
+                      value: _mirror,
+                      hint: 'GitHub',
+                      width: 300,
+                      onChanged: (v) => _runtimeEdit(() => _mirror = v))),
+            const SizedBox(height: 4),
+            Wrap(spacing: 8, runSpacing: 8, children: [
+              if (_runtimeDirty)
+                PillButton(label: '保存', primary: true, onTap: _saveRuntime),
+              if (r.licensesDirectory case final dir?)
+                if (Platform.isMacOS)
+                  PillButton(
+                      label: '开源许可',
+                      onTap: () => unawaited(Process.run('open', [dir]))),
+              if (managed && r.status == UiCodexStatus.ready)
+                PillButton(
+                    label: '移除',
+                    danger: true,
+                    onTap: () => _runtimeDo((h) => h.removeCodex())),
+            ]),
+          ]),
         ),
-        onTap: () => setState(() => _runtimeMore = !_runtimeMore),
-        below: !_runtimeMore
-            ? null
-            : Padding(
-                padding: const EdgeInsets.fromLTRB(18, 2, 18, 14),
-                child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      if (_runtimeChoice() case final choice?) choice,
-                      field(
-                          '使用',
-                          Segmented<UiCodexSource>(
-                            value: _runtimeSource,
-                            options: [
-                              for (final (v, t) in const [
-                                (UiCodexSource.managed, '自动下载'),
-                                (UiCodexSource.path, '系统里的'),
-                                (UiCodexSource.specified, '指定路径'),
-                              ])
-                                (
-                                  v,
-                                  t,
-                                  (c) => Text(t,
-                                      style: NextText.sans(12.5, color: c))
-                                ),
-                            ],
-                            onChanged: (v) =>
-                                _runtimeEdit(() => _runtimeSource = v),
-                          )),
-                      if (_runtimeSource == UiCodexSource.specified)
-                        field(
-                            '路径',
-                            LiveTextField(
-                                value: _executable,
-                                hint: '/usr/local/bin/codex',
-                                width: 300,
-                                mono: true,
-                                onChanged: (v) =>
-                                    _runtimeEdit(() => _executable = v))),
-                      if (_runtimeSource == UiCodexSource.managed)
-                        field(
-                            '镜像',
-                            LiveTextField(
-                                value: _mirror,
-                                hint: 'GitHub',
-                                width: 300,
-                                onChanged: (v) =>
-                                    _runtimeEdit(() => _mirror = v))),
-                      const SizedBox(height: 4),
-                      Wrap(spacing: 8, runSpacing: 8, children: [
-                        if (_runtimeDirty)
-                          PillButton(
-                              label: '保存', primary: true, onTap: _saveRuntime),
-                        if (r.licensesDirectory case final dir?)
-                          if (Platform.isMacOS)
-                            PillButton(
-                                label: '开源许可',
-                                onTap: () => unawaited(
-                                    Process.run('open', [dir]))),
-                        if (managed && r.status == UiCodexStatus.ready)
-                          PillButton(
-                              label: '移除',
-                              danger: true,
-                              onTap: () =>
-                                  _runtimeDo((h) => h.removeCodex())),
-                      ]),
-                    ]),
-              ),
       ),
     ]);
   }
@@ -1397,8 +1368,8 @@ class NipaSectionState extends State<NipaSection> {
 /// A provider's fill-in: address, model, wire protocol and what its models
 /// need from it.
 class _Template {
-  const _Template(
-      this.name, this.baseUrl, this.model, this.api, this.reasoning, this.compat);
+  const _Template(this.name, this.baseUrl, this.model, this.api, this.reasoning,
+      this.compat);
   final String name, baseUrl, model, reasoning;
   final UiModelApi api;
   final Map<String, Object?> compat;

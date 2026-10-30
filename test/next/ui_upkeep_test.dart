@@ -4,6 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:nipa_harness/nipa_harness.dart' hide Invocation;
 import 'package:nipa_harness/nipa_harness.dart' as h show Invocation;
 import 'package:nipaplay/next/ui/data/gui_calls.dart';
+import 'package:nipaplay/next/system/storage.dart';
 import 'package:nipaplay/next/ui/data/upkeep.dart';
 import 'package:nipaplay/next/ui/dev/fake_settings.dart';
 import 'package:nipaplay/next/ui/settings/registry_rows.dart';
@@ -13,6 +14,12 @@ import 'package:nipaplay/next/ui/settings/section_misc.dart';
 /// the kinds a person knows, cleared with the plan they were shown; a
 /// check for updates that failed says so; sync and folders as they are.
 void main() {
+  test('GUI cleanup categories use only backend disposable cache kinds', () {
+    for (final group in UiCacheKind.all) {
+      expect(group.$3, everyElement(isIn(SystemStorage.disposable)));
+    }
+  });
+
   test('caches: each kind gathers its stores; clearing prunes its own plan',
       () async {
     final world = _World();
@@ -20,25 +27,27 @@ void main() {
 
     final kinds = await upkeep.caches();
     expect([for (final k in kinds) k.id], ['images', 'danmaku', 'thumbnails']);
-    expect([for (final k in kinds) k.title], ['图片', '弹幕', '缩略图']);
+    expect([for (final k in kinds) k.title], ['图片', '弹幕缓存', '缩略图']);
     expect(world.plans, [
       ['images', 'nextArtwork'],
-      ['classicDanmaku', 'nextDanmaku'],
+      ['classicDanmaku'],
       ['thumbnails', 'timeline'],
     ]);
     final danmaku = kinds[1];
-    expect(danmaku.bytes, 300 + 100);
-    expect(danmaku.kept, 12);
+    expect(danmaku.bytes, 300);
+    expect(danmaku.kept, 0);
     expect(kinds[2].kept, 0);
 
     world.plans.clear();
     final freed = await upkeep.clear('danmaku');
     expect(world.plans, [
-      ['classicDanmaku', 'nextDanmaku']
+      ['classicDanmaku']
     ]);
     // The plan just made, not one shown earlier.
     expect(world.pruned, ['plan-4']);
-    expect(freed, 400);
+    expect(freed, 300);
+    expect(world.caches['nextDanmaku'], 100,
+        reason: 'saved danmaku is persistent media data');
     expect((await upkeep.caches())[1].bytes, 0);
   });
 
@@ -225,8 +234,8 @@ void main() {
     expect(find.text('共 977 KB'), findsOneWidget);
     expect(find.text('3.9 KB'), findsOneWidget);
     expect(find.text('图片'), findsOneWidget);
-    expect(find.text('保留 12 B'), findsOneWidget);
-    expect(find.text('400 B'), findsOneWidget);
+    expect(find.text('保留 12 B'), findsNothing);
+    expect(find.text('300 B'), findsOneWidget);
 
     await tester.tap(find.text('清理').at(1));
     await tester.pumpAndSettle();

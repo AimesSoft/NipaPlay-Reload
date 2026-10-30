@@ -656,7 +656,8 @@ final class HostSettingsService
   Future<UiMeshSetup> mesh() async {
     await _writes;
     final value = await _read('mesh.json');
-    final listed = await meshRuntime.settingsDevices();
+    final listed = await meshRuntime.settingsDevices(
+        selfRemotePrograms: programs.enabled);
     return UiMeshSetup(
         joined: meshRuntime.status == 'online',
         available: meshRuntime.issuerAvailable,

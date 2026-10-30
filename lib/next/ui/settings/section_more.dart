@@ -63,7 +63,7 @@ class PluginsSectionState extends State<PluginsSection> {
   void initState() {
     super.initState();
     _load();
-    if (widget.more) _fetch();
+    _fetch();
   }
 
   @override
@@ -167,7 +167,8 @@ class PluginsSectionState extends State<PluginsSection> {
             Padding(
               padding: const EdgeInsets.only(left: 16, top: 6),
               child: Text(r.content,
-                  style: NextText.sans(12.5, color: NextColors.p3, height: 1.5)),
+                  style:
+                      NextText.sans(12.5, color: NextColors.p3, height: 1.5)),
             ),
         ],
       );
@@ -220,9 +221,7 @@ class PluginsSectionState extends State<PluginsSection> {
                 },
         ),
       ]),
-      onTap: details
-          ? () => setState(() => _open = open ? null : p.id)
-          : null,
+      onTap: details ? () => setState(() => _open = open ? null : p.id) : null,
       below: AnimatedSize(
         duration: const Duration(milliseconds: 220),
         curve: NextMotion.ease,
@@ -246,8 +245,8 @@ class PluginsSectionState extends State<PluginsSection> {
                             ConfirmPill(
                               label: '删除',
                               confirm: '确定删除',
-                              onConfirm: () => _run(
-                                  p.id, () => widget.plugins.delete(p.id)),
+                              onConfirm: () =>
+                                  _run(p.id, () => widget.plugins.delete(p.id)),
                             ),
                           ],
                         ]),
@@ -298,39 +297,35 @@ class PluginsSectionState extends State<PluginsSection> {
         highlight: widget.highlight,
         skipFolded: true,
       ),
-      FoldButton(open: widget.more, onTap: widget.onMore),
-      if (widget.more)
-        SettingsCard(title: '市场', children: [
-          if (_fetching && market.isEmpty)
-            const SettingsRow(title: '', trailing: BusyDots())
-          else if (_marketFailed != null && market.isEmpty)
-            SettingsRow(
-              title: _marketFailed!,
-              dim: true,
-              trailing: PillButton(label: '再试', onTap: _fetch),
-            ),
-          for (final p in market)
-            SettingsRow(
-              key: ValueKey('market:${p.id}'),
-              title: p.name,
-              mark: _version(p.version),
-              subtitle: _errors[p.id] ?? p.description,
-              trailing: PillButton(
-                label: '安装',
-                busy: _busy.contains(p.id),
-                onTap: () =>
-                    _run(p.id, () => widget.plugins.install(remoteId: p.id)),
-              ),
-            ),
+      SettingsCard(title: '市场', children: [
+        if (_fetching && market.isEmpty)
+          const SettingsRow(title: '', trailing: BusyDots())
+        else if (_marketFailed != null && market.isEmpty)
           SettingsRow(
-            title: '从文件安装',
-            subtitle: _errors['file'],
-            trailing: PillButton(
-                label: '选择',
-                busy: _busy.contains('file'),
-                onTap: _fromFile),
+            title: _marketFailed!,
+            dim: true,
+            trailing: PillButton(label: '再试', onTap: _fetch),
           ),
-        ]),
+        for (final p in market)
+          SettingsRow(
+            key: ValueKey('market:${p.id}'),
+            title: p.name,
+            mark: _version(p.version),
+            subtitle: _errors[p.id] ?? p.description,
+            trailing: PillButton(
+              label: '安装',
+              busy: _busy.contains(p.id),
+              onTap: () =>
+                  _run(p.id, () => widget.plugins.install(remoteId: p.id)),
+            ),
+          ),
+        SettingsRow(
+          title: '从文件安装',
+          subtitle: _errors['file'],
+          trailing: PillButton(
+              label: '选择', busy: _busy.contains('file'), onTap: _fromFile),
+        ),
+      ]),
     ]);
   }
 }
@@ -509,8 +504,7 @@ class SyncSectionState extends State<SyncSection> {
     final relogin = s.configured && !s.hasPassword;
     final connection = switch (_tested) {
       true => _state(NextColors.mint, '连接正常'),
-      false =>
-        _state(NextColors.accent, '连不上', textColor: NextColors.accent2),
+      false => _state(NextColors.accent, '连不上', textColor: NextColors.accent2),
       null when relogin => _state(NextColors.amber, '需要登录'),
       null when s.hasPassword => _state(NextColors.p4, '已登录'),
       null => null,
@@ -566,9 +560,7 @@ class SyncSectionState extends State<SyncSection> {
           trailing: Row(mainAxisSize: MainAxisSize.min, children: [
             if (connection != null) ...[connection, const SizedBox(width: 14)],
             PillButton(
-                label: '测试',
-                busy: _testing,
-                onTap: s.configured ? test : null),
+                label: '测试', busy: _testing, onTap: s.configured ? test : null),
             const SizedBox(width: 8),
             PillButton(
                 label: s.hasPassword ? '重新登录' : '登录',
@@ -604,33 +596,31 @@ class SyncSectionState extends State<SyncSection> {
           ),
         ),
       ]),
-      FoldButton(open: widget.more, onTap: widget.onMore),
-      if (widget.more)
-        SettingsCard(children: [
-          SettingsRow(
-            title: '远端文件夹',
-            trailing: FieldControl(
-              value: s.folder,
-              hint: '/NipaPlay',
-              width: 200,
-              onCommit: (v) => _configure(folder: v.trim()),
+      SettingsCard(children: [
+        SettingsRow(
+          title: '远端文件夹',
+          trailing: FieldControl(
+            value: s.folder,
+            hint: '/NipaPlay',
+            width: 200,
+            onCommit: (v) => _configure(folder: v.trim()),
+          ),
+        ),
+        SettingsRow(
+          title: '间隔',
+          trailing: Row(mainAxisSize: MainAxisSize.min, children: [
+            FieldControl(
+              value: '${s.minutes}',
+              width: 72,
+              numeric: true,
+              align: TextAlign.right,
+              onCommit: (v) => _configure(minutes: int.tryParse(v.trim())),
             ),
-          ),
-          SettingsRow(
-            title: '间隔',
-            trailing: Row(mainAxisSize: MainAxisSize.min, children: [
-              FieldControl(
-                value: '${s.minutes}',
-                width: 72,
-                numeric: true,
-                align: TextAlign.right,
-                onCommit: (v) => _configure(minutes: int.tryParse(v.trim())),
-              ),
-              const SizedBox(width: 10),
-              Text('分钟', style: NextText.sans(13, color: NextColors.p3)),
-            ]),
-          ),
-        ]),
+            const SizedBox(width: 10),
+            Text('分钟', style: NextText.sans(13, color: NextColors.p3)),
+          ]),
+        ),
+      ]),
       RegistryGroups(
         section: SettingsSection.sync,
         model: widget.model,

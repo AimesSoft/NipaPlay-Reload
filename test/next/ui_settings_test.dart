@@ -20,6 +20,64 @@ import 'package:nipaplay/next/ui_data/host_settings.dart';
 /// a change the registry refuses is put back, and what Nipa changed shows
 /// her reason and the way back.
 void main() {
+  testWidgets('a slow Mesh read does not hide local permissions or remote access',
+      (tester) async {
+    final host = _WaitingDeviceHost();
+    await tester.pumpWidget(MaterialApp(
+        home: Material(child: SingleChildScrollView(
+            child: DevicesSection(host: host)))));
+    await tester.pump();
+    expect(find.text('正在读取设备信息…'), findsOneWidget);
+    expect(find.text('允许别的设备在这里运行程序'), findsOneWidget);
+    expect(find.text('远程访问'), findsWidgets);
+    host.pending.completeError(const Failure(
+        FailureCode.unavailable, 'peer lookup timed out'));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('peer lookup timed out'), findsOneWidget);
+    expect(find.text('允许别的设备在这里运行程序'), findsOneWidget);
+  });
+
+  testWidgets('a replaced host ignores the previous pending response',
+      (tester) async {
+    final previous = _WaitingDeviceHost();
+    Widget page(NextHostSettings host) => MaterialApp(home: Material(
+        child: SingleChildScrollView(child: DevicesSection(host: host))));
+    await tester.pumpWidget(page(previous));
+    await tester.pump();
+    await tester.pumpWidget(page(_MeshHost()));
+    await tester.pumpAndSettle();
+    previous.pending.complete(const UiMeshSetup(name: 'old host'));
+    await tester.pumpAndSettle();
+    expect(find.text('这台电脑'), findsWidgets);
+    expect(find.text('old host'), findsNothing);
+  });
+
+  test('danmaku renderer is the first control in its section', () {
+    final rows = [
+      for (final key in ['danmaku.visible', 'danmaku.renderEngine',
+        'danmaku.opacity'])
+        UiSetting.fromRow({'key': key, 'title': key, 'type': 'boolean'}),
+    ];
+    final groups = SettingsLayout.arrange(SettingsSection.danmaku, rows);
+    expect(groups.first.$2.first.key, 'danmaku.renderEngine');
+  });
+
+  testWidgets('all registry groups are visible without a More control',
+      (tester) async {
+    final model = SettingsModel(FakeSettings());
+    await tester.runAsync(model.load);
+    await tester.pumpWidget(MaterialApp(home: Material(
+        child: SingleChildScrollView(child: RegistryGroups(
+          section: SettingsSection.playback, model: model,
+          more: false, onMore: () {},
+        )))));
+    final shown = tester.widgetList<RegistryRow>(find.byType(RegistryRow))
+        .map((row) => row.setting.key);
+    expect(shown, contains('player.externalEnabled'));
+    expect(find.byType(FoldButton), findsNothing);
+    model.dispose();
+  });
+
   testWidgets('program permission stays visible and revocable without an issuer',
       (tester) async {
     final data = _DeviceHost();
@@ -139,9 +197,7 @@ void main() {
     expect(find.text('已就绪'), findsOneWidget);
     expect(find.text('下载'), findsNothing);
 
-    await tester.ensureVisible(find.text('更多'));
-    await tester.tap(find.text('更多'));
-    await tester.pumpAndSettle();
+    expect(find.byType(FoldButton), findsNothing);
     await tester.ensureVisible(find.text('移除'));
     await tester.tap(find.text('移除'));
     await tester.pump(const Duration(milliseconds: 100));
@@ -218,9 +274,7 @@ void main() {
     expect(find.text('正在用 deepseek-flash'), findsOneWidget);
 
     // Codex is the other runtime, one choice away; its cards come back.
-    await tester.ensureVisible(find.text('更多').last);
-    await tester.tap(find.text('更多').last);
-    await tester.pumpAndSettle();
+    expect(find.byType(FoldButton), findsNothing);
     await tester.ensureVisible(find.text('Codex'));
     await tester.tap(find.text('Codex'));
     await tester.pump(const Duration(milliseconds: 100));
@@ -596,6 +650,12 @@ final class _RemoteHost extends _DeviceHost implements NextHostDeviceSettings {
   @override
   Future<void> setKeys({String? spoilerAi, String? tmdb}) async =>
       keyWrites.add((spoilerAi, tmdb));
+}
+
+final class _WaitingDeviceHost extends _RemoteHost {
+  final pending = Completer<UiMeshSetup>();
+  @override
+  Future<UiMeshSetup> mesh() => pending.future;
 }
 
 /// The scripted settings (the built-in sample of the registry), recording

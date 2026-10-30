@@ -103,7 +103,7 @@ final class UiCacheKind {
   /// The page's kinds and the caches they clear together.
   static const all = [
     ('images', '图片', ['images', 'nextArtwork']),
-    ('danmaku', '弹幕', ['classicDanmaku', 'nextDanmaku']),
+    ('danmaku', '弹幕缓存', ['classicDanmaku']),
     ('thumbnails', '缩略图', ['thumbnails', 'timeline']),
   ];
 }

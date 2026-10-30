@@ -170,9 +170,7 @@ class _RegistryRowState extends State<RegistryRow> {
         return ChoiceControl<Object?>(
           value: s.choices
               .firstWhere((c) => '$c' == '${s.value}', orElse: () => s.value),
-          options: [
-            for (final c in s.choices) (c, s.nameOf(c))
-          ],
+          options: [for (final c in s.choices) (c, s.nameOf(c))],
           onChanged: _set,
         );
       case UiSettingKind.number:
@@ -346,8 +344,7 @@ class NipaNote extends StatelessWidget {
   }
 }
 
-/// A section's registry settings: its groups, the folded ones behind
-/// “更多”.
+/// A section's registry settings, with every group visible.
 class RegistryGroups extends StatelessWidget {
   const RegistryGroups({
     super.key,
@@ -374,17 +371,6 @@ class RegistryGroups extends StatelessWidget {
     final all = model.all;
     if (all == null) return const SizedBox.shrink();
     final groups = SettingsLayout.arrange(section, all);
-    final open = [
-      for (final g in groups)
-        if (!g.$1.folded) g
-    ];
-    final folded = [
-      for (final g in groups)
-        if (g.$1.folded) g
-    ];
-    // Arriving at a folded setting unfolds them.
-    final showFolded =
-        more || folded.any((g) => g.$2.any((s) => s.key == highlight));
     Widget card((SettingsGroup, List<UiSetting>) g) => SettingsCard(
           title: g.$1.title,
           children: [
@@ -400,12 +386,7 @@ class RegistryGroups extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        for (final g in open) card(g),
-        if (folded.isNotEmpty && !skipFolded) ...[
-          FoldButton(open: showFolded, onTap: onMore),
-          if (showFolded)
-            for (final g in folded) card(g),
-        ],
+        for (final g in groups) card(g),
       ],
     );
   }
