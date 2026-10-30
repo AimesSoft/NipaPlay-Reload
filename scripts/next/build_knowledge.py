@@ -53,7 +53,7 @@ def git(*args):
 
 def build(version=None, commit=None, dirty=None):
     if version is None:
-        version = re.search(r'^version:\s*(\S+)', (ROOT / 'pubspec.yaml').read_text(), re.M)[1]
+        version = re.search(r'^version:\s*(\S+)', (ROOT / 'pubspec.yaml').read_text(encoding='utf-8'), re.M)[1]
     head = git('rev-parse', 'HEAD')
     commit = commit or head or None
     # Never let an external clean stamp hide untracked knowledge/source inputs.
@@ -76,7 +76,7 @@ def build(version=None, commit=None, dirty=None):
                                     else 'reference' if name.startswith('development/') else 'current'),
                               sha256=hashlib.sha256(content.encode()).hexdigest(), content=content))
     # Source references are navigation candidates, never synthesized Action schemas.
-    reference = (ROOT / 'docs/next/development/ACTION_REFERENCE.md').read_text()
+    reference = (ROOT / 'docs/next/development/ACTION_REFERENCE.md').read_text(encoding='utf-8')
     actions = {}
     for line in reference.splitlines():
         match = re.match(r'\| `([a-z][a-z0-9_.]+)` \|', line)
@@ -110,7 +110,7 @@ def main():
     parser.add_argument('--check', action='store_true', help='Check source content, independent of build provenance')
     args = parser.parse_args()
     if args.check:
-        old = json.loads(args.output.read_text())
+        old = json.loads(args.output.read_text(encoding='utf-8'))
         new = build()
         if any(old[key] != new[key] for key in ('formatVersion', 'contentRevision', 'documents', 'actions')):
             raise SystemExit('Knowledge snapshot is stale; run python3 scripts/next/build_knowledge.py')
